@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -132,7 +141,7 @@ export def "subscriptions-providers-microsoft-marketplace-ordering-agreements li
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.MarketplaceOrdering/agreements") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.MarketplaceOrdering/agreements") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -160,7 +169,7 @@ export def "subscriptions-providers-microsoft-marketplace-ordering-agreements-of
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, publisher_id: $publisher_id, offer_id: $offer_id, plan_id: $plan_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.MarketplaceOrdering/agreements/{publisher_id}/offers/{offer_id}/plans/{plan_id}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), publisher_id: (encode-path-segment $publisher_id), offer_id: (encode-path-segment $offer_id), plan_id: (encode-path-segment $plan_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.MarketplaceOrdering/agreements/{publisher_id}/offers/{offer_id}/plans/{plan_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -188,7 +197,7 @@ export def "subscriptions-providers-microsoft-marketplace-ordering-agreements-of
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, publisher_id: $publisher_id, offer_id: $offer_id, plan_id: $plan_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.MarketplaceOrdering/agreements/{publisher_id}/offers/{offer_id}/plans/{plan_id}/cancel") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), publisher_id: (encode-path-segment $publisher_id), offer_id: (encode-path-segment $offer_id), plan_id: (encode-path-segment $plan_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.MarketplaceOrdering/agreements/{publisher_id}/offers/{offer_id}/plans/{plan_id}/cancel") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -198,7 +207,7 @@ export def "subscriptions-providers-microsoft-marketplace-ordering-agreements-of
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.MarketplaceOrdering/agreements/{publisherId}/offers/{offerId}/plans/{planId}/sign
 # operationId: MarketplaceAgreements_Sign
-export def "subscriptions-providers-microsoft-marketplace-ordering-agreements-offers-plans-sign post" [
+export def "subscriptions-providers-microsoft-marketplace-ordering-agreements-offers-plans-sign create" [
   subscription_id: string
   publisher_id: string
   offer_id: string
@@ -216,7 +225,7 @@ export def "subscriptions-providers-microsoft-marketplace-ordering-agreements-of
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, publisher_id: $publisher_id, offer_id: $offer_id, plan_id: $plan_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.MarketplaceOrdering/agreements/{publisher_id}/offers/{offer_id}/plans/{plan_id}/sign") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), publisher_id: (encode-path-segment $publisher_id), offer_id: (encode-path-segment $offer_id), plan_id: (encode-path-segment $plan_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.MarketplaceOrdering/agreements/{publisher_id}/offers/{offer_id}/plans/{plan_id}/sign") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -245,7 +254,7 @@ export def "subscriptions-providers-microsoft-marketplace-ordering-offer-types-p
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, offer_type: $offer_type, publisher_id: $publisher_id, offer_id: $offer_id, plan_id: $plan_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.MarketplaceOrdering/offerTypes/{offer_type}/publishers/{publisher_id}/offers/{offer_id}/plans/{plan_id}/agreements/current") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), offer_type: (encode-path-segment $offer_type), publisher_id: (encode-path-segment $publisher_id), offer_id: (encode-path-segment $offer_id), plan_id: (encode-path-segment $plan_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.MarketplaceOrdering/offerTypes/{offer_type}/publishers/{publisher_id}/offers/{offer_id}/plans/{plan_id}/agreements/current") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -277,10 +286,10 @@ export def "subscriptions-providers-microsoft-marketplace-ordering-offer-types-p
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, offer_type: $offer_type, publisher_id: $publisher_id, offer_id: $offer_id, plan_id: $plan_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.MarketplaceOrdering/offerTypes/{offer_type}/publishers/{publisher_id}/offers/{offer_id}/plans/{plan_id}/agreements/current") $qp)
-  let body = {"properties": $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), offer_type: (encode-path-segment $offer_type), publisher_id: (encode-path-segment $publisher_id), offer_id: (encode-path-segment $offer_id), plan_id: (encode-path-segment $plan_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.MarketplaceOrdering/offerTypes/{offer_type}/publishers/{publisher_id}/offers/{offer_id}/plans/{plan_id}/agreements/current") $qp)
+  let req_body = {"properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

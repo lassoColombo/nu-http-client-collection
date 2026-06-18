@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -74,7 +83,7 @@ def event-source-completer [] { ["AUTOML" "BATCH_UPLOAD" "ECOMMERCE" "EVENT_SOUR
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1beta1 recommendationengineprojectslocationscatalogseventStorespredictionApiKeyRegistrationsdelete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1beta1 delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -98,7 +107,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /v1beta1/{name}
 # operationId: recommendationengine.projects.locations.catalogs.eventStores.predictionApiKeyRegistrations.delete
-export def "v1beta1 recommendationengineprojectslocationscatalogseventStorespredictionApiKeyRegistrationsdelete" [
+export def "v1beta1 delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -123,7 +132,7 @@ export def "v1beta1 recommendationengineprojectslocationscatalogseventStorespred
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1beta1/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta1/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -133,7 +142,7 @@ export def "v1beta1 recommendationengineprojectslocationscatalogseventStorespred
 #
 # GET /v1beta1/{name}
 # operationId: recommendationengine.projects.locations.catalogs.operations.get
-export def "v1beta1 recommendationengineprojectslocationscatalogsoperationsget" [
+export def "v1beta1 get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -158,7 +167,7 @@ export def "v1beta1 recommendationengineprojectslocationscatalogsoperationsget" 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1beta1/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta1/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -168,10 +177,10 @@ export def "v1beta1 recommendationengineprojectslocationscatalogsoperationsget" 
 #
 # PATCH /v1beta1/{name}
 # operationId: recommendationengine.projects.locations.catalogs.catalogItems.patch
-# --categoryHierarchies item shape: {categories?: list}
+# --categoryHierarchies item shape: {categories?: list<string>}
 # --itemAttributes shape: {categoricalFeatures?: record, numericalFeatures?: record}
 # --productMetadata shape: {availableQuantity?: string, canonicalProductUri?: string, costs?: record, currencyCode?: string, exactPrice?: record, images?: list, priceRange?: record, stockState?: "STOCK_STATE_UNSPECIFIED"|"IN_STOCK"|"OUT_OF_STOCK"|"PREORDER"|"BACKORDER"}
-export def "v1beta1 recommendationengineprojectslocationscatalogscatalogItemspatch" [
+export def "v1beta1 update" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -193,33 +202,33 @@ export def "v1beta1 recommendationengineprojectslocationscatalogscatalogItemspat
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --update-mask: string # Optional. Indicates which fields in the provided 'item' to update. If not set, will by default update all fields.
-  --category-hierarchies: list # Required. Catalog item categories. This field is repeated for supporting one catalog item belonging to several parallel category hierarchies. For example, if a shoes product belongs to both ["Shoes & Accessories" -> "Shoes"] and ["Sports & Fitness" -> "Athletic Clothing" -> "Shoes"], it could be represented as: "categoryHierarchies": [ { "categories": ["Shoes & Accessories", "Shoes"]}, { "categories": ["Sports & Fitness", "Athletic Clothing", "Shoes"] } ] — item shape: {categories?: list}
+  --category-hierarchies: list # Required. Catalog item categories. This field is repeated for supporting one catalog item belonging to several parallel category hierarchies. For example, if a shoes product belongs to both ["Shoes & Accessories" -> "Shoes"] and ["Sports & Fitness" -> "Athletic Clothing" -> "Shoes"], it could be represented as: "categoryHierarchies": [ { "categories": ["Shoes & Accessories", "Shoes"]}, { "categories": ["Sports & Fitness", "Athletic Clothing", "Shoes"] } ] — item shape: {categories?: list<string>}
   --description: string # Optional. Catalog item description. UTF-8 encoded string with a length limit of 5 KiB.
   --id: string # Required. Catalog item identifier. UTF-8 encoded string with a length limit of 128 bytes. This id must be unique among all catalog items within the same catalog. It should also be used when logging user events in order for the user events to be joined with the Catalog.
   --item-attributes: record # FeatureMap represents extra features that customers want to include in the recommendation model for catalogs/user events as categorical/numerical features. — shape: {categoricalFeatures?: record, numericalFeatures?: record}
   --item-group-id: string # Optional. Variant group identifier for prediction results. UTF-8 encoded string with a length limit of 128 bytes. This field must be enabled before it can be used. [Learn more](/recommendations-ai/docs/catalog#item-group-id).
   --language-code: string # Optional. Deprecated. The model automatically detects the text language. Your catalog can include text in different languages, but duplicating catalog items to provide text in multiple languages can result in degraded model performance.
   --product-metadata: record # ProductCatalogItem captures item metadata specific to retail products. — shape: {availableQuantity?: string, canonicalProductUri?: string, costs?: record, currencyCode?: string, exactPrice?: record, images?: list, priceRange?: record, stockState?: "STOCK_STATE_UNSPECIFIED"|"IN_STOCK"|"OUT_OF_STOCK"|"PREORDER"|"BACKORDER"}
-  --tags: list # Optional. Filtering tags associated with the catalog item. Each tag should be a UTF-8 encoded string with a length limit of 1 KiB. This tag can be used for filtering recommendation results by passing the tag as part of the predict request filter.
+  --tags: list<string> # Optional. Filtering tags associated with the catalog item. Each tag should be a UTF-8 encoded string with a length limit of 1 KiB. This tag can be used for filtering recommendation results by passing the tag as part of the predict request filter.
   --title: string # Required. Catalog item title. UTF-8 encoded string with a length limit of 1 KiB.
 ]: any -> record<categoryHierarchies: table<categories: list>, description: string, id: string, itemAttributes: record<categoricalFeatures: record, numericalFeatures: record>, itemGroupId: string, languageCode: string, productMetadata: record<availableQuantity: string, canonicalProductUri: string, costs: record, currencyCode: string, exactPrice: record<displayPrice: float, originalPrice: float>, images: list<record>, priceRange: record<max: float, min: float>, stockState: string>, tags: list<string>, title: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1beta1/{name}") $qp)
-  let body = {"categoryHierarchies": $category_hierarchies, "description": $description, "id": $id, "itemAttributes": $item_attributes, "itemGroupId": $item_group_id, "languageCode": $language_code, "productMetadata": $product_metadata, "tags": $tags, "title": $title} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta1/{name}") $qp)
+  let req_body = {"categoryHierarchies": $category_hierarchies, "description": $description, "id": $id, "itemAttributes": $item_attributes, "itemGroupId": $item_group_id, "languageCode": $language_code, "productMetadata": $product_metadata, "tags": $tags, "title": $title} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists operations that match the specified filter in the request. If the server doesn't support this method, it returns `UNIMPLEMENTED`.
 #
 # GET /v1beta1/{name}/operations
 # operationId: recommendationengine.projects.locations.catalogs.operations.list
-export def "v1beta1-operations recommendationengineprojectslocationscatalogsoperationslist" [
+export def "v1beta1-operations list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -247,7 +256,7 @@ export def "v1beta1-operations recommendationengineprojectslocationscatalogsoper
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1beta1/{name}/operations") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta1/{name}/operations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -258,7 +267,7 @@ export def "v1beta1-operations recommendationengineprojectslocationscatalogsoper
 # POST /v1beta1/{name}:predict
 # operationId: recommendationengine.projects.locations.catalogs.eventStores.placements.predict
 # --userEvent shape: {eventDetail?: record, eventSource?: "EVENT_SOURCE_UNSPECIFIED"|"AUTOML"|"ECOMMERCE"|"BATCH_UPLOAD", eventTime?: string, eventType?: string, productEventDetail?: record, userInfo?: record}
-export def "v1beta1 recommendationengineprojectslocationscatalogseventStoresplacementspredict" [
+export def "v1beta1 create-predict" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -291,19 +300,19 @@ export def "v1beta1 recommendationengineprojectslocationscatalogseventStoresplac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1beta1/{name}:predict") $qp)
-  let body = {"dryRun": $body_dry_run, "filter": $filter, "labels": $labels, "pageSize": $page_size, "pageToken": $page_token, "params": $params, "userEvent": $user_event} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta1/{name}:predict") $qp)
+  let req_body = {"dryRun": $body_dry_run, "filter": $filter, "labels": $labels, "pageSize": $page_size, "pageToken": $page_token, "params": $params, "userEvent": $user_event} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets a list of catalog items.
 #
 # GET /v1beta1/{parent}/catalogItems
 # operationId: recommendationengine.projects.locations.catalogs.catalogItems.list
-export def "v1beta1-catalog-items recommendationengineprojectslocationscatalogscatalogItemslist" [
+export def "v1beta1-catalog-items list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -331,7 +340,7 @@ export def "v1beta1-catalog-items recommendationengineprojectslocationscatalogsc
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta1/{parent}/catalogItems") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta1/{parent}/catalogItems") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -341,10 +350,10 @@ export def "v1beta1-catalog-items recommendationengineprojectslocationscatalogsc
 #
 # POST /v1beta1/{parent}/catalogItems
 # operationId: recommendationengine.projects.locations.catalogs.catalogItems.create
-# --categoryHierarchies item shape: {categories?: list}
+# --categoryHierarchies item shape: {categories?: list<string>}
 # --itemAttributes shape: {categoricalFeatures?: record, numericalFeatures?: record}
 # --productMetadata shape: {availableQuantity?: string, canonicalProductUri?: string, costs?: record, currencyCode?: string, exactPrice?: record, images?: list, priceRange?: record, stockState?: "STOCK_STATE_UNSPECIFIED"|"IN_STOCK"|"OUT_OF_STOCK"|"PREORDER"|"BACKORDER"}
-export def "v1beta1-catalog-items recommendationengineprojectslocationscatalogscatalogItemscreate" [
+export def "v1beta1-catalog-items create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -365,26 +374,26 @@ export def "v1beta1-catalog-items recommendationengineprojectslocationscatalogsc
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --category-hierarchies: list # Required. Catalog item categories. This field is repeated for supporting one catalog item belonging to several parallel category hierarchies. For example, if a shoes product belongs to both ["Shoes & Accessories" -> "Shoes"] and ["Sports & Fitness" -> "Athletic Clothing" -> "Shoes"], it could be represented as: "categoryHierarchies": [ { "categories": ["Shoes & Accessories", "Shoes"]}, { "categories": ["Sports & Fitness", "Athletic Clothing", "Shoes"] } ] — item shape: {categories?: list}
+  --category-hierarchies: list # Required. Catalog item categories. This field is repeated for supporting one catalog item belonging to several parallel category hierarchies. For example, if a shoes product belongs to both ["Shoes & Accessories" -> "Shoes"] and ["Sports & Fitness" -> "Athletic Clothing" -> "Shoes"], it could be represented as: "categoryHierarchies": [ { "categories": ["Shoes & Accessories", "Shoes"]}, { "categories": ["Sports & Fitness", "Athletic Clothing", "Shoes"] } ] — item shape: {categories?: list<string>}
   --description: string # Optional. Catalog item description. UTF-8 encoded string with a length limit of 5 KiB.
   --id: string # Required. Catalog item identifier. UTF-8 encoded string with a length limit of 128 bytes. This id must be unique among all catalog items within the same catalog. It should also be used when logging user events in order for the user events to be joined with the Catalog.
   --item-attributes: record # FeatureMap represents extra features that customers want to include in the recommendation model for catalogs/user events as categorical/numerical features. — shape: {categoricalFeatures?: record, numericalFeatures?: record}
   --item-group-id: string # Optional. Variant group identifier for prediction results. UTF-8 encoded string with a length limit of 128 bytes. This field must be enabled before it can be used. [Learn more](/recommendations-ai/docs/catalog#item-group-id).
   --language-code: string # Optional. Deprecated. The model automatically detects the text language. Your catalog can include text in different languages, but duplicating catalog items to provide text in multiple languages can result in degraded model performance.
   --product-metadata: record # ProductCatalogItem captures item metadata specific to retail products. — shape: {availableQuantity?: string, canonicalProductUri?: string, costs?: record, currencyCode?: string, exactPrice?: record, images?: list, priceRange?: record, stockState?: "STOCK_STATE_UNSPECIFIED"|"IN_STOCK"|"OUT_OF_STOCK"|"PREORDER"|"BACKORDER"}
-  --tags: list # Optional. Filtering tags associated with the catalog item. Each tag should be a UTF-8 encoded string with a length limit of 1 KiB. This tag can be used for filtering recommendation results by passing the tag as part of the predict request filter.
+  --tags: list<string> # Optional. Filtering tags associated with the catalog item. Each tag should be a UTF-8 encoded string with a length limit of 1 KiB. This tag can be used for filtering recommendation results by passing the tag as part of the predict request filter.
   --title: string # Required. Catalog item title. UTF-8 encoded string with a length limit of 1 KiB.
 ]: any -> record<categoryHierarchies: table<categories: list>, description: string, id: string, itemAttributes: record<categoricalFeatures: record, numericalFeatures: record>, itemGroupId: string, languageCode: string, productMetadata: record<availableQuantity: string, canonicalProductUri: string, costs: record, currencyCode: string, exactPrice: record<displayPrice: float, originalPrice: float>, images: list<record>, priceRange: record<max: float, min: float>, stockState: string>, tags: list<string>, title: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta1/{parent}/catalogItems") $qp)
-  let body = {"categoryHierarchies": $category_hierarchies, "description": $description, "id": $id, "itemAttributes": $item_attributes, "itemGroupId": $item_group_id, "languageCode": $language_code, "productMetadata": $product_metadata, "tags": $tags, "title": $title} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta1/{parent}/catalogItems") $qp)
+  let req_body = {"categoryHierarchies": $category_hierarchies, "description": $description, "id": $id, "itemAttributes": $item_attributes, "itemGroupId": $item_group_id, "languageCode": $language_code, "productMetadata": $product_metadata, "tags": $tags, "title": $title} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Bulk import of multiple catalog items. Request processing may be synchronous. No partial updating supported. Non-existing items will be created. Operation.response is of type ImportResponse. Note that it is possible for a subset of the items to be successfully updated.
@@ -393,7 +402,7 @@ export def "v1beta1-catalog-items recommendationengineprojectslocationscatalogsc
 # operationId: recommendationengine.projects.locations.catalogs.catalogItems.import
 # --errorsConfig shape: {gcsPrefix?: string}
 # --inputConfig shape: {bigQuerySource?: record, catalogInlineSource?: record, gcsSource?: record, userEventInlineSource?: record}
-export def "v1beta1-catalog-items-import recommendationengineprojectslocationscatalogscatalogItemsimport" [
+export def "v1beta1-catalog-items-import import" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -423,19 +432,19 @@ export def "v1beta1-catalog-items-import recommendationengineprojectslocationsca
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta1/{parent}/catalogItems:import") $qp)
-  let body = {"errorsConfig": $errors_config, "inputConfig": $input_config, "requestId": $request_id, "updateMask": $update_mask} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta1/{parent}/catalogItems:import") $qp)
+  let req_body = {"errorsConfig": $errors_config, "inputConfig": $input_config, "requestId": $request_id, "updateMask": $update_mask} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists all the catalog configurations associated with the project.
 #
 # GET /v1beta1/{parent}/catalogs
 # operationId: recommendationengine.projects.locations.catalogs.list
-export def "v1beta1-catalogs recommendationengineprojectslocationscatalogslist" [
+export def "v1beta1-catalogs list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -462,7 +471,7 @@ export def "v1beta1-catalogs recommendationengineprojectslocationscatalogslist" 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta1/{parent}/catalogs") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta1/{parent}/catalogs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -472,7 +481,7 @@ export def "v1beta1-catalogs recommendationengineprojectslocationscatalogslist" 
 #
 # GET /v1beta1/{parent}/predictionApiKeyRegistrations
 # operationId: recommendationengine.projects.locations.catalogs.eventStores.predictionApiKeyRegistrations.list
-export def "v1beta1-prediction-api-key-registrations recommendationengineprojectslocationscatalogseventStorespredictionApiKeyRegistrationslist" [
+export def "v1beta1-prediction-api-key-registrations list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -499,7 +508,7 @@ export def "v1beta1-prediction-api-key-registrations recommendationengineproject
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta1/{parent}/predictionApiKeyRegistrations") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta1/{parent}/predictionApiKeyRegistrations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -510,7 +519,7 @@ export def "v1beta1-prediction-api-key-registrations recommendationengineproject
 # POST /v1beta1/{parent}/predictionApiKeyRegistrations
 # operationId: recommendationengine.projects.locations.catalogs.eventStores.predictionApiKeyRegistrations.create
 # --predictionApiKeyRegistration shape: {apiKey?: string}
-export def "v1beta1-prediction-api-key-registrations recommendationengineprojectslocationscatalogseventStorespredictionApiKeyRegistrationscreate" [
+export def "v1beta1-prediction-api-key-registrations create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -537,19 +546,19 @@ export def "v1beta1-prediction-api-key-registrations recommendationengineproject
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta1/{parent}/predictionApiKeyRegistrations") $qp)
-  let body = {"predictionApiKeyRegistration": $prediction_api_key_registration} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta1/{parent}/predictionApiKeyRegistrations") $qp)
+  let req_body = {"predictionApiKeyRegistration": $prediction_api_key_registration} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets a list of user events within a time range, with potential filtering. The method does not list unjoined user events. Unjoined user event definition: when a user event is ingested from Recommendations AI User Event APIs, the catalog item included in the user event is connected with the current catalog. If a catalog item of the ingested event is not in the current catalog, it could lead to degraded model quality. This is called an unjoined event.
 #
 # GET /v1beta1/{parent}/userEvents
 # operationId: recommendationengine.projects.locations.catalogs.eventStores.userEvents.list
-export def "v1beta1-user-events recommendationengineprojectslocationscatalogseventStoresuserEventslist" [
+export def "v1beta1-user-events list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -577,7 +586,7 @@ export def "v1beta1-user-events recommendationengineprojectslocationscatalogseve
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta1/{parent}/userEvents") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta1/{parent}/userEvents") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -587,7 +596,7 @@ export def "v1beta1-user-events recommendationengineprojectslocationscatalogseve
 #
 # GET /v1beta1/{parent}/userEvents:collect
 # operationId: recommendationengine.projects.locations.catalogs.eventStores.userEvents.collect
-export def "v1beta1-user-events-collect recommendationengineprojectslocationscatalogseventStoresuserEventscollect" [
+export def "v1beta1-user-events-collect get" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -615,7 +624,7 @@ export def "v1beta1-user-events-collect recommendationengineprojectslocationscat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "ets" $ets "scalar") (serialize-qp "uri" $uri "scalar") (serialize-qp "userEvent" $user_event "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta1/{parent}/userEvents:collect") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta1/{parent}/userEvents:collect") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -627,7 +636,7 @@ export def "v1beta1-user-events-collect recommendationengineprojectslocationscat
 # operationId: recommendationengine.projects.locations.catalogs.eventStores.userEvents.import
 # --errorsConfig shape: {gcsPrefix?: string}
 # --inputConfig shape: {bigQuerySource?: record, catalogInlineSource?: record, gcsSource?: record, userEventInlineSource?: record}
-export def "v1beta1-user-events-import recommendationengineprojectslocationscatalogseventStoresuserEventsimport" [
+export def "v1beta1-user-events-import import" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -656,19 +665,19 @@ export def "v1beta1-user-events-import recommendationengineprojectslocationscata
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta1/{parent}/userEvents:import") $qp)
-  let body = {"errorsConfig": $errors_config, "inputConfig": $input_config, "requestId": $request_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta1/{parent}/userEvents:import") $qp)
+  let req_body = {"errorsConfig": $errors_config, "inputConfig": $input_config, "requestId": $request_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes permanently all user events specified by the filter provided. Depending on the number of events specified by the filter, this operation could take hours or days to complete. To test a filter, use the list command first.
 #
 # POST /v1beta1/{parent}/userEvents:purge
 # operationId: recommendationengine.projects.locations.catalogs.eventStores.userEvents.purge
-export def "v1beta1-user-events-purge recommendationengineprojectslocationscatalogseventStoresuserEventspurge" [
+export def "v1beta1-user-events-purge create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -696,19 +705,19 @@ export def "v1beta1-user-events-purge recommendationengineprojectslocationscatal
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta1/{parent}/userEvents:purge") $qp)
-  let body = {"filter": $filter, "force": $force} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta1/{parent}/userEvents:purge") $qp)
+  let req_body = {"filter": $filter, "force": $force} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Triggers a user event rejoin operation with latest catalog data. Events will not be annotated with detailed catalog information if catalog item is missing at the time the user event is ingested, and these events are stored as unjoined events with a limited usage on training and serving. This API can be used to trigger a 'join' operation on specified events with latest version of catalog items. It can also be used to correct events joined with wrong catalog items.
 #
 # POST /v1beta1/{parent}/userEvents:rejoin
 # operationId: recommendationengine.projects.locations.catalogs.eventStores.userEvents.rejoin
-export def "v1beta1-user-events-rejoin recommendationengineprojectslocationscatalogseventStoresuserEventsrejoin" [
+export def "v1beta1-user-events-rejoin create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -735,22 +744,22 @@ export def "v1beta1-user-events-rejoin recommendationengineprojectslocationscata
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta1/{parent}/userEvents:rejoin") $qp)
-  let body = {"userEventRejoinScope": $user_event_rejoin_scope} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta1/{parent}/userEvents:rejoin") $qp)
+  let req_body = {"userEventRejoinScope": $user_event_rejoin_scope} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Writes a single user event.
 #
 # POST /v1beta1/{parent}/userEvents:write
 # operationId: recommendationengine.projects.locations.catalogs.eventStores.userEvents.write
-# --eventDetail shape: {eventAttributes?: record, experimentIds?: list, pageViewId?: string, recommendationToken?: string, referrerUri?: string, uri?: string}
+# --eventDetail shape: {eventAttributes?: record, experimentIds?: list<string>, pageViewId?: string, recommendationToken?: string, referrerUri?: string, uri?: string}
 # --productEventDetail shape: {cartId?: string, listId?: string, pageCategories?: list, productDetails?: list, purchaseTransaction?: record, searchQuery?: string}
 # --userInfo shape: {directUserRequest?: bool, ipAddress?: string, userAgent?: string, userId?: string, visitorId?: string}
-export def "v1beta1-user-events-write recommendationengineprojectslocationscatalogseventStoresuserEventswrite" [
+export def "v1beta1-user-events-write create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -771,7 +780,7 @@ export def "v1beta1-user-events-write recommendationengineprojectslocationscatal
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --event-detail: record # User event details shared by all recommendation types. — shape: {eventAttributes?: record, experimentIds?: list, pageViewId?: string, recommendationToken?: string, referrerUri?: string, uri?: string}
+  --event-detail: record # User event details shared by all recommendation types. — shape: {eventAttributes?: record, experimentIds?: list<string>, pageViewId?: string, recommendationToken?: string, referrerUri?: string, uri?: string}
   --event-source: string@event-source-completer # Optional. This field should *not* be set when using JavaScript pixel or the Recommendations AI Tag. Defaults to `EVENT_SOURCE_UNSPECIFIED`.
   --event-time: string # Optional. Only required for ImportUserEvents method. Timestamp of user event created. (format: google-datetime)
   --event-type: string # Required. User event type. Allowed values are: * `add-to-cart` Products being added to cart. * `add-to-list` Items being added to a list (shopping list, favorites etc). * `category-page-view` Special pages such as sale or promotion pages viewed. * `checkout-start` User starting a checkout process. * `detail-page-view` Products detail page viewed. * `home-page-view` Homepage viewed. * `page-visit` Generic page visits not included in the event types above. * `purchase-complete` User finishing a purchase. * `refund` Purchased items being refunded or returned. * `remove-from-cart` Products being removed from cart. * `remove-from-list` Items being removed from a list. * `search` Product search. * `shopping-cart-page-view` User viewing a shopping cart. * `impression` List of items displayed. Used by Google Tag Manager.
@@ -782,10 +791,10 @@ export def "v1beta1-user-events-write recommendationengineprojectslocationscatal
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta1/{parent}/userEvents:write") $qp)
-  let body = {"eventDetail": $event_detail, "eventSource": $event_source, "eventTime": $event_time, "eventType": $event_type, "productEventDetail": $product_event_detail, "userInfo": $user_info} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta1/{parent}/userEvents:write") $qp)
+  let req_body = {"eventDetail": $event_detail, "eventSource": $event_source, "eventTime": $event_time, "eventType": $event_type, "productEventDetail": $product_event_detail, "userInfo": $user_info} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

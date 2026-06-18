@@ -12,6 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
   match $scheme {
     "basic" => { {headers: {Authorization: $"Basic ($token_val)"}, query: ""} }
+    "basic-credentials" => { {headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: ""} }
     "none" => { {headers: {}, query: ""} }
     _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
   }
@@ -33,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
     "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
     _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -63,7 +73,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 }
 
 def base-url-completer [] { ["https://frontline-api.twilio.com"] }
-def auth-scheme-completer [] { ["basic"] }
+def auth-scheme-completer [] { ["basic" "basic-credentials"] }
 
 # Completers for enum parameters
 def state-completer [] { ["active" "deactivated"] }
@@ -108,7 +118,7 @@ export def "users get" [
 ]: nothing -> record<avatar: string, friendly_name: string, identity: string, is_available: bool, sid: string, state: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://frontline-api.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/Users/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Users/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -136,10 +146,11 @@ export def "users update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://frontline-api.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/Users/{sid}"))
-  let body = {"Avatar": $avatar, "FriendlyName": $friendly_name, "IsAvailable": $is_available, "State": $state} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Users/{sid}"))
+  let req_body = {"Avatar": $avatar, "FriendlyName": $friendly_name, "IsAvailable": $is_available, "State": $state} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }

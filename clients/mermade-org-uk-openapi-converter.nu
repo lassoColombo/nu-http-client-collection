@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -104,11 +113,11 @@ export def "badge get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-url: string # The URL to retrieve the OpenAPI 3.0.x definition from (format: uri, e.g. https://raw.githubusercontent.com/Mermade/openapi-webconverter/master/contract/openapi.json)
+  --url: string # The URL to retrieve the OpenAPI 3.0.x definition from (format: uri, e.g. https://raw.githubusercontent.com/Mermade/openapi-webconverter/master/contract/openapi.json)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "url" $qp_url "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "url" $url "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/badge" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -119,7 +128,7 @@ export def "badge get" [
 #
 # GET /convert
 # operationId: convertUrl
-export def "convert convertUrl" [
+export def "convert get-url" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -129,22 +138,22 @@ export def "convert convertUrl" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-url: string # The URL to retrieve the OpenAPI 2.0 definition from (format: uri, e.g. https://raw.githubusercontent.com/Mermade/openapi-webconverter/master/contract/swagger.json)
+  --url: string # The URL to retrieve the OpenAPI 2.0 definition from (format: uri, e.g. https://raw.githubusercontent.com/Mermade/openapi-webconverter/master/contract/swagger.json)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "url" $qp_url "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "url" $url "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/convert" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Convert a Swagger 2.0 definition passed in the body to OpenAPI 3.0.x 
+# Convert a Swagger 2.0 definition passed in the body to OpenAPI 3.0.x
 #
 # POST /convert
 # operationId: convert
-export def "convert post" [
+export def "convert create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -162,11 +171,12 @@ export def "convert post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/convert")
-  let body = {"filename": $filename, "source": $body_source, "validate": $validate} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"filename": $filename, "source": $body_source, "validate": $validate} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body [])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # Get the status of the API
@@ -206,11 +216,11 @@ export def "validate validate-url" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-url: string # The URL to retrieve the OpenAPI 3.0.x definition from (format: uri, e.g. https://raw.githubusercontent.com/Mermade/openapi-webconverter/master/contract/openapi.json)
+  --url: string # The URL to retrieve the OpenAPI 3.0.x definition from (format: uri, e.g. https://raw.githubusercontent.com/Mermade/openapi-webconverter/master/contract/openapi.json)
 ]: nothing -> record<openapi: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "url" $qp_url "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "url" $url "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/validate" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -221,7 +231,7 @@ export def "validate validate-url" [
 #
 # POST /validate
 # operationId: validate
-export def "validate post" [
+export def "validate create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -238,9 +248,10 @@ export def "validate post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/validate")
-  let body = {"filename": $filename, "source": $body_source} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"filename": $filename, "source": $body_source} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body [])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }

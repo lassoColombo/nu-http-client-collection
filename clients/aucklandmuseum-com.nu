@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -73,7 +82,7 @@ def accept-completer-3 [] { ["application/sparql-results+json" "application/spar
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "id-media get-media" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "id-media get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -97,7 +106,7 @@ export def commands []: nothing -> table {
 #
 # GET /id/media/{path}
 # operationId: get media
-export def "id-media get-media" [
+export def "id-media get" [
   path: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -108,12 +117,12 @@ export def "id-media get-media" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --rendering: string # The desired media `rendering`  Possible values: * `original.jpg` * `original.pdf` * `thumbnail.jpg` (fixed with 70px) * `standard.jpg` (fixed width 440px and height 440px) * `preview.jpg` (fixed height 100px)
+  --rendering: string # The desired media `rendering` Possible values: * `original.jpg` * `original.pdf` * `thumbnail.jpg` (fixed with 70px) * `standard.jpg` (fixed width 440px and height 440px) * `preview.jpg` (fixed height 100px)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "rendering" $rendering "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({path: $path} | format pattern "/id/media/{path}") $qp)
+  let full_url = (build-url $base ({path: (encode-path-segment $path)} | format pattern "/id/media/{path}") $qp)
   let accept_val = ($accept | default "image/jpeg")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -137,7 +146,7 @@ export def "id get-subject" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({identifier: $identifier} | format pattern "/id/{identifier}"))
+  let full_url = (build-url $base ({identifier: (encode-path-segment $identifier)} | format pattern "/id/{identifier}"))
   let accept_val = ($accept | default "text/html")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -147,7 +156,7 @@ export def "id get-subject" [
 #
 # GET /search/{index}/{operation}
 # operationId: get search
-export def "search get-search" [
+export def "search get" [
   index: string
   operation: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -163,7 +172,7 @@ export def "search get-search" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({index: $index, operation: $operation} | format pattern "/search/{index}/{operation}") $qp)
+  let full_url = (build-url $base ({index: (encode-path-segment $index), operation: (encode-path-segment $operation)} | format pattern "/search/{index}/{operation}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -173,7 +182,7 @@ export def "search get-search" [
 #
 # POST /search/{index}/{operation}
 # operationId: post search
-export def "search post-search" [
+export def "search create" [
   index: string
   operation: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -189,18 +198,19 @@ export def "search post-search" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({index: $index, operation: $operation} | format pattern "/search/{index}/{operation}"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({index: (encode-path-segment $index), operation: (encode-path-segment $operation)} | format pattern "/search/{index}/{operation}"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Auckland Museum SPARQL endpoint
 #
 # GET /sparql
 # operationId: get sparql
-export def "sparql get-sparql" [
+export def "sparql get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -227,7 +237,7 @@ export def "sparql get-sparql" [
 #
 # POST /sparql
 # operationId: post sparql
-export def "sparql post-sparql" [
+export def "sparql create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -244,9 +254,10 @@ export def "sparql post-sparql" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sparql")
-  let body = {"query": $query, "infer": $infer} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"query": $query, "infer": $infer} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/sparql-results+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }

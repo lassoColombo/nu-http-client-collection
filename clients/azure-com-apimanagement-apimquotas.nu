@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -69,7 +78,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-api-management-service-quotas list-by" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-api-management-service-quotas list-by-counter-keys" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -94,7 +103,7 @@ export def commands []: nothing -> table {
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/quotas/{quotaCounterKey}
 # Docs: https://docs.microsoft.com/en-us/azure/api-management/api-management-howto-product-with-rules#a-namepolicies-ato-configure-call-rate-limit-and-quota-policies — Document describing how to configure the quota policies.
 # operationId: QuotaByCounterKeys_ListByService
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-quotas list-by" [
+export def "subscriptions-resource-groups-providers-microsoft-api-management-service-quotas list-by-counter-keys" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -112,7 +121,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, service_name: $service_name, quota_counter_key: $quota_counter_key} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ApiManagement/service/{service_name}/quotas/{quota_counter_key}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), service_name: (encode-path-segment $service_name), quota_counter_key: (encode-path-segment $quota_counter_key)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ApiManagement/service/{service_name}/quotas/{quota_counter_key}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -122,7 +131,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/quotas/{quotaCounterKey}
 # operationId: QuotaByCounterKeys_Update
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-quotas update" [
+export def "subscriptions-resource-groups-providers-microsoft-api-management-service-quotas update-by-counter-keys" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -143,12 +152,12 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, service_name: $service_name, quota_counter_key: $quota_counter_key} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ApiManagement/service/{service_name}/quotas/{quota_counter_key}") $qp)
-  let body = {"callsCount": $calls_count, "kbTransferred": $kb_transferred} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), service_name: (encode-path-segment $service_name), quota_counter_key: (encode-path-segment $quota_counter_key)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ApiManagement/service/{service_name}/quotas/{quota_counter_key}") $qp)
+  let req_body = {"callsCount": $calls_count, "kbTransferred": $kb_transferred} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets the value of the quota counter associated with the counter-key in the policy for the specific period in service instance.
@@ -156,7 +165,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/quotas/{quotaCounterKey}/periods/{quotaPeriodKey}
 # Docs: https://docs.microsoft.com/en-us/azure/api-management/api-management-howto-product-with-rules#a-namepolicies-ato-configure-call-rate-limit-and-quota-policies — Document describing how to configure the quota policies.
 # operationId: QuotaByPeriodKeys_Get
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-quotas-periods get" [
+export def "subscriptions-resource-groups-providers-microsoft-api-management-service-quotas-periods get-by-keys" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -175,7 +184,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, service_name: $service_name, quota_counter_key: $quota_counter_key, quota_period_key: $quota_period_key} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ApiManagement/service/{service_name}/quotas/{quota_counter_key}/periods/{quota_period_key}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), service_name: (encode-path-segment $service_name), quota_counter_key: (encode-path-segment $quota_counter_key), quota_period_key: (encode-path-segment $quota_period_key)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ApiManagement/service/{service_name}/quotas/{quota_counter_key}/periods/{quota_period_key}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -185,7 +194,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/quotas/{quotaCounterKey}/periods/{quotaPeriodKey}
 # operationId: QuotaByPeriodKeys_Update
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-quotas-periods update" [
+export def "subscriptions-resource-groups-providers-microsoft-api-management-service-quotas-periods update-by-keys" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -207,10 +216,10 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, service_name: $service_name, quota_counter_key: $quota_counter_key, quota_period_key: $quota_period_key} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ApiManagement/service/{service_name}/quotas/{quota_counter_key}/periods/{quota_period_key}") $qp)
-  let body = {"callsCount": $calls_count, "kbTransferred": $kb_transferred} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), service_name: (encode-path-segment $service_name), quota_counter_key: (encode-path-segment $quota_counter_key), quota_period_key: (encode-path-segment $quota_period_key)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ApiManagement/service/{service_name}/quotas/{quota_counter_key}/periods/{quota_period_key}") $qp)
+  let req_body = {"callsCount": $calls_count, "kbTransferred": $kb_transferred} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

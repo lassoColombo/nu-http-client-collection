@@ -12,6 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
   match $scheme {
     "basic" => { {headers: {Authorization: $"Basic ($token_val)"}, query: ""} }
+    "basic-credentials" => { {headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: ""} }
     "none" => { {headers: {}, query: ""} }
     _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
   }
@@ -33,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
     "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
     _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -63,7 +73,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 }
 
 def base-url-completer [] { ["http://169.254.169.254/metadata" "https://169.254.169.254/metadata"] }
-def auth-scheme-completer [] { ["basic"] }
+def auth-scheme-completer [] { ["basic" "basic-credentials"] }
 
 # Completers for enum parameters
 def api-version-completer [] { ["2018-10-01"] }
@@ -114,10 +124,10 @@ export def "attested-document get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "nonce" $nonce "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/attested/document" $qp)
-  let extra_headers = {"Metadata": $metadata} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Metadata": $metadata} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -141,10 +151,10 @@ export def "identity-info get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/identity/info" $qp)
-  let extra_headers = {"Metadata": $metadata} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Metadata": $metadata} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -174,10 +184,10 @@ export def "identity-oauth2-token get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "resource" $resource "scalar") (serialize-qp "api-version" $api_version "scalar") (serialize-qp "client_id" $client_id "scalar") (serialize-qp "object_id" $object_id "scalar") (serialize-qp "msi_res_id" $msi_res_id "scalar") (serialize-qp "authority" $authority "scalar") (serialize-qp "bypass_cache" $bypass_cache "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/identity/oauth2/token" $qp)
-  let extra_headers = {"Metadata": $metadata} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Metadata": $metadata} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -201,9 +211,9 @@ export def "instance get-metadata" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/instance" $qp)
-  let extra_headers = {"Metadata": $metadata} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Metadata": $metadata} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

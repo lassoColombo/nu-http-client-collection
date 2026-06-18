@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -89,7 +98,7 @@ export def commands []: nothing -> table {
   }
 }
 
-# <p>The CancelJob operation cancels an unfinished job.</p> <note> <p>You can only cancel a job that has a status of <code>Submitted</code>. To prevent a pipeline from starting to process a job while you're getting the job identifier, use <a>UpdatePipelineStatus</a> to temporarily pause the pipeline.</p> </note>
+# The CancelJob operation cancels an unfinished job. You can only cancel a job that has a status of Submitted. To prevent a pipeline from starting to process a job while you're getting the job identifier, use UpdatePipelineStatus to temporarily pause the pipeline.
 #
 # DELETE /2012-09-25/jobs/{Id}
 # operationId: CancelJob
@@ -113,11 +122,11 @@ export def "2012-09-25-jobs cancel" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/2012-09-25/jobs/{id}"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2012-09-25/jobs/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -145,15 +154,15 @@ export def "2012-09-25-jobs get" [
 ]: nothing -> record<Job: record<Id: record, Arn: record, PipelineId: record, Input: record<Key: record, FrameRate: record, Resolution: record, AspectRatio: record, Interlaced: record, Container: record, Encryption: record, TimeSpan: record, InputCaptions: record, DetectedProperties: record>, Inputs: record, Output: record<Id: record, Key: record, ThumbnailPattern: record, ThumbnailEncryption: record, Rotate: record, PresetId: record, SegmentDuration: record, Status: record, StatusDetail: record, Duration: record, Width: record, Height: record, FrameRate: record, FileSize: record, DurationMillis: record, Watermarks: record, AlbumArt: record, Composition: record, Captions: record, Encryption: record, AppliedColorSpaceConversion: record>, Outputs: record, OutputKeyPrefix: record, Playlists: record, Status: record, UserMetadata: record, Timing: record<SubmitTimeMillis: record, StartTimeMillis: record, FinishTimeMillis: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/2012-09-25/jobs/{id}"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2012-09-25/jobs/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# <p>When you create a job, Elastic Transcoder returns JSON data that includes the values that you specified plus information about the job that is created.</p> <p>If you have specified more than one output for your jobs (for example, one output for the Kindle Fire and another output for the Apple iPhone 4s), you currently must use the Elastic Transcoder API to list the jobs (as opposed to the AWS Console).</p>
+# When you create a job, Elastic Transcoder returns JSON data that includes the values that you specified plus information about the job that is created. If you have specified more than one output for your jobs (for example, one output for the Kindle Fire and another output for the Apple iPhone 4s), you currently must use the Elastic Transcoder API to list the jobs (as opposed to the AWS Console).
 #
 # POST /2012-09-25/jobs
 # operationId: CreateJob
@@ -178,26 +187,26 @@ export def "2012-09-25-jobs create" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  pipeline_id: string # The <code>Id</code> of the pipeline that you want Elastic Transcoder to use for transcoding. The pipeline determines several settings, including the Amazon S3 bucket from which Elastic Transcoder gets the files to transcode and the bucket into which Elastic Transcoder puts the transcoded files.
+  pipeline_id: string # The Id of the pipeline that you want Elastic Transcoder to use for transcoding. The pipeline determines several settings, including the Amazon S3 bucket from which Elastic Transcoder gets the files to transcode and the bucket into which Elastic Transcoder puts the transcoded files.
   --input: record # Information about the file that you're transcoding. — shape: {Key?: any, FrameRate?: any, Resolution?: any, AspectRatio?: any, Interlaced?: any, Container?: any, Encryption?: any, TimeSpan?: any, InputCaptions?: any, DetectedProperties?: any}
   --inputs: list # A section of the request body that provides information about the files that are being transcoded. — item shape: {Key?: any, FrameRate?: any, Resolution?: any, AspectRatio?: any, Interlaced?: any, Container?: any, Encryption?: any, TimeSpan?: any, InputCaptions?: any, DetectedProperties?: any}
-  --output: record # The <code>CreateJobOutput</code> structure. — shape: {Key?: any, ThumbnailPattern?: any, ThumbnailEncryption?: any, Rotate?: any, PresetId?: any, SegmentDuration?: any, Watermarks?: any, AlbumArt?: any, Composition?: any, Captions?: any, Encryption?: any}
-  --outputs: list #  A section of the request body that provides information about the transcoded (target) files. We recommend that you use the <code>Outputs</code> syntax instead of the <code>Output</code> syntax.  — item shape: {Key?: any, ThumbnailPattern?: any, ThumbnailEncryption?: any, Rotate?: any, PresetId?: any, SegmentDuration?: any, Watermarks?: any, AlbumArt?: any, Composition?: any, Captions?: any, Encryption?: any}
+  --output: record # The CreateJobOutput structure. — shape: {Key?: any, ThumbnailPattern?: any, ThumbnailEncryption?: any, Rotate?: any, PresetId?: any, SegmentDuration?: any, Watermarks?: any, AlbumArt?: any, Composition?: any, Captions?: any, Encryption?: any}
+  --outputs: list # A section of the request body that provides information about the transcoded (target) files. We recommend that you use the Outputs syntax instead of the Output syntax. — item shape: {Key?: any, ThumbnailPattern?: any, ThumbnailEncryption?: any, Rotate?: any, PresetId?: any, SegmentDuration?: any, Watermarks?: any, AlbumArt?: any, Composition?: any, Captions?: any, Encryption?: any}
   --output-key-prefix: string # The value, if any, that you want Elastic Transcoder to prepend to the names of all files that this job creates, including output files, thumbnails, and playlists.
-  --playlists: list # <p>If you specify a preset in <code>PresetId</code> for which the value of <code>Container</code> is fmp4 (Fragmented MP4) or ts (MPEG-TS), Playlists contains information about the master playlists that you want Elastic Transcoder to create.</p> <p>The maximum number of master playlists in a job is 30.</p> — item shape: {Name?: any, Format?: any, OutputKeys?: any, HlsContentProtection?: any, PlayReadyDrm?: any}
-  --user-metadata: record # User-defined metadata that you want to associate with an Elastic Transcoder job. You specify metadata in <code>key/value</code> pairs, and you can add up to 10 <code>key/value</code> pairs per job. Elastic Transcoder does not guarantee that <code>key/value</code> pairs are returned in the same order in which you specify them.
+  --playlists: list # If you specify a preset in PresetId for which the value of Container is fmp4 (Fragmented MP4) or ts (MPEG-TS), Playlists contains information about the master playlists that you want Elastic Transcoder to create. The maximum number of master playlists in a job is 30. — item shape: {Name?: any, Format?: any, OutputKeys?: any, HlsContentProtection?: any, PlayReadyDrm?: any}
+  --user-metadata: record # User-defined metadata that you want to associate with an Elastic Transcoder job. You specify metadata in key/value pairs, and you can add up to 10 key/value pairs per job. Elastic Transcoder does not guarantee that key/value pairs are returned in the same order in which you specify them.
 ]: any -> record<Job: record<Id: record, Arn: record, PipelineId: record, Input: record<Key: record, FrameRate: record, Resolution: record, AspectRatio: record, Interlaced: record, Container: record, Encryption: record, TimeSpan: record, InputCaptions: record, DetectedProperties: record>, Inputs: record, Output: record<Id: record, Key: record, ThumbnailPattern: record, ThumbnailEncryption: record, Rotate: record, PresetId: record, SegmentDuration: record, Status: record, StatusDetail: record, Duration: record, Width: record, Height: record, FrameRate: record, FileSize: record, DurationMillis: record, Watermarks: record, AlbumArt: record, Composition: record, Captions: record, Encryption: record, AppliedColorSpaceConversion: record>, Outputs: record, OutputKeyPrefix: record, Playlists: record, Status: record, UserMetadata: record, Timing: record<SubmitTimeMillis: record, StartTimeMillis: record, FinishTimeMillis: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/2012-09-25/jobs")
-  let body = {"PipelineId": $pipeline_id, "Input": $input, "Inputs": $inputs, "Output": $output, "Outputs": $outputs, "OutputKeyPrefix": $output_key_prefix, "Playlists": $playlists, "UserMetadata": $user_metadata} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"PipelineId": $pipeline_id, "Input": $input, "Inputs": $inputs, "Output": $output, "Outputs": $outputs, "OutputKeyPrefix": $output_key_prefix, "Playlists": $playlists, "UserMetadata": $user_metadata} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # The CreatePipeline operation creates a pipeline with settings that you specify.
@@ -223,26 +232,26 @@ export def "2012-09-25-pipelines create" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  name: string # <p>The name of the pipeline. We recommend that the name be unique within the AWS account, but uniqueness is not enforced.</p> <p>Constraints: Maximum 40 characters.</p>
+  name: string # The name of the pipeline. We recommend that the name be unique within the AWS account, but uniqueness is not enforced. Constraints: Maximum 40 characters.
   input_bucket: string # The Amazon S3 bucket in which you saved the media files that you want to transcode.
-  --output-bucket: string # <p>The Amazon S3 bucket in which you want Elastic Transcoder to save the transcoded files. (Use this, or use ContentConfig:Bucket plus ThumbnailConfig:Bucket.)</p> <p>Specify this value when all of the following are true:</p> <ul> <li> <p>You want to save transcoded files, thumbnails (if any), and playlists (if any) together in one bucket.</p> </li> <li> <p>You do not want to specify the users or groups who have access to the transcoded files, thumbnails, and playlists.</p> </li> <li> <p>You do not want to specify the permissions that Elastic Transcoder grants to the files. </p> <important> <p>When Elastic Transcoder saves files in <code>OutputBucket</code>, it grants full control over the files only to the AWS account that owns the role that is specified by <code>Role</code>.</p> </important> </li> <li> <p>You want to associate the transcoded files and thumbnails with the Amazon S3 Standard storage class.</p> </li> </ul> <p>If you want to save transcoded files and playlists in one bucket and thumbnails in another bucket, specify which users can access the transcoded files or the permissions the users have, or change the Amazon S3 storage class, omit <code>OutputBucket</code> and specify values for <code>ContentConfig</code> and <code>ThumbnailConfig</code> instead.</p>
+  --output-bucket: string # The Amazon S3 bucket in which you want Elastic Transcoder to save the transcoded files. (Use this, or use ContentConfig:Bucket plus ThumbnailConfig:Bucket.) Specify this value when all of the following are true: You want to save transcoded files, thumbnails (if any), and playlists (if any) together in one bucket. You do not want to specify the users or groups who have access to the transcoded files, thumbnails, and playlists. You do not want to specify the permissions that Elastic Transcoder grants to the files. When Elastic Transcoder saves files in OutputBucket, it grants full control over the files only to the AWS account that owns the role that is specified by Role. You want to associate the transcoded files and thumbnails with the Amazon S3 Standard storage class. If you want to save transcoded files and playlists in one bucket and thumbnails in another bucket, specify which users can access the transcoded files or the permissions the users have, or change the Amazon S3 storage class, omit OutputBucket and specify values for ContentConfig and ThumbnailConfig instead.
   role: string # The IAM Amazon Resource Name (ARN) for the role that you want Elastic Transcoder to use to create the pipeline.
-  --aws-kms-key-arn: string # <p>The AWS Key Management Service (AWS KMS) key that you want to use with this pipeline.</p> <p>If you use either <code>s3</code> or <code>s3-aws-kms</code> as your <code>Encryption:Mode</code>, you don't need to provide a key with your job because a default key, known as an AWS-KMS key, is created for you automatically. You need to provide an AWS-KMS key only if you want to use a non-default AWS-KMS key, or if you are using an <code>Encryption:Mode</code> of <code>aes-cbc-pkcs7</code>, <code>aes-ctr</code>, or <code>aes-gcm</code>.</p>
-  --notifications: record # <p>The Amazon Simple Notification Service (Amazon SNS) topic or topics to notify in order to report job status.</p> <important> <p>To receive notifications, you must also subscribe to the new topic in the Amazon SNS console.</p> </important> — shape: {Progressing?: any, Completed?: any, Warning?: any, Error?: any}
-  --content-config: record # The <code>PipelineOutputConfig</code> structure. — shape: {Bucket?: any, StorageClass?: any, Permissions?: any}
-  --thumbnail-config: record # The <code>PipelineOutputConfig</code> structure. — shape: {Bucket?: any, StorageClass?: any, Permissions?: any}
+  --aws-kms-key-arn: string # The AWS Key Management Service (AWS KMS) key that you want to use with this pipeline. If you use either s3 or s3-aws-kms as your Encryption:Mode, you don't need to provide a key with your job because a default key, known as an AWS-KMS key, is created for you automatically. You need to provide an AWS-KMS key only if you want to use a non-default AWS-KMS key, or if you are using an Encryption:Mode of aes-cbc-pkcs7, aes-ctr, or aes-gcm.
+  --notifications: record # The Amazon Simple Notification Service (Amazon SNS) topic or topics to notify in order to report job status. To receive notifications, you must also subscribe to the new topic in the Amazon SNS console. — shape: {Progressing?: any, Completed?: any, Warning?: any, Error?: any}
+  --content-config: record # The PipelineOutputConfig structure. — shape: {Bucket?: any, StorageClass?: any, Permissions?: any}
+  --thumbnail-config: record # The PipelineOutputConfig structure. — shape: {Bucket?: any, StorageClass?: any, Permissions?: any}
 ]: any -> record<Pipeline: record<Id: record, Arn: record, Name: record, Status: record, InputBucket: record, OutputBucket: record, Role: record, AwsKmsKeyArn: record, Notifications: record<Progressing: record, Completed: record, Warning: record, Error: record>, ContentConfig: record<Bucket: record, StorageClass: record, Permissions: record>, ThumbnailConfig: record<Bucket: record, StorageClass: record, Permissions: record>>, Warnings: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/2012-09-25/pipelines")
-  let body = {"Name": $name, "InputBucket": $input_bucket, "OutputBucket": $output_bucket, "Role": $role, "AwsKmsKeyArn": $aws_kms_key_arn, "Notifications": $notifications, "ContentConfig": $content_config, "ThumbnailConfig": $thumbnail_config} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"Name": $name, "InputBucket": $input_bucket, "OutputBucket": $output_bucket, "Role": $role, "AwsKmsKeyArn": $aws_kms_key_arn, "Notifications": $notifications, "ContentConfig": $content_config, "ThumbnailConfig": $thumbnail_config} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # The ListPipelines operation gets a list of the pipelines associated with the current AWS account.
@@ -258,8 +267,8 @@ export def "2012-09-25-pipelines list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ascending: string # To list pipelines in chronological order by the date and time that they were created, enter <code>true</code>. To list pipelines in reverse chronological order, enter <code>false</code>.
-  --page-token: string # When Elastic Transcoder returns more than one page of results, use <code>pageToken</code> in subsequent <code>GET</code> requests to get each successive page of results. 
+  --ascending: string # To list pipelines in chronological order by the date and time that they were created, enter true. To list pipelines in reverse chronological order, enter false.
+  --page-token: string # When Elastic Transcoder returns more than one page of results, use pageToken in subsequent GET requests to get each successive page of results.
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -272,14 +281,14 @@ export def "2012-09-25-pipelines list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "Ascending" $ascending "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/2012-09-25/pipelines" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# <p>The CreatePreset operation creates a preset with settings that you specify.</p> <important> <p>Elastic Transcoder checks the CreatePreset settings to ensure that they meet Elastic Transcoder requirements and to determine whether they comply with H.264 standards. If your settings are not valid for Elastic Transcoder, Elastic Transcoder returns an HTTP 400 response (<code>ValidationException</code>) and does not create the preset. If the settings are valid for Elastic Transcoder but aren't strictly compliant with the H.264 standard, Elastic Transcoder creates the preset and returns a warning message in the response. This helps you determine whether your settings comply with the H.264 standard while giving you greater flexibility with respect to the video that Elastic Transcoder produces.</p> </important> <p>Elastic Transcoder uses the H.264 video-compression format. For more information, see the International Telecommunication Union publication <i>Recommendation ITU-T H.264: Advanced video coding for generic audiovisual services</i>.</p>
+# The CreatePreset operation creates a preset with settings that you specify. Elastic Transcoder checks the CreatePreset settings to ensure that they meet Elastic Transcoder requirements and to determine whether they comply with H.264 standards. If your settings are not valid for Elastic Transcoder, Elastic Transcoder returns an HTTP 400 response (ValidationException) and does not create the preset. If the settings are valid for Elastic Transcoder but aren't strictly compliant with the H.264 standard, Elastic Transcoder creates the preset and returns a warning message in the response. This helps you determine whether your settings comply with the H.264 standard while giving you greater flexibility with respect to the video that Elastic Transcoder produces. Elastic Transcoder uses the H.264 video-compression format. For more information, see the International Telecommunication Union publication Recommendation ITU-T H.264: Advanced video coding for generic audiovisual services.
 #
 # POST /2012-09-25/presets
 # operationId: CreatePreset
@@ -304,8 +313,8 @@ export def "2012-09-25-presets create" [
   --x-amz-signed-headers: string
   name: string # The name of the preset. We recommend that the name be unique within the AWS account, but uniqueness is not enforced.
   --description: string # A description of the preset.
-  container: string # The container type for the output file. Valid values include <code>flac</code>, <code>flv</code>, <code>fmp4</code>, <code>gif</code>, <code>mp3</code>, <code>mp4</code>, <code>mpg</code>, <code>mxf</code>, <code>oga</code>, <code>ogg</code>, <code>ts</code>, and <code>webm</code>.
-  --video: record # The <code>VideoParameters</code> structure. — shape: {Codec?: any, CodecOptions?: any, KeyframesMaxDist?: any, FixedGOP?: any, BitRate?: any, FrameRate?: any, MaxFrameRate?: any, Resolution?: any, AspectRatio?: any, MaxWidth?: any, MaxHeight?: any, DisplayAspectRatio?: any, SizingPolicy?: any, PaddingPolicy?: any, Watermarks?: any}
+  container: string # The container type for the output file. Valid values include flac, flv, fmp4, gif, mp3, mp4, mpg, mxf, oga, ogg, ts, and webm.
+  --video: record # The VideoParameters structure. — shape: {Codec?: any, CodecOptions?: any, KeyframesMaxDist?: any, FixedGOP?: any, BitRate?: any, FrameRate?: any, MaxFrameRate?: any, Resolution?: any, AspectRatio?: any, MaxWidth?: any, MaxHeight?: any, DisplayAspectRatio?: any, SizingPolicy?: any, PaddingPolicy?: any, Watermarks?: any}
   --audio: record # Parameters required for transcoding audio. — shape: {Codec?: any, SampleRate?: any, BitRate?: any, Channels?: any, AudioPackingMode?: any, CodecOptions?: any}
   --thumbnails: record # Thumbnails for videos. — shape: {Format?: any, Interval?: any, Resolution?: any, AspectRatio?: any, MaxWidth?: any, MaxHeight?: any, SizingPolicy?: any, PaddingPolicy?: any}
 ]: any -> record<Preset: record<Id: record, Arn: record, Name: record, Description: record, Container: record, Audio: record<Codec: record, SampleRate: record, BitRate: record, Channels: record, AudioPackingMode: record, CodecOptions: record>, Video: record<Codec: record, CodecOptions: record, KeyframesMaxDist: record, FixedGOP: record, BitRate: record, FrameRate: record, MaxFrameRate: record, Resolution: record, AspectRatio: record, MaxWidth: record, MaxHeight: record, DisplayAspectRatio: record, SizingPolicy: record, PaddingPolicy: record, Watermarks: record>, Thumbnails: record<Format: record, Interval: record, Resolution: record, AspectRatio: record, MaxWidth: record, MaxHeight: record, SizingPolicy: record, PaddingPolicy: record>, Type: record>, Warning: record> {
@@ -313,13 +322,13 @@ export def "2012-09-25-presets create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/2012-09-25/presets")
-  let body = {"Name": $name, "Description": $description, "Container": $container, "Video": $video, "Audio": $audio, "Thumbnails": $thumbnails} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"Name": $name, "Description": $description, "Container": $container, "Video": $video, "Audio": $audio, "Thumbnails": $thumbnails} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # The ListPresets operation gets a list of the default presets included with Elastic Transcoder and the presets that you've added in an AWS region.
@@ -335,8 +344,8 @@ export def "2012-09-25-presets list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ascending: string # To list presets in chronological order by the date and time that they were created, enter <code>true</code>. To list presets in reverse chronological order, enter <code>false</code>.
-  --page-token: string # When Elastic Transcoder returns more than one page of results, use <code>pageToken</code> in subsequent <code>GET</code> requests to get each successive page of results. 
+  --ascending: string # To list presets in chronological order by the date and time that they were created, enter true. To list presets in reverse chronological order, enter false.
+  --page-token: string # When Elastic Transcoder returns more than one page of results, use pageToken in subsequent GET requests to get each successive page of results.
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -349,14 +358,14 @@ export def "2012-09-25-presets list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "Ascending" $ascending "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/2012-09-25/presets" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# <p>The DeletePipeline operation removes a pipeline.</p> <p> You can only delete a pipeline that has never been used or that is not currently in use (doesn't contain any active jobs). If the pipeline is currently in use, <code>DeletePipeline</code> returns an error. </p>
+# The DeletePipeline operation removes a pipeline. You can only delete a pipeline that has never been used or that is not currently in use (doesn't contain any active jobs). If the pipeline is currently in use, DeletePipeline returns an error.
 #
 # DELETE /2012-09-25/pipelines/{Id}
 # operationId: DeletePipeline
@@ -380,11 +389,11 @@ export def "2012-09-25-pipelines delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/2012-09-25/pipelines/{id}"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2012-09-25/pipelines/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -412,15 +421,15 @@ export def "2012-09-25-pipelines get" [
 ]: nothing -> record<Pipeline: record<Id: record, Arn: record, Name: record, Status: record, InputBucket: record, OutputBucket: record, Role: record, AwsKmsKeyArn: record, Notifications: record<Progressing: record, Completed: record, Warning: record, Error: record>, ContentConfig: record<Bucket: record, StorageClass: record, Permissions: record>, ThumbnailConfig: record<Bucket: record, StorageClass: record, Permissions: record>>, Warnings: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/2012-09-25/pipelines/{id}"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2012-09-25/pipelines/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# <p> Use the <code>UpdatePipeline</code> operation to update settings for a pipeline.</p> <important> <p>When you change pipeline settings, your changes take effect immediately. Jobs that you have already submitted and that Elastic Transcoder has not started to process are affected in addition to jobs that you submit after you change settings. </p> </important>
+# Use the UpdatePipeline operation to update settings for a pipeline. When you change pipeline settings, your changes take effect immediately. Jobs that you have already submitted and that Elastic Transcoder has not started to process are affected in addition to jobs that you submit after you change settings.
 #
 # PUT /2012-09-25/pipelines/{Id}
 # operationId: UpdatePipeline
@@ -444,28 +453,28 @@ export def "2012-09-25-pipelines update" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --name: string # <p>The name of the pipeline. We recommend that the name be unique within the AWS account, but uniqueness is not enforced.</p> <p>Constraints: Maximum 40 characters</p>
+  --name: string # The name of the pipeline. We recommend that the name be unique within the AWS account, but uniqueness is not enforced. Constraints: Maximum 40 characters
   --input-bucket: string # The Amazon S3 bucket in which you saved the media files that you want to transcode and the graphics that you want to use as watermarks.
   --role: string # The IAM Amazon Resource Name (ARN) for the role that you want Elastic Transcoder to use to transcode jobs for this pipeline.
-  --aws-kms-key-arn: string # <p>The AWS Key Management Service (AWS KMS) key that you want to use with this pipeline.</p> <p>If you use either <code>s3</code> or <code>s3-aws-kms</code> as your <code>Encryption:Mode</code>, you don't need to provide a key with your job because a default key, known as an AWS-KMS key, is created for you automatically. You need to provide an AWS-KMS key only if you want to use a non-default AWS-KMS key, or if you are using an <code>Encryption:Mode</code> of <code>aes-cbc-pkcs7</code>, <code>aes-ctr</code>, or <code>aes-gcm</code>.</p>
-  --notifications: record # <p>The Amazon Simple Notification Service (Amazon SNS) topic or topics to notify in order to report job status.</p> <important> <p>To receive notifications, you must also subscribe to the new topic in the Amazon SNS console.</p> </important> — shape: {Progressing?: any, Completed?: any, Warning?: any, Error?: any}
-  --content-config: record # The <code>PipelineOutputConfig</code> structure. — shape: {Bucket?: any, StorageClass?: any, Permissions?: any}
-  --thumbnail-config: record # The <code>PipelineOutputConfig</code> structure. — shape: {Bucket?: any, StorageClass?: any, Permissions?: any}
+  --aws-kms-key-arn: string # The AWS Key Management Service (AWS KMS) key that you want to use with this pipeline. If you use either s3 or s3-aws-kms as your Encryption:Mode, you don't need to provide a key with your job because a default key, known as an AWS-KMS key, is created for you automatically. You need to provide an AWS-KMS key only if you want to use a non-default AWS-KMS key, or if you are using an Encryption:Mode of aes-cbc-pkcs7, aes-ctr, or aes-gcm.
+  --notifications: record # The Amazon Simple Notification Service (Amazon SNS) topic or topics to notify in order to report job status. To receive notifications, you must also subscribe to the new topic in the Amazon SNS console. — shape: {Progressing?: any, Completed?: any, Warning?: any, Error?: any}
+  --content-config: record # The PipelineOutputConfig structure. — shape: {Bucket?: any, StorageClass?: any, Permissions?: any}
+  --thumbnail-config: record # The PipelineOutputConfig structure. — shape: {Bucket?: any, StorageClass?: any, Permissions?: any}
 ]: any -> record<Pipeline: record<Id: record, Arn: record, Name: record, Status: record, InputBucket: record, OutputBucket: record, Role: record, AwsKmsKeyArn: record, Notifications: record<Progressing: record, Completed: record, Warning: record, Error: record>, ContentConfig: record<Bucket: record, StorageClass: record, Permissions: record>, ThumbnailConfig: record<Bucket: record, StorageClass: record, Permissions: record>>, Warnings: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/2012-09-25/pipelines/{id}"))
-  let body = {"Name": $name, "InputBucket": $input_bucket, "Role": $role, "AwsKmsKeyArn": $aws_kms_key_arn, "Notifications": $notifications, "ContentConfig": $content_config, "ThumbnailConfig": $thumbnail_config} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2012-09-25/pipelines/{id}"))
+  let req_body = {"Name": $name, "InputBucket": $input_bucket, "Role": $role, "AwsKmsKeyArn": $aws_kms_key_arn, "Notifications": $notifications, "ContentConfig": $content_config, "ThumbnailConfig": $thumbnail_config} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-# <p>The DeletePreset operation removes a preset that you've added in an AWS region.</p> <note> <p>You can't delete the default presets that are included with Elastic Transcoder.</p> </note>
+# The DeletePreset operation removes a preset that you've added in an AWS region. You can't delete the default presets that are included with Elastic Transcoder.
 #
 # DELETE /2012-09-25/presets/{Id}
 # operationId: DeletePreset
@@ -489,11 +498,11 @@ export def "2012-09-25-presets delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/2012-09-25/presets/{id}"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2012-09-25/presets/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -521,15 +530,15 @@ export def "2012-09-25-presets get" [
 ]: nothing -> record<Preset: record<Id: record, Arn: record, Name: record, Description: record, Container: record, Audio: record<Codec: record, SampleRate: record, BitRate: record, Channels: record, AudioPackingMode: record, CodecOptions: record>, Video: record<Codec: record, CodecOptions: record, KeyframesMaxDist: record, FixedGOP: record, BitRate: record, FrameRate: record, MaxFrameRate: record, Resolution: record, AspectRatio: record, MaxWidth: record, MaxHeight: record, DisplayAspectRatio: record, SizingPolicy: record, PaddingPolicy: record, Watermarks: record>, Thumbnails: record<Format: record, Interval: record, Resolution: record, AspectRatio: record, MaxWidth: record, MaxHeight: record, SizingPolicy: record, PaddingPolicy: record>, Type: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/2012-09-25/presets/{id}"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2012-09-25/presets/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# <p>The ListJobsByPipeline operation gets a list of the jobs currently in a pipeline.</p> <p>Elastic Transcoder returns all of the jobs currently in the specified pipeline. The response body contains one element for each job that satisfies the search criteria.</p>
+# The ListJobsByPipeline operation gets a list of the jobs currently in a pipeline. Elastic Transcoder returns all of the jobs currently in the specified pipeline. The response body contains one element for each job that satisfies the search criteria.
 #
 # GET /2012-09-25/jobsByPipeline/{PipelineId}
 # operationId: ListJobsByPipeline
@@ -543,8 +552,8 @@ export def "2012-09-25-jobs-by-pipeline list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ascending: string #  To list jobs in chronological order by the date and time that they were submitted, enter <code>true</code>. To list jobs in reverse chronological order, enter <code>false</code>. 
-  --page-token: string #  When Elastic Transcoder returns more than one page of results, use <code>pageToken</code> in subsequent <code>GET</code> requests to get each successive page of results. 
+  --ascending: string # To list jobs in chronological order by the date and time that they were submitted, enter true. To list jobs in reverse chronological order, enter false.
+  --page-token: string # When Elastic Transcoder returns more than one page of results, use pageToken in subsequent GET requests to get each successive page of results.
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -556,11 +565,11 @@ export def "2012-09-25-jobs-by-pipeline list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "Ascending" $ascending "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({pipeline_id: $pipeline_id} | format pattern "/2012-09-25/jobsByPipeline/{pipeline_id}") $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({pipeline_id: (encode-path-segment $pipeline_id)} | format pattern "/2012-09-25/jobsByPipeline/{pipeline_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -578,8 +587,8 @@ export def "2012-09-25-jobs-by-status list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ascending: string #  To list jobs in chronological order by the date and time that they were submitted, enter <code>true</code>. To list jobs in reverse chronological order, enter <code>false</code>. 
-  --page-token: string #  When Elastic Transcoder returns more than one page of results, use <code>pageToken</code> in subsequent <code>GET</code> requests to get each successive page of results. 
+  --ascending: string # To list jobs in chronological order by the date and time that they were submitted, enter true. To list jobs in reverse chronological order, enter false.
+  --page-token: string # When Elastic Transcoder returns more than one page of results, use pageToken in subsequent GET requests to get each successive page of results.
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -591,15 +600,15 @@ export def "2012-09-25-jobs-by-status list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "Ascending" $ascending "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({status: $status} | format pattern "/2012-09-25/jobsByStatus/{status}") $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({status: (encode-path-segment $status)} | format pattern "/2012-09-25/jobsByStatus/{status}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# <p>The TestRole operation tests the IAM role used to create the pipeline.</p> <p>The <code>TestRole</code> action lets you determine whether the IAM role you are using has sufficient permissions to let Elastic Transcoder perform tasks associated with the transcoding process. The action attempts to assume the specified IAM role, checks read access to the input and output buckets, and tries to send a test notification to Amazon SNS topics that you specify.</p>
+# The TestRole operation tests the IAM role used to create the pipeline. The TestRole action lets you determine whether the IAM role you are using has sufficient permissions to let Elastic Transcoder perform tasks associated with the transcoding process. The action attempts to assume the specified IAM role, checks read access to the input and output buckets, and tries to send a test notification to Amazon SNS topics that you specify.
 #
 # POST /2012-09-25/roleTests
 # DEPRECATED
@@ -624,22 +633,22 @@ export def "2012-09-25-role-tests test" [
   role: string # The IAM Amazon Resource Name (ARN) for the role that you want Elastic Transcoder to test.
   input_bucket: string # The Amazon S3 bucket that contains media files to be transcoded. The action attempts to read from this bucket.
   output_bucket: string # The Amazon S3 bucket that Elastic Transcoder writes transcoded media files to. The action attempts to read from this bucket.
-  topics: list # The ARNs of one or more Amazon Simple Notification Service (Amazon SNS) topics that you want the action to send a test notification to.
+  topics: list<string> # The ARNs of one or more Amazon Simple Notification Service (Amazon SNS) topics that you want the action to send a test notification to.
 ]: any -> record<Success: record, Messages: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/2012-09-25/roleTests")
-  let body = {"Role": $role, "InputBucket": $input_bucket, "OutputBucket": $output_bucket, "Topics": $topics} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"Role": $role, "InputBucket": $input_bucket, "OutputBucket": $output_bucket, "Topics": $topics} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-# <p>With the UpdatePipelineNotifications operation, you can update Amazon Simple Notification Service (Amazon SNS) notifications for a pipeline.</p> <p>When you update notifications for a pipeline, Elastic Transcoder returns the values that you specified in the request.</p>
+# With the UpdatePipelineNotifications operation, you can update Amazon Simple Notification Service (Amazon SNS) notifications for a pipeline. When you update notifications for a pipeline, Elastic Transcoder returns the values that you specified in the request.
 #
 # POST /2012-09-25/pipelines/{Id}/notifications
 # operationId: UpdatePipelineNotifications
@@ -661,22 +670,22 @@ export def "2012-09-25-pipelines-notifications update" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  notifications: record # <p>The Amazon Simple Notification Service (Amazon SNS) topic or topics to notify in order to report job status.</p> <important> <p>To receive notifications, you must also subscribe to the new topic in the Amazon SNS console.</p> </important> — shape: {Progressing?: any, Completed?: any, Warning?: any, Error?: any}
+  notifications: record # The Amazon Simple Notification Service (Amazon SNS) topic or topics to notify in order to report job status. To receive notifications, you must also subscribe to the new topic in the Amazon SNS console. — shape: {Progressing?: any, Completed?: any, Warning?: any, Error?: any}
 ]: any -> record<Pipeline: record<Id: record, Arn: record, Name: record, Status: record, InputBucket: record, OutputBucket: record, Role: record, AwsKmsKeyArn: record, Notifications: record<Progressing: record, Completed: record, Warning: record, Error: record>, ContentConfig: record<Bucket: record, StorageClass: record, Permissions: record>, ThumbnailConfig: record<Bucket: record, StorageClass: record, Permissions: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/2012-09-25/pipelines/{id}/notifications"))
-  let body = {"Notifications": $notifications} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2012-09-25/pipelines/{id}/notifications"))
+  let req_body = {"Notifications": $notifications} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-# <p>The UpdatePipelineStatus operation pauses or reactivates a pipeline, so that the pipeline stops or restarts the processing of jobs.</p> <p>Changing the pipeline status is useful if you want to cancel one or more jobs. You can't cancel jobs after Elastic Transcoder has started processing them; if you pause the pipeline to which you submitted the jobs, you have more time to get the job IDs for the jobs that you want to cancel, and to send a <a>CancelJob</a> request. </p>
+# The UpdatePipelineStatus operation pauses or reactivates a pipeline, so that the pipeline stops or restarts the processing of jobs. Changing the pipeline status is useful if you want to cancel one or more jobs. You can't cancel jobs after Elastic Transcoder has started processing them; if you pause the pipeline to which you submitted the jobs, you have more time to get the job IDs for the jobs that you want to cancel, and to send a CancelJob request.
 #
 # POST /2012-09-25/pipelines/{Id}/status
 # operationId: UpdatePipelineStatus
@@ -697,17 +706,17 @@ export def "2012-09-25-pipelines-status update" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  status: string # <p>The desired status of the pipeline:</p> <ul> <li> <p> <code>Active</code>: The pipeline is processing jobs.</p> </li> <li> <p> <code>Paused</code>: The pipeline is not currently processing jobs.</p> </li> </ul>
+  status: string # The desired status of the pipeline: Active: The pipeline is processing jobs. Paused: The pipeline is not currently processing jobs.
 ]: any -> record<Pipeline: record<Id: record, Arn: record, Name: record, Status: record, InputBucket: record, OutputBucket: record, Role: record, AwsKmsKeyArn: record, Notifications: record<Progressing: record, Completed: record, Warning: record, Error: record>, ContentConfig: record<Bucket: record, StorageClass: record, Permissions: record>, ThumbnailConfig: record<Bucket: record, StorageClass: record, Permissions: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/2012-09-25/pipelines/{id}/status"))
-  let body = {"Status": $status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2012-09-25/pipelines/{id}/status"))
+  let req_body = {"Status": $status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

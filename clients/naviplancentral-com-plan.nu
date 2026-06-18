@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -117,7 +126,7 @@ export def "advisors get" [
 #
 # GET /api/Advisors/{householdId}/{clientId}
 # operationId: Advisors_GetByHouseholdidClientid
-export def "advisors get-by" [
+export def "advisors get-by-householdId-clientId" [
   household_id: int
   client_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -132,7 +141,7 @@ export def "advisors get-by" [
 ]: nothing -> record<advisors: table<addressLine1: string, addressLine2: string, advisorId: string, advisorTitle: string, businessPhone: string, cellPhone: string, city: string, emailAddress: string, faxPhone: string, firstName: string, homePhone: string, lastName: string, links: list, middleName: string, officeName: string, officeWebsite: string, pagerNumber: string, postalCode: string, stateProvince: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({household_id: $household_id, client_id: $client_id} | format pattern "/api/Advisors/{household_id}/{client_id}"))
+  let full_url = (build-url $base ({household_id: (encode-path-segment $household_id), client_id: (encode-path-segment $client_id)} | format pattern "/api/Advisors/{household_id}/{client_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -142,7 +151,7 @@ export def "advisors get-by" [
 #
 # GET /api/Advisors/{id}
 # operationId: Advisors_GetById
-export def "advisors list" [
+export def "advisors get-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -156,7 +165,7 @@ export def "advisors list" [
 ]: nothing -> record<addressLine1: string, addressLine2: string, advisorId: string, advisorTitle: string, businessPhone: string, cellPhone: string, city: string, emailAddress: string, faxPhone: string, firstName: string, homePhone: string, lastName: string, links: table<href: string, rel: string>, middleName: string, officeName: string, officeWebsite: string, pagerNumber: string, postalCode: string, stateProvince: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/Advisors/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Advisors/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -232,7 +241,7 @@ export def "business-entities get-by-planid" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/BusinessEntities/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/BusinessEntities/{id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -308,7 +317,7 @@ export def "defined-benefit-pensions get-by-planid" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/DefinedBenefitPensions/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/DefinedBenefitPensions/{id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -318,7 +327,7 @@ export def "defined-benefit-pensions get-by-planid" [
 #
 # POST /api/Eula/Accept
 # operationId: Eula_Accept
-export def "eula-accept post" [
+export def "eula-accept create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -366,7 +375,7 @@ export def "family get-by-planid" [
 #
 # GET /api/GoalAdjustments/Education/{id}/Adjustments
 # operationId: GoalAdjustments_GetEducationByIdClientidPlanid
-export def "goal-adjustments-education-adjustments get" [
+export def "goal-adjustments-education-adjustments get-by-clientid-planid" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -383,7 +392,7 @@ export def "goal-adjustments-education-adjustments get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "clientId" $client_id "scalar") (serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/GoalAdjustments/Education/{id}/Adjustments") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/GoalAdjustments/Education/{id}/Adjustments") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -394,7 +403,7 @@ export def "goal-adjustments-education-adjustments get" [
 # POST /api/GoalAdjustments/Education/{id}/Calculations
 # operationId: GoalAdjustments_PostEducationByIdGoaladjustmentsPlanid
 # --adjustedValues shape: {duration?: float, expensesCovered?: float, lumpSumContribution?: float, lumpSumDate?: string, monthlySavingsContribution?: float}
-export def "goal-adjustments-education-calculations create" [
+export def "goal-adjustments-education-calculations create-by-goaladjustments-planid" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -412,19 +421,19 @@ export def "goal-adjustments-education-calculations create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/GoalAdjustments/Education/{id}/Calculations") $qp)
-  let body = {"adjustedValues": $adjusted_values} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/GoalAdjustments/Education/{id}/Calculations") $qp)
+  let req_body = {"adjustedValues": $adjusted_values} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns a list of goals with their relevant success rates.
 #
 # GET /api/GoalAdjustments/GoalSuccessRates
 # operationId: GoalAdjustments_GetGoalSuccessRatesByClientidPlanid
-export def "goal-adjustments-goal-success-rates get" [
+export def "goal-adjustments-goal-success-rates get-by-clientid-planid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -450,7 +459,7 @@ export def "goal-adjustments-goal-success-rates get" [
 #
 # GET /api/GoalAdjustments/MajorPurchase/{id}/Adjustments
 # operationId: GoalAdjustments_GetMajorPurchaseByIdClientidPlanid
-export def "goal-adjustments-major-purchase-adjustments get" [
+export def "goal-adjustments-major-purchase-adjustments get-by-clientid-planid" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -467,7 +476,7 @@ export def "goal-adjustments-major-purchase-adjustments get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "clientId" $client_id "scalar") (serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/GoalAdjustments/MajorPurchase/{id}/Adjustments") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/GoalAdjustments/MajorPurchase/{id}/Adjustments") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -478,7 +487,7 @@ export def "goal-adjustments-major-purchase-adjustments get" [
 # POST /api/GoalAdjustments/MajorPurchase/{id}/Calculations
 # operationId: GoalAdjustments_PostMajorPurchaseByIdGoaladjustmentsPlanid
 # --adjustedValues shape: {lumpSumContribution?: float, lumpSumDate?: string, monthlySavingsContribution?: float, targetDate?: string, totalNeed?: float}
-export def "goal-adjustments-major-purchase-calculations create" [
+export def "goal-adjustments-major-purchase-calculations create-by-goaladjustments-planid" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -496,19 +505,19 @@ export def "goal-adjustments-major-purchase-calculations create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/GoalAdjustments/MajorPurchase/{id}/Calculations") $qp)
-  let body = {"adjustedValues": $adjusted_values} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/GoalAdjustments/MajorPurchase/{id}/Calculations") $qp)
+  let req_body = {"adjustedValues": $adjusted_values} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns a list of goal adjustment restrictions.
 #
 # GET /api/GoalAdjustments/Restrictions
 # operationId: GoalAdjustments_GetGoalAdjustmentRestrictionsByClientidPlanid
-export def "goal-adjustments-restrictions get" [
+export def "goal-adjustments-restrictions get-by-clientid-planid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -534,7 +543,7 @@ export def "goal-adjustments-restrictions get" [
 #
 # GET /api/GoalAdjustments/Retirement/Adjustments
 # operationId: GoalAdjustments_GetRetirementByClientidPlanid
-export def "goal-adjustments-retirement-adjustments get" [
+export def "goal-adjustments-retirement-adjustments get-by-clientid-planid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -561,7 +570,7 @@ export def "goal-adjustments-retirement-adjustments get" [
 # POST /api/GoalAdjustments/Retirement/Calculations
 # operationId: GoalAdjustments_PostRetirementByGoaladjustmentsPlanid
 # --adjustedValues shape: {clientRetirementAge?: float, coClientRetirementAge?: float, discretionaryExpenseCoverage?: float, fixedExpenseCoverage?: float, lumpSumContribution?: float, lumpSumDate?: string, monthlySavingsContribution?: float}
-export def "goal-adjustments-retirement-calculations create" [
+export def "goal-adjustments-retirement-calculations create-by-goaladjustments-planid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -579,18 +588,18 @@ export def "goal-adjustments-retirement-calculations create" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/GoalAdjustments/Retirement/Calculations" $qp)
-  let body = {"adjustedValues": $adjusted_values} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"adjustedValues": $adjusted_values} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns WAMO values for current goal
 #
 # GET /api/GoalAdjustments/{id}/WhatAreMyOptions
 # operationId: GoalAdjustments_GetWhatAreMyOptionsByIdClientidPlanid
-export def "goal-adjustments-what-are-my-options get" [
+export def "goal-adjustments-what-are-my-options get-by-clientid-planid" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -607,7 +616,7 @@ export def "goal-adjustments-what-are-my-options get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "clientId" $client_id "scalar") (serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/GoalAdjustments/{id}/WhatAreMyOptions") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/GoalAdjustments/{id}/WhatAreMyOptions") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -658,7 +667,7 @@ export def "goals get-by-planid" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/Goals/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Goals/{id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -709,7 +718,7 @@ export def "holding-companies get-by-planid" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/HoldingCompanies/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/HoldingCompanies/{id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -785,7 +794,7 @@ export def "liabilities get-by-planid" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/Liabilities/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Liabilities/{id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -836,7 +845,7 @@ export def "lifestyle-assets get-by-planid" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/LifestyleAssets/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/LifestyleAssets/{id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -846,7 +855,7 @@ export def "lifestyle-assets get-by-planid" [
 #
 # GET /api/LivePlan/Goals
 # operationId: LivePlan_GetGoalsByClientidPlanid
-export def "live-plan-goals get" [
+export def "live-plan-goals get-by-clientid-planid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -872,7 +881,7 @@ export def "live-plan-goals get" [
 #
 # GET /api/LivePlan/Goals/Funding
 # operationId: LivePlan_GetGoalFundingListByClientidPlanid
-export def "live-plan-goals-funding get-goal-funding-list" [
+export def "live-plan-goals-funding get-list-by-clientid-planid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -898,7 +907,7 @@ export def "live-plan-goals-funding get-goal-funding-list" [
 #
 # GET /api/LivePlan/Goals/{id}/WhatAreMyOptions
 # operationId: LivePlan_GetWhatAreMyOptionsByIdClientidPlanid
-export def "live-plan-goals-what-are-my-options get" [
+export def "live-plan-goals-what-are-my-options get-by-clientid-planid" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -915,7 +924,7 @@ export def "live-plan-goals-what-are-my-options get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "clientId" $client_id "scalar") (serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/LivePlan/Goals/{id}/WhatAreMyOptions") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/LivePlan/Goals/{id}/WhatAreMyOptions") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -925,7 +934,7 @@ export def "live-plan-goals-what-are-my-options get" [
 #
 # GET /api/LivePlan/NetWorth/Accounts
 # operationId: LivePlan_GetAccountsByClientidPlanid
-export def "live-plan-net-worth-accounts get" [
+export def "live-plan-net-worth-accounts get-by-clientid-planid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -951,7 +960,7 @@ export def "live-plan-net-worth-accounts get" [
 #
 # GET /api/LivePlan/NetWorth/Liabilities
 # operationId: LivePlan_GetLiabilitiesByClientidPlanid
-export def "live-plan-net-worth-liabilities get" [
+export def "live-plan-net-worth-liabilities get-by-clientid-planid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -977,7 +986,7 @@ export def "live-plan-net-worth-liabilities get" [
 #
 # GET /api/LivePlan/NetWorth/LifestyleAssets
 # operationId: LivePlan_GetLifestyleAssetsByClientidPlanid
-export def "live-plan-net-worth-lifestyle-assets get" [
+export def "live-plan-net-worth-lifestyle-assets get-by-clientid-planid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1003,7 +1012,7 @@ export def "live-plan-net-worth-lifestyle-assets get" [
 #
 # GET /api/LivePlan/NetWorth/RealEstate
 # operationId: LivePlan_GetRealEstateAssetsByClientidPlanid
-export def "live-plan-net-worth-real-estate get-real-estate-assets" [
+export def "live-plan-net-worth-real-estate get-assets-by-clientid-planid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1029,7 +1038,7 @@ export def "live-plan-net-worth-real-estate get-real-estate-assets" [
 #
 # GET /api/LivePlan/Projections/NetWorth
 # operationId: LivePlan_GetProjectedNetWorthByClientidPlanid
-export def "live-plan-projections-net-worth get-projected" [
+export def "live-plan-projections-net-worth get-projected-by-clientid-planid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1055,7 +1064,7 @@ export def "live-plan-projections-net-worth get-projected" [
 #
 # GET /api/LivePlan/Projections/{id}/NeedsVsAbilities
 # operationId: LivePlan_GetProjectedNeedsVsAbilitiesByIdClientidPlanid
-export def "live-plan-projections-needs-vs-abilities get-projected" [
+export def "live-plan-projections-needs-vs-abilities get-projected-by-clientid-planid" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1072,7 +1081,7 @@ export def "live-plan-projections-needs-vs-abilities get-projected" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "clientId" $client_id "scalar") (serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/LivePlan/Projections/{id}/NeedsVsAbilities") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/LivePlan/Projections/{id}/NeedsVsAbilities") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1107,7 +1116,7 @@ export def "net-worth get-by-planid" [
 #
 # POST /api/Password/HasUserSetPassword
 # operationId: Password_HasUserSetPassword
-export def "password-has-user-set-password post" [
+export def "password-has-user-set-password update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1170,18 +1179,18 @@ export def "password-reset reset-by-model" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/Password/Reset")
-  let body = {"locale": $locale, "userName": $user_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"locale": $locale, "userName": $user_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Sets the password for the currently logged in user
 #
 # POST /api/Password/Set
 # operationId: Password_SetByModel
-export def "password-set post" [
+export def "password-set update-by-model" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1198,11 +1207,11 @@ export def "password-set post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/Password/Set")
-  let body = {"newPassword": $new_password, "oldPassword": $old_password} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"newPassword": $new_password, "oldPassword": $old_password} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve plan information
@@ -1300,7 +1309,7 @@ export def "portfolio-accounts get-by-planid" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/PortfolioAccounts/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/PortfolioAccounts/{id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1351,7 +1360,7 @@ export def "projected-annual-summary get-by-planid" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/ProjectedAnnualSummary/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/ProjectedAnnualSummary/{id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1402,7 +1411,7 @@ export def "projected-cash-flow get-by-planid" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/ProjectedCashFlow/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/ProjectedCashFlow/{id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1412,7 +1421,7 @@ export def "projected-cash-flow get-by-planid" [
 #
 # GET /api/ProjectedGoals/AssetsFundingGoals
 # operationId: ProjectedGoals_GetAssetsFundingGoalsByPlanid
-export def "projected-goals-assets-funding-goals get" [
+export def "projected-goals-assets-funding-goals get-by-planid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1437,7 +1446,7 @@ export def "projected-goals-assets-funding-goals get" [
 #
 # GET /api/ProjectedGoals/NeedsVsAbilities
 # operationId: ProjectedGoals_GetNeedsVsAbilitiesByPlanid
-export def "projected-goals-needs-vs-abilities get" [
+export def "projected-goals-needs-vs-abilities get-by-planid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1503,7 +1512,7 @@ export def "projected-net-worth get-by-planid" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/ProjectedNetWorth/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/ProjectedNetWorth/{id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1554,7 +1563,7 @@ export def "restricted-stocks get-by-planid" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/RestrictedStocks/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/RestrictedStocks/{id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1628,7 +1637,7 @@ export def "stock-options get-by-planid" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/StockOptions/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/StockOptions/{id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1638,7 +1647,7 @@ export def "stock-options get-by-planid" [
 #
 # POST /api/auth/Login
 # operationId: Auth_LoginByModel
-export def "auth-login post" [
+export def "auth-login create-by-model" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1655,18 +1664,18 @@ export def "auth-login post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/auth/Login")
-  let body = {"password": $password, "username": $username} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"password": $password, "username": $username} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets the login rules
 #
 # GET /api/auth/LoginConfiguration
 # operationId: Auth_PasswordRequirements
-export def "auth-login-configuration get" [
+export def "auth-login-configuration get-password-requirements" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1688,7 +1697,7 @@ export def "auth-login-configuration get" [
 # POST /api/auth/Logout
 #
 # operationId: Auth_Logout
-export def "auth-logout post" [
+export def "auth-logout create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1711,7 +1720,7 @@ export def "auth-logout post" [
 #
 # POST /api/auth/ResumeSession
 # operationId: Auth_ResumeSession
-export def "auth-resume-session post" [
+export def "auth-resume-session create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

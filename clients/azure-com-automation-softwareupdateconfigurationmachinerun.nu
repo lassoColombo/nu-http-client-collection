@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -115,11 +124,11 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$top" $top "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, automation_account_name: $automation_account_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Automation/automationAccounts/{automation_account_name}/softwareUpdateConfigurationMachineRuns") $qp)
-  let extra_headers = {"clientRequestId": $client_request_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), automation_account_name: (encode-path-segment $automation_account_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Automation/automationAccounts/{automation_account_name}/softwareUpdateConfigurationMachineRuns") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"clientRequestId": $client_request_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -128,7 +137,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/softwareUpdateConfigurationMachineRuns/{softwareUpdateConfigurationMachineRunId}
 # Docs: http://aka.ms/azureautomationsdk/softwareupdateconfigurationoperations
 # operationId: SoftwareUpdateConfigurationMachineRuns_GetById
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-software-update-configuration-machine-runs get-by" [
+export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-software-update-configuration-machine-runs get" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string
@@ -147,10 +156,10 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, automation_account_name: $automation_account_name, software_update_configuration_machine_run_id: $software_update_configuration_machine_run_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Automation/automationAccounts/{automation_account_name}/softwareUpdateConfigurationMachineRuns/{software_update_configuration_machine_run_id}") $qp)
-  let extra_headers = {"clientRequestId": $client_request_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), automation_account_name: (encode-path-segment $automation_account_name), software_update_configuration_machine_run_id: (encode-path-segment $software_update_configuration_machine_run_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Automation/automationAccounts/{automation_account_name}/softwareUpdateConfigurationMachineRuns/{software_update_configuration_machine_run_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"clientRequestId": $client_request_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

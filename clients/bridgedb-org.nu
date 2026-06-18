@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -110,7 +119,7 @@ export def "attribute-search get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "attrName" $attr_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({organism: $organism, query: $query} | format pattern "/{organism}/attributeSearch/{query}") $qp)
+  let full_url = (build-url $base ({organism: (encode-path-segment $organism), query: (encode-path-segment $query)} | format pattern "/{organism}/attributeSearch/{query}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -132,7 +141,7 @@ export def "attribute-set get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({organism: $organism} | format pattern "/{organism}/attributeSet"))
+  let full_url = (build-url $base ({organism: (encode-path-segment $organism)} | format pattern "/{organism}/attributeSet"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -158,7 +167,7 @@ export def "attributes get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "attrName" $attr_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({organism: $organism, system_code: $system_code, identifier: $identifier} | format pattern "/{organism}/attributes/{system_code}/{identifier}") $qp)
+  let full_url = (build-url $base ({organism: (encode-path-segment $organism), system_code: (encode-path-segment $system_code), identifier: (encode-path-segment $identifier)} | format pattern "/{organism}/attributes/{system_code}/{identifier}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -180,7 +189,7 @@ export def "is-free-search-supported get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({organism: $organism} | format pattern "/{organism}/isFreeSearchSupported"))
+  let full_url = (build-url $base ({organism: (encode-path-segment $organism)} | format pattern "/{organism}/isFreeSearchSupported"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -204,7 +213,7 @@ export def "is-mapping-supported get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({organism: $organism, source_system_code: $source_system_code, target_system_code: $target_system_code} | format pattern "/{organism}/isMappingSupported/{source_system_code}/{target_system_code}"))
+  let full_url = (build-url $base ({organism: (encode-path-segment $organism), source_system_code: (encode-path-segment $source_system_code), target_system_code: (encode-path-segment $target_system_code)} | format pattern "/{organism}/isMappingSupported/{source_system_code}/{target_system_code}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -226,7 +235,7 @@ export def "properties get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({organism: $organism} | format pattern "/{organism}/properties"))
+  let full_url = (build-url $base ({organism: (encode-path-segment $organism)} | format pattern "/{organism}/properties"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -251,7 +260,7 @@ export def "search get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({organism: $organism, query: $query} | format pattern "/{organism}/search/{query}") $qp)
+  let full_url = (build-url $base ({organism: (encode-path-segment $organism), query: (encode-path-segment $query)} | format pattern "/{organism}/search/{query}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -273,7 +282,7 @@ export def "source-data-sources get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({organism: $organism} | format pattern "/{organism}/sourceDataSources"))
+  let full_url = (build-url $base ({organism: (encode-path-segment $organism)} | format pattern "/{organism}/sourceDataSources"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -295,7 +304,7 @@ export def "target-data-sources get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({organism: $organism} | format pattern "/{organism}/targetDataSources"))
+  let full_url = (build-url $base ({organism: (encode-path-segment $organism)} | format pattern "/{organism}/targetDataSources"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -319,7 +328,7 @@ export def "xref-exists get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({organism: $organism, system_code: $system_code, identifier: $identifier} | format pattern "/{organism}/xrefExists/{system_code}/{identifier}"))
+  let full_url = (build-url $base ({organism: (encode-path-segment $organism), system_code: (encode-path-segment $system_code), identifier: (encode-path-segment $identifier)} | format pattern "/{organism}/xrefExists/{system_code}/{identifier}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -345,7 +354,7 @@ export def "xrefs get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "dataSource" $data_source "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({organism: $organism, system_code: $system_code, identifier: $identifier} | format pattern "/{organism}/xrefs/{system_code}/{identifier}") $qp)
+  let full_url = (build-url $base ({organism: (encode-path-segment $organism), system_code: (encode-path-segment $system_code), identifier: (encode-path-segment $identifier)} | format pattern "/{organism}/xrefs/{system_code}/{identifier}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -354,7 +363,7 @@ export def "xrefs get" [
 # Returns a list of xrefs, per identifier, that maps to a given list of identifiers an data source given an organism.
 #
 # POST /{organism}/xrefsBatch
-export def "xrefs-batch post-by-organism" [
+export def "xrefs-batch create-by-organism" [
   organism: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -371,17 +380,18 @@ export def "xrefs-batch post-by-organism" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "dataSource" $data_source "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({organism: $organism} | format pattern "/{organism}/xrefsBatch") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({organism: (encode-path-segment $organism)} | format pattern "/{organism}/xrefsBatch") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns a list of xrefs, that maps to a given list of identifiers to a given data source and organism.
 #
 # POST /{organism}/xrefsBatch/{systemCode}
-export def "xrefs-batch post-by-organism-systemCode" [
+export def "xrefs-batch create-by-organism-systemCode" [
   organism: string
   system_code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -399,9 +409,10 @@ export def "xrefs-batch post-by-organism-systemCode" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "dataSource" $data_source "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({organism: $organism, system_code: $system_code} | format pattern "/{organism}/xrefsBatch/{system_code}") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({organism: (encode-path-segment $organism), system_code: (encode-path-segment $system_code)} | format pattern "/{organism}/xrefsBatch/{system_code}") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

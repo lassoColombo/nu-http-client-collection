@@ -36,6 +36,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -134,10 +143,10 @@ export def "locate create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --confidence: int # Confidence level in percent for the accuracy/uncertainty in the location estimate response. If not specified, the default is 68 (this corresponds to a 68% probability that the true position is within the accuracy/uncertainty radius of the location estimate: the higher the number, the greater the confidence level).  (default: 68)
-  --fallback: list # Acceptable fallback options for cell and WLAN positioning. Values `area` and `any` apply to cell based positioning, and value `singleWifi` applies to WLAN based positioning. Both cell and WLAN options may be specified in the same request. If both `area` and `any` are specified, then `area` is ignored.  By default, cell based positioning returns cell tower level location estimates only. If you allow a WGS-84 compliant geocoordinate location estimate based on LAC, RNC, TAC, NID, or RZ areas, use the `fallback=area` setting. If you use the `fallback=any` setting, the service uses all available cell fallback methods and therefore the location estimate in the response may be at the MNC, SID, or MCC level.  For privacy reasons, the precise positioning based on a single WLAN AP is not possible. You can use the `fallback=singleWifi` setting to allow less accurate positioning based on a single WLAN AP. In that case, the center location of the position estimate will be deviated and the reported accuracy radius will be larger.
-  --desired: list # Comma-separated list of additional data fields that the service should include in the response if data is available. The query parameter supports the value `altitude`.
-  --required: list # Comma-separated list of additional data fields that the service should include in the response. If the data is not available, the response contains an error message. The query parameter supports the value `altitude`.
+  --confidence: int # Confidence level in percent for the accuracy/uncertainty in the location estimate response. If not specified, the default is 68 (this corresponds to a 68% probability that the true position is within the accuracy/uncertainty radius of the location estimate: the higher the number, the greater the confidence level). (default: 68)
+  --fallback: list<string> # Acceptable fallback options for cell and WLAN positioning. Values `area` and `any` apply to cell based positioning, and value `singleWifi` applies to WLAN based positioning. Both cell and WLAN options may be specified in the same request. If both `area` and `any` are specified, then `area` is ignored. By default, cell based positioning returns cell tower level location estimates only. If you allow a WGS-84 compliant geocoordinate location estimate based on LAC, RNC, TAC, NID, or RZ areas, use the `fallback=area` setting. If you use the `fallback=any` setting, the service uses all available cell fallback methods and therefore the location estimate in the response may be at the MNC, SID, or MCC level. For privacy reasons, the precise positioning based on a single WLAN AP is not possible. You can use the `fallback=singleWifi` setting to allow less accurate positioning based on a single WLAN AP. In that case, the center location of the position estimate will be deviated and the reported accuracy radius will be larger.
+  --desired: list<string> # Comma-separated list of additional data fields that the service should include in the response if data is available. The query parameter supports the value `altitude`.
+  --required: list<string> # Comma-separated list of additional data fields that the service should include in the response. If the data is not available, the response contains an error message. The query parameter supports the value `altitude`.
   --content-encoding: string@content-encoding-completer # Indicates that the data in the body is gzip-encoded.
   --x-request-id: string # ID used for correlating customer requests within HERE services. Used for logging and error reporting. Can be any string, but UUID is recommended. It will be echoed in the response.
   --cdma: list # CDMA cells (CDMA2000) — item shape: {baseLat?: float, baseLng?: float, bsid: int, localId?: record, nid: int, nmr?: list, pilotPower?: int, rz?: int, sid: int}
@@ -153,20 +162,20 @@ export def "locate create" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "confidence" $confidence "scalar") (serialize-qp "fallback" $fallback "csv") (serialize-qp "desired" $desired "csv") (serialize-qp "required" $required "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/locate" $qp)
-  let body = {"cdma": $cdma, "client": $client, "gsm": $gsm, "lte": $lte, "tdscdma": $tdscdma, "wcdma": $wcdma, "wlan": $wlan} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Encoding": $content_encoding, "X-Request-ID": $x_request_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"cdma": $cdma, "client": $client, "gsm": $gsm, "lte": $lte, "tdscdma": $tdscdma, "wcdma": $wcdma, "wlan": $wlan} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Content-Encoding": $content_encoding, "X-Request-ID": $x_request_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # API version
 #
 # GET /version
 # operationId: getApiVersion
-export def "version get-api" [
+export def "version get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

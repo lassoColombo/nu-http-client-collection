@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -68,7 +77,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "address-autocomplete post" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "address-autocomplete create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -91,7 +100,7 @@ export def commands []: nothing -> table {
 # Search
 #
 # POST /address/autocomplete
-export def "address-autocomplete post" [
+export def "address-autocomplete create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -109,20 +118,20 @@ export def "address-autocomplete post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/address/autocomplete")
-  let body = {"Input": $input} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"galaxy-ap-name": $galaxy_ap_name, "galaxy-ap-password": $galaxy_ap_password, "galaxy-search-type": $galaxy_search_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"Input": $input} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"galaxy-ap-name": $galaxy_ap_name, "galaxy-ap-password": $galaxy_ap_password, "galaxy-search-type": $galaxy_search_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Search
 #
 # POST /contact/enrich
 # --Address shape: {addressLine1?: string, addressLine2?: string}
-export def "contact-enrich post" [
+export def "contact-enrich create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -147,19 +156,19 @@ export def "contact-enrich post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/contact/enrich")
-  let body = {"Address": $address, "Age": $age, "Dob": $dob, "Email": $email, "FirstName": $first_name, "LastName": $last_name, "MiddleName": $middle_name, "PhoneNumber": $phone_number} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"galaxy-ap-name": $galaxy_ap_name, "galaxy-ap-password": $galaxy_ap_password, "galaxy-search-type": $galaxy_search_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"Address": $address, "Age": $age, "Dob": $dob, "Email": $email, "FirstName": $first_name, "LastName": $last_name, "MiddleName": $middle_name, "PhoneNumber": $phone_number} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"galaxy-ap-name": $galaxy_ap_name, "galaxy-ap-password": $galaxy_ap_password, "galaxy-search-type": $galaxy_search_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Search
 #
 # POST /email/enrich
-export def "email-enrich post" [
+export def "email-enrich create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -177,13 +186,13 @@ export def "email-enrich post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/email/enrich")
-  let body = {"Email": $email} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"galaxy-ap-name": $galaxy_ap_name, "galaxy-ap-password": $galaxy_ap_password, "galaxy-search-type": $galaxy_search_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"Email": $email} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"galaxy-ap-name": $galaxy_ap_name, "galaxy-ap-password": $galaxy_ap_password, "galaxy-search-type": $galaxy_search_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Search
@@ -216,19 +225,19 @@ export def "identity-verify-id list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/identity/verify_id")
-  let body = {"Address": $address, "Age": $age, "Dob": $dob, "Email": $email, "FirstName": $first_name, "LastName": $last_name, "MiddleName": $middle_name, "PhoneNumber": $phone_number} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"galaxy-ap-name": $galaxy_ap_name, "galaxy-ap-password": $galaxy_ap_password, "galaxy-search-type": $galaxy_search_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"Address": $address, "Age": $age, "Dob": $dob, "Email": $email, "FirstName": $first_name, "LastName": $last_name, "MiddleName": $middle_name, "PhoneNumber": $phone_number} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"galaxy-ap-name": $galaxy_ap_name, "galaxy-ap-password": $galaxy_ap_password, "galaxy-search-type": $galaxy_search_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Search
 #
 # POST /phone/enrich
-export def "phone-enrich post" [
+export def "phone-enrich create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -246,11 +255,11 @@ export def "phone-enrich post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/phone/enrich")
-  let body = {"Phone": $phone} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"galaxy-ap-name": $galaxy_ap_name, "galaxy-ap-password": $galaxy_ap_password, "galaxy-search-type": $galaxy_search_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"Phone": $phone} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"galaxy-ap-name": $galaxy_ap_name, "galaxy-ap-password": $galaxy_ap_password, "galaxy-search-type": $galaxy_search_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

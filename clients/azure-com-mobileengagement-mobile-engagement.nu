@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -115,7 +124,7 @@ export def "subscriptions-providers-microsoft-mobile-engagement-app-collections 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.MobileEngagement/appCollections") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.MobileEngagement/appCollections") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -144,12 +153,12 @@ export def "subscriptions-providers-microsoft-mobile-engagement-check-app-collec
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.MobileEngagement/checkAppCollectionNameAvailability") $qp)
-  let body = {"available": $available, "name": $name, "unavailabilityReason": $unavailability_reason} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.MobileEngagement/checkAppCollectionNameAvailability") $qp)
+  let req_body = {"available": $available, "name": $name, "unavailabilityReason": $unavailability_reason} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists supported platforms for Engagement applications.
@@ -171,7 +180,7 @@ export def "subscriptions-providers-microsoft-mobile-engagement-supported-platfo
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.MobileEngagement/supportedPlatforms") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.MobileEngagement/supportedPlatforms") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -198,7 +207,7 @@ export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, app_collection: $app_collection} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), app_collection: (encode-path-segment $app_collection)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -232,7 +241,7 @@ export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$search" $search "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, app_collection: $app_collection, app_name: $app_name, kind: $kind} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/campaigns/{kind}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), app_collection: (encode-path-segment $app_collection), app_name: (encode-path-segment $app_name), kind: (encode-path-segment $kind)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/campaigns/{kind}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -262,27 +271,27 @@ export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-
   --api-version: string # Client Api Version.
   --audience: record # Specify which users will be targeted by this campaign. By default, all users will be targeted. If you set `pushMode` property to `manual`, the only thing you can specify in the audience is the push quota filter. An audience is a boolean expression made of criteria (variables) operators (`not`, `and` or `or`) and parenthesis. Additionally, a set of filters can be added to an audience. 65535 bytes max as per JSON encoding. — shape: {criteria?: record, expression?: string, filters?: list}
   --category: string # Category of the campaign. Categories can be used on the application side to customize campaigns.
-  --delivery-activities: list # Announcements/polls only. Array containing the list of activities in which the campaign can be delivered. deliveryTime must be set to session. If the platform is iOS, this option can also be set if deliveryTime is set to any. In that case, if the campaign is received when the application is launched, it will be delivered only in the specified list of activities.
+  --delivery-activities: list<string> # Announcements/polls only. Array containing the list of activities in which the campaign can be delivered. deliveryTime must be set to session. If the platform is iOS, this option can also be set if deliveryTime is set to any. In that case, if the campaign is received when the application is launched, it will be delivered only in the specified list of activities.
   --delivery-time: string@delivery-time-completer # Announcements/polls only. Defines when the campaign should be delivered. Valid values are: * `any`: Campaign will be delivered as soon as possible. * `background`: iOS only. Campaign will be only delivered when the application is in background (out of app). * `session`: Campaign will be delivered when the application is running.
   --end-time: string # The date at which the campaign should be finished. The date shall conform to the following format: `yyyy-MM-ddTHH:mm:ssZ`. Example: `2011-11-21 15:23Z`
   --localization: record # Push campaigns can be localized using an optional JSON object. The JSON key is a two-character language code as specified by the ISO 639-1 standard. The corresponding value is an object containing the localizable properties.
   --name: string # Unique name of the campaign.
-  --notification-badge: oneof<nothing, bool> # A flag indicating whether or not you want the native Apple Push notification to update the badge icon to the number of unread messages. The `deliveryTime` property must be set to `any` or `background`.  (default: false)
+  --notification-badge: oneof<nothing, bool> # A flag indicating whether or not you want the native Apple Push notification to update the badge icon to the number of unread messages. The `deliveryTime` property must be set to `any` or `background`. (default: false)
   --notification-closeable: oneof<nothing, bool> # A flag indicating whether or not you want the notification to be closeable. (default: true)
   --notification-icon: oneof<nothing, bool> # A flag indicating whether or not you want to display the resource icon in notification content. (default: true)
-  --notification-sound: oneof<nothing, bool> # * `Android`: A flag indicating whether or not you want the system notification to make a sound. The `notificationType` property must be set to `system`. * `iOS`: A flag indicating whether or not you want the native Apple Push notification to make a sound. The `deliveryTime` property must be set to `any` or `background`. This will play the 'default' sound. If you want to play a custom sound, see the `notificationOptions` property. * `Windows`: A flag indicating whether or not you want the native Windows Notification Service to make a sound. The `deliveryTime` property must be set to `any`.  (default: false)
-  --notification-type: string@notification-type-completer # Android only. Defines how the notification should be displayed. Valid values are: * `system`: Display the notification using a standard system notification. * `popup`: Display the notification using a in-app banner notification.  (default: popup)
+  --notification-sound: oneof<nothing, bool> # * `Android`: A flag indicating whether or not you want the system notification to make a sound. The `notificationType` property must be set to `system`. * `iOS`: A flag indicating whether or not you want the native Apple Push notification to make a sound. The `deliveryTime` property must be set to `any` or `background`. This will play the 'default' sound. If you want to play a custom sound, see the `notificationOptions` property. * `Windows`: A flag indicating whether or not you want the native Windows Notification Service to make a sound. The `deliveryTime` property must be set to `any`. (default: false)
+  --notification-type: string@notification-type-completer # Android only. Defines how the notification should be displayed. Valid values are: * `system`: Display the notification using a standard system notification. * `popup`: Display the notification using a in-app banner notification. (default: popup)
   --notification-vibrate: oneof<nothing, bool> # Android only. A flag indicating whether or not you want the system notification to make a vibration. The notificationType property must be set to system. (default: false)
-  --push-mode: string@push-mode-completer # Announcements/polls only. Defines how the campaign is pushed. Valid values are: * `real-time`: Never ending campaign, the campaign will be delivered  to your existing users and also to your new users. * `one-shot`: In this mode, the campaign will be delivered only to your existing users (campaign will stop after that). * `manual`: In this mode, the campaign will not be pushed automatically to devices. You will have to use the Push campaign command to push the campaign to your end-users. Campaigns can be pushed multiple times to the same device.  (default: real-time)
+  --push-mode: string@push-mode-completer # Announcements/polls only. Defines how the campaign is pushed. Valid values are: * `real-time`: Never ending campaign, the campaign will be delivered to your existing users and also to your new users. * `one-shot`: In this mode, the campaign will be delivered only to your existing users (campaign will stop after that). * `manual`: In this mode, the campaign will not be pushed automatically to devices. You will have to use the Push campaign command to push the campaign to your end-users. Campaigns can be pushed multiple times to the same device. (default: real-time)
   --questions: list # Poll questions. — item shape: {choices?: list, id?: int, localization?: record, title?: string}
   --start-time: string # The date at which the campaign should be started. The date shall conform to the following format: `yyyy-MM-ddTHH:mm:ssZ`. * If you set pushMode property to manual, this attribute will be ignored. * If you set pushMode property to one-shot, then the timezone attribute must be specified. Example: `2011-11-21 15:23Z`
   --timezone: string # The id of the time zone to use for the startTime and endTime dates. If not provided, the two date attributes will be expressed using the device timezone. Example: America/Los_Angeles
   --type: string@type-completer # Applicable only to announcements and data pushes. Type of announcement. Valid values are: * `text/plain`: Text-only announcement: `body` property should only contain plain text. * `text/html`: HTML announcement: `body` attribute can contain HTML code. * `only_notif`: Notification-only announcement. With this kind of announcements, the `body`, `title`, `actionButtonText` and `exitButtonText` are ignored. Type of data push. Valid values are: * `text/plain`: Text only data push: `body` property must be plain text. * `text/base64`: Base 64 data push: `body` property must be encoded in base 64.
   --action-button-text: string # Text of the action button for text/web announcements and polls (answer button).
   --action-url: string # URL to launch when the announcement is actioned.
-  --body-body: string # Body of the text/web announcement, poll or data push. This field supports appInfo markers.
+  --body: string # Body of the text/web announcement, poll or data push. This field supports appInfo markers.
   --exit-button-text: string # Text of the exit button for text/web announcements and polls.
-  --notification-image: string # Optional image encoded in base 64. Usually included in the right part of in app notifications (or as a banner if there is neither text nor content icon). For Android system notifications, the image is used as the large icon (displayed only on Android 3+).  (format: byte)
+  --notification-image: string # Optional image encoded in base 64. Usually included in the right part of in app notifications (or as a banner if there is neither text nor content icon). For Android system notifications, the image is used as the large icon (displayed only on Android 3+). (format: byte)
   --notification-message: string # Message of the notification. This field supports appInfo markers.
   --notification-options: any # shape: {actionText?: string, bigPicture?: string, bigText?: string, sound?: string}
   --notification-title: string # Title of the notification. This field supports appInfo markers.
@@ -293,19 +302,19 @@ export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, app_collection: $app_collection, app_name: $app_name, kind: $kind} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/campaigns/{kind}") $qp)
-  let body = {"audience": $audience, "category": $category, "deliveryActivities": $delivery_activities, "deliveryTime": $delivery_time, "endTime": $end_time, "localization": $localization, "name": $name, "notificationBadge": $notification_badge, "notificationCloseable": $notification_closeable, "notificationIcon": $notification_icon, "notificationSound": $notification_sound, "notificationType": $notification_type, "notificationVibrate": $notification_vibrate, "pushMode": $push_mode, "questions": $questions, "startTime": $start_time, "timezone": $timezone, "type": $type, "actionButtonText": $action_button_text, "actionUrl": $action_url, "body": $body_body, "exitButtonText": $exit_button_text, "notificationImage": $notification_image, "notificationMessage": $notification_message, "notificationOptions": $notification_options, "notificationTitle": $notification_title, "payload": $payload, "title": $title} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), app_collection: (encode-path-segment $app_collection), app_name: (encode-path-segment $app_name), kind: (encode-path-segment $kind)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/campaigns/{kind}") $qp)
+  let req_body = {"audience": $audience, "category": $category, "deliveryActivities": $delivery_activities, "deliveryTime": $delivery_time, "endTime": $end_time, "localization": $localization, "name": $name, "notificationBadge": $notification_badge, "notificationCloseable": $notification_closeable, "notificationIcon": $notification_icon, "notificationSound": $notification_sound, "notificationType": $notification_type, "notificationVibrate": $notification_vibrate, "pushMode": $push_mode, "questions": $questions, "startTime": $start_time, "timezone": $timezone, "type": $type, "actionButtonText": $action_button_text, "actionUrl": $action_url, "body": $body, "exitButtonText": $exit_button_text, "notificationImage": $notification_image, "notificationMessage": $notification_message, "notificationOptions": $notification_options, "notificationTitle": $notification_title, "payload": $payload, "title": $title} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Test a new campaign on a set of devices.
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MobileEngagement/appcollections/{appCollection}/apps/{appName}/campaigns/{kind}/test
 # operationId: Campaigns_TestNew
-# --data shape: {audience?: record, category?: string, deliveryActivities?: list, deliveryTime?: "any"|"background"|"session", endTime?: string, localization?: record, name?: string, notificationBadge?: bool, notificationCloseable?: bool, notificationIcon?: bool, notificationSound?: bool, notificationType?: "system"|"popup", notificationVibrate?: bool, pushMode?: "real-time"|"one-shot"|"manual", questions?: list, startTime?: string, timezone?: string, type?: "text/plain"|"text/html"|"only_notif"|"text/base64", actionButtonText?: string, actionUrl?: string, body?: string, exitButtonText?: string, notificationImage?: string, notificationMessage?: string, notificationOptions?: any, notificationTitle?: string, payload?: record, title?: string}
+# --data shape: {audience?: record, category?: string, deliveryActivities?: list<string>, deliveryTime?: "any"|"background"|"session", endTime?: string, localization?: record, name?: string, notificationBadge?: bool, notificationCloseable?: bool, notificationIcon?: bool, notificationSound?: bool, notificationType?: "system"|"popup", notificationVibrate?: bool, pushMode?: "real-time"|"one-shot"|"manual", questions?: list, startTime?: string, timezone?: string, ... (11 more fields)}
 export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-appcollections-apps-campaigns-test test-new" [
   subscription_id: string
   resource_group_name: string
@@ -321,7 +330,7 @@ export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
-  data: any # shape: {audience?: record, category?: string, deliveryActivities?: list, deliveryTime?: "any"|"background"|"session", endTime?: string, localization?: record, name?: string, notificationBadge?: bool, notificationCloseable?: bool, notificationIcon?: bool, notificationSound?: bool, notificationType?: "system"|"popup", notificationVibrate?: bool, pushMode?: "real-time"|"one-shot"|"manual", questions?: list, startTime?: string, timezone?: string, type?: "text/plain"|"text/html"|"only_notif"|"text/base64", actionButtonText?: string, actionUrl?: string, body?: string, exitButtonText?: string, notificationImage?: string, notificationMessage?: string, notificationOptions?: any, notificationTitle?: string, payload?: record, title?: string}
+  data: any # shape: {audience?: record, category?: string, deliveryActivities?: list<string>, deliveryTime?: "any"|"background"|"session", endTime?: string, localization?: record, name?: string, notificationBadge?: bool, notificationCloseable?: bool, notificationIcon?: bool, notificationSound?: bool, notificationType?: "system"|"popup", notificationVibrate?: bool, pushMode?: "real-time"|"one-shot"|"manual", questions?: list, startTime?: string, timezone?: string, ... (11 more fields)}
   device_id: string # Device identifier (as returned by the SDK).
   --lang: string # The language to test expressed using ISO 639-1 code. The default language of the campaign will be used if the parameter is not provided.
 ]: any -> record<state: string> {
@@ -329,12 +338,12 @@ export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, app_collection: $app_collection, app_name: $app_name, kind: $kind} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/campaigns/{kind}/test") $qp)
-  let body = {"data": $data, "deviceId": $device_id, "lang": $lang} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), app_collection: (encode-path-segment $app_collection), app_name: (encode-path-segment $app_name), kind: (encode-path-segment $kind)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/campaigns/{kind}/test") $qp)
+  let req_body = {"data": $data, "deviceId": $device_id, "lang": $lang} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a campaign previously created by a call to Create campaign.
@@ -361,7 +370,7 @@ export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, app_collection: $app_collection, app_name: $app_name, kind: $kind, id: $id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/campaigns/{kind}/{id}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), app_collection: (encode-path-segment $app_collection), app_name: (encode-path-segment $app_name), kind: (encode-path-segment $kind), id: (encode-path-segment $id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/campaigns/{kind}/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -391,7 +400,7 @@ export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, app_collection: $app_collection, app_name: $app_name, kind: $kind, id: $id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/campaigns/{kind}/{id}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), app_collection: (encode-path-segment $app_collection), app_name: (encode-path-segment $app_name), kind: (encode-path-segment $kind), id: (encode-path-segment $id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/campaigns/{kind}/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -422,27 +431,27 @@ export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-
   --api-version: string # Client Api Version.
   --audience: record # Specify which users will be targeted by this campaign. By default, all users will be targeted. If you set `pushMode` property to `manual`, the only thing you can specify in the audience is the push quota filter. An audience is a boolean expression made of criteria (variables) operators (`not`, `and` or `or`) and parenthesis. Additionally, a set of filters can be added to an audience. 65535 bytes max as per JSON encoding. — shape: {criteria?: record, expression?: string, filters?: list}
   --category: string # Category of the campaign. Categories can be used on the application side to customize campaigns.
-  --delivery-activities: list # Announcements/polls only. Array containing the list of activities in which the campaign can be delivered. deliveryTime must be set to session. If the platform is iOS, this option can also be set if deliveryTime is set to any. In that case, if the campaign is received when the application is launched, it will be delivered only in the specified list of activities.
+  --delivery-activities: list<string> # Announcements/polls only. Array containing the list of activities in which the campaign can be delivered. deliveryTime must be set to session. If the platform is iOS, this option can also be set if deliveryTime is set to any. In that case, if the campaign is received when the application is launched, it will be delivered only in the specified list of activities.
   --delivery-time: string@delivery-time-completer # Announcements/polls only. Defines when the campaign should be delivered. Valid values are: * `any`: Campaign will be delivered as soon as possible. * `background`: iOS only. Campaign will be only delivered when the application is in background (out of app). * `session`: Campaign will be delivered when the application is running.
   --end-time: string # The date at which the campaign should be finished. The date shall conform to the following format: `yyyy-MM-ddTHH:mm:ssZ`. Example: `2011-11-21 15:23Z`
   --localization: record # Push campaigns can be localized using an optional JSON object. The JSON key is a two-character language code as specified by the ISO 639-1 standard. The corresponding value is an object containing the localizable properties.
   --name: string # Unique name of the campaign.
-  --notification-badge: oneof<nothing, bool> # A flag indicating whether or not you want the native Apple Push notification to update the badge icon to the number of unread messages. The `deliveryTime` property must be set to `any` or `background`.  (default: false)
+  --notification-badge: oneof<nothing, bool> # A flag indicating whether or not you want the native Apple Push notification to update the badge icon to the number of unread messages. The `deliveryTime` property must be set to `any` or `background`. (default: false)
   --notification-closeable: oneof<nothing, bool> # A flag indicating whether or not you want the notification to be closeable. (default: true)
   --notification-icon: oneof<nothing, bool> # A flag indicating whether or not you want to display the resource icon in notification content. (default: true)
-  --notification-sound: oneof<nothing, bool> # * `Android`: A flag indicating whether or not you want the system notification to make a sound. The `notificationType` property must be set to `system`. * `iOS`: A flag indicating whether or not you want the native Apple Push notification to make a sound. The `deliveryTime` property must be set to `any` or `background`. This will play the 'default' sound. If you want to play a custom sound, see the `notificationOptions` property. * `Windows`: A flag indicating whether or not you want the native Windows Notification Service to make a sound. The `deliveryTime` property must be set to `any`.  (default: false)
-  --notification-type: string@notification-type-completer # Android only. Defines how the notification should be displayed. Valid values are: * `system`: Display the notification using a standard system notification. * `popup`: Display the notification using a in-app banner notification.  (default: popup)
+  --notification-sound: oneof<nothing, bool> # * `Android`: A flag indicating whether or not you want the system notification to make a sound. The `notificationType` property must be set to `system`. * `iOS`: A flag indicating whether or not you want the native Apple Push notification to make a sound. The `deliveryTime` property must be set to `any` or `background`. This will play the 'default' sound. If you want to play a custom sound, see the `notificationOptions` property. * `Windows`: A flag indicating whether or not you want the native Windows Notification Service to make a sound. The `deliveryTime` property must be set to `any`. (default: false)
+  --notification-type: string@notification-type-completer # Android only. Defines how the notification should be displayed. Valid values are: * `system`: Display the notification using a standard system notification. * `popup`: Display the notification using a in-app banner notification. (default: popup)
   --notification-vibrate: oneof<nothing, bool> # Android only. A flag indicating whether or not you want the system notification to make a vibration. The notificationType property must be set to system. (default: false)
-  --push-mode: string@push-mode-completer # Announcements/polls only. Defines how the campaign is pushed. Valid values are: * `real-time`: Never ending campaign, the campaign will be delivered  to your existing users and also to your new users. * `one-shot`: In this mode, the campaign will be delivered only to your existing users (campaign will stop after that). * `manual`: In this mode, the campaign will not be pushed automatically to devices. You will have to use the Push campaign command to push the campaign to your end-users. Campaigns can be pushed multiple times to the same device.  (default: real-time)
+  --push-mode: string@push-mode-completer # Announcements/polls only. Defines how the campaign is pushed. Valid values are: * `real-time`: Never ending campaign, the campaign will be delivered to your existing users and also to your new users. * `one-shot`: In this mode, the campaign will be delivered only to your existing users (campaign will stop after that). * `manual`: In this mode, the campaign will not be pushed automatically to devices. You will have to use the Push campaign command to push the campaign to your end-users. Campaigns can be pushed multiple times to the same device. (default: real-time)
   --questions: list # Poll questions. — item shape: {choices?: list, id?: int, localization?: record, title?: string}
   --start-time: string # The date at which the campaign should be started. The date shall conform to the following format: `yyyy-MM-ddTHH:mm:ssZ`. * If you set pushMode property to manual, this attribute will be ignored. * If you set pushMode property to one-shot, then the timezone attribute must be specified. Example: `2011-11-21 15:23Z`
   --timezone: string # The id of the time zone to use for the startTime and endTime dates. If not provided, the two date attributes will be expressed using the device timezone. Example: America/Los_Angeles
   --type: string@type-completer # Applicable only to announcements and data pushes. Type of announcement. Valid values are: * `text/plain`: Text-only announcement: `body` property should only contain plain text. * `text/html`: HTML announcement: `body` attribute can contain HTML code. * `only_notif`: Notification-only announcement. With this kind of announcements, the `body`, `title`, `actionButtonText` and `exitButtonText` are ignored. Type of data push. Valid values are: * `text/plain`: Text only data push: `body` property must be plain text. * `text/base64`: Base 64 data push: `body` property must be encoded in base 64.
   --action-button-text: string # Text of the action button for text/web announcements and polls (answer button).
   --action-url: string # URL to launch when the announcement is actioned.
-  --body-body: string # Body of the text/web announcement, poll or data push. This field supports appInfo markers.
+  --body: string # Body of the text/web announcement, poll or data push. This field supports appInfo markers.
   --exit-button-text: string # Text of the exit button for text/web announcements and polls.
-  --notification-image: string # Optional image encoded in base 64. Usually included in the right part of in app notifications (or as a banner if there is neither text nor content icon). For Android system notifications, the image is used as the large icon (displayed only on Android 3+).  (format: byte)
+  --notification-image: string # Optional image encoded in base 64. Usually included in the right part of in app notifications (or as a banner if there is neither text nor content icon). For Android system notifications, the image is used as the large icon (displayed only on Android 3+). (format: byte)
   --notification-message: string # Message of the notification. This field supports appInfo markers.
   --notification-options: any # shape: {actionText?: string, bigPicture?: string, bigText?: string, sound?: string}
   --notification-title: string # Title of the notification. This field supports appInfo markers.
@@ -453,19 +462,19 @@ export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, app_collection: $app_collection, app_name: $app_name, kind: $kind, id: $id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/campaigns/{kind}/{id}") $qp)
-  let body = {"audience": $audience, "category": $category, "deliveryActivities": $delivery_activities, "deliveryTime": $delivery_time, "endTime": $end_time, "localization": $localization, "name": $name, "notificationBadge": $notification_badge, "notificationCloseable": $notification_closeable, "notificationIcon": $notification_icon, "notificationSound": $notification_sound, "notificationType": $notification_type, "notificationVibrate": $notification_vibrate, "pushMode": $push_mode, "questions": $questions, "startTime": $start_time, "timezone": $timezone, "type": $type, "actionButtonText": $action_button_text, "actionUrl": $action_url, "body": $body_body, "exitButtonText": $exit_button_text, "notificationImage": $notification_image, "notificationMessage": $notification_message, "notificationOptions": $notification_options, "notificationTitle": $notification_title, "payload": $payload, "title": $title} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), app_collection: (encode-path-segment $app_collection), app_name: (encode-path-segment $app_name), kind: (encode-path-segment $kind), id: (encode-path-segment $id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/campaigns/{kind}/{id}") $qp)
+  let req_body = {"audience": $audience, "category": $category, "deliveryActivities": $delivery_activities, "deliveryTime": $delivery_time, "endTime": $end_time, "localization": $localization, "name": $name, "notificationBadge": $notification_badge, "notificationCloseable": $notification_closeable, "notificationIcon": $notification_icon, "notificationSound": $notification_sound, "notificationType": $notification_type, "notificationVibrate": $notification_vibrate, "pushMode": $push_mode, "questions": $questions, "startTime": $start_time, "timezone": $timezone, "type": $type, "actionButtonText": $action_button_text, "actionUrl": $action_url, "body": $body, "exitButtonText": $exit_button_text, "notificationImage": $notification_image, "notificationMessage": $notification_message, "notificationOptions": $notification_options, "notificationTitle": $notification_title, "payload": $payload, "title": $title} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Activate a campaign previously created by a call to Create campaign.
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MobileEngagement/appcollections/{appCollection}/apps/{appName}/campaigns/{kind}/{id}/activate
 # operationId: Campaigns_Activate
-export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-appcollections-apps-campaigns-activate post" [
+export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-appcollections-apps-campaigns-activate create" [
   subscription_id: string
   resource_group_name: string
   app_collection: string
@@ -485,7 +494,7 @@ export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, app_collection: $app_collection, app_name: $app_name, kind: $kind, id: $id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/campaigns/{kind}/{id}/activate") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), app_collection: (encode-path-segment $app_collection), app_name: (encode-path-segment $app_name), kind: (encode-path-segment $kind), id: (encode-path-segment $id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/campaigns/{kind}/{id}/activate") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -495,7 +504,7 @@ export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MobileEngagement/appcollections/{appCollection}/apps/{appName}/campaigns/{kind}/{id}/finish
 # operationId: Campaigns_Finish
-export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-appcollections-apps-campaigns-finish post" [
+export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-appcollections-apps-campaigns-finish create" [
   subscription_id: string
   resource_group_name: string
   app_collection: string
@@ -515,7 +524,7 @@ export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, app_collection: $app_collection, app_name: $app_name, kind: $kind, id: $id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/campaigns/{kind}/{id}/finish") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), app_collection: (encode-path-segment $app_collection), app_name: (encode-path-segment $app_name), kind: (encode-path-segment $kind), id: (encode-path-segment $id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/campaigns/{kind}/{id}/finish") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -525,7 +534,7 @@ export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MobileEngagement/appcollections/{appCollection}/apps/{appName}/campaigns/{kind}/{id}/push
 # operationId: Campaigns_Push
-# --data shape: {audience?: record, category?: string, deliveryActivities?: list, deliveryTime?: "any"|"background"|"session", endTime?: string, localization?: record, name?: string, notificationBadge?: bool, notificationCloseable?: bool, notificationIcon?: bool, notificationSound?: bool, notificationType?: "system"|"popup", notificationVibrate?: bool, pushMode?: "real-time"|"one-shot"|"manual", questions?: list, startTime?: string, timezone?: string, type?: "text/plain"|"text/html"|"only_notif"|"text/base64", actionButtonText?: string, actionUrl?: string, body?: string, exitButtonText?: string, notificationImage?: string, notificationMessage?: string, notificationOptions?: any, notificationTitle?: string, payload?: record, title?: string}
+# --data shape: {audience?: record, category?: string, deliveryActivities?: list<string>, deliveryTime?: "any"|"background"|"session", endTime?: string, localization?: record, name?: string, notificationBadge?: bool, notificationCloseable?: bool, notificationIcon?: bool, notificationSound?: bool, notificationType?: "system"|"popup", notificationVibrate?: bool, pushMode?: "real-time"|"one-shot"|"manual", questions?: list, startTime?: string, timezone?: string, ... (11 more fields)}
 export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-appcollections-apps-campaigns-push push" [
   subscription_id: string
   resource_group_name: string
@@ -542,19 +551,19 @@ export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
-  --data: any # shape: {audience?: record, category?: string, deliveryActivities?: list, deliveryTime?: "any"|"background"|"session", endTime?: string, localization?: record, name?: string, notificationBadge?: bool, notificationCloseable?: bool, notificationIcon?: bool, notificationSound?: bool, notificationType?: "system"|"popup", notificationVibrate?: bool, pushMode?: "real-time"|"one-shot"|"manual", questions?: list, startTime?: string, timezone?: string, type?: "text/plain"|"text/html"|"only_notif"|"text/base64", actionButtonText?: string, actionUrl?: string, body?: string, exitButtonText?: string, notificationImage?: string, notificationMessage?: string, notificationOptions?: any, notificationTitle?: string, payload?: record, title?: string}
-  device_ids: list # Device identifiers to push as a JSON array of strings. Note that if you want to push the same campaign several times to the same device, you need to make several API calls.
+  --data: any # shape: {audience?: record, category?: string, deliveryActivities?: list<string>, deliveryTime?: "any"|"background"|"session", endTime?: string, localization?: record, name?: string, notificationBadge?: bool, notificationCloseable?: bool, notificationIcon?: bool, notificationSound?: bool, notificationType?: "system"|"popup", notificationVibrate?: bool, pushMode?: "real-time"|"one-shot"|"manual", questions?: list, startTime?: string, timezone?: string, ... (11 more fields)}
+  device_ids: list<string> # Device identifiers to push as a JSON array of strings. Note that if you want to push the same campaign several times to the same device, you need to make several API calls.
 ]: any -> record<invalidDeviceIds: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, app_collection: $app_collection, app_name: $app_name, kind: $kind, id: $id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/campaigns/{kind}/{id}/push") $qp)
-  let body = {"data": $data, "deviceIds": $device_ids} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), app_collection: (encode-path-segment $app_collection), app_name: (encode-path-segment $app_name), kind: (encode-path-segment $kind), id: (encode-path-segment $id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/campaigns/{kind}/{id}/push") $qp)
+  let req_body = {"data": $data, "deviceIds": $device_ids} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get all the campaign statistics.
@@ -581,7 +590,7 @@ export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, app_collection: $app_collection, app_name: $app_name, kind: $kind, id: $id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/campaigns/{kind}/{id}/statistics") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), app_collection: (encode-path-segment $app_collection), app_name: (encode-path-segment $app_name), kind: (encode-path-segment $kind), id: (encode-path-segment $id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/campaigns/{kind}/{id}/statistics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -591,7 +600,7 @@ export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MobileEngagement/appcollections/{appCollection}/apps/{appName}/campaigns/{kind}/{id}/suspend
 # operationId: Campaigns_Suspend
-export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-appcollections-apps-campaigns-suspend post" [
+export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-appcollections-apps-campaigns-suspend create" [
   subscription_id: string
   resource_group_name: string
   app_collection: string
@@ -611,7 +620,7 @@ export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, app_collection: $app_collection, app_name: $app_name, kind: $kind, id: $id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/campaigns/{kind}/{id}/suspend") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), app_collection: (encode-path-segment $app_collection), app_name: (encode-path-segment $app_name), kind: (encode-path-segment $kind), id: (encode-path-segment $id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/campaigns/{kind}/{id}/suspend") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -644,12 +653,12 @@ export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, app_collection: $app_collection, app_name: $app_name, kind: $kind, id: $id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/campaigns/{kind}/{id}/test") $qp)
-  let body = {"deviceId": $device_id, "lang": $lang} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), app_collection: (encode-path-segment $app_collection), app_name: (encode-path-segment $app_name), kind: (encode-path-segment $kind), id: (encode-path-segment $id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/campaigns/{kind}/{id}/test") $qp)
+  let req_body = {"deviceId": $device_id, "lang": $lang} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # The Get campaign operation retrieves information about a previously created campaign.
@@ -676,7 +685,7 @@ export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, app_collection: $app_collection, app_name: $app_name, kind: $kind, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/campaignsByName/{kind}/{name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), app_collection: (encode-path-segment $app_collection), app_name: (encode-path-segment $app_name), kind: (encode-path-segment $kind), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/campaignsByName/{kind}/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -702,12 +711,12 @@ export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-
   --api-version: string # Client Api Version.
   --top: int # Number of devices to return with each call. Defaults to 100 and cannot return more. Passing a greater value is ignored. The response contains a `nextLink` property describing the URI path to get the next page of results if not all results could be returned at once.
   --select: string # By default all `meta` and `appInfo` properties are returned, this property is used to restrict the output to the desired properties. It also excludes all devices from the output that have none of the selected properties. In other terms, only devices having at least one of the selected property being set is part of the results. Examples: - `$select=appInfo` : select all devices having at least 1 appInfo, return them all and don’t return any meta property. - `$select=meta` : return only meta properties in the output. - `$select=appInfo,meta/firstSeen,meta/lastSeen` : return all `appInfo`, plus meta object containing only firstSeen and lastSeen properties. The format is thus a comma separated list of properties to select. Use `appInfo` to select all appInfo properties, `meta` to select all meta properties. Use `appInfo/{key}` and `meta/{key}` to select specific appInfo and meta properties.
-  --filter: string # Filter can be used to reduce the number of results. Filter is a boolean expression that can look like the following examples: * `$filter=deviceId gt 'abcdef0123456789abcdef0123456789'` * `$filter=lastModified le 1447284263690L` * `$filter=(deviceId ge 'abcdef0123456789abcdef0123456789') and (deviceId lt 'bacdef0123456789abcdef0123456789') and (lastModified gt 1447284263690L)` The first example is used automatically for paging when returning the `nextLink` property. The filter expression is a combination of checks on some properties that can be compared to their value. The available operators are: * `gt`  : greater than * `ge`  : greater than or equals * `lt`  : less than * `le`  : less than or equals * `and` : to add multiple checks (all checks must pass), optional parentheses can be used. The properties that can be used in the expression are the following: * `deviceId {operator} '{deviceIdValue}'` : a lexicographical comparison is made on the deviceId value, use single quotes for the value. * `lastModified {operator} {number}L` : returns only meta properties or appInfo properties whose last value modification timestamp compared to the specified value is matching (value is milliseconds since January 1st, 1970 UTC). Please note the `L` character after the number of milliseconds, its required when the number of milliseconds exceeds `2^31 - 1` (which is always the case for recent timestamps). Using `lastModified` excludes all devices from the output that have no property matching the timestamp criteria, like `$select`. Please note that the internal value of `lastModified` timestamp for a given property is never part of the results.
+  --filter: string # Filter can be used to reduce the number of results. Filter is a boolean expression that can look like the following examples: * `$filter=deviceId gt 'abcdef0123456789abcdef0123456789'` * `$filter=lastModified le 1447284263690L` * `$filter=(deviceId ge 'abcdef0123456789abcdef0123456789') and (deviceId lt 'bacdef0123456789abcdef0123456789') and (lastModified gt 1447284263690L)` The first example is used automatically for paging when returning the `nextLink` property. The filter expression is a combination of checks on some properties that can be compared to their value. The available operators are: * `gt` : greater than * `ge` : greater than or equals * `lt` : less than * `le` : less than or equals * `and` : to add multiple checks (all checks must pass), optional parentheses can be used. The properties that can be used in the expression are the following: * `deviceId {operator} '{deviceIdValue}'` : a lexicographical comparison is made on the deviceId value, use single quotes for the value. * `lastModified {operator} {number}L` : returns only meta properties or appInfo properties whose last value modification timestamp compared to the specified value is matching (value is milliseconds since January 1st, 1970 UTC). Please note the `L` character after the number of milliseconds, its required when the number of milliseconds exceeds `2^31 - 1` (which is always the case for recent timestamps). Using `lastModified` excludes all devices from the output that have no property matching the timestamp criteria, like `$select`. Please note that the internal value of `lastModified` timestamp for a given property is never part of the results.
 ]: nothing -> record<nextLink: string, value: table<appInfo: record, deviceId: string, meta: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, app_collection: $app_collection, app_name: $app_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/devices") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), app_collection: (encode-path-segment $app_collection), app_name: (encode-path-segment $app_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/devices") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -738,7 +747,7 @@ export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$orderby" $orderby "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, app_collection: $app_collection, app_name: $app_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/devices/exportTasks") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), app_collection: (encode-path-segment $app_collection), app_name: (encode-path-segment $app_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/devices/exportTasks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -772,12 +781,12 @@ export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, app_collection: $app_collection, app_name: $app_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/devices/exportTasks/activities") $qp)
-  let body = {"containerUrl": $container_url, "description": $description, "endDate": $end_date, "exportFormat": $export_format, "startDate": $start_date} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), app_collection: (encode-path-segment $app_collection), app_name: (encode-path-segment $app_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/devices/exportTasks/activities") $qp)
+  let req_body = {"containerUrl": $container_url, "description": $description, "endDate": $end_date, "exportFormat": $export_format, "startDate": $start_date} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Creates a task to export crashes.
@@ -808,12 +817,12 @@ export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, app_collection: $app_collection, app_name: $app_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/devices/exportTasks/crashes") $qp)
-  let body = {"containerUrl": $container_url, "description": $description, "endDate": $end_date, "exportFormat": $export_format, "startDate": $start_date} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), app_collection: (encode-path-segment $app_collection), app_name: (encode-path-segment $app_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/devices/exportTasks/crashes") $qp)
+  let req_body = {"containerUrl": $container_url, "description": $description, "endDate": $end_date, "exportFormat": $export_format, "startDate": $start_date} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Creates a task to export errors.
@@ -844,12 +853,12 @@ export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, app_collection: $app_collection, app_name: $app_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/devices/exportTasks/errors") $qp)
-  let body = {"containerUrl": $container_url, "description": $description, "endDate": $end_date, "exportFormat": $export_format, "startDate": $start_date} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), app_collection: (encode-path-segment $app_collection), app_name: (encode-path-segment $app_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/devices/exportTasks/errors") $qp)
+  let req_body = {"containerUrl": $container_url, "description": $description, "endDate": $end_date, "exportFormat": $export_format, "startDate": $start_date} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Creates a task to export events.
@@ -880,12 +889,12 @@ export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, app_collection: $app_collection, app_name: $app_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/devices/exportTasks/events") $qp)
-  let body = {"containerUrl": $container_url, "description": $description, "endDate": $end_date, "exportFormat": $export_format, "startDate": $start_date} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), app_collection: (encode-path-segment $app_collection), app_name: (encode-path-segment $app_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/devices/exportTasks/events") $qp)
+  let req_body = {"containerUrl": $container_url, "description": $description, "endDate": $end_date, "exportFormat": $export_format, "startDate": $start_date} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Creates a task to export push campaign data for a set of campaigns.
@@ -906,7 +915,7 @@ export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
-  campaign_ids: list # A list of campaign identifiers.
+  campaign_ids: list<int> # A list of campaign identifiers.
   campaign_type: string@campaign-type-completer # Campaign type.
   container_url: string # format: uri
   --description: string # A description of the export task.
@@ -916,19 +925,19 @@ export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, app_collection: $app_collection, app_name: $app_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/devices/exportTasks/feedbackByCampaign") $qp)
-  let body = {"campaignIds": $campaign_ids, "campaignType": $campaign_type, "containerUrl": $container_url, "description": $description, "exportFormat": $export_format} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), app_collection: (encode-path-segment $app_collection), app_name: (encode-path-segment $app_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/devices/exportTasks/feedbackByCampaign") $qp)
+  let req_body = {"campaignIds": $campaign_ids, "campaignType": $campaign_type, "containerUrl": $container_url, "description": $description, "exportFormat": $export_format} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Creates a task to export push campaign data for a date range.
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MobileEngagement/appcollections/{appCollection}/apps/{appName}/devices/exportTasks/feedbackByDate
 # operationId: ExportTasks_CreateFeedbackTaskByDateRange
-export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-appcollections-apps-devices-export-tasks-feedback-by-date create" [
+export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-appcollections-apps-devices-export-tasks-feedback-by-date create-range" [
   subscription_id: string
   resource_group_name: string
   app_collection: string
@@ -953,12 +962,12 @@ export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, app_collection: $app_collection, app_name: $app_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/devices/exportTasks/feedbackByDate") $qp)
-  let body = {"campaignType": $campaign_type, "campaignWindowEnd": $campaign_window_end, "campaignWindowStart": $campaign_window_start, "containerUrl": $container_url, "description": $description, "exportFormat": $export_format} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), app_collection: (encode-path-segment $app_collection), app_name: (encode-path-segment $app_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/devices/exportTasks/feedbackByDate") $qp)
+  let req_body = {"campaignType": $campaign_type, "campaignWindowEnd": $campaign_window_end, "campaignWindowStart": $campaign_window_start, "containerUrl": $container_url, "description": $description, "exportFormat": $export_format} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Creates a task to export jobs.
@@ -989,12 +998,12 @@ export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, app_collection: $app_collection, app_name: $app_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/devices/exportTasks/jobs") $qp)
-  let body = {"containerUrl": $container_url, "description": $description, "endDate": $end_date, "exportFormat": $export_format, "startDate": $start_date} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), app_collection: (encode-path-segment $app_collection), app_name: (encode-path-segment $app_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/devices/exportTasks/jobs") $qp)
+  let req_body = {"containerUrl": $container_url, "description": $description, "endDate": $end_date, "exportFormat": $export_format, "startDate": $start_date} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Creates a task to export sessions.
@@ -1025,12 +1034,12 @@ export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, app_collection: $app_collection, app_name: $app_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/devices/exportTasks/sessions") $qp)
-  let body = {"containerUrl": $container_url, "description": $description, "endDate": $end_date, "exportFormat": $export_format, "startDate": $start_date} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), app_collection: (encode-path-segment $app_collection), app_name: (encode-path-segment $app_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/devices/exportTasks/sessions") $qp)
+  let req_body = {"containerUrl": $container_url, "description": $description, "endDate": $end_date, "exportFormat": $export_format, "startDate": $start_date} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Creates a task to export tags.
@@ -1059,12 +1068,12 @@ export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, app_collection: $app_collection, app_name: $app_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/devices/exportTasks/tags") $qp)
-  let body = {"containerUrl": $container_url, "description": $description, "exportFormat": $export_format} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), app_collection: (encode-path-segment $app_collection), app_name: (encode-path-segment $app_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/devices/exportTasks/tags") $qp)
+  let req_body = {"containerUrl": $container_url, "description": $description, "exportFormat": $export_format} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Creates a task to export tags.
@@ -1093,12 +1102,12 @@ export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, app_collection: $app_collection, app_name: $app_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/devices/exportTasks/tokens") $qp)
-  let body = {"containerUrl": $container_url, "description": $description, "exportFormat": $export_format} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), app_collection: (encode-path-segment $app_collection), app_name: (encode-path-segment $app_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/devices/exportTasks/tokens") $qp)
+  let req_body = {"containerUrl": $container_url, "description": $description, "exportFormat": $export_format} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieves information about a previously created export task.
@@ -1124,7 +1133,7 @@ export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, app_collection: $app_collection, app_name: $app_name, id: $id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/devices/exportTasks/{id}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), app_collection: (encode-path-segment $app_collection), app_name: (encode-path-segment $app_name), id: (encode-path-segment $id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/devices/exportTasks/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1155,7 +1164,7 @@ export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$orderby" $orderby "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, app_collection: $app_collection, app_name: $app_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/devices/importTasks") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), app_collection: (encode-path-segment $app_collection), app_name: (encode-path-segment $app_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/devices/importTasks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1185,12 +1194,12 @@ export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, app_collection: $app_collection, app_name: $app_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/devices/importTasks") $qp)
-  let body = {"storageUrl": $storage_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), app_collection: (encode-path-segment $app_collection), app_name: (encode-path-segment $app_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/devices/importTasks") $qp)
+  let req_body = {"storageUrl": $storage_url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # The Get import job operation retrieves information about a previously created import job.
@@ -1216,7 +1225,7 @@ export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, app_collection: $app_collection, app_name: $app_name, id: $id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/devices/importTasks/{id}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), app_collection: (encode-path-segment $app_collection), app_name: (encode-path-segment $app_name), id: (encode-path-segment $id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/devices/importTasks/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1226,7 +1235,7 @@ export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MobileEngagement/appcollections/{appCollection}/apps/{appName}/devices/tag
 # operationId: Devices_TagByDeviceId
-export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-appcollections-apps-devices-tag tag-by" [
+export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-appcollections-apps-devices-tag tag" [
   subscription_id: string
   resource_group_name: string
   app_collection: string
@@ -1247,19 +1256,19 @@ export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, app_collection: $app_collection, app_name: $app_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/devices/tag") $qp)
-  let body = {"deleteOnNull": $delete_on_null, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), app_collection: (encode-path-segment $app_collection), app_name: (encode-path-segment $app_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/devices/tag") $qp)
+  let req_body = {"deleteOnNull": $delete_on_null, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get the information associated to a device running an application.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MobileEngagement/appcollections/{appCollection}/apps/{appName}/devices/{deviceId}
 # operationId: Devices_GetByDeviceId
-export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-appcollections-apps-devices get-by" [
+export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-appcollections-apps-devices get" [
   subscription_id: string
   resource_group_name: string
   app_collection: string
@@ -1278,7 +1287,7 @@ export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, app_collection: $app_collection, app_name: $app_name, device_id: $device_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/devices/{device_id}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), app_collection: (encode-path-segment $app_collection), app_name: (encode-path-segment $app_name), device_id: (encode-path-segment $device_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/devices/{device_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1288,7 +1297,7 @@ export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MobileEngagement/appcollections/{appCollection}/apps/{appName}/users/tag
 # operationId: Devices_TagByUserId
-export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-appcollections-apps-users-tag tag-by" [
+export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-appcollections-apps-users-tag tag-devices" [
   subscription_id: string
   resource_group_name: string
   app_collection: string
@@ -1309,19 +1318,19 @@ export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, app_collection: $app_collection, app_name: $app_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/users/tag") $qp)
-  let body = {"deleteOnNull": $delete_on_null, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), app_collection: (encode-path-segment $app_collection), app_name: (encode-path-segment $app_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/users/tag") $qp)
+  let req_body = {"deleteOnNull": $delete_on_null, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get the information associated to a device running an application using the user identifier.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MobileEngagement/appcollections/{appCollection}/apps/{appName}/users/{userId}
 # operationId: Devices_GetByUserId
-export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-appcollections-apps-users get-by" [
+export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-appcollections-apps-users get-devices" [
   subscription_id: string
   resource_group_name: string
   app_collection: string
@@ -1340,7 +1349,7 @@ export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, app_collection: $app_collection, app_name: $app_name, user_id: $user_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/users/{user_id}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), app_collection: (encode-path-segment $app_collection), app_name: (encode-path-segment $app_name), user_id: (encode-path-segment $user_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/users/{user_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

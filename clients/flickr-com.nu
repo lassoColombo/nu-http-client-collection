@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -59,6 +68,33 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   }
   if ($method in ["head" "options"]) { return $resp }
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+}
+
+# Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
+# the field names whose value should be read from disk as bytes; every
+# other field is sent as a text part (records/lists JSON-stringified).
+# Returns {content_type, body} ready to pass to `do-request`.
+def build-multipart-body [parts: record, file_fields: list<string>]: nothing -> record {
+  let boundary = $"----nu-(random chars --length 24)"
+  let crlf = "\r\n"
+  let chunks = ($parts | transpose k v | where {|p| $p.v != null} | each {|p|
+    let name = $p.k
+    let val = $p.v
+    if $name in $file_fields {
+      let filename = ($val | path basename)
+      let bytes = (open --raw $val | into binary | collect)
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"; filename=\"($filename)\"($crlf)Content-Type: application/octet-stream($crlf)($crlf)" | into binary)
+      $head ++ $bytes ++ ($crlf | into binary)
+    } else {
+      let dt = ($val | describe)
+      let s = if (($dt | str starts-with "record") or ($dt | str starts-with "list") or ($dt | str starts-with "table")) { ($val | to json --raw) } else { ($val | into string) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"($crlf)($crlf)" | into binary)
+      $head ++ ($"($s)($crlf)" | into binary)
+    }
+  })
+  let trailer = ($"--($boundary)--($crlf)" | into binary)
+  let body = ($chunks | reduce --fold (0x[] | into binary) {|chunk, acc| $acc ++ $chunk }) ++ $trailer
+  {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
 }
 
 def base-url-completer [] { ["https://api.flickr.com/services"] }
@@ -160,7 +196,7 @@ export def "oauth-request-token get" [
 #
 # GET /rest?method=flickr.favorites.getContext
 # operationId: getFavoritesContextByID
-export def "rest-methodflickrfavoritesget-context get-favorites" [
+export def "rest-methodflickr-favorites-get-context get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -186,7 +222,7 @@ export def "rest-methodflickrfavoritesget-context get-favorites" [
 #
 # GET /rest?method=flickr.favorites.getList
 # operationId: getFavoritesByPersonID
-export def "rest-methodflickrfavoritesget-list get-favorites" [
+export def "rest-methodflickr-favorites-get-list get-by-person" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -215,7 +251,7 @@ export def "rest-methodflickrfavoritesget-list get-favorites" [
 #
 # GET /rest?method=flickr.galleries.getPhotos
 # operationId: getGalleryPhotosByID
-export def "rest-methodflickrgalleriesget-photos get-gallery" [
+export def "rest-methodflickr-galleries-get-photos get-gallery" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -240,7 +276,7 @@ export def "rest-methodflickrgalleriesget-photos get-gallery" [
 #
 # GET /rest?method=flickr.groups.discuss.replies.getInfo
 # operationId: getGroupTopicRepliesByID
-export def "rest-methodflickrgroupsdiscussrepliesget-info get-group-topic-replies" [
+export def "rest-methodflickr-groups-discuss-replies-get-info get-topic" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -267,7 +303,7 @@ export def "rest-methodflickrgroupsdiscussrepliesget-info get-group-topic-replie
 #
 # GET /rest?method=flickr.groups.discuss.topics.getInfo
 # operationId: getGroupTopicByID
-export def "rest-methodflickrgroupsdiscusstopicsget-info get-group-topic" [
+export def "rest-methodflickr-groups-discuss-topics-get-info get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -293,7 +329,7 @@ export def "rest-methodflickrgroupsdiscusstopicsget-info get-group-topic" [
 #
 # GET /rest?method=flickr.groups.discuss.topics.getList
 # operationId: getGroupDiscussionsByID
-export def "rest-methodflickrgroupsdiscusstopicsget-list get-group-discussions" [
+export def "rest-methodflickr-groups-discuss-topics-get-list get-discussions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -320,7 +356,7 @@ export def "rest-methodflickrgroupsdiscusstopicsget-list get-group-discussions" 
 #
 # GET /rest?method=flickr.groups.getInfo
 # operationId: getGroupByID
-export def "rest-methodflickrgroupsget-info get-group" [
+export def "rest-methodflickr-groups-get-info get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -346,7 +382,7 @@ export def "rest-methodflickrgroupsget-info get-group" [
 # Returns next and previous photos for a photo in a group pool
 #
 # GET /rest?method=flickr.groups.pools.getContext
-export def "rest-methodflickrgroupspoolsget-context get" [
+export def "rest-methodflickr-groups-pools-get-context get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -372,7 +408,7 @@ export def "rest-methodflickrgroupspoolsget-context get" [
 #
 # GET /rest?method=flickr.groups.pools.getPhotos
 # operationId: getGroupPhotosByID
-export def "rest-methodflickrgroupspoolsget-photos get-group" [
+export def "rest-methodflickr-groups-pools-get-photos get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -397,7 +433,7 @@ export def "rest-methodflickrgroupspoolsget-photos get-group" [
 #
 # GET /rest?method=flickr.people.getInfo
 # operationId: getPersonByID
-export def "rest-methodflickrpeopleget-info get-person" [
+export def "rest-methodflickr-people-get-info get-person" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -422,7 +458,7 @@ export def "rest-methodflickrpeopleget-info get-person" [
 #
 # GET /rest?method=flickr.people.getPhotos
 # operationId: getMediaByPersonID
-export def "rest-methodflickrpeopleget-photos get-media" [
+export def "rest-methodflickr-people-get-photos get-media-by-person" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -456,7 +492,7 @@ export def "rest-methodflickrpeopleget-photos get-media" [
 #
 # GET /rest?method=flickr.photolist.getContext
 # operationId: getPhotolistContextByID
-export def "rest-methodflickrphotolistget-context get-photolist" [
+export def "rest-methodflickr-photolist-get-context get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -482,7 +518,7 @@ export def "rest-methodflickrphotolistget-context get-photolist" [
 #
 # GET /rest?method=flickr.photos.getContext
 # operationId: getPhotostreamContextByID
-export def "rest-methodflickrphotosget-context get-photostream" [
+export def "rest-methodflickr-photos-get-context get-photostream" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -507,7 +543,7 @@ export def "rest-methodflickrphotosget-context get-photostream" [
 #
 # GET /rest?method=flickr.photos.getExif
 # operationId: getPhotoExifByID
-export def "rest-methodflickrphotosget-exif get-photo" [
+export def "rest-methodflickr-photos-get-exif get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -533,7 +569,7 @@ export def "rest-methodflickrphotosget-exif get-photo" [
 #
 # GET /rest?method=flickr.photos.getInfo
 # operationId: getPhotoByID
-export def "rest-methodflickrphotosget-info get-photo" [
+export def "rest-methodflickr-photos-get-info get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -558,7 +594,7 @@ export def "rest-methodflickrphotosget-info get-photo" [
 #
 # GET /rest?method=flickr.photos.getSizes
 # operationId: getPhotoSizesByID
-export def "rest-methodflickrphotosget-sizes get-photo" [
+export def "rest-methodflickr-photos-get-sizes get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -583,7 +619,7 @@ export def "rest-methodflickrphotosget-sizes get-photo" [
 #
 # GET /rest?method=flickr.photos.licenses.getInfo
 # operationId: getLicenseByID
-export def "rest-methodflickrphotoslicensesget-info get-license" [
+export def "rest-methodflickr-photos-licenses-get-info get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -607,7 +643,7 @@ export def "rest-methodflickrphotoslicensesget-info get-license" [
 #
 # GET /rest?method=flickr.photos.search
 # operationId: getMediaBySearch
-export def "rest-methodflickrphotossearch get-media" [
+export def "rest-methodflickr-photos-search get-media" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -625,12 +661,12 @@ export def "rest-methodflickrphotossearch get-media" [
   --min-taken-date: string # Minimum taken date. Photos with an taken date greater than or equal to this value will be returned. The date can be in the form of a mysql datetime or unix timestamp.
   --max-taken-date: string # Maximum taken date. Photos with an taken date less than or equal to this value will be returned. The date can be in the form of a mysql datetime or unix timestamp.
   --license: string # The license id for photos (for possible values see the flickr.photos.licenses.getInfo method). Multiple licenses may be comma-separated.
-  --qp-sort: string # The order in which to sort returned photos. Deafults to date-posted-desc (unless you are doing a radial geo query, in which case the default sorting is by ascending distance from the point specified). The possible values are:   date-posted-asc,   date-posted-desc,   date-taken-asc,   date-taken-desc,   interestingness-desc,   interestingness-asc, and   relevance.
-  --privacy-filter: float # Return photos only matching a certain privacy level. This only applies when making an authenticated call to view photos you own. Valid values are:,   1: public photos,   2: private photos visible to friends,   3: private photos visible to family,   4: private photos visible to friends & family,   5: completely private photos
+  --qp-sort: string # The order in which to sort returned photos. Deafults to date-posted-desc (unless you are doing a radial geo query, in which case the default sorting is by ascending distance from the point specified). The possible values are: date-posted-asc, date-posted-desc, date-taken-asc, date-taken-desc, interestingness-desc, interestingness-asc, and relevance.
+  --privacy-filter: float # Return photos only matching a certain privacy level. This only applies when making an authenticated call to view photos you own. Valid values are:, 1: public photos, 2: private photos visible to friends, 3: private photos visible to family, 4: private photos visible to friends & family, 5: completely private photos
   --bbox: string # A comma-delimited list of 4 values defining the Bounding Box of the area that will be searched.
-  --accuracy: string # Recorded accuracy level of the location information. Current range is 1-16:   World level is 1   Country is ~3   Region is ~6   City is ~11   Street is ~16
-  --safe-search: float # Safe search setting:   1: for safe,   2: for moderate,   3: for restricted
-  --content-type: float # Content Type setting:   1: photos only.   2: screenshots only.   3: 'other' only.   4: photos and screenshots.   5: screenshots and 'other'.   6: photos and 'other'.   7: photos, screenshots, and 'other' (all).
+  --accuracy: string # Recorded accuracy level of the location information. Current range is 1-16: World level is 1 Country is ~3 Region is ~6 City is ~11 Street is ~16
+  --safe-search: float # Safe search setting: 1: for safe, 2: for moderate, 3: for restricted
+  --content-type: float # Content Type setting: 1: photos only. 2: screenshots only. 3: 'other' only. 4: photos and screenshots. 5: screenshots and 'other'. 6: photos and 'other'. 7: photos, screenshots, and 'other' (all).
   --machine-tags: string # Aside from passing in a fully formed machine tag, there is a special syntax for searching on specific properties : Find photos using the 'dc' namespace : "machine_tags" => "dc:" Find photos with a title in the 'dc' namespace : "machine_tags" => "dc:title=" Find photos titled "mr. camera" in the 'dc' namespace : "machine_tags" => "dc:title=\"mr. camera\" Find photos whose value is "mr. camera" : "machine_tags" => "*:*=\"mr. camera\"" Find photos that have a title, in any namespace : "machine_tags" => "*:title=" Find photos that have a title, in any namespace, whose value is "mr. camera" : "machine_tags" => "*:title=\"mr. camera\"" Find photos, in the 'dc' namespace whose value is "mr. camera" : "machine_tags" => "dc:*=\"mr. camera\"" Multiple machine tags may be queried by passing a comma-separated list. The number of machine tags you can pass in a single query depends on the tag mode (AND or OR) that you are querying with. "AND" queries are limited to (16) machine tags. "OR" queries are limited to (8).
   --machine-tag-mode: string # Either 'any' for an OR combination of tags, or 'all' for an AND combination. Defaults to 'any' if not specified.
   --group-id: string # The id of a group who's pool to search. If specified, only matching photos posted to the group's pool will be returned.
@@ -663,7 +699,7 @@ export def "rest-methodflickrphotossearch get-media" [
 #
 # GET /rest?method=flickr.photosets.getContext
 # operationId: getAlbumContextByID
-export def "rest-methodflickrphotosetsget-context get-album" [
+export def "rest-methodflickr-photosets-get-context get-album" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -689,7 +725,7 @@ export def "rest-methodflickrphotosetsget-context get-album" [
 #
 # GET /rest?method=flickr.photosets.getList
 # operationId: getAlbumsByPersonID
-export def "rest-methodflickrphotosetsget-list get-albums" [
+export def "rest-methodflickr-photosets-get-list get-albums-by-person" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -716,7 +752,7 @@ export def "rest-methodflickrphotosetsget-list get-albums" [
 #
 # GET /rest?method=flickr.photosets.getPhotos
 # operationId: getAlbumByID
-export def "rest-methodflickrphotosetsget-photos get-album" [
+export def "rest-methodflickr-photosets-get-photos get-album" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -741,7 +777,7 @@ export def "rest-methodflickrphotosetsget-photos get-album" [
 #
 # GET /rest?method=flickr.test.echo
 # operationId: echo
-export def "rest-methodflickrtestecho echo" [
+export def "rest-methodflickr-test-echo get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -791,9 +827,10 @@ export def "upload upload-photo" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/upload")
-  let body = {"api_key": $api_key, "content_type": $content_type, "description": $description, "hidden": $hidden, "is_family": $is_family, "is_friend": $is_friend, "is_public": $is_public, "photo": $photo, "safety_level": $safety_level, "tags": $tags, "title": $title} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"api_key": $api_key, "content_type": $content_type, "description": $description, "hidden": $hidden, "is_family": $is_family, "is_friend": $is_friend, "is_public": $is_public, "photo": $photo, "safety_level": $safety_level, "tags": $tags, "title": $title} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body ["photo"])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }

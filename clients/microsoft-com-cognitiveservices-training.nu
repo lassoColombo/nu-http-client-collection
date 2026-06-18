@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -60,6 +69,33 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   }
   if ($method in ["head" "options"]) { return $resp }
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+}
+
+# Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
+# the field names whose value should be read from disk as bytes; every
+# other field is sent as a text part (records/lists JSON-stringified).
+# Returns {content_type, body} ready to pass to `do-request`.
+def build-multipart-body [parts: record, file_fields: list<string>]: nothing -> record {
+  let boundary = $"----nu-(random chars --length 24)"
+  let crlf = "\r\n"
+  let chunks = ($parts | transpose k v | where {|p| $p.v != null} | each {|p|
+    let name = $p.k
+    let val = $p.v
+    if $name in $file_fields {
+      let filename = ($val | path basename)
+      let bytes = (open --raw $val | into binary | collect)
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"; filename=\"($filename)\"($crlf)Content-Type: application/octet-stream($crlf)($crlf)" | into binary)
+      $head ++ $bytes ++ ($crlf | into binary)
+    } else {
+      let dt = ($val | describe)
+      let s = if (($dt | str starts-with "record") or ($dt | str starts-with "list") or ($dt | str starts-with "table")) { ($val | to json --raw) } else { ($val | into string) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"($crlf)($crlf)" | into binary)
+      $head ++ ($"($s)($crlf)" | into binary)
+    }
+  })
+  let trailer = ($"--($boundary)--($crlf)" | into binary)
+  let body = ($chunks | reduce --fold (0x[] | into binary) {|chunk, acc| $acc ++ $chunk }) ++ $trailer
+  {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
 }
 
 def base-url-completer [] { ["https://southcentralus.api.cognitive.microsoft.com/customvision/v3.2/training" "none/customvision/v3.2/training"] }
@@ -141,7 +177,7 @@ export def "domains get" [
 ]: nothing -> record<enabled: bool, exportable: bool, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "training-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({domain_id: $domain_id} | format pattern "/domains/{domain_id}"))
+  let full_url = (build-url $base ({domain_id: (encode-path-segment $domain_id)} | format pattern "/domains/{domain_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -188,7 +224,7 @@ export def "projects create" [
   --description: string # The description of the project.
   --domain-id: string # The id of the domain to use for this project. Defaults to General. (format: uuid)
   --classification-type: string@classification-type-completer # The type of classifier to create for this project.
-  --target-export-platforms: list # List of platforms the trained model is intending exporting to.
+  --target-export-platforms: list<string> # List of platforms the trained model is intending exporting to.
 ]: nothing -> record<created: string, description: string, drModeEnabled: bool, id: string, lastModified: string, name: string, settings: record<classificationType: string, detectionParameters: string, domainId: string, imageProcessingSettings: record<augmentationMethods: record>, targetExportPlatforms: list<string>, useNegativeSet: bool>, status: string, thumbnailUri: string> {
   let auth = (build-auth $token ($auth_scheme | default "training-key"))
   let base = ($base_url | default $BASE_URL)
@@ -241,7 +277,7 @@ export def "projects delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "training-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/projects/{project_id}"))
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -265,7 +301,7 @@ export def "projects get" [
 ]: nothing -> record<created: string, description: string, drModeEnabled: bool, id: string, lastModified: string, name: string, settings: record<classificationType: string, detectionParameters: string, domainId: string, imageProcessingSettings: record<augmentationMethods: record>, targetExportPlatforms: list<string>, useNegativeSet: bool>, status: string, thumbnailUri: string> {
   let auth = (build-auth $token ($auth_scheme | default "training-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/projects/{project_id}"))
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -275,7 +311,7 @@ export def "projects get" [
 #
 # PATCH /projects/{projectId}
 # operationId: UpdateProject
-# --settings shape: {classificationType?: "Multiclass"|"Multilabel", domainId?: string, imageProcessingSettings?: record, targetExportPlatforms?: list}
+# --settings shape: {classificationType?: "Multiclass"|"Multilabel", domainId?: string, imageProcessingSettings?: record, targetExportPlatforms?: list<string>}
 export def "projects update" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -289,18 +325,18 @@ export def "projects update" [
   --accept: string@accept-completer # Response content type
   --description: string # Gets or sets the description of the project. (nullable)
   name: string # Gets or sets the name of the project.
-  settings: record # Represents settings associated with a project. — shape: {classificationType?: "Multiclass"|"Multilabel", domainId?: string, imageProcessingSettings?: record, targetExportPlatforms?: list}
+  settings: record # Represents settings associated with a project. — shape: {classificationType?: "Multiclass"|"Multilabel", domainId?: string, imageProcessingSettings?: record, targetExportPlatforms?: list<string>}
   --status: string@status-completer # Gets the status of the project.
 ]: any -> record<created: string, description: string, drModeEnabled: bool, id: string, lastModified: string, name: string, settings: record<classificationType: string, detectionParameters: string, domainId: string, imageProcessingSettings: record<augmentationMethods: record>, targetExportPlatforms: list<string>, useNegativeSet: bool>, status: string, thumbnailUri: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "training-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/projects/{project_id}"))
-  let body = {"description": $description, "name": $name, "settings": $settings, "status": $status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}"))
+  let req_body = {"description": $description, "name": $name, "settings": $settings, "status": $status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Exports a project.
@@ -321,7 +357,7 @@ export def "projects-export export" [
 ]: nothing -> record<estimatedImportTimeInMS: int, imageCount: int, iterationCount: int, regionCount: int, tagCount: int, token: string> {
   let auth = (build-auth $token ($auth_scheme | default "training-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/projects/{project_id}/export"))
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/export"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -342,14 +378,14 @@ export def "projects-images delete" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --image-ids: list # Ids of the images to be deleted. Limited to 256 images per batch.
+  --image-ids: list<string> # Ids of the images to be deleted. Limited to 256 images per batch.
   --all-images: oneof<nothing, bool> # Flag to specify delete all images, specify this flag or a list of images. Using this flag will return a 202 response to indicate the images are being deleted.
   --all-iterations: oneof<nothing, bool> # Removes these images from all iterations, not just the current workspace. Using this flag will return a 202 response to indicate the images are being deleted.
 ]: nothing -> record<code: string, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "training-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "imageIds" $image_ids "csv") (serialize-qp "allImages" $all_images "scalar") (serialize-qp "allIterations" $all_iterations "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/projects/{project_id}/images") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/images") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -359,7 +395,7 @@ export def "projects-images delete" [
 #
 # POST /projects/{projectId}/images
 # operationId: CreateImagesFromData
-export def "projects-images create-images-from-data" [
+export def "projects-images create-from-data" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -370,27 +406,28 @@ export def "projects-images create-images-from-data" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --tag-ids: list # The tags ids with which to tag each image. Limited to 20.
+  --tag-ids: list<string> # The tags ids with which to tag each image. Limited to 20.
   image_data: string # Binary image data. Supported formats are JPEG, GIF, PNG, and BMP. Supports images up to 6MB. (format: binary)
 ]: any -> record<images: table<image: record, sourceUrl: string, status: string>, isBatchSuccessful: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "training-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "tagIds" $tag_ids "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/projects/{project_id}/images") $qp)
-  let body = {"imageData": $image_data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/images") $qp)
+  let req_body = {"imageData": $image_data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body ["imageData"])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # Add the provided batch of images to the set of training images.
 #
 # POST /projects/{projectId}/images/files
 # operationId: CreateImagesFromFiles
-# --images item shape: {contents?: string, name?: string, regions?: list, tagIds?: list}
-export def "projects-images-files create-images-from" [
+# --images item shape: {contents?: string, name?: string, regions?: list, tagIds?: list<string>}
+export def "projects-images-files create" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -401,18 +438,18 @@ export def "projects-images-files create-images-from" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --images: list # item shape: {contents?: string, name?: string, regions?: list, tagIds?: list}
-  --tag-ids: list
+  --images: list # item shape: {contents?: string, name?: string, regions?: list, tagIds?: list<string>}
+  --tag-ids: list<string>
 ]: any -> record<images: table<image: record, sourceUrl: string, status: string>, isBatchSuccessful: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "training-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/projects/{project_id}/images/files"))
-  let body = {"images": $images, "tagIds": $tag_ids} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/images/files"))
+  let req_body = {"images": $images, "tagIds": $tag_ids} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get images by id for a given project iteration.
@@ -430,13 +467,13 @@ export def "projects-images-id get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --image-ids: list # The list of image ids to retrieve. Limited to 256.
+  --image-ids: list<string> # The list of image ids to retrieve. Limited to 256.
   --iteration-id: string # The iteration id. Defaults to workspace. (format: uuid)
 ]: nothing -> table<created: string, height: int, id: string, originalImageUri: string, regions: list<record>, resizedImageUri: string, tags: list<record>, thumbnailUri: string, width: int> {
   let auth = (build-auth $token ($auth_scheme | default "training-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "imageIds" $image_ids "csv") (serialize-qp "iterationId" $iteration_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/projects/{project_id}/images/id") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/images/id") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -446,8 +483,8 @@ export def "projects-images-id get" [
 #
 # POST /projects/{projectId}/images/predictions
 # operationId: CreateImagesFromPredictions
-# --images item shape: {id?: string, regions?: list, tagIds?: list}
-export def "projects-images-predictions create-images-from" [
+# --images item shape: {id?: string, regions?: list, tagIds?: list<string>}
+export def "projects-images-predictions create" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -458,18 +495,18 @@ export def "projects-images-predictions create-images-from" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --images: list # item shape: {id?: string, regions?: list, tagIds?: list}
-  --tag-ids: list
+  --images: list # item shape: {id?: string, regions?: list, tagIds?: list<string>}
+  --tag-ids: list<string>
 ]: any -> record<images: table<image: record, sourceUrl: string, status: string>, isBatchSuccessful: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "training-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/projects/{project_id}/images/predictions"))
-  let body = {"images": $images, "tagIds": $tag_ids} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/images/predictions"))
+  let req_body = {"images": $images, "tagIds": $tag_ids} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a set of image regions.
@@ -486,12 +523,12 @@ export def "projects-images-regions delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --region-ids: list # Regions to delete. Limited to 64.
+  --region-ids: list<string> # Regions to delete. Limited to 64.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "training-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "regionIds" $region_ids "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/projects/{project_id}/images/regions") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/images/regions") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -518,12 +555,12 @@ export def "projects-images-regions create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "training-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/projects/{project_id}/images/regions"))
-  let body = {"regions": $regions} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/images/regions"))
+  let req_body = {"regions": $regions} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get untagged images whose suggested tags match given tags. Returns empty array if no images are found.
@@ -546,19 +583,19 @@ export def "projects-images-suggested list" [
   --max-count: int # Maximum number of results you want to be returned in the response. (format: int32)
   --session: string # SessionId for database query. Initially set to null but later used to paginate.
   --sort-by: string@sort-by-completer # OrderBy. Ordering mechanism for your results.
-  --tag-ids: list # Existing TagIds in project to filter suggested tags on.
+  --tag-ids: list<string> # Existing TagIds in project to filter suggested tags on.
   --threshold: float # Confidence threshold to filter suggested tags on. (format: double)
 ]: any -> record<results: table<created: string, domain: string, height: int, id: string, iteration: string, originalImageUri: string, predictionUncertainty: float, predictions: list, project: string, resizedImageUri: string, thumbnailUri: string, width: int>, token: record<continuation: string, maxCount: int, session: string, sortBy: string, tagIds: list<string>, threshold: float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "training-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "iterationId" $iteration_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/projects/{project_id}/images/suggested") $qp)
-  let body = {"continuation": $continuation, "maxCount": $max_count, "session": $session, "sortBy": $sort_by, "tagIds": $tag_ids, "threshold": $threshold} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/images/suggested") $qp)
+  let req_body = {"continuation": $continuation, "maxCount": $max_count, "session": $session, "sortBy": $sort_by, "tagIds": $tag_ids, "threshold": $threshold} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get count of images whose suggested tags match given tags and their probabilities are greater than or equal to the given threshold. Returns count as 0 if none found.
@@ -577,19 +614,19 @@ export def "projects-images-suggested-count list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --iteration-id: string # IterationId to use for the suggested tags and regions. (format: uuid)
-  --tag-ids: list # Existing TagIds in project to get suggested tags count for.
+  --tag-ids: list<string> # Existing TagIds in project to get suggested tags count for.
   --threshold: float # Confidence threshold to filter suggested tags on. (format: double)
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "training-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "iterationId" $iteration_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/projects/{project_id}/images/suggested/count") $qp)
-  let body = {"tagIds": $tag_ids, "threshold": $threshold} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/images/suggested/count") $qp)
+  let req_body = {"tagIds": $tag_ids, "threshold": $threshold} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get tagged images for a given project iteration.
@@ -608,7 +645,7 @@ export def "projects-images-tagged get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --iteration-id: string # The iteration id. Defaults to workspace. (format: uuid)
-  --tag-ids: list # A list of tags ids to filter the images. Defaults to all tagged images when null. Limited to 20.
+  --tag-ids: list<string> # A list of tags ids to filter the images. Defaults to all tagged images when null. Limited to 20.
   --order-by: string@order-by-completer # The ordering. Defaults to newest.
   --take: int # Maximum number of images to return. Defaults to 50, limited to 256. (format: int32, default: 50)
   --skip: int # Number of images to skip before beginning the image batch. Defaults to 0. (format: int32, default: 0)
@@ -616,7 +653,7 @@ export def "projects-images-tagged get" [
   let auth = (build-auth $token ($auth_scheme | default "training-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "iterationId" $iteration_id "scalar") (serialize-qp "tagIds" $tag_ids "csv") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "take" $take "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/projects/{project_id}/images/tagged") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/images/tagged") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -638,12 +675,12 @@ export def "projects-images-tagged-count get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --iteration-id: string # The iteration id. Defaults to workspace. (format: uuid)
-  --tag-ids: list # A list of tags ids to filter the images to count. Defaults to all tags when null.
+  --tag-ids: list<string> # A list of tags ids to filter the images to count. Defaults to all tags when null.
 ]: nothing -> int {
   let auth = (build-auth $token ($auth_scheme | default "training-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "iterationId" $iteration_id "scalar") (serialize-qp "tagIds" $tag_ids "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/projects/{project_id}/images/tagged/count") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/images/tagged/count") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -663,13 +700,13 @@ export def "projects-images-tags delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --image-ids: list # Image ids. Limited to 64 images.
-  --tag-ids: list # Tags to be deleted from the specified images. Limited to 20 tags.
+  --image-ids: list<string> # Image ids. Limited to 64 images.
+  --tag-ids: list<string> # Tags to be deleted from the specified images. Limited to 20 tags.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "training-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "imageIds" $image_ids "csv") (serialize-qp "tagIds" $tag_ids "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/projects/{project_id}/images/tags") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/images/tags") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -696,12 +733,12 @@ export def "projects-images-tags create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "training-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/projects/{project_id}/images/tags"))
-  let body = {"tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/images/tags"))
+  let req_body = {"tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get untagged images for a given project iteration.
@@ -727,7 +764,7 @@ export def "projects-images-untagged get" [
   let auth = (build-auth $token ($auth_scheme | default "training-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "iterationId" $iteration_id "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "take" $take "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/projects/{project_id}/images/untagged") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/images/untagged") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -753,7 +790,7 @@ export def "projects-images-untagged-count get" [
   let auth = (build-auth $token ($auth_scheme | default "training-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "iterationId" $iteration_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/projects/{project_id}/images/untagged/count") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/images/untagged/count") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -763,8 +800,8 @@ export def "projects-images-untagged-count get" [
 #
 # POST /projects/{projectId}/images/urls
 # operationId: CreateImagesFromUrls
-# --images item shape: {regions?: list, tagIds?: list, url: string}
-export def "projects-images-urls create-images-from" [
+# --images item shape: {regions?: list, tagIds?: list<string>, url: string}
+export def "projects-images-urls create" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -775,25 +812,25 @@ export def "projects-images-urls create-images-from" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --images: list # item shape: {regions?: list, tagIds?: list, url: string}
-  --tag-ids: list
+  --images: list # item shape: {regions?: list, tagIds?: list<string>, url: string}
+  --tag-ids: list<string>
 ]: any -> record<images: table<image: record, sourceUrl: string, status: string>, isBatchSuccessful: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "training-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/projects/{project_id}/images/urls"))
-  let body = {"images": $images, "tagIds": $tag_ids} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/images/urls"))
+  let req_body = {"images": $images, "tagIds": $tag_ids} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get region proposals for an image. Returns empty array if no proposals are found.
 #
 # POST /projects/{projectId}/images/{imageId}/regionproposals
 # operationId: GetImageRegionProposals
-export def "projects-images-regionproposals get" [
+export def "projects-images-regionproposals get-region-proposals" [
   project_id: string
   image_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -807,7 +844,7 @@ export def "projects-images-regionproposals get" [
 ]: nothing -> record<imageId: string, projectId: string, proposals: table<boundingBox: record, confidence: float>> {
   let auth = (build-auth $token ($auth_scheme | default "training-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({project_id: $project_id, image_id: $image_id} | format pattern "/projects/{project_id}/images/{image_id}/regionproposals"))
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), image_id: (encode-path-segment $image_id)} | format pattern "/projects/{project_id}/images/{image_id}/regionproposals"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -831,7 +868,7 @@ export def "projects-iterations list" [
 ]: nothing -> table<classificationType: string, created: string, domainId: string, exportable: bool, exportableTo: list<string>, id: string, lastModified: string, name: string, originalPublishResourceId: string, projectId: string, publishName: string, reservedBudgetInHours: int, status: string, trainedAt: string, trainingTimeInMinutes: int, trainingType: string> {
   let auth = (build-auth $token ($auth_scheme | default "training-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/projects/{project_id}/iterations"))
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/iterations"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -855,7 +892,7 @@ export def "projects-iterations delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "training-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({project_id: $project_id, iteration_id: $iteration_id} | format pattern "/projects/{project_id}/iterations/{iteration_id}"))
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), iteration_id: (encode-path-segment $iteration_id)} | format pattern "/projects/{project_id}/iterations/{iteration_id}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -880,7 +917,7 @@ export def "projects-iterations get" [
 ]: nothing -> record<classificationType: string, created: string, domainId: string, exportable: bool, exportableTo: list<string>, id: string, lastModified: string, name: string, originalPublishResourceId: string, projectId: string, publishName: string, reservedBudgetInHours: int, status: string, trainedAt: string, trainingTimeInMinutes: int, trainingType: string> {
   let auth = (build-auth $token ($auth_scheme | default "training-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({project_id: $project_id, iteration_id: $iteration_id} | format pattern "/projects/{project_id}/iterations/{iteration_id}"))
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), iteration_id: (encode-path-segment $iteration_id)} | format pattern "/projects/{project_id}/iterations/{iteration_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -907,12 +944,12 @@ export def "projects-iterations update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "training-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({project_id: $project_id, iteration_id: $iteration_id} | format pattern "/projects/{project_id}/iterations/{iteration_id}"))
-  let body = {"name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), iteration_id: (encode-path-segment $iteration_id)} | format pattern "/projects/{project_id}/iterations/{iteration_id}"))
+  let req_body = {"name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get the list of exports for a specific iteration.
@@ -934,7 +971,7 @@ export def "projects-iterations-export get" [
 ]: nothing -> table<downloadUri: string, flavor: string, newerVersionAvailable: bool, platform: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "training-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({project_id: $project_id, iteration_id: $iteration_id} | format pattern "/projects/{project_id}/iterations/{iteration_id}/export"))
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), iteration_id: (encode-path-segment $iteration_id)} | format pattern "/projects/{project_id}/iterations/{iteration_id}/export"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -962,7 +999,7 @@ export def "projects-iterations-export export" [
   let auth = (build-auth $token ($auth_scheme | default "training-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar") (serialize-qp "flavor" $flavor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id, iteration_id: $iteration_id} | format pattern "/projects/{project_id}/iterations/{iteration_id}/export") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), iteration_id: (encode-path-segment $iteration_id)} | format pattern "/projects/{project_id}/iterations/{iteration_id}/export") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -990,7 +1027,7 @@ export def "projects-iterations-performance get" [
   let auth = (build-auth $token ($auth_scheme | default "training-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "threshold" $threshold "scalar") (serialize-qp "overlapThreshold" $overlap_threshold "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id, iteration_id: $iteration_id} | format pattern "/projects/{project_id}/iterations/{iteration_id}/performance") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), iteration_id: (encode-path-segment $iteration_id)} | format pattern "/projects/{project_id}/iterations/{iteration_id}/performance") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1012,7 +1049,7 @@ export def "projects-iterations-performance-images get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --tag-ids: list # A list of tags ids to filter the images. Defaults to all tagged images when null. Limited to 20.
+  --tag-ids: list<string> # A list of tags ids to filter the images. Defaults to all tagged images when null. Limited to 20.
   --order-by: string@order-by-completer # The ordering. Defaults to newest.
   --take: int # Maximum number of images to return. Defaults to 50, limited to 256. (format: int32, default: 50)
   --skip: int # Number of images to skip before beginning the image batch. Defaults to 0. (format: int32, default: 0)
@@ -1020,7 +1057,7 @@ export def "projects-iterations-performance-images get" [
   let auth = (build-auth $token ($auth_scheme | default "training-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "tagIds" $tag_ids "csv") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "take" $take "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id, iteration_id: $iteration_id} | format pattern "/projects/{project_id}/iterations/{iteration_id}/performance/images") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), iteration_id: (encode-path-segment $iteration_id)} | format pattern "/projects/{project_id}/iterations/{iteration_id}/performance/images") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1042,12 +1079,12 @@ export def "projects-iterations-performance-images-count get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --tag-ids: list # A list of tags ids to filter the images to count. Defaults to all tags when null.
+  --tag-ids: list<string> # A list of tags ids to filter the images to count. Defaults to all tags when null.
 ]: nothing -> int {
   let auth = (build-auth $token ($auth_scheme | default "training-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "tagIds" $tag_ids "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id, iteration_id: $iteration_id} | format pattern "/projects/{project_id}/iterations/{iteration_id}/performance/images/count") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), iteration_id: (encode-path-segment $iteration_id)} | format pattern "/projects/{project_id}/iterations/{iteration_id}/performance/images/count") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1071,7 +1108,7 @@ export def "projects-iterations-publish delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "training-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({project_id: $project_id, iteration_id: $iteration_id} | format pattern "/projects/{project_id}/iterations/{iteration_id}/publish"))
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), iteration_id: (encode-path-segment $iteration_id)} | format pattern "/projects/{project_id}/iterations/{iteration_id}/publish"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1099,7 +1136,7 @@ export def "projects-iterations-publish publish" [
   let auth = (build-auth $token ($auth_scheme | default "training-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "publishName" $publish_name "scalar") (serialize-qp "predictionId" $prediction_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id, iteration_id: $iteration_id} | format pattern "/projects/{project_id}/iterations/{iteration_id}/publish") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), iteration_id: (encode-path-segment $iteration_id)} | format pattern "/projects/{project_id}/iterations/{iteration_id}/publish") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1119,12 +1156,12 @@ export def "projects-predictions delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ids: list # The prediction ids. Limited to 64.
+  --ids: list<string> # The prediction ids. Limited to 64.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "training-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ids" $ids "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/projects/{project_id}/predictions") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/predictions") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1159,19 +1196,19 @@ export def "projects-predictions-query list" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "training-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/projects/{project_id}/predictions/query"))
-  let body = {"application": $application, "continuation": $continuation, "endTime": $end_time, "iterationId": $iteration_id, "maxCount": $max_count, "orderBy": $order_by, "session": $session, "startTime": $start_time, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/predictions/query"))
+  let req_body = {"application": $application, "continuation": $continuation, "endTime": $end_time, "iterationId": $iteration_id, "maxCount": $max_count, "orderBy": $order_by, "session": $session, "startTime": $start_time, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Quick test an image.
 #
 # POST /projects/{projectId}/quicktest/image
 # operationId: QuickTestImage
-export def "projects-quicktest-image post" [
+export def "projects-quicktest-image test-quick" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1182,7 +1219,7 @@ export def "projects-quicktest-image post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --iteration-id: string # Optional. Specifies the id of a particular iteration to evaluate against.             The default iteration for the project will be used when not specified. (format: uuid)
+  --iteration-id: string # Optional. Specifies the id of a particular iteration to evaluate against. The default iteration for the project will be used when not specified. (format: uuid)
   --store: oneof<nothing, bool> # Optional. Specifies whether or not to store the result of this prediction. The default is true, to store. (default: true)
   image_data: string # Binary image data. Supported formats are JPEG, GIF, PNG, and BMP. Supports images up to 6MB. (format: binary)
 ]: any -> record<created: string, id: string, iteration: string, predictions: table<boundingBox: record, probability: float, tagId: string, tagName: string>, project: string> {
@@ -1190,19 +1227,20 @@ export def "projects-quicktest-image post" [
   let auth = (build-auth $token ($auth_scheme | default "training-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "iterationId" $iteration_id "scalar") (serialize-qp "store" $store "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/projects/{project_id}/quicktest/image") $qp)
-  let body = {"imageData": $image_data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/quicktest/image") $qp)
+  let req_body = {"imageData": $image_data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body ["imageData"])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # Quick test an image url.
 #
 # POST /projects/{projectId}/quicktest/url
 # operationId: QuickTestImageUrl
-export def "projects-quicktest-url post" [
+export def "projects-quicktest-url test-quick-image" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1213,20 +1251,20 @@ export def "projects-quicktest-url post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --iteration-id: string # Optional. Specifies the id of a particular iteration to evaluate against.             The default iteration for the project will be used when not specified. (format: uuid)
+  --iteration-id: string # Optional. Specifies the id of a particular iteration to evaluate against. The default iteration for the project will be used when not specified. (format: uuid)
   --store: oneof<nothing, bool> # Optional. Specifies whether or not to store the result of this prediction. The default is true, to store. (default: true)
-  --body-url: string # Url of the image.
+  url: string # Url of the image.
 ]: any -> record<created: string, id: string, iteration: string, predictions: table<boundingBox: record, probability: float, tagId: string, tagName: string>, project: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "training-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "iterationId" $iteration_id "scalar") (serialize-qp "store" $store "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/projects/{project_id}/quicktest/url") $qp)
-  let body = {"url": $body_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/quicktest/url") $qp)
+  let req_body = {"url": $url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get the tags for a given project and iteration.
@@ -1249,7 +1287,7 @@ export def "projects-tags list" [
   let auth = (build-auth $token ($auth_scheme | default "training-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "iterationId" $iteration_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/projects/{project_id}/tags") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/tags") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1277,7 +1315,7 @@ export def "projects-tags create" [
   let auth = (build-auth $token ($auth_scheme | default "training-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/projects/{project_id}/tags") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/tags") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1301,7 +1339,7 @@ export def "projects-tags delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "training-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({project_id: $project_id, tag_id: $tag_id} | format pattern "/projects/{project_id}/tags/{tag_id}"))
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/projects/{project_id}/tags/{tag_id}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1328,7 +1366,7 @@ export def "projects-tags get" [
   let auth = (build-auth $token ($auth_scheme | default "training-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "iterationId" $iteration_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id, tag_id: $tag_id} | format pattern "/projects/{project_id}/tags/{tag_id}") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/projects/{project_id}/tags/{tag_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1357,19 +1395,19 @@ export def "projects-tags update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "training-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({project_id: $project_id, tag_id: $tag_id} | format pattern "/projects/{project_id}/tags/{tag_id}"))
-  let body = {"description": $description, "name": $name, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/projects/{project_id}/tags/{tag_id}"))
+  let req_body = {"description": $description, "name": $name, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Suggest tags and regions for an array/batch of untagged images. Returns empty array if no tags are found.
 #
 # POST /projects/{projectId}/tagsandregions/suggestions
 # operationId: SuggestTagsAndRegions
-export def "projects-tagsandregions-suggestions post" [
+export def "projects-tagsandregions-suggestions create-suggest-tags-and-regions" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1381,12 +1419,12 @@ export def "projects-tagsandregions-suggestions post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --iteration-id: string # IterationId to use for tag and region suggestion. (format: uuid)
-  --image-ids: list # Array of image ids tag suggestion are needed for. Use GetUntaggedImages API to get imageIds.
+  --image-ids: list<string> # Array of image ids tag suggestion are needed for. Use GetUntaggedImages API to get imageIds.
 ]: nothing -> table<created: string, id: string, iteration: string, predictionUncertainty: float, predictions: list<record>, project: string> {
   let auth = (build-auth $token ($auth_scheme | default "training-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "iterationId" $iteration_id "scalar") (serialize-qp "imageIds" $image_ids "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/projects/{project_id}/tagsandregions/suggestions") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/tagsandregions/suggestions") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1396,7 +1434,7 @@ export def "projects-tagsandregions-suggestions post" [
 #
 # POST /projects/{projectId}/train
 # operationId: TrainProject
-export def "projects-train post" [
+export def "projects-train create" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1411,16 +1449,16 @@ export def "projects-train post" [
   --reserved-budget-in-hours: int # The number of hours reserved as budget for training (if applicable). (format: int32, default: 0)
   --force-train: oneof<nothing, bool> # Whether to force train even if dataset and configuration does not change (default: false). (default: false)
   --notification-email-address: string # The email address to send notification to when training finishes (default: null).
-  --selected-tags: list # List of tags selected for this training session, other tags in the project will be ignored.
+  --selected-tags: list<string> # List of tags selected for this training session, other tags in the project will be ignored.
 ]: any -> record<classificationType: string, created: string, domainId: string, exportable: bool, exportableTo: list<string>, id: string, lastModified: string, name: string, originalPublishResourceId: string, projectId: string, publishName: string, reservedBudgetInHours: int, status: string, trainedAt: string, trainingTimeInMinutes: int, trainingType: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "training-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "trainingType" $training_type "scalar") (serialize-qp "reservedBudgetInHours" $reserved_budget_in_hours "scalar") (serialize-qp "forceTrain" $force_train "scalar") (serialize-qp "notificationEmailAddress" $notification_email_address "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/projects/{project_id}/train") $qp)
-  let body = {"selectedTags": $selected_tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/train") $qp)
+  let req_body = {"selectedTags": $selected_tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

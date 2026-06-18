@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -74,7 +83,7 @@ def order-by-completer-1 [] { ["alphabetical" "best"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "activities plusactivitiessearch" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "activities list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -98,7 +107,7 @@ export def commands []: nothing -> table {
 #
 # GET /activities
 # operationId: plus.activities.search
-export def "activities plusactivitiessearch" [
+export def "activities list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -133,7 +142,7 @@ export def "activities plusactivitiessearch" [
 #
 # GET /activities/{activityId}
 # operationId: plus.activities.get
-export def "activities plusactivitiesget" [
+export def "activities get" [
   activity_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -154,7 +163,7 @@ export def "activities plusactivitiesget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({activity_id: $activity_id} | format pattern "/activities/{activity_id}") $qp)
+  let full_url = (build-url $base ({activity_id: (encode-path-segment $activity_id)} | format pattern "/activities/{activity_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -164,7 +173,7 @@ export def "activities plusactivitiesget" [
 #
 # GET /activities/{activityId}/comments
 # operationId: plus.comments.list
-export def "activities-comments pluscommentslist" [
+export def "activities-comments list" [
   activity_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -188,7 +197,7 @@ export def "activities-comments pluscommentslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "sortOrder" $sort_order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({activity_id: $activity_id} | format pattern "/activities/{activity_id}/comments") $qp)
+  let full_url = (build-url $base ({activity_id: (encode-path-segment $activity_id)} | format pattern "/activities/{activity_id}/comments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -198,7 +207,7 @@ export def "activities-comments pluscommentslist" [
 #
 # GET /activities/{activityId}/people/{collection}
 # operationId: plus.people.listByActivity
-export def "activities-people pluspeoplelistByActivity" [
+export def "activities-people list-by-activity" [
   activity_id: string
   collection: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -222,7 +231,7 @@ export def "activities-people pluspeoplelistByActivity" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({activity_id: $activity_id, collection: $collection} | format pattern "/activities/{activity_id}/people/{collection}") $qp)
+  let full_url = (build-url $base ({activity_id: (encode-path-segment $activity_id), collection: (encode-path-segment $collection)} | format pattern "/activities/{activity_id}/people/{collection}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -232,7 +241,7 @@ export def "activities-people pluspeoplelistByActivity" [
 #
 # GET /comments/{commentId}
 # operationId: plus.comments.get
-export def "comments pluscommentsget" [
+export def "comments get" [
   comment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -253,7 +262,7 @@ export def "comments pluscommentsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({comment_id: $comment_id} | format pattern "/comments/{comment_id}") $qp)
+  let full_url = (build-url $base ({comment_id: (encode-path-segment $comment_id)} | format pattern "/comments/{comment_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -263,7 +272,7 @@ export def "comments pluscommentsget" [
 #
 # GET /people
 # operationId: plus.people.search
-export def "people pluspeoplesearch" [
+export def "people list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -297,7 +306,7 @@ export def "people pluspeoplesearch" [
 #
 # GET /people/{userId}
 # operationId: plus.people.get
-export def "people pluspeopleget" [
+export def "people get" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -318,7 +327,7 @@ export def "people pluspeopleget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/people/{user_id}") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/people/{user_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -328,7 +337,7 @@ export def "people pluspeopleget" [
 #
 # GET /people/{userId}/activities/{collection}
 # operationId: plus.activities.list
-export def "people-activities plusactivitieslist" [
+export def "people-activities list" [
   user_id: string
   collection: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -352,7 +361,7 @@ export def "people-activities plusactivitieslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id, collection: $collection} | format pattern "/people/{user_id}/activities/{collection}") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), collection: (encode-path-segment $collection)} | format pattern "/people/{user_id}/activities/{collection}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -362,7 +371,7 @@ export def "people-activities plusactivitieslist" [
 #
 # GET /people/{userId}/people/{collection}
 # operationId: plus.people.list
-export def "people-people pluspeoplelist" [
+export def "people-people list" [
   user_id: string
   collection: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -387,7 +396,7 @@ export def "people-people pluspeoplelist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id, collection: $collection} | format pattern "/people/{user_id}/people/{collection}") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), collection: (encode-path-segment $collection)} | format pattern "/people/{user_id}/people/{collection}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -72,7 +81,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1beta1 dataformprojectslocationsrepositoriesworkspacesdelete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1beta1 delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -96,7 +105,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /v1beta1/{name}
 # operationId: dataform.projects.locations.repositories.workspaces.delete
-export def "v1beta1 dataformprojectslocationsrepositoriesworkspacesdelete" [
+export def "v1beta1 delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -122,7 +131,7 @@ export def "v1beta1 dataformprojectslocationsrepositoriesworkspacesdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "force" $force "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1beta1/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta1/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -132,7 +141,7 @@ export def "v1beta1 dataformprojectslocationsrepositoriesworkspacesdelete" [
 #
 # GET /v1beta1/{name}
 # operationId: dataform.projects.locations.repositories.workspaces.get
-export def "v1beta1 dataformprojectslocationsrepositoriesworkspacesget" [
+export def "v1beta1 get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -157,7 +166,7 @@ export def "v1beta1 dataformprojectslocationsrepositoriesworkspacesget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1beta1/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta1/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -167,9 +176,9 @@ export def "v1beta1 dataformprojectslocationsrepositoriesworkspacesget" [
 #
 # PATCH /v1beta1/{name}
 # operationId: dataform.projects.locations.repositories.workflowConfigs.patch
-# --invocationConfig shape: {fullyRefreshIncrementalTablesEnabled?: bool, includedTags?: list, includedTargets?: list, transitiveDependenciesIncluded?: bool, transitiveDependentsIncluded?: bool}
+# --invocationConfig shape: {fullyRefreshIncrementalTablesEnabled?: bool, includedTags?: list<string>, includedTargets?: list, transitiveDependenciesIncluded?: bool, transitiveDependentsIncluded?: bool}
 # --recentScheduledExecutionRecords item shape: {errorStatus?: record, executionTime?: string, workflowInvocation?: string}
-export def "v1beta1 dataformprojectslocationsrepositoriesworkflowConfigspatch" [
+export def "v1beta1 update" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -192,7 +201,7 @@ export def "v1beta1 dataformprojectslocationsrepositoriesworkflowConfigspatch" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --update-mask: string # Optional. Specifies the fields to be updated in the workflow config. If left unset, all fields will be updated.
   --cron-schedule: string # Optional. Optional schedule (in cron format) for automatic execution of this workflow config.
-  --invocation-config: record # Includes various configuration options for a workflow invocation. If both `included_targets` and `included_tags` are unset, all actions will be included. — shape: {fullyRefreshIncrementalTablesEnabled?: bool, includedTags?: list, includedTargets?: list, transitiveDependenciesIncluded?: bool, transitiveDependentsIncluded?: bool}
+  --invocation-config: record # Includes various configuration options for a workflow invocation. If both `included_targets` and `included_tags` are unset, all actions will be included. — shape: {fullyRefreshIncrementalTablesEnabled?: bool, includedTags?: list<string>, includedTargets?: list, transitiveDependenciesIncluded?: bool, transitiveDependentsIncluded?: bool}
   --release-config: string # Required. The name of the release config whose release_compilation_result should be executed. Must be in the format `projects/*/locations/*/repositories/*/releaseConfigs/*`.
   --time-zone: string # Optional. Specifies the time zone to be used when interpreting cron_schedule. Must be a time zone name from the time zone database (https://en.wikipedia.org/wiki/List_of_tz_database_time_zones). If left unspecified, the default is UTC.
 ]: any -> record<cronSchedule: string, invocationConfig: record<fullyRefreshIncrementalTablesEnabled: bool, includedTags: list<string>, includedTargets: list<record>, transitiveDependenciesIncluded: bool, transitiveDependentsIncluded: bool>, name: string, recentScheduledExecutionRecords: table<errorStatus: record, executionTime: string, workflowInvocation: string>, releaseConfig: string, timeZone: string> {
@@ -200,19 +209,19 @@ export def "v1beta1 dataformprojectslocationsrepositoriesworkflowConfigspatch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1beta1/{name}") $qp)
-  let body = {"cronSchedule": $cron_schedule, "invocationConfig": $invocation_config, "releaseConfig": $release_config, "timeZone": $time_zone} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta1/{name}") $qp)
+  let req_body = {"cronSchedule": $cron_schedule, "invocationConfig": $invocation_config, "releaseConfig": $release_config, "timeZone": $time_zone} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists information about the supported locations for this service.
 #
 # GET /v1beta1/{name}/locations
 # operationId: dataform.projects.locations.list
-export def "v1beta1-locations dataformprojectslocationslist" [
+export def "v1beta1-locations list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -240,7 +249,7 @@ export def "v1beta1-locations dataformprojectslocationslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1beta1/{name}/locations") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta1/{name}/locations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -250,7 +259,7 @@ export def "v1beta1-locations dataformprojectslocationslist" [
 #
 # POST /v1beta1/{name}:cancel
 # operationId: dataform.projects.locations.repositories.workflowInvocations.cancel
-export def "v1beta1 dataformprojectslocationsrepositoriesworkflowInvocationscancel" [
+export def "v1beta1 cancel" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -277,11 +286,12 @@ export def "v1beta1 dataformprojectslocationsrepositoriesworkflowInvocationscanc
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1beta1/{name}:cancel") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta1/{name}:cancel") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Applies a Git commit for uncommitted files in a Workspace.
@@ -289,7 +299,7 @@ export def "v1beta1 dataformprojectslocationsrepositoriesworkflowInvocationscanc
 # POST /v1beta1/{name}:commit
 # operationId: dataform.projects.locations.repositories.workspaces.commit
 # --author shape: {emailAddress?: string, name?: string}
-export def "v1beta1 dataformprojectslocationsrepositoriesworkspacescommit" [
+export def "v1beta1 commit" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -312,25 +322,25 @@ export def "v1beta1 dataformprojectslocationsrepositoriesworkspacescommit" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --author: record # Represents the author of a Git commit. — shape: {emailAddress?: string, name?: string}
   --commit-message: string # Optional. The commit's message.
-  --paths: list # Optional. Full file paths to commit including filename, rooted at workspace root. If left empty, all files will be committed.
+  --paths: list<string> # Optional. Full file paths to commit including filename, rooted at workspace root. If left empty, all files will be committed.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1beta1/{name}:commit") $qp)
-  let body = {"author": $author, "commitMessage": $commit_message, "paths": $paths} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta1/{name}:commit") $qp)
+  let req_body = {"author": $author, "commitMessage": $commit_message, "paths": $paths} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Fetches Git statuses for the files in a Workspace.
 #
 # GET /v1beta1/{name}:fetchFileGitStatuses
 # operationId: dataform.projects.locations.repositories.workspaces.fetchFileGitStatuses
-export def "v1beta1 dataformprojectslocationsrepositoriesworkspacesfetchFileGitStatuses" [
+export def "v1beta1 get-file-git-statuses" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -355,7 +365,7 @@ export def "v1beta1 dataformprojectslocationsrepositoriesworkspacesfetchFileGitS
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1beta1/{name}:fetchFileGitStatuses") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta1/{name}:fetchFileGitStatuses") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -365,7 +375,7 @@ export def "v1beta1 dataformprojectslocationsrepositoriesworkspacesfetchFileGitS
 #
 # GET /v1beta1/{name}:fetchGitAheadBehind
 # operationId: dataform.projects.locations.repositories.workspaces.fetchGitAheadBehind
-export def "v1beta1 dataformprojectslocationsrepositoriesworkspacesfetchGitAheadBehind" [
+export def "v1beta1 get-git-ahead-behind" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -391,7 +401,7 @@ export def "v1beta1 dataformprojectslocationsrepositoriesworkspacesfetchGitAhead
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "remoteBranch" $remote_branch "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1beta1/{name}:fetchGitAheadBehind") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta1/{name}:fetchGitAheadBehind") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -401,7 +411,7 @@ export def "v1beta1 dataformprojectslocationsrepositoriesworkspacesfetchGitAhead
 #
 # GET /v1beta1/{name}:fetchRemoteBranches
 # operationId: dataform.projects.locations.repositories.fetchRemoteBranches
-export def "v1beta1 dataformprojectslocationsrepositoriesfetchRemoteBranches" [
+export def "v1beta1 get-remote-branches" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -426,7 +436,7 @@ export def "v1beta1 dataformprojectslocationsrepositoriesfetchRemoteBranches" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1beta1/{name}:fetchRemoteBranches") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta1/{name}:fetchRemoteBranches") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -437,7 +447,7 @@ export def "v1beta1 dataformprojectslocationsrepositoriesfetchRemoteBranches" [
 # POST /v1beta1/{name}:pull
 # operationId: dataform.projects.locations.repositories.workspaces.pull
 # --author shape: {emailAddress?: string, name?: string}
-export def "v1beta1 dataformprojectslocationsrepositoriesworkspacespull" [
+export def "v1beta1 pull" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -465,19 +475,19 @@ export def "v1beta1 dataformprojectslocationsrepositoriesworkspacespull" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1beta1/{name}:pull") $qp)
-  let body = {"author": $author, "remoteBranch": $remote_branch} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta1/{name}:pull") $qp)
+  let req_body = {"author": $author, "remoteBranch": $remote_branch} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Pushes Git commits from a Workspace to the Repository's remote.
 #
 # POST /v1beta1/{name}:push
 # operationId: dataform.projects.locations.repositories.workspaces.push
-export def "v1beta1 dataformprojectslocationsrepositoriesworkspacespush" [
+export def "v1beta1 push" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -504,19 +514,19 @@ export def "v1beta1 dataformprojectslocationsrepositoriesworkspacespush" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1beta1/{name}:push") $qp)
-  let body = {"remoteBranch": $remote_branch} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta1/{name}:push") $qp)
+  let req_body = {"remoteBranch": $remote_branch} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns WorkflowInvocationActions in a given WorkflowInvocation.
 #
 # GET /v1beta1/{name}:query
 # operationId: dataform.projects.locations.repositories.workflowInvocations.query
-export def "v1beta1 dataformprojectslocationsrepositoriesworkflowInvocationsquery" [
+export def "v1beta1 list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -543,7 +553,7 @@ export def "v1beta1 dataformprojectslocationsrepositoriesworkflowInvocationsquer
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1beta1/{name}:query") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta1/{name}:query") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -553,7 +563,7 @@ export def "v1beta1 dataformprojectslocationsrepositoriesworkflowInvocationsquer
 #
 # POST /v1beta1/{name}:reset
 # operationId: dataform.projects.locations.repositories.workspaces.reset
-export def "v1beta1 dataformprojectslocationsrepositoriesworkspacesreset" [
+export def "v1beta1 reset" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -575,25 +585,25 @@ export def "v1beta1 dataformprojectslocationsrepositoriesworkspacesreset" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --clean: oneof<nothing, bool> # Optional. If set to true, untracked files will be deleted.
-  --paths: list # Optional. Full file paths to reset back to their committed state including filename, rooted at workspace root. If left empty, all files will be reset.
+  --paths: list<string> # Optional. Full file paths to reset back to their committed state including filename, rooted at workspace root. If left empty, all files will be reset.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1beta1/{name}:reset") $qp)
-  let body = {"clean": $clean, "paths": $paths} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta1/{name}:reset") $qp)
+  let req_body = {"clean": $clean, "paths": $paths} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists CompilationResults in a given Repository.
 #
 # GET /v1beta1/{parent}/compilationResults
 # operationId: dataform.projects.locations.repositories.compilationResults.list
-export def "v1beta1-compilation-results dataformprojectslocationsrepositoriescompilationResultslist" [
+export def "v1beta1-compilation-results list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -620,7 +630,7 @@ export def "v1beta1-compilation-results dataformprojectslocationsrepositoriescom
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta1/{parent}/compilationResults") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta1/{parent}/compilationResults") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -632,7 +642,7 @@ export def "v1beta1-compilation-results dataformprojectslocationsrepositoriescom
 # operationId: dataform.projects.locations.repositories.compilationResults.create
 # --codeCompilationConfig shape: {assertionSchema?: string, databaseSuffix?: string, defaultDatabase?: string, defaultLocation?: string, defaultSchema?: string, schemaSuffix?: string, tablePrefix?: string, vars?: record}
 # --compilationErrors item shape: {actionTarget?: record}
-export def "v1beta1-compilation-results dataformprojectslocationsrepositoriescompilationResultscreate" [
+export def "v1beta1-compilation-results create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -662,19 +672,19 @@ export def "v1beta1-compilation-results dataformprojectslocationsrepositoriescom
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta1/{parent}/compilationResults") $qp)
-  let body = {"codeCompilationConfig": $code_compilation_config, "gitCommitish": $git_commitish, "releaseConfig": $release_config, "workspace": $workspace} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta1/{parent}/compilationResults") $qp)
+  let req_body = {"codeCompilationConfig": $code_compilation_config, "gitCommitish": $git_commitish, "releaseConfig": $release_config, "workspace": $workspace} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists ReleaseConfigs in a given Repository.
 #
 # GET /v1beta1/{parent}/releaseConfigs
 # operationId: dataform.projects.locations.repositories.releaseConfigs.list
-export def "v1beta1-release-configs dataformprojectslocationsrepositoriesreleaseConfigslist" [
+export def "v1beta1-release-configs list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -701,7 +711,7 @@ export def "v1beta1-release-configs dataformprojectslocationsrepositoriesrelease
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta1/{parent}/releaseConfigs") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta1/{parent}/releaseConfigs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -713,7 +723,7 @@ export def "v1beta1-release-configs dataformprojectslocationsrepositoriesrelease
 # operationId: dataform.projects.locations.repositories.releaseConfigs.create
 # --codeCompilationConfig shape: {assertionSchema?: string, databaseSuffix?: string, defaultDatabase?: string, defaultLocation?: string, defaultSchema?: string, schemaSuffix?: string, tablePrefix?: string, vars?: record}
 # --recentScheduledReleaseRecords item shape: {compilationResult?: string, errorStatus?: record, releaseTime?: string}
-export def "v1beta1-release-configs dataformprojectslocationsrepositoriesreleaseConfigscreate" [
+export def "v1beta1-release-configs create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -745,19 +755,19 @@ export def "v1beta1-release-configs dataformprojectslocationsrepositoriesrelease
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "releaseConfigId" $release_config_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta1/{parent}/releaseConfigs") $qp)
-  let body = {"codeCompilationConfig": $code_compilation_config, "cronSchedule": $cron_schedule, "gitCommitish": $git_commitish, "releaseCompilationResult": $release_compilation_result, "timeZone": $time_zone} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta1/{parent}/releaseConfigs") $qp)
+  let req_body = {"codeCompilationConfig": $code_compilation_config, "cronSchedule": $cron_schedule, "gitCommitish": $git_commitish, "releaseCompilationResult": $release_compilation_result, "timeZone": $time_zone} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists Repositories in a given project and location.
 #
 # GET /v1beta1/{parent}/repositories
 # operationId: dataform.projects.locations.repositories.list
-export def "v1beta1-repositories dataformprojectslocationsrepositorieslist" [
+export def "v1beta1-repositories list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -786,7 +796,7 @@ export def "v1beta1-repositories dataformprojectslocationsrepositorieslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta1/{parent}/repositories") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta1/{parent}/repositories") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -798,7 +808,7 @@ export def "v1beta1-repositories dataformprojectslocationsrepositorieslist" [
 # operationId: dataform.projects.locations.repositories.create
 # --gitRemoteSettings shape: {authenticationTokenSecretVersion?: string, defaultBranch?: string, url?: string}
 # --workspaceCompilationOverrides shape: {defaultDatabase?: string, schemaSuffix?: string, tablePrefix?: string}
-export def "v1beta1-repositories dataformprojectslocationsrepositoriescreate" [
+export def "v1beta1-repositories create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -828,19 +838,19 @@ export def "v1beta1-repositories dataformprojectslocationsrepositoriescreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "repositoryId" $repository_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta1/{parent}/repositories") $qp)
-  let body = {"gitRemoteSettings": $git_remote_settings, "npmrcEnvironmentVariablesSecretVersion": $npmrc_environment_variables_secret_version, "workspaceCompilationOverrides": $workspace_compilation_overrides} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta1/{parent}/repositories") $qp)
+  let req_body = {"gitRemoteSettings": $git_remote_settings, "npmrcEnvironmentVariablesSecretVersion": $npmrc_environment_variables_secret_version, "workspaceCompilationOverrides": $workspace_compilation_overrides} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists WorkflowConfigs in a given Repository.
 #
 # GET /v1beta1/{parent}/workflowConfigs
 # operationId: dataform.projects.locations.repositories.workflowConfigs.list
-export def "v1beta1-workflow-configs dataformprojectslocationsrepositoriesworkflowConfigslist" [
+export def "v1beta1-workflow-configs list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -867,7 +877,7 @@ export def "v1beta1-workflow-configs dataformprojectslocationsrepositoriesworkfl
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta1/{parent}/workflowConfigs") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta1/{parent}/workflowConfigs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -877,9 +887,9 @@ export def "v1beta1-workflow-configs dataformprojectslocationsrepositoriesworkfl
 #
 # POST /v1beta1/{parent}/workflowConfigs
 # operationId: dataform.projects.locations.repositories.workflowConfigs.create
-# --invocationConfig shape: {fullyRefreshIncrementalTablesEnabled?: bool, includedTags?: list, includedTargets?: list, transitiveDependenciesIncluded?: bool, transitiveDependentsIncluded?: bool}
+# --invocationConfig shape: {fullyRefreshIncrementalTablesEnabled?: bool, includedTags?: list<string>, includedTargets?: list, transitiveDependenciesIncluded?: bool, transitiveDependentsIncluded?: bool}
 # --recentScheduledExecutionRecords item shape: {errorStatus?: record, executionTime?: string, workflowInvocation?: string}
-export def "v1beta1-workflow-configs dataformprojectslocationsrepositoriesworkflowConfigscreate" [
+export def "v1beta1-workflow-configs create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -902,7 +912,7 @@ export def "v1beta1-workflow-configs dataformprojectslocationsrepositoriesworkfl
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --workflow-config-id: string # Required. The ID to use for the workflow config, which will become the final component of the workflow config's resource name.
   --cron-schedule: string # Optional. Optional schedule (in cron format) for automatic execution of this workflow config.
-  --invocation-config: record # Includes various configuration options for a workflow invocation. If both `included_targets` and `included_tags` are unset, all actions will be included. — shape: {fullyRefreshIncrementalTablesEnabled?: bool, includedTags?: list, includedTargets?: list, transitiveDependenciesIncluded?: bool, transitiveDependentsIncluded?: bool}
+  --invocation-config: record # Includes various configuration options for a workflow invocation. If both `included_targets` and `included_tags` are unset, all actions will be included. — shape: {fullyRefreshIncrementalTablesEnabled?: bool, includedTags?: list<string>, includedTargets?: list, transitiveDependenciesIncluded?: bool, transitiveDependentsIncluded?: bool}
   --release-config: string # Required. The name of the release config whose release_compilation_result should be executed. Must be in the format `projects/*/locations/*/repositories/*/releaseConfigs/*`.
   --time-zone: string # Optional. Specifies the time zone to be used when interpreting cron_schedule. Must be a time zone name from the time zone database (https://en.wikipedia.org/wiki/List_of_tz_database_time_zones). If left unspecified, the default is UTC.
 ]: any -> record<cronSchedule: string, invocationConfig: record<fullyRefreshIncrementalTablesEnabled: bool, includedTags: list<string>, includedTargets: list<record>, transitiveDependenciesIncluded: bool, transitiveDependentsIncluded: bool>, name: string, recentScheduledExecutionRecords: table<errorStatus: record, executionTime: string, workflowInvocation: string>, releaseConfig: string, timeZone: string> {
@@ -910,19 +920,19 @@ export def "v1beta1-workflow-configs dataformprojectslocationsrepositoriesworkfl
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "workflowConfigId" $workflow_config_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta1/{parent}/workflowConfigs") $qp)
-  let body = {"cronSchedule": $cron_schedule, "invocationConfig": $invocation_config, "releaseConfig": $release_config, "timeZone": $time_zone} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta1/{parent}/workflowConfigs") $qp)
+  let req_body = {"cronSchedule": $cron_schedule, "invocationConfig": $invocation_config, "releaseConfig": $release_config, "timeZone": $time_zone} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists WorkflowInvocations in a given Repository.
 #
 # GET /v1beta1/{parent}/workflowInvocations
 # operationId: dataform.projects.locations.repositories.workflowInvocations.list
-export def "v1beta1-workflow-invocations dataformprojectslocationsrepositoriesworkflowInvocationslist" [
+export def "v1beta1-workflow-invocations list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -951,7 +961,7 @@ export def "v1beta1-workflow-invocations dataformprojectslocationsrepositorieswo
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta1/{parent}/workflowInvocations") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta1/{parent}/workflowInvocations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -961,9 +971,9 @@ export def "v1beta1-workflow-invocations dataformprojectslocationsrepositorieswo
 #
 # POST /v1beta1/{parent}/workflowInvocations
 # operationId: dataform.projects.locations.repositories.workflowInvocations.create
-# --invocationConfig shape: {fullyRefreshIncrementalTablesEnabled?: bool, includedTags?: list, includedTargets?: list, transitiveDependenciesIncluded?: bool, transitiveDependentsIncluded?: bool}
+# --invocationConfig shape: {fullyRefreshIncrementalTablesEnabled?: bool, includedTags?: list<string>, includedTargets?: list, transitiveDependenciesIncluded?: bool, transitiveDependentsIncluded?: bool}
 # --invocationTiming shape: {endTime?: string, startTime?: string}
-export def "v1beta1-workflow-invocations dataformprojectslocationsrepositoriesworkflowInvocationscreate" [
+export def "v1beta1-workflow-invocations create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -985,7 +995,7 @@ export def "v1beta1-workflow-invocations dataformprojectslocationsrepositorieswo
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --compilation-result: string # Immutable. The name of the compilation result to compile. Must be in the format `projects/*/locations/*/repositories/*/compilationResults/*`.
-  --invocation-config: record # Includes various configuration options for a workflow invocation. If both `included_targets` and `included_tags` are unset, all actions will be included. — shape: {fullyRefreshIncrementalTablesEnabled?: bool, includedTags?: list, includedTargets?: list, transitiveDependenciesIncluded?: bool, transitiveDependentsIncluded?: bool}
+  --invocation-config: record # Includes various configuration options for a workflow invocation. If both `included_targets` and `included_tags` are unset, all actions will be included. — shape: {fullyRefreshIncrementalTablesEnabled?: bool, includedTags?: list<string>, includedTargets?: list, transitiveDependenciesIncluded?: bool, transitiveDependentsIncluded?: bool}
   --invocation-timing: record # Represents a time interval, encoded as a Timestamp start (inclusive) and a Timestamp end (exclusive). The start must be less than or equal to the end. When the start equals the end, the interval is empty (matches no time). When both start and end are unspecified, the interval matches any time. — shape: {endTime?: string, startTime?: string}
   --workflow-config: string # Immutable. The name of the workflow config to invoke. Must be in the format `projects/*/locations/*/repositories/*/workflowConfigs/*`.
 ]: any -> record<compilationResult: string, invocationConfig: record<fullyRefreshIncrementalTablesEnabled: bool, includedTags: list<string>, includedTargets: list<record>, transitiveDependenciesIncluded: bool, transitiveDependentsIncluded: bool>, invocationTiming: record<endTime: string, startTime: string>, name: string, state: string, workflowConfig: string> {
@@ -993,19 +1003,19 @@ export def "v1beta1-workflow-invocations dataformprojectslocationsrepositorieswo
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta1/{parent}/workflowInvocations") $qp)
-  let body = {"compilationResult": $compilation_result, "invocationConfig": $invocation_config, "invocationTiming": $invocation_timing, "workflowConfig": $workflow_config} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta1/{parent}/workflowInvocations") $qp)
+  let req_body = {"compilationResult": $compilation_result, "invocationConfig": $invocation_config, "invocationTiming": $invocation_timing, "workflowConfig": $workflow_config} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists Workspaces in a given Repository.
 #
 # GET /v1beta1/{parent}/workspaces
 # operationId: dataform.projects.locations.repositories.workspaces.list
-export def "v1beta1-workspaces dataformprojectslocationsrepositoriesworkspaceslist" [
+export def "v1beta1-workspaces list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1034,7 +1044,7 @@ export def "v1beta1-workspaces dataformprojectslocationsrepositoriesworkspacesli
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta1/{parent}/workspaces") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta1/{parent}/workspaces") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1044,7 +1054,7 @@ export def "v1beta1-workspaces dataformprojectslocationsrepositoriesworkspacesli
 #
 # POST /v1beta1/{parent}/workspaces
 # operationId: dataform.projects.locations.repositories.workspaces.create
-export def "v1beta1-workspaces dataformprojectslocationsrepositoriesworkspacescreate" [
+export def "v1beta1-workspaces create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1072,18 +1082,19 @@ export def "v1beta1-workspaces dataformprojectslocationsrepositoriesworkspacescr
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "workspaceId" $workspace_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta1/{parent}/workspaces") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta1/{parent}/workspaces") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets the access control policy for a resource. Returns an empty policy if the resource exists and does not have a policy set.
 #
 # GET /v1beta1/{resource}:getIamPolicy
 # operationId: dataform.projects.locations.repositories.workspaces.getIamPolicy
-export def "v1beta1 dataformprojectslocationsrepositoriesworkspacesgetIamPolicy" [
+export def "v1beta1 get-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1109,7 +1120,7 @@ export def "v1beta1 dataformprojectslocationsrepositoriesworkspacesgetIamPolicy"
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "options.requestedPolicyVersion" $options_requested_policy_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource: $resource} | format pattern "/v1beta1/{resource}:getIamPolicy") $qp)
+  let full_url = (build-url $base ({resource: (encode-path-segment $resource)} | format pattern "/v1beta1/{resource}:getIamPolicy") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1120,7 +1131,7 @@ export def "v1beta1 dataformprojectslocationsrepositoriesworkspacesgetIamPolicy"
 # POST /v1beta1/{resource}:setIamPolicy
 # operationId: dataform.projects.locations.repositories.workspaces.setIamPolicy
 # --policy shape: {bindings?: list, etag?: string, version?: int}
-export def "v1beta1 dataformprojectslocationsrepositoriesworkspacessetIamPolicy" [
+export def "v1beta1 update-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1147,19 +1158,19 @@ export def "v1beta1 dataformprojectslocationsrepositoriesworkspacessetIamPolicy"
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource: $resource} | format pattern "/v1beta1/{resource}:setIamPolicy") $qp)
-  let body = {"policy": $policy} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({resource: (encode-path-segment $resource)} | format pattern "/v1beta1/{resource}:setIamPolicy") $qp)
+  let req_body = {"policy": $policy} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns permissions that a caller has on the specified resource. If the resource does not exist, this will return an empty set of permissions, not a `NOT_FOUND` error. Note: This operation is designed to be used for building permission-aware UIs and command-line tools, not for authorization checking. This operation may "fail open" without warning.
 #
 # POST /v1beta1/{resource}:testIamPermissions
 # operationId: dataform.projects.locations.repositories.workspaces.testIamPermissions
-export def "v1beta1 dataformprojectslocationsrepositoriesworkspacestestIamPermissions" [
+export def "v1beta1 test-iam-permissions" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1180,25 +1191,25 @@ export def "v1beta1 dataformprojectslocationsrepositoriesworkspacestestIamPermis
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --permissions: list # The set of permissions to check for the `resource`. Permissions with wildcards (such as `*` or `storage.*`) are not allowed. For more information see [IAM Overview](https://cloud.google.com/iam/docs/overview#permissions).
+  --permissions: list<string> # The set of permissions to check for the `resource`. Permissions with wildcards (such as `*` or `storage.*`) are not allowed. For more information see [IAM Overview](https://cloud.google.com/iam/docs/overview#permissions).
 ]: any -> record<permissions: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource: $resource} | format pattern "/v1beta1/{resource}:testIamPermissions") $qp)
-  let body = {"permissions": $permissions} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({resource: (encode-path-segment $resource)} | format pattern "/v1beta1/{resource}:testIamPermissions") $qp)
+  let req_body = {"permissions": $permissions} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Fetches Git diff for an uncommitted file in a Workspace.
 #
 # GET /v1beta1/{workspace}:fetchFileDiff
 # operationId: dataform.projects.locations.repositories.workspaces.fetchFileDiff
-export def "v1beta1 dataformprojectslocationsrepositoriesworkspacesfetchFileDiff" [
+export def "v1beta1 get-file-diff" [
   workspace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1224,7 +1235,7 @@ export def "v1beta1 dataformprojectslocationsrepositoriesworkspacesfetchFileDiff
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "path" $path "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({workspace: $workspace} | format pattern "/v1beta1/{workspace}:fetchFileDiff") $qp)
+  let full_url = (build-url $base ({workspace: (encode-path-segment $workspace)} | format pattern "/v1beta1/{workspace}:fetchFileDiff") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1234,7 +1245,7 @@ export def "v1beta1 dataformprojectslocationsrepositoriesworkspacesfetchFileDiff
 #
 # POST /v1beta1/{workspace}:installNpmPackages
 # operationId: dataform.projects.locations.repositories.workspaces.installNpmPackages
-export def "v1beta1 dataformprojectslocationsrepositoriesworkspacesinstallNpmPackages" [
+export def "v1beta1 create-install-npm-packages" [
   workspace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1261,18 +1272,19 @@ export def "v1beta1 dataformprojectslocationsrepositoriesworkspacesinstallNpmPac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({workspace: $workspace} | format pattern "/v1beta1/{workspace}:installNpmPackages") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({workspace: (encode-path-segment $workspace)} | format pattern "/v1beta1/{workspace}:installNpmPackages") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Creates a directory inside a Workspace.
 #
 # POST /v1beta1/{workspace}:makeDirectory
 # operationId: dataform.projects.locations.repositories.workspaces.makeDirectory
-export def "v1beta1 dataformprojectslocationsrepositoriesworkspacesmakeDirectory" [
+export def "v1beta1 create-make-directory" [
   workspace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1299,19 +1311,19 @@ export def "v1beta1 dataformprojectslocationsrepositoriesworkspacesmakeDirectory
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({workspace: $workspace} | format pattern "/v1beta1/{workspace}:makeDirectory") $qp)
-  let body = {"path": $path} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({workspace: (encode-path-segment $workspace)} | format pattern "/v1beta1/{workspace}:makeDirectory") $qp)
+  let req_body = {"path": $path} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Moves a directory (inside a Workspace), and all of its contents, to a new location.
 #
 # POST /v1beta1/{workspace}:moveDirectory
 # operationId: dataform.projects.locations.repositories.workspaces.moveDirectory
-export def "v1beta1 dataformprojectslocationsrepositoriesworkspacesmoveDirectory" [
+export def "v1beta1 move-directory" [
   workspace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1339,19 +1351,19 @@ export def "v1beta1 dataformprojectslocationsrepositoriesworkspacesmoveDirectory
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({workspace: $workspace} | format pattern "/v1beta1/{workspace}:moveDirectory") $qp)
-  let body = {"newPath": $new_path, "path": $path} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({workspace: (encode-path-segment $workspace)} | format pattern "/v1beta1/{workspace}:moveDirectory") $qp)
+  let req_body = {"newPath": $new_path, "path": $path} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Moves a file (inside a Workspace) to a new location.
 #
 # POST /v1beta1/{workspace}:moveFile
 # operationId: dataform.projects.locations.repositories.workspaces.moveFile
-export def "v1beta1 dataformprojectslocationsrepositoriesworkspacesmoveFile" [
+export def "v1beta1 move-file" [
   workspace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1379,19 +1391,19 @@ export def "v1beta1 dataformprojectslocationsrepositoriesworkspacesmoveFile" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({workspace: $workspace} | format pattern "/v1beta1/{workspace}:moveFile") $qp)
-  let body = {"newPath": $new_path, "path": $path} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({workspace: (encode-path-segment $workspace)} | format pattern "/v1beta1/{workspace}:moveFile") $qp)
+  let req_body = {"newPath": $new_path, "path": $path} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns the contents of a given Workspace directory.
 #
 # GET /v1beta1/{workspace}:queryDirectoryContents
 # operationId: dataform.projects.locations.repositories.workspaces.queryDirectoryContents
-export def "v1beta1 dataformprojectslocationsrepositoriesworkspacesqueryDirectoryContents" [
+export def "v1beta1 list-directory-contents" [
   workspace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1419,7 +1431,7 @@ export def "v1beta1 dataformprojectslocationsrepositoriesworkspacesqueryDirector
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "path" $path "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({workspace: $workspace} | format pattern "/v1beta1/{workspace}:queryDirectoryContents") $qp)
+  let full_url = (build-url $base ({workspace: (encode-path-segment $workspace)} | format pattern "/v1beta1/{workspace}:queryDirectoryContents") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1429,7 +1441,7 @@ export def "v1beta1 dataformprojectslocationsrepositoriesworkspacesqueryDirector
 #
 # GET /v1beta1/{workspace}:readFile
 # operationId: dataform.projects.locations.repositories.workspaces.readFile
-export def "v1beta1 dataformprojectslocationsrepositoriesworkspacesreadFile" [
+export def "v1beta1 get-file" [
   workspace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1455,7 +1467,7 @@ export def "v1beta1 dataformprojectslocationsrepositoriesworkspacesreadFile" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "path" $path "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({workspace: $workspace} | format pattern "/v1beta1/{workspace}:readFile") $qp)
+  let full_url = (build-url $base ({workspace: (encode-path-segment $workspace)} | format pattern "/v1beta1/{workspace}:readFile") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1465,7 +1477,7 @@ export def "v1beta1 dataformprojectslocationsrepositoriesworkspacesreadFile" [
 #
 # POST /v1beta1/{workspace}:removeDirectory
 # operationId: dataform.projects.locations.repositories.workspaces.removeDirectory
-export def "v1beta1 dataformprojectslocationsrepositoriesworkspacesremoveDirectory" [
+export def "v1beta1 delete-directory" [
   workspace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1492,19 +1504,19 @@ export def "v1beta1 dataformprojectslocationsrepositoriesworkspacesremoveDirecto
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({workspace: $workspace} | format pattern "/v1beta1/{workspace}:removeDirectory") $qp)
-  let body = {"path": $path} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({workspace: (encode-path-segment $workspace)} | format pattern "/v1beta1/{workspace}:removeDirectory") $qp)
+  let req_body = {"path": $path} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes a file (inside a Workspace).
 #
 # POST /v1beta1/{workspace}:removeFile
 # operationId: dataform.projects.locations.repositories.workspaces.removeFile
-export def "v1beta1 dataformprojectslocationsrepositoriesworkspacesremoveFile" [
+export def "v1beta1 delete-file" [
   workspace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1531,19 +1543,19 @@ export def "v1beta1 dataformprojectslocationsrepositoriesworkspacesremoveFile" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({workspace: $workspace} | format pattern "/v1beta1/{workspace}:removeFile") $qp)
-  let body = {"path": $path} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({workspace: (encode-path-segment $workspace)} | format pattern "/v1beta1/{workspace}:removeFile") $qp)
+  let req_body = {"path": $path} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Writes to a file (inside a Workspace).
 #
 # POST /v1beta1/{workspace}:writeFile
 # operationId: dataform.projects.locations.repositories.workspaces.writeFile
-export def "v1beta1 dataformprojectslocationsrepositoriesworkspaceswriteFile" [
+export def "v1beta1 create-write-file" [
   workspace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1571,10 +1583,10 @@ export def "v1beta1 dataformprojectslocationsrepositoriesworkspaceswriteFile" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({workspace: $workspace} | format pattern "/v1beta1/{workspace}:writeFile") $qp)
-  let body = {"contents": $contents, "path": $path} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({workspace: (encode-path-segment $workspace)} | format pattern "/v1beta1/{workspace}:writeFile") $qp)
+  let req_body = {"contents": $contents, "path": $path} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

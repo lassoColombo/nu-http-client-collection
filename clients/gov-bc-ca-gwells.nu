@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -320,7 +329,7 @@ export def "aquifers-names list" [
 #
 # GET /aquifers/{aquifer_id}/
 # operationId: aquifers_read
-export def "aquifers read" [
+export def "aquifers get" [
   aquifer_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -333,7 +342,7 @@ export def "aquifers read" [
 ]: nothing -> record<aquifer_id: int, aquifer_name: string, area: string, demand: string, demand_description: string, known_water_use: string, known_water_use_description: string, litho_stratographic_unit: string, location_description: string, mapping_year: int, material: string, material_description: string, notes: string, productivity: string, productivity_description: string, quality_concern: string, quality_concern_description: string, subtype: string, subtype_description: string, vulnerability: string, vulnerability_description: string> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({aquifer_id: $aquifer_id} | format pattern "/aquifers/{aquifer_id}/"))
+  let full_url = (build-url $base ({aquifer_id: (encode-path-segment $aquifer_id)} | format pattern "/aquifers/{aquifer_id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -356,7 +365,7 @@ export def "aquifers-files list" [
 ]: nothing -> record<private: table<name: string, url: string>, public: table<name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({aquifer_id: $aquifer_id} | format pattern "/aquifers/{aquifer_id}/files"))
+  let full_url = (build-url $base ({aquifer_id: (encode-path-segment $aquifer_id)} | format pattern "/aquifers/{aquifer_id}/files"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -496,7 +505,7 @@ export def "drillers-files list" [
 ]: nothing -> record<private: table<name: string, url: string>, public: table<name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({person_guid: $person_guid} | format pattern "/drillers/{person_guid}/files/"))
+  let full_url = (build-url $base ({person_guid: (encode-path-segment $person_guid)} | format pattern "/drillers/{person_guid}/files/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -635,7 +644,7 @@ export def "wells-files list" [
 ]: nothing -> record<private: table<name: string, url: string>, public: table<name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({tag: $tag} | format pattern "/wells/{tag}/files"))
+  let full_url = (build-url $base ({tag: (encode-path-segment $tag)} | format pattern "/wells/{tag}/files"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -645,7 +654,7 @@ export def "wells-files list" [
 #
 # GET /wells/{well_tag_number}
 # operationId: wells_read
-export def "wells read" [
+export def "wells get" [
   well_tag_number: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -658,7 +667,7 @@ export def "wells read" [
 ]: nothing -> record<alteration_end_date: string, alternative_specs_submitted: bool, analytic_solution_type: string, aquifer: int, aquifer_vulnerability_index: string, artesian_flow: string, artesian_pressure: string, backfill_depth: string, backfill_material: string, backfill_type: string, bcgs_id: int, bedrock_depth: string, boundary_effect: string, casing_set: table<casing_code: string, casing_material: string, diameter: string, drive_shoe: bool, end: string, start: string, wall_thickness: string>, city: string, comments: string, company_of_person_responsible: record<name: string, org_guid: string, org_verbose_name: string>, construction_end_date: string, construction_start_date: string, coordinate_acquisition_code: string, decommission_description_set: table<end: string, material: string, observations: string, start: string>, decommission_details: string, decommission_end_date: string, decommission_method: string, decommission_reason: string, decommission_start_date: string, development_hours: string, development_method: string, development_notes: string, diameter: string, drawdown: string, drilling_company: string, drilling_method: string, ems: string, filter_pack_from: string, filter_pack_material: string, filter_pack_material_size: string, filter_pack_thickness: string, filter_pack_to: string, final_casing_stick_up: string, finished_well_depth: string, ground_elevation: string, ground_elevation_method: string, hydraulic_conductivity: string, hydro_fracturing_performed: bool, hydro_fracturing_yield_increase: string, id_plate_attached_by: string, identification_plate_number: int, intended_water_use: string, land_district: string, latitude: string, legal_block: string, legal_district_lot: string, legal_lot: string, legal_pid: int, legal_plan: string, legal_range: string, legal_section: string, legal_township: string, licenced_status: string, liner_diameter: string, liner_from: string, liner_material: string, liner_thickness: string, liner_to: string, linerperforation_set: table<end: string, start: string>, lithologydescription_set: table<lithology_colour: string, lithology_from: string, lithology_hardness: string, lithology_moisture: string, lithology_raw_data: string, lithology_to: string, water_bearing_estimated_flow: string>, longitude: string, observation_well_number: string, observation_well_status: string, other_drilling_method: string, other_screen_bottom: string, other_screen_material: string, owner_full_name: string, person_responsible: record<name: string, person_guid: string>, recommended_pump_depth: string, recommended_pump_rate: string, screen_bottom: string, screen_information: string, screen_intake_method: string, screen_material: string, screen_opening: string, screen_set: table<assembly_type: string, end: string, internal_diameter: string, slot_size: string, start: string>, screen_type: string, sealant_material: string, specific_storage: string, specific_yield: string, static_level_before_test: string, static_water_level: string, storativity: string, street_address: string, surface_seal_depth: string, surface_seal_length: string, surface_seal_material: string, surface_seal_method: string, surface_seal_thickness: string, testing_duration: int, testing_method: string, total_depth_drilled: string, transmissivity: string, utm_easting: int, utm_northing: int, utm_zone_code: string, water_quality_characteristics: list<string>, water_quality_colour: string, water_quality_odour: string, water_supply_system_name: string, water_supply_system_well_name: string, well: int, well_cap_type: string, well_class: string, well_disinfected: bool, well_guid: string, well_identification_plate_attached: string, well_location_description: string, well_orientation: bool, well_status: string, well_subclass: string, well_tag_number: int, well_yield: string, well_yield_unit: string, yield_estimation_duration: string, yield_estimation_method: string, yield_estimation_rate: string> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({well_tag_number: $well_tag_number} | format pattern "/wells/{well_tag_number}"))
+  let full_url = (build-url $base ({well_tag_number: (encode-path-segment $well_tag_number)} | format pattern "/wells/{well_tag_number}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

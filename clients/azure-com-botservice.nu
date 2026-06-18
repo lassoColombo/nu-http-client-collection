@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -112,11 +121,11 @@ export def "providers-microsoft-bot-service-check-enterprise-channel-name-availa
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.BotService/checkEnterpriseChannelNameAvailability" $qp)
-  let body = {"name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Check whether a bot name is available.
@@ -141,11 +150,11 @@ export def "providers-microsoft-bot-service-check-name-availability get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.BotService/checkNameAvailability" $qp)
-  let body = {"name": $name, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"name": $name, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists all the available BotService operations.
@@ -191,7 +200,7 @@ export def "subscriptions-providers-microsoft-bot-service-bot-services list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.BotService/botServices") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.BotService/botServices") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -201,7 +210,7 @@ export def "subscriptions-providers-microsoft-bot-service-bot-services list" [
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.BotService/listAuthServiceProviders
 # operationId: BotConnection_ListServiceProviders
-export def "subscriptions-providers-microsoft-bot-service-list-auth-service-providers list" [
+export def "subscriptions-providers-microsoft-bot-service-list-auth-service-providers list-connection" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -216,7 +225,7 @@ export def "subscriptions-providers-microsoft-bot-service-list-auth-service-prov
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.BotService/listAuthServiceProviders") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.BotService/listAuthServiceProviders") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -226,7 +235,7 @@ export def "subscriptions-providers-microsoft-bot-service-list-auth-service-prov
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.BotService/botServices
 # operationId: Bots_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-bot-service-bot-services list-by" [
+export def "subscriptions-resource-groups-providers-microsoft-bot-service-bot-services list" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -242,13 +251,13 @@ export def "subscriptions-resource-groups-providers-microsoft-bot-service-bot-se
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BotService/botServices") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BotService/botServices") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Deletes a Bot Service from the resource group. 
+# Deletes a Bot Service from the resource group.
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.BotService/botServices/{resourceName}
 # operationId: Bots_Delete
@@ -269,7 +278,7 @@ export def "subscriptions-resource-groups-providers-microsoft-bot-service-bot-se
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BotService/botServices/{resource_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BotService/botServices/{resource_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -296,7 +305,7 @@ export def "subscriptions-resource-groups-providers-microsoft-bot-service-bot-se
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BotService/botServices/{resource_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BotService/botServices/{resource_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -306,7 +315,7 @@ export def "subscriptions-resource-groups-providers-microsoft-bot-service-bot-se
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.BotService/botServices/{resourceName}
 # operationId: Bots_Update
-# --properties shape: {description?: string, developerAppInsightKey?: string, developerAppInsightsApiKey?: string, developerAppInsightsApplicationId?: string, displayName: string, endpoint: string, iconUrl?: string, luisAppIds?: list, luisKey?: string, msaAppId: string}
+# --properties shape: {description?: string, developerAppInsightKey?: string, developerAppInsightsApiKey?: string, developerAppInsightsApplicationId?: string, displayName: string, endpoint: string, iconUrl?: string, luisAppIds?: list<string>, luisKey?: string, msaAppId: string}
 # --sku shape: {name: "F0"|"S1"}
 export def "subscriptions-resource-groups-providers-microsoft-bot-service-bot-services update" [
   subscription_id: string
@@ -321,7 +330,7 @@ export def "subscriptions-resource-groups-providers-microsoft-bot-service-bot-se
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request.
-  --properties: any # The parameters to provide for the Bot. — shape: {description?: string, developerAppInsightKey?: string, developerAppInsightsApiKey?: string, developerAppInsightsApplicationId?: string, displayName: string, endpoint: string, iconUrl?: string, luisAppIds?: list, luisKey?: string, msaAppId: string}
+  --properties: any # The parameters to provide for the Bot. — shape: {description?: string, developerAppInsightKey?: string, developerAppInsightsApiKey?: string, developerAppInsightsApplicationId?: string, displayName: string, endpoint: string, iconUrl?: string, luisAppIds?: list<string>, luisKey?: string, msaAppId: string}
   --etag: string # Entity Tag
   --kind: string@kind-completer # Indicates the type of bot service
   --location: string # Specifies the location of the resource.
@@ -332,19 +341,19 @@ export def "subscriptions-resource-groups-providers-microsoft-bot-service-bot-se
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BotService/botServices/{resource_name}") $qp)
-  let body = {"properties": $properties, "etag": $etag, "kind": $kind, "location": $location, "sku": $sku, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BotService/botServices/{resource_name}") $qp)
+  let req_body = {"properties": $properties, "etag": $etag, "kind": $kind, "location": $location, "sku": $sku, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Creates a Bot Service. Bot Service is a resource group wide resource type.
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.BotService/botServices/{resourceName}
 # operationId: Bots_Create
-# --properties shape: {description?: string, developerAppInsightKey?: string, developerAppInsightsApiKey?: string, developerAppInsightsApplicationId?: string, displayName: string, endpoint: string, iconUrl?: string, luisAppIds?: list, luisKey?: string, msaAppId: string}
+# --properties shape: {description?: string, developerAppInsightKey?: string, developerAppInsightsApiKey?: string, developerAppInsightsApplicationId?: string, displayName: string, endpoint: string, iconUrl?: string, luisAppIds?: list<string>, luisKey?: string, msaAppId: string}
 # --sku shape: {name: "F0"|"S1"}
 export def "subscriptions-resource-groups-providers-microsoft-bot-service-bot-services create" [
   subscription_id: string
@@ -359,7 +368,7 @@ export def "subscriptions-resource-groups-providers-microsoft-bot-service-bot-se
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request.
-  --properties: any # The parameters to provide for the Bot. — shape: {description?: string, developerAppInsightKey?: string, developerAppInsightsApiKey?: string, developerAppInsightsApplicationId?: string, displayName: string, endpoint: string, iconUrl?: string, luisAppIds?: list, luisKey?: string, msaAppId: string}
+  --properties: any # The parameters to provide for the Bot. — shape: {description?: string, developerAppInsightKey?: string, developerAppInsightsApiKey?: string, developerAppInsightsApplicationId?: string, displayName: string, endpoint: string, iconUrl?: string, luisAppIds?: list<string>, luisKey?: string, msaAppId: string}
   --etag: string # Entity Tag
   --kind: string@kind-completer # Indicates the type of bot service
   --location: string # Specifies the location of the resource.
@@ -370,12 +379,12 @@ export def "subscriptions-resource-groups-providers-microsoft-bot-service-bot-se
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BotService/botServices/{resource_name}") $qp)
-  let body = {"properties": $properties, "etag": $etag, "kind": $kind, "location": $location, "sku": $sku, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BotService/botServices/{resource_name}") $qp)
+  let req_body = {"properties": $properties, "etag": $etag, "kind": $kind, "location": $location, "sku": $sku, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes a Connection Setting registration for a Bot Service
@@ -400,7 +409,7 @@ export def "subscriptions-resource-groups-providers-microsoft-bot-service-bot-se
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, connection_name: $connection_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BotService/botServices/{resource_name}/Connections/{connection_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), connection_name: (encode-path-segment $connection_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BotService/botServices/{resource_name}/Connections/{connection_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -428,7 +437,7 @@ export def "subscriptions-resource-groups-providers-microsoft-bot-service-bot-se
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, connection_name: $connection_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BotService/botServices/{resource_name}/Connections/{connection_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), connection_name: (encode-path-segment $connection_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BotService/botServices/{resource_name}/Connections/{connection_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -465,12 +474,12 @@ export def "subscriptions-resource-groups-providers-microsoft-bot-service-bot-se
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, connection_name: $connection_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BotService/botServices/{resource_name}/Connections/{connection_name}") $qp)
-  let body = {"properties": $properties, "etag": $etag, "kind": $kind, "location": $location, "sku": $sku, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), connection_name: (encode-path-segment $connection_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BotService/botServices/{resource_name}/Connections/{connection_name}") $qp)
+  let req_body = {"properties": $properties, "etag": $etag, "kind": $kind, "location": $location, "sku": $sku, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Register a new Auth Connection for a Bot Service
@@ -504,12 +513,12 @@ export def "subscriptions-resource-groups-providers-microsoft-bot-service-bot-se
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, connection_name: $connection_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BotService/botServices/{resource_name}/Connections/{connection_name}") $qp)
-  let body = {"properties": $properties, "etag": $etag, "kind": $kind, "location": $location, "sku": $sku, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), connection_name: (encode-path-segment $connection_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BotService/botServices/{resource_name}/Connections/{connection_name}") $qp)
+  let req_body = {"properties": $properties, "etag": $etag, "kind": $kind, "location": $location, "sku": $sku, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get a Connection Setting registration for a Bot Service
@@ -534,7 +543,7 @@ export def "subscriptions-resource-groups-providers-microsoft-bot-service-bot-se
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, connection_name: $connection_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BotService/botServices/{resource_name}/Connections/{connection_name}/listWithSecrets") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), connection_name: (encode-path-segment $connection_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BotService/botServices/{resource_name}/Connections/{connection_name}/listWithSecrets") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -544,7 +553,7 @@ export def "subscriptions-resource-groups-providers-microsoft-bot-service-bot-se
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.BotService/botServices/{resourceName}/channels
 # operationId: Channels_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-bot-service-bot-services-channels list-by" [
+export def "subscriptions-resource-groups-providers-microsoft-bot-service-bot-services-channels list" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -561,7 +570,7 @@ export def "subscriptions-resource-groups-providers-microsoft-bot-service-bot-se
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BotService/botServices/{resource_name}/channels") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BotService/botServices/{resource_name}/channels") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -589,7 +598,7 @@ export def "subscriptions-resource-groups-providers-microsoft-bot-service-bot-se
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, channel_name: $channel_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BotService/botServices/{resource_name}/channels/{channel_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), channel_name: (encode-path-segment $channel_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BotService/botServices/{resource_name}/channels/{channel_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -617,7 +626,7 @@ export def "subscriptions-resource-groups-providers-microsoft-bot-service-bot-se
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, channel_name: $channel_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BotService/botServices/{resource_name}/channels/{channel_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), channel_name: (encode-path-segment $channel_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BotService/botServices/{resource_name}/channels/{channel_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -654,12 +663,12 @@ export def "subscriptions-resource-groups-providers-microsoft-bot-service-bot-se
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, channel_name: $channel_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BotService/botServices/{resource_name}/channels/{channel_name}") $qp)
-  let body = {"properties": $properties, "etag": $etag, "kind": $kind, "location": $location, "sku": $sku, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), channel_name: (encode-path-segment $channel_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BotService/botServices/{resource_name}/channels/{channel_name}") $qp)
+  let req_body = {"properties": $properties, "etag": $etag, "kind": $kind, "location": $location, "sku": $sku, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Creates a Channel registration for a Bot Service
@@ -693,12 +702,12 @@ export def "subscriptions-resource-groups-providers-microsoft-bot-service-bot-se
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, channel_name: $channel_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BotService/botServices/{resource_name}/channels/{channel_name}") $qp)
-  let body = {"properties": $properties, "etag": $etag, "kind": $kind, "location": $location, "sku": $sku, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), channel_name: (encode-path-segment $channel_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BotService/botServices/{resource_name}/channels/{channel_name}") $qp)
+  let req_body = {"properties": $properties, "etag": $etag, "kind": $kind, "location": $location, "sku": $sku, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists a Channel registration for a Bot Service including secrets
@@ -723,7 +732,7 @@ export def "subscriptions-resource-groups-providers-microsoft-bot-service-bot-se
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, channel_name: $channel_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BotService/botServices/{resource_name}/channels/{channel_name}/listChannelWithKeys") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), channel_name: (encode-path-segment $channel_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BotService/botServices/{resource_name}/channels/{channel_name}/listChannelWithKeys") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -733,7 +742,7 @@ export def "subscriptions-resource-groups-providers-microsoft-bot-service-bot-se
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.BotService/botServices/{resourceName}/connections
 # operationId: BotConnection_ListByBotService
-export def "subscriptions-resource-groups-providers-microsoft-bot-service-bot-services-connections list-by" [
+export def "subscriptions-resource-groups-providers-microsoft-bot-service-bot-services-connections list" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -750,7 +759,7 @@ export def "subscriptions-resource-groups-providers-microsoft-bot-service-bot-se
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BotService/botServices/{resource_name}/connections") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BotService/botServices/{resource_name}/connections") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -760,7 +769,7 @@ export def "subscriptions-resource-groups-providers-microsoft-bot-service-bot-se
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.BotService/enterpriseChannels
 # operationId: EnterpriseChannels_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-bot-service-enterprise-channels list-by" [
+export def "subscriptions-resource-groups-providers-microsoft-bot-service-enterprise-channels list" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -776,7 +785,7 @@ export def "subscriptions-resource-groups-providers-microsoft-bot-service-enterp
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BotService/enterpriseChannels") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BotService/enterpriseChannels") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -803,7 +812,7 @@ export def "subscriptions-resource-groups-providers-microsoft-bot-service-enterp
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BotService/enterpriseChannels/{resource_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BotService/enterpriseChannels/{resource_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -830,7 +839,7 @@ export def "subscriptions-resource-groups-providers-microsoft-bot-service-enterp
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BotService/enterpriseChannels/{resource_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BotService/enterpriseChannels/{resource_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -866,12 +875,12 @@ export def "subscriptions-resource-groups-providers-microsoft-bot-service-enterp
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BotService/enterpriseChannels/{resource_name}") $qp)
-  let body = {"properties": $properties, "etag": $etag, "kind": $kind, "location": $location, "sku": $sku, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BotService/enterpriseChannels/{resource_name}") $qp)
+  let req_body = {"properties": $properties, "etag": $etag, "kind": $kind, "location": $location, "sku": $sku, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Creates an Enterprise Channel.
@@ -904,10 +913,10 @@ export def "subscriptions-resource-groups-providers-microsoft-bot-service-enterp
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BotService/enterpriseChannels/{resource_name}") $qp)
-  let body = {"properties": $properties, "etag": $etag, "kind": $kind, "location": $location, "sku": $sku, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BotService/enterpriseChannels/{resource_name}") $qp)
+  let req_body = {"properties": $properties, "etag": $etag, "kind": $kind, "location": $location, "sku": $sku, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

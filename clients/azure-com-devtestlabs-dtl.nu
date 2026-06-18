@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -121,7 +130,7 @@ export def "providers-microsoft-dev-test-lab-operations list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.DevTestLab/labs
 # operationId: Labs_ListBySubscription
-export def "subscriptions-providers-microsoft-dev-test-lab-labs list-by" [
+export def "subscriptions-providers-microsoft-dev-test-lab-labs list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -140,7 +149,7 @@ export def "subscriptions-providers-microsoft-dev-test-lab-labs list-by" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.DevTestLab/labs") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.DevTestLab/labs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -167,7 +176,7 @@ export def "subscriptions-providers-microsoft-dev-test-lab-locations-operations 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, location_name: $location_name, name: $name} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.DevTestLab/locations/{location_name}/operations/{name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), location_name: (encode-path-segment $location_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.DevTestLab/locations/{location_name}/operations/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -177,7 +186,7 @@ export def "subscriptions-providers-microsoft-dev-test-lab-locations-operations 
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.DevTestLab/schedules
 # operationId: GlobalSchedules_ListBySubscription
-export def "subscriptions-providers-microsoft-dev-test-lab-schedules list-by" [
+export def "subscriptions-providers-microsoft-dev-test-lab-schedules list-global" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -196,7 +205,7 @@ export def "subscriptions-providers-microsoft-dev-test-lab-schedules list-by" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.DevTestLab/schedules") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.DevTestLab/schedules") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -206,7 +215,7 @@ export def "subscriptions-providers-microsoft-dev-test-lab-schedules list-by" [
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs
 # operationId: Labs_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs list-by" [
+export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs list" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -226,7 +235,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -236,7 +245,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs 
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/artifactsources
 # operationId: ArtifactSources_List
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-artifactsources list" [
+export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-artifactsources list-artifact-sources" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -257,7 +266,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/artifactsources") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/artifactsources") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -267,7 +276,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/artifactsources/{artifactSourceName}/armtemplates
 # operationId: ArmTemplates_List
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-artifactsources-armtemplates list" [
+export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-artifactsources-armtemplates list-arm-templates" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -289,7 +298,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, artifact_source_name: $artifact_source_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/artifactsources/{artifact_source_name}/armtemplates") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), artifact_source_name: (encode-path-segment $artifact_source_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/artifactsources/{artifact_source_name}/armtemplates") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -299,7 +308,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/artifactsources/{artifactSourceName}/armtemplates/{name}
 # operationId: ArmTemplates_Get
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-artifactsources-armtemplates get" [
+export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-artifactsources-armtemplates get-arm-templates" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -319,7 +328,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, artifact_source_name: $artifact_source_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/artifactsources/{artifact_source_name}/armtemplates/{name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), artifact_source_name: (encode-path-segment $artifact_source_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/artifactsources/{artifact_source_name}/armtemplates/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -351,7 +360,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, artifact_source_name: $artifact_source_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/artifactsources/{artifact_source_name}/artifacts") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), artifact_source_name: (encode-path-segment $artifact_source_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/artifactsources/{artifact_source_name}/artifacts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -381,7 +390,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, artifact_source_name: $artifact_source_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/artifactsources/{artifact_source_name}/artifacts/{name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), artifact_source_name: (encode-path-segment $artifact_source_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/artifactsources/{artifact_source_name}/artifacts/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -392,7 +401,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/artifactsources/{artifactSourceName}/artifacts/{name}/generateArmTemplate
 # operationId: Artifacts_GenerateArmTemplate
 # --parameters item shape: {name?: string, value?: string}
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-artifactsources-artifacts-generate-arm-template post" [
+export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-artifactsources-artifacts-generate-arm-template generate" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -416,19 +425,19 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, artifact_source_name: $artifact_source_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/artifactsources/{artifact_source_name}/artifacts/{name}/generateArmTemplate") $qp)
-  let body = {"fileUploadOptions": $file_upload_options, "location": $location, "parameters": $parameters, "virtualMachineName": $virtual_machine_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), artifact_source_name: (encode-path-segment $artifact_source_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/artifactsources/{artifact_source_name}/artifacts/{name}/generateArmTemplate") $qp)
+  let req_body = {"fileUploadOptions": $file_upload_options, "location": $location, "parameters": $parameters, "virtualMachineName": $virtual_machine_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete artifact source.
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/artifactsources/{name}
 # operationId: ArtifactSources_Delete
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-artifactsources delete" [
+export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-artifactsources delete-artifact-sources" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -446,7 +455,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/artifactsources/{name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/artifactsources/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -456,7 +465,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/artifactsources/{name}
 # operationId: ArtifactSources_Get
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-artifactsources get" [
+export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-artifactsources get-artifact-sources" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -475,7 +484,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/artifactsources/{name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/artifactsources/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -486,7 +495,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/artifactsources/{name}
 # operationId: ArtifactSources_Update
 # --properties shape: {armTemplateFolderPath?: string, branchRef?: string, displayName?: string, folderPath?: string, securityToken?: string, sourceType?: "VsoGit"|"GitHub", status?: "Enabled"|"Disabled", uri?: string}
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-artifactsources update" [
+export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-artifactsources update-artifact-sources" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -507,12 +516,12 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/artifactsources/{name}") $qp)
-  let body = {"properties": $properties, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/artifactsources/{name}") $qp)
+  let req_body = {"properties": $properties, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create or replace an existing artifact source.
@@ -520,7 +529,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/artifactsources/{name}
 # operationId: ArtifactSources_CreateOrUpdate
 # --properties shape: {armTemplateFolderPath?: string, branchRef?: string, displayName?: string, folderPath?: string, securityToken?: string, sourceType?: "VsoGit"|"GitHub", status?: "Enabled"|"Disabled", uri?: string}
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-artifactsources create-or-update" [
+export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-artifactsources create-artifact-sources-or-update" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -542,12 +551,12 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/artifactsources/{name}") $qp)
-  let body = {"properties": $properties, "location": $location, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/artifactsources/{name}") $qp)
+  let req_body = {"properties": $properties, "location": $location, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get cost.
@@ -573,7 +582,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/costs/{name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/costs/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -606,19 +615,19 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/costs/{name}") $qp)
-  let body = {"properties": $properties, "location": $location, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/costs/{name}") $qp)
+  let req_body = {"properties": $properties, "location": $location, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List custom images in a given lab.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/customimages
 # operationId: CustomImages_List
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-customimages list" [
+export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-customimages list-custom-images" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -639,7 +648,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/customimages") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/customimages") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -649,7 +658,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/customimages/{name}
 # operationId: CustomImages_Delete
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-customimages delete" [
+export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-customimages delete-custom-images" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -667,7 +676,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/customimages/{name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/customimages/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -677,7 +686,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/customimages/{name}
 # operationId: CustomImages_Get
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-customimages get" [
+export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-customimages get-custom-images" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -696,7 +705,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/customimages/{name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/customimages/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -707,7 +716,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/customimages/{name}
 # operationId: CustomImages_Update
 # --properties shape: {author?: string, customImagePlan?: record, dataDiskStorageInfo?: list, description?: string, isPlanAuthorized?: bool, managedImageId?: string, managedSnapshotId?: string, vhd?: record, vm?: record}
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-customimages update" [
+export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-customimages update-custom-images" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -728,12 +737,12 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/customimages/{name}") $qp)
-  let body = {"properties": $properties, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/customimages/{name}") $qp)
+  let req_body = {"properties": $properties, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create or replace an existing custom image. This operation can take a while to complete.
@@ -741,7 +750,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/customimages/{name}
 # operationId: CustomImages_CreateOrUpdate
 # --properties shape: {author?: string, customImagePlan?: record, dataDiskStorageInfo?: list, description?: string, isPlanAuthorized?: bool, managedImageId?: string, managedSnapshotId?: string, vhd?: record, vm?: record}
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-customimages create-or-update" [
+export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-customimages create-custom-images-or-update" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -763,12 +772,12 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/customimages/{name}") $qp)
-  let body = {"properties": $properties, "location": $location, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/customimages/{name}") $qp)
+  let req_body = {"properties": $properties, "location": $location, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List formulas in a given lab.
@@ -796,7 +805,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/formulas") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/formulas") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -824,7 +833,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/formulas/{name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/formulas/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -853,7 +862,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/formulas/{name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/formulas/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -885,12 +894,12 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/formulas/{name}") $qp)
-  let body = {"properties": $properties, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/formulas/{name}") $qp)
+  let req_body = {"properties": $properties, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create or replace an existing formula. This operation can take a while to complete.
@@ -920,19 +929,19 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/formulas/{name}") $qp)
-  let body = {"properties": $properties, "location": $location, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/formulas/{name}") $qp)
+  let req_body = {"properties": $properties, "location": $location, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List gallery images in a given lab.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/galleryimages
 # operationId: GalleryImages_List
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-galleryimages list" [
+export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-galleryimages list-gallery-images" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -953,7 +962,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/galleryimages") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/galleryimages") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -963,7 +972,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/notificationchannels
 # operationId: NotificationChannels_List
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-notificationchannels list" [
+export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-notificationchannels list-notification-channels" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -984,7 +993,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/notificationchannels") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/notificationchannels") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -994,7 +1003,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/notificationchannels/{name}
 # operationId: NotificationChannels_Delete
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-notificationchannels delete" [
+export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-notificationchannels delete-notification-channels" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -1012,7 +1021,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/notificationchannels/{name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/notificationchannels/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1022,7 +1031,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/notificationchannels/{name}
 # operationId: NotificationChannels_Get
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-notificationchannels get" [
+export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-notificationchannels get-notification-channels" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -1041,7 +1050,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/notificationchannels/{name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/notificationchannels/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1052,7 +1061,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/notificationchannels/{name}
 # operationId: NotificationChannels_Update
 # --properties shape: {description?: string, emailRecipient?: string, events?: list, notificationLocale?: string, webHookUrl?: string}
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-notificationchannels update" [
+export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-notificationchannels update-notification-channels" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -1073,12 +1082,12 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/notificationchannels/{name}") $qp)
-  let body = {"properties": $properties, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/notificationchannels/{name}") $qp)
+  let req_body = {"properties": $properties, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create or replace an existing notification channel.
@@ -1086,7 +1095,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/notificationchannels/{name}
 # operationId: NotificationChannels_CreateOrUpdate
 # --properties shape: {description?: string, emailRecipient?: string, events?: list, notificationLocale?: string, webHookUrl?: string}
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-notificationchannels create-or-update" [
+export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-notificationchannels create-notification-channels-or-update" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -1108,19 +1117,19 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/notificationchannels/{name}") $qp)
-  let body = {"properties": $properties, "location": $location, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/notificationchannels/{name}") $qp)
+  let req_body = {"properties": $properties, "location": $location, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Send notification to provided channel.
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/notificationchannels/{name}/notify
 # operationId: NotificationChannels_Notify
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-notificationchannels-notify post" [
+export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-notificationchannels-notify notify-notification-channels" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -1141,12 +1150,12 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/notificationchannels/{name}/notify") $qp)
-  let body = {"eventName": $event_name, "jsonPayload": $json_payload} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/notificationchannels/{name}/notify") $qp)
+  let req_body = {"eventName": $event_name, "jsonPayload": $json_payload} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Evaluates lab policy.
@@ -1154,7 +1163,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/policysets/{name}/evaluatePolicies
 # operationId: PolicySets_EvaluatePolicies
 # --policies item shape: {factData?: string, factName?: string, userObjectId?: string, valueOffset?: string}
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-policysets-evaluate-policies post" [
+export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-policysets-evaluate-policies create-policy-sets" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -1174,12 +1183,12 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/policysets/{name}/evaluatePolicies") $qp)
-  let body = {"policies": $policies} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/policysets/{name}/evaluatePolicies") $qp)
+  let req_body = {"policies": $policies} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List policies in a given policy set.
@@ -1208,7 +1217,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, policy_set_name: $policy_set_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/policysets/{policy_set_name}/policies") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), policy_set_name: (encode-path-segment $policy_set_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/policysets/{policy_set_name}/policies") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1237,7 +1246,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, policy_set_name: $policy_set_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/policysets/{policy_set_name}/policies/{name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), policy_set_name: (encode-path-segment $policy_set_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/policysets/{policy_set_name}/policies/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1267,7 +1276,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, policy_set_name: $policy_set_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/policysets/{policy_set_name}/policies/{name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), policy_set_name: (encode-path-segment $policy_set_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/policysets/{policy_set_name}/policies/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1300,12 +1309,12 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, policy_set_name: $policy_set_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/policysets/{policy_set_name}/policies/{name}") $qp)
-  let body = {"properties": $properties, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), policy_set_name: (encode-path-segment $policy_set_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/policysets/{policy_set_name}/policies/{name}") $qp)
+  let req_body = {"properties": $properties, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create or replace an existing policy.
@@ -1336,12 +1345,12 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, policy_set_name: $policy_set_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/policysets/{policy_set_name}/policies/{name}") $qp)
-  let body = {"properties": $properties, "location": $location, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), policy_set_name: (encode-path-segment $policy_set_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/policysets/{policy_set_name}/policies/{name}") $qp)
+  let req_body = {"properties": $properties, "location": $location, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List schedules in a given lab.
@@ -1369,7 +1378,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/schedules") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/schedules") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1397,7 +1406,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/schedules/{name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/schedules/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1426,7 +1435,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/schedules/{name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/schedules/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1458,12 +1467,12 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/schedules/{name}") $qp)
-  let body = {"properties": $properties, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/schedules/{name}") $qp)
+  let req_body = {"properties": $properties, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create or replace an existing schedule.
@@ -1493,19 +1502,19 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/schedules/{name}") $qp)
-  let body = {"properties": $properties, "location": $location, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/schedules/{name}") $qp)
+  let req_body = {"properties": $properties, "location": $location, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Execute a schedule. This operation can take a while to complete.
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/schedules/{name}/execute
 # operationId: Schedules_Execute
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-schedules-execute exec-ute" [
+export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-schedules-execute create" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -1523,7 +1532,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/schedules/{name}/execute") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/schedules/{name}/execute") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1551,7 +1560,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/schedules/{name}/listApplicable") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/schedules/{name}/listApplicable") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1561,7 +1570,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/servicerunners/{name}
 # operationId: ServiceRunners_Delete
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-servicerunners delete" [
+export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-servicerunners delete-service-runners" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -1579,7 +1588,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/servicerunners/{name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/servicerunners/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1589,7 +1598,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/servicerunners/{name}
 # operationId: ServiceRunners_Get
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-servicerunners get" [
+export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-servicerunners get-service-runners" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -1607,7 +1616,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/servicerunners/{name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/servicerunners/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1618,7 +1627,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/servicerunners/{name}
 # operationId: ServiceRunners_CreateOrUpdate
 # --identity shape: {clientSecretUrl?: string, principalId?: string, tenantId?: string, type?: string}
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-servicerunners create-or-update" [
+export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-servicerunners create-service-runners-or-update" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -1640,12 +1649,12 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/servicerunners/{name}") $qp)
-  let body = {"identity": $identity, "location": $location, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/servicerunners/{name}") $qp)
+  let req_body = {"identity": $identity, "location": $location, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List user profiles in a given lab.
@@ -1673,7 +1682,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1701,7 +1710,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1730,7 +1739,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1762,12 +1771,12 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{name}") $qp)
-  let body = {"properties": $properties, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{name}") $qp)
+  let req_body = {"properties": $properties, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create or replace an existing user profile. This operation can take a while to complete.
@@ -1797,12 +1806,12 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{name}") $qp)
-  let body = {"properties": $properties, "location": $location, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{name}") $qp)
+  let req_body = {"properties": $properties, "location": $location, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List disks in a given user profile.
@@ -1831,7 +1840,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, user_name: $user_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/disks") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), user_name: (encode-path-segment $user_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/disks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1860,7 +1869,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, user_name: $user_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/disks/{name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), user_name: (encode-path-segment $user_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/disks/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1890,7 +1899,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, user_name: $user_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/disks/{name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), user_name: (encode-path-segment $user_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/disks/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1923,12 +1932,12 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, user_name: $user_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/disks/{name}") $qp)
-  let body = {"properties": $properties, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), user_name: (encode-path-segment $user_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/disks/{name}") $qp)
+  let req_body = {"properties": $properties, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create or replace an existing disk. This operation can take a while to complete.
@@ -1959,12 +1968,12 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, user_name: $user_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/disks/{name}") $qp)
-  let body = {"properties": $properties, "location": $location, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), user_name: (encode-path-segment $user_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/disks/{name}") $qp)
+  let req_body = {"properties": $properties, "location": $location, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Attach and create the lease of the disk to the virtual machine. This operation can take a while to complete.
@@ -1992,19 +2001,19 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, user_name: $user_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/disks/{name}/attach") $qp)
-  let body = {"leasedByLabVmId": $leased_by_lab_vm_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), user_name: (encode-path-segment $user_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/disks/{name}/attach") $qp)
+  let req_body = {"leasedByLabVmId": $leased_by_lab_vm_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Detach and break the lease of the disk attached to the virtual machine. This operation can take a while to complete.
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/users/{userName}/disks/{name}/detach
 # operationId: Disks_Detach
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-users-disks-detach post" [
+export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-users-disks-detach create" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -2025,12 +2034,12 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, user_name: $user_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/disks/{name}/detach") $qp)
-  let body = {"leasedByLabVmId": $leased_by_lab_vm_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), user_name: (encode-path-segment $user_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/disks/{name}/detach") $qp)
+  let req_body = {"leasedByLabVmId": $leased_by_lab_vm_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List environments in a given user profile.
@@ -2059,7 +2068,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, user_name: $user_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/environments") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), user_name: (encode-path-segment $user_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/environments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2088,7 +2097,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, user_name: $user_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/environments/{name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), user_name: (encode-path-segment $user_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/environments/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2118,7 +2127,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, user_name: $user_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/environments/{name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), user_name: (encode-path-segment $user_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/environments/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2151,12 +2160,12 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, user_name: $user_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/environments/{name}") $qp)
-  let body = {"properties": $properties, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), user_name: (encode-path-segment $user_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/environments/{name}") $qp)
+  let req_body = {"properties": $properties, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create or replace an existing environment. This operation can take a while to complete.
@@ -2187,12 +2196,12 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, user_name: $user_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/environments/{name}") $qp)
-  let body = {"properties": $properties, "location": $location, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), user_name: (encode-path-segment $user_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/environments/{name}") $qp)
+  let req_body = {"properties": $properties, "location": $location, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List secrets in a given user profile.
@@ -2221,7 +2230,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, user_name: $user_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/secrets") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), user_name: (encode-path-segment $user_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/secrets") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2250,7 +2259,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, user_name: $user_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/secrets/{name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), user_name: (encode-path-segment $user_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/secrets/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2280,7 +2289,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, user_name: $user_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/secrets/{name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), user_name: (encode-path-segment $user_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/secrets/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2313,12 +2322,12 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, user_name: $user_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/secrets/{name}") $qp)
-  let body = {"properties": $properties, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), user_name: (encode-path-segment $user_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/secrets/{name}") $qp)
+  let req_body = {"properties": $properties, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create or replace an existing secret. This operation can take a while to complete.
@@ -2349,19 +2358,19 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, user_name: $user_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/secrets/{name}") $qp)
-  let body = {"properties": $properties, "location": $location, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), user_name: (encode-path-segment $user_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/secrets/{name}") $qp)
+  let req_body = {"properties": $properties, "location": $location, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List service fabrics in a given user profile.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/users/{userName}/servicefabrics
 # operationId: ServiceFabrics_List
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-users-servicefabrics list" [
+export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-users-servicefabrics list-service-fabrics" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -2383,7 +2392,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, user_name: $user_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/servicefabrics") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), user_name: (encode-path-segment $user_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/servicefabrics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2393,7 +2402,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/users/{userName}/servicefabrics/{name}
 # operationId: ServiceFabrics_Delete
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-users-servicefabrics delete" [
+export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-users-servicefabrics delete-service-fabrics" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -2412,7 +2421,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, user_name: $user_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/servicefabrics/{name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), user_name: (encode-path-segment $user_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/servicefabrics/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2422,7 +2431,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/users/{userName}/servicefabrics/{name}
 # operationId: ServiceFabrics_Get
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-users-servicefabrics get" [
+export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-users-servicefabrics get-service-fabrics" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -2442,7 +2451,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, user_name: $user_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/servicefabrics/{name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), user_name: (encode-path-segment $user_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/servicefabrics/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2453,7 +2462,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/users/{userName}/servicefabrics/{name}
 # operationId: ServiceFabrics_Update
 # --properties shape: {environmentId?: string, externalServiceFabricId?: string}
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-users-servicefabrics update" [
+export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-users-servicefabrics update-service-fabrics" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -2475,12 +2484,12 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, user_name: $user_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/servicefabrics/{name}") $qp)
-  let body = {"properties": $properties, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), user_name: (encode-path-segment $user_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/servicefabrics/{name}") $qp)
+  let req_body = {"properties": $properties, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create or replace an existing service fabric. This operation can take a while to complete.
@@ -2488,7 +2497,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/users/{userName}/servicefabrics/{name}
 # operationId: ServiceFabrics_CreateOrUpdate
 # --properties shape: {applicableSchedule?: record, environmentId?: string, externalServiceFabricId?: string}
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-users-servicefabrics create-or-update" [
+export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-users-servicefabrics create-service-fabrics-or-update" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -2511,19 +2520,19 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, user_name: $user_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/servicefabrics/{name}") $qp)
-  let body = {"properties": $properties, "location": $location, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), user_name: (encode-path-segment $user_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/servicefabrics/{name}") $qp)
+  let req_body = {"properties": $properties, "location": $location, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists the applicable start/stop schedules, if any.
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/users/{userName}/servicefabrics/{name}/listApplicableSchedules
 # operationId: ServiceFabrics_ListApplicableSchedules
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-users-servicefabrics-list-applicable-schedules list" [
+export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-users-servicefabrics-list-applicable-schedules list-service-fabrics" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -2542,7 +2551,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, user_name: $user_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/servicefabrics/{name}/listApplicableSchedules") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), user_name: (encode-path-segment $user_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/servicefabrics/{name}/listApplicableSchedules") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2552,7 +2561,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/users/{userName}/servicefabrics/{name}/start
 # operationId: ServiceFabrics_Start
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-users-servicefabrics-start start" [
+export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-users-servicefabrics-start start-service-fabrics" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -2571,7 +2580,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, user_name: $user_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/servicefabrics/{name}/start") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), user_name: (encode-path-segment $user_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/servicefabrics/{name}/start") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2581,7 +2590,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/users/{userName}/servicefabrics/{name}/stop
 # operationId: ServiceFabrics_Stop
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-users-servicefabrics-stop stop" [
+export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-users-servicefabrics-stop stop-service-fabrics" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -2600,7 +2609,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, user_name: $user_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/servicefabrics/{name}/stop") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), user_name: (encode-path-segment $user_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/servicefabrics/{name}/stop") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2610,7 +2619,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/users/{userName}/servicefabrics/{serviceFabricName}/schedules
 # operationId: ServiceFabricSchedules_List
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-users-servicefabrics-schedules list" [
+export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-users-servicefabrics-schedules list-service-fabric" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -2633,7 +2642,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, user_name: $user_name, service_fabric_name: $service_fabric_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/servicefabrics/{service_fabric_name}/schedules") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), user_name: (encode-path-segment $user_name), service_fabric_name: (encode-path-segment $service_fabric_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/servicefabrics/{service_fabric_name}/schedules") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2643,7 +2652,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/users/{userName}/servicefabrics/{serviceFabricName}/schedules/{name}
 # operationId: ServiceFabricSchedules_Delete
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-users-servicefabrics-schedules delete" [
+export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-users-servicefabrics-schedules delete-service-fabric" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -2663,7 +2672,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, user_name: $user_name, service_fabric_name: $service_fabric_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/servicefabrics/{service_fabric_name}/schedules/{name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), user_name: (encode-path-segment $user_name), service_fabric_name: (encode-path-segment $service_fabric_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/servicefabrics/{service_fabric_name}/schedules/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2673,7 +2682,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/users/{userName}/servicefabrics/{serviceFabricName}/schedules/{name}
 # operationId: ServiceFabricSchedules_Get
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-users-servicefabrics-schedules get" [
+export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-users-servicefabrics-schedules get-service-fabric" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -2694,7 +2703,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, user_name: $user_name, service_fabric_name: $service_fabric_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/servicefabrics/{service_fabric_name}/schedules/{name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), user_name: (encode-path-segment $user_name), service_fabric_name: (encode-path-segment $service_fabric_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/servicefabrics/{service_fabric_name}/schedules/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2705,7 +2714,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/users/{userName}/servicefabrics/{serviceFabricName}/schedules/{name}
 # operationId: ServiceFabricSchedules_Update
 # --properties shape: {dailyRecurrence?: record, hourlyRecurrence?: record, notificationSettings?: record, status?: "Enabled"|"Disabled", targetResourceId?: string, taskType?: string, timeZoneId?: string, weeklyRecurrence?: record}
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-users-servicefabrics-schedules update" [
+export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-users-servicefabrics-schedules update-service-fabric" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -2728,12 +2737,12 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, user_name: $user_name, service_fabric_name: $service_fabric_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/servicefabrics/{service_fabric_name}/schedules/{name}") $qp)
-  let body = {"properties": $properties, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), user_name: (encode-path-segment $user_name), service_fabric_name: (encode-path-segment $service_fabric_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/servicefabrics/{service_fabric_name}/schedules/{name}") $qp)
+  let req_body = {"properties": $properties, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create or replace an existing schedule.
@@ -2741,7 +2750,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/users/{userName}/servicefabrics/{serviceFabricName}/schedules/{name}
 # operationId: ServiceFabricSchedules_CreateOrUpdate
 # --properties shape: {dailyRecurrence?: record, hourlyRecurrence?: record, notificationSettings?: record, status?: "Enabled"|"Disabled", targetResourceId?: string, taskType?: string, timeZoneId?: string, weeklyRecurrence?: record}
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-users-servicefabrics-schedules create-or-update" [
+export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-users-servicefabrics-schedules create-service-fabric-or-update" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -2765,19 +2774,19 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, user_name: $user_name, service_fabric_name: $service_fabric_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/servicefabrics/{service_fabric_name}/schedules/{name}") $qp)
-  let body = {"properties": $properties, "location": $location, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), user_name: (encode-path-segment $user_name), service_fabric_name: (encode-path-segment $service_fabric_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/servicefabrics/{service_fabric_name}/schedules/{name}") $qp)
+  let req_body = {"properties": $properties, "location": $location, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Execute a schedule. This operation can take a while to complete.
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/users/{userName}/servicefabrics/{serviceFabricName}/schedules/{name}/execute
 # operationId: ServiceFabricSchedules_Execute
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-users-servicefabrics-schedules-execute exec-ute" [
+export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-users-servicefabrics-schedules-execute create-service-fabric" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -2797,7 +2806,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, user_name: $user_name, service_fabric_name: $service_fabric_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/servicefabrics/{service_fabric_name}/schedules/{name}/execute") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), user_name: (encode-path-segment $user_name), service_fabric_name: (encode-path-segment $service_fabric_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/servicefabrics/{service_fabric_name}/schedules/{name}/execute") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2807,7 +2816,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/virtualmachines
 # operationId: VirtualMachines_List
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-virtualmachines list" [
+export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-virtualmachines list-virtual-machines" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -2828,7 +2837,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/virtualmachines") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/virtualmachines") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2838,7 +2847,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/virtualmachines/{name}
 # operationId: VirtualMachines_Delete
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-virtualmachines delete" [
+export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-virtualmachines delete-virtual-machines" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -2856,7 +2865,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/virtualmachines/{name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/virtualmachines/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2866,7 +2875,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/virtualmachines/{name}
 # operationId: VirtualMachines_Get
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-virtualmachines get" [
+export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-virtualmachines get-virtual-machines" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -2885,7 +2894,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/virtualmachines/{name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/virtualmachines/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2895,8 +2904,8 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/virtualmachines/{name}
 # operationId: VirtualMachines_Update
-# --properties shape: {allowClaim?: bool, artifactDeploymentStatus?: record, artifacts?: list, computeId?: string, createdByUser?: string, createdByUserId?: string, createdDate?: string, customImageId?: string, dataDiskParameters?: list, disallowPublicIpAddress?: bool, environmentId?: string, expirationDate?: string, fqdn?: string, galleryImageReference?: record, isAuthenticationWithSshKey?: bool, labSubnetName?: string, labVirtualNetworkId?: string, lastKnownPowerState?: string, networkInterface?: record, notes?: string, osType?: string, ownerObjectId?: string, ownerUserPrincipalName?: string, password?: string, planId?: string, scheduleParameters?: list, size?: string, sshKey?: string, storageType?: string, userName?: string, virtualMachineCreationSource?: "FromCustomImage"|"FromGalleryImage"|"FromSharedGalleryImage"}
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-virtualmachines update" [
+# --properties shape: {allowClaim?: bool, artifactDeploymentStatus?: record, artifacts?: list, computeId?: string, createdByUser?: string, createdByUserId?: string, createdDate?: string, customImageId?: string, dataDiskParameters?: list, disallowPublicIpAddress?: bool, environmentId?: string, expirationDate?: string, fqdn?: string, galleryImageReference?: record, isAuthenticationWithSshKey?: bool, labSubnetName?: string, labVirtualNetworkId?: string, lastKnownPowerState?: string, networkInterface?: record, ... (12 more fields)}
+export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-virtualmachines update-virtual-machines" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -2910,27 +2919,27 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (default: 2018-09-15)
-  --properties: record # Properties of a virtual machine. — shape: {allowClaim?: bool, artifactDeploymentStatus?: record, artifacts?: list, computeId?: string, createdByUser?: string, createdByUserId?: string, createdDate?: string, customImageId?: string, dataDiskParameters?: list, disallowPublicIpAddress?: bool, environmentId?: string, expirationDate?: string, fqdn?: string, galleryImageReference?: record, isAuthenticationWithSshKey?: bool, labSubnetName?: string, labVirtualNetworkId?: string, lastKnownPowerState?: string, networkInterface?: record, notes?: string, osType?: string, ownerObjectId?: string, ownerUserPrincipalName?: string, password?: string, planId?: string, scheduleParameters?: list, size?: string, sshKey?: string, storageType?: string, userName?: string, virtualMachineCreationSource?: "FromCustomImage"|"FromGalleryImage"|"FromSharedGalleryImage"}
+  --properties: record # Properties of a virtual machine. — shape: {allowClaim?: bool, artifactDeploymentStatus?: record, artifacts?: list, computeId?: string, createdByUser?: string, createdByUserId?: string, createdDate?: string, customImageId?: string, dataDiskParameters?: list, disallowPublicIpAddress?: bool, environmentId?: string, expirationDate?: string, fqdn?: string, galleryImageReference?: record, isAuthenticationWithSshKey?: bool, labSubnetName?: string, labVirtualNetworkId?: string, lastKnownPowerState?: string, networkInterface?: record, ... (12 more fields)}
   --tags: record # The tags of the resource.
 ]: any -> record<properties: record<allowClaim: bool, applicableSchedule: record<properties: record>, artifactDeploymentStatus: record<artifactsApplied: int, deploymentStatus: string, totalArtifacts: int>, artifacts: list<record>, computeId: string, computeVm: record<dataDiskIds: list, dataDisks: list, networkInterfaceId: string, osDiskId: string, osType: string, statuses: list, vmSize: string>, createdByUser: string, createdByUserId: string, createdDate: string, customImageId: string, dataDiskParameters: list<record>, disallowPublicIpAddress: bool, environmentId: string, expirationDate: string, fqdn: string, galleryImageReference: record<offer: string, osType: string, publisher: string, sku: string, version: string>, isAuthenticationWithSshKey: bool, labSubnetName: string, labVirtualNetworkId: string, lastKnownPowerState: string, networkInterface: record<dnsName: string, privateIpAddress: string, publicIpAddress: string, publicIpAddressId: string, rdpAuthority: string, sharedPublicIpAddressConfiguration: record, sshAuthority: string, subnetId: string, virtualNetworkId: string>, notes: string, osType: string, ownerObjectId: string, ownerUserPrincipalName: string, password: string, planId: string, provisioningState: string, scheduleParameters: list<record>, size: string, sshKey: string, storageType: string, uniqueIdentifier: string, userName: string, virtualMachineCreationSource: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/virtualmachines/{name}") $qp)
-  let body = {"properties": $properties, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/virtualmachines/{name}") $qp)
+  let req_body = {"properties": $properties, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create or replace an existing virtual machine. This operation can take a while to complete.
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/virtualmachines/{name}
 # operationId: VirtualMachines_CreateOrUpdate
-# --properties shape: {allowClaim?: bool, applicableSchedule?: record, artifactDeploymentStatus?: record, artifacts?: list, computeId?: string, computeVm?: record, createdByUser?: string, createdByUserId?: string, createdDate?: string, customImageId?: string, dataDiskParameters?: list, disallowPublicIpAddress?: bool, environmentId?: string, expirationDate?: string, fqdn?: string, galleryImageReference?: record, isAuthenticationWithSshKey?: bool, labSubnetName?: string, labVirtualNetworkId?: string, lastKnownPowerState?: string, networkInterface?: record, notes?: string, osType?: string, ownerObjectId?: string, ownerUserPrincipalName?: string, password?: string, planId?: string, scheduleParameters?: list, size?: string, sshKey?: string, storageType?: string, userName?: string, virtualMachineCreationSource?: "FromCustomImage"|"FromGalleryImage"|"FromSharedGalleryImage"}
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-virtualmachines create-or-update" [
+# --properties shape: {allowClaim?: bool, applicableSchedule?: record, artifactDeploymentStatus?: record, artifacts?: list, computeId?: string, computeVm?: record, createdByUser?: string, createdByUserId?: string, createdDate?: string, customImageId?: string, dataDiskParameters?: list, disallowPublicIpAddress?: bool, environmentId?: string, expirationDate?: string, fqdn?: string, galleryImageReference?: record, isAuthenticationWithSshKey?: bool, labSubnetName?: string, labVirtualNetworkId?: string, ... (14 more fields)}
+export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-virtualmachines create-virtual-machines-or-update" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -2944,7 +2953,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (default: 2018-09-15)
-  properties: record # Properties of a virtual machine. — shape: {allowClaim?: bool, applicableSchedule?: record, artifactDeploymentStatus?: record, artifacts?: list, computeId?: string, computeVm?: record, createdByUser?: string, createdByUserId?: string, createdDate?: string, customImageId?: string, dataDiskParameters?: list, disallowPublicIpAddress?: bool, environmentId?: string, expirationDate?: string, fqdn?: string, galleryImageReference?: record, isAuthenticationWithSshKey?: bool, labSubnetName?: string, labVirtualNetworkId?: string, lastKnownPowerState?: string, networkInterface?: record, notes?: string, osType?: string, ownerObjectId?: string, ownerUserPrincipalName?: string, password?: string, planId?: string, scheduleParameters?: list, size?: string, sshKey?: string, storageType?: string, userName?: string, virtualMachineCreationSource?: "FromCustomImage"|"FromGalleryImage"|"FromSharedGalleryImage"}
+  properties: record # Properties of a virtual machine. — shape: {allowClaim?: bool, applicableSchedule?: record, artifactDeploymentStatus?: record, artifacts?: list, computeId?: string, computeVm?: record, createdByUser?: string, createdByUserId?: string, createdDate?: string, customImageId?: string, dataDiskParameters?: list, disallowPublicIpAddress?: bool, environmentId?: string, expirationDate?: string, fqdn?: string, galleryImageReference?: record, isAuthenticationWithSshKey?: bool, labSubnetName?: string, labVirtualNetworkId?: string, ... (14 more fields)}
   --location: string # The location of the resource.
   --tags: record # The tags of the resource.
 ]: any -> record<properties: record<allowClaim: bool, applicableSchedule: record<properties: record>, artifactDeploymentStatus: record<artifactsApplied: int, deploymentStatus: string, totalArtifacts: int>, artifacts: list<record>, computeId: string, computeVm: record<dataDiskIds: list, dataDisks: list, networkInterfaceId: string, osDiskId: string, osType: string, statuses: list, vmSize: string>, createdByUser: string, createdByUserId: string, createdDate: string, customImageId: string, dataDiskParameters: list<record>, disallowPublicIpAddress: bool, environmentId: string, expirationDate: string, fqdn: string, galleryImageReference: record<offer: string, osType: string, publisher: string, sku: string, version: string>, isAuthenticationWithSshKey: bool, labSubnetName: string, labVirtualNetworkId: string, lastKnownPowerState: string, networkInterface: record<dnsName: string, privateIpAddress: string, publicIpAddress: string, publicIpAddressId: string, rdpAuthority: string, sharedPublicIpAddressConfiguration: record, sshAuthority: string, subnetId: string, virtualNetworkId: string>, notes: string, osType: string, ownerObjectId: string, ownerUserPrincipalName: string, password: string, planId: string, provisioningState: string, scheduleParameters: list<record>, size: string, sshKey: string, storageType: string, uniqueIdentifier: string, userName: string, virtualMachineCreationSource: string>> {
@@ -2952,12 +2961,12 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/virtualmachines/{name}") $qp)
-  let body = {"properties": $properties, "location": $location, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/virtualmachines/{name}") $qp)
+  let req_body = {"properties": $properties, "location": $location, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Attach a new or existing data disk to virtual machine. This operation can take a while to complete.
@@ -2965,7 +2974,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/virtualmachines/{name}/addDataDisk
 # operationId: VirtualMachines_AddDataDisk
 # --attachNewDataDiskOptions shape: {diskName?: string, diskSizeGiB?: int, diskType?: "Standard"|"Premium"|"StandardSSD"}
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-virtualmachines-add-data-disk create" [
+export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-virtualmachines-add-data-disk create-virtual-machines" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -2987,12 +2996,12 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/virtualmachines/{name}/addDataDisk") $qp)
-  let body = {"attachNewDataDiskOptions": $attach_new_data_disk_options, "existingLabDiskId": $existing_lab_disk_id, "hostCaching": $host_caching} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/virtualmachines/{name}/addDataDisk") $qp)
+  let req_body = {"attachNewDataDiskOptions": $attach_new_data_disk_options, "existingLabDiskId": $existing_lab_disk_id, "hostCaching": $host_caching} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Apply artifacts to virtual machine. This operation can take a while to complete.
@@ -3000,7 +3009,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/virtualmachines/{name}/applyArtifacts
 # operationId: VirtualMachines_ApplyArtifacts
 # --artifacts item shape: {artifactId?: string, artifactTitle?: string, deploymentStatusMessage?: string, installTime?: string, parameters?: list, status?: string, vmExtensionStatusMessage?: string}
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-virtualmachines-apply-artifacts post" [
+export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-virtualmachines-apply-artifacts create-virtual-machines" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -3020,19 +3029,19 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/virtualmachines/{name}/applyArtifacts") $qp)
-  let body = {"artifacts": $artifacts} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/virtualmachines/{name}/applyArtifacts") $qp)
+  let req_body = {"artifacts": $artifacts} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Take ownership of an existing virtual machine This operation can take a while to complete.
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/virtualmachines/{name}/claim
 # operationId: VirtualMachines_Claim
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-virtualmachines-claim post" [
+export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-virtualmachines-claim create-virtual-machines" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -3050,7 +3059,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/virtualmachines/{name}/claim") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/virtualmachines/{name}/claim") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3060,7 +3069,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/virtualmachines/{name}/detachDataDisk
 # operationId: VirtualMachines_DetachDataDisk
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-virtualmachines-detach-data-disk post" [
+export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-virtualmachines-detach-data-disk create-virtual-machines" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -3080,19 +3089,19 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/virtualmachines/{name}/detachDataDisk") $qp)
-  let body = {"existingLabDiskId": $existing_lab_disk_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/virtualmachines/{name}/detachDataDisk") $qp)
+  let req_body = {"existingLabDiskId": $existing_lab_disk_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets a string that represents the contents of the RDP file for the virtual machine
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/virtualmachines/{name}/getRdpFileContents
 # operationId: VirtualMachines_GetRdpFileContents
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-virtualmachines-get-rdp-file-contents get" [
+export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-virtualmachines-get-rdp-file-contents get-virtual-machines" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -3110,7 +3119,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/virtualmachines/{name}/getRdpFileContents") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/virtualmachines/{name}/getRdpFileContents") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3120,7 +3129,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/virtualmachines/{name}/listApplicableSchedules
 # operationId: VirtualMachines_ListApplicableSchedules
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-virtualmachines-list-applicable-schedules list" [
+export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-virtualmachines-list-applicable-schedules list-virtual-machines" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -3138,7 +3147,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/virtualmachines/{name}/listApplicableSchedules") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/virtualmachines/{name}/listApplicableSchedules") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3148,7 +3157,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/virtualmachines/{name}/redeploy
 # operationId: VirtualMachines_Redeploy
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-virtualmachines-redeploy post" [
+export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-virtualmachines-redeploy create-virtual-machines" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -3166,7 +3175,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/virtualmachines/{name}/redeploy") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/virtualmachines/{name}/redeploy") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3176,7 +3185,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/virtualmachines/{name}/resize
 # operationId: VirtualMachines_Resize
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-virtualmachines-resize resize" [
+export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-virtualmachines-resize resize-virtual-machines" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -3196,19 +3205,19 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/virtualmachines/{name}/resize") $qp)
-  let body = {"size": $size} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/virtualmachines/{name}/resize") $qp)
+  let req_body = {"size": $size} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Restart a virtual machine. This operation can take a while to complete.
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/virtualmachines/{name}/restart
 # operationId: VirtualMachines_Restart
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-virtualmachines-restart restart" [
+export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-virtualmachines-restart restart-virtual-machines" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -3226,7 +3235,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/virtualmachines/{name}/restart") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/virtualmachines/{name}/restart") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3236,7 +3245,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/virtualmachines/{name}/start
 # operationId: VirtualMachines_Start
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-virtualmachines-start start" [
+export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-virtualmachines-start start-virtual-machines" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -3254,7 +3263,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/virtualmachines/{name}/start") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/virtualmachines/{name}/start") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3264,7 +3273,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/virtualmachines/{name}/stop
 # operationId: VirtualMachines_Stop
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-virtualmachines-stop stop" [
+export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-virtualmachines-stop stop-virtual-machines" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -3282,7 +3291,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/virtualmachines/{name}/stop") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/virtualmachines/{name}/stop") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3292,7 +3301,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/virtualmachines/{name}/transferDisks
 # operationId: VirtualMachines_TransferDisks
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-virtualmachines-transfer-disks post" [
+export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-virtualmachines-transfer-disks create-virtual-machines" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -3310,7 +3319,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/virtualmachines/{name}/transferDisks") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/virtualmachines/{name}/transferDisks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3320,7 +3329,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/virtualmachines/{name}/unClaim
 # operationId: VirtualMachines_UnClaim
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-virtualmachines-un-claim post" [
+export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-virtualmachines-un-claim create-virtual-machines" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -3338,7 +3347,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/virtualmachines/{name}/unClaim") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/virtualmachines/{name}/unClaim") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3348,7 +3357,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/virtualmachines/{virtualMachineName}/schedules
 # operationId: VirtualMachineSchedules_List
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-virtualmachines-schedules list" [
+export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-virtualmachines-schedules list-virtual-machine" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -3370,7 +3379,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, virtual_machine_name: $virtual_machine_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/virtualmachines/{virtual_machine_name}/schedules") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), virtual_machine_name: (encode-path-segment $virtual_machine_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/virtualmachines/{virtual_machine_name}/schedules") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3380,7 +3389,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/virtualmachines/{virtualMachineName}/schedules/{name}
 # operationId: VirtualMachineSchedules_Delete
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-virtualmachines-schedules delete" [
+export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-virtualmachines-schedules delete-virtual-machine" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -3399,7 +3408,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, virtual_machine_name: $virtual_machine_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/virtualmachines/{virtual_machine_name}/schedules/{name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), virtual_machine_name: (encode-path-segment $virtual_machine_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/virtualmachines/{virtual_machine_name}/schedules/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3409,7 +3418,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/virtualmachines/{virtualMachineName}/schedules/{name}
 # operationId: VirtualMachineSchedules_Get
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-virtualmachines-schedules get" [
+export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-virtualmachines-schedules get-virtual-machine" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -3429,7 +3438,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, virtual_machine_name: $virtual_machine_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/virtualmachines/{virtual_machine_name}/schedules/{name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), virtual_machine_name: (encode-path-segment $virtual_machine_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/virtualmachines/{virtual_machine_name}/schedules/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3440,7 +3449,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/virtualmachines/{virtualMachineName}/schedules/{name}
 # operationId: VirtualMachineSchedules_Update
 # --properties shape: {dailyRecurrence?: record, hourlyRecurrence?: record, notificationSettings?: record, status?: "Enabled"|"Disabled", targetResourceId?: string, taskType?: string, timeZoneId?: string, weeklyRecurrence?: record}
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-virtualmachines-schedules update" [
+export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-virtualmachines-schedules update-virtual-machine" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -3462,12 +3471,12 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, virtual_machine_name: $virtual_machine_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/virtualmachines/{virtual_machine_name}/schedules/{name}") $qp)
-  let body = {"properties": $properties, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), virtual_machine_name: (encode-path-segment $virtual_machine_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/virtualmachines/{virtual_machine_name}/schedules/{name}") $qp)
+  let req_body = {"properties": $properties, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create or replace an existing schedule.
@@ -3475,7 +3484,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/virtualmachines/{virtualMachineName}/schedules/{name}
 # operationId: VirtualMachineSchedules_CreateOrUpdate
 # --properties shape: {dailyRecurrence?: record, hourlyRecurrence?: record, notificationSettings?: record, status?: "Enabled"|"Disabled", targetResourceId?: string, taskType?: string, timeZoneId?: string, weeklyRecurrence?: record}
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-virtualmachines-schedules create-or-update" [
+export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-virtualmachines-schedules create-virtual-machine-or-update" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -3498,19 +3507,19 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, virtual_machine_name: $virtual_machine_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/virtualmachines/{virtual_machine_name}/schedules/{name}") $qp)
-  let body = {"properties": $properties, "location": $location, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), virtual_machine_name: (encode-path-segment $virtual_machine_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/virtualmachines/{virtual_machine_name}/schedules/{name}") $qp)
+  let req_body = {"properties": $properties, "location": $location, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Execute a schedule. This operation can take a while to complete.
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/virtualmachines/{virtualMachineName}/schedules/{name}/execute
 # operationId: VirtualMachineSchedules_Execute
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-virtualmachines-schedules-execute exec-ute" [
+export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-virtualmachines-schedules-execute create-virtual-machine" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -3529,7 +3538,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, virtual_machine_name: $virtual_machine_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/virtualmachines/{virtual_machine_name}/schedules/{name}/execute") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), virtual_machine_name: (encode-path-segment $virtual_machine_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/virtualmachines/{virtual_machine_name}/schedules/{name}/execute") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3539,7 +3548,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/virtualnetworks
 # operationId: VirtualNetworks_List
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-virtualnetworks list" [
+export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-virtualnetworks list-virtual-networks" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -3560,7 +3569,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/virtualnetworks") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/virtualnetworks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3570,7 +3579,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/virtualnetworks/{name}
 # operationId: VirtualNetworks_Delete
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-virtualnetworks delete" [
+export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-virtualnetworks delete-virtual-networks" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -3588,7 +3597,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/virtualnetworks/{name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/virtualnetworks/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3598,7 +3607,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/virtualnetworks/{name}
 # operationId: VirtualNetworks_Get
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-virtualnetworks get" [
+export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-virtualnetworks get-virtual-networks" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -3617,7 +3626,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/virtualnetworks/{name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/virtualnetworks/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3628,7 +3637,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/virtualnetworks/{name}
 # operationId: VirtualNetworks_Update
 # --properties shape: {allowedSubnets?: list, description?: string, externalProviderResourceId?: string, subnetOverrides?: list}
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-virtualnetworks update" [
+export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-virtualnetworks update-virtual-networks" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -3649,12 +3658,12 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/virtualnetworks/{name}") $qp)
-  let body = {"properties": $properties, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/virtualnetworks/{name}") $qp)
+  let req_body = {"properties": $properties, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create or replace an existing virtual network. This operation can take a while to complete.
@@ -3662,7 +3671,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/virtualnetworks/{name}
 # operationId: VirtualNetworks_CreateOrUpdate
 # --properties shape: {allowedSubnets?: list, description?: string, externalProviderResourceId?: string, subnetOverrides?: list}
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-virtualnetworks create-or-update" [
+export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-virtualnetworks create-virtual-networks-or-update" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -3684,12 +3693,12 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lab_name: $lab_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/virtualnetworks/{name}") $qp)
-  let body = {"properties": $properties, "location": $location, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/virtualnetworks/{name}") $qp)
+  let req_body = {"properties": $properties, "location": $location, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete lab. This operation can take a while to complete.
@@ -3713,7 +3722,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3741,7 +3750,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3751,7 +3760,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs 
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{name}
 # operationId: Labs_Update
-# --properties shape: {announcement?: record, environmentPermission?: "Reader"|"Contributor", extendedProperties?: record, labStorageType?: "Standard"|"Premium"|"StandardSSD", mandatoryArtifactsResourceIdsLinux?: list, mandatoryArtifactsResourceIdsWindows?: list, premiumDataDisks?: "Disabled"|"Enabled", support?: record}
+# --properties shape: {announcement?: record, environmentPermission?: "Reader"|"Contributor", extendedProperties?: record, labStorageType?: "Standard"|"Premium"|"StandardSSD", mandatoryArtifactsResourceIdsLinux?: list<string>, mandatoryArtifactsResourceIdsWindows?: list<string>, premiumDataDisks?: "Disabled"|"Enabled", support?: record}
 export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs update" [
   subscription_id: string
   resource_group_name: string
@@ -3765,26 +3774,26 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs 
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (default: 2018-09-15)
-  --properties: record # Properties of a lab. — shape: {announcement?: record, environmentPermission?: "Reader"|"Contributor", extendedProperties?: record, labStorageType?: "Standard"|"Premium"|"StandardSSD", mandatoryArtifactsResourceIdsLinux?: list, mandatoryArtifactsResourceIdsWindows?: list, premiumDataDisks?: "Disabled"|"Enabled", support?: record}
+  --properties: record # Properties of a lab. — shape: {announcement?: record, environmentPermission?: "Reader"|"Contributor", extendedProperties?: record, labStorageType?: "Standard"|"Premium"|"StandardSSD", mandatoryArtifactsResourceIdsLinux?: list<string>, mandatoryArtifactsResourceIdsWindows?: list<string>, premiumDataDisks?: "Disabled"|"Enabled", support?: record}
   --tags: record # The tags of the resource.
 ]: any -> record<properties: record<announcement: record<enabled: string, expirationDate: string, expired: bool, markdown: string, provisioningState: string, title: string, uniqueIdentifier: string>, artifactsStorageAccount: string, createdDate: string, defaultPremiumStorageAccount: string, defaultStorageAccount: string, environmentPermission: string, extendedProperties: record, labStorageType: string, loadBalancerId: string, mandatoryArtifactsResourceIdsLinux: list<string>, mandatoryArtifactsResourceIdsWindows: list<string>, networkSecurityGroupId: string, premiumDataDiskStorageAccount: string, premiumDataDisks: string, provisioningState: string, publicIpId: string, support: record<enabled: string, markdown: string>, uniqueIdentifier: string, vaultName: string, vmCreationResourceGroup: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{name}") $qp)
-  let body = {"properties": $properties, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{name}") $qp)
+  let req_body = {"properties": $properties, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create or replace an existing lab. This operation can take a while to complete.
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{name}
 # operationId: Labs_CreateOrUpdate
-# --properties shape: {announcement?: record, environmentPermission?: "Reader"|"Contributor", extendedProperties?: record, labStorageType?: "Standard"|"Premium"|"StandardSSD", mandatoryArtifactsResourceIdsLinux?: list, mandatoryArtifactsResourceIdsWindows?: list, premiumDataDisks?: "Disabled"|"Enabled", support?: record}
+# --properties shape: {announcement?: record, environmentPermission?: "Reader"|"Contributor", extendedProperties?: record, labStorageType?: "Standard"|"Premium"|"StandardSSD", mandatoryArtifactsResourceIdsLinux?: list<string>, mandatoryArtifactsResourceIdsWindows?: list<string>, premiumDataDisks?: "Disabled"|"Enabled", support?: record}
 export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -3798,7 +3807,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs 
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (default: 2018-09-15)
-  --properties: record # Properties of a lab. — shape: {announcement?: record, environmentPermission?: "Reader"|"Contributor", extendedProperties?: record, labStorageType?: "Standard"|"Premium"|"StandardSSD", mandatoryArtifactsResourceIdsLinux?: list, mandatoryArtifactsResourceIdsWindows?: list, premiumDataDisks?: "Disabled"|"Enabled", support?: record}
+  --properties: record # Properties of a lab. — shape: {announcement?: record, environmentPermission?: "Reader"|"Contributor", extendedProperties?: record, labStorageType?: "Standard"|"Premium"|"StandardSSD", mandatoryArtifactsResourceIdsLinux?: list<string>, mandatoryArtifactsResourceIdsWindows?: list<string>, premiumDataDisks?: "Disabled"|"Enabled", support?: record}
   --location: string # The location of the resource.
   --tags: record # The tags of the resource.
 ]: any -> record<properties: record<announcement: record<enabled: string, expirationDate: string, expired: bool, markdown: string, provisioningState: string, title: string, uniqueIdentifier: string>, artifactsStorageAccount: string, createdDate: string, defaultPremiumStorageAccount: string, defaultStorageAccount: string, environmentPermission: string, extendedProperties: record, labStorageType: string, loadBalancerId: string, mandatoryArtifactsResourceIdsLinux: list<string>, mandatoryArtifactsResourceIdsWindows: list<string>, networkSecurityGroupId: string, premiumDataDiskStorageAccount: string, premiumDataDisks: string, provisioningState: string, publicIpId: string, support: record<enabled: string, markdown: string>, uniqueIdentifier: string, vaultName: string, vmCreationResourceGroup: string>> {
@@ -3806,19 +3815,19 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{name}") $qp)
-  let body = {"properties": $properties, "location": $location, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{name}") $qp)
+  let req_body = {"properties": $properties, "location": $location, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Claim a random claimable virtual machine in the lab. This operation can take a while to complete.
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{name}/claimAnyVm
 # operationId: Labs_ClaimAnyVm
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-claim-any-vm post" [
+export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-claim-any-vm create" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -3835,7 +3844,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{name}/claimAnyVm") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{name}/claimAnyVm") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3845,7 +3854,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{name}/createEnvironment
 # operationId: Labs_CreateEnvironment
-# --properties shape: {allowClaim?: bool, artifactDeploymentStatus?: record, artifacts?: list, bulkCreationParameters?: record, computeId?: string, createdByUser?: string, createdByUserId?: string, createdDate?: string, customImageId?: string, dataDiskParameters?: list, disallowPublicIpAddress?: bool, environmentId?: string, expirationDate?: string, fqdn?: string, galleryImageReference?: record, isAuthenticationWithSshKey?: bool, labSubnetName?: string, labVirtualNetworkId?: string, lastKnownPowerState?: string, networkInterface?: record, notes?: string, osType?: string, ownerObjectId?: string, ownerUserPrincipalName?: string, password?: string, planId?: string, scheduleParameters?: list, size?: string, sshKey?: string, storageType?: string, userName?: string, virtualMachineCreationSource?: "FromCustomImage"|"FromGalleryImage"|"FromSharedGalleryImage"}
+# --properties shape: {allowClaim?: bool, artifactDeploymentStatus?: record, artifacts?: list, bulkCreationParameters?: record, computeId?: string, createdByUser?: string, createdByUserId?: string, createdDate?: string, customImageId?: string, dataDiskParameters?: list, disallowPublicIpAddress?: bool, environmentId?: string, expirationDate?: string, fqdn?: string, galleryImageReference?: record, isAuthenticationWithSshKey?: bool, labSubnetName?: string, labVirtualNetworkId?: string, lastKnownPowerState?: string, ... (13 more fields)}
 export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-create-environment create" [
   subscription_id: string
   resource_group_name: string
@@ -3861,19 +3870,19 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   --api-version: string # Client API version. (default: 2018-09-15)
   --location: string # The location of the new virtual machine or environment
   --body-name: string # The name of the virtual machine or environment
-  --properties: record # Properties for virtual machine creation. — shape: {allowClaim?: bool, artifactDeploymentStatus?: record, artifacts?: list, bulkCreationParameters?: record, computeId?: string, createdByUser?: string, createdByUserId?: string, createdDate?: string, customImageId?: string, dataDiskParameters?: list, disallowPublicIpAddress?: bool, environmentId?: string, expirationDate?: string, fqdn?: string, galleryImageReference?: record, isAuthenticationWithSshKey?: bool, labSubnetName?: string, labVirtualNetworkId?: string, lastKnownPowerState?: string, networkInterface?: record, notes?: string, osType?: string, ownerObjectId?: string, ownerUserPrincipalName?: string, password?: string, planId?: string, scheduleParameters?: list, size?: string, sshKey?: string, storageType?: string, userName?: string, virtualMachineCreationSource?: "FromCustomImage"|"FromGalleryImage"|"FromSharedGalleryImage"}
+  --properties: record # Properties for virtual machine creation. — shape: {allowClaim?: bool, artifactDeploymentStatus?: record, artifacts?: list, bulkCreationParameters?: record, computeId?: string, createdByUser?: string, createdByUserId?: string, createdDate?: string, customImageId?: string, dataDiskParameters?: list, disallowPublicIpAddress?: bool, environmentId?: string, expirationDate?: string, fqdn?: string, galleryImageReference?: record, isAuthenticationWithSshKey?: bool, labSubnetName?: string, labVirtualNetworkId?: string, lastKnownPowerState?: string, ... (13 more fields)}
   --tags: record # The tags of the resource.
 ]: any -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{name}/createEnvironment") $qp)
-  let body = {"location": $location, "name": $body_name, "properties": $properties, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{name}/createEnvironment") $qp)
+  let req_body = {"location": $location, "name": $body_name, "properties": $properties, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Exports the lab resource usage into a storage account This operation can take a while to complete.
@@ -3900,19 +3909,19 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{name}/exportResourceUsage") $qp)
-  let body = {"blobStorageAbsoluteSasUri": $blob_storage_absolute_sas_uri, "usageStartDate": $usage_start_date} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{name}/exportResourceUsage") $qp)
+  let req_body = {"blobStorageAbsoluteSasUri": $blob_storage_absolute_sas_uri, "usageStartDate": $usage_start_date} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Generate a URI for uploading custom disk images to a Lab.
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{name}/generateUploadUri
 # operationId: Labs_GenerateUploadUri
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-generate-upload-uri post" [
+export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-generate-upload-uri generate" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -3931,12 +3940,12 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{name}/generateUploadUri") $qp)
-  let body = {"blobName": $blob_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{name}/generateUploadUri") $qp)
+  let req_body = {"blobName": $blob_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Import a virtual machine into a different lab. This operation can take a while to complete.
@@ -3963,12 +3972,12 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{name}/importVirtualMachine") $qp)
-  let body = {"destinationVirtualMachineName": $destination_virtual_machine_name, "sourceVirtualMachineResourceId": $source_virtual_machine_resource_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{name}/importVirtualMachine") $qp)
+  let req_body = {"destinationVirtualMachineName": $destination_virtual_machine_name, "sourceVirtualMachineResourceId": $source_virtual_machine_resource_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List disk images available for custom image creation.
@@ -3992,7 +4001,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{name}/listVhds") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{name}/listVhds") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4002,7 +4011,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/schedules
 # operationId: GlobalSchedules_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-schedules list-by" [
+export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-schedules list-global" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4022,7 +4031,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-sched
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/schedules") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/schedules") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4032,7 +4041,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-sched
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/schedules/{name}
 # operationId: GlobalSchedules_Delete
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-schedules delete" [
+export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-schedules delete-global" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -4049,7 +4058,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-sched
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/schedules/{name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/schedules/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4059,7 +4068,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-sched
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/schedules/{name}
 # operationId: GlobalSchedules_Get
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-schedules get" [
+export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-schedules get-global" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -4077,7 +4086,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-sched
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/schedules/{name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/schedules/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4088,7 +4097,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-sched
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/schedules/{name}
 # operationId: GlobalSchedules_Update
 # --properties shape: {dailyRecurrence?: record, hourlyRecurrence?: record, notificationSettings?: record, status?: "Enabled"|"Disabled", targetResourceId?: string, taskType?: string, timeZoneId?: string, weeklyRecurrence?: record}
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-schedules update" [
+export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-schedules update-global" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -4108,12 +4117,12 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-sched
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/schedules/{name}") $qp)
-  let body = {"properties": $properties, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/schedules/{name}") $qp)
+  let req_body = {"properties": $properties, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create or replace an existing schedule.
@@ -4121,7 +4130,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-sched
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/schedules/{name}
 # operationId: GlobalSchedules_CreateOrUpdate
 # --properties shape: {dailyRecurrence?: record, hourlyRecurrence?: record, notificationSettings?: record, status?: "Enabled"|"Disabled", targetResourceId?: string, taskType?: string, timeZoneId?: string, weeklyRecurrence?: record}
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-schedules create-or-update" [
+export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-schedules create-global-or-update" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -4142,19 +4151,19 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-sched
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/schedules/{name}") $qp)
-  let body = {"properties": $properties, "location": $location, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/schedules/{name}") $qp)
+  let req_body = {"properties": $properties, "location": $location, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Execute a schedule. This operation can take a while to complete.
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/schedules/{name}/execute
 # operationId: GlobalSchedules_Execute
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-schedules-execute exec-ute" [
+export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-schedules-execute create-global" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -4171,7 +4180,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-sched
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/schedules/{name}/execute") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/schedules/{name}/execute") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4181,7 +4190,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-sched
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/schedules/{name}/retarget
 # operationId: GlobalSchedules_Retarget
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-schedules-retarget post" [
+export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-schedules-retarget create-global" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -4201,10 +4210,10 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-sched
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/schedules/{name}/retarget") $qp)
-  let body = {"currentResourceId": $current_resource_id, "targetResourceId": $target_resource_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/schedules/{name}/retarget") $qp)
+  let req_body = {"currentResourceId": $current_resource_id, "targetResourceId": $target_resource_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

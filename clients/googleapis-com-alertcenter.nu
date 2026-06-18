@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -73,7 +82,7 @@ def type-completer [] { ["ALERT_FEEDBACK_TYPE_UNSPECIFIED" "NOT_USEFUL" "SOMEWHA
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1beta1-alerts alertcenteralertslist" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1beta1-alerts list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -97,7 +106,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1beta1/alerts
 # operationId: alertcenter.alerts.list
-export def "v1beta1-alerts alertcenteralertslist" [
+export def "v1beta1-alerts list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -136,7 +145,7 @@ export def "v1beta1-alerts alertcenteralertslist" [
 #
 # DELETE /v1beta1/alerts/{alertId}
 # operationId: alertcenter.alerts.delete
-export def "v1beta1-alerts alertcenteralertsdelete" [
+export def "v1beta1-alerts delete" [
   alert_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -162,7 +171,7 @@ export def "v1beta1-alerts alertcenteralertsdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "customerId" $customer_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({alert_id: $alert_id} | format pattern "/v1beta1/alerts/{alert_id}") $qp)
+  let full_url = (build-url $base ({alert_id: (encode-path-segment $alert_id)} | format pattern "/v1beta1/alerts/{alert_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -172,7 +181,7 @@ export def "v1beta1-alerts alertcenteralertsdelete" [
 #
 # GET /v1beta1/alerts/{alertId}
 # operationId: alertcenter.alerts.get
-export def "v1beta1-alerts alertcenteralertsget" [
+export def "v1beta1-alerts get" [
   alert_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -198,7 +207,7 @@ export def "v1beta1-alerts alertcenteralertsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "customerId" $customer_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({alert_id: $alert_id} | format pattern "/v1beta1/alerts/{alert_id}") $qp)
+  let full_url = (build-url $base ({alert_id: (encode-path-segment $alert_id)} | format pattern "/v1beta1/alerts/{alert_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -208,7 +217,7 @@ export def "v1beta1-alerts alertcenteralertsget" [
 #
 # GET /v1beta1/alerts/{alertId}/feedback
 # operationId: alertcenter.alerts.feedback.list
-export def "v1beta1-alerts-feedback alertcenteralertsfeedbacklist" [
+export def "v1beta1-alerts-feedback list" [
   alert_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -235,7 +244,7 @@ export def "v1beta1-alerts-feedback alertcenteralertsfeedbacklist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "customerId" $customer_id "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({alert_id: $alert_id} | format pattern "/v1beta1/alerts/{alert_id}/feedback") $qp)
+  let full_url = (build-url $base ({alert_id: (encode-path-segment $alert_id)} | format pattern "/v1beta1/alerts/{alert_id}/feedback") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -245,7 +254,7 @@ export def "v1beta1-alerts-feedback alertcenteralertsfeedbacklist" [
 #
 # POST /v1beta1/alerts/{alertId}/feedback
 # operationId: alertcenter.alerts.feedback.create
-export def "v1beta1-alerts-feedback alertcenteralertsfeedbackcreate" [
+export def "v1beta1-alerts-feedback create" [
   alert_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -278,19 +287,19 @@ export def "v1beta1-alerts-feedback alertcenteralertsfeedbackcreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "customerId" $customer_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({alert_id: $alert_id} | format pattern "/v1beta1/alerts/{alert_id}/feedback") $qp)
-  let body = {"alertId": $body_alert_id, "createTime": $create_time, "customerId": $customer_id, "email": $email, "feedbackId": $feedback_id, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({alert_id: (encode-path-segment $alert_id)} | format pattern "/v1beta1/alerts/{alert_id}/feedback") $qp)
+  let req_body = {"alertId": $body_alert_id, "createTime": $create_time, "customerId": $customer_id, "email": $email, "feedbackId": $feedback_id, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns the metadata of an alert. Attempting to get metadata for a non-existent alert returns `NOT_FOUND` error.
 #
 # GET /v1beta1/alerts/{alertId}/metadata
 # operationId: alertcenter.alerts.getMetadata
-export def "v1beta1-alerts-metadata alertcenteralertsgetMetadata" [
+export def "v1beta1-alerts-metadata get" [
   alert_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -316,7 +325,7 @@ export def "v1beta1-alerts-metadata alertcenteralertsgetMetadata" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "customerId" $customer_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({alert_id: $alert_id} | format pattern "/v1beta1/alerts/{alert_id}/metadata") $qp)
+  let full_url = (build-url $base ({alert_id: (encode-path-segment $alert_id)} | format pattern "/v1beta1/alerts/{alert_id}/metadata") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -326,7 +335,7 @@ export def "v1beta1-alerts-metadata alertcenteralertsgetMetadata" [
 #
 # POST /v1beta1/alerts/{alertId}:undelete
 # operationId: alertcenter.alerts.undelete
-export def "v1beta1-alerts alertcenteralertsundelete" [
+export def "v1beta1-alerts create-undelete" [
   alert_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -353,19 +362,19 @@ export def "v1beta1-alerts alertcenteralertsundelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({alert_id: $alert_id} | format pattern "/v1beta1/alerts/{alert_id}:undelete") $qp)
-  let body = {"customerId": $customer_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({alert_id: (encode-path-segment $alert_id)} | format pattern "/v1beta1/alerts/{alert_id}:undelete") $qp)
+  let req_body = {"customerId": $customer_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Performs batch delete operation on alerts.
 #
 # POST /v1beta1/alerts:batchDelete
 # operationId: alertcenter.alerts.batchDelete
-export def "v1beta1-alerts-batch-delete alertcenteralertsbatchDelete" [
+export def "v1beta1-alerts-batch-delete delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -385,7 +394,7 @@ export def "v1beta1-alerts-batch-delete alertcenteralertsbatchDelete" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --alert-id: list # Required. The list of alert IDs to delete.
+  --alert-id: list<string> # Required. The list of alert IDs to delete.
   --customer-id: string # Optional. The unique identifier of the Google Workspace account of the customer the alerts are associated with. The `customer_id` must have the initial "C" stripped (for example, `046psxkn`). Inferred from the caller identity if not provided. [Find your customer ID](https://support.google.com/cloudidentity/answer/10070793).
 ]: any -> record<failedAlertStatus: record, successAlertIds: list<string>> {
   let input = $in
@@ -393,18 +402,18 @@ export def "v1beta1-alerts-batch-delete alertcenteralertsbatchDelete" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1beta1/alerts:batchDelete" $qp)
-  let body = {"alertId": $alert_id, "customerId": $customer_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"alertId": $alert_id, "customerId": $customer_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Performs batch undelete operation on alerts.
 #
 # POST /v1beta1/alerts:batchUndelete
 # operationId: alertcenter.alerts.batchUndelete
-export def "v1beta1-alerts-batch-undelete alertcenteralertsbatchUndelete" [
+export def "v1beta1-alerts-batch-undelete create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -424,7 +433,7 @@ export def "v1beta1-alerts-batch-undelete alertcenteralertsbatchUndelete" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --alert-id: list # Required. The list of alert IDs to undelete.
+  --alert-id: list<string> # Required. The list of alert IDs to undelete.
   --customer-id: string # Optional. The unique identifier of the Google Workspace account of the customer the alerts are associated with. The `customer_id` must have the initial "C" stripped (for example, `046psxkn`). Inferred from the caller identity if not provided. [Find your customer ID](https://support.google.com/cloudidentity/answer/10070793).
 ]: any -> record<failedAlertStatus: record, successAlertIds: list<string>> {
   let input = $in
@@ -432,18 +441,18 @@ export def "v1beta1-alerts-batch-undelete alertcenteralertsbatchUndelete" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1beta1/alerts:batchUndelete" $qp)
-  let body = {"alertId": $alert_id, "customerId": $customer_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"alertId": $alert_id, "customerId": $customer_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns customer-level settings.
 #
 # GET /v1beta1/settings
 # operationId: alertcenter.getSettings
-export def "v1beta1-settings alertcentergetSettings" [
+export def "v1beta1-settings get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -479,7 +488,7 @@ export def "v1beta1-settings alertcentergetSettings" [
 # PATCH /v1beta1/settings
 # operationId: alertcenter.updateSettings
 # --notifications item shape: {cloudPubsubTopic?: record}
-export def "v1beta1-settings alertcenterupdateSettings" [
+export def "v1beta1-settings update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -507,9 +516,9 @@ export def "v1beta1-settings alertcenterupdateSettings" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "customerId" $customer_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1beta1/settings" $qp)
-  let body = {"notifications": $notifications} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"notifications": $notifications} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

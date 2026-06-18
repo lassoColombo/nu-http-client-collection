@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -72,7 +81,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v2alpha1-pipelines-run genomicspipelinesrun" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v2alpha1-pipelines-run create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -97,7 +106,7 @@ export def commands []: nothing -> table {
 # POST /v2alpha1/pipelines:run
 # operationId: genomics.pipelines.run
 # --pipeline shape: {actions?: list, encryptedEnvironment?: record, environment?: record, resources?: record, timeout?: string}
-export def "v2alpha1-pipelines-run genomicspipelinesrun" [
+export def "v2alpha1-pipelines-run create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -126,11 +135,11 @@ export def "v2alpha1-pipelines-run genomicspipelinesrun" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2alpha1/pipelines:run" $qp)
-  let body = {"labels": $labels, "pipeline": $pipeline, "pubSubTopic": $pub_sub_topic} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"labels": $labels, "pipeline": $pipeline, "pubSubTopic": $pub_sub_topic} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # The worker uses this method to retrieve the assigned operation and provide periodic status updates.
@@ -140,7 +149,7 @@ export def "v2alpha1-pipelines-run genomicspipelinesrun" [
 # --events item shape: {data?: record, timestamp?: string}
 # --result shape: {code?: int, details?: list, message?: string}
 # --workerStatus shape: {attachedDisks?: record, bootDisk?: record, freeRamBytes?: string, totalRamBytes?: string, uptimeSeconds?: string}
-export def "v2alpha1-workers genomicsworkerscheckIn" [
+export def "v2alpha1-workers check" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -172,12 +181,12 @@ export def "v2alpha1-workers genomicsworkerscheckIn" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v2alpha1/workers/{id}:checkIn") $qp)
-  let body = {"deadlineExpired": $deadline_expired, "event": $event, "events": $events, "result": $result, "sosReport": $sos_report, "workerStatus": $worker_status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2alpha1/workers/{id}:checkIn") $qp)
+  let req_body = {"deadlineExpired": $deadline_expired, "event": $event, "events": $events, "result": $result, "sosReport": $sos_report, "workerStatus": $worker_status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # The worker uses this method to retrieve the assigned operation and provide periodic status updates.
@@ -187,7 +196,7 @@ export def "v2alpha1-workers genomicsworkerscheckIn" [
 # --events item shape: {data?: record, timestamp?: string}
 # --result shape: {code?: int, details?: list, message?: string}
 # --workerStatus shape: {attachedDisks?: record, bootDisk?: record, freeRamBytes?: string, totalRamBytes?: string, uptimeSeconds?: string}
-export def "v2alpha1 genomicsprojectsworkerscheckIn" [
+export def "v2alpha1 check" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -219,19 +228,19 @@ export def "v2alpha1 genomicsprojectsworkerscheckIn" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v2alpha1/{id}:checkIn") $qp)
-  let body = {"deadlineExpired": $deadline_expired, "event": $event, "events": $events, "result": $result, "sosReport": $sos_report, "workerStatus": $worker_status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2alpha1/{id}:checkIn") $qp)
+  let req_body = {"deadlineExpired": $deadline_expired, "event": $event, "events": $events, "result": $result, "sosReport": $sos_report, "workerStatus": $worker_status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists operations that match the specified filter in the request. Authorization requires the following [Google IAM](https://cloud.google.com/iam) permission: * `genomics.operations.list`
 #
 # GET /v2alpha1/{name}
 # operationId: genomics.projects.operations.list
-export def "v2alpha1 genomicsprojectsoperationslist" [
+export def "v2alpha1 list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -259,7 +268,7 @@ export def "v2alpha1 genomicsprojectsoperationslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v2alpha1/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v2alpha1/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -269,7 +278,7 @@ export def "v2alpha1 genomicsprojectsoperationslist" [
 #
 # POST /v2alpha1/{name}:cancel
 # operationId: genomics.projects.operations.cancel
-export def "v2alpha1 genomicsprojectsoperationscancel" [
+export def "v2alpha1 cancel" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -296,9 +305,10 @@ export def "v2alpha1 genomicsprojectsoperationscancel" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v2alpha1/{name}:cancel") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v2alpha1/{name}:cancel") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

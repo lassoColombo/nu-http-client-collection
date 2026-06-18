@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -124,7 +133,7 @@ export def "map-copyrights-format get" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({version_number: $version_number, format: $format} | format pattern "/map/{version_number}/copyrights.{format}") $qp)
+  let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), format: (encode-path-segment $format)} | format pattern "/map/{version_number}/copyrights.{format}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -149,7 +158,7 @@ export def "map-copyrights-caption-format get" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({version_number: $version_number, format: $format} | format pattern "/map/{version_number}/copyrights/caption.{format}") $qp)
+  let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), format: (encode-path-segment $format)} | format pattern "/map/{version_number}/copyrights/caption.{format}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -178,7 +187,7 @@ export def "map-copyrights get" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({version_number: $version_number, min_lon: $min_lon, min_lat: $min_lat, max_lon: $max_lon, max_lat: $max_lat, format: $format} | format pattern "/map/{version_number}/copyrights/{min_lon}/{min_lat}/{max_lon}/{max_lat}.{format}") $qp)
+  let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), min_lon: (encode-path-segment $min_lon), min_lat: (encode-path-segment $min_lat), max_lon: (encode-path-segment $max_lon), max_lat: (encode-path-segment $max_lat), format: (encode-path-segment $format)} | format pattern "/map/{version_number}/copyrights/{min_lon}/{min_lat}/{max_lon}/{max_lat}.{format}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -206,7 +215,7 @@ export def "map-copyrights list" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({version_number: $version_number, zoom: $zoom, x: $x, y: $y, format: $format} | format pattern "/map/{version_number}/copyrights/{zoom}/{x}/{y}.{format}") $qp)
+  let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), zoom: (encode-path-segment $zoom), x: (encode-path-segment $x), y: (encode-path-segment $y), format: (encode-path-segment $format)} | format pattern "/map/{version_number}/copyrights/{zoom}/{x}/{y}.{format}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -225,20 +234,20 @@ export def "map-staticimage get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --layer: string@layer-completer # Layer of image to be rendered. <em>Hybrid</em> and <em>labels</em> are intended for layering with other data and are only available in <em>png</em> format. (default: basic, e.g. basic)
+  --layer: string@layer-completer # Layer of image to be rendered. Hybrid and labels are intended for layering with other data and are only available in png format. (default: basic, e.g. basic)
   --style: string@style-completer # Map style to be returned (default: main, e.g. main)
   --format: string@format-completer # Image format to be returned (default: png, e.g. png)
   --zoom: int@zoom-completer # Zoom level of map image to be returned. (default: 12)
-  --center: string # Coordinates for the center point of the image. Must be used with the <strong>width</strong> and <strong>height</strong> parameters; cannot be used with <strong>bbox</strong>. Uses EPSG:3857 projection (functionally equivalent to EPSG:900910). (e.g. 4.899886, 52.379031)
+  --center: string # Coordinates for the center point of the image. Must be used with the width and height parameters; cannot be used with bbox. Uses EPSG:3857 projection (functionally equivalent to EPSG:900910). (e.g. 4.899886, 52.379031)
   --width: int # Width of the resulting image in pixels. Width must be a positive integer between 1 and 8192. (default: 512, e.g. 512)
   --height: int # Height of the resulting image in pixels. Height must be a positive integer between 1 and 8192. (default: 512, e.g. 512)
-  --bbox: string # Bounding box for the image, using EPSG:3857 projection (functionally equivalent to EPSG:900910). Values <strong>must</strong> be in the order of minLon, minLat, maxLon, maxLat. MaxLat must be greater than minLat. Longitude values can be on both sides of the 180th meridian. Cannot be used with <strong>center</strong>, <strong>width</strong>, or <strong>height</strong> parameters.
-  --view: string@view-completer # Geopolitical view. Determines rendering of disputed areas. See the <a href="/maps-api/maps-api-documentation-raster/raster-tile">documentation</a> for an explanation of how this works in live services. (e.g. Unified)
+  --bbox: string # Bounding box for the image, using EPSG:3857 projection (functionally equivalent to EPSG:900910). Values must be in the order of minLon, minLat, maxLon, maxLat. MaxLat must be greater than minLat. Longitude values can be on both sides of the 180th meridian. Cannot be used with center, width, or height parameters.
+  --view: string@view-completer # Geopolitical view. Determines rendering of disputed areas. See the documentation (/maps-api/maps-api-documentation-raster/raster-tile) for an explanation of how this works in live services. (e.g. Unified)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "layer" $layer "scalar") (serialize-qp "style" $style "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "zoom" $zoom "scalar") (serialize-qp "center" $center "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "bbox" $bbox "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({version_number: $version_number} | format pattern "/map/{version_number}/staticimage") $qp)
+  let full_url = (build-url $base ({version_number: (encode-path-segment $version_number)} | format pattern "/map/{version_number}/staticimage") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -262,13 +271,13 @@ export def "map-tile list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --view: string@view-completer-1 # Geopolitical view. Determines rendering of disputed areas. See the <a href="/maps-api/maps-api-documentation-vector/tile">documentation</a> for an explanation of how this works in live services. (e.g. Unified)
-  --language: string # Language to be used for labels in the response. The default is NGT: Neutral Ground Truth, which uses each place's local official language and script (where available). See the <a href="/maps-api/maps-api-documentation-vector/tile">documentation</a> for a full list of options. (default: NGT)
+  --view: string@view-completer-1 # Geopolitical view. Determines rendering of disputed areas. See the documentation (/maps-api/maps-api-documentation-vector/tile) for an explanation of how this works in live services. (e.g. Unified)
+  --language: string # Language to be used for labels in the response. The default is NGT: Neutral Ground Truth, which uses each place's local official language and script (where available). See the documentation (/maps-api/maps-api-documentation-vector/tile) for a full list of options. (default: NGT)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "view" $view "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({version_number: $version_number, layer: $layer, style: $style, zoom: $zoom, x: $x, y: $y} | format pattern "/map/{version_number}/tile/{layer}/{style}/{zoom}/{x}/{y}.pbf") $qp)
+  let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), layer: (encode-path-segment $layer), style: (encode-path-segment $style), zoom: (encode-path-segment $zoom), x: (encode-path-segment $x), y: (encode-path-segment $y)} | format pattern "/map/{version_number}/tile/{layer}/{style}/{zoom}/{x}/{y}.pbf") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -293,13 +302,13 @@ export def "map-tile get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tile-size: int@tile-size-completer # Tile dimensions in pixels. <em>512</em> is only available for the <em>main</em> style and <em>basic</em> or <em>labels</em> layers. (default: 256)
-  --view: string@view-completer # Geopolitical view. Determines rendering of disputed areas. See the <a href="/maps-sdk-web/functional-examples#geopolitical-views">documentation</a> for an explanation of how this works in live services. (e.g. Unified)
+  --tile-size: int@tile-size-completer # Tile dimensions in pixels. 512 is only available for the main style and basic or labels layers. (default: 256)
+  --view: string@view-completer # Geopolitical view. Determines rendering of disputed areas. See the documentation (/maps-sdk-web/functional-examples#geopolitical-views) for an explanation of how this works in live services. (e.g. Unified)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "tileSize" $tile_size "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({version_number: $version_number, layer: $layer, style: $style, zoom: $zoom, x: $x, y: $y, format: $format} | format pattern "/map/{version_number}/tile/{layer}/{style}/{zoom}/{x}/{y}.{format}") $qp)
+  let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), layer: (encode-path-segment $layer), style: (encode-path-segment $style), zoom: (encode-path-segment $zoom), x: (encode-path-segment $x), y: (encode-path-segment $y), format: (encode-path-segment $format)} | format pattern "/map/{version_number}/tile/{layer}/{style}/{zoom}/{x}/{y}.{format}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -320,8 +329,8 @@ export def "map-wms get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --request: string@request-completer # Request type
-  --srs: string@srs-completer # Projection used in describing the <b>bbox</b> EPSG:3857 is recommended, particularly at higher zoom levels. (Note that EPSG:3857 is functionally equivalent to EPSG:900913/EPSG:3785) (e.g. EPSG:4326)
-  --bbox: string # Bounding box in the projection stated in <b>srs</b> (minLon,minLat,maxLon,maxLat) (e.g. -0.489,51.28,0.236,51.686)
+  --srs: string@srs-completer # Projection used in describing the bbox EPSG:3857 is recommended, particularly at higher zoom levels. (Note that EPSG:3857 is functionally equivalent to EPSG:900913/EPSG:3785) (e.g. EPSG:4326)
+  --bbox: string # Bounding box in the projection stated in srs (minLon,minLat,maxLon,maxLat) (e.g. -0.489,51.28,0.236,51.686)
   --width: int # Width of the resulting image, in pixels Maximum value is 2048 (e.g. 512)
   --height: int # Height of the resulting image, in pixels Maximum value is 2048 (e.g. 512)
   --format: string@format-completer-1 # Image format to be returned (e.g. image/png)
@@ -333,7 +342,7 @@ export def "map-wms get" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "request" $request "scalar") (serialize-qp "srs" $srs "scalar") (serialize-qp "bbox" $bbox "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "layers" $layers "scalar") (serialize-qp "styles" $styles "scalar") (serialize-qp "service" $service "scalar") (serialize-qp "version" $version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({version_number: $version_number} | format pattern "/map/{version_number}/wms/") $qp)
+  let full_url = (build-url $base ({version_number: (encode-path-segment $version_number)} | format pattern "/map/{version_number}/wms/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -360,7 +369,7 @@ export def "map-wms get-capabilities" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "service" $service "scalar") (serialize-qp "request" $request "scalar") (serialize-qp "version" $version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({version_number: $version_number} | format pattern "/map/{version_number}/wms//") $qp)
+  let full_url = (build-url $base ({version_number: (encode-path-segment $version_number)} | format pattern "/map/{version_number}/wms//") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -369,7 +378,7 @@ export def "map-wms get-capabilities" [
 # WMTS
 #
 # GET /map/{versionNumber}/wmts/{key}/{wmtsVersion}/WMTSCapabilities.xml
-export def "map-wmts-wmts-capabilitiesxml get" [
+export def "map-wmts-wmts-capabilities-xml get" [
   version_number: int
   key: string
   wmts_version: string
@@ -384,7 +393,7 @@ export def "map-wmts-wmts-capabilitiesxml get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({version_number: $version_number, key: $key, wmts_version: $wmts_version} | format pattern "/map/{version_number}/wmts/{key}/{wmts_version}/WMTSCapabilities.xml"))
+  let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), key: (encode-path-segment $key), wmts_version: (encode-path-segment $wmts_version)} | format pattern "/map/{version_number}/wmts/{key}/{wmts_version}/WMTSCapabilities.xml"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

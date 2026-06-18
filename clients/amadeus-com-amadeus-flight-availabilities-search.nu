@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -92,7 +101,7 @@ export def commands []: nothing -> table {
 #
 # POST /shopping/availability/flight-availabilities
 # operationId: searchFlightAvailabilities
-# --originDestinations item shape: {destinationLocationCode?: string, excludedConnectionPoints?: list, id?: string, includedConnectionPoints?: list, originLocationCode?: string, arrivalDateTime?: record, departureDateTime?: record}
+# --originDestinations item shape: {destinationLocationCode?: string, excludedConnectionPoints?: list<string>, id?: string, includedConnectionPoints?: list<string>, originLocationCode?: string, arrivalDateTime?: record, departureDateTime?: record}
 # --travelers item shape: {associatedAdultId?: string, id: string, travelerType: "ADULT"|"CHILD"|"SENIOR"|"YOUNG"|"HELD_INFANT"|"SEATED_INFANT"|"STUDENT"}
 export def "shopping-availability-flight-availabilities list" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -104,20 +113,20 @@ export def "shopping-availability-flight-availabilities list" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-http-method-override: string # the HTTP method to apply
-  origin_destinations: list # Origins and Destinations must be properly ordered in time (chronological order in accordance with the timezone of each location) to describe the journey consistently. Dates and times must not be past nor more than 365 days in the future, according to provider settings.Number of Origins and Destinations must not exceed the limit defined in provider settings. — item shape: {destinationLocationCode?: string, excludedConnectionPoints?: list, id?: string, includedConnectionPoints?: list, originLocationCode?: string, arrivalDateTime?: record, departureDateTime?: record}
+  origin_destinations: list # Origins and Destinations must be properly ordered in time (chronological order in accordance with the timezone of each location) to describe the journey consistently. Dates and times must not be past nor more than 365 days in the future, according to provider settings.Number of Origins and Destinations must not exceed the limit defined in provider settings. — item shape: {destinationLocationCode?: string, excludedConnectionPoints?: list<string>, id?: string, includedConnectionPoints?: list<string>, originLocationCode?: string, arrivalDateTime?: record, departureDateTime?: record}
   --search-criteria: any
-  sources: list # Allows enable one or more sources. If present in the list, these sources will be called by the system.  GDS : Full service carriers (e.g. [GDS])
+  sources: list<string> # Allows enable one or more sources. If present in the list, these sources will be called by the system. GDS : Full service carriers (e.g. [GDS])
   travelers: list # List of travelers composing the travel — item shape: {associatedAdultId?: string, id: string, travelerType: "ADULT"|"CHILD"|"SENIOR"|"YOUNG"|"HELD_INFANT"|"SEATED_INFANT"|"STUDENT"}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/shopping/availability/flight-availabilities")
-  let body = {"originDestinations": $origin_destinations, "searchCriteria": $search_criteria, "sources": $sources, "travelers": $travelers} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-HTTP-Method-Override": $x_http_method_override} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"originDestinations": $origin_destinations, "searchCriteria": $search_criteria, "sources": $sources, "travelers": $travelers} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/vnd.amadeus+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-HTTP-Method-Override": $x_http_method_override} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

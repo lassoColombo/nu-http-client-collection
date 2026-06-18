@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -113,11 +122,11 @@ export def "aggregation-recommendations get-agg" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "startNum" $start_num "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({agg_id: $agg_id} | format pattern "/v2/aggregation/{agg_id}/recommendations") $qp)
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({agg_id: (encode-path-segment $agg_id)} | format pattern "/v2/aggregation/{agg_id}/recommendations") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -142,10 +151,10 @@ export def "channels get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "exploreOnly" $explore_only "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/channels" $qp)
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -168,10 +177,10 @@ export def "history get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/history")
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -195,11 +204,11 @@ export def "organizations-categories-recommendations get" [
 ]: nothing -> record<attributes: record<displayType: string, title: string, type: string>, errors: list<record>, href: string, items: table<attributes: record, errors: list, href: string, items: list, links: record, version: string>, links: record<more: list<record>>, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org_id: $org_id, category: $category} | format pattern "/v2/organizations/{org_id}/categories/{category}/recommendations"))
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({org_id: (encode-path-segment $org_id), category: (encode-path-segment $category)} | format pattern "/v2/organizations/{org_id}/categories/{category}/recommendations"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -207,7 +216,7 @@ export def "organizations-categories-recommendations get" [
 #
 # GET /v2/organizations/{orgId}/recommendations
 # operationId: getOrganizationOverview
-export def "organizations-recommendations get-organization-overview" [
+export def "organizations-recommendations get-overview" [
   org_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -222,11 +231,11 @@ export def "organizations-recommendations get-organization-overview" [
 ]: nothing -> record<attributes: record<brand: record<band: string, call: string, frequency: string, marketCity: string, marketState: string, name: string, tagline: string>, home: bool, type: string>, errors: list<record>, href: string, items: table<attributes: record, errors: list, href: string, items: list, links: record, version: string>, links: record<image: list<record>, related: list<record>, web: list<record>>, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/v2/organizations/{org_id}/recommendations"))
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({org_id: (encode-path-segment $org_id)} | format pattern "/v2/organizations/{org_id}/recommendations"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -249,10 +258,10 @@ export def "promo-recommendations get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/promo/recommendations")
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -281,12 +290,13 @@ export def "ratings create" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "channel" $channel "scalar") (serialize-qp "recommend" $recommend "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/ratings" $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $authorization, "X-Advertising-ID": $x_advertising_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Authorization": $authorization, "X-Advertising-ID": $x_advertising_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get a list of media for the logged-in user from NPR's recommendation engine
@@ -313,10 +323,10 @@ export def "recommendations get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "channel" $channel "scalar") (serialize-qp "sharedMediaId" $shared_media_id "scalar") (serialize-qp "notifiedMediaId" $notified_media_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/recommendations" $qp)
-  let extra_headers = {"Authorization": $authorization, "X-Advertising-ID": $x_advertising_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "X-Advertising-ID": $x_advertising_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -341,9 +351,9 @@ export def "search-recommendations get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "searchTerms" $search_terms "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/search/recommendations" $qp)
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

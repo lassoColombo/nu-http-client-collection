@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -78,7 +87,7 @@ def accept-completer-2 [] { ["application/vnd.waterlinked.operation_response+jso
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "about aboutApiVersion" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "about version-aboutapi" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -102,7 +111,7 @@ export def commands []: nothing -> table {
 #
 # GET /api/
 # operationId: about#ApiVersion
-export def "about aboutApiVersion" [
+export def "about version-aboutapi" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -124,7 +133,7 @@ export def "about aboutApiVersion" [
 #
 # GET /api/v1/about
 # operationId: about#Get
-export def "about aboutGet" [
+export def "about get-aboutget" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -146,7 +155,7 @@ export def "about aboutGet" [
 #
 # POST /api/v1/about/factoryreset
 # operationId: about#FactoryReset
-export def "about-factoryreset aboutFactoryReset" [
+export def "about-factoryreset reset-aboutfactory" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -168,7 +177,7 @@ export def "about-factoryreset aboutFactoryReset" [
 #
 # GET /api/v1/about/led
 # operationId: about#LED
-export def "about-led aboutLED" [
+export def "about-led get-aboutled" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -190,7 +199,7 @@ export def "about-led aboutLED" [
 #
 # GET /api/v1/about/status
 # operationId: about#Status
-export def "about-status aboutStatus" [
+export def "about-status get-aboutstatus" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -212,7 +221,7 @@ export def "about-status aboutStatus" [
 #
 # GET /api/v1/about/temperature
 # operationId: about#Temperature
-export def "about-temperature aboutTemperature" [
+export def "about-temperature get-abouttemperature" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -234,7 +243,7 @@ export def "about-temperature aboutTemperature" [
 #
 # GET /api/v1/config/antenna
 # operationId: config#GetAntennaConfig
-export def "config-antenna configGetAntennaConfig" [
+export def "config-antenna get-configget" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -256,7 +265,7 @@ export def "config-antenna configGetAntennaConfig" [
 #
 # PUT /api/v1/config/antenna
 # operationId: config#ModifyAntennaConfig
-export def "config-antenna configModifyAntennaConfig" [
+export def "config-antenna update-configmodify" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -274,18 +283,18 @@ export def "config-antenna configModifyAntennaConfig" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/config/antenna")
-  let body = {"antenna_rotation": $antenna_rotation, "depth": $depth, "x": $x, "y": $y} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"antenna_rotation": $antenna_rotation, "depth": $depth, "x": $x, "y": $y} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/vnd.waterlinked.operation_response+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get config
 #
 # GET /api/v1/config/generic
 # operationId: config#Get
-export def "config-generic configGet" [
+export def "config-generic get-configget" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -308,7 +317,7 @@ export def "config-generic configGet" [
 #
 # PUT /api/v1/config/generic
 # operationId: config#Modify
-export def "config-generic configModify" [
+export def "config-generic update-configmodify" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -342,18 +351,18 @@ export def "config-generic configModify" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/config/generic")
-  let body = {"antenna_enabled": $antenna_enabled, "channel": $channel, "compass": $compass, "environment": $environment, "external_pps_enabled": $external_pps_enabled, "gps": $gps, "imu_vehicle_enabled": $imu_vehicle_enabled, "locator_type": $locator_type, "range_max_x": $range_max_x, "range_max_y": $range_max_y, "range_max_z": $range_max_z, "range_min_x": $range_min_x, "range_min_y": $range_min_y, "search_direction": $search_direction, "search_radius": $search_radius, "search_sector": $search_sector, "speed_of_sound": $speed_of_sound, "static_lat": $static_lat, "static_lon": $static_lon, "static_orientation": $static_orientation} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"antenna_enabled": $antenna_enabled, "channel": $channel, "compass": $compass, "environment": $environment, "external_pps_enabled": $external_pps_enabled, "gps": $gps, "imu_vehicle_enabled": $imu_vehicle_enabled, "locator_type": $locator_type, "range_max_x": $range_max_x, "range_max_y": $range_max_y, "range_max_z": $range_max_z, "range_min_x": $range_min_x, "range_min_y": $range_min_y, "search_direction": $search_direction, "search_radius": $search_radius, "search_sector": $search_sector, "speed_of_sound": $speed_of_sound, "static_lat": $static_lat, "static_lon": $static_lon, "static_orientation": $static_orientation} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/vnd.waterlinked.operation_response+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GetIP config
 #
 # GET /api/v1/config/ip
 # operationId: config#GetIP
-export def "config-ip configGetIP" [
+export def "config-ip get-configget" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -375,7 +384,7 @@ export def "config-ip configGetIP" [
 #
 # PUT /api/v1/config/ip
 # operationId: config#ModifyIP
-export def "config-ip configModifyIP" [
+export def "config-ip update-configmodify" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -394,18 +403,18 @@ export def "config-ip configModifyIP" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/config/ip")
-  let body = {"address": $address, "dhcp": $dhcp, "dns": $dns, "gateway": $gateway, "prefix": $prefix} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"address": $address, "dhcp": $dhcp, "dns": $dns, "gateway": $gateway, "prefix": $prefix} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/vnd.waterlinked.operation_response+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # ListReceiver config
 #
 # GET /api/v1/config/receivers/
 # operationId: config#ListReceiver
-export def "config-receivers configListReceiver" [
+export def "config-receivers get-configlist" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -427,7 +436,7 @@ export def "config-receivers configListReceiver" [
 #
 # GET /api/v1/config/receivers/{ID}
 # operationId: config#ShowReceiver
-export def "config-receivers configShowReceiver" [
+export def "config-receivers get-configshow" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -440,7 +449,7 @@ export def "config-receivers configShowReceiver" [
 ]: nothing -> record<id: int, x: float, y: float, z: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/config/receivers/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/config/receivers/{id}"))
   let accept_val = "application/vnd.waterlinked.receiver+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -450,7 +459,7 @@ export def "config-receivers configShowReceiver" [
 #
 # PUT /api/v1/config/receivers/{ID}
 # operationId: config#ModifyReceiver
-export def "config-receivers configModifyReceiver" [
+export def "config-receivers update-configmodify" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -468,19 +477,19 @@ export def "config-receivers configModifyReceiver" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/config/receivers/{id}"))
-  let body = {"id": $body_id, "x": $x, "y": $y, "z": $z} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/config/receivers/{id}"))
+  let req_body = {"id": $body_id, "x": $x, "y": $y, "z": $z} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GetWIFI config
 #
 # GET /api/v1/config/wifi
 # operationId: config#GetWIFI
-export def "config-wifi configGetWIFI" [
+export def "config-wifi get-configget" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -502,7 +511,7 @@ export def "config-wifi configGetWIFI" [
 #
 # PUT /api/v1/config/wifi
 # operationId: config#ModifyWIFI
-export def "config-wifi configModifyWIFI" [
+export def "config-wifi update-configmodify" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -519,18 +528,18 @@ export def "config-wifi configModifyWIFI" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/config/wifi")
-  let body = {"mode": $mode, "password": $password, "ssid": $ssid} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"mode": $mode, "password": $password, "ssid": $ssid} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/vnd.waterlinked.operation_response+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # SetDepth external
 #
 # PUT /api/v1/external/depth
 # operationId: external#SetDepth
-export def "external-depth externalSetDepth" [
+export def "external-depth update-externalset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -546,18 +555,18 @@ export def "external-depth externalSetDepth" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/external/depth")
-  let body = {"depth": $depth, "temp": $temp} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"depth": $depth, "temp": $temp} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/vnd.waterlinked.operation_response+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GetVehicleIMU external
 #
 # GET /api/v1/external/imu
 # operationId: external#GetVehicleIMU
-export def "external-imu externalGetVehicleIMU" [
+export def "external-imu get-externalget-vehicle" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -579,7 +588,7 @@ export def "external-imu externalGetVehicleIMU" [
 #
 # PUT /api/v1/external/imu
 # operationId: external#SetVehicleIMU
-export def "external-imu externalSetVehicleIMU" [
+export def "external-imu update-externalset-vehicle" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -599,18 +608,18 @@ export def "external-imu externalSetVehicleIMU" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/external/imu")
-  let body = {"pitch": $pitch, "roll": $roll, "x": $x, "y": $y, "yaw": $yaw, "z": $z} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"pitch": $pitch, "roll": $roll, "x": $x, "y": $y, "yaw": $yaw, "z": $z} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/vnd.waterlinked.operation_response+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # SetMaster external
 #
 # PUT /api/v1/external/master
 # operationId: external#SetMaster
-export def "external-master externalSetMaster" [
+export def "external-master update-externalset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -632,18 +641,18 @@ export def "external-master externalSetMaster" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/external/master")
-  let body = {"cog": $cog, "fix_quality": $fix_quality, "hdop": $hdop, "lat": $lat, "lon": $lon, "numsats": $numsats, "orientation": $orientation, "sog": $sog} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"cog": $cog, "fix_quality": $fix_quality, "hdop": $hdop, "lat": $lat, "lon": $lon, "numsats": $numsats, "orientation": $orientation, "sog": $sog} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/vnd.waterlinked.operation_response+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GetOrientation external
 #
 # GET /api/v1/external/orientation
 # operationId: external#GetOrientation
-export def "external-orientation externalGetOrientation" [
+export def "external-orientation get-externalget" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -666,7 +675,7 @@ export def "external-orientation externalGetOrientation" [
 #
 # PUT /api/v1/external/orientation
 # operationId: external#SetOrientation
-export def "external-orientation externalSetOrientation" [
+export def "external-orientation update-externalset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -681,18 +690,18 @@ export def "external-orientation externalSetOrientation" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/external/orientation")
-  let body = {"orientation": $orientation} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"orientation": $orientation} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/vnd.waterlinked.operation_response+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get imu
 #
 # GET /api/v1/imu/calibrate
 # operationId: imu#Get
-export def "imu-calibrate imuGet" [
+export def "imu-calibrate get-imuget" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -714,7 +723,7 @@ export def "imu-calibrate imuGet" [
 #
 # POST /api/v1/imu/calibrate
 # operationId: imu#Calibrate
-export def "imu-calibrate imuCalibrate" [
+export def "imu-calibrate create-imucalibrate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -729,18 +738,18 @@ export def "imu-calibrate imuCalibrate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/imu/calibrate")
-  let body = {"action": $action} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"action": $action} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # ResetGyro imu
 #
 # POST /api/v1/imu/resetgyros
 # operationId: imu#ResetGyro
-export def "imu-resetgyros imuResetGyro" [
+export def "imu-resetgyros create-imureset-gyro" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -762,7 +771,7 @@ export def "imu-resetgyros imuResetGyro" [
 #
 # POST /api/v1/imu/setnorth
 # operationId: imu#SetNorth
-export def "imu-setnorth imuSetNorth" [
+export def "imu-setnorth create-imuset-north" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -777,18 +786,18 @@ export def "imu-setnorth imuSetNorth" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/imu/setnorth")
-  let body = {"heading": $heading} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"heading": $heading} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List poi
 #
 # GET /api/v1/poi/
 # operationId: poi#List
-export def "poi poiList" [
+export def "poi get-poilist" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -810,7 +819,7 @@ export def "poi poiList" [
 #
 # POST /api/v1/poi/
 # operationId: poi#Create
-export def "poi poiCreate" [
+export def "poi create-poicreate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -831,18 +840,18 @@ export def "poi poiCreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/poi/")
-  let body = {"depth": $depth, "icon": $icon, "id": $id, "lat": $lat, "lng": $lng, "name": $name, "visible": $visible} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"depth": $depth, "icon": $icon, "id": $id, "lat": $lat, "lng": $lng, "name": $name, "visible": $visible} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/vnd.goa.error"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete poi
 #
 # DELETE /api/v1/poi/{ID}
 # operationId: poi#Delete
-export def "poi poiDelete" [
+export def "poi delete-poidelete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -855,7 +864,7 @@ export def "poi poiDelete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/poi/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/poi/{id}"))
   let accept_val = "application/vnd.goa.error"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -865,7 +874,7 @@ export def "poi poiDelete" [
 #
 # GET /api/v1/poi/{ID}
 # operationId: poi#Show
-export def "poi poiShow" [
+export def "poi get-poishow" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -878,7 +887,7 @@ export def "poi poiShow" [
 ]: nothing -> record<depth: float, icon: string, id: int, lat: float, lng: float, name: string, visible: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/poi/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/poi/{id}"))
   let accept_val = "application/vnd.waterlinked.poi+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -888,7 +897,7 @@ export def "poi poiShow" [
 #
 # PATCH /api/v1/poi/{ID}
 # operationId: poi#Update
-export def "poi poiUpdate" [
+export def "poi update-poiupdate" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -909,19 +918,19 @@ export def "poi poiUpdate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/poi/{id}"))
-  let body = {"depth": $depth, "icon": $icon, "id": $body_id, "lat": $lat, "lng": $lng, "name": $name, "visible": $visible} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/poi/{id}"))
+  let req_body = {"depth": $depth, "icon": $icon, "id": $body_id, "lat": $lat, "lng": $lng, "name": $name, "visible": $visible} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/vnd.goa.error"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # AcousticFiltered position
 #
 # GET /api/v1/position/acoustic/filtered
 # operationId: position#AcousticFiltered
-export def "position-acoustic-filtered positionAcousticFiltered" [
+export def "position-acoustic-filtered get-positionacoustic" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -943,7 +952,7 @@ export def "position-acoustic-filtered positionAcousticFiltered" [
 #
 # GET /api/v1/position/acoustic/raw
 # operationId: position#AcousticRaw
-export def "position-acoustic-raw positionAcousticRaw" [
+export def "position-acoustic-raw get-positionacoustic" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -965,7 +974,7 @@ export def "position-acoustic-raw positionAcousticRaw" [
 #
 # GET /api/v1/position/global
 # operationId: position#Get
-export def "position-global positionGet" [
+export def "position-global get-positionget" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -987,7 +996,7 @@ export def "position-global positionGet" [
 #
 # GET /api/v1/position/master
 # operationId: position#GetMaster
-export def "position-master positionGetMaster" [
+export def "position-master get-positionget" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1009,7 +1018,7 @@ export def "position-master positionGetMaster" [
 #
 # GET /api/v1/status_report/
 # operationId: status_report#Get
-export def "status-report reportGet" [
+export def "status-report get-reportget" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1031,7 +1040,7 @@ export def "status-report reportGet" [
 #
 # GET /api/v1/warnings/
 # operationId: warnings#Get
-export def "warnings warningsGet" [
+export def "warnings get-warningsget" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

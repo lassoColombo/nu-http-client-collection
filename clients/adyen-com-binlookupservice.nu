@@ -13,6 +13,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   match $scheme {
     "x-api-key" => { {headers: {X-API-Key: $token_val}, query: ""} }
     "basic" => { {headers: {Authorization: $"Basic ($token_val)"}, query: ""} }
+    "basic-credentials" => { {headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: ""} }
     "none" => { {headers: {}, query: ""} }
     _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
   }
@@ -34,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
     "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
     _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -64,7 +74,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 }
 
 def base-url-completer [] { ["https://pal-test.adyen.com/pal/servlet/BinLookup/v54"] }
-def auth-scheme-completer [] { ["x-api-key" "basic"] }
+def auth-scheme-completer [] { ["x-api-key" "basic" "basic-credentials"] }
 
 # Completers for enum parameters
 def shopper-interaction-completer [] { ["ContAuth" "Ecommerce" "Moto" "POS"] }
@@ -72,7 +82,7 @@ def shopper-interaction-completer [] { ["ContAuth" "Ecommerce" "Moto" "POS"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get3ds-availability post-get3dsAvailability" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get3ds-availability create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -96,7 +106,7 @@ export def commands []: nothing -> table {
 #
 # POST /get3dsAvailability
 # operationId: post-get3dsAvailability
-export def "get3ds-availability post-get3dsAvailability" [
+export def "get3ds-availability create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -105,8 +115,8 @@ export def "get3ds-availability post-get3dsAvailability" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --additional-data: record # This field contains additional data, which may be required for a particular request.  The `additionalData` object consists of entries, each of which includes the key and value.
-  --brands: list # List of brands.
+  --additional-data: record # This field contains additional data, which may be required for a particular request. The `additionalData` object consists of entries, each of which includes the key and value.
+  --brands: list<string> # List of brands.
   --card-number: string # Card number or BIN.
   merchant_account: string # The merchant account identifier.
   --recurring-detail-reference: string # A recurring detail reference corresponding to a card.
@@ -116,11 +126,11 @@ export def "get3ds-availability post-get3dsAvailability" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/get3dsAvailability")
-  let body = {"additionalData": $additional_data, "brands": $brands, "cardNumber": $card_number, "merchantAccount": $merchant_account, "recurringDetailReference": $recurring_detail_reference, "shopperReference": $shopper_reference} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"additionalData": $additional_data, "brands": $brands, "cardNumber": $card_number, "merchantAccount": $merchant_account, "recurringDetailReference": $recurring_detail_reference, "shopperReference": $shopper_reference} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get a fees cost estimate
@@ -131,7 +141,7 @@ export def "get3ds-availability post-get3dsAvailability" [
 # --assumptions shape: {assume3DSecureAuthenticated?: bool, assumeLevel3Data?: bool, installments?: int}
 # --merchantDetails shape: {countryCode?: string, enrolledIn3DSecure?: bool, mcc?: string}
 # --recurring shape: {contract?: "ONECLICK"|"RECURRING"|"PAYOUT", recurringDetailName?: string, recurringExpiry?: string, recurringFrequency?: string, tokenService?: "VISATOKENSERVICE"|"MCTOKENSERVICE"}
-export def "get-cost-estimate post-getCostEstimate" [
+export def "get-cost-estimate create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -142,22 +152,22 @@ export def "get-cost-estimate post-getCostEstimate" [
   --dry-run(-n) # Return the request that would be sent without executing it
   amount: record # shape: {currency: string, value: int}
   --assumptions: record # shape: {assume3DSecureAuthenticated?: bool, assumeLevel3Data?: bool, installments?: int}
-  --card-number: string # The card number (4-19 characters) for PCI compliant use cases. Do not use any separators.  > Either the `cardNumber` or `encryptedCardNumber` field must be provided in a payment request.
-  --encrypted-card-number: string # Encrypted data that stores card information for non PCI-compliant use cases. The encrypted data must be created with the Checkout Card Component or Secured Fields Component, and must contain the `encryptedCardNumber` field.  > Either the `cardNumber` or `encryptedCardNumber` field must be provided in a payment request.
+  --card-number: string # The card number (4-19 characters) for PCI compliant use cases. Do not use any separators. > Either the `cardNumber` or `encryptedCardNumber` field must be provided in a payment request.
+  --encrypted-card-number: string # Encrypted data that stores card information for non PCI-compliant use cases. The encrypted data must be created with the Checkout Card Component or Secured Fields Component, and must contain the `encryptedCardNumber` field. > Either the `cardNumber` or `encryptedCardNumber` field must be provided in a payment request.
   merchant_account: string # The merchant account identifier you want to process the (transaction) request with.
   --merchant-details: record # shape: {countryCode?: string, enrolledIn3DSecure?: bool, mcc?: string}
   --recurring: record # shape: {contract?: "ONECLICK"|"RECURRING"|"PAYOUT", recurringDetailName?: string, recurringExpiry?: string, recurringFrequency?: string, tokenService?: "VISATOKENSERVICE"|"MCTOKENSERVICE"}
   --selected-recurring-detail-reference: string # The `recurringDetailReference` you want to use for this cost estimate. The value `LATEST` can be used to select the most recently stored recurring detail.
-  --shopper-interaction: string@shopper-interaction-completer # Specifies the sales channel, through which the shopper gives their card details, and whether the shopper is a returning customer. For the web service API, Adyen assumes Ecommerce shopper interaction by default.  This field has the following possible values: * `Ecommerce` - Online transactions where the cardholder is present (online). For better authorisation rates, we recommend sending the card security code (CSC) along with the request. * `ContAuth` - Card on file and/or subscription transactions, where the card holder is known to the merchant (returning customer). If the shopper is present (online), you can supply also the CSC to improve authorisation (one-click payment). * `Moto` - Mail-order and telephone-order transactions where the shopper is in contact with the merchant via email or telephone. * `POS` - Point-of-sale transactions where the shopper is physically present to make a payment using a secure payment terminal.
-  --shopper-reference: string # Required for recurring payments.  Your reference to uniquely identify this shopper, for example user ID or account ID. Minimum length: 3 characters. > Your reference must not include personally identifiable information (PII), for example name or email address.
+  --shopper-interaction: string@shopper-interaction-completer # Specifies the sales channel, through which the shopper gives their card details, and whether the shopper is a returning customer. For the web service API, Adyen assumes Ecommerce shopper interaction by default. This field has the following possible values: * `Ecommerce` - Online transactions where the cardholder is present (online). For better authorisation rates, we recommend sending the card security code (CSC) along with the request. * `ContAuth` - Card on file and/or subscription transactions, where the card holder is known to the merchant (returning customer). If the shopper is present (online), you can supply also the CSC to improve authorisation (one-click payment). * `Moto` - Mail-order and telephone-order transactions where the shopper is in contact with the merchant via email or telephone. * `POS` - Point-of-sale transactions where the shopper is physically present to make a payment using a secure payment terminal.
+  --shopper-reference: string # Required for recurring payments. Your reference to uniquely identify this shopper, for example user ID or account ID. Minimum length: 3 characters. > Your reference must not include personally identifiable information (PII), for example name or email address.
 ]: any -> record<cardBin: record<bin: string, commercial: bool, fundingSource: string, fundsAvailability: string, issuerBin: string, issuingBank: string, issuingCountry: string, issuingCurrency: string, paymentMethod: string, payoutEligible: string, summary: string>, costEstimateAmount: record<currency: string, value: int>, costEstimateReference: string, resultCode: string, surchargeType: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/getCostEstimate")
-  let body = {"amount": $amount, "assumptions": $assumptions, "cardNumber": $card_number, "encryptedCardNumber": $encrypted_card_number, "merchantAccount": $merchant_account, "merchantDetails": $merchant_details, "recurring": $recurring, "selectedRecurringDetailReference": $selected_recurring_detail_reference, "shopperInteraction": $shopper_interaction, "shopperReference": $shopper_reference} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"amount": $amount, "assumptions": $assumptions, "cardNumber": $card_number, "encryptedCardNumber": $encrypted_card_number, "merchantAccount": $merchant_account, "merchantDetails": $merchant_details, "recurring": $recurring, "selectedRecurringDetailReference": $selected_recurring_detail_reference, "shopperInteraction": $shopper_interaction, "shopperReference": $shopper_reference} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

@@ -36,6 +36,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -63,6 +72,33 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
+# Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
+# the field names whose value should be read from disk as bytes; every
+# other field is sent as a text part (records/lists JSON-stringified).
+# Returns {content_type, body} ready to pass to `do-request`.
+def build-multipart-body [parts: record, file_fields: list<string>]: nothing -> record {
+  let boundary = $"----nu-(random chars --length 24)"
+  let crlf = "\r\n"
+  let chunks = ($parts | transpose k v | where {|p| $p.v != null} | each {|p|
+    let name = $p.k
+    let val = $p.v
+    if $name in $file_fields {
+      let filename = ($val | path basename)
+      let bytes = (open --raw $val | into binary | collect)
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"; filename=\"($filename)\"($crlf)Content-Type: application/octet-stream($crlf)($crlf)" | into binary)
+      $head ++ $bytes ++ ($crlf | into binary)
+    } else {
+      let dt = ($val | describe)
+      let s = if (($dt | str starts-with "record") or ($dt | str starts-with "list") or ($dt | str starts-with "table")) { ($val | to json --raw) } else { ($val | into string) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"($crlf)($crlf)" | into binary)
+      $head ++ ($"($s)($crlf)" | into binary)
+    }
+  })
+  let trailer = ($"--($boundary)--($crlf)" | into binary)
+  let body = ($chunks | reduce --fold (0x[] | into binary) {|chunk, acc| $acc ++ $chunk }) ++ $trailer
+  {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
+}
+
 def base-url-completer [] { ["https://run.byvalue.org" "https://qrcode3.p.rapidapi.com"] }
 def auth-scheme-completer [] { ["byvalue-token" "x-rapidapi-key"] }
 
@@ -73,7 +109,7 @@ def accept-completer-1 [] { ["application/pdf" "application/postscript" "image/j
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "batch-qrcode post" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "batch-qrcode create-qr-code" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -98,7 +134,7 @@ export def commands []: nothing -> table {
 # POST /batch/qrcode
 # operationId: qrCodeBatch_batch_qrcode_post
 # --items item shape: {data: any, image?: any, output?: any, size?: any, style?: any}
-export def "batch-qrcode post" [
+export def "batch-qrcode create-qr-code" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -115,18 +151,18 @@ export def "batch-qrcode post" [
   let auth = (build-auth $token ($auth_scheme | default "byvalue-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/batch/qrcode")
-  let body = {"items": $items, "output": $output} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"items": $items, "output": $output} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/gzip")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List all images
 #
 # GET /images
 # operationId: imageListAll_images_get
-export def "images list" [
+export def "images list-list-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -148,7 +184,7 @@ export def "images list" [
 #
 # POST /images
 # operationId: imageUpload_images_post
-export def "images post" [
+export def "images upload-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -163,18 +199,19 @@ export def "images post" [
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/images")
-  let body = {"image": $image} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"image": $image} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body ["image"])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # Delete image
 #
 # DELETE /images/{id}
 # operationId: imageDelete_images__id__delete
-export def "images delete" [
+export def "images delete-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -187,7 +224,7 @@ export def "images delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/images/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/images/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -197,7 +234,7 @@ export def "images delete" [
 #
 # GET /images/{id}
 # operationId: imageList_images__id__get
-export def "images get" [
+export def "images list-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -210,7 +247,7 @@ export def "images get" [
 ]: nothing -> record<created: string, id: string, size: int, source: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/images/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/images/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -220,7 +257,7 @@ export def "images get" [
 #
 # POST /qrcode
 # operationId: dispatcher_qrcode_post
-export def "qrcode post" [
+export def "qrcode create-dispatcher" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -234,24 +271,24 @@ export def "qrcode post" [
   --image: any # `image` property allows you to set parameters of a custom image (e.g. your company logo, icon etc.) placed in the center of the generated QR Code.
   --output: any # `output` property allows you to specify the name and extension (type) of the file returned by the API (default: {filename: qrcode, format: svg})
   --size: any # `size` property allows you to set the values that define the sizes of the generated QR Code. (default: {error_correction: M, quiet_zone: 4, width: 200})
-  --style: any # `style` property allows you to select the appearance parameters of the modules and eyes of the generated QR Code.  All color specifications can be defined via: * CSS3 name: `Black`, `azure`, ... * hex value: `0x000`, `#FFFFFF`, `7fffd4`, ... * RGB/RGBA strings: `rgb(255, 255, 255)`, `rgba(255, 255, 255, 0.5)`, ... * HSL strings: `hsl(270, 60%, 70%)`, `hsl(270, 60%, 70%, .5)`, ...  Color values can be obtained from any online color picker like <a href="https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_Colors/Color_picker_tool" rel="noopener noreferrer" target="_blank" >developer.mozilla.org</a>. (default: {background: {}, inner_eye: {shape: default}, module: {color: black, shape: default}, outer_eye: {shape: default}})
+  --style: any # `style` property allows you to select the appearance parameters of the modules and eyes of the generated QR Code. All color specifications can be defined via: * CSS3 name: `Black`, `azure`, ... * hex value: `0x000`, `#FFFFFF`, `7fffd4`, ... * RGB/RGBA strings: `rgb(255, 255, 255)`, `rgba(255, 255, 255, 0.5)`, ... * HSL strings: `hsl(270, 60%, 70%)`, `hsl(270, 60%, 70%, .5)`, ... Color values can be obtained from any online color picker like developer.mozilla.org (https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_Colors/Color_picker_tool). (default: {background: {}, inner_eye: {shape: default}, module: {color: black, shape: default}, outer_eye: {shape: default}})
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "byvalue-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/qrcode")
-  let body = {"data": $data, "image": $image, "output": $output, "size": $size, "style": $style} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"data": $data, "image": $image, "output": $output, "size": $size, "style": $style} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/pdf")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Contact QR Code
 #
 # POST /qrcode/contact
 # operationId: dispatcher_qrcode_contact_post
-export def "qrcode-contact post" [
+export def "qrcode-contact create-dispatcher" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -265,24 +302,24 @@ export def "qrcode-contact post" [
   --image: any # `image` property allows you to set parameters of a custom image (e.g. your company logo, icon etc.) placed in the center of the generated QR Code.
   --output: any # `output` property allows you to specify the name and extension (type) of the file returned by the API (default: {filename: qrcode, format: svg})
   --size: any # `size` property allows you to set the values that define the sizes of the generated QR Code. (default: {error_correction: M, quiet_zone: 4, width: 200})
-  --style: any # `style` property allows you to select the appearance parameters of the modules and eyes of the generated QR Code.  All color specifications can be defined via: * CSS3 name: `Black`, `azure`, ... * hex value: `0x000`, `#FFFFFF`, `7fffd4`, ... * RGB/RGBA strings: `rgb(255, 255, 255)`, `rgba(255, 255, 255, 0.5)`, ... * HSL strings: `hsl(270, 60%, 70%)`, `hsl(270, 60%, 70%, .5)`, ...  Color values can be obtained from any online color picker like <a href="https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_Colors/Color_picker_tool" rel="noopener noreferrer" target="_blank" >developer.mozilla.org</a>. (default: {background: {}, inner_eye: {shape: default}, module: {color: black, shape: default}, outer_eye: {shape: default}})
+  --style: any # `style` property allows you to select the appearance parameters of the modules and eyes of the generated QR Code. All color specifications can be defined via: * CSS3 name: `Black`, `azure`, ... * hex value: `0x000`, `#FFFFFF`, `7fffd4`, ... * RGB/RGBA strings: `rgb(255, 255, 255)`, `rgba(255, 255, 255, 0.5)`, ... * HSL strings: `hsl(270, 60%, 70%)`, `hsl(270, 60%, 70%, .5)`, ... Color values can be obtained from any online color picker like developer.mozilla.org (https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_Colors/Color_picker_tool). (default: {background: {}, inner_eye: {shape: default}, module: {color: black, shape: default}, outer_eye: {shape: default}})
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "byvalue-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/qrcode/contact")
-  let body = {"data": $data, "image": $image, "output": $output, "size": $size, "style": $style} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"data": $data, "image": $image, "output": $output, "size": $size, "style": $style} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/pdf")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Cryptocurrency payment QR Code
 #
 # POST /qrcode/crypto
 # operationId: dispatcher_qrcode_crypto_post
-export def "qrcode-crypto post" [
+export def "qrcode-crypto create-dispatcher" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -296,24 +333,24 @@ export def "qrcode-crypto post" [
   --image: any # `image` property allows you to set parameters of a custom image (e.g. your company logo, icon etc.) placed in the center of the generated QR Code.
   --output: any # `output` property allows you to specify the name and extension (type) of the file returned by the API (default: {filename: qrcode, format: svg})
   --size: any # `size` property allows you to set the values that define the sizes of the generated QR Code. (default: {error_correction: M, quiet_zone: 4, width: 200})
-  --style: any # `style` property allows you to select the appearance parameters of the modules and eyes of the generated QR Code.  All color specifications can be defined via: * CSS3 name: `Black`, `azure`, ... * hex value: `0x000`, `#FFFFFF`, `7fffd4`, ... * RGB/RGBA strings: `rgb(255, 255, 255)`, `rgba(255, 255, 255, 0.5)`, ... * HSL strings: `hsl(270, 60%, 70%)`, `hsl(270, 60%, 70%, .5)`, ...  Color values can be obtained from any online color picker like <a href="https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_Colors/Color_picker_tool" rel="noopener noreferrer" target="_blank" >developer.mozilla.org</a>. (default: {background: {}, inner_eye: {shape: default}, module: {color: black, shape: default}, outer_eye: {shape: default}})
+  --style: any # `style` property allows you to select the appearance parameters of the modules and eyes of the generated QR Code. All color specifications can be defined via: * CSS3 name: `Black`, `azure`, ... * hex value: `0x000`, `#FFFFFF`, `7fffd4`, ... * RGB/RGBA strings: `rgb(255, 255, 255)`, `rgba(255, 255, 255, 0.5)`, ... * HSL strings: `hsl(270, 60%, 70%)`, `hsl(270, 60%, 70%, .5)`, ... Color values can be obtained from any online color picker like developer.mozilla.org (https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_Colors/Color_picker_tool). (default: {background: {}, inner_eye: {shape: default}, module: {color: black, shape: default}, outer_eye: {shape: default}})
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "byvalue-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/qrcode/crypto")
-  let body = {"data": $data, "image": $image, "output": $output, "size": $size, "style": $style} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"data": $data, "image": $image, "output": $output, "size": $size, "style": $style} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/pdf")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Email QR Code
 #
 # POST /qrcode/email
 # operationId: dispatcher_qrcode_email_post
-export def "qrcode-email post" [
+export def "qrcode-email create-dispatcher" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -327,24 +364,24 @@ export def "qrcode-email post" [
   --image: any # `image` property allows you to set parameters of a custom image (e.g. your company logo, icon etc.) placed in the center of the generated QR Code.
   --output: any # `output` property allows you to specify the name and extension (type) of the file returned by the API (default: {filename: qrcode, format: svg})
   --size: any # `size` property allows you to set the values that define the sizes of the generated QR Code. (default: {error_correction: M, quiet_zone: 4, width: 200})
-  --style: any # `style` property allows you to select the appearance parameters of the modules and eyes of the generated QR Code.  All color specifications can be defined via: * CSS3 name: `Black`, `azure`, ... * hex value: `0x000`, `#FFFFFF`, `7fffd4`, ... * RGB/RGBA strings: `rgb(255, 255, 255)`, `rgba(255, 255, 255, 0.5)`, ... * HSL strings: `hsl(270, 60%, 70%)`, `hsl(270, 60%, 70%, .5)`, ...  Color values can be obtained from any online color picker like <a href="https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_Colors/Color_picker_tool" rel="noopener noreferrer" target="_blank" >developer.mozilla.org</a>. (default: {background: {}, inner_eye: {shape: default}, module: {color: black, shape: default}, outer_eye: {shape: default}})
+  --style: any # `style` property allows you to select the appearance parameters of the modules and eyes of the generated QR Code. All color specifications can be defined via: * CSS3 name: `Black`, `azure`, ... * hex value: `0x000`, `#FFFFFF`, `7fffd4`, ... * RGB/RGBA strings: `rgb(255, 255, 255)`, `rgba(255, 255, 255, 0.5)`, ... * HSL strings: `hsl(270, 60%, 70%)`, `hsl(270, 60%, 70%, .5)`, ... Color values can be obtained from any online color picker like developer.mozilla.org (https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_Colors/Color_picker_tool). (default: {background: {}, inner_eye: {shape: default}, module: {color: black, shape: default}, outer_eye: {shape: default}})
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "byvalue-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/qrcode/email")
-  let body = {"data": $data, "image": $image, "output": $output, "size": $size, "style": $style} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"data": $data, "image": $image, "output": $output, "size": $size, "style": $style} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/pdf")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Geolocation QR Code
 #
 # POST /qrcode/geo
 # operationId: dispatcher_qrcode_geo_post
-export def "qrcode-geo post" [
+export def "qrcode-geo create-dispatcher" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -358,24 +395,24 @@ export def "qrcode-geo post" [
   --image: any # `image` property allows you to set parameters of a custom image (e.g. your company logo, icon etc.) placed in the center of the generated QR Code.
   --output: any # `output` property allows you to specify the name and extension (type) of the file returned by the API (default: {filename: qrcode, format: svg})
   --size: any # `size` property allows you to set the values that define the sizes of the generated QR Code. (default: {error_correction: M, quiet_zone: 4, width: 200})
-  --style: any # `style` property allows you to select the appearance parameters of the modules and eyes of the generated QR Code.  All color specifications can be defined via: * CSS3 name: `Black`, `azure`, ... * hex value: `0x000`, `#FFFFFF`, `7fffd4`, ... * RGB/RGBA strings: `rgb(255, 255, 255)`, `rgba(255, 255, 255, 0.5)`, ... * HSL strings: `hsl(270, 60%, 70%)`, `hsl(270, 60%, 70%, .5)`, ...  Color values can be obtained from any online color picker like <a href="https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_Colors/Color_picker_tool" rel="noopener noreferrer" target="_blank" >developer.mozilla.org</a>. (default: {background: {}, inner_eye: {shape: default}, module: {color: black, shape: default}, outer_eye: {shape: default}})
+  --style: any # `style` property allows you to select the appearance parameters of the modules and eyes of the generated QR Code. All color specifications can be defined via: * CSS3 name: `Black`, `azure`, ... * hex value: `0x000`, `#FFFFFF`, `7fffd4`, ... * RGB/RGBA strings: `rgb(255, 255, 255)`, `rgba(255, 255, 255, 0.5)`, ... * HSL strings: `hsl(270, 60%, 70%)`, `hsl(270, 60%, 70%, .5)`, ... Color values can be obtained from any online color picker like developer.mozilla.org (https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_Colors/Color_picker_tool). (default: {background: {}, inner_eye: {shape: default}, module: {color: black, shape: default}, outer_eye: {shape: default}})
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "byvalue-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/qrcode/geo")
-  let body = {"data": $data, "image": $image, "output": $output, "size": $size, "style": $style} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"data": $data, "image": $image, "output": $output, "size": $size, "style": $style} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/pdf")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Telephone QR Code
 #
 # POST /qrcode/phone
 # operationId: dispatcher_qrcode_phone_post
-export def "qrcode-phone post" [
+export def "qrcode-phone create-dispatcher" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -389,24 +426,24 @@ export def "qrcode-phone post" [
   --image: any # `image` property allows you to set parameters of a custom image (e.g. your company logo, icon etc.) placed in the center of the generated QR Code.
   --output: any # `output` property allows you to specify the name and extension (type) of the file returned by the API (default: {filename: qrcode, format: svg})
   --size: any # `size` property allows you to set the values that define the sizes of the generated QR Code. (default: {error_correction: M, quiet_zone: 4, width: 200})
-  --style: any # `style` property allows you to select the appearance parameters of the modules and eyes of the generated QR Code.  All color specifications can be defined via: * CSS3 name: `Black`, `azure`, ... * hex value: `0x000`, `#FFFFFF`, `7fffd4`, ... * RGB/RGBA strings: `rgb(255, 255, 255)`, `rgba(255, 255, 255, 0.5)`, ... * HSL strings: `hsl(270, 60%, 70%)`, `hsl(270, 60%, 70%, .5)`, ...  Color values can be obtained from any online color picker like <a href="https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_Colors/Color_picker_tool" rel="noopener noreferrer" target="_blank" >developer.mozilla.org</a>. (default: {background: {}, inner_eye: {shape: default}, module: {color: black, shape: default}, outer_eye: {shape: default}})
+  --style: any # `style` property allows you to select the appearance parameters of the modules and eyes of the generated QR Code. All color specifications can be defined via: * CSS3 name: `Black`, `azure`, ... * hex value: `0x000`, `#FFFFFF`, `7fffd4`, ... * RGB/RGBA strings: `rgb(255, 255, 255)`, `rgba(255, 255, 255, 0.5)`, ... * HSL strings: `hsl(270, 60%, 70%)`, `hsl(270, 60%, 70%, .5)`, ... Color values can be obtained from any online color picker like developer.mozilla.org (https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_Colors/Color_picker_tool). (default: {background: {}, inner_eye: {shape: default}, module: {color: black, shape: default}, outer_eye: {shape: default}})
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "byvalue-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/qrcode/phone")
-  let body = {"data": $data, "image": $image, "output": $output, "size": $size, "style": $style} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"data": $data, "image": $image, "output": $output, "size": $size, "style": $style} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/pdf")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # SMS QR Code
 #
 # POST /qrcode/sms
 # operationId: dispatcher_qrcode_sms_post
-export def "qrcode-sms post" [
+export def "qrcode-sms create-dispatcher" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -420,24 +457,24 @@ export def "qrcode-sms post" [
   --image: any # `image` property allows you to set parameters of a custom image (e.g. your company logo, icon etc.) placed in the center of the generated QR Code.
   --output: any # `output` property allows you to specify the name and extension (type) of the file returned by the API (default: {filename: qrcode, format: svg})
   --size: any # `size` property allows you to set the values that define the sizes of the generated QR Code. (default: {error_correction: M, quiet_zone: 4, width: 200})
-  --style: any # `style` property allows you to select the appearance parameters of the modules and eyes of the generated QR Code.  All color specifications can be defined via: * CSS3 name: `Black`, `azure`, ... * hex value: `0x000`, `#FFFFFF`, `7fffd4`, ... * RGB/RGBA strings: `rgb(255, 255, 255)`, `rgba(255, 255, 255, 0.5)`, ... * HSL strings: `hsl(270, 60%, 70%)`, `hsl(270, 60%, 70%, .5)`, ...  Color values can be obtained from any online color picker like <a href="https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_Colors/Color_picker_tool" rel="noopener noreferrer" target="_blank" >developer.mozilla.org</a>. (default: {background: {}, inner_eye: {shape: default}, module: {color: black, shape: default}, outer_eye: {shape: default}})
+  --style: any # `style` property allows you to select the appearance parameters of the modules and eyes of the generated QR Code. All color specifications can be defined via: * CSS3 name: `Black`, `azure`, ... * hex value: `0x000`, `#FFFFFF`, `7fffd4`, ... * RGB/RGBA strings: `rgb(255, 255, 255)`, `rgba(255, 255, 255, 0.5)`, ... * HSL strings: `hsl(270, 60%, 70%)`, `hsl(270, 60%, 70%, .5)`, ... Color values can be obtained from any online color picker like developer.mozilla.org (https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_Colors/Color_picker_tool). (default: {background: {}, inner_eye: {shape: default}, module: {color: black, shape: default}, outer_eye: {shape: default}})
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "byvalue-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/qrcode/sms")
-  let body = {"data": $data, "image": $image, "output": $output, "size": $size, "style": $style} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"data": $data, "image": $image, "output": $output, "size": $size, "style": $style} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/pdf")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Text QR Code
 #
 # POST /qrcode/text
 # operationId: dispatcher_qrcode_text_post
-export def "qrcode-text post" [
+export def "qrcode-text create-dispatcher" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -451,24 +488,24 @@ export def "qrcode-text post" [
   --image: any # `image` property allows you to set parameters of a custom image (e.g. your company logo, icon etc.) placed in the center of the generated QR Code.
   --output: any # `output` property allows you to specify the name and extension (type) of the file returned by the API (default: {filename: qrcode, format: svg})
   --size: any # `size` property allows you to set the values that define the sizes of the generated QR Code. (default: {error_correction: M, quiet_zone: 4, width: 200})
-  --style: any # `style` property allows you to select the appearance parameters of the modules and eyes of the generated QR Code.  All color specifications can be defined via: * CSS3 name: `Black`, `azure`, ... * hex value: `0x000`, `#FFFFFF`, `7fffd4`, ... * RGB/RGBA strings: `rgb(255, 255, 255)`, `rgba(255, 255, 255, 0.5)`, ... * HSL strings: `hsl(270, 60%, 70%)`, `hsl(270, 60%, 70%, .5)`, ...  Color values can be obtained from any online color picker like <a href="https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_Colors/Color_picker_tool" rel="noopener noreferrer" target="_blank" >developer.mozilla.org</a>. (default: {background: {}, inner_eye: {shape: default}, module: {color: black, shape: default}, outer_eye: {shape: default}})
+  --style: any # `style` property allows you to select the appearance parameters of the modules and eyes of the generated QR Code. All color specifications can be defined via: * CSS3 name: `Black`, `azure`, ... * hex value: `0x000`, `#FFFFFF`, `7fffd4`, ... * RGB/RGBA strings: `rgb(255, 255, 255)`, `rgba(255, 255, 255, 0.5)`, ... * HSL strings: `hsl(270, 60%, 70%)`, `hsl(270, 60%, 70%, .5)`, ... Color values can be obtained from any online color picker like developer.mozilla.org (https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_Colors/Color_picker_tool). (default: {background: {}, inner_eye: {shape: default}, module: {color: black, shape: default}, outer_eye: {shape: default}})
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "byvalue-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/qrcode/text")
-  let body = {"data": $data, "image": $image, "output": $output, "size": $size, "style": $style} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"data": $data, "image": $image, "output": $output, "size": $size, "style": $style} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/pdf")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # WiFi QR Code
 #
 # POST /qrcode/wifi
 # operationId: dispatcher_qrcode_wifi_post
-export def "qrcode-wifi post" [
+export def "qrcode-wifi create-dispatcher" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -482,15 +519,15 @@ export def "qrcode-wifi post" [
   --image: any # `image` property allows you to set parameters of a custom image (e.g. your company logo, icon etc.) placed in the center of the generated QR Code.
   --output: any # `output` property allows you to specify the name and extension (type) of the file returned by the API (default: {filename: qrcode, format: svg})
   --size: any # `size` property allows you to set the values that define the sizes of the generated QR Code. (default: {error_correction: M, quiet_zone: 4, width: 200})
-  --style: any # `style` property allows you to select the appearance parameters of the modules and eyes of the generated QR Code.  All color specifications can be defined via: * CSS3 name: `Black`, `azure`, ... * hex value: `0x000`, `#FFFFFF`, `7fffd4`, ... * RGB/RGBA strings: `rgb(255, 255, 255)`, `rgba(255, 255, 255, 0.5)`, ... * HSL strings: `hsl(270, 60%, 70%)`, `hsl(270, 60%, 70%, .5)`, ...  Color values can be obtained from any online color picker like <a href="https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_Colors/Color_picker_tool" rel="noopener noreferrer" target="_blank" >developer.mozilla.org</a>. (default: {background: {}, inner_eye: {shape: default}, module: {color: black, shape: default}, outer_eye: {shape: default}})
+  --style: any # `style` property allows you to select the appearance parameters of the modules and eyes of the generated QR Code. All color specifications can be defined via: * CSS3 name: `Black`, `azure`, ... * hex value: `0x000`, `#FFFFFF`, `7fffd4`, ... * RGB/RGBA strings: `rgb(255, 255, 255)`, `rgba(255, 255, 255, 0.5)`, ... * HSL strings: `hsl(270, 60%, 70%)`, `hsl(270, 60%, 70%, .5)`, ... Color values can be obtained from any online color picker like developer.mozilla.org (https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_Colors/Color_picker_tool). (default: {background: {}, inner_eye: {shape: default}, module: {color: black, shape: default}, outer_eye: {shape: default}})
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "byvalue-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/qrcode/wifi")
-  let body = {"data": $data, "image": $image, "output": $output, "size": $size, "style": $style} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"data": $data, "image": $image, "output": $output, "size": $size, "style": $style} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/pdf")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

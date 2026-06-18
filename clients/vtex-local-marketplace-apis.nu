@@ -36,6 +36,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -70,7 +79,7 @@ def auth-scheme-completer [] { ["x-vtex-api-appkey" "x-vtex-api-apptoken"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "notificator-changenotification-inventory post" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "notificator-changenotification-inventory create-notification" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -94,7 +103,7 @@ export def commands []: nothing -> table {
 #
 # POST /notificator/{sellerId}/changenotification/{skuId}/inventory
 # operationId: InventoryNotification
-export def "notificator-changenotification-inventory post" [
+export def "notificator-changenotification-inventory create-notification" [
   seller_id: string
   sku_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -113,11 +122,11 @@ export def "notificator-changenotification-inventory post" [
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accountName" $account_name "scalar") (serialize-qp "environment" $environment "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({seller_id: $seller_id, sku_id: $sku_id} | format pattern "/notificator/{seller_id}/changenotification/{sku_id}/inventory") $qp)
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({seller_id: (encode-path-segment $seller_id), sku_id: (encode-path-segment $sku_id)} | format pattern "/notificator/{seller_id}/changenotification/{sku_id}/inventory") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -125,7 +134,7 @@ export def "notificator-changenotification-inventory post" [
 #
 # POST /notificator/{sellerId}/changenotification/{skuId}/price
 # operationId: PriceNotification
-export def "notificator-changenotification-price post" [
+export def "notificator-changenotification-price create-notification" [
   seller_id: string
   sku_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -144,11 +153,11 @@ export def "notificator-changenotification-price post" [
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accountName" $account_name "scalar") (serialize-qp "environment" $environment "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({seller_id: $seller_id, sku_id: $sku_id} | format pattern "/notificator/{seller_id}/changenotification/{sku_id}/price") $qp)
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({seller_id: (encode-path-segment $seller_id), sku_id: (encode-path-segment $sku_id)} | format pattern "/notificator/{seller_id}/changenotification/{sku_id}/price") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -156,7 +165,7 @@ export def "notificator-changenotification-price post" [
 #
 # GET /offer-manager/pvt/offers
 # operationId: Getofferslist
-export def "offer-manager-pvt-offers get-offerslist" [
+export def "offer-manager-pvt-offers get-getofferslist" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -165,10 +174,10 @@ export def "offer-manager-pvt-offers get-offerslist" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-sort: string # Criteria used to sort the list of offers. For sorting values in ascending order, use `asc`, while for descending order, use `desc`. To fill in the field, insert the sorting criteria, followed by 'asc', or 'desc', separated by a comma. You can sort by the following criteria:   - **price:** sorts offers by price. *Ascending* goes from lowest to highest price, while *Descending* goes from highest to lowest price.   - **name:** sorts offers by *productName*, in alphabetical order. *Ascending* goes from *A* to *Z*, while *Descending* goes from *Z* to *A*.   - **availability:** availability in the sales channel (sc). The default value is 1.   Ex. sort=availability,desc   Ex. sort=name,asc   Ex. price,desc (e.g. availability,desc)
-  --rows: int # Number of rows included in the response. Each row corresponds to a single offer. The default amount of rows in the response is 1, and the maximum amount is 50. To have more than one offer listed in the response, please add the `rows` parameter with a number greater than 1. (default: 20)
+  --qp-sort: string # Criteria used to sort the list of offers. For sorting values in ascending order, use `asc`, while for descending order, use `desc`. To fill in the field, insert the sorting criteria, followed by 'asc', or 'desc', separated by a comma. You can sort by the following criteria: - **price:** sorts offers by price. *Ascending* goes from lowest to highest price, while *Descending* goes from highest to lowest price. - **name:** sorts offers by *productName*, in alphabetical order. *Ascending* goes from *A* to *Z*, while *Descending* goes from *Z* to *A*. - **availability:** availability in the sales channel (sc). The default value is 1. Ex. sort=availability,desc Ex. sort=name,asc Ex. price,desc (e.g. availability,desc)
+  --rows: int # Number of rows included in the response. Each row corresponds to a single offer. The default amount of rows in the response is 1, and the maximum amount is 50. To have more than one offer listed in the response, please add the `rows` parameter with a number greater than 1. (default: 20)
   --start: int # Number corresponding to the row from which the offer list will begin, used for pagination. Filters the list of offers by retrieving the offers starting from the row defined. The default value is 0, if the param is not included in the call. (default: 21)
-  --fq: string # This filter query can be used to filter offers by the criteria described below. It should be filled in by following the format: `fq={{criteriaName}}:{{criteriaValue}}`.   - **productId:** integer of the product ID   - **productName:** string of the product's name   - **skuId:** integer of the SKU ID   - **eanId:** string of the EAN ID   - **refId:** string of the Ref ID   - **categoryId:** integer of the category ID   - **brandId:** integer of the brand ID   - **sellerId:** string of the seller ID   - **sc:** integer of the sales channel's ID (trade policy in VTEX)   Ex: skuId:172   Ex: categoryId:13   Ex. productName:Product example-123 (e.g. skuId:172)
+  --fq: string # This filter query can be used to filter offers by the criteria described below. It should be filled in by following the format: `fq={{criteriaName}}:{{criteriaValue}}`. - **productId:** integer of the product ID - **productName:** string of the product's name - **skuId:** integer of the SKU ID - **eanId:** string of the EAN ID - **refId:** string of the Ref ID - **categoryId:** integer of the category ID - **brandId:** integer of the brand ID - **sellerId:** string of the seller ID - **sc:** integer of the sales channel's ID (trade policy in VTEX) Ex: skuId:172 Ex: categoryId:13 Ex. productName:Product example-123 (e.g. skuId:172)
   --account-name: string # Name of the VTEX account. Used as part of the URL (default: apiexamples)
   --environment: string # Environment to use. Used as part of the URL. (default: vtexcommercestable)
   --content-type: string # Describes the type of the content being sent.
@@ -178,10 +187,10 @@ export def "offer-manager-pvt-offers get-offerslist" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sort" $qp_sort "scalar") (serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "fq" $fq "scalar") (serialize-qp "accountName" $account_name "scalar") (serialize-qp "environment" $environment "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/offer-manager/pvt/offers" $qp)
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -207,11 +216,11 @@ export def "offer-manager-pvt-product get-productoffers" [
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accountName" $account_name "scalar") (serialize-qp "environment" $environment "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({product_id: $product_id} | format pattern "/offer-manager/pvt/product/{product_id}") $qp)
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({product_id: (encode-path-segment $product_id)} | format pattern "/offer-manager/pvt/product/{product_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -238,11 +247,11 @@ export def "offer-manager-pvt-product-sku get-sk-uoffers" [
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accountName" $account_name "scalar") (serialize-qp "environment" $environment "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({product_id: $product_id, sku_id: $sku_id} | format pattern "/offer-manager/pvt/product/{product_id}/sku/{sku_id}") $qp)
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({product_id: (encode-path-segment $product_id), sku_id: (encode-path-segment $sku_id)} | format pattern "/offer-manager/pvt/product/{product_id}/sku/{sku_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -262,11 +271,11 @@ export def "seller-register-pvt-seller-leads list" [
   --account-name: string # Name of the VTEX account that belongs to the marketplace. All data extracted, and changes added will be posted into this account. (default: apiexamples)
   --environment: string # Environment to use. Used as part of the URL. (default: vtexcommercestable)
   --offset: int # This field determines the limit used to retrieve the list of sellers. The response includes objects starting `from` the value inputted here. (format: int32, default: 0)
-  --limit: int # This field determines the limit used to retrieve the list of sellers. The response includes objects until the value inputted here.             (format: int32, default: 15)
+  --limit: int # This field determines the limit used to retrieve the list of sellers. The response includes objects until the value inputted here. (format: int32, default: 15)
   --is-connected: string # Query param that enables results to be filter by whether the seller lead is already connected to the marketplace or not. (default: )
-  --search: string # Custom search field, that filters sellers invited by specific marketplace operator's  email. (default: user email)
+  --search: string # Custom search field, that filters sellers invited by specific marketplace operator's email. (default: user email)
   --status: string # Seller Lead's status. Includes `accepted`, `connected` or `invited`. (default: invited)
-  --order-by: string # Query param determining how data will be ordered in the response, ordering by name or ID in descending our ascending order. Includes the following values:   `namesort` = desc/asc   `idsort` = desc/asc
+  --order-by: string # Query param determining how data will be ordered in the response, ordering by name or ID in descending our ascending order. Includes the following values: `namesort` = desc/asc `idsort` = desc/asc
   --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand.
   --content-type: string # Describes the type of the content being sent.
 ]: nothing -> any {
@@ -274,10 +283,10 @@ export def "seller-register-pvt-seller-leads list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accountName" $account_name "scalar") (serialize-qp "environment" $environment "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "isConnected" $is_connected "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "orderBy" $order_by "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/seller-register/pvt/seller-leads" $qp)
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -310,20 +319,22 @@ export def "seller-register-pvt-seller-leads create" [
   seller_account_name: string # Name of the seller's account, part of the url of their VTEX Admin. (default: seller123)
   seller_email: string # Seller's contact email; (default: selleremail@email.com)
   seller_name: string # Seller's store's name. (default: Seller Name)
-  seller_type: int # Type of seller, including:   `1`: regular seller   `2`: whitelabel seller (format: int32, default: 1)
+  seller_type: int # Type of seller, including: `1`: regular seller `2`: whitelabel seller (format: int32, default: 1)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accountName" $account_name "scalar") (serialize-qp "environment" $environment "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/seller-register/pvt/seller-leads" $qp)
-  let body = {"accountId": $account_id, "accountable": $accountable, "address": $address, "document": $document, "email": $email, "hasAcceptedLegalTerms": $has_accepted_legal_terms, "salesChannel": $sales_channel, "sellerAccountName": $seller_account_name, "sellerEmail": $seller_email, "sellerName": $seller_name, "sellerType": $seller_type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"accountId": $account_id, "accountable": $accountable, "address": $address, "document": $document, "email": $email, "hasAcceptedLegalTerms": $has_accepted_legal_terms, "salesChannel": $sales_channel, "sellerAccountName": $seller_account_name, "sellerEmail": $seller_email, "sellerName": $seller_name, "sellerType": $seller_type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Delete Seller Lead
@@ -348,11 +359,11 @@ export def "seller-register-pvt-seller-leads delete" [
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accountName" $account_name "scalar") (serialize-qp "environment" $environment "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({seller_lead_id: $seller_lead_id} | format pattern "/seller-register/pvt/seller-leads/{seller_lead_id}") $qp)
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({seller_lead_id: (encode-path-segment $seller_lead_id)} | format pattern "/seller-register/pvt/seller-leads/{seller_lead_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -360,7 +371,7 @@ export def "seller-register-pvt-seller-leads delete" [
 #
 # GET /seller-register/pvt/seller-leads/{sellerLeadId}
 # operationId: RetrieveSellerLead
-export def "seller-register-pvt-seller-leads retrieve" [
+export def "seller-register-pvt-seller-leads get" [
   seller_lead_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -378,11 +389,11 @@ export def "seller-register-pvt-seller-leads retrieve" [
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accountName" $account_name "scalar") (serialize-qp "environment" $environment "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({seller_lead_id: $seller_lead_id} | format pattern "/seller-register/pvt/seller-leads/{seller_lead_id}") $qp)
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({seller_lead_id: (encode-path-segment $seller_lead_id)} | format pattern "/seller-register/pvt/seller-leads/{seller_lead_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -392,7 +403,7 @@ export def "seller-register-pvt-seller-leads retrieve" [
 # operationId: AcceptSellerLead
 # --accountable shape: {email: string, name: string, phone: string}
 # --address shape: {city: string, complement: string, neighborhood: string, number: string, postalcode: string, state: string, street: string}
-export def "seller-register-pvt-seller-leads put" [
+export def "seller-register-pvt-seller-leads update-accept" [
   seller_lead_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -416,27 +427,29 @@ export def "seller-register-pvt-seller-leads put" [
   seller_account_name: string # Name of the seller's account, part of the url of their VTEX Admin. (default: seller123)
   seller_email: string # Seller's contact email. (default: selleremail@email.com)
   seller_name: string # Seller's store's name. (default: Seller Name)
-  seller_type: int # Type of seller, including:   `1`: regular seller   `2`: whitelabel seller (format: int32, default: 1)
+  seller_type: int # Type of seller, including: `1`: regular seller `2`: whitelabel seller (format: int32, default: 1)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accountName" $account_name "scalar") (serialize-qp "environment" $environment "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({seller_lead_id: $seller_lead_id} | format pattern "/seller-register/pvt/seller-leads/{seller_lead_id}") $qp)
-  let body = {"accountId": $account_id, "accountable": $accountable, "address": $address, "document": $document, "email": $email, "hasAcceptedLegalTerms": $has_accepted_legal_terms, "salesChannel": $sales_channel, "sellerAccountName": $seller_account_name, "sellerEmail": $seller_email, "sellerName": $seller_name, "sellerType": $seller_type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({seller_lead_id: (encode-path-segment $seller_lead_id)} | format pattern "/seller-register/pvt/seller-leads/{seller_lead_id}") $qp)
+  let req_body = {"accountId": $account_id, "accountable": $accountable, "address": $address, "document": $document, "email": $email, "hasAcceptedLegalTerms": $has_accepted_legal_terms, "salesChannel": $sales_channel, "sellerAccountName": $seller_account_name, "sellerEmail": $seller_email, "sellerName": $seller_name, "sellerType": $seller_type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Create Seller From Lead
 #
 # PUT /seller-register/pvt/seller-leads/{sellerLeadId}/seller
 # operationId: CreateSellerFromSellerLead
-export def "seller-register-pvt-seller-leads-seller create-seller-from" [
+export def "seller-register-pvt-seller-leads-seller create" [
   seller_lead_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -455,11 +468,11 @@ export def "seller-register-pvt-seller-leads-seller create-seller-from" [
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accountName" $account_name "scalar") (serialize-qp "environment" $environment "scalar") (serialize-qp "isActive" $is_active "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({seller_lead_id: $seller_lead_id} | format pattern "/seller-register/pvt/seller-leads/{seller_lead_id}/seller") $qp)
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({seller_lead_id: (encode-path-segment $seller_lead_id)} | format pattern "/seller-register/pvt/seller-leads/{seller_lead_id}/seller") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -467,7 +480,7 @@ export def "seller-register-pvt-seller-leads-seller create-seller-from" [
 #
 # PUT /seller-register/pvt/seller-leads/{sellerLeadId}/status
 # operationId: ResendSellerLeadRequest
-export def "seller-register-pvt-seller-leads-status request" [
+export def "seller-register-pvt-seller-leads-status resend-request" [
   seller_lead_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -487,14 +500,16 @@ export def "seller-register-pvt-seller-leads-status request" [
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accountName" $account_name "scalar") (serialize-qp "environment" $environment "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({seller_lead_id: $seller_lead_id} | format pattern "/seller-register/pvt/seller-leads/{seller_lead_id}/status") $qp)
-  let body = {"status": $status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({seller_lead_id: (encode-path-segment $seller_lead_id)} | format pattern "/seller-register/pvt/seller-leads/{seller_lead_id}/status") $qp)
+  let req_body = {"status": $status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # List Sellers
@@ -530,10 +545,10 @@ export def "seller-register-pvt-sellers get-list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accountName" $account_name "scalar") (serialize-qp "environment" $environment "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "keyword" $keyword "scalar") (serialize-qp "integration" $integration "scalar") (serialize-qp "group " $group "scalar") (serialize-qp "isActive" $is_active "scalar") (serialize-qp "isBetterScope" $is_better_scope "scalar") (serialize-qp "isVtex" $is_vtex "scalar") (serialize-qp "sc" $sc "scalar") (serialize-qp "sellerType" $seller_type "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/seller-register/pvt/sellers" $qp)
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -543,7 +558,7 @@ export def "seller-register-pvt-sellers get-list" [
 # operationId: UpsertSellerRequest
 # --availableSalesChannels item shape: {id: int, isSelected: bool, name: string}
 # --groups item shape: {id?: string, name?: string}
-export def "seller-register-pvt-sellers update-seller-request" [
+export def "seller-register-pvt-sellers update-request" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -566,8 +581,8 @@ export def "seller-register-pvt-sellers update-seller-request" [
   description: string # String describing the seller (default: Seller A, from the B industry.)
   email: string # email of the admin responsible for the seller. (default: seller@email.com)
   exchange_return_policy: string # Text describing the exchange and return policy previously agreed between the marketplace and the seller. (default: Describe exchange and returns policy)
-  fulfillment_endpoint: string # URL of the endpoint for fulfillment of seller's orders, which the marketplace will use to communicate with the seller.   For **external sellers**, please include the URL of the seller's endpoint. External sellers have different endpoint standards. The seller must inform this endpoint to the marketplace so that the marketplace can complete the configuration process.   For **VTEX Stores**, the field format will be as follows: `https://{SellerName}.vtexcommercestable.com.br/api/fulfillment?&sc={TradePolicyID}`.   The value `SellerName` corresponds to the store name if the seller is a VTEX store.   The value `TradePolicyID` corresponds to the [trade policy](https://help.vtex.com/en/tutorial/how-trade-policies-work--6Xef8PZiFm40kg2STrMkMV#master-data) created by the seller in their own VTEX environment. The seller must inform this ID to the marketplace so that the marketplace can complete the configuration process.   The value `AffiliateID` corresponds to the 3-digit affiliate identification code created by the seller. The seller must inform this ID to the marketplace so that the marketplace can complete the configuration process.   To configure the [Multilevel Omnichannel Inventory](https://developers.vtex.com/vtex-rest-api/docs/multilevel-omnichannel-inventory) feature, fill in this field with the checkout endpoint following this example: `https://{{sellerAccount}}.vtexcommercestable.com.br/api/checkout?affiliateid={{affiliateId}}&sc={{salesChannel` (default: http://{SellerName}.vtexcommercestable.com.br/api/fulfillment?&sc={TradePolicyID})
-  fulfillment_seller_id: string #  Identification code of the seller responsible for fulfilling the order. This is an optional field used when a seller sells SKUs from another seller. If the seller sells their own SKUs, it must be nulled. (default: seller1)
+  fulfillment_endpoint: string # URL of the endpoint for fulfillment of seller's orders, which the marketplace will use to communicate with the seller. For **external sellers**, please include the URL of the seller's endpoint. External sellers have different endpoint standards. The seller must inform this endpoint to the marketplace so that the marketplace can complete the configuration process. For **VTEX Stores**, the field format will be as follows: `https://{SellerName}.vtexcommercestable.com.br/api/fulfillment?&sc={TradePolicyID}`. The value `SellerName` corresponds to the store name if the seller is a VTEX store. The value `TradePolicyID` corresponds to the [trade policy](https://help.vtex.com/en/tutorial/how-trade-policies-work--6Xef8PZiFm40kg2STrMkMV#master-data) created by the seller in their own VTEX environment. The seller must inform this ID to the marketplace so that the marketplace can complete the configuration process. The value `AffiliateID` corresponds to the 3-digit affiliate identification code created by the seller. The seller must inform this ID to the marketplace so that the marketplace can complete the configuration process. To configure the [Multilevel Omnichannel Inventory](https://developers.vtex.com/vtex-rest-api/docs/multilevel-omnichannel-inventory) feature, fill in this field with the checkout endpoint following this example: `https://{{sellerAccount}}.vtexcommercestable.com.br/api/checkout?affiliateid={{affiliateId}}&sc={{salesChannel` (default: http://{SellerName}.vtexcommercestable.com.br/api/fulfillment?&sc={TradePolicyID})
+  fulfillment_seller_id: string # Identification code of the seller responsible for fulfilling the order. This is an optional field used when a seller sells SKUs from another seller. If the seller sells their own SKUs, it must be nulled. (default: seller1)
   --groups: list # Array of groups attached to the seller. Groups are defined by key-words that group sellers into categories defined by the marketplace when adding a new seller through the [Configure Seller Account](https://developers.vtex.com/vtex-rest-api/reference/sellers#putupsertseller) endpoint. It is possible to filter sellers by group in the Seller Management page in your VTEX Admin. Know more about groups through our [Seller Management](https://help.vtex.com/en/tutorial/gerenciamento-de-sellers-beta--6eEiOISwxuAWJ8w6MtK7iv#groups) documentation. — item shape: {id?: string, name?: string}
   id: string # Seller ID assigned by the marketplace. We recommend filling it in with the seller's account name. (default: seller123)
   --is-active: oneof<nothing, bool> # Whether the seller is active on the marketplace or not. (default: true)
@@ -577,11 +592,11 @@ export def "seller-register-pvt-sellers update-seller-request" [
   --password: string # User password, if you are using a hub to integrate with the external seller. (nullable, default: integrationHubPassword)
   sales_channel: string # Sales channel (or [trade policy](https://help.vtex.com/en/tutorial/how-trade-policies-work--6Xef8PZiFm40kg2STrMkMV)) associated to the seller account created. If no value is specified, the system will automatically use the sales channel configured in the seller's [affiliate](https://help.vtex.com/en/tutorial/configuring-affiliates--tutorials_187) ID. (default: 1)
   score: float # Score attributed to this seller. (default: 0)
-  --security-privacy-policy: string #  Text describing the security policy previously agreed between the marketplace and the seller. (nullable, default: Describe privacy and security policy)
+  --security-privacy-policy: string # Text describing the security policy previously agreed between the marketplace and the seller. (nullable, default: Describe privacy and security policy)
   seller_commission_configuration: record
-  seller_type: int # Type of seller, including:   `1`: regular seller   `2`: whitelabel seller (format: int32, default: 1)
+  seller_type: int # Type of seller, including: `1`: regular seller `2`: whitelabel seller (format: int32, default: 1)
   tax_code: string # This code is the Identity Number for the legal entity and is linked to information in its base country. (default: 34444)
-  trust_policy: string #  the marketplace must first allow VTEX to share clients’ email addresses with the seller. To do so, it is necessary to set 'AllowEmailSharing' as the value for the TrustPolicy field (default: AllowEmailSharing)
+  trust_policy: string # the marketplace must first allow VTEX to share clients’ email addresses with the seller. To do so, it is necessary to set 'AllowEmailSharing' as the value for the TrustPolicy field (default: AllowEmailSharing)
   --user: string # Username, if you are using a hub to integrate with the external seller. (nullable, default: integrationHubUserName)
 ]: any -> any {
   let input = $in
@@ -589,20 +604,22 @@ export def "seller-register-pvt-sellers update-seller-request" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accountName" $account_name "scalar") (serialize-qp "environment" $environment "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/seller-register/pvt/sellers" $qp)
-  let body = {"CSCIdentification": $csc_identification, "account": $account, "allowHybridPayments": $allow_hybrid_payments, "availableSalesChannels": $available_sales_channels, "catalogSystemEndpoint": $catalog_system_endpoint, "channel": $channel, "deliveryPolicy": $delivery_policy, "description": $description, "email": $email, "exchangeReturnPolicy": $exchange_return_policy, "fulfillmentEndpoint": $fulfillment_endpoint, "fulfillmentSellerId": $fulfillment_seller_id, "groups": $groups, "id": $id, "isActive": $is_active, "isBetterScope": $is_better_scope, "isVtex": $is_vtex, "name": $name, "password": $password, "salesChannel": $sales_channel, "score": $score, "securityPrivacyPolicy": $security_privacy_policy, "sellerCommissionConfiguration": $seller_commission_configuration, "sellerType": $seller_type, "taxCode": $tax_code, "trustPolicy": $trust_policy, "user": $user} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"CSCIdentification": $csc_identification, "account": $account, "allowHybridPayments": $allow_hybrid_payments, "availableSalesChannels": $available_sales_channels, "catalogSystemEndpoint": $catalog_system_endpoint, "channel": $channel, "deliveryPolicy": $delivery_policy, "description": $description, "email": $email, "exchangeReturnPolicy": $exchange_return_policy, "fulfillmentEndpoint": $fulfillment_endpoint, "fulfillmentSellerId": $fulfillment_seller_id, "groups": $groups, "id": $id, "isActive": $is_active, "isBetterScope": $is_better_scope, "isVtex": $is_vtex, "name": $name, "password": $password, "salesChannel": $sales_channel, "score": $score, "securityPrivacyPolicy": $security_privacy_policy, "sellerCommissionConfiguration": $seller_commission_configuration, "sellerType": $seller_type, "taxCode": $tax_code, "trustPolicy": $trust_policy, "user": $user} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Get Seller data by ID
 #
 # GET /seller-register/pvt/sellers/{sellerId}
 # operationId: GetRetrieveSeller
-export def "seller-register-pvt-sellers get-retrieve" [
+export def "seller-register-pvt-sellers get-get" [
   seller_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -621,11 +638,11 @@ export def "seller-register-pvt-sellers get-retrieve" [
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accountName" $account_name "scalar") (serialize-qp "environment" $environment "scalar") (serialize-qp "sc" $sc "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({seller_id: $seller_id} | format pattern "/seller-register/pvt/sellers/{seller_id}") $qp)
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({seller_id: (encode-path-segment $seller_id)} | format pattern "/seller-register/pvt/sellers/{seller_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -653,13 +670,16 @@ export def "seller-register-pvt-sellers update" [
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accountName" $account_name "scalar") (serialize-qp "environment" $environment "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({seller_id: $seller_id} | format pattern "/seller-register/pvt/sellers/{seller_id}") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({seller_id: (encode-path-segment $seller_id)} | format pattern "/seller-register/pvt/sellers/{seller_id}") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # List Seller Commissions by seller ID
@@ -684,11 +704,11 @@ export def "seller-register-pvt-sellers-commissions list" [
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accountName" $account_name "scalar") (serialize-qp "environment" $environment "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({seller_id: $seller_id} | format pattern "/seller-register/pvt/sellers/{seller_id}/commissions") $qp)
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({seller_id: (encode-path-segment $seller_id)} | format pattern "/seller-register/pvt/sellers/{seller_id}/commissions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -696,7 +716,7 @@ export def "seller-register-pvt-sellers-commissions list" [
 #
 # PUT /seller-register/pvt/sellers/{sellerId}/commissions/categories
 # operationId: BulkUpsertSellerCommissions
-export def "seller-register-pvt-sellers-commissions-categories put" [
+export def "seller-register-pvt-sellers-commissions-categories update-bulk" [
   seller_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -716,13 +736,16 @@ export def "seller-register-pvt-sellers-commissions-categories put" [
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accountName" $account_name "scalar") (serialize-qp "environment" $environment "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({seller_id: $seller_id} | format pattern "/seller-register/pvt/sellers/{seller_id}/commissions/categories") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({seller_id: (encode-path-segment $seller_id)} | format pattern "/seller-register/pvt/sellers/{seller_id}/commissions/categories") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Remove Seller Commissions by Category ID
@@ -748,11 +771,11 @@ export def "seller-register-pvt-sellers-commissions delete" [
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accountName" $account_name "scalar") (serialize-qp "environment" $environment "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({seller_id: $seller_id, category_id: $category_id} | format pattern "/seller-register/pvt/sellers/{seller_id}/commissions/{category_id}") $qp)
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({seller_id: (encode-path-segment $seller_id), category_id: (encode-path-segment $category_id)} | format pattern "/seller-register/pvt/sellers/{seller_id}/commissions/{category_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -760,7 +783,7 @@ export def "seller-register-pvt-sellers-commissions delete" [
 #
 # GET /seller-register/pvt/sellers/{sellerId}/commissions/{categoryId}
 # operationId: RetrieveSellerCommissions
-export def "seller-register-pvt-sellers-commissions retrieve" [
+export def "seller-register-pvt-sellers-commissions get" [
   seller_id: string
   category_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -779,11 +802,11 @@ export def "seller-register-pvt-sellers-commissions retrieve" [
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accountName" $account_name "scalar") (serialize-qp "environment" $environment "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({seller_id: $seller_id, category_id: $category_id} | format pattern "/seller-register/pvt/sellers/{seller_id}/commissions/{category_id}") $qp)
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({seller_id: (encode-path-segment $seller_id), category_id: (encode-path-segment $category_id)} | format pattern "/seller-register/pvt/sellers/{seller_id}/commissions/{category_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -815,21 +838,23 @@ export def "seller-register-pvt-sellers-commissions update" [
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accountName" $account_name "scalar") (serialize-qp "environment" $environment "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({seller_id: $seller_id, category_id: $category_id} | format pattern "/seller-register/pvt/sellers/{seller_id}/commissions/{category_id}") $qp)
-  let body = {"categoryFullPath": $category_full_path, "categoryId": $body_category_id, "freightCommissionPercentage": $freight_commission_percentage, "productCommissionPercentage": $product_commission_percentage} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({seller_id: (encode-path-segment $seller_id), category_id: (encode-path-segment $category_id)} | format pattern "/seller-register/pvt/sellers/{seller_id}/commissions/{category_id}") $qp)
+  let req_body = {"categoryFullPath": $category_full_path, "categoryId": $body_category_id, "freightCommissionPercentage": $freight_commission_percentage, "productCommissionPercentage": $product_commission_percentage} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Get Sales Channel Mapping Data
 #
 # GET /seller-register/pvt/sellers/{sellerId}/sales-channel/mapping
 # operationId: RetrieveMapping
-export def "seller-register-pvt-sellers-sales-channel-mapping retrieve" [
+export def "seller-register-pvt-sellers-sales-channel-mapping get" [
   seller_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -848,11 +873,11 @@ export def "seller-register-pvt-sellers-sales-channel-mapping retrieve" [
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accountName" $account_name "scalar") (serialize-qp "environment" $environment "scalar") (serialize-qp "an" $an "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({seller_id: $seller_id} | format pattern "/seller-register/pvt/sellers/{seller_id}/sales-channel/mapping") $qp)
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({seller_id: (encode-path-segment $seller_id)} | format pattern "/seller-register/pvt/sellers/{seller_id}/sales-channel/mapping") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -881,11 +906,14 @@ export def "seller-register-pvt-sellers-sales-channel-mapping update" [
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accountName" $account_name "scalar") (serialize-qp "environment" $environment "scalar") (serialize-qp "an" $an "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({seller_id: $seller_id} | format pattern "/seller-register/pvt/sellers/{seller_id}/sales-channel/mapping") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({seller_id: (encode-path-segment $seller_id)} | format pattern "/seller-register/pvt/sellers/{seller_id}/sales-channel/mapping") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }

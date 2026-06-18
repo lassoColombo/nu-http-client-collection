@@ -12,6 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
   match $scheme {
     "basic" => { {headers: {Authorization: $"Basic ($token_val)"}, query: ""} }
+    "basic-credentials" => { {headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: ""} }
     "none" => { {headers: {}, query: ""} }
     _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
   }
@@ -33,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
     "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
     _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -63,7 +73,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 }
 
 def base-url-completer [] { ["https://rest-api.d7networks.com/secure"] }
-def auth-scheme-completer [] { ["basic"] }
+def auth-scheme-completer [] { ["basic" "basic-credentials"] }
 
 
 # List all available API commands with their parameters
@@ -115,7 +125,7 @@ export def "balance get" [
 #
 # POST /send
 # operationId: SendPost
-export def "send send-post" [
+export def "send create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -134,21 +144,23 @@ export def "send send-post" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/send")
-  let body = {"content": $content, "from": $body_from, "to": $body_to} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"content": $content, "from": $body_from, "to": $body_to} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Bulk SMS
 #
 # POST /sendbatch
 # operationId: SendbatchPost
-# --messages item shape: {content: string, from: string, to: list}
-export def "sendbatch send-batch-post" [
+# --messages item shape: {content: string, from: string, to: list<string>}
+export def "sendbatch create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -159,17 +171,19 @@ export def "sendbatch send-batch-post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string
   --hdr-accept: string
-  messages: list # Sendbatch message body — item shape: {content: string, from: string, to: list}
+  messages: list # Sendbatch message body — item shape: {content: string, from: string, to: list<string>}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sendbatch")
-  let body = {"messages": $messages} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"messages": $messages} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }

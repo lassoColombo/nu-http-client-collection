@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -116,7 +125,7 @@ export def "alerts-lat-lat-lon-lon get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({lat: $lat, lon: $lon} | format pattern "/alerts?lat={lat}&lon={lon}") $qp)
+  let full_url = (build-url $base ({lat: (encode-path-segment $lat), lon: (encode-path-segment $lon)} | format pattern "/alerts?lat={lat}&lon={lon}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -140,7 +149,7 @@ export def "bulk-files get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({file: $file} | format pattern "/bulk/files/{file}") $qp)
+  let full_url = (build-url $base ({file: (encode-path-segment $file)} | format pattern "/bulk/files/{file}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -167,7 +176,7 @@ export def "current-airquality-city-city-country-country get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "state" $state "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({city: $city, country: $country} | format pattern "/current/airquality?city={city}&country={country}") $qp)
+  let full_url = (build-url $base ({city: (encode-path-segment $city), country: (encode-path-segment $country)} | format pattern "/current/airquality?city={city}&country={country}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -192,7 +201,7 @@ export def "current-airquality-city-id-city-id get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({city_id: $city_id} | format pattern "/current/airquality?city_id={city_id}") $qp)
+  let full_url = (build-url $base ({city_id: (encode-path-segment $city_id)} | format pattern "/current/airquality?city_id={city_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -218,7 +227,7 @@ export def "current-airquality-lat-lat-lon-lon get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({lat: $lat, lon: $lon} | format pattern "/current/airquality?lat={lat}&lon={lon}") $qp)
+  let full_url = (build-url $base ({lat: (encode-path-segment $lat), lon: (encode-path-segment $lon)} | format pattern "/current/airquality?lat={lat}&lon={lon}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -244,7 +253,7 @@ export def "current-airquality-postal-code-postal-code get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "country" $country "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({postal_code: $postal_code} | format pattern "/current/airquality?postal_code={postal_code}") $qp)
+  let full_url = (build-url $base ({postal_code: (encode-path-segment $postal_code)} | format pattern "/current/airquality?postal_code={postal_code}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -263,16 +272,16 @@ export def "current-cities-cities get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --units: string@units-completer # Convert to units. Default Metric See <a target='blank' href='/api/requests'>units field description</a> (format: string)
+  --units: string@units-completer # Convert to units. Default Metric See units field description (format: string)
   --marine: string@marine-completer # Marine stations only (buoys, oil platforms, etc) (format: string)
-  --lang: string@lang-completer # Language (Default: English) See <a target='blank' href='/api/requests'>language field description</a> (format: string)
+  --lang: string@lang-completer # Language (Default: English) See language field description (format: string)
   --callback: string # Wraps return in jsonp callback - Example - callback=func (format: string)
   --key: string # Your registered API key. (format: string)
 ]: nothing -> record<count: int, data: table<app_temp: float, aqi: float, city_name: string, clouds: int, country_code: string, datetime: string, dewpt: float, dhi: float, dni: float, elev_angle: float, ghi: float, gust: float, hour_angle: float, lat: float, lon: float, ob_time: string, pod: string, precip: float, pres: float, rh: int, slp: float, snow: float, solar_rad: float, sources: list, state_code: string, station: string, sunrise: string, sunset: string, temp: float, timezone: string, ts: float, uv: float, vis: int, weather: record, wind_cdir: string, wind_cdir_full: string, wind_dir: int, wind_speed: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "units" $units "scalar") (serialize-qp "marine" $marine "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({cities: $cities} | format pattern "/current?cities={cities}") $qp)
+  let full_url = (build-url $base ({cities: (encode-path-segment $cities)} | format pattern "/current?cities={cities}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -295,15 +304,15 @@ export def "current-city-city-country-country get" [
   --include: string@include-completer # Include 1 hour - minutely forecast in the response (format: string)
   --state: string # Full name of state. (format: string)
   --marine: string@marine-completer # Marine stations only (buoys, oil platforms, etc) (format: string)
-  --units: string@units-completer # Convert to units. Default Metric See <a target='blank' href='/api/requests'>units field description</a> (format: string)
-  --lang: string@lang-completer # Language (Default: English) See <a target='blank' href='/api/requests'>language field description</a> (format: string)
+  --units: string@units-completer # Convert to units. Default Metric See units field description (format: string)
+  --lang: string@lang-completer # Language (Default: English) See language field description (format: string)
   --callback: string # Wraps return in jsonp callback - Example - callback=func (format: string)
   --key: string # Your registered API key. (format: string)
 ]: nothing -> record<count: int, data: table<app_temp: float, aqi: float, city_name: string, clouds: int, country_code: string, datetime: string, dewpt: float, dhi: float, dni: float, elev_angle: float, ghi: float, gust: float, hour_angle: float, lat: float, lon: float, ob_time: string, pod: string, precip: float, pres: float, rh: int, slp: float, snow: float, solar_rad: float, sources: list, state_code: string, station: string, sunrise: string, sunset: string, temp: float, timezone: string, ts: float, uv: float, vis: int, weather: record, wind_cdir: string, wind_cdir_full: string, wind_dir: int, wind_speed: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "include" $include "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "marine" $marine "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({city: $city, country: $country} | format pattern "/current?city={city}&country={country}") $qp)
+  let full_url = (build-url $base ({city: (encode-path-segment $city), country: (encode-path-segment $country)} | format pattern "/current?city={city}&country={country}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -322,17 +331,17 @@ export def "current-city-id-city-id get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --units: string@units-completer # Convert to units. Default Metric See <a target='blank' href='/api/requests'>units field description</a> (format: string)
+  --units: string@units-completer # Convert to units. Default Metric See units field description (format: string)
   --include: string@include-completer # Include 1 hour - minutely forecast in the response (format: string)
   --marine: string@marine-completer # Marine stations only (buoys, oil platforms, etc) (format: string)
-  --lang: string@lang-completer # Language (Default: English) See <a target='blank' href='/api/requests'>language field description</a> (format: string)
+  --lang: string@lang-completer # Language (Default: English) See language field description (format: string)
   --callback: string # Wraps return in jsonp callback - Example - callback=func (format: string)
   --key: string # Your registered API key. (format: string)
 ]: nothing -> record<count: int, data: table<app_temp: float, aqi: float, city_name: string, clouds: int, country_code: string, datetime: string, dewpt: float, dhi: float, dni: float, elev_angle: float, ghi: float, gust: float, hour_angle: float, lat: float, lon: float, ob_time: string, pod: string, precip: float, pres: float, rh: int, slp: float, snow: float, solar_rad: float, sources: list, state_code: string, station: string, sunrise: string, sunset: string, temp: float, timezone: string, ts: float, uv: float, vis: int, weather: record, wind_cdir: string, wind_cdir_full: string, wind_dir: int, wind_speed: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "units" $units "scalar") (serialize-qp "include" $include "scalar") (serialize-qp "marine" $marine "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({city_id: $city_id} | format pattern "/current?city_id={city_id}") $qp)
+  let full_url = (build-url $base ({city_id: (encode-path-segment $city_id)} | format pattern "/current?city_id={city_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -354,15 +363,15 @@ export def "current-lat-lat-lon-lon get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --include: string@include-completer # Include 1 hour - minutely forecast in the response (format: string)
   --marine: string@marine-completer # Marine stations only (buoys, oil platforms, etc) (format: string)
-  --units: string@units-completer # Convert to units. Default Metric See <a target='blank' href='/api/requests'>units field description</a> (format: string)
-  --lang: string@lang-completer # Language (Default: English) See <a target='blank' href='/api/requests'>language field description</a> (format: string)
+  --units: string@units-completer # Convert to units. Default Metric See units field description (format: string)
+  --lang: string@lang-completer # Language (Default: English) See language field description (format: string)
   --callback: string # Wraps return in jsonp callback - Example - callback=func (format: string)
   --key: string # Your registered API key. (format: string)
 ]: nothing -> record<count: int, data: table<app_temp: float, aqi: float, city_name: string, clouds: int, country_code: string, datetime: string, dewpt: float, dhi: float, dni: float, elev_angle: float, ghi: float, gust: float, hour_angle: float, lat: float, lon: float, ob_time: string, pod: string, precip: float, pres: float, rh: int, slp: float, snow: float, solar_rad: float, sources: list, state_code: string, station: string, sunrise: string, sunset: string, temp: float, timezone: string, ts: float, uv: float, vis: int, weather: record, wind_cdir: string, wind_cdir_full: string, wind_dir: int, wind_speed: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "include" $include "scalar") (serialize-qp "marine" $marine "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({lat: $lat, lon: $lon} | format pattern "/current?lat={lat}&lon={lon}") $qp)
+  let full_url = (build-url $base ({lat: (encode-path-segment $lat), lon: (encode-path-segment $lon)} | format pattern "/current?lat={lat}&lon={lon}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -381,15 +390,15 @@ export def "current-points-points get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --units: string@units-completer # Convert to units. Default Metric See <a target='blank' href='/api/requests'>units field description</a> (format: string)
-  --lang: string@lang-completer # Language (Default: English) See <a target='blank' href='/api/requests'>language field description</a> (format: string)
+  --units: string@units-completer # Convert to units. Default Metric See units field description (format: string)
+  --lang: string@lang-completer # Language (Default: English) See language field description (format: string)
   --callback: string # Wraps return in jsonp callback. Example: callback=func (format: string)
   --key: string # Your registered API key. (format: string)
 ]: nothing -> record<count: int, data: table<app_temp: float, aqi: float, city_name: string, clouds: int, country_code: string, datetime: string, dewpt: float, dhi: float, dni: float, elev_angle: float, ghi: float, gust: float, hour_angle: float, lat: float, lon: float, ob_time: string, pod: string, precip: float, pres: float, rh: int, slp: float, snow: float, solar_rad: float, sources: list, state_code: string, station: string, sunrise: string, sunset: string, temp: float, timezone: string, ts: float, uv: float, vis: int, weather: record, wind_cdir: string, wind_cdir_full: string, wind_dir: int, wind_speed: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({points: $points} | format pattern "/current?points={points}") $qp)
+  let full_url = (build-url $base ({points: (encode-path-segment $points)} | format pattern "/current?points={points}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -411,15 +420,15 @@ export def "current-postal-code-postal-code get" [
   --country: string # Country Code (2 letter). (format: string)
   --include: string@include-completer # Include 1 hour - minutely forecast in the response (format: string)
   --marine: string@marine-completer # Marine stations only (buoys, oil platforms, etc) (format: string)
-  --units: string@units-completer # Convert to units. Default Metric See <a target='blank' href='/api/requests'>units field description</a> (format: string)
-  --lang: string@lang-completer # Language (Default: English) See <a target='blank' href='/api/requests'>language field description</a> (format: string)
+  --units: string@units-completer # Convert to units. Default Metric See units field description (format: string)
+  --lang: string@lang-completer # Language (Default: English) See language field description (format: string)
   --callback: string # Wraps return in jsonp callback - Example - callback=func (format: string)
   --key: string # Your registered API key. (format: string)
 ]: nothing -> record<count: int, data: table<app_temp: float, aqi: float, city_name: string, clouds: int, country_code: string, datetime: string, dewpt: float, dhi: float, dni: float, elev_angle: float, ghi: float, gust: float, hour_angle: float, lat: float, lon: float, ob_time: string, pod: string, precip: float, pres: float, rh: int, slp: float, snow: float, solar_rad: float, sources: list, state_code: string, station: string, sunrise: string, sunset: string, temp: float, timezone: string, ts: float, uv: float, vis: int, weather: record, wind_cdir: string, wind_cdir_full: string, wind_dir: int, wind_speed: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "country" $country "scalar") (serialize-qp "include" $include "scalar") (serialize-qp "marine" $marine "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({postal_code: $postal_code} | format pattern "/current?postal_code={postal_code}") $qp)
+  let full_url = (build-url $base ({postal_code: (encode-path-segment $postal_code)} | format pattern "/current?postal_code={postal_code}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -439,15 +448,15 @@ export def "current-station-station get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --include: string@include-completer # Include 1 hour - minutely forecast in the response (format: string)
-  --units: string@units-completer # Convert to units. Default Metric See <a target='blank' href='/api/requests'>units field description</a> (format: string)
-  --lang: string@lang-completer # Language (Default: English) See <a target='blank' href='/api/requests'>language field description</a> (format: string)
+  --units: string@units-completer # Convert to units. Default Metric See units field description (format: string)
+  --lang: string@lang-completer # Language (Default: English) See language field description (format: string)
   --callback: string # Wraps return in jsonp callback. Example: callback=func (format: string)
   --key: string # Your registered API key. (format: string)
 ]: nothing -> record<count: int, data: table<app_temp: float, aqi: float, city_name: string, clouds: int, country_code: string, datetime: string, dewpt: float, dhi: float, dni: float, elev_angle: float, ghi: float, gust: float, hour_angle: float, lat: float, lon: float, ob_time: string, pod: string, precip: float, pres: float, rh: int, slp: float, snow: float, solar_rad: float, sources: list, state_code: string, station: string, sunrise: string, sunset: string, temp: float, timezone: string, ts: float, uv: float, vis: int, weather: record, wind_cdir: string, wind_cdir_full: string, wind_dir: int, wind_speed: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "include" $include "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({station: $station} | format pattern "/current?station={station}") $qp)
+  let full_url = (build-url $base ({station: (encode-path-segment $station)} | format pattern "/current?station={station}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -466,15 +475,15 @@ export def "current-stations-stations get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --units: string@units-completer # Convert to units. Default Metric See <a target='blank' href='/api/requests'>units field description</a> (format: string)
-  --lang: string@lang-completer # Language (Default: English) See <a target='blank' href='/api/requests'>language field description</a> (format: string)
+  --units: string@units-completer # Convert to units. Default Metric See units field description (format: string)
+  --lang: string@lang-completer # Language (Default: English) See language field description (format: string)
   --callback: string # Wraps return in jsonp callback. Example: callback=func (format: string)
   --key: string # Your registered API key. (format: string)
 ]: nothing -> record<count: int, data: table<app_temp: float, aqi: float, city_name: string, clouds: int, country_code: string, datetime: string, dewpt: float, dhi: float, dni: float, elev_angle: float, ghi: float, gust: float, hour_angle: float, lat: float, lon: float, ob_time: string, pod: string, precip: float, pres: float, rh: int, slp: float, snow: float, solar_rad: float, sources: list, state_code: string, station: string, sunrise: string, sunset: string, temp: float, timezone: string, ts: float, uv: float, vis: int, weather: record, wind_cdir: string, wind_cdir_full: string, wind_dir: int, wind_speed: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({stations: $stations} | format pattern "/current?stations={stations}") $qp)
+  let full_url = (build-url $base ({stations: (encode-path-segment $stations)} | format pattern "/current?stations={stations}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -502,7 +511,7 @@ export def "forecast-airquality-city-city-country-country get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "state" $state "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "hours" $hours "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({city: $city, country: $country} | format pattern "/forecast/airquality?city={city}&country={country}") $qp)
+  let full_url = (build-url $base ({city: (encode-path-segment $city), country: (encode-path-segment $country)} | format pattern "/forecast/airquality?city={city}&country={country}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -528,7 +537,7 @@ export def "forecast-airquality-city-id-city-id get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "callback" $callback "scalar") (serialize-qp "hours" $hours "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({city_id: $city_id} | format pattern "/forecast/airquality?city_id={city_id}") $qp)
+  let full_url = (build-url $base ({city_id: (encode-path-segment $city_id)} | format pattern "/forecast/airquality?city_id={city_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -555,7 +564,7 @@ export def "forecast-airquality-lat-lat-lon-lon get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "hours" $hours "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({lat: $lat, lon: $lon} | format pattern "/forecast/airquality?lat={lat}&lon={lon}") $qp)
+  let full_url = (build-url $base ({lat: (encode-path-segment $lat), lon: (encode-path-segment $lon)} | format pattern "/forecast/airquality?lat={lat}&lon={lon}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -582,7 +591,7 @@ export def "forecast-airquality-postal-code-postal-code get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "country" $country "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "hours" $hours "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({postal_code: $postal_code} | format pattern "/forecast/airquality?postal_code={postal_code}") $qp)
+  let full_url = (build-url $base ({postal_code: (encode-path-segment $postal_code)} | format pattern "/forecast/airquality?postal_code={postal_code}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -604,15 +613,15 @@ export def "forecast-daily-city-city-country-country get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --state: string # Full name of state. (format: string)
   --days: float # Number of days to return. Default 16. (format: integer)
-  --units: string@units-completer # Convert to units. Default Metric See <a target='blank' href='/api/requests'>units field description</a> (format: string)
-  --lang: string@lang-completer # Language (Default: English) See <a target='blank' href='/api/requests'>language field description</a> (format: string)
+  --units: string@units-completer # Convert to units. Default Metric See units field description (format: string)
+  --lang: string@lang-completer # Language (Default: English) See language field description (format: string)
   --callback: string # Wraps return in jsonp callback. Example - callback=func (format: string)
   --key: string # Your registered API key. (format: string)
 ]: nothing -> record<city_name: string, country_code: string, data: table<app_max_temp: float, app_min_temp: float, clouds: int, datetime: string, dewpt: float, max_dhi: float, max_temp: float, min_temp: float, moon_phase: float, moonrise_ts: int, moonset_ts: int, pod: string, pop: float, precip: float, pres: float, rh: int, slp: float, snow: float, snow_depth: float, sunrise_ts: int, sunset_ts: int, temp: float, timestamp_local: string, timestamp_utc: string, ts: float, uv: float, vis: float, weather: record, wind_cdir: string, wind_cdir_full: string, wind_dir: int, wind_spd: float>, lat: string, lon: string, state_code: string, timezone: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "state" $state "scalar") (serialize-qp "days" $days "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({city: $city, country: $country} | format pattern "/forecast/daily?city={city}&country={country}") $qp)
+  let full_url = (build-url $base ({city: (encode-path-segment $city), country: (encode-path-segment $country)} | format pattern "/forecast/daily?city={city}&country={country}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -632,15 +641,15 @@ export def "forecast-daily-city-id-city-id get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --days: float # Number of days to return. Default 16. (format: integer)
-  --units: string@units-completer # Convert to units. Default Metric See <a target='blank' href='/api/requests'>units field description</a> (format: string)
-  --lang: string@lang-completer # Language (Default: English) See <a target='blank' href='/api/requests'>language field description</a> (format: string)
+  --units: string@units-completer # Convert to units. Default Metric See units field description (format: string)
+  --lang: string@lang-completer # Language (Default: English) See language field description (format: string)
   --callback: string # Wraps return in jsonp callback. Example: callback=func (format: string)
   --key: string # Your registered API key. (format: string)
 ]: nothing -> record<city_name: string, country_code: string, data: table<app_max_temp: float, app_min_temp: float, clouds: int, datetime: string, dewpt: float, max_dhi: float, max_temp: float, min_temp: float, moon_phase: float, moonrise_ts: int, moonset_ts: int, pod: string, pop: float, precip: float, pres: float, rh: int, slp: float, snow: float, snow_depth: float, sunrise_ts: int, sunset_ts: int, temp: float, timestamp_local: string, timestamp_utc: string, ts: float, uv: float, vis: float, weather: record, wind_cdir: string, wind_cdir_full: string, wind_dir: int, wind_spd: float>, lat: string, lon: string, state_code: string, timezone: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "days" $days "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({city_id: $city_id} | format pattern "/forecast/daily?city_id={city_id}") $qp)
+  let full_url = (build-url $base ({city_id: (encode-path-segment $city_id)} | format pattern "/forecast/daily?city_id={city_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -661,15 +670,15 @@ export def "forecast-daily-lat-lat-lon-lon get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --days: float # Number of days to return. Default 16. (format: integer)
-  --units: string@units-completer # Convert to units. Default Metric See <a target='blank' href='/api/requests'>units field description</a> (format: string)
-  --lang: string@lang-completer # Language (Default: English) See <a target='blank' href='/api/requests'>language field description</a> (format: string)
+  --units: string@units-completer # Convert to units. Default Metric See units field description (format: string)
+  --lang: string@lang-completer # Language (Default: English) See language field description (format: string)
   --callback: string # Wraps return in jsonp callback. Example: callback=func (format: string)
   --key: string # Your registered API key. (format: string)
 ]: nothing -> record<city_name: string, country_code: string, data: table<app_max_temp: float, app_min_temp: float, clouds: int, datetime: string, dewpt: float, max_dhi: float, max_temp: float, min_temp: float, moon_phase: float, moonrise_ts: int, moonset_ts: int, pod: string, pop: float, precip: float, pres: float, rh: int, slp: float, snow: float, snow_depth: float, sunrise_ts: int, sunset_ts: int, temp: float, timestamp_local: string, timestamp_utc: string, ts: float, uv: float, vis: float, weather: record, wind_cdir: string, wind_cdir_full: string, wind_dir: int, wind_spd: float>, lat: string, lon: string, state_code: string, timezone: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "days" $days "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({lat: $lat, lon: $lon} | format pattern "/forecast/daily?lat={lat}&lon={lon}") $qp)
+  let full_url = (build-url $base ({lat: (encode-path-segment $lat), lon: (encode-path-segment $lon)} | format pattern "/forecast/daily?lat={lat}&lon={lon}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -690,21 +699,21 @@ export def "forecast-daily-postal-code-postal-code get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --country: string # Country Code (2 letter). (format: string)
   --days: float # Number of days to return. Default 16. (format: integer)
-  --units: string@units-completer # Convert to units. Default Metric See <a target='blank' href='/api/requests'>units field description</a> (format: string)
-  --lang: string@lang-completer # Language (Default: English) See <a target='blank' href='/api/requests'>language field description</a> (format: string)
+  --units: string@units-completer # Convert to units. Default Metric See units field description (format: string)
+  --lang: string@lang-completer # Language (Default: English) See language field description (format: string)
   --callback: string # Wraps return in jsonp callback. Example: callback=func (format: string)
   --key: string # Your registered API key. (format: string)
 ]: nothing -> record<city_name: string, country_code: string, data: table<app_max_temp: float, app_min_temp: float, clouds: int, datetime: string, dewpt: float, max_dhi: float, max_temp: float, min_temp: float, moon_phase: float, moonrise_ts: int, moonset_ts: int, pod: string, pop: float, precip: float, pres: float, rh: int, slp: float, snow: float, snow_depth: float, sunrise_ts: int, sunset_ts: int, temp: float, timestamp_local: string, timestamp_utc: string, ts: float, uv: float, vis: float, weather: record, wind_cdir: string, wind_cdir_full: string, wind_dir: int, wind_spd: float>, lat: string, lon: string, state_code: string, timezone: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "country" $country "scalar") (serialize-qp "days" $days "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({postal_code: $postal_code} | format pattern "/forecast/daily?postal_code={postal_code}") $qp)
+  let full_url = (build-url $base ({postal_code: (encode-path-segment $postal_code)} | format pattern "/forecast/daily?postal_code={postal_code}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Returns Energy Forecast API response  - Given a single lat/lon. 
+# Returns Energy Forecast API response - Given a single lat/lon.
 #
 # GET /forecast/energy?lat={lat}&lon={lon}
 export def "forecast-energy-lat-lat-lon-lon get" [
@@ -718,8 +727,8 @@ export def "forecast-energy-lat-lat-lon-lon get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --threshold: float # Temperature threshold to use to calculate degree days (default 18 C)  (format: double)
-  --units: string@units-completer # Convert to units. Default Metric See <a target='blank' href='/api/requests'>units field description</a> (format: string)
+  --threshold: float # Temperature threshold to use to calculate degree days (default 18 C) (format: double)
+  --units: string@units-completer # Convert to units. Default Metric See units field description (format: string)
   --tp: string@tp-completer # Time period (default: daily) (format: string)
   --callback: string # Wraps return in jsonp callback. Example: callback=func (format: string)
   --key: string # Your registered API key. (format: string)
@@ -727,7 +736,7 @@ export def "forecast-energy-lat-lat-lon-lon get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "threshold" $threshold "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "tp" $tp "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({lat: $lat, lon: $lon} | format pattern "/forecast/energy?lat={lat}&lon={lon}") $qp)
+  let full_url = (build-url $base ({lat: (encode-path-segment $lat), lon: (encode-path-segment $lon)} | format pattern "/forecast/energy?lat={lat}&lon={lon}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -748,8 +757,8 @@ export def "forecast-hourly-city-city-country-country get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --state: string # Full name of state. (format: string)
-  --units: string@units-completer # Convert to units. Default Metric See <a target='blank' href='/api/requests'>units field description</a> (format: string)
-  --lang: string@lang-completer # Language (Default: English) See <a target='blank' href='/api/requests'>language field description</a> (format: string)
+  --units: string@units-completer # Convert to units. Default Metric See units field description (format: string)
+  --lang: string@lang-completer # Language (Default: English) See language field description (format: string)
   --callback: string # Wraps return in jsonp callback. Example: callback=func (format: string)
   --hours: int # Number of hours to return. (format: integer)
   --key: string # Your registered API key. (format: string)
@@ -757,7 +766,7 @@ export def "forecast-hourly-city-city-country-country get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "state" $state "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "hours" $hours "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({city: $city, country: $country} | format pattern "/forecast/hourly?city={city}&country={country}") $qp)
+  let full_url = (build-url $base ({city: (encode-path-segment $city), country: (encode-path-segment $country)} | format pattern "/forecast/hourly?city={city}&country={country}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -776,8 +785,8 @@ export def "forecast-hourly-city-id-city-id get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --units: string@units-completer # Convert to units. Default Metric See <a target='blank' href='/api/requests'>units field description</a> (format: string)
-  --lang: string@lang-completer # Language (Default: English) See <a target='blank' href='/api/requests'>language field description</a> (format: string)
+  --units: string@units-completer # Convert to units. Default Metric See units field description (format: string)
+  --lang: string@lang-completer # Language (Default: English) See language field description (format: string)
   --callback: string # Wraps return in jsonp callback. Example - callback=func (format: string)
   --hours: int # Number of hours to return. (format: integer)
   --key: string # Your registered API key. (format: string)
@@ -785,7 +794,7 @@ export def "forecast-hourly-city-id-city-id get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "hours" $hours "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({city_id: $city_id} | format pattern "/forecast/hourly?city_id={city_id}") $qp)
+  let full_url = (build-url $base ({city_id: (encode-path-segment $city_id)} | format pattern "/forecast/hourly?city_id={city_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -805,8 +814,8 @@ export def "forecast-hourly-lat-lat-lon-lon get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --units: string@units-completer # Convert to units. Default Metric See <a target='blank' href='/api/requests'>units field description</a> (format: string)
-  --lang: string@lang-completer # Language (Default: English) See <a target='blank' href='/api/requests'>language field description</a> (format: string)
+  --units: string@units-completer # Convert to units. Default Metric See units field description (format: string)
+  --lang: string@lang-completer # Language (Default: English) See language field description (format: string)
   --callback: string # Wraps return in jsonp callback. Example - callback=func (format: string)
   --key: string # Your registered API key. (format: string)
   --hours: int # Number of hours to return. (format: integer)
@@ -814,7 +823,7 @@ export def "forecast-hourly-lat-lat-lon-lon get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "hours" $hours "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({lat: $lat, lon: $lon} | format pattern "/forecast/hourly?lat={lat}&lon={lon}") $qp)
+  let full_url = (build-url $base ({lat: (encode-path-segment $lat), lon: (encode-path-segment $lon)} | format pattern "/forecast/hourly?lat={lat}&lon={lon}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -834,8 +843,8 @@ export def "forecast-hourly-postal-code-postal-code get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --country: string # Country Code (2 letter). (format: string)
-  --units: string@units-completer # Convert to units. Default Metric See <a target='blank' href='/api/requests'>units field description</a> (format: string)
-  --lang: string@lang-completer # Language (Default: English) See <a target='blank' href='/api/requests'>language field description</a> (format: string)
+  --units: string@units-completer # Convert to units. Default Metric See units field description (format: string)
+  --lang: string@lang-completer # Language (Default: English) See language field description (format: string)
   --callback: string # Wraps return in jsonp callback. Example - callback=func (format: string)
   --hours: int # Number of hours to return. (format: integer)
   --key: string # Your registered API key. (format: string)
@@ -843,7 +852,7 @@ export def "forecast-hourly-postal-code-postal-code get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "country" $country "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "hours" $hours "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({postal_code: $postal_code} | format pattern "/forecast/hourly?postal_code={postal_code}") $qp)
+  let full_url = (build-url $base ({postal_code: (encode-path-segment $postal_code)} | format pattern "/forecast/hourly?postal_code={postal_code}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -870,7 +879,7 @@ export def "history-airquality-city-city-country-country get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "state" $state "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({city: $city, country: $country} | format pattern "/history/airquality?city={city}&country={country}") $qp)
+  let full_url = (build-url $base ({city: (encode-path-segment $city), country: (encode-path-segment $country)} | format pattern "/history/airquality?city={city}&country={country}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -895,7 +904,7 @@ export def "history-airquality-city-id-city-id get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({city_id: $city_id} | format pattern "/history/airquality?city_id={city_id}") $qp)
+  let full_url = (build-url $base ({city_id: (encode-path-segment $city_id)} | format pattern "/history/airquality?city_id={city_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -921,7 +930,7 @@ export def "history-airquality-lat-lat-lon-lon get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({lat: $lat, lon: $lon} | format pattern "/history/airquality?lat={lat}&lon={lon}") $qp)
+  let full_url = (build-url $base ({lat: (encode-path-segment $lat), lon: (encode-path-segment $lon)} | format pattern "/history/airquality?lat={lat}&lon={lon}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -947,7 +956,7 @@ export def "history-airquality-postal-code-postal-code get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "country" $country "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({postal_code: $postal_code} | format pattern "/history/airquality?postal_code={postal_code}") $qp)
+  let full_url = (build-url $base ({postal_code: (encode-path-segment $postal_code)} | format pattern "/history/airquality?postal_code={postal_code}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -970,15 +979,15 @@ export def "history-daily-city-city-country-country get" [
   --state: string # Full name of state. (format: string)
   --start-date: string # Start Date (YYYY-MM-DD or YYYY-MM-DD:HH). (format: string)
   --end-date: string # End Date (YYYY-MM-DD or YYYY-MM-DD:HH). (format: string)
-  --units: string@units-completer # Convert to units. Default Metric See <a target='blank' href='/api/requests'>units field description</a> (format: string)
-  --lang: string@lang-completer # Language (Default: English) See <a target='blank' href='/api/requests'>language field description</a> (format: string)
+  --units: string@units-completer # Convert to units. Default Metric See units field description (format: string)
+  --lang: string@lang-completer # Language (Default: English) See language field description (format: string)
   --callback: string # Wraps return in jsonp callback. Example: callback=func (format: string)
   --key: string # Your registered API key. (format: string)
 ]: nothing -> record<city_name: string, country_code: string, data: table<datetime: string, dewpt: float, dhi: int, dni: int, ghi: int, max_temp: float, max_temp_ts: float, max_uv: float, max_wind_dir: int, max_wind_spd: float, max_wind_spd_ts: float, min_temp: float, min_temp_ts: float, precip: float, precip_gpm: float, pres: float, revision_status: string, rh: int, slp: float, snow: float, snow_depth: float, t_dhi: int, t_dni: int, t_ghi: int, temp: float, ts: int, wind_dir: int, wind_gust_spd: float, wind_spd: float>, lat: string, lon: string, sources: list<string>, state_code: string, timezone: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "state" $state "scalar") (serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({city: $city, country: $country} | format pattern "/history/daily?city={city}&country={country}") $qp)
+  let full_url = (build-url $base ({city: (encode-path-segment $city), country: (encode-path-segment $country)} | format pattern "/history/daily?city={city}&country={country}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -999,15 +1008,15 @@ export def "history-daily-city-id-city-id get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --start-date: string # Start Date (YYYY-MM-DD or YYYY-MM-DD:HH) (format: string)
   --end-date: string # End Date (YYYY-MM-DD or YYYY-MM-DD:HH) (format: string)
-  --units: string@units-completer # Convert to units. Default Metric See <a target='blank' href='/api/requests'>units field description</a> (format: string)
-  --lang: string@lang-completer # Language (Default: English) See <a target='blank' href='/api/requests'>language field description</a> (format: string)
+  --units: string@units-completer # Convert to units. Default Metric See units field description (format: string)
+  --lang: string@lang-completer # Language (Default: English) See language field description (format: string)
   --callback: string # Wraps return in jsonp callback. Example: callback=func (format: string)
   --key: string # Your registered API key. (format: string)
 ]: nothing -> record<city_name: string, country_code: string, data: table<datetime: string, dewpt: float, dhi: int, dni: int, ghi: int, max_temp: float, max_temp_ts: float, max_uv: float, max_wind_dir: int, max_wind_spd: float, max_wind_spd_ts: float, min_temp: float, min_temp_ts: float, precip: float, precip_gpm: float, pres: float, revision_status: string, rh: int, slp: float, snow: float, snow_depth: float, t_dhi: int, t_dni: int, t_ghi: int, temp: float, ts: int, wind_dir: int, wind_gust_spd: float, wind_spd: float>, lat: string, lon: string, sources: list<string>, state_code: string, timezone: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({city_id: $city_id} | format pattern "/history/daily?city_id={city_id}") $qp)
+  let full_url = (build-url $base ({city_id: (encode-path-segment $city_id)} | format pattern "/history/daily?city_id={city_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1029,15 +1038,15 @@ export def "history-daily-lat-lat-lon-lon get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --start-date: string # Start Date (YYYY-MM-DD or YYYY-MM-DD:HH). (format: string)
   --end-date: string # End Date (YYYY-MM-DD or YYYY-MM-DD:HH). (format: string)
-  --units: string@units-completer # Convert to units. Default Metric See <a target='blank' href='/api/requests'>units field description</a> (format: string)
-  --lang: string@lang-completer # Language (Default: English) See <a target='blank' href='/api/requests'>language field description</a> (format: string)
+  --units: string@units-completer # Convert to units. Default Metric See units field description (format: string)
+  --lang: string@lang-completer # Language (Default: English) See language field description (format: string)
   --callback: string # Wraps return in jsonp callback. Example: callback=func (format: string)
   --key: string # Your registered API key. (format: string)
 ]: nothing -> record<city_name: string, country_code: string, data: table<datetime: string, dewpt: float, dhi: int, dni: int, ghi: int, max_temp: float, max_temp_ts: float, max_uv: float, max_wind_dir: int, max_wind_spd: float, max_wind_spd_ts: float, min_temp: float, min_temp_ts: float, precip: float, precip_gpm: float, pres: float, revision_status: string, rh: int, slp: float, snow: float, snow_depth: float, t_dhi: int, t_dni: int, t_ghi: int, temp: float, ts: int, wind_dir: int, wind_gust_spd: float, wind_spd: float>, lat: string, lon: string, sources: list<string>, state_code: string, timezone: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({lat: $lat, lon: $lon} | format pattern "/history/daily?lat={lat}&lon={lon}") $qp)
+  let full_url = (build-url $base ({lat: (encode-path-segment $lat), lon: (encode-path-segment $lon)} | format pattern "/history/daily?lat={lat}&lon={lon}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1059,15 +1068,15 @@ export def "history-daily-postal-code-postal-code get" [
   --country: string # Country Code (2 letter). (format: string)
   --start-date: string # Start Date (YYYY-MM-DD or YYYY-MM-DD:HH) (format: string)
   --end-date: string # End Date (YYYY-MM-DD or YYYY-MM-DD:HH) (format: string)
-  --units: string@units-completer # Convert to units. Default Metric See <a target='blank' href='/api/requests'>units field description</a> (format: string)
-  --lang: string@lang-completer # Language (Default: English) See <a target='blank' href='/api/requests'>language field description</a> (format: string)
+  --units: string@units-completer # Convert to units. Default Metric See units field description (format: string)
+  --lang: string@lang-completer # Language (Default: English) See language field description (format: string)
   --callback: string # Wraps return in jsonp callback. Example: callback=func (format: string)
   --key: string # Your registered API key. (format: string)
 ]: nothing -> record<city_name: string, country_code: string, data: table<datetime: string, dewpt: float, dhi: int, dni: int, ghi: int, max_temp: float, max_temp_ts: float, max_uv: float, max_wind_dir: int, max_wind_spd: float, max_wind_spd_ts: float, min_temp: float, min_temp_ts: float, precip: float, precip_gpm: float, pres: float, revision_status: string, rh: int, slp: float, snow: float, snow_depth: float, t_dhi: int, t_dni: int, t_ghi: int, temp: float, ts: int, wind_dir: int, wind_gust_spd: float, wind_spd: float>, lat: string, lon: string, sources: list<string>, state_code: string, timezone: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "country" $country "scalar") (serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({postal_code: $postal_code} | format pattern "/history/daily?postal_code={postal_code}") $qp)
+  let full_url = (build-url $base ({postal_code: (encode-path-segment $postal_code)} | format pattern "/history/daily?postal_code={postal_code}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1088,21 +1097,21 @@ export def "history-daily-station-station get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --start-date: string # Start Date (YYYY-MM-DD or YYYY-MM-DD:HH). (format: string)
   --end-date: string # End Date (YYYY-MM-DD or YYYY-MM-DD:HH). (format: string)
-  --units: string@units-completer # Convert to units. Default Metric See <a target='blank' href='/api/requests'>units field description</a> (format: string)
-  --lang: string@lang-completer # Language (Default: English) See <a target='blank' href='/api/requests'>language field description</a> (format: string)
+  --units: string@units-completer # Convert to units. Default Metric See units field description (format: string)
+  --lang: string@lang-completer # Language (Default: English) See language field description (format: string)
   --callback: string # Wraps return in jsonp callback. Example: callback=func (format: string)
   --key: string # Your registered API key. (format: string)
 ]: nothing -> record<city_name: string, country_code: string, data: table<datetime: string, dewpt: float, dhi: int, dni: int, ghi: int, max_temp: float, max_temp_ts: float, max_uv: float, max_wind_dir: int, max_wind_spd: float, max_wind_spd_ts: float, min_temp: float, min_temp_ts: float, precip: float, precip_gpm: float, pres: float, revision_status: string, rh: int, slp: float, snow: float, snow_depth: float, t_dhi: int, t_dni: int, t_ghi: int, temp: float, ts: int, wind_dir: int, wind_gust_spd: float, wind_spd: float>, lat: string, lon: string, sources: list<string>, state_code: string, timezone: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({station: $station} | format pattern "/history/daily?station={station}") $qp)
+  let full_url = (build-url $base ({station: (encode-path-segment $station)} | format pattern "/history/daily?station={station}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Returns Energy API response  - Given a single lat/lon. 
+# Returns Energy API response - Given a single lat/lon.
 #
 # GET /history/energy?lat={lat}&lon={lon}
 export def "history-energy-lat-lat-lon-lon get" [
@@ -1119,15 +1128,15 @@ export def "history-energy-lat-lat-lon-lon get" [
   --start-date: string # Start Date (YYYY-MM-DD or YYYY-MM-DD:HH). (format: string)
   --end-date: string # End Date (YYYY-MM-DD or YYYY-MM-DD:HH). (format: string)
   --tp: string@tp-completer-1 # Time period to aggregate by (daily, monthly) (format: string)
-  --threshold: float # Temperature threshold to use to calculate degree days (default 18 C)  (format: double)
-  --units: string@units-completer # Convert to units. Default Metric See <a target='blank' href='/api/requests'>units field description</a> (format: string)
+  --threshold: float # Temperature threshold to use to calculate degree days (default 18 C) (format: double)
+  --units: string@units-completer # Convert to units. Default Metric See units field description (format: string)
   --callback: string # Wraps return in jsonp callback. Example: callback=func (format: string)
   --key: string # Your registered API key. (format: string)
 ]: nothing -> record<count: int, data: table<cdd: float, city_name: string, clouds: int, country_code: string, dewpt: float, hdd: float, lat: string, lon: string, precip: float, rh: int, snow: float, sources: list, state_code: string, station_id: string, sun_hours: float, t_dhi: float, t_dni: float, t_ghi: float, temp: float, timezone: string, wind_dir: int, wind_spd: float>, end_date: int, start_date: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "tp" $tp "scalar") (serialize-qp "threshold" $threshold "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({lat: $lat, lon: $lon} | format pattern "/history/energy?lat={lat}&lon={lon}") $qp)
+  let full_url = (build-url $base ({lat: (encode-path-segment $lat), lon: (encode-path-segment $lon)} | format pattern "/history/energy?lat={lat}&lon={lon}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1150,8 +1159,8 @@ export def "history-hourly-city-city-country-country get" [
   --state: string # Full name of state. (format: string)
   --start-date: string # Start Date (YYYY-MM-DD or YYYY-MM-DD:HH). (format: string)
   --end-date: string # End Date (YYYY-MM-DD or YYYY-MM-DD:HH). (format: string)
-  --units: string@units-completer # Convert to units. Default Metric See <a target='blank' href='/api/requests'>units field description</a> (format: string)
-  --lang: string@lang-completer # Language (Default: English) See <a target='blank' href='/api/requests'>language field description</a> (format: string)
+  --units: string@units-completer # Convert to units. Default Metric See units field description (format: string)
+  --lang: string@lang-completer # Language (Default: English) See language field description (format: string)
   --tz: string@tz-completer # Assume utc (default) or local time for start_date, end_date (format: string)
   --callback: string # Wraps return in jsonp callback. Example: callback=func (format: string)
   --key: string # Your registered API key. (format: string)
@@ -1159,7 +1168,7 @@ export def "history-hourly-city-city-country-country get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "state" $state "scalar") (serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "tz" $tz "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({city: $city, country: $country} | format pattern "/history/hourly?city={city}&country={country}") $qp)
+  let full_url = (build-url $base ({city: (encode-path-segment $city), country: (encode-path-segment $country)} | format pattern "/history/hourly?city={city}&country={country}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1180,8 +1189,8 @@ export def "history-hourly-city-id-city-id get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --start-date: string # Start Date (YYYY-MM-DD or YYYY-MM-DD:HH) (format: string)
   --end-date: string # End Date (YYYY-MM-DD or YYYY-MM-DD:HH) (format: string)
-  --units: string@units-completer # Convert to units. Default Metric See <a target='blank' href='/api/requests'>units field description</a> (format: string)
-  --lang: string@lang-completer # Language (Default: English) See <a target='blank' href='/api/requests'>language field description</a> (format: string)
+  --units: string@units-completer # Convert to units. Default Metric See units field description (format: string)
+  --lang: string@lang-completer # Language (Default: English) See language field description (format: string)
   --tz: string@tz-completer # Assume utc (default) or local time for start_date, end_date (format: string)
   --callback: string # Wraps return in jsonp callback. Example: callback=func (format: string)
   --key: string # Your registered API key. (format: string)
@@ -1189,7 +1198,7 @@ export def "history-hourly-city-id-city-id get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "tz" $tz "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({city_id: $city_id} | format pattern "/history/hourly?city_id={city_id}") $qp)
+  let full_url = (build-url $base ({city_id: (encode-path-segment $city_id)} | format pattern "/history/hourly?city_id={city_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1211,8 +1220,8 @@ export def "history-hourly-lat-lat-lon-lon get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --start-date: string # Start Date (YYYY-MM-DD or YYYY-MM-DD:HH). (format: string)
   --end-date: string # End Date (YYYY-MM-DD or YYYY-MM-DD:HH). (format: string)
-  --units: string@units-completer # Convert to units. Default Metric See <a target='blank' href='/api/requests'>units field description</a> (format: string)
-  --lang: string@lang-completer # Language (Default: English) See <a target='blank' href='/api/requests'>language field description</a> (format: string)
+  --units: string@units-completer # Convert to units. Default Metric See units field description (format: string)
+  --lang: string@lang-completer # Language (Default: English) See language field description (format: string)
   --tz: string@tz-completer # Assume utc (default) or local time for start_date, end_date (format: string)
   --callback: string # Wraps return in jsonp callback. Example: callback=func (format: string)
   --key: string # Your registered API key. (format: string)
@@ -1220,7 +1229,7 @@ export def "history-hourly-lat-lat-lon-lon get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "tz" $tz "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({lat: $lat, lon: $lon} | format pattern "/history/hourly?lat={lat}&lon={lon}") $qp)
+  let full_url = (build-url $base ({lat: (encode-path-segment $lat), lon: (encode-path-segment $lon)} | format pattern "/history/hourly?lat={lat}&lon={lon}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1242,8 +1251,8 @@ export def "history-hourly-postal-code-postal-code get" [
   --country: string # Country Code (2 letter). (format: string)
   --start-date: string # Start Date (YYYY-MM-DD or YYYY-MM-DD:HH) (format: string)
   --end-date: string # End Date (YYYY-MM-DD or YYYY-MM-DD:HH) (format: string)
-  --units: string@units-completer # Convert to units. Default Metric See <a target='blank' href='/api/requests'>units field description</a> (format: string)
-  --lang: string@lang-completer # Language (Default: English) See <a target='blank' href='/api/requests'>language field description</a> (format: string)
+  --units: string@units-completer # Convert to units. Default Metric See units field description (format: string)
+  --lang: string@lang-completer # Language (Default: English) See language field description (format: string)
   --tz: string@tz-completer # Assume utc (default) or local time for start_date, end_date (format: string)
   --callback: string # Wraps return in jsonp callback. Example: callback=func (format: string)
   --key: string # Your registered API key. (format: string)
@@ -1251,7 +1260,7 @@ export def "history-hourly-postal-code-postal-code get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "country" $country "scalar") (serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "tz" $tz "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({postal_code: $postal_code} | format pattern "/history/hourly?postal_code={postal_code}") $qp)
+  let full_url = (build-url $base ({postal_code: (encode-path-segment $postal_code)} | format pattern "/history/hourly?postal_code={postal_code}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1272,8 +1281,8 @@ export def "history-hourly-station-station get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --start-date: string # Start Date (YYYY-MM-DD or YYYY-MM-DD:HH). (format: string)
   --end-date: string # End Date (YYYY-MM-DD or YYYY-MM-DD:HH). (format: string)
-  --units: string@units-completer # Convert to units. Default Metric See <a target='blank' href='/api/requests'>units field description</a> (format: string)
-  --lang: string@lang-completer # Language (Default: English) See <a target='blank' href='/api/requests'>language field description</a> (format: string)
+  --units: string@units-completer # Convert to units. Default Metric See units field description (format: string)
+  --lang: string@lang-completer # Language (Default: English) See language field description (format: string)
   --tz: string@tz-completer # Assume utc (default) or local time for start_date, end_date (format: string)
   --callback: string # Wraps return in jsonp callback. Example: callback=func (format: string)
   --key: string # Your registered API key. (format: string)
@@ -1281,7 +1290,7 @@ export def "history-hourly-station-station get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "tz" $tz "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({station: $station} | format pattern "/history/hourly?station={station}") $qp)
+  let full_url = (build-url $base ({station: (encode-path-segment $station)} | format pattern "/history/hourly?station={station}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1304,8 +1313,8 @@ export def "history-subhourly-city-city-country-country get" [
   --state: string # Full name of state. (format: string)
   --start-date: string # Start Date (YYYY-MM-DD or YYYY-MM-DD:HH). (format: string)
   --end-date: string # End Date (YYYY-MM-DD or YYYY-MM-DD:HH). (format: string)
-  --units: string@units-completer # Convert to units. Default Metric See <a target='blank' href='/api/requests'>units field description</a> (format: string)
-  --lang: string@lang-completer # Language (Default: English) See <a target='blank' href='/api/requests'>language field description</a> (format: string)
+  --units: string@units-completer # Convert to units. Default Metric See units field description (format: string)
+  --lang: string@lang-completer # Language (Default: English) See language field description (format: string)
   --tz: string@tz-completer # Assume utc (default) or local time for start_date, end_date (format: string)
   --callback: string # Wraps return in jsonp callback. Example: callback=func (format: string)
   --key: string # Your registered API key. (format: string)
@@ -1313,7 +1322,7 @@ export def "history-subhourly-city-city-country-country get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "state" $state "scalar") (serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "tz" $tz "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({city: $city, country: $country} | format pattern "/history/subhourly?city={city}&country={country}") $qp)
+  let full_url = (build-url $base ({city: (encode-path-segment $city), country: (encode-path-segment $country)} | format pattern "/history/subhourly?city={city}&country={country}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1334,8 +1343,8 @@ export def "history-subhourly-city-id-city-id get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --start-date: string # Start Date (YYYY-MM-DD or YYYY-MM-DD:HH) (format: string)
   --end-date: string # End Date (YYYY-MM-DD or YYYY-MM-DD:HH) (format: string)
-  --units: string@units-completer # Convert to units. Default Metric See <a target='blank' href='/api/requests'>units field description</a> (format: string)
-  --lang: string@lang-completer # Language (Default: English) See <a target='blank' href='/api/requests'>language field description</a> (format: string)
+  --units: string@units-completer # Convert to units. Default Metric See units field description (format: string)
+  --lang: string@lang-completer # Language (Default: English) See language field description (format: string)
   --tz: string@tz-completer # Assume utc (default) or local time for start_date, end_date (format: string)
   --callback: string # Wraps return in jsonp callback. Example: callback=func (format: string)
   --key: string # Your registered API key. (format: string)
@@ -1343,7 +1352,7 @@ export def "history-subhourly-city-id-city-id get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "tz" $tz "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({city_id: $city_id} | format pattern "/history/subhourly?city_id={city_id}") $qp)
+  let full_url = (build-url $base ({city_id: (encode-path-segment $city_id)} | format pattern "/history/subhourly?city_id={city_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1365,8 +1374,8 @@ export def "history-subhourly-lat-lat-lon-lon get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --start-date: string # Start Date (YYYY-MM-DD or YYYY-MM-DD:HH). (format: string)
   --end-date: string # End Date (YYYY-MM-DD or YYYY-MM-DD:HH). (format: string)
-  --units: string@units-completer # Convert to units. Default Metric See <a target='blank' href='/api/requests'>units field description</a> (format: string)
-  --lang: string@lang-completer # Language (Default: English) See <a target='blank' href='/api/requests'>language field description</a> (format: string)
+  --units: string@units-completer # Convert to units. Default Metric See units field description (format: string)
+  --lang: string@lang-completer # Language (Default: English) See language field description (format: string)
   --tz: string@tz-completer # Assume utc (default) or local time for start_date, end_date (format: string)
   --callback: string # Wraps return in jsonp callback. Example: callback=func (format: string)
   --key: string # Your registered API key. (format: string)
@@ -1374,7 +1383,7 @@ export def "history-subhourly-lat-lat-lon-lon get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "tz" $tz "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({lat: $lat, lon: $lon} | format pattern "/history/subhourly?lat={lat}&lon={lon}") $qp)
+  let full_url = (build-url $base ({lat: (encode-path-segment $lat), lon: (encode-path-segment $lon)} | format pattern "/history/subhourly?lat={lat}&lon={lon}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1396,8 +1405,8 @@ export def "history-subhourly-postal-code-postal-code get" [
   --country: string # Country Code (2 letter). (format: string)
   --start-date: string # Start Date (YYYY-MM-DD or YYYY-MM-DD:HH) (format: string)
   --end-date: string # End Date (YYYY-MM-DD or YYYY-MM-DD:HH) (format: string)
-  --units: string@units-completer # Convert to units. Default Metric See <a target='blank' href='/api/requests'>units field description</a> (format: string)
-  --lang: string@lang-completer # Language (Default: English) See <a target='blank' href='/api/requests'>language field description</a> (format: string)
+  --units: string@units-completer # Convert to units. Default Metric See units field description (format: string)
+  --lang: string@lang-completer # Language (Default: English) See language field description (format: string)
   --tz: string@tz-completer # Assume utc (default) or local time for start_date, end_date (format: string)
   --callback: string # Wraps return in jsonp callback. Example: callback=func (format: string)
   --key: string # Your registered API key. (format: string)
@@ -1405,7 +1414,7 @@ export def "history-subhourly-postal-code-postal-code get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "country" $country "scalar") (serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "tz" $tz "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({postal_code: $postal_code} | format pattern "/history/subhourly?postal_code={postal_code}") $qp)
+  let full_url = (build-url $base ({postal_code: (encode-path-segment $postal_code)} | format pattern "/history/subhourly?postal_code={postal_code}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1426,8 +1435,8 @@ export def "history-subhourly-station-station get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --start-date: string # Start Date (YYYY-MM-DD or YYYY-MM-DD:HH). (format: string)
   --end-date: string # End Date (YYYY-MM-DD or YYYY-MM-DD:HH). (format: string)
-  --units: string@units-completer # Convert to units. Default Metric See <a target='blank' href='/api/requests'>units field description</a> (format: string)
-  --lang: string@lang-completer # Language (Default: English) See <a target='blank' href='/api/requests'>language field description</a> (format: string)
+  --units: string@units-completer # Convert to units. Default Metric See units field description (format: string)
+  --lang: string@lang-completer # Language (Default: English) See language field description (format: string)
   --tz: string@tz-completer # Assume utc (default) or local time for start_date, end_date (format: string)
   --callback: string # Wraps return in jsonp callback. Example: callback=func (format: string)
   --key: string # Your registered API key. (format: string)
@@ -1435,7 +1444,7 @@ export def "history-subhourly-station-station get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "tz" $tz "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({station: $station} | format pattern "/history/subhourly?station={station}") $qp)
+  let full_url = (build-url $base ({station: (encode-path-segment $station)} | format pattern "/history/subhourly?station={station}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

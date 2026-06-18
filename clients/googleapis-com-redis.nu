@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -78,7 +87,7 @@ def reschedule-type-completer [] { ["IMMEDIATE" "NEXT_AVAILABLE_WINDOW" "RESCHED
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "projects redisprojectslocationsoperationsdelete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "projects delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -102,7 +111,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /v1/{name}
 # operationId: redis.projects.locations.operations.delete
-export def "projects redisprojectslocationsoperationsdelete" [
+export def "projects delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -127,7 +136,7 @@ export def "projects redisprojectslocationsoperationsdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -137,7 +146,7 @@ export def "projects redisprojectslocationsoperationsdelete" [
 #
 # GET /v1/{name}
 # operationId: redis.projects.locations.operations.get
-export def "projects redisprojectslocationsoperationsget" [
+export def "projects get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -162,7 +171,7 @@ export def "projects redisprojectslocationsoperationsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -176,7 +185,7 @@ export def "projects redisprojectslocationsoperationsget" [
 # --maintenanceSchedule shape: {canReschedule?: bool}
 # --persistenceConfig shape: {persistenceMode?: "PERSISTENCE_MODE_UNSPECIFIED"|"DISABLED"|"RDB", rdbSnapshotPeriod?: "SNAPSHOT_PERIOD_UNSPECIFIED"|"ONE_HOUR"|"SIX_HOURS"|"TWELVE_HOURS"|"TWENTY_FOUR_HOURS", rdbSnapshotStartTime?: string}
 # --serverCaCerts item shape: {cert?: string, serialNumber?: string, sha1Fingerprint?: string}
-export def "projects redisprojectslocationsinstancespatch" [
+export def "projects update" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -201,7 +210,7 @@ export def "projects redisprojectslocationsinstancespatch" [
   --alternative-location-id: string # Optional. If specified, at least one node will be provisioned in this zone in addition to the zone specified in location_id. Only applicable to standard tier. If provided, it must be a different zone from the one provided in [location_id]. Additional nodes beyond the first 2 will be placed in zones selected by the service.
   --auth-enabled: oneof<nothing, bool> # Optional. Indicates whether OSS Redis AUTH is enabled for the instance. If set to "true" AUTH is enabled on the instance. Default value is "false" meaning AUTH is disabled.
   --authorized-network: string # Optional. The full name of the Google Compute Engine [network](https://cloud.google.com/vpc/docs/vpc) to which the instance is connected. If left unspecified, the `default` network will be used.
-  --available-maintenance-versions: list # Optional. The available maintenance versions that an instance could update to.
+  --available-maintenance-versions: list<string> # Optional. The available maintenance versions that an instance could update to.
   --connect-mode: string@connect-mode-completer # Optional. The network connect mode of the Redis instance. If not provided, the connect mode defaults to DIRECT_PEERING.
   --customer-managed-key: string # Optional. The KMS key reference that the customer provides when trying to create the instance.
   --display-name: string # An arbitrary and optional user-provided name for the instance.
@@ -219,7 +228,7 @@ export def "projects redisprojectslocationsinstancespatch" [
   --replica-count: int # Optional. The number of replica nodes. The valid range for the Standard Tier with read replicas enabled is [1-5] and defaults to 2. If read replicas are not enabled for a Standard Tier instance, the only valid value is 1 and the default is 1. The valid value for basic tier is 0 and the default is also 0. (format: int32)
   --reserved-ip-range: string # Optional. For DIRECT_PEERING mode, the CIDR range of internal addresses that are reserved for this instance. Range must be unique and non-overlapping with existing subnets in an authorized network. For PRIVATE_SERVICE_ACCESS mode, the name of one allocated IP address ranges associated with this private service access connection. If not provided, the service will choose an unused /29 block, for example, 10.0.0.0/29 or 192.168.0.0/29. For READ_REPLICAS_ENABLED the default block size is /28.
   --secondary-ip-range: string # Optional. Additional IP range for node placement. Required when enabling read replicas on an existing instance. For DIRECT_PEERING mode value must be a CIDR range of size /28, or "auto". For PRIVATE_SERVICE_ACCESS mode value must be the name of an allocated address range associated with the private service access connection, or "auto".
-  --suspension-reasons: list # Optional. reasons that causes instance in "SUSPENDED" state.
+  --suspension-reasons: list<string> # Optional. reasons that causes instance in "SUSPENDED" state.
   --tier: string@tier-completer # Required. The service tier of the instance.
   --transit-encryption-mode: string@transit-encryption-mode-completer # Optional. The TLS mode of the Redis instance. If not provided, TLS is disabled for the instance.
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
@@ -227,19 +236,19 @@ export def "projects redisprojectslocationsinstancespatch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}") $qp)
-  let body = {"alternativeLocationId": $alternative_location_id, "authEnabled": $auth_enabled, "authorizedNetwork": $authorized_network, "availableMaintenanceVersions": $available_maintenance_versions, "connectMode": $connect_mode, "customerManagedKey": $customer_managed_key, "displayName": $display_name, "labels": $labels, "locationId": $location_id, "maintenancePolicy": $maintenance_policy, "maintenanceSchedule": $maintenance_schedule, "maintenanceVersion": $maintenance_version, "memorySizeGb": $memory_size_gb, "name": $body_name, "persistenceConfig": $persistence_config, "readReplicasMode": $read_replicas_mode, "redisConfigs": $redis_configs, "redisVersion": $redis_version, "replicaCount": $replica_count, "reservedIpRange": $reserved_ip_range, "secondaryIpRange": $secondary_ip_range, "suspensionReasons": $suspension_reasons, "tier": $tier, "transitEncryptionMode": $transit_encryption_mode} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}") $qp)
+  let req_body = {"alternativeLocationId": $alternative_location_id, "authEnabled": $auth_enabled, "authorizedNetwork": $authorized_network, "availableMaintenanceVersions": $available_maintenance_versions, "connectMode": $connect_mode, "customerManagedKey": $customer_managed_key, "displayName": $display_name, "labels": $labels, "locationId": $location_id, "maintenancePolicy": $maintenance_policy, "maintenanceSchedule": $maintenance_schedule, "maintenanceVersion": $maintenance_version, "memorySizeGb": $memory_size_gb, "name": $body_name, "persistenceConfig": $persistence_config, "readReplicasMode": $read_replicas_mode, "redisConfigs": $redis_configs, "redisVersion": $redis_version, "replicaCount": $replica_count, "reservedIpRange": $reserved_ip_range, "secondaryIpRange": $secondary_ip_range, "suspensionReasons": $suspension_reasons, "tier": $tier, "transitEncryptionMode": $transit_encryption_mode} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets the AUTH string for a Redis instance. If AUTH is not enabled for the instance the response will be empty. This information is not included in the details returned to GetInstance.
 #
 # GET /v1/{name}/authString
 # operationId: redis.projects.locations.instances.getAuthString
-export def "auth-string redisprojectslocationsinstancesgetAuthString" [
+export def "auth-string get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -264,7 +273,7 @@ export def "auth-string redisprojectslocationsinstancesgetAuthString" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}/authString") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}/authString") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -274,7 +283,7 @@ export def "auth-string redisprojectslocationsinstancesgetAuthString" [
 #
 # GET /v1/{name}/locations
 # operationId: redis.projects.locations.list
-export def "locations redisprojectslocationslist" [
+export def "locations list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -302,7 +311,7 @@ export def "locations redisprojectslocationslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}/locations") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}/locations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -312,7 +321,7 @@ export def "locations redisprojectslocationslist" [
 #
 # GET /v1/{name}/operations
 # operationId: redis.projects.locations.operations.list
-export def "operations redisprojectslocationsoperationslist" [
+export def "operations list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -340,7 +349,7 @@ export def "operations redisprojectslocationsoperationslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}/operations") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}/operations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -350,7 +359,7 @@ export def "operations redisprojectslocationsoperationslist" [
 #
 # POST /v1/{name}:cancel
 # operationId: redis.projects.locations.operations.cancel
-export def "projects redisprojectslocationsoperationscancel" [
+export def "projects cancel" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -375,7 +384,7 @@ export def "projects redisprojectslocationsoperationscancel" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}:cancel") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}:cancel") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -386,7 +395,7 @@ export def "projects redisprojectslocationsoperationscancel" [
 # POST /v1/{name}:export
 # operationId: redis.projects.locations.instances.export
 # --outputConfig shape: {gcsDestination?: record}
-export def "projects redisprojectslocationsinstancesexport" [
+export def "projects export" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -413,19 +422,19 @@ export def "projects redisprojectslocationsinstancesexport" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}:export") $qp)
-  let body = {"outputConfig": $output_config} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}:export") $qp)
+  let req_body = {"outputConfig": $output_config} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Initiates a failover of the primary node to current replica node for a specific STANDARD tier Cloud Memorystore for Redis instance.
 #
 # POST /v1/{name}:failover
 # operationId: redis.projects.locations.instances.failover
-export def "projects redisprojectslocationsinstancesfailover" [
+export def "projects create-failover" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -452,12 +461,12 @@ export def "projects redisprojectslocationsinstancesfailover" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}:failover") $qp)
-  let body = {"dataProtectionMode": $data_protection_mode} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}:failover") $qp)
+  let req_body = {"dataProtectionMode": $data_protection_mode} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Import a Redis RDB snapshot file from Cloud Storage into a Redis instance. Redis may stop serving during this operation. Instance state will be IMPORTING for entire operation. When complete, the instance will contain only data from the imported file. The returned operation is automatically deleted after a few hours, so there is no need to call DeleteOperation.
@@ -465,7 +474,7 @@ export def "projects redisprojectslocationsinstancesfailover" [
 # POST /v1/{name}:import
 # operationId: redis.projects.locations.instances.import
 # --inputConfig shape: {gcsSource?: record}
-export def "projects redisprojectslocationsinstancesimport" [
+export def "projects import" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -492,19 +501,19 @@ export def "projects redisprojectslocationsinstancesimport" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}:import") $qp)
-  let body = {"inputConfig": $input_config} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}:import") $qp)
+  let req_body = {"inputConfig": $input_config} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Reschedule maintenance for a given instance in a given project and location.
 #
 # POST /v1/{name}:rescheduleMaintenance
 # operationId: redis.projects.locations.instances.rescheduleMaintenance
-export def "projects redisprojectslocationsinstancesrescheduleMaintenance" [
+export def "projects create-reschedule-maintenance" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -532,19 +541,19 @@ export def "projects redisprojectslocationsinstancesrescheduleMaintenance" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}:rescheduleMaintenance") $qp)
-  let body = {"rescheduleType": $reschedule_type, "scheduleTime": $schedule_time} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}:rescheduleMaintenance") $qp)
+  let req_body = {"rescheduleType": $reschedule_type, "scheduleTime": $schedule_time} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Upgrades Redis instance to the newer Redis version specified in the request.
 #
 # POST /v1/{name}:upgrade
 # operationId: redis.projects.locations.instances.upgrade
-export def "projects redisprojectslocationsinstancesupgrade" [
+export def "projects create-upgrade" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -571,19 +580,19 @@ export def "projects redisprojectslocationsinstancesupgrade" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}:upgrade") $qp)
-  let body = {"redisVersion": $redis_version} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}:upgrade") $qp)
+  let req_body = {"redisVersion": $redis_version} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists all Redis instances owned by a project in either the specified location (region) or all locations. The location should have the following format: * `projects/{project_id}/locations/{location_id}` If `location_id` is specified as `-` (wildcard), then all regions available to the project are queried, and the results are aggregated.
 #
 # GET /v1/{parent}/instances
 # operationId: redis.projects.locations.instances.list
-export def "instances redisprojectslocationsinstanceslist" [
+export def "instances list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -610,7 +619,7 @@ export def "instances redisprojectslocationsinstanceslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/instances") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/instances") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -624,7 +633,7 @@ export def "instances redisprojectslocationsinstanceslist" [
 # --maintenanceSchedule shape: {canReschedule?: bool}
 # --persistenceConfig shape: {persistenceMode?: "PERSISTENCE_MODE_UNSPECIFIED"|"DISABLED"|"RDB", rdbSnapshotPeriod?: "SNAPSHOT_PERIOD_UNSPECIFIED"|"ONE_HOUR"|"SIX_HOURS"|"TWELVE_HOURS"|"TWENTY_FOUR_HOURS", rdbSnapshotStartTime?: string}
 # --serverCaCerts item shape: {cert?: string, serialNumber?: string, sha1Fingerprint?: string}
-export def "instances redisprojectslocationsinstancescreate" [
+export def "instances create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -649,7 +658,7 @@ export def "instances redisprojectslocationsinstancescreate" [
   --alternative-location-id: string # Optional. If specified, at least one node will be provisioned in this zone in addition to the zone specified in location_id. Only applicable to standard tier. If provided, it must be a different zone from the one provided in [location_id]. Additional nodes beyond the first 2 will be placed in zones selected by the service.
   --auth-enabled: oneof<nothing, bool> # Optional. Indicates whether OSS Redis AUTH is enabled for the instance. If set to "true" AUTH is enabled on the instance. Default value is "false" meaning AUTH is disabled.
   --authorized-network: string # Optional. The full name of the Google Compute Engine [network](https://cloud.google.com/vpc/docs/vpc) to which the instance is connected. If left unspecified, the `default` network will be used.
-  --available-maintenance-versions: list # Optional. The available maintenance versions that an instance could update to.
+  --available-maintenance-versions: list<string> # Optional. The available maintenance versions that an instance could update to.
   --connect-mode: string@connect-mode-completer # Optional. The network connect mode of the Redis instance. If not provided, the connect mode defaults to DIRECT_PEERING.
   --customer-managed-key: string # Optional. The KMS key reference that the customer provides when trying to create the instance.
   --display-name: string # An arbitrary and optional user-provided name for the instance.
@@ -667,7 +676,7 @@ export def "instances redisprojectslocationsinstancescreate" [
   --replica-count: int # Optional. The number of replica nodes. The valid range for the Standard Tier with read replicas enabled is [1-5] and defaults to 2. If read replicas are not enabled for a Standard Tier instance, the only valid value is 1 and the default is 1. The valid value for basic tier is 0 and the default is also 0. (format: int32)
   --reserved-ip-range: string # Optional. For DIRECT_PEERING mode, the CIDR range of internal addresses that are reserved for this instance. Range must be unique and non-overlapping with existing subnets in an authorized network. For PRIVATE_SERVICE_ACCESS mode, the name of one allocated IP address ranges associated with this private service access connection. If not provided, the service will choose an unused /29 block, for example, 10.0.0.0/29 or 192.168.0.0/29. For READ_REPLICAS_ENABLED the default block size is /28.
   --secondary-ip-range: string # Optional. Additional IP range for node placement. Required when enabling read replicas on an existing instance. For DIRECT_PEERING mode value must be a CIDR range of size /28, or "auto". For PRIVATE_SERVICE_ACCESS mode value must be the name of an allocated address range associated with the private service access connection, or "auto".
-  --suspension-reasons: list # Optional. reasons that causes instance in "SUSPENDED" state.
+  --suspension-reasons: list<string> # Optional. reasons that causes instance in "SUSPENDED" state.
   --tier: string@tier-completer # Required. The service tier of the instance.
   --transit-encryption-mode: string@transit-encryption-mode-completer # Optional. The TLS mode of the Redis instance. If not provided, TLS is disabled for the instance.
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
@@ -675,10 +684,10 @@ export def "instances redisprojectslocationsinstancescreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "instanceId" $instance_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/instances") $qp)
-  let body = {"alternativeLocationId": $alternative_location_id, "authEnabled": $auth_enabled, "authorizedNetwork": $authorized_network, "availableMaintenanceVersions": $available_maintenance_versions, "connectMode": $connect_mode, "customerManagedKey": $customer_managed_key, "displayName": $display_name, "labels": $labels, "locationId": $location_id, "maintenancePolicy": $maintenance_policy, "maintenanceSchedule": $maintenance_schedule, "maintenanceVersion": $maintenance_version, "memorySizeGb": $memory_size_gb, "name": $name, "persistenceConfig": $persistence_config, "readReplicasMode": $read_replicas_mode, "redisConfigs": $redis_configs, "redisVersion": $redis_version, "replicaCount": $replica_count, "reservedIpRange": $reserved_ip_range, "secondaryIpRange": $secondary_ip_range, "suspensionReasons": $suspension_reasons, "tier": $tier, "transitEncryptionMode": $transit_encryption_mode} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/instances") $qp)
+  let req_body = {"alternativeLocationId": $alternative_location_id, "authEnabled": $auth_enabled, "authorizedNetwork": $authorized_network, "availableMaintenanceVersions": $available_maintenance_versions, "connectMode": $connect_mode, "customerManagedKey": $customer_managed_key, "displayName": $display_name, "labels": $labels, "locationId": $location_id, "maintenancePolicy": $maintenance_policy, "maintenanceSchedule": $maintenance_schedule, "maintenanceVersion": $maintenance_version, "memorySizeGb": $memory_size_gb, "name": $name, "persistenceConfig": $persistence_config, "readReplicasMode": $read_replicas_mode, "redisConfigs": $redis_configs, "redisVersion": $redis_version, "replicaCount": $replica_count, "reservedIpRange": $reserved_ip_range, "secondaryIpRange": $secondary_ip_range, "suspensionReasons": $suspension_reasons, "tier": $tier, "transitEncryptionMode": $transit_encryption_mode} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

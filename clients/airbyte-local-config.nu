@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -79,7 +88,7 @@ def default-geography-completer [] { ["auto" "eu" "us"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "attempt-save-stats saveStats" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "attempt-save-stats stats" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -105,7 +114,7 @@ export def commands []: nothing -> table {
 # operationId: saveStats
 # --stats shape: {bytesEmitted?: int, estimatedBytes?: int, estimatedRecords?: int, recordsCommitted?: int, recordsEmitted?: int, stateMessagesEmitted?: int}
 # --streamStats item shape: {stats: record, streamName: string, streamNamespace?: string}
-export def "attempt-save-stats saveStats" [
+export def "attempt-save-stats stats" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -123,11 +132,11 @@ export def "attempt-save-stats saveStats" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/attempt/save_stats")
-  let body = {"attemptNumber": $attempt_number, "jobId": $job_id, "stats": $stats, "streamStats": $stream_stats} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"attemptNumber": $attempt_number, "jobId": $job_id, "stats": $stats, "streamStats": $stream_stats} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # For worker to save the AttemptSyncConfig for an attempt.
@@ -135,7 +144,7 @@ export def "attempt-save-stats saveStats" [
 # POST /v1/attempt/save_sync_config
 # operationId: saveSyncConfig
 # --syncConfig shape: {destinationConfiguration: any, sourceConfiguration: any, state?: record}
-export def "attempt-save-sync-config saveSyncConfig" [
+export def "attempt-save-sync-config sync" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -152,18 +161,18 @@ export def "attempt-save-sync-config saveSyncConfig" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/attempt/save_sync_config")
-  let body = {"attemptNumber": $attempt_number, "jobId": $job_id, "syncConfig": $sync_config} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"attemptNumber": $attempt_number, "jobId": $job_id, "syncConfig": $sync_config} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # For worker to register the workflow id in attempt.
 #
 # POST /v1/attempt/set_workflow_in_attempt
 # operationId: setWorkflowInAttempt
-export def "attempt-set-workflow-in-attempt setWorkflowInAttempt" [
+export def "attempt-set-workflow-in-attempt update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -181,11 +190,11 @@ export def "attempt-set-workflow-in-attempt setWorkflowInAttempt" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/attempt/set_workflow_in_attempt")
-  let body = {"attemptNumber": $attempt_number, "jobId": $job_id, "processingTaskQueue": $processing_task_queue, "workflowId": $workflow_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"attemptNumber": $attempt_number, "jobId": $job_id, "processingTaskQueue": $processing_task_queue, "workflowId": $workflow_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create a connection between a source and a destination
@@ -212,7 +221,7 @@ export def "connections-create create" [
   --namespace-format: string # Used when namespaceDefinition is 'customformat'. If blank then behaves like namespaceDefinition = 'destination'. If "${SOURCE_NAMESPACE}" then behaves like namespaceDefinition = 'source'. (e.g. ${SOURCE_NAMESPACE})
   --non-breaking-changes-preference: string@non-breaking-changes-preference-completer
   --notify-schema-changes: oneof<nothing, bool>
-  --operation-ids: list
+  --operation-ids: list<string>
   --prefix: string # Prefix that will be prepended to the name of each stream when it is written to the destination.
   --resource-requirements: record # optional resource requirements to run workers (blank for unbounded allocations) — shape: {cpu_limit?: string, cpu_request?: string, memory_limit?: string, memory_request?: string}
   --schedule: record # if null, then no schedule is set. — shape: {timeUnit: "minutes"|"hours"|"days"|"weeks"|"months", units: int}
@@ -227,11 +236,11 @@ export def "connections-create create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/connections/create")
-  let body = {"destinationId": $destination_id, "geography": $geography, "name": $name, "namespaceDefinition": $namespace_definition, "namespaceFormat": $namespace_format, "nonBreakingChangesPreference": $non_breaking_changes_preference, "notifySchemaChanges": $notify_schema_changes, "operationIds": $operation_ids, "prefix": $prefix, "resourceRequirements": $resource_requirements, "schedule": $schedule, "scheduleData": $schedule_data, "scheduleType": $schedule_type, "sourceCatalogId": $source_catalog_id, "sourceId": $source_id, "status": $status, "syncCatalog": $sync_catalog} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"destinationId": $destination_id, "geography": $geography, "name": $name, "namespaceDefinition": $namespace_definition, "namespaceFormat": $namespace_format, "nonBreakingChangesPreference": $non_breaking_changes_preference, "notifySchemaChanges": $notify_schema_changes, "operationIds": $operation_ids, "prefix": $prefix, "resourceRequirements": $resource_requirements, "schedule": $schedule, "scheduleData": $schedule_data, "scheduleType": $schedule_type, "sourceCatalogId": $source_catalog_id, "sourceId": $source_id, "status": $status, "syncCatalog": $sync_catalog} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a connection
@@ -253,11 +262,11 @@ export def "connections-delete delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/connections/delete")
-  let body = {"connectionId": $connection_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"connectionId": $connection_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get a connection
@@ -279,18 +288,18 @@ export def "connections-get get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/connections/get")
-  let body = {"connectionId": $connection_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"connectionId": $connection_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns all connections for a workspace.
 #
 # POST /v1/connections/list
 # operationId: listConnectionsForWorkspace
-export def "connections-list list-connections-for-workspace" [
+export def "connections-list list-for-workspace" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -305,18 +314,18 @@ export def "connections-list list-connections-for-workspace" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/connections/list")
-  let body = {"workspaceId": $workspace_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"workspaceId": $workspace_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns all connections for a workspace, including deleted connections.
 #
 # POST /v1/connections/list_all
 # operationId: listAllConnectionsForWorkspace
-export def "connections-list-all list-all-connections-for-workspace" [
+export def "connections-list-all list-for-workspace" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -331,11 +340,11 @@ export def "connections-list-all list-all-connections-for-workspace" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/connections/list_all")
-  let body = {"workspaceId": $workspace_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"workspaceId": $workspace_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Reset the data for the connection. Deletes data generated by the connection in the destination. Resets any cursors back to initial state.
@@ -357,11 +366,11 @@ export def "connections-reset reset" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/connections/reset")
-  let body = {"connectionId": $connection_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"connectionId": $connection_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Search connections
@@ -399,11 +408,11 @@ export def "connections-search list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/connections/search")
-  let body = {"connectionId": $connection_id, "destination": $destination, "destinationId": $destination_id, "name": $name, "namespaceDefinition": $namespace_definition, "namespaceFormat": $namespace_format, "prefix": $prefix, "schedule": $schedule, "scheduleData": $schedule_data, "scheduleType": $schedule_type, "source": $body_source, "sourceId": $source_id, "status": $status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"connectionId": $connection_id, "destination": $destination, "destinationId": $destination_id, "name": $name, "namespaceDefinition": $namespace_definition, "namespaceFormat": $namespace_format, "prefix": $prefix, "schedule": $schedule, "scheduleData": $schedule_data, "scheduleType": $schedule_type, "source": $body_source, "sourceId": $source_id, "status": $status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Trigger a manual sync of the connection
@@ -425,11 +434,11 @@ export def "connections-sync sync" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/connections/sync")
-  let body = {"connectionId": $connection_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"connectionId": $connection_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update a connection
@@ -457,7 +466,7 @@ export def "connections-update update" [
   --namespace-format: string # Used when namespaceDefinition is 'customformat'. If blank then behaves like namespaceDefinition = 'destination'. If "${SOURCE_NAMESPACE}" then behaves like namespaceDefinition = 'source'. (e.g. ${SOURCE_NAMESPACE})
   --non-breaking-changes-preference: string@non-breaking-changes-preference-completer
   --notify-schema-changes: oneof<nothing, bool>
-  --operation-ids: list
+  --operation-ids: list<string>
   --prefix: string # Prefix that will be prepended to the name of each stream when it is written to the destination.
   --resource-requirements: record # optional resource requirements to run workers (blank for unbounded allocations) — shape: {cpu_limit?: string, cpu_request?: string, memory_limit?: string, memory_request?: string}
   --schedule: record # if null, then no schedule is set. — shape: {timeUnit: "minutes"|"hours"|"days"|"weeks"|"months", units: int}
@@ -471,11 +480,11 @@ export def "connections-update update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/connections/update")
-  let body = {"breakingChange": $breaking_change, "connectionId": $connection_id, "geography": $geography, "name": $name, "namespaceDefinition": $namespace_definition, "namespaceFormat": $namespace_format, "nonBreakingChangesPreference": $non_breaking_changes_preference, "notifySchemaChanges": $notify_schema_changes, "operationIds": $operation_ids, "prefix": $prefix, "resourceRequirements": $resource_requirements, "schedule": $schedule, "scheduleData": $schedule_data, "scheduleType": $schedule_type, "sourceCatalogId": $source_catalog_id, "status": $status, "syncCatalog": $sync_catalog} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"breakingChange": $breaking_change, "connectionId": $connection_id, "geography": $geography, "name": $name, "namespaceDefinition": $namespace_definition, "namespaceFormat": $namespace_format, "nonBreakingChangesPreference": $non_breaking_changes_preference, "notifySchemaChanges": $notify_schema_changes, "operationIds": $operation_ids, "prefix": $prefix, "resourceRequirements": $resource_requirements, "schedule": $schedule, "scheduleData": $schedule_data, "scheduleType": $schedule_type, "sourceCatalogId": $source_catalog_id, "status": $status, "syncCatalog": $sync_catalog} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get specification for a destinationDefinition
@@ -498,11 +507,11 @@ export def "destination-definition-specifications-get get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/destination_definition_specifications/get")
-  let body = {"destinationDefinitionId": $destination_definition_id, "workspaceId": $workspace_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"destinationDefinitionId": $destination_definition_id, "workspaceId": $workspace_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Creates a custom destinationDefinition for the given workspace
@@ -526,11 +535,11 @@ export def "destination-definitions-create-custom create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/destination_definitions/create_custom")
-  let body = {"destinationDefinition": $destination_definition, "workspaceId": $workspace_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"destinationDefinition": $destination_definition, "workspaceId": $workspace_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a destination definition
@@ -552,11 +561,11 @@ export def "destination-definitions-delete delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/destination_definitions/delete")
-  let body = {"destinationDefinitionId": $destination_definition_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"destinationDefinitionId": $destination_definition_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get destinationDefinition
@@ -578,11 +587,11 @@ export def "destination-definitions-get get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/destination_definitions/get")
-  let body = {"destinationDefinitionId": $destination_definition_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"destinationDefinitionId": $destination_definition_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get a destinationDefinition that is configured for the given workspace
@@ -605,18 +614,18 @@ export def "destination-definitions-get-for-workspace get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/destination_definitions/get_for_workspace")
-  let body = {"destinationDefinitionId": $destination_definition_id, "workspaceId": $workspace_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"destinationDefinitionId": $destination_definition_id, "workspaceId": $workspace_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # grant a private, non-custom destinationDefinition to a given workspace
 #
 # POST /v1/destination_definitions/grant_definition
 # operationId: grantDestinationDefinitionToWorkspace
-export def "destination-definitions-grant-definition grantDestinationDefinitionToWorkspace" [
+export def "destination-definitions-grant-definition create-to-workspace" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -632,11 +641,11 @@ export def "destination-definitions-grant-definition grantDestinationDefinitionT
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/destination_definitions/grant_definition")
-  let body = {"destinationDefinitionId": $destination_definition_id, "workspaceId": $workspace_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"destinationDefinitionId": $destination_definition_id, "workspaceId": $workspace_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List all the destinationDefinitions the current Airbyte deployment is configured to use
@@ -680,11 +689,11 @@ export def "destination-definitions-list-for-workspace list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/destination_definitions/list_for_workspace")
-  let body = {"workspaceId": $workspace_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"workspaceId": $workspace_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List the latest destinationDefinitions Airbyte supports
@@ -728,18 +737,18 @@ export def "destination-definitions-list-private list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/destination_definitions/list_private")
-  let body = {"workspaceId": $workspace_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"workspaceId": $workspace_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # revoke a grant to a private, non-custom destinationDefinition from a given workspace
 #
 # POST /v1/destination_definitions/revoke_definition
 # operationId: revokeDestinationDefinitionFromWorkspace
-export def "destination-definitions-revoke-definition delete-destination-definition-from-workspace" [
+export def "destination-definitions-revoke-definition delete-from-workspace" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -755,11 +764,11 @@ export def "destination-definitions-revoke-definition delete-destination-definit
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/destination_definitions/revoke_definition")
-  let body = {"destinationDefinitionId": $destination_definition_id, "workspaceId": $workspace_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"destinationDefinitionId": $destination_definition_id, "workspaceId": $workspace_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update destinationDefinition
@@ -784,18 +793,18 @@ export def "destination-definitions-update update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/destination_definitions/update")
-  let body = {"destinationDefinitionId": $destination_definition_id, "dockerImageTag": $docker_image_tag, "resourceRequirements": $resource_requirements} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"destinationDefinitionId": $destination_definition_id, "dockerImageTag": $docker_image_tag, "resourceRequirements": $resource_requirements} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Given a destination def ID generate an access/refresh token etc.
 #
 # POST /v1/destination_oauths/complete_oauth
 # operationId: completeDestinationOAuth
-export def "destination-oauths-complete-oauth completeDestinationOAuth" [
+export def "destination-oauths-complete-oauth complete-o-auth" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -815,18 +824,18 @@ export def "destination-oauths-complete-oauth completeDestinationOAuth" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/destination_oauths/complete_oauth")
-  let body = {"destinationDefinitionId": $destination_definition_id, "destinationId": $destination_id, "oAuthInputConfiguration": $o_auth_input_configuration, "queryParams": $query_params, "redirectUrl": $redirect_url, "workspaceId": $workspace_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"destinationDefinitionId": $destination_definition_id, "destinationId": $destination_id, "oAuthInputConfiguration": $o_auth_input_configuration, "queryParams": $query_params, "redirectUrl": $redirect_url, "workspaceId": $workspace_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Given a destination connector definition ID, return the URL to the consent screen where to redirect the user to.
 #
 # POST /v1/destination_oauths/get_consent_url
 # operationId: getDestinationOAuthConsent
-export def "destination-oauths-get-consent-url get" [
+export def "destination-oauths-get-consent-url get-o-auth" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -845,18 +854,18 @@ export def "destination-oauths-get-consent-url get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/destination_oauths/get_consent_url")
-  let body = {"destinationDefinitionId": $destination_definition_id, "destinationId": $destination_id, "oAuthInputConfiguration": $o_auth_input_configuration, "redirectUrl": $redirect_url, "workspaceId": $workspace_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"destinationDefinitionId": $destination_definition_id, "destinationId": $destination_id, "oAuthInputConfiguration": $o_auth_input_configuration, "redirectUrl": $redirect_url, "workspaceId": $workspace_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Sets instancewide variables to be used for the oauth flow when creating this destination. When set, these variables will be injected into a connector's configuration before any interaction with the connector image itself. This enables running oauth flows with consistent variables e.g: the company's Google Ads developer_token, client_id, and client_secret without the user having to know about these variables.
 #
 # POST /v1/destination_oauths/oauth_params/create
 # operationId: setInstancewideDestinationOauthParams
-export def "destination-oauths-oauth-params-create setInstancewideDestinationOauthParams" [
+export def "destination-oauths-oauth-params-create update-instancewide" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -872,18 +881,18 @@ export def "destination-oauths-oauth-params-create setInstancewideDestinationOau
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/destination_oauths/oauth_params/create")
-  let body = {"destinationDefinitionId": $destination_definition_id, "params": $params} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"destinationDefinitionId": $destination_definition_id, "params": $params} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Check connection to the destination
 #
 # POST /v1/destinations/check_connection
 # operationId: checkConnectionToDestination
-export def "destinations-check-connection check-connection-to" [
+export def "destinations-check-connection check" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -898,18 +907,18 @@ export def "destinations-check-connection check-connection-to" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/destinations/check_connection")
-  let body = {"destinationId": $destination_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"destinationId": $destination_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Check connection for a proposed update to a destination
 #
 # POST /v1/destinations/check_connection_for_update
 # operationId: checkConnectionToDestinationForUpdate
-export def "destinations-check-connection-for-update check-connection-to" [
+export def "destinations-check-connection-for-update check" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -926,11 +935,11 @@ export def "destinations-check-connection-for-update check-connection-to" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/destinations/check_connection_for_update")
-  let body = {"connectionConfiguration": $connection_configuration, "destinationId": $destination_id, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"connectionConfiguration": $connection_configuration, "destinationId": $destination_id, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Clone destination
@@ -954,11 +963,11 @@ export def "destinations-clone clone" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/destinations/clone")
-  let body = {"destinationCloneId": $destination_clone_id, "destinationConfiguration": $destination_configuration} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"destinationCloneId": $destination_clone_id, "destinationConfiguration": $destination_configuration} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create a destination
@@ -983,11 +992,11 @@ export def "destinations-create create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/destinations/create")
-  let body = {"connectionConfiguration": $connection_configuration, "destinationDefinitionId": $destination_definition_id, "name": $name, "workspaceId": $workspace_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"connectionConfiguration": $connection_configuration, "destinationDefinitionId": $destination_definition_id, "name": $name, "workspaceId": $workspace_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete the destination
@@ -1009,11 +1018,11 @@ export def "destinations-delete delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/destinations/delete")
-  let body = {"destinationId": $destination_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"destinationId": $destination_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get configured destination
@@ -1035,18 +1044,18 @@ export def "destinations-get get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/destinations/get")
-  let body = {"destinationId": $destination_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"destinationId": $destination_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List configured destinations for a workspace
 #
 # POST /v1/destinations/list
 # operationId: listDestinationsForWorkspace
-export def "destinations-list list-destinations-for-workspace" [
+export def "destinations-list list-for-workspace" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1061,11 +1070,11 @@ export def "destinations-list list-destinations-for-workspace" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/destinations/list")
-  let body = {"workspaceId": $workspace_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"workspaceId": $workspace_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Search destinations
@@ -1092,11 +1101,11 @@ export def "destinations-search list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/destinations/search")
-  let body = {"connectionConfiguration": $connection_configuration, "destinationDefinitionId": $destination_definition_id, "destinationId": $destination_id, "destinationName": $destination_name, "name": $name, "workspaceId": $workspace_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"connectionConfiguration": $connection_configuration, "destinationDefinitionId": $destination_definition_id, "destinationId": $destination_id, "destinationName": $destination_name, "name": $name, "workspaceId": $workspace_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update a destination
@@ -1120,18 +1129,18 @@ export def "destinations-update update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/destinations/update")
-  let body = {"connectionConfiguration": $connection_configuration, "destinationId": $destination_id, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"connectionConfiguration": $connection_configuration, "destinationId": $destination_id, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Health Check
 #
 # GET /v1/health
 # operationId: getHealthCheck
-export def "health get-health-check" [
+export def "health get-check" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1168,18 +1177,18 @@ export def "jobs-cancel cancel" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/jobs/cancel")
-  let body = {"id": $id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"id": $id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get information about a job
 #
 # POST /v1/jobs/get
 # operationId: getJobInfo
-export def "jobs-get get-job-info" [
+export def "jobs-get get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1194,11 +1203,11 @@ export def "jobs-get get-job-info" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/jobs/get")
-  let body = {"id": $id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"id": $id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets all information needed to debug this job
@@ -1220,11 +1229,11 @@ export def "jobs-get-debug-info get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/jobs/get_debug_info")
-  let body = {"id": $id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"id": $id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /v1/jobs/get_last_replication_job
@@ -1245,18 +1254,18 @@ export def "jobs-get-last-replication-job get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/jobs/get_last_replication_job")
-  let body = {"connectionId": $connection_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"connectionId": $connection_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get information about a job excluding attempt info and logs
 #
 # POST /v1/jobs/get_light
 # operationId: getJobInfoLight
-export def "jobs-get-light get-job-info" [
+export def "jobs-get-light get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1271,18 +1280,18 @@ export def "jobs-get-light get-job-info" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/jobs/get_light")
-  let body = {"id": $id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"id": $id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get normalization status to determine if we can bypass normalization phase
 #
 # POST /v1/jobs/get_normalization_status
 # operationId: getAttemptNormalizationStatusesForJob
-export def "jobs-get-normalization-status get-attempt-normalization-statuses-for" [
+export def "jobs-get-normalization-status get-attempt-statuses" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1297,11 +1306,11 @@ export def "jobs-get-normalization-status get-attempt-normalization-statuses-for
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/jobs/get_normalization_status")
-  let body = {"id": $id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"id": $id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns recent jobs for a connection. Jobs are returned in descending order by createdAt.
@@ -1309,7 +1318,7 @@ export def "jobs-get-normalization-status get-attempt-normalization-statuses-for
 # POST /v1/jobs/list
 # operationId: listJobsFor
 # --pagination shape: {pageSize?: int, rowOffset?: int}
-export def "jobs-list list-jobs-for" [
+export def "jobs-list list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1319,7 +1328,7 @@ export def "jobs-list list-jobs-for" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   config_id: string
-  config_types: list
+  config_types: list<string>
   --including-job-id: int # format: int64
   --pagination: record # shape: {pageSize?: int, rowOffset?: int}
 ]: any -> record<jobs: table<attempts: list, job: record>, totalJobCount: int> {
@@ -1327,11 +1336,11 @@ export def "jobs-list list-jobs-for" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/jobs/list")
-  let body = {"configId": $config_id, "configTypes": $config_types, "includingJobId": $including_job_id, "pagination": $pagination} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"configId": $config_id, "configTypes": $config_types, "includingJobId": $including_job_id, "pagination": $pagination} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get logs
@@ -1353,11 +1362,11 @@ export def "logs-get get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/logs/get")
-  let body = {"logType": $log_type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"logType": $log_type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Try sending a notifications
@@ -1365,7 +1374,7 @@ export def "logs-get get" [
 # POST /v1/notifications/try
 # operationId: tryNotificationConfig
 # --slackConfiguration shape: {webhook: string}
-export def "notifications-try tryNotificationConfig" [
+export def "notifications-try create-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1384,18 +1393,18 @@ export def "notifications-try tryNotificationConfig" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/notifications/try")
-  let body = {"customerioConfiguration": $customerio_configuration, "notificationType": $notification_type, "sendOnFailure": $send_on_failure, "sendOnSuccess": $send_on_success, "slackConfiguration": $slack_configuration} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"customerioConfiguration": $customerio_configuration, "notificationType": $notification_type, "sendOnFailure": $send_on_failure, "sendOnSuccess": $send_on_success, "slackConfiguration": $slack_configuration} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns the openapi specification
 #
 # GET /v1/openapi
 # operationId: getOpenApiSpec
-export def "openapi get-open-api-spec" [
+export def "openapi get-open-spec" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1438,11 +1447,11 @@ export def "operations-check check" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/operations/check")
-  let body = {"dbt": $dbt, "normalization": $normalization, "operatorType": $operator_type, "webhook": $webhook} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"dbt": $dbt, "normalization": $normalization, "operatorType": $operator_type, "webhook": $webhook} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create an operation to be applied as part of a connection pipeline
@@ -1467,11 +1476,11 @@ export def "operations-create create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/operations/create")
-  let body = {"name": $name, "operatorConfiguration": $operator_configuration, "workspaceId": $workspace_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"name": $name, "operatorConfiguration": $operator_configuration, "workspaceId": $workspace_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete an operation
@@ -1493,11 +1502,11 @@ export def "operations-delete delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/operations/delete")
-  let body = {"operationId": $operation_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"operationId": $operation_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns an operation
@@ -1519,18 +1528,18 @@ export def "operations-get get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/operations/get")
-  let body = {"operationId": $operation_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"operationId": $operation_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns all operations for a connection.
 #
 # POST /v1/operations/list
 # operationId: listOperationsForConnection
-export def "operations-list list-operations-for-connection" [
+export def "operations-list list-for-connection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1545,11 +1554,11 @@ export def "operations-list list-operations-for-connection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/operations/list")
-  let body = {"connectionId": $connection_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"connectionId": $connection_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update an operation
@@ -1574,18 +1583,18 @@ export def "operations-update update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/operations/update")
-  let body = {"name": $name, "operationId": $operation_id, "operatorConfiguration": $operator_configuration} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"name": $name, "operationId": $operation_id, "operatorConfiguration": $operator_configuration} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Run check connection for a given destination configuration
 #
 # POST /v1/scheduler/destinations/check_connection
 # operationId: executeDestinationCheckConnection
-export def "scheduler-destinations-check-connection exec-ute" [
+export def "scheduler-destinations-check-connection check-execute" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1603,18 +1612,18 @@ export def "scheduler-destinations-check-connection exec-ute" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/scheduler/destinations/check_connection")
-  let body = {"connectionConfiguration": $connection_configuration, "destinationDefinitionId": $destination_definition_id, "destinationId": $destination_id, "workspaceId": $workspace_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"connectionConfiguration": $connection_configuration, "destinationDefinitionId": $destination_definition_id, "destinationId": $destination_id, "workspaceId": $workspace_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Run check connection for a given source configuration
 #
 # POST /v1/scheduler/sources/check_connection
 # operationId: executeSourceCheckConnection
-export def "scheduler-sources-check-connection exec-ute" [
+export def "scheduler-sources-check-connection check-execute" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1632,18 +1641,18 @@ export def "scheduler-sources-check-connection exec-ute" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/scheduler/sources/check_connection")
-  let body = {"connectionConfiguration": $connection_configuration, "sourceDefinitionId": $source_definition_id, "sourceId": $source_id, "workspaceId": $workspace_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"connectionConfiguration": $connection_configuration, "sourceDefinitionId": $source_definition_id, "sourceId": $source_id, "workspaceId": $workspace_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Run discover schema for a given source a source configuration
 #
 # POST /v1/scheduler/sources/discover_schema
 # operationId: executeSourceDiscoverSchema
-export def "scheduler-sources-discover-schema exec-ute" [
+export def "scheduler-sources-discover-schema create-execute" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1661,11 +1670,11 @@ export def "scheduler-sources-discover-schema exec-ute" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/scheduler/sources/discover_schema")
-  let body = {"connectionConfiguration": $connection_configuration, "sourceDefinitionId": $source_definition_id, "sourceId": $source_id, "workspaceId": $workspace_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"connectionConfiguration": $connection_configuration, "sourceDefinitionId": $source_definition_id, "sourceId": $source_id, "workspaceId": $workspace_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get specification for a SourceDefinition.
@@ -1688,11 +1697,11 @@ export def "source-definition-specifications-get get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/source_definition_specifications/get")
-  let body = {"sourceDefinitionId": $source_definition_id, "workspaceId": $workspace_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"sourceDefinitionId": $source_definition_id, "workspaceId": $workspace_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Creates a custom sourceDefinition for the given workspace
@@ -1716,11 +1725,11 @@ export def "source-definitions-create-custom create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/source_definitions/create_custom")
-  let body = {"sourceDefinition": $source_definition, "workspaceId": $workspace_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"sourceDefinition": $source_definition, "workspaceId": $workspace_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a source definition
@@ -1742,11 +1751,11 @@ export def "source-definitions-delete delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/source_definitions/delete")
-  let body = {"sourceDefinitionId": $source_definition_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"sourceDefinitionId": $source_definition_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get source
@@ -1768,11 +1777,11 @@ export def "source-definitions-get get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/source_definitions/get")
-  let body = {"sourceDefinitionId": $source_definition_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"sourceDefinitionId": $source_definition_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get a sourceDefinition that is configured for the given workspace
@@ -1795,18 +1804,18 @@ export def "source-definitions-get-for-workspace get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/source_definitions/get_for_workspace")
-  let body = {"sourceDefinitionId": $source_definition_id, "workspaceId": $workspace_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"sourceDefinitionId": $source_definition_id, "workspaceId": $workspace_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # grant a private, non-custom sourceDefinition to a given workspace
 #
 # POST /v1/source_definitions/grant_definition
 # operationId: grantSourceDefinitionToWorkspace
-export def "source-definitions-grant-definition grantSourceDefinitionToWorkspace" [
+export def "source-definitions-grant-definition create-to-workspace" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1822,11 +1831,11 @@ export def "source-definitions-grant-definition grantSourceDefinitionToWorkspace
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/source_definitions/grant_definition")
-  let body = {"sourceDefinitionId": $source_definition_id, "workspaceId": $workspace_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"sourceDefinitionId": $source_definition_id, "workspaceId": $workspace_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List all the sourceDefinitions the current Airbyte deployment is configured to use
@@ -1870,11 +1879,11 @@ export def "source-definitions-list-for-workspace list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/source_definitions/list_for_workspace")
-  let body = {"workspaceId": $workspace_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"workspaceId": $workspace_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List the latest sourceDefinitions Airbyte supports
@@ -1918,18 +1927,18 @@ export def "source-definitions-list-private list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/source_definitions/list_private")
-  let body = {"workspaceId": $workspace_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"workspaceId": $workspace_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # revoke a grant to a private, non-custom sourceDefinition from a given workspace
 #
 # POST /v1/source_definitions/revoke_definition
 # operationId: revokeSourceDefinitionFromWorkspace
-export def "source-definitions-revoke-definition delete-source-definition-from-workspace" [
+export def "source-definitions-revoke-definition delete-from-workspace" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1945,11 +1954,11 @@ export def "source-definitions-revoke-definition delete-source-definition-from-w
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/source_definitions/revoke_definition")
-  let body = {"sourceDefinitionId": $source_definition_id, "workspaceId": $workspace_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"sourceDefinitionId": $source_definition_id, "workspaceId": $workspace_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update a sourceDefinition
@@ -1974,18 +1983,18 @@ export def "source-definitions-update update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/source_definitions/update")
-  let body = {"dockerImageTag": $docker_image_tag, "resourceRequirements": $resource_requirements, "sourceDefinitionId": $source_definition_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"dockerImageTag": $docker_image_tag, "resourceRequirements": $resource_requirements, "sourceDefinitionId": $source_definition_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Given a source def ID generate an access/refresh token etc.
 #
 # POST /v1/source_oauths/complete_oauth
 # operationId: completeSourceOAuth
-export def "source-oauths-complete-oauth completeSourceOAuth" [
+export def "source-oauths-complete-oauth complete-o-auth" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2005,18 +2014,18 @@ export def "source-oauths-complete-oauth completeSourceOAuth" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/source_oauths/complete_oauth")
-  let body = {"oAuthInputConfiguration": $o_auth_input_configuration, "queryParams": $query_params, "redirectUrl": $redirect_url, "sourceDefinitionId": $source_definition_id, "sourceId": $source_id, "workspaceId": $workspace_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"oAuthInputConfiguration": $o_auth_input_configuration, "queryParams": $query_params, "redirectUrl": $redirect_url, "sourceDefinitionId": $source_definition_id, "sourceId": $source_id, "workspaceId": $workspace_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Given a source connector definition ID, return the URL to the consent screen where to redirect the user to.
 #
 # POST /v1/source_oauths/get_consent_url
 # operationId: getSourceOAuthConsent
-export def "source-oauths-get-consent-url get" [
+export def "source-oauths-get-consent-url get-o-auth" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2035,18 +2044,18 @@ export def "source-oauths-get-consent-url get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/source_oauths/get_consent_url")
-  let body = {"oAuthInputConfiguration": $o_auth_input_configuration, "redirectUrl": $redirect_url, "sourceDefinitionId": $source_definition_id, "sourceId": $source_id, "workspaceId": $workspace_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"oAuthInputConfiguration": $o_auth_input_configuration, "redirectUrl": $redirect_url, "sourceDefinitionId": $source_definition_id, "sourceId": $source_id, "workspaceId": $workspace_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Sets instancewide variables to be used for the oauth flow when creating this source. When set, these variables will be injected into a connector's configuration before any interaction with the connector image itself. This enables running oauth flows with consistent variables e.g: the company's Google Ads developer_token, client_id, and client_secret without the user having to know about these variables.
 #
 # POST /v1/source_oauths/oauth_params/create
 # operationId: setInstancewideSourceOauthParams
-export def "source-oauths-oauth-params-create setInstancewideSourceOauthParams" [
+export def "source-oauths-oauth-params-create update-instancewide" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2062,18 +2071,18 @@ export def "source-oauths-oauth-params-create setInstancewideSourceOauthParams" 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/source_oauths/oauth_params/create")
-  let body = {"params": $params, "sourceDefinitionId": $source_definition_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"params": $params, "sourceDefinitionId": $source_definition_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Check connection to the source
 #
 # POST /v1/sources/check_connection
 # operationId: checkConnectionToSource
-export def "sources-check-connection check-connection-to" [
+export def "sources-check-connection check" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2088,18 +2097,18 @@ export def "sources-check-connection check-connection-to" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/sources/check_connection")
-  let body = {"sourceId": $source_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"sourceId": $source_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Check connection for a proposed update to a source
 #
 # POST /v1/sources/check_connection_for_update
 # operationId: checkConnectionToSourceForUpdate
-export def "sources-check-connection-for-update check-connection-to" [
+export def "sources-check-connection-for-update check" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2116,11 +2125,11 @@ export def "sources-check-connection-for-update check-connection-to" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/sources/check_connection_for_update")
-  let body = {"connectionConfiguration": $connection_configuration, "name": $name, "sourceId": $source_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"connectionConfiguration": $connection_configuration, "name": $name, "sourceId": $source_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Clone source
@@ -2144,11 +2153,11 @@ export def "sources-clone clone" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/sources/clone")
-  let body = {"sourceCloneId": $source_clone_id, "sourceConfiguration": $source_configuration} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"sourceCloneId": $source_clone_id, "sourceConfiguration": $source_configuration} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create a source
@@ -2173,11 +2182,11 @@ export def "sources-create create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/sources/create")
-  let body = {"connectionConfiguration": $connection_configuration, "name": $name, "sourceDefinitionId": $source_definition_id, "workspaceId": $workspace_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"connectionConfiguration": $connection_configuration, "name": $name, "sourceDefinitionId": $source_definition_id, "workspaceId": $workspace_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a source
@@ -2199,18 +2208,18 @@ export def "sources-delete delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/sources/delete")
-  let body = {"sourceId": $source_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"sourceId": $source_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Discover the schema catalog of the source
 #
 # POST /v1/sources/discover_schema
 # operationId: discoverSchemaForSource
-export def "sources-discover-schema discoverSchemaForSource" [
+export def "sources-discover-schema create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2228,11 +2237,11 @@ export def "sources-discover-schema discoverSchemaForSource" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/sources/discover_schema")
-  let body = {"connectionId": $connection_id, "disable_cache": $disable_cache, "notifySchemaChange": $notify_schema_change, "sourceId": $source_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"connectionId": $connection_id, "disable_cache": $disable_cache, "notifySchemaChange": $notify_schema_change, "sourceId": $source_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get source
@@ -2254,18 +2263,18 @@ export def "sources-get get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/sources/get")
-  let body = {"sourceId": $source_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"sourceId": $source_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List sources for workspace
 #
 # POST /v1/sources/list
 # operationId: listSourcesForWorkspace
-export def "sources-list list-sources-for-workspace" [
+export def "sources-list list-for-workspace" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2280,11 +2289,11 @@ export def "sources-list list-sources-for-workspace" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/sources/list")
-  let body = {"workspaceId": $workspace_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"workspaceId": $workspace_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get most recent ActorCatalog for source
@@ -2306,11 +2315,11 @@ export def "sources-most-recent-source-actor-catalog get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/sources/most_recent_source_actor_catalog")
-  let body = {"sourceId": $source_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"sourceId": $source_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Search sources
@@ -2337,11 +2346,11 @@ export def "sources-search list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/sources/search")
-  let body = {"connectionConfiguration": $connection_configuration, "name": $name, "sourceDefinitionId": $source_definition_id, "sourceId": $source_id, "sourceName": $source_name, "workspaceId": $workspace_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"connectionConfiguration": $connection_configuration, "name": $name, "sourceDefinitionId": $source_definition_id, "sourceId": $source_id, "sourceName": $source_name, "workspaceId": $workspace_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update a source
@@ -2365,11 +2374,11 @@ export def "sources-update update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/sources/update")
-  let body = {"connectionConfiguration": $connection_configuration, "name": $name, "sourceId": $source_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"connectionConfiguration": $connection_configuration, "name": $name, "sourceId": $source_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Should only called from worker, to write result from discover activity back to DB.
@@ -2377,7 +2386,7 @@ export def "sources-update update" [
 # POST /v1/sources/write_discover_catalog_result
 # operationId: writeDiscoverCatalogResult
 # --catalog shape: {streams: list}
-export def "sources-write-discover-catalog-result writeDiscoverCatalogResult" [
+export def "sources-write-discover-catalog-result create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2395,11 +2404,11 @@ export def "sources-write-discover-catalog-result writeDiscoverCatalogResult" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/sources/write_discover_catalog_result")
-  let body = {"catalog": $catalog, "configurationHash": $configuration_hash, "connectorVersion": $connector_version, "sourceId": $source_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"catalog": $catalog, "configurationHash": $configuration_hash, "connectorVersion": $connector_version, "sourceId": $source_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create or update the state for a connection.
@@ -2423,11 +2432,11 @@ export def "state-create-or-update create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/state/create_or_update")
-  let body = {"connectionId": $connection_id, "connectionState": $connection_state} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"connectionId": $connection_id, "connectionState": $connection_state} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Fetch the current state for a connection.
@@ -2449,18 +2458,18 @@ export def "state-get get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/state/get")
-  let body = {"connectionId": $connection_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"connectionId": $connection_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns a summary of source and destination definitions that could be updated.
 #
 # POST /v1/web_backend/check_updates
 # operationId: webBackendCheckUpdates
-export def "web-backend-check-updates webBackendCheckUpdates" [
+export def "web-backend-check-updates check" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2487,7 +2496,7 @@ export def "web-backend-check-updates webBackendCheckUpdates" [
 # --schedule shape: {timeUnit: "minutes"|"hours"|"days"|"weeks"|"months", units: int}
 # --scheduleData shape: {basicSchedule?: record, cron?: record}
 # --syncCatalog shape: {streams: list}
-export def "web-backend-connections-create webBackendCreateConnection" [
+export def "web-backend-connections-create create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2502,7 +2511,7 @@ export def "web-backend-connections-create webBackendCreateConnection" [
   --namespace-definition: string@namespace-definition-completer # Method used for computing final namespace in destination
   --namespace-format: string # Used when namespaceDefinition is 'customformat'. If blank then behaves like namespaceDefinition = 'destination'. If "${SOURCE_NAMESPACE}" then behaves like namespaceDefinition = 'source'. (e.g. ${SOURCE_NAMESPACE})
   --non-breaking-changes-preference: string@non-breaking-changes-preference-completer
-  --operation-ids: list
+  --operation-ids: list<string>
   --operations: list # item shape: {name: string, operatorConfiguration: record, workspaceId: string}
   --prefix: string # Prefix that will be prepended to the name of each stream when it is written to the destination.
   --resource-requirements: record # optional resource requirements to run workers (blank for unbounded allocations) — shape: {cpu_limit?: string, cpu_request?: string, memory_limit?: string, memory_request?: string}
@@ -2518,18 +2527,18 @@ export def "web-backend-connections-create webBackendCreateConnection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/web_backend/connections/create")
-  let body = {"destinationId": $destination_id, "geography": $geography, "name": $name, "namespaceDefinition": $namespace_definition, "namespaceFormat": $namespace_format, "nonBreakingChangesPreference": $non_breaking_changes_preference, "operationIds": $operation_ids, "operations": $operations, "prefix": $prefix, "resourceRequirements": $resource_requirements, "schedule": $schedule, "scheduleData": $schedule_data, "scheduleType": $schedule_type, "sourceCatalogId": $source_catalog_id, "sourceId": $source_id, "status": $status, "syncCatalog": $sync_catalog} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"destinationId": $destination_id, "geography": $geography, "name": $name, "namespaceDefinition": $namespace_definition, "namespaceFormat": $namespace_format, "nonBreakingChangesPreference": $non_breaking_changes_preference, "operationIds": $operation_ids, "operations": $operations, "prefix": $prefix, "resourceRequirements": $resource_requirements, "schedule": $schedule, "scheduleData": $schedule_data, "scheduleType": $schedule_type, "sourceCatalogId": $source_catalog_id, "sourceId": $source_id, "status": $status, "syncCatalog": $sync_catalog} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get a connection
 #
 # POST /v1/web_backend/connections/get
 # operationId: webBackendGetConnection
-export def "web-backend-connections-get webBackendGetConnection" [
+export def "web-backend-connections-get get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2545,18 +2554,18 @@ export def "web-backend-connections-get webBackendGetConnection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/web_backend/connections/get")
-  let body = {"connectionId": $connection_id, "withRefreshedCatalog": $with_refreshed_catalog} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"connectionId": $connection_id, "withRefreshedCatalog": $with_refreshed_catalog} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns all non-deleted connections for a workspace.
 #
 # POST /v1/web_backend/connections/list
 # operationId: webBackendListConnectionsForWorkspace
-export def "web-backend-connections-list webBackendListConnectionsForWorkspace" [
+export def "web-backend-connections-list list-for-workspace" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2565,19 +2574,19 @@ export def "web-backend-connections-list webBackendListConnectionsForWorkspace" 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --destination-id: list
-  --source-id: list
+  --destination-id: list<string>
+  --source-id: list<string>
   workspace_id: string # format: uuid
 ]: any -> record<connections: table<connectionId: string, destination: record, isSyncing: bool, latestSyncJobCreatedAt: int, latestSyncJobStatus: string, name: string, scheduleData: record, scheduleType: string, schemaChange: string, source: record, status: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/web_backend/connections/list")
-  let body = {"destinationId": $destination_id, "sourceId": $source_id, "workspaceId": $workspace_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"destinationId": $destination_id, "sourceId": $source_id, "workspaceId": $workspace_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update a connection
@@ -2589,7 +2598,7 @@ export def "web-backend-connections-list webBackendListConnectionsForWorkspace" 
 # --schedule shape: {timeUnit: "minutes"|"hours"|"days"|"weeks"|"months", units: int}
 # --scheduleData shape: {basicSchedule?: record, cron?: record}
 # --syncCatalog shape: {streams: list}
-export def "web-backend-connections-update webBackendUpdateConnection" [
+export def "web-backend-connections-update update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2620,18 +2629,18 @@ export def "web-backend-connections-update webBackendUpdateConnection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/web_backend/connections/update")
-  let body = {"connectionId": $connection_id, "geography": $geography, "name": $name, "namespaceDefinition": $namespace_definition, "namespaceFormat": $namespace_format, "nonBreakingChangesPreference": $non_breaking_changes_preference, "notifySchemaChanges": $notify_schema_changes, "operations": $operations, "prefix": $prefix, "resourceRequirements": $resource_requirements, "schedule": $schedule, "scheduleData": $schedule_data, "scheduleType": $schedule_type, "skipReset": $skip_reset, "sourceCatalogId": $source_catalog_id, "status": $status, "syncCatalog": $sync_catalog} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"connectionId": $connection_id, "geography": $geography, "name": $name, "namespaceDefinition": $namespace_definition, "namespaceFormat": $namespace_format, "nonBreakingChangesPreference": $non_breaking_changes_preference, "notifySchemaChanges": $notify_schema_changes, "operations": $operations, "prefix": $prefix, "resourceRequirements": $resource_requirements, "schedule": $schedule, "scheduleData": $schedule_data, "scheduleType": $schedule_type, "skipReset": $skip_reset, "sourceCatalogId": $source_catalog_id, "status": $status, "syncCatalog": $sync_catalog} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns available geographies can be selected to run data syncs in a particular geography. The 'auto' entry indicates that the sync will be automatically assigned to a geography according to the platform default behavior. Entries other than 'auto' are two-letter country codes that follow the ISO 3166-1 alpha-2 standard.
 #
 # POST /v1/web_backend/geographies/list
 # operationId: webBackendListGeographies
-export def "web-backend-geographies-list webBackendListGeographies" [
+export def "web-backend-geographies-list list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2668,18 +2677,18 @@ export def "web-backend-state-get-type get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/web_backend/state/get_type")
-  let body = {"connectionId": $connection_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"connectionId": $connection_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns the current state of a workspace
 #
 # POST /v1/web_backend/workspace/state
 # operationId: webBackendGetWorkspaceState
-export def "web-backend-workspace-state webBackendGetWorkspaceState" [
+export def "web-backend-workspace-state get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2694,11 +2703,11 @@ export def "web-backend-workspace-state webBackendGetWorkspaceState" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/web_backend/workspace/state")
-  let body = {"workspaceId": $workspace_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"workspaceId": $workspace_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Creates a workspace
@@ -2730,11 +2739,11 @@ export def "workspaces-create create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/workspaces/create")
-  let body = {"anonymousDataCollection": $anonymous_data_collection, "defaultGeography": $default_geography, "displaySetupWizard": $display_setup_wizard, "email": $email, "name": $name, "news": $news, "notifications": $notifications, "securityUpdates": $security_updates, "webhookConfigs": $webhook_configs} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"anonymousDataCollection": $anonymous_data_collection, "defaultGeography": $default_geography, "displaySetupWizard": $display_setup_wizard, "email": $email, "name": $name, "news": $news, "notifications": $notifications, "securityUpdates": $security_updates, "webhookConfigs": $webhook_configs} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes a workspace
@@ -2756,11 +2765,11 @@ export def "workspaces-delete delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/workspaces/delete")
-  let body = {"workspaceId": $workspace_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"workspaceId": $workspace_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Find workspace by ID
@@ -2782,11 +2791,11 @@ export def "workspaces-get get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/workspaces/get")
-  let body = {"workspaceId": $workspace_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"workspaceId": $workspace_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Find workspace by connection id
@@ -2808,11 +2817,11 @@ export def "workspaces-get-by-connection-id get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/workspaces/get_by_connection_id")
-  let body = {"connectionId": $connection_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"connectionId": $connection_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Find workspace by slug
@@ -2834,11 +2843,11 @@ export def "workspaces-get-by-slug get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/workspaces/get_by_slug")
-  let body = {"slug": $slug} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"slug": $slug} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List all workspaces registered in the current Airbyte deployment
@@ -2882,11 +2891,11 @@ export def "workspaces-tag-feedback-status-as-done update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/workspaces/tag_feedback_status_as_done")
-  let body = {"workspaceId": $workspace_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"workspaceId": $workspace_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update workspace state
@@ -2919,11 +2928,11 @@ export def "workspaces-update update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/workspaces/update")
-  let body = {"anonymousDataCollection": $anonymous_data_collection, "defaultGeography": $default_geography, "displaySetupWizard": $display_setup_wizard, "email": $email, "initialSetupComplete": $initial_setup_complete, "news": $news, "notifications": $notifications, "securityUpdates": $security_updates, "webhookConfigs": $webhook_configs, "workspaceId": $workspace_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"anonymousDataCollection": $anonymous_data_collection, "defaultGeography": $default_geography, "displaySetupWizard": $display_setup_wizard, "email": $email, "initialSetupComplete": $initial_setup_complete, "news": $news, "notifications": $notifications, "securityUpdates": $security_updates, "webhookConfigs": $webhook_configs, "workspaceId": $workspace_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update workspace name
@@ -2946,9 +2955,9 @@ export def "workspaces-update-name update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/workspaces/update_name")
-  let body = {"name": $name, "workspaceId": $workspace_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"name": $name, "workspaceId": $workspace_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

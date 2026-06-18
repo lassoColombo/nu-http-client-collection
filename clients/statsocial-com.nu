@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -141,7 +150,7 @@ export def "reports get" [
 # Obtain report output
 #
 # POST /reports/
-export def "reports post" [
+export def "reports create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -191,7 +200,7 @@ export def "reports-custom-create get" [
 # Step 3 of executing custom report
 #
 # POST /reports/custom/create/
-export def "reports-custom-create post" [
+export def "reports-custom-create create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -238,7 +247,7 @@ export def "reports-custom-generate get" [
 # Step 1 of executing custom report
 #
 # POST /reports/custom/generate/
-export def "reports-custom-generate post" [
+export def "reports-custom-generate create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -285,7 +294,7 @@ export def "reports-custom-insert get" [
 # Step 2 of executing custom report
 #
 # POST /reports/custom/insert/
-export def "reports-custom-insert post" [
+export def "reports-custom-insert create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -332,7 +341,7 @@ export def "reports-dates get" [
 # Get report dates available for a specific report
 #
 # POST /reports/dates/
-export def "reports-dates post" [
+export def "reports-dates create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -378,7 +387,7 @@ export def "reports-status get" [
 # Get list of generated reports
 #
 # POST /reports/status/
-export def "reports-status post" [
+export def "reports-status create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -428,7 +437,7 @@ export def "reports-tweet-create get" [
 # Used to create tweet reports
 #
 # POST /reports/tweet/create/
-export def "reports-tweet-create post" [
+export def "reports-tweet-create create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -480,7 +489,7 @@ export def "reports-twitter-create get" [
 # Used to create twitter follower report
 #
 # POST /reports/twitter/create/
-export def "reports-twitter-create post" [
+export def "reports-twitter-create create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

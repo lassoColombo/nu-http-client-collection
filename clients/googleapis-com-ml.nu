@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -76,7 +85,7 @@ def state-completer-2 [] { ["ACTIVE" "COMPLETED" "REQUESTED" "STATE_UNSPECIFIED"
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "projects mlprojectsmodelsversionsdelete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "projects delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -100,7 +109,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /v1/{name}
 # operationId: ml.projects.models.versions.delete
-export def "projects mlprojectsmodelsversionsdelete" [
+export def "projects delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -125,7 +134,7 @@ export def "projects mlprojectsmodelsversionsdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -135,7 +144,7 @@ export def "projects mlprojectsmodelsversionsdelete" [
 #
 # GET /v1/{name}
 # operationId: ml.projects.operations.get
-export def "projects mlprojectsoperationsget" [
+export def "projects get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -160,7 +169,7 @@ export def "projects mlprojectsoperationsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -172,12 +181,12 @@ export def "projects mlprojectsoperationsget" [
 # operationId: ml.projects.models.versions.patch
 # --acceleratorConfig shape: {count?: string, type?: "ACCELERATOR_TYPE_UNSPECIFIED"|"NVIDIA_TESLA_K80"|"NVIDIA_TESLA_P100"|"NVIDIA_TESLA_V100"|"NVIDIA_TESLA_P4"|"NVIDIA_TESLA_T4"|"NVIDIA_TESLA_A100"|"TPU_V2"|"TPU_V3"|"TPU_V2_POD"|"TPU_V3_POD"|"TPU_V4_POD"}
 # --autoScaling shape: {maxNodes?: int, metrics?: list, minNodes?: int}
-# --container shape: {args?: list, command?: list, env?: list, image?: string, ports?: list}
+# --container shape: {args?: list<string>, command?: list<string>, env?: list, image?: string, ports?: list}
 # --explanationConfig shape: {integratedGradientsAttribution?: record, sampledShapleyAttribution?: record, xraiAttribution?: record}
 # --manualScaling shape: {nodes?: int}
 # --requestLoggingConfig shape: {bigqueryTableName?: string, samplingPercentage?: float}
 # --routes shape: {health?: string, predict?: string}
-export def "projects mlprojectsmodelsversionspatch" [
+export def "projects update" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -201,7 +210,7 @@ export def "projects mlprojectsmodelsversionspatch" [
   --update-mask: string # Required. Specifies the path, relative to `Version`, of the field to update. Must be present and non-empty. For example, to change the description of a version to "foo", the `update_mask` parameter would be specified as `description`, and the `PATCH` request body would specify the new value, as follows: ``` { "description": "foo" } ``` Currently the only supported update mask fields are `description`, `requestLoggingConfig`, `autoScaling.minNodes`, and `manualScaling.nodes`. However, you can only update `manualScaling.nodes` if the version uses a [Compute Engine (N1) machine type](/ml-engine/docs/machine-types-online-prediction).
   --accelerator-config: record # Represents a hardware accelerator request config. Note that the AcceleratorConfig can be used in both Jobs and Versions. Learn more about [accelerators for training](/ml-engine/docs/using-gpus) and [accelerators for online prediction](/ml-engine/docs/machine-types-online-prediction#gpus). — shape: {count?: string, type?: "ACCELERATOR_TYPE_UNSPECIFIED"|"NVIDIA_TESLA_K80"|"NVIDIA_TESLA_P100"|"NVIDIA_TESLA_V100"|"NVIDIA_TESLA_P4"|"NVIDIA_TESLA_T4"|"NVIDIA_TESLA_A100"|"TPU_V2"|"TPU_V3"|"TPU_V2_POD"|"TPU_V3_POD"|"TPU_V4_POD"}
   --auto-scaling: record # Options for automatically scaling a model. — shape: {maxNodes?: int, metrics?: list, minNodes?: int}
-  --container: record # Specification of a custom container for serving predictions. This message is a subset of the [Kubernetes Container v1 core specification](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.18/#container-v1-core). — shape: {args?: list, command?: list, env?: list, image?: string, ports?: list}
+  --container: record # Specification of a custom container for serving predictions. This message is a subset of the [Kubernetes Container v1 core specification](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.18/#container-v1-core). — shape: {args?: list<string>, command?: list<string>, env?: list, image?: string, ports?: list}
   --create-time: string # Output only. The time the version was created. (format: google-datetime)
   --deployment-uri: string # The Cloud Storage URI of a directory containing trained model artifacts to be used to create the model version. See the [guide to deploying models](/ai-platform/prediction/docs/deploying-models) for more information. The total number of files under this directory must not exceed 1000. During projects.models.versions.create, AI Platform Prediction copies all files from the specified directory to a location managed by the service. From then on, AI Platform Prediction uses these copies of the model artifacts to serve predictions, not the original files in Cloud Storage, so this location is useful only as a historical record. If you specify container, then this field is optional. Otherwise, it is required. Learn [how to use this field with a custom container](/ai-platform/prediction/docs/custom-container-requirements#artifacts).
   --description: string # Optional. The description specified for the version when it was created.
@@ -215,7 +224,7 @@ export def "projects mlprojectsmodelsversionspatch" [
   --machine-type: string # Optional. The type of machine on which to serve the model. Currently only applies to online prediction service. To learn about valid values for this field, read [Choosing a machine type for online prediction](/ai-platform/prediction/docs/machine-types-online-prediction). If this field is not specified and you are using a [regional endpoint](/ai-platform/prediction/docs/regional-endpoints), then the machine type defaults to `n1-standard-2`. If this field is not specified and you are using the global endpoint (`ml.googleapis.com`), then the machine type defaults to `mls1-c1-m2`.
   --manual-scaling: record # Options for manually scaling a model. — shape: {nodes?: int}
   --body-name: string # Required. The name specified for the version when it was created. The version name must be unique within the model it is created in.
-  --package-uris: list # Optional. Cloud Storage paths (`gs://…`) of packages for [custom prediction routines](/ml-engine/docs/tensorflow/custom-prediction-routines) or [scikit-learn pipelines with custom code](/ml-engine/docs/scikit/exporting-for-prediction#custom-pipeline-code). For a custom prediction routine, one of these packages must contain your Predictor class (see [`predictionClass`](#Version.FIELDS.prediction_class)). Additionally, include any dependencies used by your Predictor or scikit-learn pipeline uses that are not already included in your selected [runtime version](/ml-engine/docs/tensorflow/runtime-version-list). If you specify this field, you must also set [`runtimeVersion`](#Version.FIELDS.runtime_version) to 1.4 or greater.
+  --package-uris: list<string> # Optional. Cloud Storage paths (`gs://…`) of packages for [custom prediction routines](/ml-engine/docs/tensorflow/custom-prediction-routines) or [scikit-learn pipelines with custom code](/ml-engine/docs/scikit/exporting-for-prediction#custom-pipeline-code). For a custom prediction routine, one of these packages must contain your Predictor class (see [`predictionClass`](#Version.FIELDS.prediction_class)). Additionally, include any dependencies used by your Predictor or scikit-learn pipeline uses that are not already included in your selected [runtime version](/ml-engine/docs/tensorflow/runtime-version-list). If you specify this field, you must also set [`runtimeVersion`](#Version.FIELDS.runtime_version) to 1.4 or greater.
   --prediction-class: string # Optional. The fully qualified name (module_name.class_name) of a class that implements the Predictor interface described in this reference field. The module containing this class should be included in a package provided to the [`packageUris` field](#Version.FIELDS.package_uris). Specify this field if and only if you are deploying a [custom prediction routine (beta)](/ml-engine/docs/tensorflow/custom-prediction-routines). If you specify this field, you must set [`runtimeVersion`](#Version.FIELDS.runtime_version) to 1.4 or greater and you must set `machineType` to a [legacy (MLS1) machine type](/ml-engine/docs/machine-types-online-prediction). The following code sample provides the Predictor interface: class Predictor(object): """Interface for constructing custom predictors.""" def predict(self, instances, **kwargs): """Performs custom prediction. Instances are the decoded values from the request. They have already been deserialized from JSON. Args: instances: A list of prediction input instances. **kwargs: A dictionary of keyword args provided as additional fields on the predict request body. Returns: A list of outputs containing the prediction results. This list must be JSON serializable. """ raise NotImplementedError() @classmethod def from_path(cls, model_dir): """Creates an instance of Predictor using the given path. Loading of the predictor should be done in this method. Args: model_dir: The local directory that contains the exported model file along with any additional files uploaded when creating the version resource. Returns: An instance implementing this Predictor class. """ raise NotImplementedError() Learn more about [the Predictor interface and custom prediction routines](/ml-engine/docs/tensorflow/custom-prediction-routines).
   --python-version: string # Required. The version of Python used in prediction. The following Python versions are available: * Python '3.7' is available when `runtime_version` is set to '1.15' or later. * Python '3.5' is available when `runtime_version` is set to a version from '1.4' to '1.14'. * Python '2.7' is available when `runtime_version` is set to '1.15' or earlier. Read more about the Python versions available for [each runtime version](/ml-engine/docs/runtime-version-list).
   --request-logging-config: record # Configuration for logging request-response pairs to a BigQuery table. Online prediction requests to a model version and the responses to these requests are converted to raw strings and saved to the specified BigQuery table. Logging is constrained by [BigQuery quotas and limits](/bigquery/quotas). If your project exceeds BigQuery quotas or limits, AI Platform Prediction does not log request-response pairs, but it continues to serve predictions. If you are using [continuous evaluation](/ml-engine/docs/continuous-evaluation/), you do not need to specify this configuration manually. Setting up continuous evaluation automatically enables logging of request-response pairs. — shape: {bigqueryTableName?: string, samplingPercentage?: float}
@@ -228,19 +237,19 @@ export def "projects mlprojectsmodelsversionspatch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}") $qp)
-  let body = {"acceleratorConfig": $accelerator_config, "autoScaling": $auto_scaling, "container": $container, "createTime": $create_time, "deploymentUri": $deployment_uri, "description": $description, "errorMessage": $error_message, "etag": $etag, "explanationConfig": $explanation_config, "framework": $framework, "isDefault": $is_default, "labels": $labels, "lastUseTime": $last_use_time, "machineType": $machine_type, "manualScaling": $manual_scaling, "name": $body_name, "packageUris": $package_uris, "predictionClass": $prediction_class, "pythonVersion": $python_version, "requestLoggingConfig": $request_logging_config, "routes": $routes, "runtimeVersion": $runtime_version, "serviceAccount": $service_account, "state": $state} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}") $qp)
+  let req_body = {"acceleratorConfig": $accelerator_config, "autoScaling": $auto_scaling, "container": $container, "createTime": $create_time, "deploymentUri": $deployment_uri, "description": $description, "errorMessage": $error_message, "etag": $etag, "explanationConfig": $explanation_config, "framework": $framework, "isDefault": $is_default, "labels": $labels, "lastUseTime": $last_use_time, "machineType": $machine_type, "manualScaling": $manual_scaling, "name": $body_name, "packageUris": $package_uris, "predictionClass": $prediction_class, "pythonVersion": $python_version, "requestLoggingConfig": $request_logging_config, "routes": $routes, "runtimeVersion": $runtime_version, "serviceAccount": $service_account, "state": $state} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists operations that match the specified filter in the request. If the server doesn't support this method, it returns `UNIMPLEMENTED`.
 #
 # GET /v1/{name}/operations
 # operationId: ml.projects.operations.list
-export def "operations mlprojectsoperationslist" [
+export def "operations list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -268,7 +277,7 @@ export def "operations mlprojectsoperationslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}/operations") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}/operations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -279,7 +288,7 @@ export def "operations mlprojectsoperationslist" [
 # POST /v1/{name}:addMeasurement
 # operationId: ml.projects.locations.studies.trials.addMeasurement
 # --measurement shape: {elapsedTime?: string, metrics?: list, stepCount?: string}
-export def "projects mlprojectslocationsstudiestrialsaddMeasurement" [
+export def "projects create-measurement" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -306,19 +315,19 @@ export def "projects mlprojectslocationsstudiestrialsaddMeasurement" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}:addMeasurement") $qp)
-  let body = {"measurement": $measurement} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}:addMeasurement") $qp)
+  let req_body = {"measurement": $measurement} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Starts asynchronous cancellation on a long-running operation. The server makes a best effort to cancel the operation, but success is not guaranteed. If the server doesn't support this method, it returns `google.rpc.Code.UNIMPLEMENTED`. Clients can use Operations.GetOperation or other methods to check whether the cancellation succeeded or whether the operation completed despite cancellation. On successful cancellation, the operation is not deleted; instead, it becomes an operation with an Operation.error value with a google.rpc.Status.code of 1, corresponding to `Code.CANCELLED`.
 #
 # POST /v1/{name}:cancel
 # operationId: ml.projects.operations.cancel
-export def "projects mlprojectsoperationscancel" [
+export def "projects cancel" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -345,18 +354,19 @@ export def "projects mlprojectsoperationscancel" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}:cancel") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}:cancel") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Checks whether a trial should stop or not. Returns a long-running operation. When the operation is successful, it will contain a CheckTrialEarlyStoppingStateResponse.
 #
 # POST /v1/{name}:checkEarlyStoppingState
 # operationId: ml.projects.locations.studies.trials.checkEarlyStoppingState
-export def "projects mlprojectslocationsstudiestrialscheckEarlyStoppingState" [
+export def "projects check-early-stopping-state" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -383,11 +393,12 @@ export def "projects mlprojectslocationsstudiestrialscheckEarlyStoppingState" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}:checkEarlyStoppingState") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}:checkEarlyStoppingState") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Marks a trial as complete.
@@ -395,7 +406,7 @@ export def "projects mlprojectslocationsstudiestrialscheckEarlyStoppingState" [
 # POST /v1/{name}:complete
 # operationId: ml.projects.locations.studies.trials.complete
 # --finalMeasurement shape: {elapsedTime?: string, metrics?: list, stepCount?: string}
-export def "projects mlprojectslocationsstudiestrialscomplete" [
+export def "projects complete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -424,20 +435,20 @@ export def "projects mlprojectslocationsstudiestrialscomplete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}:complete") $qp)
-  let body = {"finalMeasurement": $final_measurement, "infeasibleReason": $infeasible_reason, "trialInfeasible": $trial_infeasible} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}:complete") $qp)
+  let req_body = {"finalMeasurement": $final_measurement, "infeasibleReason": $infeasible_reason, "trialInfeasible": $trial_infeasible} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-# Performs explanation on the data in the request. {% dynamic include "/ai-platform/includes/___explain-request" %} 
+# Performs explanation on the data in the request. {% dynamic include "/ai-platform/includes/___explain-request" %}
 #
 # POST /v1/{name}:explain
 # operationId: ml.projects.explain
 # --httpBody shape: {contentType?: string, data?: string, extensions?: list}
-export def "projects mlprojectsexplain" [
+export def "projects create-explain" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -464,19 +475,19 @@ export def "projects mlprojectsexplain" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}:explain") $qp)
-  let body = {"httpBody": $http_body} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}:explain") $qp)
+  let req_body = {"httpBody": $http_body} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get the service account information associated with your project. You need this information in order to grant the service account permissions for the Google Cloud Storage location where you put your model training code for training the model with Google Cloud Machine Learning.
 #
 # GET /v1/{name}:getConfig
 # operationId: ml.projects.getConfig
-export def "projects mlprojectsgetConfig" [
+export def "projects get-config" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -501,18 +512,18 @@ export def "projects mlprojectsgetConfig" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}:getConfig") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}:getConfig") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Performs online prediction on the data in the request. {% dynamic include "/ai-platform/includes/___predict-request" %} 
+# Performs online prediction on the data in the request. {% dynamic include "/ai-platform/includes/___predict-request" %}
 #
 # POST /v1/{name}:predict
 # operationId: ml.projects.predict
 # --httpBody shape: {contentType?: string, data?: string, extensions?: list}
-export def "projects mlprojectspredict" [
+export def "projects create-predict" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -539,19 +550,19 @@ export def "projects mlprojectspredict" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}:predict") $qp)
-  let body = {"httpBody": $http_body} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}:predict") $qp)
+  let req_body = {"httpBody": $http_body} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Designates a version to be the default for the model. The default version is used for prediction requests made against the model that don't specify a version. The first version to be created for a model is automatically set as the default. You must make any subsequent changes to the default version setting manually using this method.
 #
 # POST /v1/{name}:setDefault
 # operationId: ml.projects.models.versions.setDefault
-export def "projects mlprojectsmodelsversionssetDefault" [
+export def "projects update-default" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -578,18 +589,19 @@ export def "projects mlprojectsmodelsversionssetDefault" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}:setDefault") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}:setDefault") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Stops a trial.
 #
 # POST /v1/{name}:stop
 # operationId: ml.projects.locations.studies.trials.stop
-export def "projects mlprojectslocationsstudiestrialsstop" [
+export def "projects stop" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -616,18 +628,19 @@ export def "projects mlprojectslocationsstudiestrialsstop" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}:stop") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}:stop") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists the jobs in the project. If there are no jobs that match the request parameters, the list request returns an empty response body: {}.
 #
 # GET /v1/{parent}/jobs
 # operationId: ml.projects.jobs.list
-export def "jobs mlprojectsjobslist" [
+export def "jobs list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -655,7 +668,7 @@ export def "jobs mlprojectsjobslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/jobs") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/jobs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -665,11 +678,11 @@ export def "jobs mlprojectsjobslist" [
 #
 # POST /v1/{parent}/jobs
 # operationId: ml.projects.jobs.create
-# --predictionInput shape: {batchSize?: string, dataFormat?: "DATA_FORMAT_UNSPECIFIED"|"JSON"|"TEXT"|"TF_RECORD"|"TF_RECORD_GZIP"|"CSV", inputPaths?: list, maxWorkerCount?: string, modelName?: string, outputDataFormat?: "DATA_FORMAT_UNSPECIFIED"|"JSON"|"TEXT"|"TF_RECORD"|"TF_RECORD_GZIP"|"CSV", outputPath?: string, region?: string, runtimeVersion?: string, signatureName?: string, uri?: string, versionName?: string}
+# --predictionInput shape: {batchSize?: string, dataFormat?: "DATA_FORMAT_UNSPECIFIED"|"JSON"|"TEXT"|"TF_RECORD"|"TF_RECORD_GZIP"|"CSV", inputPaths?: list<string>, maxWorkerCount?: string, modelName?: string, outputDataFormat?: "DATA_FORMAT_UNSPECIFIED"|"JSON"|"TEXT"|"TF_RECORD"|"TF_RECORD_GZIP"|"CSV", outputPath?: string, region?: string, runtimeVersion?: string, signatureName?: string, uri?: string, versionName?: string}
 # --predictionOutput shape: {errorCount?: string, nodeHours?: float, outputPath?: string, predictionCount?: string}
-# --trainingInput shape: {args?: list, enableWebAccess?: bool, encryptionConfig?: record, evaluatorConfig?: record, evaluatorCount?: string, evaluatorType?: string, hyperparameters?: record, jobDir?: string, masterConfig?: record, masterType?: string, network?: string, packageUris?: list, parameterServerConfig?: record, parameterServerCount?: string, parameterServerType?: string, pythonModule?: string, pythonVersion?: string, region?: string, runtimeVersion?: string, scaleTier?: "BASIC"|"STANDARD_1"|"PREMIUM_1"|"BASIC_GPU"|"BASIC_TPU"|"CUSTOM", scheduling?: record, serviceAccount?: string, useChiefInTfConfig?: bool, workerConfig?: record, workerCount?: string, workerType?: string}
+# --trainingInput shape: {args?: list<string>, enableWebAccess?: bool, encryptionConfig?: record, evaluatorConfig?: record, evaluatorCount?: string, evaluatorType?: string, hyperparameters?: record, jobDir?: string, masterConfig?: record, masterType?: string, network?: string, packageUris?: list<string>, parameterServerConfig?: record, parameterServerCount?: string, parameterServerType?: string, pythonModule?: string, pythonVersion?: string, region?: string, runtimeVersion?: string, ... (7 more fields)}
 # --trainingOutput shape: {builtInAlgorithmOutput?: record, completedTrialCount?: string, consumedMLUnits?: float, hyperparameterMetricTag?: string, isBuiltInAlgorithmJob?: bool, isHyperparameterTuningJob?: bool, trials?: list}
-export def "jobs mlprojectsjobscreate" [
+export def "jobs create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -696,30 +709,30 @@ export def "jobs mlprojectsjobscreate" [
   --etag: string # `etag` is used for optimistic concurrency control as a way to help prevent simultaneous updates of a job from overwriting each other. It is strongly suggested that systems make use of the `etag` in the read-modify-write cycle to perform job updates in order to avoid race conditions: An `etag` is returned in the response to `GetJob`, and systems are expected to put that etag in the request to `UpdateJob` to ensure that their change will be applied to the same version of the job. (format: byte)
   --job-id: string # Required. The user-specified id of the job.
   --labels: record # Optional. One or more labels that you can add, to organize your jobs. Each label is a key-value pair, where both the key and the value are arbitrary strings that you supply. For more information, see the documentation on using labels.
-  --prediction-input: record # Represents input parameters for a prediction job. — shape: {batchSize?: string, dataFormat?: "DATA_FORMAT_UNSPECIFIED"|"JSON"|"TEXT"|"TF_RECORD"|"TF_RECORD_GZIP"|"CSV", inputPaths?: list, maxWorkerCount?: string, modelName?: string, outputDataFormat?: "DATA_FORMAT_UNSPECIFIED"|"JSON"|"TEXT"|"TF_RECORD"|"TF_RECORD_GZIP"|"CSV", outputPath?: string, region?: string, runtimeVersion?: string, signatureName?: string, uri?: string, versionName?: string}
+  --prediction-input: record # Represents input parameters for a prediction job. — shape: {batchSize?: string, dataFormat?: "DATA_FORMAT_UNSPECIFIED"|"JSON"|"TEXT"|"TF_RECORD"|"TF_RECORD_GZIP"|"CSV", inputPaths?: list<string>, maxWorkerCount?: string, modelName?: string, outputDataFormat?: "DATA_FORMAT_UNSPECIFIED"|"JSON"|"TEXT"|"TF_RECORD"|"TF_RECORD_GZIP"|"CSV", outputPath?: string, region?: string, runtimeVersion?: string, signatureName?: string, uri?: string, versionName?: string}
   --prediction-output: record # Represents results of a prediction job. — shape: {errorCount?: string, nodeHours?: float, outputPath?: string, predictionCount?: string}
   --start-time: string # Output only. When the job processing was started. (format: google-datetime)
   --state: string@state-completer-1 # Output only. The detailed state of a job.
-  --training-input: record # Represents input parameters for a training job. When using the gcloud command to submit your training job, you can specify the input parameters as command-line arguments and/or in a YAML configuration file referenced from the --config command-line argument. For details, see the guide to [submitting a training job](/ai-platform/training/docs/training-jobs). — shape: {args?: list, enableWebAccess?: bool, encryptionConfig?: record, evaluatorConfig?: record, evaluatorCount?: string, evaluatorType?: string, hyperparameters?: record, jobDir?: string, masterConfig?: record, masterType?: string, network?: string, packageUris?: list, parameterServerConfig?: record, parameterServerCount?: string, parameterServerType?: string, pythonModule?: string, pythonVersion?: string, region?: string, runtimeVersion?: string, scaleTier?: "BASIC"|"STANDARD_1"|"PREMIUM_1"|"BASIC_GPU"|"BASIC_TPU"|"CUSTOM", scheduling?: record, serviceAccount?: string, useChiefInTfConfig?: bool, workerConfig?: record, workerCount?: string, workerType?: string}
+  --training-input: record # Represents input parameters for a training job. When using the gcloud command to submit your training job, you can specify the input parameters as command-line arguments and/or in a YAML configuration file referenced from the --config command-line argument. For details, see the guide to [submitting a training job](/ai-platform/training/docs/training-jobs). — shape: {args?: list<string>, enableWebAccess?: bool, encryptionConfig?: record, evaluatorConfig?: record, evaluatorCount?: string, evaluatorType?: string, hyperparameters?: record, jobDir?: string, masterConfig?: record, masterType?: string, network?: string, packageUris?: list<string>, parameterServerConfig?: record, parameterServerCount?: string, parameterServerType?: string, pythonModule?: string, pythonVersion?: string, region?: string, runtimeVersion?: string, ... (7 more fields)}
   --training-output: record # Represents results of a training job. Output only. — shape: {builtInAlgorithmOutput?: record, completedTrialCount?: string, consumedMLUnits?: float, hyperparameterMetricTag?: string, isBuiltInAlgorithmJob?: bool, isHyperparameterTuningJob?: bool, trials?: list}
 ]: any -> record<createTime: string, endTime: string, errorMessage: string, etag: string, jobId: string, jobPosition: string, labels: record, predictionInput: record<batchSize: string, dataFormat: string, inputPaths: list<string>, maxWorkerCount: string, modelName: string, outputDataFormat: string, outputPath: string, region: string, runtimeVersion: string, signatureName: string, uri: string, versionName: string>, predictionOutput: record<errorCount: string, nodeHours: float, outputPath: string, predictionCount: string>, startTime: string, state: string, trainingInput: record<args: list<string>, enableWebAccess: bool, encryptionConfig: record<kmsKeyName: string>, evaluatorConfig: record<acceleratorConfig: record, containerArgs: list, containerCommand: list, diskConfig: record, imageUri: string, tpuTfVersion: string>, evaluatorCount: string, evaluatorType: string, hyperparameters: record<algorithm: string, enableTrialEarlyStopping: bool, goal: string, hyperparameterMetricTag: string, maxFailedTrials: int, maxParallelTrials: int, maxTrials: int, params: list, resumePreviousJobId: string>, jobDir: string, masterConfig: record<acceleratorConfig: record, containerArgs: list, containerCommand: list, diskConfig: record, imageUri: string, tpuTfVersion: string>, masterType: string, network: string, packageUris: list<string>, parameterServerConfig: record<acceleratorConfig: record, containerArgs: list, containerCommand: list, diskConfig: record, imageUri: string, tpuTfVersion: string>, parameterServerCount: string, parameterServerType: string, pythonModule: string, pythonVersion: string, region: string, runtimeVersion: string, scaleTier: string, scheduling: record<maxRunningTime: string, maxWaitTime: string, priority: int>, serviceAccount: string, useChiefInTfConfig: bool, workerConfig: record<acceleratorConfig: record, containerArgs: list, containerCommand: list, diskConfig: record, imageUri: string, tpuTfVersion: string>, workerCount: string, workerType: string>, trainingOutput: record<builtInAlgorithmOutput: record<framework: string, modelPath: string, pythonVersion: string, runtimeVersion: string>, completedTrialCount: string, consumedMLUnits: float, hyperparameterMetricTag: string, isBuiltInAlgorithmJob: bool, isHyperparameterTuningJob: bool, trials: list<record>, webAccessUris: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/jobs") $qp)
-  let body = {"createTime": $create_time, "endTime": $end_time, "errorMessage": $error_message, "etag": $etag, "jobId": $job_id, "labels": $labels, "predictionInput": $prediction_input, "predictionOutput": $prediction_output, "startTime": $start_time, "state": $state, "trainingInput": $training_input, "trainingOutput": $training_output} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/jobs") $qp)
+  let req_body = {"createTime": $create_time, "endTime": $end_time, "errorMessage": $error_message, "etag": $etag, "jobId": $job_id, "labels": $labels, "predictionInput": $prediction_input, "predictionOutput": $prediction_output, "startTime": $start_time, "state": $state, "trainingInput": $training_input, "trainingOutput": $training_output} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List all locations that provides at least one type of CMLE capability.
 #
 # GET /v1/{parent}/locations
 # operationId: ml.projects.locations.list
-export def "locations mlprojectslocationslist" [
+export def "locations list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -746,7 +759,7 @@ export def "locations mlprojectslocationslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/locations") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/locations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -756,7 +769,7 @@ export def "locations mlprojectslocationslist" [
 #
 # GET /v1/{parent}/models
 # operationId: ml.projects.models.list
-export def "models mlprojectsmodelslist" [
+export def "models list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -784,7 +797,7 @@ export def "models mlprojectsmodelslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/models") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/models") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -794,8 +807,8 @@ export def "models mlprojectsmodelslist" [
 #
 # POST /v1/{parent}/models
 # operationId: ml.projects.models.create
-# --defaultVersion shape: {acceleratorConfig?: record, autoScaling?: record, container?: record, createTime?: string, deploymentUri?: string, description?: string, errorMessage?: string, etag?: string, explanationConfig?: record, framework?: "FRAMEWORK_UNSPECIFIED"|"TENSORFLOW"|"SCIKIT_LEARN"|"XGBOOST", isDefault?: bool, labels?: record, lastUseTime?: string, machineType?: string, manualScaling?: record, name?: string, packageUris?: list, predictionClass?: string, pythonVersion?: string, requestLoggingConfig?: record, routes?: record, runtimeVersion?: string, serviceAccount?: string, state?: "UNKNOWN"|"READY"|"CREATING"|"FAILED"|"DELETING"|"UPDATING"}
-export def "models mlprojectsmodelscreate" [
+# --defaultVersion shape: {acceleratorConfig?: record, autoScaling?: record, container?: record, createTime?: string, deploymentUri?: string, description?: string, errorMessage?: string, etag?: string, explanationConfig?: record, framework?: "FRAMEWORK_UNSPECIFIED"|"TENSORFLOW"|"SCIKIT_LEARN"|"XGBOOST", isDefault?: bool, labels?: record, lastUseTime?: string, machineType?: string, manualScaling?: record, name?: string, packageUris?: list<string>, predictionClass?: string, pythonVersion?: string, ... (5 more fields)}
+export def "models create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -816,32 +829,32 @@ export def "models mlprojectsmodelscreate" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --default-version: record # Represents a version of the model. Each version is a trained model deployed in the cloud, ready to handle prediction requests. A model can have multiple versions. You can get information about all of the versions of a given model by calling projects.models.versions.list. — shape: {acceleratorConfig?: record, autoScaling?: record, container?: record, createTime?: string, deploymentUri?: string, description?: string, errorMessage?: string, etag?: string, explanationConfig?: record, framework?: "FRAMEWORK_UNSPECIFIED"|"TENSORFLOW"|"SCIKIT_LEARN"|"XGBOOST", isDefault?: bool, labels?: record, lastUseTime?: string, machineType?: string, manualScaling?: record, name?: string, packageUris?: list, predictionClass?: string, pythonVersion?: string, requestLoggingConfig?: record, routes?: record, runtimeVersion?: string, serviceAccount?: string, state?: "UNKNOWN"|"READY"|"CREATING"|"FAILED"|"DELETING"|"UPDATING"}
+  --default-version: record # Represents a version of the model. Each version is a trained model deployed in the cloud, ready to handle prediction requests. A model can have multiple versions. You can get information about all of the versions of a given model by calling projects.models.versions.list. — shape: {acceleratorConfig?: record, autoScaling?: record, container?: record, createTime?: string, deploymentUri?: string, description?: string, errorMessage?: string, etag?: string, explanationConfig?: record, framework?: "FRAMEWORK_UNSPECIFIED"|"TENSORFLOW"|"SCIKIT_LEARN"|"XGBOOST", isDefault?: bool, labels?: record, lastUseTime?: string, machineType?: string, manualScaling?: record, name?: string, packageUris?: list<string>, predictionClass?: string, pythonVersion?: string, ... (5 more fields)}
   --description: string # Optional. The description specified for the model when it was created.
   --etag: string # `etag` is used for optimistic concurrency control as a way to help prevent simultaneous updates of a model from overwriting each other. It is strongly suggested that systems make use of the `etag` in the read-modify-write cycle to perform model updates in order to avoid race conditions: An `etag` is returned in the response to `GetModel`, and systems are expected to put that etag in the request to `UpdateModel` to ensure that their change will be applied to the model as intended. (format: byte)
   --labels: record # Optional. One or more labels that you can add, to organize your models. Each label is a key-value pair, where both the key and the value are arbitrary strings that you supply. For more information, see the documentation on using labels. Note that this field is not updatable for mls1* models.
   --name: string # Required. The name specified for the model when it was created. The model name must be unique within the project it is created in.
   --online-prediction-console-logging: oneof<nothing, bool> # Optional. If true, online prediction nodes send `stderr` and `stdout` streams to Cloud Logging. These can be more verbose than the standard access logs (see `onlinePredictionLogging`) and can incur higher cost. However, they are helpful for debugging. Note that [logs may incur a cost](/stackdriver/pricing), especially if your project receives prediction requests at a high QPS. Estimate your costs before enabling this option. Default is false.
   --online-prediction-logging: oneof<nothing, bool> # Optional. If true, online prediction access logs are sent to Cloud Logging. These logs are like standard server access logs, containing information like timestamp and latency for each request. Note that [logs may incur a cost](/stackdriver/pricing), especially if your project receives prediction requests at a high queries per second rate (QPS). Estimate your costs before enabling this option. Default is false.
-  --regions: list # Optional. The list of regions where the model is going to be deployed. Only one region per model is supported. Defaults to 'us-central1' if nothing is set. See the available regions for AI Platform services. Note: * No matter where a model is deployed, it can always be accessed by users from anywhere, both for online and batch prediction. * The region for a batch prediction job is set by the region field when submitting the batch prediction job and does not take its value from this field.
+  --regions: list<string> # Optional. The list of regions where the model is going to be deployed. Only one region per model is supported. Defaults to 'us-central1' if nothing is set. See the available regions for AI Platform services. Note: * No matter where a model is deployed, it can always be accessed by users from anywhere, both for online and batch prediction. * The region for a batch prediction job is set by the region field when submitting the batch prediction job and does not take its value from this field.
 ]: any -> record<defaultVersion: record<acceleratorConfig: record<count: string, type: string>, autoScaling: record<maxNodes: int, metrics: list, minNodes: int>, container: record<args: list, command: list, env: list, image: string, ports: list>, createTime: string, deploymentUri: string, description: string, errorMessage: string, etag: string, explanationConfig: record<integratedGradientsAttribution: record, sampledShapleyAttribution: record, xraiAttribution: record>, framework: string, isDefault: bool, labels: record, lastMigrationModelId: string, lastMigrationTime: string, lastUseTime: string, machineType: string, manualScaling: record<nodes: int>, name: string, packageUris: list<string>, predictionClass: string, pythonVersion: string, requestLoggingConfig: record<bigqueryTableName: string, samplingPercentage: float>, routes: record<health: string, predict: string>, runtimeVersion: string, serviceAccount: string, state: string>, description: string, etag: string, labels: record, name: string, onlinePredictionConsoleLogging: bool, onlinePredictionLogging: bool, regions: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/models") $qp)
-  let body = {"defaultVersion": $default_version, "description": $description, "etag": $etag, "labels": $labels, "name": $name, "onlinePredictionConsoleLogging": $online_prediction_console_logging, "onlinePredictionLogging": $online_prediction_logging, "regions": $regions} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/models") $qp)
+  let req_body = {"defaultVersion": $default_version, "description": $description, "etag": $etag, "labels": $labels, "name": $name, "onlinePredictionConsoleLogging": $online_prediction_console_logging, "onlinePredictionLogging": $online_prediction_logging, "regions": $regions} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists all the studies in a region for an associated project.
 #
 # GET /v1/{parent}/studies
 # operationId: ml.projects.locations.studies.list
-export def "studies mlprojectslocationsstudieslist" [
+export def "studies list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -866,7 +879,7 @@ export def "studies mlprojectslocationsstudieslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/studies") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/studies") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -877,7 +890,7 @@ export def "studies mlprojectslocationsstudieslist" [
 # POST /v1/{parent}/studies
 # operationId: ml.projects.locations.studies.create
 # --studyConfig shape: {algorithm?: "ALGORITHM_UNSPECIFIED"|"GAUSSIAN_PROCESS_BANDIT"|"GRID_SEARCH"|"RANDOM_SEARCH", automatedStoppingConfig?: record, metrics?: list, parameters?: list}
-export def "studies mlprojectslocationsstudiescreate" [
+export def "studies create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -905,19 +918,19 @@ export def "studies mlprojectslocationsstudiescreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "studyId" $study_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/studies") $qp)
-  let body = {"studyConfig": $study_config} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/studies") $qp)
+  let req_body = {"studyConfig": $study_config} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists the trials associated with a study.
 #
 # GET /v1/{parent}/trials
 # operationId: ml.projects.locations.studies.trials.list
-export def "trials mlprojectslocationsstudiestrialslist" [
+export def "trials list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -942,7 +955,7 @@ export def "trials mlprojectslocationsstudiestrialslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/trials") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/trials") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -955,7 +968,7 @@ export def "trials mlprojectslocationsstudiestrialslist" [
 # --finalMeasurement shape: {elapsedTime?: string, metrics?: list, stepCount?: string}
 # --measurements item shape: {elapsedTime?: string, metrics?: list, stepCount?: string}
 # --parameters item shape: {floatValue?: float, intValue?: string, parameter?: string, stringValue?: string}
-export def "trials mlprojectslocationsstudiestrialscreate" [
+export def "trials create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -985,19 +998,19 @@ export def "trials mlprojectslocationsstudiestrialscreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/trials") $qp)
-  let body = {"finalMeasurement": $final_measurement, "measurements": $measurements, "parameters": $parameters, "state": $state} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/trials") $qp)
+  let req_body = {"finalMeasurement": $final_measurement, "measurements": $measurements, "parameters": $parameters, "state": $state} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists the pareto-optimal trials for multi-objective study or the optimal trials for single-objective study. The definition of pareto-optimal can be checked in wiki page. https://en.wikipedia.org/wiki/Pareto_efficiency
 #
 # POST /v1/{parent}/trials:listOptimalTrials
 # operationId: ml.projects.locations.studies.trials.listOptimalTrials
-export def "trials-list-optimal-trials mlprojectslocationsstudiestrialslistOptimalTrials" [
+export def "trials-list-optimal-trials list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1024,18 +1037,19 @@ export def "trials-list-optimal-trials mlprojectslocationsstudiestrialslistOptim
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/trials:listOptimalTrials") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/trials:listOptimalTrials") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Adds one or more trials to a study, with parameter values suggested by AI Platform Vizier. Returns a long-running operation associated with the generation of trial suggestions. When this long-running operation succeeds, it will contain a SuggestTrialsResponse.
 #
 # POST /v1/{parent}/trials:suggest
 # operationId: ml.projects.locations.studies.trials.suggest
-export def "trials-suggest mlprojectslocationsstudiestrialssuggest" [
+export def "trials-suggest create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1063,19 +1077,19 @@ export def "trials-suggest mlprojectslocationsstudiestrialssuggest" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/trials:suggest") $qp)
-  let body = {"clientId": $client_id, "suggestionCount": $suggestion_count} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/trials:suggest") $qp)
+  let req_body = {"clientId": $client_id, "suggestionCount": $suggestion_count} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets basic information about all the versions of a model. If you expect that a model has many versions, or if you need to handle only a limited number of results at a time, you can request that the list be retrieved in batches (called pages). If there are no versions that match the request parameters, the list request returns an empty response body: {}.
 #
 # GET /v1/{parent}/versions
 # operationId: ml.projects.models.versions.list
-export def "versions mlprojectsmodelsversionslist" [
+export def "versions list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1103,7 +1117,7 @@ export def "versions mlprojectsmodelsversionslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/versions") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/versions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1115,12 +1129,12 @@ export def "versions mlprojectsmodelsversionslist" [
 # operationId: ml.projects.models.versions.create
 # --acceleratorConfig shape: {count?: string, type?: "ACCELERATOR_TYPE_UNSPECIFIED"|"NVIDIA_TESLA_K80"|"NVIDIA_TESLA_P100"|"NVIDIA_TESLA_V100"|"NVIDIA_TESLA_P4"|"NVIDIA_TESLA_T4"|"NVIDIA_TESLA_A100"|"TPU_V2"|"TPU_V3"|"TPU_V2_POD"|"TPU_V3_POD"|"TPU_V4_POD"}
 # --autoScaling shape: {maxNodes?: int, metrics?: list, minNodes?: int}
-# --container shape: {args?: list, command?: list, env?: list, image?: string, ports?: list}
+# --container shape: {args?: list<string>, command?: list<string>, env?: list, image?: string, ports?: list}
 # --explanationConfig shape: {integratedGradientsAttribution?: record, sampledShapleyAttribution?: record, xraiAttribution?: record}
 # --manualScaling shape: {nodes?: int}
 # --requestLoggingConfig shape: {bigqueryTableName?: string, samplingPercentage?: float}
 # --routes shape: {health?: string, predict?: string}
-export def "versions mlprojectsmodelsversionscreate" [
+export def "versions create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1143,7 +1157,7 @@ export def "versions mlprojectsmodelsversionscreate" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --accelerator-config: record # Represents a hardware accelerator request config. Note that the AcceleratorConfig can be used in both Jobs and Versions. Learn more about [accelerators for training](/ml-engine/docs/using-gpus) and [accelerators for online prediction](/ml-engine/docs/machine-types-online-prediction#gpus). — shape: {count?: string, type?: "ACCELERATOR_TYPE_UNSPECIFIED"|"NVIDIA_TESLA_K80"|"NVIDIA_TESLA_P100"|"NVIDIA_TESLA_V100"|"NVIDIA_TESLA_P4"|"NVIDIA_TESLA_T4"|"NVIDIA_TESLA_A100"|"TPU_V2"|"TPU_V3"|"TPU_V2_POD"|"TPU_V3_POD"|"TPU_V4_POD"}
   --auto-scaling: record # Options for automatically scaling a model. — shape: {maxNodes?: int, metrics?: list, minNodes?: int}
-  --container: record # Specification of a custom container for serving predictions. This message is a subset of the [Kubernetes Container v1 core specification](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.18/#container-v1-core). — shape: {args?: list, command?: list, env?: list, image?: string, ports?: list}
+  --container: record # Specification of a custom container for serving predictions. This message is a subset of the [Kubernetes Container v1 core specification](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.18/#container-v1-core). — shape: {args?: list<string>, command?: list<string>, env?: list, image?: string, ports?: list}
   --create-time: string # Output only. The time the version was created. (format: google-datetime)
   --deployment-uri: string # The Cloud Storage URI of a directory containing trained model artifacts to be used to create the model version. See the [guide to deploying models](/ai-platform/prediction/docs/deploying-models) for more information. The total number of files under this directory must not exceed 1000. During projects.models.versions.create, AI Platform Prediction copies all files from the specified directory to a location managed by the service. From then on, AI Platform Prediction uses these copies of the model artifacts to serve predictions, not the original files in Cloud Storage, so this location is useful only as a historical record. If you specify container, then this field is optional. Otherwise, it is required. Learn [how to use this field with a custom container](/ai-platform/prediction/docs/custom-container-requirements#artifacts).
   --description: string # Optional. The description specified for the version when it was created.
@@ -1157,7 +1171,7 @@ export def "versions mlprojectsmodelsversionscreate" [
   --machine-type: string # Optional. The type of machine on which to serve the model. Currently only applies to online prediction service. To learn about valid values for this field, read [Choosing a machine type for online prediction](/ai-platform/prediction/docs/machine-types-online-prediction). If this field is not specified and you are using a [regional endpoint](/ai-platform/prediction/docs/regional-endpoints), then the machine type defaults to `n1-standard-2`. If this field is not specified and you are using the global endpoint (`ml.googleapis.com`), then the machine type defaults to `mls1-c1-m2`.
   --manual-scaling: record # Options for manually scaling a model. — shape: {nodes?: int}
   --name: string # Required. The name specified for the version when it was created. The version name must be unique within the model it is created in.
-  --package-uris: list # Optional. Cloud Storage paths (`gs://…`) of packages for [custom prediction routines](/ml-engine/docs/tensorflow/custom-prediction-routines) or [scikit-learn pipelines with custom code](/ml-engine/docs/scikit/exporting-for-prediction#custom-pipeline-code). For a custom prediction routine, one of these packages must contain your Predictor class (see [`predictionClass`](#Version.FIELDS.prediction_class)). Additionally, include any dependencies used by your Predictor or scikit-learn pipeline uses that are not already included in your selected [runtime version](/ml-engine/docs/tensorflow/runtime-version-list). If you specify this field, you must also set [`runtimeVersion`](#Version.FIELDS.runtime_version) to 1.4 or greater.
+  --package-uris: list<string> # Optional. Cloud Storage paths (`gs://…`) of packages for [custom prediction routines](/ml-engine/docs/tensorflow/custom-prediction-routines) or [scikit-learn pipelines with custom code](/ml-engine/docs/scikit/exporting-for-prediction#custom-pipeline-code). For a custom prediction routine, one of these packages must contain your Predictor class (see [`predictionClass`](#Version.FIELDS.prediction_class)). Additionally, include any dependencies used by your Predictor or scikit-learn pipeline uses that are not already included in your selected [runtime version](/ml-engine/docs/tensorflow/runtime-version-list). If you specify this field, you must also set [`runtimeVersion`](#Version.FIELDS.runtime_version) to 1.4 or greater.
   --prediction-class: string # Optional. The fully qualified name (module_name.class_name) of a class that implements the Predictor interface described in this reference field. The module containing this class should be included in a package provided to the [`packageUris` field](#Version.FIELDS.package_uris). Specify this field if and only if you are deploying a [custom prediction routine (beta)](/ml-engine/docs/tensorflow/custom-prediction-routines). If you specify this field, you must set [`runtimeVersion`](#Version.FIELDS.runtime_version) to 1.4 or greater and you must set `machineType` to a [legacy (MLS1) machine type](/ml-engine/docs/machine-types-online-prediction). The following code sample provides the Predictor interface: class Predictor(object): """Interface for constructing custom predictors.""" def predict(self, instances, **kwargs): """Performs custom prediction. Instances are the decoded values from the request. They have already been deserialized from JSON. Args: instances: A list of prediction input instances. **kwargs: A dictionary of keyword args provided as additional fields on the predict request body. Returns: A list of outputs containing the prediction results. This list must be JSON serializable. """ raise NotImplementedError() @classmethod def from_path(cls, model_dir): """Creates an instance of Predictor using the given path. Loading of the predictor should be done in this method. Args: model_dir: The local directory that contains the exported model file along with any additional files uploaded when creating the version resource. Returns: An instance implementing this Predictor class. """ raise NotImplementedError() Learn more about [the Predictor interface and custom prediction routines](/ml-engine/docs/tensorflow/custom-prediction-routines).
   --python-version: string # Required. The version of Python used in prediction. The following Python versions are available: * Python '3.7' is available when `runtime_version` is set to '1.15' or later. * Python '3.5' is available when `runtime_version` is set to a version from '1.4' to '1.14'. * Python '2.7' is available when `runtime_version` is set to '1.15' or earlier. Read more about the Python versions available for [each runtime version](/ml-engine/docs/runtime-version-list).
   --request-logging-config: record # Configuration for logging request-response pairs to a BigQuery table. Online prediction requests to a model version and the responses to these requests are converted to raw strings and saved to the specified BigQuery table. Logging is constrained by [BigQuery quotas and limits](/bigquery/quotas). If your project exceeds BigQuery quotas or limits, AI Platform Prediction does not log request-response pairs, but it continues to serve predictions. If you are using [continuous evaluation](/ml-engine/docs/continuous-evaluation/), you do not need to specify this configuration manually. Setting up continuous evaluation automatically enables logging of request-response pairs. — shape: {bigqueryTableName?: string, samplingPercentage?: float}
@@ -1170,19 +1184,19 @@ export def "versions mlprojectsmodelsversionscreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/versions") $qp)
-  let body = {"acceleratorConfig": $accelerator_config, "autoScaling": $auto_scaling, "container": $container, "createTime": $create_time, "deploymentUri": $deployment_uri, "description": $description, "errorMessage": $error_message, "etag": $etag, "explanationConfig": $explanation_config, "framework": $framework, "isDefault": $is_default, "labels": $labels, "lastUseTime": $last_use_time, "machineType": $machine_type, "manualScaling": $manual_scaling, "name": $name, "packageUris": $package_uris, "predictionClass": $prediction_class, "pythonVersion": $python_version, "requestLoggingConfig": $request_logging_config, "routes": $routes, "runtimeVersion": $runtime_version, "serviceAccount": $service_account, "state": $state} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/versions") $qp)
+  let req_body = {"acceleratorConfig": $accelerator_config, "autoScaling": $auto_scaling, "container": $container, "createTime": $create_time, "deploymentUri": $deployment_uri, "description": $description, "errorMessage": $error_message, "etag": $etag, "explanationConfig": $explanation_config, "framework": $framework, "isDefault": $is_default, "labels": $labels, "lastUseTime": $last_use_time, "machineType": $machine_type, "manualScaling": $manual_scaling, "name": $name, "packageUris": $package_uris, "predictionClass": $prediction_class, "pythonVersion": $python_version, "requestLoggingConfig": $request_logging_config, "routes": $routes, "runtimeVersion": $runtime_version, "serviceAccount": $service_account, "state": $state} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets the access control policy for a resource. Returns an empty policy if the resource exists and does not have a policy set.
 #
 # GET /v1/{resource}:getIamPolicy
 # operationId: ml.projects.models.getIamPolicy
-export def "projects mlprojectsmodelsgetIamPolicy" [
+export def "projects get-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1208,7 +1222,7 @@ export def "projects mlprojectsmodelsgetIamPolicy" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "options.requestedPolicyVersion" $options_requested_policy_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource: $resource} | format pattern "/v1/{resource}:getIamPolicy") $qp)
+  let full_url = (build-url $base ({resource: (encode-path-segment $resource)} | format pattern "/v1/{resource}:getIamPolicy") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1219,7 +1233,7 @@ export def "projects mlprojectsmodelsgetIamPolicy" [
 # POST /v1/{resource}:setIamPolicy
 # operationId: ml.projects.models.setIamPolicy
 # --policy shape: {auditConfigs?: list, bindings?: list, etag?: string, version?: int}
-export def "projects mlprojectsmodelssetIamPolicy" [
+export def "projects update-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1247,19 +1261,19 @@ export def "projects mlprojectsmodelssetIamPolicy" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource: $resource} | format pattern "/v1/{resource}:setIamPolicy") $qp)
-  let body = {"policy": $policy, "updateMask": $update_mask} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({resource: (encode-path-segment $resource)} | format pattern "/v1/{resource}:setIamPolicy") $qp)
+  let req_body = {"policy": $policy, "updateMask": $update_mask} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns permissions that a caller has on the specified resource. If the resource does not exist, this will return an empty set of permissions, not a `NOT_FOUND` error. Note: This operation is designed to be used for building permission-aware UIs and command-line tools, not for authorization checking. This operation may "fail open" without warning.
 #
 # POST /v1/{resource}:testIamPermissions
 # operationId: ml.projects.models.testIamPermissions
-export def "projects mlprojectsmodelstestIamPermissions" [
+export def "projects test-iam-permissions" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1280,16 +1294,16 @@ export def "projects mlprojectsmodelstestIamPermissions" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --permissions: list # The set of permissions to check for the `resource`. Permissions with wildcards (such as `*` or `storage.*`) are not allowed. For more information see [IAM Overview](https://cloud.google.com/iam/docs/overview#permissions).
+  --permissions: list<string> # The set of permissions to check for the `resource`. Permissions with wildcards (such as `*` or `storage.*`) are not allowed. For more information see [IAM Overview](https://cloud.google.com/iam/docs/overview#permissions).
 ]: any -> record<permissions: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource: $resource} | format pattern "/v1/{resource}:testIamPermissions") $qp)
-  let body = {"permissions": $permissions} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({resource: (encode-path-segment $resource)} | format pattern "/v1/{resource}:testIamPermissions") $qp)
+  let req_body = {"permissions": $permissions} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -112,10 +121,10 @@ export def "asset-types get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/AssetTypes")
-  let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -146,13 +155,13 @@ export def "asset-types create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/AssetTypes")
-  let body = {"accumulatedDepreciationAccountId": $accumulated_depreciation_account_id, "assetTypeId": $asset_type_id, "assetTypeName": $asset_type_name, "bookDepreciationSetting": $book_depreciation_setting, "depreciationExpenseAccountId": $depreciation_expense_account_id, "fixedAssetAccountId": $fixed_asset_account_id, "locks": $locks} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"accumulatedDepreciationAccountId": $accumulated_depreciation_account_id, "assetTypeId": $asset_type_id, "assetTypeName": $asset_type_name, "bookDepreciationSetting": $book_depreciation_setting, "depreciationExpenseAccountId": $depreciation_expense_account_id, "fixedAssetAccountId": $fixed_asset_account_id, "locks": $locks} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # searches fixed asset
@@ -180,10 +189,10 @@ export def "assets list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "status" $status "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "sortDirection" $sort_direction "scalar") (serialize-qp "filterBy" $filter_by "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Assets" $qp)
-  let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -224,13 +233,13 @@ export def "assets create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Assets")
-  let body = {"accountingBookValue": $accounting_book_value, "assetId": $asset_id, "assetName": $asset_name, "assetNumber": $asset_number, "assetStatus": $asset_status, "assetTypeId": $asset_type_id, "bookDepreciationDetail": $book_depreciation_detail, "bookDepreciationSetting": $book_depreciation_setting, "canRollback": $can_rollback, "disposalDate": $disposal_date, "disposalPrice": $disposal_price, "isDeleteEnabledForDate": $is_delete_enabled_for_date, "purchaseDate": $purchase_date, "purchasePrice": $purchase_price, "serialNumber": $serial_number, "warrantyExpiryDate": $warranty_expiry_date} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"accountingBookValue": $accounting_book_value, "assetId": $asset_id, "assetName": $asset_name, "assetNumber": $asset_number, "assetStatus": $asset_status, "assetTypeId": $asset_type_id, "bookDepreciationDetail": $book_depreciation_detail, "bookDepreciationSetting": $book_depreciation_setting, "canRollback": $can_rollback, "disposalDate": $disposal_date, "disposalPrice": $disposal_price, "isDeleteEnabledForDate": $is_delete_enabled_for_date, "purchaseDate": $purchase_date, "purchasePrice": $purchase_price, "serialNumber": $serial_number, "warrantyExpiryDate": $warranty_expiry_date} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieves fixed asset by id
@@ -251,11 +260,11 @@ export def "assets get" [
 ]: nothing -> record<accountingBookValue: float, assetId: string, assetName: string, assetNumber: string, assetStatus: string, assetTypeId: string, bookDepreciationDetail: record<costLimit: float, currentAccumDepreciationAmount: float, currentCapitalGain: float, currentGainLoss: float, depreciationStartDate: string, priorAccumDepreciationAmount: float, residualValue: float>, bookDepreciationSetting: record<averagingMethod: string, bookEffectiveDateOfChangeId: string, depreciableObjectId: string, depreciableObjectType: string, depreciationCalculationMethod: string, depreciationMethod: string, depreciationRate: float, effectiveLifeYears: int>, canRollback: bool, disposalDate: string, disposalPrice: float, isDeleteEnabledForDate: bool, purchaseDate: string, purchasePrice: float, serialNumber: string, warrantyExpiryDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/Assets/{id}"))
-  let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/Assets/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -277,9 +286,9 @@ export def "settings get-asset" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Settings")
-  let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

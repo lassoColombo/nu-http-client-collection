@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -109,10 +118,10 @@ export def "country-code-check check" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "code" $code "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/country-code-check" $qp)
-  let extra_headers = {"Response-Type": $response_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Response-Type": $response_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -120,7 +129,7 @@ export def "country-code-check check" [
 #
 # GET /currency-conversion
 # operationId: currency_conversion
-export def "currency-conversion conversion" [
+export def "currency-conversion get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -138,10 +147,10 @@ export def "currency-conversion conversion" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "currency_from" $currency_from "scalar") (serialize-qp "currency_to" $currency_to "scalar") (serialize-qp "amount" $amount "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/currency-conversion" $qp)
-  let extra_headers = {"Response-Type": $response_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Response-Type": $response_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -150,7 +159,7 @@ export def "currency-conversion conversion" [
 # POST /invoice
 # operationId: create_invoice
 # --items item shape: {description: string, price_each: int, quantity: int, vat_rate: int}
-export def "invoice post" [
+export def "invoice create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -182,13 +191,13 @@ export def "invoice post" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/invoice")
-  let body = {"business_address": $business_address, "business_name": $business_name, "conversion_rate": $conversion_rate, "currency_code": $currency_code, "currency_code_conversion": $currency_code_conversion, "customer_address": $customer_address, "customer_name": $customer_name, "customer_vat_number": $customer_vat_number, "date": $date, "discount_rate": $discount_rate, "items": $items, "notes": $notes, "price_type": $price_type, "tax_point": $tax_point, "type": $type, "vat_number": $vat_number, "zero_rated": $zero_rated} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Response-Type": $response_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"business_address": $business_address, "business_name": $business_name, "conversion_rate": $conversion_rate, "currency_code": $currency_code, "currency_code_conversion": $currency_code_conversion, "customer_address": $customer_address, "customer_name": $customer_name, "customer_vat_number": $customer_vat_number, "date": $date, "discount_rate": $discount_rate, "items": $items, "notes": $notes, "price_type": $price_type, "tax_point": $tax_point, "type": $type, "vat_number": $vat_number, "zero_rated": $zero_rated} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Response-Type": $response_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete an invoice
@@ -209,11 +218,11 @@ export def "invoice delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/invoice/{id}"))
-  let extra_headers = {"Response-Type": $response_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/invoice/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Response-Type": $response_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -235,11 +244,11 @@ export def "invoice get" [
 ]: nothing -> record<invoice: record<business_address: string, business_name: string, conversion_rate: int, currency_code: string, currency_code_conversion: string, customer_address: string, customer_name: string, customer_vat_number: string, date: string, discount_rate: int, discount_total: int, id: int, invoice_url: string, items: list<record>, logo_url: string, notes: string, price_type: string, subtotal: int, tax_point: string, total: int, type: string, vat_number: string, vat_total: int, zero_rated: string>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/invoice/{id}"))
-  let extra_headers = {"Response-Type": $response_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/invoice/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Response-Type": $response_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -279,14 +288,14 @@ export def "invoice update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/invoice/{id}"))
-  let body = {"business_address": $business_address, "business_name": $business_name, "conversion_rate": $conversion_rate, "currency_code": $currency_code, "currency_code_conversion": $currency_code_conversion, "customer_address": $customer_address, "customer_name": $customer_name, "customervat_number": $customervat_number, "date": $date, "discount_rate": $discount_rate, "items": $items, "logo_url": $logo_url, "notes": $notes, "tax_point": $tax_point, "type": $type, "vat_number": $vat_number} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Response-Type": $response_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/invoice/{id}"))
+  let req_body = {"business_address": $business_address, "business_name": $business_name, "conversion_rate": $conversion_rate, "currency_code": $currency_code, "currency_code_conversion": $currency_code_conversion, "customer_address": $customer_address, "customer_name": $customer_name, "customervat_number": $customervat_number, "date": $date, "discount_rate": $discount_rate, "items": $items, "logo_url": $logo_url, "notes": $notes, "tax_point": $tax_point, "type": $type, "vat_number": $vat_number} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Response-Type": $response_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve a countries VAT rates from an IP address
@@ -309,10 +318,10 @@ export def "ip-check check" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "address" $address "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ip-check" $qp)
-  let extra_headers = {"Response-Type": $response_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Response-Type": $response_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -320,7 +329,7 @@ export def "ip-check check" [
 #
 # GET /usage-check
 # operationId: api_usage
-export def "usage-check usage" [
+export def "usage-check get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -334,10 +343,10 @@ export def "usage-check usage" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/usage-check")
-  let extra_headers = {"Response-Type": $response_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Response-Type": $response_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -361,10 +370,10 @@ export def "vat-number-check validate" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "vatid" $vatid "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/vat-number-check" $qp)
-  let extra_headers = {"Response-Type": $response_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Response-Type": $response_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -372,7 +381,7 @@ export def "vat-number-check validate" [
 #
 # GET /vat-price
 # operationId: convert_price
-export def "vat-price price" [
+export def "vat-price get-convert" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -391,10 +400,10 @@ export def "vat-price price" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "code" $code "scalar") (serialize-qp "country_rate" $country_rate "scalar") (serialize-qp "price" $price "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/vat-price" $qp)
-  let extra_headers = {"Response-Type": $response_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Response-Type": $response_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -402,7 +411,7 @@ export def "vat-price price" [
 #
 # GET /vat-rates
 # operationId: vat_rates
-export def "vat-rates rates" [
+export def "vat-rates get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -416,9 +425,9 @@ export def "vat-rates rates" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/vat-rates")
-  let extra_headers = {"Response-Type": $response_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Response-Type": $response_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

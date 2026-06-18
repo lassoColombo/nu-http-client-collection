@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -72,7 +81,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "jobs youtubereportingjobslist" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "jobs list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -96,7 +105,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/jobs
 # operationId: youtubereporting.jobs.list
-export def "jobs youtubereportingjobslist" [
+export def "jobs list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -134,7 +143,7 @@ export def "jobs youtubereportingjobslist" [
 #
 # POST /v1/jobs
 # operationId: youtubereporting.jobs.create
-export def "jobs youtubereportingjobscreate" [
+export def "jobs create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -167,18 +176,18 @@ export def "jobs youtubereportingjobscreate" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "onBehalfOfContentOwner" $on_behalf_of_content_owner "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/jobs" $qp)
-  let body = {"createTime": $create_time, "expireTime": $expire_time, "id": $id, "name": $name, "reportTypeId": $report_type_id, "systemManaged": $system_managed} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"createTime": $create_time, "expireTime": $expire_time, "id": $id, "name": $name, "reportTypeId": $report_type_id, "systemManaged": $system_managed} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes a job.
 #
 # DELETE /v1/jobs/{jobId}
 # operationId: youtubereporting.jobs.delete
-export def "jobs youtubereportingjobsdelete" [
+export def "jobs delete" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -204,7 +213,7 @@ export def "jobs youtubereportingjobsdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "onBehalfOfContentOwner" $on_behalf_of_content_owner "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({job_id: $job_id} | format pattern "/v1/jobs/{job_id}") $qp)
+  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/v1/jobs/{job_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -214,7 +223,7 @@ export def "jobs youtubereportingjobsdelete" [
 #
 # GET /v1/jobs/{jobId}
 # operationId: youtubereporting.jobs.get
-export def "jobs youtubereportingjobsget" [
+export def "jobs get" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -240,7 +249,7 @@ export def "jobs youtubereportingjobsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "onBehalfOfContentOwner" $on_behalf_of_content_owner "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({job_id: $job_id} | format pattern "/v1/jobs/{job_id}") $qp)
+  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/v1/jobs/{job_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -250,7 +259,7 @@ export def "jobs youtubereportingjobsget" [
 #
 # GET /v1/jobs/{jobId}/reports
 # operationId: youtubereporting.jobs.reports.list
-export def "jobs-reports youtubereportingjobsreportslist" [
+export def "jobs-reports list" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -281,7 +290,7 @@ export def "jobs-reports youtubereportingjobsreportslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "createdAfter" $created_after "scalar") (serialize-qp "onBehalfOfContentOwner" $on_behalf_of_content_owner "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "startTimeAtOrAfter" $start_time_at_or_after "scalar") (serialize-qp "startTimeBefore" $start_time_before "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({job_id: $job_id} | format pattern "/v1/jobs/{job_id}/reports") $qp)
+  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/v1/jobs/{job_id}/reports") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -291,7 +300,7 @@ export def "jobs-reports youtubereportingjobsreportslist" [
 #
 # GET /v1/jobs/{jobId}/reports/{reportId}
 # operationId: youtubereporting.jobs.reports.get
-export def "jobs-reports youtubereportingjobsreportsget" [
+export def "jobs-reports get" [
   job_id: string
   report_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -318,7 +327,7 @@ export def "jobs-reports youtubereportingjobsreportsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "onBehalfOfContentOwner" $on_behalf_of_content_owner "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({job_id: $job_id, report_id: $report_id} | format pattern "/v1/jobs/{job_id}/reports/{report_id}") $qp)
+  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id), report_id: (encode-path-segment $report_id)} | format pattern "/v1/jobs/{job_id}/reports/{report_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -328,7 +337,7 @@ export def "jobs-reports youtubereportingjobsreportsget" [
 #
 # GET /v1/media/{resourceName}
 # operationId: youtubereporting.media.download
-export def "media youtubereportingmediadownload" [
+export def "media download" [
   resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -353,7 +362,7 @@ export def "media youtubereportingmediadownload" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_name: $resource_name} | format pattern "/v1/media/{resource_name}") $qp)
+  let full_url = (build-url $base ({resource_name: (encode-path-segment $resource_name)} | format pattern "/v1/media/{resource_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -363,7 +372,7 @@ export def "media youtubereportingmediadownload" [
 #
 # GET /v1/reportTypes
 # operationId: youtubereporting.reportTypes.list
-export def "report-types youtubereportingreportTypeslist" [
+export def "report-types list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -83,7 +92,7 @@ def exclude-source-dictionaries-completer [] { ["ahd-5" "century" "cmu" "macmill
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "wordjson-audio get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "word-json-audio get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -107,7 +116,7 @@ export def commands []: nothing -> table {
 #
 # GET /word.json/{word}/audio
 # operationId: getAudio
-export def "wordjson-audio get" [
+export def "word-json-audio get" [
   word: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -123,7 +132,7 @@ export def "wordjson-audio get" [
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "useCanonical" $use_canonical "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({word: $word} | format pattern "/word.json/{word}/audio") $qp)
+  let full_url = (build-url $base ({word: (encode-path-segment $word)} | format pattern "/word.json/{word}/audio") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -133,7 +142,7 @@ export def "wordjson-audio get" [
 #
 # GET /word.json/{word}/definitions
 # operationId: getDefinitions
-export def "wordjson-definitions get" [
+export def "word-json-definitions get" [
   word: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -146,14 +155,14 @@ export def "wordjson-definitions get" [
   --limit: int # Maximum number of results to return (format: int32, default: 200)
   --part-of-speech: string@part-of-speech-completer # CSV list of part-of-speech types
   --include-related: string # Return related words with definitions (default: false)
-  --source-dictionaries: list@source-dictionaries-completer # Source dictionary to return definitions from.  If 'all' is received, results are returned from all sources. If multiple values are received (e.g. 'century,wiktionary'), results are returned from the first specified dictionary that has definitions. If left blank, results are returned from the first dictionary that has definitions. By default, dictionaries are searched in this order: ahd-5, wiktionary, webster, century, wordnet
+  --source-dictionaries: list<string>@source-dictionaries-completer # Source dictionary to return definitions from. If 'all' is received, results are returned from all sources. If multiple values are received (e.g. 'century,wiktionary'), results are returned from the first specified dictionary that has definitions. If left blank, results are returned from the first dictionary that has definitions. By default, dictionaries are searched in this order: ahd-5, wiktionary, webster, century, wordnet
   --use-canonical: string@use-canonical-completer # If true will try to return the correct word root ('cats' -> 'cat'). If false returns exactly what was requested. (default: false)
   --include-tags: string@include-tags-completer # Return a closed set of XML tags in response (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "partOfSpeech" $part_of_speech "scalar") (serialize-qp "includeRelated" $include_related "scalar") (serialize-qp "sourceDictionaries" $source_dictionaries "csv") (serialize-qp "useCanonical" $use_canonical "scalar") (serialize-qp "includeTags" $include_tags "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({word: $word} | format pattern "/word.json/{word}/definitions") $qp)
+  let full_url = (build-url $base ({word: (encode-path-segment $word)} | format pattern "/word.json/{word}/definitions") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -163,7 +172,7 @@ export def "wordjson-definitions get" [
 #
 # GET /word.json/{word}/etymologies
 # operationId: getEtymologies
-export def "wordjson-etymologies get" [
+export def "word-json-etymologies get" [
   word: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -178,7 +187,7 @@ export def "wordjson-etymologies get" [
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "useCanonical" $use_canonical "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({word: $word} | format pattern "/word.json/{word}/etymologies") $qp)
+  let full_url = (build-url $base ({word: (encode-path-segment $word)} | format pattern "/word.json/{word}/etymologies") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -188,7 +197,7 @@ export def "wordjson-etymologies get" [
 #
 # GET /word.json/{word}/examples
 # operationId: getExamples
-export def "wordjson-examples get" [
+export def "word-json-examples get" [
   word: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -206,7 +215,7 @@ export def "wordjson-examples get" [
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "includeDuplicates" $include_duplicates "scalar") (serialize-qp "useCanonical" $use_canonical "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({word: $word} | format pattern "/word.json/{word}/examples") $qp)
+  let full_url = (build-url $base ({word: (encode-path-segment $word)} | format pattern "/word.json/{word}/examples") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -216,7 +225,7 @@ export def "wordjson-examples get" [
 #
 # GET /word.json/{word}/frequency
 # operationId: getWordFrequency
-export def "wordjson-frequency get" [
+export def "word-json-frequency get" [
   word: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -233,7 +242,7 @@ export def "wordjson-frequency get" [
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "useCanonical" $use_canonical "scalar") (serialize-qp "startYear" $start_year "scalar") (serialize-qp "endYear" $end_year "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({word: $word} | format pattern "/word.json/{word}/frequency") $qp)
+  let full_url = (build-url $base ({word: (encode-path-segment $word)} | format pattern "/word.json/{word}/frequency") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -243,7 +252,7 @@ export def "wordjson-frequency get" [
 #
 # GET /word.json/{word}/hyphenation
 # operationId: getHyphenation
-export def "wordjson-hyphenation get" [
+export def "word-json-hyphenation get" [
   word: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -260,7 +269,7 @@ export def "wordjson-hyphenation get" [
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "useCanonical" $use_canonical "scalar") (serialize-qp "sourceDictionary" $source_dictionary "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({word: $word} | format pattern "/word.json/{word}/hyphenation") $qp)
+  let full_url = (build-url $base ({word: (encode-path-segment $word)} | format pattern "/word.json/{word}/hyphenation") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -270,7 +279,7 @@ export def "wordjson-hyphenation get" [
 #
 # GET /word.json/{word}/phrases
 # operationId: getPhrases
-export def "wordjson-phrases get" [
+export def "word-json-phrases get" [
   word: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -287,7 +296,7 @@ export def "wordjson-phrases get" [
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "wlmi" $wlmi "scalar") (serialize-qp "useCanonical" $use_canonical "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({word: $word} | format pattern "/word.json/{word}/phrases") $qp)
+  let full_url = (build-url $base ({word: (encode-path-segment $word)} | format pattern "/word.json/{word}/phrases") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -297,7 +306,7 @@ export def "wordjson-phrases get" [
 #
 # GET /word.json/{word}/pronunciations
 # operationId: getTextPronunciations
-export def "wordjson-pronunciations get-text" [
+export def "word-json-pronunciations get-text" [
   word: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -315,7 +324,7 @@ export def "wordjson-pronunciations get-text" [
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "useCanonical" $use_canonical "scalar") (serialize-qp "sourceDictionary" $source_dictionary "scalar") (serialize-qp "typeFormat" $type_format "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({word: $word} | format pattern "/word.json/{word}/pronunciations") $qp)
+  let full_url = (build-url $base ({word: (encode-path-segment $word)} | format pattern "/word.json/{word}/pronunciations") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -325,7 +334,7 @@ export def "wordjson-pronunciations get-text" [
 #
 # GET /word.json/{word}/relatedWords
 # operationId: getRelatedWords
-export def "wordjson-related-words get" [
+export def "word-json-related-words get" [
   word: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -342,7 +351,7 @@ export def "wordjson-related-words get" [
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "useCanonical" $use_canonical "scalar") (serialize-qp "relationshipTypes" $relationship_types "scalar") (serialize-qp "limitPerRelationshipType" $limit_per_relationship_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({word: $word} | format pattern "/word.json/{word}/relatedWords") $qp)
+  let full_url = (build-url $base ({word: (encode-path-segment $word)} | format pattern "/word.json/{word}/relatedWords") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -352,7 +361,7 @@ export def "wordjson-related-words get" [
 #
 # GET /word.json/{word}/scrabbleScore
 # operationId: getScrabbleScore
-export def "wordjson-scrabble-score get" [
+export def "word-json-scrabble-score get" [
   word: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -365,7 +374,7 @@ export def "wordjson-scrabble-score get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({word: $word} | format pattern "/word.json/{word}/scrabbleScore"))
+  let full_url = (build-url $base ({word: (encode-path-segment $word)} | format pattern "/word.json/{word}/scrabbleScore"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -375,7 +384,7 @@ export def "wordjson-scrabble-score get" [
 #
 # GET /word.json/{word}/topExample
 # operationId: getTopExample
-export def "wordjson-top-example get" [
+export def "word-json-top-example get" [
   word: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -390,7 +399,7 @@ export def "wordjson-top-example get" [
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "useCanonical" $use_canonical "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({word: $word} | format pattern "/word.json/{word}/topExample") $qp)
+  let full_url = (build-url $base ({word: (encode-path-segment $word)} | format pattern "/word.json/{word}/topExample") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -400,7 +409,7 @@ export def "wordjson-top-example get" [
 #
 # GET /words.json/randomWord
 # operationId: getRandomWord
-export def "wordsjson-random-word get" [
+export def "words-json-random-word get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -432,7 +441,7 @@ export def "wordsjson-random-word get" [
 #
 # GET /words.json/randomWords
 # operationId: getRandomWords
-export def "wordsjson-random-words get" [
+export def "words-json-random-words get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -467,7 +476,7 @@ export def "wordsjson-random-words get" [
 #
 # GET /words.json/reverseDictionary
 # operationId: reverseDictionary
-export def "wordsjson-reverse-dictionary reverseDictionary" [
+export def "words-json-reverse-dictionary get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -506,7 +515,7 @@ export def "wordsjson-reverse-dictionary reverseDictionary" [
 #
 # GET /words.json/search/{query}
 # operationId: searchWords
-export def "wordsjson-search list-words" [
+export def "words-json-search list" [
   query: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -532,7 +541,7 @@ export def "wordsjson-search list-words" [
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "allowRegex" $allow_regex "scalar") (serialize-qp "caseSensitive" $case_sensitive "scalar") (serialize-qp "includePartOfSpeech" $include_part_of_speech "scalar") (serialize-qp "excludePartOfSpeech" $exclude_part_of_speech "scalar") (serialize-qp "minCorpusCount" $min_corpus_count "scalar") (serialize-qp "maxCorpusCount" $max_corpus_count "scalar") (serialize-qp "minDictionaryCount" $min_dictionary_count "scalar") (serialize-qp "maxDictionaryCount" $max_dictionary_count "scalar") (serialize-qp "minLength" $min_length "scalar") (serialize-qp "maxLength" $max_length "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({query: $query} | format pattern "/words.json/search/{query}") $qp)
+  let full_url = (build-url $base ({query: (encode-path-segment $query)} | format pattern "/words.json/search/{query}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -542,7 +551,7 @@ export def "wordsjson-search list-words" [
 #
 # GET /words.json/wordOfTheDay
 # operationId: getWordOfTheDay
-export def "wordsjson-word-of-the-day get" [
+export def "words-json-word-of-the-day get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -73,7 +82,7 @@ def suggestions-view-mode-completer [] { ["DEFAULT_FOR_CURRENT_ACCESS" "PREVIEW_
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "documents docsdocumentscreate" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "documents create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -100,7 +109,7 @@ export def commands []: nothing -> table {
 # --body shape: {content?: list}
 # --documentStyle shape: {background?: record, defaultFooterId?: string, defaultHeaderId?: string, evenPageFooterId?: string, evenPageHeaderId?: string, firstPageFooterId?: string, firstPageHeaderId?: string, marginBottom?: record, marginFooter?: record, marginHeader?: record, marginLeft?: record, marginRight?: record, marginTop?: record, pageNumberStart?: int, pageSize?: record, useCustomHeaderFooterMargins?: bool, useEvenPageHeaderFooter?: bool, useFirstPageHeaderFooter?: bool}
 # --namedStyles shape: {styles?: list}
-export def "documents docsdocumentscreate" [
+export def "documents create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -120,7 +129,7 @@ export def "documents docsdocumentscreate" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --body-body: record # The document body. The body typically contains the full document contents except for headers, footers, and footnotes. — shape: {content?: list}
+  --body: record # The document body. The body typically contains the full document contents except for headers, footers, and footnotes. — shape: {content?: list}
   --document-id: string # Output only. The ID of the document.
   --document-style: record # The style of the document. — shape: {background?: record, defaultFooterId?: string, defaultHeaderId?: string, evenPageFooterId?: string, evenPageHeaderId?: string, firstPageFooterId?: string, firstPageHeaderId?: string, marginBottom?: record, marginFooter?: record, marginHeader?: record, marginLeft?: record, marginRight?: record, marginTop?: record, pageNumberStart?: int, pageSize?: record, useCustomHeaderFooterMargins?: bool, useEvenPageHeaderFooter?: bool, useFirstPageHeaderFooter?: bool}
   --footers: record # Output only. The footers in the document, keyed by footer ID.
@@ -142,18 +151,18 @@ export def "documents docsdocumentscreate" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/documents" $qp)
-  let body = {"body": $body_body, "documentId": $document_id, "documentStyle": $document_style, "footers": $footers, "footnotes": $footnotes, "headers": $headers, "inlineObjects": $inline_objects, "lists": $lists, "namedRanges": $named_ranges, "namedStyles": $named_styles, "positionedObjects": $positioned_objects, "revisionId": $revision_id, "suggestedDocumentStyleChanges": $suggested_document_style_changes, "suggestedNamedStylesChanges": $suggested_named_styles_changes, "suggestionsViewMode": $suggestions_view_mode, "title": $title} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"body": $body, "documentId": $document_id, "documentStyle": $document_style, "footers": $footers, "footnotes": $footnotes, "headers": $headers, "inlineObjects": $inline_objects, "lists": $lists, "namedRanges": $named_ranges, "namedStyles": $named_styles, "positionedObjects": $positioned_objects, "revisionId": $revision_id, "suggestedDocumentStyleChanges": $suggested_document_style_changes, "suggestedNamedStylesChanges": $suggested_named_styles_changes, "suggestionsViewMode": $suggestions_view_mode, "title": $title} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets the latest version of the specified document.
 #
 # GET /v1/documents/{documentId}
 # operationId: docs.documents.get
-export def "documents docsdocumentsget" [
+export def "documents get" [
   document_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -179,7 +188,7 @@ export def "documents docsdocumentsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "suggestionsViewMode" $suggestions_view_mode "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({document_id: $document_id} | format pattern "/v1/documents/{document_id}") $qp)
+  let full_url = (build-url $base ({document_id: (encode-path-segment $document_id)} | format pattern "/v1/documents/{document_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -189,9 +198,9 @@ export def "documents docsdocumentsget" [
 #
 # POST /v1/documents/{documentId}:batchUpdate
 # operationId: docs.documents.batchUpdate
-# --requests item shape: {createFooter?: record, createFootnote?: record, createHeader?: record, createNamedRange?: record, createParagraphBullets?: record, deleteContentRange?: record, deleteFooter?: record, deleteHeader?: record, deleteNamedRange?: record, deleteParagraphBullets?: record, deletePositionedObject?: record, deleteTableColumn?: record, deleteTableRow?: record, insertInlineImage?: record, insertPageBreak?: record, insertSectionBreak?: record, insertTable?: record, insertTableColumn?: record, insertTableRow?: record, insertText?: record, mergeTableCells?: record, pinTableHeaderRows?: record, replaceAllText?: record, replaceImage?: record, replaceNamedRangeContent?: record, unmergeTableCells?: record, updateDocumentStyle?: record, updateParagraphStyle?: record, updateSectionStyle?: record, updateTableCellStyle?: record, updateTableColumnProperties?: record, updateTableRowStyle?: record, updateTextStyle?: record}
+# --requests item shape: {createFooter?: record, createFootnote?: record, createHeader?: record, createNamedRange?: record, createParagraphBullets?: record, deleteContentRange?: record, deleteFooter?: record, deleteHeader?: record, deleteNamedRange?: record, deleteParagraphBullets?: record, deletePositionedObject?: record, deleteTableColumn?: record, deleteTableRow?: record, insertInlineImage?: record, insertPageBreak?: record, insertSectionBreak?: record, insertTable?: record, insertTableColumn?: record, ... (15 more fields)}
 # --writeControl shape: {requiredRevisionId?: string, targetRevisionId?: string}
-export def "documents docsdocumentsbatchUpdate" [
+export def "documents update-batch" [
   document_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -212,17 +221,17 @@ export def "documents docsdocumentsbatchUpdate" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --requests: list # A list of updates to apply to the document. — item shape: {createFooter?: record, createFootnote?: record, createHeader?: record, createNamedRange?: record, createParagraphBullets?: record, deleteContentRange?: record, deleteFooter?: record, deleteHeader?: record, deleteNamedRange?: record, deleteParagraphBullets?: record, deletePositionedObject?: record, deleteTableColumn?: record, deleteTableRow?: record, insertInlineImage?: record, insertPageBreak?: record, insertSectionBreak?: record, insertTable?: record, insertTableColumn?: record, insertTableRow?: record, insertText?: record, mergeTableCells?: record, pinTableHeaderRows?: record, replaceAllText?: record, replaceImage?: record, replaceNamedRangeContent?: record, unmergeTableCells?: record, updateDocumentStyle?: record, updateParagraphStyle?: record, updateSectionStyle?: record, updateTableCellStyle?: record, updateTableColumnProperties?: record, updateTableRowStyle?: record, updateTextStyle?: record}
+  --requests: list # A list of updates to apply to the document. — item shape: {createFooter?: record, createFootnote?: record, createHeader?: record, createNamedRange?: record, createParagraphBullets?: record, deleteContentRange?: record, deleteFooter?: record, deleteHeader?: record, deleteNamedRange?: record, deleteParagraphBullets?: record, deletePositionedObject?: record, deleteTableColumn?: record, deleteTableRow?: record, insertInlineImage?: record, insertPageBreak?: record, insertSectionBreak?: record, insertTable?: record, insertTableColumn?: record, ... (15 more fields)}
   --write-control: record # Provides control over how write requests are executed. — shape: {requiredRevisionId?: string, targetRevisionId?: string}
 ]: any -> record<documentId: string, replies: table<createFooter: record, createFootnote: record, createHeader: record, createNamedRange: record, insertInlineImage: record, insertInlineSheetsChart: record, replaceAllText: record>, writeControl: record<requiredRevisionId: string, targetRevisionId: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({document_id: $document_id} | format pattern "/v1/documents/{document_id}:batchUpdate") $qp)
-  let body = {"requests": $requests, "writeControl": $write_control} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({document_id: (encode-path-segment $document_id)} | format pattern "/v1/documents/{document_id}:batchUpdate") $qp)
+  let req_body = {"requests": $requests, "writeControl": $write_control} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

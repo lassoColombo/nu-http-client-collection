@@ -12,6 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
   match $scheme {
     "basic" => { {headers: {Authorization: $"Basic ($token_val)"}, query: ""} }
+    "basic-credentials" => { {headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: ""} }
     "none" => { {headers: {}, query: ""} }
     _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
   }
@@ -33,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
     "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
     _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -63,7 +73,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 }
 
 def base-url-completer [] { ["http://otoroshi-api.oto.tools" "http://maif.local"] }
-def auth-scheme-completer [] { ["basic"] }
+def auth-scheme-completer [] { ["basic" "basic-credentials"] }
 
 # Completers for enum parameters
 def typ-completer [] { ["console" "custom" "elastic" "file" "kafka" "mailer" "pulsar"] }
@@ -72,7 +82,7 @@ def accept-completer [] { ["application/json" "text/event-stream"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "apikeys allApiKeys" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "apikeys list-keys" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -96,7 +106,7 @@ export def commands []: nothing -> table {
 #
 # GET /api/apikeys
 # operationId: allApiKeys
-export def "apikeys allApiKeys" [
+export def "apikeys list-keys" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -118,7 +128,7 @@ export def "apikeys allApiKeys" [
 #
 # GET /api/auths
 # operationId: findAllGlobalAuthModules
-export def "auths findAllGlobalAuthModules" [
+export def "auths find-list-global-modules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -141,7 +151,7 @@ export def "auths findAllGlobalAuthModules" [
 # POST /api/auths
 # operationId: createGlobalAuthModule
 # --users item shape: {email: string, metadata: record, name: string, password: string}
-export def "auths create-global-auth-module" [
+export def "auths create-global-module" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -187,18 +197,18 @@ export def "auths create-global-auth-module" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/auths")
-  let body = {"adminPassword": $admin_password, "adminUsername": $admin_username, "desc": $desc, "emailField": $email_field, "groupFilter": $group_filter, "id": $id, "name": $name, "nameField": $name_field, "otoroshiDataField": $otoroshi_data_field, "searchBase": $search_base, "searchFilter": $search_filter, "serverUrl": $server_url, "sessionMaxAge": $session_max_age, "type": $type, "userBase": $user_base, "users": $users, "accessTokenField": $access_token_field, "authorizeUrl": $authorize_url, "callbackUrl": $callback_url, "claims": $claims, "clientId": $client_id, "clientSecret": $client_secret, "jwtVerifier": $jwt_verifier, "loginUrl": $login_url, "logoutUrl": $logout_url, "oidConfig": $oid_config, "readProfileFromToken": $read_profile_from_token, "scope": $scope, "tokenUrl": $token_url, "useCookies": $use_cookies, "useJson": $use_json, "userInfoUrl": $user_info_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"adminPassword": $admin_password, "adminUsername": $admin_username, "desc": $desc, "emailField": $email_field, "groupFilter": $group_filter, "id": $id, "name": $name, "nameField": $name_field, "otoroshiDataField": $otoroshi_data_field, "searchBase": $search_base, "searchFilter": $search_filter, "serverUrl": $server_url, "sessionMaxAge": $session_max_age, "type": $type, "userBase": $user_base, "users": $users, "accessTokenField": $access_token_field, "authorizeUrl": $authorize_url, "callbackUrl": $callback_url, "claims": $claims, "clientId": $client_id, "clientSecret": $client_secret, "jwtVerifier": $jwt_verifier, "loginUrl": $login_url, "logoutUrl": $logout_url, "oidConfig": $oid_config, "readProfileFromToken": $read_profile_from_token, "scope": $scope, "tokenUrl": $token_url, "useCookies": $use_cookies, "useJson": $use_json, "userInfoUrl": $user_info_url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete one global auth. module config
 #
 # DELETE /api/auths/{id}
 # operationId: deleteGlobalAuthModule
-export def "auths delete-global-auth-module" [
+export def "auths delete-global-module" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -211,7 +221,7 @@ export def "auths delete-global-auth-module" [
 ]: nothing -> record<deleted: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/auths/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/auths/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -221,7 +231,7 @@ export def "auths delete-global-auth-module" [
 #
 # GET /api/auths/{id}
 # operationId: findGlobalAuthModuleById
-export def "auths findGlobalAuthModuleById" [
+export def "auths find-global-module" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -234,7 +244,7 @@ export def "auths findGlobalAuthModuleById" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/auths/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/auths/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -244,7 +254,7 @@ export def "auths findGlobalAuthModuleById" [
 #
 # PATCH /api/auths/{id}
 # operationId: patchGlobalAuthModule
-export def "auths update-global-auth-module-by-id" [
+export def "auths update-global-module-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -259,11 +269,12 @@ export def "auths update-global-auth-module-by-id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/auths/{id}"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/auths/{id}"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update one global auth. module config
@@ -271,7 +282,7 @@ export def "auths update-global-auth-module-by-id" [
 # PUT /api/auths/{id}
 # operationId: updateGlobalAuthModule
 # --users item shape: {email: string, metadata: record, name: string, password: string}
-export def "auths update-global-auth-module-by-id-1" [
+export def "auths update-global-module-by-id-1" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -317,19 +328,19 @@ export def "auths update-global-auth-module-by-id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/auths/{id}"))
-  let body = {"adminPassword": $admin_password, "adminUsername": $admin_username, "desc": $desc, "emailField": $email_field, "groupFilter": $group_filter, "id": $body_id, "name": $name, "nameField": $name_field, "otoroshiDataField": $otoroshi_data_field, "searchBase": $search_base, "searchFilter": $search_filter, "serverUrl": $server_url, "sessionMaxAge": $session_max_age, "type": $type, "userBase": $user_base, "users": $users, "accessTokenField": $access_token_field, "authorizeUrl": $authorize_url, "callbackUrl": $callback_url, "claims": $claims, "clientId": $client_id, "clientSecret": $client_secret, "jwtVerifier": $jwt_verifier, "loginUrl": $login_url, "logoutUrl": $logout_url, "oidConfig": $oid_config, "readProfileFromToken": $read_profile_from_token, "scope": $scope, "tokenUrl": $token_url, "useCookies": $use_cookies, "useJson": $use_json, "userInfoUrl": $user_info_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/auths/{id}"))
+  let req_body = {"adminPassword": $admin_password, "adminUsername": $admin_username, "desc": $desc, "emailField": $email_field, "groupFilter": $group_filter, "id": $body_id, "name": $name, "nameField": $name_field, "otoroshiDataField": $otoroshi_data_field, "searchBase": $search_base, "searchFilter": $search_filter, "serverUrl": $server_url, "sessionMaxAge": $session_max_age, "type": $type, "userBase": $user_base, "users": $users, "accessTokenField": $access_token_field, "authorizeUrl": $authorize_url, "callbackUrl": $callback_url, "claims": $claims, "clientId": $client_id, "clientSecret": $client_secret, "jwtVerifier": $jwt_verifier, "loginUrl": $login_url, "logoutUrl": $logout_url, "oidConfig": $oid_config, "readProfileFromToken": $read_profile_from_token, "scope": $scope, "tokenUrl": $token_url, "useCookies": $use_cookies, "useJson": $use_json, "userInfoUrl": $user_info_url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get all certificates
 #
 # GET /api/certificates
 # operationId: allCerts
-export def "certificates allCerts" [
+export def "certificates list-certs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -368,7 +379,7 @@ export def "certificates create-cert" [
   --body-from: string # Start date of validity (e.g. a string value)
   id: string # Id of the certificate (e.g. a string value)
   private_key: string # PKCS8 private key in PEM format (e.g. a string value)
-  self_signed: string # Certificate is self signed  read only) (e.g. a string value)
+  self_signed: string # Certificate is self signed read only) (e.g. a string value)
   subject: string # Subject of the certificate (read only) (e.g. a string value)
   --body-to: string # End date of validity (e.g. a string value)
   valid: string # Certificate is valid (read only) (e.g. a string value)
@@ -377,11 +388,11 @@ export def "certificates create-cert" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/certificates")
-  let body = {"autoRenew": $auto_renew, "ca": $ca, "caRef": $ca_ref, "chain": $chain, "domain": $domain, "from": $body_from, "id": $id, "privateKey": $private_key, "selfSigned": $self_signed, "subject": $subject, "to": $body_to, "valid": $valid} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"autoRenew": $auto_renew, "ca": $ca, "caRef": $ca_ref, "chain": $chain, "domain": $domain, "from": $body_from, "id": $id, "privateKey": $private_key, "selfSigned": $self_signed, "subject": $subject, "to": $body_to, "valid": $valid} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete one certificate by id
@@ -401,7 +412,7 @@ export def "certificates delete-cert" [
 ]: nothing -> record<deleted: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/certificates/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/certificates/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -411,7 +422,7 @@ export def "certificates delete-cert" [
 #
 # GET /api/certificates/{id}
 # operationId: oneCert
-export def "certificates oneCert" [
+export def "certificates get-one-cert" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -424,7 +435,7 @@ export def "certificates oneCert" [
 ]: nothing -> record<autoRenew: string, ca: string, caRef: string, chain: string, domain: string, from: string, id: string, privateKey: string, selfSigned: string, subject: string, to: string, valid: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/certificates/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/certificates/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -449,11 +460,12 @@ export def "certificates update-cert-by-id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/certificates/{id}"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/certificates/{id}"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update one certificate by id
@@ -478,7 +490,7 @@ export def "certificates update-cert-by-id-1" [
   --body-from: string # Start date of validity (e.g. a string value)
   --body-id: string # Id of the certificate (e.g. a string value)
   private_key: string # PKCS8 private key in PEM format (e.g. a string value)
-  self_signed: string # Certificate is self signed  read only) (e.g. a string value)
+  self_signed: string # Certificate is self signed read only) (e.g. a string value)
   subject: string # Subject of the certificate (read only) (e.g. a string value)
   --body-to: string # End date of validity (e.g. a string value)
   valid: string # Certificate is valid (read only) (e.g. a string value)
@@ -486,19 +498,19 @@ export def "certificates update-cert-by-id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/certificates/{id}"))
-  let body = {"autoRenew": $auto_renew, "ca": $ca, "caRef": $ca_ref, "chain": $chain, "domain": $domain, "from": $body_from, "id": $body_id, "privateKey": $private_key, "selfSigned": $self_signed, "subject": $subject, "to": $body_to, "valid": $valid} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/certificates/{id}"))
+  let req_body = {"autoRenew": $auto_renew, "ca": $ca, "caRef": $ca_ref, "chain": $chain, "domain": $domain, "from": $body_from, "id": $body_id, "privateKey": $private_key, "selfSigned": $self_signed, "subject": $subject, "to": $body_to, "valid": $valid} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get all validation authoritiess
 #
 # GET /api/client-validators
 # operationId: findAllClientValidators
-export def "client-validators findAllClientValidators" [
+export def "client-validators find-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -541,17 +553,17 @@ export def "client-validators create" [
   --no-cache: oneof<nothing, bool> # Avoid caching responses (e.g. true)
   path: string # The URL path (e.g. a string value)
   timeout: int # The call timeout (format: int64, e.g. 123)
-  --body-url: string # The URL of the server (e.g. a string value)
+  url: string # The URL of the server (e.g. a string value)
 ]: any -> record<alwaysValid: bool, badTtl: int, description: string, goodTtl: int, headers: record, host: string, id: string, method: string, name: string, noCache: bool, path: string, timeout: int, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/client-validators")
-  let body = {"alwaysValid": $always_valid, "badTtl": $bad_ttl, "description": $description, "goodTtl": $good_ttl, "headers": $headers, "host": $host, "id": $id, "method": $method, "name": $name, "noCache": $no_cache, "path": $path, "timeout": $timeout, "url": $body_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"alwaysValid": $always_valid, "badTtl": $bad_ttl, "description": $description, "goodTtl": $good_ttl, "headers": $headers, "host": $host, "id": $id, "method": $method, "name": $name, "noCache": $no_cache, "path": $path, "timeout": $timeout, "url": $url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete one validation authorities by id
@@ -571,7 +583,7 @@ export def "client-validators delete" [
 ]: nothing -> record<deleted: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/client-validators/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/client-validators/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -581,7 +593,7 @@ export def "client-validators delete" [
 #
 # GET /api/client-validators/{id}
 # operationId: findClientValidatorById
-export def "client-validators findClientValidatorById" [
+export def "client-validators find" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -594,7 +606,7 @@ export def "client-validators findClientValidatorById" [
 ]: nothing -> record<alwaysValid: bool, badTtl: int, description: string, goodTtl: int, headers: record, host: string, id: string, method: string, name: string, noCache: bool, path: string, timeout: int, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/client-validators/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/client-validators/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -619,11 +631,12 @@ export def "client-validators update-by-id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/client-validators/{id}"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/client-validators/{id}"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update one validation authorities by id
@@ -652,24 +665,24 @@ export def "client-validators update-by-id-1" [
   --no-cache: oneof<nothing, bool> # Avoid caching responses (e.g. true)
   path: string # The URL path (e.g. a string value)
   timeout: int # The call timeout (format: int64, e.g. 123)
-  --body-url: string # The URL of the server (e.g. a string value)
+  url: string # The URL of the server (e.g. a string value)
 ]: any -> record<alwaysValid: bool, badTtl: int, description: string, goodTtl: int, headers: record, host: string, id: string, method: string, name: string, noCache: bool, path: string, timeout: int, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/client-validators/{id}"))
-  let body = {"alwaysValid": $always_valid, "badTtl": $bad_ttl, "description": $description, "goodTtl": $good_ttl, "headers": $headers, "host": $host, "id": $body_id, "method": $method, "name": $name, "noCache": $no_cache, "path": $path, "timeout": $timeout, "url": $body_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/client-validators/{id}"))
+  let req_body = {"alwaysValid": $always_valid, "badTtl": $bad_ttl, "description": $description, "goodTtl": $good_ttl, "headers": $headers, "host": $host, "id": $body_id, "method": $method, "name": $name, "noCache": $no_cache, "path": $path, "timeout": $timeout, "url": $url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get all data exporter configs
 #
 # GET /api/data-exporter-configs
 # operationId: findAllDataExporters
-export def "data-exporter-configs findAllDataExporters" [
+export def "data-exporter-configs find-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -722,18 +735,18 @@ export def "data-exporter-configs create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/data-exporter-configs")
-  let body = {"bufferSize": $buffer_size, "config": $config, "desc": $desc, "enabled": $enabled, "filtering": $filtering, "groupDuration": $group_duration, "groupSize": $group_size, "id": $id, "jsonWorkers": $json_workers, "location": $location, "metadata": $metadata, "name": $name, "projection": $projection, "sendWorkers": $send_workers, "typ": $typ} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"bufferSize": $buffer_size, "config": $config, "desc": $desc, "enabled": $enabled, "filtering": $filtering, "groupDuration": $group_duration, "groupSize": $group_size, "id": $id, "jsonWorkers": $json_workers, "location": $location, "metadata": $metadata, "name": $name, "projection": $projection, "sendWorkers": $send_workers, "typ": $typ} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a data exporter config
 #
 # DELETE /api/data-exporter-configs/_bulk
 # operationId: deletebulkDataExporterConfig
-export def "data-exporter-configs-bulk delete" [
+export def "data-exporter-configs-bulk delete-deletebulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -748,10 +761,11 @@ export def "data-exporter-configs-bulk delete" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/data-exporter-configs/_bulk")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/ndjson" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/ndjson" $req_body
 }
 
 # Update a data exporter configs with a diff
@@ -773,10 +787,11 @@ export def "data-exporter-configs-bulk update" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/data-exporter-configs/_bulk")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/ndjson" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/ndjson" $req_body
 }
 
 # Create a new data exporter configs
@@ -798,10 +813,11 @@ export def "data-exporter-configs-bulk create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/data-exporter-configs/_bulk")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/ndjson" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/ndjson" $req_body
 }
 
 # Update a data exporter configs
@@ -823,10 +839,11 @@ export def "data-exporter-configs-bulk update-1" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/data-exporter-configs/_bulk")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/ndjson" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/ndjson" $req_body
 }
 
 # Get all data exporter configs
@@ -870,7 +887,7 @@ export def "data-exporter-configs delete" [
 ]: nothing -> record<deleted: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({data_exporter_config_id: $data_exporter_config_id} | format pattern "/api/data-exporter-configs/{data_exporter_config_id}"))
+  let full_url = (build-url $base ({data_exporter_config_id: (encode-path-segment $data_exporter_config_id)} | format pattern "/api/data-exporter-configs/{data_exporter_config_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -880,7 +897,7 @@ export def "data-exporter-configs delete" [
 #
 # GET /api/data-exporter-configs/{dataExporterConfigId}
 # operationId: findDataExporterConfigById
-export def "data-exporter-configs findDataExporterConfigById" [
+export def "data-exporter-configs find" [
   data_exporter_config_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -893,7 +910,7 @@ export def "data-exporter-configs findDataExporterConfigById" [
 ]: nothing -> record<bufferSize: int, config: any, desc: string, enabled: string, filtering: record<exclude: list<record>, include: list<record>>, groupDuration: int, groupSize: int, id: string, jsonWorkers: int, location: record<teams: list<record>, tenant: string>, metadata: record, name: string, projection: record, sendWorkers: int, typ: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({data_exporter_config_id: $data_exporter_config_id} | format pattern "/api/data-exporter-configs/{data_exporter_config_id}"))
+  let full_url = (build-url $base ({data_exporter_config_id: (encode-path-segment $data_exporter_config_id)} | format pattern "/api/data-exporter-configs/{data_exporter_config_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -918,11 +935,12 @@ export def "data-exporter-configs update-by-dataExporterConfigId" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({data_exporter_config_id: $data_exporter_config_id} | format pattern "/api/data-exporter-configs/{data_exporter_config_id}"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({data_exporter_config_id: (encode-path-segment $data_exporter_config_id)} | format pattern "/api/data-exporter-configs/{data_exporter_config_id}"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update a data exporter config
@@ -960,19 +978,19 @@ export def "data-exporter-configs update-by-dataExporterConfigId-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({data_exporter_config_id: $data_exporter_config_id} | format pattern "/api/data-exporter-configs/{data_exporter_config_id}"))
-  let body = {"bufferSize": $buffer_size, "config": $config, "desc": $desc, "enabled": $enabled, "filtering": $filtering, "groupDuration": $group_duration, "groupSize": $group_size, "id": $id, "jsonWorkers": $json_workers, "location": $location, "metadata": $metadata, "name": $name, "projection": $projection, "sendWorkers": $send_workers, "typ": $typ} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({data_exporter_config_id: (encode-path-segment $data_exporter_config_id)} | format pattern "/api/data-exporter-configs/{data_exporter_config_id}"))
+  let req_body = {"bufferSize": $buffer_size, "config": $config, "desc": $desc, "enabled": $enabled, "filtering": $filtering, "groupDuration": $group_duration, "groupSize": $group_size, "id": $id, "jsonWorkers": $json_workers, "location": $location, "metadata": $metadata, "name": $name, "projection": $projection, "sendWorkers": $send_workers, "typ": $typ} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get the full configuration of Otoroshi
 #
 # GET /api/globalconfig
 # operationId: globalConfig
-export def "globalconfig get" [
+export def "globalconfig get-global-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -994,7 +1012,7 @@ export def "globalconfig get" [
 #
 # PATCH /api/globalconfig
 # operationId: patchGlobalConfig
-export def "globalconfig update" [
+export def "globalconfig update-global-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1009,10 +1027,11 @@ export def "globalconfig update" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/globalconfig")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update the global configuration
@@ -1025,10 +1044,10 @@ export def "globalconfig update" [
 # --cleverSettings shape: {consumerKey: string, consumerSecret: string, orgaId: string, secret: string, token: string}
 # --elasticReadsConfig shape: {clusterUri: string, headers: record, index: string, password: string, type: string, user: string}
 # --elasticWritesConfigs item shape: {clusterUri: string, headers: record, index: string, password: string, type: string, user: string}
-# --ipFiltering shape: {blacklist: list, whitelist: list}
+# --ipFiltering shape: {blacklist: list<string>, whitelist: list<string>}
 # --mailerSettings shape: {apiKey: string, apiKeyPrivate?: string, apiKeyPublic?: string, domain: string, eu?: bool, header?: record, type?: string, url?: string}
 # --privateAppsAuth0Config shape: {callbackUrl: string, clientId: string, clientSecret: string, domain: string}
-export def "globalconfig update-1" [
+export def "globalconfig update-global-config-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1037,7 +1056,7 @@ export def "globalconfig update-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  alerts_emails: list # Email addresses that will receive all Otoroshi alert events
+  alerts_emails: list<string> # Email addresses that will receive all Otoroshi alert events
   alerts_webhooks: list # Webhook that will receive all Otoroshi alert events — item shape: {headers: record, url: string}
   analytics_webhooks: list # Webhook that will receive all internal Otoroshi events — item shape: {headers: record, url: string}
   --api-read-only: oneof<nothing, bool> # If enabled, Admin API won't be able to write/update/delete entities (e.g. true)
@@ -1046,10 +1065,10 @@ export def "globalconfig update-1" [
   --clever-settings: record # Configuration for CleverCloud client — shape: {consumerKey: string, consumerSecret: string, orgaId: string, secret: string, token: string}
   --elastic-reads-config: record # The configuration for elastic access — shape: {clusterUri: string, headers: record, index: string, password: string, type: string, user: string}
   --elastic-writes-configs: list # Configs. for Elastic writes — item shape: {clusterUri: string, headers: record, index: string, password: string, type: string, user: string}
-  endless_ip_addresses: list # IP addresses for which any request to Otoroshi will respond with 128 Gb of zeros
-  ip_filtering: record # The filtering configuration block for a service of globally. — shape: {blacklist: list, whitelist: list}
+  endless_ip_addresses: list<string> # IP addresses for which any request to Otoroshi will respond with 128 Gb of zeros
+  ip_filtering: record # The filtering configuration block for a service of globally. — shape: {blacklist: list<string>, whitelist: list<string>}
   --limit-concurrent-requests: oneof<nothing, bool> # If enabled, Otoroshi will reject new request if too much at the same time (e.g. true)
-  --lines: list # Possibles lines for Otoroshi
+  --lines: list<string> # Possibles lines for Otoroshi
   --mailer-settings: record # Configuration for mailgun api client — shape: {apiKey: string, apiKeyPrivate?: string, apiKeyPublic?: string, domain: string, eu?: bool, header?: record, type?: string, url?: string}
   max_concurrent_requests: int # The number of authorized request processed at the same time (format: int64, e.g. 123)
   --max-http10-response-size: int # The max size in bytes of an HTTP 1.0 response (format: int64, e.g. 123)
@@ -1066,18 +1085,18 @@ export def "globalconfig update-1" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/globalconfig")
-  let body = {"alertsEmails": $alerts_emails, "alertsWebhooks": $alerts_webhooks, "analyticsWebhooks": $analytics_webhooks, "apiReadOnly": $api_read_only, "autoLinkToDefaultGroup": $auto_link_to_default_group, "backofficeAuth0Config": $backoffice_auth0_config, "cleverSettings": $clever_settings, "elasticReadsConfig": $elastic_reads_config, "elasticWritesConfigs": $elastic_writes_configs, "endlessIpAddresses": $endless_ip_addresses, "ipFiltering": $ip_filtering, "limitConcurrentRequests": $limit_concurrent_requests, "lines": $lines, "mailerSettings": $mailer_settings, "maxConcurrentRequests": $max_concurrent_requests, "maxHttp10ResponseSize": $max_http10_response_size, "maxLogsSize": $max_logs_size, "middleFingers": $middle_fingers, "perIpThrottlingQuota": $per_ip_throttling_quota, "privateAppsAuth0Config": $private_apps_auth0_config, "streamEntityOnly": $stream_entity_only, "throttlingQuota": $throttling_quota, "u2fLoginOnly": $u2f_login_only, "useCircuitBreakers": $use_circuit_breakers} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"alertsEmails": $alerts_emails, "alertsWebhooks": $alerts_webhooks, "analyticsWebhooks": $analytics_webhooks, "apiReadOnly": $api_read_only, "autoLinkToDefaultGroup": $auto_link_to_default_group, "backofficeAuth0Config": $backoffice_auth0_config, "cleverSettings": $clever_settings, "elasticReadsConfig": $elastic_reads_config, "elasticWritesConfigs": $elastic_writes_configs, "endlessIpAddresses": $endless_ip_addresses, "ipFiltering": $ip_filtering, "limitConcurrentRequests": $limit_concurrent_requests, "lines": $lines, "mailerSettings": $mailer_settings, "maxConcurrentRequests": $max_concurrent_requests, "maxHttp10ResponseSize": $max_http10_response_size, "maxLogsSize": $max_logs_size, "middleFingers": $middle_fingers, "perIpThrottlingQuota": $per_ip_throttling_quota, "privateAppsAuth0Config": $private_apps_auth0_config, "streamEntityOnly": $stream_entity_only, "throttlingQuota": $throttling_quota, "u2fLoginOnly": $u2f_login_only, "useCircuitBreakers": $use_circuit_breakers} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get all service groups
 #
 # GET /api/groups
 # operationId: allServiceGroups
-export def "groups allServiceGroups" [
+export def "groups list-service" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1116,18 +1135,18 @@ export def "groups create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/groups")
-  let body = {"description": $description, "id": $id, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"description": $description, "id": $id, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get all api keys for the group of a service
 #
 # GET /api/groups/{groupId}/apikeys
 # operationId: apiKeysFromGroup
-export def "groups-apikeys apiKeysFromGroup" [
+export def "groups-apikeys get-keys" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1140,7 +1159,7 @@ export def "groups-apikeys apiKeysFromGroup" [
 ]: nothing -> table<authorizedEntities: list<string>, clientId: string, clientName: string, clientSecret: string, dailyQuota: int, enabled: bool, metadata: record, monthlyQuota: int, throttlingQuota: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/api/groups/{group_id}/apikeys"))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/api/groups/{group_id}/apikeys"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1150,7 +1169,7 @@ export def "groups-apikeys apiKeysFromGroup" [
 #
 # POST /api/groups/{groupId}/apikeys
 # operationId: createApiKeyFromGroup
-export def "groups-apikeys create-api-key-from" [
+export def "groups-apikeys create-key" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1160,7 +1179,7 @@ export def "groups-apikeys create-api-key-from" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  authorized_entities: list # The group/service ids (prefixed by group_ or service_ on which the key is authorized (e.g. [a string value])
+  authorized_entities: list<string> # The group/service ids (prefixed by group_ or service_ on which the key is authorized (e.g. [a string value])
   client_id: string # The unique id of the Api Key. Usually 16 random alpha numerical characters, but can be anything (e.g. a string value)
   client_name: string # The name of the api key, for humans ;-) (e.g. a string value)
   client_secret: string # The secret of the Api Key. Usually 64 random alpha numerical characters, but can be anything (e.g. a string value)
@@ -1173,19 +1192,19 @@ export def "groups-apikeys create-api-key-from" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/api/groups/{group_id}/apikeys"))
-  let body = {"authorizedEntities": $authorized_entities, "clientId": $client_id, "clientName": $client_name, "clientSecret": $client_secret, "dailyQuota": $daily_quota, "enabled": $enabled, "metadata": $metadata, "monthlyQuota": $monthly_quota, "throttlingQuota": $throttling_quota} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/api/groups/{group_id}/apikeys"))
+  let req_body = {"authorizedEntities": $authorized_entities, "clientId": $client_id, "clientName": $client_name, "clientSecret": $client_secret, "dailyQuota": $daily_quota, "enabled": $enabled, "metadata": $metadata, "monthlyQuota": $monthly_quota, "throttlingQuota": $throttling_quota} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete an api key
 #
 # DELETE /api/groups/{groupId}/apikeys/{clientId}
 # operationId: deleteApiKeyFromGroup
-export def "groups-apikeys delete-api-key-from" [
+export def "groups-apikeys delete-key" [
   group_id: string
   client_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1199,7 +1218,7 @@ export def "groups-apikeys delete-api-key-from" [
 ]: nothing -> record<deleted: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({group_id: $group_id, client_id: $client_id} | format pattern "/api/groups/{group_id}/apikeys/{client_id}"))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), client_id: (encode-path-segment $client_id)} | format pattern "/api/groups/{group_id}/apikeys/{client_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1209,7 +1228,7 @@ export def "groups-apikeys delete-api-key-from" [
 #
 # GET /api/groups/{groupId}/apikeys/{clientId}
 # operationId: apiKeyFromGroup
-export def "groups-apikeys apiKeyFromGroup" [
+export def "groups-apikeys get-key" [
   group_id: string
   client_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1223,7 +1242,7 @@ export def "groups-apikeys apiKeyFromGroup" [
 ]: nothing -> record<authorizedEntities: list<string>, clientId: string, clientName: string, clientSecret: string, dailyQuota: int, enabled: bool, metadata: record, monthlyQuota: int, throttlingQuota: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({group_id: $group_id, client_id: $client_id} | format pattern "/api/groups/{group_id}/apikeys/{client_id}"))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), client_id: (encode-path-segment $client_id)} | format pattern "/api/groups/{group_id}/apikeys/{client_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1233,7 +1252,7 @@ export def "groups-apikeys apiKeyFromGroup" [
 #
 # PATCH /api/groups/{groupId}/apikeys/{clientId}
 # operationId: patchApiKeyFromGroup
-export def "groups-apikeys update-api-key-from-by-groupId-clientId" [
+export def "groups-apikeys update-key-by-groupId-clientId" [
   group_id: string
   client_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1249,18 +1268,19 @@ export def "groups-apikeys update-api-key-from-by-groupId-clientId" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({group_id: $group_id, client_id: $client_id} | format pattern "/api/groups/{group_id}/apikeys/{client_id}"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), client_id: (encode-path-segment $client_id)} | format pattern "/api/groups/{group_id}/apikeys/{client_id}"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update an api key
 #
 # PUT /api/groups/{groupId}/apikeys/{clientId}
 # operationId: updateApiKeyFromGroup
-export def "groups-apikeys update-api-key-from-by-groupId-clientId-1" [
+export def "groups-apikeys update-key-by-groupId-clientId-1" [
   group_id: string
   client_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1271,7 +1291,7 @@ export def "groups-apikeys update-api-key-from-by-groupId-clientId-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  authorized_entities: list # The group/service ids (prefixed by group_ or service_ on which the key is authorized (e.g. [a string value])
+  authorized_entities: list<string> # The group/service ids (prefixed by group_ or service_ on which the key is authorized (e.g. [a string value])
   --body-client-id: string # The unique id of the Api Key. Usually 16 random alpha numerical characters, but can be anything (e.g. a string value)
   client_name: string # The name of the api key, for humans ;-) (e.g. a string value)
   client_secret: string # The secret of the Api Key. Usually 64 random alpha numerical characters, but can be anything (e.g. a string value)
@@ -1284,19 +1304,19 @@ export def "groups-apikeys update-api-key-from-by-groupId-clientId-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({group_id: $group_id, client_id: $client_id} | format pattern "/api/groups/{group_id}/apikeys/{client_id}"))
-  let body = {"authorizedEntities": $authorized_entities, "clientId": $body_client_id, "clientName": $client_name, "clientSecret": $client_secret, "dailyQuota": $daily_quota, "enabled": $enabled, "metadata": $metadata, "monthlyQuota": $monthly_quota, "throttlingQuota": $throttling_quota} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), client_id: (encode-path-segment $client_id)} | format pattern "/api/groups/{group_id}/apikeys/{client_id}"))
+  let req_body = {"authorizedEntities": $authorized_entities, "clientId": $body_client_id, "clientName": $client_name, "clientSecret": $client_secret, "dailyQuota": $daily_quota, "enabled": $enabled, "metadata": $metadata, "monthlyQuota": $monthly_quota, "throttlingQuota": $throttling_quota} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Reset the quota state of an api key
 #
 # DELETE /api/groups/{groupId}/apikeys/{clientId}/quotas
 # operationId: resetApiKeyFromGroupQuotas
-export def "groups-apikeys-quotas reset-api-key-from" [
+export def "groups-apikeys-quotas reset-key" [
   group_id: string
   client_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1310,7 +1330,7 @@ export def "groups-apikeys-quotas reset-api-key-from" [
 ]: nothing -> record<authorizedCallsPerDay: int, authorizedCallsPerMonth: int, authorizedCallsPerSec: int, currentCallsPerDay: int, currentCallsPerMonth: int, currentCallsPerSec: int, remainingCallsPerDay: int, remainingCallsPerMonth: int, remainingCallsPerSec: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({group_id: $group_id, client_id: $client_id} | format pattern "/api/groups/{group_id}/apikeys/{client_id}/quotas"))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), client_id: (encode-path-segment $client_id)} | format pattern "/api/groups/{group_id}/apikeys/{client_id}/quotas"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1320,7 +1340,7 @@ export def "groups-apikeys-quotas reset-api-key-from" [
 #
 # GET /api/groups/{groupId}/apikeys/{clientId}/quotas
 # operationId: apiKeyFromGroupQuotas
-export def "groups-apikeys-quotas apiKeyFromGroupQuotas" [
+export def "groups-apikeys-quotas get-key" [
   group_id: string
   client_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1334,7 +1354,7 @@ export def "groups-apikeys-quotas apiKeyFromGroupQuotas" [
 ]: nothing -> record<authorizedCallsPerDay: int, authorizedCallsPerMonth: int, authorizedCallsPerSec: int, currentCallsPerDay: int, currentCallsPerMonth: int, currentCallsPerSec: int, remainingCallsPerDay: int, remainingCallsPerMonth: int, remainingCallsPerSec: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({group_id: $group_id, client_id: $client_id} | format pattern "/api/groups/{group_id}/apikeys/{client_id}/quotas"))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), client_id: (encode-path-segment $client_id)} | format pattern "/api/groups/{group_id}/apikeys/{client_id}/quotas"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1357,7 +1377,7 @@ export def "groups delete" [
 ]: nothing -> record<deleted: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({service_group_id: $service_group_id} | format pattern "/api/groups/{service_group_id}"))
+  let full_url = (build-url $base ({service_group_id: (encode-path-segment $service_group_id)} | format pattern "/api/groups/{service_group_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1367,7 +1387,7 @@ export def "groups delete" [
 #
 # GET /api/groups/{serviceGroupId}
 # operationId: serviceGroup
-export def "groups serviceGroup" [
+export def "groups get-service" [
   service_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1380,7 +1400,7 @@ export def "groups serviceGroup" [
 ]: nothing -> record<description: string, id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({service_group_id: $service_group_id} | format pattern "/api/groups/{service_group_id}"))
+  let full_url = (build-url $base ({service_group_id: (encode-path-segment $service_group_id)} | format pattern "/api/groups/{service_group_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1405,11 +1425,12 @@ export def "groups update-by-serviceGroupId" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({service_group_id: $service_group_id} | format pattern "/api/groups/{service_group_id}"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({service_group_id: (encode-path-segment $service_group_id)} | format pattern "/api/groups/{service_group_id}"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update a service group
@@ -1433,19 +1454,19 @@ export def "groups update-by-serviceGroupId-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({service_group_id: $service_group_id} | format pattern "/api/groups/{service_group_id}"))
-  let body = {"description": $description, "id": $id, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({service_group_id: (encode-path-segment $service_group_id)} | format pattern "/api/groups/{service_group_id}"))
+  let req_body = {"description": $description, "id": $id, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get all services descriptor for a group
 #
 # GET /api/groups/{serviceGroupId}/services
 # operationId: serviceGroupServices
-export def "groups-services serviceGroupServices" [
+export def "groups-services get" [
   service_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1458,7 +1479,7 @@ export def "groups-services serviceGroupServices" [
 ]: nothing -> table<authorizedEntities: list<string>, clientId: string, clientName: string, clientSecret: string, dailyQuota: int, enabled: bool, metadata: record, monthlyQuota: int, throttlingQuota: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({service_group_id: $service_group_id} | format pattern "/api/groups/{service_group_id}/services"))
+  let full_url = (build-url $base ({service_group_id: (encode-path-segment $service_group_id)} | format pattern "/api/groups/{service_group_id}/services"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1469,14 +1490,14 @@ export def "groups-services serviceGroupServices" [
 # POST /api/import
 # operationId: fullImportFromFile
 # --admins item shape: {createdAt: int, label: string, password: string, registration: record, username: string}
-# --apiKeys item shape: {authorizedEntities: list, clientId: string, clientName: string, clientSecret: string, dailyQuota?: int, enabled: bool, metadata?: record, monthlyQuota?: int, throttlingQuota?: int}
-# --config shape: {alertsEmails: list, alertsWebhooks: list, analyticsWebhooks: list, apiReadOnly: bool, autoLinkToDefaultGroup: bool, backofficeAuth0Config?: record, cleverSettings?: record, elasticReadsConfig?: record, elasticWritesConfigs?: list, endlessIpAddresses: list, ipFiltering: record, limitConcurrentRequests: bool, lines?: list, mailerSettings?: record, maxConcurrentRequests: int, maxHttp10ResponseSize?: int, maxLogsSize?: int, middleFingers?: bool, perIpThrottlingQuota: int, privateAppsAuth0Config?: record, streamEntityOnly: bool, throttlingQuota: int, u2fLoginOnly: bool, useCircuitBreakers: bool}
+# --apiKeys item shape: {authorizedEntities: list<string>, clientId: string, clientName: string, clientSecret: string, dailyQuota?: int, enabled: bool, metadata?: record, monthlyQuota?: int, throttlingQuota?: int}
+# --config shape: {alertsEmails: list<string>, alertsWebhooks: list, analyticsWebhooks: list, apiReadOnly: bool, autoLinkToDefaultGroup: bool, backofficeAuth0Config?: record, cleverSettings?: record, elasticReadsConfig?: record, elasticWritesConfigs?: list, endlessIpAddresses: list<string>, ipFiltering: record, limitConcurrentRequests: bool, lines?: list<string>, mailerSettings?: record, maxConcurrentRequests: int, maxHttp10ResponseSize?: int, maxLogsSize?: int, middleFingers?: bool, perIpThrottlingQuota: int, ... (5 more fields)}
 # --errorTemplates item shape: {messages: record, serviceId: string, template40x: string, template50x: string, templateBuild: string, templateMaintenance: string}
-# --serviceDescriptors item shape: {Canary?: record, additionalHeaders?: record, api?: record, authConfigRef?: string, buildMode: bool, chaosConfig?: record, clientConfig?: record, clientValidatorRef?: string, cors?: record, domain: string, enabled: bool, enforceSecureCommunication: bool, env: string, forceHttps: bool, groups: list, gzip?: record, headersVerification?: record, healthCheck?: record, id: string, ipFiltering?: record, jwtVerifier?: any, localHost?: string, localScheme?: string, maintenanceMode: bool, matchingHeaders?: record, matchingRoot?: string, metadata?: record, name: string, overrideHost?: bool, privateApp: bool, privatePatterns?: list, publicPatterns?: list, redirectToLocal?: bool, redirection?: record, root: string, secComExcludedPatterns?: list, secComSettings?: any, sendOtoroshiHeadersBack?: bool, statsdConfig?: record, subdomain: string, targets: list, transformerRef?: string, userFacing?: bool, xForwardedHeaders?: bool}
+# --serviceDescriptors item shape: {Canary?: record, additionalHeaders?: record, api?: record, authConfigRef?: string, buildMode: bool, chaosConfig?: record, clientConfig?: record, clientValidatorRef?: string, cors?: record, domain: string, enabled: bool, enforceSecureCommunication: bool, env: string, forceHttps: bool, groups: list<string>, gzip?: record, headersVerification?: record, healthCheck?: record, id: string, ipFiltering?: record, jwtVerifier?: any, localHost?: string, localScheme?: string, maintenanceMode: bool, ... (20 more fields)}
 # --serviceGroups item shape: {description?: string, id: string, name: string}
 # --simpleAdmins item shape: {createdAt: int, label: string, password: string, username: string}
 # --stats shape: {calls: int, dataIn: int, dataOut: int}
-export def "import fullImportFromFile" [
+export def "import import-full-from-file" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1486,14 +1507,14 @@ export def "import fullImportFromFile" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   admins: list # Current U2F admin at the time of export — item shape: {createdAt: int, label: string, password: string, registration: record, username: string}
-  api_keys: list # Current apik keys at the time of export — item shape: {authorizedEntities: list, clientId: string, clientName: string, clientSecret: string, dailyQuota?: int, enabled: bool, metadata?: record, monthlyQuota?: int, throttlingQuota?: int}
+  api_keys: list # Current apik keys at the time of export — item shape: {authorizedEntities: list<string>, clientId: string, clientName: string, clientSecret: string, dailyQuota?: int, enabled: bool, metadata?: record, monthlyQuota?: int, throttlingQuota?: int}
   --app-config: record # Current env variables at the time of export (e.g. {key: value})
-  config: record # The global config object of Otoroshi, used to customize settings of the current Otoroshi instance — shape: {alertsEmails: list, alertsWebhooks: list, analyticsWebhooks: list, apiReadOnly: bool, autoLinkToDefaultGroup: bool, backofficeAuth0Config?: record, cleverSettings?: record, elasticReadsConfig?: record, elasticWritesConfigs?: list, endlessIpAddresses: list, ipFiltering: record, limitConcurrentRequests: bool, lines?: list, mailerSettings?: record, maxConcurrentRequests: int, maxHttp10ResponseSize?: int, maxLogsSize?: int, middleFingers?: bool, perIpThrottlingQuota: int, privateAppsAuth0Config?: record, streamEntityOnly: bool, throttlingQuota: int, u2fLoginOnly: bool, useCircuitBreakers: bool}
+  config: record # The global config object of Otoroshi, used to customize settings of the current Otoroshi instance — shape: {alertsEmails: list<string>, alertsWebhooks: list, analyticsWebhooks: list, apiReadOnly: bool, autoLinkToDefaultGroup: bool, backofficeAuth0Config?: record, cleverSettings?: record, elasticReadsConfig?: record, elasticWritesConfigs?: list, endlessIpAddresses: list<string>, ipFiltering: record, limitConcurrentRequests: bool, lines?: list<string>, mailerSettings?: record, maxConcurrentRequests: int, maxHttp10ResponseSize?: int, maxLogsSize?: int, middleFingers?: bool, perIpThrottlingQuota: int, ... (5 more fields)}
   date: string # format: date-time, e.g. 2017-07-21T17:32:28Z
   date_raw: int # format: int64, e.g. 123
   error_templates: list # Current error templates at the time of export — item shape: {messages: record, serviceId: string, template40x: string, template50x: string, templateBuild: string, templateMaintenance: string}
   label: string # e.g. a string value
-  service_descriptors: list # Current service descriptors at the time of export — item shape: {Canary?: record, additionalHeaders?: record, api?: record, authConfigRef?: string, buildMode: bool, chaosConfig?: record, clientConfig?: record, clientValidatorRef?: string, cors?: record, domain: string, enabled: bool, enforceSecureCommunication: bool, env: string, forceHttps: bool, groups: list, gzip?: record, headersVerification?: record, healthCheck?: record, id: string, ipFiltering?: record, jwtVerifier?: any, localHost?: string, localScheme?: string, maintenanceMode: bool, matchingHeaders?: record, matchingRoot?: string, metadata?: record, name: string, overrideHost?: bool, privateApp: bool, privatePatterns?: list, publicPatterns?: list, redirectToLocal?: bool, redirection?: record, root: string, secComExcludedPatterns?: list, secComSettings?: any, sendOtoroshiHeadersBack?: bool, statsdConfig?: record, subdomain: string, targets: list, transformerRef?: string, userFacing?: bool, xForwardedHeaders?: bool}
+  service_descriptors: list # Current service descriptors at the time of export — item shape: {Canary?: record, additionalHeaders?: record, api?: record, authConfigRef?: string, buildMode: bool, chaosConfig?: record, clientConfig?: record, clientValidatorRef?: string, cors?: record, domain: string, enabled: bool, enforceSecureCommunication: bool, env: string, forceHttps: bool, groups: list<string>, gzip?: record, headersVerification?: record, healthCheck?: record, id: string, ipFiltering?: record, jwtVerifier?: any, localHost?: string, localScheme?: string, maintenanceMode: bool, ... (20 more fields)}
   service_groups: list # Current service groups at the time of export — item shape: {description?: string, id: string, name: string}
   simple_admins: list # Current simple admins at the time of export — item shape: {createdAt: int, label: string, password: string, username: string}
   stats: record # Global stats for the current Otoroshi instances — shape: {calls: int, dataIn: int, dataOut: int}
@@ -1502,18 +1523,18 @@ export def "import fullImportFromFile" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/import")
-  let body = {"admins": $admins, "apiKeys": $api_keys, "appConfig": $app_config, "config": $config, "date": $date, "dateRaw": $date_raw, "errorTemplates": $error_templates, "label": $label, "serviceDescriptors": $service_descriptors, "serviceGroups": $service_groups, "simpleAdmins": $simple_admins, "stats": $stats} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"admins": $admins, "apiKeys": $api_keys, "appConfig": $app_config, "config": $config, "date": $date, "dateRaw": $date_raw, "errorTemplates": $error_templates, "label": $label, "serviceDescriptors": $service_descriptors, "serviceGroups": $service_groups, "simpleAdmins": $simple_admins, "stats": $stats} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get global otoroshi stats
 #
 # GET /api/live
 # operationId: globalLiveStats
-export def "live globalLiveStats" [
+export def "live stats-global" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1535,7 +1556,7 @@ export def "live globalLiveStats" [
 #
 # GET /api/live/{id}
 # operationId: serviceLiveStats
-export def "live serviceLiveStats" [
+export def "live stats-service" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1549,7 +1570,7 @@ export def "live serviceLiveStats" [
 ]: nothing -> record<calls: int, concurrentHandledRequests: int, dataIn: int, dataInRate: float, dataOut: int, dataOutRate: float, duration: float, overhead: float, rate: float> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/live/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/live/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1559,7 +1580,7 @@ export def "live serviceLiveStats" [
 #
 # GET /api/otoroshi.json
 # operationId: fullExport
-export def "otoroshijson fullExport" [
+export def "otoroshi-json export-full" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1582,14 +1603,14 @@ export def "otoroshijson fullExport" [
 # POST /api/otoroshi.json
 # operationId: fullImport
 # --admins item shape: {createdAt: int, label: string, password: string, registration: record, username: string}
-# --apiKeys item shape: {authorizedEntities: list, clientId: string, clientName: string, clientSecret: string, dailyQuota?: int, enabled: bool, metadata?: record, monthlyQuota?: int, throttlingQuota?: int}
-# --config shape: {alertsEmails: list, alertsWebhooks: list, analyticsWebhooks: list, apiReadOnly: bool, autoLinkToDefaultGroup: bool, backofficeAuth0Config?: record, cleverSettings?: record, elasticReadsConfig?: record, elasticWritesConfigs?: list, endlessIpAddresses: list, ipFiltering: record, limitConcurrentRequests: bool, lines?: list, mailerSettings?: record, maxConcurrentRequests: int, maxHttp10ResponseSize?: int, maxLogsSize?: int, middleFingers?: bool, perIpThrottlingQuota: int, privateAppsAuth0Config?: record, streamEntityOnly: bool, throttlingQuota: int, u2fLoginOnly: bool, useCircuitBreakers: bool}
+# --apiKeys item shape: {authorizedEntities: list<string>, clientId: string, clientName: string, clientSecret: string, dailyQuota?: int, enabled: bool, metadata?: record, monthlyQuota?: int, throttlingQuota?: int}
+# --config shape: {alertsEmails: list<string>, alertsWebhooks: list, analyticsWebhooks: list, apiReadOnly: bool, autoLinkToDefaultGroup: bool, backofficeAuth0Config?: record, cleverSettings?: record, elasticReadsConfig?: record, elasticWritesConfigs?: list, endlessIpAddresses: list<string>, ipFiltering: record, limitConcurrentRequests: bool, lines?: list<string>, mailerSettings?: record, maxConcurrentRequests: int, maxHttp10ResponseSize?: int, maxLogsSize?: int, middleFingers?: bool, perIpThrottlingQuota: int, ... (5 more fields)}
 # --errorTemplates item shape: {messages: record, serviceId: string, template40x: string, template50x: string, templateBuild: string, templateMaintenance: string}
-# --serviceDescriptors item shape: {Canary?: record, additionalHeaders?: record, api?: record, authConfigRef?: string, buildMode: bool, chaosConfig?: record, clientConfig?: record, clientValidatorRef?: string, cors?: record, domain: string, enabled: bool, enforceSecureCommunication: bool, env: string, forceHttps: bool, groups: list, gzip?: record, headersVerification?: record, healthCheck?: record, id: string, ipFiltering?: record, jwtVerifier?: any, localHost?: string, localScheme?: string, maintenanceMode: bool, matchingHeaders?: record, matchingRoot?: string, metadata?: record, name: string, overrideHost?: bool, privateApp: bool, privatePatterns?: list, publicPatterns?: list, redirectToLocal?: bool, redirection?: record, root: string, secComExcludedPatterns?: list, secComSettings?: any, sendOtoroshiHeadersBack?: bool, statsdConfig?: record, subdomain: string, targets: list, transformerRef?: string, userFacing?: bool, xForwardedHeaders?: bool}
+# --serviceDescriptors item shape: {Canary?: record, additionalHeaders?: record, api?: record, authConfigRef?: string, buildMode: bool, chaosConfig?: record, clientConfig?: record, clientValidatorRef?: string, cors?: record, domain: string, enabled: bool, enforceSecureCommunication: bool, env: string, forceHttps: bool, groups: list<string>, gzip?: record, headersVerification?: record, healthCheck?: record, id: string, ipFiltering?: record, jwtVerifier?: any, localHost?: string, localScheme?: string, maintenanceMode: bool, ... (20 more fields)}
 # --serviceGroups item shape: {description?: string, id: string, name: string}
 # --simpleAdmins item shape: {createdAt: int, label: string, password: string, username: string}
 # --stats shape: {calls: int, dataIn: int, dataOut: int}
-export def "otoroshijson fullImport" [
+export def "otoroshi-json import-full" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1599,14 +1620,14 @@ export def "otoroshijson fullImport" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   admins: list # Current U2F admin at the time of export — item shape: {createdAt: int, label: string, password: string, registration: record, username: string}
-  api_keys: list # Current apik keys at the time of export — item shape: {authorizedEntities: list, clientId: string, clientName: string, clientSecret: string, dailyQuota?: int, enabled: bool, metadata?: record, monthlyQuota?: int, throttlingQuota?: int}
+  api_keys: list # Current apik keys at the time of export — item shape: {authorizedEntities: list<string>, clientId: string, clientName: string, clientSecret: string, dailyQuota?: int, enabled: bool, metadata?: record, monthlyQuota?: int, throttlingQuota?: int}
   --app-config: record # Current env variables at the time of export (e.g. {key: value})
-  config: record # The global config object of Otoroshi, used to customize settings of the current Otoroshi instance — shape: {alertsEmails: list, alertsWebhooks: list, analyticsWebhooks: list, apiReadOnly: bool, autoLinkToDefaultGroup: bool, backofficeAuth0Config?: record, cleverSettings?: record, elasticReadsConfig?: record, elasticWritesConfigs?: list, endlessIpAddresses: list, ipFiltering: record, limitConcurrentRequests: bool, lines?: list, mailerSettings?: record, maxConcurrentRequests: int, maxHttp10ResponseSize?: int, maxLogsSize?: int, middleFingers?: bool, perIpThrottlingQuota: int, privateAppsAuth0Config?: record, streamEntityOnly: bool, throttlingQuota: int, u2fLoginOnly: bool, useCircuitBreakers: bool}
+  config: record # The global config object of Otoroshi, used to customize settings of the current Otoroshi instance — shape: {alertsEmails: list<string>, alertsWebhooks: list, analyticsWebhooks: list, apiReadOnly: bool, autoLinkToDefaultGroup: bool, backofficeAuth0Config?: record, cleverSettings?: record, elasticReadsConfig?: record, elasticWritesConfigs?: list, endlessIpAddresses: list<string>, ipFiltering: record, limitConcurrentRequests: bool, lines?: list<string>, mailerSettings?: record, maxConcurrentRequests: int, maxHttp10ResponseSize?: int, maxLogsSize?: int, middleFingers?: bool, perIpThrottlingQuota: int, ... (5 more fields)}
   date: string # format: date-time, e.g. 2017-07-21T17:32:28Z
   date_raw: int # format: int64, e.g. 123
   error_templates: list # Current error templates at the time of export — item shape: {messages: record, serviceId: string, template40x: string, template50x: string, templateBuild: string, templateMaintenance: string}
   label: string # e.g. a string value
-  service_descriptors: list # Current service descriptors at the time of export — item shape: {Canary?: record, additionalHeaders?: record, api?: record, authConfigRef?: string, buildMode: bool, chaosConfig?: record, clientConfig?: record, clientValidatorRef?: string, cors?: record, domain: string, enabled: bool, enforceSecureCommunication: bool, env: string, forceHttps: bool, groups: list, gzip?: record, headersVerification?: record, healthCheck?: record, id: string, ipFiltering?: record, jwtVerifier?: any, localHost?: string, localScheme?: string, maintenanceMode: bool, matchingHeaders?: record, matchingRoot?: string, metadata?: record, name: string, overrideHost?: bool, privateApp: bool, privatePatterns?: list, publicPatterns?: list, redirectToLocal?: bool, redirection?: record, root: string, secComExcludedPatterns?: list, secComSettings?: any, sendOtoroshiHeadersBack?: bool, statsdConfig?: record, subdomain: string, targets: list, transformerRef?: string, userFacing?: bool, xForwardedHeaders?: bool}
+  service_descriptors: list # Current service descriptors at the time of export — item shape: {Canary?: record, additionalHeaders?: record, api?: record, authConfigRef?: string, buildMode: bool, chaosConfig?: record, clientConfig?: record, clientValidatorRef?: string, cors?: record, domain: string, enabled: bool, enforceSecureCommunication: bool, env: string, forceHttps: bool, groups: list<string>, gzip?: record, headersVerification?: record, healthCheck?: record, id: string, ipFiltering?: record, jwtVerifier?: any, localHost?: string, localScheme?: string, maintenanceMode: bool, ... (20 more fields)}
   service_groups: list # Current service groups at the time of export — item shape: {description?: string, id: string, name: string}
   simple_admins: list # Current simple admins at the time of export — item shape: {createdAt: int, label: string, password: string, username: string}
   stats: record # Global stats for the current Otoroshi instances — shape: {calls: int, dataIn: int, dataOut: int}
@@ -1615,18 +1636,18 @@ export def "otoroshijson fullImport" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/otoroshi.json")
-  let body = {"admins": $admins, "apiKeys": $api_keys, "appConfig": $app_config, "config": $config, "date": $date, "dateRaw": $date_raw, "errorTemplates": $error_templates, "label": $label, "serviceDescriptors": $service_descriptors, "serviceGroups": $service_groups, "simpleAdmins": $simple_admins, "stats": $stats} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"admins": $admins, "apiKeys": $api_keys, "appConfig": $app_config, "config": $config, "date": $date, "dateRaw": $date_raw, "errorTemplates": $error_templates, "label": $label, "serviceDescriptors": $service_descriptors, "serviceGroups": $service_groups, "simpleAdmins": $simple_admins, "stats": $stats} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get all scripts
 #
 # GET /api/scripts
 # operationId: findAllScripts
-export def "scripts findAllScripts" [
+export def "scripts find-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1666,18 +1687,18 @@ export def "scripts create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/scripts")
-  let body = {"code": $code, "desc": $desc, "id": $id, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"code": $code, "desc": $desc, "id": $id, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Compile a script
 #
 # POST /api/scripts/_compile
 # operationId: compileScript
-export def "scripts-compile compileScript" [
+export def "scripts-compile create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1695,11 +1716,11 @@ export def "scripts-compile compileScript" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/scripts/_compile")
-  let body = {"code": $code, "desc": $desc, "id": $id, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"code": $code, "desc": $desc, "id": $id, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a script
@@ -1719,7 +1740,7 @@ export def "scripts delete" [
 ]: nothing -> record<deleted: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({script_id: $script_id} | format pattern "/api/scripts/{script_id}"))
+  let full_url = (build-url $base ({script_id: (encode-path-segment $script_id)} | format pattern "/api/scripts/{script_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1729,7 +1750,7 @@ export def "scripts delete" [
 #
 # GET /api/scripts/{scriptId}
 # operationId: findScriptById
-export def "scripts findScriptById" [
+export def "scripts find" [
   script_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1742,7 +1763,7 @@ export def "scripts findScriptById" [
 ]: nothing -> record<code: record, desc: record, id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({script_id: $script_id} | format pattern "/api/scripts/{script_id}"))
+  let full_url = (build-url $base ({script_id: (encode-path-segment $script_id)} | format pattern "/api/scripts/{script_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1767,11 +1788,12 @@ export def "scripts update-by-scriptId" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({script_id: $script_id} | format pattern "/api/scripts/{script_id}"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({script_id: (encode-path-segment $script_id)} | format pattern "/api/scripts/{script_id}"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update a script
@@ -1796,19 +1818,19 @@ export def "scripts update-by-scriptId-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({script_id: $script_id} | format pattern "/api/scripts/{script_id}"))
-  let body = {"code": $code, "desc": $desc, "id": $id, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({script_id: (encode-path-segment $script_id)} | format pattern "/api/scripts/{script_id}"))
+  let req_body = {"code": $code, "desc": $desc, "id": $id, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get all services
 #
 # GET /api/services
 # operationId: allServices
-export def "services allServices" [
+export def "services list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1834,10 +1856,10 @@ export def "services allServices" [
 # --api shape: {exposeApi: bool, openApiDescriptorUrl?: string}
 # --chaosConfig shape: {badResponsesFaultConfig?: record, enabled: bool, largeRequestFaultConfig?: record, largeResponseFaultConfig?: record, latencyInjectionFaultConfig?: record}
 # --clientConfig shape: {backoffFactor: int, callTimeout: int, globalTimeout: int, maxErrors: int, retries: int, retryInitialDelay: int, sampleInterval: int, useCircuitBreaker: bool}
-# --cors shape: {allowCredentials: bool, allowHeaders: list, allowMethods: list, allowOrigin: string, enabled: bool, excludedPatterns: list, exposeHeaders: list, maxAge: int}
-# --gzip shape: {blackList: list, bufferSize: int, chunkedThreshold: int, compressionLevel: int, enabled: bool, excludedPatterns: list, whiteList: list}
+# --cors shape: {allowCredentials: bool, allowHeaders: list<string>, allowMethods: list<string>, allowOrigin: string, enabled: bool, excludedPatterns: list<string>, exposeHeaders: list<string>, maxAge: int}
+# --gzip shape: {blackList: list<string>, bufferSize: int, chunkedThreshold: int, compressionLevel: int, enabled: bool, excludedPatterns: list<string>, whiteList: list<string>}
 # --healthCheck shape: {enabled: bool, url?: string}
-# --ipFiltering shape: {blacklist: list, whitelist: list}
+# --ipFiltering shape: {blacklist: list<string>, whitelist: list<string>}
 # --redirection shape: {code: int, enabled: bool, to: string}
 # --statsdConfig shape: {datadog: bool, host: string, port: int}
 # --targets item shape: {host: string, scheme: string}
@@ -1858,18 +1880,18 @@ export def "services create" [
   --chaos-config: record # Configuration for the faults that can be injected in requests — shape: {badResponsesFaultConfig?: record, enabled: bool, largeRequestFaultConfig?: record, largeResponseFaultConfig?: record, latencyInjectionFaultConfig?: record}
   --client-config: record # The configuration of the circuit breaker for a service descriptor — shape: {backoffFactor: int, callTimeout: int, globalTimeout: int, maxErrors: int, retries: int, retryInitialDelay: int, sampleInterval: int, useCircuitBreaker: bool}
   --client-validator-ref: string # A reference to validation authority (e.g. a string value)
-  --cors: record # The configuration for cors support — shape: {allowCredentials: bool, allowHeaders: list, allowMethods: list, allowOrigin: string, enabled: bool, excludedPatterns: list, exposeHeaders: list, maxAge: int}
+  --cors: record # The configuration for cors support — shape: {allowCredentials: bool, allowHeaders: list<string>, allowMethods: list<string>, allowOrigin: string, enabled: bool, excludedPatterns: list<string>, exposeHeaders: list<string>, maxAge: int}
   domain: string # The domain on which the service is available. (e.g. a string value)
   --enabled: oneof<nothing, bool> # Activate or deactivate your service. Once disabled, users will get an error page saying the service does not exist (e.g. true)
   --enforce-secure-communication: oneof<nothing, bool> # When enabled, Otoroshi will try to exchange headers with downstream service to ensure no one else can use the service from outside (e.g. true)
   --body-env: string # The line on which the service is available. Based on that value, the name of the line will be appended to the subdomain. For line prod, nothing will be appended. For example, if the subdomain is 'foo' and line is 'preprod', then the exposed service will be available at 'foo.preprod.mydomain' (e.g. a string value)
   --force-https: oneof<nothing, bool> # Will force redirection to https:// if not present (e.g. true)
-  groups: list # Each service descriptor is attached to groups. A group can have one or more services. Each API key is linked to a group and allow access to every service in the group (e.g. [a string value])
-  --gzip: record # Configuration for gzip of service responses — shape: {blackList: list, bufferSize: int, chunkedThreshold: int, compressionLevel: int, enabled: bool, excludedPatterns: list, whiteList: list}
+  groups: list<string> # Each service descriptor is attached to groups. A group can have one or more services. Each API key is linked to a group and allow access to every service in the group (e.g. [a string value])
+  --gzip: record # Configuration for gzip of service responses — shape: {blackList: list<string>, bufferSize: int, chunkedThreshold: int, compressionLevel: int, enabled: bool, excludedPatterns: list<string>, whiteList: list<string>}
   --headers-verification: record # Specify headers that will be verified after routing. (e.g. {key: value})
   --health-check: record # The configuration for checking health of a service. Otoroshi will perform GET call on the URL to check if the service is still alive — shape: {enabled: bool, url?: string}
   id: string # A unique random string to identify your service (format: uuid, e.g. 110e8400-e29b-11d4-a716-446655440000)
-  --ip-filtering: record # The filtering configuration block for a service of globally. — shape: {blacklist: list, whitelist: list}
+  --ip-filtering: record # The filtering configuration block for a service of globally. — shape: {blacklist: list<string>, whitelist: list<string>}
   --jwt-verifier: any
   --local-host: string # The host used localy, mainly localhost:xxxx (e.g. a string value)
   --local-scheme: string # The scheme used localy, mainly http (e.g. a string value)
@@ -1880,12 +1902,12 @@ export def "services create" [
   name: string # The name of your service. Only for debug and human readability purposes (e.g. a string value)
   --override-host: oneof<nothing, bool> # Host header will be overriden with Host of the target (e.g. true)
   --private-app: oneof<nothing, bool> # When enabled, user will be allowed to use the service (UI) only if they are registered users of the private apps domain (e.g. true)
-  --private-patterns: list # If you define a public pattern that is a little bit too much, you can make some of public URL private again
-  --public-patterns: list # By default, every services are private only and you'll need an API key to access it. However, if you want to expose a public UI, you can define one or more public patterns (regex) to allow access to anybody. For example if you want to allow anybody on any URL, just use '/.*'
+  --private-patterns: list<string> # If you define a public pattern that is a little bit too much, you can make some of public URL private again
+  --public-patterns: list<string> # By default, every services are private only and you'll need an API key to access it. However, if you want to expose a public UI, you can define one or more public patterns (regex) to allow access to anybody. For example if you want to allow anybody on any URL, just use '/.*'
   --redirect-to-local: oneof<nothing, bool> # If you work locally with Otoroshi, you may want to use that feature to redirect one particuliar service to a local host. For example, you can relocate https://foo.preprod.bar.com to http://localhost:8080 to make some tests (e.g. true)
   --redirection: record # The configuration for redirection per service — shape: {code: int, enabled: bool, to: string}
   root: string # Otoroshi will append this root to any target choosen. If the specified root is '/api/foo', then a request to https://yyyyyyy/bar will actually hit https://xxxxxxxxx/api/foo/bar (e.g. a string value)
-  --sec-com-excluded-patterns: list # URI patterns excluded from secured communications
+  --sec-com-excluded-patterns: list<string> # URI patterns excluded from secured communications
   --sec-com-settings: any
   --send-otoroshi-headers-back: oneof<nothing, bool> # When enabled, Otoroshi will send headers to consumer like request id, client latency, overhead, etc ... (e.g. true)
   --statsd-config: record # The configuration for statsd metrics push — shape: {datadog: bool, host: string, port: int}
@@ -1899,11 +1921,11 @@ export def "services create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/services")
-  let body = {"Canary": $canary, "additionalHeaders": $additional_headers, "api": $api, "authConfigRef": $auth_config_ref, "buildMode": $build_mode, "chaosConfig": $chaos_config, "clientConfig": $client_config, "clientValidatorRef": $client_validator_ref, "cors": $cors, "domain": $domain, "enabled": $enabled, "enforceSecureCommunication": $enforce_secure_communication, "env": $body_env, "forceHttps": $force_https, "groups": $groups, "gzip": $gzip, "headersVerification": $headers_verification, "healthCheck": $health_check, "id": $id, "ipFiltering": $ip_filtering, "jwtVerifier": $jwt_verifier, "localHost": $local_host, "localScheme": $local_scheme, "maintenanceMode": $maintenance_mode, "matchingHeaders": $matching_headers, "matchingRoot": $matching_root, "metadata": $metadata, "name": $name, "overrideHost": $override_host, "privateApp": $private_app, "privatePatterns": $private_patterns, "publicPatterns": $public_patterns, "redirectToLocal": $redirect_to_local, "redirection": $redirection, "root": $root, "secComExcludedPatterns": $sec_com_excluded_patterns, "secComSettings": $sec_com_settings, "sendOtoroshiHeadersBack": $send_otoroshi_headers_back, "statsdConfig": $statsd_config, "subdomain": $subdomain, "targets": $targets, "transformerRef": $transformer_ref, "userFacing": $user_facing, "xForwardedHeaders": $x_forwarded_headers} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"Canary": $canary, "additionalHeaders": $additional_headers, "api": $api, "authConfigRef": $auth_config_ref, "buildMode": $build_mode, "chaosConfig": $chaos_config, "clientConfig": $client_config, "clientValidatorRef": $client_validator_ref, "cors": $cors, "domain": $domain, "enabled": $enabled, "enforceSecureCommunication": $enforce_secure_communication, "env": $body_env, "forceHttps": $force_https, "groups": $groups, "gzip": $gzip, "headersVerification": $headers_verification, "healthCheck": $health_check, "id": $id, "ipFiltering": $ip_filtering, "jwtVerifier": $jwt_verifier, "localHost": $local_host, "localScheme": $local_scheme, "maintenanceMode": $maintenance_mode, "matchingHeaders": $matching_headers, "matchingRoot": $matching_root, "metadata": $metadata, "name": $name, "overrideHost": $override_host, "privateApp": $private_app, "privatePatterns": $private_patterns, "publicPatterns": $public_patterns, "redirectToLocal": $redirect_to_local, "redirection": $redirection, "root": $root, "secComExcludedPatterns": $sec_com_excluded_patterns, "secComSettings": $sec_com_settings, "sendOtoroshiHeadersBack": $send_otoroshi_headers_back, "statsdConfig": $statsd_config, "subdomain": $subdomain, "targets": $targets, "transformerRef": $transformer_ref, "userFacing": $user_facing, "xForwardedHeaders": $x_forwarded_headers} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a service descriptor
@@ -1923,7 +1945,7 @@ export def "services delete" [
 ]: nothing -> record<deleted: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({service_id: $service_id} | format pattern "/api/services/{service_id}"))
+  let full_url = (build-url $base ({service_id: (encode-path-segment $service_id)} | format pattern "/api/services/{service_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1933,7 +1955,7 @@ export def "services delete" [
 #
 # GET /api/services/{serviceId}
 # operationId: service
-export def "services service" [
+export def "services get" [
   service_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1946,7 +1968,7 @@ export def "services service" [
 ]: nothing -> record<Canary: record<enabled: bool, root: string, targets: list<record>, traffic: int>, additionalHeaders: record, api: record<exposeApi: bool, openApiDescriptorUrl: string>, authConfigRef: string, buildMode: bool, chaosConfig: record<badResponsesFaultConfig: record<ratio: float, responses: list>, enabled: bool, largeRequestFaultConfig: record<additionalRequestSize: int, ratio: float>, largeResponseFaultConfig: record<additionalRequestSize: int, ratio: float>, latencyInjectionFaultConfig: record<from: int, ratio: float, to: int>>, clientConfig: record<backoffFactor: int, callTimeout: int, globalTimeout: int, maxErrors: int, retries: int, retryInitialDelay: int, sampleInterval: int, useCircuitBreaker: bool>, clientValidatorRef: string, cors: record<allowCredentials: bool, allowHeaders: list<string>, allowMethods: list<string>, allowOrigin: string, enabled: bool, excludedPatterns: list<string>, exposeHeaders: list<string>, maxAge: int>, domain: string, enabled: bool, enforceSecureCommunication: bool, env: string, forceHttps: bool, groups: list<string>, gzip: record<blackList: list<string>, bufferSize: int, chunkedThreshold: int, compressionLevel: int, enabled: bool, excludedPatterns: list<string>, whiteList: list<string>>, headersVerification: record, healthCheck: record<enabled: bool, url: string>, id: string, ipFiltering: record<blacklist: list<string>, whitelist: list<string>>, jwtVerifier: any, localHost: string, localScheme: string, maintenanceMode: bool, matchingHeaders: record, matchingRoot: string, metadata: record, name: string, overrideHost: bool, privateApp: bool, privatePatterns: list<string>, publicPatterns: list<string>, redirectToLocal: bool, redirection: record<code: int, enabled: bool, to: string>, root: string, secComExcludedPatterns: list<string>, secComSettings: any, sendOtoroshiHeadersBack: bool, statsdConfig: record<datadog: bool, host: string, port: int>, subdomain: string, targets: table<host: string, scheme: string>, transformerRef: string, userFacing: bool, xForwardedHeaders: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({service_id: $service_id} | format pattern "/api/services/{service_id}"))
+  let full_url = (build-url $base ({service_id: (encode-path-segment $service_id)} | format pattern "/api/services/{service_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1971,11 +1993,12 @@ export def "services update-by-serviceId" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({service_id: $service_id} | format pattern "/api/services/{service_id}"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({service_id: (encode-path-segment $service_id)} | format pattern "/api/services/{service_id}"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update a service descriptor
@@ -1986,10 +2009,10 @@ export def "services update-by-serviceId" [
 # --api shape: {exposeApi: bool, openApiDescriptorUrl?: string}
 # --chaosConfig shape: {badResponsesFaultConfig?: record, enabled: bool, largeRequestFaultConfig?: record, largeResponseFaultConfig?: record, latencyInjectionFaultConfig?: record}
 # --clientConfig shape: {backoffFactor: int, callTimeout: int, globalTimeout: int, maxErrors: int, retries: int, retryInitialDelay: int, sampleInterval: int, useCircuitBreaker: bool}
-# --cors shape: {allowCredentials: bool, allowHeaders: list, allowMethods: list, allowOrigin: string, enabled: bool, excludedPatterns: list, exposeHeaders: list, maxAge: int}
-# --gzip shape: {blackList: list, bufferSize: int, chunkedThreshold: int, compressionLevel: int, enabled: bool, excludedPatterns: list, whiteList: list}
+# --cors shape: {allowCredentials: bool, allowHeaders: list<string>, allowMethods: list<string>, allowOrigin: string, enabled: bool, excludedPatterns: list<string>, exposeHeaders: list<string>, maxAge: int}
+# --gzip shape: {blackList: list<string>, bufferSize: int, chunkedThreshold: int, compressionLevel: int, enabled: bool, excludedPatterns: list<string>, whiteList: list<string>}
 # --healthCheck shape: {enabled: bool, url?: string}
-# --ipFiltering shape: {blacklist: list, whitelist: list}
+# --ipFiltering shape: {blacklist: list<string>, whitelist: list<string>}
 # --redirection shape: {code: int, enabled: bool, to: string}
 # --statsdConfig shape: {datadog: bool, host: string, port: int}
 # --targets item shape: {host: string, scheme: string}
@@ -2011,18 +2034,18 @@ export def "services update-by-serviceId-1" [
   --chaos-config: record # Configuration for the faults that can be injected in requests — shape: {badResponsesFaultConfig?: record, enabled: bool, largeRequestFaultConfig?: record, largeResponseFaultConfig?: record, latencyInjectionFaultConfig?: record}
   --client-config: record # The configuration of the circuit breaker for a service descriptor — shape: {backoffFactor: int, callTimeout: int, globalTimeout: int, maxErrors: int, retries: int, retryInitialDelay: int, sampleInterval: int, useCircuitBreaker: bool}
   --client-validator-ref: string # A reference to validation authority (e.g. a string value)
-  --cors: record # The configuration for cors support — shape: {allowCredentials: bool, allowHeaders: list, allowMethods: list, allowOrigin: string, enabled: bool, excludedPatterns: list, exposeHeaders: list, maxAge: int}
+  --cors: record # The configuration for cors support — shape: {allowCredentials: bool, allowHeaders: list<string>, allowMethods: list<string>, allowOrigin: string, enabled: bool, excludedPatterns: list<string>, exposeHeaders: list<string>, maxAge: int}
   domain: string # The domain on which the service is available. (e.g. a string value)
   --enabled: oneof<nothing, bool> # Activate or deactivate your service. Once disabled, users will get an error page saying the service does not exist (e.g. true)
   --enforce-secure-communication: oneof<nothing, bool> # When enabled, Otoroshi will try to exchange headers with downstream service to ensure no one else can use the service from outside (e.g. true)
   --body-env: string # The line on which the service is available. Based on that value, the name of the line will be appended to the subdomain. For line prod, nothing will be appended. For example, if the subdomain is 'foo' and line is 'preprod', then the exposed service will be available at 'foo.preprod.mydomain' (e.g. a string value)
   --force-https: oneof<nothing, bool> # Will force redirection to https:// if not present (e.g. true)
-  groups: list # Each service descriptor is attached to groups. A group can have one or more services. Each API key is linked to a group and allow access to every service in the group (e.g. [a string value])
-  --gzip: record # Configuration for gzip of service responses — shape: {blackList: list, bufferSize: int, chunkedThreshold: int, compressionLevel: int, enabled: bool, excludedPatterns: list, whiteList: list}
+  groups: list<string> # Each service descriptor is attached to groups. A group can have one or more services. Each API key is linked to a group and allow access to every service in the group (e.g. [a string value])
+  --gzip: record # Configuration for gzip of service responses — shape: {blackList: list<string>, bufferSize: int, chunkedThreshold: int, compressionLevel: int, enabled: bool, excludedPatterns: list<string>, whiteList: list<string>}
   --headers-verification: record # Specify headers that will be verified after routing. (e.g. {key: value})
   --health-check: record # The configuration for checking health of a service. Otoroshi will perform GET call on the URL to check if the service is still alive — shape: {enabled: bool, url?: string}
   id: string # A unique random string to identify your service (format: uuid, e.g. 110e8400-e29b-11d4-a716-446655440000)
-  --ip-filtering: record # The filtering configuration block for a service of globally. — shape: {blacklist: list, whitelist: list}
+  --ip-filtering: record # The filtering configuration block for a service of globally. — shape: {blacklist: list<string>, whitelist: list<string>}
   --jwt-verifier: any
   --local-host: string # The host used localy, mainly localhost:xxxx (e.g. a string value)
   --local-scheme: string # The scheme used localy, mainly http (e.g. a string value)
@@ -2033,12 +2056,12 @@ export def "services update-by-serviceId-1" [
   name: string # The name of your service. Only for debug and human readability purposes (e.g. a string value)
   --override-host: oneof<nothing, bool> # Host header will be overriden with Host of the target (e.g. true)
   --private-app: oneof<nothing, bool> # When enabled, user will be allowed to use the service (UI) only if they are registered users of the private apps domain (e.g. true)
-  --private-patterns: list # If you define a public pattern that is a little bit too much, you can make some of public URL private again
-  --public-patterns: list # By default, every services are private only and you'll need an API key to access it. However, if you want to expose a public UI, you can define one or more public patterns (regex) to allow access to anybody. For example if you want to allow anybody on any URL, just use '/.*'
+  --private-patterns: list<string> # If you define a public pattern that is a little bit too much, you can make some of public URL private again
+  --public-patterns: list<string> # By default, every services are private only and you'll need an API key to access it. However, if you want to expose a public UI, you can define one or more public patterns (regex) to allow access to anybody. For example if you want to allow anybody on any URL, just use '/.*'
   --redirect-to-local: oneof<nothing, bool> # If you work locally with Otoroshi, you may want to use that feature to redirect one particuliar service to a local host. For example, you can relocate https://foo.preprod.bar.com to http://localhost:8080 to make some tests (e.g. true)
   --redirection: record # The configuration for redirection per service — shape: {code: int, enabled: bool, to: string}
   root: string # Otoroshi will append this root to any target choosen. If the specified root is '/api/foo', then a request to https://yyyyyyy/bar will actually hit https://xxxxxxxxx/api/foo/bar (e.g. a string value)
-  --sec-com-excluded-patterns: list # URI patterns excluded from secured communications
+  --sec-com-excluded-patterns: list<string> # URI patterns excluded from secured communications
   --sec-com-settings: any
   --send-otoroshi-headers-back: oneof<nothing, bool> # When enabled, Otoroshi will send headers to consumer like request id, client latency, overhead, etc ... (e.g. true)
   --statsd-config: record # The configuration for statsd metrics push — shape: {datadog: bool, host: string, port: int}
@@ -2051,19 +2074,19 @@ export def "services update-by-serviceId-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({service_id: $service_id} | format pattern "/api/services/{service_id}"))
-  let body = {"Canary": $canary, "additionalHeaders": $additional_headers, "api": $api, "authConfigRef": $auth_config_ref, "buildMode": $build_mode, "chaosConfig": $chaos_config, "clientConfig": $client_config, "clientValidatorRef": $client_validator_ref, "cors": $cors, "domain": $domain, "enabled": $enabled, "enforceSecureCommunication": $enforce_secure_communication, "env": $body_env, "forceHttps": $force_https, "groups": $groups, "gzip": $gzip, "headersVerification": $headers_verification, "healthCheck": $health_check, "id": $id, "ipFiltering": $ip_filtering, "jwtVerifier": $jwt_verifier, "localHost": $local_host, "localScheme": $local_scheme, "maintenanceMode": $maintenance_mode, "matchingHeaders": $matching_headers, "matchingRoot": $matching_root, "metadata": $metadata, "name": $name, "overrideHost": $override_host, "privateApp": $private_app, "privatePatterns": $private_patterns, "publicPatterns": $public_patterns, "redirectToLocal": $redirect_to_local, "redirection": $redirection, "root": $root, "secComExcludedPatterns": $sec_com_excluded_patterns, "secComSettings": $sec_com_settings, "sendOtoroshiHeadersBack": $send_otoroshi_headers_back, "statsdConfig": $statsd_config, "subdomain": $subdomain, "targets": $targets, "transformerRef": $transformer_ref, "userFacing": $user_facing, "xForwardedHeaders": $x_forwarded_headers} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({service_id: (encode-path-segment $service_id)} | format pattern "/api/services/{service_id}"))
+  let req_body = {"Canary": $canary, "additionalHeaders": $additional_headers, "api": $api, "authConfigRef": $auth_config_ref, "buildMode": $build_mode, "chaosConfig": $chaos_config, "clientConfig": $client_config, "clientValidatorRef": $client_validator_ref, "cors": $cors, "domain": $domain, "enabled": $enabled, "enforceSecureCommunication": $enforce_secure_communication, "env": $body_env, "forceHttps": $force_https, "groups": $groups, "gzip": $gzip, "headersVerification": $headers_verification, "healthCheck": $health_check, "id": $id, "ipFiltering": $ip_filtering, "jwtVerifier": $jwt_verifier, "localHost": $local_host, "localScheme": $local_scheme, "maintenanceMode": $maintenance_mode, "matchingHeaders": $matching_headers, "matchingRoot": $matching_root, "metadata": $metadata, "name": $name, "overrideHost": $override_host, "privateApp": $private_app, "privatePatterns": $private_patterns, "publicPatterns": $public_patterns, "redirectToLocal": $redirect_to_local, "redirection": $redirection, "root": $root, "secComExcludedPatterns": $sec_com_excluded_patterns, "secComSettings": $sec_com_settings, "sendOtoroshiHeadersBack": $send_otoroshi_headers_back, "statsdConfig": $statsd_config, "subdomain": $subdomain, "targets": $targets, "transformerRef": $transformer_ref, "userFacing": $user_facing, "xForwardedHeaders": $x_forwarded_headers} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get all api keys for the group of a service
 #
 # GET /api/services/{serviceId}/apikeys
 # operationId: apiKeys
-export def "services-apikeys apiKeys" [
+export def "services-apikeys get-keys" [
   service_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2076,7 +2099,7 @@ export def "services-apikeys apiKeys" [
 ]: nothing -> table<authorizedEntities: list<string>, clientId: string, clientName: string, clientSecret: string, dailyQuota: int, enabled: bool, metadata: record, monthlyQuota: int, throttlingQuota: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({service_id: $service_id} | format pattern "/api/services/{service_id}/apikeys"))
+  let full_url = (build-url $base ({service_id: (encode-path-segment $service_id)} | format pattern "/api/services/{service_id}/apikeys"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2086,7 +2109,7 @@ export def "services-apikeys apiKeys" [
 #
 # POST /api/services/{serviceId}/apikeys
 # operationId: createApiKey
-export def "services-apikeys create" [
+export def "services-apikeys create-key" [
   service_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2096,7 +2119,7 @@ export def "services-apikeys create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  authorized_entities: list # The group/service ids (prefixed by group_ or service_ on which the key is authorized (e.g. [a string value])
+  authorized_entities: list<string> # The group/service ids (prefixed by group_ or service_ on which the key is authorized (e.g. [a string value])
   client_id: string # The unique id of the Api Key. Usually 16 random alpha numerical characters, but can be anything (e.g. a string value)
   client_name: string # The name of the api key, for humans ;-) (e.g. a string value)
   client_secret: string # The secret of the Api Key. Usually 64 random alpha numerical characters, but can be anything (e.g. a string value)
@@ -2109,19 +2132,19 @@ export def "services-apikeys create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({service_id: $service_id} | format pattern "/api/services/{service_id}/apikeys"))
-  let body = {"authorizedEntities": $authorized_entities, "clientId": $client_id, "clientName": $client_name, "clientSecret": $client_secret, "dailyQuota": $daily_quota, "enabled": $enabled, "metadata": $metadata, "monthlyQuota": $monthly_quota, "throttlingQuota": $throttling_quota} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({service_id: (encode-path-segment $service_id)} | format pattern "/api/services/{service_id}/apikeys"))
+  let req_body = {"authorizedEntities": $authorized_entities, "clientId": $client_id, "clientName": $client_name, "clientSecret": $client_secret, "dailyQuota": $daily_quota, "enabled": $enabled, "metadata": $metadata, "monthlyQuota": $monthly_quota, "throttlingQuota": $throttling_quota} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete an api key
 #
 # DELETE /api/services/{serviceId}/apikeys/{clientId}
 # operationId: deleteApiKey
-export def "services-apikeys delete" [
+export def "services-apikeys delete-key" [
   service_id: string
   client_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2135,7 +2158,7 @@ export def "services-apikeys delete" [
 ]: nothing -> record<deleted: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({service_id: $service_id, client_id: $client_id} | format pattern "/api/services/{service_id}/apikeys/{client_id}"))
+  let full_url = (build-url $base ({service_id: (encode-path-segment $service_id), client_id: (encode-path-segment $client_id)} | format pattern "/api/services/{service_id}/apikeys/{client_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2145,7 +2168,7 @@ export def "services-apikeys delete" [
 #
 # GET /api/services/{serviceId}/apikeys/{clientId}
 # operationId: apiKey
-export def "services-apikeys apiKey" [
+export def "services-apikeys get-key" [
   service_id: string
   client_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2159,7 +2182,7 @@ export def "services-apikeys apiKey" [
 ]: nothing -> record<authorizedEntities: list<string>, clientId: string, clientName: string, clientSecret: string, dailyQuota: int, enabled: bool, metadata: record, monthlyQuota: int, throttlingQuota: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({service_id: $service_id, client_id: $client_id} | format pattern "/api/services/{service_id}/apikeys/{client_id}"))
+  let full_url = (build-url $base ({service_id: (encode-path-segment $service_id), client_id: (encode-path-segment $client_id)} | format pattern "/api/services/{service_id}/apikeys/{client_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2169,7 +2192,7 @@ export def "services-apikeys apiKey" [
 #
 # PATCH /api/services/{serviceId}/apikeys/{clientId}
 # operationId: patchApiKey
-export def "services-apikeys update-by-serviceId-clientId" [
+export def "services-apikeys update-key-by-serviceId-clientId" [
   service_id: string
   client_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2185,18 +2208,19 @@ export def "services-apikeys update-by-serviceId-clientId" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({service_id: $service_id, client_id: $client_id} | format pattern "/api/services/{service_id}/apikeys/{client_id}"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({service_id: (encode-path-segment $service_id), client_id: (encode-path-segment $client_id)} | format pattern "/api/services/{service_id}/apikeys/{client_id}"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update an api key
 #
 # PUT /api/services/{serviceId}/apikeys/{clientId}
 # operationId: updateApiKey
-export def "services-apikeys update-by-serviceId-clientId-1" [
+export def "services-apikeys update-key-by-serviceId-clientId-1" [
   service_id: string
   client_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2207,7 +2231,7 @@ export def "services-apikeys update-by-serviceId-clientId-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  authorized_entities: list # The group/service ids (prefixed by group_ or service_ on which the key is authorized (e.g. [a string value])
+  authorized_entities: list<string> # The group/service ids (prefixed by group_ or service_ on which the key is authorized (e.g. [a string value])
   --body-client-id: string # The unique id of the Api Key. Usually 16 random alpha numerical characters, but can be anything (e.g. a string value)
   client_name: string # The name of the api key, for humans ;-) (e.g. a string value)
   client_secret: string # The secret of the Api Key. Usually 64 random alpha numerical characters, but can be anything (e.g. a string value)
@@ -2220,19 +2244,19 @@ export def "services-apikeys update-by-serviceId-clientId-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({service_id: $service_id, client_id: $client_id} | format pattern "/api/services/{service_id}/apikeys/{client_id}"))
-  let body = {"authorizedEntities": $authorized_entities, "clientId": $body_client_id, "clientName": $client_name, "clientSecret": $client_secret, "dailyQuota": $daily_quota, "enabled": $enabled, "metadata": $metadata, "monthlyQuota": $monthly_quota, "throttlingQuota": $throttling_quota} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({service_id: (encode-path-segment $service_id), client_id: (encode-path-segment $client_id)} | format pattern "/api/services/{service_id}/apikeys/{client_id}"))
+  let req_body = {"authorizedEntities": $authorized_entities, "clientId": $body_client_id, "clientName": $client_name, "clientSecret": $client_secret, "dailyQuota": $daily_quota, "enabled": $enabled, "metadata": $metadata, "monthlyQuota": $monthly_quota, "throttlingQuota": $throttling_quota} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get the group of an api key
 #
 # GET /api/services/{serviceId}/apikeys/{clientId}/group
 # operationId: apiKeyGroup
-export def "services-apikeys-group apiKeyGroup" [
+export def "services-apikeys-group get-key" [
   service_id: string
   client_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2246,7 +2270,7 @@ export def "services-apikeys-group apiKeyGroup" [
 ]: nothing -> record<description: string, id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({service_id: $service_id, client_id: $client_id} | format pattern "/api/services/{service_id}/apikeys/{client_id}/group"))
+  let full_url = (build-url $base ({service_id: (encode-path-segment $service_id), client_id: (encode-path-segment $client_id)} | format pattern "/api/services/{service_id}/apikeys/{client_id}/group"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2256,7 +2280,7 @@ export def "services-apikeys-group apiKeyGroup" [
 #
 # DELETE /api/services/{serviceId}/apikeys/{clientId}/quotas
 # operationId: resetApiKeyQuotas
-export def "services-apikeys-quotas reset" [
+export def "services-apikeys-quotas reset-key" [
   service_id: string
   client_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2270,7 +2294,7 @@ export def "services-apikeys-quotas reset" [
 ]: nothing -> record<authorizedCallsPerDay: int, authorizedCallsPerMonth: int, authorizedCallsPerSec: int, currentCallsPerDay: int, currentCallsPerMonth: int, currentCallsPerSec: int, remainingCallsPerDay: int, remainingCallsPerMonth: int, remainingCallsPerSec: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({service_id: $service_id, client_id: $client_id} | format pattern "/api/services/{service_id}/apikeys/{client_id}/quotas"))
+  let full_url = (build-url $base ({service_id: (encode-path-segment $service_id), client_id: (encode-path-segment $client_id)} | format pattern "/api/services/{service_id}/apikeys/{client_id}/quotas"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2280,7 +2304,7 @@ export def "services-apikeys-quotas reset" [
 #
 # GET /api/services/{serviceId}/apikeys/{clientId}/quotas
 # operationId: apiKeyQuotas
-export def "services-apikeys-quotas apiKeyQuotas" [
+export def "services-apikeys-quotas get-key" [
   service_id: string
   client_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2294,7 +2318,7 @@ export def "services-apikeys-quotas apiKeyQuotas" [
 ]: nothing -> record<authorizedCallsPerDay: int, authorizedCallsPerMonth: int, authorizedCallsPerSec: int, currentCallsPerDay: int, currentCallsPerMonth: int, currentCallsPerSec: int, remainingCallsPerDay: int, remainingCallsPerMonth: int, remainingCallsPerSec: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({service_id: $service_id, client_id: $client_id} | format pattern "/api/services/{service_id}/apikeys/{client_id}/quotas"))
+  let full_url = (build-url $base ({service_id: (encode-path-segment $service_id), client_id: (encode-path-segment $client_id)} | format pattern "/api/services/{service_id}/apikeys/{client_id}/quotas"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2304,7 +2328,7 @@ export def "services-apikeys-quotas apiKeyQuotas" [
 #
 # DELETE /api/services/{serviceId}/targets
 # operationId: serviceDeleteTarget
-export def "services-targets serviceDeleteTarget" [
+export def "services-targets delete" [
   service_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2317,7 +2341,7 @@ export def "services-targets serviceDeleteTarget" [
 ]: nothing -> table<host: string, scheme: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({service_id: $service_id} | format pattern "/api/services/{service_id}/targets"))
+  let full_url = (build-url $base ({service_id: (encode-path-segment $service_id)} | format pattern "/api/services/{service_id}/targets"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2327,7 +2351,7 @@ export def "services-targets serviceDeleteTarget" [
 #
 # GET /api/services/{serviceId}/targets
 # operationId: serviceTargets
-export def "services-targets serviceTargets" [
+export def "services-targets get" [
   service_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2340,7 +2364,7 @@ export def "services-targets serviceTargets" [
 ]: nothing -> table<host: string, scheme: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({service_id: $service_id} | format pattern "/api/services/{service_id}/targets"))
+  let full_url = (build-url $base ({service_id: (encode-path-segment $service_id)} | format pattern "/api/services/{service_id}/targets"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2365,18 +2389,19 @@ export def "services-targets update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({service_id: $service_id} | format pattern "/api/services/{service_id}/targets"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({service_id: (encode-path-segment $service_id)} | format pattern "/api/services/{service_id}/targets"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Add a target to a service descriptor
 #
 # POST /api/services/{serviceId}/targets
 # operationId: serviceAddTarget
-export def "services-targets serviceAddTarget" [
+export def "services-targets create" [
   service_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2392,12 +2417,12 @@ export def "services-targets serviceAddTarget" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({service_id: $service_id} | format pattern "/api/services/{service_id}/targets"))
-  let body = {"host": $host, "scheme": $scheme} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({service_id: (encode-path-segment $service_id)} | format pattern "/api/services/{service_id}/targets"))
+  let req_body = {"host": $host, "scheme": $scheme} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a service descriptor error template
@@ -2417,7 +2442,7 @@ export def "services-template delete" [
 ]: nothing -> record<deleted: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({service_id: $service_id} | format pattern "/api/services/{service_id}/template"))
+  let full_url = (build-url $base ({service_id: (encode-path-segment $service_id)} | format pattern "/api/services/{service_id}/template"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2427,7 +2452,7 @@ export def "services-template delete" [
 #
 # GET /api/services/{serviceId}/template
 # operationId: serviceTemplate
-export def "services-template serviceTemplate" [
+export def "services-template get" [
   service_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2440,7 +2465,7 @@ export def "services-template serviceTemplate" [
 ]: nothing -> record<messages: record, serviceId: string, template40x: string, template50x: string, templateBuild: string, templateMaintenance: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({service_id: $service_id} | format pattern "/api/services/{service_id}/template"))
+  let full_url = (build-url $base ({service_id: (encode-path-segment $service_id)} | format pattern "/api/services/{service_id}/template"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2470,12 +2495,12 @@ export def "services-template create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({service_id: $service_id} | format pattern "/api/services/{service_id}/template"))
-  let body = {"messages": $messages, "serviceId": $body_service_id, "template40x": $template40x, "template50x": $template50x, "templateBuild": $template_build, "templateMaintenance": $template_maintenance} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({service_id: (encode-path-segment $service_id)} | format pattern "/api/services/{service_id}/template"))
+  let req_body = {"messages": $messages, "serviceId": $body_service_id, "template40x": $template40x, "template50x": $template50x, "templateBuild": $template_build, "templateMaintenance": $template_maintenance} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update an error template to a service descriptor
@@ -2502,19 +2527,19 @@ export def "services-template update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({service_id: $service_id} | format pattern "/api/services/{service_id}/template"))
-  let body = {"messages": $messages, "serviceId": $body_service_id, "template40x": $template40x, "template50x": $template50x, "templateBuild": $template_build, "templateMaintenance": $template_maintenance} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({service_id: (encode-path-segment $service_id)} | format pattern "/api/services/{service_id}/template"))
+  let req_body = {"messages": $messages, "serviceId": $body_service_id, "template40x": $template40x, "template50x": $template50x, "templateBuild": $template_build, "templateMaintenance": $template_maintenance} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Start the Snow Monkey
 #
 # POST /api/snowmonkey/_start
 # operationId: startSnowMonkey
-export def "snowmonkey-start start" [
+export def "snowmonkey-start start-snow-monkey" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2536,7 +2561,7 @@ export def "snowmonkey-start start" [
 #
 # POST /api/snowmonkey/_stop
 # operationId: stopSnowMonkey
-export def "snowmonkey-stop stop" [
+export def "snowmonkey-stop stop-snow-monkey" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2558,7 +2583,7 @@ export def "snowmonkey-stop stop" [
 #
 # GET /api/snowmonkey/config
 # operationId: getSnowMonkeyConfig
-export def "snowmonkey-config get" [
+export def "snowmonkey-config get-snow-monkey" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2580,7 +2605,7 @@ export def "snowmonkey-config get" [
 #
 # PATCH /api/snowmonkey/config
 # operationId: patchSnowMonkey
-export def "snowmonkey-config update" [
+export def "snowmonkey-config update-snow-monkey" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2597,18 +2622,18 @@ export def "snowmonkey-config update" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/snowmonkey/config")
-  let body = {"description": $description, "id": $id, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"description": $description, "id": $id, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update current Snow Monkey config
 #
 # PUT /api/snowmonkey/config
 # operationId: updateSnowMonkey
-export def "snowmonkey-config update-1" [
+export def "snowmonkey-config update-snow-monkey-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2625,18 +2650,18 @@ export def "snowmonkey-config update-1" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/snowmonkey/config")
-  let body = {"description": $description, "id": $id, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"description": $description, "id": $id, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Reset Snow Monkey Outages for the day
 #
 # DELETE /api/snowmonkey/outages
 # operationId: resetSnowMonkey
-export def "snowmonkey-outages reset" [
+export def "snowmonkey-outages reset-snow-monkey" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2658,7 +2683,7 @@ export def "snowmonkey-outages reset" [
 #
 # GET /api/snowmonkey/outages
 # operationId: getSnowMonkeyOutages
-export def "snowmonkey-outages get" [
+export def "snowmonkey-outages get-snow-monkey" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2680,7 +2705,7 @@ export def "snowmonkey-outages get" [
 #
 # GET /api/verifiers
 # operationId: findAllGlobalJwtVerifiers
-export def "verifiers findAllGlobalJwtVerifiers" [
+export def "verifiers find-list-global-jwt" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2724,11 +2749,11 @@ export def "verifiers create-global-jwt" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/verifiers")
-  let body = {"algoSettings": $algo_settings, "desc": $desc, "enabled": $enabled, "id": $id, "name": $name, "source": $body_source, "strategy": $strategy, "strict": $strict} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"algoSettings": $algo_settings, "desc": $desc, "enabled": $enabled, "id": $id, "name": $name, "source": $body_source, "strategy": $strategy, "strict": $strict} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete one global JWT verifiers
@@ -2748,7 +2773,7 @@ export def "verifiers delete-global-jwt" [
 ]: nothing -> record<deleted: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({verifier_id: $verifier_id} | format pattern "/api/verifiers/{verifier_id}"))
+  let full_url = (build-url $base ({verifier_id: (encode-path-segment $verifier_id)} | format pattern "/api/verifiers/{verifier_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2758,7 +2783,7 @@ export def "verifiers delete-global-jwt" [
 #
 # GET /api/verifiers/{verifierId}
 # operationId: findGlobalJwtVerifiersById
-export def "verifiers findGlobalJwtVerifiersById" [
+export def "verifiers find-global-jwt" [
   verifier_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2771,7 +2796,7 @@ export def "verifiers findGlobalJwtVerifiersById" [
 ]: nothing -> record<algoSettings: any, desc: string, enabled: bool, id: string, name: string, source: any, strategy: any, strict: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({verifier_id: $verifier_id} | format pattern "/api/verifiers/{verifier_id}"))
+  let full_url = (build-url $base ({verifier_id: (encode-path-segment $verifier_id)} | format pattern "/api/verifiers/{verifier_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2796,11 +2821,12 @@ export def "verifiers update-global-jwt-by-verifierId" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({verifier_id: $verifier_id} | format pattern "/api/verifiers/{verifier_id}"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({verifier_id: (encode-path-segment $verifier_id)} | format pattern "/api/verifiers/{verifier_id}"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update one global JWT verifiers
@@ -2829,12 +2855,12 @@ export def "verifiers update-global-jwt-by-verifierId-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({verifier_id: $verifier_id} | format pattern "/api/verifiers/{verifier_id}"))
-  let body = {"algoSettings": $algo_settings, "desc": $desc, "enabled": $enabled, "id": $id, "name": $name, "source": $body_source, "strategy": $strategy, "strict": $strict} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({verifier_id: (encode-path-segment $verifier_id)} | format pattern "/api/verifiers/{verifier_id}"))
+  let req_body = {"algoSettings": $algo_settings, "desc": $desc, "enabled": $enabled, "id": $id, "name": $name, "source": $body_source, "strategy": $strategy, "strict": $strict} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Return current Otoroshi health
@@ -2863,7 +2889,7 @@ export def "health get" [
 #
 # GET /lines
 # operationId: allLines
-export def "lines allLines" [
+export def "lines list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2885,7 +2911,7 @@ export def "lines allLines" [
 #
 # GET /lines/{line}/services
 # operationId: servicesForALine
-export def "lines-services servicesForALine" [
+export def "lines-services get" [
   line: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2898,7 +2924,7 @@ export def "lines-services servicesForALine" [
 ]: nothing -> table<Canary: record<enabled: bool, root: string, targets: list, traffic: int>, additionalHeaders: record, api: record<exposeApi: bool, openApiDescriptorUrl: string>, authConfigRef: string, buildMode: bool, chaosConfig: record<badResponsesFaultConfig: record, enabled: bool, largeRequestFaultConfig: record, largeResponseFaultConfig: record, latencyInjectionFaultConfig: record>, clientConfig: record<backoffFactor: int, callTimeout: int, globalTimeout: int, maxErrors: int, retries: int, retryInitialDelay: int, sampleInterval: int, useCircuitBreaker: bool>, clientValidatorRef: string, cors: record<allowCredentials: bool, allowHeaders: list, allowMethods: list, allowOrigin: string, enabled: bool, excludedPatterns: list, exposeHeaders: list, maxAge: int>, domain: string, enabled: bool, enforceSecureCommunication: bool, env: string, forceHttps: bool, groups: list<string>, gzip: record<blackList: list, bufferSize: int, chunkedThreshold: int, compressionLevel: int, enabled: bool, excludedPatterns: list, whiteList: list>, headersVerification: record, healthCheck: record<enabled: bool, url: string>, id: string, ipFiltering: record<blacklist: list, whitelist: list>, jwtVerifier: any, localHost: string, localScheme: string, maintenanceMode: bool, matchingHeaders: record, matchingRoot: string, metadata: record, name: string, overrideHost: bool, privateApp: bool, privatePatterns: list<string>, publicPatterns: list<string>, redirectToLocal: bool, redirection: record<code: int, enabled: bool, to: string>, root: string, secComExcludedPatterns: list<string>, secComSettings: any, sendOtoroshiHeadersBack: bool, statsdConfig: record<datadog: bool, host: string, port: int>, subdomain: string, targets: list<record>, transformerRef: string, userFacing: bool, xForwardedHeaders: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({line: $line} | format pattern "/lines/{line}/services"))
+  let full_url = (build-url $base ({line: (encode-path-segment $line)} | format pattern "/lines/{line}/services"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2908,7 +2934,7 @@ export def "lines-services servicesForALine" [
 #
 # GET /new/apikey
 # operationId: initiateApiKey
-export def "new-apikey initiateApiKey" [
+export def "new-apikey get-initiate-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2930,7 +2956,7 @@ export def "new-apikey initiateApiKey" [
 #
 # GET /new/group
 # operationId: initiateServiceGroup
-export def "new-group initiateServiceGroup" [
+export def "new-group get-initiate-service" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2952,7 +2978,7 @@ export def "new-group initiateServiceGroup" [
 #
 # GET /new/service
 # operationId: initiateService
-export def "new-service initiateService" [
+export def "new-service get-initiate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

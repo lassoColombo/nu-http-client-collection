@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -83,7 +92,7 @@ def time-series-granularity-completer [] { ["DAILY" "HOURLY" "TIME_SERIES_GRANUL
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v2beta1-accounts-clients adexchangebuyer2accountsclientslist" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v2beta1-accounts-clients list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -107,7 +116,7 @@ export def commands []: nothing -> table {
 #
 # GET /v2beta1/accounts/{accountId}/clients
 # operationId: adexchangebuyer2.accounts.clients.list
-export def "v2beta1-accounts-clients adexchangebuyer2accountsclientslist" [
+export def "v2beta1-accounts-clients list" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -135,7 +144,7 @@ export def "v2beta1-accounts-clients adexchangebuyer2accountsclientslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "partnerClientId" $partner_client_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/v2beta1/accounts/{account_id}/clients") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2beta1/accounts/{account_id}/clients") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -145,7 +154,7 @@ export def "v2beta1-accounts-clients adexchangebuyer2accountsclientslist" [
 #
 # POST /v2beta1/accounts/{accountId}/clients
 # operationId: adexchangebuyer2.accounts.clients.create
-export def "v2beta1-accounts-clients adexchangebuyer2accountsclientscreate" [
+export def "v2beta1-accounts-clients create" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -180,19 +189,19 @@ export def "v2beta1-accounts-clients adexchangebuyer2accountsclientscreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/v2beta1/accounts/{account_id}/clients") $qp)
-  let body = {"clientAccountId": $client_account_id, "clientName": $client_name, "entityId": $entity_id, "entityName": $entity_name, "entityType": $entity_type, "partnerClientId": $partner_client_id, "role": $role, "status": $status, "visibleToSeller": $visible_to_seller} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2beta1/accounts/{account_id}/clients") $qp)
+  let req_body = {"clientAccountId": $client_account_id, "clientName": $client_name, "entityId": $entity_id, "entityName": $entity_name, "entityType": $entity_type, "partnerClientId": $partner_client_id, "role": $role, "status": $status, "visibleToSeller": $visible_to_seller} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets a client buyer with a given client account ID.
 #
 # GET /v2beta1/accounts/{accountId}/clients/{clientAccountId}
 # operationId: adexchangebuyer2.accounts.clients.get
-export def "v2beta1-accounts-clients adexchangebuyer2accountsclientsget" [
+export def "v2beta1-accounts-clients get" [
   account_id: string
   client_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -218,7 +227,7 @@ export def "v2beta1-accounts-clients adexchangebuyer2accountsclientsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, client_account_id: $client_account_id} | format pattern "/v2beta1/accounts/{account_id}/clients/{client_account_id}") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), client_account_id: (encode-path-segment $client_account_id)} | format pattern "/v2beta1/accounts/{account_id}/clients/{client_account_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -228,7 +237,7 @@ export def "v2beta1-accounts-clients adexchangebuyer2accountsclientsget" [
 #
 # PUT /v2beta1/accounts/{accountId}/clients/{clientAccountId}
 # operationId: adexchangebuyer2.accounts.clients.update
-export def "v2beta1-accounts-clients adexchangebuyer2accountsclientsupdate" [
+export def "v2beta1-accounts-clients update" [
   account_id: string
   client_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -264,19 +273,19 @@ export def "v2beta1-accounts-clients adexchangebuyer2accountsclientsupdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, client_account_id: $client_account_id} | format pattern "/v2beta1/accounts/{account_id}/clients/{client_account_id}") $qp)
-  let body = {"clientAccountId": $body_client_account_id, "clientName": $client_name, "entityId": $entity_id, "entityName": $entity_name, "entityType": $entity_type, "partnerClientId": $partner_client_id, "role": $role, "status": $status, "visibleToSeller": $visible_to_seller} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), client_account_id: (encode-path-segment $client_account_id)} | format pattern "/v2beta1/accounts/{account_id}/clients/{client_account_id}") $qp)
+  let req_body = {"clientAccountId": $body_client_account_id, "clientName": $client_name, "entityId": $entity_id, "entityName": $entity_name, "entityType": $entity_type, "partnerClientId": $partner_client_id, "role": $role, "status": $status, "visibleToSeller": $visible_to_seller} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists all the client users invitations for a client with a given account ID.
 #
 # GET /v2beta1/accounts/{accountId}/clients/{clientAccountId}/invitations
 # operationId: adexchangebuyer2.accounts.clients.invitations.list
-export def "v2beta1-accounts-clients-invitations adexchangebuyer2accountsclientsinvitationslist" [
+export def "v2beta1-accounts-clients-invitations list" [
   account_id: string
   client_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -304,7 +313,7 @@ export def "v2beta1-accounts-clients-invitations adexchangebuyer2accountsclients
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, client_account_id: $client_account_id} | format pattern "/v2beta1/accounts/{account_id}/clients/{client_account_id}/invitations") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), client_account_id: (encode-path-segment $client_account_id)} | format pattern "/v2beta1/accounts/{account_id}/clients/{client_account_id}/invitations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -314,7 +323,7 @@ export def "v2beta1-accounts-clients-invitations adexchangebuyer2accountsclients
 #
 # POST /v2beta1/accounts/{accountId}/clients/{clientAccountId}/invitations
 # operationId: adexchangebuyer2.accounts.clients.invitations.create
-export def "v2beta1-accounts-clients-invitations adexchangebuyer2accountsclientsinvitationscreate" [
+export def "v2beta1-accounts-clients-invitations create" [
   account_id: string
   client_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -344,19 +353,19 @@ export def "v2beta1-accounts-clients-invitations adexchangebuyer2accountsclients
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, client_account_id: $client_account_id} | format pattern "/v2beta1/accounts/{account_id}/clients/{client_account_id}/invitations") $qp)
-  let body = {"clientAccountId": $body_client_account_id, "email": $email, "invitationId": $invitation_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), client_account_id: (encode-path-segment $client_account_id)} | format pattern "/v2beta1/accounts/{account_id}/clients/{client_account_id}/invitations") $qp)
+  let req_body = {"clientAccountId": $body_client_account_id, "email": $email, "invitationId": $invitation_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieves an existing client user invitation.
 #
 # GET /v2beta1/accounts/{accountId}/clients/{clientAccountId}/invitations/{invitationId}
 # operationId: adexchangebuyer2.accounts.clients.invitations.get
-export def "v2beta1-accounts-clients-invitations adexchangebuyer2accountsclientsinvitationsget" [
+export def "v2beta1-accounts-clients-invitations get" [
   account_id: string
   client_account_id: string
   invitation_id: string
@@ -383,7 +392,7 @@ export def "v2beta1-accounts-clients-invitations adexchangebuyer2accountsclients
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, client_account_id: $client_account_id, invitation_id: $invitation_id} | format pattern "/v2beta1/accounts/{account_id}/clients/{client_account_id}/invitations/{invitation_id}") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), client_account_id: (encode-path-segment $client_account_id), invitation_id: (encode-path-segment $invitation_id)} | format pattern "/v2beta1/accounts/{account_id}/clients/{client_account_id}/invitations/{invitation_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -393,7 +402,7 @@ export def "v2beta1-accounts-clients-invitations adexchangebuyer2accountsclients
 #
 # GET /v2beta1/accounts/{accountId}/clients/{clientAccountId}/users
 # operationId: adexchangebuyer2.accounts.clients.users.list
-export def "v2beta1-accounts-clients-users adexchangebuyer2accountsclientsuserslist" [
+export def "v2beta1-accounts-clients-users list" [
   account_id: string
   client_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -421,7 +430,7 @@ export def "v2beta1-accounts-clients-users adexchangebuyer2accountsclientsusersl
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, client_account_id: $client_account_id} | format pattern "/v2beta1/accounts/{account_id}/clients/{client_account_id}/users") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), client_account_id: (encode-path-segment $client_account_id)} | format pattern "/v2beta1/accounts/{account_id}/clients/{client_account_id}/users") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -431,7 +440,7 @@ export def "v2beta1-accounts-clients-users adexchangebuyer2accountsclientsusersl
 #
 # GET /v2beta1/accounts/{accountId}/clients/{clientAccountId}/users/{userId}
 # operationId: adexchangebuyer2.accounts.clients.users.get
-export def "v2beta1-accounts-clients-users adexchangebuyer2accountsclientsusersget" [
+export def "v2beta1-accounts-clients-users get" [
   account_id: string
   client_account_id: string
   user_id: string
@@ -458,7 +467,7 @@ export def "v2beta1-accounts-clients-users adexchangebuyer2accountsclientsusersg
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, client_account_id: $client_account_id, user_id: $user_id} | format pattern "/v2beta1/accounts/{account_id}/clients/{client_account_id}/users/{user_id}") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), client_account_id: (encode-path-segment $client_account_id), user_id: (encode-path-segment $user_id)} | format pattern "/v2beta1/accounts/{account_id}/clients/{client_account_id}/users/{user_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -468,7 +477,7 @@ export def "v2beta1-accounts-clients-users adexchangebuyer2accountsclientsusersg
 #
 # PUT /v2beta1/accounts/{accountId}/clients/{clientAccountId}/users/{userId}
 # operationId: adexchangebuyer2.accounts.clients.users.update
-export def "v2beta1-accounts-clients-users adexchangebuyer2accountsclientsusersupdate" [
+export def "v2beta1-accounts-clients-users update" [
   account_id: string
   client_account_id: string
   user_id: string
@@ -500,19 +509,19 @@ export def "v2beta1-accounts-clients-users adexchangebuyer2accountsclientsusersu
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, client_account_id: $client_account_id, user_id: $user_id} | format pattern "/v2beta1/accounts/{account_id}/clients/{client_account_id}/users/{user_id}") $qp)
-  let body = {"clientAccountId": $body_client_account_id, "email": $email, "status": $status, "userId": $body_user_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), client_account_id: (encode-path-segment $client_account_id), user_id: (encode-path-segment $user_id)} | format pattern "/v2beta1/accounts/{account_id}/clients/{client_account_id}/users/{user_id}") $qp)
+  let req_body = {"clientAccountId": $body_client_account_id, "email": $email, "status": $status, "userId": $body_user_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists creatives.
 #
 # GET /v2beta1/accounts/{accountId}/creatives
 # operationId: adexchangebuyer2.accounts.creatives.list
-export def "v2beta1-accounts-creatives adexchangebuyer2accountscreativeslist" [
+export def "v2beta1-accounts-creatives list" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -540,7 +549,7 @@ export def "v2beta1-accounts-creatives adexchangebuyer2accountscreativeslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "query" $query "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/v2beta1/accounts/{account_id}/creatives") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2beta1/accounts/{account_id}/creatives") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -550,13 +559,13 @@ export def "v2beta1-accounts-creatives adexchangebuyer2accountscreativeslist" [
 #
 # POST /v2beta1/accounts/{accountId}/creatives
 # operationId: adexchangebuyer2.accounts.creatives.create
-# --adTechnologyProviders shape: {detectedProviderIds?: list, hasUnidentifiedProvider?: bool}
-# --corrections item shape: {contexts?: list, details?: list, type?: "CORRECTION_TYPE_UNSPECIFIED"|"VENDOR_IDS_ADDED"|"SSL_ATTRIBUTE_REMOVED"|"FLASH_FREE_ATTRIBUTE_REMOVED"|"FLASH_FREE_ATTRIBUTE_ADDED"|"REQUIRED_ATTRIBUTE_ADDED"|"REQUIRED_VENDOR_ADDED"|"SSL_ATTRIBUTE_ADDED"|"IN_BANNER_VIDEO_ATTRIBUTE_ADDED"|"MRAID_ATTRIBUTE_ADDED"|"FLASH_ATTRIBUTE_REMOVED"|"VIDEO_IN_SNIPPET_ATTRIBUTE_ADDED"}
+# --adTechnologyProviders shape: {detectedProviderIds?: list<string>, hasUnidentifiedProvider?: bool}
+# --corrections item shape: {contexts?: list, details?: list<string>, type?: "CORRECTION_TYPE_UNSPECIFIED"|"VENDOR_IDS_ADDED"|"SSL_ATTRIBUTE_REMOVED"|"FLASH_FREE_ATTRIBUTE_REMOVED"|"FLASH_FREE_ATTRIBUTE_ADDED"|"REQUIRED_ATTRIBUTE_ADDED"|"REQUIRED_VENDOR_ADDED"|"SSL_ATTRIBUTE_ADDED"|"IN_BANNER_VIDEO_ATTRIBUTE_ADDED"|"MRAID_ATTRIBUTE_ADDED"|"FLASH_ATTRIBUTE_REMOVED"|"VIDEO_IN_SNIPPET_ATTRIBUTE_ADDED"}
 # --html shape: {height?: int, snippet?: string, width?: int}
 # --native shape: {advertiserName?: string, appIcon?: record, body?: string, callToAction?: string, clickLinkUrl?: string, clickTrackingUrl?: string, headline?: string, image?: record, logo?: record, priceDisplayText?: string, starRating?: float, storeUrl?: string, videoUrl?: string}
 # --servingRestrictions item shape: {contexts?: list, disapproval?: record, disapprovalReasons?: list, status?: "STATUS_UNSPECIFIED"|"DISAPPROVAL"|"PENDING_REVIEW"}
 # --video shape: {videoUrl?: string, videoVastXml?: string}
-export def "v2beta1-accounts-creatives adexchangebuyer2accountscreativescreate" [
+export def "v2beta1-accounts-creatives create" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -580,28 +589,28 @@ export def "v2beta1-accounts-creatives adexchangebuyer2accountscreativescreate" 
   --duplicate-id-mode: string@duplicate-id-mode-completer # Indicates if multiple creatives can share an ID or not. Default is NO_DUPLICATES (one ID per creative).
   --body-account-id: string # The account that this creative belongs to. Can be used to filter the response of the creatives.list method.
   --ad-choices-destination-url: string # The link to AdChoices destination page.
-  --ad-technology-providers: record # Detected ad technology provider information. — shape: {detectedProviderIds?: list, hasUnidentifiedProvider?: bool}
+  --ad-technology-providers: record # Detected ad technology provider information. — shape: {detectedProviderIds?: list<string>, hasUnidentifiedProvider?: bool}
   --advertiser-name: string # The name of the company being advertised in the creative.
   --agency-id: string # The agency ID for this creative. (format: int64)
   --api-update-time: string # Output only. The last update timestamp of the creative through the API. (format: google-datetime)
-  --attributes: list # All attributes for the ads that may be shown from this creative. Can be used to filter the response of the creatives.list method.
-  --click-through-urls: list # The set of destination URLs for the creative.
-  --corrections: list # Output only. Shows any corrections that were applied to this creative. — item shape: {contexts?: list, details?: list, type?: "CORRECTION_TYPE_UNSPECIFIED"|"VENDOR_IDS_ADDED"|"SSL_ATTRIBUTE_REMOVED"|"FLASH_FREE_ATTRIBUTE_REMOVED"|"FLASH_FREE_ATTRIBUTE_ADDED"|"REQUIRED_ATTRIBUTE_ADDED"|"REQUIRED_VENDOR_ADDED"|"SSL_ATTRIBUTE_ADDED"|"IN_BANNER_VIDEO_ATTRIBUTE_ADDED"|"MRAID_ATTRIBUTE_ADDED"|"FLASH_ATTRIBUTE_REMOVED"|"VIDEO_IN_SNIPPET_ATTRIBUTE_ADDED"}
+  --attributes: list<string> # All attributes for the ads that may be shown from this creative. Can be used to filter the response of the creatives.list method.
+  --click-through-urls: list<string> # The set of destination URLs for the creative.
+  --corrections: list # Output only. Shows any corrections that were applied to this creative. — item shape: {contexts?: list, details?: list<string>, type?: "CORRECTION_TYPE_UNSPECIFIED"|"VENDOR_IDS_ADDED"|"SSL_ATTRIBUTE_REMOVED"|"FLASH_FREE_ATTRIBUTE_REMOVED"|"FLASH_FREE_ATTRIBUTE_ADDED"|"REQUIRED_ATTRIBUTE_ADDED"|"REQUIRED_VENDOR_ADDED"|"SSL_ATTRIBUTE_ADDED"|"IN_BANNER_VIDEO_ATTRIBUTE_ADDED"|"MRAID_ATTRIBUTE_ADDED"|"FLASH_ATTRIBUTE_REMOVED"|"VIDEO_IN_SNIPPET_ATTRIBUTE_ADDED"}
   --creative-id: string # The buyer-defined creative ID of this creative. Can be used to filter the response of the creatives.list method.
   --deals-status: string@deals-status-completer # Output only. The top-level deals status of this creative. If disapproved, an entry for 'auctionType=DIRECT_DEALS' (or 'ALL') in serving_restrictions will also exist. Note that this may be nuanced with other contextual restrictions, in which case, it may be preferable to read from serving_restrictions directly. Can be used to filter the response of the creatives.list method.
-  --declared-click-through-urls: list # The set of declared destination URLs for the creative.
-  --detected-advertiser-ids: list # Output only. Detected advertiser IDs, if any.
-  --detected-domains: list # Output only. The detected domains for this creative.
-  --detected-languages: list # Output only. The detected languages for this creative. The order is arbitrary. The codes are 2 or 5 characters and are documented at https://developers.google.com/adwords/api/docs/appendix/languagecodes.
-  --detected-product-categories: list # Output only. Detected product categories, if any. See the ad-product-categories.txt file in the technical documentation for a list of IDs.
-  --detected-sensitive-categories: list # Output only. Detected sensitive categories, if any. See the ad-sensitive-categories.txt file in the technical documentation for a list of IDs. You should use these IDs along with the excluded-sensitive-category field in the bid request to filter your bids.
+  --declared-click-through-urls: list<string> # The set of declared destination URLs for the creative.
+  --detected-advertiser-ids: list<string> # Output only. Detected advertiser IDs, if any.
+  --detected-domains: list<string> # Output only. The detected domains for this creative.
+  --detected-languages: list<string> # Output only. The detected languages for this creative. The order is arbitrary. The codes are 2 or 5 characters and are documented at https://developers.google.com/adwords/api/docs/appendix/languagecodes.
+  --detected-product-categories: list<int> # Output only. Detected product categories, if any. See the ad-product-categories.txt file in the technical documentation for a list of IDs.
+  --detected-sensitive-categories: list<int> # Output only. Detected sensitive categories, if any. See the ad-sensitive-categories.txt file in the technical documentation for a list of IDs. You should use these IDs along with the excluded-sensitive-category field in the bid request to filter your bids.
   --html: record # HTML content for a creative. — shape: {height?: int, snippet?: string, width?: int}
-  --impression-tracking-urls: list # The set of URLs to be called to record an impression.
+  --impression-tracking-urls: list<string> # The set of URLs to be called to record an impression.
   --native: record # Native content for a creative. — shape: {advertiserName?: string, appIcon?: record, body?: string, callToAction?: string, clickLinkUrl?: string, clickTrackingUrl?: string, headline?: string, image?: record, logo?: record, priceDisplayText?: string, starRating?: float, storeUrl?: string, videoUrl?: string}
   --open-auction-status: string@open-auction-status-completer # Output only. The top-level open auction status of this creative. If disapproved, an entry for 'auctionType = OPEN_AUCTION' (or 'ALL') in serving_restrictions will also exist. Note that this may be nuanced with other contextual restrictions, in which case, it may be preferable to read from serving_restrictions directly. Can be used to filter the response of the creatives.list method.
-  --restricted-categories: list # All restricted categories for the ads that may be shown from this creative.
+  --restricted-categories: list<string> # All restricted categories for the ads that may be shown from this creative.
   --serving-restrictions: list # Output only. The granular status of this ad in specific contexts. A context here relates to where something ultimately serves (for example, a physical location, a platform, an HTTPS versus HTTP request, or the type of auction). — item shape: {contexts?: list, disapproval?: record, disapprovalReasons?: list, status?: "STATUS_UNSPECIFIED"|"DISAPPROVAL"|"PENDING_REVIEW"}
-  --vendor-ids: list # All vendor IDs for the ads that may be shown from this creative. See https://storage.googleapis.com/adx-rtb-dictionaries/vendors.txt for possible values.
+  --vendor-ids: list<int> # All vendor IDs for the ads that may be shown from this creative. See https://storage.googleapis.com/adx-rtb-dictionaries/vendors.txt for possible values.
   --version: int # Output only. The version of this creative. (format: int32)
   --video: record # Video content for a creative. — shape: {videoUrl?: string, videoVastXml?: string}
 ]: any -> record<accountId: string, adChoicesDestinationUrl: string, adTechnologyProviders: record<detectedProviderIds: list<string>, hasUnidentifiedProvider: bool>, advertiserName: string, agencyId: string, apiUpdateTime: string, attributes: list<string>, clickThroughUrls: list<string>, corrections: table<contexts: list, details: list, type: string>, creativeId: string, dealsStatus: string, declaredClickThroughUrls: list<string>, detectedAdvertiserIds: list<string>, detectedDomains: list<string>, detectedLanguages: list<string>, detectedProductCategories: list<int>, detectedSensitiveCategories: list<int>, html: record<height: int, snippet: string, width: int>, impressionTrackingUrls: list<string>, native: record<advertiserName: string, appIcon: record<height: int, url: string, width: int>, body: string, callToAction: string, clickLinkUrl: string, clickTrackingUrl: string, headline: string, image: record<height: int, url: string, width: int>, logo: record<height: int, url: string, width: int>, priceDisplayText: string, starRating: float, storeUrl: string, videoUrl: string>, openAuctionStatus: string, restrictedCategories: list<string>, servingRestrictions: table<contexts: list, disapproval: record, disapprovalReasons: list, status: string>, vendorIds: list<int>, version: int, video: record<videoUrl: string, videoVastXml: string>> {
@@ -609,19 +618,19 @@ export def "v2beta1-accounts-creatives adexchangebuyer2accountscreativescreate" 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "duplicateIdMode" $duplicate_id_mode "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/v2beta1/accounts/{account_id}/creatives") $qp)
-  let body = {"accountId": $body_account_id, "adChoicesDestinationUrl": $ad_choices_destination_url, "adTechnologyProviders": $ad_technology_providers, "advertiserName": $advertiser_name, "agencyId": $agency_id, "apiUpdateTime": $api_update_time, "attributes": $attributes, "clickThroughUrls": $click_through_urls, "corrections": $corrections, "creativeId": $creative_id, "dealsStatus": $deals_status, "declaredClickThroughUrls": $declared_click_through_urls, "detectedAdvertiserIds": $detected_advertiser_ids, "detectedDomains": $detected_domains, "detectedLanguages": $detected_languages, "detectedProductCategories": $detected_product_categories, "detectedSensitiveCategories": $detected_sensitive_categories, "html": $html, "impressionTrackingUrls": $impression_tracking_urls, "native": $native, "openAuctionStatus": $open_auction_status, "restrictedCategories": $restricted_categories, "servingRestrictions": $serving_restrictions, "vendorIds": $vendor_ids, "version": $version, "video": $video} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2beta1/accounts/{account_id}/creatives") $qp)
+  let req_body = {"accountId": $body_account_id, "adChoicesDestinationUrl": $ad_choices_destination_url, "adTechnologyProviders": $ad_technology_providers, "advertiserName": $advertiser_name, "agencyId": $agency_id, "apiUpdateTime": $api_update_time, "attributes": $attributes, "clickThroughUrls": $click_through_urls, "corrections": $corrections, "creativeId": $creative_id, "dealsStatus": $deals_status, "declaredClickThroughUrls": $declared_click_through_urls, "detectedAdvertiserIds": $detected_advertiser_ids, "detectedDomains": $detected_domains, "detectedLanguages": $detected_languages, "detectedProductCategories": $detected_product_categories, "detectedSensitiveCategories": $detected_sensitive_categories, "html": $html, "impressionTrackingUrls": $impression_tracking_urls, "native": $native, "openAuctionStatus": $open_auction_status, "restrictedCategories": $restricted_categories, "servingRestrictions": $serving_restrictions, "vendorIds": $vendor_ids, "version": $version, "video": $video} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets a creative.
 #
 # GET /v2beta1/accounts/{accountId}/creatives/{creativeId}
 # operationId: adexchangebuyer2.accounts.creatives.get
-export def "v2beta1-accounts-creatives adexchangebuyer2accountscreativesget" [
+export def "v2beta1-accounts-creatives get" [
   account_id: string
   creative_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -647,7 +656,7 @@ export def "v2beta1-accounts-creatives adexchangebuyer2accountscreativesget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, creative_id: $creative_id} | format pattern "/v2beta1/accounts/{account_id}/creatives/{creative_id}") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), creative_id: (encode-path-segment $creative_id)} | format pattern "/v2beta1/accounts/{account_id}/creatives/{creative_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -657,13 +666,13 @@ export def "v2beta1-accounts-creatives adexchangebuyer2accountscreativesget" [
 #
 # PUT /v2beta1/accounts/{accountId}/creatives/{creativeId}
 # operationId: adexchangebuyer2.accounts.creatives.update
-# --adTechnologyProviders shape: {detectedProviderIds?: list, hasUnidentifiedProvider?: bool}
-# --corrections item shape: {contexts?: list, details?: list, type?: "CORRECTION_TYPE_UNSPECIFIED"|"VENDOR_IDS_ADDED"|"SSL_ATTRIBUTE_REMOVED"|"FLASH_FREE_ATTRIBUTE_REMOVED"|"FLASH_FREE_ATTRIBUTE_ADDED"|"REQUIRED_ATTRIBUTE_ADDED"|"REQUIRED_VENDOR_ADDED"|"SSL_ATTRIBUTE_ADDED"|"IN_BANNER_VIDEO_ATTRIBUTE_ADDED"|"MRAID_ATTRIBUTE_ADDED"|"FLASH_ATTRIBUTE_REMOVED"|"VIDEO_IN_SNIPPET_ATTRIBUTE_ADDED"}
+# --adTechnologyProviders shape: {detectedProviderIds?: list<string>, hasUnidentifiedProvider?: bool}
+# --corrections item shape: {contexts?: list, details?: list<string>, type?: "CORRECTION_TYPE_UNSPECIFIED"|"VENDOR_IDS_ADDED"|"SSL_ATTRIBUTE_REMOVED"|"FLASH_FREE_ATTRIBUTE_REMOVED"|"FLASH_FREE_ATTRIBUTE_ADDED"|"REQUIRED_ATTRIBUTE_ADDED"|"REQUIRED_VENDOR_ADDED"|"SSL_ATTRIBUTE_ADDED"|"IN_BANNER_VIDEO_ATTRIBUTE_ADDED"|"MRAID_ATTRIBUTE_ADDED"|"FLASH_ATTRIBUTE_REMOVED"|"VIDEO_IN_SNIPPET_ATTRIBUTE_ADDED"}
 # --html shape: {height?: int, snippet?: string, width?: int}
 # --native shape: {advertiserName?: string, appIcon?: record, body?: string, callToAction?: string, clickLinkUrl?: string, clickTrackingUrl?: string, headline?: string, image?: record, logo?: record, priceDisplayText?: string, starRating?: float, storeUrl?: string, videoUrl?: string}
 # --servingRestrictions item shape: {contexts?: list, disapproval?: record, disapprovalReasons?: list, status?: "STATUS_UNSPECIFIED"|"DISAPPROVAL"|"PENDING_REVIEW"}
 # --video shape: {videoUrl?: string, videoVastXml?: string}
-export def "v2beta1-accounts-creatives adexchangebuyer2accountscreativesupdate" [
+export def "v2beta1-accounts-creatives update" [
   account_id: string
   creative_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -687,28 +696,28 @@ export def "v2beta1-accounts-creatives adexchangebuyer2accountscreativesupdate" 
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body-account-id: string # The account that this creative belongs to. Can be used to filter the response of the creatives.list method.
   --ad-choices-destination-url: string # The link to AdChoices destination page.
-  --ad-technology-providers: record # Detected ad technology provider information. — shape: {detectedProviderIds?: list, hasUnidentifiedProvider?: bool}
+  --ad-technology-providers: record # Detected ad technology provider information. — shape: {detectedProviderIds?: list<string>, hasUnidentifiedProvider?: bool}
   --advertiser-name: string # The name of the company being advertised in the creative.
   --agency-id: string # The agency ID for this creative. (format: int64)
   --api-update-time: string # Output only. The last update timestamp of the creative through the API. (format: google-datetime)
-  --attributes: list # All attributes for the ads that may be shown from this creative. Can be used to filter the response of the creatives.list method.
-  --click-through-urls: list # The set of destination URLs for the creative.
-  --corrections: list # Output only. Shows any corrections that were applied to this creative. — item shape: {contexts?: list, details?: list, type?: "CORRECTION_TYPE_UNSPECIFIED"|"VENDOR_IDS_ADDED"|"SSL_ATTRIBUTE_REMOVED"|"FLASH_FREE_ATTRIBUTE_REMOVED"|"FLASH_FREE_ATTRIBUTE_ADDED"|"REQUIRED_ATTRIBUTE_ADDED"|"REQUIRED_VENDOR_ADDED"|"SSL_ATTRIBUTE_ADDED"|"IN_BANNER_VIDEO_ATTRIBUTE_ADDED"|"MRAID_ATTRIBUTE_ADDED"|"FLASH_ATTRIBUTE_REMOVED"|"VIDEO_IN_SNIPPET_ATTRIBUTE_ADDED"}
+  --attributes: list<string> # All attributes for the ads that may be shown from this creative. Can be used to filter the response of the creatives.list method.
+  --click-through-urls: list<string> # The set of destination URLs for the creative.
+  --corrections: list # Output only. Shows any corrections that were applied to this creative. — item shape: {contexts?: list, details?: list<string>, type?: "CORRECTION_TYPE_UNSPECIFIED"|"VENDOR_IDS_ADDED"|"SSL_ATTRIBUTE_REMOVED"|"FLASH_FREE_ATTRIBUTE_REMOVED"|"FLASH_FREE_ATTRIBUTE_ADDED"|"REQUIRED_ATTRIBUTE_ADDED"|"REQUIRED_VENDOR_ADDED"|"SSL_ATTRIBUTE_ADDED"|"IN_BANNER_VIDEO_ATTRIBUTE_ADDED"|"MRAID_ATTRIBUTE_ADDED"|"FLASH_ATTRIBUTE_REMOVED"|"VIDEO_IN_SNIPPET_ATTRIBUTE_ADDED"}
   --body-creative-id: string # The buyer-defined creative ID of this creative. Can be used to filter the response of the creatives.list method.
   --deals-status: string@deals-status-completer # Output only. The top-level deals status of this creative. If disapproved, an entry for 'auctionType=DIRECT_DEALS' (or 'ALL') in serving_restrictions will also exist. Note that this may be nuanced with other contextual restrictions, in which case, it may be preferable to read from serving_restrictions directly. Can be used to filter the response of the creatives.list method.
-  --declared-click-through-urls: list # The set of declared destination URLs for the creative.
-  --detected-advertiser-ids: list # Output only. Detected advertiser IDs, if any.
-  --detected-domains: list # Output only. The detected domains for this creative.
-  --detected-languages: list # Output only. The detected languages for this creative. The order is arbitrary. The codes are 2 or 5 characters and are documented at https://developers.google.com/adwords/api/docs/appendix/languagecodes.
-  --detected-product-categories: list # Output only. Detected product categories, if any. See the ad-product-categories.txt file in the technical documentation for a list of IDs.
-  --detected-sensitive-categories: list # Output only. Detected sensitive categories, if any. See the ad-sensitive-categories.txt file in the technical documentation for a list of IDs. You should use these IDs along with the excluded-sensitive-category field in the bid request to filter your bids.
+  --declared-click-through-urls: list<string> # The set of declared destination URLs for the creative.
+  --detected-advertiser-ids: list<string> # Output only. Detected advertiser IDs, if any.
+  --detected-domains: list<string> # Output only. The detected domains for this creative.
+  --detected-languages: list<string> # Output only. The detected languages for this creative. The order is arbitrary. The codes are 2 or 5 characters and are documented at https://developers.google.com/adwords/api/docs/appendix/languagecodes.
+  --detected-product-categories: list<int> # Output only. Detected product categories, if any. See the ad-product-categories.txt file in the technical documentation for a list of IDs.
+  --detected-sensitive-categories: list<int> # Output only. Detected sensitive categories, if any. See the ad-sensitive-categories.txt file in the technical documentation for a list of IDs. You should use these IDs along with the excluded-sensitive-category field in the bid request to filter your bids.
   --html: record # HTML content for a creative. — shape: {height?: int, snippet?: string, width?: int}
-  --impression-tracking-urls: list # The set of URLs to be called to record an impression.
+  --impression-tracking-urls: list<string> # The set of URLs to be called to record an impression.
   --native: record # Native content for a creative. — shape: {advertiserName?: string, appIcon?: record, body?: string, callToAction?: string, clickLinkUrl?: string, clickTrackingUrl?: string, headline?: string, image?: record, logo?: record, priceDisplayText?: string, starRating?: float, storeUrl?: string, videoUrl?: string}
   --open-auction-status: string@open-auction-status-completer # Output only. The top-level open auction status of this creative. If disapproved, an entry for 'auctionType = OPEN_AUCTION' (or 'ALL') in serving_restrictions will also exist. Note that this may be nuanced with other contextual restrictions, in which case, it may be preferable to read from serving_restrictions directly. Can be used to filter the response of the creatives.list method.
-  --restricted-categories: list # All restricted categories for the ads that may be shown from this creative.
+  --restricted-categories: list<string> # All restricted categories for the ads that may be shown from this creative.
   --serving-restrictions: list # Output only. The granular status of this ad in specific contexts. A context here relates to where something ultimately serves (for example, a physical location, a platform, an HTTPS versus HTTP request, or the type of auction). — item shape: {contexts?: list, disapproval?: record, disapprovalReasons?: list, status?: "STATUS_UNSPECIFIED"|"DISAPPROVAL"|"PENDING_REVIEW"}
-  --vendor-ids: list # All vendor IDs for the ads that may be shown from this creative. See https://storage.googleapis.com/adx-rtb-dictionaries/vendors.txt for possible values.
+  --vendor-ids: list<int> # All vendor IDs for the ads that may be shown from this creative. See https://storage.googleapis.com/adx-rtb-dictionaries/vendors.txt for possible values.
   --version: int # Output only. The version of this creative. (format: int32)
   --video: record # Video content for a creative. — shape: {videoUrl?: string, videoVastXml?: string}
 ]: any -> record<accountId: string, adChoicesDestinationUrl: string, adTechnologyProviders: record<detectedProviderIds: list<string>, hasUnidentifiedProvider: bool>, advertiserName: string, agencyId: string, apiUpdateTime: string, attributes: list<string>, clickThroughUrls: list<string>, corrections: table<contexts: list, details: list, type: string>, creativeId: string, dealsStatus: string, declaredClickThroughUrls: list<string>, detectedAdvertiserIds: list<string>, detectedDomains: list<string>, detectedLanguages: list<string>, detectedProductCategories: list<int>, detectedSensitiveCategories: list<int>, html: record<height: int, snippet: string, width: int>, impressionTrackingUrls: list<string>, native: record<advertiserName: string, appIcon: record<height: int, url: string, width: int>, body: string, callToAction: string, clickLinkUrl: string, clickTrackingUrl: string, headline: string, image: record<height: int, url: string, width: int>, logo: record<height: int, url: string, width: int>, priceDisplayText: string, starRating: float, storeUrl: string, videoUrl: string>, openAuctionStatus: string, restrictedCategories: list<string>, servingRestrictions: table<contexts: list, disapproval: record, disapprovalReasons: list, status: string>, vendorIds: list<int>, version: int, video: record<videoUrl: string, videoVastXml: string>> {
@@ -716,19 +725,19 @@ export def "v2beta1-accounts-creatives adexchangebuyer2accountscreativesupdate" 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, creative_id: $creative_id} | format pattern "/v2beta1/accounts/{account_id}/creatives/{creative_id}") $qp)
-  let body = {"accountId": $body_account_id, "adChoicesDestinationUrl": $ad_choices_destination_url, "adTechnologyProviders": $ad_technology_providers, "advertiserName": $advertiser_name, "agencyId": $agency_id, "apiUpdateTime": $api_update_time, "attributes": $attributes, "clickThroughUrls": $click_through_urls, "corrections": $corrections, "creativeId": $body_creative_id, "dealsStatus": $deals_status, "declaredClickThroughUrls": $declared_click_through_urls, "detectedAdvertiserIds": $detected_advertiser_ids, "detectedDomains": $detected_domains, "detectedLanguages": $detected_languages, "detectedProductCategories": $detected_product_categories, "detectedSensitiveCategories": $detected_sensitive_categories, "html": $html, "impressionTrackingUrls": $impression_tracking_urls, "native": $native, "openAuctionStatus": $open_auction_status, "restrictedCategories": $restricted_categories, "servingRestrictions": $serving_restrictions, "vendorIds": $vendor_ids, "version": $version, "video": $video} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), creative_id: (encode-path-segment $creative_id)} | format pattern "/v2beta1/accounts/{account_id}/creatives/{creative_id}") $qp)
+  let req_body = {"accountId": $body_account_id, "adChoicesDestinationUrl": $ad_choices_destination_url, "adTechnologyProviders": $ad_technology_providers, "advertiserName": $advertiser_name, "agencyId": $agency_id, "apiUpdateTime": $api_update_time, "attributes": $attributes, "clickThroughUrls": $click_through_urls, "corrections": $corrections, "creativeId": $body_creative_id, "dealsStatus": $deals_status, "declaredClickThroughUrls": $declared_click_through_urls, "detectedAdvertiserIds": $detected_advertiser_ids, "detectedDomains": $detected_domains, "detectedLanguages": $detected_languages, "detectedProductCategories": $detected_product_categories, "detectedSensitiveCategories": $detected_sensitive_categories, "html": $html, "impressionTrackingUrls": $impression_tracking_urls, "native": $native, "openAuctionStatus": $open_auction_status, "restrictedCategories": $restricted_categories, "servingRestrictions": $serving_restrictions, "vendorIds": $vendor_ids, "version": $version, "video": $video} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List all creative-deal associations.
 #
 # GET /v2beta1/accounts/{accountId}/creatives/{creativeId}/dealAssociations
 # operationId: adexchangebuyer2.accounts.creatives.dealAssociations.list
-export def "v2beta1-accounts-creatives-deal-associations adexchangebuyer2accountscreativesdealAssociationslist" [
+export def "v2beta1-accounts-creatives-deal-associations list" [
   account_id: string
   creative_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -757,7 +766,7 @@ export def "v2beta1-accounts-creatives-deal-associations adexchangebuyer2account
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "query" $query "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, creative_id: $creative_id} | format pattern "/v2beta1/accounts/{account_id}/creatives/{creative_id}/dealAssociations") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), creative_id: (encode-path-segment $creative_id)} | format pattern "/v2beta1/accounts/{account_id}/creatives/{creative_id}/dealAssociations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -768,7 +777,7 @@ export def "v2beta1-accounts-creatives-deal-associations adexchangebuyer2account
 # POST /v2beta1/accounts/{accountId}/creatives/{creativeId}/dealAssociations:add
 # operationId: adexchangebuyer2.accounts.creatives.dealAssociations.add
 # --association shape: {accountId?: string, creativeId?: string, dealsId?: string}
-export def "v2beta1-accounts-creatives-deal-associations-add adexchangebuyer2accountscreativesdealAssociationsadd" [
+export def "v2beta1-accounts-creatives-deal-associations-add create" [
   account_id: string
   creative_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -796,12 +805,12 @@ export def "v2beta1-accounts-creatives-deal-associations-add adexchangebuyer2acc
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, creative_id: $creative_id} | format pattern "/v2beta1/accounts/{account_id}/creatives/{creative_id}/dealAssociations:add") $qp)
-  let body = {"association": $association} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), creative_id: (encode-path-segment $creative_id)} | format pattern "/v2beta1/accounts/{account_id}/creatives/{creative_id}/dealAssociations:add") $qp)
+  let req_body = {"association": $association} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Remove the association between a deal and a creative.
@@ -809,7 +818,7 @@ export def "v2beta1-accounts-creatives-deal-associations-add adexchangebuyer2acc
 # POST /v2beta1/accounts/{accountId}/creatives/{creativeId}/dealAssociations:remove
 # operationId: adexchangebuyer2.accounts.creatives.dealAssociations.remove
 # --association shape: {accountId?: string, creativeId?: string, dealsId?: string}
-export def "v2beta1-accounts-creatives-deal-associations-remove adexchangebuyer2accountscreativesdealAssociationsremove" [
+export def "v2beta1-accounts-creatives-deal-associations-remove delete" [
   account_id: string
   creative_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -837,19 +846,19 @@ export def "v2beta1-accounts-creatives-deal-associations-remove adexchangebuyer2
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, creative_id: $creative_id} | format pattern "/v2beta1/accounts/{account_id}/creatives/{creative_id}/dealAssociations:remove") $qp)
-  let body = {"association": $association} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), creative_id: (encode-path-segment $creative_id)} | format pattern "/v2beta1/accounts/{account_id}/creatives/{creative_id}/dealAssociations:remove") $qp)
+  let req_body = {"association": $association} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Stops watching a creative. Will stop push notifications being sent to the topics when the creative changes status.
 #
 # POST /v2beta1/accounts/{accountId}/creatives/{creativeId}:stopWatching
 # operationId: adexchangebuyer2.accounts.creatives.stopWatching
-export def "v2beta1-accounts-creatives adexchangebuyer2accountscreativesstopWatching" [
+export def "v2beta1-accounts-creatives stop-watching" [
   account_id: string
   creative_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -877,18 +886,19 @@ export def "v2beta1-accounts-creatives adexchangebuyer2accountscreativesstopWatc
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, creative_id: $creative_id} | format pattern "/v2beta1/accounts/{account_id}/creatives/{creative_id}:stopWatching") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), creative_id: (encode-path-segment $creative_id)} | format pattern "/v2beta1/accounts/{account_id}/creatives/{creative_id}:stopWatching") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Watches a creative. Will result in push notifications being sent to the topic when the creative changes status.
 #
 # POST /v2beta1/accounts/{accountId}/creatives/{creativeId}:watch
 # operationId: adexchangebuyer2.accounts.creatives.watch
-export def "v2beta1-accounts-creatives adexchangebuyer2accountscreativeswatch" [
+export def "v2beta1-accounts-creatives watch" [
   account_id: string
   creative_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -916,19 +926,19 @@ export def "v2beta1-accounts-creatives adexchangebuyer2accountscreativeswatch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, creative_id: $creative_id} | format pattern "/v2beta1/accounts/{account_id}/creatives/{creative_id}:watch") $qp)
-  let body = {"topic": $topic} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), creative_id: (encode-path-segment $creative_id)} | format pattern "/v2beta1/accounts/{account_id}/creatives/{creative_id}:watch") $qp)
+  let req_body = {"topic": $topic} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List finalized proposals, regardless if a proposal is being renegotiated. A filter expression (PQL query) may be specified to filter the results. The notes will not be returned.
 #
 # GET /v2beta1/accounts/{accountId}/finalizedProposals
 # operationId: adexchangebuyer2.accounts.finalizedProposals.list
-export def "v2beta1-accounts-finalized-proposals adexchangebuyer2accountsfinalizedProposalslist" [
+export def "v2beta1-accounts-finalized-proposals list" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -957,7 +967,7 @@ export def "v2beta1-accounts-finalized-proposals adexchangebuyer2accountsfinaliz
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "filterSyntax" $filter_syntax "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/v2beta1/accounts/{account_id}/finalizedProposals") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2beta1/accounts/{account_id}/finalizedProposals") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -967,7 +977,7 @@ export def "v2beta1-accounts-finalized-proposals adexchangebuyer2accountsfinaliz
 #
 # POST /v2beta1/accounts/{accountId}/finalizedProposals/{proposalId}:pause
 # operationId: adexchangebuyer2.accounts.finalizedProposals.pause
-export def "v2beta1-accounts-finalized-proposals adexchangebuyer2accountsfinalizedProposalspause" [
+export def "v2beta1-accounts-finalized-proposals pause" [
   account_id: string
   proposal_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -989,26 +999,26 @@ export def "v2beta1-accounts-finalized-proposals adexchangebuyer2accountsfinaliz
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --external-deal-ids: list # The external_deal_id's of the deals to be paused. If empty, all the deals in the proposal will be paused.
+  --external-deal-ids: list<string> # The external_deal_id's of the deals to be paused. If empty, all the deals in the proposal will be paused.
   --reason: string # The reason why the deals are being paused. This human readable message will be displayed in the seller's UI. (Max length: 1000 unicode code units.)
 ]: any -> record<billedBuyer: record<accountId: string>, buyer: record<accountId: string>, buyerContacts: table<email: string, name: string>, buyerPrivateData: record<referenceId: string>, deals: table<availableEndTime: string, availableStartTime: string, buyerPrivateData: record, createProductId: string, createProductRevision: string, createTime: string, creativePreApprovalPolicy: string, creativeRestrictions: record, creativeSafeFrameCompatibility: string, dealId: string, dealServingMetadata: record, dealTerms: record, deliveryControl: record, description: string, displayName: string, externalDealId: string, isSetupComplete: bool, programmaticCreativeSource: string, proposalId: string, sellerContacts: list, syndicationProduct: string, targeting: record, targetingCriterion: list, updateTime: string, webPropertyCode: string>, displayName: string, isRenegotiating: bool, isSetupComplete: bool, lastUpdaterOrCommentorRole: string, notes: table<createTime: string, creatorRole: string, note: string, noteId: string, proposalRevision: string>, originatorRole: string, privateAuctionId: string, proposalId: string, proposalRevision: string, proposalState: string, seller: record<accountId: string, subAccountId: string>, sellerContacts: table<email: string, name: string>, termsAndConditions: string, updateTime: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, proposal_id: $proposal_id} | format pattern "/v2beta1/accounts/{account_id}/finalizedProposals/{proposal_id}:pause") $qp)
-  let body = {"externalDealIds": $external_deal_ids, "reason": $reason} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), proposal_id: (encode-path-segment $proposal_id)} | format pattern "/v2beta1/accounts/{account_id}/finalizedProposals/{proposal_id}:pause") $qp)
+  let req_body = {"externalDealIds": $external_deal_ids, "reason": $reason} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update given deals to resume serving. This method will set the `DealServingMetadata.DealPauseStatus.has_buyer_paused` bit to false for all listed deals in the request. Currently, this method only applies to PG and PD deals. For PA deals, call accounts.proposals.resume endpoint. It is a no-op to resume running deals or deals paused by the other party. It is an error to call ResumeProposalDeals for deals which are not part of the proposal of proposal_id or which are not finalized or renegotiating.
 #
 # POST /v2beta1/accounts/{accountId}/finalizedProposals/{proposalId}:resume
 # operationId: adexchangebuyer2.accounts.finalizedProposals.resume
-export def "v2beta1-accounts-finalized-proposals adexchangebuyer2accountsfinalizedProposalsresume" [
+export def "v2beta1-accounts-finalized-proposals create-resume" [
   account_id: string
   proposal_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1030,25 +1040,25 @@ export def "v2beta1-accounts-finalized-proposals adexchangebuyer2accountsfinaliz
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --external-deal-ids: list # The external_deal_id's of the deals to resume. If empty, all the deals in the proposal will be resumed.
+  --external-deal-ids: list<string> # The external_deal_id's of the deals to resume. If empty, all the deals in the proposal will be resumed.
 ]: any -> record<billedBuyer: record<accountId: string>, buyer: record<accountId: string>, buyerContacts: table<email: string, name: string>, buyerPrivateData: record<referenceId: string>, deals: table<availableEndTime: string, availableStartTime: string, buyerPrivateData: record, createProductId: string, createProductRevision: string, createTime: string, creativePreApprovalPolicy: string, creativeRestrictions: record, creativeSafeFrameCompatibility: string, dealId: string, dealServingMetadata: record, dealTerms: record, deliveryControl: record, description: string, displayName: string, externalDealId: string, isSetupComplete: bool, programmaticCreativeSource: string, proposalId: string, sellerContacts: list, syndicationProduct: string, targeting: record, targetingCriterion: list, updateTime: string, webPropertyCode: string>, displayName: string, isRenegotiating: bool, isSetupComplete: bool, lastUpdaterOrCommentorRole: string, notes: table<createTime: string, creatorRole: string, note: string, noteId: string, proposalRevision: string>, originatorRole: string, privateAuctionId: string, proposalId: string, proposalRevision: string, proposalState: string, seller: record<accountId: string, subAccountId: string>, sellerContacts: table<email: string, name: string>, termsAndConditions: string, updateTime: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, proposal_id: $proposal_id} | format pattern "/v2beta1/accounts/{account_id}/finalizedProposals/{proposal_id}:resume") $qp)
-  let body = {"externalDealIds": $external_deal_ids} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), proposal_id: (encode-path-segment $proposal_id)} | format pattern "/v2beta1/accounts/{account_id}/finalizedProposals/{proposal_id}:resume") $qp)
+  let req_body = {"externalDealIds": $external_deal_ids} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List all products visible to the buyer (optionally filtered by the specified PQL query).
 #
 # GET /v2beta1/accounts/{accountId}/products
 # operationId: adexchangebuyer2.accounts.products.list
-export def "v2beta1-accounts-products adexchangebuyer2accountsproductslist" [
+export def "v2beta1-accounts-products list" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1076,7 +1086,7 @@ export def "v2beta1-accounts-products adexchangebuyer2accountsproductslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/v2beta1/accounts/{account_id}/products") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2beta1/accounts/{account_id}/products") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1086,7 +1096,7 @@ export def "v2beta1-accounts-products adexchangebuyer2accountsproductslist" [
 #
 # GET /v2beta1/accounts/{accountId}/products/{productId}
 # operationId: adexchangebuyer2.accounts.products.get
-export def "v2beta1-accounts-products adexchangebuyer2accountsproductsget" [
+export def "v2beta1-accounts-products get" [
   account_id: string
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1112,7 +1122,7 @@ export def "v2beta1-accounts-products adexchangebuyer2accountsproductsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, product_id: $product_id} | format pattern "/v2beta1/accounts/{account_id}/products/{product_id}") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), product_id: (encode-path-segment $product_id)} | format pattern "/v2beta1/accounts/{account_id}/products/{product_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1122,7 +1132,7 @@ export def "v2beta1-accounts-products adexchangebuyer2accountsproductsget" [
 #
 # GET /v2beta1/accounts/{accountId}/proposals
 # operationId: adexchangebuyer2.accounts.proposals.list
-export def "v2beta1-accounts-proposals adexchangebuyer2accountsproposalslist" [
+export def "v2beta1-accounts-proposals list" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1151,7 +1161,7 @@ export def "v2beta1-accounts-proposals adexchangebuyer2accountsproposalslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "filterSyntax" $filter_syntax "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/v2beta1/accounts/{account_id}/proposals") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2beta1/accounts/{account_id}/proposals") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1169,7 +1179,7 @@ export def "v2beta1-accounts-proposals adexchangebuyer2accountsproposalslist" [
 # --notes item shape: {note?: string}
 # --seller shape: {accountId?: string}
 # --sellerContacts item shape: {email?: string, name?: string}
-export def "v2beta1-accounts-proposals adexchangebuyer2accountsproposalscreate" [
+export def "v2beta1-accounts-proposals create" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1202,19 +1212,19 @@ export def "v2beta1-accounts-proposals adexchangebuyer2accountsproposalscreate" 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/v2beta1/accounts/{account_id}/proposals") $qp)
-  let body = {"billedBuyer": $billed_buyer, "buyer": $buyer, "buyerContacts": $buyer_contacts, "buyerPrivateData": $buyer_private_data, "deals": $deals, "displayName": $display_name, "seller": $seller} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2beta1/accounts/{account_id}/proposals") $qp)
+  let req_body = {"billedBuyer": $billed_buyer, "buyer": $buyer, "buyerContacts": $buyer_contacts, "buyerPrivateData": $buyer_private_data, "deals": $deals, "displayName": $display_name, "seller": $seller} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets a proposal given its ID. The proposal is returned at its head revision.
 #
 # GET /v2beta1/accounts/{accountId}/proposals/{proposalId}
 # operationId: adexchangebuyer2.accounts.proposals.get
-export def "v2beta1-accounts-proposals adexchangebuyer2accountsproposalsget" [
+export def "v2beta1-accounts-proposals get" [
   account_id: string
   proposal_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1240,7 +1250,7 @@ export def "v2beta1-accounts-proposals adexchangebuyer2accountsproposalsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, proposal_id: $proposal_id} | format pattern "/v2beta1/accounts/{account_id}/proposals/{proposal_id}") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), proposal_id: (encode-path-segment $proposal_id)} | format pattern "/v2beta1/accounts/{account_id}/proposals/{proposal_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1258,7 +1268,7 @@ export def "v2beta1-accounts-proposals adexchangebuyer2accountsproposalsget" [
 # --notes item shape: {note?: string}
 # --seller shape: {accountId?: string}
 # --sellerContacts item shape: {email?: string, name?: string}
-export def "v2beta1-accounts-proposals adexchangebuyer2accountsproposalsupdate" [
+export def "v2beta1-accounts-proposals update" [
   account_id: string
   proposal_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1292,19 +1302,19 @@ export def "v2beta1-accounts-proposals adexchangebuyer2accountsproposalsupdate" 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, proposal_id: $proposal_id} | format pattern "/v2beta1/accounts/{account_id}/proposals/{proposal_id}") $qp)
-  let body = {"billedBuyer": $billed_buyer, "buyer": $buyer, "buyerContacts": $buyer_contacts, "buyerPrivateData": $buyer_private_data, "deals": $deals, "displayName": $display_name, "seller": $seller} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), proposal_id: (encode-path-segment $proposal_id)} | format pattern "/v2beta1/accounts/{account_id}/proposals/{proposal_id}") $qp)
+  let req_body = {"billedBuyer": $billed_buyer, "buyer": $buyer, "buyerContacts": $buyer_contacts, "buyerPrivateData": $buyer_private_data, "deals": $deals, "displayName": $display_name, "seller": $seller} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Mark the proposal as accepted at the given revision number. If the number does not match the server's revision number an `ABORTED` error message will be returned. This call updates the proposal_state from `PROPOSED` to `BUYER_ACCEPTED`, or from `SELLER_ACCEPTED` to `FINALIZED`. Upon calling this endpoint, the buyer implicitly agrees to the terms and conditions optionally set within the proposal by the publisher.
 #
 # POST /v2beta1/accounts/{accountId}/proposals/{proposalId}:accept
 # operationId: adexchangebuyer2.accounts.proposals.accept
-export def "v2beta1-accounts-proposals adexchangebuyer2accountsproposalsaccept" [
+export def "v2beta1-accounts-proposals create-accept" [
   account_id: string
   proposal_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1332,12 +1342,12 @@ export def "v2beta1-accounts-proposals adexchangebuyer2accountsproposalsaccept" 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, proposal_id: $proposal_id} | format pattern "/v2beta1/accounts/{account_id}/proposals/{proposal_id}:accept") $qp)
-  let body = {"proposalRevision": $proposal_revision} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), proposal_id: (encode-path-segment $proposal_id)} | format pattern "/v2beta1/accounts/{account_id}/proposals/{proposal_id}:accept") $qp)
+  let req_body = {"proposalRevision": $proposal_revision} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create a new note and attach it to the proposal. The note is assigned a unique ID by the server. The proposal revision number will not increase when associated with a new note.
@@ -1345,7 +1355,7 @@ export def "v2beta1-accounts-proposals adexchangebuyer2accountsproposalsaccept" 
 # POST /v2beta1/accounts/{accountId}/proposals/{proposalId}:addNote
 # operationId: adexchangebuyer2.accounts.proposals.addNote
 # --note shape: {note?: string}
-export def "v2beta1-accounts-proposals adexchangebuyer2accountsproposalsaddNote" [
+export def "v2beta1-accounts-proposals create-note" [
   account_id: string
   proposal_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1373,19 +1383,19 @@ export def "v2beta1-accounts-proposals adexchangebuyer2accountsproposalsaddNote"
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, proposal_id: $proposal_id} | format pattern "/v2beta1/accounts/{account_id}/proposals/{proposal_id}:addNote") $qp)
-  let body = {"note": $note} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), proposal_id: (encode-path-segment $proposal_id)} | format pattern "/v2beta1/accounts/{account_id}/proposals/{proposal_id}:addNote") $qp)
+  let req_body = {"note": $note} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Cancel an ongoing negotiation on a proposal. This does not cancel or end serving for the deals if the proposal has been finalized, but only cancels a negotiation unilaterally.
 #
 # POST /v2beta1/accounts/{accountId}/proposals/{proposalId}:cancelNegotiation
 # operationId: adexchangebuyer2.accounts.proposals.cancelNegotiation
-export def "v2beta1-accounts-proposals adexchangebuyer2accountsproposalscancelNegotiation" [
+export def "v2beta1-accounts-proposals cancel-negotiation" [
   account_id: string
   proposal_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1413,18 +1423,19 @@ export def "v2beta1-accounts-proposals adexchangebuyer2accountsproposalscancelNe
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, proposal_id: $proposal_id} | format pattern "/v2beta1/accounts/{account_id}/proposals/{proposal_id}:cancelNegotiation") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), proposal_id: (encode-path-segment $proposal_id)} | format pattern "/v2beta1/accounts/{account_id}/proposals/{proposal_id}:cancelNegotiation") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # You can opt-in to manually update proposals to indicate that setup is complete. By default, proposal setup is automatically completed after their deals are finalized. Contact your Technical Account Manager to opt in. Buyers can call this method when the proposal has been finalized, and all the required creatives have been uploaded using the Creatives API. This call updates the `is_setup_completed` field on the deals in the proposal, and notifies the seller. The server then advances the revision number of the most recent proposal. To mark an individual deal as ready to serve, call `buyers.finalizedDeals.setReadyToServe` in the Marketplace API.
 #
 # POST /v2beta1/accounts/{accountId}/proposals/{proposalId}:completeSetup
 # operationId: adexchangebuyer2.accounts.proposals.completeSetup
-export def "v2beta1-accounts-proposals adexchangebuyer2accountsproposalscompleteSetup" [
+export def "v2beta1-accounts-proposals complete-setup" [
   account_id: string
   proposal_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1452,18 +1463,19 @@ export def "v2beta1-accounts-proposals adexchangebuyer2accountsproposalscomplete
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, proposal_id: $proposal_id} | format pattern "/v2beta1/accounts/{account_id}/proposals/{proposal_id}:completeSetup") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), proposal_id: (encode-path-segment $proposal_id)} | format pattern "/v2beta1/accounts/{account_id}/proposals/{proposal_id}:completeSetup") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update the given proposal to pause serving. This method will set the `DealServingMetadata.DealPauseStatus.has_buyer_paused` bit to true for all deals in the proposal. It is a no-op to pause an already-paused proposal. It is an error to call PauseProposal for a proposal that is not finalized or renegotiating.
 #
 # POST /v2beta1/accounts/{accountId}/proposals/{proposalId}:pause
 # operationId: adexchangebuyer2.accounts.proposals.pause
-export def "v2beta1-accounts-proposals adexchangebuyer2accountsproposalspause" [
+export def "v2beta1-accounts-proposals pause" [
   account_id: string
   proposal_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1491,19 +1503,19 @@ export def "v2beta1-accounts-proposals adexchangebuyer2accountsproposalspause" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, proposal_id: $proposal_id} | format pattern "/v2beta1/accounts/{account_id}/proposals/{proposal_id}:pause") $qp)
-  let body = {"reason": $reason} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), proposal_id: (encode-path-segment $proposal_id)} | format pattern "/v2beta1/accounts/{account_id}/proposals/{proposal_id}:pause") $qp)
+  let req_body = {"reason": $reason} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update the given proposal to resume serving. This method will set the `DealServingMetadata.DealPauseStatus.has_buyer_paused` bit to false for all deals in the proposal. Note that if the `has_seller_paused` bit is also set, serving will not resume until the seller also resumes. It is a no-op to resume an already-running proposal. It is an error to call ResumeProposal for a proposal that is not finalized or renegotiating.
 #
 # POST /v2beta1/accounts/{accountId}/proposals/{proposalId}:resume
 # operationId: adexchangebuyer2.accounts.proposals.resume
-export def "v2beta1-accounts-proposals adexchangebuyer2accountsproposalsresume" [
+export def "v2beta1-accounts-proposals create-resume" [
   account_id: string
   proposal_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1531,18 +1543,19 @@ export def "v2beta1-accounts-proposals adexchangebuyer2accountsproposalsresume" 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, proposal_id: $proposal_id} | format pattern "/v2beta1/accounts/{account_id}/proposals/{proposal_id}:resume") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), proposal_id: (encode-path-segment $proposal_id)} | format pattern "/v2beta1/accounts/{account_id}/proposals/{proposal_id}:resume") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List all publisher profiles visible to the buyer
 #
 # GET /v2beta1/accounts/{accountId}/publisherProfiles
 # operationId: adexchangebuyer2.accounts.publisherProfiles.list
-export def "v2beta1-accounts-publisher-profiles adexchangebuyer2accountspublisherProfileslist" [
+export def "v2beta1-accounts-publisher-profiles list" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1569,7 +1582,7 @@ export def "v2beta1-accounts-publisher-profiles adexchangebuyer2accountspublishe
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/v2beta1/accounts/{account_id}/publisherProfiles") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2beta1/accounts/{account_id}/publisherProfiles") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1579,7 +1592,7 @@ export def "v2beta1-accounts-publisher-profiles adexchangebuyer2accountspublishe
 #
 # GET /v2beta1/accounts/{accountId}/publisherProfiles/{publisherProfileId}
 # operationId: adexchangebuyer2.accounts.publisherProfiles.get
-export def "v2beta1-accounts-publisher-profiles adexchangebuyer2accountspublisherProfilesget" [
+export def "v2beta1-accounts-publisher-profiles get" [
   account_id: string
   publisher_profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1605,7 +1618,7 @@ export def "v2beta1-accounts-publisher-profiles adexchangebuyer2accountspublishe
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, publisher_profile_id: $publisher_profile_id} | format pattern "/v2beta1/accounts/{account_id}/publisherProfiles/{publisher_profile_id}") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), publisher_profile_id: (encode-path-segment $publisher_profile_id)} | format pattern "/v2beta1/accounts/{account_id}/publisherProfiles/{publisher_profile_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1615,7 +1628,7 @@ export def "v2beta1-accounts-publisher-profiles adexchangebuyer2accountspublishe
 #
 # GET /v2beta1/{filterSetName}/bidMetrics
 # operationId: adexchangebuyer2.bidders.filterSets.bidMetrics.list
-export def "v2beta1-bid-metrics adexchangebuyer2biddersfilterSetsbidMetricslist" [
+export def "v2beta1-bid-metrics list" [
   filter_set_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1642,7 +1655,7 @@ export def "v2beta1-bid-metrics adexchangebuyer2biddersfilterSetsbidMetricslist"
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({filter_set_name: $filter_set_name} | format pattern "/v2beta1/{filter_set_name}/bidMetrics") $qp)
+  let full_url = (build-url $base ({filter_set_name: (encode-path-segment $filter_set_name)} | format pattern "/v2beta1/{filter_set_name}/bidMetrics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1652,7 +1665,7 @@ export def "v2beta1-bid-metrics adexchangebuyer2biddersfilterSetsbidMetricslist"
 #
 # GET /v2beta1/{filterSetName}/bidResponseErrors
 # operationId: adexchangebuyer2.bidders.filterSets.bidResponseErrors.list
-export def "v2beta1-bid-response-errors adexchangebuyer2biddersfilterSetsbidResponseErrorslist" [
+export def "v2beta1-bid-response-errors list" [
   filter_set_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1679,7 +1692,7 @@ export def "v2beta1-bid-response-errors adexchangebuyer2biddersfilterSetsbidResp
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({filter_set_name: $filter_set_name} | format pattern "/v2beta1/{filter_set_name}/bidResponseErrors") $qp)
+  let full_url = (build-url $base ({filter_set_name: (encode-path-segment $filter_set_name)} | format pattern "/v2beta1/{filter_set_name}/bidResponseErrors") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1689,7 +1702,7 @@ export def "v2beta1-bid-response-errors adexchangebuyer2biddersfilterSetsbidResp
 #
 # GET /v2beta1/{filterSetName}/bidResponsesWithoutBids
 # operationId: adexchangebuyer2.bidders.filterSets.bidResponsesWithoutBids.list
-export def "v2beta1-bid-responses-without-bids adexchangebuyer2biddersfilterSetsbidResponsesWithoutBidslist" [
+export def "v2beta1-bid-responses-without-bids list" [
   filter_set_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1716,7 +1729,7 @@ export def "v2beta1-bid-responses-without-bids adexchangebuyer2biddersfilterSets
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({filter_set_name: $filter_set_name} | format pattern "/v2beta1/{filter_set_name}/bidResponsesWithoutBids") $qp)
+  let full_url = (build-url $base ({filter_set_name: (encode-path-segment $filter_set_name)} | format pattern "/v2beta1/{filter_set_name}/bidResponsesWithoutBids") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1726,7 +1739,7 @@ export def "v2beta1-bid-responses-without-bids adexchangebuyer2biddersfilterSets
 #
 # GET /v2beta1/{filterSetName}/filteredBidRequests
 # operationId: adexchangebuyer2.bidders.filterSets.filteredBidRequests.list
-export def "v2beta1-filtered-bid-requests adexchangebuyer2biddersfilterSetsfilteredBidRequestslist" [
+export def "v2beta1-filtered-bid-requests list" [
   filter_set_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1753,7 +1766,7 @@ export def "v2beta1-filtered-bid-requests adexchangebuyer2biddersfilterSetsfilte
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({filter_set_name: $filter_set_name} | format pattern "/v2beta1/{filter_set_name}/filteredBidRequests") $qp)
+  let full_url = (build-url $base ({filter_set_name: (encode-path-segment $filter_set_name)} | format pattern "/v2beta1/{filter_set_name}/filteredBidRequests") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1763,7 +1776,7 @@ export def "v2beta1-filtered-bid-requests adexchangebuyer2biddersfilterSetsfilte
 #
 # GET /v2beta1/{filterSetName}/filteredBids
 # operationId: adexchangebuyer2.bidders.filterSets.filteredBids.list
-export def "v2beta1-filtered-bids adexchangebuyer2biddersfilterSetsfilteredBidslist" [
+export def "v2beta1-filtered-bids list" [
   filter_set_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1790,7 +1803,7 @@ export def "v2beta1-filtered-bids adexchangebuyer2biddersfilterSetsfilteredBidsl
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({filter_set_name: $filter_set_name} | format pattern "/v2beta1/{filter_set_name}/filteredBids") $qp)
+  let full_url = (build-url $base ({filter_set_name: (encode-path-segment $filter_set_name)} | format pattern "/v2beta1/{filter_set_name}/filteredBids") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1800,7 +1813,7 @@ export def "v2beta1-filtered-bids adexchangebuyer2biddersfilterSetsfilteredBidsl
 #
 # GET /v2beta1/{filterSetName}/filteredBids/{creativeStatusId}/creatives
 # operationId: adexchangebuyer2.bidders.filterSets.filteredBids.creatives.list
-export def "v2beta1-filtered-bids-creatives adexchangebuyer2biddersfilterSetsfilteredBidscreativeslist" [
+export def "v2beta1-filtered-bids-creatives list" [
   filter_set_name: string
   creative_status_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1828,7 +1841,7 @@ export def "v2beta1-filtered-bids-creatives adexchangebuyer2biddersfilterSetsfil
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({filter_set_name: $filter_set_name, creative_status_id: $creative_status_id} | format pattern "/v2beta1/{filter_set_name}/filteredBids/{creative_status_id}/creatives") $qp)
+  let full_url = (build-url $base ({filter_set_name: (encode-path-segment $filter_set_name), creative_status_id: (encode-path-segment $creative_status_id)} | format pattern "/v2beta1/{filter_set_name}/filteredBids/{creative_status_id}/creatives") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1838,7 +1851,7 @@ export def "v2beta1-filtered-bids-creatives adexchangebuyer2biddersfilterSetsfil
 #
 # GET /v2beta1/{filterSetName}/filteredBids/{creativeStatusId}/details
 # operationId: adexchangebuyer2.bidders.filterSets.filteredBids.details.list
-export def "v2beta1-filtered-bids-details adexchangebuyer2biddersfilterSetsfilteredBidsdetailslist" [
+export def "v2beta1-filtered-bids-details list" [
   filter_set_name: string
   creative_status_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1866,7 +1879,7 @@ export def "v2beta1-filtered-bids-details adexchangebuyer2biddersfilterSetsfilte
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({filter_set_name: $filter_set_name, creative_status_id: $creative_status_id} | format pattern "/v2beta1/{filter_set_name}/filteredBids/{creative_status_id}/details") $qp)
+  let full_url = (build-url $base ({filter_set_name: (encode-path-segment $filter_set_name), creative_status_id: (encode-path-segment $creative_status_id)} | format pattern "/v2beta1/{filter_set_name}/filteredBids/{creative_status_id}/details") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1876,7 +1889,7 @@ export def "v2beta1-filtered-bids-details adexchangebuyer2biddersfilterSetsfilte
 #
 # GET /v2beta1/{filterSetName}/impressionMetrics
 # operationId: adexchangebuyer2.bidders.filterSets.impressionMetrics.list
-export def "v2beta1-impression-metrics adexchangebuyer2biddersfilterSetsimpressionMetricslist" [
+export def "v2beta1-impression-metrics list" [
   filter_set_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1903,7 +1916,7 @@ export def "v2beta1-impression-metrics adexchangebuyer2biddersfilterSetsimpressi
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({filter_set_name: $filter_set_name} | format pattern "/v2beta1/{filter_set_name}/impressionMetrics") $qp)
+  let full_url = (build-url $base ({filter_set_name: (encode-path-segment $filter_set_name)} | format pattern "/v2beta1/{filter_set_name}/impressionMetrics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1913,7 +1926,7 @@ export def "v2beta1-impression-metrics adexchangebuyer2biddersfilterSetsimpressi
 #
 # GET /v2beta1/{filterSetName}/losingBids
 # operationId: adexchangebuyer2.bidders.filterSets.losingBids.list
-export def "v2beta1-losing-bids adexchangebuyer2biddersfilterSetslosingBidslist" [
+export def "v2beta1-losing-bids list" [
   filter_set_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1940,7 +1953,7 @@ export def "v2beta1-losing-bids adexchangebuyer2biddersfilterSetslosingBidslist"
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({filter_set_name: $filter_set_name} | format pattern "/v2beta1/{filter_set_name}/losingBids") $qp)
+  let full_url = (build-url $base ({filter_set_name: (encode-path-segment $filter_set_name)} | format pattern "/v2beta1/{filter_set_name}/losingBids") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1950,7 +1963,7 @@ export def "v2beta1-losing-bids adexchangebuyer2biddersfilterSetslosingBidslist"
 #
 # GET /v2beta1/{filterSetName}/nonBillableWinningBids
 # operationId: adexchangebuyer2.bidders.filterSets.nonBillableWinningBids.list
-export def "v2beta1-non-billable-winning-bids adexchangebuyer2biddersfilterSetsnonBillableWinningBidslist" [
+export def "v2beta1-non-billable-winning-bids list" [
   filter_set_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1977,7 +1990,7 @@ export def "v2beta1-non-billable-winning-bids adexchangebuyer2biddersfilterSetsn
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({filter_set_name: $filter_set_name} | format pattern "/v2beta1/{filter_set_name}/nonBillableWinningBids") $qp)
+  let full_url = (build-url $base ({filter_set_name: (encode-path-segment $filter_set_name)} | format pattern "/v2beta1/{filter_set_name}/nonBillableWinningBids") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1987,7 +2000,7 @@ export def "v2beta1-non-billable-winning-bids adexchangebuyer2biddersfilterSetsn
 #
 # DELETE /v2beta1/{name}
 # operationId: adexchangebuyer2.bidders.filterSets.delete
-export def "v2beta1 adexchangebuyer2biddersfilterSetsdelete" [
+export def "v2beta1 delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2012,7 +2025,7 @@ export def "v2beta1 adexchangebuyer2biddersfilterSetsdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v2beta1/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v2beta1/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2022,7 +2035,7 @@ export def "v2beta1 adexchangebuyer2biddersfilterSetsdelete" [
 #
 # GET /v2beta1/{name}
 # operationId: adexchangebuyer2.bidders.filterSets.get
-export def "v2beta1 adexchangebuyer2biddersfilterSetsget" [
+export def "v2beta1 get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2047,7 +2060,7 @@ export def "v2beta1 adexchangebuyer2biddersfilterSetsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v2beta1/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v2beta1/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2057,7 +2070,7 @@ export def "v2beta1 adexchangebuyer2biddersfilterSetsget" [
 #
 # GET /v2beta1/{ownerName}/filterSets
 # operationId: adexchangebuyer2.bidders.filterSets.list
-export def "v2beta1-filter-sets adexchangebuyer2biddersfilterSetslist" [
+export def "v2beta1-filter-sets list" [
   owner_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2084,7 +2097,7 @@ export def "v2beta1-filter-sets adexchangebuyer2biddersfilterSetslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({owner_name: $owner_name} | format pattern "/v2beta1/{owner_name}/filterSets") $qp)
+  let full_url = (build-url $base ({owner_name: (encode-path-segment $owner_name)} | format pattern "/v2beta1/{owner_name}/filterSets") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2097,7 +2110,7 @@ export def "v2beta1-filter-sets adexchangebuyer2biddersfilterSetslist" [
 # --absoluteDateRange shape: {endDate?: record, startDate?: record}
 # --realtimeTimeRange shape: {startTimestamp?: string}
 # --relativeDateRange shape: {durationDays?: int, offsetDays?: int}
-export def "v2beta1-filter-sets adexchangebuyer2biddersfilterSetscreate" [
+export def "v2beta1-filter-sets create" [
   owner_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2120,28 +2133,28 @@ export def "v2beta1-filter-sets adexchangebuyer2biddersfilterSetscreate" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --is-transient: oneof<nothing, bool> # Whether the filter set is transient, or should be persisted indefinitely. By default, filter sets are not transient. If transient, it will be available for at least 1 hour after creation.
   --absolute-date-range: record # An absolute date range, specified by its start date and end date. The supported range of dates begins 30 days before today and ends today. Validity checked upon filter set creation. If a filter set with an absolute date range is run at a later date more than 30 days after start_date, it will fail. — shape: {endDate?: record, startDate?: record}
-  --breakdown-dimensions: list # The set of dimensions along which to break down the response; may be empty. If multiple dimensions are requested, the breakdown is along the Cartesian product of the requested dimensions.
+  --breakdown-dimensions: list<string> # The set of dimensions along which to break down the response; may be empty. If multiple dimensions are requested, the breakdown is along the Cartesian product of the requested dimensions.
   --creative-id: string # The ID of the creative on which to filter; optional. This field may be set only for a filter set that accesses account-level troubleshooting data, for example, one whose name matches the `bidders/*/accounts/*/filterSets/*` pattern.
   --deal-id: string # The ID of the deal on which to filter; optional. This field may be set only for a filter set that accesses account-level troubleshooting data, for example, one whose name matches the `bidders/*/accounts/*/filterSets/*` pattern. (format: int64)
   --environment: string@environment-completer # The environment on which to filter; optional.
   --format: string@format-completer # Creative format bidded on or allowed to bid on, can be empty.
-  --formats: list # Creative formats bidded on or allowed to bid on, can be empty. Although this field is a list, it can only be populated with a single item. A HTTP 400 bad request error will be returned in the response if you specify multiple items.
+  --formats: list<string> # Creative formats bidded on or allowed to bid on, can be empty. Although this field is a list, it can only be populated with a single item. A HTTP 400 bad request error will be returned in the response if you specify multiple items.
   --name: string # A user-defined name of the filter set. Filter set names must be unique globally and match one of the patterns: - `bidders/*/filterSets/*` (for accessing bidder-level troubleshooting data) - `bidders/*/accounts/*/filterSets/*` (for accessing account-level troubleshooting data) This field is required in create operations.
-  --platforms: list # The list of platforms on which to filter; may be empty. The filters represented by multiple platforms are ORed together (for example, if non-empty, results must match any one of the platforms).
-  --publisher-identifiers: list # For Open Bidding partners only. The list of publisher identifiers on which to filter; may be empty. The filters represented by multiple publisher identifiers are ORed together.
+  --platforms: list<string> # The list of platforms on which to filter; may be empty. The filters represented by multiple platforms are ORed together (for example, if non-empty, results must match any one of the platforms).
+  --publisher-identifiers: list<string> # For Open Bidding partners only. The list of publisher identifiers on which to filter; may be empty. The filters represented by multiple publisher identifiers are ORed together.
   --realtime-time-range: record # An open-ended realtime time range specified by the start timestamp. For filter sets that specify a realtime time range RTB metrics continue to be aggregated throughout the lifetime of the filter set. — shape: {startTimestamp?: string}
   --relative-date-range: record # A relative date range, specified by an offset and a duration. The supported range of dates begins 30 days before today and ends today, for example, the limits for these values are: offset_days >= 0 duration_days >= 1 offset_days + duration_days <= 30 — shape: {durationDays?: int, offsetDays?: int}
-  --seller-network-ids: list # For Authorized Buyers only. The list of IDs of the seller (publisher) networks on which to filter; may be empty. The filters represented by multiple seller network IDs are ORed together (for example, if non-empty, results must match any one of the publisher networks). See [seller-network-ids](https://developers.google.com/authorized-buyers/rtb/downloads/seller-network-ids) file for the set of existing seller network IDs.
+  --seller-network-ids: list<int> # For Authorized Buyers only. The list of IDs of the seller (publisher) networks on which to filter; may be empty. The filters represented by multiple seller network IDs are ORed together (for example, if non-empty, results must match any one of the publisher networks). See [seller-network-ids](https://developers.google.com/authorized-buyers/rtb/downloads/seller-network-ids) file for the set of existing seller network IDs.
   --time-series-granularity: string@time-series-granularity-completer # The granularity of time intervals if a time series breakdown is preferred; optional.
 ]: any -> record<absoluteDateRange: record<endDate: record<day: int, month: int, year: int>, startDate: record<day: int, month: int, year: int>>, breakdownDimensions: list<string>, creativeId: string, dealId: string, environment: string, format: string, formats: list<string>, name: string, platforms: list<string>, publisherIdentifiers: list<string>, realtimeTimeRange: record<startTimestamp: string>, relativeDateRange: record<durationDays: int, offsetDays: int>, sellerNetworkIds: list<int>, timeSeriesGranularity: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "isTransient" $is_transient "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({owner_name: $owner_name} | format pattern "/v2beta1/{owner_name}/filterSets") $qp)
-  let body = {"absoluteDateRange": $absolute_date_range, "breakdownDimensions": $breakdown_dimensions, "creativeId": $creative_id, "dealId": $deal_id, "environment": $environment, "format": $format, "formats": $formats, "name": $name, "platforms": $platforms, "publisherIdentifiers": $publisher_identifiers, "realtimeTimeRange": $realtime_time_range, "relativeDateRange": $relative_date_range, "sellerNetworkIds": $seller_network_ids, "timeSeriesGranularity": $time_series_granularity} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner_name: (encode-path-segment $owner_name)} | format pattern "/v2beta1/{owner_name}/filterSets") $qp)
+  let req_body = {"absoluteDateRange": $absolute_date_range, "breakdownDimensions": $breakdown_dimensions, "creativeId": $creative_id, "dealId": $deal_id, "environment": $environment, "format": $format, "formats": $formats, "name": $name, "platforms": $platforms, "publisherIdentifiers": $publisher_identifiers, "realtimeTimeRange": $realtime_time_range, "relativeDateRange": $relative_date_range, "sellerNetworkIds": $seller_network_ids, "timeSeriesGranularity": $time_series_granularity} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

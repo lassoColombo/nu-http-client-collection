@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -89,7 +98,7 @@ export def commands []: nothing -> table {
   }
 }
 
-# This method creates a "shipment" based on the <b>shippingQuoteId</b> and <b>rateId</b> values supplied in the request. The rate identified by the <b>rateId</b> value specifies the carrier and service for the package shipment, and the rate ID must be contained in the shipping quote identified by the <b>shippingQuoteId</b> value. Call <b>createShippingQuote</b> to retrieve a set of live shipping rates.  <br><br>When you create a shipment, eBay generates a shipping label that you can download and use to ship your package.  <br><br>In a <b>createFromShippingQuote</b> request, sellers can include a list of shipping options they want to add to the base service quoted in the selected rate. The list of available shipping options is specific to each quoted rate and if available, the options are listed in the rate container of the of the shipping quote.  <br><br>In addition to a configurable return-to location and other details about the shipment, the response to this method includes:  <ul><li>The shipping carrier and service to be used for the package shipment</li> <li>A list of selected shipping options, if any</li> <li>The shipment tracking number</li> <li>The total shipping cost (the sum cost of the base shipping service and any added options)</li></ul> When you create a shipment, your billing agreement account is charged the sum of the <b>baseShippingCost</b> and the total cost of any additional shipping options you might have selected. Use the URL returned in <b>labelDownloadUrl</b> field, or call <b>downloadLabelFile</b> with the <b>shipmentId</b> value from the response, to download a shipping label for your package. <p class="tablenote"><b>Important!</b> Sellers must set up their payment method with eBay before they can use this method to create a shipment and the associated shipping label.</p>
+# This method creates a "shipment" based on the shippingQuoteId and rateId values supplied in the request. The rate identified by the rateId value specifies the carrier and service for the package shipment, and the rate ID must be contained in the shipping quote identified by the shippingQuoteId value. Call createShippingQuote to retrieve a set of live shipping rates. When you create a shipment, eBay generates a shipping label that you can download and use to ship your package. In a createFromShippingQuote request, sellers can include a list of shipping options they want to add to the base service quoted in the selected rate. The list of available shipping options is specific to each quoted rate and if available, the options are listed in the rate container of the of the shipping quote. In addition to a configurable return-to location and other details about the shipment, the response to this method includes: The shipping carrier and service to be used for the package shipment A list of selected shipping options, if any The shipment tracking number The total shipping cost (the sum cost of the base shipping service and any added options) When you create a shipment, your billing agreement account is charged the sum of the baseShippingCost and the total cost of any additional shipping options you might have selected. Use the URL returned in labelDownloadUrl field, or call downloadLabelFile with the shipmentId value from the response, to download a shipping label for your package. Important! Sellers must set up their payment method with eBay before they can use this method to create a shipment and the associated shipping label.
 #
 # POST /shipment/create_from_shipping_quote
 # operationId: createFromShippingQuote
@@ -104,25 +113,25 @@ export def "shipment-create-from-shipping-quote create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --additional-options: list # Supply a list of one or more shipping options that the seller wants to purchase for this shipment.  <br><br>The <b>baseShippingCost</b> field that's associated with the selected shipping rate is the cost of the base service offered in the rate. In addition to the base service, sellers can add additional shipping services to the base service. Shipping options include things such as shipping insurance or a recipient's signature upon delivery. The cost of any added services is summed with the base shipping cost to determine the final cost for the shipment. All options added to the shipment must be chosen from the set of shipping options offered with the selected rate. — item shape: {additionalCost?: record, optionType?: string}
+  --additional-options: list # Supply a list of one or more shipping options that the seller wants to purchase for this shipment. The baseShippingCost field that's associated with the selected shipping rate is the cost of the base service offered in the rate. In addition to the base service, sellers can add additional shipping services to the base service. Shipping options include things such as shipping insurance or a recipient's signature upon delivery. The cost of any added services is summed with the base shipping cost to determine the final cost for the shipment. All options added to the shipment must be chosen from the set of shipping options offered with the selected rate. — item shape: {additionalCost?: record, optionType?: string}
   --label-custom-message: string # Optional text to be printed on the shipping label if the selected shipping carrier supports custom messages on their labels.
-  --label-size: string # The seller's desired label size. Any supplied value is applied only if the shipping carrier supports multiple label sizes, otherwise the carrier's default label size is used.  <br><brCurrently, the only valid value is: <code>4"x6"</code>
-  --rate-id: string # The eBay-assigned ID of the shipping rate that the seller selected for the shipment. This value is generated by a call to <b>createShippingQuote</b> and is returned in the <b>rates.rateId</b> field.
+  --label-size: string # The seller's desired label size. Any supplied value is applied only if the shipping carrier supports multiple label sizes, otherwise the carrier's default label size is used. <brCurrently, the only valid value is: 4"x6"
+  --rate-id: string # The eBay-assigned ID of the shipping rate that the seller selected for the shipment. This value is generated by a call to createShippingQuote and is returned in the rates.rateId field.
   --return-to: record # This complex type contains contact information for an individual buyer or seller. — shape: {companyName?: string, contactAddress?: record, fullName?: string, primaryPhone?: record}
-  --shipping-quote-id: string # The unique eBay-assigned ID of the shipping quote that was generated by a call to <b>createShippingQuote</b>.
+  --shipping-quote-id: string # The unique eBay-assigned ID of the shipping quote that was generated by a call to createShippingQuote.
 ]: any -> record<cancellation: record<cancellationRequestedDate: string, cancellationStatus: string>, creationDate: string, labelCustomMessage: string, labelDownloadUrl: string, labelSize: string, orders: table<channel: string, orderId: string>, packageSpecification: record<dimensions: record<height: string, length: string, unit: string, width: string>, weight: record<unit: string, value: string>>, rate: record<additionalOptions: list<record>, baseShippingCost: record<currency: string, value: string>, destinationTimeZone: string, maxEstimatedDeliveryDate: string, minEstimatedDeliveryDate: string, pickupNetworks: list<string>, pickupSlotId: string, pickupType: string, rateId: string, shippingCarrierCode: string, shippingCarrierName: string, shippingQuoteId: string, shippingServiceCode: string, shippingServiceName: string, totalShippingCost: record<currency: string, value: string>>, returnTo: record<companyName: string, contactAddress: record<addressLine1: string, addressLine2: string, city: string, countryCode: string, county: string, postalCode: string, stateOrProvince: string>, fullName: string, primaryPhone: record<phoneNumber: string>>, shipFrom: record<companyName: string, contactAddress: record<addressLine1: string, addressLine2: string, city: string, countryCode: string, county: string, postalCode: string, stateOrProvince: string>, fullName: string, primaryPhone: record<phoneNumber: string>>, shipTo: record<companyName: string, contactAddress: record<addressLine1: string, addressLine2: string, city: string, countryCode: string, county: string, postalCode: string, stateOrProvince: string>, fullName: string, primaryPhone: record<phoneNumber: string>>, shipmentId: string, shipmentTrackingNumber: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/shipment/create_from_shipping_quote")
-  let body = {"additionalOptions": $additional_options, "labelCustomMessage": $label_custom_message, "labelSize": $label_size, "rateId": $rate_id, "returnTo": $return_to, "shippingQuoteId": $shipping_quote_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"additionalOptions": $additional_options, "labelCustomMessage": $label_custom_message, "labelSize": $label_size, "rateId": $rate_id, "returnTo": $return_to, "shippingQuoteId": $shipping_quote_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-# This method retrieves the shipment details for the specified shipment ID. Call <b>createFromShippingQuote</b> to generate a shipment ID.
+# This method retrieves the shipment details for the specified shipment ID. Call createFromShippingQuote to generate a shipment ID.
 #
 # GET /shipment/{shipmentId}
 # operationId: getShipment
@@ -139,13 +148,13 @@ export def "shipment get" [
 ]: nothing -> record<cancellation: record<cancellationRequestedDate: string, cancellationStatus: string>, creationDate: string, labelCustomMessage: string, labelDownloadUrl: string, labelSize: string, orders: table<channel: string, orderId: string>, packageSpecification: record<dimensions: record<height: string, length: string, unit: string, width: string>, weight: record<unit: string, value: string>>, rate: record<additionalOptions: list<record>, baseShippingCost: record<currency: string, value: string>, destinationTimeZone: string, maxEstimatedDeliveryDate: string, minEstimatedDeliveryDate: string, pickupNetworks: list<string>, pickupSlotId: string, pickupType: string, rateId: string, shippingCarrierCode: string, shippingCarrierName: string, shippingQuoteId: string, shippingServiceCode: string, shippingServiceName: string, totalShippingCost: record<currency: string, value: string>>, returnTo: record<companyName: string, contactAddress: record<addressLine1: string, addressLine2: string, city: string, countryCode: string, county: string, postalCode: string, stateOrProvince: string>, fullName: string, primaryPhone: record<phoneNumber: string>>, shipFrom: record<companyName: string, contactAddress: record<addressLine1: string, addressLine2: string, city: string, countryCode: string, county: string, postalCode: string, stateOrProvince: string>, fullName: string, primaryPhone: record<phoneNumber: string>>, shipTo: record<companyName: string, contactAddress: record<addressLine1: string, addressLine2: string, city: string, countryCode: string, county: string, postalCode: string, stateOrProvince: string>, fullName: string, primaryPhone: record<phoneNumber: string>>, shipmentId: string, shipmentTrackingNumber: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({shipment_id: $shipment_id} | format pattern "/shipment/{shipment_id}"))
+  let full_url = (build-url $base ({shipment_id: (encode-path-segment $shipment_id)} | format pattern "/shipment/{shipment_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# This method cancels the shipment associated with the specified shipment ID and the associated shipping label is deleted. When you cancel a shipment, the <b>totalShippingCost</b> of the canceled shipment is refunded to the account established by the user's billing agreement.  <br><br>Note that you cannot cancel a shipment if you have used the associated shipping label.
+# This method cancels the shipment associated with the specified shipment ID and the associated shipping label is deleted. When you cancel a shipment, the totalShippingCost of the canceled shipment is refunded to the account established by the user's billing agreement. Note that you cannot cancel a shipment if you have used the associated shipping label.
 #
 # POST /shipment/{shipmentId}/cancel
 # operationId: cancelShipment
@@ -162,13 +171,13 @@ export def "shipment-cancel cancel" [
 ]: nothing -> record<cancellation: record<cancellationRequestedDate: string, cancellationStatus: string>, creationDate: string, labelCustomMessage: string, labelDownloadUrl: string, labelSize: string, orders: table<channel: string, orderId: string>, packageSpecification: record<dimensions: record<height: string, length: string, unit: string, width: string>, weight: record<unit: string, value: string>>, rate: record<additionalOptions: list<record>, baseShippingCost: record<currency: string, value: string>, destinationTimeZone: string, maxEstimatedDeliveryDate: string, minEstimatedDeliveryDate: string, pickupNetworks: list<string>, pickupSlotId: string, pickupType: string, rateId: string, shippingCarrierCode: string, shippingCarrierName: string, shippingQuoteId: string, shippingServiceCode: string, shippingServiceName: string, totalShippingCost: record<currency: string, value: string>>, returnTo: record<companyName: string, contactAddress: record<addressLine1: string, addressLine2: string, city: string, countryCode: string, county: string, postalCode: string, stateOrProvince: string>, fullName: string, primaryPhone: record<phoneNumber: string>>, shipFrom: record<companyName: string, contactAddress: record<addressLine1: string, addressLine2: string, city: string, countryCode: string, county: string, postalCode: string, stateOrProvince: string>, fullName: string, primaryPhone: record<phoneNumber: string>>, shipTo: record<companyName: string, contactAddress: record<addressLine1: string, addressLine2: string, city: string, countryCode: string, county: string, postalCode: string, stateOrProvince: string>, fullName: string, primaryPhone: record<phoneNumber: string>>, shipmentId: string, shipmentTrackingNumber: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({shipment_id: $shipment_id} | format pattern "/shipment/{shipment_id}/cancel"))
+  let full_url = (build-url $base ({shipment_id: (encode-path-segment $shipment_id)} | format pattern "/shipment/{shipment_id}/cancel"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# This method returns the shipping label file that was generated for the <b>shipmentId</b> value specified in the request. Call <b>createFromShippingQuote</b> to generate a shipment ID.  <br><br>Use the <code>Accept</code> HTTP header to specify the format of the returned file. The default file format is a PDF file. <!-- Are other options available? -->
+# This method returns the shipping label file that was generated for the shipmentId value specified in the request. Call createFromShippingQuote to generate a shipment ID. Use the Accept HTTP header to specify the format of the returned file. The default file format is a PDF file.
 #
 # GET /shipment/{shipmentId}/download_label_file
 # operationId: downloadLabelFile
@@ -185,13 +194,13 @@ export def "shipment-download-label-file download" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({shipment_id: $shipment_id} | format pattern "/shipment/{shipment_id}/download_label_file"))
+  let full_url = (build-url $base ({shipment_id: (encode-path-segment $shipment_id)} | format pattern "/shipment/{shipment_id}/download_label_file"))
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# The <b>createShippingQuote</b> method returns a <i>shipping quote </i> that contains a list of live "rates."  <br><br>Each rate represents an offer made by a shipping carrier for a specific service and each offer has a live quote for the base service cost. Rates have a time window in which they are "live," and rates expire when their purchase window ends. If offered by the carrier, rates can include shipping options (and their associated prices), and users can add any offered shipping option to the base service should they desire.  Also, depending on the services required, rates can also include pickup and delivery windows.  <br><br>Each rate is for a single package and is based on the following information: <ul><li>The shipping origin</li> <li>The shipping destination</li> <li>The package size (weight and dimensions)</li></ul>  Rates are identified by a unique eBay-assigned <b>rateId</b> and rates are based on price points, pickup and delivery time frames, and other user requirements. Because each rate offered must be compliant with the eBay shipping program, all rates reflect eBay-negotiated prices.  <br><br>The various rates returned in a shipping quote offer the user a choice from which they can choose a shipping service that best fits their needs. Select the rate for your shipment and using the associated <b>rateId</b>, call <b>createFromShippingQuote</b> to create a shipment and generate a shipping label that you can use to ship the package.
+# The createShippingQuote method returns a shipping quote that contains a list of live "rates." Each rate represents an offer made by a shipping carrier for a specific service and each offer has a live quote for the base service cost. Rates have a time window in which they are "live," and rates expire when their purchase window ends. If offered by the carrier, rates can include shipping options (and their associated prices), and users can add any offered shipping option to the base service should they desire. Also, depending on the services required, rates can also include pickup and delivery windows. Each rate is for a single package and is based on the following information: The shipping origin The shipping destination The package size (weight and dimensions) Rates are identified by a unique eBay-assigned rateId and rates are based on price points, pickup and delivery time frames, and other user requirements. Because each rate offered must be compliant with the eBay shipping program, all rates reflect eBay-negotiated prices. The various rates returned in a shipping quote offer the user a choice from which they can choose a shipping service that best fits their needs. Select the rate for your shipment and using the associated rateId, call createFromShippingQuote to create a shipment and generate a shipping label that you can use to ship the package.
 #
 # POST /shipping_quote
 # operationId: createShippingQuote
@@ -208,8 +217,8 @@ export def "shipping-quote create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-ebay-c-marketplace-id: string # This header parameter specifies the eBay marketplace for the shipping quote that is being created. For a list of valid values, refer to the section <a href="/api-docs/static/rest-request-components.html#marketpl" target="_blank">Marketplace ID Values</a> in the <b>Using eBay RESTful APIs</b> guide.
-  --orders: list # A seller-defined list that contains information about the orders in the package. This allows sellers to include information about the line items in the package with the shipment information.  <br><br>A package can contain any number of line items from one or more orders, providing they all ship in the same package.  <br><br><b>Maximum list size:</b> 10 — item shape: {channel?: string, orderId?: string}
+  --x-ebay-c-marketplace-id: string # This header parameter specifies the eBay marketplace for the shipping quote that is being created. For a list of valid values, refer to the section Marketplace ID Values (/api-docs/static/rest-request-components.html#marketpl) in the Using eBay RESTful APIs guide.
+  --orders: list # A seller-defined list that contains information about the orders in the package. This allows sellers to include information about the line items in the package with the shipment information. A package can contain any number of line items from one or more orders, providing they all ship in the same package. Maximum list size: 10 — item shape: {channel?: string, orderId?: string}
   --package-specification: record # This complex type specifies the dimensions and weight of a package. — shape: {dimensions?: record, weight?: record}
   --ship-from: record # This complex type contains contact information for an individual buyer or seller. — shape: {companyName?: string, contactAddress?: record, fullName?: string, primaryPhone?: record}
   --ship-to: record # This complex type contains contact information for an individual buyer or seller. — shape: {companyName?: string, contactAddress?: record, fullName?: string, primaryPhone?: record}
@@ -218,16 +227,16 @@ export def "shipping-quote create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/shipping_quote")
-  let body = {"orders": $orders, "packageSpecification": $package_specification, "shipFrom": $ship_from, "shipTo": $ship_to} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-EBAY-C-MARKETPLACE-ID": $x_ebay_c_marketplace_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"orders": $orders, "packageSpecification": $package_specification, "shipFrom": $ship_from, "shipTo": $ship_to} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-EBAY-C-MARKETPLACE-ID": $x_ebay_c_marketplace_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-# This method retrieves the complete details of the shipping quote associated with the specified <b>shippingQuoteId</b> value.  <br><br>A "shipping quote" pertains to a single specific package and contains a set of shipping "rates" that quote the cost to ship the package by different shipping carriers and services. The quotes are based on the package's origin, destination, and size.  <br><br>Call <b>createShippingQuote</b> to create a <b>shippingQuoteId</b>.
+# This method retrieves the complete details of the shipping quote associated with the specified shippingQuoteId value. A "shipping quote" pertains to a single specific package and contains a set of shipping "rates" that quote the cost to ship the package by different shipping carriers and services. The quotes are based on the package's origin, destination, and size. Call createShippingQuote to create a shippingQuoteId.
 #
 # GET /shipping_quote/{shippingQuoteId}
 # operationId: getShippingQuote
@@ -244,7 +253,7 @@ export def "shipping-quote get" [
 ]: nothing -> record<creationDate: string, expirationDate: string, orders: table<channel: string, orderId: string>, packageSpecification: record<dimensions: record<height: string, length: string, unit: string, width: string>, weight: record<unit: string, value: string>>, rates: table<additionalOptions: list, baseShippingCost: record, destinationTimeZone: string, maxEstimatedDeliveryDate: string, minEstimatedDeliveryDate: string, pickupNetworks: list, pickupSlots: list, pickupType: string, rateId: string, rateRecommendation: list, shippingCarrierCode: string, shippingCarrierName: string, shippingServiceCode: string, shippingServiceName: string>, shipFrom: record<companyName: string, contactAddress: record<addressLine1: string, addressLine2: string, city: string, countryCode: string, county: string, postalCode: string, stateOrProvince: string>, fullName: string, primaryPhone: record<phoneNumber: string>>, shipTo: record<companyName: string, contactAddress: record<addressLine1: string, addressLine2: string, city: string, countryCode: string, county: string, postalCode: string, stateOrProvince: string>, fullName: string, primaryPhone: record<phoneNumber: string>>, shippingQuoteId: string, warnings: table<category: string, domain: string, errorId: int, inputRefIds: list, longMessage: string, message: string, outputRefIds: list, parameters: list, subdomain: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({shipping_quote_id: $shipping_quote_id} | format pattern "/shipping_quote/{shipping_quote_id}"))
+  let full_url = (build-url $base ({shipping_quote_id: (encode-path-segment $shipping_quote_id)} | format pattern "/shipping_quote/{shipping_quote_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

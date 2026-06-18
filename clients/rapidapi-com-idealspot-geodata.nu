@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -107,10 +116,10 @@ export def "data-insights get-available" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/data/insights")
-  let extra_headers = {"X-RapidAPI-Key": $x_rapid_api_key, "X-RapidAPI-Host": $x_rapid_api_host} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-RapidAPI-Key": $x_rapid_api_key, "X-RapidAPI-Host": $x_rapid_api_host} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -118,7 +127,7 @@ export def "data-insights get-available" [
 #
 # GET /data/insights/{insight_id:}
 # operationId: FetchInsightQueryParameters
-export def "data-insights get-insight-query-parameters" [
+export def "data-insights get-list-parameters" [
   insight_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -133,11 +142,11 @@ export def "data-insights get-insight-query-parameters" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({insight_id: $insight_id} | format pattern "/data/insights/{insight_id}"))
-  let extra_headers = {"X-RapidAPI-Key": $x_rapid_api_key, "X-RapidAPI-Host": $x_rapid_api_host} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({insight_id: (encode-path-segment $insight_id)} | format pattern "/data/insights/{insight_id}"))
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-RapidAPI-Key": $x_rapid_api_key, "X-RapidAPI-Host": $x_rapid_api_host} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -163,11 +172,11 @@ export def "data-insights-query list-insightat-location" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "version" $version "scalar") (serialize-qp "location[]" $location "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({insight_id: $insight_id} | format pattern "/data/insights/{insight_id}/query") $qp)
-  let extra_headers = {"X-RapidAPI-Key": $x_rapid_api_key, "X-RapidAPI-Host": $x_rapid_api_host} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({insight_id: (encode-path-segment $insight_id)} | format pattern "/data/insights/{insight_id}/query") $qp)
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-RapidAPI-Key": $x_rapid_api_key, "X-RapidAPI-Host": $x_rapid_api_host} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -192,10 +201,10 @@ export def "geometries-geometry get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "location[]" $location "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/geometries/geometry" $qp)
-  let extra_headers = {"X-RapidAPI-Key": $x_rapid_api_key, "X-RapidAPI-Host": $x_rapid_api_host} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-RapidAPI-Key": $x_rapid_api_key, "X-RapidAPI-Host": $x_rapid_api_host} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -219,11 +228,11 @@ export def "geometries-regions-intersecting get-administrative-regionsusing-lat-
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({latitude: $latitude, longitude: $longitude} | format pattern "/geometries/regions/intersecting/{latitude}/{longitude}"))
-  let extra_headers = {"X-RapidAPI-Key": $x_rapid_api_key, "X-RapidAPI-Host": $x_rapid_api_host} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({latitude: (encode-path-segment $latitude), longitude: (encode-path-segment $longitude)} | format pattern "/geometries/regions/intersecting/{latitude}/{longitude}"))
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-RapidAPI-Key": $x_rapid_api_key, "X-RapidAPI-Host": $x_rapid_api_host} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -231,7 +240,7 @@ export def "geometries-regions-intersecting get-administrative-regionsusing-lat-
 #
 # GET /traffic/counts/{segment_id}
 # operationId: VehicleTrafficCountsforRoadSegment
-export def "traffic-counts get" [
+export def "traffic-counts get-vehicle-countsfor-road" [
   segment_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -246,11 +255,11 @@ export def "traffic-counts get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({segment_id: $segment_id} | format pattern "/traffic/counts/{segment_id}"))
-  let extra_headers = {"X-RapidAPI-Key": $x_rapid_api_key, "X-RapidAPI-Host": $x_rapid_api_host} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({segment_id: (encode-path-segment $segment_id)} | format pattern "/traffic/counts/{segment_id}"))
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-RapidAPI-Key": $x_rapid_api_key, "X-RapidAPI-Host": $x_rapid_api_host} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -258,7 +267,7 @@ export def "traffic-counts get" [
 #
 # GET /traffic/roads/nearest/{latitude}/{longitude}
 # operationId: FetchNearestRoadSegments
-export def "traffic-roads-nearest get-nearest-road-segments" [
+export def "traffic-roads-nearest get-segments" [
   latitude: float
   longitude: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -276,10 +285,10 @@ export def "traffic-roads-nearest get-nearest-road-segments" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "n" $n "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({latitude: $latitude, longitude: $longitude} | format pattern "/traffic/roads/nearest/{latitude}/{longitude}") $qp)
-  let extra_headers = {"X-RapidAPI-Key": $x_rapid_api_key, "X-RapidAPI-Host": $x_rapid_api_host} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({latitude: (encode-path-segment $latitude), longitude: (encode-path-segment $longitude)} | format pattern "/traffic/roads/nearest/{latitude}/{longitude}") $qp)
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-RapidAPI-Key": $x_rapid_api_key, "X-RapidAPI-Host": $x_rapid_api_host} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

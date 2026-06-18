@@ -13,6 +13,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   match $scheme {
     "basic" => { {headers: {Authorization: $"Basic ($token_val)"}, query: ""} }
     "bearer" => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "basic-credentials" => { {headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: ""} }
     "none" => { {headers: {}, query: ""} }
     _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
   }
@@ -34,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
     "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
     _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -64,7 +74,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 }
 
 def base-url-completer [] { ["https://api.surevoip.co.uk" "https://sandbox.surevoip.co.uk"] }
-def auth-scheme-completer [] { ["basic" "bearer"] }
+def auth-scheme-completer [] { ["basic" "bearer" "basic-credentials"] }
 
 # Completers for enum parameters
 def hypermedia-completer [] { ["no" "yes"] }
@@ -132,7 +142,7 @@ export def "announcements get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> record<status: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/announcements")
@@ -144,7 +154,7 @@ export def "announcements get" [
 # Add a new announcement audio file
 #
 # POST /announcements
-export def "announcements post" [
+export def "announcements create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -160,11 +170,12 @@ export def "announcements post" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/announcements")
-  let body = {"description": $description, "file": $file} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"description": $description, "file": $file} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body [])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # List areacodes
@@ -222,7 +233,7 @@ export def "calls get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --validate: int # Validate a phone number by calling it for one ring. Note; not 100% proof the number is in service. (e.g. 441224900123)
-]: nothing -> any {
+]: nothing -> record<status: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "validate" $validate "scalar")] | flatten | str join "&"
@@ -236,7 +247,7 @@ export def "calls get" [
 #
 # POST /calls
 # --options shape: {a_leg_caller_id?: string, a_leg_only?: int, cancel_key?: int, connect_key?: int, play_audio?: list}
-export def "calls post" [
+export def "calls create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -245,12 +256,12 @@ export def "calls post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --announcement-at: string # is in seconds. Just take 120 secs away from the hangup_at time for a announcement to be played 2 mins before the end of the call. If provided announcement_id is required  (e.g. 180)
-  --announcement-id: string # is the announcement id (from https://api.surevoip.co.uk/customers/{customer}/announcements/{announcement_id}) to play for example “your call is about to end in 2 mins”. We only allow a wav file, but we may allow "words", which will use SureVoIP provided text to speech. If provided announcement_at is required  (e.g. hgCRVfWB4hGRSEAkICyA)
+  --announcement-at: string # is in seconds. Just take 120 secs away from the hangup_at time for a announcement to be played 2 mins before the end of the call. If provided announcement_id is required (e.g. 180)
+  --announcement-id: string # is the announcement id (from https://api.surevoip.co.uk/customers/{customer}/announcements/{announcement_id}) to play for example “your call is about to end in 2 mins”. We only allow a wav file, but we may allow "words", which will use SureVoIP provided text to speech. If provided announcement_at is required (e.g. hgCRVfWB4hGRSEAkICyA)
   caller_id: string # The caller ID to show the b leg (to). (e.g. 1224900123)
   --body-from: string # The person making the call, i.e the a leg. This person must answer in order for the b leg to be rung (e.g. 442035159999)
-  --hangup-announcement-id: string # the id of a thank you announcement or similar. You can manage these as you would with any RESTful resource at https://api.surevoip.co.uk/announcements and https://api.surevoip.co.uk/customers/{customer}/announcements/{announcement_id}. It will be played at the end of the call at hangup. If provided hangup_at is required.  (e.g. RVfWB4hGRSEAkIXYCyA)
-  --hangup-at: string # length in seconds from when the call is *answered* to when the system hangs up. If "hangup_announcement_id" is present, this will be played at hangup  (e.g. 300)
+  --hangup-announcement-id: string # the id of a thank you announcement or similar. You can manage these as you would with any RESTful resource at https://api.surevoip.co.uk/announcements and https://api.surevoip.co.uk/customers/{customer}/announcements/{announcement_id}. It will be played at the end of the call at hangup. If provided hangup_at is required. (e.g. RVfWB4hGRSEAkIXYCyA)
+  --hangup-at: string # length in seconds from when the call is *answered* to when the system hangs up. If "hangup_announcement_id" is present, this will be played at hangup (e.g. 300)
   --options: record # shape: {a_leg_caller_id?: string, a_leg_only?: int, cancel_key?: int, connect_key?: int, play_audio?: list}
   --body-to: string # The b leg of the call, i.e. the person you are calling (e.g. 442035159995)
 ]: any -> record<Call: string, Location: string> {
@@ -258,11 +269,11 @@ export def "calls post" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/calls")
-  let body = {"announcement_at": $announcement_at, "announcement_id": $announcement_id, "caller_id": $caller_id, "from": $body_from, "hangup_announcement_id": $hangup_announcement_id, "hangup_at": $hangup_at, "options": $options, "to": $body_to} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"announcement_at": $announcement_at, "announcement_id": $announcement_id, "caller_id": $caller_id, "from": $body_from, "hangup_announcement_id": $hangup_announcement_id, "hangup_at": $hangup_at, "options": $options, "to": $body_to} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List charges
@@ -289,7 +300,7 @@ export def "charges get" [
 # Create charges for invoices
 #
 # POST /charges
-export def "charges post" [
+export def "charges create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -366,7 +377,7 @@ export def "customers get" [
 ]: nothing -> record<address: string, balance: int, city: string, company_name: string, company_website: string, country: string, creditlimit: string, email: string, fax: string, firstname: string, lastname: string, phone: string, postcode: string, state: string, username: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({account: $account} | format pattern "/customers/{account}"))
+  let full_url = (build-url $base ({account: (encode-path-segment $account)} | format pattern "/customers/{account}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -385,10 +396,10 @@ export def "customers-announcements list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<list: list<any>> {
+]: nothing -> record<list: table<announcement: record>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({account: $account} | format pattern "/customers/{account}/announcements"))
+  let full_url = (build-url $base ({account: (encode-path-segment $account)} | format pattern "/customers/{account}/announcements"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -411,7 +422,7 @@ export def "customers-announcements delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({account: $account, announcement_id: $announcement_id} | format pattern "/customers/{account}/announcements/{announcement_id}"))
+  let full_url = (build-url $base ({account: (encode-path-segment $account), announcement_id: (encode-path-segment $announcement_id)} | format pattern "/customers/{account}/announcements/{announcement_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -431,10 +442,10 @@ export def "customers-announcements get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<announcement: record<creation_date: string, description: string, file_internal: string, filename: string, id: string, size: int, src_ip_address: string, url: record<download: string, href: string, title: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({account: $account, announcement_id: $announcement_id} | format pattern "/customers/{account}/announcements/{announcement_id}"))
+  let full_url = (build-url $base ({account: (encode-path-segment $account), announcement_id: (encode-path-segment $announcement_id)} | format pattern "/customers/{account}/announcements/{announcement_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -674,7 +685,7 @@ export def "sms get" [
 # Return your POSTed data for testing
 #
 # POST /support/echo
-export def "support-echo post" [
+export def "support-echo create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -690,6 +701,48 @@ export def "support-echo post" [
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Return the IP address from where your API request originated
+#
+# GET /support/ip-address
+export def "support-ip-address get" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/support/ip-address")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# List all Service Status messages
+#
+# GET /support/service-status
+export def "support-service-status get" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/support/service-status")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all account credit topups

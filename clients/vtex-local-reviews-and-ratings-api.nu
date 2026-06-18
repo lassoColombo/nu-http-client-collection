@@ -36,6 +36,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -109,11 +118,11 @@ export def "rating get-product" [
 ]: nothing -> record<average: float, totalCount: float> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({product_id: $product_id} | format pattern "/rating/{product_id}"))
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({product_id: (encode-path-segment $product_id)} | format pattern "/rating/{product_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -121,7 +130,7 @@ export def "rating get-product" [
 #
 # POST /review
 # operationId: SaveReview
-export def "review post" [
+export def "review create-save" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -142,13 +151,15 @@ export def "review post" [
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/review")
-  let body = {"productId": $product_id, "rating": $rating, "reviewerName": $reviewer_name, "text": $text, "title": $title} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"productId": $product_id, "rating": $rating, "reviewerName": $reviewer_name, "text": $text, "title": $title} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Delete Review
@@ -170,11 +181,11 @@ export def "review delete" [
 ]: nothing -> bool {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({review_id: $review_id} | format pattern "/review/{review_id}"))
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({review_id: (encode-path-segment $review_id)} | format pattern "/review/{review_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -197,11 +208,11 @@ export def "review get-reviewby" [
 ]: nothing -> record<approved: bool, id: string, locale: string, location: string, pastReviews: string, productId: string, rating: float, reviewDateTime: string, reviewerName: string, searchDate: string, shopperId: string, sku: string, text: string, title: string, verifiedPurchaser: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({review_id: $review_id} | format pattern "/review/{review_id}"))
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({review_id: (encode-path-segment $review_id)} | format pattern "/review/{review_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -209,7 +220,7 @@ export def "review get-reviewby" [
 #
 # PATCH /review/{reviewId}
 # operationId: EditReview
-export def "review patch" [
+export def "review update-edit" [
   review_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -233,14 +244,16 @@ export def "review patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({review_id: $review_id} | format pattern "/review/{review_id}"))
-  let body = {"locale": $locale, "productId": $product_id, "rating": $rating, "reviewerName": $reviewer_name, "shopperId": $shopper_id, "text": $text, "title": $title, "verifiedPurchaser": $verified_purchaser} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({review_id: (encode-path-segment $review_id)} | format pattern "/review/{review_id}"))
+  let req_body = {"locale": $locale, "productId": $product_id, "rating": $rating, "reviewerName": $reviewer_name, "shopperId": $shopper_id, "text": $text, "title": $title, "verifiedPurchaser": $verified_purchaser} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Delete Multiple Reviews
@@ -264,19 +277,22 @@ export def "reviews delete-multiple" [
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/reviews")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Get a list of Reviews
 #
 # GET /reviews
 # operationId: GetalistofReviews
-export def "reviews get-alistof" [
+export def "reviews get-getalistof" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -298,10 +314,10 @@ export def "reviews get-alistof" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "search_term" $search_term "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "product_id" $product_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/reviews" $qp)
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -309,7 +325,7 @@ export def "reviews get-alistof" [
 #
 # POST /reviews
 # operationId: SaveMultipleReviews
-export def "reviews post" [
+export def "reviews create-save-multiple" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -326,10 +342,13 @@ export def "reviews post" [
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/reviews")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }

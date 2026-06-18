@@ -13,6 +13,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   match $scheme {
     "basic" => { {headers: {Authorization: $"Basic ($token_val)"}, query: ""} }
     "jwt" => { {headers: {Authorization: $"JWT ($token_val)"}, query: ""} }
+    "basic-credentials" => { {headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: ""} }
     "none" => { {headers: {}, query: ""} }
     _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
   }
@@ -34,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
     "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
     _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -64,7 +74,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 }
 
 def base-url-completer [] { ["http://localhost/api/v1"] }
-def auth-scheme-completer [] { ["basic" "jwt"] }
+def auth-scheme-completer [] { ["basic" "jwt" "basic-credentials"] }
 
 # Completers for enum parameters
 def dialect-completer [] { ["escpos" "escposlite" "star" "text"] }
@@ -133,7 +143,7 @@ export def "belege get" [
 ]: nothing -> record<Beleg_Codes: list<string>, Beleg_Typen: list<string>, Belegdaten: record<Beleg_Datum_Uhrzeit: string, Belegnummer: string, Betrag_Brutto: int, Betrag_Netto: int, Betrag_Satz_Besonders_Brutto: int, Betrag_Satz_Besonders_Netto: int, Betrag_Satz_Ermaessigt_1_Brutto: int, Betrag_Satz_Ermaessigt_1_Netto: int, Betrag_Satz_Ermaessigt_2_Brutto: int, Betrag_Satz_Ermaessigt_2_Netto: int, Betrag_Satz_Normal_Brutto: int, Betrag_Satz_Normal_Netto: int, Betrag_Satz_Null_Brutto: int, Betrag_Satz_Null_Netto: int, Externer_Beleg_Belegkreis: string, Externer_Beleg_Bezeichnung: string, Externer_Beleg_Referenz: string, Kassen_ID: string, Kunde: string, Notizen: list<string>, Posten: list<record>, Rabatte: list<record>, Storno: bool, Storno_Beleg_UUID: string, Storno_Text: string, Training: bool, Unternehmen_Adresse1: string, Unternehmen_Adresse2: string, Unternehmen_Fusszeile: string, Unternehmen_ID: string, Unternehmen_ID_Typ: string, Unternehmen_Kopfzeile: string, Unternehmen_Name: string, Unternehmen_Ort: string, Unternehmen_PLZ: string, Zahlungen: list<record>, Zertifikat_Seriennummer: string>, JWS: string, QR: string, QR_Link: string, Registrierkasse_UUID: string, Signaturerstellungseinheit_UUID: string, _href: string, _uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({beleg_uuid: $beleg_uuid} | format pattern "/belege/{beleg_uuid}"))
+  let full_url = (build-url $base ({beleg_uuid: (encode-path-segment $beleg_uuid)} | format pattern "/belege/{beleg_uuid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -157,7 +167,7 @@ export def "export-csv-registrierkassen-belege get" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "before" $before "scalar") (serialize-qp "after" $after "scalar") (serialize-qp "posten" $posten "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({registrierkasse_uuid: $registrierkasse_uuid} | format pattern "/export/csv/registrierkassen/{registrierkasse_uuid}/belege") $qp)
+  let full_url = (build-url $base ({registrierkasse_uuid: (encode-path-segment $registrierkasse_uuid)} | format pattern "/export/csv/registrierkassen/{registrierkasse_uuid}/belege") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -180,7 +190,7 @@ export def "export-dep131-registrierkassen-belege get" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "before" $before "scalar") (serialize-qp "after" $after "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({registrierkasse_uuid: $registrierkasse_uuid} | format pattern "/export/dep131/registrierkassen/{registrierkasse_uuid}/belege") $qp)
+  let full_url = (build-url $base ({registrierkasse_uuid: (encode-path-segment $registrierkasse_uuid)} | format pattern "/export/dep131/registrierkassen/{registrierkasse_uuid}/belege") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -203,7 +213,7 @@ export def "export-dep7-registrierkassen-belege get" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "before" $before "scalar") (serialize-qp "after" $after "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({registrierkasse_uuid: $registrierkasse_uuid} | format pattern "/export/dep7/registrierkassen/{registrierkasse_uuid}/belege") $qp)
+  let full_url = (build-url $base ({registrierkasse_uuid: (encode-path-segment $registrierkasse_uuid)} | format pattern "/export/dep7/registrierkassen/{registrierkasse_uuid}/belege") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -226,7 +236,7 @@ export def "export-gobd-registrierkassen get" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "before" $before "scalar") (serialize-qp "after" $after "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({registrierkasse_uuid: $registrierkasse_uuid} | format pattern "/export/gobd/registrierkassen/{registrierkasse_uuid}") $qp)
+  let full_url = (build-url $base ({registrierkasse_uuid: (encode-path-segment $registrierkasse_uuid)} | format pattern "/export/gobd/registrierkassen/{registrierkasse_uuid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -246,7 +256,7 @@ export def "export-html-belege get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({beleg_uuid: $beleg_uuid} | format pattern "/export/html/belege/{beleg_uuid}"))
+  let full_url = (build-url $base ({beleg_uuid: (encode-path-segment $beleg_uuid)} | format pattern "/export/html/belege/{beleg_uuid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -266,7 +276,7 @@ export def "export-pdf-belege get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({beleg_uuid: $beleg_uuid} | format pattern "/export/pdf/belege/{beleg_uuid}"))
+  let full_url = (build-url $base ({beleg_uuid: (encode-path-segment $beleg_uuid)} | format pattern "/export/pdf/belege/{beleg_uuid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -286,7 +296,7 @@ export def "export-qr-belege get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({beleg_uuid: $beleg_uuid} | format pattern "/export/qr/belege/{beleg_uuid}"))
+  let full_url = (build-url $base ({beleg_uuid: (encode-path-segment $beleg_uuid)} | format pattern "/export/qr/belege/{beleg_uuid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -311,7 +321,7 @@ export def "export-thermal-print-belege get" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "qr" $qr "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "dialect" $dialect "scalar") (serialize-qp "encoding" $encoding "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({beleg_uuid: $beleg_uuid} | format pattern "/export/thermal-print/belege/{beleg_uuid}") $qp)
+  let full_url = (build-url $base ({beleg_uuid: (encode-path-segment $beleg_uuid)} | format pattern "/export/thermal-print/belege/{beleg_uuid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -334,7 +344,7 @@ export def "export-xls-registrierkassen-belege get" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "before" $before "scalar") (serialize-qp "after" $after "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({registrierkasse_uuid: $registrierkasse_uuid} | format pattern "/export/xls/registrierkassen/{registrierkasse_uuid}/belege") $qp)
+  let full_url = (build-url $base ({registrierkasse_uuid: (encode-path-segment $registrierkasse_uuid)} | format pattern "/export/xls/registrierkassen/{registrierkasse_uuid}/belege") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -357,7 +367,7 @@ export def "registrierkassen get-registrierkasse" [
 ]: nothing -> record<Benutzerschluessel: string, Kassen_ID: string, Signaturerstellungseinheit_UUID: string, _href: string, _uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({registrierkasse_uuid: $registrierkasse_uuid} | format pattern "/registrierkassen/{registrierkasse_uuid}"))
+  let full_url = (build-url $base ({registrierkasse_uuid: (encode-path-segment $registrierkasse_uuid)} | format pattern "/registrierkassen/{registrierkasse_uuid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -383,12 +393,12 @@ export def "registrierkassen-abschluss create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({registrierkasse_uuid: $registrierkasse_uuid} | format pattern "/registrierkassen/{registrierkasse_uuid}/abschluss"))
-  let body = {"Abschluss-Beginn-Datum-Uhrzeit": $abschluss_beginn_datum_uhrzeit, "Abschluss-Ende-Datum-Uhrzeit": $abschluss_ende_datum_uhrzeit} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({registrierkasse_uuid: (encode-path-segment $registrierkasse_uuid)} | format pattern "/registrierkassen/{registrierkasse_uuid}/abschluss"))
+  let req_body = {"Abschluss-Beginn-Datum-Uhrzeit": $abschluss_beginn_datum_uhrzeit, "Abschluss-Ende-Datum-Uhrzeit": $abschluss_ende_datum_uhrzeit} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieves the `Beleg` collection from the "Datenerfassungsprotokoll".
@@ -417,7 +427,7 @@ export def "registrierkassen-belege get" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "after" $after "scalar") (serialize-qp "gte" $gte "scalar") (serialize-qp "lte" $lte "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({registrierkasse_uuid: $registrierkasse_uuid} | format pattern "/registrierkassen/{registrierkasse_uuid}/belege") $qp)
+  let full_url = (build-url $base ({registrierkasse_uuid: (encode-path-segment $registrierkasse_uuid)} | format pattern "/registrierkassen/{registrierkasse_uuid}/belege") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -441,7 +451,7 @@ export def "registrierkassen-belege get-beleg" [
 ]: nothing -> record<Beleg_Codes: list<string>, Beleg_Typen: list<string>, Belegdaten: record<Beleg_Datum_Uhrzeit: string, Belegnummer: string, Betrag_Brutto: int, Betrag_Netto: int, Betrag_Satz_Besonders_Brutto: int, Betrag_Satz_Besonders_Netto: int, Betrag_Satz_Ermaessigt_1_Brutto: int, Betrag_Satz_Ermaessigt_1_Netto: int, Betrag_Satz_Ermaessigt_2_Brutto: int, Betrag_Satz_Ermaessigt_2_Netto: int, Betrag_Satz_Normal_Brutto: int, Betrag_Satz_Normal_Netto: int, Betrag_Satz_Null_Brutto: int, Betrag_Satz_Null_Netto: int, Externer_Beleg_Belegkreis: string, Externer_Beleg_Bezeichnung: string, Externer_Beleg_Referenz: string, Kassen_ID: string, Kunde: string, Notizen: list<string>, Posten: list<record>, Rabatte: list<record>, Storno: bool, Storno_Beleg_UUID: string, Storno_Text: string, Training: bool, Unternehmen_Adresse1: string, Unternehmen_Adresse2: string, Unternehmen_Fusszeile: string, Unternehmen_ID: string, Unternehmen_ID_Typ: string, Unternehmen_Kopfzeile: string, Unternehmen_Name: string, Unternehmen_Ort: string, Unternehmen_PLZ: string, Zahlungen: list<record>, Zertifikat_Seriennummer: string>, JWS: string, QR: string, QR_Link: string, Registrierkasse_UUID: string, Signaturerstellungseinheit_UUID: string, _href: string, _uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({registrierkasse_uuid: $registrierkasse_uuid, beleg_uuid: $beleg_uuid} | format pattern "/registrierkassen/{registrierkasse_uuid}/belege/{beleg_uuid}"))
+  let full_url = (build-url $base ({registrierkasse_uuid: (encode-path-segment $registrierkasse_uuid), beleg_uuid: (encode-path-segment $beleg_uuid)} | format pattern "/registrierkassen/{registrierkasse_uuid}/belege/{beleg_uuid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -469,7 +479,7 @@ export def "registrierkassen-belege create-beleg" [
   --externer-beleg-bezeichnung: string
   --externer-beleg-referenz: string
   --kunde: string
-  --notizen: list
+  --notizen: list<string>
   --posten: list # item shape: {Bezeichnung: string, BruttoBetrag: int, Externer-Beleg-Belegkreis?: string, Externer-Beleg-Bezeichnung?: string, Externer-Beleg-Referenz?: string, Menge: int, NettoBetrag: int, Satz: "NORMAL"|"ERMAESSIGT1"|"ERMAESSIGT2"|"BESONDERS"|"NULL"}
   --rabatte: list # item shape: {Betrag-Brutto: int, Betrag-Netto: int, Bezeichnung: string, Satz?: "NORMAL"|"ERMAESSIGT1"|"ERMAESSIGT2"|"BESONDERS"|"NULL"}
   --storno: oneof<nothing, bool> # Storno?
@@ -490,12 +500,12 @@ export def "registrierkassen-belege create-beleg" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({registrierkasse_uuid: $registrierkasse_uuid, beleg_uuid: $beleg_uuid} | format pattern "/registrierkassen/{registrierkasse_uuid}/belege/{beleg_uuid}"))
-  let body = {"Externer-Beleg-Belegkreis": $externer_beleg_belegkreis, "Externer-Beleg-Bezeichnung": $externer_beleg_bezeichnung, "Externer-Beleg-Referenz": $externer_beleg_referenz, "Kunde": $kunde, "Notizen": $notizen, "Posten": $posten, "Rabatte": $rabatte, "Storno": $storno, "Storno-Beleg-UUID": $storno_beleg_uuid, "Storno-Text": $storno_text, "Training": $training, "Unternehmen-Adresse1": $unternehmen_adresse1, "Unternehmen-Adresse2": $unternehmen_adresse2, "Unternehmen-Fusszeile": $unternehmen_fusszeile, "Unternehmen-ID": $unternehmen_id, "Unternehmen-ID-Typ": $unternehmen_id_typ, "Unternehmen-Kopfzeile": $unternehmen_kopfzeile, "Unternehmen-Name": $unternehmen_name, "Unternehmen-Ort": $unternehmen_ort, "Unternehmen-PLZ": $unternehmen_plz, "Zahlungen": $zahlungen} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({registrierkasse_uuid: (encode-path-segment $registrierkasse_uuid), beleg_uuid: (encode-path-segment $beleg_uuid)} | format pattern "/registrierkassen/{registrierkasse_uuid}/belege/{beleg_uuid}"))
+  let req_body = {"Externer-Beleg-Belegkreis": $externer_beleg_belegkreis, "Externer-Beleg-Bezeichnung": $externer_beleg_bezeichnung, "Externer-Beleg-Referenz": $externer_beleg_referenz, "Kunde": $kunde, "Notizen": $notizen, "Posten": $posten, "Rabatte": $rabatte, "Storno": $storno, "Storno-Beleg-UUID": $storno_beleg_uuid, "Storno-Text": $storno_text, "Training": $training, "Unternehmen-Adresse1": $unternehmen_adresse1, "Unternehmen-Adresse2": $unternehmen_adresse2, "Unternehmen-Fusszeile": $unternehmen_fusszeile, "Unternehmen-ID": $unternehmen_id, "Unternehmen-ID-Typ": $unternehmen_id_typ, "Unternehmen-Kopfzeile": $unternehmen_kopfzeile, "Unternehmen-Name": $unternehmen_name, "Unternehmen-Ort": $unternehmen_ort, "Unternehmen-PLZ": $unternehmen_plz, "Zahlungen": $zahlungen} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Generates a DEP file.
@@ -515,7 +525,7 @@ export def "registrierkassen-dep get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({registrierkasse_uuid: $registrierkasse_uuid} | format pattern "/registrierkassen/{registrierkasse_uuid}/dep"))
+  let full_url = (build-url $base ({registrierkasse_uuid: (encode-path-segment $registrierkasse_uuid)} | format pattern "/registrierkassen/{registrierkasse_uuid}/dep"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -541,7 +551,7 @@ export def "registrierkassen-monatsbelege get" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "year" $year "scalar") (serialize-qp "month" $month "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({registrierkasse_uuid: $registrierkasse_uuid} | format pattern "/registrierkassen/{registrierkasse_uuid}/monatsbelege") $qp)
+  let full_url = (build-url $base ({registrierkasse_uuid: (encode-path-segment $registrierkasse_uuid)} | format pattern "/registrierkassen/{registrierkasse_uuid}/monatsbelege") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -69,7 +78,7 @@ def auth-scheme-completer [] { ["query-user_key"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "lat-lon byPoint" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "lat-lon get-by-point" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,7 +102,7 @@ export def commands []: nothing -> table {
 #
 # GET /@{lat},{lon}
 # operationId: byPoint
-export def "lat-lon byPoint" [
+export def "lat-lon get-by-point" [
   lat: float
   lon: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -110,7 +119,7 @@ export def "lat-lon byPoint" [
   let auth = (build-auth $token ($auth_scheme | default "query-user_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "school_search_radius" $school_search_radius "scalar") (serialize-qp "park_search_radius" $park_search_radius "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({lat: $lat, lon: $lon} | format pattern "/@{lat},{lon}") $qp)
+  let full_url = (build-url $base ({lat: (encode-path-segment $lat), lon: (encode-path-segment $lon)} | format pattern "/@{lat},{lon}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -120,7 +129,7 @@ export def "lat-lon byPoint" [
 #
 # GET /postcodes/{postcode}
 # operationId: byPostcode
-export def "postcodes byPostcode" [
+export def "postcodes get" [
   postcode: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -136,7 +145,7 @@ export def "postcodes byPostcode" [
   let auth = (build-auth $token ($auth_scheme | default "query-user_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "school_search_radius" $school_search_radius "scalar") (serialize-qp "park_search_radius" $park_search_radius "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({postcode: $postcode} | format pattern "/postcodes/{postcode}") $qp)
+  let full_url = (build-url $base ({postcode: (encode-path-segment $postcode)} | format pattern "/postcodes/{postcode}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

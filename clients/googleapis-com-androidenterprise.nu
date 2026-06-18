@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -86,7 +95,7 @@ def display-mode-completer [] { ["displayModeUnspecified" "fullScreen" "minimalU
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "androidenterprise-enterprises androidenterpriseenterpriseslist" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "androidenterprise-enterprises list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -110,7 +119,7 @@ export def commands []: nothing -> table {
 #
 # GET /androidenterprise/v1/enterprises
 # operationId: androidenterprise.enterprises.list
-export def "androidenterprise-enterprises androidenterpriseenterpriseslist" [
+export def "androidenterprise-enterprises list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -145,7 +154,7 @@ export def "androidenterprise-enterprises androidenterpriseenterpriseslist" [
 #
 # POST /androidenterprise/v1/enterprises/acknowledgeNotificationSet
 # operationId: androidenterprise.enterprises.acknowledgeNotificationSet
-export def "androidenterprise-enterprises-acknowledge-notification-set androidenterpriseenterprisesacknowledgeNotificationSet" [
+export def "androidenterprise-enterprises-acknowledge-notification-set update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -180,7 +189,7 @@ export def "androidenterprise-enterprises-acknowledge-notification-set androiden
 #
 # POST /androidenterprise/v1/enterprises/completeSignup
 # operationId: androidenterprise.enterprises.completeSignup
-export def "androidenterprise-enterprises-complete-signup androidenterpriseenterprisescompleteSignup" [
+export def "androidenterprise-enterprises-complete-signup complete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -218,7 +227,7 @@ export def "androidenterprise-enterprises-complete-signup androidenterpriseenter
 # operationId: androidenterprise.enterprises.enroll
 # --administrator item shape: {email?: string}
 # --googleAuthenticationSettings shape: {dedicatedDevicesAllowed?: "dedicatedDevicesAllowedUnspecified"|"disallowed"|"allowed", googleAuthenticationRequired?: "googleAuthenticationRequiredUnspecified"|"notRequired"|"required"}
-export def "androidenterprise-enterprises-enroll androidenterpriseenterprisesenroll" [
+export def "androidenterprise-enterprises-enroll create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -250,18 +259,18 @@ export def "androidenterprise-enterprises-enroll androidenterpriseenterprisesenr
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/androidenterprise/v1/enterprises/enroll" $qp)
-  let body = {"administrator": $administrator, "googleAuthenticationSettings": $google_authentication_settings, "id": $id, "name": $name, "primaryDomain": $primary_domain} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"administrator": $administrator, "googleAuthenticationSettings": $google_authentication_settings, "id": $id, "name": $name, "primaryDomain": $primary_domain} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Pulls and returns a notification set for the enterprises associated with the service account authenticated for the request. The notification set may be empty if no notification are pending. A notification set returned needs to be acknowledged within 20 seconds by calling Enterprises.AcknowledgeNotificationSet, unless the notification set is empty. Notifications that are not acknowledged within the 20 seconds will eventually be included again in the response to another PullNotificationSet request, and those that are never acknowledged will ultimately be deleted according to the Google Cloud Platform Pub/Sub system policy. Multiple requests might be performed concurrently to retrieve notifications, in which case the pending notifications (if any) will be split among each caller, if any are pending. If no notifications are present, an empty notification list is returned. Subsequent requests may return more notifications once they become available.
 #
 # POST /androidenterprise/v1/enterprises/pullNotificationSet
 # operationId: androidenterprise.enterprises.pullNotificationSet
-export def "androidenterprise-enterprises-pull-notification-set androidenterpriseenterprisespullNotificationSet" [
+export def "androidenterprise-enterprises-pull-notification-set pull" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -296,7 +305,7 @@ export def "androidenterprise-enterprises-pull-notification-set androidenterpris
 #
 # POST /androidenterprise/v1/enterprises/signupUrl
 # operationId: androidenterprise.enterprises.generateSignupUrl
-export def "androidenterprise-enterprises-signup-url androidenterpriseenterprisesgenerateSignupUrl" [
+export def "androidenterprise-enterprises-signup-url generate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -331,7 +340,7 @@ export def "androidenterprise-enterprises-signup-url androidenterpriseenterprise
 #
 # GET /androidenterprise/v1/enterprises/{enterpriseId}
 # operationId: androidenterprise.enterprises.get
-export def "androidenterprise-enterprises androidenterpriseenterprisesget" [
+export def "androidenterprise-enterprises get" [
   enterprise_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -356,7 +365,7 @@ export def "androidenterprise-enterprises androidenterpriseenterprisesget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({enterprise_id: $enterprise_id} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}") $qp)
+  let full_url = (build-url $base ({enterprise_id: (encode-path-segment $enterprise_id)} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -366,7 +375,7 @@ export def "androidenterprise-enterprises androidenterpriseenterprisesget" [
 #
 # PUT /androidenterprise/v1/enterprises/{enterpriseId}/account
 # operationId: androidenterprise.enterprises.setAccount
-export def "androidenterprise-enterprises-account androidenterpriseenterprisessetAccount" [
+export def "androidenterprise-enterprises-account update" [
   enterprise_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -393,19 +402,19 @@ export def "androidenterprise-enterprises-account androidenterpriseenterprisesse
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({enterprise_id: $enterprise_id} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/account") $qp)
-  let body = {"accountEmail": $account_email} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({enterprise_id: (encode-path-segment $enterprise_id)} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/account") $qp)
+  let req_body = {"accountEmail": $account_email} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns a token for device enrollment. The DPC can encode this token within the QR/NFC/zero-touch enrollment payload or fetch it before calling the on-device API to authenticate the user. The token can be generated for each device or reused across multiple devices.
 #
 # POST /androidenterprise/v1/enterprises/{enterpriseId}/createEnrollmentToken
 # operationId: androidenterprise.enterprises.createEnrollmentToken
-export def "androidenterprise-enterprises-create-enrollment-token androidenterpriseenterprisescreateEnrollmentToken" [
+export def "androidenterprise-enterprises-create-enrollment-token create" [
   enterprise_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -431,7 +440,7 @@ export def "androidenterprise-enterprises-create-enrollment-token androidenterpr
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "deviceType" $device_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({enterprise_id: $enterprise_id} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/createEnrollmentToken") $qp)
+  let full_url = (build-url $base ({enterprise_id: (encode-path-segment $enterprise_id)} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/createEnrollmentToken") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -447,7 +456,7 @@ export def "androidenterprise-enterprises-create-enrollment-token androidenterpr
 # --storeBuilder shape: {enabled?: bool}
 # --webApps shape: {enabled?: bool}
 # --zeroTouch shape: {enabled?: bool}
-export def "androidenterprise-enterprises-create-web-token androidenterpriseenterprisescreateWebToken" [
+export def "androidenterprise-enterprises-create-web-token create" [
   enterprise_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -470,7 +479,7 @@ export def "androidenterprise-enterprises-create-web-token androidenterpriseente
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --managed-configurations: record # shape: {enabled?: bool}
   --parent: string # The URI of the parent frame hosting the iframe. To prevent XSS, the iframe may not be hosted at other URIs. This URI must be https. Use whitespaces to separate multiple parent URIs.
-  --permission: list # Deprecated. Use PlaySearch.approveApps.
+  --permission: list<string> # Deprecated. Use PlaySearch.approveApps.
   --play-search: record # shape: {approveApps?: bool, enabled?: bool}
   --private-apps: record # shape: {enabled?: bool}
   --store-builder: record # shape: {enabled?: bool}
@@ -481,19 +490,19 @@ export def "androidenterprise-enterprises-create-web-token androidenterpriseente
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({enterprise_id: $enterprise_id} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/createWebToken") $qp)
-  let body = {"managedConfigurations": $managed_configurations, "parent": $parent, "permission": $permission, "playSearch": $play_search, "privateApps": $private_apps, "storeBuilder": $store_builder, "webApps": $web_apps, "zeroTouch": $zero_touch} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({enterprise_id: (encode-path-segment $enterprise_id)} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/createWebToken") $qp)
+  let req_body = {"managedConfigurations": $managed_configurations, "parent": $parent, "permission": $permission, "playSearch": $play_search, "privateApps": $private_apps, "storeBuilder": $store_builder, "webApps": $web_apps, "zeroTouch": $zero_touch} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieves IDs of all products for which the enterprise has a group license. **Note:** This item has been deprecated. New integrations cannot use this method and can refer to our new recommendations.
 #
 # GET /androidenterprise/v1/enterprises/{enterpriseId}/groupLicenses
 # operationId: androidenterprise.grouplicenses.list
-export def "androidenterprise-enterprises-group-licenses androidenterprisegrouplicenseslist" [
+export def "androidenterprise-enterprises-group-licenses list" [
   enterprise_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -518,7 +527,7 @@ export def "androidenterprise-enterprises-group-licenses androidenterprisegroupl
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({enterprise_id: $enterprise_id} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/groupLicenses") $qp)
+  let full_url = (build-url $base ({enterprise_id: (encode-path-segment $enterprise_id)} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/groupLicenses") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -528,7 +537,7 @@ export def "androidenterprise-enterprises-group-licenses androidenterprisegroupl
 #
 # GET /androidenterprise/v1/enterprises/{enterpriseId}/groupLicenses/{groupLicenseId}
 # operationId: androidenterprise.grouplicenses.get
-export def "androidenterprise-enterprises-group-licenses androidenterprisegrouplicensesget" [
+export def "androidenterprise-enterprises-group-licenses get" [
   enterprise_id: string
   group_license_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -554,7 +563,7 @@ export def "androidenterprise-enterprises-group-licenses androidenterprisegroupl
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({enterprise_id: $enterprise_id, group_license_id: $group_license_id} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/groupLicenses/{group_license_id}") $qp)
+  let full_url = (build-url $base ({enterprise_id: (encode-path-segment $enterprise_id), group_license_id: (encode-path-segment $group_license_id)} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/groupLicenses/{group_license_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -564,7 +573,7 @@ export def "androidenterprise-enterprises-group-licenses androidenterprisegroupl
 #
 # GET /androidenterprise/v1/enterprises/{enterpriseId}/groupLicenses/{groupLicenseId}/users
 # operationId: androidenterprise.grouplicenseusers.list
-export def "androidenterprise-enterprises-group-licenses-users androidenterprisegrouplicenseuserslist" [
+export def "androidenterprise-enterprises-group-licenses-users list" [
   enterprise_id: string
   group_license_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -590,17 +599,17 @@ export def "androidenterprise-enterprises-group-licenses-users androidenterprise
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({enterprise_id: $enterprise_id, group_license_id: $group_license_id} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/groupLicenses/{group_license_id}/users") $qp)
+  let full_url = (build-url $base ({enterprise_id: (encode-path-segment $enterprise_id), group_license_id: (encode-path-segment $group_license_id)} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/groupLicenses/{group_license_id}/users") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Finds approved products that match a query, or all approved products if there is no query. **Note:** This item has been deprecated. New integrations cannot use this method and can refer to our new recommendations. 
+# Finds approved products that match a query, or all approved products if there is no query. **Note:** This item has been deprecated. New integrations cannot use this method and can refer to our new recommendations.
 #
 # GET /androidenterprise/v1/enterprises/{enterpriseId}/products
 # operationId: androidenterprise.products.list
-export def "androidenterprise-enterprises-products androidenterpriseproductslist" [
+export def "androidenterprise-enterprises-products list" [
   enterprise_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -630,7 +639,7 @@ export def "androidenterprise-enterprises-products androidenterpriseproductslist
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "approved" $approved "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({enterprise_id: $enterprise_id} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/products") $qp)
+  let full_url = (build-url $base ({enterprise_id: (encode-path-segment $enterprise_id)} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/products") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -640,7 +649,7 @@ export def "androidenterprise-enterprises-products androidenterpriseproductslist
 #
 # GET /androidenterprise/v1/enterprises/{enterpriseId}/products/{productId}
 # operationId: androidenterprise.products.get
-export def "androidenterprise-enterprises-products androidenterpriseproductsget" [
+export def "androidenterprise-enterprises-products get" [
   enterprise_id: string
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -667,7 +676,7 @@ export def "androidenterprise-enterprises-products androidenterpriseproductsget"
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({enterprise_id: $enterprise_id, product_id: $product_id} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/products/{product_id}") $qp)
+  let full_url = (build-url $base ({enterprise_id: (encode-path-segment $enterprise_id), product_id: (encode-path-segment $product_id)} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/products/{product_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -677,7 +686,7 @@ export def "androidenterprise-enterprises-products androidenterpriseproductsget"
 #
 # GET /androidenterprise/v1/enterprises/{enterpriseId}/products/{productId}/appRestrictionsSchema
 # operationId: androidenterprise.products.getAppRestrictionsSchema
-export def "androidenterprise-enterprises-products-app-restrictions-schema androidenterpriseproductsgetAppRestrictionsSchema" [
+export def "androidenterprise-enterprises-products-app-restrictions-schema get" [
   enterprise_id: string
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -704,18 +713,18 @@ export def "androidenterprise-enterprises-products-app-restrictions-schema andro
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({enterprise_id: $enterprise_id, product_id: $product_id} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/products/{product_id}/appRestrictionsSchema") $qp)
+  let full_url = (build-url $base ({enterprise_id: (encode-path-segment $enterprise_id), product_id: (encode-path-segment $product_id)} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/products/{product_id}/appRestrictionsSchema") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-#  Approves the specified product and the relevant app permissions, if any. The maximum number of products that you can approve per enterprise customer is 1,000. To learn how to use managed Google Play to design and create a store layout to display approved products to your users, see Store Layout Design. **Note:** This item has been deprecated. New integrations cannot use this method and can refer to our new recommendations. 
+# Approves the specified product and the relevant app permissions, if any. The maximum number of products that you can approve per enterprise customer is 1,000. To learn how to use managed Google Play to design and create a store layout to display approved products to your users, see Store Layout Design. **Note:** This item has been deprecated. New integrations cannot use this method and can refer to our new recommendations.
 #
 # POST /androidenterprise/v1/enterprises/{enterpriseId}/products/{productId}/approve
 # operationId: androidenterprise.products.approve
 # --approvalUrlInfo shape: {approvalUrl?: string}
-export def "androidenterprise-enterprises-products-approve androidenterpriseproductsapprove" [
+export def "androidenterprise-enterprises-products-approve approve" [
   enterprise_id: string
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -744,19 +753,19 @@ export def "androidenterprise-enterprises-products-approve androidenterpriseprod
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({enterprise_id: $enterprise_id, product_id: $product_id} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/products/{product_id}/approve") $qp)
-  let body = {"approvalUrlInfo": $approval_url_info, "approvedPermissions": $approved_permissions} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({enterprise_id: (encode-path-segment $enterprise_id), product_id: (encode-path-segment $product_id)} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/products/{product_id}/approve") $qp)
+  let req_body = {"approvalUrlInfo": $approval_url_info, "approvedPermissions": $approved_permissions} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-# Generates a URL that can be rendered in an iframe to display the permissions (if any) of a product. An enterprise admin must view these permissions and accept them on behalf of their organization in order to approve that product. Admins should accept the displayed permissions by interacting with a separate UI element in the EMM console, which in turn should trigger the use of this URL as the approvalUrlInfo.approvalUrl property in a Products.approve call to approve the product. This URL can only be used to display permissions for up to 1 day. **Note:** This item has been deprecated. New integrations cannot use this method and can refer to our new recommendations. 
+# Generates a URL that can be rendered in an iframe to display the permissions (if any) of a product. An enterprise admin must view these permissions and accept them on behalf of their organization in order to approve that product. Admins should accept the displayed permissions by interacting with a separate UI element in the EMM console, which in turn should trigger the use of this URL as the approvalUrlInfo.approvalUrl property in a Products.approve call to approve the product. This URL can only be used to display permissions for up to 1 day. **Note:** This item has been deprecated. New integrations cannot use this method and can refer to our new recommendations.
 #
 # POST /androidenterprise/v1/enterprises/{enterpriseId}/products/{productId}/generateApprovalUrl
 # operationId: androidenterprise.products.generateApprovalUrl
-export def "androidenterprise-enterprises-products-generate-approval-url androidenterpriseproductsgenerateApprovalUrl" [
+export def "androidenterprise-enterprises-products-generate-approval-url generate" [
   enterprise_id: string
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -783,7 +792,7 @@ export def "androidenterprise-enterprises-products-generate-approval-url android
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "languageCode" $language_code "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({enterprise_id: $enterprise_id, product_id: $product_id} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/products/{product_id}/generateApprovalUrl") $qp)
+  let full_url = (build-url $base ({enterprise_id: (encode-path-segment $enterprise_id), product_id: (encode-path-segment $product_id)} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/products/{product_id}/generateApprovalUrl") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -793,7 +802,7 @@ export def "androidenterprise-enterprises-products-generate-approval-url android
 #
 # GET /androidenterprise/v1/enterprises/{enterpriseId}/products/{productId}/managedConfigurationsSettings
 # operationId: androidenterprise.managedconfigurationssettings.list
-export def "androidenterprise-enterprises-products-managed-configurations-settings androidenterprisemanagedconfigurationssettingslist" [
+export def "androidenterprise-enterprises-products-managed-configurations-settings list" [
   enterprise_id: string
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -819,7 +828,7 @@ export def "androidenterprise-enterprises-products-managed-configurations-settin
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({enterprise_id: $enterprise_id, product_id: $product_id} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/products/{product_id}/managedConfigurationsSettings") $qp)
+  let full_url = (build-url $base ({enterprise_id: (encode-path-segment $enterprise_id), product_id: (encode-path-segment $product_id)} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/products/{product_id}/managedConfigurationsSettings") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -829,7 +838,7 @@ export def "androidenterprise-enterprises-products-managed-configurations-settin
 #
 # GET /androidenterprise/v1/enterprises/{enterpriseId}/products/{productId}/permissions
 # operationId: androidenterprise.products.getPermissions
-export def "androidenterprise-enterprises-products-permissions androidenterpriseproductsgetPermissions" [
+export def "androidenterprise-enterprises-products-permissions get" [
   enterprise_id: string
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -855,7 +864,7 @@ export def "androidenterprise-enterprises-products-permissions androidenterprise
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({enterprise_id: $enterprise_id, product_id: $product_id} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/products/{product_id}/permissions") $qp)
+  let full_url = (build-url $base ({enterprise_id: (encode-path-segment $enterprise_id), product_id: (encode-path-segment $product_id)} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/products/{product_id}/permissions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -865,7 +874,7 @@ export def "androidenterprise-enterprises-products-permissions androidenterprise
 #
 # POST /androidenterprise/v1/enterprises/{enterpriseId}/products/{productId}/unapprove
 # operationId: androidenterprise.products.unapprove
-export def "androidenterprise-enterprises-products-unapprove androidenterpriseproductsunapprove" [
+export def "androidenterprise-enterprises-products-unapprove create" [
   enterprise_id: string
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -891,7 +900,7 @@ export def "androidenterprise-enterprises-products-unapprove androidenterprisepr
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({enterprise_id: $enterprise_id, product_id: $product_id} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/products/{product_id}/unapprove") $qp)
+  let full_url = (build-url $base ({enterprise_id: (encode-path-segment $enterprise_id), product_id: (encode-path-segment $product_id)} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/products/{product_id}/unapprove") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -901,7 +910,7 @@ export def "androidenterprise-enterprises-products-unapprove androidenterprisepr
 #
 # POST /androidenterprise/v1/enterprises/{enterpriseId}/sendTestPushNotification
 # operationId: androidenterprise.enterprises.sendTestPushNotification
-export def "androidenterprise-enterprises-send-test-push-notification androidenterpriseenterprisessendTestPushNotification" [
+export def "androidenterprise-enterprises-send-test-push-notification send" [
   enterprise_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -926,7 +935,7 @@ export def "androidenterprise-enterprises-send-test-push-notification androident
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({enterprise_id: $enterprise_id} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/sendTestPushNotification") $qp)
+  let full_url = (build-url $base ({enterprise_id: (encode-path-segment $enterprise_id)} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/sendTestPushNotification") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -936,7 +945,7 @@ export def "androidenterprise-enterprises-send-test-push-notification androident
 #
 # GET /androidenterprise/v1/enterprises/{enterpriseId}/serviceAccount
 # operationId: androidenterprise.enterprises.getServiceAccount
-export def "androidenterprise-enterprises-service-account androidenterpriseenterprisesgetServiceAccount" [
+export def "androidenterprise-enterprises-service-account get" [
   enterprise_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -962,7 +971,7 @@ export def "androidenterprise-enterprises-service-account androidenterpriseenter
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "keyType" $key_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({enterprise_id: $enterprise_id} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/serviceAccount") $qp)
+  let full_url = (build-url $base ({enterprise_id: (encode-path-segment $enterprise_id)} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/serviceAccount") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -972,7 +981,7 @@ export def "androidenterprise-enterprises-service-account androidenterpriseenter
 #
 # GET /androidenterprise/v1/enterprises/{enterpriseId}/serviceAccountKeys
 # operationId: androidenterprise.serviceaccountkeys.list
-export def "androidenterprise-enterprises-service-account-keys androidenterpriseserviceaccountkeyslist" [
+export def "androidenterprise-enterprises-service-account-keys list" [
   enterprise_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -997,7 +1006,7 @@ export def "androidenterprise-enterprises-service-account-keys androidenterprise
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({enterprise_id: $enterprise_id} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/serviceAccountKeys") $qp)
+  let full_url = (build-url $base ({enterprise_id: (encode-path-segment $enterprise_id)} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/serviceAccountKeys") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1007,7 +1016,7 @@ export def "androidenterprise-enterprises-service-account-keys androidenterprise
 #
 # POST /androidenterprise/v1/enterprises/{enterpriseId}/serviceAccountKeys
 # operationId: androidenterprise.serviceaccountkeys.insert
-export def "androidenterprise-enterprises-service-account-keys androidenterpriseserviceaccountkeysinsert" [
+export def "androidenterprise-enterprises-service-account-keys create" [
   enterprise_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1037,19 +1046,19 @@ export def "androidenterprise-enterprises-service-account-keys androidenterprise
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({enterprise_id: $enterprise_id} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/serviceAccountKeys") $qp)
-  let body = {"data": $data, "id": $id, "publicData": $public_data, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({enterprise_id: (encode-path-segment $enterprise_id)} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/serviceAccountKeys") $qp)
+  let req_body = {"data": $data, "id": $id, "publicData": $public_data, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Removes and invalidates the specified credentials for the service account associated with this enterprise. The calling service account must have been retrieved by calling Enterprises.GetServiceAccount and must have been set as the enterprise service account by calling Enterprises.SetAccount.
 #
 # DELETE /androidenterprise/v1/enterprises/{enterpriseId}/serviceAccountKeys/{keyId}
 # operationId: androidenterprise.serviceaccountkeys.delete
-export def "androidenterprise-enterprises-service-account-keys androidenterpriseserviceaccountkeysdelete" [
+export def "androidenterprise-enterprises-service-account-keys delete" [
   enterprise_id: string
   key_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1075,7 +1084,7 @@ export def "androidenterprise-enterprises-service-account-keys androidenterprise
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({enterprise_id: $enterprise_id, key_id: $key_id} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/serviceAccountKeys/{key_id}") $qp)
+  let full_url = (build-url $base ({enterprise_id: (encode-path-segment $enterprise_id), key_id: (encode-path-segment $key_id)} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/serviceAccountKeys/{key_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1085,7 +1094,7 @@ export def "androidenterprise-enterprises-service-account-keys androidenterprise
 #
 # GET /androidenterprise/v1/enterprises/{enterpriseId}/storeLayout
 # operationId: androidenterprise.enterprises.getStoreLayout
-export def "androidenterprise-enterprises-store-layout androidenterpriseenterprisesgetStoreLayout" [
+export def "androidenterprise-enterprises-store-layout get" [
   enterprise_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1110,7 +1119,7 @@ export def "androidenterprise-enterprises-store-layout androidenterpriseenterpri
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({enterprise_id: $enterprise_id} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/storeLayout") $qp)
+  let full_url = (build-url $base ({enterprise_id: (encode-path-segment $enterprise_id)} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/storeLayout") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1120,7 +1129,7 @@ export def "androidenterprise-enterprises-store-layout androidenterpriseenterpri
 #
 # PUT /androidenterprise/v1/enterprises/{enterpriseId}/storeLayout
 # operationId: androidenterprise.enterprises.setStoreLayout
-export def "androidenterprise-enterprises-store-layout androidenterpriseenterprisessetStoreLayout" [
+export def "androidenterprise-enterprises-store-layout update" [
   enterprise_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1148,19 +1157,19 @@ export def "androidenterprise-enterprises-store-layout androidenterpriseenterpri
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({enterprise_id: $enterprise_id} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/storeLayout") $qp)
-  let body = {"homepageId": $homepage_id, "storeLayoutType": $store_layout_type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({enterprise_id: (encode-path-segment $enterprise_id)} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/storeLayout") $qp)
+  let req_body = {"homepageId": $homepage_id, "storeLayoutType": $store_layout_type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieves the details of all pages in the store.
 #
 # GET /androidenterprise/v1/enterprises/{enterpriseId}/storeLayout/pages
 # operationId: androidenterprise.storelayoutpages.list
-export def "androidenterprise-enterprises-store-layout-pages androidenterprisestorelayoutpageslist" [
+export def "androidenterprise-enterprises-store-layout-pages list" [
   enterprise_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1185,7 +1194,7 @@ export def "androidenterprise-enterprises-store-layout-pages androidenterprisest
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({enterprise_id: $enterprise_id} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/storeLayout/pages") $qp)
+  let full_url = (build-url $base ({enterprise_id: (encode-path-segment $enterprise_id)} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/storeLayout/pages") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1196,7 +1205,7 @@ export def "androidenterprise-enterprises-store-layout-pages androidenterprisest
 # POST /androidenterprise/v1/enterprises/{enterpriseId}/storeLayout/pages
 # operationId: androidenterprise.storelayoutpages.insert
 # --name item shape: {locale?: string, text?: string}
-export def "androidenterprise-enterprises-store-layout-pages androidenterprisestorelayoutpagesinsert" [
+export def "androidenterprise-enterprises-store-layout-pages create" [
   enterprise_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1218,26 +1227,26 @@ export def "androidenterprise-enterprises-store-layout-pages androidenterprisest
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --id: string # Unique ID of this page. Assigned by the server. Immutable once assigned.
-  --link: list # Ordered list of pages a user should be able to reach from this page. The list can't include this page. It is recommended that the basic pages are created first, before adding the links between pages. The API doesn't verify that the pages exist or the pages are reachable.
+  --link: list<string> # Ordered list of pages a user should be able to reach from this page. The list can't include this page. It is recommended that the basic pages are created first, before adding the links between pages. The API doesn't verify that the pages exist or the pages are reachable.
   --name: list # Ordered list of localized strings giving the name of this page. The text displayed is the one that best matches the user locale, or the first entry if there is no good match. There needs to be at least one entry. — item shape: {locale?: string, text?: string}
 ]: any -> record<id: string, link: list<string>, name: table<locale: string, text: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({enterprise_id: $enterprise_id} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/storeLayout/pages") $qp)
-  let body = {"id": $id, "link": $link, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({enterprise_id: (encode-path-segment $enterprise_id)} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/storeLayout/pages") $qp)
+  let req_body = {"id": $id, "link": $link, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes a store page.
 #
 # DELETE /androidenterprise/v1/enterprises/{enterpriseId}/storeLayout/pages/{pageId}
 # operationId: androidenterprise.storelayoutpages.delete
-export def "androidenterprise-enterprises-store-layout-pages androidenterprisestorelayoutpagesdelete" [
+export def "androidenterprise-enterprises-store-layout-pages delete" [
   enterprise_id: string
   page_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1263,7 +1272,7 @@ export def "androidenterprise-enterprises-store-layout-pages androidenterprisest
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({enterprise_id: $enterprise_id, page_id: $page_id} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/storeLayout/pages/{page_id}") $qp)
+  let full_url = (build-url $base ({enterprise_id: (encode-path-segment $enterprise_id), page_id: (encode-path-segment $page_id)} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/storeLayout/pages/{page_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1273,7 +1282,7 @@ export def "androidenterprise-enterprises-store-layout-pages androidenterprisest
 #
 # GET /androidenterprise/v1/enterprises/{enterpriseId}/storeLayout/pages/{pageId}
 # operationId: androidenterprise.storelayoutpages.get
-export def "androidenterprise-enterprises-store-layout-pages androidenterprisestorelayoutpagesget" [
+export def "androidenterprise-enterprises-store-layout-pages get" [
   enterprise_id: string
   page_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1299,7 +1308,7 @@ export def "androidenterprise-enterprises-store-layout-pages androidenterprisest
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({enterprise_id: $enterprise_id, page_id: $page_id} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/storeLayout/pages/{page_id}") $qp)
+  let full_url = (build-url $base ({enterprise_id: (encode-path-segment $enterprise_id), page_id: (encode-path-segment $page_id)} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/storeLayout/pages/{page_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1310,7 +1319,7 @@ export def "androidenterprise-enterprises-store-layout-pages androidenterprisest
 # PUT /androidenterprise/v1/enterprises/{enterpriseId}/storeLayout/pages/{pageId}
 # operationId: androidenterprise.storelayoutpages.update
 # --name item shape: {locale?: string, text?: string}
-export def "androidenterprise-enterprises-store-layout-pages androidenterprisestorelayoutpagesupdate" [
+export def "androidenterprise-enterprises-store-layout-pages update" [
   enterprise_id: string
   page_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1333,26 +1342,26 @@ export def "androidenterprise-enterprises-store-layout-pages androidenterprisest
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --id: string # Unique ID of this page. Assigned by the server. Immutable once assigned.
-  --link: list # Ordered list of pages a user should be able to reach from this page. The list can't include this page. It is recommended that the basic pages are created first, before adding the links between pages. The API doesn't verify that the pages exist or the pages are reachable.
+  --link: list<string> # Ordered list of pages a user should be able to reach from this page. The list can't include this page. It is recommended that the basic pages are created first, before adding the links between pages. The API doesn't verify that the pages exist or the pages are reachable.
   --name: list # Ordered list of localized strings giving the name of this page. The text displayed is the one that best matches the user locale, or the first entry if there is no good match. There needs to be at least one entry. — item shape: {locale?: string, text?: string}
 ]: any -> record<id: string, link: list<string>, name: table<locale: string, text: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({enterprise_id: $enterprise_id, page_id: $page_id} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/storeLayout/pages/{page_id}") $qp)
-  let body = {"id": $id, "link": $link, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({enterprise_id: (encode-path-segment $enterprise_id), page_id: (encode-path-segment $page_id)} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/storeLayout/pages/{page_id}") $qp)
+  let req_body = {"id": $id, "link": $link, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieves the details of all clusters on the specified page.
 #
 # GET /androidenterprise/v1/enterprises/{enterpriseId}/storeLayout/pages/{pageId}/clusters
 # operationId: androidenterprise.storelayoutclusters.list
-export def "androidenterprise-enterprises-store-layout-pages-clusters androidenterprisestorelayoutclusterslist" [
+export def "androidenterprise-enterprises-store-layout-pages-clusters list" [
   enterprise_id: string
   page_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1378,7 +1387,7 @@ export def "androidenterprise-enterprises-store-layout-pages-clusters androident
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({enterprise_id: $enterprise_id, page_id: $page_id} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/storeLayout/pages/{page_id}/clusters") $qp)
+  let full_url = (build-url $base ({enterprise_id: (encode-path-segment $enterprise_id), page_id: (encode-path-segment $page_id)} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/storeLayout/pages/{page_id}/clusters") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1389,7 +1398,7 @@ export def "androidenterprise-enterprises-store-layout-pages-clusters androident
 # POST /androidenterprise/v1/enterprises/{enterpriseId}/storeLayout/pages/{pageId}/clusters
 # operationId: androidenterprise.storelayoutclusters.insert
 # --name item shape: {locale?: string, text?: string}
-export def "androidenterprise-enterprises-store-layout-pages-clusters androidenterprisestorelayoutclustersinsert" [
+export def "androidenterprise-enterprises-store-layout-pages-clusters create" [
   enterprise_id: string
   page_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1414,25 +1423,25 @@ export def "androidenterprise-enterprises-store-layout-pages-clusters androident
   --id: string # Unique ID of this cluster. Assigned by the server. Immutable once assigned.
   --name: list # Ordered list of localized strings giving the name of this page. The text displayed is the one that best matches the user locale, or the first entry if there is no good match. There needs to be at least one entry. — item shape: {locale?: string, text?: string}
   --order-in-page: string # String (US-ASCII only) used to determine order of this cluster within the parent page's elements. Page elements are sorted in lexicographic order of this field. Duplicated values are allowed, but ordering between elements with duplicate order is undefined. The value of this field is never visible to a user, it is used solely for the purpose of defining an ordering. Maximum length is 256 characters.
-  --product-id: list # List of products in the order they are displayed in the cluster. There should not be duplicates within a cluster.
+  --product-id: list<string> # List of products in the order they are displayed in the cluster. There should not be duplicates within a cluster.
 ]: any -> record<id: string, name: table<locale: string, text: string>, orderInPage: string, productId: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({enterprise_id: $enterprise_id, page_id: $page_id} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/storeLayout/pages/{page_id}/clusters") $qp)
-  let body = {"id": $id, "name": $name, "orderInPage": $order_in_page, "productId": $product_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({enterprise_id: (encode-path-segment $enterprise_id), page_id: (encode-path-segment $page_id)} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/storeLayout/pages/{page_id}/clusters") $qp)
+  let req_body = {"id": $id, "name": $name, "orderInPage": $order_in_page, "productId": $product_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes a cluster.
 #
 # DELETE /androidenterprise/v1/enterprises/{enterpriseId}/storeLayout/pages/{pageId}/clusters/{clusterId}
 # operationId: androidenterprise.storelayoutclusters.delete
-export def "androidenterprise-enterprises-store-layout-pages-clusters androidenterprisestorelayoutclustersdelete" [
+export def "androidenterprise-enterprises-store-layout-pages-clusters delete" [
   enterprise_id: string
   page_id: string
   cluster_id: string
@@ -1459,7 +1468,7 @@ export def "androidenterprise-enterprises-store-layout-pages-clusters androident
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({enterprise_id: $enterprise_id, page_id: $page_id, cluster_id: $cluster_id} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/storeLayout/pages/{page_id}/clusters/{cluster_id}") $qp)
+  let full_url = (build-url $base ({enterprise_id: (encode-path-segment $enterprise_id), page_id: (encode-path-segment $page_id), cluster_id: (encode-path-segment $cluster_id)} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/storeLayout/pages/{page_id}/clusters/{cluster_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1469,7 +1478,7 @@ export def "androidenterprise-enterprises-store-layout-pages-clusters androident
 #
 # GET /androidenterprise/v1/enterprises/{enterpriseId}/storeLayout/pages/{pageId}/clusters/{clusterId}
 # operationId: androidenterprise.storelayoutclusters.get
-export def "androidenterprise-enterprises-store-layout-pages-clusters androidenterprisestorelayoutclustersget" [
+export def "androidenterprise-enterprises-store-layout-pages-clusters get" [
   enterprise_id: string
   page_id: string
   cluster_id: string
@@ -1496,7 +1505,7 @@ export def "androidenterprise-enterprises-store-layout-pages-clusters androident
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({enterprise_id: $enterprise_id, page_id: $page_id, cluster_id: $cluster_id} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/storeLayout/pages/{page_id}/clusters/{cluster_id}") $qp)
+  let full_url = (build-url $base ({enterprise_id: (encode-path-segment $enterprise_id), page_id: (encode-path-segment $page_id), cluster_id: (encode-path-segment $cluster_id)} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/storeLayout/pages/{page_id}/clusters/{cluster_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1507,7 +1516,7 @@ export def "androidenterprise-enterprises-store-layout-pages-clusters androident
 # PUT /androidenterprise/v1/enterprises/{enterpriseId}/storeLayout/pages/{pageId}/clusters/{clusterId}
 # operationId: androidenterprise.storelayoutclusters.update
 # --name item shape: {locale?: string, text?: string}
-export def "androidenterprise-enterprises-store-layout-pages-clusters androidenterprisestorelayoutclustersupdate" [
+export def "androidenterprise-enterprises-store-layout-pages-clusters update" [
   enterprise_id: string
   page_id: string
   cluster_id: string
@@ -1533,25 +1542,25 @@ export def "androidenterprise-enterprises-store-layout-pages-clusters androident
   --id: string # Unique ID of this cluster. Assigned by the server. Immutable once assigned.
   --name: list # Ordered list of localized strings giving the name of this page. The text displayed is the one that best matches the user locale, or the first entry if there is no good match. There needs to be at least one entry. — item shape: {locale?: string, text?: string}
   --order-in-page: string # String (US-ASCII only) used to determine order of this cluster within the parent page's elements. Page elements are sorted in lexicographic order of this field. Duplicated values are allowed, but ordering between elements with duplicate order is undefined. The value of this field is never visible to a user, it is used solely for the purpose of defining an ordering. Maximum length is 256 characters.
-  --product-id: list # List of products in the order they are displayed in the cluster. There should not be duplicates within a cluster.
+  --product-id: list<string> # List of products in the order they are displayed in the cluster. There should not be duplicates within a cluster.
 ]: any -> record<id: string, name: table<locale: string, text: string>, orderInPage: string, productId: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({enterprise_id: $enterprise_id, page_id: $page_id, cluster_id: $cluster_id} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/storeLayout/pages/{page_id}/clusters/{cluster_id}") $qp)
-  let body = {"id": $id, "name": $name, "orderInPage": $order_in_page, "productId": $product_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({enterprise_id: (encode-path-segment $enterprise_id), page_id: (encode-path-segment $page_id), cluster_id: (encode-path-segment $cluster_id)} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/storeLayout/pages/{page_id}/clusters/{cluster_id}") $qp)
+  let req_body = {"id": $id, "name": $name, "orderInPage": $order_in_page, "productId": $product_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Unenrolls an enterprise from the calling EMM.
 #
 # POST /androidenterprise/v1/enterprises/{enterpriseId}/unenroll
 # operationId: androidenterprise.enterprises.unenroll
-export def "androidenterprise-enterprises-unenroll androidenterpriseenterprisesunenroll" [
+export def "androidenterprise-enterprises-unenroll create" [
   enterprise_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1576,7 +1585,7 @@ export def "androidenterprise-enterprises-unenroll androidenterpriseenterprisesu
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({enterprise_id: $enterprise_id} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/unenroll") $qp)
+  let full_url = (build-url $base ({enterprise_id: (encode-path-segment $enterprise_id)} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/unenroll") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1586,7 +1595,7 @@ export def "androidenterprise-enterprises-unenroll androidenterpriseenterprisesu
 #
 # GET /androidenterprise/v1/enterprises/{enterpriseId}/users
 # operationId: androidenterprise.users.list
-export def "androidenterprise-enterprises-users androidenterpriseuserslist" [
+export def "androidenterprise-enterprises-users list" [
   enterprise_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1612,7 +1621,7 @@ export def "androidenterprise-enterprises-users androidenterpriseuserslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "email" $email "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({enterprise_id: $enterprise_id} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/users") $qp)
+  let full_url = (build-url $base ({enterprise_id: (encode-path-segment $enterprise_id)} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/users") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1622,7 +1631,7 @@ export def "androidenterprise-enterprises-users androidenterpriseuserslist" [
 #
 # POST /androidenterprise/v1/enterprises/{enterpriseId}/users
 # operationId: androidenterprise.users.insert
-export def "androidenterprise-enterprises-users androidenterpriseusersinsert" [
+export def "androidenterprise-enterprises-users create" [
   enterprise_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1654,19 +1663,19 @@ export def "androidenterprise-enterprises-users androidenterpriseusersinsert" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({enterprise_id: $enterprise_id} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/users") $qp)
-  let body = {"accountIdentifier": $account_identifier, "accountType": $account_type, "displayName": $display_name, "id": $id, "managementType": $management_type, "primaryEmail": $primary_email} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({enterprise_id: (encode-path-segment $enterprise_id)} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/users") $qp)
+  let req_body = {"accountIdentifier": $account_identifier, "accountType": $account_type, "displayName": $display_name, "id": $id, "managementType": $management_type, "primaryEmail": $primary_email} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deleted an EMM-managed user.
 #
 # DELETE /androidenterprise/v1/enterprises/{enterpriseId}/users/{userId}
 # operationId: androidenterprise.users.delete
-export def "androidenterprise-enterprises-users androidenterpriseusersdelete" [
+export def "androidenterprise-enterprises-users delete" [
   enterprise_id: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1692,7 +1701,7 @@ export def "androidenterprise-enterprises-users androidenterpriseusersdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({enterprise_id: $enterprise_id, user_id: $user_id} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/users/{user_id}") $qp)
+  let full_url = (build-url $base ({enterprise_id: (encode-path-segment $enterprise_id), user_id: (encode-path-segment $user_id)} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/users/{user_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1702,7 +1711,7 @@ export def "androidenterprise-enterprises-users androidenterpriseusersdelete" [
 #
 # GET /androidenterprise/v1/enterprises/{enterpriseId}/users/{userId}
 # operationId: androidenterprise.users.get
-export def "androidenterprise-enterprises-users androidenterpriseusersget" [
+export def "androidenterprise-enterprises-users get" [
   enterprise_id: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1728,7 +1737,7 @@ export def "androidenterprise-enterprises-users androidenterpriseusersget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({enterprise_id: $enterprise_id, user_id: $user_id} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/users/{user_id}") $qp)
+  let full_url = (build-url $base ({enterprise_id: (encode-path-segment $enterprise_id), user_id: (encode-path-segment $user_id)} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/users/{user_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1738,7 +1747,7 @@ export def "androidenterprise-enterprises-users androidenterpriseusersget" [
 #
 # PUT /androidenterprise/v1/enterprises/{enterpriseId}/users/{userId}
 # operationId: androidenterprise.users.update
-export def "androidenterprise-enterprises-users androidenterpriseusersupdate" [
+export def "androidenterprise-enterprises-users update" [
   enterprise_id: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1771,19 +1780,19 @@ export def "androidenterprise-enterprises-users androidenterpriseusersupdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({enterprise_id: $enterprise_id, user_id: $user_id} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/users/{user_id}") $qp)
-  let body = {"accountIdentifier": $account_identifier, "accountType": $account_type, "displayName": $display_name, "id": $id, "managementType": $management_type, "primaryEmail": $primary_email} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({enterprise_id: (encode-path-segment $enterprise_id), user_id: (encode-path-segment $user_id)} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/users/{user_id}") $qp)
+  let req_body = {"accountIdentifier": $account_identifier, "accountType": $account_type, "displayName": $display_name, "id": $id, "managementType": $management_type, "primaryEmail": $primary_email} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Generates an authentication token which the device policy client can use to provision the given EMM-managed user account on a device. The generated token is single-use and expires after a few minutes. You can provision a maximum of 10 devices per user. This call only works with EMM-managed accounts.
 #
 # POST /androidenterprise/v1/enterprises/{enterpriseId}/users/{userId}/authenticationToken
 # operationId: androidenterprise.users.generateAuthenticationToken
-export def "androidenterprise-enterprises-users-authentication-token androidenterpriseusersgenerateAuthenticationToken" [
+export def "androidenterprise-enterprises-users-authentication-token generate" [
   enterprise_id: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1809,7 +1818,7 @@ export def "androidenterprise-enterprises-users-authentication-token androidente
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({enterprise_id: $enterprise_id, user_id: $user_id} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/users/{user_id}/authenticationToken") $qp)
+  let full_url = (build-url $base ({enterprise_id: (encode-path-segment $enterprise_id), user_id: (encode-path-segment $user_id)} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/users/{user_id}/authenticationToken") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1819,7 +1828,7 @@ export def "androidenterprise-enterprises-users-authentication-token androidente
 #
 # GET /androidenterprise/v1/enterprises/{enterpriseId}/users/{userId}/availableProductSet
 # operationId: androidenterprise.users.getAvailableProductSet
-export def "androidenterprise-enterprises-users-available-product-set androidenterpriseusersgetAvailableProductSet" [
+export def "androidenterprise-enterprises-users-available-product-set get" [
   enterprise_id: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1845,7 +1854,7 @@ export def "androidenterprise-enterprises-users-available-product-set androident
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({enterprise_id: $enterprise_id, user_id: $user_id} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/users/{user_id}/availableProductSet") $qp)
+  let full_url = (build-url $base ({enterprise_id: (encode-path-segment $enterprise_id), user_id: (encode-path-segment $user_id)} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/users/{user_id}/availableProductSet") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1855,8 +1864,8 @@ export def "androidenterprise-enterprises-users-available-product-set androident
 #
 # PUT /androidenterprise/v1/enterprises/{enterpriseId}/users/{userId}/availableProductSet
 # operationId: androidenterprise.users.setAvailableProductSet
-# --productVisibility item shape: {productId?: string, trackIds?: list, tracks?: list}
-export def "androidenterprise-enterprises-users-available-product-set androidenterpriseuserssetAvailableProductSet" [
+# --productVisibility item shape: {productId?: string, trackIds?: list<string>, tracks?: list<string>}
+export def "androidenterprise-enterprises-users-available-product-set update" [
   enterprise_id: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1878,27 +1887,27 @@ export def "androidenterprise-enterprises-users-available-product-set androident
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --product-id: list # The list of product IDs making up the set of products.
+  --product-id: list<string> # The list of product IDs making up the set of products.
   --product-set-behavior: string@product-set-behavior-completer # The interpretation of this product set. "unknown" should never be sent and is ignored if received. "whitelist" means that the user is entitled to access the product set. "includeAll" means that all products are accessible, including products that are approved, products with revoked approval, and products that have never been approved. "allApproved" means that the user is entitled to access all products that are approved for the enterprise. If the value is "allApproved" or "includeAll", the productId field is ignored. If no value is provided, it is interpreted as "whitelist" for backwards compatibility. Further "allApproved" or "includeAll" does not enable automatic visibility of "alpha" or "beta" tracks for Android app. Use ProductVisibility to enable "alpha" or "beta" tracks per user.
-  --product-visibility: list # Additional list of product IDs making up the product set. Unlike the productID array, in this list It's possible to specify which tracks (alpha, beta, production) of a product are visible to the user. See ProductVisibility and its fields for more information. Specifying the same product ID both here and in the productId array is not allowed and it will result in an error. — item shape: {productId?: string, trackIds?: list, tracks?: list}
+  --product-visibility: list # Additional list of product IDs making up the product set. Unlike the productID array, in this list It's possible to specify which tracks (alpha, beta, production) of a product are visible to the user. See ProductVisibility and its fields for more information. Specifying the same product ID both here and in the productId array is not allowed and it will result in an error. — item shape: {productId?: string, trackIds?: list<string>, tracks?: list<string>}
 ]: any -> record<productId: list<string>, productSetBehavior: string, productVisibility: table<productId: string, trackIds: list, tracks: list>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({enterprise_id: $enterprise_id, user_id: $user_id} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/users/{user_id}/availableProductSet") $qp)
-  let body = {"productId": $product_id, "productSetBehavior": $product_set_behavior, "productVisibility": $product_visibility} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({enterprise_id: (encode-path-segment $enterprise_id), user_id: (encode-path-segment $user_id)} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/users/{user_id}/availableProductSet") $qp)
+  let req_body = {"productId": $product_id, "productSetBehavior": $product_set_behavior, "productVisibility": $product_visibility} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Revokes access to all devices currently provisioned to the user. The user will no longer be able to use the managed Play store on any of their managed devices. This call only works with EMM-managed accounts.
 #
 # DELETE /androidenterprise/v1/enterprises/{enterpriseId}/users/{userId}/deviceAccess
 # operationId: androidenterprise.users.revokeDeviceAccess
-export def "androidenterprise-enterprises-users-device-access androidenterpriseusersrevokeDeviceAccess" [
+export def "androidenterprise-enterprises-users-device-access delete" [
   enterprise_id: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1924,7 +1933,7 @@ export def "androidenterprise-enterprises-users-device-access androidenterpriseu
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({enterprise_id: $enterprise_id, user_id: $user_id} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/users/{user_id}/deviceAccess") $qp)
+  let full_url = (build-url $base ({enterprise_id: (encode-path-segment $enterprise_id), user_id: (encode-path-segment $user_id)} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/users/{user_id}/deviceAccess") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1934,7 +1943,7 @@ export def "androidenterprise-enterprises-users-device-access androidenterpriseu
 #
 # GET /androidenterprise/v1/enterprises/{enterpriseId}/users/{userId}/devices
 # operationId: androidenterprise.devices.list
-export def "androidenterprise-enterprises-users-devices androidenterprisedeviceslist" [
+export def "androidenterprise-enterprises-users-devices list" [
   enterprise_id: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1960,7 +1969,7 @@ export def "androidenterprise-enterprises-users-devices androidenterprisedevices
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({enterprise_id: $enterprise_id, user_id: $user_id} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/users/{user_id}/devices") $qp)
+  let full_url = (build-url $base ({enterprise_id: (encode-path-segment $enterprise_id), user_id: (encode-path-segment $user_id)} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/users/{user_id}/devices") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1970,7 +1979,7 @@ export def "androidenterprise-enterprises-users-devices androidenterprisedevices
 #
 # GET /androidenterprise/v1/enterprises/{enterpriseId}/users/{userId}/devices/{deviceId}
 # operationId: androidenterprise.devices.get
-export def "androidenterprise-enterprises-users-devices androidenterprisedevicesget" [
+export def "androidenterprise-enterprises-users-devices get" [
   enterprise_id: string
   user_id: string
   device_id: string
@@ -1997,7 +2006,7 @@ export def "androidenterprise-enterprises-users-devices androidenterprisedevices
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({enterprise_id: $enterprise_id, user_id: $user_id, device_id: $device_id} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/users/{user_id}/devices/{device_id}") $qp)
+  let full_url = (build-url $base ({enterprise_id: (encode-path-segment $enterprise_id), user_id: (encode-path-segment $user_id), device_id: (encode-path-segment $device_id)} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/users/{user_id}/devices/{device_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2009,7 +2018,7 @@ export def "androidenterprise-enterprises-users-devices androidenterprisedevices
 # operationId: androidenterprise.devices.update
 # --policy shape: {autoUpdatePolicy?: "autoUpdatePolicyUnspecified"|"choiceToTheUser"|"never"|"wifiOnly"|"always", deviceReportPolicy?: "deviceReportPolicyUnspecified"|"deviceReportDisabled"|"deviceReportEnabled", maintenanceWindow?: record, productAvailabilityPolicy?: "productAvailabilityPolicyUnspecified"|"whitelist"|"all", productPolicy?: list}
 # --report shape: {appState?: list, lastUpdatedTimestampMillis?: string}
-export def "androidenterprise-enterprises-users-devices androidenterprisedevicesupdate" [
+export def "androidenterprise-enterprises-users-devices update" [
   enterprise_id: string
   user_id: string
   device_id: string
@@ -2032,12 +2041,12 @@ export def "androidenterprise-enterprises-users-devices androidenterprisedevices
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --update-mask: string # Mask that identifies which fields to update. If not set, all modifiable fields will be modified. When set in a query parameter, this field should be specified as updateMask=<field1>,<field2>,...
+  --update-mask: string # Mask that identifies which fields to update. If not set, all modifiable fields will be modified. When set in a query parameter, this field should be specified as updateMask=,,...
   --android-id: string # The Google Play Services Android ID for the device encoded as a lowercase hex string. For example, "123456789abcdef0".
   --device: string # The internal hardware codename of the device. This comes from android.os.Build.DEVICE. (field named "device" per logs/wireless/android/android_checkin.proto)
   --latest-build-fingerprint: string # The build fingerprint of the device if known.
   --maker: string # The manufacturer of the device. This comes from android.os.Build.MANUFACTURER.
-  --management-type: string@management-type-completer-1 # Identifies the extent to which the device is controlled by a managed Google Play EMM in various deployment configurations. Possible values include: - "managedDevice", a device that has the EMM's device policy controller (DPC) as the device owner. - "managedProfile", a device that has a profile managed by the DPC (DPC is profile owner) in addition to a separate, personal profile that is unavailable to the DPC. - "containerApp", no longer used (deprecated). - "unmanagedProfile", a device that has been allowed (by the domain's admin, using the Admin Console to enable the privilege) to use managed Google Play, but the profile is itself not owned by a DPC. 
+  --management-type: string@management-type-completer-1 # Identifies the extent to which the device is controlled by a managed Google Play EMM in various deployment configurations. Possible values include: - "managedDevice", a device that has the EMM's device policy controller (DPC) as the device owner. - "managedProfile", a device that has a profile managed by the DPC (DPC is profile owner) in addition to a separate, personal profile that is unavailable to the DPC. - "containerApp", no longer used (deprecated). - "unmanagedProfile", a device that has been allowed (by the domain's admin, using the Admin Console to enable the privilege) to use managed Google Play, but the profile is itself not owned by a DPC.
   --model: string # The model name of the device. This comes from android.os.Build.MODEL.
   --policy: record # The device policy for a given managed device. — shape: {autoUpdatePolicy?: "autoUpdatePolicyUnspecified"|"choiceToTheUser"|"never"|"wifiOnly"|"always", deviceReportPolicy?: "deviceReportPolicyUnspecified"|"deviceReportDisabled"|"deviceReportEnabled", maintenanceWindow?: record, productAvailabilityPolicy?: "productAvailabilityPolicyUnspecified"|"whitelist"|"all", productPolicy?: list}
   --product: string # The product name of the device. This comes from android.os.Build.PRODUCT.
@@ -2049,19 +2058,19 @@ export def "androidenterprise-enterprises-users-devices androidenterprisedevices
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({enterprise_id: $enterprise_id, user_id: $user_id, device_id: $device_id} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/users/{user_id}/devices/{device_id}") $qp)
-  let body = {"androidId": $android_id, "device": $device, "latestBuildFingerprint": $latest_build_fingerprint, "maker": $maker, "managementType": $management_type, "model": $model, "policy": $policy, "product": $product, "report": $report, "retailBrand": $retail_brand, "sdkVersion": $sdk_version} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({enterprise_id: (encode-path-segment $enterprise_id), user_id: (encode-path-segment $user_id), device_id: (encode-path-segment $device_id)} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/users/{user_id}/devices/{device_id}") $qp)
+  let req_body = {"androidId": $android_id, "device": $device, "latestBuildFingerprint": $latest_build_fingerprint, "maker": $maker, "managementType": $management_type, "model": $model, "policy": $policy, "product": $product, "report": $report, "retailBrand": $retail_brand, "sdkVersion": $sdk_version} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Uploads a report containing any changes in app states on the device since the last report was generated. You can call this method up to 3 times every 24 hours for a given device. If you exceed the quota, then the Google Play EMM API returns HTTP 429 Too Many Requests.
 #
 # POST /androidenterprise/v1/enterprises/{enterpriseId}/users/{userId}/devices/{deviceId}/forceReportUpload
 # operationId: androidenterprise.devices.forceReportUpload
-export def "androidenterprise-enterprises-users-devices-force-report-upload androidenterprisedevicesforceReportUpload" [
+export def "androidenterprise-enterprises-users-devices-force-report-upload upload" [
   enterprise_id: string
   user_id: string
   device_id: string
@@ -2088,7 +2097,7 @@ export def "androidenterprise-enterprises-users-devices-force-report-upload andr
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({enterprise_id: $enterprise_id, user_id: $user_id, device_id: $device_id} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/users/{user_id}/devices/{device_id}/forceReportUpload") $qp)
+  let full_url = (build-url $base ({enterprise_id: (encode-path-segment $enterprise_id), user_id: (encode-path-segment $user_id), device_id: (encode-path-segment $device_id)} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/users/{user_id}/devices/{device_id}/forceReportUpload") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2098,7 +2107,7 @@ export def "androidenterprise-enterprises-users-devices-force-report-upload andr
 #
 # GET /androidenterprise/v1/enterprises/{enterpriseId}/users/{userId}/devices/{deviceId}/installs
 # operationId: androidenterprise.installs.list
-export def "androidenterprise-enterprises-users-devices-installs androidenterpriseinstallslist" [
+export def "androidenterprise-enterprises-users-devices-installs list" [
   enterprise_id: string
   user_id: string
   device_id: string
@@ -2125,7 +2134,7 @@ export def "androidenterprise-enterprises-users-devices-installs androidenterpri
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({enterprise_id: $enterprise_id, user_id: $user_id, device_id: $device_id} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/users/{user_id}/devices/{device_id}/installs") $qp)
+  let full_url = (build-url $base ({enterprise_id: (encode-path-segment $enterprise_id), user_id: (encode-path-segment $user_id), device_id: (encode-path-segment $device_id)} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/users/{user_id}/devices/{device_id}/installs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2135,7 +2144,7 @@ export def "androidenterprise-enterprises-users-devices-installs androidenterpri
 #
 # DELETE /androidenterprise/v1/enterprises/{enterpriseId}/users/{userId}/devices/{deviceId}/installs/{installId}
 # operationId: androidenterprise.installs.delete
-export def "androidenterprise-enterprises-users-devices-installs androidenterpriseinstallsdelete" [
+export def "androidenterprise-enterprises-users-devices-installs delete" [
   enterprise_id: string
   user_id: string
   device_id: string
@@ -2163,7 +2172,7 @@ export def "androidenterprise-enterprises-users-devices-installs androidenterpri
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({enterprise_id: $enterprise_id, user_id: $user_id, device_id: $device_id, install_id: $install_id} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/users/{user_id}/devices/{device_id}/installs/{install_id}") $qp)
+  let full_url = (build-url $base ({enterprise_id: (encode-path-segment $enterprise_id), user_id: (encode-path-segment $user_id), device_id: (encode-path-segment $device_id), install_id: (encode-path-segment $install_id)} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/users/{user_id}/devices/{device_id}/installs/{install_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2173,7 +2182,7 @@ export def "androidenterprise-enterprises-users-devices-installs androidenterpri
 #
 # GET /androidenterprise/v1/enterprises/{enterpriseId}/users/{userId}/devices/{deviceId}/installs/{installId}
 # operationId: androidenterprise.installs.get
-export def "androidenterprise-enterprises-users-devices-installs androidenterpriseinstallsget" [
+export def "androidenterprise-enterprises-users-devices-installs get" [
   enterprise_id: string
   user_id: string
   device_id: string
@@ -2201,7 +2210,7 @@ export def "androidenterprise-enterprises-users-devices-installs androidenterpri
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({enterprise_id: $enterprise_id, user_id: $user_id, device_id: $device_id, install_id: $install_id} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/users/{user_id}/devices/{device_id}/installs/{install_id}") $qp)
+  let full_url = (build-url $base ({enterprise_id: (encode-path-segment $enterprise_id), user_id: (encode-path-segment $user_id), device_id: (encode-path-segment $device_id), install_id: (encode-path-segment $install_id)} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/users/{user_id}/devices/{device_id}/installs/{install_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2211,7 +2220,7 @@ export def "androidenterprise-enterprises-users-devices-installs androidenterpri
 #
 # PUT /androidenterprise/v1/enterprises/{enterpriseId}/users/{userId}/devices/{deviceId}/installs/{installId}
 # operationId: androidenterprise.installs.update
-export def "androidenterprise-enterprises-users-devices-installs androidenterpriseinstallsupdate" [
+export def "androidenterprise-enterprises-users-devices-installs update" [
   enterprise_id: string
   user_id: string
   device_id: string
@@ -2243,19 +2252,19 @@ export def "androidenterprise-enterprises-users-devices-installs androidenterpri
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({enterprise_id: $enterprise_id, user_id: $user_id, device_id: $device_id, install_id: $install_id} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/users/{user_id}/devices/{device_id}/installs/{install_id}") $qp)
-  let body = {"installState": $install_state, "productId": $product_id, "versionCode": $version_code} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({enterprise_id: (encode-path-segment $enterprise_id), user_id: (encode-path-segment $user_id), device_id: (encode-path-segment $device_id), install_id: (encode-path-segment $install_id)} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/users/{user_id}/devices/{device_id}/installs/{install_id}") $qp)
+  let req_body = {"installState": $install_state, "productId": $product_id, "versionCode": $version_code} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists all the per-device managed configurations for the specified device. Only the ID is set.
 #
 # GET /androidenterprise/v1/enterprises/{enterpriseId}/users/{userId}/devices/{deviceId}/managedConfigurationsForDevice
 # operationId: androidenterprise.managedconfigurationsfordevice.list
-export def "androidenterprise-enterprises-users-devices-managed-configurations-for-device androidenterprisemanagedconfigurationsfordevicelist" [
+export def "androidenterprise-enterprises-users-devices-managed-configurations-for-device list" [
   enterprise_id: string
   user_id: string
   device_id: string
@@ -2282,7 +2291,7 @@ export def "androidenterprise-enterprises-users-devices-managed-configurations-f
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({enterprise_id: $enterprise_id, user_id: $user_id, device_id: $device_id} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/users/{user_id}/devices/{device_id}/managedConfigurationsForDevice") $qp)
+  let full_url = (build-url $base ({enterprise_id: (encode-path-segment $enterprise_id), user_id: (encode-path-segment $user_id), device_id: (encode-path-segment $device_id)} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/users/{user_id}/devices/{device_id}/managedConfigurationsForDevice") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2292,7 +2301,7 @@ export def "androidenterprise-enterprises-users-devices-managed-configurations-f
 #
 # DELETE /androidenterprise/v1/enterprises/{enterpriseId}/users/{userId}/devices/{deviceId}/managedConfigurationsForDevice/{managedConfigurationForDeviceId}
 # operationId: androidenterprise.managedconfigurationsfordevice.delete
-export def "androidenterprise-enterprises-users-devices-managed-configurations-for-device androidenterprisemanagedconfigurationsfordevicedelete" [
+export def "androidenterprise-enterprises-users-devices-managed-configurations-for-device delete" [
   enterprise_id: string
   user_id: string
   device_id: string
@@ -2320,7 +2329,7 @@ export def "androidenterprise-enterprises-users-devices-managed-configurations-f
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({enterprise_id: $enterprise_id, user_id: $user_id, device_id: $device_id, managed_configuration_for_device_id: $managed_configuration_for_device_id} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/users/{user_id}/devices/{device_id}/managedConfigurationsForDevice/{managed_configuration_for_device_id}") $qp)
+  let full_url = (build-url $base ({enterprise_id: (encode-path-segment $enterprise_id), user_id: (encode-path-segment $user_id), device_id: (encode-path-segment $device_id), managed_configuration_for_device_id: (encode-path-segment $managed_configuration_for_device_id)} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/users/{user_id}/devices/{device_id}/managedConfigurationsForDevice/{managed_configuration_for_device_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2330,7 +2339,7 @@ export def "androidenterprise-enterprises-users-devices-managed-configurations-f
 #
 # GET /androidenterprise/v1/enterprises/{enterpriseId}/users/{userId}/devices/{deviceId}/managedConfigurationsForDevice/{managedConfigurationForDeviceId}
 # operationId: androidenterprise.managedconfigurationsfordevice.get
-export def "androidenterprise-enterprises-users-devices-managed-configurations-for-device androidenterprisemanagedconfigurationsfordeviceget" [
+export def "androidenterprise-enterprises-users-devices-managed-configurations-for-device get" [
   enterprise_id: string
   user_id: string
   device_id: string
@@ -2358,7 +2367,7 @@ export def "androidenterprise-enterprises-users-devices-managed-configurations-f
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({enterprise_id: $enterprise_id, user_id: $user_id, device_id: $device_id, managed_configuration_for_device_id: $managed_configuration_for_device_id} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/users/{user_id}/devices/{device_id}/managedConfigurationsForDevice/{managed_configuration_for_device_id}") $qp)
+  let full_url = (build-url $base ({enterprise_id: (encode-path-segment $enterprise_id), user_id: (encode-path-segment $user_id), device_id: (encode-path-segment $device_id), managed_configuration_for_device_id: (encode-path-segment $managed_configuration_for_device_id)} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/users/{user_id}/devices/{device_id}/managedConfigurationsForDevice/{managed_configuration_for_device_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2369,8 +2378,8 @@ export def "androidenterprise-enterprises-users-devices-managed-configurations-f
 # PUT /androidenterprise/v1/enterprises/{enterpriseId}/users/{userId}/devices/{deviceId}/managedConfigurationsForDevice/{managedConfigurationForDeviceId}
 # operationId: androidenterprise.managedconfigurationsfordevice.update
 # --configurationVariables shape: {mcmId?: string, variableSet?: list}
-# --managedProperty item shape: {key?: string, valueBool?: bool, valueBundle?: record, valueBundleArray?: list, valueInteger?: int, valueString?: string, valueStringArray?: list}
-export def "androidenterprise-enterprises-users-devices-managed-configurations-for-device androidenterprisemanagedconfigurationsfordeviceupdate" [
+# --managedProperty item shape: {key?: string, valueBool?: bool, valueBundle?: record, valueBundleArray?: list, valueInteger?: int, valueString?: string, valueStringArray?: list<string>}
+export def "androidenterprise-enterprises-users-devices-managed-configurations-for-device update" [
   enterprise_id: string
   user_id: string
   device_id: string
@@ -2396,26 +2405,26 @@ export def "androidenterprise-enterprises-users-devices-managed-configurations-f
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --configuration-variables: record # A configuration variables resource contains the managed configuration settings ID to be applied to a single user, as well as the variable set that is attributed to the user. The variable set will be used to replace placeholders in the managed configuration settings. — shape: {mcmId?: string, variableSet?: list}
   --kind: string # Deprecated.
-  --managed-property: list # The set of managed properties for this configuration. — item shape: {key?: string, valueBool?: bool, valueBundle?: record, valueBundleArray?: list, valueInteger?: int, valueString?: string, valueStringArray?: list}
+  --managed-property: list # The set of managed properties for this configuration. — item shape: {key?: string, valueBool?: bool, valueBundle?: record, valueBundleArray?: list, valueInteger?: int, valueString?: string, valueStringArray?: list<string>}
   --product-id: string # The ID of the product that the managed configuration is for, e.g. "app:com.google.android.gm".
 ]: any -> record<configurationVariables: record<mcmId: string, variableSet: list<record>>, kind: string, managedProperty: table<key: string, valueBool: bool, valueBundle: record, valueBundleArray: list, valueInteger: int, valueString: string, valueStringArray: list>, productId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({enterprise_id: $enterprise_id, user_id: $user_id, device_id: $device_id, managed_configuration_for_device_id: $managed_configuration_for_device_id} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/users/{user_id}/devices/{device_id}/managedConfigurationsForDevice/{managed_configuration_for_device_id}") $qp)
-  let body = {"configurationVariables": $configuration_variables, "kind": $kind, "managedProperty": $managed_property, "productId": $product_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({enterprise_id: (encode-path-segment $enterprise_id), user_id: (encode-path-segment $user_id), device_id: (encode-path-segment $device_id), managed_configuration_for_device_id: (encode-path-segment $managed_configuration_for_device_id)} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/users/{user_id}/devices/{device_id}/managedConfigurationsForDevice/{managed_configuration_for_device_id}") $qp)
+  let req_body = {"configurationVariables": $configuration_variables, "kind": $kind, "managedProperty": $managed_property, "productId": $product_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieves whether a device's access to Google services is enabled or disabled. The device state takes effect only if enforcing EMM policies on Android devices is enabled in the Google Admin Console. Otherwise, the device state is ignored and all devices are allowed access to Google services. This is only supported for Google-managed users.
 #
 # GET /androidenterprise/v1/enterprises/{enterpriseId}/users/{userId}/devices/{deviceId}/state
 # operationId: androidenterprise.devices.getState
-export def "androidenterprise-enterprises-users-devices-state androidenterprisedevicesgetState" [
+export def "androidenterprise-enterprises-users-devices-state get" [
   enterprise_id: string
   user_id: string
   device_id: string
@@ -2442,7 +2451,7 @@ export def "androidenterprise-enterprises-users-devices-state androidenterprised
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({enterprise_id: $enterprise_id, user_id: $user_id, device_id: $device_id} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/users/{user_id}/devices/{device_id}/state") $qp)
+  let full_url = (build-url $base ({enterprise_id: (encode-path-segment $enterprise_id), user_id: (encode-path-segment $user_id), device_id: (encode-path-segment $device_id)} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/users/{user_id}/devices/{device_id}/state") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2452,7 +2461,7 @@ export def "androidenterprise-enterprises-users-devices-state androidenterprised
 #
 # PUT /androidenterprise/v1/enterprises/{enterpriseId}/users/{userId}/devices/{deviceId}/state
 # operationId: androidenterprise.devices.setState
-export def "androidenterprise-enterprises-users-devices-state androidenterprisedevicessetState" [
+export def "androidenterprise-enterprises-users-devices-state update" [
   enterprise_id: string
   user_id: string
   device_id: string
@@ -2481,19 +2490,19 @@ export def "androidenterprise-enterprises-users-devices-state androidenterprised
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({enterprise_id: $enterprise_id, user_id: $user_id, device_id: $device_id} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/users/{user_id}/devices/{device_id}/state") $qp)
-  let body = {"accountState": $account_state} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({enterprise_id: (encode-path-segment $enterprise_id), user_id: (encode-path-segment $user_id), device_id: (encode-path-segment $device_id)} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/users/{user_id}/devices/{device_id}/state") $qp)
+  let req_body = {"accountState": $account_state} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists all entitlements for the specified user. Only the ID is set. **Note:** This item has been deprecated. New integrations cannot use this method and can refer to our new recommendations.
 #
 # GET /androidenterprise/v1/enterprises/{enterpriseId}/users/{userId}/entitlements
 # operationId: androidenterprise.entitlements.list
-export def "androidenterprise-enterprises-users-entitlements androidenterpriseentitlementslist" [
+export def "androidenterprise-enterprises-users-entitlements list" [
   enterprise_id: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2519,7 +2528,7 @@ export def "androidenterprise-enterprises-users-entitlements androidenterpriseen
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({enterprise_id: $enterprise_id, user_id: $user_id} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/users/{user_id}/entitlements") $qp)
+  let full_url = (build-url $base ({enterprise_id: (encode-path-segment $enterprise_id), user_id: (encode-path-segment $user_id)} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/users/{user_id}/entitlements") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2529,7 +2538,7 @@ export def "androidenterprise-enterprises-users-entitlements androidenterpriseen
 #
 # DELETE /androidenterprise/v1/enterprises/{enterpriseId}/users/{userId}/entitlements/{entitlementId}
 # operationId: androidenterprise.entitlements.delete
-export def "androidenterprise-enterprises-users-entitlements androidenterpriseentitlementsdelete" [
+export def "androidenterprise-enterprises-users-entitlements delete" [
   enterprise_id: string
   user_id: string
   entitlement_id: string
@@ -2556,7 +2565,7 @@ export def "androidenterprise-enterprises-users-entitlements androidenterpriseen
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({enterprise_id: $enterprise_id, user_id: $user_id, entitlement_id: $entitlement_id} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/users/{user_id}/entitlements/{entitlement_id}") $qp)
+  let full_url = (build-url $base ({enterprise_id: (encode-path-segment $enterprise_id), user_id: (encode-path-segment $user_id), entitlement_id: (encode-path-segment $entitlement_id)} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/users/{user_id}/entitlements/{entitlement_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2566,7 +2575,7 @@ export def "androidenterprise-enterprises-users-entitlements androidenterpriseen
 #
 # GET /androidenterprise/v1/enterprises/{enterpriseId}/users/{userId}/entitlements/{entitlementId}
 # operationId: androidenterprise.entitlements.get
-export def "androidenterprise-enterprises-users-entitlements androidenterpriseentitlementsget" [
+export def "androidenterprise-enterprises-users-entitlements get" [
   enterprise_id: string
   user_id: string
   entitlement_id: string
@@ -2593,7 +2602,7 @@ export def "androidenterprise-enterprises-users-entitlements androidenterpriseen
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({enterprise_id: $enterprise_id, user_id: $user_id, entitlement_id: $entitlement_id} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/users/{user_id}/entitlements/{entitlement_id}") $qp)
+  let full_url = (build-url $base ({enterprise_id: (encode-path-segment $enterprise_id), user_id: (encode-path-segment $user_id), entitlement_id: (encode-path-segment $entitlement_id)} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/users/{user_id}/entitlements/{entitlement_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2603,7 +2612,7 @@ export def "androidenterprise-enterprises-users-entitlements androidenterpriseen
 #
 # PUT /androidenterprise/v1/enterprises/{enterpriseId}/users/{userId}/entitlements/{entitlementId}
 # operationId: androidenterprise.entitlements.update
-export def "androidenterprise-enterprises-users-entitlements androidenterpriseentitlementsupdate" [
+export def "androidenterprise-enterprises-users-entitlements update" [
   enterprise_id: string
   user_id: string
   entitlement_id: string
@@ -2634,19 +2643,19 @@ export def "androidenterprise-enterprises-users-entitlements androidenterpriseen
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "install" $install "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({enterprise_id: $enterprise_id, user_id: $user_id, entitlement_id: $entitlement_id} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/users/{user_id}/entitlements/{entitlement_id}") $qp)
-  let body = {"productId": $product_id, "reason": $reason} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({enterprise_id: (encode-path-segment $enterprise_id), user_id: (encode-path-segment $user_id), entitlement_id: (encode-path-segment $entitlement_id)} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/users/{user_id}/entitlements/{entitlement_id}") $qp)
+  let req_body = {"productId": $product_id, "reason": $reason} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists all the per-user managed configurations for the specified user. Only the ID is set.
 #
 # GET /androidenterprise/v1/enterprises/{enterpriseId}/users/{userId}/managedConfigurationsForUser
 # operationId: androidenterprise.managedconfigurationsforuser.list
-export def "androidenterprise-enterprises-users-managed-configurations-for-user androidenterprisemanagedconfigurationsforuserlist" [
+export def "androidenterprise-enterprises-users-managed-configurations-for-user list" [
   enterprise_id: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2672,7 +2681,7 @@ export def "androidenterprise-enterprises-users-managed-configurations-for-user 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({enterprise_id: $enterprise_id, user_id: $user_id} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/users/{user_id}/managedConfigurationsForUser") $qp)
+  let full_url = (build-url $base ({enterprise_id: (encode-path-segment $enterprise_id), user_id: (encode-path-segment $user_id)} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/users/{user_id}/managedConfigurationsForUser") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2682,7 +2691,7 @@ export def "androidenterprise-enterprises-users-managed-configurations-for-user 
 #
 # DELETE /androidenterprise/v1/enterprises/{enterpriseId}/users/{userId}/managedConfigurationsForUser/{managedConfigurationForUserId}
 # operationId: androidenterprise.managedconfigurationsforuser.delete
-export def "androidenterprise-enterprises-users-managed-configurations-for-user androidenterprisemanagedconfigurationsforuserdelete" [
+export def "androidenterprise-enterprises-users-managed-configurations-for-user delete" [
   enterprise_id: string
   user_id: string
   managed_configuration_for_user_id: string
@@ -2709,7 +2718,7 @@ export def "androidenterprise-enterprises-users-managed-configurations-for-user 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({enterprise_id: $enterprise_id, user_id: $user_id, managed_configuration_for_user_id: $managed_configuration_for_user_id} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/users/{user_id}/managedConfigurationsForUser/{managed_configuration_for_user_id}") $qp)
+  let full_url = (build-url $base ({enterprise_id: (encode-path-segment $enterprise_id), user_id: (encode-path-segment $user_id), managed_configuration_for_user_id: (encode-path-segment $managed_configuration_for_user_id)} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/users/{user_id}/managedConfigurationsForUser/{managed_configuration_for_user_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2719,7 +2728,7 @@ export def "androidenterprise-enterprises-users-managed-configurations-for-user 
 #
 # GET /androidenterprise/v1/enterprises/{enterpriseId}/users/{userId}/managedConfigurationsForUser/{managedConfigurationForUserId}
 # operationId: androidenterprise.managedconfigurationsforuser.get
-export def "androidenterprise-enterprises-users-managed-configurations-for-user androidenterprisemanagedconfigurationsforuserget" [
+export def "androidenterprise-enterprises-users-managed-configurations-for-user get" [
   enterprise_id: string
   user_id: string
   managed_configuration_for_user_id: string
@@ -2746,7 +2755,7 @@ export def "androidenterprise-enterprises-users-managed-configurations-for-user 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({enterprise_id: $enterprise_id, user_id: $user_id, managed_configuration_for_user_id: $managed_configuration_for_user_id} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/users/{user_id}/managedConfigurationsForUser/{managed_configuration_for_user_id}") $qp)
+  let full_url = (build-url $base ({enterprise_id: (encode-path-segment $enterprise_id), user_id: (encode-path-segment $user_id), managed_configuration_for_user_id: (encode-path-segment $managed_configuration_for_user_id)} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/users/{user_id}/managedConfigurationsForUser/{managed_configuration_for_user_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2757,8 +2766,8 @@ export def "androidenterprise-enterprises-users-managed-configurations-for-user 
 # PUT /androidenterprise/v1/enterprises/{enterpriseId}/users/{userId}/managedConfigurationsForUser/{managedConfigurationForUserId}
 # operationId: androidenterprise.managedconfigurationsforuser.update
 # --configurationVariables shape: {mcmId?: string, variableSet?: list}
-# --managedProperty item shape: {key?: string, valueBool?: bool, valueBundle?: record, valueBundleArray?: list, valueInteger?: int, valueString?: string, valueStringArray?: list}
-export def "androidenterprise-enterprises-users-managed-configurations-for-user androidenterprisemanagedconfigurationsforuserupdate" [
+# --managedProperty item shape: {key?: string, valueBool?: bool, valueBundle?: record, valueBundleArray?: list, valueInteger?: int, valueString?: string, valueStringArray?: list<string>}
+export def "androidenterprise-enterprises-users-managed-configurations-for-user update" [
   enterprise_id: string
   user_id: string
   managed_configuration_for_user_id: string
@@ -2783,26 +2792,26 @@ export def "androidenterprise-enterprises-users-managed-configurations-for-user 
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --configuration-variables: record # A configuration variables resource contains the managed configuration settings ID to be applied to a single user, as well as the variable set that is attributed to the user. The variable set will be used to replace placeholders in the managed configuration settings. — shape: {mcmId?: string, variableSet?: list}
   --kind: string # Deprecated.
-  --managed-property: list # The set of managed properties for this configuration. — item shape: {key?: string, valueBool?: bool, valueBundle?: record, valueBundleArray?: list, valueInteger?: int, valueString?: string, valueStringArray?: list}
+  --managed-property: list # The set of managed properties for this configuration. — item shape: {key?: string, valueBool?: bool, valueBundle?: record, valueBundleArray?: list, valueInteger?: int, valueString?: string, valueStringArray?: list<string>}
   --product-id: string # The ID of the product that the managed configuration is for, e.g. "app:com.google.android.gm".
 ]: any -> record<configurationVariables: record<mcmId: string, variableSet: list<record>>, kind: string, managedProperty: table<key: string, valueBool: bool, valueBundle: record, valueBundleArray: list, valueInteger: int, valueString: string, valueStringArray: list>, productId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({enterprise_id: $enterprise_id, user_id: $user_id, managed_configuration_for_user_id: $managed_configuration_for_user_id} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/users/{user_id}/managedConfigurationsForUser/{managed_configuration_for_user_id}") $qp)
-  let body = {"configurationVariables": $configuration_variables, "kind": $kind, "managedProperty": $managed_property, "productId": $product_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({enterprise_id: (encode-path-segment $enterprise_id), user_id: (encode-path-segment $user_id), managed_configuration_for_user_id: (encode-path-segment $managed_configuration_for_user_id)} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/users/{user_id}/managedConfigurationsForUser/{managed_configuration_for_user_id}") $qp)
+  let req_body = {"configurationVariables": $configuration_variables, "kind": $kind, "managedProperty": $managed_property, "productId": $product_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieves the details of all web apps for a given enterprise.
 #
 # GET /androidenterprise/v1/enterprises/{enterpriseId}/webApps
 # operationId: androidenterprise.webapps.list
-export def "androidenterprise-enterprises-web-apps androidenterprisewebappslist" [
+export def "androidenterprise-enterprises-web-apps list" [
   enterprise_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2827,7 +2836,7 @@ export def "androidenterprise-enterprises-web-apps androidenterprisewebappslist"
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({enterprise_id: $enterprise_id} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/webApps") $qp)
+  let full_url = (build-url $base ({enterprise_id: (encode-path-segment $enterprise_id)} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/webApps") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2838,7 +2847,7 @@ export def "androidenterprise-enterprises-web-apps androidenterprisewebappslist"
 # POST /androidenterprise/v1/enterprises/{enterpriseId}/webApps
 # operationId: androidenterprise.webapps.insert
 # --icons item shape: {imageData?: string}
-export def "androidenterprise-enterprises-web-apps androidenterprisewebappsinsert" [
+export def "androidenterprise-enterprises-web-apps create" [
   enterprise_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2859,31 +2868,31 @@ export def "androidenterprise-enterprises-web-apps androidenterprisewebappsinser
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --display-mode: string@display-mode-completer # The display mode of the web app. Possible values include: - "minimalUi", the device's status bar, navigation bar, the app's URL, and a refresh button are visible when the app is open. For HTTP URLs, you can only select this option. - "standalone", the device's status bar and navigation bar are visible when the app is open. - "fullScreen", the app opens in full screen mode, hiding the device's status and navigation bars. All browser UI elements, page URL, system status bar and back button are not visible, and the web app takes up the entirety of the available display area. 
+  --display-mode: string@display-mode-completer # The display mode of the web app. Possible values include: - "minimalUi", the device's status bar, navigation bar, the app's URL, and a refresh button are visible when the app is open. For HTTP URLs, you can only select this option. - "standalone", the device's status bar and navigation bar are visible when the app is open. - "fullScreen", the app opens in full screen mode, hiding the device's status and navigation bars. All browser UI elements, page URL, system status bar and back button are not visible, and the web app takes up the entirety of the available display area.
   --icons: list # A list of icons representing this website. If absent, a default icon (for create) or the current icon (for update) will be used. — item shape: {imageData?: string}
   --is-published: oneof<nothing, bool> # A flag whether the app has been published to the Play store yet.
   --start-url: string # The start URL, i.e. the URL that should load when the user opens the application.
   --title: string # The title of the web app as displayed to the user (e.g., amongst a list of other applications, or as a label for an icon).
   --version-code: string # The current version of the app. Note that the version can automatically increase during the lifetime of the web app, while Google does internal housekeeping to keep the web app up-to-date. (format: int64)
-  --web-app-id: string # The ID of the application. A string of the form "app:<package name>" where the package name always starts with the prefix "com.google.enterprise.webapp." followed by a random id.
+  --web-app-id: string # The ID of the application. A string of the form "app:" where the package name always starts with the prefix "com.google.enterprise.webapp." followed by a random id.
 ]: any -> record<displayMode: string, icons: table<imageData: string>, isPublished: bool, startUrl: string, title: string, versionCode: string, webAppId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({enterprise_id: $enterprise_id} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/webApps") $qp)
-  let body = {"displayMode": $display_mode, "icons": $icons, "isPublished": $is_published, "startUrl": $start_url, "title": $title, "versionCode": $version_code, "webAppId": $web_app_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({enterprise_id: (encode-path-segment $enterprise_id)} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/webApps") $qp)
+  let req_body = {"displayMode": $display_mode, "icons": $icons, "isPublished": $is_published, "startUrl": $start_url, "title": $title, "versionCode": $version_code, "webAppId": $web_app_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes an existing web app.
 #
 # DELETE /androidenterprise/v1/enterprises/{enterpriseId}/webApps/{webAppId}
 # operationId: androidenterprise.webapps.delete
-export def "androidenterprise-enterprises-web-apps androidenterprisewebappsdelete" [
+export def "androidenterprise-enterprises-web-apps delete" [
   enterprise_id: string
   web_app_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2909,7 +2918,7 @@ export def "androidenterprise-enterprises-web-apps androidenterprisewebappsdelet
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({enterprise_id: $enterprise_id, web_app_id: $web_app_id} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/webApps/{web_app_id}") $qp)
+  let full_url = (build-url $base ({enterprise_id: (encode-path-segment $enterprise_id), web_app_id: (encode-path-segment $web_app_id)} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/webApps/{web_app_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2919,7 +2928,7 @@ export def "androidenterprise-enterprises-web-apps androidenterprisewebappsdelet
 #
 # GET /androidenterprise/v1/enterprises/{enterpriseId}/webApps/{webAppId}
 # operationId: androidenterprise.webapps.get
-export def "androidenterprise-enterprises-web-apps androidenterprisewebappsget" [
+export def "androidenterprise-enterprises-web-apps get" [
   enterprise_id: string
   web_app_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2945,7 +2954,7 @@ export def "androidenterprise-enterprises-web-apps androidenterprisewebappsget" 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({enterprise_id: $enterprise_id, web_app_id: $web_app_id} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/webApps/{web_app_id}") $qp)
+  let full_url = (build-url $base ({enterprise_id: (encode-path-segment $enterprise_id), web_app_id: (encode-path-segment $web_app_id)} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/webApps/{web_app_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2956,7 +2965,7 @@ export def "androidenterprise-enterprises-web-apps androidenterprisewebappsget" 
 # PUT /androidenterprise/v1/enterprises/{enterpriseId}/webApps/{webAppId}
 # operationId: androidenterprise.webapps.update
 # --icons item shape: {imageData?: string}
-export def "androidenterprise-enterprises-web-apps androidenterprisewebappsupdate" [
+export def "androidenterprise-enterprises-web-apps update" [
   enterprise_id: string
   web_app_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2978,31 +2987,31 @@ export def "androidenterprise-enterprises-web-apps androidenterprisewebappsupdat
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --display-mode: string@display-mode-completer # The display mode of the web app. Possible values include: - "minimalUi", the device's status bar, navigation bar, the app's URL, and a refresh button are visible when the app is open. For HTTP URLs, you can only select this option. - "standalone", the device's status bar and navigation bar are visible when the app is open. - "fullScreen", the app opens in full screen mode, hiding the device's status and navigation bars. All browser UI elements, page URL, system status bar and back button are not visible, and the web app takes up the entirety of the available display area. 
+  --display-mode: string@display-mode-completer # The display mode of the web app. Possible values include: - "minimalUi", the device's status bar, navigation bar, the app's URL, and a refresh button are visible when the app is open. For HTTP URLs, you can only select this option. - "standalone", the device's status bar and navigation bar are visible when the app is open. - "fullScreen", the app opens in full screen mode, hiding the device's status and navigation bars. All browser UI elements, page URL, system status bar and back button are not visible, and the web app takes up the entirety of the available display area.
   --icons: list # A list of icons representing this website. If absent, a default icon (for create) or the current icon (for update) will be used. — item shape: {imageData?: string}
   --is-published: oneof<nothing, bool> # A flag whether the app has been published to the Play store yet.
   --start-url: string # The start URL, i.e. the URL that should load when the user opens the application.
   --title: string # The title of the web app as displayed to the user (e.g., amongst a list of other applications, or as a label for an icon).
   --version-code: string # The current version of the app. Note that the version can automatically increase during the lifetime of the web app, while Google does internal housekeeping to keep the web app up-to-date. (format: int64)
-  --body-web-app-id: string # The ID of the application. A string of the form "app:<package name>" where the package name always starts with the prefix "com.google.enterprise.webapp." followed by a random id.
+  --body-web-app-id: string # The ID of the application. A string of the form "app:" where the package name always starts with the prefix "com.google.enterprise.webapp." followed by a random id.
 ]: any -> record<displayMode: string, icons: table<imageData: string>, isPublished: bool, startUrl: string, title: string, versionCode: string, webAppId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({enterprise_id: $enterprise_id, web_app_id: $web_app_id} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/webApps/{web_app_id}") $qp)
-  let body = {"displayMode": $display_mode, "icons": $icons, "isPublished": $is_published, "startUrl": $start_url, "title": $title, "versionCode": $version_code, "webAppId": $body_web_app_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({enterprise_id: (encode-path-segment $enterprise_id), web_app_id: (encode-path-segment $web_app_id)} | format pattern "/androidenterprise/v1/enterprises/{enterprise_id}/webApps/{web_app_id}") $qp)
+  let req_body = {"displayMode": $display_mode, "icons": $icons, "isPublished": $is_published, "startUrl": $start_url, "title": $title, "versionCode": $version_code, "webAppId": $body_web_app_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieves details of an Android app permission for display to an enterprise admin.
 #
 # GET /androidenterprise/v1/permissions/{permissionId}
 # operationId: androidenterprise.permissions.get
-export def "androidenterprise-permissions androidenterprisepermissionsget" [
+export def "androidenterprise-permissions get" [
   permission_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3028,7 +3037,7 @@ export def "androidenterprise-permissions androidenterprisepermissionsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({permission_id: $permission_id} | format pattern "/androidenterprise/v1/permissions/{permission_id}") $qp)
+  let full_url = (build-url $base ({permission_id: (encode-path-segment $permission_id)} | format pattern "/androidenterprise/v1/permissions/{permission_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

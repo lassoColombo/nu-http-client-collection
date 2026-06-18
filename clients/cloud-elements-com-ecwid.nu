@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -59,6 +68,33 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   }
   if ($method in ["head" "options"]) { return $resp }
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+}
+
+# Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
+# the field names whose value should be read from disk as bytes; every
+# other field is sent as a text part (records/lists JSON-stringified).
+# Returns {content_type, body} ready to pass to `do-request`.
+def build-multipart-body [parts: record, file_fields: list<string>]: nothing -> record {
+  let boundary = $"----nu-(random chars --length 24)"
+  let crlf = "\r\n"
+  let chunks = ($parts | transpose k v | where {|p| $p.v != null} | each {|p|
+    let name = $p.k
+    let val = $p.v
+    if $name in $file_fields {
+      let filename = ($val | path basename)
+      let bytes = (open --raw $val | into binary | collect)
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"; filename=\"($filename)\"($crlf)Content-Type: application/octet-stream($crlf)($crlf)" | into binary)
+      $head ++ $bytes ++ ($crlf | into binary)
+    } else {
+      let dt = ($val | describe)
+      let s = if (($dt | str starts-with "record") or ($dt | str starts-with "list") or ($dt | str starts-with "table")) { ($val | to json --raw) } else { ($val | into string) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"($crlf)($crlf)" | into binary)
+      $head ++ ($"($s)($crlf)" | into binary)
+    }
+  })
+  let trailer = ($"--($boundary)--($crlf)" | into binary)
+  let body = ($chunks | reduce --fold (0x[] | into binary) {|chunk, acc| $acc ++ $chunk }) ++ $trailer
+  {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
 }
 
 def base-url-completer [] { ["https://api.cloud-elements.com/elements/api-v2"] }
@@ -108,7 +144,7 @@ export def "bulk-download create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The authorization tokens. The format for the header value is 'Element &lt;token&gt;, User &lt;user secret&gt;'
+  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>'
   --api-limit: int # format: int32
   --continue-from-job-id: int # format: int32
   --docs-hub-details: record # shape: {instanceId?: string, path?: string}
@@ -129,13 +165,13 @@ export def "bulk-download create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/bulk/download")
-  let body = {"apiLimit": $api_limit, "continueFromJobId": $continue_from_job_id, "docsHubDetails": $docs_hub_details, "filterDateField": $filter_date_field, "filterNulls": $filter_nulls, "format": $format, "from": $body_from, "limit": $limit, "notificationUrl": $notification_url, "objectName": $object_name, "pageSize": $page_size, "query": $query, "selectFields": $select_fields, "to": $body_to, "where": $body_where} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"apiLimit": $api_limit, "continueFromJobId": $continue_from_job_id, "docsHubDetails": $docs_hub_details, "filterDateField": $filter_date_field, "filterNulls": $filter_nulls, "format": $format, "from": $body_from, "limit": $limit, "notificationUrl": $notification_url, "objectName": $object_name, "pageSize": $page_size, "query": $query, "selectFields": $select_fields, "to": $body_to, "where": $body_where} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Fetch all the bulk jobs for an instance
@@ -155,16 +191,16 @@ export def "bulk-jobs get" [
   --next-page: string # The next page cursor, taken from the response header: `elements-next-page-token`
   --page-size: int # The page size for pagination, which defaults to 200 if not supplied (format: int64)
   --fields: string # The fields to return on the response. Can be a single field or a comma-separated list of fields
-  --authorization: string # The authorization tokens. The format for the header value is 'Element &lt;token&gt;, User &lt;user secret&gt;'
+  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>'
 ]: nothing -> record<completion_time: int, createdDate: int, error_count: int, fileFormat: string, id: int, instanceId: int, job_direction: string, job_query: string, job_reset_attempt: int, job_state: string, notification_url: string, object_name: string, record_count: int, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "where" $qp_where "scalar") (serialize-qp "nextPage" $next_page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/bulk/jobs" $qp)
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -185,22 +221,23 @@ export def "bulk-query create" [
   --last-run-date: string # The last time this query was run. This is optional. You can also have this parameter in the query and leave this blank - optional eg. '2014-10-06T13:22:17-08:00'
   --qp-from: string # The created/updated date of the object to filter on - optional eg. '2014-10-06T13:22:17-08:00'
   --qp-to: string # The created/updated date of the object to filter on - optional eg. '2014-10-06T13:22:17-08:00'
-  --authorization: string # The authorization tokens. The format for the header value is 'Element &lt;token&gt;, User &lt;user secret&gt;'
+  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>'
   --elements-async-callback-url: string # The Url to send the notification to when the Job is completed
-  --meta-data: string # Optional JSON MetaData that contains callback-payload and fileName, ex: {"callback-payload" : <Json> , "fileName" : "{Date format}_Name of the file"}. If the fileName is MyFile then pass metadata as {"fileName" : "{yyyy-MM-dd HH:mm:ss}_MyFile"}. The valid date formats are "yyyy-MM-dd'T'HH:mm:ssXXX", "yyyy-MM-dd'T'HH:mm:ss'Z'", "yyyy-MM-dd'T'HH:mm:ss.SXXX", "yyyy-MM-dd'T'HH:mm:ss.SSSXXX", "yyyy-MM-dd'T'HH:mm:ss.SSSZ", "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", "yyyy-MM-dd HH:mm:ss", "yyyy.MM.dd G 'at' HH:mm:ss z", "h:mm a", "yyyyy.MMMMM.dd GGG hh:mm aaa" and "yyMMddHHmmssZ". callback-payload - is passed back in bulk job notification 
+  --meta-data: string # Optional JSON MetaData that contains callback-payload and fileName, ex: {"callback-payload" : , "fileName" : "{Date format}_Name of the file"}. If the fileName is MyFile then pass metadata as {"fileName" : "{yyyy-MM-dd HH:mm:ss}_MyFile"}. The valid date formats are "yyyy-MM-dd'T'HH:mm:ssXXX", "yyyy-MM-dd'T'HH:mm:ss'Z'", "yyyy-MM-dd'T'HH:mm:ss.SXXX", "yyyy-MM-dd'T'HH:mm:ss.SSSXXX", "yyyy-MM-dd'T'HH:mm:ss.SSSZ", "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", "yyyy-MM-dd HH:mm:ss", "yyyy.MM.dd G 'at' HH:mm:ss z", "h:mm a", "yyyyy.MMMMM.dd GGG hh:mm aaa" and "yyMMddHHmmssZ". callback-payload - is passed back in bulk job notification
 ]: any -> record<id: string, instance_id: float, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "lastRunDate" $last_run_date "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/bulk/query" $qp)
-  let body = {"metaData": $meta_data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $authorization, "Elements-Async-Callback-Url": $elements_async_callback_url} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"metaData": $meta_data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"Authorization": $authorization, "Elements-Async-Callback-Url": $elements_async_callback_url} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Cancel an asynchronous bulk query job.
@@ -217,15 +254,15 @@ export def "bulk-cancel update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The authorization tokens. The format for the header value is 'Element &lt;token&gt;, User &lt;user secret&gt;'
+  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>'
 ]: nothing -> record<batchId: float, message: string, numOfLeadsProcessed: float, numOfRowsFailed: float, numOfRowsWithWarning: float, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/bulk/{id}/cancel"))
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bulk/{id}/cancel"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -246,16 +283,16 @@ export def "bulk-errors get" [
   --page-size: int # The page size for pagination, which defaults to 200 if not supplied (format: int64)
   --next-page: string # The next page cursor, taken from the response header: `elements-next-page-token`
   --fields: string # The fields to return on the response. Can be a single field or a comma-separated list of fields
-  --authorization: string # The authorization tokens. The format for the header value is 'Element &lt;token&gt;, User &lt;user secret&gt;'
+  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>'
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pageSize" $page_size "scalar") (serialize-qp "nextPage" $next_page "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/bulk/{id}/errors") $qp)
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bulk/{id}/errors") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -273,15 +310,15 @@ export def "bulk-status get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The authorization tokens. The format for the header value is 'Element &lt;token&gt;, User &lt;user secret&gt;'
+  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>'
 ]: nothing -> record<batchId: float, message: string, numOfLeadsProcessed: float, numOfRowsFailed: float, numOfRowsWithWarning: float, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/bulk/{id}/status"))
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bulk/{id}/status"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -289,7 +326,7 @@ export def "bulk-status get" [
 #
 # GET /bulk/{id}/{objectName}
 # operationId: getBulkByObjectName
-export def "bulk get" [
+export def "bulk get-by-object-name" [
   id: string
   object_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -301,15 +338,15 @@ export def "bulk get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --authorization: string # The authorization tokens. The format for the header value is 'Element &lt;token&gt;, User &lt;user secret&gt;'
+  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>'
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, object_name: $object_name} | format pattern "/bulk/{id}/{object_name}"))
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), object_name: (encode-path-segment $object_name)} | format pattern "/bulk/{id}/{object_name}"))
   let accept_val = ($accept | default "text/csv")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -317,7 +354,7 @@ export def "bulk get" [
 #
 # POST /bulk/{objectName}
 # operationId: createBulkByObjectName
-export def "bulk create" [
+export def "bulk create-by-object-name" [
   object_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -327,23 +364,23 @@ export def "bulk create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The authorization tokens. The format for the header value is 'Element &lt;token&gt;, User &lt;user secret&gt;'
+  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>'
   --elements-async-callback-url: string # The Url to send the notification to when the Job is completed
-  --meta-data: string # Optional JSON MetaData that contains callback-payload, path or format, ex: {"path" :&lt;path for the sub resource&gt;, "format": &lt;json/csv&gt;, "callback-payload":&lt;json&gt;}. path - is passed to the endpoint for bulk loading the data into a nested object. Optional JSON Metadata that contains identifierFieldName, action, listId or campaignId. The identifierField name is used for upserts and the optional fields like listId or campaignId. Example: {"listId":"1014","action":"upsert"}. If the Upload format is JSON pass metadata as {"format":"json"}. callback-payload - is passed back in bulk job notification 
+  --meta-data: string # Optional JSON MetaData that contains callback-payload, path or format, ex: {"path" :<path for the sub resource>, "format": <json/csv>, "callback-payload":<json>}. path - is passed to the endpoint for bulk loading the data into a nested object. Optional JSON Metadata that contains identifierFieldName, action, listId or campaignId. The identifierField name is used for upserts and the optional fields like listId or campaignId. Example: {"listId":"1014","action":"upsert"}. If the Upload format is JSON pass metadata as {"format":"json"}. callback-payload - is passed back in bulk job notification
   --file: path # The file of objects to bulk load. If the JSON file upload, each JSON record should be in a single line
 ]: any -> record<id: string, instanceId: int, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({object_name: $object_name} | format pattern "/bulk/{object_name}"))
-  let body = {"metaData": $meta_data, "file": $file} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $authorization, "Elements-Async-Callback-Url": $elements_async_callback_url} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({object_name: (encode-path-segment $object_name)} | format pattern "/bulk/{object_name}"))
+  let req_body = {"metaData": $meta_data, "file": $file} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let body = if ($file | is-not-empty) { $body | upsert file (open -r $file) } else { $body }
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let extra_headers = {"Authorization": $authorization, "Elements-Async-Callback-Url": $elements_async_callback_url} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let mp = (build-multipart-body $req_body ["file"])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # Find customers in the eCommerce system, using the provided CEQL search expression. If no search expression is provided, all records will be retrieved
@@ -359,20 +396,20 @@ export def "customers list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-where: string # The CEQL search expression, or the where clause, without the WHERE keyword, in a typical SQL query (i.e. field='value'). <p>Supported search terms: customer_id and customer_email. All other search criteria are ignored. NOTE: When searching by customer_id, do not quote the value (ex: customer_id=15693430), as the ID is a number rather than a string.  When searching by email, quote the value (ex: customer_email='a@b.c'), as the email parameter is a string
+  --qp-where: string # The CEQL search expression, or the where clause, without the WHERE keyword, in a typical SQL query (i.e. field='value'). Supported search terms: customer_id and customer_email. All other search criteria are ignored. NOTE: When searching by customer_id, do not quote the value (ex: customer_id=15693430), as the ID is a number rather than a string. When searching by email, quote the value (ex: customer_email='a@b.c'), as the email parameter is a string
   --page-size: int # The number of results to fetch in a given page. When this parameter is omitted, a maximum of 200 results are returned (format: int64)
   --next-page: string # The next page cursor, taken from the response header: `elements-next-page-token`
   --fields: string # The fields to return on the response. Can be a single field or a comma-separated list of fields
-  --authorization: string # The authorization tokens. The format for the header value is 'Element &lt;token&gt;, User &lt;user secret&gt;'
+  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>'
 ]: nothing -> table<billingPerson: record<city: string, companyName: string, countryCode: string, countryName: string, name: string, phone: string, postalCode: string, stateName: string, stateOrProvinceCode: string, stateOrProvinceName: string, street: string>, customerGroupId: int, customerGroupName: string, email: string, id: int, name: string, registered: string, shippingAddresses: list<record>, taxExempt: bool, taxId: float, taxIdValid: bool, totalOrderCount: float, updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "where" $qp_where "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "nextPage" $next_page "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/customers" $qp)
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -391,7 +428,7 @@ export def "customers create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The authorization tokens. The format for the header value is 'Element &lt;token&gt;, User &lt;user secret&gt;'
+  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>'
   --billing-person: record # shape: {city?: string, companyName?: string, countryCode?: string, countryName?: string, name?: string, phone?: string, postalCode?: string, stateName?: string, stateOrProvinceCode?: string, stateOrProvinceName?: string, street?: string}
   --customer-group-id: int # format: int64
   email: string # customer email
@@ -405,13 +442,13 @@ export def "customers create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/customers")
-  let body = {"billingPerson": $billing_person, "customerGroupId": $customer_group_id, "email": $email, "password": $password, "shippingAddresses": $shipping_addresses, "taxExempt": $tax_exempt, "taxId": $tax_id, "taxIdValid": $tax_id_valid} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"billingPerson": $billing_person, "customerGroupId": $customer_group_id, "email": $email, "password": $password, "shippingAddresses": $shipping_addresses, "taxExempt": $tax_exempt, "taxId": $tax_id, "taxIdValid": $tax_id_valid} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a customer associated with a given ID from your eCommerce system. Specifying a customer associated with a given ID that does not exist will result in an error message
@@ -428,15 +465,15 @@ export def "customers delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The authorization tokens. The format for the header value is 'Element &lt;token&gt;, User &lt;user secret&gt;'
+  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>'
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/customers/{id}"))
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/customers/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -454,15 +491,15 @@ export def "customers get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The authorization tokens. The format for the header value is 'Element &lt;token&gt;, User &lt;user secret&gt;'
+  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>'
 ]: nothing -> record<billingPerson: record<city: string, companyName: string, countryCode: string, countryName: string, name: string, phone: string, postalCode: string, stateName: string, stateOrProvinceCode: string, stateOrProvinceName: string, street: string>, customerGroupId: int, customerGroupName: string, email: string, id: int, name: string, registered: string, shippingAddresses: table<city: string, companyName: string, countryCode: string, countryName: string, name: string, phone: string, postalCode: string, stateName: string, stateOrProvinceCode: string, stateOrProvinceName: string, street: string>, taxExempt: bool, taxId: float, taxIdValid: bool, totalOrderCount: float, updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/customers/{id}"))
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/customers/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -482,7 +519,7 @@ export def "customers update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The authorization tokens. The format for the header value is 'Element &lt;token&gt;, User &lt;user secret&gt;'
+  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>'
   --billing-person: record # shape: {city?: string, companyName?: string, countryCode?: string, countryName?: string, name?: string, phone?: string, postalCode?: string, stateName?: string, stateOrProvinceCode?: string, stateOrProvinceName?: string, street?: string}
   --customer-group-id: int # format: int64
   --email: string # customer email
@@ -495,14 +532,14 @@ export def "customers update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/customers/{id}"))
-  let body = {"billingPerson": $billing_person, "customerGroupId": $customer_group_id, "email": $email, "password": $password, "shippingAddresses": $shipping_addresses, "taxExempt": $tax_exempt, "taxId": $tax_id, "taxIdValid": $tax_id_valid} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/customers/{id}"))
+  let req_body = {"billingPerson": $billing_person, "customerGroupId": $customer_group_id, "email": $email, "password": $password, "shippingAddresses": $shipping_addresses, "taxExempt": $tax_exempt, "taxId": $tax_id, "taxIdValid": $tax_id_valid} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Find orders in the customer associated with a given ID. If the customer does not exist, an error response will be returned. If no orders are found in the given customer then an empty array will be returned
@@ -522,16 +559,16 @@ export def "customers-orders get" [
   --page-size: int # The number of results to fetch in a given page. When this parameter is omitted, a maximum of 200 results are returned (format: int64)
   --next-page: string # The next page cursor, taken from the response header: `elements-next-page-token`
   --fields: string # The fields to return on the response. Can be a single field or a comma-separated list of fields
-  --authorization: string # The authorization tokens. The format for the header value is 'Element &lt;token&gt;, User &lt;user secret&gt;'
+  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>'
 ]: nothing -> table<additionalInfo: record<google_customer_id: string>, billingPerson: record<city: string, companyName: string, countryCode: string, countryName: string, name: string, phone: string, postalCode: string, stateName: string, stateOrProvinceCode: string, stateOrProvinceName: string, street: string>, couponDiscount: float, createDate: string, createTimestamp: float, customerId: float, customerTaxExempt: bool, customerTaxId: int, customerTaxIdValid: bool, discount: float, email: string, fulfillmentStatus: string, globalReferer: string, handlingFee: record<description: string, name: string, value: float>, hidden: bool, ipAddress: string, items: list<record>, lastChangeDate: string, membershipBasedDiscount: float, orderComments: string, orderNumber: int, paymentMethod: string, paymentModule: string, paymentStatus: string, privateAdminNotes: string, refererUrl: string, refundedAmount: float, refunds: list<record>, reversedTaxApplied: bool, sample: bool, shippingMethod: string, shippingOption: record<estimatedTransitTime: string, isPickup: bool, shippingCarrierName: string, shippingMethodName: string, shippingRate: float>, shippingPerson: record<city: string, companyName: string, countryCode: string, countryName: string, name: string, phone: string, postalCode: string, stateName: string, stateOrProvinceCode: string, stateOrProvinceName: string, street: string>, subtotal: float, tax: float, taxesOnShipping: list<record>, total: float, totalAndMembershipBasedDiscount: float, trackingNumber: string, updateDate: string, updateTimestamp: float, usdTotal: float, vendorNumber: float, vendorOrderNumber: string, volumeDiscount: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pageSize" $page_size "scalar") (serialize-qp "nextPage" $next_page "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/customers/{id}/orders") $qp)
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/customers/{id}/orders") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -548,16 +585,16 @@ export def "objects get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The authorization tokens. The format for the header value is 'Element &lt;token&gt;, User &lt;user secret&gt;'
+  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>'
   --elements-version: string@elements-version-completer # Elements Version to be used for getting metadata, possible options are Hydrogen, Helium. Default value is Hydrogen
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/objects")
-  let extra_headers = {"Authorization": $authorization, "Elements-Version": $elements_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Elements-Version": $elements_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -565,7 +602,7 @@ export def "objects get" [
 #
 # GET /objects/{objectName}/docs
 # operationId: getObjectsObjectNameDocs
-export def "objects-docs get-objects-object-name" [
+export def "objects-docs get-name" [
   object_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -579,16 +616,16 @@ export def "objects-docs get-objects-object-name" [
   --resolve-references: oneof<nothing, bool> # Optionally resolve swagger references for an inline object definition
   --basic: oneof<nothing, bool> # Include only OpenAPI / Swagger properties in definitions
   --version: string # The element swagger version to get the corresponding element swagger, Passing in "-1" gives latest element swagger (default: -1)
-  --authorization: string # The authorization tokens. The format for the header value is 'Element &lt;token&gt;, User &lt;user secret&gt;'
+  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>'
 ]: nothing -> record<basePath: string, definitions: record<definition_name: record<properties: record>>, host: string, info: record<contact: record<email: string>, title: string, version: string>, paths: record<_contacts: record<post: record>>, schemes: list<string>, swagger: string, tags: table<name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "discovery" $discovery "scalar") (serialize-qp "resolveReferences" $resolve_references "scalar") (serialize-qp "basic" $basic "scalar") (serialize-qp "version" $version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({object_name: $object_name} | format pattern "/objects/{object_name}/docs") $qp)
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({object_name: (encode-path-segment $object_name)} | format pattern "/objects/{object_name}/docs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -596,7 +633,7 @@ export def "objects-docs get-objects-object-name" [
 #
 # GET /objects/{objectName}/metadata
 # operationId: getObjectsObjectNameMetadata
-export def "objects-metadata get-objects-object-name" [
+export def "objects-metadata get-name" [
   object_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -606,16 +643,16 @@ export def "objects-metadata get-objects-object-name" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The authorization tokens. The format for the header value is 'Element &lt;token&gt;, User &lt;user secret&gt;'
+  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>'
   --elements-version: string@elements-version-completer # Elements Version to be used for getting metadata, possible options are Hydrogen, Helium. Default value is Hydrogen
 ]: nothing -> record<fields: table<mask: string, type: string, vendorDisplayName: string, vendorPath: string, vendorReadOnly: bool, vendorRequired: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({object_name: $object_name} | format pattern "/objects/{object_name}/metadata"))
-  let extra_headers = {"Authorization": $authorization, "Elements-Version": $elements_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({object_name: (encode-path-segment $object_name)} | format pattern "/objects/{object_name}/metadata"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Elements-Version": $elements_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -632,20 +669,20 @@ export def "orders list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-where: string # The CEQL search expression, or the where clause, without the WHERE keyword, in a typical SQL query (i.e. field='value'). <p>Supported search terms: date, from_date, to_date, from_update_date, to_update_date, order, from_order, to_order, customer_id, customer_email and statuses. All other search criteria are ignored
+  --qp-where: string # The CEQL search expression, or the where clause, without the WHERE keyword, in a typical SQL query (i.e. field='value'). Supported search terms: date, from_date, to_date, from_update_date, to_update_date, order, from_order, to_order, customer_id, customer_email and statuses. All other search criteria are ignored
   --page-size: int # The number of results to fetch in a given page. When this parameter is omitted, a maximum of 200 results are returned (format: int64)
   --next-page: string # The next page cursor, taken from the response header: `elements-next-page-token`
   --fields: string # The fields to return on the response. Can be a single field or a comma-separated list of fields
-  --authorization: string # The authorization tokens. The format for the header value is 'Element &lt;token&gt;, User &lt;user secret&gt;'
+  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>'
 ]: nothing -> table<additionalInfo: record<google_customer_id: string>, billingPerson: record<city: string, companyName: string, countryCode: string, countryName: string, name: string, phone: string, postalCode: string, stateName: string, stateOrProvinceCode: string, stateOrProvinceName: string, street: string>, couponDiscount: float, createDate: string, createTimestamp: float, customerId: float, customerTaxExempt: bool, customerTaxId: int, customerTaxIdValid: bool, discount: float, email: string, fulfillmentStatus: string, globalReferer: string, handlingFee: record<description: string, name: string, value: float>, hidden: bool, ipAddress: string, items: list<record>, lastChangeDate: string, membershipBasedDiscount: float, orderComments: string, orderNumber: int, paymentMethod: string, paymentModule: string, paymentStatus: string, privateAdminNotes: string, refererUrl: string, refundedAmount: float, refunds: list<record>, reversedTaxApplied: bool, sample: bool, shippingMethod: string, shippingOption: record<estimatedTransitTime: string, isPickup: bool, shippingCarrierName: string, shippingMethodName: string, shippingRate: float>, shippingPerson: record<city: string, companyName: string, countryCode: string, countryName: string, name: string, phone: string, postalCode: string, stateName: string, stateOrProvinceCode: string, stateOrProvinceName: string, street: string>, subtotal: float, tax: float, taxesOnShipping: list<record>, total: float, totalAndMembershipBasedDiscount: float, trackingNumber: string, updateDate: string, updateTimestamp: float, usdTotal: float, vendorNumber: float, vendorOrderNumber: string, volumeDiscount: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "where" $qp_where "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "nextPage" $next_page "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/orders" $qp)
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -666,7 +703,7 @@ export def "orders create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The authorization tokens. The format for the header value is 'Element &lt;token&gt;, User &lt;user secret&gt;'
+  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>'
   --billing-person: record # shape: {city?: string, companyName?: string, countryCode?: string, countryName?: string, name?: string, phone?: string, postalCode?: string, stateName?: string, stateOrProvinceCode?: string, stateOrProvinceName?: string, street?: string}
   --coupon-discount: float # format: double
   --customer-id: float # format: double
@@ -701,13 +738,13 @@ export def "orders create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/orders")
-  let body = {"billingPerson": $billing_person, "couponDiscount": $coupon_discount, "customerId": $customer_id, "customerTaxExempt": $customer_tax_exempt, "customerTaxId": $customer_tax_id, "customerTaxIdValid": $customer_tax_id_valid, "discount": $discount, "email": $email, "fulfillmentStatus": $fulfillment_status, "globalReferer": $global_referer, "hidden": $hidden, "items": $items, "membershipBasedDiscount": $membership_based_discount, "orderComments": $order_comments, "paymentMethod": $payment_method, "paymentModule": $payment_module, "paymentStatus": $payment_status, "privateAdminNotes": $private_admin_notes, "refererUrl": $referer_url, "reversedTaxApplied": $reversed_tax_applied, "sample": $sample, "shippingMethod": $shipping_method, "shippingOption": $shipping_option, "shippingPerson": $shipping_person, "subtotal": $subtotal, "tax": $tax, "total": $total, "totalAndMembershipBasedDiscount": $total_and_membership_based_discount, "volumeDiscount": $volume_discount} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"billingPerson": $billing_person, "couponDiscount": $coupon_discount, "customerId": $customer_id, "customerTaxExempt": $customer_tax_exempt, "customerTaxId": $customer_tax_id, "customerTaxIdValid": $customer_tax_id_valid, "discount": $discount, "email": $email, "fulfillmentStatus": $fulfillment_status, "globalReferer": $global_referer, "hidden": $hidden, "items": $items, "membershipBasedDiscount": $membership_based_discount, "orderComments": $order_comments, "paymentMethod": $payment_method, "paymentModule": $payment_module, "paymentStatus": $payment_status, "privateAdminNotes": $private_admin_notes, "refererUrl": $referer_url, "reversedTaxApplied": $reversed_tax_applied, "sample": $sample, "shippingMethod": $shipping_method, "shippingOption": $shipping_option, "shippingPerson": $shipping_person, "subtotal": $subtotal, "tax": $tax, "total": $total, "totalAndMembershipBasedDiscount": $total_and_membership_based_discount, "volumeDiscount": $volume_discount} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete an order associated with a given ID from your eCommerce system. Specifying an order associated with a given ID that does not exist will result in an error message
@@ -724,15 +761,15 @@ export def "orders delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The authorization tokens. The format for the header value is 'Element &lt;token&gt;, User &lt;user secret&gt;'
+  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>'
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/orders/{id}"))
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/orders/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -750,19 +787,19 @@ export def "orders get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The authorization tokens. The format for the header value is 'Element &lt;token&gt;, User &lt;user secret&gt;'
+  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>'
 ]: nothing -> record<additionalInfo: record<google_customer_id: string>, billingPerson: record<city: string, companyName: string, countryCode: string, countryName: string, name: string, phone: string, postalCode: string, stateName: string, stateOrProvinceCode: string, stateOrProvinceName: string, street: string>, couponDiscount: float, createDate: string, createTimestamp: float, customerId: float, customerTaxExempt: bool, customerTaxId: int, customerTaxIdValid: bool, discount: float, email: string, fulfillmentStatus: string, globalReferer: string, handlingFee: record<description: string, name: string, value: float>, hidden: bool, ipAddress: string, items: table<categoryId: int, couponApplied: bool, digital: bool, fixedShippingRate: float, fixedShippingRateOnly: bool, hdThumbnailUrl: string, id: int, imageUrl: string, isShippingRequired: bool, name: string, price: float, productAvailable: bool, productId: int, productPrice: float, quantity: int, quantityInStock: float, shipping: float, sku: string, smallThumbnailUrl: string, tax: float, taxes: list, trackQuantity: bool, weight: float>, lastChangeDate: string, membershipBasedDiscount: float, orderComments: string, orderNumber: int, paymentMethod: string, paymentModule: string, paymentStatus: string, privateAdminNotes: string, refererUrl: string, refundedAmount: float, refunds: table<amount: float, date: string, reason: string, source: string>, reversedTaxApplied: bool, sample: bool, shippingMethod: string, shippingOption: record<estimatedTransitTime: string, isPickup: bool, shippingCarrierName: string, shippingMethodName: string, shippingRate: float>, shippingPerson: record<city: string, companyName: string, countryCode: string, countryName: string, name: string, phone: string, postalCode: string, stateName: string, stateOrProvinceCode: string, stateOrProvinceName: string, street: string>, subtotal: float, tax: float, taxesOnShipping: table<name: string, total: float, value: float>, total: float, totalAndMembershipBasedDiscount: float, trackingNumber: string, updateDate: string, updateTimestamp: float, usdTotal: float, vendorNumber: float, vendorOrderNumber: string, volumeDiscount: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/orders/{id}"))
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/orders/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Update an order associated with a given ID in the eCommerce system. The update API uses the PATCH HTTP verb, so only those fields provided in the order object will be updated, and those fields not provided will be left alone. Updating an order with a specified ID that does not exist will result in an error response</strong>
+# Update an order associated with a given ID in the eCommerce system. The update API uses the PATCH HTTP verb, so only those fields provided in the order object will be updated, and those fields not provided will be left alone. Updating an order with a specified ID that does not exist will result in an error response
 #
 # PATCH /orders/{id}
 # operationId: updateOrderById
@@ -782,7 +819,7 @@ export def "orders update" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --action: string # An action to perform on the order: cancel, reopen or close. If left blank then the order is updated but no action is taken
-  --authorization: string # The authorization tokens. The format for the header value is 'Element &lt;token&gt;, User &lt;user secret&gt;'
+  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>'
   --billing-person: record # shape: {city?: string, companyName?: string, countryCode?: string, countryName?: string, name?: string, phone?: string, postalCode?: string, stateName?: string, stateOrProvinceCode?: string, stateOrProvinceName?: string, street?: string}
   --coupon-discount: float # format: double
   --customer-id: float # format: double
@@ -817,14 +854,14 @@ export def "orders update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "action" $action "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/orders/{id}") $qp)
-  let body = {"billingPerson": $billing_person, "couponDiscount": $coupon_discount, "customerId": $customer_id, "customerTaxExempt": $customer_tax_exempt, "customerTaxId": $customer_tax_id, "customerTaxIdValid": $customer_tax_id_valid, "discount": $discount, "email": $email, "fulfillmentStatus": $fulfillment_status, "globalReferer": $global_referer, "hidden": $hidden, "items": $items, "membershipBasedDiscount": $membership_based_discount, "orderComments": $order_comments, "paymentModule": $payment_module, "paymentStatus": $payment_status, "privateAdminNotes": $private_admin_notes, "refererUrl": $referer_url, "reversedTaxApplied": $reversed_tax_applied, "sample": $sample, "shippingMethod": $shipping_method, "shippingOption": $shipping_option, "shippingPerson": $shipping_person, "subtotal": $subtotal, "tax": $tax, "taxesOnShipping": $taxes_on_shipping, "total": $total, "totalAndMembershipBasedDiscount": $total_and_membership_based_discount, "volumeDiscount": $volume_discount} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/orders/{id}") $qp)
+  let req_body = {"billingPerson": $billing_person, "couponDiscount": $coupon_discount, "customerId": $customer_id, "customerTaxExempt": $customer_tax_exempt, "customerTaxId": $customer_tax_id, "customerTaxIdValid": $customer_tax_id_valid, "discount": $discount, "email": $email, "fulfillmentStatus": $fulfillment_status, "globalReferer": $global_referer, "hidden": $hidden, "items": $items, "membershipBasedDiscount": $membership_based_discount, "orderComments": $order_comments, "paymentModule": $payment_module, "paymentStatus": $payment_status, "privateAdminNotes": $private_admin_notes, "refererUrl": $referer_url, "reversedTaxApplied": $reversed_tax_applied, "sample": $sample, "shippingMethod": $shipping_method, "shippingOption": $shipping_option, "shippingPerson": $shipping_person, "subtotal": $subtotal, "tax": $tax, "taxesOnShipping": $taxes_on_shipping, "total": $total, "totalAndMembershipBasedDiscount": $total_and_membership_based_discount, "volumeDiscount": $volume_discount} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve the payments in the eCommerce system for the specified order
@@ -844,16 +881,16 @@ export def "orders-payments get" [
   --page-size: int # The number of results to fetch in a given page. When this parameter is omitted, a maximum of 200 results are returned (format: int64)
   --next-page: string # The next page cursor, taken from the response header: `elements-next-page-token`
   --fields: string # The fields to return on the response. Can be a single field or a comma-separated list of fields
-  --authorization: string # The authorization tokens. The format for the header value is 'Element &lt;token&gt;, User &lt;user secret&gt;'
+  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>'
 ]: nothing -> table<paymentMethod: string, paymentStatus: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pageSize" $page_size "scalar") (serialize-qp "nextPage" $next_page "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({order_id: $order_id} | format pattern "/orders/{order_id}/payments") $qp)
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({order_id: (encode-path-segment $order_id)} | format pattern "/orders/{order_id}/payments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -874,20 +911,20 @@ export def "orders-refunds get" [
   --page-size: int # The number of results to fetch in a given page. When this parameter is omitted, a maximum of 200 results are returned (format: int64)
   --next-page: string # The next page cursor, taken from the response header: `elements-next-page-token`
   --fields: string # The fields to return on the response. Can be a single field or a comma-separated list of fields
-  --authorization: string # The authorization tokens. The format for the header value is 'Element &lt;token&gt;, User &lt;user secret&gt;'
+  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>'
 ]: nothing -> table<paymentMethod: string, paymentStatus: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pageSize" $page_size "scalar") (serialize-qp "nextPage" $next_page "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({order_id: $order_id} | format pattern "/orders/{order_id}/refunds") $qp)
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({order_id: (encode-path-segment $order_id)} | format pattern "/orders/{order_id}/refunds") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Ping the Element to confirm that the Hub Element has a heartbeat.  If the Element does not have a heartbeat, an error message will be returned.
+# Ping the Element to confirm that the Hub Element has a heartbeat. If the Element does not have a heartbeat, an error message will be returned.
 #
 # GET /ping
 # operationId: getPing
@@ -900,19 +937,19 @@ export def "ping get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The authorization tokens. The format for the header value is 'Element &lt;token&gt;, User &lt;user secret&gt;'
+  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>'
 ]: nothing -> record<dateTime: string, endpoint: string, valid: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ping")
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Find products in the eCommerce system, using the provided CEQL search expression. The search expression in CEQL is the WHERE clause in a typical SQL query, but without the WHERE keyword.  If no search expression is provided, all records will be retrieved
+# Find products in the eCommerce system, using the provided CEQL search expression. The search expression in CEQL is the WHERE clause in a typical SQL query, but without the WHERE keyword. If no search expression is provided, all records will be retrieved
 #
 # GET /products
 # operationId: getProducts
@@ -925,20 +962,20 @@ export def "products list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-where: string # The CEQL search expression, or the where clause, without the WHERE keyword, in a typical SQL query (i.e. field='value'). <p>Supported search terms: category, hidden_products. All other search criteria are ignored
+  --qp-where: string # The CEQL search expression, or the where clause, without the WHERE keyword, in a typical SQL query (i.e. field='value'). Supported search terms: category, hidden_products. All other search criteria are ignored
   --page-size: int # The number of results to fetch in a given page. When this parameter is omitted, a maximum of 200 results are returned (format: int64)
   --next-page: string # The next page cursor, taken from the response header: `elements-next-page-token`
   --fields: string # The fields to return on the response. Can be a single field or a comma-separated list of fields
-  --authorization: string # The authorization tokens. The format for the header value is 'Element &lt;token&gt;, User &lt;user secret&gt;'
+  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>'
 ]: nothing -> table<attributes: list<record>, borderInfo: record<dominatingColor: record, homogeneity: bool>, categories: list<record>, categoryIds: list<int>, combinations: list<record>, compareAtPrice: float, compareToPrice: float, compareToPriceDiscount: float, compareToPriceDiscountFormatted: string, compareToPriceDiscountPercent: float, compareToPriceDiscountPercentFormatted: string, compareToPriceFormatted: string, createTimestamp: int, created: string, defaultCategoryId: int, defaultCombinationId: float, defaultDisplayedPrice: float, defaultDisplayedPriceFormatted: string, description: string, descriptionTruncated: bool, dimensions: record<height: float, length: float, width: float>, enabled: bool, favorites: record<count: int, displayedCount: string>, files: list<record>, fixedShippingRate: float, fixedShippingRateOnly: bool, galleryImages: list<record>, googleItemCondition: string, hdThumbnailUrl: string, id: int, imageUrl: string, inStock: bool, isSampleProduct: bool, isShippingRequired: bool, media: record<images: list>, name: string, options: list<record>, originalImage: record<alt: string, height: int, thumbnail: string, url: string, width: int>, originalImageUrl: string, price: float, priceInProductList: float, productClassId: int, quantity: int, quantityDelta: int, relatedProducts: record<productIds: list, relatedCategory: record>, seoDescription: string, seoTitle: string, shipping: record<disabledMethods: list, enabledMethods: list, flatRate: float, methodMarkup: float, type: string>, showOnFrontpage: float, sku: string, smallThumbnailUrl: string, tangible: string, tax: record<defaultLocationIncludedTaxRate: float, enabledManualTaxes: list>, taxes: list<record>, thumbnailUrl: string, trackQuantity: string, unlimited: bool, updateTimestamp: int, updated: string, url: string, warningLimit: int, weight: float, wholesalePrices: record<_quantity_: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "where" $qp_where "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "nextPage" $next_page "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/products" $qp)
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -951,9 +988,9 @@ export def "products list" [
 # --favorites shape: {count?: int, displayedCount?: string}
 # --galleryImages item shape: {alt?: string, height?: int, thumbnail?: string, url?: string, width?: int}
 # --options item shape: {choices?: list, defaultChoice?: int, name: string, required: bool, type: string}
-# --relatedProducts shape: {productIds?: list, relatedCategory?: record}
-# --shipping shape: {disabledMethods?: list, enabledMethods?: list, flatRate?: float, methodMarkup?: float, type?: string}
-# --tax shape: {defaultLocationIncludedTaxRate?: float, enabledManualTaxes?: list}
+# --relatedProducts shape: {productIds?: list<float>, relatedCategory?: record}
+# --shipping shape: {disabledMethods?: list<string>, enabledMethods?: list<string>, flatRate?: float, methodMarkup?: float, type?: string}
+# --tax shape: {defaultLocationIncludedTaxRate?: float, enabledManualTaxes?: list<int>}
 # --taxes item shape: {name?: string, total?: float, value?: float}
 # --wholesalePrices shape: {{quantity}?: float}
 export def "products create" [
@@ -965,9 +1002,9 @@ export def "products create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The authorization tokens. The format for the header value is 'Element &lt;token&gt;, User &lt;user secret&gt;'
+  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>'
   --attributes: list # item shape: {id?: int, internalName?: string, name?: string, value?: string}
-  --category-ids: list
+  --category-ids: list<int>
   --compare-at-price: float # Product’s sale price displayed strike-out in the customer (format: double)
   --compare-to-price: float # format: double
   --created: string # format: date-time
@@ -986,13 +1023,13 @@ export def "products create" [
   --price: float # Base Product price (format: double)
   --product-class-id: int # Id of the product type that this product belongs to. (format: int64)
   --quantity: int # Amount of product items in stock. (format: int64)
-  --related-products: record # shape: {productIds?: list, relatedCategory?: record}
+  --related-products: record # shape: {productIds?: list<float>, relatedCategory?: record}
   --seo-description: string
   --seo-title: string
-  --shipping: record # shape: {disabledMethods?: list, enabledMethods?: list, flatRate?: float, methodMarkup?: float, type?: string}
+  --shipping: record # shape: {disabledMethods?: list<string>, enabledMethods?: list<string>, flatRate?: float, methodMarkup?: float, type?: string}
   --show-on-frontpage: float # format: double
   --sku: string # Product SKU
-  --tax: record # shape: {defaultLocationIncludedTaxRate?: float, enabledManualTaxes?: list}
+  --tax: record # shape: {defaultLocationIncludedTaxRate?: float, enabledManualTaxes?: list<int>}
   --taxes: list # item shape: {name?: string, total?: float, value?: float}
   --warning-limit: int # format: int64
   --weight: float # Product weight in the units defined in store settings (format: double)
@@ -1002,13 +1039,13 @@ export def "products create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/products")
-  let body = {"attributes": $attributes, "categoryIds": $category_ids, "compareAtPrice": $compare_at_price, "compareToPrice": $compare_to_price, "created": $created, "defaultCategoryId": $default_category_id, "description": $description, "dimensions": $dimensions, "enabled": $enabled, "favorites": $favorites, "fixedShippingRate": $fixed_shipping_rate, "fixedShippingRateOnly": $fixed_shipping_rate_only, "galleryImages": $gallery_images, "googleItemCondition": $google_item_condition, "isShippingRequired": $is_shipping_required, "name": $name, "options": $options, "price": $price, "productClassId": $product_class_id, "quantity": $quantity, "relatedProducts": $related_products, "seoDescription": $seo_description, "seoTitle": $seo_title, "shipping": $shipping, "showOnFrontpage": $show_on_frontpage, "sku": $sku, "tax": $tax, "taxes": $taxes, "warningLimit": $warning_limit, "weight": $weight, "wholesalePrices": $wholesale_prices} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"attributes": $attributes, "categoryIds": $category_ids, "compareAtPrice": $compare_at_price, "compareToPrice": $compare_to_price, "created": $created, "defaultCategoryId": $default_category_id, "description": $description, "dimensions": $dimensions, "enabled": $enabled, "favorites": $favorites, "fixedShippingRate": $fixed_shipping_rate, "fixedShippingRateOnly": $fixed_shipping_rate_only, "galleryImages": $gallery_images, "googleItemCondition": $google_item_condition, "isShippingRequired": $is_shipping_required, "name": $name, "options": $options, "price": $price, "productClassId": $product_class_id, "quantity": $quantity, "relatedProducts": $related_products, "seoDescription": $seo_description, "seoTitle": $seo_title, "shipping": $shipping, "showOnFrontpage": $show_on_frontpage, "sku": $sku, "tax": $tax, "taxes": $taxes, "warningLimit": $warning_limit, "weight": $weight, "wholesalePrices": $wholesale_prices} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a product associated with a given ID from your eCommerce system. Specifying a product associated with a given ID that does not exist will result in an error message
@@ -1025,15 +1062,15 @@ export def "products delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The authorization tokens. The format for the header value is 'Element &lt;token&gt;, User &lt;user secret&gt;'
+  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>'
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/products/{id}"))
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/products/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1051,19 +1088,19 @@ export def "products get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The authorization tokens. The format for the header value is 'Element &lt;token&gt;, User &lt;user secret&gt;'
+  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>'
 ]: nothing -> record<attributes: table<id: int, internalName: string, name: string, value: string>, borderInfo: record<dominatingColor: record<alpha: float, blue: float, green: float, red: float>, homogeneity: bool>, categories: table<defaultCategory: bool, description: string, enabled: bool, id: int, name: string, originalImageUrl: string, productCount: int, thumbnailUrl: string, url: string>, categoryIds: list<int>, combinations: table<attributes: list, combinationNumber: float, compareToPrice: float, id: float, price: float, quantity: float, sku: string, unlimited: bool, warningLimit: float, weight: float>, compareAtPrice: float, compareToPrice: float, compareToPriceDiscount: float, compareToPriceDiscountFormatted: string, compareToPriceDiscountPercent: float, compareToPriceDiscountPercentFormatted: string, compareToPriceFormatted: string, createTimestamp: int, created: string, defaultCategoryId: int, defaultCombinationId: float, defaultDisplayedPrice: float, defaultDisplayedPriceFormatted: string, description: string, descriptionTruncated: bool, dimensions: record<height: float, length: float, width: float>, enabled: bool, favorites: record<count: int, displayedCount: string>, files: table<adminUrl: string, description: string, id: float, name: string, size: float>, fixedShippingRate: float, fixedShippingRateOnly: bool, galleryImages: table<alt: string, height: int, thumbnail: string, url: string, width: int>, googleItemCondition: string, hdThumbnailUrl: string, id: int, imageUrl: string, inStock: bool, isSampleProduct: bool, isShippingRequired: bool, media: record<images: list<record>>, name: string, options: table<choices: list, defaultChoice: int, name: string, required: bool, type: string>, originalImage: record<alt: string, height: int, thumbnail: string, url: string, width: int>, originalImageUrl: string, price: float, priceInProductList: float, productClassId: int, quantity: int, quantityDelta: int, relatedProducts: record<productIds: list<float>, relatedCategory: record<categoryId: float, enabled: bool, productCount: float>>, seoDescription: string, seoTitle: string, shipping: record<disabledMethods: list<string>, enabledMethods: list<string>, flatRate: float, methodMarkup: float, type: string>, showOnFrontpage: float, sku: string, smallThumbnailUrl: string, tangible: string, tax: record<defaultLocationIncludedTaxRate: float, enabledManualTaxes: list<int>>, taxes: table<name: string, total: float, value: float>, thumbnailUrl: string, trackQuantity: string, unlimited: bool, updateTimestamp: int, updated: string, url: string, warningLimit: int, weight: float, wholesalePrices: record<_quantity_: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/products/{id}"))
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/products/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Update a product associated with a given ID in the eCommerce system. The update API uses the PATCH HTTP verb, so only those fields provided in the product object will be updated, and those fields not provided will be left alone. Updating a product with a specified ID that does not exist will result in an error response. <p><strong>Update supports the following fields: sku, quantity, trackQuantity, quantityDelta, warningLimit, name, price, weight, tangible, enabled, fixedShippingRateOnly, fixedShippingRate, description, wholesalePrices, compareAtPrice, productClassId</strong>
+# Update a product associated with a given ID in the eCommerce system. The update API uses the PATCH HTTP verb, so only those fields provided in the product object will be updated, and those fields not provided will be left alone. Updating a product with a specified ID that does not exist will result in an error response. Update supports the following fields: sku, quantity, trackQuantity, quantityDelta, warningLimit, name, price, weight, tangible, enabled, fixedShippingRateOnly, fixedShippingRate, description, wholesalePrices, compareAtPrice, productClassId
 #
 # PATCH /products/{id}
 # operationId: updateProductById
@@ -1071,9 +1108,9 @@ export def "products get" [
 # --dimensions shape: {height?: float, length?: float, width?: float}
 # --galleryImages item shape: {alt?: string, height?: int, thumbnail?: string, url?: string, width?: int}
 # --options item shape: {choices?: list, defaultChoice?: int, name: string, required: bool, type: string}
-# --relatedProducts shape: {productIds?: list, relatedCategory?: record}
-# --shipping shape: {disabledMethods?: list, enabledMethods?: list, flatRate?: float, methodMarkup?: float, type?: string}
-# --tax shape: {defaultLocationIncludedTaxRate?: float, enabledManualTaxes?: list}
+# --relatedProducts shape: {productIds?: list<float>, relatedCategory?: record}
+# --shipping shape: {disabledMethods?: list<string>, enabledMethods?: list<string>, flatRate?: float, methodMarkup?: float, type?: string}
+# --tax shape: {defaultLocationIncludedTaxRate?: float, enabledManualTaxes?: list<int>}
 # --taxes item shape: {name?: string, total?: float, value?: float}
 # --wholesalePrices shape: {{quantity}?: float}
 export def "products update" [
@@ -1086,9 +1123,9 @@ export def "products update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The authorization tokens. The format for the header value is 'Element &lt;token&gt;, User &lt;user secret&gt;'
+  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>'
   --attributes: list # item shape: {id?: int, internalName?: string, name?: string, value?: string}
-  --category-ids: list
+  --category-ids: list<int>
   --compare-at-price: float # Product’s sale price displayed strike-out in the customer (format: double)
   --compare-to-price: float # format: double
   --default-category-id: int # format: int64
@@ -1105,13 +1142,13 @@ export def "products update" [
   --price: float # Base Product price (format: double)
   --product-class-id: int # Id of the product type that this product belongs to. (format: int64)
   --quantity: int # Amount of product items in stock. (format: int64)
-  --related-products: record # shape: {productIds?: list, relatedCategory?: record}
+  --related-products: record # shape: {productIds?: list<float>, relatedCategory?: record}
   --seo-description: string
   --seo-title: string
-  --shipping: record # shape: {disabledMethods?: list, enabledMethods?: list, flatRate?: float, methodMarkup?: float, type?: string}
+  --shipping: record # shape: {disabledMethods?: list<string>, enabledMethods?: list<string>, flatRate?: float, methodMarkup?: float, type?: string}
   --show-on-frontpage: float # format: double
   --sku: string # Product SKU
-  --tax: record # shape: {defaultLocationIncludedTaxRate?: float, enabledManualTaxes?: list}
+  --tax: record # shape: {defaultLocationIncludedTaxRate?: float, enabledManualTaxes?: list<int>}
   --taxes: list # item shape: {name?: string, total?: float, value?: float}
   --warning-limit: int # format: int64
   --weight: float # Product weight in the units defined in store settings (format: double)
@@ -1120,21 +1157,21 @@ export def "products update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/products/{id}"))
-  let body = {"attributes": $attributes, "categoryIds": $category_ids, "compareAtPrice": $compare_at_price, "compareToPrice": $compare_to_price, "defaultCategoryId": $default_category_id, "description": $description, "dimensions": $dimensions, "enabled": $enabled, "fixedShippingRate": $fixed_shipping_rate, "fixedShippingRateOnly": $fixed_shipping_rate_only, "galleryImages": $gallery_images, "googleItemCondition": $google_item_condition, "isShippingRequired": $is_shipping_required, "name": $name, "options": $options, "price": $price, "productClassId": $product_class_id, "quantity": $quantity, "relatedProducts": $related_products, "seoDescription": $seo_description, "seoTitle": $seo_title, "shipping": $shipping, "showOnFrontpage": $show_on_frontpage, "sku": $sku, "tax": $tax, "taxes": $taxes, "warningLimit": $warning_limit, "weight": $weight, "wholesalePrices": $wholesale_prices} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/products/{id}"))
+  let req_body = {"attributes": $attributes, "categoryIds": $category_ids, "compareAtPrice": $compare_at_price, "compareToPrice": $compare_to_price, "defaultCategoryId": $default_category_id, "description": $description, "dimensions": $dimensions, "enabled": $enabled, "fixedShippingRate": $fixed_shipping_rate, "fixedShippingRateOnly": $fixed_shipping_rate_only, "galleryImages": $gallery_images, "googleItemCondition": $google_item_condition, "isShippingRequired": $is_shipping_required, "name": $name, "options": $options, "price": $price, "productClassId": $product_class_id, "quantity": $quantity, "relatedProducts": $related_products, "seoDescription": $seo_description, "seoTitle": $seo_title, "shipping": $shipping, "showOnFrontpage": $show_on_frontpage, "sku": $sku, "tax": $tax, "taxes": $taxes, "warningLimit": $warning_limit, "weight": $weight, "wholesalePrices": $wholesale_prices} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Search for {objectName}
 #
 # GET /{objectName}
 # operationId: getByObjectName
-export def "object-name get-by" [
+export def "object-name list" [
   object_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1148,16 +1185,16 @@ export def "object-name get-by" [
   --page-size: int # The page size. Defaults to 200 if not provided. Maximum of 5000. (format: int64)
   --next-page: string # The next page cursor, taken from the response header: `elements-next-page-token`
   --fields: string # The fields to return on the response. Can be a single field or a comma-separated list of fields
-  --authorization: string # The authorization tokens. The format for the header value is 'Element &lt;token&gt;, User &lt;user secret&gt;'
+  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>'
 ]: nothing -> table<objectField: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "where" $qp_where "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "nextPage" $next_page "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({object_name: $object_name} | format pattern "/{object_name}") $qp)
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({object_name: (encode-path-segment $object_name)} | format pattern "/{object_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1165,7 +1202,7 @@ export def "object-name get-by" [
 #
 # POST /{objectName}
 # operationId: createByObjectName
-export def "object-name create-by" [
+export def "object-name create" [
   object_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1175,27 +1212,27 @@ export def "object-name create-by" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The authorization tokens. The format for the header value is 'Element &lt;token&gt;, User &lt;user secret&gt;'
+  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>'
   --object-field: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({object_name: $object_name} | format pattern "/{object_name}"))
-  let body = {"objectField": $object_field} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({object_name: (encode-path-segment $object_name)} | format pattern "/{object_name}"))
+  let req_body = {"objectField": $object_field} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete an {objectName}
 #
 # DELETE /{objectName}/{objectId}
 # operationId: deleteObjectNameByObjectId
-export def "object-name delete-by-objectName-objectId" [
+export def "object-name delete" [
   object_name: string
   object_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1206,15 +1243,15 @@ export def "object-name delete-by-objectName-objectId" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The authorization tokens. The format for the header value is 'Element &lt;token&gt;, User &lt;user secret&gt;'
+  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>'
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({object_name: $object_name, object_id: $object_id} | format pattern "/{object_name}/{object_id}"))
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({object_name: (encode-path-segment $object_name), object_id: (encode-path-segment $object_id)} | format pattern "/{object_name}/{object_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1222,7 +1259,7 @@ export def "object-name delete-by-objectName-objectId" [
 #
 # GET /{objectName}/{objectId}
 # operationId: getObjectNameByObjectId
-export def "object-name get-by-objectName-objectId" [
+export def "object-name get" [
   object_name: string
   object_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1234,15 +1271,15 @@ export def "object-name get-by-objectName-objectId" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --authorization: string # The authorization tokens. The format for the header value is 'Element &lt;token&gt;, User &lt;user secret&gt;'
+  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>'
 ]: nothing -> record<objectField: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({object_name: $object_name, object_id: $object_id} | format pattern "/{object_name}/{object_id}"))
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({object_name: (encode-path-segment $object_name), object_id: (encode-path-segment $object_id)} | format pattern "/{object_name}/{object_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1261,20 +1298,20 @@ export def "object-name update-by-objectName-objectId" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The authorization tokens. The format for the header value is 'Element &lt;token&gt;, User &lt;user secret&gt;'
+  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>'
   --object-field: string
 ]: any -> record<objectField: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({object_name: $object_name, object_id: $object_id} | format pattern "/{object_name}/{object_id}"))
-  let body = {"objectField": $object_field} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({object_name: (encode-path-segment $object_name), object_id: (encode-path-segment $object_id)} | format pattern "/{object_name}/{object_id}"))
+  let req_body = {"objectField": $object_field} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update an {objectName}
@@ -1292,27 +1329,27 @@ export def "object-name update-by-objectName-objectId-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The authorization tokens. The format for the header value is 'Element &lt;token&gt;, User &lt;user secret&gt;'
+  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>'
   --object-field: string
 ]: any -> record<objectField: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({object_name: $object_name, object_id: $object_id} | format pattern "/{object_name}/{object_id}"))
-  let body = {"objectField": $object_field} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({object_name: (encode-path-segment $object_name), object_id: (encode-path-segment $object_id)} | format pattern "/{object_name}/{object_id}"))
+  let req_body = {"objectField": $object_field} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Search for {childObjectName}
 #
 # GET /{objectName}/{objectId}/{childObjectName}
 # operationId: getObjectNameByChildObjectName
-export def "object-name get-by-objectName-objectId-childObjectName" [
+export def "object-name list-1" [
   object_name: string
   object_id: string
   child_object_name: string
@@ -1328,16 +1365,16 @@ export def "object-name get-by-objectName-objectId-childObjectName" [
   --page-size: int # The page size. Defaults to 200 if not provided. Maximum of 5000. (format: int64)
   --next-page: string # The next page cursor, taken from the response header: `elements-next-page-token`
   --fields: string # The fields to return on the response. Can be a single field or a comma-separated list of fields
-  --authorization: string # The authorization tokens. The format for the header value is 'Element &lt;token&gt;, User &lt;user secret&gt;'
+  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>'
 ]: nothing -> table<objectField: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "where" $qp_where "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "nextPage" $next_page "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({object_name: $object_name, object_id: $object_id, child_object_name: $child_object_name} | format pattern "/{object_name}/{object_id}/{child_object_name}") $qp)
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({object_name: (encode-path-segment $object_name), object_id: (encode-path-segment $object_id), child_object_name: (encode-path-segment $child_object_name)} | format pattern "/{object_name}/{object_id}/{child_object_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1345,7 +1382,7 @@ export def "object-name get-by-objectName-objectId-childObjectName" [
 #
 # POST /{objectName}/{objectId}/{childObjectName}
 # operationId: createObjectNameByChildObjectName
-export def "object-name create" [
+export def "object-name create-by-child" [
   object_name: string
   object_id: string
   child_object_name: string
@@ -1357,27 +1394,27 @@ export def "object-name create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The authorization tokens. The format for the header value is 'Element &lt;token&gt;, User &lt;user secret&gt;'
+  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>'
   --object-field: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({object_name: $object_name, object_id: $object_id, child_object_name: $child_object_name} | format pattern "/{object_name}/{object_id}/{child_object_name}"))
-  let body = {"objectField": $object_field} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({object_name: (encode-path-segment $object_name), object_id: (encode-path-segment $object_id), child_object_name: (encode-path-segment $child_object_name)} | format pattern "/{object_name}/{object_id}/{child_object_name}"))
+  let req_body = {"objectField": $object_field} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete an {childObjectName}
 #
 # DELETE /{objectName}/{objectId}/{childObjectName}/{childObjectId}
 # operationId: deleteObjectNameByChildObjectId
-export def "object-name delete-by-objectName-objectId-childObjectName-childObjectId" [
+export def "object-name delete-by-child" [
   object_name: string
   object_id: string
   child_object_name: string
@@ -1390,15 +1427,15 @@ export def "object-name delete-by-objectName-objectId-childObjectName-childObjec
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The authorization tokens. The format for the header value is 'Element &lt;token&gt;, User &lt;user secret&gt;'
+  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>'
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({object_name: $object_name, object_id: $object_id, child_object_name: $child_object_name, child_object_id: $child_object_id} | format pattern "/{object_name}/{object_id}/{child_object_name}/{child_object_id}"))
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({object_name: (encode-path-segment $object_name), object_id: (encode-path-segment $object_id), child_object_name: (encode-path-segment $child_object_name), child_object_id: (encode-path-segment $child_object_id)} | format pattern "/{object_name}/{object_id}/{child_object_name}/{child_object_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1406,7 +1443,7 @@ export def "object-name delete-by-objectName-objectId-childObjectName-childObjec
 #
 # GET /{objectName}/{objectId}/{childObjectName}/{childObjectId}
 # operationId: getObjectNameByChildObjectId
-export def "object-name get-by-objectName-objectId-childObjectName-childObjectId" [
+export def "object-name get-by-child" [
   object_name: string
   object_id: string
   child_object_name: string
@@ -1419,15 +1456,15 @@ export def "object-name get-by-objectName-objectId-childObjectName-childObjectId
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The authorization tokens. The format for the header value is 'Element &lt;token&gt;, User &lt;user secret&gt;'
+  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>'
 ]: nothing -> record<objectField: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({object_name: $object_name, object_id: $object_id, child_object_name: $child_object_name, child_object_id: $child_object_id} | format pattern "/{object_name}/{object_id}/{child_object_name}/{child_object_id}"))
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({object_name: (encode-path-segment $object_name), object_id: (encode-path-segment $object_id), child_object_name: (encode-path-segment $child_object_name), child_object_id: (encode-path-segment $child_object_id)} | format pattern "/{object_name}/{object_id}/{child_object_name}/{child_object_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1435,7 +1472,7 @@ export def "object-name get-by-objectName-objectId-childObjectName-childObjectId
 #
 # PATCH /{objectName}/{objectId}/{childObjectName}/{childObjectId}
 # operationId: updateObjectNameByChildObjectId
-export def "object-name update-by-objectName-objectId-childObjectName-childObjectId" [
+export def "object-name update-by-child-by-objectName-objectId-childObjectName-childObjectId" [
   object_name: string
   object_id: string
   child_object_name: string
@@ -1448,27 +1485,27 @@ export def "object-name update-by-objectName-objectId-childObjectName-childObjec
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The authorization tokens. The format for the header value is 'Element &lt;token&gt;, User &lt;user secret&gt;'
+  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>'
   --object-field: string
 ]: any -> record<objectField: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({object_name: $object_name, object_id: $object_id, child_object_name: $child_object_name, child_object_id: $child_object_id} | format pattern "/{object_name}/{object_id}/{child_object_name}/{child_object_id}"))
-  let body = {"objectField": $object_field} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({object_name: (encode-path-segment $object_name), object_id: (encode-path-segment $object_id), child_object_name: (encode-path-segment $child_object_name), child_object_id: (encode-path-segment $child_object_id)} | format pattern "/{object_name}/{object_id}/{child_object_name}/{child_object_id}"))
+  let req_body = {"objectField": $object_field} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update an {childObjectName}
 #
 # PUT /{objectName}/{objectId}/{childObjectName}/{childObjectId}
 # operationId: replaceObjectNameByChildObjectId
-export def "object-name update-by-objectName-objectId-childObjectName-childObjectId-1" [
+export def "object-name update-by-child-by-objectName-objectId-childObjectName-childObjectId-1" [
   object_name: string
   object_id: string
   child_object_name: string
@@ -1481,18 +1518,18 @@ export def "object-name update-by-objectName-objectId-childObjectName-childObjec
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The authorization tokens. The format for the header value is 'Element &lt;token&gt;, User &lt;user secret&gt;'
+  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>'
   --object-field: string
 ]: any -> record<objectField: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({object_name: $object_name, object_id: $object_id, child_object_name: $child_object_name, child_object_id: $child_object_id} | format pattern "/{object_name}/{object_id}/{child_object_name}/{child_object_id}"))
-  let body = {"objectField": $object_field} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({object_name: (encode-path-segment $object_name), object_id: (encode-path-segment $object_id), child_object_name: (encode-path-segment $child_object_name), child_object_id: (encode-path-segment $child_object_id)} | format pattern "/{object_name}/{object_id}/{child_object_name}/{child_object_id}"))
+  let req_body = {"objectField": $object_field} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

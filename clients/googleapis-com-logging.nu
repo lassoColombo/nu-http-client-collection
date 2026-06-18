@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -74,7 +83,7 @@ def output-version-format-completer [] { ["V1" "V2" "VERSION_FORMAT_UNSPECIFIED"
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "entries-copy loggingentriescopy" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "entries-copy copy" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -98,7 +107,7 @@ export def commands []: nothing -> table {
 #
 # POST /v2/entries:copy
 # operationId: logging.entries.copy
-export def "entries-copy loggingentriescopy" [
+export def "entries-copy copy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -127,18 +136,18 @@ export def "entries-copy loggingentriescopy" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/entries:copy" $qp)
-  let body = {"destination": $destination, "filter": $filter, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"destination": $destination, "filter": $filter, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists log entries. Use this method to retrieve log entries that originated from a project/folder/organization/billing account. For ways to export log entries, see Exporting Logs (https://cloud.google.com/logging/docs/export).
 #
 # POST /v2/entries:list
 # operationId: logging.entries.list
-export def "entries-list loggingentrieslist" [
+export def "entries-list list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -162,26 +171,26 @@ export def "entries-list loggingentrieslist" [
   --order-by: string # Optional. How the results should be sorted. Presently, the only permitted values are "timestamp asc" (default) and "timestamp desc". The first option returns entries in order of increasing values of LogEntry.timestamp (oldest first), and the second option returns entries in order of decreasing timestamps (newest first). Entries with equal timestamps are returned in order of their insert_id values.
   --page-size: int # Optional. The maximum number of results to return from this request. Default is 50. If the value is negative or exceeds 1000, the request is rejected. The presence of next_page_token in the response indicates that more results might be available. (format: int32)
   --page-token: string # Optional. If present, then retrieve the next batch of results from the preceding call to this method. page_token must be the value of next_page_token from the previous response. The values of other method parameters should be identical to those in the previous call.
-  --project-ids: list # Optional. Deprecated. Use resource_names instead. One or more project identifiers or project numbers from which to retrieve log entries. Example: "my-project-1A".
-  --resource-names: list # Required. Names of one or more parent resources from which to retrieve log entries: projects/[PROJECT_ID] organizations/[ORGANIZATION_ID] billingAccounts/[BILLING_ACCOUNT_ID] folders/[FOLDER_ID]May alternatively be one or more views: projects/[PROJECT_ID]/locations/[LOCATION_ID]/buckets/[BUCKET_ID]/views/[VIEW_ID] organizations/[ORGANIZATION_ID]/locations/[LOCATION_ID]/buckets/[BUCKET_ID]/views/[VIEW_ID] billingAccounts/[BILLING_ACCOUNT_ID]/locations/[LOCATION_ID]/buckets/[BUCKET_ID]/views/[VIEW_ID] folders/[FOLDER_ID]/locations/[LOCATION_ID]/buckets/[BUCKET_ID]/views/[VIEW_ID]Projects listed in the project_ids field are added to this list. A maximum of 100 resources may be specified in a single request.
+  --project-ids: list<string> # Optional. Deprecated. Use resource_names instead. One or more project identifiers or project numbers from which to retrieve log entries. Example: "my-project-1A".
+  --resource-names: list<string> # Required. Names of one or more parent resources from which to retrieve log entries: projects/[PROJECT_ID] organizations/[ORGANIZATION_ID] billingAccounts/[BILLING_ACCOUNT_ID] folders/[FOLDER_ID]May alternatively be one or more views: projects/[PROJECT_ID]/locations/[LOCATION_ID]/buckets/[BUCKET_ID]/views/[VIEW_ID] organizations/[ORGANIZATION_ID]/locations/[LOCATION_ID]/buckets/[BUCKET_ID]/views/[VIEW_ID] billingAccounts/[BILLING_ACCOUNT_ID]/locations/[LOCATION_ID]/buckets/[BUCKET_ID]/views/[VIEW_ID] folders/[FOLDER_ID]/locations/[LOCATION_ID]/buckets/[BUCKET_ID]/views/[VIEW_ID]Projects listed in the project_ids field are added to this list. A maximum of 100 resources may be specified in a single request.
 ]: any -> record<entries: table<httpRequest: record, insertId: string, jsonPayload: record, labels: record, logName: string, metadata: record, operation: record, protoPayload: record, receiveTimestamp: string, resource: record, severity: string, sourceLocation: record, spanId: string, split: record, textPayload: string, timestamp: string, trace: string, traceSampled: bool>, nextPageToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/entries:list" $qp)
-  let body = {"filter": $filter, "orderBy": $order_by, "pageSize": $page_size, "pageToken": $page_token, "projectIds": $project_ids, "resourceNames": $resource_names} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"filter": $filter, "orderBy": $order_by, "pageSize": $page_size, "pageToken": $page_token, "projectIds": $project_ids, "resourceNames": $resource_names} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Streaming read of log entries as they are ingested. Until the stream is terminated, it will continue reading logs.
 #
 # POST /v2/entries:tail
 # operationId: logging.entries.tail
-export def "entries-tail loggingentriestail" [
+export def "entries-tail create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -203,18 +212,18 @@ export def "entries-tail loggingentriestail" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --buffer-window: string # Optional. The amount of time to buffer log entries at the server before being returned to prevent out of order results due to late arriving log entries. Valid values are between 0-60000 milliseconds. Defaults to 2000 milliseconds. (format: google-duration)
   --filter: string # Optional. Only log entries that match the filter are returned. An empty filter matches all log entries in the resources listed in resource_names. Referencing a parent resource that is not listed in resource_names will cause the filter to return no results. The maximum length of a filter is 20,000 characters.
-  --resource-names: list # Required. Name of a parent resource from which to retrieve log entries: projects/[PROJECT_ID] organizations/[ORGANIZATION_ID] billingAccounts/[BILLING_ACCOUNT_ID] folders/[FOLDER_ID]May alternatively be one or more views: projects/[PROJECT_ID]/locations/[LOCATION_ID]/buckets/[BUCKET_ID]/views/[VIEW_ID] organizations/[ORGANIZATION_ID]/locations/[LOCATION_ID]/buckets/[BUCKET_ID]/views/[VIEW_ID] billingAccounts/[BILLING_ACCOUNT_ID]/locations/[LOCATION_ID]/buckets/[BUCKET_ID]/views/[VIEW_ID] folders/[FOLDER_ID]/locations/[LOCATION_ID]/buckets/[BUCKET_ID]/views/[VIEW_ID]
+  --resource-names: list<string> # Required. Name of a parent resource from which to retrieve log entries: projects/[PROJECT_ID] organizations/[ORGANIZATION_ID] billingAccounts/[BILLING_ACCOUNT_ID] folders/[FOLDER_ID]May alternatively be one or more views: projects/[PROJECT_ID]/locations/[LOCATION_ID]/buckets/[BUCKET_ID]/views/[VIEW_ID] organizations/[ORGANIZATION_ID]/locations/[LOCATION_ID]/buckets/[BUCKET_ID]/views/[VIEW_ID] billingAccounts/[BILLING_ACCOUNT_ID]/locations/[LOCATION_ID]/buckets/[BUCKET_ID]/views/[VIEW_ID] folders/[FOLDER_ID]/locations/[LOCATION_ID]/buckets/[BUCKET_ID]/views/[VIEW_ID]
 ]: any -> record<entries: table<httpRequest: record, insertId: string, jsonPayload: record, labels: record, logName: string, metadata: record, operation: record, protoPayload: record, receiveTimestamp: string, resource: record, severity: string, sourceLocation: record, spanId: string, split: record, textPayload: string, timestamp: string, trace: string, traceSampled: bool>, suppressionInfo: table<reason: string, suppressedCount: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/entries:tail" $qp)
-  let body = {"bufferWindow": $buffer_window, "filter": $filter, "resourceNames": $resource_names} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"bufferWindow": $buffer_window, "filter": $filter, "resourceNames": $resource_names} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Writes log entries to Logging. This API method is the only way to send log entries to Logging. This method is used, directly or indirectly, by the Logging agent (fluentd) and all logging libraries configured to use Logging. A single request may contain log entries for a maximum of 1000 different resources (projects, organizations, billing accounts or folders)
@@ -223,7 +232,7 @@ export def "entries-tail loggingentriestail" [
 # operationId: logging.entries.write
 # --entries item shape: {httpRequest?: record, insertId?: string, jsonPayload?: record, labels?: record, logName?: string, metadata?: record, operation?: record, protoPayload?: record, resource?: record, severity?: "DEFAULT"|"DEBUG"|"INFO"|"NOTICE"|"WARNING"|"ERROR"|"CRITICAL"|"ALERT"|"EMERGENCY", sourceLocation?: record, spanId?: string, split?: record, textPayload?: string, timestamp?: string, trace?: string, traceSampled?: bool}
 # --resource shape: {labels?: record, type?: string}
-export def "entries-write loggingentrieswrite" [
+export def "entries-write create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -248,25 +257,25 @@ export def "entries-write loggingentrieswrite" [
   --labels: record # Optional. Default labels that are added to the labels field of all log entries in entries. If a log entry already has a label with the same key as a label in this parameter, then the log entry's label is not changed. See LogEntry.
   --log-name: string # Optional. A default log resource name that is assigned to all log entries in entries that do not specify a value for log_name: projects/[PROJECT_ID]/logs/[LOG_ID] organizations/[ORGANIZATION_ID]/logs/[LOG_ID] billingAccounts/[BILLING_ACCOUNT_ID]/logs/[LOG_ID] folders/[FOLDER_ID]/logs/[LOG_ID][LOG_ID] must be URL-encoded. For example: "projects/my-project-id/logs/syslog" "organizations/123/logs/cloudaudit.googleapis.com%2Factivity" The permission logging.logEntries.create is needed on each project, organization, billing account, or folder that is receiving new log entries, whether the resource is specified in logName or in an individual log entry.
   --partial-success: oneof<nothing, bool> # Optional. Whether a batch's valid entries should be written even if some other entry failed due to a permanent error such as INVALID_ARGUMENT or PERMISSION_DENIED. If any entry failed, then the response status is the response status of one of the failed entries. The response will include error details in WriteLogEntriesPartialErrors.log_entry_errors keyed by the entries' zero-based index in the entries. Failed requests for which no entries are written will not include per-entry errors.
-  --resource: record # An object representing a resource that can be used for monitoring, logging, billing, or other purposes. Examples include virtual machine instances, databases, and storage devices such as disks. The type field identifies a MonitoredResourceDescriptor object that describes the resource's schema. Information in the labels field identifies the actual resource and its attributes according to the schema. For example, a particular Compute Engine VM instance could be represented by the following object, because the MonitoredResourceDescriptor for "gce_instance" has labels "project_id", "instance_id" and "zone": { "type": "gce_instance", "labels": { "project_id": "my-project", "instance_id": "12345678901234", "zone": "us-central1-a" }}  — shape: {labels?: record, type?: string}
+  --resource: record # An object representing a resource that can be used for monitoring, logging, billing, or other purposes. Examples include virtual machine instances, databases, and storage devices such as disks. The type field identifies a MonitoredResourceDescriptor object that describes the resource's schema. Information in the labels field identifies the actual resource and its attributes according to the schema. For example, a particular Compute Engine VM instance could be represented by the following object, because the MonitoredResourceDescriptor for "gce_instance" has labels "project_id", "instance_id" and "zone": { "type": "gce_instance", "labels": { "project_id": "my-project", "instance_id": "12345678901234", "zone": "us-central1-a" }} — shape: {labels?: record, type?: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/entries:write" $qp)
-  let body = {"dryRun": $body_dry_run, "entries": $entries, "labels": $labels, "logName": $log_name, "partialSuccess": $partial_success, "resource": $resource} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"dryRun": $body_dry_run, "entries": $entries, "labels": $labels, "logName": $log_name, "partialSuccess": $partial_success, "resource": $resource} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists the descriptors for monitored resource types used by Logging.
 #
 # GET /v2/monitoredResourceDescriptors
 # operationId: logging.monitoredResourceDescriptors.list
-export def "monitored-resource-descriptors loggingmonitoredResourceDescriptorslist" [
+export def "monitored-resource-descriptors list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -302,7 +311,7 @@ export def "monitored-resource-descriptors loggingmonitoredResourceDescriptorsli
 #
 # DELETE /v2/{logName}
 # operationId: logging.projects.logs.delete
-export def "projects loggingprojectslogsdelete" [
+export def "projects delete-by-logName" [
   log_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -327,7 +336,7 @@ export def "projects loggingprojectslogsdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({log_name: $log_name} | format pattern "/v2/{log_name}") $qp)
+  let full_url = (build-url $base ({log_name: (encode-path-segment $log_name)} | format pattern "/v2/{log_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -337,7 +346,7 @@ export def "projects loggingprojectslogsdelete" [
 #
 # DELETE /v2/{metricName}
 # operationId: logging.projects.metrics.delete
-export def "projects loggingprojectsmetricsdelete" [
+export def "projects delete-by-metricName" [
   metric_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -362,7 +371,7 @@ export def "projects loggingprojectsmetricsdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({metric_name: $metric_name} | format pattern "/v2/{metric_name}") $qp)
+  let full_url = (build-url $base ({metric_name: (encode-path-segment $metric_name)} | format pattern "/v2/{metric_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -372,7 +381,7 @@ export def "projects loggingprojectsmetricsdelete" [
 #
 # GET /v2/{metricName}
 # operationId: logging.projects.metrics.get
-export def "projects loggingprojectsmetricsget" [
+export def "projects get-by-metricName" [
   metric_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -397,7 +406,7 @@ export def "projects loggingprojectsmetricsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({metric_name: $metric_name} | format pattern "/v2/{metric_name}") $qp)
+  let full_url = (build-url $base ({metric_name: (encode-path-segment $metric_name)} | format pattern "/v2/{metric_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -408,8 +417,8 @@ export def "projects loggingprojectsmetricsget" [
 # PUT /v2/{metricName}
 # operationId: logging.projects.metrics.update
 # --bucketOptions shape: {explicitBuckets?: record, exponentialBuckets?: record, linearBuckets?: record}
-# --metricDescriptor shape: {description?: string, displayName?: string, labels?: list, launchStage?: "LAUNCH_STAGE_UNSPECIFIED"|"UNIMPLEMENTED"|"PRELAUNCH"|"EARLY_ACCESS"|"ALPHA"|"BETA"|"GA"|"DEPRECATED", metadata?: record, metricKind?: "METRIC_KIND_UNSPECIFIED"|"GAUGE"|"DELTA"|"CUMULATIVE", monitoredResourceTypes?: list, name?: string, type?: string, unit?: string, valueType?: "VALUE_TYPE_UNSPECIFIED"|"BOOL"|"INT64"|"DOUBLE"|"STRING"|"DISTRIBUTION"|"MONEY"}
-export def "projects loggingprojectsmetricsupdate" [
+# --metricDescriptor shape: {description?: string, displayName?: string, labels?: list, launchStage?: "LAUNCH_STAGE_UNSPECIFIED"|"UNIMPLEMENTED"|"PRELAUNCH"|"EARLY_ACCESS"|"ALPHA"|"BETA"|"GA"|"DEPRECATED", metadata?: record, metricKind?: "METRIC_KIND_UNSPECIFIED"|"GAUGE"|"DELTA"|"CUMULATIVE", monitoredResourceTypes?: list<string>, name?: string, type?: string, unit?: string, valueType?: "VALUE_TYPE_UNSPECIFIED"|"BOOL"|"INT64"|"DOUBLE"|"STRING"|"DISTRIBUTION"|"MONEY"}
+export def "projects update-by-metricName" [
   metric_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -436,7 +445,7 @@ export def "projects loggingprojectsmetricsupdate" [
   --disabled: oneof<nothing, bool> # Optional. If set to True, then this metric is disabled and it does not generate any points.
   --filter: string # Required. An advanced logs filter (https://cloud.google.com/logging/docs/view/advanced_filters) which is used to match log entries. Example: "resource.type=gae_app AND severity>=ERROR" The maximum length of the filter is 20000 characters.
   --label-extractors: record # Optional. A map from a label key string to an extractor expression which is used to extract data from a log entry field and assign as the label value. Each label key specified in the LabelDescriptor must have an associated extractor expression in this map. The syntax of the extractor expression is the same as for the value_extractor field.The extracted value is converted to the type defined in the label descriptor. If either the extraction or the type conversion fails, the label will have a default value. The default value for a string label is an empty string, for an integer label its 0, and for a boolean label its false.Note that there are upper bounds on the maximum number of labels and the number of active time series that are allowed in a project.
-  --metric-descriptor: record # Defines a metric type and its schema. Once a metric descriptor is created, deleting or altering it stops data collection and makes the metric type's existing data unusable. — shape: {description?: string, displayName?: string, labels?: list, launchStage?: "LAUNCH_STAGE_UNSPECIFIED"|"UNIMPLEMENTED"|"PRELAUNCH"|"EARLY_ACCESS"|"ALPHA"|"BETA"|"GA"|"DEPRECATED", metadata?: record, metricKind?: "METRIC_KIND_UNSPECIFIED"|"GAUGE"|"DELTA"|"CUMULATIVE", monitoredResourceTypes?: list, name?: string, type?: string, unit?: string, valueType?: "VALUE_TYPE_UNSPECIFIED"|"BOOL"|"INT64"|"DOUBLE"|"STRING"|"DISTRIBUTION"|"MONEY"}
+  --metric-descriptor: record # Defines a metric type and its schema. Once a metric descriptor is created, deleting or altering it stops data collection and makes the metric type's existing data unusable. — shape: {description?: string, displayName?: string, labels?: list, launchStage?: "LAUNCH_STAGE_UNSPECIFIED"|"UNIMPLEMENTED"|"PRELAUNCH"|"EARLY_ACCESS"|"ALPHA"|"BETA"|"GA"|"DEPRECATED", metadata?: record, metricKind?: "METRIC_KIND_UNSPECIFIED"|"GAUGE"|"DELTA"|"CUMULATIVE", monitoredResourceTypes?: list<string>, name?: string, type?: string, unit?: string, valueType?: "VALUE_TYPE_UNSPECIFIED"|"BOOL"|"INT64"|"DOUBLE"|"STRING"|"DISTRIBUTION"|"MONEY"}
   --name: string # Required. The client-assigned metric identifier. Examples: "error_count", "nginx/requests".Metric identifiers are limited to 100 characters and can include only the following characters: A-Z, a-z, 0-9, and the special characters _-.,+!*',()%/. The forward-slash character (/) denotes a hierarchy of name pieces, and it cannot be the first character of the name.This field is the [METRIC_ID] part of a metric resource name in the format "projects/PROJECT_ID/metrics/METRIC_ID". Example: If the resource name of a metric is "projects/my-project/metrics/nginx%2Frequests", this field's value is "nginx/requests".
   --value-extractor: string # Optional. A value_extractor is required when using a distribution logs-based metric to extract the values to record from a log entry. Two functions are supported for value extraction: EXTRACT(field) or REGEXP_EXTRACT(field, regex). The arguments are: field: The name of the log entry field from which the value is to be extracted. regex: A regular expression using the Google RE2 syntax (https://github.com/google/re2/wiki/Syntax) with a single capture group to extract data from the specified log entry field. The value of the field is converted to a string before applying the regex. It is an error to specify a regex that does not include exactly one capture group.The result of the extraction must be convertible to a double type, as the distribution always records double values. If either the extraction or the conversion to double fails, then those values are not recorded in the distribution.Example: REGEXP_EXTRACT(jsonPayload.request, ".*quantity=(\d+).*")
   --version: string@version-completer # Deprecated. The API version that created or updated this metric. The v2 format is used by default and cannot be changed.
@@ -445,19 +454,19 @@ export def "projects loggingprojectsmetricsupdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({metric_name: $metric_name} | format pattern "/v2/{metric_name}") $qp)
-  let body = {"bucketName": $bucket_name, "bucketOptions": $bucket_options, "description": $description, "disabled": $disabled, "filter": $filter, "labelExtractors": $label_extractors, "metricDescriptor": $metric_descriptor, "name": $name, "valueExtractor": $value_extractor, "version": $version} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({metric_name: (encode-path-segment $metric_name)} | format pattern "/v2/{metric_name}") $qp)
+  let req_body = {"bucketName": $bucket_name, "bucketOptions": $bucket_options, "description": $description, "disabled": $disabled, "filter": $filter, "labelExtractors": $label_extractors, "metricDescriptor": $metric_descriptor, "name": $name, "valueExtractor": $value_extractor, "version": $version} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes a view on a log bucket. If an UNAVAILABLE error is returned, this indicates that system is not in a state where it can delete the view. If this occurs, please try again in a few minutes.
 #
 # DELETE /v2/{name}
 # operationId: logging.projects.locations.buckets.views.delete
-export def "projects loggingprojectslocationsbucketsviewsdelete" [
+export def "projects delete-by-name" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -482,7 +491,7 @@ export def "projects loggingprojectslocationsbucketsviewsdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v2/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v2/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -492,7 +501,7 @@ export def "projects loggingprojectslocationsbucketsviewsdelete" [
 #
 # GET /v2/{name}
 # operationId: logging.projects.locations.operations.get
-export def "projects loggingprojectslocationsoperationsget" [
+export def "projects get-by-name" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -517,7 +526,7 @@ export def "projects loggingprojectslocationsoperationsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v2/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v2/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -527,7 +536,7 @@ export def "projects loggingprojectslocationsoperationsget" [
 #
 # PATCH /v2/{name}
 # operationId: logging.projects.locations.buckets.views.patch
-export def "projects loggingprojectslocationsbucketsviewspatch" [
+export def "projects update-by-name" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -557,19 +566,19 @@ export def "projects loggingprojectslocationsbucketsviewspatch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v2/{name}") $qp)
-  let body = {"description": $description, "filter": $filter, "name": $body_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v2/{name}") $qp)
+  let req_body = {"description": $description, "filter": $filter, "name": $body_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets the Logging CMEK settings for the given resource.Note: CMEK for the Log Router can be configured for Google Cloud projects, folders, organizations and billing accounts. Once configured for an organization, it applies to all projects and folders in the Google Cloud organization.See Enabling CMEK for Log Router (https://cloud.google.com/logging/docs/routing/managed-encryption) for more information.
 #
 # GET /v2/{name}/cmekSettings
 # operationId: logging.getCmekSettings
-export def "cmek-settings logginggetCmekSettings" [
+export def "cmek-settings get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -594,7 +603,7 @@ export def "cmek-settings logginggetCmekSettings" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v2/{name}/cmekSettings") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v2/{name}/cmekSettings") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -604,7 +613,7 @@ export def "cmek-settings logginggetCmekSettings" [
 #
 # PATCH /v2/{name}/cmekSettings
 # operationId: logging.updateCmekSettings
-export def "cmek-settings loggingupdateCmekSettings" [
+export def "cmek-settings update" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -633,19 +642,19 @@ export def "cmek-settings loggingupdateCmekSettings" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v2/{name}/cmekSettings") $qp)
-  let body = {"kmsKeyName": $kms_key_name, "kmsKeyVersionName": $kms_key_version_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v2/{name}/cmekSettings") $qp)
+  let req_body = {"kmsKeyName": $kms_key_name, "kmsKeyVersionName": $kms_key_version_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists information about the supported locations for this service.
 #
 # GET /v2/{name}/locations
 # operationId: logging.projects.locations.list
-export def "locations loggingprojectslocationslist" [
+export def "locations list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -673,7 +682,7 @@ export def "locations loggingprojectslocationslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v2/{name}/locations") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v2/{name}/locations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -683,7 +692,7 @@ export def "locations loggingprojectslocationslist" [
 #
 # GET /v2/{name}/operations
 # operationId: logging.projects.locations.operations.list
-export def "operations loggingprojectslocationsoperationslist" [
+export def "operations list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -711,7 +720,7 @@ export def "operations loggingprojectslocationsoperationslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v2/{name}/operations") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v2/{name}/operations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -721,7 +730,7 @@ export def "operations loggingprojectslocationsoperationslist" [
 #
 # GET /v2/{name}/settings
 # operationId: logging.getSettings
-export def "settings logginggetSettings" [
+export def "settings get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -746,7 +755,7 @@ export def "settings logginggetSettings" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v2/{name}/settings") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v2/{name}/settings") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -756,7 +765,7 @@ export def "settings logginggetSettings" [
 #
 # PATCH /v2/{name}/settings
 # operationId: logging.updateSettings
-export def "settings loggingupdateSettings" [
+export def "settings update" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -786,19 +795,19 @@ export def "settings loggingupdateSettings" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v2/{name}/settings") $qp)
-  let body = {"disableDefaultSink": $disable_default_sink, "kmsKeyName": $kms_key_name, "storageLocation": $storage_location} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v2/{name}/settings") $qp)
+  let req_body = {"disableDefaultSink": $disable_default_sink, "kmsKeyName": $kms_key_name, "storageLocation": $storage_location} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Starts asynchronous cancellation on a long-running operation. The server makes a best effort to cancel the operation, but success is not guaranteed. If the server doesn't support this method, it returns google.rpc.Code.UNIMPLEMENTED. Clients can use Operations.GetOperation or other methods to check whether the cancellation succeeded or whether the operation completed despite cancellation. On successful cancellation, the operation is not deleted; instead, it becomes an operation with an Operation.error value with a google.rpc.Status.code of 1, corresponding to Code.CANCELLED.
 #
 # POST /v2/{name}:cancel
 # operationId: logging.projects.locations.operations.cancel
-export def "projects loggingprojectslocationsoperationscancel" [
+export def "projects cancel" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -825,18 +834,19 @@ export def "projects loggingprojectslocationsoperationscancel" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v2/{name}:cancel") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v2/{name}:cancel") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Undeletes a log bucket. A bucket that has been deleted can be undeleted within the grace period of 7 days.
 #
 # POST /v2/{name}:undelete
 # operationId: logging.projects.locations.buckets.undelete
-export def "projects loggingprojectslocationsbucketsundelete" [
+export def "projects create-undelete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -863,11 +873,12 @@ export def "projects loggingprojectslocationsbucketsundelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v2/{name}:undelete") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v2/{name}:undelete") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates a log bucket asynchronously.If the bucket has a lifecycle_state of DELETE_REQUESTED, then FAILED_PRECONDITION will be returned.After a bucket has been created, the bucket's location cannot be changed.
@@ -876,7 +887,7 @@ export def "projects loggingprojectslocationsbucketsundelete" [
 # operationId: logging.projects.locations.buckets.updateAsync
 # --cmekSettings shape: {kmsKeyName?: string, kmsKeyVersionName?: string}
 # --indexConfigs item shape: {fieldPath?: string, type?: "INDEX_TYPE_UNSPECIFIED"|"INDEX_TYPE_STRING"|"INDEX_TYPE_INTEGER"}
-export def "projects loggingprojectslocationsbucketsupdateAsync" [
+export def "projects update-async" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -903,26 +914,26 @@ export def "projects loggingprojectslocationsbucketsupdateAsync" [
   --description: string # Describes this bucket.
   --index-configs: list # A list of indexed fields and related configuration data. — item shape: {fieldPath?: string, type?: "INDEX_TYPE_UNSPECIFIED"|"INDEX_TYPE_STRING"|"INDEX_TYPE_INTEGER"}
   --locked: oneof<nothing, bool> # Whether the bucket is locked.The retention period on a locked bucket cannot be changed. Locked buckets may only be deleted if they are empty.
-  --restricted-fields: list # Log entry field paths that are denied access in this bucket.The following fields and their children are eligible: textPayload, jsonPayload, protoPayload, httpRequest, labels, sourceLocation.Restricting a repeated field will restrict all values. Adding a parent will block all child fields. (e.g. foo.bar will block foo.bar.baz)
+  --restricted-fields: list<string> # Log entry field paths that are denied access in this bucket.The following fields and their children are eligible: textPayload, jsonPayload, protoPayload, httpRequest, labels, sourceLocation.Restricting a repeated field will restrict all values. Adding a parent will block all child fields. (e.g. foo.bar will block foo.bar.baz)
   --retention-days: int # Logs will be retained by default for this amount of time, after which they will automatically be deleted. The minimum retention period is 1 day. If this value is set to zero at bucket creation time, the default time of 30 days will be used. (format: int32)
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v2/{name}:updateAsync") $qp)
-  let body = {"analyticsEnabled": $analytics_enabled, "cmekSettings": $cmek_settings, "description": $description, "indexConfigs": $index_configs, "locked": $locked, "restrictedFields": $restricted_fields, "retentionDays": $retention_days} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v2/{name}:updateAsync") $qp)
+  let req_body = {"analyticsEnabled": $analytics_enabled, "cmekSettings": $cmek_settings, "description": $description, "indexConfigs": $index_configs, "locked": $locked, "restrictedFields": $restricted_fields, "retentionDays": $retention_days} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists log buckets.
 #
 # GET /v2/{parent}/buckets
 # operationId: logging.projects.locations.buckets.list
-export def "buckets loggingprojectslocationsbucketslist" [
+export def "buckets list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -949,7 +960,7 @@ export def "buckets loggingprojectslocationsbucketslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v2/{parent}/buckets") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v2/{parent}/buckets") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -961,7 +972,7 @@ export def "buckets loggingprojectslocationsbucketslist" [
 # operationId: logging.projects.locations.buckets.create
 # --cmekSettings shape: {kmsKeyName?: string, kmsKeyVersionName?: string}
 # --indexConfigs item shape: {fieldPath?: string, type?: "INDEX_TYPE_UNSPECIFIED"|"INDEX_TYPE_STRING"|"INDEX_TYPE_INTEGER"}
-export def "buckets loggingprojectslocationsbucketscreate" [
+export def "buckets create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -988,19 +999,19 @@ export def "buckets loggingprojectslocationsbucketscreate" [
   --description: string # Describes this bucket.
   --index-configs: list # A list of indexed fields and related configuration data. — item shape: {fieldPath?: string, type?: "INDEX_TYPE_UNSPECIFIED"|"INDEX_TYPE_STRING"|"INDEX_TYPE_INTEGER"}
   --locked: oneof<nothing, bool> # Whether the bucket is locked.The retention period on a locked bucket cannot be changed. Locked buckets may only be deleted if they are empty.
-  --restricted-fields: list # Log entry field paths that are denied access in this bucket.The following fields and their children are eligible: textPayload, jsonPayload, protoPayload, httpRequest, labels, sourceLocation.Restricting a repeated field will restrict all values. Adding a parent will block all child fields. (e.g. foo.bar will block foo.bar.baz)
+  --restricted-fields: list<string> # Log entry field paths that are denied access in this bucket.The following fields and their children are eligible: textPayload, jsonPayload, protoPayload, httpRequest, labels, sourceLocation.Restricting a repeated field will restrict all values. Adding a parent will block all child fields. (e.g. foo.bar will block foo.bar.baz)
   --retention-days: int # Logs will be retained by default for this amount of time, after which they will automatically be deleted. The minimum retention period is 1 day. If this value is set to zero at bucket creation time, the default time of 30 days will be used. (format: int32)
 ]: any -> record<analyticsEnabled: bool, cmekSettings: record<kmsKeyName: string, kmsKeyVersionName: string, name: string, serviceAccountId: string>, createTime: string, description: string, indexConfigs: table<createTime: string, fieldPath: string, type: string>, lifecycleState: string, locked: bool, name: string, restrictedFields: list<string>, retentionDays: int, updateTime: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "bucketId" $bucket_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v2/{parent}/buckets") $qp)
-  let body = {"analyticsEnabled": $analytics_enabled, "cmekSettings": $cmek_settings, "description": $description, "indexConfigs": $index_configs, "locked": $locked, "restrictedFields": $restricted_fields, "retentionDays": $retention_days} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v2/{parent}/buckets") $qp)
+  let req_body = {"analyticsEnabled": $analytics_enabled, "cmekSettings": $cmek_settings, "description": $description, "indexConfigs": $index_configs, "locked": $locked, "restrictedFields": $restricted_fields, "retentionDays": $retention_days} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Creates a log bucket asynchronously that can be used to store log entries.After a bucket has been created, the bucket's location cannot be changed.
@@ -1009,7 +1020,7 @@ export def "buckets loggingprojectslocationsbucketscreate" [
 # operationId: logging.projects.locations.buckets.createAsync
 # --cmekSettings shape: {kmsKeyName?: string, kmsKeyVersionName?: string}
 # --indexConfigs item shape: {fieldPath?: string, type?: "INDEX_TYPE_UNSPECIFIED"|"INDEX_TYPE_STRING"|"INDEX_TYPE_INTEGER"}
-export def "buckets-create-async loggingprojectslocationsbucketscreateAsync" [
+export def "buckets-create-async create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1036,26 +1047,26 @@ export def "buckets-create-async loggingprojectslocationsbucketscreateAsync" [
   --description: string # Describes this bucket.
   --index-configs: list # A list of indexed fields and related configuration data. — item shape: {fieldPath?: string, type?: "INDEX_TYPE_UNSPECIFIED"|"INDEX_TYPE_STRING"|"INDEX_TYPE_INTEGER"}
   --locked: oneof<nothing, bool> # Whether the bucket is locked.The retention period on a locked bucket cannot be changed. Locked buckets may only be deleted if they are empty.
-  --restricted-fields: list # Log entry field paths that are denied access in this bucket.The following fields and their children are eligible: textPayload, jsonPayload, protoPayload, httpRequest, labels, sourceLocation.Restricting a repeated field will restrict all values. Adding a parent will block all child fields. (e.g. foo.bar will block foo.bar.baz)
+  --restricted-fields: list<string> # Log entry field paths that are denied access in this bucket.The following fields and their children are eligible: textPayload, jsonPayload, protoPayload, httpRequest, labels, sourceLocation.Restricting a repeated field will restrict all values. Adding a parent will block all child fields. (e.g. foo.bar will block foo.bar.baz)
   --retention-days: int # Logs will be retained by default for this amount of time, after which they will automatically be deleted. The minimum retention period is 1 day. If this value is set to zero at bucket creation time, the default time of 30 days will be used. (format: int32)
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "bucketId" $bucket_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v2/{parent}/buckets:createAsync") $qp)
-  let body = {"analyticsEnabled": $analytics_enabled, "cmekSettings": $cmek_settings, "description": $description, "indexConfigs": $index_configs, "locked": $locked, "restrictedFields": $restricted_fields, "retentionDays": $retention_days} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v2/{parent}/buckets:createAsync") $qp)
+  let req_body = {"analyticsEnabled": $analytics_enabled, "cmekSettings": $cmek_settings, "description": $description, "indexConfigs": $index_configs, "locked": $locked, "restrictedFields": $restricted_fields, "retentionDays": $retention_days} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists all the exclusions on the _Default sink in a parent resource.
 #
 # GET /v2/{parent}/exclusions
 # operationId: logging.projects.exclusions.list
-export def "exclusions loggingprojectsexclusionslist" [
+export def "exclusions list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1082,7 +1093,7 @@ export def "exclusions loggingprojectsexclusionslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v2/{parent}/exclusions") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v2/{parent}/exclusions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1092,7 +1103,7 @@ export def "exclusions loggingprojectsexclusionslist" [
 #
 # POST /v2/{parent}/exclusions
 # operationId: logging.projects.exclusions.create
-export def "exclusions loggingprojectsexclusionscreate" [
+export def "exclusions create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1122,19 +1133,19 @@ export def "exclusions loggingprojectsexclusionscreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v2/{parent}/exclusions") $qp)
-  let body = {"description": $description, "disabled": $disabled, "filter": $filter, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v2/{parent}/exclusions") $qp)
+  let req_body = {"description": $description, "disabled": $disabled, "filter": $filter, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists links.
 #
 # GET /v2/{parent}/links
 # operationId: logging.projects.locations.buckets.links.list
-export def "links loggingprojectslocationsbucketslinkslist" [
+export def "links list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1161,7 +1172,7 @@ export def "links loggingprojectslocationsbucketslinkslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v2/{parent}/links") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v2/{parent}/links") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1171,7 +1182,7 @@ export def "links loggingprojectslocationsbucketslinkslist" [
 #
 # POST /v2/{parent}/links
 # operationId: logging.projects.locations.buckets.links.create
-export def "links loggingprojectslocationsbucketslinkscreate" [
+export def "links create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1201,19 +1212,19 @@ export def "links loggingprojectslocationsbucketslinkscreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "linkId" $link_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v2/{parent}/links") $qp)
-  let body = {"bigqueryDataset": $bigquery_dataset, "description": $description, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v2/{parent}/links") $qp)
+  let req_body = {"bigqueryDataset": $bigquery_dataset, "description": $description, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists the logs in projects, organizations, folders, or billing accounts. Only logs that have entries are listed.
 #
 # GET /v2/{parent}/logs
 # operationId: logging.projects.logs.list
-export def "logs loggingprojectslogslist" [
+export def "logs list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1236,12 +1247,12 @@ export def "logs loggingprojectslogslist" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # Optional. The maximum number of results to return from this request. Non-positive values are ignored. The presence of nextPageToken in the response indicates that more results might be available.
   --page-token: string # Optional. If present, then retrieve the next batch of results from the preceding call to this method. pageToken must be the value of nextPageToken from the previous response. The values of other method parameters should be identical to those in the previous call.
-  --resource-names: list # Optional. List of resource names to list logs for: projects/[PROJECT_ID]/locations/[LOCATION_ID]/buckets/[BUCKET_ID]/views/[VIEW_ID] organizations/[ORGANIZATION_ID]/locations/[LOCATION_ID]/buckets/[BUCKET_ID]/views/[VIEW_ID] billingAccounts/[BILLING_ACCOUNT_ID]/locations/[LOCATION_ID]/buckets/[BUCKET_ID]/views/[VIEW_ID] folders/[FOLDER_ID]/locations/[LOCATION_ID]/buckets/[BUCKET_ID]/views/[VIEW_ID]To support legacy queries, it could also be: projects/[PROJECT_ID] organizations/[ORGANIZATION_ID] billingAccounts/[BILLING_ACCOUNT_ID] folders/[FOLDER_ID]The resource name in the parent field is added to this list.
+  --resource-names: list<string> # Optional. List of resource names to list logs for: projects/[PROJECT_ID]/locations/[LOCATION_ID]/buckets/[BUCKET_ID]/views/[VIEW_ID] organizations/[ORGANIZATION_ID]/locations/[LOCATION_ID]/buckets/[BUCKET_ID]/views/[VIEW_ID] billingAccounts/[BILLING_ACCOUNT_ID]/locations/[LOCATION_ID]/buckets/[BUCKET_ID]/views/[VIEW_ID] folders/[FOLDER_ID]/locations/[LOCATION_ID]/buckets/[BUCKET_ID]/views/[VIEW_ID]To support legacy queries, it could also be: projects/[PROJECT_ID] organizations/[ORGANIZATION_ID] billingAccounts/[BILLING_ACCOUNT_ID] folders/[FOLDER_ID]The resource name in the parent field is added to this list.
 ]: nothing -> record<logNames: list<string>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "resourceNames" $resource_names "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v2/{parent}/logs") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v2/{parent}/logs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1251,7 +1262,7 @@ export def "logs loggingprojectslogslist" [
 #
 # GET /v2/{parent}/metrics
 # operationId: logging.projects.metrics.list
-export def "metrics loggingprojectsmetricslist" [
+export def "metrics list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1278,7 +1289,7 @@ export def "metrics loggingprojectsmetricslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v2/{parent}/metrics") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v2/{parent}/metrics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1289,8 +1300,8 @@ export def "metrics loggingprojectsmetricslist" [
 # POST /v2/{parent}/metrics
 # operationId: logging.projects.metrics.create
 # --bucketOptions shape: {explicitBuckets?: record, exponentialBuckets?: record, linearBuckets?: record}
-# --metricDescriptor shape: {description?: string, displayName?: string, labels?: list, launchStage?: "LAUNCH_STAGE_UNSPECIFIED"|"UNIMPLEMENTED"|"PRELAUNCH"|"EARLY_ACCESS"|"ALPHA"|"BETA"|"GA"|"DEPRECATED", metadata?: record, metricKind?: "METRIC_KIND_UNSPECIFIED"|"GAUGE"|"DELTA"|"CUMULATIVE", monitoredResourceTypes?: list, name?: string, type?: string, unit?: string, valueType?: "VALUE_TYPE_UNSPECIFIED"|"BOOL"|"INT64"|"DOUBLE"|"STRING"|"DISTRIBUTION"|"MONEY"}
-export def "metrics loggingprojectsmetricscreate" [
+# --metricDescriptor shape: {description?: string, displayName?: string, labels?: list, launchStage?: "LAUNCH_STAGE_UNSPECIFIED"|"UNIMPLEMENTED"|"PRELAUNCH"|"EARLY_ACCESS"|"ALPHA"|"BETA"|"GA"|"DEPRECATED", metadata?: record, metricKind?: "METRIC_KIND_UNSPECIFIED"|"GAUGE"|"DELTA"|"CUMULATIVE", monitoredResourceTypes?: list<string>, name?: string, type?: string, unit?: string, valueType?: "VALUE_TYPE_UNSPECIFIED"|"BOOL"|"INT64"|"DOUBLE"|"STRING"|"DISTRIBUTION"|"MONEY"}
+export def "metrics create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1317,7 +1328,7 @@ export def "metrics loggingprojectsmetricscreate" [
   --disabled: oneof<nothing, bool> # Optional. If set to True, then this metric is disabled and it does not generate any points.
   --filter: string # Required. An advanced logs filter (https://cloud.google.com/logging/docs/view/advanced_filters) which is used to match log entries. Example: "resource.type=gae_app AND severity>=ERROR" The maximum length of the filter is 20000 characters.
   --label-extractors: record # Optional. A map from a label key string to an extractor expression which is used to extract data from a log entry field and assign as the label value. Each label key specified in the LabelDescriptor must have an associated extractor expression in this map. The syntax of the extractor expression is the same as for the value_extractor field.The extracted value is converted to the type defined in the label descriptor. If either the extraction or the type conversion fails, the label will have a default value. The default value for a string label is an empty string, for an integer label its 0, and for a boolean label its false.Note that there are upper bounds on the maximum number of labels and the number of active time series that are allowed in a project.
-  --metric-descriptor: record # Defines a metric type and its schema. Once a metric descriptor is created, deleting or altering it stops data collection and makes the metric type's existing data unusable. — shape: {description?: string, displayName?: string, labels?: list, launchStage?: "LAUNCH_STAGE_UNSPECIFIED"|"UNIMPLEMENTED"|"PRELAUNCH"|"EARLY_ACCESS"|"ALPHA"|"BETA"|"GA"|"DEPRECATED", metadata?: record, metricKind?: "METRIC_KIND_UNSPECIFIED"|"GAUGE"|"DELTA"|"CUMULATIVE", monitoredResourceTypes?: list, name?: string, type?: string, unit?: string, valueType?: "VALUE_TYPE_UNSPECIFIED"|"BOOL"|"INT64"|"DOUBLE"|"STRING"|"DISTRIBUTION"|"MONEY"}
+  --metric-descriptor: record # Defines a metric type and its schema. Once a metric descriptor is created, deleting or altering it stops data collection and makes the metric type's existing data unusable. — shape: {description?: string, displayName?: string, labels?: list, launchStage?: "LAUNCH_STAGE_UNSPECIFIED"|"UNIMPLEMENTED"|"PRELAUNCH"|"EARLY_ACCESS"|"ALPHA"|"BETA"|"GA"|"DEPRECATED", metadata?: record, metricKind?: "METRIC_KIND_UNSPECIFIED"|"GAUGE"|"DELTA"|"CUMULATIVE", monitoredResourceTypes?: list<string>, name?: string, type?: string, unit?: string, valueType?: "VALUE_TYPE_UNSPECIFIED"|"BOOL"|"INT64"|"DOUBLE"|"STRING"|"DISTRIBUTION"|"MONEY"}
   --name: string # Required. The client-assigned metric identifier. Examples: "error_count", "nginx/requests".Metric identifiers are limited to 100 characters and can include only the following characters: A-Z, a-z, 0-9, and the special characters _-.,+!*',()%/. The forward-slash character (/) denotes a hierarchy of name pieces, and it cannot be the first character of the name.This field is the [METRIC_ID] part of a metric resource name in the format "projects/PROJECT_ID/metrics/METRIC_ID". Example: If the resource name of a metric is "projects/my-project/metrics/nginx%2Frequests", this field's value is "nginx/requests".
   --value-extractor: string # Optional. A value_extractor is required when using a distribution logs-based metric to extract the values to record from a log entry. Two functions are supported for value extraction: EXTRACT(field) or REGEXP_EXTRACT(field, regex). The arguments are: field: The name of the log entry field from which the value is to be extracted. regex: A regular expression using the Google RE2 syntax (https://github.com/google/re2/wiki/Syntax) with a single capture group to extract data from the specified log entry field. The value of the field is converted to a string before applying the regex. It is an error to specify a regex that does not include exactly one capture group.The result of the extraction must be convertible to a double type, as the distribution always records double values. If either the extraction or the conversion to double fails, then those values are not recorded in the distribution.Example: REGEXP_EXTRACT(jsonPayload.request, ".*quantity=(\d+).*")
   --version: string@version-completer # Deprecated. The API version that created or updated this metric. The v2 format is used by default and cannot be changed.
@@ -1326,19 +1337,19 @@ export def "metrics loggingprojectsmetricscreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v2/{parent}/metrics") $qp)
-  let body = {"bucketName": $bucket_name, "bucketOptions": $bucket_options, "description": $description, "disabled": $disabled, "filter": $filter, "labelExtractors": $label_extractors, "metricDescriptor": $metric_descriptor, "name": $name, "valueExtractor": $value_extractor, "version": $version} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v2/{parent}/metrics") $qp)
+  let req_body = {"bucketName": $bucket_name, "bucketOptions": $bucket_options, "description": $description, "disabled": $disabled, "filter": $filter, "labelExtractors": $label_extractors, "metricDescriptor": $metric_descriptor, "name": $name, "valueExtractor": $value_extractor, "version": $version} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists sinks.
 #
 # GET /v2/{parent}/sinks
 # operationId: logging.sinks.list
-export def "sinks loggingsinkslist" [
+export def "sinks list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1365,7 +1376,7 @@ export def "sinks loggingsinkslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v2/{parent}/sinks") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v2/{parent}/sinks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1377,7 +1388,7 @@ export def "sinks loggingsinkslist" [
 # operationId: logging.sinks.create
 # --bigqueryOptions shape: {usePartitionedTables?: bool}
 # --exclusions item shape: {description?: string, disabled?: bool, filter?: string, name?: string}
-export def "sinks loggingsinkscreate" [
+export def "sinks create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1413,19 +1424,19 @@ export def "sinks loggingsinkscreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "uniqueWriterIdentity" $unique_writer_identity "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v2/{parent}/sinks") $qp)
-  let body = {"bigqueryOptions": $bigquery_options, "description": $description, "destination": $destination, "disabled": $disabled, "exclusions": $exclusions, "filter": $filter, "includeChildren": $include_children, "name": $name, "outputVersionFormat": $output_version_format} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v2/{parent}/sinks") $qp)
+  let req_body = {"bigqueryOptions": $bigquery_options, "description": $description, "destination": $destination, "disabled": $disabled, "exclusions": $exclusions, "filter": $filter, "includeChildren": $include_children, "name": $name, "outputVersionFormat": $output_version_format} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists views on a log bucket.
 #
 # GET /v2/{parent}/views
 # operationId: logging.projects.locations.buckets.views.list
-export def "views loggingprojectslocationsbucketsviewslist" [
+export def "views list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1452,7 +1463,7 @@ export def "views loggingprojectslocationsbucketsviewslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v2/{parent}/views") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v2/{parent}/views") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1462,7 +1473,7 @@ export def "views loggingprojectslocationsbucketsviewslist" [
 #
 # POST /v2/{parent}/views
 # operationId: logging.projects.locations.buckets.views.create
-export def "views loggingprojectslocationsbucketsviewscreate" [
+export def "views create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1492,19 +1503,19 @@ export def "views loggingprojectslocationsbucketsviewscreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "viewId" $view_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v2/{parent}/views") $qp)
-  let body = {"description": $description, "filter": $filter, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v2/{parent}/views") $qp)
+  let req_body = {"description": $description, "filter": $filter, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes a sink. If the sink has a unique writer_identity, then that service account is also deleted.
 #
 # DELETE /v2/{sinkName}
 # operationId: logging.sinks.delete
-export def "sinks loggingsinksdelete" [
+export def "sinks delete" [
   sink_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1529,7 +1540,7 @@ export def "sinks loggingsinksdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({sink_name: $sink_name} | format pattern "/v2/{sink_name}") $qp)
+  let full_url = (build-url $base ({sink_name: (encode-path-segment $sink_name)} | format pattern "/v2/{sink_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1539,7 +1550,7 @@ export def "sinks loggingsinksdelete" [
 #
 # GET /v2/{sinkName}
 # operationId: logging.sinks.get
-export def "sinks loggingsinksget" [
+export def "sinks get" [
   sink_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1564,7 +1575,7 @@ export def "sinks loggingsinksget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({sink_name: $sink_name} | format pattern "/v2/{sink_name}") $qp)
+  let full_url = (build-url $base ({sink_name: (encode-path-segment $sink_name)} | format pattern "/v2/{sink_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1576,7 +1587,7 @@ export def "sinks loggingsinksget" [
 # operationId: logging.projects.sinks.patch
 # --bigqueryOptions shape: {usePartitionedTables?: bool}
 # --exclusions item shape: {description?: string, disabled?: bool, filter?: string, name?: string}
-export def "projects loggingprojectssinkspatch" [
+export def "projects update-by-sinkName" [
   sink_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1613,12 +1624,12 @@ export def "projects loggingprojectssinkspatch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "uniqueWriterIdentity" $unique_writer_identity "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({sink_name: $sink_name} | format pattern "/v2/{sink_name}") $qp)
-  let body = {"bigqueryOptions": $bigquery_options, "description": $description, "destination": $destination, "disabled": $disabled, "exclusions": $exclusions, "filter": $filter, "includeChildren": $include_children, "name": $name, "outputVersionFormat": $output_version_format} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({sink_name: (encode-path-segment $sink_name)} | format pattern "/v2/{sink_name}") $qp)
+  let req_body = {"bigqueryOptions": $bigquery_options, "description": $description, "destination": $destination, "disabled": $disabled, "exclusions": $exclusions, "filter": $filter, "includeChildren": $include_children, "name": $name, "outputVersionFormat": $output_version_format} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates a sink. This method replaces the following fields in the existing sink with values from the new sink: destination, and filter.The updated sink might also have a new writer_identity; see the unique_writer_identity field.
@@ -1627,7 +1638,7 @@ export def "projects loggingprojectssinkspatch" [
 # operationId: logging.sinks.update
 # --bigqueryOptions shape: {usePartitionedTables?: bool}
 # --exclusions item shape: {description?: string, disabled?: bool, filter?: string, name?: string}
-export def "sinks loggingsinksupdate" [
+export def "sinks update" [
   sink_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1664,10 +1675,10 @@ export def "sinks loggingsinksupdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "uniqueWriterIdentity" $unique_writer_identity "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({sink_name: $sink_name} | format pattern "/v2/{sink_name}") $qp)
-  let body = {"bigqueryOptions": $bigquery_options, "description": $description, "destination": $destination, "disabled": $disabled, "exclusions": $exclusions, "filter": $filter, "includeChildren": $include_children, "name": $name, "outputVersionFormat": $output_version_format} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({sink_name: (encode-path-segment $sink_name)} | format pattern "/v2/{sink_name}") $qp)
+  let req_body = {"bigqueryOptions": $bigquery_options, "description": $description, "destination": $destination, "disabled": $disabled, "exclusions": $exclusions, "filter": $filter, "includeChildren": $include_children, "name": $name, "outputVersionFormat": $output_version_format} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

@@ -13,6 +13,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   match $scheme {
     "x-api-key" => { {headers: {X-API-Key: $token_val}, query: ""} }
     "basic" => { {headers: {Authorization: $"Basic ($token_val)"}, query: ""} }
+    "basic-credentials" => { {headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: ""} }
     "none" => { {headers: {}, query: ""} }
     _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
   }
@@ -34,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
     "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
     _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -64,13 +74,13 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 }
 
 def base-url-completer [] { ["https://postfmapi-test.adyen.com/postfmapi/terminal/v1"] }
-def auth-scheme-completer [] { ["x-api-key" "basic"] }
+def auth-scheme-completer [] { ["x-api-key" "basic" "basic-credentials"] }
 
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "assign-terminals post-assignTerminals" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "assign-terminals create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -94,7 +104,7 @@ export def commands []: nothing -> table {
 #
 # POST /assignTerminals
 # operationId: post-assignTerminals
-export def "assign-terminals post-assignTerminals" [
+export def "assign-terminals create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -105,26 +115,26 @@ export def "assign-terminals post-assignTerminals" [
   --dry-run(-n) # Return the request that would be sent without executing it
   company_account: string # Your company account. To return terminals to the company inventory, specify only this parameter and the `terminals`.
   --merchant-account: string # Name of the merchant account. Specify this parameter to assign terminals to this merchant account or to a store under this merchant account.
-  --merchant-inventory: oneof<nothing, bool> # Boolean that indicates if you are assigning the terminals to the merchant inventory. Do not use when assigning terminals to a store. Required when assigning the terminal to a merchant account.  - Set this to **true** to assign the terminals to the merchant inventory. This also means that the terminals cannot be boarded.  - Set this to **false** to assign the terminals to the merchant account as in-store terminals. This makes the terminals ready to be boarded and to process payments through the specified merchant account.
+  --merchant-inventory: oneof<nothing, bool> # Boolean that indicates if you are assigning the terminals to the merchant inventory. Do not use when assigning terminals to a store. Required when assigning the terminal to a merchant account. - Set this to **true** to assign the terminals to the merchant inventory. This also means that the terminals cannot be boarded. - Set this to **false** to assign the terminals to the merchant account as in-store terminals. This makes the terminals ready to be boarded and to process payments through the specified merchant account.
   --store: string # The store code of the store that you want to assign the terminals to.
-  terminals: list # Array containing a list of terminal IDs that you want to assign or reassign to the merchant account or store, or that you want to return to the company inventory.  For example, `["V400m-324689776","P400Plus-329127412"]`.
+  terminals: list<string> # Array containing a list of terminal IDs that you want to assign or reassign to the merchant account or store, or that you want to return to the company inventory. For example, `["V400m-324689776","P400Plus-329127412"]`.
 ]: any -> record<results: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/assignTerminals")
-  let body = {"companyAccount": $company_account, "merchantAccount": $merchant_account, "merchantInventory": $merchant_inventory, "store": $store, "terminals": $terminals} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"companyAccount": $company_account, "merchantAccount": $merchant_account, "merchantInventory": $merchant_inventory, "store": $store, "terminals": $terminals} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get the account or store of a terminal
 #
 # POST /findTerminal
 # operationId: post-findTerminal
-export def "find-terminal post-findTerminal" [
+export def "find-terminal create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -133,24 +143,24 @@ export def "find-terminal post-findTerminal" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  terminal: string # The unique terminal ID in the format `[Device model]-[Serial number]`.   For example, **V400m-324689776**.
+  terminal: string # The unique terminal ID in the format `[Device model]-[Serial number]`. For example, **V400m-324689776**.
 ]: any -> record<companyAccount: string, merchantAccount: string, merchantInventory: bool, store: string, terminal: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/findTerminal")
-  let body = {"terminal": $terminal} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"terminal": $terminal} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get the stores of an account
 #
 # POST /getStoresUnderAccount
 # operationId: post-getStoresUnderAccount
-export def "get-stores-under-account post-getStoresUnderAccount" [
+export def "get-stores-under-account create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -166,18 +176,18 @@ export def "get-stores-under-account post-getStoresUnderAccount" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/getStoresUnderAccount")
-  let body = {"companyAccount": $company_account, "merchantAccount": $merchant_account} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"companyAccount": $company_account, "merchantAccount": $merchant_account} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get the details of a terminal
 #
 # POST /getTerminalDetails
 # operationId: post-getTerminalDetails
-export def "get-terminal-details post-getTerminalDetails" [
+export def "get-terminal-details create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -186,24 +196,24 @@ export def "get-terminal-details post-getTerminalDetails" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  terminal: string # The unique terminal ID in the format `[Device model]-[Serial number]`.   For example, **V400m-324689776**.
+  terminal: string # The unique terminal ID in the format `[Device model]-[Serial number]`. For example, **V400m-324689776**.
 ]: any -> record<bluetoothIp: string, bluetoothMac: string, companyAccount: string, country: string, deviceModel: string, dhcpEnabled: bool, displayLabel: string, ethernetIp: string, ethernetMac: string, firmwareVersion: string, iccid: string, lastActivityDateTime: string, lastTransactionDateTime: string, linkNegotiation: string, merchantAccount: string, merchantInventory: bool, permanentTerminalId: string, serialNumber: string, simStatus: string, store: string, storeDetails: record<address: record<city: string, countryCode: string, postalCode: string, stateOrProvince: string, streetAddress: string, streetAddress2: string>, description: string, inStoreTerminals: list<string>, merchantAccountCode: string, status: string, store: string>, terminal: string, terminalStatus: string, wifiIp: string, wifiMac: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/getTerminalDetails")
-  let body = {"terminal": $terminal} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"terminal": $terminal} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get the list of terminals
 #
 # POST /getTerminalsUnderAccount
 # operationId: post-getTerminalsUnderAccount
-export def "get-terminals-under-account post-getTerminalsUnderAccount" [
+export def "get-terminals-under-account create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -220,9 +230,9 @@ export def "get-terminals-under-account post-getTerminalsUnderAccount" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/getTerminalsUnderAccount")
-  let body = {"companyAccount": $company_account, "merchantAccount": $merchant_account, "store": $store} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"companyAccount": $company_account, "merchantAccount": $merchant_account, "store": $store} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

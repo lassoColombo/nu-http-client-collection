@@ -13,6 +13,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   match $scheme {
     "apikey" => { {headers: {ApiKey: $token_val}, query: ""} }
     "basic" => { {headers: {Authorization: $"Basic ($token_val)"}, query: ""} }
+    "basic-credentials" => { {headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: ""} }
     "none" => { {headers: {}, query: ""} }
     _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
   }
@@ -34,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
     "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
     _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -64,7 +74,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 }
 
 def base-url-completer [] { ["https://live-api.letmc.com"] }
-def auth-scheme-completer [] { ["apikey" "basic"] }
+def auth-scheme-completer [] { ["apikey" "basic" "basic-credentials"] }
 
 # Completers for enum parameters
 def accept-completer [] { ["application/json" "application/xml" "text/json" "text/xml"] }
@@ -112,7 +122,7 @@ export def "tier1-area-areas list" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: $short_name} | format pattern "/v2/tier1/{short_name}/area/areas") $qp)
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/tier1/{short_name}/area/areas") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -136,7 +146,7 @@ export def "tier1-area-areas get" [
 ]: nothing -> record<Branch: string, ETag: string, Name: string, OID: string, ShowOnSites: bool> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({short_name: $short_name, area_id: $area_id} | format pattern "/v2/tier1/{short_name}/area/areas/{area_id}"))
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), area_id: (encode-path-segment $area_id)} | format pattern "/v2/tier1/{short_name}/area/areas/{area_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -162,7 +172,7 @@ export def "tier1-branch-branches list" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: $short_name} | format pattern "/v2/tier1/{short_name}/branch/branches") $qp)
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/tier1/{short_name}/branch/branches") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -186,7 +196,7 @@ export def "tier1-branch-branches get" [
 ]: nothing -> record<Address1: string, Address2: string, Address3: string, Address4: string, CompanyName: string, County: string, EMailAddress: string, ETag: string, FaxPhone: string, LandPhone: string, Name: string, OID: string, Postcode: string, WebAddress: string> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({short_name: $short_name, branch_id: $branch_id} | format pattern "/v2/tier1/{short_name}/branch/branches/{branch_id}"))
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), branch_id: (encode-path-segment $branch_id)} | format pattern "/v2/tier1/{short_name}/branch/branches/{branch_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -196,7 +206,7 @@ export def "tier1-branch-branches get" [
 #
 # GET /v2/tier1/{shortName}/company
 # operationId: CompanyController_GetCompany
-export def "tier1-company get" [
+export def "tier1-company get-controller" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -210,7 +220,7 @@ export def "tier1-company get" [
 ]: nothing -> record<CompanyName: string, CompanyRegistration: string, ETag: string, MarketingCompanyName: string, OID: string, ShortName: string> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({short_name: $short_name} | format pattern "/v2/tier1/{short_name}/company"))
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/tier1/{short_name}/company"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -236,7 +246,7 @@ export def "tier1-county-counties list" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: $short_name} | format pattern "/v2/tier1/{short_name}/county/counties") $qp)
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/tier1/{short_name}/county/counties") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -260,7 +270,7 @@ export def "tier1-county-counties get" [
 ]: nothing -> record<ETag: string, Name: string, OID: string> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({short_name: $short_name, county_id: $county_id} | format pattern "/v2/tier1/{short_name}/county/counties/{county_id}"))
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), county_id: (encode-path-segment $county_id)} | format pattern "/v2/tier1/{short_name}/county/counties/{county_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -270,7 +280,7 @@ export def "tier1-county-counties get" [
 #
 # GET /v2/tier1/{shortName}/county/counties/{countyID}/branches
 # operationId: CountyController_GetCountiesBranches
-export def "tier1-county-counties-branches get" [
+export def "tier1-county-counties-branches get-controller" [
   short_name: string
   county_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -288,7 +298,7 @@ export def "tier1-county-counties-branches get" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: $short_name, county_id: $county_id} | format pattern "/v2/tier1/{short_name}/county/counties/{county_id}/branches") $qp)
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), county_id: (encode-path-segment $county_id)} | format pattern "/v2/tier1/{short_name}/county/counties/{county_id}/branches") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -314,7 +324,7 @@ export def "tier1-diary-allocations list" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: $short_name} | format pattern "/v2/tier1/{short_name}/diary/allocations") $qp)
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/tier1/{short_name}/diary/allocations") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -338,7 +348,7 @@ export def "tier1-diary-allocations get" [
 ]: nothing -> record<AppointmentType: string, ETag: string, End: string, OID: string, Staff: string, Start: string> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({short_name: $short_name, diary_allocation_id: $diary_allocation_id} | format pattern "/v2/tier1/{short_name}/diary/allocations/{diary_allocation_id}"))
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), diary_allocation_id: (encode-path-segment $diary_allocation_id)} | format pattern "/v2/tier1/{short_name}/diary/allocations/{diary_allocation_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -364,7 +374,7 @@ export def "tier1-diary-appointments list" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: $short_name} | format pattern "/v2/tier1/{short_name}/diary/appointments") $qp)
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/tier1/{short_name}/diary/appointments") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -388,7 +398,7 @@ export def "tier1-diary-appointments get" [
 ]: nothing -> record<AppointmentType: string, Cancelled: bool, Comment: string, CreatedAt: string, CreatedBy: string, ETag: string, End: string, OID: string, RemindAt: string, RemindBefore: string, Staff: string, Start: string, Subject: string> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({short_name: $short_name, diary_appointment_id: $diary_appointment_id} | format pattern "/v2/tier1/{short_name}/diary/appointments/{diary_appointment_id}"))
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), diary_appointment_id: (encode-path-segment $diary_appointment_id)} | format pattern "/v2/tier1/{short_name}/diary/appointments/{diary_appointment_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -414,7 +424,7 @@ export def "tier1-diary-appointmenttypes list" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: $short_name} | format pattern "/v2/tier1/{short_name}/diary/appointmenttypes") $qp)
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/tier1/{short_name}/diary/appointmenttypes") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -438,7 +448,7 @@ export def "tier1-diary-appointmenttypes get" [
 ]: nothing -> record<ETag: string, Name: string, OID: string, SystemType: string> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({short_name: $short_name, diary_appointment_type_id: $diary_appointment_type_id} | format pattern "/v2/tier1/{short_name}/diary/appointmenttypes/{diary_appointment_type_id}"))
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), diary_appointment_type_id: (encode-path-segment $diary_appointment_type_id)} | format pattern "/v2/tier1/{short_name}/diary/appointmenttypes/{diary_appointment_type_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -448,7 +458,7 @@ export def "tier1-diary-appointmenttypes get" [
 #
 # GET /v2/tier1/{shortName}/lettings/advertised
 # operationId: LettingsController_GetAdvertised
-export def "tier1-lettings-advertised get" [
+export def "tier1-lettings-advertised get-controller" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -472,7 +482,7 @@ export def "tier1-lettings-advertised get" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "branchID" $branch_id "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "areaID" $area_id "scalar") (serialize-qp "rentMinimum" $rent_minimum "scalar") (serialize-qp "rentMaximum" $rent_maximum "scalar") (serialize-qp "maximumTenants" $maximum_tenants "scalar") (serialize-qp "wantSharedProperties" $want_shared_properties "scalar") (serialize-qp "wantStudentProperties" $want_student_properties "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: $short_name} | format pattern "/v2/tier1/{short_name}/lettings/advertised") $qp)
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/tier1/{short_name}/lettings/advertised") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -482,7 +492,7 @@ export def "tier1-lettings-advertised get" [
 #
 # GET /v2/tier1/{shortName}/lettings/advertisedbetweendates
 # operationId: LettingsController_GetAdvertisedBetweenDates
-export def "tier1-lettings-advertisedbetweendates get-advertised-between-dates" [
+export def "tier1-lettings-advertisedbetweendates get-controller-advertised-between-dates" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -508,7 +518,7 @@ export def "tier1-lettings-advertisedbetweendates get-advertised-between-dates" 
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "branchID" $branch_id "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "rangeStartDate" $range_start_date "scalar") (serialize-qp "rangeEndDate" $range_end_date "scalar") (serialize-qp "areaID" $area_id "scalar") (serialize-qp "rentMinimum" $rent_minimum "scalar") (serialize-qp "rentMaximum" $rent_maximum "scalar") (serialize-qp "maximumTenants" $maximum_tenants "scalar") (serialize-qp "wantSharedProperties" $want_shared_properties "scalar") (serialize-qp "wantStudentProperties" $want_student_properties "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: $short_name} | format pattern "/v2/tier1/{short_name}/lettings/advertisedbetweendates") $qp)
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/tier1/{short_name}/lettings/advertisedbetweendates") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -534,7 +544,7 @@ export def "tier1-lettings-tenancies list" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: $short_name} | format pattern "/v2/tier1/{short_name}/lettings/tenancies") $qp)
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/tier1/{short_name}/lettings/tenancies") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -558,7 +568,7 @@ export def "tier1-lettings-tenancies get" [
 ]: nothing -> record<AdvertiseFrom: string, Area: string, BondRequired: float, Branch: string, ETag: string, Furnished: string, GlobalReference: string, IsShareProperty: bool, IsStudentProperty: bool, IsTenancyAdvertised: bool, IsTenancyProposed: bool, MaximumTenants: int, MinimumTenants: int, OID: string, RentAdvertised: float, RentRecurrence: int, RentSchedule: string, TenancyProperty: string, TenantSystemTypes: list<string>, TermMaximum: int, TermMinimum: int, TermStart: string, UtilityCouncilTax: string, UtilityElectricity: string, UtilityGas: string, UtilityTelephone: string, UtilityWater: string> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({short_name: $short_name, tenancy_id: $tenancy_id} | format pattern "/v2/tier1/{short_name}/lettings/tenancies/{tenancy_id}"))
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), tenancy_id: (encode-path-segment $tenancy_id)} | format pattern "/v2/tier1/{short_name}/lettings/tenancies/{tenancy_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -568,7 +578,7 @@ export def "tier1-lettings-tenancies get" [
 #
 # GET /v2/tier1/{shortName}/lettings/tenancies/{tenancyID}/brochure
 # operationId: LettingsController_GetTenancyBrochure
-export def "tier1-lettings-tenancies-brochure get-tenancy" [
+export def "tier1-lettings-tenancies-brochure get-controller-tenancy" [
   short_name: string
   tenancy_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -583,7 +593,7 @@ export def "tier1-lettings-tenancies-brochure get-tenancy" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({short_name: $short_name, tenancy_id: $tenancy_id} | format pattern "/v2/tier1/{short_name}/lettings/tenancies/{tenancy_id}/brochure"))
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), tenancy_id: (encode-path-segment $tenancy_id)} | format pattern "/v2/tier1/{short_name}/lettings/tenancies/{tenancy_id}/brochure"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -609,7 +619,7 @@ export def "tier1-photo-photos list" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: $short_name} | format pattern "/v2/tier1/{short_name}/photo/photos") $qp)
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/tier1/{short_name}/photo/photos") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -633,7 +643,7 @@ export def "tier1-photo-photos get" [
 ]: nothing -> record<ETag: string, FileName: string, InspectionItem: string, InterimInspection: string, InventoryItem: string, Name: string, OID: string, PhotoNumber: int, PhotoType: string, Property: string, Room: string> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({short_name: $short_name, photo_id: $photo_id} | format pattern "/v2/tier1/{short_name}/photo/photos/{photo_id}"))
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), photo_id: (encode-path-segment $photo_id)} | format pattern "/v2/tier1/{short_name}/photo/photos/{photo_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -643,7 +653,7 @@ export def "tier1-photo-photos get" [
 #
 # GET /v2/tier1/{shortName}/photos/photo/{photoID}/download
 # operationId: PhotoController_GetPhotoDownload
-export def "tier1-photos-photo-download get" [
+export def "tier1-photos-photo-download get-controller" [
   short_name: string
   photo_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -661,7 +671,7 @@ export def "tier1-photos-photo-download get" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: $short_name, photo_id: $photo_id} | format pattern "/v2/tier1/{short_name}/photos/photo/{photo_id}/download") $qp)
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), photo_id: (encode-path-segment $photo_id)} | format pattern "/v2/tier1/{short_name}/photos/photo/{photo_id}/download") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -687,7 +697,7 @@ export def "tier1-property-properties list" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: $short_name} | format pattern "/v2/tier1/{short_name}/property/properties") $qp)
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/tier1/{short_name}/property/properties") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -711,7 +721,7 @@ export def "tier1-property-properties get" [
 ]: nothing -> record<Area: string, Branch: string, Description: string, ETag: string, FullAddress: string, GlobalReference: string, MainPhoto: string, ManagedByStaff: string, OID: string, PropertySource: string, PropertyType: string, RoomName: string, VideoURL: string> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({short_name: $short_name, property_id: $property_id} | format pattern "/v2/tier1/{short_name}/property/properties/{property_id}"))
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), property_id: (encode-path-segment $property_id)} | format pattern "/v2/tier1/{short_name}/property/properties/{property_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -721,7 +731,7 @@ export def "tier1-property-properties get" [
 #
 # GET /v2/tier1/{shortName}/property/properties/{propertyID}/facilities
 # operationId: PropertyController_GetPropertiesFacilities
-export def "tier1-property-properties-facilities get" [
+export def "tier1-property-properties-facilities get-controller" [
   short_name: string
   property_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -739,7 +749,7 @@ export def "tier1-property-properties-facilities get" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: $short_name, property_id: $property_id} | format pattern "/v2/tier1/{short_name}/property/properties/{property_id}/facilities") $qp)
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), property_id: (encode-path-segment $property_id)} | format pattern "/v2/tier1/{short_name}/property/properties/{property_id}/facilities") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -749,7 +759,7 @@ export def "tier1-property-properties-facilities get" [
 #
 # GET /v2/tier1/{shortName}/property/properties/{propertyID}/photos
 # operationId: PropertyController_GetPropertiesPhotos
-export def "tier1-property-properties-photos get" [
+export def "tier1-property-properties-photos get-controller" [
   short_name: string
   property_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -767,7 +777,7 @@ export def "tier1-property-properties-photos get" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: $short_name, property_id: $property_id} | format pattern "/v2/tier1/{short_name}/property/properties/{property_id}/photos") $qp)
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), property_id: (encode-path-segment $property_id)} | format pattern "/v2/tier1/{short_name}/property/properties/{property_id}/photos") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -777,7 +787,7 @@ export def "tier1-property-properties-photos get" [
 #
 # GET /v2/tier1/{shortName}/property/properties/{propertyID}/rooms
 # operationId: PropertyController_GetPropertiesRooms
-export def "tier1-property-properties-rooms get" [
+export def "tier1-property-properties-rooms get-controller" [
   short_name: string
   property_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -795,7 +805,7 @@ export def "tier1-property-properties-rooms get" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: $short_name, property_id: $property_id} | format pattern "/v2/tier1/{short_name}/property/properties/{property_id}/rooms") $qp)
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), property_id: (encode-path-segment $property_id)} | format pattern "/v2/tier1/{short_name}/property/properties/{property_id}/rooms") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -805,7 +815,7 @@ export def "tier1-property-properties-rooms get" [
 #
 # GET /v2/tier1/{shortName}/property/properties/{propertyID}/tenancies
 # operationId: PropertyController_GetPropertiesTenancies
-export def "tier1-property-properties-tenancies get" [
+export def "tier1-property-properties-tenancies get-controller" [
   short_name: string
   property_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -823,7 +833,7 @@ export def "tier1-property-properties-tenancies get" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: $short_name, property_id: $property_id} | format pattern "/v2/tier1/{short_name}/property/properties/{property_id}/tenancies") $qp)
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), property_id: (encode-path-segment $property_id)} | format pattern "/v2/tier1/{short_name}/property/properties/{property_id}/tenancies") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -833,7 +843,7 @@ export def "tier1-property-properties-tenancies get" [
 #
 # GET /v2/tier1/{shortName}/property/structures/{propertyStructureID}/reports/eer
 # operationId: PropertyController_GetPropertyEERDownload
-export def "tier1-property-structures-reports-eer get-property-eer-download" [
+export def "tier1-property-structures-reports-eer get-controller-download" [
   short_name: string
   property_structure_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -848,7 +858,7 @@ export def "tier1-property-structures-reports-eer get-property-eer-download" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({short_name: $short_name, property_structure_id: $property_structure_id} | format pattern "/v2/tier1/{short_name}/property/structures/{property_structure_id}/reports/eer"))
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), property_structure_id: (encode-path-segment $property_structure_id)} | format pattern "/v2/tier1/{short_name}/property/structures/{property_structure_id}/reports/eer"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -858,7 +868,7 @@ export def "tier1-property-structures-reports-eer get-property-eer-download" [
 #
 # GET /v2/tier1/{shortName}/property/structures/{propertyStructureID}/reports/eir
 # operationId: PropertyController_GetPropertyEIRDownload
-export def "tier1-property-structures-reports-eir get-property-eir-download" [
+export def "tier1-property-structures-reports-eir get-controller-download" [
   short_name: string
   property_structure_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -873,7 +883,7 @@ export def "tier1-property-structures-reports-eir get-property-eir-download" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({short_name: $short_name, property_structure_id: $property_structure_id} | format pattern "/v2/tier1/{short_name}/property/structures/{property_structure_id}/reports/eir"))
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), property_structure_id: (encode-path-segment $property_structure_id)} | format pattern "/v2/tier1/{short_name}/property/structures/{property_structure_id}/reports/eir"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -883,7 +893,7 @@ export def "tier1-property-structures-reports-eir get-property-eir-download" [
 #
 # GET /v2/tier1/{shortName}/sales/advertisedsales
 # operationId: SalesController_GetAdvertisedSales
-export def "tier1-sales-advertisedsales get" [
+export def "tier1-sales-advertisedsales get-controller-advertised" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -910,7 +920,7 @@ export def "tier1-sales-advertisedsales get" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "branchID" $branch_id "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "onlyDevelopement" $only_developement "scalar") (serialize-qp "onlyInvestements" $only_investements "scalar") (serialize-qp "minimumPrice" $minimum_price "scalar") (serialize-qp "maximumPrice" $maximum_price "scalar") (serialize-qp "minimumBeds" $minimum_beds "scalar") (serialize-qp "minimumBathrooms" $minimum_bathrooms "scalar") (serialize-qp "minimumEnsuites" $minimum_ensuites "scalar") (serialize-qp "minimumToilets" $minimum_toilets "scalar") (serialize-qp "minimumReception" $minimum_reception "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: $short_name} | format pattern "/v2/tier1/{short_name}/sales/advertisedsales") $qp)
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/tier1/{short_name}/sales/advertisedsales") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -920,7 +930,7 @@ export def "tier1-sales-advertisedsales get" [
 #
 # GET /v2/tier1/{shortName}/sales/reports/eer/{salesInstructionID}
 # operationId: SalesController_GetEER
-export def "tier1-sales-reports-eer get" [
+export def "tier1-sales-reports-eer get-controller" [
   short_name: string
   sales_instruction_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -935,7 +945,7 @@ export def "tier1-sales-reports-eer get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({short_name: $short_name, sales_instruction_id: $sales_instruction_id} | format pattern "/v2/tier1/{short_name}/sales/reports/eer/{sales_instruction_id}"))
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), sales_instruction_id: (encode-path-segment $sales_instruction_id)} | format pattern "/v2/tier1/{short_name}/sales/reports/eer/{sales_instruction_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -945,7 +955,7 @@ export def "tier1-sales-reports-eer get" [
 #
 # GET /v2/tier1/{shortName}/sales/reports/eir/{salesInstructionID}
 # operationId: SalesController_GetEIR
-export def "tier1-sales-reports-eir get" [
+export def "tier1-sales-reports-eir get-controller" [
   short_name: string
   sales_instruction_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -960,7 +970,7 @@ export def "tier1-sales-reports-eir get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({short_name: $short_name, sales_instruction_id: $sales_instruction_id} | format pattern "/v2/tier1/{short_name}/sales/reports/eir/{sales_instruction_id}"))
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), sales_instruction_id: (encode-path-segment $sales_instruction_id)} | format pattern "/v2/tier1/{short_name}/sales/reports/eir/{sales_instruction_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -986,7 +996,7 @@ export def "tier1-sales-salesfeaturetypes list" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: $short_name} | format pattern "/v2/tier1/{short_name}/sales/salesfeaturetypes") $qp)
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/tier1/{short_name}/sales/salesfeaturetypes") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1010,7 +1020,7 @@ export def "tier1-sales-salesfeaturetypes get" [
 ]: nothing -> record<ETag: string, Name: string, OID: string> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({short_name: $short_name, sales_feature_type_id: $sales_feature_type_id} | format pattern "/v2/tier1/{short_name}/sales/salesfeaturetypes/{sales_feature_type_id}"))
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), sales_feature_type_id: (encode-path-segment $sales_feature_type_id)} | format pattern "/v2/tier1/{short_name}/sales/salesfeaturetypes/{sales_feature_type_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1036,7 +1046,7 @@ export def "tier1-sales-salesinstructions list" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: $short_name} | format pattern "/v2/tier1/{short_name}/sales/salesinstructions") $qp)
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/tier1/{short_name}/sales/salesinstructions") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1060,7 +1070,7 @@ export def "tier1-sales-salesinstructions get" [
 ]: nothing -> record<Address1: string, Address2: string, Address3: string, Address4: string, AddressNumber: string, Area: string, Bathrooms: int, BathroomsEnsuite: int, Bedrooms: int, ContractType: string, Country: string, Description: string, DevelopmentOpp: bool, Directions: string, EPCCurrentEER: int, EPCCurrentEI: int, EPCPotentialEER: int, EPCPotentialEI: int, ETag: string, HasElectricitySupply: bool, HasGasSupply: bool, HasWaterMeter: bool, InvestmentOpp: bool, Kitchens: int, OID: string, OutsideSpaceBalcony: bool, OutsideSpaceCommunalGarden: bool, OutsideSpaceConservatory: bool, OutsideSpaceGarden: bool, OutsideSpaceLargeGarden: bool, OutsideSpacePatio: bool, OutsideSpaceRoofTerrace: bool, OutsideSpaceSouthFacingGarden: bool, ParkingAllocated: bool, ParkingCarport: bool, ParkingDoubleGarage: bool, ParkingGarage: bool, ParkingOffRoad: bool, ParkingOnRoad: bool, ParkingPermit: bool, ParkingSecureGated: bool, ParkingTripleGarage: bool, Postcode: string, Price: float, PropertyOwnableType: string, ReceptionRooms: int, State: string, Tenure: string, VideoURL: string> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({short_name: $short_name, sales_instruction_id: $sales_instruction_id} | format pattern "/v2/tier1/{short_name}/sales/salesinstructions/{sales_instruction_id}"))
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), sales_instruction_id: (encode-path-segment $sales_instruction_id)} | format pattern "/v2/tier1/{short_name}/sales/salesinstructions/{sales_instruction_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1070,7 +1080,7 @@ export def "tier1-sales-salesinstructions get" [
 #
 # GET /v2/tier1/{shortName}/sales/salesinstructions/{salesInstructionID}/features
 # operationId: SalesController_GetSalesInstructionsFeatures
-export def "tier1-sales-salesinstructions-features get-sales-instructions" [
+export def "tier1-sales-salesinstructions-features get-controller-instructions" [
   short_name: string
   sales_instruction_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1088,7 +1098,7 @@ export def "tier1-sales-salesinstructions-features get-sales-instructions" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: $short_name, sales_instruction_id: $sales_instruction_id} | format pattern "/v2/tier1/{short_name}/sales/salesinstructions/{sales_instruction_id}/features") $qp)
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), sales_instruction_id: (encode-path-segment $sales_instruction_id)} | format pattern "/v2/tier1/{short_name}/sales/salesinstructions/{sales_instruction_id}/features") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1098,7 +1108,7 @@ export def "tier1-sales-salesinstructions-features get-sales-instructions" [
 #
 # GET /v2/tier1/{shortName}/sales/salesinstructions/{salesInstructionID}/floorplans
 # operationId: SalesController_GetSalesInstructionsFloorPlans
-export def "tier1-sales-salesinstructions-floorplans get-sales-instructions" [
+export def "tier1-sales-salesinstructions-floorplans get-controller-instructions-floor-plans" [
   short_name: string
   sales_instruction_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1116,7 +1126,7 @@ export def "tier1-sales-salesinstructions-floorplans get-sales-instructions" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: $short_name, sales_instruction_id: $sales_instruction_id} | format pattern "/v2/tier1/{short_name}/sales/salesinstructions/{sales_instruction_id}/floorplans") $qp)
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), sales_instruction_id: (encode-path-segment $sales_instruction_id)} | format pattern "/v2/tier1/{short_name}/sales/salesinstructions/{sales_instruction_id}/floorplans") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1126,7 +1136,7 @@ export def "tier1-sales-salesinstructions-floorplans get-sales-instructions" [
 #
 # GET /v2/tier1/{shortName}/sales/salesinstructions/{salesInstructionID}/photos
 # operationId: SalesController_GetSalesInstructionsPhotos
-export def "tier1-sales-salesinstructions-photos get-sales-instructions" [
+export def "tier1-sales-salesinstructions-photos get-controller-instructions" [
   short_name: string
   sales_instruction_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1144,7 +1154,7 @@ export def "tier1-sales-salesinstructions-photos get-sales-instructions" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: $short_name, sales_instruction_id: $sales_instruction_id} | format pattern "/v2/tier1/{short_name}/sales/salesinstructions/{sales_instruction_id}/photos") $qp)
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), sales_instruction_id: (encode-path-segment $sales_instruction_id)} | format pattern "/v2/tier1/{short_name}/sales/salesinstructions/{sales_instruction_id}/photos") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1154,7 +1164,7 @@ export def "tier1-sales-salesinstructions-photos get-sales-instructions" [
 #
 # GET /v2/tier1/{shortName}/sales/salesinstructions/{salesInstructionID}/rooms
 # operationId: SalesController_GetSalesInstructionsRooms
-export def "tier1-sales-salesinstructions-rooms get-sales-instructions" [
+export def "tier1-sales-salesinstructions-rooms get-controller-instructions" [
   short_name: string
   sales_instruction_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1172,7 +1182,7 @@ export def "tier1-sales-salesinstructions-rooms get-sales-instructions" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: $short_name, sales_instruction_id: $sales_instruction_id} | format pattern "/v2/tier1/{short_name}/sales/salesinstructions/{sales_instruction_id}/rooms") $qp)
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), sales_instruction_id: (encode-path-segment $sales_instruction_id)} | format pattern "/v2/tier1/{short_name}/sales/salesinstructions/{sales_instruction_id}/rooms") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1198,7 +1208,7 @@ export def "tier1-staff-staff list" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: $short_name} | format pattern "/v2/tier1/{short_name}/staff/staff") $qp)
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/tier1/{short_name}/staff/staff") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1222,7 +1232,7 @@ export def "tier1-staff-staff get" [
 ]: nothing -> record<ETag: string, Forename: string, GlobalReference: string, IsEnabled: bool, ManagedBy: string, Middlename: string, OID: string, Surname: string, Title: string> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({short_name: $short_name, application_staff_id: $application_staff_id} | format pattern "/v2/tier1/{short_name}/staff/staff/{application_staff_id}"))
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), application_staff_id: (encode-path-segment $application_staff_id)} | format pattern "/v2/tier1/{short_name}/staff/staff/{application_staff_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

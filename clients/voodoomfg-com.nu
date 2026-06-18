@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -134,7 +143,7 @@ export def "model list" [
 # Models represent 3D design files that you'd like to produce. Creating models is generally the first step in creating an order.
 #
 # POST /model
-export def "model post" [
+export def "model create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -149,11 +158,11 @@ export def "model post" [
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/model")
-  let body = {"file_url": $file_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"file_url": $file_url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get a quote a given model id.
@@ -230,7 +239,7 @@ export def "model get" [
 ]: nothing -> record<id: int, rendering_url: string, surface_area: float, volume: float, x: float, y: float, z: float> {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({model_id: $model_id} | format pattern "/model/{model_id}"))
+  let full_url = (build-url $base ({model_id: (encode-path-segment $model_id)} | format pattern "/model/{model_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -260,7 +269,7 @@ export def "order list" [
 # Confirms an order from a quote_id and submits it to the Voodoo factory.
 #
 # POST /order/confirm
-export def "order-confirm post" [
+export def "order-confirm create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -275,11 +284,11 @@ export def "order-confirm post" [
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/order/confirm")
-  let body = {"quote_id": $quote_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"quote_id": $quote_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Quotes an order and returns a quote_id that is used to confirm the order.
@@ -287,7 +296,7 @@ export def "order-confirm post" [
 # POST /order/create
 # --models item shape: {material_id?: int, model_id?: int, options?: record, quantity?: int, units?: string}
 # --shipping_address shape: {city?: string, country?: string, email?: string, name?: string, state?: string, street1?: string, street2?: string, zip?: string}
-export def "order-create post" [
+export def "order-create create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -305,11 +314,11 @@ export def "order-create post" [
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/order/create")
-  let body = {"models": $models, "notes": $notes, "shipping_address": $shipping_address, "shipping_service": $shipping_service} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"models": $models, "notes": $notes, "shipping_address": $shipping_address, "shipping_service": $shipping_service} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List shipping options and prices for a given shipment.
@@ -317,7 +326,7 @@ export def "order-create post" [
 # POST /order/shipping
 # --models item shape: {material_id?: int, model_id?: int, options?: record, quantity?: int, units?: string}
 # --shipping_address shape: {city?: string, country?: string, email?: string, name?: string, state?: string, street1?: string, street2?: string, zip?: string}
-export def "order-shipping post" [
+export def "order-shipping create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -333,11 +342,11 @@ export def "order-shipping post" [
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/order/shipping")
-  let body = {"models": $models, "shipping_address": $shipping_address} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"models": $models, "shipping_address": $shipping_address} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve a previously created model by its id.
@@ -356,7 +365,7 @@ export def "order get" [
 ]: nothing -> record<customer_contact_email: string, customer_name: string, id: int, notes: string, prints: table<material: record, model: record, quantity: int, units: string>, reference: string, ship_by: string, shipping_address: record<city: string, country: string, email: string, name: string, state: string, street1: string, street2: string, zip: string>> {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({order_id: $order_id} | format pattern "/order/{order_id}"))
+  let full_url = (build-url $base ({order_id: (encode-path-segment $order_id)} | format pattern "/order/{order_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

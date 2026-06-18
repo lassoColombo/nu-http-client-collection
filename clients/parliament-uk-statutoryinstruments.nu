@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -114,7 +123,7 @@ export def "business-item get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "LaidPaper" $laid_paper "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/BusinessItem/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/BusinessItem/{id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -124,7 +133,7 @@ export def "business-item get" [
 #
 # GET /api/v1/LayingBody
 # operationId: GetLayingBodies
-export def "laying-body get-laying-bodies" [
+export def "laying-body get-bodies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -147,7 +156,7 @@ export def "laying-body get-laying-bodies" [
 #
 # GET /api/v1/Procedure
 # operationId: GetProceduresV1
-export def "procedure get-procedures-v1" [
+export def "procedure list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -184,7 +193,7 @@ export def "procedure get" [
 ]: nothing -> record<links: table<href: string, method: string, rel: string>, value: record<description: string, id: string, name: string, uri: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/Procedure/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/Procedure/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -238,7 +247,7 @@ export def "proposed-negative-statutory-instrument get" [
 ]: nothing -> record<links: table<href: string, method: string, rel: string>, value: record<commonsLayingDate: string, commonsPublishedDate: string, departmentId: int, id: string, layingBodyDepartment: record<departmentId: int, id: string, name: string>, layingBodyId: string, layingBodyName: string, link: string, lordsLayingDate: string, lordsPublishedDate: string, name: string, procedure: record<id: string, name: string, uri: string>, procedureName: string, procedureUri: string, statutoryInstrument: record<id: string, name: string>, statutoryInstrumentPaperId: string, statutoryInstrumentPaperName: string, uri: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/ProposedNegativeStatutoryInstrument/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/ProposedNegativeStatutoryInstrument/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -262,7 +271,7 @@ export def "proposed-negative-statutory-instrument-business-items get" [
 ]: nothing -> record<items: table<links: list, value: record>, itemsPerPage: int, links: table<href: string, method: string, rel: string>, totalResults: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/ProposedNegativeStatutoryInstrument/{id}/BusinessItems"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/ProposedNegativeStatutoryInstrument/{id}/BusinessItems"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -321,7 +330,7 @@ export def "statutory-instrument get" [
 ]: nothing -> record<links: table<href: string, method: string, rel: string>, value: record<commonsLayingDate: string, commonsPublishedDate: string, departmentId: int, id: string, layingBodyDepartment: record<departmentId: int, id: string, name: string>, layingBodyId: string, layingBodyName: string, link: string, lordsLayingDate: string, lordsPublishedDate: string, name: string, paperComingIntoForceDate: string, paperComingIntoForceNote: string, paperMadeDate: string, paperNumber: int, paperPrefix: string, paperYear: string, procedure: record<id: string, name: string, uri: string>, procedureName: string, procedureUri: string, proposedNegativeStatutoryInstrument: record<id: string, name: string>, proposedNegativeStatutoryInstrumentPaperId: string, proposedNegativeStatutoryInstrumentPaperName: string, uri: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/StatutoryInstrument/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/StatutoryInstrument/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -345,7 +354,7 @@ export def "statutory-instrument-business-items get" [
 ]: nothing -> record<items: table<links: list, value: record>, itemsPerPage: int, links: table<href: string, method: string, rel: string>, totalResults: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/StatutoryInstrument/{id}/BusinessItems"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/StatutoryInstrument/{id}/BusinessItems"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

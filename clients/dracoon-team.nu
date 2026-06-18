@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -62,6 +71,33 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
+# Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
+# the field names whose value should be read from disk as bytes; every
+# other field is sent as a text part (records/lists JSON-stringified).
+# Returns {content_type, body} ready to pass to `do-request`.
+def build-multipart-body [parts: record, file_fields: list<string>]: nothing -> record {
+  let boundary = $"----nu-(random chars --length 24)"
+  let crlf = "\r\n"
+  let chunks = ($parts | transpose k v | where {|p| $p.v != null} | each {|p|
+    let name = $p.k
+    let val = $p.v
+    if $name in $file_fields {
+      let filename = ($val | path basename)
+      let bytes = (open --raw $val | into binary | collect)
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"; filename=\"($filename)\"($crlf)Content-Type: application/octet-stream($crlf)($crlf)" | into binary)
+      $head ++ $bytes ++ ($crlf | into binary)
+    } else {
+      let dt = ($val | describe)
+      let s = if (($dt | str starts-with "record") or ($dt | str starts-with "list") or ($dt | str starts-with "table")) { ($val | to json --raw) } else { ($val | into string) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"($crlf)($crlf)" | into binary)
+      $head ++ ($"($s)($crlf)" | into binary)
+    }
+  })
+  let trailer = ($"--($boundary)--($crlf)" | into binary)
+  let body = ($chunks | reduce --fold (0x[] | into binary) {|chunk, acc| $acc ++ $chunk }) ++ $trailer
+  {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
+}
+
 def base-url-completer [] { ["http://localhost/api"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -83,7 +119,7 @@ def protocol-completer [] { ["TCP" "UDP"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "auth-login login" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "auth-login create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -112,7 +148,7 @@ export def commands []: nothing -> table {
 @deprecated
 @deprecated --flag language
 @deprecated --flag login
-export def "auth-login login" [
+export def "auth-login create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -122,22 +158,22 @@ export def "auth-login login" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --auth-type: string@auth-type-completer # Authentication methods
-  --language: string # &#128679; Deprecated since v4.7.0  Language ID or ISO 639-1 code (DEPRECATED)
-  --login: string # &#128679; Deprecated since v4.7.0  User login name (DEPRECATED)
+  --language: string # &#128679; Deprecated since v4.7.0 Language ID or ISO 639-1 code (DEPRECATED)
+  --login: string # &#128679; Deprecated since v4.7.0 User login name (DEPRECATED)
   password: string # Password
-  --state: string # For RADIUS Access-Challenge  If a `replyState` is returned, it must be included as `state` in the following request.
+  --state: string # For RADIUS Access-Challenge If a `replyState` is returned, it must be included as `state` in the following request.
   --body-token: string # RADIUS Token
-  --user-name: string # &#128640; Since v4.13.0  Username
+  --user-name: string # &#128640; Since v4.13.0 Username
 ]: any -> record<token: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/auth/login")
-  let body = {"authType": $auth_type, "language": $language, "login": $login, "password": $password, "state": $state, "token": $body_token, "userName": $user_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"authType": $auth_type, "language": $language, "login": $login, "password": $password, "state": $state, "token": $body_token, "userName": $user_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Initiate OpenID Connect authentication
@@ -148,7 +184,7 @@ export def "auth-login login" [
 # operationId: initiateOpenIdLogin
 @deprecated
 @deprecated --flag language
-export def "auth-openid-login initiateOpenIdLogin" [
+export def "auth-openid-login open-initiate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -160,7 +196,7 @@ export def "auth-openid-login initiateOpenIdLogin" [
   --issuer: string # Issuer identifier of the OpenID Connect identity provider
   --redirect-uri: string # Redirect URI to complete the OpenID Connect authentication
   --language: string # Language ID or ISO 639-1 code (DEPRECATED)
-  --test: oneof<nothing, bool> # Flag to test the authentication parameters.  If the request is valid, the API will respond with `204 No Content`.
+  --test: oneof<nothing, bool> # Flag to test the authentication parameters. If the request is valid, the API will respond with `204 No Content`.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -178,7 +214,7 @@ export def "auth-openid-login initiateOpenIdLogin" [
 # Docs: http://openid.net/developers/specs — OpenID Specifications
 # operationId: completeOpenIdLogin
 @deprecated
-export def "auth-openid-login completeOpenIdLogin" [
+export def "auth-openid-login complete-open" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -226,7 +262,7 @@ export def "auth-ping ping" [
 #
 # POST /v4/auth/recover_username
 # operationId: recoverUserName
-export def "auth-recover-username recoverUserName" [
+export def "auth-recover-username create-user-name" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -236,17 +272,17 @@ export def "auth-recover-username recoverUserName" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --creator-language: string # IETF language tag
-  email: string # Email 
+  email: string # Email
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/auth/recover_username")
-  let body = {"creatorLanguage": $creator_language, "email": $email} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"creatorLanguage": $creator_language, "email": $email} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Request password reset
@@ -265,19 +301,19 @@ export def "auth-reset-password request" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --creator-language: string # IETF language tag
-  --language: string # &#128679; Deprecated since v4.7.0  Language ID or ISO 639-1 code (DEPRECATED)
-  --login: string # &#128679; Deprecated since v4.13.0  User login name (DEPRECATED)
-  --user-name: string # &#128640; Since v4.13.0  Username
+  --language: string # &#128679; Deprecated since v4.7.0 Language ID or ISO 639-1 code (DEPRECATED)
+  --login: string # &#128679; Deprecated since v4.13.0 User login name (DEPRECATED)
+  --user-name: string # &#128640; Since v4.13.0 Username
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/auth/reset_password")
-  let body = {"creatorLanguage": $creator_language, "language": $language, "login": $login, "userName": $user_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"creatorLanguage": $creator_language, "language": $language, "login": $login, "userName": $user_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Validate information for password reset
@@ -297,7 +333,7 @@ export def "auth-reset-password validate" [
 ]: nothing -> record<allowSystemGlobalWeakPassword: bool, firstName: string, gender: string, lastName: string, loginPasswordPolicies: record<characterRules: record<mustContainCharacters: list, numberOfCharacteristicsToEnforce: int>, minLength: int, numberOfArchivedPasswords: int, passwordExpiration: record<enabled: bool, maxPasswordAge: int>, rejectDictionaryWords: bool, rejectKeyboardPatterns: bool, rejectUserInfo: bool, updatedAt: string, updatedBy: record<avatarUuid: string, displayName: string, email: string, firstName: string, id: int, lastName: string, title: string, userName: string, userType: string>, userLockout: record<enabled: bool, lockoutPeriod: int, maxNumberOfLoginFailures: int>>, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({token_arg: $token_arg} | format pattern "/v4/auth/reset_password/{token_arg}"))
+  let full_url = (build-url $base ({token_arg: (encode-path-segment $token_arg)} | format pattern "/v4/auth/reset_password/{token_arg}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -322,12 +358,12 @@ export def "auth-reset-password reset" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({token_arg: $token_arg} | format pattern "/v4/auth/reset_password/{token_arg}"))
-  let body = {"password": $password} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({token_arg: (encode-path-segment $token_arg)} | format pattern "/v4/auth/reset_password/{token_arg}"))
+  let req_body = {"password": $password} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Request default values
@@ -349,10 +385,10 @@ export def "config-info-defaults request-system" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/config/info/defaults")
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -360,7 +396,7 @@ export def "config-info-defaults request-system" [
 #
 # GET /v4/config/info/general
 # operationId: requestGeneralSettingsInfo
-export def "config-info-general request-general-settings" [
+export def "config-info-general request-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -374,10 +410,10 @@ export def "config-info-general request-general-settings" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/config/info/general")
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -385,7 +421,7 @@ export def "config-info-general request-general-settings" [
 #
 # GET /v4/config/info/infrastructure
 # operationId: requestInfrastructurePropertiesInfo
-export def "config-info-infrastructure request-infrastructure-properties" [
+export def "config-info-infrastructure request-properties" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -399,10 +435,10 @@ export def "config-info-infrastructure request-infrastructure-properties" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/config/info/infrastructure")
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -424,10 +460,10 @@ export def "config-info-notifications-channels request" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/config/info/notifications/channels")
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -449,10 +485,10 @@ export def "config-info-policies-algorithms request" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/config/info/policies/algorithms")
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -474,10 +510,10 @@ export def "config-info-policies-classifications request" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/config/info/policies/classifications")
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -499,10 +535,10 @@ export def "config-info-policies-guest-users request" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/config/info/policies/guest_users")
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -524,10 +560,10 @@ export def "config-info-policies-passwords request" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/config/info/policies/passwords")
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -549,10 +585,10 @@ export def "config-info-product-packages request" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/config/info/product_packages")
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -574,10 +610,10 @@ export def "config-info-product-packages-current request" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/config/info/product_packages/current")
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -599,10 +635,10 @@ export def "config-info-s3-tags request" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/config/info/s3_tags")
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -626,10 +662,10 @@ export def "config-settings request-system" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/config/settings")
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -656,13 +692,13 @@ export def "config-settings update-system" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/config/settings")
-  let body = {"items": $items} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"items": $items} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Download avatar
@@ -683,7 +719,7 @@ export def "downloads-avatar download" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id, uuid: $uuid} | format pattern "/v4/downloads/avatar/{user_id}/{uuid}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), uuid: (encode-path-segment $uuid)} | format pattern "/v4/downloads/avatar/{user_id}/{uuid}"))
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -693,7 +729,7 @@ export def "downloads-avatar download" [
 #
 # GET /v4/downloads/zip/{token}
 # operationId: downloadZipArchiveViaToken
-export def "downloads-zip download-zip-archive-via" [
+export def "downloads-zip archive-via" [
   token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -706,7 +742,7 @@ export def "downloads-zip download-zip-archive-via" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({token_arg: $token_arg} | format pattern "/v4/downloads/zip/{token_arg}"))
+  let full_url = (build-url $base ({token_arg: (encode-path-segment $token_arg)} | format pattern "/v4/downloads/zip/{token_arg}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -729,16 +765,16 @@ export def "downloads download-file-via" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --generic-mimetype: oneof<nothing, bool> # Always return `application/octet-stream` instead of specific mimetype
   --inline: oneof<nothing, bool> # Use Content-Disposition: `inline` instead of `attachment`
-  --range: string # Range   e.g. `bytes=0-999`
+  --range: string # Range e.g. `bytes=0-999`
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "generic_mimetype" $generic_mimetype "scalar") (serialize-qp "inline" $inline "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({token_arg: $token_arg} | format pattern "/v4/downloads/{token_arg}") $qp)
-  let extra_headers = {"Range": $range} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({token_arg: (encode-path-segment $token_arg)} | format pattern "/v4/downloads/{token_arg}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Range": $range} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -759,16 +795,16 @@ export def "downloads download-file-via-by-token" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --generic-mimetype: oneof<nothing, bool> # Always return `application/octet-stream` instead of specific mimetype
   --inline: oneof<nothing, bool> # Use Content-Disposition: `inline` instead of `attachment`
-  --range: string # Range   e.g. `bytes=0-999`
+  --range: string # Range e.g. `bytes=0-999`
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "generic_mimetype" $generic_mimetype "scalar") (serialize-qp "inline" $inline "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({token_arg: $token_arg} | format pattern "/v4/downloads/{token_arg}") $qp)
-  let extra_headers = {"Range": $range} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({token_arg: (encode-path-segment $token_arg)} | format pattern "/v4/downloads/{token_arg}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Range": $range} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -785,9 +821,9 @@ export def "eventlog-audits-node-info request" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --parent-id: int # Parent node ID.  Only rooms can be parents.  Parent ID `0` or empty is the root node. (format: int64)
+  --parent-id: int # Parent node ID. Only rooms can be parents. Parent ID `0` or empty is the root node. (format: int64)
   --offset: int # Range offset (format: int32)
-  --limit: int # Range limit.  Maximum 500.   For more results please use paging (`offset` + `limit`). (format: int32)
+  --limit: int # Range limit. Maximum 500. For more results please use paging (`offset` + `limit`). (format: int32)
   --filter: string # Filter string
   --qp-sort: string # Sort string
   --x-sds-auth-token: string # Authentication token
@@ -796,10 +832,10 @@ export def "eventlog-audits-node-info request" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "parent_id" $parent_id "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v4/eventlog/audits/node_info" $qp)
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -809,7 +845,7 @@ export def "eventlog-audits-node-info request" [
 # DEPRECATED
 # operationId: requestAuditNodeUserData
 @deprecated
-export def "eventlog-audits-nodes request-audit-node-user-data" [
+export def "eventlog-audits-nodes request-user-data" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -819,7 +855,7 @@ export def "eventlog-audits-nodes request-audit-node-user-data" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # Range offset (format: int32)
-  --limit: int # Range limit.  Maximum 500.   For more results please use paging (`offset` + `limit`). (format: int32)
+  --limit: int # Range limit. Maximum 500. For more results please use paging (`offset` + `limit`). (format: int32)
   --filter: string # Filter string
   --qp-sort: string # Sort string
   --x-sds-date-format: string@x-sds-date-format-completer # Date time format (cf. [RFC 3339](https://www.ietf.org/rfc/rfc3339.txt) & [leettime.de](http://leettime.de/))
@@ -829,10 +865,10 @@ export def "eventlog-audits-nodes request-audit-node-user-data" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v4/eventlog/audits/nodes" $qp)
-  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -840,7 +876,7 @@ export def "eventlog-audits-nodes request-audit-node-user-data" [
 #
 # GET /v4/eventlog/events
 # operationId: requestLogEventsAsJson
-export def "eventlog-events request-log-events-as-json" [
+export def "eventlog-events request-log-as-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -851,12 +887,12 @@ export def "eventlog-events request-log-events-as-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-sort: string # Sort string
   --offset: int # Range offset (format: int32)
-  --limit: int # Range limit.  Maximum 500.   For more results please use paging (`offset` + `limit`). (format: int32)
-  --date-start: string # Filter events from given date   e.g. `2015-12-31T23:59:00`
-  --date-end: string # Filter events until given date   e.g. `2015-12-31T23:59:00`
-  --type: int # Operation ID   cf. `GET /eventlog/operations` (format: int32)
+  --limit: int # Range limit. Maximum 500. For more results please use paging (`offset` + `limit`). (format: int32)
+  --date-start: string # Filter events from given date e.g. `2015-12-31T23:59:00`
+  --date-end: string # Filter events until given date e.g. `2015-12-31T23:59:00`
+  --type: int # Operation ID cf. `GET /eventlog/operations` (format: int32)
   --user-id: int # User ID (format: int64)
-  --status: string@status-completer # Operation status:  * `0` - Success  * `2` - Error
+  --status: string@status-completer # Operation status: * `0` - Success * `2` - Error
   --user-client: string # User client
   --x-sds-date-format: string@x-sds-date-format-completer # Date time format (cf. [RFC 3339](https://www.ietf.org/rfc/rfc3339.txt) & [leettime.de](http://leettime.de/))
   --x-sds-auth-token: string # Authentication token
@@ -865,10 +901,10 @@ export def "eventlog-events request-log-events-as-json" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sort" $qp_sort "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "date_start" $date_start "scalar") (serialize-qp "date_end" $date_end "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "user_id" $user_id "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "user_client" $user_client "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v4/eventlog/events" $qp)
-  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -892,10 +928,10 @@ export def "eventlog-operations request-log" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "is_deprecated" $is_deprecated "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v4/eventlog/operations" $qp)
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -913,7 +949,7 @@ export def "groups list" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # Range offset (format: int32)
-  --limit: int # Range limit.  Maximum 500.   For more results please use paging (`offset` + `limit`). (format: int32)
+  --limit: int # Range limit. Maximum 500. For more results please use paging (`offset` + `limit`). (format: int32)
   --filter: string # Filter string
   --qp-sort: string # Sort string
   --x-sds-date-format: string@x-sds-date-format-completer # Date time format (cf. [RFC 3339](https://www.ietf.org/rfc/rfc3339.txt) & [leettime.de](http://leettime.de/))
@@ -923,10 +959,10 @@ export def "groups list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v4/groups" $qp)
-  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -953,13 +989,13 @@ export def "groups create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/groups")
-  let body = {"expiration": $expiration, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"expiration": $expiration, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Remove user group
@@ -980,11 +1016,11 @@ export def "groups delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/v4/groups/{group_id}"))
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/v4/groups/{group_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1007,11 +1043,11 @@ export def "groups request" [
 ]: nothing -> record<cntUsers: int, createdAt: string, createdBy: record<avatarUuid: string, displayName: string, email: string, firstName: string, id: int, lastName: string, title: string, userName: string, userType: string>, expireAt: string, groupRoles: record<items: list<record>>, id: int, name: string, updatedAt: string, updatedBy: record<avatarUuid: string, displayName: string, email: string, firstName: string, id: int, lastName: string, title: string, userName: string, userType: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/v4/groups/{group_id}"))
-  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/v4/groups/{group_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1038,14 +1074,14 @@ export def "groups update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/v4/groups/{group_id}"))
-  let body = {"expiration": $expiration, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/v4/groups/{group_id}"))
+  let req_body = {"expiration": $expiration, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Request rooms where the group is defined as last admin group
@@ -1066,11 +1102,11 @@ export def "groups-last-admin-rooms request" [
 ]: nothing -> record<items: table<id: int, name: string, parentId: int, parentPath: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/v4/groups/{group_id}/last_admin_rooms"))
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/v4/groups/{group_id}/last_admin_rooms"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1092,11 +1128,11 @@ export def "groups-roles request" [
 ]: nothing -> record<items: table<description: string, id: int, items: list, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/v4/groups/{group_id}/roles"))
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/v4/groups/{group_id}/roles"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1117,7 +1153,7 @@ export def "groups-rooms request" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # Range offset (format: int32)
-  --limit: int # Range limit.  Maximum 500.   For more results please use paging (`offset` + `limit`). (format: int32)
+  --limit: int # Range limit. Maximum 500. For more results please use paging (`offset` + `limit`). (format: int32)
   --filter: string # Filter string
   --x-sds-date-format: string@x-sds-date-format-completer # Date time format (cf. [RFC 3339](https://www.ietf.org/rfc/rfc3339.txt) & [leettime.de](http://leettime.de/))
   --x-sds-auth-token: string # Authentication token
@@ -1125,11 +1161,11 @@ export def "groups-rooms request" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/v4/groups/{group_id}/rooms") $qp)
-  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/v4/groups/{group_id}/rooms") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1137,7 +1173,7 @@ export def "groups-rooms request" [
 #
 # DELETE /v4/groups/{group_id}/users
 # operationId: removeGroupMembers
-export def "groups-users delete-group-members" [
+export def "groups-users delete-members" [
   group_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1149,26 +1185,26 @@ export def "groups-users delete-group-members" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-sds-date-format: string@x-sds-date-format-completer # Date time format (cf. [RFC 3339](https://www.ietf.org/rfc/rfc3339.txt) & [leettime.de](http://leettime.de/))
   --x-sds-auth-token: string # Authentication token
-  ids: list # List of user IDs
+  ids: list<int> # List of user IDs
 ]: any -> record<cntUsers: int, createdAt: string, createdBy: record<avatarUuid: string, displayName: string, email: string, firstName: string, id: int, lastName: string, title: string, userName: string, userType: string>, expireAt: string, groupRoles: record<items: list<record>>, id: int, name: string, updatedAt: string, updatedBy: record<avatarUuid: string, displayName: string, email: string, firstName: string, id: int, lastName: string, title: string, userName: string, userType: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/v4/groups/{group_id}/users"))
-  let body = {"ids": $ids} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/v4/groups/{group_id}/users"))
+  let req_body = {"ids": $ids} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Request group member users or / and users who can become a member
 #
 # GET /v4/groups/{group_id}/users
 # operationId: requestGroupMembers
-export def "groups-users request-group-members" [
+export def "groups-users request-members" [
   group_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1179,18 +1215,18 @@ export def "groups-users request-group-members" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # Range offset (format: int32)
-  --limit: int # Range limit.  Maximum 500.   For more results please use paging (`offset` + `limit`). (format: int32)
+  --limit: int # Range limit. Maximum 500. For more results please use paging (`offset` + `limit`). (format: int32)
   --filter: string # Filter string
   --x-sds-auth-token: string # Authentication token
 ]: nothing -> record<items: table<displayName: string, email: string, id: int, isMember: bool, login: string, userInfo: record>, range: record<limit: int, offset: int, total: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/v4/groups/{group_id}/users") $qp)
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/v4/groups/{group_id}/users") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1198,7 +1234,7 @@ export def "groups-users request-group-members" [
 #
 # POST /v4/groups/{group_id}/users
 # operationId: addGroupMembers
-export def "groups-users create-group-members" [
+export def "groups-users create-members" [
   group_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1210,26 +1246,26 @@ export def "groups-users create-group-members" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-sds-date-format: string@x-sds-date-format-completer # Date time format (cf. [RFC 3339](https://www.ietf.org/rfc/rfc3339.txt) & [leettime.de](http://leettime.de/))
   --x-sds-auth-token: string # Authentication token
-  ids: list # List of user IDs
+  ids: list<int> # List of user IDs
 ]: any -> record<cntUsers: int, createdAt: string, createdBy: record<avatarUuid: string, displayName: string, email: string, firstName: string, id: int, lastName: string, title: string, userName: string, userType: string>, expireAt: string, groupRoles: record<items: list<record>>, id: int, name: string, updatedAt: string, updatedBy: record<avatarUuid: string, displayName: string, email: string, firstName: string, id: int, lastName: string, title: string, userName: string, userType: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/v4/groups/{group_id}/users"))
-  let body = {"ids": $ids} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/v4/groups/{group_id}/users"))
+  let req_body = {"ids": $ids} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Request subscription plan
 #
 # GET /v4/internal/tenant/subscription_plan
 # operationId: internalRequestSubscriptionPlan
-export def "internal-tenant-subscription-plan internalRequestSubscriptionPlan" [
+export def "internal-tenant-subscription-plan request" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1243,10 +1279,10 @@ export def "internal-tenant-subscription-plan internalRequestSubscriptionPlan" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/internal/tenant/subscription_plan")
-  let extra_headers = {"X-Sds-Service-Token": $x_sds_service_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Service-Token": $x_sds_service_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1254,7 +1290,7 @@ export def "internal-tenant-subscription-plan internalRequestSubscriptionPlan" [
 #
 # PUT /v4/internal/tenant/subscription_plan
 # operationId: internalSetSubscriptionPlan
-export def "internal-tenant-subscription-plan internalSetSubscriptionPlan" [
+export def "internal-tenant-subscription-plan update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1270,13 +1306,13 @@ export def "internal-tenant-subscription-plan internalSetSubscriptionPlan" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/internal/tenant/subscription_plan")
-  let body = {"subscriptionPlanId": $subscription_plan_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Service-Token": $x_sds_service_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"subscriptionPlanId": $subscription_plan_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Service-Token": $x_sds_service_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Remove nodes
@@ -1293,19 +1329,19 @@ export def "nodes delete" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-sds-auth-token: string # Authentication token
-  node_ids: list # List of node IDs
+  node_ids: list<int> # List of node IDs
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/nodes")
-  let body = {"nodeIds": $node_ids} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"nodeIds": $node_ids} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Request list of nodes
@@ -1322,13 +1358,13 @@ export def "nodes list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --depth-level: int # * `0` - top level nodes only  * `n` (any positive number) - include `n` levels starting from the current node (DEPRECATED, format: int32)
-  --parent-id: int # Parent node ID.  Only rooms and folders can be parents.  Parent ID `0` or empty is the root node. (format: int64)
-  --room-manager: oneof<nothing, bool> # Show all rooms for management perspective.  Only possible for _Rooms Managers_ / _Room Admins_.  For all other users, it will be ignored.
+  --depth-level: int # * `0` - top level nodes only * `n` (any positive number) - include `n` levels starting from the current node (DEPRECATED, format: int32)
+  --parent-id: int # Parent node ID. Only rooms and folders can be parents. Parent ID `0` or empty is the root node. (format: int64)
+  --room-manager: oneof<nothing, bool> # Show all rooms for management perspective. Only possible for _Rooms Managers_ / _Room Admins_. For all other users, it will be ignored.
   --filter: string # Filter string
   --qp-sort: string # Sort string
   --offset: int # Range offset (format: int32)
-  --limit: int # Range limit.  Maximum 500.   For more results please use paging (`offset` + `limit`). (format: int32)
+  --limit: int # Range limit. Maximum 500. For more results please use paging (`offset` + `limit`). (format: int32)
   --x-sds-date-format: string@x-sds-date-format-completer # Date time format (cf. [RFC 3339](https://www.ietf.org/rfc/rfc3339.txt) & [leettime.de](http://leettime.de/))
   --x-sds-auth-token: string # Authentication token
 ]: nothing -> record<items: table<authParentId: int, branchVersion: int, children: list, classification: int, cntChildren: int, cntComments: int, cntDeletedVersions: int, cntDownloadShares: int, cntFiles: int, cntFolders: int, cntRooms: int, cntUploadShares: int, createdAt: string, createdBy: record, encryptionInfo: record, expireAt: string, fileType: string, hasActivitiesLog: bool, hash: string, id: int, inheritPermissions: bool, isBrowsable: bool, isEncrypted: bool, isFavorite: bool, mediaToken: string, mediaType: string, name: string, notes: string, parentId: int, parentPath: string, permissions: record, quota: int, recycleBinRetentionPeriod: int, referenceId: int, size: int, timestampCreation: string, timestampModification: string, type: string, updatedAt: string, updatedBy: record>, range: record<limit: int, offset: int, total: int>> {
@@ -1336,10 +1372,10 @@ export def "nodes list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "depth_level" $depth_level "scalar") (serialize-qp "parent_id" $parent_id "scalar") (serialize-qp "room_manager" $room_manager "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v4/nodes" $qp)
-  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1361,11 +1397,11 @@ export def "nodes-comments delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({comment_id: $comment_id} | format pattern "/v4/nodes/comments/{comment_id}"))
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({comment_id: (encode-path-segment $comment_id)} | format pattern "/v4/nodes/comments/{comment_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1390,14 +1426,14 @@ export def "nodes-comments update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({comment_id: $comment_id} | format pattern "/v4/nodes/comments/{comment_id}"))
-  let body = {"text": $text} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({comment_id: (encode-path-segment $comment_id)} | format pattern "/v4/nodes/comments/{comment_id}"))
+  let req_body = {"text": $text} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Remove nodes from recycle bin
@@ -1414,26 +1450,26 @@ export def "nodes-deleted-nodes delete" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-sds-auth-token: string # Authentication token
-  deleted_node_ids: list # List of deleted node IDs
+  deleted_node_ids: list<int> # List of deleted node IDs
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/nodes/deleted_nodes")
-  let body = {"deletedNodeIds": $deleted_node_ids} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"deletedNodeIds": $deleted_node_ids} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Restore deleted nodes
 #
 # POST /v4/nodes/deleted_nodes/actions/restore
 # operationId: restoreNodes
-export def "nodes-deleted-nodes-actions-restore restoreNodes" [
+export def "nodes-deleted-nodes-actions-restore create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1443,22 +1479,22 @@ export def "nodes-deleted-nodes-actions-restore restoreNodes" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-sds-auth-token: string # Authentication token
-  deleted_node_ids: list # List of deleted node IDs
+  deleted_node_ids: list<int> # List of deleted node IDs
   --keep-share-links: oneof<nothing, bool> # Preserve Download Share Links and point them to the new node. (default: false)
-  --parent-id: int # Node parent ID  (default: previous parent ID) (format: int64)
-  --resolution-strategy: string@resolution-strategy-completer # Node conflict resolution strategy:  * `autorename`  * `overwrite`  * `fail` (default: autorename)
+  --parent-id: int # Node parent ID (default: previous parent ID) (format: int64)
+  --resolution-strategy: string@resolution-strategy-completer # Node conflict resolution strategy: * `autorename` * `overwrite` * `fail` (default: autorename)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/nodes/deleted_nodes/actions/restore")
-  let body = {"deletedNodeIds": $deleted_node_ids, "keepShareLinks": $keep_share_links, "parentId": $parent_id, "resolutionStrategy": $resolution_strategy} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"deletedNodeIds": $deleted_node_ids, "keepShareLinks": $keep_share_links, "parentId": $parent_id, "resolutionStrategy": $resolution_strategy} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Request deleted node
@@ -1480,11 +1516,11 @@ export def "nodes-deleted-nodes request" [
 ]: nothing -> record<accessedAt: string, classification: int, createdAt: string, createdBy: record<avatarUuid: string, displayName: string, email: string, firstName: string, id: int, lastName: string, title: string, userName: string, userType: string>, deletedAt: string, deletedBy: record<avatarUuid: string, displayName: string, email: string, firstName: string, id: int, lastName: string, title: string, userName: string, userType: string>, expireAt: string, id: int, isEncrypted: bool, name: string, notes: string, parentId: int, parentPath: string, referenceId: int, size: int, type: string, updatedAt: string, updatedBy: record<avatarUuid: string, displayName: string, email: string, firstName: string, id: int, lastName: string, title: string, userName: string, userType: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({deleted_node_id: $deleted_node_id} | format pattern "/v4/nodes/deleted_nodes/{deleted_node_id}"))
-  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({deleted_node_id: (encode-path-segment $deleted_node_id)} | format pattern "/v4/nodes/deleted_nodes/{deleted_node_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1503,22 +1539,22 @@ export def "nodes-favorites update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-sds-auth-token: string # Authentication token
   --is-favorite: oneof<nothing, bool> # Sets the favorite attribute to true or false on each file in an array of nodes.
-  object_ids: list # List of ids
+  object_ids: list<int> # List of ids
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/nodes/favorites")
-  let body = {"isFavorite": $is_favorite, "objectIds": $object_ids} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"isFavorite": $is_favorite, "objectIds": $object_ids} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-# Updates a list of  file’s metadata
+# Updates a list of file’s metadata
 #
 # PUT /v4/nodes/files
 # operationId: updateFiles
@@ -1533,21 +1569,21 @@ export def "nodes-files update" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-sds-auth-token: string # Authentication token
-  --classification: int # Classification ID:  * `1` - public  * `2` - internal  * `3` - confidential  * `4` - strictly confidential (format: int32)
+  --classification: int # Classification ID: * `1` - public * `2` - internal * `3` - confidential * `4` - strictly confidential (format: int32)
   --expiration: record # Expiration information — shape: {enableExpiration: bool, expireAt?: string}
-  object_ids: list # List of ids
+  object_ids: list<int> # List of ids
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/nodes/files")
-  let body = {"classification": $classification, "expiration": $expiration, "objectIds": $object_ids} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"classification": $classification, "expiration": $expiration, "objectIds": $object_ids} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Set file keys for a list of users and files
@@ -1555,7 +1591,7 @@ export def "nodes-files update" [
 # POST /v4/nodes/files/keys
 # operationId: setUserFileKeys
 # --items item shape: {fileId: int, fileKey: record, userId: int}
-export def "nodes-files-keys setUserFileKeys" [
+export def "nodes-files-keys update-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1571,13 +1607,13 @@ export def "nodes-files-keys setUserFileKeys" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/nodes/files/keys")
-  let body = {"items": $items} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"items": $items} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create new file upload channel
@@ -1585,7 +1621,7 @@ export def "nodes-files-keys setUserFileKeys" [
 # POST /v4/nodes/files/uploads
 # operationId: createFileUploadChannel
 # --expiration shape: {enableExpiration: bool, expireAt?: string}
-export def "nodes-files-uploads create-file-upload-channel" [
+export def "nodes-files-uploads create-channel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1595,27 +1631,27 @@ export def "nodes-files-uploads create-file-upload-channel" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-sds-auth-token: string # Authentication token
-  --classification: int@classification-completer # Classification ID:  * `1` - public  * `2` - internal  * `3` - confidential  * `4` - strictly confidential    (default: classification from parent room) (format: int32)
-  --direct-s3-upload: oneof<nothing, bool> # &#128640; Since v4.15.0  Upload direct to S3 (default: false)
+  --classification: int@classification-completer # Classification ID: * `1` - public * `2` - internal * `3` - confidential * `4` - strictly confidential (default: classification from parent room) (format: int32)
+  --direct-s3-upload: oneof<nothing, bool> # &#128640; Since v4.15.0 Upload direct to S3 (default: false)
   --expiration: record # Expiration information — shape: {enableExpiration: bool, expireAt?: string}
   name: string # File name
-  --notes: string # User notes  Use empty string to remove.
+  --notes: string # User notes Use empty string to remove.
   parent_id: int # Parent node ID (room or folder) (format: int64)
   --size: int # File size in byte (format: int64)
-  --timestamp-creation: string # &#128640; Since v4.22.0  Time the node was created on external file system  (default: current server datetime in UTC format) (format: date-time)
-  --timestamp-modification: string # &#128640; Since v4.22.0  Time the content of a node was last modified on external file system  (default: current server datetime in UTC format) (format: date-time)
+  --timestamp-creation: string # &#128640; Since v4.22.0 Time the node was created on external file system (default: current server datetime in UTC format) (format: date-time)
+  --timestamp-modification: string # &#128640; Since v4.22.0 Time the content of a node was last modified on external file system (default: current server datetime in UTC format) (format: date-time)
 ]: any -> record<token: string, uploadId: string, uploadUrl: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/nodes/files/uploads")
-  let body = {"classification": $classification, "directS3Upload": $direct_s3_upload, "expiration": $expiration, "name": $name, "notes": $notes, "parentId": $parent_id, "size": $size, "timestampCreation": $timestamp_creation, "timestampModification": $timestamp_modification} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"classification": $classification, "directS3Upload": $direct_s3_upload, "expiration": $expiration, "name": $name, "notes": $notes, "parentId": $parent_id, "size": $size, "timestampCreation": $timestamp_creation, "timestampModification": $timestamp_modification} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Cancel file upload
@@ -1636,11 +1672,11 @@ export def "nodes-files-uploads cancel" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({upload_id: $upload_id} | format pattern "/v4/nodes/files/uploads/{upload_id}"))
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({upload_id: (encode-path-segment $upload_id)} | format pattern "/v4/nodes/files/uploads/{upload_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1648,7 +1684,7 @@ export def "nodes-files-uploads cancel" [
 #
 # GET /v4/nodes/files/uploads/{upload_id}
 # operationId: requestUploadStatusFiles
-export def "nodes-files-uploads request-upload-status" [
+export def "nodes-files-uploads request-status" [
   upload_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1663,11 +1699,11 @@ export def "nodes-files-uploads request-upload-status" [
 ]: nothing -> record<errorDetails: record<code: int, debugInfo: string, errorCode: int, message: string>, node: record<authParentId: int, branchVersion: int, children: list<any>, classification: int, cntChildren: int, cntComments: int, cntDeletedVersions: int, cntDownloadShares: int, cntFiles: int, cntFolders: int, cntRooms: int, cntUploadShares: int, createdAt: string, createdBy: record<avatarUuid: string, displayName: string, email: string, firstName: string, id: int, lastName: string, title: string, userName: string, userType: string>, encryptionInfo: record<dataSpaceKeyState: string, roomKeyState: string, userKeyState: string>, expireAt: string, fileType: string, hasActivitiesLog: bool, hash: string, id: int, inheritPermissions: bool, isBrowsable: bool, isEncrypted: bool, isFavorite: bool, mediaToken: string, mediaType: string, name: string, notes: string, parentId: int, parentPath: string, permissions: record<change: bool, create: bool, delete: bool, deleteRecycleBin: bool, manage: bool, manageDownloadShare: bool, manageUploadShare: bool, read: bool, readRecycleBin: bool, restoreRecycleBin: bool>, quota: int, recycleBinRetentionPeriod: int, referenceId: int, size: int, timestampCreation: string, timestampModification: string, type: string, updatedAt: string, updatedBy: record<avatarUuid: string, displayName: string, email: string, firstName: string, id: int, lastName: string, title: string, userName: string, userType: string>>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({upload_id: $upload_id} | format pattern "/v4/nodes/files/uploads/{upload_id}"))
-  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({upload_id: (encode-path-segment $upload_id)} | format pattern "/v4/nodes/files/uploads/{upload_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1678,7 +1714,7 @@ export def "nodes-files-uploads request-upload-status" [
 # Docs: https://tools.ietf.org/html/rfc7233 — Range Requests
 # operationId: uploadFileAsMultipart
 @deprecated
-export def "nodes-files-uploads upload-file-as-multipart" [
+export def "nodes-files-uploads upload-as-multipart" [
   upload_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1688,21 +1724,22 @@ export def "nodes-files-uploads upload-file-as-multipart" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-range: string # Content-Range   e.g. `bytes 0-999/3980`
+  --content-range: string # Content-Range e.g. `bytes 0-999/3980`
   --x-sds-auth-token: string # Authentication token
   file: string # File (format: binary)
 ]: any -> record<hash: string, size: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({upload_id: $upload_id} | format pattern "/v4/nodes/files/uploads/{upload_id}"))
-  let body = {"file": $file} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Range": $content_range, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({upload_id: (encode-path-segment $upload_id)} | format pattern "/v4/nodes/files/uploads/{upload_id}"))
+  let req_body = {"file": $file} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let extra_headers = {"Content-Range": $content_range, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let mp = (build-multipart-body $req_body ["file"])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # Complete file upload
@@ -1714,7 +1751,7 @@ export def "nodes-files-uploads upload-file-as-multipart" [
 # --userFileKeyList shape: {items?: list}
 @deprecated
 @deprecated --flag user-file-key-list
-export def "nodes-files-uploads completeFileUpload" [
+export def "nodes-files-uploads complete" [
   upload_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1729,20 +1766,20 @@ export def "nodes-files-uploads completeFileUpload" [
   --file-key: record # File key information — shape: {iv: string, key: string, tag: string, version: string}
   --file-name: string # New file name to store with
   --keep-share-links: oneof<nothing, bool> # Preserve Download Share Links and point them to the new node. (default: false)
-  --resolution-strategy: string@resolution-strategy-completer # Node conflict resolution strategy:  * `autorename`  * `overwrite`  * `fail` (default: autorename)
+  --resolution-strategy: string@resolution-strategy-completer # Node conflict resolution strategy: * `autorename` * `overwrite` * `fail` (default: autorename)
   --user-file-key-list: record # Mandatory for encrypted shares (DEPRECATED) — shape: {items?: list}
 ]: any -> record<authParentId: int, branchVersion: int, children: list<any>, classification: int, cntChildren: int, cntComments: int, cntDeletedVersions: int, cntDownloadShares: int, cntFiles: int, cntFolders: int, cntRooms: int, cntUploadShares: int, createdAt: string, createdBy: record<avatarUuid: string, displayName: string, email: string, firstName: string, id: int, lastName: string, title: string, userName: string, userType: string>, encryptionInfo: record<dataSpaceKeyState: string, roomKeyState: string, userKeyState: string>, expireAt: string, fileType: string, hasActivitiesLog: bool, hash: string, id: int, inheritPermissions: bool, isBrowsable: bool, isEncrypted: bool, isFavorite: bool, mediaToken: string, mediaType: string, name: string, notes: string, parentId: int, parentPath: string, permissions: record<change: bool, create: bool, delete: bool, deleteRecycleBin: bool, manage: bool, manageDownloadShare: bool, manageUploadShare: bool, read: bool, readRecycleBin: bool, restoreRecycleBin: bool>, quota: int, recycleBinRetentionPeriod: int, referenceId: int, size: int, timestampCreation: string, timestampModification: string, type: string, updatedAt: string, updatedBy: record<avatarUuid: string, displayName: string, email: string, firstName: string, id: int, lastName: string, title: string, userName: string, userType: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({upload_id: $upload_id} | format pattern "/v4/nodes/files/uploads/{upload_id}"))
-  let body = {"fileKey": $file_key, "fileName": $file_name, "keepShareLinks": $keep_share_links, "resolutionStrategy": $resolution_strategy, "userFileKeyList": $user_file_key_list} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({upload_id: (encode-path-segment $upload_id)} | format pattern "/v4/nodes/files/uploads/{upload_id}"))
+  let req_body = {"fileKey": $file_key, "fileName": $file_name, "keepShareLinks": $keep_share_links, "resolutionStrategy": $resolution_strategy, "userFileKeyList": $user_file_key_list} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Complete S3 file upload
@@ -1751,7 +1788,7 @@ export def "nodes-files-uploads completeFileUpload" [
 # operationId: completeS3FileUpload
 # --fileKey shape: {iv: string, key: string, tag: string, version: string}
 # --parts item shape: {partEtag: string, partNumber: int}
-export def "nodes-files-uploads-s3 completeS3FileUpload" [
+export def "nodes-files-uploads-s3 complete" [
   upload_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1766,26 +1803,26 @@ export def "nodes-files-uploads-s3 completeS3FileUpload" [
   --file-name: string # New file name to store with
   --keep-share-links: oneof<nothing, bool> # Preserve Download Share Links and point them to the new node. (default: false)
   parts: list # List of S3 file upload parts — item shape: {partEtag: string, partNumber: int}
-  --resolution-strategy: string@resolution-strategy-completer # Node conflict resolution strategy:  * `autorename`  * `overwrite`  * `fail` (default: autorename)
+  --resolution-strategy: string@resolution-strategy-completer # Node conflict resolution strategy: * `autorename` * `overwrite` * `fail` (default: autorename)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({upload_id: $upload_id} | format pattern "/v4/nodes/files/uploads/{upload_id}/s3"))
-  let body = {"fileKey": $file_key, "fileName": $file_name, "keepShareLinks": $keep_share_links, "parts": $parts, "resolutionStrategy": $resolution_strategy} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({upload_id: (encode-path-segment $upload_id)} | format pattern "/v4/nodes/files/uploads/{upload_id}/s3"))
+  let req_body = {"fileKey": $file_key, "fileName": $file_name, "keepShareLinks": $keep_share_links, "parts": $parts, "resolutionStrategy": $resolution_strategy} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Generate presigned URLs for S3 file upload
 #
 # POST /v4/nodes/files/uploads/{upload_id}/s3_urls
 # operationId: generatePresignedUrlsFiles
-export def "nodes-files-uploads-s3-urls generatePresignedUrlsFiles" [
+export def "nodes-files-uploads-s3-urls generate-presigned" [
   upload_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1798,26 +1835,26 @@ export def "nodes-files-uploads-s3-urls generatePresignedUrlsFiles" [
   --x-sds-auth-token: string # Authentication token
   first_part_number: int # First part number of a range of requested presigned URLs (for S3 it is: `1`) (format: int32)
   last_part_number: int # Last part number of a range of requested presigned URLs (format: int32)
-  size: int # `Content-Length` header size for each presigned URL (in bytes)  *MUST* be >= 5 MB except the last part. (format: int64)
+  size: int # `Content-Length` header size for each presigned URL (in bytes) *MUST* be >= 5 MB except the last part. (format: int64)
 ]: any -> record<urls: table<partNumber: int, url: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({upload_id: $upload_id} | format pattern "/v4/nodes/files/uploads/{upload_id}/s3_urls"))
-  let body = {"firstPartNumber": $first_part_number, "lastPartNumber": $last_part_number, "size": $size} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({upload_id: (encode-path-segment $upload_id)} | format pattern "/v4/nodes/files/uploads/{upload_id}/s3_urls"))
+  let req_body = {"firstPartNumber": $first_part_number, "lastPartNumber": $last_part_number, "size": $size} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Request list of file versions
 #
 # GET /v4/nodes/files/versions/{reference_id}
 # operationId: requestFileVersionList
-export def "nodes-files-versions request-file-version-list" [
+export def "nodes-files-versions request-list" [
   reference_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1828,18 +1865,18 @@ export def "nodes-files-versions request-file-version-list" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # Range offset (format: int32)
-  --limit: int # Range limit.  Maximum 500.   For more results please use paging (`offset` + `limit`). (format: int32)
+  --limit: int # Range limit. Maximum 500. For more results please use paging (`offset` + `limit`). (format: int32)
   --x-sds-date-format: string@x-sds-date-format-completer # Date time format (cf. [RFC 3339](https://www.ietf.org/rfc/rfc3339.txt) & [leettime.de](http://leettime.de/))
   --x-sds-auth-token: string # Authentication token
 ]: nothing -> record<items: table<deleted: bool, id: int, name: string, parentId: int, referenceId: int>, range: record<limit: int, offset: int, total: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({reference_id: $reference_id} | format pattern "/v4/nodes/files/versions/{reference_id}") $qp)
-  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({reference_id: (encode-path-segment $reference_id)} | format pattern "/v4/nodes/files/versions/{reference_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1860,24 +1897,24 @@ export def "nodes-files update-by-file_id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-sds-date-format: string@x-sds-date-format-completer # Date time format (cf. [RFC 3339](https://www.ietf.org/rfc/rfc3339.txt) & [leettime.de](http://leettime.de/))
   --x-sds-auth-token: string # Authentication token
-  --classification: int # Classification ID:  * `1` - public  * `2` - internal  * `3` - confidential  * `4` - strictly confidential (format: int32)
+  --classification: int # Classification ID: * `1` - public * `2` - internal * `3` - confidential * `4` - strictly confidential (format: int32)
   --expiration: record # Expiration information — shape: {enableExpiration: bool, expireAt?: string}
   --name: string # File name
-  --notes: string # User notes  Use empty string to remove.
-  --timestamp-creation: string # &#128640; Since v4.22.0  Time the node was created on external file system  (default: current server datetime in UTC format) (format: date-time)
-  --timestamp-modification: string # &#128640; Since v4.22.0  Time the content of a node was last modified on external file system  (default: current server datetime in UTC format) (format: date-time)
+  --notes: string # User notes Use empty string to remove.
+  --timestamp-creation: string # &#128640; Since v4.22.0 Time the node was created on external file system (default: current server datetime in UTC format) (format: date-time)
+  --timestamp-modification: string # &#128640; Since v4.22.0 Time the content of a node was last modified on external file system (default: current server datetime in UTC format) (format: date-time)
 ]: any -> record<authParentId: int, branchVersion: int, children: list<any>, classification: int, cntChildren: int, cntComments: int, cntDeletedVersions: int, cntDownloadShares: int, cntFiles: int, cntFolders: int, cntRooms: int, cntUploadShares: int, createdAt: string, createdBy: record<avatarUuid: string, displayName: string, email: string, firstName: string, id: int, lastName: string, title: string, userName: string, userType: string>, encryptionInfo: record<dataSpaceKeyState: string, roomKeyState: string, userKeyState: string>, expireAt: string, fileType: string, hasActivitiesLog: bool, hash: string, id: int, inheritPermissions: bool, isBrowsable: bool, isEncrypted: bool, isFavorite: bool, mediaToken: string, mediaType: string, name: string, notes: string, parentId: int, parentPath: string, permissions: record<change: bool, create: bool, delete: bool, deleteRecycleBin: bool, manage: bool, manageDownloadShare: bool, manageUploadShare: bool, read: bool, readRecycleBin: bool, restoreRecycleBin: bool>, quota: int, recycleBinRetentionPeriod: int, referenceId: int, size: int, timestampCreation: string, timestampModification: string, type: string, updatedAt: string, updatedBy: record<avatarUuid: string, displayName: string, email: string, firstName: string, id: int, lastName: string, title: string, userName: string, userType: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({file_id: $file_id} | format pattern "/v4/nodes/files/{file_id}"))
-  let body = {"classification": $classification, "expiration": $expiration, "name": $name, "notes": $notes, "timestampCreation": $timestamp_creation, "timestampModification": $timestamp_modification} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/v4/nodes/files/{file_id}"))
+  let req_body = {"classification": $classification, "expiration": $expiration, "name": $name, "notes": $notes, "timestampCreation": $timestamp_creation, "timestampModification": $timestamp_modification} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Request room rescue key
@@ -1886,7 +1923,7 @@ export def "nodes-files update-by-file_id" [
 # DEPRECATED
 # operationId: requestRoomRescueKey
 @deprecated
-export def "nodes-files-data-room-file-key request-room-rescue" [
+export def "nodes-files-data-room-file-key request-rescue" [
   file_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1902,11 +1939,11 @@ export def "nodes-files-data-room-file-key request-room-rescue" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "version" $version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({file_id: $file_id} | format pattern "/v4/nodes/files/{file_id}/data_room_file_key") $qp)
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/v4/nodes/files/{file_id}/data_room_file_key") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1932,11 +1969,11 @@ export def "nodes-files-data-space-file-key request-system-rescue" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "version" $version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({file_id: $file_id} | format pattern "/v4/nodes/files/{file_id}/data_space_file_key") $qp)
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/v4/nodes/files/{file_id}/data_space_file_key") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1944,7 +1981,7 @@ export def "nodes-files-data-space-file-key request-system-rescue" [
 #
 # POST /v4/nodes/files/{file_id}/downloads
 # operationId: generateDownloadUrl
-export def "nodes-files-downloads generateDownloadUrl" [
+export def "nodes-files-downloads generate-url" [
   file_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1958,11 +1995,11 @@ export def "nodes-files-downloads generateDownloadUrl" [
 ]: nothing -> record<downloadUrl: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({file_id: $file_id} | format pattern "/v4/nodes/files/{file_id}/downloads"))
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/v4/nodes/files/{file_id}/downloads"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1986,11 +2023,11 @@ export def "nodes-files-user-file-key request" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "version" $version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({file_id: $file_id} | format pattern "/v4/nodes/files/{file_id}/user_file_key") $qp)
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/v4/nodes/files/{file_id}/user_file_key") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2009,24 +2046,24 @@ export def "nodes-folders create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-sds-date-format: string@x-sds-date-format-completer # Date time format (cf. [RFC 3339](https://www.ietf.org/rfc/rfc3339.txt) & [leettime.de](http://leettime.de/))
   --x-sds-auth-token: string # Authentication token
-  --classification: int@classification-completer # &#128640; Since v4.30.0  Classification ID:  * `1` - public  * `2` - internal  * `3` - confidential  * `4` - strictly confidential    Provided (or default) classification is taken from room  when file gets uploaded without any classification. (format: int32)
+  --classification: int@classification-completer # &#128640; Since v4.30.0 Classification ID: * `1` - public * `2` - internal * `3` - confidential * `4` - strictly confidential Provided (or default) classification is taken from room when file gets uploaded without any classification. (format: int32)
   name: string # Name
-  --notes: string # User notes  Use empty string to remove.
+  --notes: string # User notes Use empty string to remove.
   parent_id: int # Parent node ID (room or folder) (format: int64)
-  --timestamp-creation: string # &#128640; Since v4.22.0  Time the node was created on external file system  (default: current server datetime in UTC format) (format: date-time)
-  --timestamp-modification: string # &#128640; Since v4.22.0  Time the content of a node was last modified on external file system  (default: current server datetime in UTC format) (format: date-time)
+  --timestamp-creation: string # &#128640; Since v4.22.0 Time the node was created on external file system (default: current server datetime in UTC format) (format: date-time)
+  --timestamp-modification: string # &#128640; Since v4.22.0 Time the content of a node was last modified on external file system (default: current server datetime in UTC format) (format: date-time)
 ]: any -> record<authParentId: int, branchVersion: int, children: list<any>, classification: int, cntChildren: int, cntComments: int, cntDeletedVersions: int, cntDownloadShares: int, cntFiles: int, cntFolders: int, cntRooms: int, cntUploadShares: int, createdAt: string, createdBy: record<avatarUuid: string, displayName: string, email: string, firstName: string, id: int, lastName: string, title: string, userName: string, userType: string>, encryptionInfo: record<dataSpaceKeyState: string, roomKeyState: string, userKeyState: string>, expireAt: string, fileType: string, hasActivitiesLog: bool, hash: string, id: int, inheritPermissions: bool, isBrowsable: bool, isEncrypted: bool, isFavorite: bool, mediaToken: string, mediaType: string, name: string, notes: string, parentId: int, parentPath: string, permissions: record<change: bool, create: bool, delete: bool, deleteRecycleBin: bool, manage: bool, manageDownloadShare: bool, manageUploadShare: bool, read: bool, readRecycleBin: bool, restoreRecycleBin: bool>, quota: int, recycleBinRetentionPeriod: int, referenceId: int, size: int, timestampCreation: string, timestampModification: string, type: string, updatedAt: string, updatedBy: record<avatarUuid: string, displayName: string, email: string, firstName: string, id: int, lastName: string, title: string, userName: string, userType: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/nodes/folders")
-  let body = {"classification": $classification, "name": $name, "notes": $notes, "parentId": $parent_id, "timestampCreation": $timestamp_creation, "timestampModification": $timestamp_modification} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"classification": $classification, "name": $name, "notes": $notes, "parentId": $parent_id, "timestampCreation": $timestamp_creation, "timestampModification": $timestamp_modification} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates folder’s metadata
@@ -2045,23 +2082,23 @@ export def "nodes-folders update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-sds-date-format: string@x-sds-date-format-completer # Date time format (cf. [RFC 3339](https://www.ietf.org/rfc/rfc3339.txt) & [leettime.de](http://leettime.de/))
   --x-sds-auth-token: string # Authentication token
-  --classification: int@classification-completer # &#128640; Since v4.30.0  Classification ID:  * `1` - public  * `2` - internal  * `3` - confidential  * `4` - strictly confidential    Provided (or default) classification is taken from room  when file gets uploaded without any classification. (format: int32)
+  --classification: int@classification-completer # &#128640; Since v4.30.0 Classification ID: * `1` - public * `2` - internal * `3` - confidential * `4` - strictly confidential Provided (or default) classification is taken from room when file gets uploaded without any classification. (format: int32)
   --name: string # Folder name
-  --notes: string # User notes  Use empty string to remove.
-  --timestamp-creation: string # &#128640; Since v4.22.0  Time the node was created on external file system  (default: current server datetime in UTC format) (format: date-time)
-  --timestamp-modification: string # &#128640; Since v4.22.0  Time the content of a node was last modified on external file system  (default: current server datetime in UTC format) (format: date-time)
+  --notes: string # User notes Use empty string to remove.
+  --timestamp-creation: string # &#128640; Since v4.22.0 Time the node was created on external file system (default: current server datetime in UTC format) (format: date-time)
+  --timestamp-modification: string # &#128640; Since v4.22.0 Time the content of a node was last modified on external file system (default: current server datetime in UTC format) (format: date-time)
 ]: any -> record<authParentId: int, branchVersion: int, children: list<any>, classification: int, cntChildren: int, cntComments: int, cntDeletedVersions: int, cntDownloadShares: int, cntFiles: int, cntFolders: int, cntRooms: int, cntUploadShares: int, createdAt: string, createdBy: record<avatarUuid: string, displayName: string, email: string, firstName: string, id: int, lastName: string, title: string, userName: string, userType: string>, encryptionInfo: record<dataSpaceKeyState: string, roomKeyState: string, userKeyState: string>, expireAt: string, fileType: string, hasActivitiesLog: bool, hash: string, id: int, inheritPermissions: bool, isBrowsable: bool, isEncrypted: bool, isFavorite: bool, mediaToken: string, mediaType: string, name: string, notes: string, parentId: int, parentPath: string, permissions: record<change: bool, create: bool, delete: bool, deleteRecycleBin: bool, manage: bool, manageDownloadShare: bool, manageUploadShare: bool, read: bool, readRecycleBin: bool, restoreRecycleBin: bool>, quota: int, recycleBinRetentionPeriod: int, referenceId: int, size: int, timestampCreation: string, timestampModification: string, type: string, updatedAt: string, updatedBy: record<avatarUuid: string, displayName: string, email: string, firstName: string, id: int, lastName: string, title: string, userName: string, userType: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({folder_id: $folder_id} | format pattern "/v4/nodes/folders/{folder_id}"))
-  let body = {"classification": $classification, "name": $name, "notes": $notes, "timestampCreation": $timestamp_creation, "timestampModification": $timestamp_modification} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({folder_id: (encode-path-segment $folder_id)} | format pattern "/v4/nodes/folders/{folder_id}"))
+  let req_body = {"classification": $classification, "name": $name, "notes": $notes, "timestampCreation": $timestamp_creation, "timestampModification": $timestamp_modification} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Request files without user's file key
@@ -2078,7 +2115,7 @@ export def "nodes-missing-file-keys request" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # Range offset (format: int32)
-  --limit: int # Range limit.  Maximum 500.   For more results please use paging (`offset` + `limit`). (format: int32)
+  --limit: int # Range limit. Maximum 500. For more results please use paging (`offset` + `limit`). (format: int32)
   --room-id: int # Room ID (format: int64)
   --file-id: int # File ID (format: int64)
   --user-id: int # User ID (format: int64)
@@ -2089,10 +2126,10 @@ export def "nodes-missing-file-keys request" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "room_id" $room_id "scalar") (serialize-qp "file_id" $file_id "scalar") (serialize-qp "user_id" $user_id "scalar") (serialize-qp "use_key" $use_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v4/nodes/missingFileKeys" $qp)
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2112,39 +2149,39 @@ export def "nodes-rooms create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-sds-date-format: string@x-sds-date-format-completer # Date time format (cf. [RFC 3339](https://www.ietf.org/rfc/rfc3339.txt) & [leettime.de](http://leettime.de/))
   --x-sds-auth-token: string # Authentication token
-  --admin-group-ids: list # List of group ids  A room requires at least one admin (user or group)
-  --admin-ids: list # List of user ids  A room requires at least one admin (user or group)
-  --classification: int@classification-completer # Classification ID:  * `1` - public  * `2` - internal  * `3` - confidential  * `4` - strictly confidential    Provided (or default) classification is taken from room  when file gets uploaded without any classification. (format: int32, default: 2)
+  --admin-group-ids: list<int> # List of group ids A room requires at least one admin (user or group)
+  --admin-ids: list<int> # List of user ids A room requires at least one admin (user or group)
+  --classification: int@classification-completer # Classification ID: * `1` - public * `2` - internal * `3` - confidential * `4` - strictly confidential Provided (or default) classification is taken from room when file gets uploaded without any classification. (format: int32, default: 2)
   --has-activities-log: oneof<nothing, bool> # Is activities log active (for rooms only) (default: true)
-  --has-recycle-bin: oneof<nothing, bool> # &#128679; Deprecated since v4.10.0  Is recycle bin active (for rooms only)  Recycle bin is always on (disabling is not possible). (DEPRECATED)
-  --inherit-permissions: oneof<nothing, bool> # Inherit permissions from parent room  (default: `false` if `parentId` is `0`; otherwise: `true`)
+  --has-recycle-bin: oneof<nothing, bool> # &#128679; Deprecated since v4.10.0 Is recycle bin active (for rooms only) Recycle bin is always on (disabling is not possible). (DEPRECATED)
+  --inherit-permissions: oneof<nothing, bool> # Inherit permissions from parent room (default: `false` if `parentId` is `0`; otherwise: `true`)
   name: string # Name
-  --new-group-member-acceptance: string@new-group-member-acceptance-completer # Behaviour when new users are added to the group:  * `autoallow`  * `pending`    Only relevant if `adminGroupIds` has items. (default: autoallow)
-  --notes: string # User notes  Use empty string to remove.
+  --new-group-member-acceptance: string@new-group-member-acceptance-completer # Behaviour when new users are added to the group: * `autoallow` * `pending` Only relevant if `adminGroupIds` has items. (default: autoallow)
+  --notes: string # User notes Use empty string to remove.
   --parent-id: int # Parent room ID or `null` (not 0) to create a top level room (format: int64)
   --quota: int # Quota in byte (format: int64)
   --recycle-bin-retention-period: int # Retention period for deleted nodes in days (format: int32)
-  --timestamp-creation: string # &#128640; Since v4.22.0  Time the node was created on external file system  (default: current server datetime in UTC format) (format: date-time)
-  --timestamp-modification: string # &#128640; Since v4.22.0  Time the content of a node was last modified on external file system  (default: current server datetime in UTC format) (format: date-time)
+  --timestamp-creation: string # &#128640; Since v4.22.0 Time the node was created on external file system (default: current server datetime in UTC format) (format: date-time)
+  --timestamp-modification: string # &#128640; Since v4.22.0 Time the content of a node was last modified on external file system (default: current server datetime in UTC format) (format: date-time)
 ]: any -> record<authParentId: int, branchVersion: int, children: list<any>, classification: int, cntChildren: int, cntComments: int, cntDeletedVersions: int, cntDownloadShares: int, cntFiles: int, cntFolders: int, cntRooms: int, cntUploadShares: int, createdAt: string, createdBy: record<avatarUuid: string, displayName: string, email: string, firstName: string, id: int, lastName: string, title: string, userName: string, userType: string>, encryptionInfo: record<dataSpaceKeyState: string, roomKeyState: string, userKeyState: string>, expireAt: string, fileType: string, hasActivitiesLog: bool, hash: string, id: int, inheritPermissions: bool, isBrowsable: bool, isEncrypted: bool, isFavorite: bool, mediaToken: string, mediaType: string, name: string, notes: string, parentId: int, parentPath: string, permissions: record<change: bool, create: bool, delete: bool, deleteRecycleBin: bool, manage: bool, manageDownloadShare: bool, manageUploadShare: bool, read: bool, readRecycleBin: bool, restoreRecycleBin: bool>, quota: int, recycleBinRetentionPeriod: int, referenceId: int, size: int, timestampCreation: string, timestampModification: string, type: string, updatedAt: string, updatedBy: record<avatarUuid: string, displayName: string, email: string, firstName: string, id: int, lastName: string, title: string, userName: string, userType: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/nodes/rooms")
-  let body = {"adminGroupIds": $admin_group_ids, "adminIds": $admin_ids, "classification": $classification, "hasActivitiesLog": $has_activities_log, "hasRecycleBin": $has_recycle_bin, "inheritPermissions": $inherit_permissions, "name": $name, "newGroupMemberAcceptance": $new_group_member_acceptance, "notes": $notes, "parentId": $parent_id, "quota": $quota, "recycleBinRetentionPeriod": $recycle_bin_retention_period, "timestampCreation": $timestamp_creation, "timestampModification": $timestamp_modification} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"adminGroupIds": $admin_group_ids, "adminIds": $admin_ids, "classification": $classification, "hasActivitiesLog": $has_activities_log, "hasRecycleBin": $has_recycle_bin, "inheritPermissions": $inherit_permissions, "name": $name, "newGroupMemberAcceptance": $new_group_member_acceptance, "notes": $notes, "parentId": $parent_id, "quota": $quota, "recycleBinRetentionPeriod": $recycle_bin_retention_period, "timestampCreation": $timestamp_creation, "timestampModification": $timestamp_modification} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Request user-room assignments per group
 #
 # GET /v4/nodes/rooms/pending
 # operationId: requestPendingAssignments
-export def "nodes-rooms-pending request-pending-assignments" [
+export def "nodes-rooms-pending request-assignments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2154,7 +2191,7 @@ export def "nodes-rooms-pending request-pending-assignments" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # Range offset (format: int32)
-  --limit: int # Range limit.  Maximum 500.   For more results please use paging (`offset` + `limit`). (format: int32)
+  --limit: int # Range limit. Maximum 500. For more results please use paging (`offset` + `limit`). (format: int32)
   --filter: string # Filter string
   --qp-sort: string # Sort string
   --x-sds-auth-token: string # Authentication token
@@ -2163,10 +2200,10 @@ export def "nodes-rooms-pending request-pending-assignments" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v4/nodes/rooms/pending" $qp)
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2175,7 +2212,7 @@ export def "nodes-rooms-pending request-pending-assignments" [
 # PUT /v4/nodes/rooms/pending
 # operationId: changePendingAssignments
 # --items item shape: {groupId: int, roomId: int, roomName: string, state: "ACCEPTED"|"DENIED"|"WAITING", userId: int}
-export def "nodes-rooms-pending changePendingAssignments" [
+export def "nodes-rooms-pending update-change-assignments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2191,13 +2228,13 @@ export def "nodes-rooms-pending changePendingAssignments" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/nodes/rooms/pending")
-  let body = {"items": $items} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"items": $items} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates room’s metadata
@@ -2217,29 +2254,29 @@ export def "nodes-rooms update" [
   --x-sds-date-format: string@x-sds-date-format-completer # Date time format (cf. [RFC 3339](https://www.ietf.org/rfc/rfc3339.txt) & [leettime.de](http://leettime.de/))
   --x-sds-auth-token: string # Authentication token
   --name: string # Name
-  --notes: string # User notes  Use empty string to remove.
+  --notes: string # User notes Use empty string to remove.
   --quota: int # Quota in byte (format: int64)
-  --timestamp-creation: string # &#128640; Since v4.22.0  Time the node was created on external file system (format: date-time)
-  --timestamp-modification: string # &#128640; Since v4.22.0  Time the content of a node was last modified on external file system (format: date-time)
+  --timestamp-creation: string # &#128640; Since v4.22.0 Time the node was created on external file system (format: date-time)
+  --timestamp-modification: string # &#128640; Since v4.22.0 Time the content of a node was last modified on external file system (format: date-time)
 ]: any -> record<authParentId: int, branchVersion: int, children: list<any>, classification: int, cntChildren: int, cntComments: int, cntDeletedVersions: int, cntDownloadShares: int, cntFiles: int, cntFolders: int, cntRooms: int, cntUploadShares: int, createdAt: string, createdBy: record<avatarUuid: string, displayName: string, email: string, firstName: string, id: int, lastName: string, title: string, userName: string, userType: string>, encryptionInfo: record<dataSpaceKeyState: string, roomKeyState: string, userKeyState: string>, expireAt: string, fileType: string, hasActivitiesLog: bool, hash: string, id: int, inheritPermissions: bool, isBrowsable: bool, isEncrypted: bool, isFavorite: bool, mediaToken: string, mediaType: string, name: string, notes: string, parentId: int, parentPath: string, permissions: record<change: bool, create: bool, delete: bool, deleteRecycleBin: bool, manage: bool, manageDownloadShare: bool, manageUploadShare: bool, read: bool, readRecycleBin: bool, restoreRecycleBin: bool>, quota: int, recycleBinRetentionPeriod: int, referenceId: int, size: int, timestampCreation: string, timestampModification: string, type: string, updatedAt: string, updatedBy: record<avatarUuid: string, displayName: string, email: string, firstName: string, id: int, lastName: string, title: string, userName: string, userType: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({room_id: $room_id} | format pattern "/v4/nodes/rooms/{room_id}"))
-  let body = {"name": $name, "notes": $notes, "quota": $quota, "timestampCreation": $timestamp_creation, "timestampModification": $timestamp_modification} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({room_id: (encode-path-segment $room_id)} | format pattern "/v4/nodes/rooms/{room_id}"))
+  let req_body = {"name": $name, "notes": $notes, "quota": $quota, "timestampCreation": $timestamp_creation, "timestampModification": $timestamp_modification} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Configure room
 #
 # PUT /v4/nodes/rooms/{room_id}/config
 # operationId: configureRoom
-export def "nodes-rooms-config configureRoom" [
+export def "nodes-rooms-config update-configure" [
   room_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2251,26 +2288,26 @@ export def "nodes-rooms-config configureRoom" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-sds-date-format: string@x-sds-date-format-completer # Date time format (cf. [RFC 3339](https://www.ietf.org/rfc/rfc3339.txt) & [leettime.de](http://leettime.de/))
   --x-sds-auth-token: string # Authentication token
-  --admin-group-ids: list # List of group ids  A room requires at least one admin (user or group)
-  --admin-ids: list # List of user ids  A room requires at least one admin (user or group)
-  --classification: int@classification-completer # Classification ID:  * `1` - public  * `2` - internal  * `3` - confidential  * `4` - strictly confidential    Provided (or default) classification is taken from room  when file gets uploaded without any classification. (format: int32, default: 2)
+  --admin-group-ids: list<int> # List of group ids A room requires at least one admin (user or group)
+  --admin-ids: list<int> # List of user ids A room requires at least one admin (user or group)
+  --classification: int@classification-completer # Classification ID: * `1` - public * `2` - internal * `3` - confidential * `4` - strictly confidential Provided (or default) classification is taken from room when file gets uploaded without any classification. (format: int32, default: 2)
   --has-activities-log: oneof<nothing, bool> # Is activities log active (for rooms only) (default: true)
-  --inherit-permissions: oneof<nothing, bool> # Inherit permissions from parent room  (default: `false` if `parentId` is `0`; otherwise: `true`)
-  --new-group-member-acceptance: string@new-group-member-acceptance-completer # Behaviour when new users are added to the group:  * `autoallow`  * `pending`    Only relevant if `adminGroupIds` has items. (default: autoallow)
+  --inherit-permissions: oneof<nothing, bool> # Inherit permissions from parent room (default: `false` if `parentId` is `0`; otherwise: `true`)
+  --new-group-member-acceptance: string@new-group-member-acceptance-completer # Behaviour when new users are added to the group: * `autoallow` * `pending` Only relevant if `adminGroupIds` has items. (default: autoallow)
   --recycle-bin-retention-period: int # Retention period for deleted nodes in days (format: int32)
   --take-over-permissions: oneof<nothing, bool> # Take over existing permissions
 ]: any -> record<authParentId: int, branchVersion: int, children: list<any>, classification: int, cntChildren: int, cntComments: int, cntDeletedVersions: int, cntDownloadShares: int, cntFiles: int, cntFolders: int, cntRooms: int, cntUploadShares: int, createdAt: string, createdBy: record<avatarUuid: string, displayName: string, email: string, firstName: string, id: int, lastName: string, title: string, userName: string, userType: string>, encryptionInfo: record<dataSpaceKeyState: string, roomKeyState: string, userKeyState: string>, expireAt: string, fileType: string, hasActivitiesLog: bool, hash: string, id: int, inheritPermissions: bool, isBrowsable: bool, isEncrypted: bool, isFavorite: bool, mediaToken: string, mediaType: string, name: string, notes: string, parentId: int, parentPath: string, permissions: record<change: bool, create: bool, delete: bool, deleteRecycleBin: bool, manage: bool, manageDownloadShare: bool, manageUploadShare: bool, read: bool, readRecycleBin: bool, restoreRecycleBin: bool>, quota: int, recycleBinRetentionPeriod: int, referenceId: int, size: int, timestampCreation: string, timestampModification: string, type: string, updatedAt: string, updatedBy: record<avatarUuid: string, displayName: string, email: string, firstName: string, id: int, lastName: string, title: string, userName: string, userType: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({room_id: $room_id} | format pattern "/v4/nodes/rooms/{room_id}/config"))
-  let body = {"adminGroupIds": $admin_group_ids, "adminIds": $admin_ids, "classification": $classification, "hasActivitiesLog": $has_activities_log, "inheritPermissions": $inherit_permissions, "newGroupMemberAcceptance": $new_group_member_acceptance, "recycleBinRetentionPeriod": $recycle_bin_retention_period, "takeOverPermissions": $take_over_permissions} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({room_id: (encode-path-segment $room_id)} | format pattern "/v4/nodes/rooms/{room_id}/config"))
+  let req_body = {"adminGroupIds": $admin_group_ids, "adminIds": $admin_ids, "classification": $classification, "hasActivitiesLog": $has_activities_log, "inheritPermissions": $inherit_permissions, "newGroupMemberAcceptance": $new_group_member_acceptance, "recycleBinRetentionPeriod": $recycle_bin_retention_period, "takeOverPermissions": $take_over_permissions} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Encrypt room
@@ -2278,7 +2315,7 @@ export def "nodes-rooms-config configureRoom" [
 # PUT /v4/nodes/rooms/{room_id}/encrypt
 # operationId: encryptRoom
 # --dataRoomRescueKey shape: {privateKeyContainer: record, publicKeyContainer: record}
-export def "nodes-rooms-encrypt encryptRoom" [
+export def "nodes-rooms-encrypt update" [
   room_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2297,21 +2334,21 @@ export def "nodes-rooms-encrypt encryptRoom" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({room_id: $room_id} | format pattern "/v4/nodes/rooms/{room_id}/encrypt"))
-  let body = {"dataRoomRescueKey": $data_room_rescue_key, "isEncrypted": $is_encrypted, "useDataSpaceRescueKey": $use_data_space_rescue_key} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({room_id: (encode-path-segment $room_id)} | format pattern "/v4/nodes/rooms/{room_id}/encrypt"))
+  let req_body = {"dataRoomRescueKey": $data_room_rescue_key, "isEncrypted": $is_encrypted, "useDataSpaceRescueKey": $use_data_space_rescue_key} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Request events of a room
 #
 # GET /v4/nodes/rooms/{room_id}/events
 # operationId: requestRoomActivitiesLogAsJson
-export def "nodes-rooms-events request-room-activities-log-as-json" [
+export def "nodes-rooms-events request-activities-log-as-json" [
   room_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2323,23 +2360,23 @@ export def "nodes-rooms-events request-room-activities-log-as-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-sort: string # Sort string
   --offset: int # Range offset (format: int32)
-  --limit: int # Range limit.  Maximum 500.   For more results please use paging (`offset` + `limit`). (format: int32)
-  --date-start: string # Filter events from given date   e.g. `2015-12-31T23:59:00`
-  --date-end: string # Filter events until given date   e.g. `2015-12-31T23:59:00`
-  --type: int # Operation ID   cf. `GET /eventlog/operations` (format: int32)
+  --limit: int # Range limit. Maximum 500. For more results please use paging (`offset` + `limit`). (format: int32)
+  --date-start: string # Filter events from given date e.g. `2015-12-31T23:59:00`
+  --date-end: string # Filter events until given date e.g. `2015-12-31T23:59:00`
+  --type: int # Operation ID cf. `GET /eventlog/operations` (format: int32)
   --user-id: int # User ID (format: int64)
-  --status: int # Operation status:  * `0` - Success  * `2` - Error (format: int32)
+  --status: int # Operation status: * `0` - Success * `2` - Error (format: int32)
   --x-sds-date-format: string@x-sds-date-format-completer # Date time format (cf. [RFC 3339](https://www.ietf.org/rfc/rfc3339.txt) & [leettime.de](http://leettime.de/))
   --x-sds-auth-token: string # Authentication token
 ]: nothing -> record<items: table<attribute1: string, attribute2: string, attribute3: string, authParentSource: string, authParentTarget: string, customerId: int, id: int, message: string, objectId1: int, objectId2: int, objectName1: string, objectName2: string, objectType1: int, objectType2: int, operationId: int, operationName: string, status: int, time: string, userClient: string, userId: int, userIp: string, userName: string>, range: record<limit: int, offset: int, total: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sort" $qp_sort "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "date_start" $date_start "scalar") (serialize-qp "date_end" $date_end "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "user_id" $user_id "scalar") (serialize-qp "status" $status "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({room_id: $room_id} | format pattern "/v4/nodes/rooms/{room_id}/events") $qp)
-  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({room_id: (encode-path-segment $room_id)} | format pattern "/v4/nodes/rooms/{room_id}/events") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2359,19 +2396,19 @@ export def "nodes-rooms-groups delete" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-sds-date-format: string@x-sds-date-format-completer # Date time format (cf. [RFC 3339](https://www.ietf.org/rfc/rfc3339.txt) & [leettime.de](http://leettime.de/))
   --x-sds-auth-token: string # Authentication token
-  ids: list # List of group IDs
+  ids: list<int> # List of group IDs
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({room_id: $room_id} | format pattern "/v4/nodes/rooms/{room_id}/groups"))
-  let body = {"ids": $ids} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({room_id: (encode-path-segment $room_id)} | format pattern "/v4/nodes/rooms/{room_id}/groups"))
+  let req_body = {"ids": $ids} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Request room granted group(s) or / and group(s) that can be granted
@@ -2389,7 +2426,7 @@ export def "nodes-rooms-groups request" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # Range offset (format: int32)
-  --limit: int # Range limit.  Maximum 500.   For more results please use paging (`offset` + `limit`). (format: int32)
+  --limit: int # Range limit. Maximum 500. For more results please use paging (`offset` + `limit`). (format: int32)
   --filter: string # Filter string
   --qp-sort: string # Sort string
   --x-sds-auth-token: string # Authentication token
@@ -2397,11 +2434,11 @@ export def "nodes-rooms-groups request" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({room_id: $room_id} | format pattern "/v4/nodes/rooms/{room_id}/groups") $qp)
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({room_id: (encode-path-segment $room_id)} | format pattern "/v4/nodes/rooms/{room_id}/groups") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2426,14 +2463,14 @@ export def "nodes-rooms-groups update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({room_id: $room_id} | format pattern "/v4/nodes/rooms/{room_id}/groups"))
-  let body = {"items": $items} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({room_id: (encode-path-segment $room_id)} | format pattern "/v4/nodes/rooms/{room_id}/groups"))
+  let req_body = {"items": $items} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Add guest users to a room
@@ -2457,21 +2494,21 @@ export def "nodes-rooms-guest-users create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({room_id: $room_id} | format pattern "/v4/nodes/rooms/{room_id}/guest_users"))
-  let body = {"roomGuestInvitations": $room_guest_invitations} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({room_id: (encode-path-segment $room_id)} | format pattern "/v4/nodes/rooms/{room_id}/guest_users"))
+  let req_body = {"roomGuestInvitations": $room_guest_invitations} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Remove rooms's rescue key pair
 #
 # DELETE /v4/nodes/rooms/{room_id}/keypair
 # operationId: removeRoomRescueKeyPair
-export def "nodes-rooms-keypair delete-room-rescue" [
+export def "nodes-rooms-keypair delete-rescue-key-pair" [
   room_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2487,11 +2524,11 @@ export def "nodes-rooms-keypair delete-room-rescue" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "version" $version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({room_id: $room_id} | format pattern "/v4/nodes/rooms/{room_id}/keypair") $qp)
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({room_id: (encode-path-segment $room_id)} | format pattern "/v4/nodes/rooms/{room_id}/keypair") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2499,7 +2536,7 @@ export def "nodes-rooms-keypair delete-room-rescue" [
 #
 # GET /v4/nodes/rooms/{room_id}/keypair
 # operationId: requestRoomRescueKeyPair
-export def "nodes-rooms-keypair request-room-rescue" [
+export def "nodes-rooms-keypair request-rescue-key-pair" [
   room_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2516,11 +2553,11 @@ export def "nodes-rooms-keypair request-room-rescue" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "version" $version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({room_id: $room_id} | format pattern "/v4/nodes/rooms/{room_id}/keypair") $qp)
-  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({room_id: (encode-path-segment $room_id)} | format pattern "/v4/nodes/rooms/{room_id}/keypair") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2530,7 +2567,7 @@ export def "nodes-rooms-keypair request-room-rescue" [
 # operationId: setRoomRescueKeyPair
 # --privateKeyContainer shape: {createdAt?: string, createdBy?: int, privateKey: string, version: string}
 # --publicKeyContainer shape: {createdAt?: string, createdBy?: int, publicKey: string, version: string}
-export def "nodes-rooms-keypair setRoomRescueKeyPair" [
+export def "nodes-rooms-keypair update-rescue-key-pair" [
   room_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2547,21 +2584,21 @@ export def "nodes-rooms-keypair setRoomRescueKeyPair" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({room_id: $room_id} | format pattern "/v4/nodes/rooms/{room_id}/keypair"))
-  let body = {"privateKeyContainer": $private_key_container, "publicKeyContainer": $public_key_container} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({room_id: (encode-path-segment $room_id)} | format pattern "/v4/nodes/rooms/{room_id}/keypair"))
+  let req_body = {"privateKeyContainer": $private_key_container, "publicKeyContainer": $public_key_container} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Request all room rescue key pairs
 #
 # GET /v4/nodes/rooms/{room_id}/keypairs
 # operationId: requestRoomRescueKeyPairs
-export def "nodes-rooms-keypairs request-room-rescue" [
+export def "nodes-rooms-keypairs request-rescue-key-pairs" [
   room_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2576,11 +2613,11 @@ export def "nodes-rooms-keypairs request-room-rescue" [
 ]: nothing -> table<privateKeyContainer: record<createdAt: string, createdBy: int, privateKey: string, version: string>, publicKeyContainer: record<createdAt: string, createdBy: int, publicKey: string, version: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({room_id: $room_id} | format pattern "/v4/nodes/rooms/{room_id}/keypairs"))
-  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({room_id: (encode-path-segment $room_id)} | format pattern "/v4/nodes/rooms/{room_id}/keypairs"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2591,7 +2628,7 @@ export def "nodes-rooms-keypairs request-room-rescue" [
 # --previousPrivateKey shape: {createdAt?: string, createdBy?: int, privateKey: string, version: string}
 # --privateKeyContainer shape: {createdAt?: string, createdBy?: int, privateKey: string, version: string}
 # --publicKeyContainer shape: {createdAt?: string, createdBy?: int, publicKey: string, version: string}
-export def "nodes-rooms-keypairs create-and-preserve-room-rescue" [
+export def "nodes-rooms-keypairs create-and-preserve-rescue-key-pair" [
   room_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2609,14 +2646,14 @@ export def "nodes-rooms-keypairs create-and-preserve-room-rescue" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({room_id: $room_id} | format pattern "/v4/nodes/rooms/{room_id}/keypairs"))
-  let body = {"previousPrivateKey": $previous_private_key, "privateKeyContainer": $private_key_container, "publicKeyContainer": $public_key_container} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({room_id: (encode-path-segment $room_id)} | format pattern "/v4/nodes/rooms/{room_id}/keypairs"))
+  let req_body = {"previousPrivateKey": $previous_private_key, "privateKeyContainer": $private_key_container, "publicKeyContainer": $public_key_container} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Request Room Policies
@@ -2637,11 +2674,11 @@ export def "nodes-rooms-policies request" [
 ]: nothing -> record<defaultExpirationPeriod: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({room_id: $room_id} | format pattern "/v4/nodes/rooms/{room_id}/policies"))
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({room_id: (encode-path-segment $room_id)} | format pattern "/v4/nodes/rooms/{room_id}/policies"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2649,7 +2686,7 @@ export def "nodes-rooms-policies request" [
 #
 # PUT /v4/nodes/rooms/{room_id}/policies
 # operationId: setRoomPolicies
-export def "nodes-rooms-policies setRoomPolicies" [
+export def "nodes-rooms-policies update" [
   room_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2660,19 +2697,19 @@ export def "nodes-rooms-policies setRoomPolicies" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-sds-auth-token: string # Authentication token
-  --default-expiration-period: int # Default policy room expiration period in seconds.  All files in a room will have their expiration date set to this period after their respective upload.   0 means no default expiration policy is set. (format: int32)
+  --default-expiration-period: int # Default policy room expiration period in seconds. All files in a room will have their expiration date set to this period after their respective upload. 0 means no default expiration policy is set. (format: int32)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({room_id: $room_id} | format pattern "/v4/nodes/rooms/{room_id}/policies"))
-  let body = {"defaultExpirationPeriod": $default_expiration_period} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({room_id: (encode-path-segment $room_id)} | format pattern "/v4/nodes/rooms/{room_id}/policies"))
+  let req_body = {"defaultExpirationPeriod": $default_expiration_period} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Request list of all assigned S3 tags to the room
@@ -2693,11 +2730,11 @@ export def "nodes-rooms-s3-tags request" [
 ]: nothing -> record<items: table<id: int, isMandatory: bool, key: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({room_id: $room_id} | format pattern "/v4/nodes/rooms/{room_id}/s3_tags"))
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({room_id: (encode-path-segment $room_id)} | format pattern "/v4/nodes/rooms/{room_id}/s3_tags"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2705,7 +2742,7 @@ export def "nodes-rooms-s3-tags request" [
 #
 # POST /v4/nodes/rooms/{room_id}/s3_tags
 # operationId: setRoomS3Tags
-export def "nodes-rooms-s3-tags setRoomS3Tags" [
+export def "nodes-rooms-s3-tags update" [
   room_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2716,19 +2753,19 @@ export def "nodes-rooms-s3-tags setRoomS3Tags" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-sds-auth-token: string # Authentication token
-  ids: list # List of S3 tag IDs
+  ids: list<int> # List of S3 tag IDs
 ]: any -> record<items: table<id: int, isMandatory: bool, key: string, value: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({room_id: $room_id} | format pattern "/v4/nodes/rooms/{room_id}/s3_tags"))
-  let body = {"ids": $ids} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({room_id: (encode-path-segment $room_id)} | format pattern "/v4/nodes/rooms/{room_id}/s3_tags"))
+  let req_body = {"ids": $ids} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Revoke granted user(s) from room
@@ -2746,19 +2783,19 @@ export def "nodes-rooms-users delete" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-sds-auth-token: string # Authentication token
-  ids: list # List of user IDs
+  ids: list<int> # List of user IDs
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({room_id: $room_id} | format pattern "/v4/nodes/rooms/{room_id}/users"))
-  let body = {"ids": $ids} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({room_id: (encode-path-segment $room_id)} | format pattern "/v4/nodes/rooms/{room_id}/users"))
+  let req_body = {"ids": $ids} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Request room granted user(s) or / and user(s) that can be granted
@@ -2776,7 +2813,7 @@ export def "nodes-rooms-users request" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # Range offset (format: int32)
-  --limit: int # Range limit.  Maximum 500.   For more results please use paging (`offset` + `limit`). (format: int32)
+  --limit: int # Range limit. Maximum 500. For more results please use paging (`offset` + `limit`). (format: int32)
   --filter: string # Filter string
   --qp-sort: string # Sort string
   --x-sds-auth-token: string # Authentication token
@@ -2784,11 +2821,11 @@ export def "nodes-rooms-users request" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({room_id: $room_id} | format pattern "/v4/nodes/rooms/{room_id}/users") $qp)
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({room_id: (encode-path-segment $room_id)} | format pattern "/v4/nodes/rooms/{room_id}/users") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2813,21 +2850,21 @@ export def "nodes-rooms-users update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({room_id: $room_id} | format pattern "/v4/nodes/rooms/{room_id}/users"))
-  let body = {"items": $items} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({room_id: (encode-path-segment $room_id)} | format pattern "/v4/nodes/rooms/{room_id}/users"))
+  let req_body = {"items": $items} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Request list of webhooks that are assigned or can be assigned to this room
 #
 # GET /v4/nodes/rooms/{room_id}/webhooks
 # operationId: requestListOfWebhooksForRoom
-export def "nodes-rooms-webhooks request-list-of-webhooks-for" [
+export def "nodes-rooms-webhooks request-list-of" [
   room_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2838,7 +2875,7 @@ export def "nodes-rooms-webhooks request-list-of-webhooks-for" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # Range offset (format: int32)
-  --limit: int # Range limit.  Maximum 500.   For more results please use paging (`offset` + `limit`). (format: int32)
+  --limit: int # Range limit. Maximum 500. For more results please use paging (`offset` + `limit`). (format: int32)
   --filter: string # Filter string
   --x-sds-date-format: string@x-sds-date-format-completer # Date time format (cf. [RFC 3339](https://www.ietf.org/rfc/rfc3339.txt) & [leettime.de](http://leettime.de/))
   --x-sds-auth-token: string # Authentication token
@@ -2846,11 +2883,11 @@ export def "nodes-rooms-webhooks request-list-of-webhooks-for" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({room_id: $room_id} | format pattern "/v4/nodes/rooms/{room_id}/webhooks") $qp)
-  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({room_id: (encode-path-segment $room_id)} | format pattern "/v4/nodes/rooms/{room_id}/webhooks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2859,7 +2896,7 @@ export def "nodes-rooms-webhooks request-list-of-webhooks-for" [
 # PUT /v4/nodes/rooms/{room_id}/webhooks
 # operationId: handleRoomWebhookAssignments
 # --items item shape: {isAssigned: bool, webhookId: int}
-export def "nodes-rooms-webhooks handleRoomWebhookAssignments" [
+export def "nodes-rooms-webhooks update-handle-assignments" [
   room_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2871,19 +2908,19 @@ export def "nodes-rooms-webhooks handleRoomWebhookAssignments" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-sds-date-format: string@x-sds-date-format-completer # Date time format (cf. [RFC 3339](https://www.ietf.org/rfc/rfc3339.txt) & [leettime.de](http://leettime.de/))
   --x-sds-auth-token: string # Authentication token
-  items: list # Assign a webhook to a room to use it for node actions within the room  — item shape: {isAssigned: bool, webhookId: int}
+  items: list # Assign a webhook to a room to use it for node actions within the room — item shape: {isAssigned: bool, webhookId: int}
 ]: any -> record<items: table<isAssigned: bool, webhook: record>, range: record<limit: int, offset: int, total: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({room_id: $room_id} | format pattern "/v4/nodes/rooms/{room_id}/webhooks"))
-  let body = {"items": $items} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({room_id: (encode-path-segment $room_id)} | format pattern "/v4/nodes/rooms/{room_id}/webhooks"))
+  let req_body = {"items": $items} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Search nodes
@@ -2900,12 +2937,12 @@ export def "nodes-search list" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --search-string: string # Search string
-  --depth-level: int # * `0` - top level nodes only (default)  * `-1` - full tree  * `n` (any positive number) - include `n` levels starting from the current node (format: int32)
-  --parent-id: int # Parent node ID.  Only rooms and folders can be parents.  Parent ID `0` or empty is the root node. (format: int64)
+  --depth-level: int # * `0` - top level nodes only (default) * `-1` - full tree * `n` (any positive number) - include `n` levels starting from the current node (format: int32)
+  --parent-id: int # Parent node ID. Only rooms and folders can be parents. Parent ID `0` or empty is the root node. (format: int64)
   --filter: string # Filter string
   --qp-sort: string # Sort string
   --offset: int # Range offset (format: int32)
-  --limit: int # Range limit.  Maximum 500.   For more results please use paging (`offset` + `limit`). (format: int32)
+  --limit: int # Range limit. Maximum 500. For more results please use paging (`offset` + `limit`). (format: int32)
   --x-sds-date-format: string@x-sds-date-format-completer # Date time format (cf. [RFC 3339](https://www.ietf.org/rfc/rfc3339.txt) & [leettime.de](http://leettime.de/))
   --x-sds-auth-token: string # Authentication token
 ]: nothing -> record<items: table<authParentId: int, branchVersion: int, children: list, classification: int, cntChildren: int, cntComments: int, cntDeletedVersions: int, cntDownloadShares: int, cntFiles: int, cntFolders: int, cntRooms: int, cntUploadShares: int, createdAt: string, createdBy: record, encryptionInfo: record, expireAt: string, fileType: string, hasActivitiesLog: bool, hash: string, id: int, inheritPermissions: bool, isBrowsable: bool, isEncrypted: bool, isFavorite: bool, mediaToken: string, mediaType: string, name: string, notes: string, parentId: int, parentPath: string, permissions: record, quota: int, recycleBinRetentionPeriod: int, referenceId: int, size: int, timestampCreation: string, timestampModification: string, type: string, updatedAt: string, updatedBy: record>, range: record<limit: int, offset: int, total: int>> {
@@ -2913,10 +2950,10 @@ export def "nodes-search list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "search_string" $search_string "scalar") (serialize-qp "depth_level" $depth_level "scalar") (serialize-qp "parent_id" $parent_id "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v4/nodes/search" $qp)
-  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2924,7 +2961,7 @@ export def "nodes-search list" [
 #
 # POST /v4/nodes/zip
 # operationId: generateDownloadUrlForZipArchive
-export def "nodes-zip generateDownloadUrlForZipArchive" [
+export def "nodes-zip generate-download-url-for-archive" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2934,26 +2971,26 @@ export def "nodes-zip generateDownloadUrlForZipArchive" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-sds-auth-token: string # Authentication token
-  node_ids: list # List of node IDs
+  node_ids: list<int> # List of node IDs
 ]: any -> record<downloadUrl: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/nodes/zip")
-  let body = {"nodeIds": $node_ids} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"nodeIds": $node_ids} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Download files / folders as ZIP archive
 #
 # POST /v4/nodes/zip/download
 # operationId: downloadZipArchive
-export def "nodes-zip-download download-zip-archive" [
+export def "nodes-zip-download archive" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2963,19 +3000,19 @@ export def "nodes-zip-download download-zip-archive" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-sds-auth-token: string # Authentication token
-  node_ids: list # List of node IDs
+  node_ids: list<int> # List of node IDs
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/nodes/zip/download")
-  let body = {"nodeIds": $node_ids} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"nodeIds": $node_ids} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Remove node
@@ -2996,11 +3033,11 @@ export def "nodes delete-by-node_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({node_id: $node_id} | format pattern "/v4/nodes/{node_id}"))
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({node_id: (encode-path-segment $node_id)} | format pattern "/v4/nodes/{node_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3023,11 +3060,11 @@ export def "nodes request" [
 ]: nothing -> record<authParentId: int, branchVersion: int, children: list<any>, classification: int, cntChildren: int, cntComments: int, cntDeletedVersions: int, cntDownloadShares: int, cntFiles: int, cntFolders: int, cntRooms: int, cntUploadShares: int, createdAt: string, createdBy: record<avatarUuid: string, displayName: string, email: string, firstName: string, id: int, lastName: string, title: string, userName: string, userType: string>, encryptionInfo: record<dataSpaceKeyState: string, roomKeyState: string, userKeyState: string>, expireAt: string, fileType: string, hasActivitiesLog: bool, hash: string, id: int, inheritPermissions: bool, isBrowsable: bool, isEncrypted: bool, isFavorite: bool, mediaToken: string, mediaType: string, name: string, notes: string, parentId: int, parentPath: string, permissions: record<change: bool, create: bool, delete: bool, deleteRecycleBin: bool, manage: bool, manageDownloadShare: bool, manageUploadShare: bool, read: bool, readRecycleBin: bool, restoreRecycleBin: bool>, quota: int, recycleBinRetentionPeriod: int, referenceId: int, size: int, timestampCreation: string, timestampModification: string, type: string, updatedAt: string, updatedBy: record<avatarUuid: string, displayName: string, email: string, firstName: string, id: int, lastName: string, title: string, userName: string, userType: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({node_id: $node_id} | format pattern "/v4/nodes/{node_id}"))
-  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({node_id: (encode-path-segment $node_id)} | format pattern "/v4/nodes/{node_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3046,7 +3083,7 @@ export def "nodes-comments request" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # Range offset (format: int32)
-  --limit: int # Range limit.  Maximum 500.   For more results please use paging (`offset` + `limit`). (format: int32)
+  --limit: int # Range limit. Maximum 500. For more results please use paging (`offset` + `limit`). (format: int32)
   --hide-deleted: oneof<nothing, bool> # Hide deleted comments (default: false)
   --x-sds-date-format: string@x-sds-date-format-completer # Date time format (cf. [RFC 3339](https://www.ietf.org/rfc/rfc3339.txt) & [leettime.de](http://leettime.de/))
   --x-sds-auth-token: string # Authentication token
@@ -3054,11 +3091,11 @@ export def "nodes-comments request" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "hide_deleted" $hide_deleted "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({node_id: $node_id} | format pattern "/v4/nodes/{node_id}/comments") $qp)
-  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({node_id: (encode-path-segment $node_id)} | format pattern "/v4/nodes/{node_id}/comments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3083,14 +3120,14 @@ export def "nodes-comments create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({node_id: $node_id} | format pattern "/v4/nodes/{node_id}/comments"))
-  let body = {"text": $text} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({node_id: (encode-path-segment $node_id)} | format pattern "/v4/nodes/{node_id}/comments"))
+  let req_body = {"text": $text} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Copy node(s)
@@ -3113,27 +3150,27 @@ export def "nodes-copy-to copy" [
   --x-sds-auth-token: string # Authentication token
   --items: list # List of nodes to be copied — item shape: {id: int, name?: string, timestampCreation?: string, timestampModification?: string}
   --keep-share-links: oneof<nothing, bool> # Preserve Download Share Links and point them to the new node. (default: false)
-  --node-ids: list # &#128679; Deprecated since v4.5.0  Node IDs  Please use `items` instead. (DEPRECATED)
-  --resolution-strategy: string@resolution-strategy-completer # Node conflict resolution strategy:  * `autorename`  * `overwrite`  * `fail` (default: autorename)
+  --node-ids: list<int> # &#128679; Deprecated since v4.5.0 Node IDs Please use `items` instead. (DEPRECATED)
+  --resolution-strategy: string@resolution-strategy-completer # Node conflict resolution strategy: * `autorename` * `overwrite` * `fail` (default: autorename)
 ]: any -> record<authParentId: int, branchVersion: int, children: list<any>, classification: int, cntChildren: int, cntComments: int, cntDeletedVersions: int, cntDownloadShares: int, cntFiles: int, cntFolders: int, cntRooms: int, cntUploadShares: int, createdAt: string, createdBy: record<avatarUuid: string, displayName: string, email: string, firstName: string, id: int, lastName: string, title: string, userName: string, userType: string>, encryptionInfo: record<dataSpaceKeyState: string, roomKeyState: string, userKeyState: string>, expireAt: string, fileType: string, hasActivitiesLog: bool, hash: string, id: int, inheritPermissions: bool, isBrowsable: bool, isEncrypted: bool, isFavorite: bool, mediaToken: string, mediaType: string, name: string, notes: string, parentId: int, parentPath: string, permissions: record<change: bool, create: bool, delete: bool, deleteRecycleBin: bool, manage: bool, manageDownloadShare: bool, manageUploadShare: bool, read: bool, readRecycleBin: bool, restoreRecycleBin: bool>, quota: int, recycleBinRetentionPeriod: int, referenceId: int, size: int, timestampCreation: string, timestampModification: string, type: string, updatedAt: string, updatedBy: record<avatarUuid: string, displayName: string, email: string, firstName: string, id: int, lastName: string, title: string, userName: string, userType: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({node_id: $node_id} | format pattern "/v4/nodes/{node_id}/copy_to"))
-  let body = {"items": $items, "keepShareLinks": $keep_share_links, "nodeIds": $node_ids, "resolutionStrategy": $resolution_strategy} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({node_id: (encode-path-segment $node_id)} | format pattern "/v4/nodes/{node_id}/copy_to"))
+  let req_body = {"items": $items, "keepShareLinks": $keep_share_links, "nodeIds": $node_ids, "resolutionStrategy": $resolution_strategy} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Empty recycle bin
 #
 # DELETE /v4/nodes/{node_id}/deleted_nodes
 # operationId: emptyDeletedNodes
-export def "nodes-deleted-nodes emptyDeletedNodes" [
+export def "nodes-deleted-nodes delete-empty" [
   node_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3147,11 +3184,11 @@ export def "nodes-deleted-nodes emptyDeletedNodes" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({node_id: $node_id} | format pattern "/v4/nodes/{node_id}/deleted_nodes"))
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({node_id: (encode-path-segment $node_id)} | format pattern "/v4/nodes/{node_id}/deleted_nodes"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3159,7 +3196,7 @@ export def "nodes-deleted-nodes emptyDeletedNodes" [
 #
 # GET /v4/nodes/{node_id}/deleted_nodes
 # operationId: requestDeletedNodesSummary
-export def "nodes-deleted-nodes request-deleted-nodes-summary" [
+export def "nodes-deleted-nodes request-summary" [
   node_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3172,18 +3209,18 @@ export def "nodes-deleted-nodes request-deleted-nodes-summary" [
   --filter: string # Filter string
   --qp-sort: string # Sort string
   --offset: int # Range offset (format: int32)
-  --limit: int # Range limit.  Maximum 500.   For more results please use paging (`offset` + `limit`). (format: int32)
+  --limit: int # Range limit. Maximum 500. For more results please use paging (`offset` + `limit`). (format: int32)
   --x-sds-date-format: string@x-sds-date-format-completer # Date time format (cf. [RFC 3339](https://www.ietf.org/rfc/rfc3339.txt) & [leettime.de](http://leettime.de/))
   --x-sds-auth-token: string # Authentication token
 ]: nothing -> record<items: table<cntVersions: int, firstDeletedAt: string, lastDeletedAt: string, lastDeletedNodeId: int, name: string, parentId: int, parentPath: string, referenceId: int, timestampCreation: string, timestampModification: string, type: string>, range: record<limit: int, offset: int, total: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({node_id: $node_id} | format pattern "/v4/nodes/{node_id}/deleted_nodes") $qp)
-  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({node_id: (encode-path-segment $node_id)} | format pattern "/v4/nodes/{node_id}/deleted_nodes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3205,18 +3242,18 @@ export def "nodes-deleted-nodes-versions request" [
   --name: string # Node name
   --qp-sort: string # Sort string
   --offset: int # Range offset (format: int32)
-  --limit: int # Range limit.  Maximum 500.   For more results please use paging (`offset` + `limit`). (format: int32)
+  --limit: int # Range limit. Maximum 500. For more results please use paging (`offset` + `limit`). (format: int32)
   --x-sds-date-format: string@x-sds-date-format-completer # Date time format (cf. [RFC 3339](https://www.ietf.org/rfc/rfc3339.txt) & [leettime.de](http://leettime.de/))
   --x-sds-auth-token: string # Authentication token
 ]: nothing -> record<items: table<accessedAt: string, classification: int, createdAt: string, createdBy: record, deletedAt: string, deletedBy: record, expireAt: string, id: int, isEncrypted: bool, name: string, notes: string, parentId: int, parentPath: string, referenceId: int, size: int, type: string, updatedAt: string, updatedBy: record>, range: record<limit: int, offset: int, total: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({node_id: $node_id} | format pattern "/v4/nodes/{node_id}/deleted_nodes/versions") $qp)
-  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({node_id: (encode-path-segment $node_id)} | format pattern "/v4/nodes/{node_id}/deleted_nodes/versions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3238,11 +3275,11 @@ export def "nodes-favorite delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({node_id: $node_id} | format pattern "/v4/nodes/{node_id}/favorite"))
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({node_id: (encode-path-segment $node_id)} | format pattern "/v4/nodes/{node_id}/favorite"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3265,11 +3302,11 @@ export def "nodes-favorite create" [
 ]: nothing -> record<authParentId: int, branchVersion: int, children: list<any>, classification: int, cntChildren: int, cntComments: int, cntDeletedVersions: int, cntDownloadShares: int, cntFiles: int, cntFolders: int, cntRooms: int, cntUploadShares: int, createdAt: string, createdBy: record<avatarUuid: string, displayName: string, email: string, firstName: string, id: int, lastName: string, title: string, userName: string, userType: string>, encryptionInfo: record<dataSpaceKeyState: string, roomKeyState: string, userKeyState: string>, expireAt: string, fileType: string, hasActivitiesLog: bool, hash: string, id: int, inheritPermissions: bool, isBrowsable: bool, isEncrypted: bool, isFavorite: bool, mediaToken: string, mediaType: string, name: string, notes: string, parentId: int, parentPath: string, permissions: record<change: bool, create: bool, delete: bool, deleteRecycleBin: bool, manage: bool, manageDownloadShare: bool, manageUploadShare: bool, read: bool, readRecycleBin: bool, restoreRecycleBin: bool>, quota: int, recycleBinRetentionPeriod: int, referenceId: int, size: int, timestampCreation: string, timestampModification: string, type: string, updatedAt: string, updatedBy: record<avatarUuid: string, displayName: string, email: string, firstName: string, id: int, lastName: string, title: string, userName: string, userType: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({node_id: $node_id} | format pattern "/v4/nodes/{node_id}/favorite"))
-  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({node_id: (encode-path-segment $node_id)} | format pattern "/v4/nodes/{node_id}/favorite"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3293,20 +3330,20 @@ export def "nodes-move-to move" [
   --x-sds-auth-token: string # Authentication token
   --items: list # List of nodes to be moved — item shape: {id: int, name?: string, timestampCreation?: string, timestampModification?: string}
   --keep-share-links: oneof<nothing, bool> # Preserve Download Share Links and point them to the new node. (default: false)
-  --node-ids: list # &#128679; Deprecated since v4.5.0  Node IDs  Please use `items` instead. (DEPRECATED)
-  --resolution-strategy: string@resolution-strategy-completer # Node conflict resolution strategy:  * `autorename`  * `overwrite`  * `fail` (default: autorename)
+  --node-ids: list<int> # &#128679; Deprecated since v4.5.0 Node IDs Please use `items` instead. (DEPRECATED)
+  --resolution-strategy: string@resolution-strategy-completer # Node conflict resolution strategy: * `autorename` * `overwrite` * `fail` (default: autorename)
 ]: any -> record<authParentId: int, branchVersion: int, children: list<any>, classification: int, cntChildren: int, cntComments: int, cntDeletedVersions: int, cntDownloadShares: int, cntFiles: int, cntFolders: int, cntRooms: int, cntUploadShares: int, createdAt: string, createdBy: record<avatarUuid: string, displayName: string, email: string, firstName: string, id: int, lastName: string, title: string, userName: string, userType: string>, encryptionInfo: record<dataSpaceKeyState: string, roomKeyState: string, userKeyState: string>, expireAt: string, fileType: string, hasActivitiesLog: bool, hash: string, id: int, inheritPermissions: bool, isBrowsable: bool, isEncrypted: bool, isFavorite: bool, mediaToken: string, mediaType: string, name: string, notes: string, parentId: int, parentPath: string, permissions: record<change: bool, create: bool, delete: bool, deleteRecycleBin: bool, manage: bool, manageDownloadShare: bool, manageUploadShare: bool, read: bool, readRecycleBin: bool, restoreRecycleBin: bool>, quota: int, recycleBinRetentionPeriod: int, referenceId: int, size: int, timestampCreation: string, timestampModification: string, type: string, updatedAt: string, updatedBy: record<avatarUuid: string, displayName: string, email: string, firstName: string, id: int, lastName: string, title: string, userName: string, userType: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({node_id: $node_id} | format pattern "/v4/nodes/{node_id}/move_to"))
-  let body = {"items": $items, "keepShareLinks": $keep_share_links, "nodeIds": $node_ids, "resolutionStrategy": $resolution_strategy} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({node_id: (encode-path-segment $node_id)} | format pattern "/v4/nodes/{node_id}/move_to"))
+  let req_body = {"items": $items, "keepShareLinks": $keep_share_links, "nodeIds": $node_ids, "resolutionStrategy": $resolution_strategy} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Request list of parent nodes
@@ -3327,11 +3364,11 @@ export def "nodes-parents request" [
 ]: nothing -> record<items: table<id: int, name: string, parentId: int, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({node_id: $node_id} | format pattern "/v4/nodes/{node_id}/parents"))
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({node_id: (encode-path-segment $node_id)} | format pattern "/v4/nodes/{node_id}/parents"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3349,7 +3386,7 @@ export def "provisioning-customers list" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # Range offset (format: int32)
-  --limit: int # Range limit.  Maximum 500.   For more results please use paging (`offset` + `limit`). (format: int32)
+  --limit: int # Range limit. Maximum 500. For more results please use paging (`offset` + `limit`). (format: int32)
   --filter: string # Filter string
   --qp-sort: string # Sort string
   --include-attributes: oneof<nothing, bool> # Include custom customer attributes.
@@ -3360,10 +3397,10 @@ export def "provisioning-customers list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "include_attributes" $include_attributes "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v4/provisioning/customers" $qp)
-  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Service-Token": $x_sds_service_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Service-Token": $x_sds_service_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3386,30 +3423,30 @@ export def "provisioning-customers create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-sds-date-format: string@x-sds-date-format-completer # Date time format (cf. [RFC 3339](https://www.ietf.org/rfc/rfc3339.txt) & [leettime.de](http://leettime.de/))
   --x-sds-service-token: string # Service Authentication token
-  --activation-code: string # &#128679; Deprecated since v4.8.0  Customer activation code string:  * valid only for types `free` and `demo`  * for `pay` customers it is empty (DEPRECATED)
+  --activation-code: string # &#128679; Deprecated since v4.8.0 Customer activation code string: * valid only for types `free` and `demo` * for `pay` customers it is empty (DEPRECATED)
   --company-name: string # Company name
   --customer-attributes: record # List of customer attributes — shape: {items: list}
   customer_contract_type: string@customer-contract-type-completer # Customer type
   first_admin_user: record # First administrator user — shape: {authData?: record, authMethods?: list, email?: string, firstName: string, gender?: string, language?: string, lastName: string, login?: string, needsToChangePassword?: bool, needsToChangeUserName?: bool, notifyUser?: bool, password?: string, phone?: string, receiverLanguage?: string, title?: string, userName?: string}
-  --is-locked: oneof<nothing, bool> # Customer is locked:  * `false` - unlocked  * `true` - locked    All users of this customer will be blocked and can not login anymore. (default: false)
-  --lock-status: oneof<nothing, bool> # &#128679; Deprecated since v4.7.0  Customer lock status:  * `false` - unlocked  * `true` - locked    Please use `isLocked` instead.  All users of this customer will be blocked and can not login anymore. (DEPRECATED, default: false)
+  --is-locked: oneof<nothing, bool> # Customer is locked: * `false` - unlocked * `true` - locked All users of this customer will be blocked and can not login anymore. (default: false)
+  --lock-status: oneof<nothing, bool> # &#128679; Deprecated since v4.7.0 Customer lock status: * `false` - unlocked * `true` - locked Please use `isLocked` instead. All users of this customer will be blocked and can not login anymore. (DEPRECATED, default: false)
   --provider-customer-id: string # Provider customer ID
   quota_max: int # Maximal disc space which can be allocated by customer in bytes. -1 for unlimited (format: int64)
-  --trial-days: int # Number of days left for trial period (relevant only for type `demo`)  (not used) (format: int32)
+  --trial-days: int # Number of days left for trial period (relevant only for type `demo`) (not used) (format: int32)
   user_max: int # Maximal number of users (format: int32)
-  --webhooks-max: int # &#128640; Since v4.19.0  Maximal number of webhooks (format: int64)
+  --webhooks-max: int # &#128640; Since v4.19.0 Maximal number of webhooks (format: int64)
 ]: any -> record<activationCode: string, companyName: string, createdAt: string, customerAttributes: record<items: list<record>>, customerContractType: string, customerUuid: string, firstAdminUser: record<authData: record<adConfigId: int, login: string, method: string, mustChangePassword: bool, oidConfigId: int, password: string>, authMethods: list<record>, email: string, firstName: string, gender: string, language: string, lastName: string, login: string, needsToChangePassword: bool, needsToChangeUserName: bool, notifyUser: bool, password: string, phone: string, receiverLanguage: string, title: string, userName: string>, id: int, isLocked: bool, lockStatus: bool, providerCustomerId: string, quotaMax: int, trialDays: int, userMax: int, webhooksMax: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/provisioning/customers")
-  let body = {"activationCode": $activation_code, "companyName": $company_name, "customerAttributes": $customer_attributes, "customerContractType": $customer_contract_type, "firstAdminUser": $first_admin_user, "isLocked": $is_locked, "lockStatus": $lock_status, "providerCustomerId": $provider_customer_id, "quotaMax": $quota_max, "trialDays": $trial_days, "userMax": $user_max, "webhooksMax": $webhooks_max} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Service-Token": $x_sds_service_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"activationCode": $activation_code, "companyName": $company_name, "customerAttributes": $customer_attributes, "customerContractType": $customer_contract_type, "firstAdminUser": $first_admin_user, "isLocked": $is_locked, "lockStatus": $lock_status, "providerCustomerId": $provider_customer_id, "quotaMax": $quota_max, "trialDays": $trial_days, "userMax": $user_max, "webhooksMax": $webhooks_max} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Service-Token": $x_sds_service_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Remove customer
@@ -3430,11 +3467,11 @@ export def "provisioning-customers delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({customer_id: $customer_id} | format pattern "/v4/provisioning/customers/{customer_id}"))
-  let extra_headers = {"X-Sds-Service-Token": $x_sds_service_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id)} | format pattern "/v4/provisioning/customers/{customer_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Service-Token": $x_sds_service_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3459,11 +3496,11 @@ export def "provisioning-customers request" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "include_attributes" $include_attributes "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer_id: $customer_id} | format pattern "/v4/provisioning/customers/{customer_id}") $qp)
-  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Service-Token": $x_sds_service_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id)} | format pattern "/v4/provisioning/customers/{customer_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Service-Token": $x_sds_service_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3486,24 +3523,24 @@ export def "provisioning-customers update" [
   --x-sds-service-token: string # Service Authentication token
   --company-name: string # Company name
   customer_contract_type: string@customer-contract-type-completer # Customer type
-  --is-locked: oneof<nothing, bool> # Customer is locked:  * `false` - unlocked  * `true` - locked    All users of this customer will be blocked and can not login anymore. (default: false)
-  --lock-status: oneof<nothing, bool> # &#128679; Deprecated since v4.7.0  Customer lock status:  * `false` - unlocked  * `true` - locked    Please use `isLocked` instead.  All users of this customer will be blocked and can not login anymore. (DEPRECATED, default: false)
+  --is-locked: oneof<nothing, bool> # Customer is locked: * `false` - unlocked * `true` - locked All users of this customer will be blocked and can not login anymore. (default: false)
+  --lock-status: oneof<nothing, bool> # &#128679; Deprecated since v4.7.0 Customer lock status: * `false` - unlocked * `true` - locked Please use `isLocked` instead. All users of this customer will be blocked and can not login anymore. (DEPRECATED, default: false)
   --provider-customer-id: string # Provider customer ID
   --quota-max: int # Maximal disc space which can be allocated by customer in bytes. -1 for unlimited (format: int64)
   --user-max: int # Maximal number of users (format: int32)
-  --webhooks-max: int # &#128640; Since v4.19.0  Maximal number of webhooks (format: int64)
+  --webhooks-max: int # &#128640; Since v4.19.0 Maximal number of webhooks (format: int64)
 ]: any -> record<activationCode: string, companyName: string, createdAt: string, customerAttributes: record<items: list<record>>, customerContractType: string, customerUuid: string, id: int, isLocked: bool, lockStatus: bool, providerCustomerId: string, quotaMax: int, trialDays: int, updatedAt: string, userMax: int, webhooksMax: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({customer_id: $customer_id} | format pattern "/v4/provisioning/customers/{customer_id}"))
-  let body = {"companyName": $company_name, "customerContractType": $customer_contract_type, "isLocked": $is_locked, "lockStatus": $lock_status, "providerCustomerId": $provider_customer_id, "quotaMax": $quota_max, "userMax": $user_max, "webhooksMax": $webhooks_max} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Service-Token": $x_sds_service_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id)} | format pattern "/v4/provisioning/customers/{customer_id}"))
+  let req_body = {"companyName": $company_name, "customerContractType": $customer_contract_type, "isLocked": $is_locked, "lockStatus": $lock_status, "providerCustomerId": $provider_customer_id, "quotaMax": $quota_max, "userMax": $user_max, "webhooksMax": $webhooks_max} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Service-Token": $x_sds_service_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Request customer attributes
@@ -3521,7 +3558,7 @@ export def "provisioning-customers-customer-attributes request" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # Range offset (format: int32)
-  --limit: int # Range limit.  Maximum 500.   For more results please use paging (`offset` + `limit`). (format: int32)
+  --limit: int # Range limit. Maximum 500. For more results please use paging (`offset` + `limit`). (format: int32)
   --filter: string # Filter string
   --qp-sort: string # Sort string
   --x-sds-service-token: string # Service Authentication token
@@ -3529,11 +3566,11 @@ export def "provisioning-customers-customer-attributes request" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer_id: $customer_id} | format pattern "/v4/provisioning/customers/{customer_id}/customerAttributes") $qp)
-  let extra_headers = {"X-Sds-Service-Token": $x_sds_service_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id)} | format pattern "/v4/provisioning/customers/{customer_id}/customerAttributes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Service-Token": $x_sds_service_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3544,7 +3581,7 @@ export def "provisioning-customers-customer-attributes request" [
 # operationId: setCustomerAttributes
 # --items item shape: {key: string, value: string}
 @deprecated
-export def "provisioning-customers-customer-attributes setCustomerAttributes" [
+export def "provisioning-customers-customer-attributes update-by-customer_id" [
   customer_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3561,14 +3598,14 @@ export def "provisioning-customers-customer-attributes setCustomerAttributes" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({customer_id: $customer_id} | format pattern "/v4/provisioning/customers/{customer_id}/customerAttributes"))
-  let body = {"items": $items} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Service-Token": $x_sds_service_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id)} | format pattern "/v4/provisioning/customers/{customer_id}/customerAttributes"))
+  let req_body = {"items": $items} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Service-Token": $x_sds_service_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Add or edit customer attributes
@@ -3576,7 +3613,7 @@ export def "provisioning-customers-customer-attributes setCustomerAttributes" [
 # PUT /v4/provisioning/customers/{customer_id}/customerAttributes
 # operationId: updateCustomerAttributes
 # --items item shape: {key: string, value: string}
-export def "provisioning-customers-customer-attributes update" [
+export def "provisioning-customers-customer-attributes update-by-customer_id-1" [
   customer_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3593,14 +3630,14 @@ export def "provisioning-customers-customer-attributes update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({customer_id: $customer_id} | format pattern "/v4/provisioning/customers/{customer_id}/customerAttributes"))
-  let body = {"items": $items} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Service-Token": $x_sds_service_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id)} | format pattern "/v4/provisioning/customers/{customer_id}/customerAttributes"))
+  let req_body = {"items": $items} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Service-Token": $x_sds_service_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Remove customer attribute
@@ -3622,11 +3659,11 @@ export def "provisioning-customers-customer-attributes delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({customer_id: $customer_id, key: $key} | format pattern "/v4/provisioning/customers/{customer_id}/customerAttributes/{key}"))
-  let extra_headers = {"X-Sds-Service-Token": $x_sds_service_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id), key: (encode-path-segment $key)} | format pattern "/v4/provisioning/customers/{customer_id}/customerAttributes/{key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Service-Token": $x_sds_service_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3645,7 +3682,7 @@ export def "provisioning-customers-users request" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # Range offset (format: int32)
-  --limit: int # Range limit.  Maximum 500.   For more results please use paging (`offset` + `limit`). (format: int32)
+  --limit: int # Range limit. Maximum 500. For more results please use paging (`offset` + `limit`). (format: int32)
   --filter: string # Filter string
   --qp-sort: string # Sort string
   --include-attributes: oneof<nothing, bool> # Include custom user attributes.
@@ -3657,11 +3694,11 @@ export def "provisioning-customers-users request" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "include_attributes" $include_attributes "scalar") (serialize-qp "include_roles" $include_roles "scalar") (serialize-qp "include_manageable_rooms" $include_manageable_rooms "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer_id: $customer_id} | format pattern "/v4/provisioning/customers/{customer_id}/users") $qp)
-  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Service-Token": $x_sds_service_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id)} | format pattern "/v4/provisioning/customers/{customer_id}/users") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Service-Token": $x_sds_service_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3679,7 +3716,7 @@ export def "provisioning-webhooks request-list-of-tenant" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # Range offset (format: int32)
-  --limit: int # Range limit.  Maximum 500.   For more results please use paging (`offset` + `limit`). (format: int32)
+  --limit: int # Range limit. Maximum 500. For more results please use paging (`offset` + `limit`). (format: int32)
   --filter: string # Filter string
   --qp-sort: string # Sort string
   --x-sds-date-format: string@x-sds-date-format-completer # Date time format (cf. [RFC 3339](https://www.ietf.org/rfc/rfc3339.txt) & [leettime.de](http://leettime.de/))
@@ -3689,10 +3726,10 @@ export def "provisioning-webhooks request-list-of-tenant" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v4/provisioning/webhooks" $qp)
-  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Service-Token": $x_sds_service_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Service-Token": $x_sds_service_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3711,31 +3748,31 @@ export def "provisioning-webhooks create-tenant" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-sds-date-format: string@x-sds-date-format-completer # Date time format (cf. [RFC 3339](https://www.ietf.org/rfc/rfc3339.txt) & [leettime.de](http://leettime.de/))
   --x-sds-service-token: string # Service Authentication token
-  event_type_names: list # List of names of event types
+  event_type_names: list<string> # List of names of event types
   --is-enabled: oneof<nothing, bool> # Is enabled
   name: string # Name
   --secret: string # Secret; used for event message signatures
   --trigger-example-event: oneof<nothing, bool> # If set to true, an example event is being created
-  --body-url: string # URL (must begin with the `HTTPS` scheme)
+  url: string # URL (must begin with the `HTTPS` scheme)
 ]: any -> record<createdAt: string, createdBy: record<avatarUuid: string, displayName: string, email: string, firstName: string, id: int, lastName: string, title: string, userName: string, userType: string>, eventTypeNames: list<string>, expireAt: string, failStatus: int, id: int, isEnabled: bool, name: string, secret: string, updatedAt: string, updatedBy: record<avatarUuid: string, displayName: string, email: string, firstName: string, id: int, lastName: string, title: string, userName: string, userType: string>, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/provisioning/webhooks")
-  let body = {"eventTypeNames": $event_type_names, "isEnabled": $is_enabled, "name": $name, "secret": $secret, "triggerExampleEvent": $trigger_example_event, "url": $body_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Service-Token": $x_sds_service_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"eventTypeNames": $event_type_names, "isEnabled": $is_enabled, "name": $name, "secret": $secret, "triggerExampleEvent": $trigger_example_event, "url": $url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Service-Token": $x_sds_service_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Request list of event types
 #
 # GET /v4/provisioning/webhooks/event_types
 # operationId: requestListOfEventTypesForTenant
-export def "provisioning-webhooks-event-types request-list-of-event-types-for-tenant" [
+export def "provisioning-webhooks-event-types request-list-of-for-tenant" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3749,10 +3786,10 @@ export def "provisioning-webhooks-event-types request-list-of-event-types-for-te
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/provisioning/webhooks/event_types")
-  let extra_headers = {"X-Sds-Service-Token": $x_sds_service_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Service-Token": $x_sds_service_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3774,11 +3811,11 @@ export def "provisioning-webhooks delete-tenant" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({webhook_id: $webhook_id} | format pattern "/v4/provisioning/webhooks/{webhook_id}"))
-  let extra_headers = {"X-Sds-Service-Token": $x_sds_service_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({webhook_id: (encode-path-segment $webhook_id)} | format pattern "/v4/provisioning/webhooks/{webhook_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Service-Token": $x_sds_service_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3801,11 +3838,11 @@ export def "provisioning-webhooks request-tenant" [
 ]: nothing -> record<createdAt: string, createdBy: record<avatarUuid: string, displayName: string, email: string, firstName: string, id: int, lastName: string, title: string, userName: string, userType: string>, eventTypeNames: list<string>, expireAt: string, failStatus: int, id: int, isEnabled: bool, name: string, secret: string, updatedAt: string, updatedBy: record<avatarUuid: string, displayName: string, email: string, firstName: string, id: int, lastName: string, title: string, userName: string, userType: string>, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({webhook_id: $webhook_id} | format pattern "/v4/provisioning/webhooks/{webhook_id}"))
-  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Service-Token": $x_sds_service_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({webhook_id: (encode-path-segment $webhook_id)} | format pattern "/v4/provisioning/webhooks/{webhook_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Service-Token": $x_sds_service_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3825,24 +3862,24 @@ export def "provisioning-webhooks update-tenant" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-sds-date-format: string@x-sds-date-format-completer # Date time format (cf. [RFC 3339](https://www.ietf.org/rfc/rfc3339.txt) & [leettime.de](http://leettime.de/))
   --x-sds-service-token: string # Service Authentication token
-  --event-type-names: list # List of names of event types
+  --event-type-names: list<string> # List of names of event types
   --is-enabled: oneof<nothing, bool> # Is enabled
   --name: string # Name
   --secret: string # Secret; used for event message signatures
   --trigger-example-event: oneof<nothing, bool> # If set to true, an example event is being created
-  --body-url: string # URL (must begin with the `HTTPS` scheme)
+  --url: string # URL (must begin with the `HTTPS` scheme)
 ]: any -> record<createdAt: string, createdBy: record<avatarUuid: string, displayName: string, email: string, firstName: string, id: int, lastName: string, title: string, userName: string, userType: string>, eventTypeNames: list<string>, expireAt: string, failStatus: int, id: int, isEnabled: bool, name: string, secret: string, updatedAt: string, updatedBy: record<avatarUuid: string, displayName: string, email: string, firstName: string, id: int, lastName: string, title: string, userName: string, userType: string>, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({webhook_id: $webhook_id} | format pattern "/v4/provisioning/webhooks/{webhook_id}"))
-  let body = {"eventTypeNames": $event_type_names, "isEnabled": $is_enabled, "name": $name, "secret": $secret, "triggerExampleEvent": $trigger_example_event, "url": $body_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Service-Token": $x_sds_service_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({webhook_id: (encode-path-segment $webhook_id)} | format pattern "/v4/provisioning/webhooks/{webhook_id}"))
+  let req_body = {"eventTypeNames": $event_type_names, "isEnabled": $is_enabled, "name": $name, "secret": $secret, "triggerExampleEvent": $trigger_example_event, "url": $url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Service-Token": $x_sds_service_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Reset tenant webhook lifetime
@@ -3864,11 +3901,11 @@ export def "provisioning-webhooks-reset-lifetime reset-tenant" [
 ]: nothing -> record<createdAt: string, createdBy: record<avatarUuid: string, displayName: string, email: string, firstName: string, id: int, lastName: string, title: string, userName: string, userType: string>, eventTypeNames: list<string>, expireAt: string, failStatus: int, id: int, isEnabled: bool, name: string, secret: string, updatedAt: string, updatedBy: record<avatarUuid: string, displayName: string, email: string, firstName: string, id: int, lastName: string, title: string, userName: string, userType: string>, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({webhook_id: $webhook_id} | format pattern "/v4/provisioning/webhooks/{webhook_id}/reset_lifetime"))
-  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Service-Token": $x_sds_service_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({webhook_id: (encode-path-segment $webhook_id)} | format pattern "/v4/provisioning/webhooks/{webhook_id}/reset_lifetime"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Service-Token": $x_sds_service_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3876,7 +3913,7 @@ export def "provisioning-webhooks-reset-lifetime reset-tenant" [
 #
 # GET /v4/public/shares/downloads/{access_key}
 # operationId: requestPublicDownloadShareInfo
-export def "public-shares-downloads request-public-download-share-info" [
+export def "public-shares-downloads request-get" [
   access_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3890,11 +3927,11 @@ export def "public-shares-downloads request-public-download-share-info" [
 ]: nothing -> record<createdAt: string, creatorName: string, creatorUsername: string, expireAt: string, fileKey: record<iv: string, key: string, tag: string, version: string>, fileName: string, hasDownloadLimit: bool, isEncrypted: bool, isProtected: bool, limitReached: bool, mediaType: string, name: string, notes: string, privateKeyContainer: record<createdAt: string, createdBy: int, privateKey: string, version: string>, size: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({access_key: $access_key} | format pattern "/v4/public/shares/downloads/{access_key}"))
-  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({access_key: (encode-path-segment $access_key)} | format pattern "/v4/public/shares/downloads/{access_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3902,7 +3939,7 @@ export def "public-shares-downloads request-public-download-share-info" [
 #
 # HEAD /v4/public/shares/downloads/{access_key}
 # operationId: checkPublicDownloadSharePassword
-export def "public-shares-downloads check-public-download-share-password" [
+export def "public-shares-downloads check-password" [
   access_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3917,7 +3954,7 @@ export def "public-shares-downloads check-public-download-share-password" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "password" $password "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({access_key: $access_key} | format pattern "/v4/public/shares/downloads/{access_key}") $qp)
+  let full_url = (build-url $base ({access_key: (encode-path-segment $access_key)} | format pattern "/v4/public/shares/downloads/{access_key}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3927,7 +3964,7 @@ export def "public-shares-downloads check-public-download-share-password" [
 #
 # POST /v4/public/shares/downloads/{access_key}
 # operationId: generateDownloadUrlPublic
-export def "public-shares-downloads generateDownloadUrlPublic" [
+export def "public-shares-downloads generate-url" [
   access_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3942,12 +3979,12 @@ export def "public-shares-downloads generateDownloadUrlPublic" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({access_key: $access_key} | format pattern "/v4/public/shares/downloads/{access_key}"))
-  let body = {"password": $password} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({access_key: (encode-path-segment $access_key)} | format pattern "/v4/public/shares/downloads/{access_key}"))
+  let req_body = {"password": $password} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Download file with token
@@ -3968,16 +4005,16 @@ export def "public-shares-downloads download-file-via" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --generic-mimetype: oneof<nothing, bool> # Always return `application/octet-stream` instead of specific mimetype
   --inline: oneof<nothing, bool> # Use Content-Disposition: `inline` instead of `attachment`
-  --range: string # Range   e.g. `bytes=0-999`
+  --range: string # Range e.g. `bytes=0-999`
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "generic_mimetype" $generic_mimetype "scalar") (serialize-qp "inline" $inline "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({access_key: $access_key, token_arg: $token_arg} | format pattern "/v4/public/shares/downloads/{access_key}/{token_arg}") $qp)
-  let extra_headers = {"Range": $range} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({access_key: (encode-path-segment $access_key), token_arg: (encode-path-segment $token_arg)} | format pattern "/v4/public/shares/downloads/{access_key}/{token_arg}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Range": $range} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3999,16 +4036,16 @@ export def "public-shares-downloads download-file-via-by-access_key-token" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --generic-mimetype: oneof<nothing, bool> # Always return `application/octet-stream` instead of specific mimetype
   --inline: oneof<nothing, bool> # Use Content-Disposition: `inline` instead of `attachment`
-  --range: string # Range   e.g. `bytes=0-999`
+  --range: string # Range e.g. `bytes=0-999`
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "generic_mimetype" $generic_mimetype "scalar") (serialize-qp "inline" $inline "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({access_key: $access_key, token_arg: $token_arg} | format pattern "/v4/public/shares/downloads/{access_key}/{token_arg}") $qp)
-  let extra_headers = {"Range": $range} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({access_key: (encode-path-segment $access_key), token_arg: (encode-path-segment $token_arg)} | format pattern "/v4/public/shares/downloads/{access_key}/{token_arg}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Range": $range} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4016,7 +4053,7 @@ export def "public-shares-downloads download-file-via-by-access_key-token" [
 #
 # GET /v4/public/shares/uploads/{access_key}
 # operationId: requestPublicUploadShareInfo
-export def "public-shares-uploads request-public-upload-share-info" [
+export def "public-shares-uploads request-get" [
   access_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4026,16 +4063,16 @@ export def "public-shares-uploads request-public-upload-share-info" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-sds-share-password: string # Upload share password. Should be base64-encoded.  Plain X-Sds-Share-Passwords are *deprecated* and will be removed in the future
+  --x-sds-share-password: string # Upload share password. Should be base64-encoded. Plain X-Sds-Share-Passwords are *deprecated* and will be removed in the future
   --x-sds-date-format: string@x-sds-date-format-completer # Date time format (cf. [RFC 3339](https://www.ietf.org/rfc/rfc3339.txt) & [leettime.de](http://leettime.de/))
 ]: nothing -> record<createdAt: string, creatorName: string, creatorUsername: string, expireAt: string, isEncrypted: bool, isProtected: bool, name: string, notes: string, remainingSize: int, remainingSlots: int, showUploadedFiles: bool, uploadedFiles: table<createdAt: string, hash: string, name: string, size: int>, userUserPublicKeyList: record<items: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({access_key: $access_key} | format pattern "/v4/public/shares/uploads/{access_key}"))
-  let extra_headers = {"X-Sds-Share-Password": $x_sds_share_password, "X-Sds-Date-Format": $x_sds_date_format} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({access_key: (encode-path-segment $access_key)} | format pattern "/v4/public/shares/uploads/{access_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Share-Password": $x_sds_share_password, "X-Sds-Date-Format": $x_sds_date_format} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4043,7 +4080,7 @@ export def "public-shares-uploads request-public-upload-share-info" [
 #
 # POST /v4/public/shares/uploads/{access_key}
 # operationId: createShareUploadChannel
-export def "public-shares-uploads create-share-upload-channel" [
+export def "public-shares-uploads create-channel" [
   access_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4053,29 +4090,29 @@ export def "public-shares-uploads create-share-upload-channel" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --direct-s3-upload: oneof<nothing, bool> # &#128640; Since v4.15.0  Upload direct to S3 (default: false)
+  --direct-s3-upload: oneof<nothing, bool> # &#128640; Since v4.15.0 Upload direct to S3 (default: false)
   name: string # File name
   --password: string # Password
   --size: int # File size in byte (format: int64)
-  --timestamp-creation: string # &#128640; Since v4.22.0  Time the node was created on external file system  (default: current server datetime in UTC format) (format: date-time)
-  --timestamp-modification: string # &#128640; Since v4.22.0  Time the content of a node was last modified on external file system  (default: current server datetime in UTC format) (format: date-time)
+  --timestamp-creation: string # &#128640; Since v4.22.0 Time the node was created on external file system (default: current server datetime in UTC format) (format: date-time)
+  --timestamp-modification: string # &#128640; Since v4.22.0 Time the content of a node was last modified on external file system (default: current server datetime in UTC format) (format: date-time)
 ]: any -> record<uploadId: string, uploadUrl: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({access_key: $access_key} | format pattern "/v4/public/shares/uploads/{access_key}"))
-  let body = {"directS3Upload": $direct_s3_upload, "name": $name, "password": $password, "size": $size, "timestampCreation": $timestamp_creation, "timestampModification": $timestamp_modification} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({access_key: (encode-path-segment $access_key)} | format pattern "/v4/public/shares/uploads/{access_key}"))
+  let req_body = {"directS3Upload": $direct_s3_upload, "name": $name, "password": $password, "size": $size, "timestampCreation": $timestamp_creation, "timestampModification": $timestamp_modification} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Cancel file upload
 #
 # DELETE /v4/public/shares/uploads/{access_key}/{upload_id}
 # operationId: cancelFileUploadViaShare
-export def "public-shares-uploads cancel-file-upload-via" [
+export def "public-shares-uploads cancel-file-via" [
   access_key: string
   upload_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4089,7 +4126,7 @@ export def "public-shares-uploads cancel-file-upload-via" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({access_key: $access_key, upload_id: $upload_id} | format pattern "/v4/public/shares/uploads/{access_key}/{upload_id}"))
+  let full_url = (build-url $base ({access_key: (encode-path-segment $access_key), upload_id: (encode-path-segment $upload_id)} | format pattern "/v4/public/shares/uploads/{access_key}/{upload_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4099,7 +4136,7 @@ export def "public-shares-uploads cancel-file-upload-via" [
 #
 # GET /v4/public/shares/uploads/{access_key}/{upload_id}
 # operationId: requestUploadStatusPublic
-export def "public-shares-uploads request-upload-status" [
+export def "public-shares-uploads request-status" [
   access_key: string
   upload_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4113,7 +4150,7 @@ export def "public-shares-uploads request-upload-status" [
 ]: nothing -> record<errorDetails: record<code: int, debugInfo: string, errorCode: int, message: string>, fileName: string, size: int, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({access_key: $access_key, upload_id: $upload_id} | format pattern "/v4/public/shares/uploads/{access_key}/{upload_id}"))
+  let full_url = (build-url $base ({access_key: (encode-path-segment $access_key), upload_id: (encode-path-segment $upload_id)} | format pattern "/v4/public/shares/uploads/{access_key}/{upload_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4135,21 +4172,22 @@ export def "public-shares-uploads upload-file-as-multipart-by-access_key-upload_
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-range: string # Content-Range   e.g. `bytes 0-999/3980`
+  --content-range: string # Content-Range e.g. `bytes 0-999/3980`
   --x-sds-date-format: string@x-sds-date-format-completer # Date time format (cf. [RFC 3339](https://www.ietf.org/rfc/rfc3339.txt) & [leettime.de](http://leettime.de/))
   file: string # File (format: binary)
 ]: any -> record<hash: string, size: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({access_key: $access_key, upload_id: $upload_id} | format pattern "/v4/public/shares/uploads/{access_key}/{upload_id}"))
-  let body = {"file": $file} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Range": $content_range, "X-Sds-Date-Format": $x_sds_date_format} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({access_key: (encode-path-segment $access_key), upload_id: (encode-path-segment $upload_id)} | format pattern "/v4/public/shares/uploads/{access_key}/{upload_id}"))
+  let req_body = {"file": $file} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let extra_headers = {"Content-Range": $content_range, "X-Sds-Date-Format": $x_sds_date_format} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let mp = (build-multipart-body $req_body ["file"])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # Complete file upload
@@ -4158,7 +4196,7 @@ export def "public-shares-uploads upload-file-as-multipart-by-access_key-upload_
 # Docs: https://tools.ietf.org/html/rfc7233 — Range Requests
 # operationId: completeFileUploadViaShare
 # --items item shape: {fileKey: record, userId: int}
-export def "public-shares-uploads completeFileUploadViaShare" [
+export def "public-shares-uploads complete-file-via" [
   access_key: string
   upload_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4175,14 +4213,14 @@ export def "public-shares-uploads completeFileUploadViaShare" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({access_key: $access_key, upload_id: $upload_id} | format pattern "/v4/public/shares/uploads/{access_key}/{upload_id}"))
-  let body = {"items": $items} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({access_key: (encode-path-segment $access_key), upload_id: (encode-path-segment $upload_id)} | format pattern "/v4/public/shares/uploads/{access_key}/{upload_id}"))
+  let req_body = {"items": $items} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Complete S3 file upload
@@ -4191,7 +4229,7 @@ export def "public-shares-uploads completeFileUploadViaShare" [
 # operationId: completeS3FileUploadViaShare
 # --parts item shape: {partEtag: string, partNumber: int}
 # --userFileKeyList item shape: {fileKey: record, userId: int}
-export def "public-shares-uploads-s3 completeS3FileUploadViaShare" [
+export def "public-shares-uploads-s3 complete-file-via" [
   access_key: string
   upload_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4208,19 +4246,19 @@ export def "public-shares-uploads-s3 completeS3FileUploadViaShare" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({access_key: $access_key, upload_id: $upload_id} | format pattern "/v4/public/shares/uploads/{access_key}/{upload_id}/s3"))
-  let body = {"parts": $parts, "userFileKeyList": $user_file_key_list} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({access_key: (encode-path-segment $access_key), upload_id: (encode-path-segment $upload_id)} | format pattern "/v4/public/shares/uploads/{access_key}/{upload_id}/s3"))
+  let req_body = {"parts": $parts, "userFileKeyList": $user_file_key_list} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Generate presigned URLs for S3 file upload
 #
 # POST /v4/public/shares/uploads/{access_key}/{upload_id}/s3_urls
 # operationId: generatePresignedUrlsPublic
-export def "public-shares-uploads-s3-urls generatePresignedUrlsPublic" [
+export def "public-shares-uploads-s3-urls generate-presigned" [
   access_key: string
   upload_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4234,19 +4272,19 @@ export def "public-shares-uploads-s3-urls generatePresignedUrlsPublic" [
   --x-sds-date-format: string@x-sds-date-format-completer # Date time format (cf. [RFC 3339](https://www.ietf.org/rfc/rfc3339.txt) & [leettime.de](http://leettime.de/))
   first_part_number: int # First part number of a range of requested presigned URLs (for S3 it is: `1`) (format: int32)
   last_part_number: int # Last part number of a range of requested presigned URLs (format: int32)
-  size: int # `Content-Length` header size for each presigned URL (in bytes)  *MUST* be >= 5 MB except the last part. (format: int64)
+  size: int # `Content-Length` header size for each presigned URL (in bytes) *MUST* be >= 5 MB except the last part. (format: int64)
 ]: any -> record<urls: table<partNumber: int, url: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({access_key: $access_key, upload_id: $upload_id} | format pattern "/v4/public/shares/uploads/{access_key}/{upload_id}/s3_urls"))
-  let body = {"firstPartNumber": $first_part_number, "lastPartNumber": $last_part_number, "size": $size} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({access_key: (encode-path-segment $access_key), upload_id: (encode-path-segment $upload_id)} | format pattern "/v4/public/shares/uploads/{access_key}/{upload_id}/s3_urls"))
+  let req_body = {"firstPartNumber": $first_part_number, "lastPartNumber": $last_part_number, "size": $size} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Request third-party software dependencies
@@ -4289,10 +4327,10 @@ export def "public-software-version request" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/public/software/version")
-  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4387,10 +4425,10 @@ export def "public-time request-system" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/public/time")
-  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4434,7 +4472,7 @@ export def "resources-users-avatar request" [
 ]: nothing -> record<avatarUri: string, avatarUuid: string, isCustomAvatar: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id, uuid: $uuid} | format pattern "/v4/resources/users/{user_id}/avatar/{uuid}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), uuid: (encode-path-segment $uuid)} | format pattern "/v4/resources/users/{user_id}/avatar/{uuid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4458,10 +4496,10 @@ export def "roles request" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/roles")
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4480,19 +4518,19 @@ export def "roles-groups delete" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-sds-auth-token: string # Authentication token
-  ids: list # List of group IDs
+  ids: list<int> # List of group IDs
 ]: any -> record<items: table<id: int, isMember: bool, name: string>, range: record<limit: int, offset: int, total: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({role_id: $role_id} | format pattern "/v4/roles/{role_id}/groups"))
-  let body = {"ids": $ids} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({role_id: (encode-path-segment $role_id)} | format pattern "/v4/roles/{role_id}/groups"))
+  let req_body = {"ids": $ids} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Request groups with specific role
@@ -4510,18 +4548,18 @@ export def "roles-groups request" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # Range offset (format: int32)
-  --limit: int # Range limit.  Maximum 500.   For more results please use paging (`offset` + `limit`). (format: int32)
+  --limit: int # Range limit. Maximum 500. For more results please use paging (`offset` + `limit`). (format: int32)
   --filter: string # Filter string
   --x-sds-auth-token: string # Authentication token
 ]: nothing -> record<items: table<id: int, isMember: bool, name: string>, range: record<limit: int, offset: int, total: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({role_id: $role_id} | format pattern "/v4/roles/{role_id}/groups") $qp)
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({role_id: (encode-path-segment $role_id)} | format pattern "/v4/roles/{role_id}/groups") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4540,19 +4578,19 @@ export def "roles-groups create" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-sds-auth-token: string # Authentication token
-  ids: list # List of group IDs
+  ids: list<int> # List of group IDs
 ]: any -> record<items: table<id: int, isMember: bool, name: string>, range: record<limit: int, offset: int, total: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({role_id: $role_id} | format pattern "/v4/roles/{role_id}/groups"))
-  let body = {"ids": $ids} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({role_id: (encode-path-segment $role_id)} | format pattern "/v4/roles/{role_id}/groups"))
+  let req_body = {"ids": $ids} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Revoke granted role from user(s)
@@ -4570,19 +4608,19 @@ export def "roles-users delete" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-sds-auth-token: string # Authentication token
-  ids: list # List of user IDs
+  ids: list<int> # List of user IDs
 ]: any -> record<items: table<displayName: string, id: int, isMember: bool, userInfo: record>, range: record<limit: int, offset: int, total: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({role_id: $role_id} | format pattern "/v4/roles/{role_id}/users"))
-  let body = {"ids": $ids} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({role_id: (encode-path-segment $role_id)} | format pattern "/v4/roles/{role_id}/users"))
+  let req_body = {"ids": $ids} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Request users with specific role
@@ -4600,18 +4638,18 @@ export def "roles-users request" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # Range offset (format: int32)
-  --limit: int # Range limit.  Maximum 500.   For more results please use paging (`offset` + `limit`). (format: int32)
+  --limit: int # Range limit. Maximum 500. For more results please use paging (`offset` + `limit`). (format: int32)
   --filter: string # Filter string
   --x-sds-auth-token: string # Authentication token
 ]: nothing -> record<items: table<displayName: string, id: int, isMember: bool, userInfo: record>, range: record<limit: int, offset: int, total: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({role_id: $role_id} | format pattern "/v4/roles/{role_id}/users") $qp)
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({role_id: (encode-path-segment $role_id)} | format pattern "/v4/roles/{role_id}/users") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4630,19 +4668,19 @@ export def "roles-users create" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-sds-auth-token: string # Authentication token
-  ids: list # List of user IDs
+  ids: list<int> # List of user IDs
 ]: any -> record<items: table<displayName: string, id: int, isMember: bool, userInfo: record>, range: record<limit: int, offset: int, total: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({role_id: $role_id} | format pattern "/v4/roles/{role_id}/users"))
-  let body = {"ids": $ids} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({role_id: (encode-path-segment $role_id)} | format pattern "/v4/roles/{role_id}/users"))
+  let req_body = {"ids": $ids} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Request customer settings
@@ -4663,10 +4701,10 @@ export def "settings request" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/settings")
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4674,7 +4712,7 @@ export def "settings request" [
 #
 # PUT /v4/settings
 # operationId: setSettings
-export def "settings setSettings" [
+export def "settings update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4692,20 +4730,20 @@ export def "settings setSettings" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/settings")
-  let body = {"homeRoomParentName": $home_room_parent_name, "homeRoomQuota": $home_room_quota, "homeRoomsActive": $home_rooms_active} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"homeRoomParentName": $home_room_parent_name, "homeRoomQuota": $home_room_quota, "homeRoomsActive": $home_rooms_active} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Remove system rescue key pair
 #
 # DELETE /v4/settings/keypair
 # operationId: removeSystemRescueKeyPair
-export def "settings-keypair delete-system-rescue" [
+export def "settings-keypair delete-system-rescue-key-pair" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4721,10 +4759,10 @@ export def "settings-keypair delete-system-rescue" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v4/settings/keypair" $qp)
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4732,7 +4770,7 @@ export def "settings-keypair delete-system-rescue" [
 #
 # GET /v4/settings/keypair
 # operationId: requestSystemRescueKeyPair
-export def "settings-keypair request-system-rescue" [
+export def "settings-keypair request-system-rescue-key-pair" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4749,10 +4787,10 @@ export def "settings-keypair request-system-rescue" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v4/settings/keypair" $qp)
-  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4762,7 +4800,7 @@ export def "settings-keypair request-system-rescue" [
 # operationId: setSystemRescueKeyPair
 # --privateKeyContainer shape: {createdAt?: string, createdBy?: int, privateKey: string, version: string}
 # --publicKeyContainer shape: {createdAt?: string, createdBy?: int, publicKey: string, version: string}
-export def "settings-keypair setSystemRescueKeyPair" [
+export def "settings-keypair update-system-rescue-key-pair" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4779,20 +4817,20 @@ export def "settings-keypair setSystemRescueKeyPair" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/settings/keypair")
-  let body = {"privateKeyContainer": $private_key_container, "publicKeyContainer": $public_key_container} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"privateKeyContainer": $private_key_container, "publicKeyContainer": $public_key_container} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Request all system rescue key pairs
 #
 # GET /v4/settings/keypairs
 # operationId: requestAllSystemRescueKeyPairs
-export def "settings-keypairs request-all-system-rescue" [
+export def "settings-keypairs request-list-system-rescue-key-pairs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4807,10 +4845,10 @@ export def "settings-keypairs request-all-system-rescue" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/settings/keypairs")
-  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4821,7 +4859,7 @@ export def "settings-keypairs request-all-system-rescue" [
 # --previousPrivateKey shape: {createdAt?: string, createdBy?: int, privateKey: string, version: string}
 # --privateKeyContainer shape: {createdAt?: string, createdBy?: int, privateKey: string, version: string}
 # --publicKeyContainer shape: {createdAt?: string, createdBy?: int, publicKey: string, version: string}
-export def "settings-keypairs create-and-preserve" [
+export def "settings-keypairs create-and-preserve-key-pair" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4839,13 +4877,13 @@ export def "settings-keypairs create-and-preserve" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/settings/keypairs")
-  let body = {"previousPrivateKey": $previous_private_key, "privateKeyContainer": $private_key_container, "publicKeyContainer": $public_key_container} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"previousPrivateKey": $previous_private_key, "privateKeyContainer": $private_key_container, "publicKeyContainer": $public_key_container} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Request list of notification channels
@@ -4866,10 +4904,10 @@ export def "settings-notifications-channels request" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/settings/notifications/channels")
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4877,7 +4915,7 @@ export def "settings-notifications-channels request" [
 #
 # PUT /v4/settings/notifications/channels
 # operationId: toggleNotificationChannels
-export def "settings-notifications-channels toggleNotificationChannels" [
+export def "settings-notifications-channels update-toggle" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4894,20 +4932,20 @@ export def "settings-notifications-channels toggleNotificationChannels" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/settings/notifications/channels")
-  let body = {"channelId": $channel_id, "isEnabled": $is_enabled} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"channelId": $channel_id, "isEnabled": $is_enabled} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Request list of webhooks
 #
 # GET /v4/settings/webhooks
 # operationId: requestListOfWebhooks
-export def "settings-webhooks request-list-of" [
+export def "settings-webhooks request-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4917,7 +4955,7 @@ export def "settings-webhooks request-list-of" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # Range offset (format: int32)
-  --limit: int # Range limit.  Maximum 500.   For more results please use paging (`offset` + `limit`). (format: int32)
+  --limit: int # Range limit. Maximum 500. For more results please use paging (`offset` + `limit`). (format: int32)
   --filter: string # Filter string
   --qp-sort: string # Sort string
   --x-sds-date-format: string@x-sds-date-format-completer # Date time format (cf. [RFC 3339](https://www.ietf.org/rfc/rfc3339.txt) & [leettime.de](http://leettime.de/))
@@ -4927,10 +4965,10 @@ export def "settings-webhooks request-list-of" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v4/settings/webhooks" $qp)
-  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4949,31 +4987,31 @@ export def "settings-webhooks create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-sds-date-format: string@x-sds-date-format-completer # Date time format (cf. [RFC 3339](https://www.ietf.org/rfc/rfc3339.txt) & [leettime.de](http://leettime.de/))
   --x-sds-auth-token: string # Authentication token
-  event_type_names: list # List of names of event types
+  event_type_names: list<string> # List of names of event types
   --is-enabled: oneof<nothing, bool> # Is enabled
   name: string # Name
   --secret: string # Secret; used for event message signatures
   --trigger-example-event: oneof<nothing, bool> # If set to true, an example event is being created
-  --body-url: string # URL (must begin with the `HTTPS` scheme)
+  url: string # URL (must begin with the `HTTPS` scheme)
 ]: any -> record<createdAt: string, createdBy: record<avatarUuid: string, displayName: string, email: string, firstName: string, id: int, lastName: string, title: string, userName: string, userType: string>, eventTypeNames: list<string>, expireAt: string, failStatus: int, id: int, isEnabled: bool, name: string, secret: string, updatedAt: string, updatedBy: record<avatarUuid: string, displayName: string, email: string, firstName: string, id: int, lastName: string, title: string, userName: string, userType: string>, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/settings/webhooks")
-  let body = {"eventTypeNames": $event_type_names, "isEnabled": $is_enabled, "name": $name, "secret": $secret, "triggerExampleEvent": $trigger_example_event, "url": $body_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"eventTypeNames": $event_type_names, "isEnabled": $is_enabled, "name": $name, "secret": $secret, "triggerExampleEvent": $trigger_example_event, "url": $url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Request list of event types
 #
 # GET /v4/settings/webhooks/event_types
 # operationId: requestListOfEventTypesForConfigManager
-export def "settings-webhooks-event-types request-list-of-event-types-for-config-manager" [
+export def "settings-webhooks-event-types request-list-of-for-config-manager" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4987,10 +5025,10 @@ export def "settings-webhooks-event-types request-list-of-event-types-for-config
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/settings/webhooks/event_types")
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5012,11 +5050,11 @@ export def "settings-webhooks delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({webhook_id: $webhook_id} | format pattern "/v4/settings/webhooks/{webhook_id}"))
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({webhook_id: (encode-path-segment $webhook_id)} | format pattern "/v4/settings/webhooks/{webhook_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5039,11 +5077,11 @@ export def "settings-webhooks request" [
 ]: nothing -> record<createdAt: string, createdBy: record<avatarUuid: string, displayName: string, email: string, firstName: string, id: int, lastName: string, title: string, userName: string, userType: string>, eventTypeNames: list<string>, expireAt: string, failStatus: int, id: int, isEnabled: bool, name: string, secret: string, updatedAt: string, updatedBy: record<avatarUuid: string, displayName: string, email: string, firstName: string, id: int, lastName: string, title: string, userName: string, userType: string>, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({webhook_id: $webhook_id} | format pattern "/v4/settings/webhooks/{webhook_id}"))
-  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({webhook_id: (encode-path-segment $webhook_id)} | format pattern "/v4/settings/webhooks/{webhook_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5063,24 +5101,24 @@ export def "settings-webhooks update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-sds-date-format: string@x-sds-date-format-completer # Date time format (cf. [RFC 3339](https://www.ietf.org/rfc/rfc3339.txt) & [leettime.de](http://leettime.de/))
   --x-sds-auth-token: string # Authentication token
-  --event-type-names: list # List of names of event types
+  --event-type-names: list<string> # List of names of event types
   --is-enabled: oneof<nothing, bool> # Is enabled
   --name: string # Name
   --secret: string # Secret; used for event message signatures
   --trigger-example-event: oneof<nothing, bool> # If set to true, an example event is being created
-  --body-url: string # URL (must begin with the `HTTPS` scheme)
+  --url: string # URL (must begin with the `HTTPS` scheme)
 ]: any -> record<createdAt: string, createdBy: record<avatarUuid: string, displayName: string, email: string, firstName: string, id: int, lastName: string, title: string, userName: string, userType: string>, eventTypeNames: list<string>, expireAt: string, failStatus: int, id: int, isEnabled: bool, name: string, secret: string, updatedAt: string, updatedBy: record<avatarUuid: string, displayName: string, email: string, firstName: string, id: int, lastName: string, title: string, userName: string, userType: string>, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({webhook_id: $webhook_id} | format pattern "/v4/settings/webhooks/{webhook_id}"))
-  let body = {"eventTypeNames": $event_type_names, "isEnabled": $is_enabled, "name": $name, "secret": $secret, "triggerExampleEvent": $trigger_example_event, "url": $body_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({webhook_id: (encode-path-segment $webhook_id)} | format pattern "/v4/settings/webhooks/{webhook_id}"))
+  let req_body = {"eventTypeNames": $event_type_names, "isEnabled": $is_enabled, "name": $name, "secret": $secret, "triggerExampleEvent": $trigger_example_event, "url": $url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Reset webhook lifetime
@@ -5102,11 +5140,11 @@ export def "settings-webhooks-reset-lifetime reset" [
 ]: nothing -> record<createdAt: string, createdBy: record<avatarUuid: string, displayName: string, email: string, firstName: string, id: int, lastName: string, title: string, userName: string, userType: string>, eventTypeNames: list<string>, expireAt: string, failStatus: int, id: int, isEnabled: bool, name: string, secret: string, updatedAt: string, updatedBy: record<avatarUuid: string, displayName: string, email: string, firstName: string, id: int, lastName: string, title: string, userName: string, userType: string>, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({webhook_id: $webhook_id} | format pattern "/v4/settings/webhooks/{webhook_id}/reset_lifetime"))
-  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({webhook_id: (encode-path-segment $webhook_id)} | format pattern "/v4/settings/webhooks/{webhook_id}/reset_lifetime"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5124,19 +5162,19 @@ export def "shares-downloads delete" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-sds-auth-token: string # Authentication token
-  share_ids: list # List of share IDs
+  share_ids: list<int> # List of share IDs
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/shares/downloads")
-  let body = {"shareIds": $share_ids} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"shareIds": $share_ids} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Request list of Download Shares
@@ -5155,7 +5193,7 @@ export def "shares-downloads list" [
   --filter: string # Filter string
   --qp-sort: string # Sort string
   --offset: int # Range offset (format: int32)
-  --limit: int # Range limit.  Maximum 500.   For more results please use paging (`offset` + `limit`). (format: int32)
+  --limit: int # Range limit. Maximum 500. For more results please use paging (`offset` + `limit`). (format: int32)
   --x-sds-date-format: string@x-sds-date-format-completer # Date time format (cf. [RFC 3339](https://www.ietf.org/rfc/rfc3339.txt) & [leettime.de](http://leettime.de/))
   --x-sds-auth-token: string # Authentication token
 ]: nothing -> record<items: table<accessKey: string, classification: int, cntDownloads: int, createdAt: string, createdBy: record, dataUrl: string, expireAt: string, id: int, internalNotes: string, isEncrypted: bool, isProtected: bool, maxDownloads: int, name: string, nodeId: int, nodePath: string, nodeType: string, notes: string, notifyCreator: bool, recipients: string, showCreatorName: bool, showCreatorUsername: bool, smsRecipients: string, updatedAt: string, updatedBy: record>, range: record<limit: int, offset: int, total: int>> {
@@ -5163,10 +5201,10 @@ export def "shares-downloads list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v4/shares/downloads" $qp)
-  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5196,39 +5234,39 @@ export def "shares-downloads create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-sds-date-format: string@x-sds-date-format-completer # Date time format (cf. [RFC 3339](https://www.ietf.org/rfc/rfc3339.txt) & [leettime.de](http://leettime.de/))
   --x-sds-auth-token: string # Authentication token
-  --creator-language: string # &#128679; Deprecated since v4.20.0  Language tag for messages to creator (DEPRECATED)
+  --creator-language: string # &#128679; Deprecated since v4.20.0 Language tag for messages to creator (DEPRECATED)
   --expiration: record # Expiration information — shape: {enableExpiration: bool, expireAt?: string}
   --file-key: record # File key information — shape: {iv: string, key: string, tag: string, version: string}
-  --internal-notes: string # &#128640; Since v4.11.0  Internal notes
+  --internal-notes: string # &#128640; Since v4.11.0 Internal notes
   --key-pair: record # Key pair container — shape: {privateKeyContainer: record, publicKeyContainer: record}
-  --mail-body: string # &#128679; Deprecated since v4.11.0  Notification email content (DEPRECATED)
-  --mail-recipients: string # &#128679; Deprecated since v4.11.0  CSV string of recipient email addresses (DEPRECATED)
-  --mail-subject: string # &#128679; Deprecated since v4.11.0  Notification email subject (DEPRECATED)
+  --mail-body: string # &#128679; Deprecated since v4.11.0 Notification email content (DEPRECATED)
+  --mail-recipients: string # &#128679; Deprecated since v4.11.0 CSV string of recipient email addresses (DEPRECATED)
+  --mail-subject: string # &#128679; Deprecated since v4.11.0 Notification email subject (DEPRECATED)
   --max-downloads: int # Max allowed downloads (format: int32)
-  --name: string # Alias name  (default: name of the shared node)
+  --name: string # Alias name (default: name of the shared node)
   node_id: int # Source node ID (format: int64)
   --notes: string # User notes
-  --notify-creator: oneof<nothing, bool> # &#128679; Deprecated since v4.20.0  Notify creator on every download. (DEPRECATED, default: false)
+  --notify-creator: oneof<nothing, bool> # &#128679; Deprecated since v4.20.0 Notify creator on every download. (DEPRECATED, default: false)
   --password: string # Access password, not allowed for encrypted shares
   --receiver-language: string # Language tag for messages to receiver
-  --send-mail: oneof<nothing, bool> # &#128679; Deprecated since v4.11.0  Notify recipients via email  Please use `POST /shares/downloads/{share_id}/email` API instead. (DEPRECATED, default: false)
-  --send-sms: oneof<nothing, bool> # &#128679; Deprecated since v4.11.0  Send share password via SMS  Please use `textMessageRecipients` attribute instead. (DEPRECATED, default: false)
+  --send-mail: oneof<nothing, bool> # &#128679; Deprecated since v4.11.0 Notify recipients via email Please use `POST /shares/downloads/{share_id}/email` API instead. (DEPRECATED, default: false)
+  --send-sms: oneof<nothing, bool> # &#128679; Deprecated since v4.11.0 Send share password via SMS Please use `textMessageRecipients` attribute instead. (DEPRECATED, default: false)
   --show-creator-name: oneof<nothing, bool> # Show creator first and last name. (default: false)
   --show-creator-username: oneof<nothing, bool> # Show creator email address. (default: false)
-  --sms-recipients: string # &#128679; Deprecated since v4.11.0  CSV string of recipient MSISDNs (DEPRECATED)
-  --text-message-recipients: list # &#128640; Since v4.11.0  List of recipient FQTNs  E.123 / E.164 Format
+  --sms-recipients: string # &#128679; Deprecated since v4.11.0 CSV string of recipient MSISDNs (DEPRECATED)
+  --text-message-recipients: list<string> # &#128640; Since v4.11.0 List of recipient FQTNs E.123 / E.164 Format
 ]: any -> record<accessKey: string, classification: int, cntDownloads: int, createdAt: string, createdBy: record<avatarUuid: string, displayName: string, email: string, firstName: string, id: int, lastName: string, title: string, userName: string, userType: string>, dataUrl: string, expireAt: string, id: int, internalNotes: string, isEncrypted: bool, isProtected: bool, maxDownloads: int, name: string, nodeId: int, nodePath: string, nodeType: string, notes: string, notifyCreator: bool, recipients: string, showCreatorName: bool, showCreatorUsername: bool, smsRecipients: string, updatedAt: string, updatedBy: record<avatarUuid: string, displayName: string, email: string, firstName: string, id: int, lastName: string, title: string, userName: string, userType: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/shares/downloads")
-  let body = {"creatorLanguage": $creator_language, "expiration": $expiration, "fileKey": $file_key, "internalNotes": $internal_notes, "keyPair": $key_pair, "mailBody": $mail_body, "mailRecipients": $mail_recipients, "mailSubject": $mail_subject, "maxDownloads": $max_downloads, "name": $name, "nodeId": $node_id, "notes": $notes, "notifyCreator": $notify_creator, "password": $password, "receiverLanguage": $receiver_language, "sendMail": $send_mail, "sendSms": $send_sms, "showCreatorName": $show_creator_name, "showCreatorUsername": $show_creator_username, "smsRecipients": $sms_recipients, "textMessageRecipients": $text_message_recipients} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"creatorLanguage": $creator_language, "expiration": $expiration, "fileKey": $file_key, "internalNotes": $internal_notes, "keyPair": $key_pair, "mailBody": $mail_body, "mailRecipients": $mail_recipients, "mailSubject": $mail_subject, "maxDownloads": $max_downloads, "name": $name, "nodeId": $node_id, "notes": $notes, "notifyCreator": $notify_creator, "password": $password, "receiverLanguage": $receiver_language, "sendMail": $send_mail, "sendSms": $send_sms, "showCreatorName": $show_creator_name, "showCreatorUsername": $show_creator_username, "smsRecipients": $sms_recipients, "textMessageRecipients": $text_message_recipients} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update a list of Download Shares
@@ -5248,7 +5286,7 @@ export def "shares-downloads update" [
   --x-sds-auth-token: string # Authentication token
   --expiration: record # Expiration information — shape: {enableExpiration: bool, expireAt?: string}
   --max-downloads: int # Max allowed downloads (format: int32)
-  object_ids: list # List of ids
+  object_ids: list<int> # List of ids
   --reset-max-downloads: oneof<nothing, bool> # Set 'true' to reset 'maxDownloads' for Download Share.
   --show-creator-name: oneof<nothing, bool> # Show creator first and last name.
   --show-creator-username: oneof<nothing, bool> # Show creator email address.
@@ -5257,13 +5295,13 @@ export def "shares-downloads update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/shares/downloads")
-  let body = {"expiration": $expiration, "maxDownloads": $max_downloads, "objectIds": $object_ids, "resetMaxDownloads": $reset_max_downloads, "showCreatorName": $show_creator_name, "showCreatorUsername": $show_creator_username} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"expiration": $expiration, "maxDownloads": $max_downloads, "objectIds": $object_ids, "resetMaxDownloads": $reset_max_downloads, "showCreatorName": $show_creator_name, "showCreatorUsername": $show_creator_username} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Remove Download Share
@@ -5284,11 +5322,11 @@ export def "shares-downloads delete-by-share_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({share_id: $share_id} | format pattern "/v4/shares/downloads/{share_id}"))
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({share_id: (encode-path-segment $share_id)} | format pattern "/v4/shares/downloads/{share_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5311,11 +5349,11 @@ export def "shares-downloads request" [
 ]: nothing -> record<accessKey: string, classification: int, cntDownloads: int, createdAt: string, createdBy: record<avatarUuid: string, displayName: string, email: string, firstName: string, id: int, lastName: string, title: string, userName: string, userType: string>, dataUrl: string, expireAt: string, id: int, internalNotes: string, isEncrypted: bool, isProtected: bool, maxDownloads: int, name: string, nodeId: int, nodePath: string, nodeType: string, notes: string, notifyCreator: bool, recipients: string, showCreatorName: bool, showCreatorUsername: bool, smsRecipients: string, updatedAt: string, updatedBy: record<avatarUuid: string, displayName: string, email: string, firstName: string, id: int, lastName: string, title: string, userName: string, userType: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({share_id: $share_id} | format pattern "/v4/shares/downloads/{share_id}"))
-  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({share_id: (encode-path-segment $share_id)} | format pattern "/v4/shares/downloads/{share_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5339,37 +5377,37 @@ export def "shares-downloads update-by-share_id" [
   --x-sds-auth-token: string # Authentication token
   --default-country: string # Country shorthand symbol (cf. ISO 3166-2)
   --expiration: record # Expiration information — shape: {enableExpiration: bool, expireAt?: string}
-  --internal-notes: string # &#128640; Since v4.11.0  Internal notes
+  --internal-notes: string # &#128640; Since v4.11.0 Internal notes
   --max-downloads: int # Max allowed downloads (format: int32)
   --name: string # Alias name
   --notes: string # User notes
-  --notify-creator: oneof<nothing, bool> # &#128679; Deprecated since v4.20.0  Notify creator on every download. (DEPRECATED)
+  --notify-creator: oneof<nothing, bool> # &#128679; Deprecated since v4.20.0 Notify creator on every download. (DEPRECATED)
   --password: string # Access password, not allowed for encrypted shares
   --receiver-language: string # Language tag for messages to receiver
   --reset-max-downloads: oneof<nothing, bool> # Set 'true' to reset 'maxDownloads' for Download Share.
   --reset-password: oneof<nothing, bool> # Set 'true' to reset 'password' for Download Share.
   --show-creator-name: oneof<nothing, bool> # Show creator first and last name.
   --show-creator-username: oneof<nothing, bool> # Show creator email address.
-  --text-message-recipients: list # List of recipient FQTNs  E.123 / E.164 Format
+  --text-message-recipients: list<string> # List of recipient FQTNs E.123 / E.164 Format
 ]: any -> record<accessKey: string, classification: int, cntDownloads: int, createdAt: string, createdBy: record<avatarUuid: string, displayName: string, email: string, firstName: string, id: int, lastName: string, title: string, userName: string, userType: string>, dataUrl: string, expireAt: string, id: int, internalNotes: string, isEncrypted: bool, isProtected: bool, maxDownloads: int, name: string, nodeId: int, nodePath: string, nodeType: string, notes: string, notifyCreator: bool, recipients: string, showCreatorName: bool, showCreatorUsername: bool, smsRecipients: string, updatedAt: string, updatedBy: record<avatarUuid: string, displayName: string, email: string, firstName: string, id: int, lastName: string, title: string, userName: string, userType: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({share_id: $share_id} | format pattern "/v4/shares/downloads/{share_id}"))
-  let body = {"defaultCountry": $default_country, "expiration": $expiration, "internalNotes": $internal_notes, "maxDownloads": $max_downloads, "name": $name, "notes": $notes, "notifyCreator": $notify_creator, "password": $password, "receiverLanguage": $receiver_language, "resetMaxDownloads": $reset_max_downloads, "resetPassword": $reset_password, "showCreatorName": $show_creator_name, "showCreatorUsername": $show_creator_username, "textMessageRecipients": $text_message_recipients} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({share_id: (encode-path-segment $share_id)} | format pattern "/v4/shares/downloads/{share_id}"))
+  let req_body = {"defaultCountry": $default_country, "expiration": $expiration, "internalNotes": $internal_notes, "maxDownloads": $max_downloads, "name": $name, "notes": $notes, "notifyCreator": $notify_creator, "password": $password, "receiverLanguage": $receiver_language, "resetMaxDownloads": $reset_max_downloads, "resetPassword": $reset_password, "showCreatorName": $show_creator_name, "showCreatorUsername": $show_creator_username, "textMessageRecipients": $text_message_recipients} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Send an existing Download Share link via email
 #
 # POST /v4/shares/downloads/{share_id}/email
 # operationId: sendDownloadShareLinkViaEmail
-export def "shares-downloads-email send-download-share-link-via" [
+export def "shares-downloads-email send-link-via" [
   share_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5380,21 +5418,21 @@ export def "shares-downloads-email send-download-share-link-via" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-sds-auth-token: string # Authentication token
-  --body-body: string # Notification email content
+  body: string # Notification email content
   --receiver-language: string # Language tag for messages to receiver
-  recipients: list # List of recipient email addresses
+  recipients: list<string> # List of recipient email addresses
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({share_id: $share_id} | format pattern "/v4/shares/downloads/{share_id}/email"))
-  let body = {"body": $body_body, "receiverLanguage": $receiver_language, "recipients": $recipients} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({share_id: (encode-path-segment $share_id)} | format pattern "/v4/shares/downloads/{share_id}/email"))
+  let req_body = {"body": $body, "receiverLanguage": $receiver_language, "recipients": $recipients} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Request Download Share via QR Code
@@ -5416,11 +5454,11 @@ export def "shares-downloads-qr request" [
 ]: nothing -> record<accessKey: string, classification: int, cntDownloads: int, createdAt: string, createdBy: record<avatarUuid: string, displayName: string, email: string, firstName: string, id: int, lastName: string, title: string, userName: string, userType: string>, dataUrl: string, expireAt: string, id: int, internalNotes: string, isEncrypted: bool, isProtected: bool, maxDownloads: int, name: string, nodeId: int, nodePath: string, nodeType: string, notes: string, notifyCreator: bool, recipients: string, showCreatorName: bool, showCreatorUsername: bool, smsRecipients: string, updatedAt: string, updatedBy: record<avatarUuid: string, displayName: string, email: string, firstName: string, id: int, lastName: string, title: string, userName: string, userType: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({share_id: $share_id} | format pattern "/v4/shares/downloads/{share_id}/qr"))
-  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({share_id: (encode-path-segment $share_id)} | format pattern "/v4/shares/downloads/{share_id}/qr"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5438,19 +5476,19 @@ export def "shares-uploads delete" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-sds-auth-token: string # Authentication token
-  share_ids: list # List of share IDs
+  share_ids: list<int> # List of share IDs
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/shares/uploads")
-  let body = {"shareIds": $share_ids} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"shareIds": $share_ids} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Request list of Upload Shares
@@ -5469,7 +5507,7 @@ export def "shares-uploads list" [
   --filter: string # Filter string
   --qp-sort: string # Sort string
   --offset: int # Range offset (format: int32)
-  --limit: int # Range limit.  Maximum 500.   For more results please use paging (`offset` + `limit`). (format: int32)
+  --limit: int # Range limit. Maximum 500. For more results please use paging (`offset` + `limit`). (format: int32)
   --x-sds-date-format: string@x-sds-date-format-completer # Date time format (cf. [RFC 3339](https://www.ietf.org/rfc/rfc3339.txt) & [leettime.de](http://leettime.de/))
   --x-sds-auth-token: string # Authentication token
 ]: nothing -> record<items: table<accessKey: string, cntFiles: int, cntUploads: int, createdAt: string, createdBy: record, dataUrl: string, expireAt: string, filesExpiryPeriod: int, id: int, internalNotes: string, isEncrypted: bool, isProtected: bool, maxSize: int, maxSlots: int, name: string, notes: string, notifyCreator: bool, recipients: string, showCreatorName: bool, showCreatorUsername: bool, showUploadedFiles: bool, smsRecipients: string, targetId: int, targetPath: string, targetType: string, updatedAt: string, updatedBy: record>, range: record<limit: int, offset: int, total: int>> {
@@ -5477,10 +5515,10 @@ export def "shares-uploads list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v4/shares/uploads" $qp)
-  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5508,40 +5546,40 @@ export def "shares-uploads create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-sds-date-format: string@x-sds-date-format-completer # Date time format (cf. [RFC 3339](https://www.ietf.org/rfc/rfc3339.txt) & [leettime.de](http://leettime.de/))
   --x-sds-auth-token: string # Authentication token
-  --creator-language: string # &#128679; Deprecated since v4.20.0  Language tag for messages to creator (DEPRECATED)
+  --creator-language: string # &#128679; Deprecated since v4.20.0 Language tag for messages to creator (DEPRECATED)
   --expiration: record # Expiration information — shape: {enableExpiration: bool, expireAt?: string}
   --files-expiry-period: int # Number of days after which uploaded files expire (format: int32)
-  --internal-notes: string # &#128640; Since v4.11.0  Internal notes
-  --mail-body: string # &#128679; Deprecated since v4.11.0  Notification email content (DEPRECATED)
-  --mail-recipients: string # &#128679; Deprecated since v4.11.0  CSV string of recipient email addresses (DEPRECATED)
-  --mail-subject: string # &#128679; Deprecated since v4.11.0  Notification email subject (DEPRECATED)
+  --internal-notes: string # &#128640; Since v4.11.0 Internal notes
+  --mail-body: string # &#128679; Deprecated since v4.11.0 Notification email content (DEPRECATED)
+  --mail-recipients: string # &#128679; Deprecated since v4.11.0 CSV string of recipient email addresses (DEPRECATED)
+  --mail-subject: string # &#128679; Deprecated since v4.11.0 Notification email subject (DEPRECATED)
   --max-size: int # Maximal total size of uploaded files (in bytes) (format: int64)
   --max-slots: int # Maximal amount of files to upload (format: int32)
-  --name: string # Alias name  (default: name of the shared node)
+  --name: string # Alias name (default: name of the shared node)
   --notes: string # User notes
-  --notify-creator: oneof<nothing, bool> # &#128679; Deprecated since v4.20.0  Notify creator on every upload. (DEPRECATED, default: false)
+  --notify-creator: oneof<nothing, bool> # &#128679; Deprecated since v4.20.0 Notify creator on every upload. (DEPRECATED, default: false)
   --password: string # Password
   --receiver-language: string # Language tag for messages to receiver
-  --send-mail: oneof<nothing, bool> # &#128679; Deprecated since v4.11.0  Notify recipients via email  Please use `POST /shares/uploads/{share_id}/email` API instead. (DEPRECATED, default: false)
-  --send-sms: oneof<nothing, bool> # &#128679; Deprecated since v4.11.0  Send share password via SMS  Please use `textMessageRecipients` attribute instead. (DEPRECATED, default: false)
-  --show-creator-name: oneof<nothing, bool> # &#128640; Since v4.11.0  Show creator first and last name. (default: false)
-  --show-creator-username: oneof<nothing, bool> # &#128640; Since v4.11.0  Show creator email address. (default: false)
+  --send-mail: oneof<nothing, bool> # &#128679; Deprecated since v4.11.0 Notify recipients via email Please use `POST /shares/uploads/{share_id}/email` API instead. (DEPRECATED, default: false)
+  --send-sms: oneof<nothing, bool> # &#128679; Deprecated since v4.11.0 Send share password via SMS Please use `textMessageRecipients` attribute instead. (DEPRECATED, default: false)
+  --show-creator-name: oneof<nothing, bool> # &#128640; Since v4.11.0 Show creator first and last name. (default: false)
+  --show-creator-username: oneof<nothing, bool> # &#128640; Since v4.11.0 Show creator email address. (default: false)
   --show-uploaded-files: oneof<nothing, bool> # Allow display of already uploaded files (default: false)
-  --sms-recipients: string # &#128679; Deprecated since v4.11.0  CSV string of recipient MSISDNs (DEPRECATED)
+  --sms-recipients: string # &#128679; Deprecated since v4.11.0 CSV string of recipient MSISDNs (DEPRECATED)
   target_id: int # Target room or folder ID (format: int64)
-  --text-message-recipients: list # &#128640; Since v4.11.0  List of recipient FQTNs  E.123 / E.164 Format
+  --text-message-recipients: list<string> # &#128640; Since v4.11.0 List of recipient FQTNs E.123 / E.164 Format
 ]: any -> record<accessKey: string, cntFiles: int, cntUploads: int, createdAt: string, createdBy: record<avatarUuid: string, displayName: string, email: string, firstName: string, id: int, lastName: string, title: string, userName: string, userType: string>, dataUrl: string, expireAt: string, filesExpiryPeriod: int, id: int, internalNotes: string, isEncrypted: bool, isProtected: bool, maxSize: int, maxSlots: int, name: string, notes: string, notifyCreator: bool, recipients: string, showCreatorName: bool, showCreatorUsername: bool, showUploadedFiles: bool, smsRecipients: string, targetId: int, targetPath: string, targetType: string, updatedAt: string, updatedBy: record<avatarUuid: string, displayName: string, email: string, firstName: string, id: int, lastName: string, title: string, userName: string, userType: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/shares/uploads")
-  let body = {"creatorLanguage": $creator_language, "expiration": $expiration, "filesExpiryPeriod": $files_expiry_period, "internalNotes": $internal_notes, "mailBody": $mail_body, "mailRecipients": $mail_recipients, "mailSubject": $mail_subject, "maxSize": $max_size, "maxSlots": $max_slots, "name": $name, "notes": $notes, "notifyCreator": $notify_creator, "password": $password, "receiverLanguage": $receiver_language, "sendMail": $send_mail, "sendSms": $send_sms, "showCreatorName": $show_creator_name, "showCreatorUsername": $show_creator_username, "showUploadedFiles": $show_uploaded_files, "smsRecipients": $sms_recipients, "targetId": $target_id, "textMessageRecipients": $text_message_recipients} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"creatorLanguage": $creator_language, "expiration": $expiration, "filesExpiryPeriod": $files_expiry_period, "internalNotes": $internal_notes, "mailBody": $mail_body, "mailRecipients": $mail_recipients, "mailSubject": $mail_subject, "maxSize": $max_size, "maxSlots": $max_slots, "name": $name, "notes": $notes, "notifyCreator": $notify_creator, "password": $password, "receiverLanguage": $receiver_language, "sendMail": $send_mail, "sendSms": $send_sms, "showCreatorName": $show_creator_name, "showCreatorUsername": $show_creator_username, "showUploadedFiles": $show_uploaded_files, "smsRecipients": $sms_recipients, "targetId": $target_id, "textMessageRecipients": $text_message_recipients} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update List of Upload Shares
@@ -5564,7 +5602,7 @@ export def "shares-uploads update" [
   --files-expiry-period: int # Number of days after which uploaded files expire (format: int32)
   --max-size: int # Maximal total size of uploaded files (in bytes) (format: int64)
   --max-slots: int # Maximal amount of files to upload (format: int32)
-  object_ids: list # List of ids
+  object_ids: list<int> # List of ids
   --reset-files-expiry-period: oneof<nothing, bool> # Set 'true' to reset 'filesExpiryPeriod' for Upload Share
   --reset-max-size: oneof<nothing, bool> # Set 'true' to reset 'maxSize' for Upload Share
   --reset-max-slots: oneof<nothing, bool> # Set 'true' to reset 'maxSlots' for Upload Share
@@ -5576,13 +5614,13 @@ export def "shares-uploads update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/shares/uploads")
-  let body = {"expiration": $expiration, "filesExpiryPeriod": $files_expiry_period, "maxSize": $max_size, "maxSlots": $max_slots, "objectIds": $object_ids, "resetFilesExpiryPeriod": $reset_files_expiry_period, "resetMaxSize": $reset_max_size, "resetMaxSlots": $reset_max_slots, "showCreatorName": $show_creator_name, "showCreatorUsername": $show_creator_username, "showUploadedFiles": $show_uploaded_files} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"expiration": $expiration, "filesExpiryPeriod": $files_expiry_period, "maxSize": $max_size, "maxSlots": $max_slots, "objectIds": $object_ids, "resetFilesExpiryPeriod": $reset_files_expiry_period, "resetMaxSize": $reset_max_size, "resetMaxSlots": $reset_max_slots, "showCreatorName": $show_creator_name, "showCreatorUsername": $show_creator_username, "showUploadedFiles": $show_uploaded_files} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Remove Upload Share
@@ -5603,11 +5641,11 @@ export def "shares-uploads delete-by-share_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({share_id: $share_id} | format pattern "/v4/shares/uploads/{share_id}"))
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({share_id: (encode-path-segment $share_id)} | format pattern "/v4/shares/uploads/{share_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5630,11 +5668,11 @@ export def "shares-uploads request" [
 ]: nothing -> record<accessKey: string, cntFiles: int, cntUploads: int, createdAt: string, createdBy: record<avatarUuid: string, displayName: string, email: string, firstName: string, id: int, lastName: string, title: string, userName: string, userType: string>, dataUrl: string, expireAt: string, filesExpiryPeriod: int, id: int, internalNotes: string, isEncrypted: bool, isProtected: bool, maxSize: int, maxSlots: int, name: string, notes: string, notifyCreator: bool, recipients: string, showCreatorName: bool, showCreatorUsername: bool, showUploadedFiles: bool, smsRecipients: string, targetId: int, targetPath: string, targetType: string, updatedAt: string, updatedBy: record<avatarUuid: string, displayName: string, email: string, firstName: string, id: int, lastName: string, title: string, userName: string, userType: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({share_id: $share_id} | format pattern "/v4/shares/uploads/{share_id}"))
-  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({share_id: (encode-path-segment $share_id)} | format pattern "/v4/shares/uploads/{share_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5659,12 +5697,12 @@ export def "shares-uploads update-by-share_id" [
   --default-country: string # Country shorthand symbol (cf. ISO 3166-2)
   --expiration: record # Expiration information — shape: {enableExpiration: bool, expireAt?: string}
   --files-expiry-period: int # Number of days after which uploaded files expire (format: int32)
-  --internal-notes: string # &#128640; Since v4.11.0  Internal notes
+  --internal-notes: string # &#128640; Since v4.11.0 Internal notes
   --max-size: int # Maximal total size of uploaded files (in bytes) (format: int64)
   --max-slots: int # Maximal amount of files to upload (format: int32)
   --name: string # Alias name
   --notes: string # User notes
-  --notify-creator: oneof<nothing, bool> # &#128679; Deprecated since v4.20.0  Notify creator on every upload. (DEPRECATED)
+  --notify-creator: oneof<nothing, bool> # &#128679; Deprecated since v4.20.0 Notify creator on every upload. (DEPRECATED)
   --password: string # Password
   --receiver-language: string # Language tag for messages to receiver
   --reset-files-expiry-period: oneof<nothing, bool> # Set 'true' to reset 'filesExpiryPeriod' for Upload Share
@@ -5674,26 +5712,26 @@ export def "shares-uploads update-by-share_id" [
   --show-creator-name: oneof<nothing, bool> # Show creator first and last name.
   --show-creator-username: oneof<nothing, bool> # Show creator email address.
   --show-uploaded-files: oneof<nothing, bool> # Allow display of already uploaded files
-  --text-message-recipients: list # List of recipient FQTNs  E.123 / E.164 Format
+  --text-message-recipients: list<string> # List of recipient FQTNs E.123 / E.164 Format
 ]: any -> record<accessKey: string, cntFiles: int, cntUploads: int, createdAt: string, createdBy: record<avatarUuid: string, displayName: string, email: string, firstName: string, id: int, lastName: string, title: string, userName: string, userType: string>, dataUrl: string, expireAt: string, filesExpiryPeriod: int, id: int, internalNotes: string, isEncrypted: bool, isProtected: bool, maxSize: int, maxSlots: int, name: string, notes: string, notifyCreator: bool, recipients: string, showCreatorName: bool, showCreatorUsername: bool, showUploadedFiles: bool, smsRecipients: string, targetId: int, targetPath: string, targetType: string, updatedAt: string, updatedBy: record<avatarUuid: string, displayName: string, email: string, firstName: string, id: int, lastName: string, title: string, userName: string, userType: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({share_id: $share_id} | format pattern "/v4/shares/uploads/{share_id}"))
-  let body = {"defaultCountry": $default_country, "expiration": $expiration, "filesExpiryPeriod": $files_expiry_period, "internalNotes": $internal_notes, "maxSize": $max_size, "maxSlots": $max_slots, "name": $name, "notes": $notes, "notifyCreator": $notify_creator, "password": $password, "receiverLanguage": $receiver_language, "resetFilesExpiryPeriod": $reset_files_expiry_period, "resetMaxSize": $reset_max_size, "resetMaxSlots": $reset_max_slots, "resetPassword": $reset_password, "showCreatorName": $show_creator_name, "showCreatorUsername": $show_creator_username, "showUploadedFiles": $show_uploaded_files, "textMessageRecipients": $text_message_recipients} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({share_id: (encode-path-segment $share_id)} | format pattern "/v4/shares/uploads/{share_id}"))
+  let req_body = {"defaultCountry": $default_country, "expiration": $expiration, "filesExpiryPeriod": $files_expiry_period, "internalNotes": $internal_notes, "maxSize": $max_size, "maxSlots": $max_slots, "name": $name, "notes": $notes, "notifyCreator": $notify_creator, "password": $password, "receiverLanguage": $receiver_language, "resetFilesExpiryPeriod": $reset_files_expiry_period, "resetMaxSize": $reset_max_size, "resetMaxSlots": $reset_max_slots, "resetPassword": $reset_password, "showCreatorName": $show_creator_name, "showCreatorUsername": $show_creator_username, "showUploadedFiles": $show_uploaded_files, "textMessageRecipients": $text_message_recipients} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Send an existing Upload Share link via email
 #
 # POST /v4/shares/uploads/{share_id}/email
 # operationId: sendUploadShareLinkViaEmail
-export def "shares-uploads-email send-upload-share-link-via" [
+export def "shares-uploads-email send-link-via" [
   share_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5704,21 +5742,21 @@ export def "shares-uploads-email send-upload-share-link-via" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-sds-auth-token: string # Authentication token
-  --body-body: string # Notification email content
+  body: string # Notification email content
   --receiver-language: string # Language tag for messages to receiver
-  recipients: list # List of recipient email addresses
+  recipients: list<string> # List of recipient email addresses
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({share_id: $share_id} | format pattern "/v4/shares/uploads/{share_id}/email"))
-  let body = {"body": $body_body, "receiverLanguage": $receiver_language, "recipients": $recipients} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({share_id: (encode-path-segment $share_id)} | format pattern "/v4/shares/uploads/{share_id}/email"))
+  let req_body = {"body": $body, "receiverLanguage": $receiver_language, "recipients": $recipients} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Request Upload Share via QR Code
@@ -5740,11 +5778,11 @@ export def "shares-uploads-qr request" [
 ]: nothing -> record<accessKey: string, cntFiles: int, cntUploads: int, createdAt: string, createdBy: record<avatarUuid: string, displayName: string, email: string, firstName: string, id: int, lastName: string, title: string, userName: string, userType: string>, dataUrl: string, expireAt: string, filesExpiryPeriod: int, id: int, internalNotes: string, isEncrypted: bool, isProtected: bool, maxSize: int, maxSlots: int, name: string, notes: string, notifyCreator: bool, recipients: string, showCreatorName: bool, showCreatorUsername: bool, showUploadedFiles: bool, smsRecipients: string, targetId: int, targetPath: string, targetType: string, updatedAt: string, updatedBy: record<avatarUuid: string, displayName: string, email: string, firstName: string, id: int, lastName: string, title: string, userName: string, userType: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({share_id: $share_id} | format pattern "/v4/shares/uploads/{share_id}/qr"))
-  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({share_id: (encode-path-segment $share_id)} | format pattern "/v4/shares/uploads/{share_id}/qr"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5767,20 +5805,20 @@ export def "system-config-actions-test-ad test" [
   server_admin_password: string # Password of Active Directory administrative account
   server_ip: string # IPv4 or IPv6 address or host name
   server_port: int # Port (format: int32)
-  --ssl-finger-print: string # SSL finger print of Active Directory server.  Mandatory for LDAPS connections.  Format: `Algorithm/Fingerprint`
+  --ssl-finger-print: string # SSL finger print of Active Directory server. Mandatory for LDAPS connections. Format: `Algorithm/Fingerprint`
   --use-ldaps: oneof<nothing, bool> # Determines whether LDAPS should be used instead of plain LDAP. (default: false)
 ]: any -> record<ldapUsersDomain: string, serverAdminName: string, serverAdminPassword: string, serverIp: string, serverPort: int, sslFingerPrint: string, useLdaps: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/system/config/actions/test/ad")
-  let body = {"ldapUsersDomain": $ldap_users_domain, "serverAdminName": $server_admin_name, "serverAdminPassword": $server_admin_password, "serverIp": $server_ip, "serverPort": $server_port, "sslFingerPrint": $ssl_finger_print, "useLdaps": $use_ldaps} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"ldapUsersDomain": $ldap_users_domain, "serverAdminName": $server_admin_name, "serverAdminPassword": $server_admin_password, "serverIp": $server_ip, "serverPort": $server_port, "sslFingerPrint": $ssl_finger_print, "useLdaps": $use_ldaps} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Test RADIUS server availability
@@ -5801,10 +5839,10 @@ export def "system-config-actions-test-radius test" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/system/config/actions/test/radius")
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5826,10 +5864,10 @@ export def "system-config-auth-ads list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/system/config/auth/ads")
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5847,32 +5885,32 @@ export def "system-config-auth-ads create" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-sds-auth-token: string # Authentication token
-  --ad-export-group: string # If `userImport` is set to `true`,  the user must be member of this Active Directory group to receive a newly created DRACOON account.
+  --ad-export-group: string # If `userImport` is set to `true`, the user must be member of this Active Directory group to receive a newly created DRACOON account.
   alias: string # Unique name for an Active Directory configuration
-  --create-home-folder: oneof<nothing, bool> # DEPRECATED, will be ignored  Determines whether a room is created for each user that is created by automatic import (like a home folder).  Room's name will equal the user's login name. (default: false)
-  --home-folder-parent: int # DEPRECATED, will be ignored  ID of the room in which the individual rooms for users will be created. (format: int64)
+  --create-home-folder: oneof<nothing, bool> # DEPRECATED, will be ignored Determines whether a room is created for each user that is created by automatic import (like a home folder). Room's name will equal the user's login name. (default: false)
+  --home-folder-parent: int # DEPRECATED, will be ignored ID of the room in which the individual rooms for users will be created. (format: int64)
   ldap_users_domain: string # Search scope of Active Directory; only users below this node can log on.
-  --sds-import-group: int # User group that is assigned to users who are created by automatic import.  Reset with `0` (format: int64)
+  --sds-import-group: int # User group that is assigned to users who are created by automatic import. Reset with `0` (format: int64)
   server_admin_name: string # Distinguished Name (DN) of Active Directory administrative account
   server_admin_password: string # Password of Active Directory administrative account
   server_ip: string # IPv4 or IPv6 address or host name
   server_port: int # Port (format: int32)
-  --ssl-finger-print: string # SSL finger print of Active Directory server.  Mandatory for LDAPS connections.  Format: `Algorithm/Fingerprint`
+  --ssl-finger-print: string # SSL finger print of Active Directory server. Mandatory for LDAPS connections. Format: `Algorithm/Fingerprint`
   --use-ldaps: oneof<nothing, bool> # Determines whether LDAPS should be used instead of plain LDAP. (default: false)
   user_filter: string # Name of Active Directory attribute that is used as login name.
-  --user-import: oneof<nothing, bool> # Determines if a DRACOON account is automatically created for a new user  who successfully logs on with his / her AD / IDP account. (default: false)
+  --user-import: oneof<nothing, bool> # Determines if a DRACOON account is automatically created for a new user who successfully logs on with his / her AD / IDP account. (default: false)
 ]: any -> record<adExportGroup: string, alias: string, createHomeFolder: bool, homeFolderParent: int, id: int, ldapUsersDomain: string, sdsImportGroup: int, serverAdminName: string, serverIp: string, serverPort: int, sslFingerPrint: string, useLdaps: bool, userFilter: string, userImport: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/system/config/auth/ads")
-  let body = {"adExportGroup": $ad_export_group, "alias": $alias, "createHomeFolder": $create_home_folder, "homeFolderParent": $home_folder_parent, "ldapUsersDomain": $ldap_users_domain, "sdsImportGroup": $sds_import_group, "serverAdminName": $server_admin_name, "serverAdminPassword": $server_admin_password, "serverIp": $server_ip, "serverPort": $server_port, "sslFingerPrint": $ssl_finger_print, "useLdaps": $use_ldaps, "userFilter": $user_filter, "userImport": $user_import} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"adExportGroup": $ad_export_group, "alias": $alias, "createHomeFolder": $create_home_folder, "homeFolderParent": $home_folder_parent, "ldapUsersDomain": $ldap_users_domain, "sdsImportGroup": $sds_import_group, "serverAdminName": $server_admin_name, "serverAdminPassword": $server_admin_password, "serverIp": $server_ip, "serverPort": $server_port, "sslFingerPrint": $ssl_finger_print, "useLdaps": $use_ldaps, "userFilter": $user_filter, "userImport": $user_import} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Remove Active Directory configuration
@@ -5893,11 +5931,11 @@ export def "system-config-auth-ads delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({ad_id: $ad_id} | format pattern "/v4/system/config/auth/ads/{ad_id}"))
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({ad_id: (encode-path-segment $ad_id)} | format pattern "/v4/system/config/auth/ads/{ad_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5919,11 +5957,11 @@ export def "system-config-auth-ads request" [
 ]: nothing -> record<adExportGroup: string, alias: string, createHomeFolder: bool, homeFolderParent: int, id: int, ldapUsersDomain: string, sdsImportGroup: int, serverAdminName: string, serverIp: string, serverPort: int, sslFingerPrint: string, useLdaps: bool, userFilter: string, userImport: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({ad_id: $ad_id} | format pattern "/v4/system/config/auth/ads/{ad_id}"))
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({ad_id: (encode-path-segment $ad_id)} | format pattern "/v4/system/config/auth/ads/{ad_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5942,32 +5980,32 @@ export def "system-config-auth-ads update" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-sds-auth-token: string # Authentication token
-  --ad-export-group: string # If `userImport` is set to `true`,  the user must be member of this Active Directory group to receive a newly created DRACOON account.
+  --ad-export-group: string # If `userImport` is set to `true`, the user must be member of this Active Directory group to receive a newly created DRACOON account.
   --alias: string # Unique name for an Active Directory configuration
-  --create-home-folder: oneof<nothing, bool> # DEPRECATED, will be ignored  Determines whether a room is created for each user that is created by automatic import (like a home folder).  Room's name will equal the user's login name. (default: false)
-  --home-folder-parent: int # DEPRECATED, will be ignored  ID of the room in which the individual rooms for users will be created. (format: int64)
+  --create-home-folder: oneof<nothing, bool> # DEPRECATED, will be ignored Determines whether a room is created for each user that is created by automatic import (like a home folder). Room's name will equal the user's login name. (default: false)
+  --home-folder-parent: int # DEPRECATED, will be ignored ID of the room in which the individual rooms for users will be created. (format: int64)
   --ldap-users-domain: string # Search scope of Active Directory; only users below this node can log on.
-  --sds-import-group: int # User group that is assigned to users who are created by automatic import.  Reset with `0` (format: int64)
+  --sds-import-group: int # User group that is assigned to users who are created by automatic import. Reset with `0` (format: int64)
   --server-admin-name: string # Distinguished Name (DN) of Active Directory administrative account
   --server-admin-password: string # Password of Active Directory administrative account
   --server-ip: string # IPv4 or IPv6 address or host name
   --server-port: int # Port (format: int32)
-  --ssl-finger-print: string # SSL finger print of Active Directory server.  Mandatory for LDAPS connections.  Format: `Algorithm/Fingerprint`
+  --ssl-finger-print: string # SSL finger print of Active Directory server. Mandatory for LDAPS connections. Format: `Algorithm/Fingerprint`
   --use-ldaps: oneof<nothing, bool> # Determines whether LDAPS should be used instead of plain LDAP.
   --user-filter: string # Name of Active Directory attribute that is used as login name.
-  --user-import: oneof<nothing, bool> # Determines if a DRACOON account is automatically created for a new user  who successfully logs on with his / her AD / IDP account.
+  --user-import: oneof<nothing, bool> # Determines if a DRACOON account is automatically created for a new user who successfully logs on with his / her AD / IDP account.
 ]: any -> record<adExportGroup: string, alias: string, createHomeFolder: bool, homeFolderParent: int, id: int, ldapUsersDomain: string, sdsImportGroup: int, serverAdminName: string, serverIp: string, serverPort: int, sslFingerPrint: string, useLdaps: bool, userFilter: string, userImport: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({ad_id: $ad_id} | format pattern "/v4/system/config/auth/ads/{ad_id}"))
-  let body = {"adExportGroup": $ad_export_group, "alias": $alias, "createHomeFolder": $create_home_folder, "homeFolderParent": $home_folder_parent, "ldapUsersDomain": $ldap_users_domain, "sdsImportGroup": $sds_import_group, "serverAdminName": $server_admin_name, "serverAdminPassword": $server_admin_password, "serverIp": $server_ip, "serverPort": $server_port, "sslFingerPrint": $ssl_finger_print, "useLdaps": $use_ldaps, "userFilter": $user_filter, "userImport": $user_import} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({ad_id: (encode-path-segment $ad_id)} | format pattern "/v4/system/config/auth/ads/{ad_id}"))
+  let req_body = {"adExportGroup": $ad_export_group, "alias": $alias, "createHomeFolder": $create_home_folder, "homeFolderParent": $home_folder_parent, "ldapUsersDomain": $ldap_users_domain, "sdsImportGroup": $sds_import_group, "serverAdminName": $server_admin_name, "serverAdminPassword": $server_admin_password, "serverIp": $server_ip, "serverPort": $server_port, "sslFingerPrint": $ssl_finger_print, "useLdaps": $use_ldaps, "userFilter": $user_filter, "userImport": $user_import} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Request list of OpenID Connect IDP configurations
@@ -5989,10 +6027,10 @@ export def "system-config-auth-openid-idps list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/system/config/auth/openid/idps")
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -6015,34 +6053,34 @@ export def "system-config-auth-openid-idps create-open" [
   client_id: string # ID of the OpenID client
   client_secret: string # Secret, which client uses at authentication.
   --fallback-mapping-claim: string # Name of the claim which is used for the user mapping fallback.
-  --flow: string@flow-completer # &#128640; Since v4.11.0  Flow, which is used at authentication
-  issuer: string # Issuer identifier of the IDP  The value is a case sensitive URL.
+  --flow: string@flow-completer # &#128640; Since v4.11.0 Flow, which is used at authentication
+  issuer: string # Issuer identifier of the IDP The value is a case sensitive URL.
   jwks_end_point_url: string # URL of the JWKS endpoint
   mapping_claim: string # Name of the claim which is used for the user mapping.
   name: string # Name of the IDP
-  --pkce-challenge-method: string # PKCE code challenge method.  cf. [RFC 7636](https://tools.ietf.org/html/rfc7636) (default: plain)
-  --pkce-enabled: oneof<nothing, bool> # Determines whether PKCE is enabled.  cf. [RFC 7636](https://tools.ietf.org/html/rfc7636) (default: false)
-  redirect_uris: list # URIs, to which a user is redirected after authorization.
-  scopes: list # List of requested scopes
+  --pkce-challenge-method: string # PKCE code challenge method. cf. [RFC 7636](https://tools.ietf.org/html/rfc7636) (default: plain)
+  --pkce-enabled: oneof<nothing, bool> # Determines whether PKCE is enabled. cf. [RFC 7636](https://tools.ietf.org/html/rfc7636) (default: false)
+  redirect_uris: list<string> # URIs, to which a user is redirected after authorization.
+  scopes: list<string> # List of requested scopes
   token_end_point_url: string # URL of the token endpoint
-  --user-import-enabled: oneof<nothing, bool> # Determines if a DRACOON account is automatically created for a new user  who successfully logs on with his / her AD / IDP account. (default: false)
-  --user-import-group: int # User group that is assigned to users who are created by automatic import.  Reset with `0` (format: int64)
+  --user-import-enabled: oneof<nothing, bool> # Determines if a DRACOON account is automatically created for a new user who successfully logs on with his / her AD / IDP account. (default: false)
+  --user-import-group: int # User group that is assigned to users who are created by automatic import. Reset with `0` (format: int64)
   user_info_end_point_url: string # URL of the user info endpoint
-  --user-info-source: string@user-info-source-completer # &#128640; Since v4.23.0  Source, which is used to get user information at the import or update of a user.
-  --user-management-url: string # URL of the user management UI.  Use empty string to remove.
-  --user-update-enabled: oneof<nothing, bool> # Determines if the DRACOON account is updated with data from AD / IDP.  For OpenID Connect, the scopes `email` and `profile` are needed. (default: false)
+  --user-info-source: string@user-info-source-completer # &#128640; Since v4.23.0 Source, which is used to get user information at the import or update of a user.
+  --user-management-url: string # URL of the user management UI. Use empty string to remove.
+  --user-update-enabled: oneof<nothing, bool> # Determines if the DRACOON account is updated with data from AD / IDP. For OpenID Connect, the scopes `email` and `profile` are needed. (default: false)
 ]: any -> record<authorizationEndPointUrl: string, clientId: string, clientSecret: string, fallbackMappingClaim: string, flow: string, id: int, issuer: string, jwksEndPointUrl: string, mappingClaim: string, name: string, pkceChallengeMethod: string, pkceEnabled: bool, redirectUris: list<string>, scopes: list<string>, tokenEndPointUrl: string, userImportEnabled: bool, userImportGroup: int, userInfoEndPointUrl: string, userInfoSource: string, userManagementUrl: string, userUpdateEnabled: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/system/config/auth/openid/idps")
-  let body = {"authorizationEndPointUrl": $authorization_end_point_url, "clientId": $client_id, "clientSecret": $client_secret, "fallbackMappingClaim": $fallback_mapping_claim, "flow": $flow, "issuer": $issuer, "jwksEndPointUrl": $jwks_end_point_url, "mappingClaim": $mapping_claim, "name": $name, "pkceChallengeMethod": $pkce_challenge_method, "pkceEnabled": $pkce_enabled, "redirectUris": $redirect_uris, "scopes": $scopes, "tokenEndPointUrl": $token_end_point_url, "userImportEnabled": $user_import_enabled, "userImportGroup": $user_import_group, "userInfoEndPointUrl": $user_info_end_point_url, "userInfoSource": $user_info_source, "userManagementUrl": $user_management_url, "userUpdateEnabled": $user_update_enabled} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"authorizationEndPointUrl": $authorization_end_point_url, "clientId": $client_id, "clientSecret": $client_secret, "fallbackMappingClaim": $fallback_mapping_claim, "flow": $flow, "issuer": $issuer, "jwksEndPointUrl": $jwks_end_point_url, "mappingClaim": $mapping_claim, "name": $name, "pkceChallengeMethod": $pkce_challenge_method, "pkceEnabled": $pkce_enabled, "redirectUris": $redirect_uris, "scopes": $scopes, "tokenEndPointUrl": $token_end_point_url, "userImportEnabled": $user_import_enabled, "userImportGroup": $user_import_group, "userInfoEndPointUrl": $user_info_end_point_url, "userInfoSource": $user_info_source, "userManagementUrl": $user_management_url, "userUpdateEnabled": $user_update_enabled} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Remove OpenID Connect IDP configuration
@@ -6064,11 +6102,11 @@ export def "system-config-auth-openid-idps delete-open" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({idp_id: $idp_id} | format pattern "/v4/system/config/auth/openid/idps/{idp_id}"))
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({idp_id: (encode-path-segment $idp_id)} | format pattern "/v4/system/config/auth/openid/idps/{idp_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -6091,11 +6129,11 @@ export def "system-config-auth-openid-idps request-open" [
 ]: nothing -> record<authorizationEndPointUrl: string, clientId: string, clientSecret: string, fallbackMappingClaim: string, flow: string, id: int, issuer: string, jwksEndPointUrl: string, mappingClaim: string, name: string, pkceChallengeMethod: string, pkceEnabled: bool, redirectUris: list<string>, scopes: list<string>, tokenEndPointUrl: string, userImportEnabled: bool, userImportGroup: int, userInfoEndPointUrl: string, userInfoSource: string, userManagementUrl: string, userUpdateEnabled: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({idp_id: $idp_id} | format pattern "/v4/system/config/auth/openid/idps/{idp_id}"))
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({idp_id: (encode-path-segment $idp_id)} | format pattern "/v4/system/config/auth/openid/idps/{idp_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -6119,35 +6157,35 @@ export def "system-config-auth-openid-idps update-open" [
   --client-id: string # ID of the OpenID client
   --client-secret: string # Secret, which client uses at authentication.
   --fallback-mapping-claim: string # Name of the claim which is used for the user mapping fallback.
-  --flow: string@flow-completer # &#128640; Since v4.11.0  Flow, which is used at authentication
-  --issuer: string # Issuer identifier of the IDP  The value is a case sensitive URL.
+  --flow: string@flow-completer # &#128640; Since v4.11.0 Flow, which is used at authentication
+  --issuer: string # Issuer identifier of the IDP The value is a case sensitive URL.
   --jwks-end-point-url: string # URL of the JWKS endpoint
   --mapping-claim: string # Name of the claim which is used for the user mapping.
   --name: string # Name of the IDP
-  --pkce-challenge-method: string # PKCE code challenge method.  cf. [RFC 7636](https://tools.ietf.org/html/rfc7636)
-  --pkce-enabled: oneof<nothing, bool> # Determines whether PKCE is enabled.  cf. [RFC 7636](https://tools.ietf.org/html/rfc7636) (default: false)
-  --redirect-uris: list # URIs, to which a user is redirected after authorization.
+  --pkce-challenge-method: string # PKCE code challenge method. cf. [RFC 7636](https://tools.ietf.org/html/rfc7636)
+  --pkce-enabled: oneof<nothing, bool> # Determines whether PKCE is enabled. cf. [RFC 7636](https://tools.ietf.org/html/rfc7636) (default: false)
+  --redirect-uris: list<string> # URIs, to which a user is redirected after authorization.
   --reset-fallback-mapping-claim: oneof<nothing, bool> # Set `true` to reset `fallbackMappingClaim`.
-  --scopes: list # List of requested scopes  Usually `openid` and the names of the requested claims.
+  --scopes: list<string> # List of requested scopes Usually `openid` and the names of the requested claims.
   --token-end-point-url: string # URL of the token endpoint
-  --user-import-enabled: oneof<nothing, bool> # Determines if a DRACOON account is automatically created for a new user  who successfully logs on with his / her AD / IDP account. (default: false)
-  --user-import-group: int # User group that is assigned to users who are created by automatic import.  Reset with `0` (format: int64)
+  --user-import-enabled: oneof<nothing, bool> # Determines if a DRACOON account is automatically created for a new user who successfully logs on with his / her AD / IDP account. (default: false)
+  --user-import-group: int # User group that is assigned to users who are created by automatic import. Reset with `0` (format: int64)
   --user-info-end-point-url: string # URL of the user info endpoint
-  --user-info-source: string@user-info-source-completer # &#128640; Since v4.23.0  Source, which is used to get user information at the import or update of a user.
-  --user-management-url: string # URL of the user management UI.  Use empty string to remove.
-  --user-update-enabled: oneof<nothing, bool> # Determines if the DRACOON account is updated with data from AD / IDP.  For OpenID Connect, the scopes `email` and `profile` are needed. (default: false)
+  --user-info-source: string@user-info-source-completer # &#128640; Since v4.23.0 Source, which is used to get user information at the import or update of a user.
+  --user-management-url: string # URL of the user management UI. Use empty string to remove.
+  --user-update-enabled: oneof<nothing, bool> # Determines if the DRACOON account is updated with data from AD / IDP. For OpenID Connect, the scopes `email` and `profile` are needed. (default: false)
 ]: any -> record<authorizationEndPointUrl: string, clientId: string, clientSecret: string, fallbackMappingClaim: string, flow: string, id: int, issuer: string, jwksEndPointUrl: string, mappingClaim: string, name: string, pkceChallengeMethod: string, pkceEnabled: bool, redirectUris: list<string>, scopes: list<string>, tokenEndPointUrl: string, userImportEnabled: bool, userImportGroup: int, userInfoEndPointUrl: string, userInfoSource: string, userManagementUrl: string, userUpdateEnabled: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({idp_id: $idp_id} | format pattern "/v4/system/config/auth/openid/idps/{idp_id}"))
-  let body = {"authorizationEndPointUrl": $authorization_end_point_url, "clientId": $client_id, "clientSecret": $client_secret, "fallbackMappingClaim": $fallback_mapping_claim, "flow": $flow, "issuer": $issuer, "jwksEndPointUrl": $jwks_end_point_url, "mappingClaim": $mapping_claim, "name": $name, "pkceChallengeMethod": $pkce_challenge_method, "pkceEnabled": $pkce_enabled, "redirectUris": $redirect_uris, "resetFallbackMappingClaim": $reset_fallback_mapping_claim, "scopes": $scopes, "tokenEndPointUrl": $token_end_point_url, "userImportEnabled": $user_import_enabled, "userImportGroup": $user_import_group, "userInfoEndPointUrl": $user_info_end_point_url, "userInfoSource": $user_info_source, "userManagementUrl": $user_management_url, "userUpdateEnabled": $user_update_enabled} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({idp_id: (encode-path-segment $idp_id)} | format pattern "/v4/system/config/auth/openid/idps/{idp_id}"))
+  let req_body = {"authorizationEndPointUrl": $authorization_end_point_url, "clientId": $client_id, "clientSecret": $client_secret, "fallbackMappingClaim": $fallback_mapping_claim, "flow": $flow, "issuer": $issuer, "jwksEndPointUrl": $jwks_end_point_url, "mappingClaim": $mapping_claim, "name": $name, "pkceChallengeMethod": $pkce_challenge_method, "pkceEnabled": $pkce_enabled, "redirectUris": $redirect_uris, "resetFallbackMappingClaim": $reset_fallback_mapping_claim, "scopes": $scopes, "tokenEndPointUrl": $token_end_point_url, "userImportEnabled": $user_import_enabled, "userImportGroup": $user_import_group, "userInfoEndPointUrl": $user_info_end_point_url, "userInfoSource": $user_info_source, "userManagementUrl": $user_management_url, "userUpdateEnabled": $user_update_enabled} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Remove RADIUS configuration
@@ -6168,10 +6206,10 @@ export def "system-config-auth-radius delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/system/config/auth/radius")
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -6193,10 +6231,10 @@ export def "system-config-auth-radius request" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/system/config/auth/radius")
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -6225,13 +6263,13 @@ export def "system-config-auth-radius create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/system/config/auth/radius")
-  let body = {"failoverServer": $failover_server, "ipAddress": $ip_address, "otpPinFirst": $otp_pin_first, "port": $port, "sharedSecret": $shared_secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"failoverServer": $failover_server, "ipAddress": $ip_address, "otpPinFirst": $otp_pin_first, "port": $port, "sharedSecret": $shared_secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update RADIUS configuration
@@ -6259,13 +6297,13 @@ export def "system-config-auth-radius update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/system/config/auth/radius")
-  let body = {"failoverServer": $failover_server, "ipAddress": $ip_address, "otpPinFirst": $otp_pin_first, "port": $port, "sharedSecret": $shared_secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"failoverServer": $failover_server, "ipAddress": $ip_address, "otpPinFirst": $otp_pin_first, "port": $port, "sharedSecret": $shared_secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Request list of OAuth clients
@@ -6289,10 +6327,10 @@ export def "system-config-oauth-clients list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v4/system/config/oauth/clients" $qp)
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -6300,7 +6338,7 @@ export def "system-config-oauth-clients list" [
 #
 # POST /v4/system/config/oauth/clients
 # operationId: createOAuthClient
-export def "system-config-oauth-clients create" [
+export def "system-config-oauth-clients create-o-auth" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6311,33 +6349,33 @@ export def "system-config-oauth-clients create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-sds-auth-token: string # Authentication token
   --access-token-validity: int # Validity of the access token in seconds. (format: int32)
-  --approval-validity: int # &#128640; Since v4.22.0  Validity of the approval interval in seconds. (format: int32)
+  --approval-validity: int # &#128640; Since v4.22.0 Validity of the approval interval in seconds. (format: int32)
   --client-id: string # ID of the OAuth client
   client_name: string # Name, which is shown at the client configuration and authorization.
   --client-secret: string # Secret, which client uses at authentication.
   --client-type: string@client-type-completer # Determines whether client is a confidential or public client.
-  grant_types: list@grant-types-completer # Authorized grant types  * `authorization_code`  * `implicit`  * `password`  * `client_credentials`  * `refresh_token`    cf. [RFC 6749](https://tools.ietf.org/html/rfc6749)
-  redirect_uris: list # URIs, to which a user is redirected after authorization.
+  grant_types: list<string>@grant-types-completer # Authorized grant types * `authorization_code` * `implicit` * `password` * `client_credentials` * `refresh_token` cf. [RFC 6749](https://tools.ietf.org/html/rfc6749)
+  redirect_uris: list<string> # URIs, to which a user is redirected after authorization.
   --refresh-token-validity: int # Validity of the refresh token in seconds. (format: int32)
 ]: any -> record<accessTokenValidity: int, approvalValidity: int, clientId: string, clientName: string, clientSecret: string, clientType: string, grantTypes: list<string>, isEnabled: bool, isExternal: bool, isStandard: bool, redirectUris: list<string>, refreshTokenValidity: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/system/config/oauth/clients")
-  let body = {"accessTokenValidity": $access_token_validity, "approvalValidity": $approval_validity, "clientId": $client_id, "clientName": $client_name, "clientSecret": $client_secret, "clientType": $client_type, "grantTypes": $grant_types, "redirectUris": $redirect_uris, "refreshTokenValidity": $refresh_token_validity} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"accessTokenValidity": $access_token_validity, "approvalValidity": $approval_validity, "clientId": $client_id, "clientName": $client_name, "clientSecret": $client_secret, "clientType": $client_type, "grantTypes": $grant_types, "redirectUris": $redirect_uris, "refreshTokenValidity": $refresh_token_validity} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Remove OAuth client
 #
 # DELETE /v4/system/config/oauth/clients/{client_id}
 # operationId: removeOAuthClient
-export def "system-config-oauth-clients delete" [
+export def "system-config-oauth-clients delete-o-auth" [
   client_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6351,11 +6389,11 @@ export def "system-config-oauth-clients delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({client_id: $client_id} | format pattern "/v4/system/config/oauth/clients/{client_id}"))
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({client_id: (encode-path-segment $client_id)} | format pattern "/v4/system/config/oauth/clients/{client_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -6363,7 +6401,7 @@ export def "system-config-oauth-clients delete" [
 #
 # GET /v4/system/config/oauth/clients/{client_id}
 # operationId: requestOAuthClient
-export def "system-config-oauth-clients request" [
+export def "system-config-oauth-clients request-o-auth" [
   client_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6377,11 +6415,11 @@ export def "system-config-oauth-clients request" [
 ]: nothing -> record<accessTokenValidity: int, approvalValidity: int, clientId: string, clientName: string, clientSecret: string, clientType: string, grantTypes: list<string>, isEnabled: bool, isExternal: bool, isStandard: bool, redirectUris: list<string>, refreshTokenValidity: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({client_id: $client_id} | format pattern "/v4/system/config/oauth/clients/{client_id}"))
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({client_id: (encode-path-segment $client_id)} | format pattern "/v4/system/config/oauth/clients/{client_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -6389,7 +6427,7 @@ export def "system-config-oauth-clients request" [
 #
 # PUT /v4/system/config/oauth/clients/{client_id}
 # operationId: updateOAuthClient
-export def "system-config-oauth-clients update" [
+export def "system-config-oauth-clients update-o-auth" [
   client_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6401,26 +6439,26 @@ export def "system-config-oauth-clients update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-sds-auth-token: string # Authentication token
   --access-token-validity: int # Validity of the access token in seconds. (format: int32)
-  --approval-validity: int # &#128640; Since v4.22.0  Validity of the approval interval in seconds. (format: int32)
+  --approval-validity: int # &#128640; Since v4.22.0 Validity of the approval interval in seconds. (format: int32)
   --client-name: string # Name, which is shown at the client configuration and authorization.
   --client-secret: string # Secret, which client uses at authentication.
   --client-type: string@client-type-completer # Determines whether client is a confidential or public client.
-  grant_types: list@grant-types-completer # Authorized grant types  * `authorization_code`  * `implicit`  * `password`  * `client_credentials`  * `refresh_token`    cf. [RFC 6749](https://tools.ietf.org/html/rfc6749)
+  grant_types: list<string>@grant-types-completer # Authorized grant types * `authorization_code` * `implicit` * `password` * `client_credentials` * `refresh_token` cf. [RFC 6749](https://tools.ietf.org/html/rfc6749)
   --is-enabled: oneof<nothing, bool> # Determines whether client is enabled.
-  --redirect-uris: list # URIs, to which a user is redirected after authorization.
+  --redirect-uris: list<string> # URIs, to which a user is redirected after authorization.
   --refresh-token-validity: int # Validity of the refresh token in seconds. (format: int32)
 ]: any -> record<accessTokenValidity: int, approvalValidity: int, clientId: string, clientName: string, clientSecret: string, clientType: string, grantTypes: list<string>, isEnabled: bool, isExternal: bool, isStandard: bool, redirectUris: list<string>, refreshTokenValidity: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({client_id: $client_id} | format pattern "/v4/system/config/oauth/clients/{client_id}"))
-  let body = {"accessTokenValidity": $access_token_validity, "approvalValidity": $approval_validity, "clientName": $client_name, "clientSecret": $client_secret, "clientType": $client_type, "grantTypes": $grant_types, "isEnabled": $is_enabled, "redirectUris": $redirect_uris, "refreshTokenValidity": $refresh_token_validity} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({client_id: (encode-path-segment $client_id)} | format pattern "/v4/system/config/oauth/clients/{client_id}"))
+  let req_body = {"accessTokenValidity": $access_token_validity, "approvalValidity": $approval_validity, "clientName": $client_name, "clientSecret": $client_secret, "clientType": $client_type, "grantTypes": $grant_types, "isEnabled": $is_enabled, "redirectUris": $redirect_uris, "refreshTokenValidity": $refresh_token_validity} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Request classification policies
@@ -6441,10 +6479,10 @@ export def "system-config-policies-classifications request" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/system/config/policies/classifications")
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -6453,7 +6491,7 @@ export def "system-config-policies-classifications request" [
 # PUT /v4/system/config/policies/classifications
 # operationId: changeClassificationPoliciesConfig
 # --shareClassificationPolicies shape: {classificationRequiresSharePassword?: "0"|"1"|"2"|"3"|"4"}
-export def "system-config-policies-classifications changeClassificationPoliciesConfig" [
+export def "system-config-policies-classifications update-change" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6469,13 +6507,13 @@ export def "system-config-policies-classifications changeClassificationPoliciesC
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/system/config/policies/classifications")
-  let body = {"shareClassificationPolicies": $share_classification_policies} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"shareClassificationPolicies": $share_classification_policies} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Request guest user policies
@@ -6496,10 +6534,10 @@ export def "system-config-policies-guest-users request" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/system/config/policies/guest_users")
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -6507,7 +6545,7 @@ export def "system-config-policies-guest-users request" [
 #
 # PUT /v4/system/config/policies/guest_users
 # operationId: changeGuestUsersPoliciesConfig
-export def "system-config-policies-guest-users changeGuestUsersPoliciesConfig" [
+export def "system-config-policies-guest-users update-change" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6523,13 +6561,13 @@ export def "system-config-policies-guest-users changeGuestUsersPoliciesConfig" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/system/config/policies/guest_users")
-  let body = {"isInviteUsersEnabled": $is_invite_users_enabled} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"isInviteUsersEnabled": $is_invite_users_enabled} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Request MFA policies
@@ -6550,10 +6588,10 @@ export def "system-config-policies-mfa request" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/system/config/policies/mfa")
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -6561,7 +6599,7 @@ export def "system-config-policies-mfa request" [
 #
 # PUT /v4/system/config/policies/mfa
 # operationId: changeMfaPoliciesConfig
-export def "system-config-policies-mfa changeMfaPoliciesConfig" [
+export def "system-config-policies-mfa update-change" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6577,20 +6615,20 @@ export def "system-config-policies-mfa changeMfaPoliciesConfig" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/system/config/policies/mfa")
-  let body = {"isMfaEnforced": $is_mfa_enforced} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"isMfaEnforced": $is_mfa_enforced} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Request password policies
 #
 # GET /v4/system/config/policies/passwords
 # operationId: requestPasswordPoliciesConfig
-export def "system-config-policies-passwords request" [
+export def "system-config-policies-passwords list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6604,10 +6642,10 @@ export def "system-config-policies-passwords request" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/system/config/policies/passwords")
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -6618,7 +6656,7 @@ export def "system-config-policies-passwords request" [
 # --encryptionPasswordPolicies shape: {characterRules?: record, minLength?: int, rejectKeyboardPatterns?: bool, rejectUserInfo?: bool}
 # --loginPasswordPolicies shape: {characterRules?: record, enforceLoginPasswordChange?: bool, minLength?: int, numberOfArchivedPasswords?: int, passwordExpiration?: record, rejectDictionaryWords?: bool, rejectKeyboardPatterns?: bool, rejectUserInfo?: bool, userLockout?: record}
 # --sharesPasswordPolicies shape: {characterRules?: record, minLength?: int, rejectDictionaryWords?: bool, rejectKeyboardPatterns?: bool, rejectUserInfo?: bool}
-export def "system-config-policies-passwords changePasswordPoliciesConfig" [
+export def "system-config-policies-passwords update-change" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6636,20 +6674,20 @@ export def "system-config-policies-passwords changePasswordPoliciesConfig" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/system/config/policies/passwords")
-  let body = {"encryptionPasswordPolicies": $encryption_password_policies, "loginPasswordPolicies": $login_password_policies, "sharesPasswordPolicies": $shares_password_policies} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"encryptionPasswordPolicies": $encryption_password_policies, "loginPasswordPolicies": $login_password_policies, "sharesPasswordPolicies": $shares_password_policies} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Enforce login password change for all users
 #
 # POST /v4/system/config/policies/passwords/enforce_change
 # operationId: enforceLoginPasswordChange
-export def "system-config-policies-passwords-enforce-change enforceLoginPasswordChange" [
+export def "system-config-policies-passwords-enforce-change create-login" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6663,10 +6701,10 @@ export def "system-config-policies-passwords-enforce-change enforceLoginPassword
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/system/config/policies/passwords/enforce_change")
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -6674,7 +6712,7 @@ export def "system-config-policies-passwords-enforce-change enforceLoginPassword
 #
 # GET /v4/system/config/policies/passwords/{password_type}
 # operationId: requestPasswordPoliciesForPasswordType
-export def "system-config-policies-passwords request-password-policies-for-password-type" [
+export def "system-config-policies-passwords request" [
   password_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6688,11 +6726,11 @@ export def "system-config-policies-passwords request-password-policies-for-passw
 ]: nothing -> record<encryptionPasswordPolicies: record<characterRules: record<mustContainCharacters: list, numberOfCharacteristicsToEnforce: int>, minLength: int, rejectKeyboardPatterns: bool, rejectUserInfo: bool, updatedAt: string, updatedBy: record<avatarUuid: string, displayName: string, email: string, firstName: string, id: int, lastName: string, title: string, userName: string, userType: string>>, loginPasswordPolicies: record<characterRules: record<mustContainCharacters: list, numberOfCharacteristicsToEnforce: int>, minLength: int, numberOfArchivedPasswords: int, passwordExpiration: record<enabled: bool, maxPasswordAge: int>, rejectDictionaryWords: bool, rejectKeyboardPatterns: bool, rejectUserInfo: bool, updatedAt: string, updatedBy: record<avatarUuid: string, displayName: string, email: string, firstName: string, id: int, lastName: string, title: string, userName: string, userType: string>, userLockout: record<enabled: bool, lockoutPeriod: int, maxNumberOfLoginFailures: int>>, sharesPasswordPolicies: record<characterRules: record<mustContainCharacters: list, numberOfCharacteristicsToEnforce: int>, minLength: int, rejectDictionaryWords: bool, rejectKeyboardPatterns: bool, rejectUserInfo: bool, updatedAt: string, updatedBy: record<avatarUuid: string, displayName: string, email: string, firstName: string, id: int, lastName: string, title: string, userName: string, userType: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({password_type: $password_type} | format pattern "/v4/system/config/policies/passwords/{password_type}"))
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({password_type: (encode-path-segment $password_type)} | format pattern "/v4/system/config/policies/passwords/{password_type}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -6714,10 +6752,10 @@ export def "system-config-settings-auth request" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/system/config/settings/auth")
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -6742,13 +6780,13 @@ export def "system-config-settings-auth update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/system/config/settings/auth")
-  let body = {"authMethods": $auth_methods} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"authMethods": $auth_methods} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Request system defaults
@@ -6770,10 +6808,10 @@ export def "system-config-settings-defaults request" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/system/config/settings/defaults")
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -6795,20 +6833,20 @@ export def "system-config-settings-defaults update" [
   --download-share-default-expiration-period: int # Default expiration period for Download Shares in days. (format: int32)
   --file-default-expiration-period: int # Default expiration period for all uploaded files in days. (format: int32)
   --language-default: string # Define which language should be default.
-  --nonmember-viewer-default: oneof<nothing, bool> # &#128640; Since v4.12.0  Defines if new users get the role Non Member Viewer by default
+  --nonmember-viewer-default: oneof<nothing, bool> # &#128640; Since v4.12.0 Defines if new users get the role Non Member Viewer by default
   --upload-share-default-expiration-period: int # Default expiration period for Upload Shares in days. (format: int32)
 ]: any -> record<downloadShareDefaultExpirationPeriod: int, fileDefaultExpirationPeriod: int, hideLoginInputFields: bool, languageDefault: string, nonmemberViewerDefault: bool, uploadShareDefaultExpirationPeriod: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/system/config/settings/defaults")
-  let body = {"downloadShareDefaultExpirationPeriod": $download_share_default_expiration_period, "fileDefaultExpirationPeriod": $file_default_expiration_period, "languageDefault": $language_default, "nonmemberViewerDefault": $nonmember_viewer_default, "uploadShareDefaultExpirationPeriod": $upload_share_default_expiration_period} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"downloadShareDefaultExpirationPeriod": $download_share_default_expiration_period, "fileDefaultExpirationPeriod": $file_default_expiration_period, "languageDefault": $language_default, "nonmemberViewerDefault": $nonmember_viewer_default, "uploadShareDefaultExpirationPeriod": $upload_share_default_expiration_period} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Request eventlog settings
@@ -6829,10 +6867,10 @@ export def "system-config-settings-eventlog request" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/system/config/settings/eventlog")
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -6852,19 +6890,19 @@ export def "system-config-settings-eventlog update" [
   --x-sds-auth-token: string # Authentication token
   --enabled: oneof<nothing, bool> # Is eventlog enabled?
   --log-ip-enabled: oneof<nothing, bool> # Determines whether user’s IP address is logged.
-  --retention-period: int # Retention period (in days) of event log entries.  After that period, all entries are deleted.  Recommended value: 7 (format: int32)
+  --retention-period: int # Retention period (in days) of event log entries. After that period, all entries are deleted. Recommended value: 7 (format: int32)
 ]: any -> record<enabled: bool, logIpEnabled: bool, retentionPeriod: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/system/config/settings/eventlog")
-  let body = {"enabled": $enabled, "logIpEnabled": $log_ip_enabled, "retentionPeriod": $retention_period} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"enabled": $enabled, "logIpEnabled": $log_ip_enabled, "retentionPeriod": $retention_period} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Request general settings
@@ -6885,10 +6923,10 @@ export def "system-config-settings-general request" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/system/config/settings/general")
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -6911,33 +6949,33 @@ export def "system-config-settings-general update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-sds-auth-token: string # Authentication token
   --auth-token-restrictions: record # Request model for updating auth token settings — shape: {accessTokenValidity?: int, overwriteEnabled: bool, refreshTokenValidity?: int}
-  --crypto-enabled: oneof<nothing, bool> # Activation status of client-side encryption.  Can only be enabled once; disabling is not possible.
+  --crypto-enabled: oneof<nothing, bool> # Activation status of client-side encryption. Can only be enabled once; disabling is not possible.
   --email-notification-button-enabled: oneof<nothing, bool> # Enable email notification button
   --eula-enabled: oneof<nothing, bool> # Each user has to confirm the EULA at first login.
-  --hide-login-input-fields: oneof<nothing, bool> # &#128679; Deprecated since v4.13.0  Defines if login fields should be hidden (DEPRECATED)
-  --media-server-enabled: oneof<nothing, bool> # &#128679; Deprecated since v4.12.0  Determines if the media server is enabled (DEPRECATED)
-  --s3-tags-enabled: oneof<nothing, bool> # &#128640; Since v4.9.0  Defines if S3 tags are enabled
+  --hide-login-input-fields: oneof<nothing, bool> # &#128679; Deprecated since v4.13.0 Defines if login fields should be hidden (DEPRECATED)
+  --media-server-enabled: oneof<nothing, bool> # &#128679; Deprecated since v4.12.0 Determines if the media server is enabled (DEPRECATED)
+  --s3-tags-enabled: oneof<nothing, bool> # &#128640; Since v4.9.0 Defines if S3 tags are enabled
   --share-password-sms-enabled: oneof<nothing, bool> # Allow sending of share passwords via SMS
-  --weak-password-enabled: oneof<nothing, bool> # &#128679; Deprecated since v4.14.0  Allow weak password  * A weak password has to fulfill the following criteria:     * is at least 8 characters long     * contains letters and numbers  * A strong password has to fulfill the following criteria in addition:     * contains at least one special character     * contains upper and lower case characters  Please use `PUT /system/config/policies/passwords` API to change configured password policies. (DEPRECATED)
+  --weak-password-enabled: oneof<nothing, bool> # &#128679; Deprecated since v4.14.0 Allow weak password * A weak password has to fulfill the following criteria: * is at least 8 characters long * contains letters and numbers * A strong password has to fulfill the following criteria in addition: * contains at least one special character * contains upper and lower case characters Please use `PUT /system/config/policies/passwords` API to change configured password policies. (DEPRECATED)
 ]: any -> record<authTokenRestrictions: record<accessTokenValidity: int, refreshTokenValidity: int, restrictionEnabled: bool>, cryptoEnabled: bool, emailNotificationButtonEnabled: bool, eulaEnabled: bool, hideLoginInputFields: bool, mediaServerEnabled: bool, s3TagsEnabled: bool, sharePasswordSmsEnabled: bool, useS3Storage: bool, weakPasswordEnabled: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/system/config/settings/general")
-  let body = {"authTokenRestrictions": $auth_token_restrictions, "cryptoEnabled": $crypto_enabled, "emailNotificationButtonEnabled": $email_notification_button_enabled, "eulaEnabled": $eula_enabled, "hideLoginInputFields": $hide_login_input_fields, "mediaServerEnabled": $media_server_enabled, "s3TagsEnabled": $s3_tags_enabled, "sharePasswordSmsEnabled": $share_password_sms_enabled, "weakPasswordEnabled": $weak_password_enabled} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"authTokenRestrictions": $auth_token_restrictions, "cryptoEnabled": $crypto_enabled, "emailNotificationButtonEnabled": $email_notification_button_enabled, "eulaEnabled": $eula_enabled, "hideLoginInputFields": $hide_login_input_fields, "mediaServerEnabled": $media_server_enabled, "s3TagsEnabled": $s3_tags_enabled, "sharePasswordSmsEnabled": $share_password_sms_enabled, "weakPasswordEnabled": $weak_password_enabled} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Request infrastructure properties
 #
 # GET /v4/system/config/settings/infrastructure
 # operationId: requestInfrastructureProperties
-export def "system-config-settings-infrastructure request-infrastructure-properties" [
+export def "system-config-settings-infrastructure request-properties" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6951,10 +6989,10 @@ export def "system-config-settings-infrastructure request-infrastructure-propert
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/system/config/settings/infrastructure")
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -6976,10 +7014,10 @@ export def "system-config-settings-syslog request" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/system/config/settings/syslog")
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -7007,20 +7045,20 @@ export def "system-config-settings-syslog update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/system/config/settings/syslog")
-  let body = {"enabled": $enabled, "host": $host, "logIpEnabled": $log_ip_enabled, "port": $port, "protocol": $protocol} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"enabled": $enabled, "host": $host, "logIpEnabled": $log_ip_enabled, "port": $port, "protocol": $protocol} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Request S3 storage configuration
 #
 # GET /v4/system/config/storage/s3
 # operationId: request3Config
-export def "system-config-storage-s3 request3Config" [
+export def "system-config-storage-s3 get-request3" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7034,10 +7072,10 @@ export def "system-config-storage-s3 request3Config" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/system/config/storage/s3")
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -7058,9 +7096,9 @@ export def "system-config-storage-s3 create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-sds-auth-token: string # Authentication token
   access_key: string # Access Key ID
-  --bucket-name: string # &#128679; Deprecated since v4.24.0  S3 bucket name  use `bucketUrl` instead (DEPRECATED)
+  --bucket-name: string # &#128679; Deprecated since v4.24.0 S3 bucket name use `bucketUrl` instead (DEPRECATED)
   --bucket-url: string # S3 object storage bucket URL
-  --endpoint-url: string # &#128679; Deprecated since v4.24.0  S3 object storage endpoint URL  use `bucketUrl` instead (DEPRECATED)
+  --endpoint-url: string # &#128679; Deprecated since v4.24.0 S3 object storage endpoint URL use `bucketUrl` instead (DEPRECATED)
   --region: string # S3 region
   secret_key: string # Secret Access Key
 ]: any -> record<accessKeyDefined: bool, bucketName: string, bucketUrl: string, endpointUrl: string, region: string, secretKeyDefined: bool> {
@@ -7068,13 +7106,13 @@ export def "system-config-storage-s3 create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/system/config/storage/s3")
-  let body = {"accessKey": $access_key, "bucketName": $bucket_name, "bucketUrl": $bucket_url, "endpointUrl": $endpoint_url, "region": $region, "secretKey": $secret_key} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"accessKey": $access_key, "bucketName": $bucket_name, "bucketUrl": $bucket_url, "endpointUrl": $endpoint_url, "region": $region, "secretKey": $secret_key} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update S3 storage configuration
@@ -7094,9 +7132,9 @@ export def "system-config-storage-s3 update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-sds-auth-token: string # Authentication token
   --access-key: string # Access Key ID
-  --bucket-name: string # &#128679; Deprecated since v4.24.0  S3 bucket name  use `bucketUrl` instead (DEPRECATED)
+  --bucket-name: string # &#128679; Deprecated since v4.24.0 S3 bucket name use `bucketUrl` instead (DEPRECATED)
   --bucket-url: string # S3 object storage bucket URL
-  --endpoint-url: string # &#128679; Deprecated since v4.24.0  S3 object storage endpoint URL  use `bucketUrl` instead (DEPRECATED)
+  --endpoint-url: string # &#128679; Deprecated since v4.24.0 S3 object storage endpoint URL use `bucketUrl` instead (DEPRECATED)
   --region: string # S3 region
   --secret-key: string # Secret Access Key
 ]: any -> record<accessKeyDefined: bool, bucketName: string, bucketUrl: string, endpointUrl: string, region: string, secretKeyDefined: bool> {
@@ -7104,20 +7142,20 @@ export def "system-config-storage-s3 update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/system/config/storage/s3")
-  let body = {"accessKey": $access_key, "bucketName": $bucket_name, "bucketUrl": $bucket_url, "endpointUrl": $endpoint_url, "region": $region, "secretKey": $secret_key} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"accessKey": $access_key, "bucketName": $bucket_name, "bucketUrl": $bucket_url, "endpointUrl": $endpoint_url, "region": $region, "secretKey": $secret_key} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Request list of configured S3 tags
 #
 # GET /v4/system/config/storage/s3/tags
 # operationId: requestS3TagList
-export def "system-config-storage-s3-tags request-s3-tag-list" [
+export def "system-config-storage-s3-tags request-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7131,10 +7169,10 @@ export def "system-config-storage-s3-tags request-s3-tag-list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/system/config/storage/s3/tags")
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -7160,13 +7198,13 @@ export def "system-config-storage-s3-tags create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/system/config/storage/s3/tags")
-  let body = {"isMandatory": $is_mandatory, "key": $key, "value": $value} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"isMandatory": $is_mandatory, "key": $key, "value": $value} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Remove S3 tag
@@ -7187,11 +7225,11 @@ export def "system-config-storage-s3-tags delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v4/system/config/storage/s3/tags/{id}"))
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v4/system/config/storage/s3/tags/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -7213,11 +7251,11 @@ export def "system-config-storage-s3-tags request" [
 ]: nothing -> record<id: int, isMandatory: bool, key: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v4/system/config/storage/s3/tags/{id}"))
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v4/system/config/storage/s3/tags/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -7238,7 +7276,7 @@ export def "uploads cancel-file" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({token_arg: $token_arg} | format pattern "/v4/uploads/{token_arg}"))
+  let full_url = (build-url $base ({token_arg: (encode-path-segment $token_arg)} | format pattern "/v4/uploads/{token_arg}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7249,7 +7287,7 @@ export def "uploads cancel-file" [
 # POST /v4/uploads/{token}
 # Docs: https://tools.ietf.org/html/rfc7233 — Range Requests
 # operationId: uploadFileByTokenAsMultipart_1
-export def "uploads upload-file-by-token" [
+export def "uploads upload-file-by-as-multipart-by-token" [
   token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7259,20 +7297,21 @@ export def "uploads upload-file-by-token" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-range: string # Content-Range   e.g. `bytes 0-999/3980`
+  --content-range: string # Content-Range e.g. `bytes 0-999/3980`
   file: string # File (format: binary)
 ]: any -> record<hash: string, size: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({token_arg: $token_arg} | format pattern "/v4/uploads/{token_arg}"))
-  let body = {"file": $file} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Range": $content_range} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({token_arg: (encode-path-segment $token_arg)} | format pattern "/v4/uploads/{token_arg}"))
+  let req_body = {"file": $file} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let extra_headers = {"Content-Range": $content_range} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let mp = (build-multipart-body $req_body ["file"])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # Complete file upload
@@ -7282,7 +7321,7 @@ export def "uploads upload-file-by-token" [
 # --fileKey shape: {iv: string, key: string, tag: string, version: string}
 # --userFileKeyList shape: {items?: list}
 @deprecated --flag user-file-key-list
-export def "uploads completeFileUploadByToken" [
+export def "uploads complete-file" [
   token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7296,27 +7335,27 @@ export def "uploads completeFileUploadByToken" [
   --file-key: record # File key information — shape: {iv: string, key: string, tag: string, version: string}
   --file-name: string # New file name to store with
   --keep-share-links: oneof<nothing, bool> # Preserve Download Share Links and point them to the new node. (default: false)
-  --resolution-strategy: string@resolution-strategy-completer # Node conflict resolution strategy:  * `autorename`  * `overwrite`  * `fail` (default: autorename)
+  --resolution-strategy: string@resolution-strategy-completer # Node conflict resolution strategy: * `autorename` * `overwrite` * `fail` (default: autorename)
   --user-file-key-list: record # Mandatory for encrypted shares (DEPRECATED) — shape: {items?: list}
 ]: any -> record<authParentId: int, branchVersion: int, children: list<any>, classification: int, cntChildren: int, cntComments: int, cntDeletedVersions: int, cntDownloadShares: int, cntFiles: int, cntFolders: int, cntRooms: int, cntUploadShares: int, createdAt: string, createdBy: record<avatarUuid: string, displayName: string, email: string, firstName: string, id: int, lastName: string, title: string, userName: string, userType: string>, encryptionInfo: record<dataSpaceKeyState: string, roomKeyState: string, userKeyState: string>, expireAt: string, fileType: string, hasActivitiesLog: bool, hash: string, id: int, inheritPermissions: bool, isBrowsable: bool, isEncrypted: bool, isFavorite: bool, mediaToken: string, mediaType: string, name: string, notes: string, parentId: int, parentPath: string, permissions: record<change: bool, create: bool, delete: bool, deleteRecycleBin: bool, manage: bool, manageDownloadShare: bool, manageUploadShare: bool, read: bool, readRecycleBin: bool, restoreRecycleBin: bool>, quota: int, recycleBinRetentionPeriod: int, referenceId: int, size: int, timestampCreation: string, timestampModification: string, type: string, updatedAt: string, updatedBy: record<avatarUuid: string, displayName: string, email: string, firstName: string, id: int, lastName: string, title: string, userName: string, userType: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({token_arg: $token_arg} | format pattern "/v4/uploads/{token_arg}"))
-  let body = {"fileKey": $file_key, "fileName": $file_name, "keepShareLinks": $keep_share_links, "resolutionStrategy": $resolution_strategy, "userFileKeyList": $user_file_key_list} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({token_arg: (encode-path-segment $token_arg)} | format pattern "/v4/uploads/{token_arg}"))
+  let req_body = {"fileKey": $file_key, "fileName": $file_name, "keepShareLinks": $keep_share_links, "resolutionStrategy": $resolution_strategy, "userFileKeyList": $user_file_key_list} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Request user account information
 #
 # GET /v4/user/account
 # operationId: requestUserInfo
-export def "user-account request-user-info" [
+export def "user-account request-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7325,7 +7364,7 @@ export def "user-account request-user-info" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --more-info: oneof<nothing, bool> # Get more info for this user  e.g. list of user groups
+  --more-info: oneof<nothing, bool> # Get more info for this user e.g. list of user groups
   --x-sds-date-format: string@x-sds-date-format-completer # Date time format (cf. [RFC 3339](https://www.ietf.org/rfc/rfc3339.txt) & [leettime.de](http://leettime.de/))
   --x-sds-auth-token: string # Authentication token
 ]: nothing -> record<authData: record<adConfigId: int, login: string, method: string, mustChangePassword: bool, oidConfigId: int, password: string>, authMethods: table<authId: string, isEnabled: bool, options: list>, email: string, expireAt: string, firstName: string, gender: string, hasManageableRooms: bool, homeRoomId: int, id: int, isEncryptionEnabled: bool, isLocked: bool, language: string, lastLoginFailAt: string, lastLoginFailIp: string, lastLoginSuccessAt: string, lastLoginSuccessIp: string, lastName: string, lockStatus: int, login: string, mustSetEmail: bool, needsToAcceptEULA: bool, needsToChangePassword: bool, needsToChangeUserName: bool, phone: string, title: string, userAttributes: record<items: list<record>>, userGroups: table<id: int, isMember: bool, name: string>, userName: string, userRoles: record<items: list<record>>> {
@@ -7333,10 +7372,10 @@ export def "user-account request-user-info" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "more_info" $more_info "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v4/user/account" $qp)
-  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -7358,28 +7397,28 @@ export def "user-account update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-sds-date-format: string@x-sds-date-format-completer # Date time format (cf. [RFC 3339](https://www.ietf.org/rfc/rfc3339.txt) & [leettime.de](http://leettime.de/))
   --x-sds-auth-token: string # Authentication token
-  --accept-eula: oneof<nothing, bool> # Accept EULA  Present, if EULA is system global active.  cf. `GET system/config/settings/general` - `eulaEnabled`  If accepted can not be undone.
-  --email: string # Email 
+  --accept-eula: oneof<nothing, bool> # Accept EULA Present, if EULA is system global active. cf. `GET system/config/settings/general` - `eulaEnabled` If accepted can not be undone.
+  --email: string # Email
   --first-name: string # User first name
-  --gender: string # &#128679; Deprecated since v4.12.0  Gender  Do NOT use `gender`! It will be ignored. (DEPRECATED, default: n)
-  --language: string # &#128640; Since v4.20.0  IETF language tag
+  --gender: string # &#128679; Deprecated since v4.12.0 Gender Do NOT use `gender`! It will be ignored. (DEPRECATED, default: n)
+  --language: string # &#128640; Since v4.20.0 IETF language tag
   --last-name: string # User last name
-  --login: string # &#128679; Deprecated since v4.13.0  User login name (DEPRECATED)
+  --login: string # &#128679; Deprecated since v4.13.0 User login name (DEPRECATED)
   --phone: string # Phone number
-  --title: string # &#128679; Deprecated since v4.18.0  Job title (DEPRECATED)
-  --user-name: string # &#128640; Since v4.13.0  Username
+  --title: string # &#128679; Deprecated since v4.18.0 Job title (DEPRECATED)
+  --user-name: string # &#128640; Since v4.13.0 Username
 ]: any -> record<authData: record<adConfigId: int, login: string, method: string, mustChangePassword: bool, oidConfigId: int, password: string>, authMethods: table<authId: string, isEnabled: bool, options: list>, email: string, expireAt: string, firstName: string, gender: string, hasManageableRooms: bool, homeRoomId: int, id: int, isEncryptionEnabled: bool, isLocked: bool, language: string, lastLoginFailAt: string, lastLoginFailIp: string, lastLoginSuccessAt: string, lastLoginSuccessIp: string, lastName: string, lockStatus: int, login: string, mustSetEmail: bool, needsToAcceptEULA: bool, needsToChangePassword: bool, needsToChangeUserName: bool, phone: string, title: string, userAttributes: record<items: list<record>>, userGroups: table<id: int, isMember: bool, name: string>, userName: string, userRoles: record<items: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/user/account")
-  let body = {"acceptEULA": $accept_eula, "email": $email, "firstName": $first_name, "gender": $gender, "language": $language, "lastName": $last_name, "login": $login, "phone": $phone, "title": $title, "userName": $user_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"acceptEULA": $accept_eula, "email": $email, "firstName": $first_name, "gender": $gender, "language": $language, "lastName": $last_name, "login": $login, "phone": $phone, "title": $title, "userName": $user_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Reset avatar
@@ -7400,10 +7439,10 @@ export def "user-account-avatar reset" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/user/account/avatar")
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -7425,10 +7464,10 @@ export def "user-account-avatar request" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/user/account/avatar")
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -7436,7 +7475,7 @@ export def "user-account-avatar request" [
 #
 # POST /v4/user/account/avatar
 # operationId: uploadAvatarAsMultipart
-export def "user-account-avatar upload-avatar-as-multipart" [
+export def "user-account-avatar upload-as-multipart" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7452,20 +7491,21 @@ export def "user-account-avatar upload-avatar-as-multipart" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/user/account/avatar")
-  let body = {"file": $file} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"file": $file} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let mp = (build-multipart-body $req_body ["file"])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # Request customer information for user
 #
 # GET /v4/user/account/customer
 # operationId: requestCustomerInfo
-export def "user-account-customer request-customer-info" [
+export def "user-account-customer request-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7479,10 +7519,10 @@ export def "user-account-customer request-customer-info" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/user/account/customer")
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -7493,7 +7533,7 @@ export def "user-account-customer request-customer-info" [
 # operationId: enableCustomerEncryption
 # --dataSpaceRescueKey shape: {privateKeyContainer: record, publicKeyContainer: record}
 @deprecated
-export def "user-account-customer enable-customer-encryption" [
+export def "user-account-customer enable-encryption" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7510,13 +7550,13 @@ export def "user-account-customer enable-customer-encryption" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/user/account/customer")
-  let body = {"dataSpaceRescueKey": $data_space_rescue_key, "enableCustomerEncryption": $enable_customer_encryption} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"dataSpaceRescueKey": $data_space_rescue_key, "enableCustomerEncryption": $enable_customer_encryption} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Request customer's key pair
@@ -7525,7 +7565,7 @@ export def "user-account-customer enable-customer-encryption" [
 # DEPRECATED
 # operationId: requestCustomerKeyPair
 @deprecated
-export def "user-account-customer-keypair request" [
+export def "user-account-customer-keypair request-key-pair" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7539,10 +7579,10 @@ export def "user-account-customer-keypair request" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/user/account/customer/keypair")
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -7550,7 +7590,7 @@ export def "user-account-customer-keypair request" [
 #
 # DELETE /v4/user/account/keypair
 # operationId: removeUserKeyPair
-export def "user-account-keypair delete" [
+export def "user-account-keypair delete-key-pair" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7566,10 +7606,10 @@ export def "user-account-keypair delete" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v4/user/account/keypair" $qp)
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -7577,7 +7617,7 @@ export def "user-account-keypair delete" [
 #
 # GET /v4/user/account/keypair
 # operationId: requestUserKeyPair
-export def "user-account-keypair request" [
+export def "user-account-keypair request-key-pair" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7594,10 +7634,10 @@ export def "user-account-keypair request" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v4/user/account/keypair" $qp)
-  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -7607,7 +7647,7 @@ export def "user-account-keypair request" [
 # operationId: setUserKeyPair
 # --privateKeyContainer shape: {createdAt?: string, createdBy?: int, privateKey: string, version: string}
 # --publicKeyContainer shape: {createdAt?: string, createdBy?: int, publicKey: string, version: string}
-export def "user-account-keypair setUserKeyPair" [
+export def "user-account-keypair update-key-pair" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7624,20 +7664,20 @@ export def "user-account-keypair setUserKeyPair" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/user/account/keypair")
-  let body = {"privateKeyContainer": $private_key_container, "publicKeyContainer": $public_key_container} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"privateKeyContainer": $private_key_container, "publicKeyContainer": $public_key_container} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Request all user key pairs
 #
 # GET /v4/user/account/keypairs
 # operationId: requestUserKeyPairs
-export def "user-account-keypairs request" [
+export def "user-account-keypairs request-key-pairs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7652,10 +7692,10 @@ export def "user-account-keypairs request" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/user/account/keypairs")
-  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -7666,7 +7706,7 @@ export def "user-account-keypairs request" [
 # --previousPrivateKey shape: {createdAt?: string, createdBy?: int, privateKey: string, version: string}
 # --privateKeyContainer shape: {createdAt?: string, createdBy?: int, privateKey: string, version: string}
 # --publicKeyContainer shape: {createdAt?: string, createdBy?: int, publicKey: string, version: string}
-export def "user-account-keypairs create-and-preserve" [
+export def "user-account-keypairs create-and-preserve-key-pair" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7684,20 +7724,20 @@ export def "user-account-keypairs create-and-preserve" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/user/account/keypairs")
-  let body = {"previousPrivateKey": $previous_private_key, "privateKeyContainer": $private_key_container, "publicKeyContainer": $public_key_container} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"previousPrivateKey": $previous_private_key, "privateKeyContainer": $private_key_container, "publicKeyContainer": $public_key_container} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Using emergency-code
 #
 # DELETE /v4/user/account/mfa
 # operationId: useEmergencyCode
-export def "user-account-mfa useEmergencyCode" [
+export def "user-account-mfa delete-use-emergency-code" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7713,10 +7753,10 @@ export def "user-account-mfa useEmergencyCode" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "emergency_code" $emergency_code "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v4/user/account/mfa" $qp)
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -7724,7 +7764,7 @@ export def "user-account-mfa useEmergencyCode" [
 #
 # GET /v4/user/account/mfa
 # operationId: getMfaStatusForUser
-export def "user-account-mfa get-mfa-status-for" [
+export def "user-account-mfa get-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7738,10 +7778,10 @@ export def "user-account-mfa get-mfa-status-for" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/user/account/mfa")
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -7749,7 +7789,7 @@ export def "user-account-mfa get-mfa-status-for" [
 #
 # GET /v4/user/account/mfa/totp
 # operationId: getTotpSetupInformation
-export def "user-account-mfa-totp get-totp-setup-information" [
+export def "user-account-mfa-totp get-setup-information" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7763,10 +7803,10 @@ export def "user-account-mfa-totp get-totp-setup-information" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/user/account/mfa/totp")
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -7774,7 +7814,7 @@ export def "user-account-mfa-totp get-totp-setup-information" [
 #
 # POST /v4/user/account/mfa/totp
 # operationId: confirmTotpSetup
-export def "user-account-mfa-totp confirmTotpSetup" [
+export def "user-account-mfa-totp confirm-setup" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7791,20 +7831,20 @@ export def "user-account-mfa-totp confirmTotpSetup" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/user/account/mfa/totp")
-  let body = {"id": $id, "otp": $otp} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"id": $id, "otp": $otp} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Disable a MFA TOTP setup with generated OTP
 #
 # DELETE /v4/user/account/mfa/totp/{id}
 # operationId: deleteMfaTotpSetup
-export def "user-account-mfa-totp delete-mfa-totp-setup" [
+export def "user-account-mfa-totp delete-setup" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7820,11 +7860,11 @@ export def "user-account-mfa-totp delete-mfa-totp-setup" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "valid_otp" $valid_otp "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v4/user/account/mfa/totp/{id}") $qp)
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v4/user/account/mfa/totp/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -7832,7 +7872,7 @@ export def "user-account-mfa-totp delete-mfa-totp-setup" [
 #
 # PUT /v4/user/account/password
 # operationId: changeUserPassword
-export def "user-account-password changeUserPassword" [
+export def "user-account-password update-change" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7849,13 +7889,13 @@ export def "user-account-password changeUserPassword" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/user/account/password")
-  let body = {"newPassword": $new_password, "oldPassword": $old_password} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"newPassword": $new_password, "oldPassword": $old_password} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Invalidate authentication token
@@ -7864,7 +7904,7 @@ export def "user-account-password changeUserPassword" [
 # DEPRECATED
 # operationId: logout
 @deprecated
-export def "user-logout logout" [
+export def "user-logout create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7880,10 +7920,10 @@ export def "user-logout logout" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "everywhere" $everywhere "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v4/user/logout" $qp)
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -7891,7 +7931,7 @@ export def "user-logout logout" [
 #
 # GET /v4/user/notifications/config
 # operationId: requestListOfNotificationConfigs
-export def "user-notifications-config request-list-of" [
+export def "user-notifications-config request-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7905,10 +7945,10 @@ export def "user-notifications-config request-list-of" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/user/notifications/config")
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -7927,26 +7967,26 @@ export def "user-notifications-config update" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-sds-auth-token: string # Authentication token
-  channel_ids: list # List of notification channel IDs.  Leave empty to disable notifications.
+  channel_ids: list<int> # List of notification channel IDs. Leave empty to disable notifications.
 ]: any -> record<channelIds: list<int>, eventTypeName: string, id: int, scopeId: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v4/user/notifications/config/{id}"))
-  let body = {"channelIds": $channel_ids} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v4/user/notifications/config/{id}"))
+  let req_body = {"channelIds": $channel_ids} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Request list of OAuth client approvals
 #
 # GET /v4/user/oauth/approvals
 # operationId: requestOAuthApprovals
-export def "user-oauth-approvals request" [
+export def "user-oauth-approvals request-o-auth" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7963,10 +8003,10 @@ export def "user-oauth-approvals request" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v4/user/oauth/approvals" $qp)
-  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -7974,7 +8014,7 @@ export def "user-oauth-approvals request" [
 #
 # DELETE /v4/user/oauth/approvals/{client_id}
 # operationId: removeOAuthApproval
-export def "user-oauth-approvals delete" [
+export def "user-oauth-approvals delete-o-auth" [
   client_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7988,11 +8028,11 @@ export def "user-oauth-approvals delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({client_id: $client_id} | format pattern "/v4/user/oauth/approvals/{client_id}"))
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({client_id: (encode-path-segment $client_id)} | format pattern "/v4/user/oauth/approvals/{client_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -8000,7 +8040,7 @@ export def "user-oauth-approvals delete" [
 #
 # GET /v4/user/oauth/authorizations
 # operationId: requestOAuthAuthorizations
-export def "user-oauth-authorizations request" [
+export def "user-oauth-authorizations request-o-auth" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8018,10 +8058,10 @@ export def "user-oauth-authorizations request" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v4/user/oauth/authorizations" $qp)
-  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -8029,7 +8069,7 @@ export def "user-oauth-authorizations request" [
 #
 # DELETE /v4/user/oauth/authorizations/{client_id}
 # operationId: removeOAuthAuthorizations
-export def "user-oauth-authorizations delete-by-client_id" [
+export def "user-oauth-authorizations delete-o-auth-by-client_id" [
   client_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8043,11 +8083,11 @@ export def "user-oauth-authorizations delete-by-client_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({client_id: $client_id} | format pattern "/v4/user/oauth/authorizations/{client_id}"))
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({client_id: (encode-path-segment $client_id)} | format pattern "/v4/user/oauth/authorizations/{client_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -8055,7 +8095,7 @@ export def "user-oauth-authorizations delete-by-client_id" [
 #
 # DELETE /v4/user/oauth/authorizations/{client_id}/{authorization_id}
 # operationId: removeOAuthAuthorization
-export def "user-oauth-authorizations delete-by-client_id-authorization_id" [
+export def "user-oauth-authorizations delete-o-auth-by-client_id-authorization_id" [
   client_id: string
   authorization_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -8070,11 +8110,11 @@ export def "user-oauth-authorizations delete-by-client_id-authorization_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({client_id: $client_id, authorization_id: $authorization_id} | format pattern "/v4/user/oauth/authorizations/{client_id}/{authorization_id}"))
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({client_id: (encode-path-segment $client_id), authorization_id: (encode-path-segment $authorization_id)} | format pattern "/v4/user/oauth/authorizations/{client_id}/{authorization_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -8096,10 +8136,10 @@ export def "user-ping ping" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/user/ping")
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -8117,7 +8157,7 @@ export def "user-profile-attributes request" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # Range offset (format: int32)
-  --limit: int # Range limit.  Maximum 500.   For more results please use paging (`offset` + `limit`). (format: int32)
+  --limit: int # Range limit. Maximum 500. For more results please use paging (`offset` + `limit`). (format: int32)
   --filter: string # Filter string
   --qp-sort: string # Sort string
   --x-sds-auth-token: string # Authentication token
@@ -8126,10 +8166,10 @@ export def "user-profile-attributes request" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v4/user/profileAttributes" $qp)
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -8140,36 +8180,6 @@ export def "user-profile-attributes request" [
 # operationId: setProfileAttributes
 # --items item shape: {key: string, value: string}
 @deprecated
-export def "user-profile-attributes setProfileAttributes" [
-  --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
-  --insecure(-k) # Skip TLS verification
-  --max-time(-m): duration # Timeout
-  --raw(-r) # Fetch as text
-  --allow-errors(-e) # Return full response without error handling
-  --dry-run(-n) # Return the request that would be sent without executing it
-  --x-sds-auth-token: string # Authentication token
-  items: list # List of key-value pairs — item shape: {key: string, value: string}
-]: any -> record<items: table<key: string, value: string>, range: record<limit: int, offset: int, total: int>> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v4/user/profileAttributes")
-  let body = {"items": $items} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
-}
-
-# Add or edit user profile attributes
-#
-# PUT /v4/user/profileAttributes
-# operationId: updateProfileAttributes
-# --items item shape: {key: string, value: string}
 export def "user-profile-attributes update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8186,13 +8196,43 @@ export def "user-profile-attributes update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/user/profileAttributes")
-  let body = {"items": $items} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"items": $items} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
+}
+
+# Add or edit user profile attributes
+#
+# PUT /v4/user/profileAttributes
+# operationId: updateProfileAttributes
+# --items item shape: {key: string, value: string}
+export def "user-profile-attributes update-1" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --x-sds-auth-token: string # Authentication token
+  items: list # List of key-value pairs — item shape: {key: string, value: string}
+]: any -> record<items: table<key: string, value: string>, range: record<limit: int, offset: int, total: int>> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/v4/user/profileAttributes")
+  let req_body = {"items": $items} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Remove user profile attribute
@@ -8213,11 +8253,11 @@ export def "user-profile-attributes delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({key: $key} | format pattern "/v4/user/profileAttributes/{key}"))
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/v4/user/profileAttributes/{key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -8235,7 +8275,7 @@ export def "user-subscriptions-download-shares list" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # Filter string
-  --limit: int # Range limit.  Maximum 500.   For more results please use paging (`offset` + `limit`). (format: int32)
+  --limit: int # Range limit. Maximum 500. For more results please use paging (`offset` + `limit`). (format: int32)
   --offset: int # Range offset (format: int32)
   --qp-sort: string # Sort string
   --x-sds-auth-token: string # Authentication token
@@ -8244,10 +8284,10 @@ export def "user-subscriptions-download-shares list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v4/user/subscriptions/download_shares" $qp)
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -8266,19 +8306,19 @@ export def "user-subscriptions-download-shares subscribe" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-sds-auth-token: string # Authentication token
   --is-subscribed: oneof<nothing, bool> # Creates or deletes a subscription on each item in an array of objects.
-  object_ids: list # List of ids
+  object_ids: list<int> # List of ids
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/user/subscriptions/download_shares")
-  let body = {"isSubscribed": $is_subscribed, "objectIds": $object_ids} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"isSubscribed": $is_subscribed, "objectIds": $object_ids} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Unsubscribe Download Share from notifications
@@ -8299,11 +8339,11 @@ export def "user-subscriptions-download-shares unsubscribe" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({share_id: $share_id} | format pattern "/v4/user/subscriptions/download_shares/{share_id}"))
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({share_id: (encode-path-segment $share_id)} | format pattern "/v4/user/subscriptions/download_shares/{share_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -8325,11 +8365,11 @@ export def "user-subscriptions-download-shares subscribe-by-share_id" [
 ]: nothing -> record<authParentId: int, id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({share_id: $share_id} | format pattern "/v4/user/subscriptions/download_shares/{share_id}"))
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({share_id: (encode-path-segment $share_id)} | format pattern "/v4/user/subscriptions/download_shares/{share_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -8347,7 +8387,7 @@ export def "user-subscriptions-nodes list" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # Filter string
-  --limit: int # Range limit.  Maximum 500.   For more results please use paging (`offset` + `limit`). (format: int32)
+  --limit: int # Range limit. Maximum 500. For more results please use paging (`offset` + `limit`). (format: int32)
   --offset: int # Range offset (format: int32)
   --qp-sort: string # Sort string
   --x-sds-auth-token: string # Authentication token
@@ -8356,10 +8396,10 @@ export def "user-subscriptions-nodes list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v4/user/subscriptions/nodes" $qp)
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -8378,19 +8418,19 @@ export def "user-subscriptions-nodes update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-sds-auth-token: string # Authentication token
   --is-subscribed: oneof<nothing, bool> # Creates or deletes a subscription on each item in an array of objects.
-  object_ids: list # List of ids
+  object_ids: list<int> # List of ids
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/user/subscriptions/nodes")
-  let body = {"isSubscribed": $is_subscribed, "objectIds": $object_ids} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"isSubscribed": $is_subscribed, "objectIds": $object_ids} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Unsubscribe node from notifications
@@ -8411,11 +8451,11 @@ export def "user-subscriptions-nodes unsubscribe" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({node_id: $node_id} | format pattern "/v4/user/subscriptions/nodes/{node_id}"))
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({node_id: (encode-path-segment $node_id)} | format pattern "/v4/user/subscriptions/nodes/{node_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -8437,11 +8477,11 @@ export def "user-subscriptions-nodes subscribe" [
 ]: nothing -> record<authParentId: int, id: int, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({node_id: $node_id} | format pattern "/v4/user/subscriptions/nodes/{node_id}"))
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({node_id: (encode-path-segment $node_id)} | format pattern "/v4/user/subscriptions/nodes/{node_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -8459,7 +8499,7 @@ export def "user-subscriptions-upload-shares list" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # Filter string
-  --limit: int # Range limit.  Maximum 500.   For more results please use paging (`offset` + `limit`). (format: int32)
+  --limit: int # Range limit. Maximum 500. For more results please use paging (`offset` + `limit`). (format: int32)
   --offset: int # Range offset (format: int32)
   --qp-sort: string # Sort string
   --x-sds-auth-token: string # Authentication token
@@ -8468,10 +8508,10 @@ export def "user-subscriptions-upload-shares list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v4/user/subscriptions/upload_shares" $qp)
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -8490,19 +8530,19 @@ export def "user-subscriptions-upload-shares subscribe" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-sds-auth-token: string # Authentication token
   --is-subscribed: oneof<nothing, bool> # Creates or deletes a subscription on each item in an array of objects.
-  object_ids: list # List of ids
+  object_ids: list<int> # List of ids
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/user/subscriptions/upload_shares")
-  let body = {"isSubscribed": $is_subscribed, "objectIds": $object_ids} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"isSubscribed": $is_subscribed, "objectIds": $object_ids} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Unsubscribe Upload Share from notifications
@@ -8523,11 +8563,11 @@ export def "user-subscriptions-upload-shares unsubscribe" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({share_id: $share_id} | format pattern "/v4/user/subscriptions/upload_shares/{share_id}"))
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({share_id: (encode-path-segment $share_id)} | format pattern "/v4/user/subscriptions/upload_shares/{share_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -8549,11 +8589,11 @@ export def "user-subscriptions-upload-shares subscribe-by-share_id" [
 ]: nothing -> record<id: int, targetNodeId: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({share_id: $share_id} | format pattern "/v4/user/subscriptions/upload_shares/{share_id}"))
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({share_id: (encode-path-segment $share_id)} | format pattern "/v4/user/subscriptions/upload_shares/{share_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -8571,7 +8611,7 @@ export def "users list" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # Range offset (format: int32)
-  --limit: int # Range limit.  Maximum 500.   For more results please use paging (`offset` + `limit`). (format: int32)
+  --limit: int # Range limit. Maximum 500. For more results please use paging (`offset` + `limit`). (format: int32)
   --filter: string # Filter string
   --qp-sort: string # Sort string
   --include-attributes: oneof<nothing, bool> # Include custom user attributes.
@@ -8584,10 +8624,10 @@ export def "users list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "include_attributes" $include_attributes "scalar") (serialize-qp "include_roles" $include_roles "scalar") (serialize-qp "include_manageable_rooms" $include_manageable_rooms "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v4/users" $qp)
-  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -8617,34 +8657,34 @@ export def "users create" [
   --x-sds-date-format: string@x-sds-date-format-completer # Date time format (cf. [RFC 3339](https://www.ietf.org/rfc/rfc3339.txt) & [leettime.de](http://leettime.de/))
   --x-sds-auth-token: string # Authentication token
   --auth-data: record # User Authentication Data — shape: {adConfigId?: int, login?: string, method: string, mustChangePassword?: bool, oidConfigId?: int, password?: string}
-  --auth-methods: list # &#128679; Deprecated since v4.13.0  Authentication methods:  * `sql`  * `active_directory`  * `radius`  * `openid`  use `authData` instead (DEPRECATED) — item shape: {authId: string, isEnabled: bool, options?: list}
-  --email: string # Email 
+  --auth-methods: list # &#128679; Deprecated since v4.13.0 Authentication methods: * `sql` * `active_directory` * `radius` * `openid` use `authData` instead (DEPRECATED) — item shape: {authId: string, isEnabled: bool, options?: list}
+  --email: string # Email
   --expiration: record # Expiration information — shape: {enableExpiration: bool, expireAt?: string}
   first_name: string # User first name
-  --gender: string # &#128679; Deprecated since v4.12.0  Gender  Do NOT use `gender`! It will be ignored. (DEPRECATED, default: n)
-  --is-nonmember-viewer: oneof<nothing, bool> # &#128640; Since v4.12.0  Determines whether user has the role NONMEMBER_VIEWER
+  --gender: string # &#128679; Deprecated since v4.12.0 Gender Do NOT use `gender`! It will be ignored. (DEPRECATED, default: n)
+  --is-nonmember-viewer: oneof<nothing, bool> # &#128640; Since v4.12.0 Determines whether user has the role NONMEMBER_VIEWER
   last_name: string # User last name
-  --login: string # &#128679; Deprecated since v4.13.0  User login name (DEPRECATED)
+  --login: string # &#128679; Deprecated since v4.13.0 User login name (DEPRECATED)
   --mfa-config: record # Multi-factor authentication configuration — shape: {mfaEnforced?: bool}
-  --needs-to-change-password: oneof<nothing, bool> # &#128679; Deprecated since v4.13.0  Determines whether user has to change his / her initial password.  use `authDate.mustChangePassword` instead (DEPRECATED)
-  --notify-user: oneof<nothing, bool> # &#128640; Since v4.9.0  Notify user about his new account  * default: `true` for `basic` auth type  * default: `false` for `active_directory`, `openid` and `radius` auth types
-  --password: string # &#128679; Deprecated since v4.13.0  An initial password may be preset  use `authData` instead (DEPRECATED)
+  --needs-to-change-password: oneof<nothing, bool> # &#128679; Deprecated since v4.13.0 Determines whether user has to change his / her initial password. use `authDate.mustChangePassword` instead (DEPRECATED)
+  --notify-user: oneof<nothing, bool> # &#128640; Since v4.9.0 Notify user about his new account * default: `true` for `basic` auth type * default: `false` for `active_directory`, `openid` and `radius` auth types
+  --password: string # &#128679; Deprecated since v4.13.0 An initial password may be preset use `authData` instead (DEPRECATED)
   --phone: string # Phone number
   --receiver-language: string # IETF language tag
-  --title: string # &#128679; Deprecated since v4.18.0  Job title (DEPRECATED)
-  --user-name: string # &#128640; Since v4.13.0  Username
+  --title: string # &#128679; Deprecated since v4.18.0 Job title (DEPRECATED)
+  --user-name: string # &#128640; Since v4.13.0 Username
 ]: any -> record<authData: record<adConfigId: int, login: string, method: string, mustChangePassword: bool, oidConfigId: int, password: string>, authMethods: table<authId: string, isEnabled: bool, options: list>, avatarUuid: string, email: string, expireAt: string, firstName: string, gender: string, hasManageableRooms: bool, homeRoomId: int, id: int, isEncryptionEnabled: bool, isLocked: bool, isMfaEnabled: bool, isMfaEnforced: bool, lastLoginSuccessAt: string, lastName: string, lockStatus: int, login: string, phone: string, publicKeyContainer: record<createdAt: string, createdBy: int, publicKey: string, version: string>, title: string, userAttributes: record<items: list<record>>, userName: string, userRoles: record<items: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/users")
-  let body = {"authData": $auth_data, "authMethods": $auth_methods, "email": $email, "expiration": $expiration, "firstName": $first_name, "gender": $gender, "isNonmemberViewer": $is_nonmember_viewer, "lastName": $last_name, "login": $login, "mfaConfig": $mfa_config, "needsToChangePassword": $needs_to_change_password, "notifyUser": $notify_user, "password": $password, "phone": $phone, "receiverLanguage": $receiver_language, "title": $title, "userName": $user_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"authData": $auth_data, "authMethods": $auth_methods, "email": $email, "expiration": $expiration, "firstName": $first_name, "gender": $gender, "isNonmemberViewer": $is_nonmember_viewer, "lastName": $last_name, "login": $login, "mfaConfig": $mfa_config, "needsToChangePassword": $needs_to_change_password, "notifyUser": $notify_user, "password": $password, "phone": $phone, "receiverLanguage": $receiver_language, "title": $title, "userName": $user_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Remove user
@@ -8665,11 +8705,11 @@ export def "users delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/v4/users/{user_id}"))
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/v4/users/{user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -8687,18 +8727,18 @@ export def "users request" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --effective-roles: oneof<nothing, bool> # Filter users with DIRECT or DIRECT **AND** EFFECTIVE roles.  * `false`: DIRECT roles  * `true`: DIRECT **AND** EFFECTIVE roles  DIRECT means: e.g. user gets role **directly** granted from someone with _grant permission_ right.  EFFECTIVE means: e.g. user gets role through **group membership**.
+  --effective-roles: oneof<nothing, bool> # Filter users with DIRECT or DIRECT **AND** EFFECTIVE roles. * `false`: DIRECT roles * `true`: DIRECT **AND** EFFECTIVE roles DIRECT means: e.g. user gets role **directly** granted from someone with _grant permission_ right. EFFECTIVE means: e.g. user gets role through **group membership**.
   --x-sds-date-format: string@x-sds-date-format-completer # Date time format (cf. [RFC 3339](https://www.ietf.org/rfc/rfc3339.txt) & [leettime.de](http://leettime.de/))
   --x-sds-auth-token: string # Authentication token
 ]: nothing -> record<authData: record<adConfigId: int, login: string, method: string, mustChangePassword: bool, oidConfigId: int, password: string>, authMethods: table<authId: string, isEnabled: bool, options: list>, avatarUuid: string, email: string, expireAt: string, firstName: string, gender: string, hasManageableRooms: bool, homeRoomId: int, id: int, isEncryptionEnabled: bool, isLocked: bool, isMfaEnabled: bool, isMfaEnforced: bool, lastLoginSuccessAt: string, lastName: string, lockStatus: int, login: string, phone: string, publicKeyContainer: record<createdAt: string, createdBy: int, publicKey: string, version: string>, title: string, userAttributes: record<items: list<record>>, userName: string, userRoles: record<items: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "effective_roles" $effective_roles "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/v4/users/{user_id}") $qp)
-  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/v4/users/{user_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -8727,31 +8767,31 @@ export def "users update" [
   --x-sds-date-format: string@x-sds-date-format-completer # Date time format (cf. [RFC 3339](https://www.ietf.org/rfc/rfc3339.txt) & [leettime.de](http://leettime.de/))
   --x-sds-auth-token: string # Authentication token
   --auth-data: record # User Authentication Data Update Request — shape: {adConfigId?: int, login?: string, method?: string, oidConfigId?: int}
-  --auth-methods: list # &#128679; Deprecated since v4.13.0  Authentication methods:  * `sql`  * `active_directory`  * `radius`  * `openid`  use `authData` instead (DEPRECATED) — item shape: {authId: string, isEnabled: bool, options?: list}
-  --email: string # Email 
+  --auth-methods: list # &#128679; Deprecated since v4.13.0 Authentication methods: * `sql` * `active_directory` * `radius` * `openid` use `authData` instead (DEPRECATED) — item shape: {authId: string, isEnabled: bool, options?: list}
+  --email: string # Email
   --expiration: record # Expiration information — shape: {enableExpiration: bool, expireAt?: string}
   --first-name: string # User first name
-  --gender: string # &#128679; Deprecated since v4.12.0  Gender  Do NOT use `gender`! It will be ignored. (DEPRECATED, default: n)
-  --is-locked: oneof<nothing, bool> # User is locked:  * `false` - unlocked  * `true` - locked    User is locked and can not login anymore. (default: false)
+  --gender: string # &#128679; Deprecated since v4.12.0 Gender Do NOT use `gender`! It will be ignored. (DEPRECATED, default: n)
+  --is-locked: oneof<nothing, bool> # User is locked: * `false` - unlocked * `true` - locked User is locked and can not login anymore. (default: false)
   --last-name: string # User last name
-  --lock-status: int # &#128679; Deprecated since v4.7.0  User lock status:  * `0` - locked  * `1` - Web access allowed  * `2` - Web and mobile access allowed    Please use `isLocked` instead. (DEPRECATED, format: int32)
+  --lock-status: int # &#128679; Deprecated since v4.7.0 User lock status: * `0` - locked * `1` - Web access allowed * `2` - Web and mobile access allowed Please use `isLocked` instead. (DEPRECATED, format: int32)
   --mfa-config: record # Multi-factor authentication configuration — shape: {mfaEnforced?: bool}
   --phone: string # Phone number
   --receiver-language: string # IETF language tag
-  --title: string # &#128679; Deprecated since v4.18.0  Job title (DEPRECATED)
-  --user-name: string # &#128640; Since v4.13.0  Username
+  --title: string # &#128679; Deprecated since v4.18.0 Job title (DEPRECATED)
+  --user-name: string # &#128640; Since v4.13.0 Username
 ]: any -> record<authData: record<adConfigId: int, login: string, method: string, mustChangePassword: bool, oidConfigId: int, password: string>, authMethods: table<authId: string, isEnabled: bool, options: list>, avatarUuid: string, email: string, expireAt: string, firstName: string, gender: string, hasManageableRooms: bool, homeRoomId: int, id: int, isEncryptionEnabled: bool, isLocked: bool, isMfaEnabled: bool, isMfaEnforced: bool, lastLoginSuccessAt: string, lastName: string, lockStatus: int, login: string, phone: string, publicKeyContainer: record<createdAt: string, createdBy: int, publicKey: string, version: string>, title: string, userAttributes: record<items: list<record>>, userName: string, userRoles: record<items: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/v4/users/{user_id}"))
-  let body = {"authData": $auth_data, "authMethods": $auth_methods, "email": $email, "expiration": $expiration, "firstName": $first_name, "gender": $gender, "isLocked": $is_locked, "lastName": $last_name, "lockStatus": $lock_status, "mfaConfig": $mfa_config, "phone": $phone, "receiverLanguage": $receiver_language, "title": $title, "userName": $user_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/v4/users/{user_id}"))
+  let req_body = {"authData": $auth_data, "authMethods": $auth_methods, "email": $email, "expiration": $expiration, "firstName": $first_name, "gender": $gender, "isLocked": $is_locked, "lastName": $last_name, "lockStatus": $lock_status, "mfaConfig": $mfa_config, "phone": $phone, "receiverLanguage": $receiver_language, "title": $title, "userName": $user_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Request groups that user is a member of or / and can become a member
@@ -8769,18 +8809,18 @@ export def "users-groups request" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # Range offset (format: int32)
-  --limit: int # Range limit.  Maximum 500.   For more results please use paging (`offset` + `limit`). (format: int32)
+  --limit: int # Range limit. Maximum 500. For more results please use paging (`offset` + `limit`). (format: int32)
   --filter: string # Filter string
   --x-sds-auth-token: string # Authentication token
 ]: nothing -> record<items: table<id: int, isMember: bool, name: string>, range: record<limit: int, offset: int, total: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/v4/users/{user_id}/groups") $qp)
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/v4/users/{user_id}/groups") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -8802,11 +8842,11 @@ export def "users-last-admin-rooms request" [
 ]: nothing -> record<items: table<id: int, lastAdminInGroup: bool, lastAdminInGroupId: int, name: string, parentId: int, parentPath: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/v4/users/{user_id}/last_admin_rooms"))
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/v4/users/{user_id}/last_admin_rooms"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -8828,11 +8868,11 @@ export def "users-mfa-emergency-code request" [
 ]: nothing -> record<code: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/v4/users/{user_id}/mfa/emergency_code"))
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/v4/users/{user_id}/mfa/emergency_code"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -8854,11 +8894,11 @@ export def "users-roles request" [
 ]: nothing -> record<items: table<description: string, id: int, items: list, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/v4/users/{user_id}/roles"))
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/v4/users/{user_id}/roles"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -8879,7 +8919,7 @@ export def "users-rooms request" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # Range offset (format: int32)
-  --limit: int # Range limit.  Maximum 500.   For more results please use paging (`offset` + `limit`). (format: int32)
+  --limit: int # Range limit. Maximum 500. For more results please use paging (`offset` + `limit`). (format: int32)
   --filter: string # Filter string
   --x-sds-date-format: string@x-sds-date-format-completer # Date time format (cf. [RFC 3339](https://www.ietf.org/rfc/rfc3339.txt) & [leettime.de](http://leettime.de/))
   --x-sds-auth-token: string # Authentication token
@@ -8887,11 +8927,11 @@ export def "users-rooms request" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/v4/users/{user_id}/rooms") $qp)
-  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/v4/users/{user_id}/rooms") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -8910,7 +8950,7 @@ export def "users-user-attributes request" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # Range offset (format: int32)
-  --limit: int # Range limit.  Maximum 500.   For more results please use paging (`offset` + `limit`). (format: int32)
+  --limit: int # Range limit. Maximum 500. For more results please use paging (`offset` + `limit`). (format: int32)
   --filter: string # Filter string
   --qp-sort: string # Sort string
   --x-sds-auth-token: string # Authentication token
@@ -8918,11 +8958,11 @@ export def "users-user-attributes request" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/v4/users/{user_id}/userAttributes") $qp)
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/v4/users/{user_id}/userAttributes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -8933,7 +8973,7 @@ export def "users-user-attributes request" [
 # operationId: setUserAttributes
 # --items item shape: {key: string, value: string}
 @deprecated
-export def "users-user-attributes setUserAttributes" [
+export def "users-user-attributes update-by-user_id" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8950,14 +8990,14 @@ export def "users-user-attributes setUserAttributes" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/v4/users/{user_id}/userAttributes"))
-  let body = {"items": $items} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/v4/users/{user_id}/userAttributes"))
+  let req_body = {"items": $items} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Add or edit custom user attributes
@@ -8965,7 +9005,7 @@ export def "users-user-attributes setUserAttributes" [
 # PUT /v4/users/{user_id}/userAttributes
 # operationId: updateUserAttributes
 # --items item shape: {key: string, value: string}
-export def "users-user-attributes update" [
+export def "users-user-attributes update-by-user_id-1" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8982,14 +9022,14 @@ export def "users-user-attributes update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/v4/users/{user_id}/userAttributes"))
-  let body = {"items": $items} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/v4/users/{user_id}/userAttributes"))
+  let req_body = {"items": $items} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Sds-Date-Format": $x_sds_date_format, "X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Remove custom user attribute
@@ -9011,10 +9051,10 @@ export def "users-user-attributes delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id, key: $key} | format pattern "/v4/users/{user_id}/userAttributes/{key}"))
-  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), key: (encode-path-segment $key)} | format pattern "/v4/users/{user_id}/userAttributes/{key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Sds-Auth-Token": $x_sds_auth_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

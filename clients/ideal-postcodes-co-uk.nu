@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -70,7 +79,7 @@ def bias-ip-completer [] { ["true"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "addresses create-resses" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "addresses get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -94,7 +103,7 @@ export def commands []: nothing -> table {
 #
 # GET /addresses
 # operationId: Addresses
-export def "addresses create-resses" [
+export def "addresses get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -142,7 +151,7 @@ export def "addresses create-resses" [
 #
 # GET /autocomplete/addresses
 # operationId: AddressAutocomplete
-export def "autocomplete-addresses create-ress" [
+export def "autocomplete-addresses get-address" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -154,7 +163,7 @@ export def "autocomplete-addresses create-ress" [
   --api-key: string # e.g. ak_test
   --query: string # Specifies the address you wish to query. Query can be shortened to `q=`
   --context: string
-  --limit: int # Limits number of address suggestions unless a postcode is detected. In this instance entire list of addreses for that postcode is returned.  (format: int32, default: 10, e.g. 5)
+  --limit: int # Limits number of address suggestions unless a postcode is detected. In this instance entire list of addreses for that postcode is returned. (format: int32, default: 10, e.g. 5)
   --postcode-outward: string # e.g. 1AA
   --postcode: string # e.g. SW1A 2AA
   --postcode-area: string # e.g. SW
@@ -188,7 +197,7 @@ export def "autocomplete-addresses create-ress" [
 #
 # GET /autocomplete/addresses/{address}/gbr
 # operationId: Resolve
-export def "autocomplete-addresses-gbr get" [
+export def "autocomplete-addresses-gbr get-resolve" [
   address: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -203,7 +212,7 @@ export def "autocomplete-addresses-gbr get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api_key" $api_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({address: $address} | format pattern "/autocomplete/addresses/{address}/gbr") $qp)
+  let full_url = (build-url $base ({address: (encode-path-segment $address)} | format pattern "/autocomplete/addresses/{address}/gbr") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -213,7 +222,7 @@ export def "autocomplete-addresses-gbr get" [
 #
 # GET /autocomplete/addresses/{address}/usa
 # operationId: ResolveUsa
-export def "autocomplete-addresses-usa get" [
+export def "autocomplete-addresses-usa get-resolve" [
   address: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -228,7 +237,7 @@ export def "autocomplete-addresses-usa get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api_key" $api_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({address: $address} | format pattern "/autocomplete/addresses/{address}/usa") $qp)
+  let full_url = (build-url $base ({address: (encode-path-segment $address)} | format pattern "/autocomplete/addresses/{address}/usa") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -238,7 +247,7 @@ export def "autocomplete-addresses-usa get" [
 #
 # POST /cleanse/addresses
 # operationId: AddressCleanse
-export def "cleanse-addresses create-ress" [
+export def "cleanse-addresses create-address" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -248,25 +257,25 @@ export def "cleanse-addresses create-ress" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # e.g. ak_test
-  query: string # Freeform address input to cleanse  (e.g. 10 Downing Street, London, SW2A 2BN)
+  query: string # Freeform address input to cleanse (e.g. 10 Downing Street, London, SW2A 2BN)
 ]: any -> record<code: int, message: string, result: any> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api_key" $api_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/cleanse/addresses" $qp)
-  let body = {"query": $query} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"query": $query} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Email Validation
 #
 # GET /emails
 # operationId: EmailValidation
-export def "emails get" [
+export def "emails get-validation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -291,7 +300,7 @@ export def "emails get" [
 #
 # GET /keys/{key}
 # operationId: KeyAvailability
-export def "keys get" [
+export def "keys get-availability" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -304,7 +313,7 @@ export def "keys get" [
 ]: nothing -> record<code: int, message: string, result: record<available: bool, context: any, contexts: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({key: $key} | format pattern "/keys/{key}"))
+  let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/keys/{key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -329,7 +338,7 @@ export def "keys-configs list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "user_token" $user_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({key: $key} | format pattern "/keys/{key}/configs") $qp)
+  let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/keys/{key}/configs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -357,12 +366,12 @@ export def "keys-configs create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "user_token" $user_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({key: $key} | format pattern "/keys/{key}/configs") $qp)
-  let body = {"name": $name, "payload": $payload} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/keys/{key}/configs") $qp)
+  let req_body = {"name": $name, "payload": $payload} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete
@@ -385,7 +394,7 @@ export def "keys-configs delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "user_token" $user_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({key: $key, config: $config} | format pattern "/keys/{key}/configs/{config}") $qp)
+  let full_url = (build-url $base ({key: (encode-path-segment $key), config: (encode-path-segment $config)} | format pattern "/keys/{key}/configs/{config}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -395,7 +404,7 @@ export def "keys-configs delete" [
 #
 # GET /keys/{key}/configs/{config}
 # operationId: RetrieveConfig
-export def "keys-configs retrieve" [
+export def "keys-configs get" [
   key: string
   config: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -409,7 +418,7 @@ export def "keys-configs retrieve" [
 ]: nothing -> record<code: int, message: string, result: record<createdAt: string, name: string, payload: string, updatedAt: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({key: $key, config: $config} | format pattern "/keys/{key}/configs/{config}"))
+  let full_url = (build-url $base ({key: (encode-path-segment $key), config: (encode-path-segment $config)} | format pattern "/keys/{key}/configs/{config}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -437,12 +446,12 @@ export def "keys-configs update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "user_token" $user_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({key: $key, config: $config} | format pattern "/keys/{key}/configs/{config}") $qp)
-  let body = {"payload": $payload} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({key: (encode-path-segment $key), config: (encode-path-segment $config)} | format pattern "/keys/{key}/configs/{config}") $qp)
+  let req_body = {"payload": $payload} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Details
@@ -464,7 +473,7 @@ export def "keys-details get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "user_token" $user_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({key: $key} | format pattern "/keys/{key}/details") $qp)
+  let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/keys/{key}/details") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -492,7 +501,7 @@ export def "keys-licensees list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "starting_after" $starting_after "scalar") (serialize-qp "user_token" $user_token "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "query" $query "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({key: $key} | format pattern "/keys/{key}/licensees") $qp)
+  let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/keys/{key}/licensees") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -518,18 +527,18 @@ export def "keys-licensees create" [
   --daily: record # shape: {limit?: float}
   --name: string # Licensee individual or organisation name (e.g. Qwerty Widgets Limited)
   --postcode: string # Licensee's postcode (e.g. ID1 1QD)
-  --whitelist: list # A list of allowed URLs. An empty list means that whitelisting is disabled
+  --whitelist: list<string> # A list of allowed URLs. An empty list means that whitelisting is disabled
 ]: any -> record<code: int, message: string, result: record<address: string, daily: record<count: float, updatedAt: string>, name: string, postcode: string, whitelist: list<string>, createdAt: string, id: string, key: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "user_token" $user_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({key: $key} | format pattern "/keys/{key}/licensees") $qp)
-  let body = {"address": $address, "daily": $daily, "name": $name, "postcode": $postcode, "whitelist": $whitelist} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/keys/{key}/licensees") $qp)
+  let req_body = {"address": $address, "daily": $daily, "name": $name, "postcode": $postcode, "whitelist": $whitelist} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Cancel
@@ -552,7 +561,7 @@ export def "keys-licensees delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "user_token" $user_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({key: $key, licensee: $licensee} | format pattern "/keys/{key}/licensees/{licensee}") $qp)
+  let full_url = (build-url $base ({key: (encode-path-segment $key), licensee: (encode-path-segment $licensee)} | format pattern "/keys/{key}/licensees/{licensee}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -562,7 +571,7 @@ export def "keys-licensees delete" [
 #
 # GET /keys/{key}/licensees/{licensee}
 # operationId: RetrieveLicensee
-export def "keys-licensees retrieve" [
+export def "keys-licensees get" [
   key: string
   licensee: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -578,7 +587,7 @@ export def "keys-licensees retrieve" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "user_token" $user_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({key: $key, licensee: $licensee} | format pattern "/keys/{key}/licensees/{licensee}") $qp)
+  let full_url = (build-url $base ({key: (encode-path-segment $key), licensee: (encode-path-segment $licensee)} | format pattern "/keys/{key}/licensees/{licensee}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -605,18 +614,18 @@ export def "keys-licensees update" [
   --daily: record # shape: {limit?: float}
   --name: string # Licensee individual or organisation name (e.g. Qwerty Widgets Limited)
   --postcode: string # Licensee's postcode (e.g. ID1 1QD)
-  --whitelist: list # A list of allowed URLs. An empty list means that whitelisting is disabled
+  --whitelist: list<string> # A list of allowed URLs. An empty list means that whitelisting is disabled
 ]: any -> record<code: int, message: string, result: record<address: string, daily: record<count: float, updatedAt: string>, name: string, postcode: string, whitelist: list<string>, createdAt: string, id: string, key: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "user_token" $user_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({key: $key, licensee: $licensee} | format pattern "/keys/{key}/licensees/{licensee}") $qp)
-  let body = {"address": $address, "daily": $daily, "name": $name, "postcode": $postcode, "whitelist": $whitelist} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({key: (encode-path-segment $key), licensee: (encode-path-segment $licensee)} | format pattern "/keys/{key}/licensees/{licensee}") $qp)
+  let req_body = {"address": $address, "daily": $daily, "name": $name, "postcode": $postcode, "whitelist": $whitelist} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Logs (CSV)
@@ -640,7 +649,7 @@ export def "keys-lookups logs" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "licensee" $licensee "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({key: $key} | format pattern "/keys/{key}/lookups") $qp)
+  let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/keys/{key}/lookups") $qp)
   let accept_val = "text/csv"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -668,7 +677,7 @@ export def "keys-usage get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "licensee" $licensee "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({key: $key} | format pattern "/keys/{key}/usage") $qp)
+  let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/keys/{key}/usage") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -678,7 +687,7 @@ export def "keys-usage get" [
 #
 # GET /phone_numbers
 # operationId: PhoneNumberValidation
-export def "phone-numbers get" [
+export def "phone-numbers get-validation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -703,7 +712,7 @@ export def "phone-numbers get" [
 #
 # GET /places
 # operationId: FindPlace
-export def "places get" [
+export def "places find" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -732,7 +741,7 @@ export def "places get" [
 #
 # GET /places/${place}
 # operationId: ResolvePlace
-export def "places-place get" [
+export def "places-place get-resolve" [
   place: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -747,7 +756,7 @@ export def "places-place get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api_key" $api_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({place: $place} | format pattern "/places/${place}") $qp)
+  let full_url = (build-url $base ({place: (encode-path-segment $place)} | format pattern "/places/${place}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -757,7 +766,7 @@ export def "places-place get" [
 #
 # GET /postcodes/{postcode}
 # operationId: Postcodes
-export def "postcodes create-codes" [
+export def "postcodes get" [
   postcode: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -774,7 +783,7 @@ export def "postcodes create-codes" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({postcode: $postcode} | format pattern "/postcodes/{postcode}") $qp)
+  let full_url = (build-url $base ({postcode: (encode-path-segment $postcode)} | format pattern "/postcodes/{postcode}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -800,7 +809,7 @@ export def "udprn get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({udprn: $udprn} | format pattern "/udprn/{udprn}") $qp)
+  let full_url = (build-url $base ({udprn: (encode-path-segment $udprn)} | format pattern "/udprn/{udprn}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -826,7 +835,7 @@ export def "umprn get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({umprn: $umprn} | format pattern "/umprn/{umprn}") $qp)
+  let full_url = (build-url $base ({umprn: (encode-path-segment $umprn)} | format pattern "/umprn/{umprn}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

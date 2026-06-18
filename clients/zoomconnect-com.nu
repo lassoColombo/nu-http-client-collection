@@ -36,6 +36,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -61,6 +70,33 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   }
   if ($method in ["head" "options"]) { return $resp }
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+}
+
+# Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
+# the field names whose value should be read from disk as bytes; every
+# other field is sent as a text part (records/lists JSON-stringified).
+# Returns {content_type, body} ready to pass to `do-request`.
+def build-multipart-body [parts: record, file_fields: list<string>]: nothing -> record {
+  let boundary = $"----nu-(random chars --length 24)"
+  let crlf = "\r\n"
+  let chunks = ($parts | transpose k v | where {|p| $p.v != null} | each {|p|
+    let name = $p.k
+    let val = $p.v
+    if $name in $file_fields {
+      let filename = ($val | path basename)
+      let bytes = (open --raw $val | into binary | collect)
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"; filename=\"($filename)\"($crlf)Content-Type: application/octet-stream($crlf)($crlf)" | into binary)
+      $head ++ $bytes ++ ($crlf | into binary)
+    } else {
+      let dt = ($val | describe)
+      let s = if (($dt | str starts-with "record") or ($dt | str starts-with "list") or ($dt | str starts-with "table")) { ($val | to json --raw) } else { ($val | into string) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"($crlf)($crlf)" | into binary)
+      $head ++ ($"($s)($crlf)" | into binary)
+    }
+  })
+  let trailer = ($"--($boundary)--($crlf)" | into binary)
+  let body = ($chunks | reduce --fold (0x[] | into binary) {|chunk, acc| $acc ++ $chunk }) ++ $trailer
+  {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
 }
 
 def base-url-completer [] { ["https://www.zoomconnect.com/app"] }
@@ -151,7 +187,7 @@ export def "rest-account-statistics get" [
 #
 # POST /api/rest/v1/account/transfer
 # operationId: transfer
-export def "rest-account-transfer transfer" [
+export def "rest-account-transfer create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -169,18 +205,18 @@ export def "rest-account-transfer transfer" [
   let auth = (build-auth $token ($auth_scheme | default "email"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/account/transfer")
-  let body = {"numberOfCreditsToTransfer": $number_of_credits_to_transfer, "transferFromEmailAddress": $transfer_from_email_address, "transferToEmailAddress": $transfer_to_email_address} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"numberOfCreditsToTransfer": $number_of_credits_to_transfer, "transferFromEmailAddress": $transfer_from_email_address, "transferToEmailAddress": $transfer_to_email_address} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # search
 #
 # GET /api/rest/v1/account/user
 # operationId: search
-export def "rest-account-user search" [
+export def "rest-account-user list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -204,7 +240,7 @@ export def "rest-account-user search" [
 # create
 #
 # PUT /api/rest/v1/account/user
-export def "rest-account-user put" [
+export def "rest-account-user update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -227,11 +263,11 @@ export def "rest-account-user put" [
   let auth = (build-auth $token ($auth_scheme | default "email"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/account/user")
-  let body = {"company": $company, "contactNumber": $contact_number, "creditBalance": $credit_balance, "emailAddress": $email_address, "firstName": $first_name, "lastName": $last_name, "password": $password, "userId": $user_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"company": $company, "contactNumber": $contact_number, "creditBalance": $credit_balance, "emailAddress": $email_address, "firstName": $first_name, "lastName": $last_name, "password": $password, "userId": $user_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # getUser
@@ -252,7 +288,7 @@ export def "rest-account-user get" [
 ]: nothing -> record<company: string, contactNumber: string, creditBalance: float, emailAddress: string, firstName: string, lastName: string, password: string, userId: int> {
   let auth = (build-auth $token ($auth_scheme | default "email"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/api/rest/v1/account/user/{user_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/api/rest/v1/account/user/{user_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -261,7 +297,7 @@ export def "rest-account-user get" [
 # update
 #
 # POST /api/rest/v1/account/user/{userId}
-export def "rest-account-user post" [
+export def "rest-account-user create" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -284,12 +320,12 @@ export def "rest-account-user post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "email"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/api/rest/v1/account/user/{user_id}"))
-  let body = {"company": $company, "contactNumber": $contact_number, "creditBalance": $credit_balance, "emailAddress": $email_address, "firstName": $first_name, "lastName": $last_name, "password": $password, "userId": $body_user_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/api/rest/v1/account/user/{user_id}"))
+  let req_body = {"company": $company, "contactNumber": $contact_number, "creditBalance": $credit_balance, "emailAddress": $email_address, "firstName": $first_name, "lastName": $last_name, "password": $password, "userId": $body_user_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # all
@@ -318,7 +354,7 @@ export def "rest-contacts-all get" [
 #
 # POST /api/rest/v1/contacts/create
 # --links item shape: {href?: string, rel?: string, templated?: bool}
-export def "rest-contacts-create post" [
+export def "rest-contacts-create create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -339,11 +375,11 @@ export def "rest-contacts-create post" [
   let auth = (build-auth $token ($auth_scheme | default "email"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/contacts/create")
-  let body = {"contactId": $contact_id, "contactNumber": $contact_number, "firstName": $first_name, "lastName": $last_name, "links": $links, "title": $title} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"contactId": $contact_id, "contactNumber": $contact_number, "firstName": $first_name, "lastName": $last_name, "links": $links, "title": $title} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # delete
@@ -363,7 +399,7 @@ export def "rest-contacts delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "email"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({contact_id: $contact_id} | format pattern "/api/rest/v1/contacts/{contact_id}"))
+  let full_url = (build-url $base ({contact_id: (encode-path-segment $contact_id)} | format pattern "/api/rest/v1/contacts/{contact_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -386,7 +422,7 @@ export def "rest-contacts get" [
 ]: nothing -> record<contactId: string, contactNumber: string, firstName: string, lastName: string, links: table<href: string, rel: string, templated: bool>, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "email"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({contact_id: $contact_id} | format pattern "/api/rest/v1/contacts/{contact_id}"))
+  let full_url = (build-url $base ({contact_id: (encode-path-segment $contact_id)} | format pattern "/api/rest/v1/contacts/{contact_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -396,7 +432,7 @@ export def "rest-contacts get" [
 #
 # POST /api/rest/v1/contacts/{contactId}
 # --links item shape: {href?: string, rel?: string, templated?: bool}
-export def "rest-contacts post" [
+export def "rest-contacts create" [
   contact_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -417,12 +453,12 @@ export def "rest-contacts post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "email"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({contact_id: $contact_id} | format pattern "/api/rest/v1/contacts/{contact_id}"))
-  let body = {"contactId": $body_contact_id, "contactNumber": $contact_number, "firstName": $first_name, "lastName": $last_name, "links": $links, "title": $title} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({contact_id: (encode-path-segment $contact_id)} | format pattern "/api/rest/v1/contacts/{contact_id}"))
+  let req_body = {"contactId": $body_contact_id, "contactNumber": $contact_number, "firstName": $first_name, "lastName": $last_name, "links": $links, "title": $title} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # removeFromGroup
@@ -443,7 +479,7 @@ export def "rest-contacts-add-from-group get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "email"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({contact_id: $contact_id, group_id: $group_id} | format pattern "/api/rest/v1/contacts/{contact_id}/addFromGroup/{group_id}"))
+  let full_url = (build-url $base ({contact_id: (encode-path-segment $contact_id), group_id: (encode-path-segment $group_id)} | format pattern "/api/rest/v1/contacts/{contact_id}/addFromGroup/{group_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -452,7 +488,7 @@ export def "rest-contacts-add-from-group get" [
 # removeFromGroup
 #
 # POST /api/rest/v1/contacts/{contactId}/addFromGroup/{groupId}
-export def "rest-contacts-add-from-group post" [
+export def "rest-contacts-add-from-group create" [
   contact_id: string
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -467,7 +503,7 @@ export def "rest-contacts-add-from-group post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "email"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({contact_id: $contact_id, group_id: $group_id} | format pattern "/api/rest/v1/contacts/{contact_id}/addFromGroup/{group_id}"))
+  let full_url = (build-url $base ({contact_id: (encode-path-segment $contact_id), group_id: (encode-path-segment $group_id)} | format pattern "/api/rest/v1/contacts/{contact_id}/addFromGroup/{group_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -491,7 +527,7 @@ export def "rest-contacts-add-to-group get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "email"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({contact_id: $contact_id, group_id: $group_id} | format pattern "/api/rest/v1/contacts/{contact_id}/addToGroup/{group_id}"))
+  let full_url = (build-url $base ({contact_id: (encode-path-segment $contact_id), group_id: (encode-path-segment $group_id)} | format pattern "/api/rest/v1/contacts/{contact_id}/addToGroup/{group_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -500,7 +536,7 @@ export def "rest-contacts-add-to-group get" [
 # addToGroup
 #
 # POST /api/rest/v1/contacts/{contactId}/addToGroup/{groupId}
-export def "rest-contacts-add-to-group post" [
+export def "rest-contacts-add-to-group create" [
   contact_id: string
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -515,7 +551,7 @@ export def "rest-contacts-add-to-group post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "email"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({contact_id: $contact_id, group_id: $group_id} | format pattern "/api/rest/v1/contacts/{contact_id}/addToGroup/{group_id}"))
+  let full_url = (build-url $base ({contact_id: (encode-path-segment $contact_id), group_id: (encode-path-segment $group_id)} | format pattern "/api/rest/v1/contacts/{contact_id}/addToGroup/{group_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -547,7 +583,7 @@ export def "rest-groups-all get" [
 #
 # POST /api/rest/v1/groups/create
 # --links item shape: {href?: string, rel?: string, templated?: bool}
-export def "rest-groups-create post" [
+export def "rest-groups-create create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -565,11 +601,11 @@ export def "rest-groups-create post" [
   let auth = (build-auth $token ($auth_scheme | default "email"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/groups/create")
-  let body = {"groupId": $group_id, "links": $links, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"groupId": $group_id, "links": $links, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # delete
@@ -589,7 +625,7 @@ export def "rest-groups delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "email"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/api/rest/v1/groups/{group_id}"))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/api/rest/v1/groups/{group_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -612,7 +648,7 @@ export def "rest-groups get" [
 ]: nothing -> record<groupId: string, links: table<href: string, rel: string, templated: bool>, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "email"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/api/rest/v1/groups/{group_id}"))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/api/rest/v1/groups/{group_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -622,7 +658,7 @@ export def "rest-groups get" [
 #
 # POST /api/rest/v1/groups/{groupId}
 # --links item shape: {href?: string, rel?: string, templated?: bool}
-export def "rest-groups post" [
+export def "rest-groups create" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -640,12 +676,12 @@ export def "rest-groups post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "email"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/api/rest/v1/groups/{group_id}"))
-  let body = {"groupId": $body_group_id, "links": $links, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/api/rest/v1/groups/{group_id}"))
+  let req_body = {"groupId": $body_group_id, "links": $links, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # addContact
@@ -666,7 +702,7 @@ export def "rest-groups-add-contact get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "email"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({group_id: $group_id, contact_id: $contact_id} | format pattern "/api/rest/v1/groups/{group_id}/addContact/{contact_id}"))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), contact_id: (encode-path-segment $contact_id)} | format pattern "/api/rest/v1/groups/{group_id}/addContact/{contact_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -675,7 +711,7 @@ export def "rest-groups-add-contact get" [
 # addContact
 #
 # POST /api/rest/v1/groups/{groupId}/addContact/{contactId}
-export def "rest-groups-add-contact post" [
+export def "rest-groups-add-contact create" [
   group_id: string
   contact_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -690,7 +726,7 @@ export def "rest-groups-add-contact post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "email"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({group_id: $group_id, contact_id: $contact_id} | format pattern "/api/rest/v1/groups/{group_id}/addContact/{contact_id}"))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), contact_id: (encode-path-segment $contact_id)} | format pattern "/api/rest/v1/groups/{group_id}/addContact/{contact_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -714,7 +750,7 @@ export def "rest-groups-remove-contact get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "email"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({group_id: $group_id, contact_id: $contact_id} | format pattern "/api/rest/v1/groups/{group_id}/removeContact/{contact_id}"))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), contact_id: (encode-path-segment $contact_id)} | format pattern "/api/rest/v1/groups/{group_id}/removeContact/{contact_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -723,7 +759,7 @@ export def "rest-groups-remove-contact get" [
 # removeContact
 #
 # POST /api/rest/v1/groups/{groupId}/removeContact/{contactId}
-export def "rest-groups-remove-contact post" [
+export def "rest-groups-remove-contact create" [
   group_id: string
   contact_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -738,7 +774,7 @@ export def "rest-groups-remove-contact post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "email"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({group_id: $group_id, contact_id: $contact_id} | format pattern "/api/rest/v1/groups/{group_id}/removeContact/{contact_id}"))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), contact_id: (encode-path-segment $contact_id)} | format pattern "/api/rest/v1/groups/{group_id}/removeContact/{contact_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -787,7 +823,7 @@ export def "rest-messages-all get" [
 #
 # POST /api/rest/v1/messages/analyse/full
 # operationId: analyse-full
-export def "rest-messages-analyse-full analyse-full" [
+export def "rest-messages-analyse-full create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -804,18 +840,18 @@ export def "rest-messages-analyse-full analyse-full" [
   let auth = (build-auth $token ($auth_scheme | default "email"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/messages/analyse/full")
-  let body = {"message": $message, "recipientNumber": $recipient_number} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"message": $message, "recipientNumber": $recipient_number} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # analyse-message-credit-cost
 #
 # POST /api/rest/v1/messages/analyse/message-credit-cost
 # operationId: analyse-message-credit-cost
-export def "rest-messages-analyse-message-credit-cost analyse-message-credit-cost" [
+export def "rest-messages-analyse-message-credit-cost create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -832,18 +868,18 @@ export def "rest-messages-analyse-message-credit-cost analyse-message-credit-cos
   let auth = (build-auth $token ($auth_scheme | default "email"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/messages/analyse/message-credit-cost")
-  let body = {"message": $message, "recipientNumber": $recipient_number} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"message": $message, "recipientNumber": $recipient_number} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # analyse-message-encoding
 #
 # POST /api/rest/v1/messages/analyse/message-encoding
 # operationId: analyse-message-encoding
-export def "rest-messages-analyse-message-encoding analyse-message-encoding" [
+export def "rest-messages-analyse-message-encoding create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -860,18 +896,18 @@ export def "rest-messages-analyse-message-encoding analyse-message-encoding" [
   let auth = (build-auth $token ($auth_scheme | default "email"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/messages/analyse/message-encoding")
-  let body = {"message": $message, "recipientNumber": $recipient_number} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"message": $message, "recipientNumber": $recipient_number} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # analyse-message-length
 #
 # POST /api/rest/v1/messages/analyse/message-length
 # operationId: analyse-message-length
-export def "rest-messages-analyse-message-length analyse-message-length" [
+export def "rest-messages-analyse-message-length create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -888,18 +924,18 @@ export def "rest-messages-analyse-message-length analyse-message-length" [
   let auth = (build-auth $token ($auth_scheme | default "email"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/messages/analyse/message-length")
-  let body = {"message": $message, "recipientNumber": $recipient_number} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"message": $message, "recipientNumber": $recipient_number} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # analyse-
 #
 # POST /api/rest/v1/messages/analyse/message-length-within-max-allowed
 # operationId: analyse-
-export def "rest-messages-analyse-message-length-within-max-allowed analyse-" [
+export def "rest-messages-analyse-message-length-within-max-allowed create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -916,18 +952,18 @@ export def "rest-messages-analyse-message-length-within-max-allowed analyse-" [
   let auth = (build-auth $token ($auth_scheme | default "email"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/messages/analyse/message-length-within-max-allowed")
-  let body = {"message": $message, "recipientNumber": $recipient_number} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"message": $message, "recipientNumber": $recipient_number} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # analyse-number-of-messages
 #
 # POST /api/rest/v1/messages/analyse/number-of-messages
 # operationId: analyse-number-of-messages
-export def "rest-messages-analyse-number-of-messages analyse-number-of-messages" [
+export def "rest-messages-analyse-number-of-messages create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -944,11 +980,11 @@ export def "rest-messages-analyse-number-of-messages analyse-number-of-messages"
   let auth = (build-auth $token ($auth_scheme | default "email"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/messages/analyse/number-of-messages")
-  let body = {"message": $message, "recipientNumber": $recipient_number} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"message": $message, "recipientNumber": $recipient_number} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # delete
@@ -968,7 +1004,7 @@ export def "rest-messages delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "email"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({message_id: $message_id} | format pattern "/api/rest/v1/messages/{message_id}"))
+  let full_url = (build-url $base ({message_id: (encode-path-segment $message_id)} | format pattern "/api/rest/v1/messages/{message_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -991,7 +1027,7 @@ export def "rest-messages get" [
 ]: nothing -> record<campaign: string, contact: record<contactId: string, links: list<record>>, creditCost: float, dateTimeReceived: string, dateTimeScheduled: string, dateTimeSent: string, deleted: bool, fromNumber: string, links: table<href: string, rel: string, templated: bool>, message: string, messageId: string, messageStatus: string, messageType: string, numberOfMessages: int, read: bool, repliedToMessage: record<links: list<record>, messageId: string>, toNumber: string, userDataField: string> {
   let auth = (build-auth $token ($auth_scheme | default "email"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({message_id: $message_id} | format pattern "/api/rest/v1/messages/{message_id}"))
+  let full_url = (build-url $base ({message_id: (encode-path-segment $message_id)} | format pattern "/api/rest/v1/messages/{message_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1000,7 +1036,7 @@ export def "rest-messages get" [
 # markRead
 #
 # POST /api/rest/v1/messages/{messageId}/markRead
-export def "rest-messages-mark-read post" [
+export def "rest-messages-mark-read create" [
   message_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1014,7 +1050,7 @@ export def "rest-messages-mark-read post" [
 ]: nothing -> record<campaign: string, contact: record<contactId: string, links: list<record>>, creditCost: float, dateTimeReceived: string, dateTimeScheduled: string, dateTimeSent: string, deleted: bool, fromNumber: string, links: table<href: string, rel: string, templated: bool>, message: string, messageId: string, messageStatus: string, messageType: string, numberOfMessages: int, read: bool, repliedToMessage: record<links: list<record>, messageId: string>, toNumber: string, userDataField: string> {
   let auth = (build-auth $token ($auth_scheme | default "email"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({message_id: $message_id} | format pattern "/api/rest/v1/messages/{message_id}/markRead"))
+  let full_url = (build-url $base ({message_id: (encode-path-segment $message_id)} | format pattern "/api/rest/v1/messages/{message_id}/markRead"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1023,7 +1059,7 @@ export def "rest-messages-mark-read post" [
 # markRead
 #
 # PUT /api/rest/v1/messages/{messageId}/markRead
-export def "rest-messages-mark-read put" [
+export def "rest-messages-mark-read update" [
   message_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1037,7 +1073,7 @@ export def "rest-messages-mark-read put" [
 ]: nothing -> record<campaign: string, contact: record<contactId: string, links: list<record>>, creditCost: float, dateTimeReceived: string, dateTimeScheduled: string, dateTimeSent: string, deleted: bool, fromNumber: string, links: table<href: string, rel: string, templated: bool>, message: string, messageId: string, messageStatus: string, messageType: string, numberOfMessages: int, read: bool, repliedToMessage: record<links: list<record>, messageId: string>, toNumber: string, userDataField: string> {
   let auth = (build-auth $token ($auth_scheme | default "email"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({message_id: $message_id} | format pattern "/api/rest/v1/messages/{message_id}/markRead"))
+  let full_url = (build-url $base ({message_id: (encode-path-segment $message_id)} | format pattern "/api/rest/v1/messages/{message_id}/markRead"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1046,7 +1082,7 @@ export def "rest-messages-mark-read put" [
 # markUnread
 #
 # POST /api/rest/v1/messages/{messageId}/markUnread
-export def "rest-messages-mark-unread post" [
+export def "rest-messages-mark-unread create" [
   message_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1060,7 +1096,7 @@ export def "rest-messages-mark-unread post" [
 ]: nothing -> record<campaign: string, contact: record<contactId: string, links: list<record>>, creditCost: float, dateTimeReceived: string, dateTimeScheduled: string, dateTimeSent: string, deleted: bool, fromNumber: string, links: table<href: string, rel: string, templated: bool>, message: string, messageId: string, messageStatus: string, messageType: string, numberOfMessages: int, read: bool, repliedToMessage: record<links: list<record>, messageId: string>, toNumber: string, userDataField: string> {
   let auth = (build-auth $token ($auth_scheme | default "email"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({message_id: $message_id} | format pattern "/api/rest/v1/messages/{message_id}/markUnread"))
+  let full_url = (build-url $base ({message_id: (encode-path-segment $message_id)} | format pattern "/api/rest/v1/messages/{message_id}/markUnread"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1069,7 +1105,7 @@ export def "rest-messages-mark-unread post" [
 # markUnread
 #
 # PUT /api/rest/v1/messages/{messageId}/markUnread
-export def "rest-messages-mark-unread put" [
+export def "rest-messages-mark-unread update" [
   message_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1083,7 +1119,7 @@ export def "rest-messages-mark-unread put" [
 ]: nothing -> record<campaign: string, contact: record<contactId: string, links: list<record>>, creditCost: float, dateTimeReceived: string, dateTimeScheduled: string, dateTimeSent: string, deleted: bool, fromNumber: string, links: table<href: string, rel: string, templated: bool>, message: string, messageId: string, messageStatus: string, messageType: string, numberOfMessages: int, read: bool, repliedToMessage: record<links: list<record>, messageId: string>, toNumber: string, userDataField: string> {
   let auth = (build-auth $token ($auth_scheme | default "email"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({message_id: $message_id} | format pattern "/api/rest/v1/messages/{message_id}/markUnread"))
+  let full_url = (build-url $base ({message_id: (encode-path-segment $message_id)} | format pattern "/api/rest/v1/messages/{message_id}/markUnread"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1114,7 +1150,7 @@ export def "rest-sms-send get" [
 # send
 #
 # POST /api/rest/v1/sms/send
-export def "rest-sms-send post" [
+export def "rest-sms-send create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1134,11 +1170,11 @@ export def "rest-sms-send post" [
   let auth = (build-auth $token ($auth_scheme | default "email"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/sms/send")
-  let body = {"campaign": $campaign, "dataField": $data_field, "dateToSend": $date_to_send, "message": $message, "recipientNumber": $recipient_number} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"campaign": $campaign, "dataField": $data_field, "dateToSend": $date_to_send, "message": $message, "recipientNumber": $recipient_number} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # send-bulk
@@ -1167,7 +1203,7 @@ export def "rest-sms-send-bulk get" [
 #
 # POST /api/rest/v1/sms/send-bulk
 # --sendSmsRequests item shape: {campaign?: string, dataField?: string, dateToSend?: string, message?: string, recipientNumber?: string}
-export def "rest-sms-send-bulk post" [
+export def "rest-sms-send-bulk create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1185,11 +1221,11 @@ export def "rest-sms-send-bulk post" [
   let auth = (build-auth $token ($auth_scheme | default "email"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/sms/send-bulk")
-  let body = {"defaultDateToSend": $default_date_to_send, "messagesPerMinute": $messages_per_minute, "sendSmsRequests": $send_sms_requests} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"defaultDateToSend": $default_date_to_send, "messagesPerMinute": $messages_per_minute, "sendSmsRequests": $send_sms_requests} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # send-url-parameters
@@ -1223,7 +1259,7 @@ export def "rest-sms-send-url-parameters get" [
 # send-url-parameters
 #
 # POST /api/rest/v1/sms/send-url-parameters
-export def "rest-sms-send-url-parameters post" [
+export def "rest-sms-send-url-parameters create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1271,7 +1307,7 @@ export def "rest-sms-send-url get" [
   let auth = (build-auth $token ($auth_scheme | default "email"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "recipientNumber" $recipient_number "scalar") (serialize-qp "message" $message "scalar") (serialize-qp "dateToSend" $date_to_send "scalar") (serialize-qp "campaign" $campaign "scalar") (serialize-qp "dataField" $data_field "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({token_arg: $token_arg} | format pattern "/api/rest/v1/sms/send-url/{token_arg}") $qp)
+  let full_url = (build-url $base ({token_arg: (encode-path-segment $token_arg)} | format pattern "/api/rest/v1/sms/send-url/{token_arg}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1280,7 +1316,7 @@ export def "rest-sms-send-url get" [
 # send-url
 #
 # POST /api/rest/v1/sms/send-url/{token}
-export def "rest-sms-send-url post" [
+export def "rest-sms-send-url create" [
   token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1300,7 +1336,7 @@ export def "rest-sms-send-url post" [
   let auth = (build-auth $token ($auth_scheme | default "email"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "recipientNumber" $recipient_number "scalar") (serialize-qp "message" $message "scalar") (serialize-qp "dateToSend" $date_to_send "scalar") (serialize-qp "campaign" $campaign "scalar") (serialize-qp "dataField" $data_field "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({token_arg: $token_arg} | format pattern "/api/rest/v1/sms/send-url/{token_arg}") $qp)
+  let full_url = (build-url $base ({token_arg: (encode-path-segment $token_arg)} | format pattern "/api/rest/v1/sms/send-url/{token_arg}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1345,7 +1381,7 @@ export def "rest-templates delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "email"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({template_id: $template_id} | format pattern "/api/rest/v1/templates/{template_id}"))
+  let full_url = (build-url $base ({template_id: (encode-path-segment $template_id)} | format pattern "/api/rest/v1/templates/{template_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1368,7 +1404,7 @@ export def "rest-templates get" [
 ]: nothing -> record<data: string, links: table<href: string, rel: string, templated: bool>, name: string, templateId: int> {
   let auth = (build-auth $token ($auth_scheme | default "email"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({template_id: $template_id} | format pattern "/api/rest/v1/templates/{template_id}"))
+  let full_url = (build-url $base ({template_id: (encode-path-segment $template_id)} | format pattern "/api/rest/v1/templates/{template_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1411,7 +1447,7 @@ export def "rest-voice-all get" [
 #
 # POST /api/rest/v1/voice/single-audio
 # operationId: single-audio
-export def "rest-voice-single-audio single-audio" [
+export def "rest-voice-single-audio create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1434,19 +1470,19 @@ export def "rest-voice-single-audio single-audio" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "recipientNumber" $recipient_number "scalar") (serialize-qp "campaign" $campaign "scalar") (serialize-qp "dataField" $data_field "scalar") (serialize-qp "retryCount" $retry_count "scalar") (serialize-qp "retryMinimumInterval" $retry_minimum_interval "scalar") (serialize-qp "retryMaximumInterval" $retry_maximum_interval "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/rest/v1/voice/single-audio" $qp)
-  let body = {"file": $file} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"file": $file} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let body = if ($file | is-not-empty) { $body | upsert file (open -r $file) } else { $body }
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body ["file"])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # single-text
 #
 # POST /api/rest/v1/voice/single-text
 # operationId: single-text
-export def "rest-voice-single-text single-text" [
+export def "rest-voice-single-text create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1469,11 +1505,11 @@ export def "rest-voice-single-text single-text" [
   let auth = (build-auth $token ($auth_scheme | default "email"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/voice/single-text")
-  let body = {"campaign": $campaign, "dataField": $data_field, "language": $language, "message": $message, "recipientNumber": $recipient_number, "retryCount": $retry_count, "retryMaximumInterval": $retry_maximum_interval, "retryMinimumInterval": $retry_minimum_interval} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"campaign": $campaign, "dataField": $data_field, "language": $language, "message": $message, "recipientNumber": $recipient_number, "retryCount": $retry_count, "retryMaximumInterval": $retry_maximum_interval, "retryMinimumInterval": $retry_minimum_interval} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # delete
@@ -1493,7 +1529,7 @@ export def "rest-voice delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "email"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({message_id: $message_id} | format pattern "/api/rest/v1/voice/{message_id}"))
+  let full_url = (build-url $base ({message_id: (encode-path-segment $message_id)} | format pattern "/api/rest/v1/voice/{message_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1516,7 +1552,7 @@ export def "rest-voice get" [
 ]: nothing -> record<audioFileUrl: string, campaign: string, dateTimeSent: string, deleted: bool, language: string, links: table<href: string, rel: string, templated: bool>, message: string, messageStatus: string, toNumber: string, userDataField: string, voiceMessageId: string> {
   let auth = (build-auth $token ($auth_scheme | default "email"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({message_id: $message_id} | format pattern "/api/rest/v1/voice/{message_id}"))
+  let full_url = (build-url $base ({message_id: (encode-path-segment $message_id)} | format pattern "/api/rest/v1/voice/{message_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -72,7 +81,7 @@ def cancellation-reason-completer [] { ["CANCELLATION_REASON_ACCIDENTAL_PURCHASE
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "partners paymentsresellersubscriptionpartnerssubscriptionsget" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "partners get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -96,7 +105,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/{name}
 # operationId: paymentsresellersubscription.partners.subscriptions.get
-export def "partners paymentsresellersubscriptionpartnerssubscriptionsget" [
+export def "partners get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -121,7 +130,7 @@ export def "partners paymentsresellersubscriptionpartnerssubscriptionsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -131,7 +140,7 @@ export def "partners paymentsresellersubscriptionpartnerssubscriptionsget" [
 #
 # POST /v1/{name}:cancel
 # operationId: paymentsresellersubscription.partners.subscriptions.cancel
-export def "partners paymentsresellersubscriptionpartnerssubscriptionscancel" [
+export def "partners cancel" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -159,19 +168,19 @@ export def "partners paymentsresellersubscriptionpartnerssubscriptionscancel" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}:cancel") $qp)
-  let body = {"cancelImmediately": $cancel_immediately, "cancellationReason": $cancellation_reason} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}:cancel") $qp)
+  let req_body = {"cancelImmediately": $cancel_immediately, "cancellationReason": $cancellation_reason} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Used by partners to entitle a previously provisioned subscription to the current end user. The end user identity is inferred from the authorized credential of the request. This API must be authorized by the end user using OAuth.
 #
 # POST /v1/{name}:entitle
 # operationId: paymentsresellersubscription.partners.subscriptions.entitle
-export def "partners paymentsresellersubscriptionpartnerssubscriptionsentitle" [
+export def "partners create-entitle" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -198,11 +207,12 @@ export def "partners paymentsresellersubscriptionpartnerssubscriptionsentitle" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}:entitle") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}:entitle") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # [Deprecated] New partners should be on auto-extend by default. Used by partners to extend a subscription service for their customers on an ongoing basis for the subscription to remain active and renewable. It should be called directly by the partner using service accounts.
@@ -210,7 +220,7 @@ export def "partners paymentsresellersubscriptionpartnerssubscriptionsentitle" [
 # POST /v1/{name}:extend
 # operationId: paymentsresellersubscription.partners.subscriptions.extend
 # --extension shape: {duration?: record, partnerUserToken?: string}
-export def "partners paymentsresellersubscriptionpartnerssubscriptionsextend" [
+export def "partners create-extend" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -238,19 +248,19 @@ export def "partners paymentsresellersubscriptionpartnerssubscriptionsextend" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}:extend") $qp)
-  let body = {"extension": $extension, "requestId": $request_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}:extend") $qp)
+  let req_body = {"extension": $extension, "requestId": $request_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Used by partners to revoke the pending cancellation of a subscription, which is currently in `STATE_CANCEL_AT_END_OF_CYCLE` state. If the subscription is already cancelled, the request will fail. It should be called directly by the partner using service accounts.
 #
 # POST /v1/{name}:undoCancel
 # operationId: paymentsresellersubscription.partners.subscriptions.undoCancel
-export def "partners paymentsresellersubscriptionpartnerssubscriptionsundoCancel" [
+export def "partners cancel-undo" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -277,18 +287,19 @@ export def "partners paymentsresellersubscriptionpartnerssubscriptionsundoCancel
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}:undoCancel") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}:undoCancel") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # To retrieve the products that can be resold by the partner. It should be autenticated with a service account.
 #
 # GET /v1/{parent}/products
 # operationId: paymentsresellersubscription.partners.products.list
-export def "products paymentsresellersubscriptionpartnersproductslist" [
+export def "products list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -316,7 +327,7 @@ export def "products paymentsresellersubscriptionpartnersproductslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/products") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/products") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -326,7 +337,7 @@ export def "products paymentsresellersubscriptionpartnersproductslist" [
 #
 # GET /v1/{parent}/promotions
 # operationId: paymentsresellersubscription.partners.promotions.list
-export def "promotions paymentsresellersubscriptionpartnerspromotionslist" [
+export def "promotions list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -354,7 +365,7 @@ export def "promotions paymentsresellersubscriptionpartnerspromotionslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/promotions") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/promotions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -364,7 +375,7 @@ export def "promotions paymentsresellersubscriptionpartnerspromotionslist" [
 #
 # POST /v1/{parent}/promotions:findEligible
 # operationId: paymentsresellersubscription.partners.promotions.findEligible
-export def "promotions-find-eligible paymentsresellersubscriptionpartnerspromotionsfindEligible" [
+export def "promotions-find-eligible find" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -393,12 +404,12 @@ export def "promotions-find-eligible paymentsresellersubscriptionpartnerspromoti
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/promotions:findEligible") $qp)
-  let body = {"filter": $filter, "pageSize": $page_size, "pageToken": $page_token} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/promotions:findEligible") $qp)
+  let req_body = {"filter": $filter, "pageSize": $page_size, "pageToken": $page_token} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Used by partners to create a subscription for their customers. The created subscription is associated with the end user inferred from the end user credentials. This API must be authorized by the end user using OAuth.
@@ -410,7 +421,7 @@ export def "promotions-find-eligible paymentsresellersubscriptionpartnerspromoti
 # --promotionSpecs item shape: {freeTrialDuration?: record, introductoryPricingDetails?: record, promotion?: string}
 # --serviceLocation shape: {postalCode?: string, regionCode?: string}
 # --upgradeDowngradeDetails shape: {billingCycleSpec?: "BILLING_CYCLE_SPEC_UNSPECIFIED"|"BILLING_CYCLE_SPEC_ALIGN_WITH_PREVIOUS_SUBSCRIPTION"|"BILLING_CYCLE_SPEC_START_IMMEDIATELY", previousSubscriptionId?: string}
-export def "subscriptions paymentsresellersubscriptionpartnerssubscriptionscreate" [
+export def "subscriptions create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -436,9 +447,9 @@ export def "subscriptions paymentsresellersubscriptionpartnerssubscriptionscreat
   --line-items: list # Required. The line items of the subscription. — item shape: {amount?: record, lineItemPromotionSpecs?: list, oneTimeRecurrenceDetails?: record, product?: string, productPayload?: record}
   --name: string # Optional. Resource name of the subscription. It will have the format of "partners/{partner_id}/subscriptions/{subscription_id}". This is available for authorizeAddon, but otherwise is response only.
   --partner-user-token: string # Required. Identifier of the end-user in partner’s system. The value is restricted to 63 ASCII characters at the maximum.
-  --products: list # Required. Deprecated: consider using `line_items` as the input. Required. Resource name that identifies the purchased products. The format will be 'partners/{partner_id}/products/{product_id}'.
+  --products: list<string> # Required. Deprecated: consider using `line_items` as the input. Required. Resource name that identifies the purchased products. The format will be 'partners/{partner_id}/products/{product_id}'.
   --promotion-specs: list # Optional. Subscription-level promotions. Only free trial is supported on this level. It determines the first renewal time of the subscription to be the end of the free trial period. Specify the promotion resource name only when used as input. — item shape: {freeTrialDuration?: record, introductoryPricingDetails?: record, promotion?: string}
-  --promotions: list # Optional. Deprecated: consider using the top-level `promotion_specs` as the input. Optional. Resource name that identifies one or more promotions that can be applied on the product. A typical promotion for a subscription is Free trial. The format will be 'partners/{partner_id}/promotions/{promotion_id}'.
+  --promotions: list<string> # Optional. Deprecated: consider using the top-level `promotion_specs` as the input. Optional. Resource name that identifies one or more promotions that can be applied on the product. A typical promotion for a subscription is Free trial. The format will be 'partners/{partner_id}/promotions/{promotion_id}'.
   --service-location: record # Describes a location of an end user. — shape: {postalCode?: string, regionCode?: string}
   --upgrade-downgrade-details: record # Details about the previous subscription that this new subscription upgrades/downgrades from. — shape: {billingCycleSpec?: "BILLING_CYCLE_SPEC_UNSPECIFIED"|"BILLING_CYCLE_SPEC_ALIGN_WITH_PREVIOUS_SUBSCRIPTION"|"BILLING_CYCLE_SPEC_START_IMMEDIATELY", previousSubscriptionId?: string}
 ]: any -> record<cancellationDetails: record<reason: string>, createTime: string, cycleEndTime: string, endUserEntitled: bool, freeTrialEndTime: string, lineItems: table<amount: record, description: string, lineItemFreeTrialEndTime: string, lineItemPromotionSpecs: list, oneTimeRecurrenceDetails: record, product: string, productPayload: record, recurrenceType: string, state: string>, name: string, partnerUserToken: string, processingState: string, products: list<string>, promotionSpecs: table<freeTrialDuration: record, introductoryPricingDetails: record, promotion: string, type: string>, promotions: list<string>, redirectUri: string, renewalTime: string, serviceLocation: record<postalCode: string, regionCode: string>, state: string, updateTime: string, upgradeDowngradeDetails: record<billingCycleSpec: string, previousSubscriptionId: string>> {
@@ -446,12 +457,12 @@ export def "subscriptions paymentsresellersubscriptionpartnerssubscriptionscreat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "subscriptionId" $subscription_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/subscriptions") $qp)
-  let body = {"cancellationDetails": $cancellation_details, "lineItems": $line_items, "name": $name, "partnerUserToken": $partner_user_token, "products": $products, "promotionSpecs": $promotion_specs, "promotions": $promotions, "serviceLocation": $service_location, "upgradeDowngradeDetails": $upgrade_downgrade_details} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/subscriptions") $qp)
+  let req_body = {"cancellationDetails": $cancellation_details, "lineItems": $line_items, "name": $name, "partnerUserToken": $partner_user_token, "products": $products, "promotionSpecs": $promotion_specs, "promotions": $promotions, "serviceLocation": $service_location, "upgradeDowngradeDetails": $upgrade_downgrade_details} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Used by partners to provision a subscription for their customers. This creates a subscription without associating it with the end user account. EntitleSubscription must be called separately using OAuth in order for the end user account to be associated with the subscription. It should be called directly by the partner using service accounts.
@@ -463,7 +474,7 @@ export def "subscriptions paymentsresellersubscriptionpartnerssubscriptionscreat
 # --promotionSpecs item shape: {freeTrialDuration?: record, introductoryPricingDetails?: record, promotion?: string}
 # --serviceLocation shape: {postalCode?: string, regionCode?: string}
 # --upgradeDowngradeDetails shape: {billingCycleSpec?: "BILLING_CYCLE_SPEC_UNSPECIFIED"|"BILLING_CYCLE_SPEC_ALIGN_WITH_PREVIOUS_SUBSCRIPTION"|"BILLING_CYCLE_SPEC_START_IMMEDIATELY", previousSubscriptionId?: string}
-export def "subscriptions-provision paymentsresellersubscriptionpartnerssubscriptionsprovision" [
+export def "subscriptions-provision create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -489,9 +500,9 @@ export def "subscriptions-provision paymentsresellersubscriptionpartnerssubscrip
   --line-items: list # Required. The line items of the subscription. — item shape: {amount?: record, lineItemPromotionSpecs?: list, oneTimeRecurrenceDetails?: record, product?: string, productPayload?: record}
   --name: string # Optional. Resource name of the subscription. It will have the format of "partners/{partner_id}/subscriptions/{subscription_id}". This is available for authorizeAddon, but otherwise is response only.
   --partner-user-token: string # Required. Identifier of the end-user in partner’s system. The value is restricted to 63 ASCII characters at the maximum.
-  --products: list # Required. Deprecated: consider using `line_items` as the input. Required. Resource name that identifies the purchased products. The format will be 'partners/{partner_id}/products/{product_id}'.
+  --products: list<string> # Required. Deprecated: consider using `line_items` as the input. Required. Resource name that identifies the purchased products. The format will be 'partners/{partner_id}/products/{product_id}'.
   --promotion-specs: list # Optional. Subscription-level promotions. Only free trial is supported on this level. It determines the first renewal time of the subscription to be the end of the free trial period. Specify the promotion resource name only when used as input. — item shape: {freeTrialDuration?: record, introductoryPricingDetails?: record, promotion?: string}
-  --promotions: list # Optional. Deprecated: consider using the top-level `promotion_specs` as the input. Optional. Resource name that identifies one or more promotions that can be applied on the product. A typical promotion for a subscription is Free trial. The format will be 'partners/{partner_id}/promotions/{promotion_id}'.
+  --promotions: list<string> # Optional. Deprecated: consider using the top-level `promotion_specs` as the input. Optional. Resource name that identifies one or more promotions that can be applied on the product. A typical promotion for a subscription is Free trial. The format will be 'partners/{partner_id}/promotions/{promotion_id}'.
   --service-location: record # Describes a location of an end user. — shape: {postalCode?: string, regionCode?: string}
   --upgrade-downgrade-details: record # Details about the previous subscription that this new subscription upgrades/downgrades from. — shape: {billingCycleSpec?: "BILLING_CYCLE_SPEC_UNSPECIFIED"|"BILLING_CYCLE_SPEC_ALIGN_WITH_PREVIOUS_SUBSCRIPTION"|"BILLING_CYCLE_SPEC_START_IMMEDIATELY", previousSubscriptionId?: string}
 ]: any -> record<cancellationDetails: record<reason: string>, createTime: string, cycleEndTime: string, endUserEntitled: bool, freeTrialEndTime: string, lineItems: table<amount: record, description: string, lineItemFreeTrialEndTime: string, lineItemPromotionSpecs: list, oneTimeRecurrenceDetails: record, product: string, productPayload: record, recurrenceType: string, state: string>, name: string, partnerUserToken: string, processingState: string, products: list<string>, promotionSpecs: table<freeTrialDuration: record, introductoryPricingDetails: record, promotion: string, type: string>, promotions: list<string>, redirectUri: string, renewalTime: string, serviceLocation: record<postalCode: string, regionCode: string>, state: string, updateTime: string, upgradeDowngradeDetails: record<billingCycleSpec: string, previousSubscriptionId: string>> {
@@ -499,10 +510,10 @@ export def "subscriptions-provision paymentsresellersubscriptionpartnerssubscrip
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "subscriptionId" $subscription_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/subscriptions:provision") $qp)
-  let body = {"cancellationDetails": $cancellation_details, "lineItems": $line_items, "name": $name, "partnerUserToken": $partner_user_token, "products": $products, "promotionSpecs": $promotion_specs, "promotions": $promotions, "serviceLocation": $service_location, "upgradeDowngradeDetails": $upgrade_downgrade_details} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/subscriptions:provision") $qp)
+  let req_body = {"cancellationDetails": $cancellation_details, "lineItems": $line_items, "name": $name, "partnerUserToken": $partner_user_token, "products": $products, "promotionSpecs": $promotion_specs, "promotions": $promotions, "serviceLocation": $service_location, "upgradeDowngradeDetails": $upgrade_downgrade_details} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -77,7 +86,7 @@ def behavior-completer [] { ["BEHAVIOR_UNSPECIFIED" "BYPASS_RESPONSE_POLICY"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "dns-projects-locations dnsprojectsget" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "dns-projects-locations get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -101,7 +110,7 @@ export def commands []: nothing -> table {
 #
 # GET /dns/v2/projects/{project}/locations/{location}
 # operationId: dns.projects.get
-export def "dns-projects-locations dnsprojectsget" [
+export def "dns-projects-locations get" [
   project: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -128,7 +137,7 @@ export def "dns-projects-locations dnsprojectsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "clientOperationId" $client_operation_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project: $project, location: $location} | format pattern "/dns/v2/projects/{project}/locations/{location}") $qp)
+  let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location)} | format pattern "/dns/v2/projects/{project}/locations/{location}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -138,7 +147,7 @@ export def "dns-projects-locations dnsprojectsget" [
 #
 # GET /dns/v2/projects/{project}/locations/{location}/managedZones
 # operationId: dns.managedZones.list
-export def "dns-projects-locations-managed-zones dnsmanagedZoneslist" [
+export def "dns-projects-locations-managed-zones list" [
   project: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -167,7 +176,7 @@ export def "dns-projects-locations-managed-zones dnsmanagedZoneslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "dnsName" $dns_name "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project: $project, location: $location} | format pattern "/dns/v2/projects/{project}/locations/{location}/managedZones") $qp)
+  let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location)} | format pattern "/dns/v2/projects/{project}/locations/{location}/managedZones") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -184,7 +193,7 @@ export def "dns-projects-locations-managed-zones dnsmanagedZoneslist" [
 # --privateVisibilityConfig shape: {gkeClusters?: list, kind?: string, networks?: list}
 # --reverseLookupConfig shape: {kind?: string}
 # --serviceDirectoryConfig shape: {kind?: string, namespace?: record}
-export def "dns-projects-locations-managed-zones dnsmanagedZonescreate" [
+export def "dns-projects-locations-managed-zones create" [
   project: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -218,7 +227,7 @@ export def "dns-projects-locations-managed-zones dnsmanagedZonescreate" [
   --labels: record # User labels.
   --name: string # User assigned name for this resource. Must be unique within the project. The name must be 1-63 characters long, must begin with a letter, end with a letter or digit, and only contain lowercase letters, digits or dashes.
   --name-server-set: string # Optionally specifies the NameServerSet for this ManagedZone. A NameServerSet is a set of DNS name servers that all host the same ManagedZones. Most users leave this field unset. If you need to use this field, contact your account team.
-  --name-servers: list # Delegate your managed_zone to these virtual name servers; defined by the server (output only)
+  --name-servers: list<string> # Delegate your managed_zone to these virtual name servers; defined by the server (output only)
   --peering-config: record # shape: {kind?: string, targetNetwork?: record}
   --private-visibility-config: record # shape: {gkeClusters?: list, kind?: string, networks?: list}
   --reverse-lookup-config: record # shape: {kind?: string}
@@ -229,19 +238,19 @@ export def "dns-projects-locations-managed-zones dnsmanagedZonescreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "clientOperationId" $client_operation_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project: $project, location: $location} | format pattern "/dns/v2/projects/{project}/locations/{location}/managedZones") $qp)
-  let body = {"cloudLoggingConfig": $cloud_logging_config, "creationTime": $creation_time, "description": $description, "dnsName": $dns_name, "dnssecConfig": $dnssec_config, "forwardingConfig": $forwarding_config, "id": $id, "kind": $kind, "labels": $labels, "name": $name, "nameServerSet": $name_server_set, "nameServers": $name_servers, "peeringConfig": $peering_config, "privateVisibilityConfig": $private_visibility_config, "reverseLookupConfig": $reverse_lookup_config, "serviceDirectoryConfig": $service_directory_config, "visibility": $visibility} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location)} | format pattern "/dns/v2/projects/{project}/locations/{location}/managedZones") $qp)
+  let req_body = {"cloudLoggingConfig": $cloud_logging_config, "creationTime": $creation_time, "description": $description, "dnsName": $dns_name, "dnssecConfig": $dnssec_config, "forwardingConfig": $forwarding_config, "id": $id, "kind": $kind, "labels": $labels, "name": $name, "nameServerSet": $name_server_set, "nameServers": $name_servers, "peeringConfig": $peering_config, "privateVisibilityConfig": $private_visibility_config, "reverseLookupConfig": $reverse_lookup_config, "serviceDirectoryConfig": $service_directory_config, "visibility": $visibility} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes a previously created ManagedZone.
 #
 # DELETE /dns/v2/projects/{project}/locations/{location}/managedZones/{managedZone}
 # operationId: dns.managedZones.delete
-export def "dns-projects-locations-managed-zones dnsmanagedZonesdelete" [
+export def "dns-projects-locations-managed-zones delete" [
   project: string
   location: string
   managed_zone: string
@@ -269,7 +278,7 @@ export def "dns-projects-locations-managed-zones dnsmanagedZonesdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "clientOperationId" $client_operation_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project: $project, location: $location, managed_zone: $managed_zone} | format pattern "/dns/v2/projects/{project}/locations/{location}/managedZones/{managed_zone}") $qp)
+  let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), managed_zone: (encode-path-segment $managed_zone)} | format pattern "/dns/v2/projects/{project}/locations/{location}/managedZones/{managed_zone}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -279,7 +288,7 @@ export def "dns-projects-locations-managed-zones dnsmanagedZonesdelete" [
 #
 # GET /dns/v2/projects/{project}/locations/{location}/managedZones/{managedZone}
 # operationId: dns.managedZones.get
-export def "dns-projects-locations-managed-zones dnsmanagedZonesget" [
+export def "dns-projects-locations-managed-zones get" [
   project: string
   location: string
   managed_zone: string
@@ -307,7 +316,7 @@ export def "dns-projects-locations-managed-zones dnsmanagedZonesget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "clientOperationId" $client_operation_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project: $project, location: $location, managed_zone: $managed_zone} | format pattern "/dns/v2/projects/{project}/locations/{location}/managedZones/{managed_zone}") $qp)
+  let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), managed_zone: (encode-path-segment $managed_zone)} | format pattern "/dns/v2/projects/{project}/locations/{location}/managedZones/{managed_zone}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -324,7 +333,7 @@ export def "dns-projects-locations-managed-zones dnsmanagedZonesget" [
 # --privateVisibilityConfig shape: {gkeClusters?: list, kind?: string, networks?: list}
 # --reverseLookupConfig shape: {kind?: string}
 # --serviceDirectoryConfig shape: {kind?: string, namespace?: record}
-export def "dns-projects-locations-managed-zones dnsmanagedZonespatch" [
+export def "dns-projects-locations-managed-zones update-by-project-location-managedZone" [
   project: string
   location: string
   managed_zone: string
@@ -359,7 +368,7 @@ export def "dns-projects-locations-managed-zones dnsmanagedZonespatch" [
   --labels: record # User labels.
   --name: string # User assigned name for this resource. Must be unique within the project. The name must be 1-63 characters long, must begin with a letter, end with a letter or digit, and only contain lowercase letters, digits or dashes.
   --name-server-set: string # Optionally specifies the NameServerSet for this ManagedZone. A NameServerSet is a set of DNS name servers that all host the same ManagedZones. Most users leave this field unset. If you need to use this field, contact your account team.
-  --name-servers: list # Delegate your managed_zone to these virtual name servers; defined by the server (output only)
+  --name-servers: list<string> # Delegate your managed_zone to these virtual name servers; defined by the server (output only)
   --peering-config: record # shape: {kind?: string, targetNetwork?: record}
   --private-visibility-config: record # shape: {gkeClusters?: list, kind?: string, networks?: list}
   --reverse-lookup-config: record # shape: {kind?: string}
@@ -370,12 +379,12 @@ export def "dns-projects-locations-managed-zones dnsmanagedZonespatch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "clientOperationId" $client_operation_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project: $project, location: $location, managed_zone: $managed_zone} | format pattern "/dns/v2/projects/{project}/locations/{location}/managedZones/{managed_zone}") $qp)
-  let body = {"cloudLoggingConfig": $cloud_logging_config, "creationTime": $creation_time, "description": $description, "dnsName": $dns_name, "dnssecConfig": $dnssec_config, "forwardingConfig": $forwarding_config, "id": $id, "kind": $kind, "labels": $labels, "name": $name, "nameServerSet": $name_server_set, "nameServers": $name_servers, "peeringConfig": $peering_config, "privateVisibilityConfig": $private_visibility_config, "reverseLookupConfig": $reverse_lookup_config, "serviceDirectoryConfig": $service_directory_config, "visibility": $visibility} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), managed_zone: (encode-path-segment $managed_zone)} | format pattern "/dns/v2/projects/{project}/locations/{location}/managedZones/{managed_zone}") $qp)
+  let req_body = {"cloudLoggingConfig": $cloud_logging_config, "creationTime": $creation_time, "description": $description, "dnsName": $dns_name, "dnssecConfig": $dnssec_config, "forwardingConfig": $forwarding_config, "id": $id, "kind": $kind, "labels": $labels, "name": $name, "nameServerSet": $name_server_set, "nameServers": $name_servers, "peeringConfig": $peering_config, "privateVisibilityConfig": $private_visibility_config, "reverseLookupConfig": $reverse_lookup_config, "serviceDirectoryConfig": $service_directory_config, "visibility": $visibility} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates an existing ManagedZone.
@@ -389,7 +398,7 @@ export def "dns-projects-locations-managed-zones dnsmanagedZonespatch" [
 # --privateVisibilityConfig shape: {gkeClusters?: list, kind?: string, networks?: list}
 # --reverseLookupConfig shape: {kind?: string}
 # --serviceDirectoryConfig shape: {kind?: string, namespace?: record}
-export def "dns-projects-locations-managed-zones dnsmanagedZonesupdate" [
+export def "dns-projects-locations-managed-zones update-by-project-location-managedZone-1" [
   project: string
   location: string
   managed_zone: string
@@ -424,7 +433,7 @@ export def "dns-projects-locations-managed-zones dnsmanagedZonesupdate" [
   --labels: record # User labels.
   --name: string # User assigned name for this resource. Must be unique within the project. The name must be 1-63 characters long, must begin with a letter, end with a letter or digit, and only contain lowercase letters, digits or dashes.
   --name-server-set: string # Optionally specifies the NameServerSet for this ManagedZone. A NameServerSet is a set of DNS name servers that all host the same ManagedZones. Most users leave this field unset. If you need to use this field, contact your account team.
-  --name-servers: list # Delegate your managed_zone to these virtual name servers; defined by the server (output only)
+  --name-servers: list<string> # Delegate your managed_zone to these virtual name servers; defined by the server (output only)
   --peering-config: record # shape: {kind?: string, targetNetwork?: record}
   --private-visibility-config: record # shape: {gkeClusters?: list, kind?: string, networks?: list}
   --reverse-lookup-config: record # shape: {kind?: string}
@@ -435,19 +444,19 @@ export def "dns-projects-locations-managed-zones dnsmanagedZonesupdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "clientOperationId" $client_operation_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project: $project, location: $location, managed_zone: $managed_zone} | format pattern "/dns/v2/projects/{project}/locations/{location}/managedZones/{managed_zone}") $qp)
-  let body = {"cloudLoggingConfig": $cloud_logging_config, "creationTime": $creation_time, "description": $description, "dnsName": $dns_name, "dnssecConfig": $dnssec_config, "forwardingConfig": $forwarding_config, "id": $id, "kind": $kind, "labels": $labels, "name": $name, "nameServerSet": $name_server_set, "nameServers": $name_servers, "peeringConfig": $peering_config, "privateVisibilityConfig": $private_visibility_config, "reverseLookupConfig": $reverse_lookup_config, "serviceDirectoryConfig": $service_directory_config, "visibility": $visibility} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), managed_zone: (encode-path-segment $managed_zone)} | format pattern "/dns/v2/projects/{project}/locations/{location}/managedZones/{managed_zone}") $qp)
+  let req_body = {"cloudLoggingConfig": $cloud_logging_config, "creationTime": $creation_time, "description": $description, "dnsName": $dns_name, "dnssecConfig": $dnssec_config, "forwardingConfig": $forwarding_config, "id": $id, "kind": $kind, "labels": $labels, "name": $name, "nameServerSet": $name_server_set, "nameServers": $name_servers, "peeringConfig": $peering_config, "privateVisibilityConfig": $private_visibility_config, "reverseLookupConfig": $reverse_lookup_config, "serviceDirectoryConfig": $service_directory_config, "visibility": $visibility} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Enumerates Changes to a ResourceRecordSet collection.
 #
 # GET /dns/v2/projects/{project}/locations/{location}/managedZones/{managedZone}/changes
 # operationId: dns.changes.list
-export def "dns-projects-locations-managed-zones-changes dnschangeslist" [
+export def "dns-projects-locations-managed-zones-changes list" [
   project: string
   location: string
   managed_zone: string
@@ -478,7 +487,7 @@ export def "dns-projects-locations-managed-zones-changes dnschangeslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "sortOrder" $sort_order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project: $project, location: $location, managed_zone: $managed_zone} | format pattern "/dns/v2/projects/{project}/locations/{location}/managedZones/{managed_zone}/changes") $qp)
+  let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), managed_zone: (encode-path-segment $managed_zone)} | format pattern "/dns/v2/projects/{project}/locations/{location}/managedZones/{managed_zone}/changes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -488,9 +497,9 @@ export def "dns-projects-locations-managed-zones-changes dnschangeslist" [
 #
 # POST /dns/v2/projects/{project}/locations/{location}/managedZones/{managedZone}/changes
 # operationId: dns.changes.create
-# --additions item shape: {kind?: string, name?: string, routingPolicy?: record, rrdatas?: list, signatureRrdatas?: list, ttl?: int, type?: string}
-# --deletions item shape: {kind?: string, name?: string, routingPolicy?: record, rrdatas?: list, signatureRrdatas?: list, ttl?: int, type?: string}
-export def "dns-projects-locations-managed-zones-changes dnschangescreate" [
+# --additions item shape: {kind?: string, name?: string, routingPolicy?: record, rrdatas?: list<string>, signatureRrdatas?: list<string>, ttl?: int, type?: string}
+# --deletions item shape: {kind?: string, name?: string, routingPolicy?: record, rrdatas?: list<string>, signatureRrdatas?: list<string>, ttl?: int, type?: string}
+export def "dns-projects-locations-managed-zones-changes create" [
   project: string
   location: string
   managed_zone: string
@@ -514,8 +523,8 @@ export def "dns-projects-locations-managed-zones-changes dnschangescreate" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --client-operation-id: string # For mutating operation requests only. An optional identifier specified by the client. Must be unique for operation resources in the Operations collection.
-  --additions: list # Which ResourceRecordSets to add? — item shape: {kind?: string, name?: string, routingPolicy?: record, rrdatas?: list, signatureRrdatas?: list, ttl?: int, type?: string}
-  --deletions: list # Which ResourceRecordSets to remove? Must match existing data exactly. — item shape: {kind?: string, name?: string, routingPolicy?: record, rrdatas?: list, signatureRrdatas?: list, ttl?: int, type?: string}
+  --additions: list # Which ResourceRecordSets to add? — item shape: {kind?: string, name?: string, routingPolicy?: record, rrdatas?: list<string>, signatureRrdatas?: list<string>, ttl?: int, type?: string}
+  --deletions: list # Which ResourceRecordSets to remove? Must match existing data exactly. — item shape: {kind?: string, name?: string, routingPolicy?: record, rrdatas?: list<string>, signatureRrdatas?: list<string>, ttl?: int, type?: string}
   --id: string # Unique identifier for the resource; defined by the server (output only).
   --is-serving: oneof<nothing, bool> # If the DNS queries for the zone will be served.
   --kind: string # default: dns#change
@@ -526,19 +535,19 @@ export def "dns-projects-locations-managed-zones-changes dnschangescreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "clientOperationId" $client_operation_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project: $project, location: $location, managed_zone: $managed_zone} | format pattern "/dns/v2/projects/{project}/locations/{location}/managedZones/{managed_zone}/changes") $qp)
-  let body = {"additions": $additions, "deletions": $deletions, "id": $id, "isServing": $is_serving, "kind": $kind, "startTime": $start_time, "status": $status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), managed_zone: (encode-path-segment $managed_zone)} | format pattern "/dns/v2/projects/{project}/locations/{location}/managedZones/{managed_zone}/changes") $qp)
+  let req_body = {"additions": $additions, "deletions": $deletions, "id": $id, "isServing": $is_serving, "kind": $kind, "startTime": $start_time, "status": $status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Fetches the representation of an existing Change.
 #
 # GET /dns/v2/projects/{project}/locations/{location}/managedZones/{managedZone}/changes/{changeId}
 # operationId: dns.changes.get
-export def "dns-projects-locations-managed-zones-changes dnschangesget" [
+export def "dns-projects-locations-managed-zones-changes get" [
   project: string
   location: string
   managed_zone: string
@@ -567,7 +576,7 @@ export def "dns-projects-locations-managed-zones-changes dnschangesget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "clientOperationId" $client_operation_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project: $project, location: $location, managed_zone: $managed_zone, change_id: $change_id} | format pattern "/dns/v2/projects/{project}/locations/{location}/managedZones/{managed_zone}/changes/{change_id}") $qp)
+  let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), managed_zone: (encode-path-segment $managed_zone), change_id: (encode-path-segment $change_id)} | format pattern "/dns/v2/projects/{project}/locations/{location}/managedZones/{managed_zone}/changes/{change_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -577,7 +586,7 @@ export def "dns-projects-locations-managed-zones-changes dnschangesget" [
 #
 # GET /dns/v2/projects/{project}/locations/{location}/managedZones/{managedZone}/dnsKeys
 # operationId: dns.dnsKeys.list
-export def "dns-projects-locations-managed-zones-dns-keys dnsdnsKeyslist" [
+export def "dns-projects-locations-managed-zones-dns-keys list" [
   project: string
   location: string
   managed_zone: string
@@ -607,7 +616,7 @@ export def "dns-projects-locations-managed-zones-dns-keys dnsdnsKeyslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "digestType" $digest_type "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project: $project, location: $location, managed_zone: $managed_zone} | format pattern "/dns/v2/projects/{project}/locations/{location}/managedZones/{managed_zone}/dnsKeys") $qp)
+  let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), managed_zone: (encode-path-segment $managed_zone)} | format pattern "/dns/v2/projects/{project}/locations/{location}/managedZones/{managed_zone}/dnsKeys") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -617,7 +626,7 @@ export def "dns-projects-locations-managed-zones-dns-keys dnsdnsKeyslist" [
 #
 # GET /dns/v2/projects/{project}/locations/{location}/managedZones/{managedZone}/dnsKeys/{dnsKeyId}
 # operationId: dns.dnsKeys.get
-export def "dns-projects-locations-managed-zones-dns-keys dnsdnsKeysget" [
+export def "dns-projects-locations-managed-zones-dns-keys get" [
   project: string
   location: string
   managed_zone: string
@@ -647,7 +656,7 @@ export def "dns-projects-locations-managed-zones-dns-keys dnsdnsKeysget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "clientOperationId" $client_operation_id "scalar") (serialize-qp "digestType" $digest_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project: $project, location: $location, managed_zone: $managed_zone, dns_key_id: $dns_key_id} | format pattern "/dns/v2/projects/{project}/locations/{location}/managedZones/{managed_zone}/dnsKeys/{dns_key_id}") $qp)
+  let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), managed_zone: (encode-path-segment $managed_zone), dns_key_id: (encode-path-segment $dns_key_id)} | format pattern "/dns/v2/projects/{project}/locations/{location}/managedZones/{managed_zone}/dnsKeys/{dns_key_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -657,7 +666,7 @@ export def "dns-projects-locations-managed-zones-dns-keys dnsdnsKeysget" [
 #
 # GET /dns/v2/projects/{project}/locations/{location}/managedZones/{managedZone}/operations
 # operationId: dns.managedZoneOperations.list
-export def "dns-projects-locations-managed-zones-operations dnsmanagedZoneOperationslist" [
+export def "dns-projects-locations-managed-zones-operations list" [
   project: string
   location: string
   managed_zone: string
@@ -687,7 +696,7 @@ export def "dns-projects-locations-managed-zones-operations dnsmanagedZoneOperat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "sortBy" $sort_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project: $project, location: $location, managed_zone: $managed_zone} | format pattern "/dns/v2/projects/{project}/locations/{location}/managedZones/{managed_zone}/operations") $qp)
+  let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), managed_zone: (encode-path-segment $managed_zone)} | format pattern "/dns/v2/projects/{project}/locations/{location}/managedZones/{managed_zone}/operations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -697,7 +706,7 @@ export def "dns-projects-locations-managed-zones-operations dnsmanagedZoneOperat
 #
 # GET /dns/v2/projects/{project}/locations/{location}/managedZones/{managedZone}/operations/{operation}
 # operationId: dns.managedZoneOperations.get
-export def "dns-projects-locations-managed-zones-operations dnsmanagedZoneOperationsget" [
+export def "dns-projects-locations-managed-zones-operations get" [
   project: string
   location: string
   managed_zone: string
@@ -726,7 +735,7 @@ export def "dns-projects-locations-managed-zones-operations dnsmanagedZoneOperat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "clientOperationId" $client_operation_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project: $project, location: $location, managed_zone: $managed_zone, operation: $operation} | format pattern "/dns/v2/projects/{project}/locations/{location}/managedZones/{managed_zone}/operations/{operation}") $qp)
+  let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), managed_zone: (encode-path-segment $managed_zone), operation: (encode-path-segment $operation)} | format pattern "/dns/v2/projects/{project}/locations/{location}/managedZones/{managed_zone}/operations/{operation}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -736,7 +745,7 @@ export def "dns-projects-locations-managed-zones-operations dnsmanagedZoneOperat
 #
 # GET /dns/v2/projects/{project}/locations/{location}/managedZones/{managedZone}/rrsets
 # operationId: dns.resourceRecordSets.list
-export def "dns-projects-locations-managed-zones-rrsets dnsresourceRecordSetslist" [
+export def "dns-projects-locations-managed-zones-rrsets list" [
   project: string
   location: string
   managed_zone: string
@@ -767,7 +776,7 @@ export def "dns-projects-locations-managed-zones-rrsets dnsresourceRecordSetslis
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project: $project, location: $location, managed_zone: $managed_zone} | format pattern "/dns/v2/projects/{project}/locations/{location}/managedZones/{managed_zone}/rrsets") $qp)
+  let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), managed_zone: (encode-path-segment $managed_zone)} | format pattern "/dns/v2/projects/{project}/locations/{location}/managedZones/{managed_zone}/rrsets") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -778,7 +787,7 @@ export def "dns-projects-locations-managed-zones-rrsets dnsresourceRecordSetslis
 # POST /dns/v2/projects/{project}/locations/{location}/managedZones/{managedZone}/rrsets
 # operationId: dns.resourceRecordSets.create
 # --routingPolicy shape: {geo?: record, kind?: string, primaryBackup?: record, wrr?: record}
-export def "dns-projects-locations-managed-zones-rrsets dnsresourceRecordSetscreate" [
+export def "dns-projects-locations-managed-zones-rrsets create" [
   project: string
   location: string
   managed_zone: string
@@ -805,8 +814,8 @@ export def "dns-projects-locations-managed-zones-rrsets dnsresourceRecordSetscre
   --kind: string # default: dns#resourceRecordSet
   --name: string # For example, www.example.com.
   --routing-policy: record # A RRSetRoutingPolicy represents ResourceRecordSet data that is returned dynamically with the response varying based on configured properties such as geolocation or by weighted random selection. — shape: {geo?: record, kind?: string, primaryBackup?: record, wrr?: record}
-  --rrdatas: list # As defined in RFC 1035 (section 5) and RFC 1034 (section 3.6.1) -- see examples.
-  --signature-rrdatas: list # As defined in RFC 4034 (section 3.2).
+  --rrdatas: list<string> # As defined in RFC 1035 (section 5) and RFC 1034 (section 3.6.1) -- see examples.
+  --signature-rrdatas: list<string> # As defined in RFC 4034 (section 3.2).
   --ttl: int # Number of seconds that this ResourceRecordSet can be cached by resolvers. (format: int32)
   --type: string # The identifier of a supported record type. See the list of Supported DNS record types.
 ]: any -> record<kind: string, name: string, routingPolicy: record<geo: record<enableFencing: bool, items: list, kind: string>, kind: string, primaryBackup: record<backupGeoTargets: record, kind: string, primaryTargets: record, trickleTraffic: float>, wrr: record<items: list, kind: string>>, rrdatas: list<string>, signatureRrdatas: list<string>, ttl: int, type: string> {
@@ -814,19 +823,19 @@ export def "dns-projects-locations-managed-zones-rrsets dnsresourceRecordSetscre
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "clientOperationId" $client_operation_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project: $project, location: $location, managed_zone: $managed_zone} | format pattern "/dns/v2/projects/{project}/locations/{location}/managedZones/{managed_zone}/rrsets") $qp)
-  let body = {"kind": $kind, "name": $name, "routingPolicy": $routing_policy, "rrdatas": $rrdatas, "signatureRrdatas": $signature_rrdatas, "ttl": $ttl, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), managed_zone: (encode-path-segment $managed_zone)} | format pattern "/dns/v2/projects/{project}/locations/{location}/managedZones/{managed_zone}/rrsets") $qp)
+  let req_body = {"kind": $kind, "name": $name, "routingPolicy": $routing_policy, "rrdatas": $rrdatas, "signatureRrdatas": $signature_rrdatas, "ttl": $ttl, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes a previously created ResourceRecordSet.
 #
 # DELETE /dns/v2/projects/{project}/locations/{location}/managedZones/{managedZone}/rrsets/{name}/{type}
 # operationId: dns.resourceRecordSets.delete
-export def "dns-projects-locations-managed-zones-rrsets dnsresourceRecordSetsdelete" [
+export def "dns-projects-locations-managed-zones-rrsets delete" [
   project: string
   location: string
   managed_zone: string
@@ -856,7 +865,7 @@ export def "dns-projects-locations-managed-zones-rrsets dnsresourceRecordSetsdel
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "clientOperationId" $client_operation_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project: $project, location: $location, managed_zone: $managed_zone, name: $name, type: $type} | format pattern "/dns/v2/projects/{project}/locations/{location}/managedZones/{managed_zone}/rrsets/{name}/{type}") $qp)
+  let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), managed_zone: (encode-path-segment $managed_zone), name: (encode-path-segment $name), type: (encode-path-segment $type)} | format pattern "/dns/v2/projects/{project}/locations/{location}/managedZones/{managed_zone}/rrsets/{name}/{type}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -866,7 +875,7 @@ export def "dns-projects-locations-managed-zones-rrsets dnsresourceRecordSetsdel
 #
 # GET /dns/v2/projects/{project}/locations/{location}/managedZones/{managedZone}/rrsets/{name}/{type}
 # operationId: dns.resourceRecordSets.get
-export def "dns-projects-locations-managed-zones-rrsets dnsresourceRecordSetsget" [
+export def "dns-projects-locations-managed-zones-rrsets get" [
   project: string
   location: string
   managed_zone: string
@@ -896,7 +905,7 @@ export def "dns-projects-locations-managed-zones-rrsets dnsresourceRecordSetsget
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "clientOperationId" $client_operation_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project: $project, location: $location, managed_zone: $managed_zone, name: $name, type: $type} | format pattern "/dns/v2/projects/{project}/locations/{location}/managedZones/{managed_zone}/rrsets/{name}/{type}") $qp)
+  let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), managed_zone: (encode-path-segment $managed_zone), name: (encode-path-segment $name), type: (encode-path-segment $type)} | format pattern "/dns/v2/projects/{project}/locations/{location}/managedZones/{managed_zone}/rrsets/{name}/{type}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -907,7 +916,7 @@ export def "dns-projects-locations-managed-zones-rrsets dnsresourceRecordSetsget
 # PATCH /dns/v2/projects/{project}/locations/{location}/managedZones/{managedZone}/rrsets/{name}/{type}
 # operationId: dns.resourceRecordSets.patch
 # --routingPolicy shape: {geo?: record, kind?: string, primaryBackup?: record, wrr?: record}
-export def "dns-projects-locations-managed-zones-rrsets dnsresourceRecordSetspatch" [
+export def "dns-projects-locations-managed-zones-rrsets update" [
   project: string
   location: string
   managed_zone: string
@@ -936,8 +945,8 @@ export def "dns-projects-locations-managed-zones-rrsets dnsresourceRecordSetspat
   --kind: string # default: dns#resourceRecordSet
   --body-name: string # For example, www.example.com.
   --routing-policy: record # A RRSetRoutingPolicy represents ResourceRecordSet data that is returned dynamically with the response varying based on configured properties such as geolocation or by weighted random selection. — shape: {geo?: record, kind?: string, primaryBackup?: record, wrr?: record}
-  --rrdatas: list # As defined in RFC 1035 (section 5) and RFC 1034 (section 3.6.1) -- see examples.
-  --signature-rrdatas: list # As defined in RFC 4034 (section 3.2).
+  --rrdatas: list<string> # As defined in RFC 1035 (section 5) and RFC 1034 (section 3.6.1) -- see examples.
+  --signature-rrdatas: list<string> # As defined in RFC 4034 (section 3.2).
   --ttl: int # Number of seconds that this ResourceRecordSet can be cached by resolvers. (format: int32)
   --body-type: string # The identifier of a supported record type. See the list of Supported DNS record types.
 ]: any -> record<kind: string, name: string, routingPolicy: record<geo: record<enableFencing: bool, items: list, kind: string>, kind: string, primaryBackup: record<backupGeoTargets: record, kind: string, primaryTargets: record, trickleTraffic: float>, wrr: record<items: list, kind: string>>, rrdatas: list<string>, signatureRrdatas: list<string>, ttl: int, type: string> {
@@ -945,19 +954,19 @@ export def "dns-projects-locations-managed-zones-rrsets dnsresourceRecordSetspat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "clientOperationId" $client_operation_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project: $project, location: $location, managed_zone: $managed_zone, name: $name, type: $type} | format pattern "/dns/v2/projects/{project}/locations/{location}/managedZones/{managed_zone}/rrsets/{name}/{type}") $qp)
-  let body = {"kind": $kind, "name": $body_name, "routingPolicy": $routing_policy, "rrdatas": $rrdatas, "signatureRrdatas": $signature_rrdatas, "ttl": $ttl, "type": $body_type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), managed_zone: (encode-path-segment $managed_zone), name: (encode-path-segment $name), type: (encode-path-segment $type)} | format pattern "/dns/v2/projects/{project}/locations/{location}/managedZones/{managed_zone}/rrsets/{name}/{type}") $qp)
+  let req_body = {"kind": $kind, "name": $body_name, "routingPolicy": $routing_policy, "rrdatas": $rrdatas, "signatureRrdatas": $signature_rrdatas, "ttl": $ttl, "type": $body_type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Enumerates all Policies associated with a project.
 #
 # GET /dns/v2/projects/{project}/locations/{location}/policies
 # operationId: dns.policies.list
-export def "dns-projects-locations-policies dnspolicieslist" [
+export def "dns-projects-locations-policies list" [
   project: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -985,7 +994,7 @@ export def "dns-projects-locations-policies dnspolicieslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project: $project, location: $location} | format pattern "/dns/v2/projects/{project}/locations/{location}/policies") $qp)
+  let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location)} | format pattern "/dns/v2/projects/{project}/locations/{location}/policies") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -997,7 +1006,7 @@ export def "dns-projects-locations-policies dnspolicieslist" [
 # operationId: dns.policies.create
 # --alternativeNameServerConfig shape: {kind?: string, targetNameServers?: list}
 # --networks item shape: {kind?: string, networkUrl?: string}
-export def "dns-projects-locations-policies dnspoliciescreate" [
+export def "dns-projects-locations-policies create" [
   project: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1033,19 +1042,19 @@ export def "dns-projects-locations-policies dnspoliciescreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "clientOperationId" $client_operation_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project: $project, location: $location} | format pattern "/dns/v2/projects/{project}/locations/{location}/policies") $qp)
-  let body = {"alternativeNameServerConfig": $alternative_name_server_config, "description": $description, "enableInboundForwarding": $enable_inbound_forwarding, "enableLogging": $enable_logging, "id": $id, "kind": $kind, "name": $name, "networks": $networks} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location)} | format pattern "/dns/v2/projects/{project}/locations/{location}/policies") $qp)
+  let req_body = {"alternativeNameServerConfig": $alternative_name_server_config, "description": $description, "enableInboundForwarding": $enable_inbound_forwarding, "enableLogging": $enable_logging, "id": $id, "kind": $kind, "name": $name, "networks": $networks} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes a previously created Policy. Fails if the policy is still being referenced by a network.
 #
 # DELETE /dns/v2/projects/{project}/locations/{location}/policies/{policy}
 # operationId: dns.policies.delete
-export def "dns-projects-locations-policies dnspoliciesdelete" [
+export def "dns-projects-locations-policies delete" [
   project: string
   location: string
   policy: string
@@ -1073,7 +1082,7 @@ export def "dns-projects-locations-policies dnspoliciesdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "clientOperationId" $client_operation_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project: $project, location: $location, policy: $policy} | format pattern "/dns/v2/projects/{project}/locations/{location}/policies/{policy}") $qp)
+  let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), policy: (encode-path-segment $policy)} | format pattern "/dns/v2/projects/{project}/locations/{location}/policies/{policy}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1083,7 +1092,7 @@ export def "dns-projects-locations-policies dnspoliciesdelete" [
 #
 # GET /dns/v2/projects/{project}/locations/{location}/policies/{policy}
 # operationId: dns.policies.get
-export def "dns-projects-locations-policies dnspoliciesget" [
+export def "dns-projects-locations-policies get" [
   project: string
   location: string
   policy: string
@@ -1111,7 +1120,7 @@ export def "dns-projects-locations-policies dnspoliciesget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "clientOperationId" $client_operation_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project: $project, location: $location, policy: $policy} | format pattern "/dns/v2/projects/{project}/locations/{location}/policies/{policy}") $qp)
+  let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), policy: (encode-path-segment $policy)} | format pattern "/dns/v2/projects/{project}/locations/{location}/policies/{policy}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1123,7 +1132,7 @@ export def "dns-projects-locations-policies dnspoliciesget" [
 # operationId: dns.policies.patch
 # --alternativeNameServerConfig shape: {kind?: string, targetNameServers?: list}
 # --networks item shape: {kind?: string, networkUrl?: string}
-export def "dns-projects-locations-policies dnspoliciespatch" [
+export def "dns-projects-locations-policies update-by-project-location-policy" [
   project: string
   location: string
   policy: string
@@ -1160,12 +1169,12 @@ export def "dns-projects-locations-policies dnspoliciespatch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "clientOperationId" $client_operation_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project: $project, location: $location, policy: $policy} | format pattern "/dns/v2/projects/{project}/locations/{location}/policies/{policy}") $qp)
-  let body = {"alternativeNameServerConfig": $alternative_name_server_config, "description": $description, "enableInboundForwarding": $enable_inbound_forwarding, "enableLogging": $enable_logging, "id": $id, "kind": $kind, "name": $name, "networks": $networks} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), policy: (encode-path-segment $policy)} | format pattern "/dns/v2/projects/{project}/locations/{location}/policies/{policy}") $qp)
+  let req_body = {"alternativeNameServerConfig": $alternative_name_server_config, "description": $description, "enableInboundForwarding": $enable_inbound_forwarding, "enableLogging": $enable_logging, "id": $id, "kind": $kind, "name": $name, "networks": $networks} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates an existing Policy.
@@ -1174,7 +1183,7 @@ export def "dns-projects-locations-policies dnspoliciespatch" [
 # operationId: dns.policies.update
 # --alternativeNameServerConfig shape: {kind?: string, targetNameServers?: list}
 # --networks item shape: {kind?: string, networkUrl?: string}
-export def "dns-projects-locations-policies dnspoliciesupdate" [
+export def "dns-projects-locations-policies update-by-project-location-policy-1" [
   project: string
   location: string
   policy: string
@@ -1211,19 +1220,19 @@ export def "dns-projects-locations-policies dnspoliciesupdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "clientOperationId" $client_operation_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project: $project, location: $location, policy: $policy} | format pattern "/dns/v2/projects/{project}/locations/{location}/policies/{policy}") $qp)
-  let body = {"alternativeNameServerConfig": $alternative_name_server_config, "description": $description, "enableInboundForwarding": $enable_inbound_forwarding, "enableLogging": $enable_logging, "id": $id, "kind": $kind, "name": $name, "networks": $networks} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), policy: (encode-path-segment $policy)} | format pattern "/dns/v2/projects/{project}/locations/{location}/policies/{policy}") $qp)
+  let req_body = {"alternativeNameServerConfig": $alternative_name_server_config, "description": $description, "enableInboundForwarding": $enable_inbound_forwarding, "enableLogging": $enable_logging, "id": $id, "kind": $kind, "name": $name, "networks": $networks} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Enumerates all Response Policies associated with a project.
 #
 # GET /dns/v2/projects/{project}/locations/{location}/responsePolicies
 # operationId: dns.responsePolicies.list
-export def "dns-projects-locations-response-policies dnsresponsePolicieslist" [
+export def "dns-projects-locations-response-policies list" [
   project: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1251,7 +1260,7 @@ export def "dns-projects-locations-response-policies dnsresponsePolicieslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project: $project, location: $location} | format pattern "/dns/v2/projects/{project}/locations/{location}/responsePolicies") $qp)
+  let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location)} | format pattern "/dns/v2/projects/{project}/locations/{location}/responsePolicies") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1263,7 +1272,7 @@ export def "dns-projects-locations-response-policies dnsresponsePolicieslist" [
 # operationId: dns.responsePolicies.create
 # --gkeClusters item shape: {gkeClusterName?: string, kind?: string}
 # --networks item shape: {kind?: string, networkUrl?: string}
-export def "dns-projects-locations-response-policies dnsresponsePoliciescreate" [
+export def "dns-projects-locations-response-policies create" [
   project: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1298,19 +1307,19 @@ export def "dns-projects-locations-response-policies dnsresponsePoliciescreate" 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "clientOperationId" $client_operation_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project: $project, location: $location} | format pattern "/dns/v2/projects/{project}/locations/{location}/responsePolicies") $qp)
-  let body = {"description": $description, "gkeClusters": $gke_clusters, "id": $id, "kind": $kind, "labels": $labels, "networks": $networks, "responsePolicyName": $response_policy_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location)} | format pattern "/dns/v2/projects/{project}/locations/{location}/responsePolicies") $qp)
+  let req_body = {"description": $description, "gkeClusters": $gke_clusters, "id": $id, "kind": $kind, "labels": $labels, "networks": $networks, "responsePolicyName": $response_policy_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes a previously created Response Policy. Fails if the response policy is non-empty or still being referenced by a network.
 #
 # DELETE /dns/v2/projects/{project}/locations/{location}/responsePolicies/{responsePolicy}
 # operationId: dns.responsePolicies.delete
-export def "dns-projects-locations-response-policies dnsresponsePoliciesdelete" [
+export def "dns-projects-locations-response-policies delete" [
   project: string
   location: string
   response_policy: string
@@ -1338,7 +1347,7 @@ export def "dns-projects-locations-response-policies dnsresponsePoliciesdelete" 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "clientOperationId" $client_operation_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project: $project, location: $location, response_policy: $response_policy} | format pattern "/dns/v2/projects/{project}/locations/{location}/responsePolicies/{response_policy}") $qp)
+  let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), response_policy: (encode-path-segment $response_policy)} | format pattern "/dns/v2/projects/{project}/locations/{location}/responsePolicies/{response_policy}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1348,7 +1357,7 @@ export def "dns-projects-locations-response-policies dnsresponsePoliciesdelete" 
 #
 # GET /dns/v2/projects/{project}/locations/{location}/responsePolicies/{responsePolicy}
 # operationId: dns.responsePolicies.get
-export def "dns-projects-locations-response-policies dnsresponsePoliciesget" [
+export def "dns-projects-locations-response-policies get" [
   project: string
   location: string
   response_policy: string
@@ -1376,7 +1385,7 @@ export def "dns-projects-locations-response-policies dnsresponsePoliciesget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "clientOperationId" $client_operation_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project: $project, location: $location, response_policy: $response_policy} | format pattern "/dns/v2/projects/{project}/locations/{location}/responsePolicies/{response_policy}") $qp)
+  let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), response_policy: (encode-path-segment $response_policy)} | format pattern "/dns/v2/projects/{project}/locations/{location}/responsePolicies/{response_policy}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1388,7 +1397,7 @@ export def "dns-projects-locations-response-policies dnsresponsePoliciesget" [
 # operationId: dns.responsePolicies.patch
 # --gkeClusters item shape: {gkeClusterName?: string, kind?: string}
 # --networks item shape: {kind?: string, networkUrl?: string}
-export def "dns-projects-locations-response-policies dnsresponsePoliciespatch" [
+export def "dns-projects-locations-response-policies update-by-project-location-responsePolicy" [
   project: string
   location: string
   response_policy: string
@@ -1424,12 +1433,12 @@ export def "dns-projects-locations-response-policies dnsresponsePoliciespatch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "clientOperationId" $client_operation_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project: $project, location: $location, response_policy: $response_policy} | format pattern "/dns/v2/projects/{project}/locations/{location}/responsePolicies/{response_policy}") $qp)
-  let body = {"description": $description, "gkeClusters": $gke_clusters, "id": $id, "kind": $kind, "labels": $labels, "networks": $networks, "responsePolicyName": $response_policy_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), response_policy: (encode-path-segment $response_policy)} | format pattern "/dns/v2/projects/{project}/locations/{location}/responsePolicies/{response_policy}") $qp)
+  let req_body = {"description": $description, "gkeClusters": $gke_clusters, "id": $id, "kind": $kind, "labels": $labels, "networks": $networks, "responsePolicyName": $response_policy_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates an existing Response Policy.
@@ -1438,7 +1447,7 @@ export def "dns-projects-locations-response-policies dnsresponsePoliciespatch" [
 # operationId: dns.responsePolicies.update
 # --gkeClusters item shape: {gkeClusterName?: string, kind?: string}
 # --networks item shape: {kind?: string, networkUrl?: string}
-export def "dns-projects-locations-response-policies dnsresponsePoliciesupdate" [
+export def "dns-projects-locations-response-policies update-by-project-location-responsePolicy-1" [
   project: string
   location: string
   response_policy: string
@@ -1474,19 +1483,19 @@ export def "dns-projects-locations-response-policies dnsresponsePoliciesupdate" 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "clientOperationId" $client_operation_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project: $project, location: $location, response_policy: $response_policy} | format pattern "/dns/v2/projects/{project}/locations/{location}/responsePolicies/{response_policy}") $qp)
-  let body = {"description": $description, "gkeClusters": $gke_clusters, "id": $id, "kind": $kind, "labels": $labels, "networks": $networks, "responsePolicyName": $response_policy_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), response_policy: (encode-path-segment $response_policy)} | format pattern "/dns/v2/projects/{project}/locations/{location}/responsePolicies/{response_policy}") $qp)
+  let req_body = {"description": $description, "gkeClusters": $gke_clusters, "id": $id, "kind": $kind, "labels": $labels, "networks": $networks, "responsePolicyName": $response_policy_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Enumerates all Response Policy Rules associated with a project.
 #
 # GET /dns/v2/projects/{project}/locations/{location}/responsePolicies/{responsePolicy}/rules
 # operationId: dns.responsePolicyRules.list
-export def "dns-projects-locations-response-policies-rules dnsresponsePolicyRuleslist" [
+export def "dns-projects-locations-response-policies-rules list" [
   project: string
   location: string
   response_policy: string
@@ -1515,7 +1524,7 @@ export def "dns-projects-locations-response-policies-rules dnsresponsePolicyRule
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project: $project, location: $location, response_policy: $response_policy} | format pattern "/dns/v2/projects/{project}/locations/{location}/responsePolicies/{response_policy}/rules") $qp)
+  let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), response_policy: (encode-path-segment $response_policy)} | format pattern "/dns/v2/projects/{project}/locations/{location}/responsePolicies/{response_policy}/rules") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1526,7 +1535,7 @@ export def "dns-projects-locations-response-policies-rules dnsresponsePolicyRule
 # POST /dns/v2/projects/{project}/locations/{location}/responsePolicies/{responsePolicy}/rules
 # operationId: dns.responsePolicyRules.create
 # --localData shape: {localDatas?: list}
-export def "dns-projects-locations-response-policies-rules dnsresponsePolicyRulescreate" [
+export def "dns-projects-locations-response-policies-rules create" [
   project: string
   location: string
   response_policy: string
@@ -1560,19 +1569,19 @@ export def "dns-projects-locations-response-policies-rules dnsresponsePolicyRule
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "clientOperationId" $client_operation_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project: $project, location: $location, response_policy: $response_policy} | format pattern "/dns/v2/projects/{project}/locations/{location}/responsePolicies/{response_policy}/rules") $qp)
-  let body = {"behavior": $behavior, "dnsName": $dns_name, "kind": $kind, "localData": $local_data, "ruleName": $rule_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), response_policy: (encode-path-segment $response_policy)} | format pattern "/dns/v2/projects/{project}/locations/{location}/responsePolicies/{response_policy}/rules") $qp)
+  let req_body = {"behavior": $behavior, "dnsName": $dns_name, "kind": $kind, "localData": $local_data, "ruleName": $rule_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes a previously created Response Policy Rule.
 #
 # DELETE /dns/v2/projects/{project}/locations/{location}/responsePolicies/{responsePolicy}/rules/{responsePolicyRule}
 # operationId: dns.responsePolicyRules.delete
-export def "dns-projects-locations-response-policies-rules dnsresponsePolicyRulesdelete" [
+export def "dns-projects-locations-response-policies-rules delete" [
   project: string
   location: string
   response_policy: string
@@ -1601,7 +1610,7 @@ export def "dns-projects-locations-response-policies-rules dnsresponsePolicyRule
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "clientOperationId" $client_operation_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project: $project, location: $location, response_policy: $response_policy, response_policy_rule: $response_policy_rule} | format pattern "/dns/v2/projects/{project}/locations/{location}/responsePolicies/{response_policy}/rules/{response_policy_rule}") $qp)
+  let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), response_policy: (encode-path-segment $response_policy), response_policy_rule: (encode-path-segment $response_policy_rule)} | format pattern "/dns/v2/projects/{project}/locations/{location}/responsePolicies/{response_policy}/rules/{response_policy_rule}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1611,7 +1620,7 @@ export def "dns-projects-locations-response-policies-rules dnsresponsePolicyRule
 #
 # GET /dns/v2/projects/{project}/locations/{location}/responsePolicies/{responsePolicy}/rules/{responsePolicyRule}
 # operationId: dns.responsePolicyRules.get
-export def "dns-projects-locations-response-policies-rules dnsresponsePolicyRulesget" [
+export def "dns-projects-locations-response-policies-rules get" [
   project: string
   location: string
   response_policy: string
@@ -1640,7 +1649,7 @@ export def "dns-projects-locations-response-policies-rules dnsresponsePolicyRule
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "clientOperationId" $client_operation_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project: $project, location: $location, response_policy: $response_policy, response_policy_rule: $response_policy_rule} | format pattern "/dns/v2/projects/{project}/locations/{location}/responsePolicies/{response_policy}/rules/{response_policy_rule}") $qp)
+  let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), response_policy: (encode-path-segment $response_policy), response_policy_rule: (encode-path-segment $response_policy_rule)} | format pattern "/dns/v2/projects/{project}/locations/{location}/responsePolicies/{response_policy}/rules/{response_policy_rule}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1651,7 +1660,7 @@ export def "dns-projects-locations-response-policies-rules dnsresponsePolicyRule
 # PATCH /dns/v2/projects/{project}/locations/{location}/responsePolicies/{responsePolicy}/rules/{responsePolicyRule}
 # operationId: dns.responsePolicyRules.patch
 # --localData shape: {localDatas?: list}
-export def "dns-projects-locations-response-policies-rules dnsresponsePolicyRulespatch" [
+export def "dns-projects-locations-response-policies-rules update-by-project-location-responsePolicy-responsePolicyRule" [
   project: string
   location: string
   response_policy: string
@@ -1686,12 +1695,12 @@ export def "dns-projects-locations-response-policies-rules dnsresponsePolicyRule
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "clientOperationId" $client_operation_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project: $project, location: $location, response_policy: $response_policy, response_policy_rule: $response_policy_rule} | format pattern "/dns/v2/projects/{project}/locations/{location}/responsePolicies/{response_policy}/rules/{response_policy_rule}") $qp)
-  let body = {"behavior": $behavior, "dnsName": $dns_name, "kind": $kind, "localData": $local_data, "ruleName": $rule_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), response_policy: (encode-path-segment $response_policy), response_policy_rule: (encode-path-segment $response_policy_rule)} | format pattern "/dns/v2/projects/{project}/locations/{location}/responsePolicies/{response_policy}/rules/{response_policy_rule}") $qp)
+  let req_body = {"behavior": $behavior, "dnsName": $dns_name, "kind": $kind, "localData": $local_data, "ruleName": $rule_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates an existing Response Policy Rule.
@@ -1699,7 +1708,7 @@ export def "dns-projects-locations-response-policies-rules dnsresponsePolicyRule
 # PUT /dns/v2/projects/{project}/locations/{location}/responsePolicies/{responsePolicy}/rules/{responsePolicyRule}
 # operationId: dns.responsePolicyRules.update
 # --localData shape: {localDatas?: list}
-export def "dns-projects-locations-response-policies-rules dnsresponsePolicyRulesupdate" [
+export def "dns-projects-locations-response-policies-rules update-by-project-location-responsePolicy-responsePolicyRule-1" [
   project: string
   location: string
   response_policy: string
@@ -1734,12 +1743,12 @@ export def "dns-projects-locations-response-policies-rules dnsresponsePolicyRule
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "clientOperationId" $client_operation_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project: $project, location: $location, response_policy: $response_policy, response_policy_rule: $response_policy_rule} | format pattern "/dns/v2/projects/{project}/locations/{location}/responsePolicies/{response_policy}/rules/{response_policy_rule}") $qp)
-  let body = {"behavior": $behavior, "dnsName": $dns_name, "kind": $kind, "localData": $local_data, "ruleName": $rule_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), response_policy: (encode-path-segment $response_policy), response_policy_rule: (encode-path-segment $response_policy_rule)} | format pattern "/dns/v2/projects/{project}/locations/{location}/responsePolicies/{response_policy}/rules/{response_policy_rule}") $qp)
+  let req_body = {"behavior": $behavior, "dnsName": $dns_name, "kind": $kind, "localData": $local_data, "ruleName": $rule_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets the access control policy for a resource. Returns an empty policy if the resource exists and does not have a policy set.
@@ -1747,7 +1756,7 @@ export def "dns-projects-locations-response-policies-rules dnsresponsePolicyRule
 # POST /dns/v2/{resource}:getIamPolicy
 # operationId: dns.managedZones.getIamPolicy
 # --options shape: {requestedPolicyVersion?: int}
-export def "dns dnsmanagedZonesgetIamPolicy" [
+export def "dns get-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1774,12 +1783,12 @@ export def "dns dnsmanagedZonesgetIamPolicy" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource: $resource} | format pattern "/dns/v2/{resource}:getIamPolicy") $qp)
-  let body = {"options": $options} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({resource: (encode-path-segment $resource)} | format pattern "/dns/v2/{resource}:getIamPolicy") $qp)
+  let req_body = {"options": $options} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Sets the access control policy on the specified resource. Replaces any existing policy. Can return `NOT_FOUND`, `INVALID_ARGUMENT`, and `PERMISSION_DENIED` errors.
@@ -1787,7 +1796,7 @@ export def "dns dnsmanagedZonesgetIamPolicy" [
 # POST /dns/v2/{resource}:setIamPolicy
 # operationId: dns.managedZones.setIamPolicy
 # --policy shape: {auditConfigs?: list, bindings?: list, etag?: string, version?: int}
-export def "dns dnsmanagedZonessetIamPolicy" [
+export def "dns update-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1815,19 +1824,19 @@ export def "dns dnsmanagedZonessetIamPolicy" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource: $resource} | format pattern "/dns/v2/{resource}:setIamPolicy") $qp)
-  let body = {"policy": $policy, "updateMask": $update_mask} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({resource: (encode-path-segment $resource)} | format pattern "/dns/v2/{resource}:setIamPolicy") $qp)
+  let req_body = {"policy": $policy, "updateMask": $update_mask} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns permissions that a caller has on the specified resource. If the resource does not exist, this returns an empty set of permissions, not a `NOT_FOUND` error. Note: This operation is designed to be used for building permission-aware UIs and command-line tools, not for authorization checking. This operation may "fail open" without warning.
 #
 # POST /dns/v2/{resource}:testIamPermissions
 # operationId: dns.managedZones.testIamPermissions
-export def "dns dnsmanagedZonestestIamPermissions" [
+export def "dns test-iam-permissions" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1848,16 +1857,16 @@ export def "dns dnsmanagedZonestestIamPermissions" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --permissions: list # The set of permissions to check for the `resource`. Permissions with wildcards (such as `*` or `storage.*`) are not allowed. For more information see [IAM Overview](https://cloud.google.com/iam/docs/overview#permissions).
+  --permissions: list<string> # The set of permissions to check for the `resource`. Permissions with wildcards (such as `*` or `storage.*`) are not allowed. For more information see [IAM Overview](https://cloud.google.com/iam/docs/overview#permissions).
 ]: any -> record<permissions: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource: $resource} | format pattern "/dns/v2/{resource}:testIamPermissions") $qp)
-  let body = {"permissions": $permissions} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({resource: (encode-path-segment $resource)} | format pattern "/dns/v2/{resource}:testIamPermissions") $qp)
+  let req_body = {"permissions": $permissions} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

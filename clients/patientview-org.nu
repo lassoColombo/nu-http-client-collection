@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -68,7 +77,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "auth-login logIn" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "auth-login create-log" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -92,7 +101,7 @@ export def commands []: nothing -> table {
 #
 # POST /auth/login
 # operationId: logIn
-export def "auth-login logIn" [
+export def "auth-login create-log" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -109,18 +118,18 @@ export def "auth-login logIn" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/auth/login")
-  let body = {"apiKey": $api_key, "password": $password, "username": $username} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"apiKey": $api_key, "password": $password, "username": $username} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Log Out
 #
 # DELETE /auth/logout/{token}
 # operationId: logOut
-export def "auth-logout logOut" [
+export def "auth-logout delete-log-out" [
   token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -133,7 +142,7 @@ export def "auth-logout logOut" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({token_arg: $token_arg} | format pattern "/auth/logout/{token_arg}"))
+  let full_url = (build-url $base ({token_arg: (encode-path-segment $token_arg)} | format pattern "/auth/logout/{token_arg}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -156,7 +165,7 @@ export def "auth-basicuserinformation get-basic-user-information" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({token_arg: $token_arg} | format pattern "/auth/{token_arg}/basicuserinformation"))
+  let full_url = (build-url $base ({token_arg: (encode-path-segment $token_arg)} | format pattern "/auth/{token_arg}/basicuserinformation"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -166,7 +175,7 @@ export def "auth-basicuserinformation get-basic-user-information" [
 #
 # GET /patient/{userId}/basic
 # operationId: getBasicPatientDetails
-export def "patient-basic get-basic-patient-details" [
+export def "patient-basic get-details" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -179,7 +188,7 @@ export def "patient-basic get-basic-patient-details" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/patient/{user_id}/basic"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/patient/{user_id}/basic"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -189,7 +198,7 @@ export def "patient-basic get-basic-patient-details" [
 #
 # GET /patientmanagement/diagnoses
 # operationId: getPatientManagementDiagnoses
-export def "patientmanagement-diagnoses get" [
+export def "patientmanagement-diagnoses get-patient-management" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -211,7 +220,7 @@ export def "patientmanagement-diagnoses get" [
 #
 # GET /patientmanagement/lookuptypes
 # operationId: getPatientManagementLookupTypes
-export def "patientmanagement-lookuptypes get" [
+export def "patientmanagement-lookuptypes get-patient-management-lookup-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -238,7 +247,7 @@ export def "patientmanagement-lookuptypes get" [
 # --observations item shape: {applies?: string, bodySite?: string, comments?: string, comparator?: string, diagram?: string, group?: record, id?: int, identifier?: string, location?: string, name?: string, temporaryUuid?: string, units?: string, value?: string}
 # --patient shape: {address1?: string, address2?: string, address3?: string, address4?: string, contacts?: list, dateOfBirth?: string, dateOfBirthNoTime?: string, forename?: string, gender?: string, group?: record, groupCode?: string, identifier?: string, identifiers?: list, postcode?: string, practitioners?: list, surname?: string}
 # --practitioners item shape: {address1?: string, address2?: string, address3?: string, address4?: string, allowInviteGp?: bool, contacts?: list, gender?: string, groupCode?: string, identifier?: string, inviteDate?: string, name?: string, postcode?: string, role?: string}
-export def "patientmanagement-validate validate" [
+export def "patientmanagement-validate validate-patient-management" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -259,18 +268,18 @@ export def "patientmanagement-validate validate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/patientmanagement/validate")
-  let body = {"condition": $condition, "encounters": $encounters, "groupCode": $group_code, "identifier": $identifier, "observations": $observations, "patient": $patient, "practitioners": $practitioners} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"condition": $condition, "encounters": $encounters, "groupCode": $group_code, "identifier": $identifier, "observations": $observations, "patient": $patient, "practitioners": $practitioners} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # getPatientManagement
 #
 # GET /patientmanagement/{userId}/group/{groupId}/identifier/{identifierId}
 # operationId: getPatientManagement
-export def "patientmanagement-group-identifier get" [
+export def "patientmanagement-group-identifier get-patient-management" [
   user_id: int
   group_id: int
   identifier_id: int
@@ -285,7 +294,7 @@ export def "patientmanagement-group-identifier get" [
 ]: nothing -> record<condition: record<asserter: string, category: string, code: string, date: string, description: string, fullDescription: string, group: record<address1: string, address2: string, address3: string, childGroups: list, code: string, contactPoints: list, created: string, fhirResourceId: string, groupFeatures: list, groupType: record, id: int, lastImportDate: string, lastUpdate: string, links: list, locations: list, name: string, parentGroups: list, postcode: string, sftpUser: string, shortName: string, visible: bool, visibleToJoin: bool>, id: int, identifier: string, links: list<record>, notes: string, severity: string, status: string>, encounters: table<date: string, encounterType: string, group: record, id: int, identifier: string, links: list, observations: list, procedures: list, status: string>, groupCode: string, identifier: string, observations: table<applies: string, bodySite: string, comments: string, comparator: string, diagram: string, group: record, id: int, identifier: string, location: string, name: string, temporaryUuid: string, units: string, value: string>, patient: record<address1: string, address2: string, address3: string, address4: string, contacts: list<record>, dateOfBirth: string, dateOfBirthNoTime: string, forename: string, gender: string, group: record<address1: string, address2: string, address3: string, childGroups: list, code: string, contactPoints: list, created: string, fhirResourceId: string, groupFeatures: list, groupType: record, id: int, lastImportDate: string, lastUpdate: string, links: list, locations: list, name: string, parentGroups: list, postcode: string, sftpUser: string, shortName: string, visible: bool, visibleToJoin: bool>, groupCode: string, identifier: string, identifiers: list<record>, postcode: string, practitioners: list<record>, surname: string>, practitioners: table<address1: string, address2: string, address3: string, address4: string, allowInviteGp: bool, contacts: list, gender: string, groupCode: string, identifier: string, inviteDate: string, name: string, postcode: string, role: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id, group_id: $group_id, identifier_id: $identifier_id} | format pattern "/patientmanagement/{user_id}/group/{group_id}/identifier/{identifier_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), group_id: (encode-path-segment $group_id), identifier_id: (encode-path-segment $identifier_id)} | format pattern "/patientmanagement/{user_id}/group/{group_id}/identifier/{identifier_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -300,7 +309,7 @@ export def "patientmanagement-group-identifier get" [
 # --observations item shape: {applies?: string, bodySite?: string, comments?: string, comparator?: string, diagram?: string, group?: record, id?: int, identifier?: string, location?: string, name?: string, temporaryUuid?: string, units?: string, value?: string}
 # --patient shape: {address1?: string, address2?: string, address3?: string, address4?: string, contacts?: list, dateOfBirth?: string, dateOfBirthNoTime?: string, forename?: string, gender?: string, group?: record, groupCode?: string, identifier?: string, identifiers?: list, postcode?: string, practitioners?: list, surname?: string}
 # --practitioners item shape: {address1?: string, address2?: string, address3?: string, address4?: string, allowInviteGp?: bool, contacts?: list, gender?: string, groupCode?: string, identifier?: string, inviteDate?: string, name?: string, postcode?: string, role?: string}
-export def "patientmanagement-group-identifier savePatientManagement" [
+export def "patientmanagement-group-identifier create-save-patient-management" [
   user_id: int
   group_id: int
   identifier_id: int
@@ -323,12 +332,12 @@ export def "patientmanagement-group-identifier savePatientManagement" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id, group_id: $group_id, identifier_id: $identifier_id} | format pattern "/patientmanagement/{user_id}/group/{group_id}/identifier/{identifier_id}"))
-  let body = {"condition": $condition, "encounters": $encounters, "groupCode": $group_code, "identifier": $identifier, "observations": $observations, "patient": $patient, "practitioners": $practitioners} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), group_id: (encode-path-segment $group_id), identifier_id: (encode-path-segment $identifier_id)} | format pattern "/patientmanagement/{user_id}/group/{group_id}/identifier/{identifier_id}"))
+  let req_body = {"condition": $condition, "encounters": $encounters, "groupCode": $group_code, "identifier": $identifier, "observations": $observations, "patient": $patient, "practitioners": $practitioners} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # savePatientManagementSurgeries
@@ -340,7 +349,7 @@ export def "patientmanagement-group-identifier savePatientManagement" [
 # --observations item shape: {applies?: string, bodySite?: string, comments?: string, comparator?: string, diagram?: string, group?: record, id?: int, identifier?: string, location?: string, name?: string, temporaryUuid?: string, units?: string, value?: string}
 # --patient shape: {address1?: string, address2?: string, address3?: string, address4?: string, contacts?: list, dateOfBirth?: string, dateOfBirthNoTime?: string, forename?: string, gender?: string, group?: record, groupCode?: string, identifier?: string, identifiers?: list, postcode?: string, practitioners?: list, surname?: string}
 # --practitioners item shape: {address1?: string, address2?: string, address3?: string, address4?: string, allowInviteGp?: bool, contacts?: list, gender?: string, groupCode?: string, identifier?: string, inviteDate?: string, name?: string, postcode?: string, role?: string}
-export def "patientmanagement-group-identifier-surgeries savePatientManagementSurgeries" [
+export def "patientmanagement-group-identifier-surgeries create-save-patient-management" [
   user_id: int
   group_id: int
   identifier_id: int
@@ -363,12 +372,12 @@ export def "patientmanagement-group-identifier-surgeries savePatientManagementSu
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id, group_id: $group_id, identifier_id: $identifier_id} | format pattern "/patientmanagement/{user_id}/group/{group_id}/identifier/{identifier_id}/surgeries"))
-  let body = {"condition": $condition, "encounters": $encounters, "groupCode": $group_code, "identifier": $identifier, "observations": $observations, "patient": $patient, "practitioners": $practitioners} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), group_id: (encode-path-segment $group_id), identifier_id: (encode-path-segment $identifier_id)} | format pattern "/patientmanagement/{user_id}/group/{group_id}/identifier/{identifier_id}/surgeries"))
+  let req_body = {"condition": $condition, "encounters": $encounters, "groupCode": $group_code, "identifier": $identifier, "observations": $observations, "patient": $patient, "practitioners": $practitioners} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get Available Observations Types For a User
@@ -388,7 +397,7 @@ export def "user-availableobservationheadings get-available-observation-headings
 ]: nothing -> table<code: string, created: string, decimalPlaces: int, defaultPanel: int, defaultPanelOrder: int, heading: string, id: int, infoLink: string, lastUpdate: string, maxGraph: float, minGraph: float, name: string, normalRange: string, observationHeadingGroups: list<record>, units: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/user/{user_id}/availableobservationheadings"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/availableobservationheadings"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -398,7 +407,7 @@ export def "user-availableobservationheadings get-available-observation-headings
 #
 # GET /user/{userId}/observations
 # operationId: getObservationsByCodes
-export def "user-observations list" [
+export def "user-observations get-by-codes" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -408,7 +417,7 @@ export def "user-observations list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --code: list # code
+  --code: list<string> # code
   --limit: int # limit (format: int64)
   --offset: int # offset (format: int64)
   --order-direction: string # orderDirection
@@ -416,7 +425,7 @@ export def "user-observations list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "code" $code "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "orderDirection" $order_direction "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/user/{user_id}/observations") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/observations") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -440,7 +449,7 @@ export def "user-observations get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id, code: $code} | format pattern "/user/{user_id}/observations/{code}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), code: (encode-path-segment $code)} | format pattern "/user/{user_id}/observations/{code}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -450,7 +459,7 @@ export def "user-observations get" [
 #
 # GET /user/{userId}/observations/{code}/patiententered
 # operationId: getPatientEnteredObservationsByCode
-export def "user-observations-patiententered get" [
+export def "user-observations-patiententered get-patient-entered" [
   user_id: int
   code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -464,7 +473,7 @@ export def "user-observations-patiententered get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id, code: $code} | format pattern "/user/{user_id}/observations/{code}/patiententered"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), code: (encode-path-segment $code)} | format pattern "/user/{user_id}/observations/{code}/patiententered"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -487,7 +496,7 @@ export def "user-patiententeredobservationheadings get-patient-entered-observati
 ]: nothing -> table<code: string, created: string, decimalPlaces: int, defaultPanel: int, defaultPanelOrder: int, heading: string, id: int, infoLink: string, lastUpdate: string, maxGraph: float, minGraph: float, name: string, normalRange: string, observationHeadingGroups: list<record>, units: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/user/{user_id}/patiententeredobservationheadings"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/patiententeredobservationheadings"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

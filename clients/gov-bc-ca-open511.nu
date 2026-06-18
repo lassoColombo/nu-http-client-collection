@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -129,14 +138,14 @@ export def "events get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --format: string@format-completer # The format of the response (default: json)
   --status: string@status-completer # Limits the response to events having a given status. (default: ALL)
-  --severity: string # Limits the response to events tagged with one of the listed severity values. The possible values are: [MINOR, MODERATE, MAJOR].  Multiple values may be listed, and should be separated by a comma. The default is to return events of any severity. (default: MAJOR)
+  --severity: string # Limits the response to events tagged with one of the listed severity values. The possible values are: [MINOR, MODERATE, MAJOR]. Multiple values may be listed, and should be separated by a comma. The default is to return events of any severity. (default: MAJOR)
   --jurisdiction: string # Limits the response to events reported by a given jurisdiction. The value given must be specified as the ID of a jurisdiction returned by the /jurisdiction resource. The default is to return events from all jurisdictions. (default: drivebc.ca)
-  --event-type: string@event-type-completer # Limits the response to events tagged with one of the listed event types.  The possible values include: [CONSTRUCTION, INCIDENT, SPECIAL_EVENT, WEATHER_CONDITION].  Multiple values may be listed, and should be separated by a comma. The default is to return events of all types. (default: INCIDENT)
-  --created: string # Limits the response to events based on the date and time that the event was created (first recorded). The date/time must be specified in ISO 8601 format, and may be prefixed by one of the following operators [<, <=, >, >=] to indicate 'before', 'before or equal to', 'after' or 'after or equal to' respectively.  For example, >2013-12-01T12:00:00Z requests all events create after Dec. 1, 2015 at 12pm (noon) Coordinated Universal Time.  The default is to return events with any creation time. (default: >2015-09-01T12:00:00Z)
-  --updated: string # Limits the response to events based on the date and time that the event was last updated. The date/time must be specified in ISO 8601 format, and may be prefixed by one of the following operators [<, <=, >, >=] to indicate 'before', 'before or equal to', 'after' or 'after or equal to' respectively.  For example, >2013-12-01T12:00:00Z requests all events updated after Dec. 1, 2015 at 12pm (noon) Coordinated Universal Time. The default is to return events with any update time (default: >2015-09-01T12:00:00Z)
-  --road-name: string # Limits the response to events on a given road as specified by the road name.  An example of a valid road name is 'Highway 1'. The default is to return events on all roads. (default: Highway 99)
-  --area-id: string # Limits the response to events within one of the specified areas.  An area must be specified as the ID of an item returned by the /areas resource. For example: an area_id of 'drivebc.ca/1' limits events to those within the Lower Mainland District.  The default is to return events in all areas. (default: drivebc.ca/1)
-  --bbox: string # Limits the response to events that fall within the specified geographical bounding box.  The bbox format must be '[min longitude],[min latitude],[max longitude],[max latitude]' with WGS84 coordinates.  For example: -123.45,48.99,-122.45,49.49.  The default is to return events in all geographical locations. (default: -130,48,-116,60)
+  --event-type: string@event-type-completer # Limits the response to events tagged with one of the listed event types. The possible values include: [CONSTRUCTION, INCIDENT, SPECIAL_EVENT, WEATHER_CONDITION]. Multiple values may be listed, and should be separated by a comma. The default is to return events of all types. (default: INCIDENT)
+  --created: string # Limits the response to events based on the date and time that the event was created (first recorded). The date/time must be specified in ISO 8601 format, and may be prefixed by one of the following operators [<, <=, >, >=] to indicate 'before', 'before or equal to', 'after' or 'after or equal to' respectively. For example, >2013-12-01T12:00:00Z requests all events create after Dec. 1, 2015 at 12pm (noon) Coordinated Universal Time. The default is to return events with any creation time. (default: >2015-09-01T12:00:00Z)
+  --updated: string # Limits the response to events based on the date and time that the event was last updated. The date/time must be specified in ISO 8601 format, and may be prefixed by one of the following operators [<, <=, >, >=] to indicate 'before', 'before or equal to', 'after' or 'after or equal to' respectively. For example, >2013-12-01T12:00:00Z requests all events updated after Dec. 1, 2015 at 12pm (noon) Coordinated Universal Time. The default is to return events with any update time (default: >2015-09-01T12:00:00Z)
+  --road-name: string # Limits the response to events on a given road as specified by the road name. An example of a valid road name is 'Highway 1'. The default is to return events on all roads. (default: Highway 99)
+  --area-id: string # Limits the response to events within one of the specified areas. An area must be specified as the ID of an item returned by the /areas resource. For example: an area_id of 'drivebc.ca/1' limits events to those within the Lower Mainland District. The default is to return events in all areas. (default: drivebc.ca/1)
+  --bbox: string # Limits the response to events that fall within the specified geographical bounding box. The bbox format must be '[min longitude],[min latitude],[max longitude],[max latitude]' with WGS84 coordinates. For example: -123.45,48.99,-122.45,49.49. The default is to return events in all geographical locations. (default: -130,48,-116,60)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

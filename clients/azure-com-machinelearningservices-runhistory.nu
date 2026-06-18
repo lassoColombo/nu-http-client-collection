@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -74,7 +83,7 @@ def sortorder-completer [] { ["Asc" "Desc"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "history-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experimentids get-by" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "history-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experimentids get-experiments" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -98,7 +107,7 @@ export def commands []: nothing -> table {
 #
 # GET /history/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/experimentids/{experimentId}
 # operationId: Experiments_GetById
-export def "history-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experimentids get-by" [
+export def "history-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experimentids get-experiments" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -114,7 +123,7 @@ export def "history-v10-subscriptions-resource-groups-providers-microsoft-machin
 ]: nothing -> record<archivedTime: string, createdUtc: string, description: string, experimentId: string, latestCreatedRunCreatedUtc: string, latestCreatedRunId: string, name: string, tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name, experiment_id: $experiment_id} | format pattern "/history/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/experimentids/{experiment_id}"))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), experiment_id: (encode-path-segment $experiment_id)} | format pattern "/history/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/experimentids/{experiment_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -124,7 +133,7 @@ export def "history-v10-subscriptions-resource-groups-providers-microsoft-machin
 #
 # PATCH /history/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/experimentids/{experimentId}
 # operationId: Experiments_Update
-export def "history-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experimentids update" [
+export def "history-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experimentids update-experiments" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -144,19 +153,19 @@ export def "history-v10-subscriptions-resource-groups-providers-microsoft-machin
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name, experiment_id: $experiment_id} | format pattern "/history/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/experimentids/{experiment_id}"))
-  let body = {"archive": $archive, "description": $description, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), experiment_id: (encode-path-segment $experiment_id)} | format pattern "/history/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/experimentids/{experiment_id}"))
+  let req_body = {"archive": $archive, "description": $description, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete list of Tags in an Experiment.
 #
 # DELETE /history/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/experimentids/{experimentId}/tags
 # operationId: Experiments_DeleteTags
-export def "history-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experimentids-tags delete" [
+export def "history-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experimentids-tags delete-experiments" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -169,24 +178,24 @@ export def "history-v10-subscriptions-resource-groups-providers-microsoft-machin
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tags: list
+  --tags: list<string>
 ]: any -> record<archivedTime: string, createdUtc: string, description: string, experimentId: string, latestCreatedRunCreatedUtc: string, latestCreatedRunId: string, name: string, tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name, experiment_id: $experiment_id} | format pattern "/history/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/experimentids/{experiment_id}/tags"))
-  let body = {"tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), experiment_id: (encode-path-segment $experiment_id)} | format pattern "/history/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/experimentids/{experiment_id}/tags"))
+  let req_body = {"tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get details of an Experiment.
 #
 # GET /history/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/experiments/{experimentName}
 # operationId: Experiments_Get
-export def "history-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experiments get" [
+export def "history-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experiments get" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -202,7 +211,7 @@ export def "history-v10-subscriptions-resource-groups-providers-microsoft-machin
 ]: nothing -> record<archivedTime: string, createdUtc: string, description: string, experimentId: string, latestCreatedRunCreatedUtc: string, latestCreatedRunId: string, name: string, tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name, experiment_name: $experiment_name} | format pattern "/history/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/experiments/{experiment_name}"))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), experiment_name: (encode-path-segment $experiment_name)} | format pattern "/history/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/experiments/{experiment_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -212,7 +221,7 @@ export def "history-v10-subscriptions-resource-groups-providers-microsoft-machin
 #
 # POST /history/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/experiments/{experimentName}
 # operationId: Experiments_Create
-export def "history-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experiments create" [
+export def "history-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experiments create" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -228,7 +237,7 @@ export def "history-v10-subscriptions-resource-groups-providers-microsoft-machin
 ]: nothing -> record<archivedTime: string, createdUtc: string, description: string, experimentId: string, latestCreatedRunCreatedUtc: string, latestCreatedRunId: string, name: string, tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name, experiment_name: $experiment_name} | format pattern "/history/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/experiments/{experiment_name}"))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), experiment_name: (encode-path-segment $experiment_name)} | format pattern "/history/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/experiments/{experiment_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -239,7 +248,7 @@ export def "history-v10-subscriptions-resource-groups-providers-microsoft-machin
 # POST /history/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/experiments/{experimentName}/batch/events
 # operationId: Events_BatchPost
 # --events item shape: {data?: record, name?: string, timestamp?: string}
-export def "history-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experiments-batch-events create" [
+export def "history-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experiments-batch-events create" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -257,12 +266,12 @@ export def "history-v10-subscriptions-resource-groups-providers-microsoft-machin
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name, experiment_name: $experiment_name} | format pattern "/history/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/experiments/{experiment_name}/batch/events"))
-  let body = {"events": $events} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), experiment_name: (encode-path-segment $experiment_name)} | format pattern "/history/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/experiments/{experiment_name}/batch/events"))
+  let req_body = {"events": $events} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Add or Modify a batch of Runs.
@@ -270,7 +279,7 @@ export def "history-v10-subscriptions-resource-groups-providers-microsoft-machin
 # PATCH /history/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/experiments/{experimentName}/batch/runs
 # operationId: Runs_BatchAddOrModify
 # --runs item shape: {cancelUri?: string, createdFrom?: record, dataContainerId?: string, description?: string, diagnosticsUri?: string, endTimeUtc?: string, heartbeatEnabled?: bool, hidden?: bool, name?: string, options?: record, parentRunId?: string, properties?: record, runDefinition?: record, runId?: string, runType?: string, scriptName?: string, startTimeUtc?: string, status?: string, tags?: record, target?: string}
-export def "history-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experiments-batch-runs patch" [
+export def "history-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experiments-batch-runs create-or-modify" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -288,19 +297,19 @@ export def "history-v10-subscriptions-resource-groups-providers-microsoft-machin
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name, experiment_name: $experiment_name} | format pattern "/history/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/experiments/{experiment_name}/batch/runs"))
-  let body = {"runs": $runs} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), experiment_name: (encode-path-segment $experiment_name)} | format pattern "/history/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/experiments/{experiment_name}/batch/runs"))
+  let req_body = {"runs": $runs} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get Metric details.
 #
 # GET /history/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/experiments/{experimentName}/metrics/{metricId}
 # operationId: RunMetrics_Get
-export def "history-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experiments-metrics get" [
+export def "history-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experiments-metrics get-run" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -317,7 +326,7 @@ export def "history-v10-subscriptions-resource-groups-providers-microsoft-machin
 ]: nothing -> record<cells: list<record>, createdUtc: string, dataContainerId: string, dataLocation: string, description: string, label: string, metricId: string, metricType: string, name: string, numCells: int, runId: string, schema: record<numProperties: int, properties: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name, experiment_name: $experiment_name, metric_id: $metric_id} | format pattern "/history/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/experiments/{experiment_name}/metrics/{metric_id}"))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), experiment_name: (encode-path-segment $experiment_name), metric_id: (encode-path-segment $metric_id)} | format pattern "/history/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/experiments/{experiment_name}/metrics/{metric_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -327,7 +336,7 @@ export def "history-v10-subscriptions-resource-groups-providers-microsoft-machin
 #
 # POST /history/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/experiments/{experimentName}/metrics:query
 # operationId: RunMetrics_GetByQuery
-export def "history-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experiments-metrics-query get-by" [
+export def "history-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experiments-metrics-query get-run" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -353,19 +362,19 @@ export def "history-v10-subscriptions-resource-groups-providers-microsoft-machin
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "MergeStrategyType" $merge_strategy_type "scalar") (serialize-qp "MergeStrategyOptions" $merge_strategy_options "scalar") (serialize-qp "MergeStrategySettings.Version" $merge_strategy_settings_version "scalar") (serialize-qp "MergeStrategySettings.SelectMetrics" $merge_strategy_settings_select_metrics "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name, experiment_name: $experiment_name} | format pattern "/history/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/experiments/{experiment_name}/metrics:query") $qp)
-  let body = {"continuationToken": $continuation_token, "filter": $filter, "orderBy": $order_by, "top": $top} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), experiment_name: (encode-path-segment $experiment_name)} | format pattern "/history/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/experiments/{experiment_name}/metrics:query") $qp)
+  let req_body = {"continuationToken": $continuation_token, "filter": $filter, "orderBy": $order_by, "top": $top} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get Run details.
 #
 # GET /history/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/experiments/{experimentName}/runs/{runId}
 # operationId: Runs_Get
-export def "history-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experiments-runs get" [
+export def "history-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experiments-runs get" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -382,7 +391,7 @@ export def "history-v10-subscriptions-resource-groups-providers-microsoft-machin
 ]: nothing -> record<cancelUri: string, createdBy: record<userName: string, userObjectId: string, userTenantId: string>, createdFrom: record<location: string, locationType: string, type: string>, createdUtc: string, dataContainerId: string, description: string, diagnosticsUri: string, endTimeUtc: string, error: record<correlation: record, environment: string, error: record<code: string, details: list, innerError: record, message: string, target: string>, location: string, time: string>, experimentId: string, heartbeatEnabled: bool, hidden: bool, name: string, options: record<generateDataContainerIdIfNotSpecified: bool>, parentRunId: string, properties: record, revision: int, rootRunId: string, runDefinition: record, runId: string, runNumber: int, runType: string, scriptName: string, startTimeUtc: string, status: string, tags: record, target: string, token: string, tokenExpiryTimeUtc: string, userId: string, warnings: table<message: string, source: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name, experiment_name: $experiment_name, run_id: $run_id} | format pattern "/history/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/experiments/{experiment_name}/runs/{run_id}"))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), experiment_name: (encode-path-segment $experiment_name), run_id: (encode-path-segment $run_id)} | format pattern "/history/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/experiments/{experiment_name}/runs/{run_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -394,7 +403,7 @@ export def "history-v10-subscriptions-resource-groups-providers-microsoft-machin
 # operationId: Runs_Patch
 # --createdFrom shape: {location?: string, locationType?: "ArtifactId", type?: "Notebook"}
 # --options shape: {generateDataContainerIdIfNotSpecified?: bool}
-export def "history-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experiments-runs update" [
+export def "history-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experiments-runs update" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -432,19 +441,19 @@ export def "history-v10-subscriptions-resource-groups-providers-microsoft-machin
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name, experiment_name: $experiment_name, run_id: $run_id} | format pattern "/history/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/experiments/{experiment_name}/runs/{run_id}"))
-  let body = {"cancelUri": $cancel_uri, "createdFrom": $created_from, "dataContainerId": $data_container_id, "description": $description, "diagnosticsUri": $diagnostics_uri, "endTimeUtc": $end_time_utc, "heartbeatEnabled": $heartbeat_enabled, "hidden": $hidden, "name": $name, "options": $options, "parentRunId": $parent_run_id, "properties": $properties, "runDefinition": $run_definition, "runId": $body_run_id, "runType": $run_type, "scriptName": $script_name, "startTimeUtc": $start_time_utc, "status": $status, "tags": $tags, "target": $target} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), experiment_name: (encode-path-segment $experiment_name), run_id: (encode-path-segment $run_id)} | format pattern "/history/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/experiments/{experiment_name}/runs/{run_id}"))
+  let req_body = {"cancelUri": $cancel_uri, "createdFrom": $created_from, "dataContainerId": $data_container_id, "description": $description, "diagnosticsUri": $diagnostics_uri, "endTimeUtc": $end_time_utc, "heartbeatEnabled": $heartbeat_enabled, "hidden": $hidden, "name": $name, "options": $options, "parentRunId": $parent_run_id, "properties": $properties, "runDefinition": $run_definition, "runId": $body_run_id, "runType": $run_type, "scriptName": $script_name, "startTimeUtc": $start_time_utc, "status": $status, "tags": $tags, "target": $target} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get Artifacts in a container.
 #
 # GET /history/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/experiments/{experimentName}/runs/{runId}/artifacts
 # operationId: RunArtifacts_ListInContainer
-export def "history-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experiments-runs-artifacts list-in-container" [
+export def "history-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experiments-runs-artifacts list-in-container" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -463,7 +472,7 @@ export def "history-v10-subscriptions-resource-groups-providers-microsoft-machin
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "continuationToken" $continuation_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name, experiment_name: $experiment_name, run_id: $run_id} | format pattern "/history/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/experiments/{experiment_name}/runs/{run_id}/artifacts") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), experiment_name: (encode-path-segment $experiment_name), run_id: (encode-path-segment $run_id)} | format pattern "/history/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/experiments/{experiment_name}/runs/{run_id}/artifacts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -473,7 +482,7 @@ export def "history-v10-subscriptions-resource-groups-providers-microsoft-machin
 #
 # GET /history/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/experiments/{experimentName}/runs/{runId}/artifacts/artifacturi
 # operationId: RunArtifacts_GetSasUri
-export def "history-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experiments-runs-artifacts-artifacturi get-sas-uri" [
+export def "history-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experiments-runs-artifacts-artifacturi get-sas-uri" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -492,7 +501,7 @@ export def "history-v10-subscriptions-resource-groups-providers-microsoft-machin
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "path" $path "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name, experiment_name: $experiment_name, run_id: $run_id} | format pattern "/history/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/experiments/{experiment_name}/runs/{run_id}/artifacts/artifacturi") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), experiment_name: (encode-path-segment $experiment_name), run_id: (encode-path-segment $run_id)} | format pattern "/history/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/experiments/{experiment_name}/runs/{run_id}/artifacts/artifacturi") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -503,7 +512,7 @@ export def "history-v10-subscriptions-resource-groups-providers-microsoft-machin
 # POST /history/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/experiments/{experimentName}/runs/{runId}/artifacts/batch/metadata
 # operationId: RunArtifacts_BatchCreateEmptyArtifacts
 # --paths item shape: {path: string}
-export def "history-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experiments-runs-artifacts-batch-metadata post" [
+export def "history-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experiments-runs-artifacts-batch-metadata create-empty" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -522,19 +531,19 @@ export def "history-v10-subscriptions-resource-groups-providers-microsoft-machin
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name, experiment_name: $experiment_name, run_id: $run_id} | format pattern "/history/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/experiments/{experiment_name}/runs/{run_id}/artifacts/batch/metadata"))
-  let body = {"paths": $paths} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), experiment_name: (encode-path-segment $experiment_name), run_id: (encode-path-segment $run_id)} | format pattern "/history/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/experiments/{experiment_name}/runs/{run_id}/artifacts/batch/metadata"))
+  let req_body = {"paths": $paths} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get Artifact content information.
 #
 # GET /history/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/experiments/{experimentName}/runs/{runId}/artifacts/contentinfo
 # operationId: RunArtifacts_GetContentInformation
-export def "history-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experiments-runs-artifacts-contentinfo get-content-information" [
+export def "history-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experiments-runs-artifacts-contentinfo get-content-information" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -553,7 +562,7 @@ export def "history-v10-subscriptions-resource-groups-providers-microsoft-machin
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "path" $path "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name, experiment_name: $experiment_name, run_id: $run_id} | format pattern "/history/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/experiments/{experiment_name}/runs/{run_id}/artifacts/contentinfo") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), experiment_name: (encode-path-segment $experiment_name), run_id: (encode-path-segment $run_id)} | format pattern "/history/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/experiments/{experiment_name}/runs/{run_id}/artifacts/contentinfo") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -563,7 +572,7 @@ export def "history-v10-subscriptions-resource-groups-providers-microsoft-machin
 #
 # GET /history/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/experiments/{experimentName}/runs/{runId}/artifacts/metadata
 # operationId: RunArtifacts_GetById
-export def "history-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experiments-runs-artifacts-metadata get-by" [
+export def "history-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experiments-runs-artifacts-metadata get" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -582,7 +591,7 @@ export def "history-v10-subscriptions-resource-groups-providers-microsoft-machin
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "path" $path "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name, experiment_name: $experiment_name, run_id: $run_id} | format pattern "/history/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/experiments/{experiment_name}/runs/{run_id}/artifacts/metadata") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), experiment_name: (encode-path-segment $experiment_name), run_id: (encode-path-segment $run_id)} | format pattern "/history/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/experiments/{experiment_name}/runs/{run_id}/artifacts/metadata") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -592,7 +601,7 @@ export def "history-v10-subscriptions-resource-groups-providers-microsoft-machin
 #
 # GET /history/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/experiments/{experimentName}/runs/{runId}/artifacts/path
 # operationId: RunArtifacts_ListInPath
-export def "history-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experiments-runs-artifacts-path list-in" [
+export def "history-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experiments-runs-artifacts-path list" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -612,7 +621,7 @@ export def "history-v10-subscriptions-resource-groups-providers-microsoft-machin
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "path" $path "scalar") (serialize-qp "continuationToken" $continuation_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name, experiment_name: $experiment_name, run_id: $run_id} | format pattern "/history/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/experiments/{experiment_name}/runs/{run_id}/artifacts/path") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), experiment_name: (encode-path-segment $experiment_name), run_id: (encode-path-segment $run_id)} | format pattern "/history/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/experiments/{experiment_name}/runs/{run_id}/artifacts/path") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -622,7 +631,7 @@ export def "history-v10-subscriptions-resource-groups-providers-microsoft-machin
 #
 # GET /history/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/experiments/{experimentName}/runs/{runId}/artifacts/prefix/contentinfo
 # operationId: RunArtifacts_ListSasByPrefix
-export def "history-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experiments-runs-artifacts-prefix-contentinfo list-sas" [
+export def "history-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experiments-runs-artifacts-prefix-contentinfo list-sas" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -642,7 +651,7 @@ export def "history-v10-subscriptions-resource-groups-providers-microsoft-machin
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "path" $path "scalar") (serialize-qp "continuationToken" $continuation_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name, experiment_name: $experiment_name, run_id: $run_id} | format pattern "/history/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/experiments/{experiment_name}/runs/{run_id}/artifacts/prefix/contentinfo") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), experiment_name: (encode-path-segment $experiment_name), run_id: (encode-path-segment $run_id)} | format pattern "/history/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/experiments/{experiment_name}/runs/{run_id}/artifacts/prefix/contentinfo") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -653,7 +662,7 @@ export def "history-v10-subscriptions-resource-groups-providers-microsoft-machin
 # POST /history/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/experiments/{experimentName}/runs/{runId}/batch/metrics
 # operationId: RunMetrics_BatchPost
 # --values item shape: {cells?: list, createdUtc?: string, dataContainerId?: string, dataLocation?: string, description?: string, label?: string, metricId?: string, metricType?: string, name?: string, numCells?: int, schema?: record}
-export def "history-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experiments-runs-batch-metrics create" [
+export def "history-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experiments-runs-batch-metrics create" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -672,19 +681,19 @@ export def "history-v10-subscriptions-resource-groups-providers-microsoft-machin
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name, experiment_name: $experiment_name, run_id: $run_id} | format pattern "/history/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/experiments/{experiment_name}/runs/{run_id}/batch/metrics"))
-  let body = {"values": $values} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), experiment_name: (encode-path-segment $experiment_name), run_id: (encode-path-segment $run_id)} | format pattern "/history/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/experiments/{experiment_name}/runs/{run_id}/batch/metrics"))
+  let req_body = {"values": $values} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get details of all child runs.
 #
 # GET /history/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/experiments/{experimentName}/runs/{runId}/children
 # operationId: Runs_GetChild
-export def "history-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experiments-runs-children get-child" [
+export def "history-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experiments-runs-children get-child" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -700,7 +709,7 @@ export def "history-v10-subscriptions-resource-groups-providers-microsoft-machin
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # Allows for filtering the collection of resources. The expression specified is evaluated for each resource in the collection, and only items where the expression evaluates to true are included in the response.
   --continuationtoken: string # The continuation token to use for getting the next set of resources.
-  --orderby: list # The list of resource properties to use for sorting the requested resources.
+  --orderby: list<string> # The list of resource properties to use for sorting the requested resources.
   --sortorder: string@sortorder-completer # The sort order of the returned resources. Not used, specify asc or desc after each property name in the OrderBy parameter.
   --top: int # The maximum number of items in the resource collection to be included in the result. If not specified, all items are returned. (format: int32)
   --count: oneof<nothing, bool> # Whether to include a count of the matching resources along with the resources returned in the response.
@@ -708,7 +717,7 @@ export def "history-v10-subscriptions-resource-groups-providers-microsoft-machin
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$continuationtoken" $continuationtoken "scalar") (serialize-qp "$orderby" $orderby "multi") (serialize-qp "$sortorder" $sortorder "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name, experiment_name: $experiment_name, run_id: $run_id} | format pattern "/history/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/experiments/{experiment_name}/runs/{run_id}/children") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), experiment_name: (encode-path-segment $experiment_name), run_id: (encode-path-segment $run_id)} | format pattern "/history/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/experiments/{experiment_name}/runs/{run_id}/children") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -718,7 +727,7 @@ export def "history-v10-subscriptions-resource-groups-providers-microsoft-machin
 #
 # GET /history/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/experiments/{experimentName}/runs/{runId}/details
 # operationId: Runs_GetDetails
-export def "history-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experiments-runs-details get" [
+export def "history-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experiments-runs-details get" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -735,7 +744,7 @@ export def "history-v10-subscriptions-resource-groups-providers-microsoft-machin
 ]: nothing -> record<endTimeUtc: string, error: record<correlation: record, environment: string, error: record<code: string, details: list, innerError: record, message: string, target: string>, location: string, time: string>, logFiles: record, parentRunId: string, properties: record, revision: int, runDefinition: record, runId: string, startTimeUtc: string, status: string, tags: record, target: string, warnings: table<message: string, source: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name, experiment_name: $experiment_name, run_id: $run_id} | format pattern "/history/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/experiments/{experiment_name}/runs/{run_id}/details"))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), experiment_name: (encode-path-segment $experiment_name), run_id: (encode-path-segment $run_id)} | format pattern "/history/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/experiments/{experiment_name}/runs/{run_id}/details"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -745,7 +754,7 @@ export def "history-v10-subscriptions-resource-groups-providers-microsoft-machin
 #
 # POST /history/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/experiments/{experimentName}/runs/{runId}/events
 # operationId: Events_Post
-export def "history-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experiments-runs-events create" [
+export def "history-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experiments-runs-events create" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -766,12 +775,12 @@ export def "history-v10-subscriptions-resource-groups-providers-microsoft-machin
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name, experiment_name: $experiment_name, run_id: $run_id} | format pattern "/history/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/experiments/{experiment_name}/runs/{run_id}/events"))
-  let body = {"data": $data, "name": $name, "timestamp": $timestamp} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), experiment_name: (encode-path-segment $experiment_name), run_id: (encode-path-segment $run_id)} | format pattern "/history/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/experiments/{experiment_name}/runs/{run_id}/events"))
+  let req_body = {"data": $data, "name": $name, "timestamp": $timestamp} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Post Metric to a Run.
@@ -779,7 +788,7 @@ export def "history-v10-subscriptions-resource-groups-providers-microsoft-machin
 # POST /history/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/experiments/{experimentName}/runs/{runId}/metrics
 # operationId: RunMetrics_Post
 # --schema shape: {numProperties?: int, properties?: list}
-export def "history-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experiments-runs-metrics create" [
+export def "history-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experiments-runs-metrics create" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -808,19 +817,19 @@ export def "history-v10-subscriptions-resource-groups-providers-microsoft-machin
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name, experiment_name: $experiment_name, run_id: $run_id} | format pattern "/history/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/experiments/{experiment_name}/runs/{run_id}/metrics"))
-  let body = {"cells": $cells, "createdUtc": $created_utc, "dataContainerId": $data_container_id, "dataLocation": $data_location, "description": $description, "label": $label, "metricId": $metric_id, "metricType": $metric_type, "name": $name, "numCells": $num_cells, "schema": $schema} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), experiment_name: (encode-path-segment $experiment_name), run_id: (encode-path-segment $run_id)} | format pattern "/history/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/experiments/{experiment_name}/runs/{run_id}/metrics"))
+  let req_body = {"cells": $cells, "createdUtc": $created_utc, "dataContainerId": $data_container_id, "dataLocation": $data_location, "description": $description, "label": $label, "metricId": $metric_id, "metricType": $metric_type, "name": $name, "numCells": $num_cells, "schema": $schema} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete list of Tags in a Run.
 #
 # DELETE /history/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/experiments/{experimentName}/runs/{runId}/tags
 # operationId: Runs_DeleteTags
-export def "history-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experiments-runs-tags delete" [
+export def "history-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experiments-runs-tags delete" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -839,18 +848,19 @@ export def "history-v10-subscriptions-resource-groups-providers-microsoft-machin
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name, experiment_name: $experiment_name, run_id: $run_id} | format pattern "/history/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/experiments/{experiment_name}/runs/{run_id}/tags"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), experiment_name: (encode-path-segment $experiment_name), run_id: (encode-path-segment $run_id)} | format pattern "/history/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/experiments/{experiment_name}/runs/{run_id}/tags"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get all Runs for a specific Experiment.
 #
 # POST /history/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/experiments/{experimentName}/runs:query
 # operationId: Runs_GetByQuery
-export def "history-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experiments-runs-query get-by" [
+export def "history-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experiments-runs-query get" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -871,19 +881,19 @@ export def "history-v10-subscriptions-resource-groups-providers-microsoft-machin
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name, experiment_name: $experiment_name} | format pattern "/history/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/experiments/{experiment_name}/runs:query"))
-  let body = {"continuationToken": $continuation_token, "filter": $filter, "orderBy": $order_by, "top": $top} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), experiment_name: (encode-path-segment $experiment_name)} | format pattern "/history/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/experiments/{experiment_name}/runs:query"))
+  let req_body = {"continuationToken": $continuation_token, "filter": $filter, "orderBy": $order_by, "top": $top} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get all Experiments in a specific workspace.
 #
 # POST /history/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/experiments:query
 # operationId: Experiments_GetByQuery
-export def "history-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experiments-query get-by" [
+export def "history-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experiments-query get" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -903,10 +913,10 @@ export def "history-v10-subscriptions-resource-groups-providers-microsoft-machin
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name} | format pattern "/history/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/experiments:query"))
-  let body = {"continuationToken": $continuation_token, "filter": $filter, "orderBy": $order_by, "top": $top} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name)} | format pattern "/history/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/experiments:query"))
+  let req_body = {"continuationToken": $continuation_token, "filter": $filter, "orderBy": $order_by, "top": $top} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -77,7 +86,7 @@ def type-completer [] { ["ALL_OF" "ANY_OF" "PHRASE_MATCHER_TYPE_UNSPECIFIED"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "projects contactcenterinsightsprojectslocationsissueModelscalculateIssueModelStats" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "projects stats-calculate-issue-model" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -101,7 +110,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/{issueModel}:calculateIssueModelStats
 # operationId: contactcenterinsights.projects.locations.issueModels.calculateIssueModelStats
-export def "projects contactcenterinsightsprojectslocationsissueModelscalculateIssueModelStats" [
+export def "projects stats-calculate-issue-model" [
   issue_model: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -126,7 +135,7 @@ export def "projects contactcenterinsightsprojectslocationsissueModelscalculateI
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({issue_model: $issue_model} | format pattern "/v1/{issue_model}:calculateIssueModelStats") $qp)
+  let full_url = (build-url $base ({issue_model: (encode-path-segment $issue_model)} | format pattern "/v1/{issue_model}:calculateIssueModelStats") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -136,7 +145,7 @@ export def "projects contactcenterinsightsprojectslocationsissueModelscalculateI
 #
 # GET /v1/{location}/conversations:calculateStats
 # operationId: contactcenterinsights.projects.locations.conversations.calculateStats
-export def "conversations-calculate-stats contactcenterinsightsprojectslocationsconversationscalculateStats" [
+export def "conversations-calculate-stats stats" [
   location: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -162,7 +171,7 @@ export def "conversations-calculate-stats contactcenterinsightsprojectslocations
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({location: $location} | format pattern "/v1/{location}/conversations:calculateStats") $qp)
+  let full_url = (build-url $base ({location: (encode-path-segment $location)} | format pattern "/v1/{location}/conversations:calculateStats") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -172,7 +181,7 @@ export def "conversations-calculate-stats contactcenterinsightsprojectslocations
 #
 # DELETE /v1/{name}
 # operationId: contactcenterinsights.projects.locations.views.delete
-export def "projects contactcenterinsightsprojectslocationsviewsdelete" [
+export def "projects delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -198,7 +207,7 @@ export def "projects contactcenterinsightsprojectslocationsviewsdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "force" $force "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -208,7 +217,7 @@ export def "projects contactcenterinsightsprojectslocationsviewsdelete" [
 #
 # GET /v1/{name}
 # operationId: contactcenterinsights.projects.locations.views.get
-export def "projects contactcenterinsightsprojectslocationsviewsget" [
+export def "projects get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -234,7 +243,7 @@ export def "projects contactcenterinsightsprojectslocationsviewsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -244,7 +253,7 @@ export def "projects contactcenterinsightsprojectslocationsviewsget" [
 #
 # PATCH /v1/{name}
 # operationId: contactcenterinsights.projects.locations.views.patch
-export def "projects contactcenterinsightsprojectslocationsviewspatch" [
+export def "projects update" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -274,19 +283,19 @@ export def "projects contactcenterinsightsprojectslocationsviewspatch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}") $qp)
-  let body = {"displayName": $display_name, "name": $body_name, "value": $value} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}") $qp)
+  let req_body = {"displayName": $display_name, "name": $body_name, "value": $value} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists operations that match the specified filter in the request. If the server doesn't support this method, it returns `UNIMPLEMENTED`.
 #
 # GET /v1/{name}/operations
 # operationId: contactcenterinsights.projects.locations.operations.list
-export def "operations contactcenterinsightsprojectslocationsoperationslist" [
+export def "operations list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -314,7 +323,7 @@ export def "operations contactcenterinsightsprojectslocationsoperationslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}/operations") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}/operations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -324,7 +333,7 @@ export def "operations contactcenterinsightsprojectslocationsoperationslist" [
 #
 # POST /v1/{name}:cancel
 # operationId: contactcenterinsights.projects.locations.operations.cancel
-export def "projects contactcenterinsightsprojectslocationsoperationscancel" [
+export def "projects cancel" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -349,7 +358,7 @@ export def "projects contactcenterinsightsprojectslocationsoperationscancel" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}:cancel") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}:cancel") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -359,7 +368,7 @@ export def "projects contactcenterinsightsprojectslocationsoperationscancel" [
 #
 # POST /v1/{name}:deploy
 # operationId: contactcenterinsights.projects.locations.issueModels.deploy
-export def "projects contactcenterinsightsprojectslocationsissueModelsdeploy" [
+export def "projects create-deploy" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -386,19 +395,19 @@ export def "projects contactcenterinsightsprojectslocationsissueModelsdeploy" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}:deploy") $qp)
-  let body = {"name": $body_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}:deploy") $qp)
+  let req_body = {"name": $body_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Undeploys an issue model. An issue model can not be used in analysis after it has been undeployed.
 #
 # POST /v1/{name}:undeploy
 # operationId: contactcenterinsights.projects.locations.issueModels.undeploy
-export def "projects contactcenterinsightsprojectslocationsissueModelsundeploy" [
+export def "projects create-undeploy" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -425,19 +434,19 @@ export def "projects contactcenterinsightsprojectslocationsissueModelsundeploy" 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}:undeploy") $qp)
-  let body = {"name": $body_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}:undeploy") $qp)
+  let req_body = {"name": $body_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists analyses.
 #
 # GET /v1/{parent}/analyses
 # operationId: contactcenterinsights.projects.locations.conversations.analyses.list
-export def "analyses contactcenterinsightsprojectslocationsconversationsanalyseslist" [
+export def "analyses list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -465,7 +474,7 @@ export def "analyses contactcenterinsightsprojectslocationsconversationsanalyses
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/analyses") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/analyses") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -476,8 +485,8 @@ export def "analyses contactcenterinsightsprojectslocationsconversationsanalyses
 # POST /v1/{parent}/analyses
 # operationId: contactcenterinsights.projects.locations.conversations.analyses.create
 # --analysisResult shape: {callAnalysisMetadata?: record, endTime?: string}
-# --annotatorSelector shape: {issueModels?: list, phraseMatchers?: list, runEntityAnnotator?: bool, runIntentAnnotator?: bool, runInterruptionAnnotator?: bool, runIssueModelAnnotator?: bool, runPhraseMatcherAnnotator?: bool, runSentimentAnnotator?: bool, runSilenceAnnotator?: bool}
-export def "analyses contactcenterinsightsprojectslocationsconversationsanalysescreate" [
+# --annotatorSelector shape: {issueModels?: list<string>, phraseMatchers?: list<string>, runEntityAnnotator?: bool, runIntentAnnotator?: bool, runInterruptionAnnotator?: bool, runIssueModelAnnotator?: bool, runPhraseMatcherAnnotator?: bool, runSentimentAnnotator?: bool, runSilenceAnnotator?: bool}
+export def "analyses create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -499,26 +508,26 @@ export def "analyses contactcenterinsightsprojectslocationsconversationsanalyses
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --analysis-result: record # The result of an analysis. — shape: {callAnalysisMetadata?: record, endTime?: string}
-  --annotator-selector: record # Selector of all available annotators and phrase matchers to run. — shape: {issueModels?: list, phraseMatchers?: list, runEntityAnnotator?: bool, runIntentAnnotator?: bool, runInterruptionAnnotator?: bool, runIssueModelAnnotator?: bool, runPhraseMatcherAnnotator?: bool, runSentimentAnnotator?: bool, runSilenceAnnotator?: bool}
+  --annotator-selector: record # Selector of all available annotators and phrase matchers to run. — shape: {issueModels?: list<string>, phraseMatchers?: list<string>, runEntityAnnotator?: bool, runIntentAnnotator?: bool, runInterruptionAnnotator?: bool, runIssueModelAnnotator?: bool, runPhraseMatcherAnnotator?: bool, runSentimentAnnotator?: bool, runSilenceAnnotator?: bool}
   --name: string # Immutable. The resource name of the analysis. Format: projects/{project}/locations/{location}/conversations/{conversation}/analyses/{analysis}
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/analyses") $qp)
-  let body = {"analysisResult": $analysis_result, "annotatorSelector": $annotator_selector, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/analyses") $qp)
+  let req_body = {"analysisResult": $analysis_result, "annotatorSelector": $annotator_selector, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists conversations.
 #
 # GET /v1/{parent}/conversations
 # operationId: contactcenterinsights.projects.locations.conversations.list
-export def "conversations contactcenterinsightsprojectslocationsconversationslist" [
+export def "conversations list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -547,7 +556,7 @@ export def "conversations contactcenterinsightsprojectslocationsconversationslis
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/conversations") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/conversations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -562,7 +571,7 @@ export def "conversations contactcenterinsightsprojectslocationsconversationslis
 # --latestAnalysis shape: {analysisResult?: record, annotatorSelector?: record, name?: string}
 # --runtimeAnnotations item shape: {annotationId?: string, answerFeedback?: record, articleSuggestion?: record, createTime?: string, dialogflowInteraction?: record, endBoundary?: record, faqAnswer?: record, smartComposeSuggestion?: record, smartReply?: record, startBoundary?: record}
 # --transcript shape: {transcriptSegments?: list}
-export def "conversations contactcenterinsightsprojectslocationsconversationscreate" [
+export def "conversations create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -602,20 +611,20 @@ export def "conversations contactcenterinsightsprojectslocationsconversationscre
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "conversationId" $conversation_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/conversations") $qp)
-  let body = {"agentId": $agent_id, "callMetadata": $call_metadata, "dataSource": $data_source, "expireTime": $expire_time, "labels": $labels, "languageCode": $language_code, "latestAnalysis": $latest_analysis, "medium": $medium, "name": $name, "obfuscatedUserId": $obfuscated_user_id, "startTime": $start_time, "transcript": $transcript, "ttl": $ttl} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/conversations") $qp)
+  let req_body = {"agentId": $agent_id, "callMetadata": $call_metadata, "dataSource": $data_source, "expireTime": $expire_time, "labels": $labels, "languageCode": $language_code, "latestAnalysis": $latest_analysis, "medium": $medium, "name": $name, "obfuscatedUserId": $obfuscated_user_id, "startTime": $start_time, "transcript": $transcript, "ttl": $ttl} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Analyzes multiple conversations in a single request.
 #
 # POST /v1/{parent}/conversations:bulkAnalyze
 # operationId: contactcenterinsights.projects.locations.conversations.bulkAnalyze
-# --annotatorSelector shape: {issueModels?: list, phraseMatchers?: list, runEntityAnnotator?: bool, runIntentAnnotator?: bool, runInterruptionAnnotator?: bool, runIssueModelAnnotator?: bool, runPhraseMatcherAnnotator?: bool, runSentimentAnnotator?: bool, runSilenceAnnotator?: bool}
-export def "conversations-bulk-analyze contactcenterinsightsprojectslocationsconversationsbulkAnalyze" [
+# --annotatorSelector shape: {issueModels?: list<string>, phraseMatchers?: list<string>, runEntityAnnotator?: bool, runIntentAnnotator?: bool, runInterruptionAnnotator?: bool, runIssueModelAnnotator?: bool, runPhraseMatcherAnnotator?: bool, runSentimentAnnotator?: bool, runSilenceAnnotator?: bool}
+export def "conversations-bulk-analyze create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -637,7 +646,7 @@ export def "conversations-bulk-analyze contactcenterinsightsprojectslocationscon
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --analysis-percentage: float # Required. Percentage of selected conversation to analyze, between [0, 100]. (format: float)
-  --annotator-selector: record # Selector of all available annotators and phrase matchers to run. — shape: {issueModels?: list, phraseMatchers?: list, runEntityAnnotator?: bool, runIntentAnnotator?: bool, runInterruptionAnnotator?: bool, runIssueModelAnnotator?: bool, runPhraseMatcherAnnotator?: bool, runSentimentAnnotator?: bool, runSilenceAnnotator?: bool}
+  --annotator-selector: record # Selector of all available annotators and phrase matchers to run. — shape: {issueModels?: list<string>, phraseMatchers?: list<string>, runEntityAnnotator?: bool, runIntentAnnotator?: bool, runInterruptionAnnotator?: bool, runIssueModelAnnotator?: bool, runPhraseMatcherAnnotator?: bool, runSentimentAnnotator?: bool, runSilenceAnnotator?: bool}
   --filter: string # Required. Filter used to select the subset of conversations to analyze.
   --body-parent: string # Required. The parent resource to create analyses in.
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
@@ -645,12 +654,12 @@ export def "conversations-bulk-analyze contactcenterinsightsprojectslocationscon
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/conversations:bulkAnalyze") $qp)
-  let body = {"analysisPercentage": $analysis_percentage, "annotatorSelector": $annotator_selector, "filter": $filter, "parent": $body_parent} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/conversations:bulkAnalyze") $qp)
+  let req_body = {"analysisPercentage": $analysis_percentage, "annotatorSelector": $annotator_selector, "filter": $filter, "parent": $body_parent} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Imports conversations and processes them according to the user's configuration.
@@ -660,7 +669,7 @@ export def "conversations-bulk-analyze contactcenterinsightsprojectslocationscon
 # --conversationConfig shape: {agentId?: string}
 # --gcsSource shape: {bucketUri?: string}
 # --transcriptObjectConfig shape: {medium?: "MEDIUM_UNSPECIFIED"|"PHONE_CALL"|"CHAT"}
-export def "conversations-ingest contactcenterinsightsprojectslocationsconversationsingest" [
+export def "conversations-ingest create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -690,12 +699,12 @@ export def "conversations-ingest contactcenterinsightsprojectslocationsconversat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/conversations:ingest") $qp)
-  let body = {"conversationConfig": $conversation_config, "gcsSource": $gcs_source, "parent": $body_parent, "transcriptObjectConfig": $transcript_object_config} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/conversations:ingest") $qp)
+  let req_body = {"conversationConfig": $conversation_config, "gcsSource": $gcs_source, "parent": $body_parent, "transcriptObjectConfig": $transcript_object_config} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create a longrunning conversation upload operation. This method differs from CreateConversation by allowing audio transcription and optional DLP redaction.
@@ -704,7 +713,7 @@ export def "conversations-ingest contactcenterinsightsprojectslocationsconversat
 # operationId: contactcenterinsights.projects.locations.conversations.upload
 # --conversation shape: {agentId?: string, callMetadata?: record, dataSource?: record, expireTime?: string, labels?: record, languageCode?: string, latestAnalysis?: record, medium?: "MEDIUM_UNSPECIFIED"|"PHONE_CALL"|"CHAT", name?: string, obfuscatedUserId?: string, startTime?: string, transcript?: record, ttl?: string}
 # --redactionConfig shape: {deidentifyTemplate?: string, inspectTemplate?: string}
-export def "conversations-upload contactcenterinsightsprojectslocationsconversationsupload" [
+export def "conversations-upload upload" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -734,12 +743,12 @@ export def "conversations-upload contactcenterinsightsprojectslocationsconversat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/conversations:upload") $qp)
-  let body = {"conversation": $conversation, "conversationId": $conversation_id, "parent": $body_parent, "redactionConfig": $redaction_config} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/conversations:upload") $qp)
+  let req_body = {"conversation": $conversation, "conversationId": $conversation_id, "parent": $body_parent, "redactionConfig": $redaction_config} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Export insights data to a destination defined in the request body.
@@ -747,7 +756,7 @@ export def "conversations-upload contactcenterinsightsprojectslocationsconversat
 # POST /v1/{parent}/insightsdata:export
 # operationId: contactcenterinsights.projects.locations.insightsdata.export
 # --bigQueryDestination shape: {dataset?: string, projectId?: string, table?: string}
-export def "insightsdata-export contactcenterinsightsprojectslocationsinsightsdataexport" [
+export def "insightsdata-export export" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -778,19 +787,19 @@ export def "insightsdata-export contactcenterinsightsprojectslocationsinsightsda
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/insightsdata:export") $qp)
-  let body = {"bigQueryDestination": $big_query_destination, "filter": $filter, "kmsKey": $kms_key, "parent": $body_parent, "writeDisposition": $write_disposition} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/insightsdata:export") $qp)
+  let req_body = {"bigQueryDestination": $big_query_destination, "filter": $filter, "kmsKey": $kms_key, "parent": $body_parent, "writeDisposition": $write_disposition} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists issue models.
 #
 # GET /v1/{parent}/issueModels
 # operationId: contactcenterinsights.projects.locations.issueModels.list
-export def "issue-models contactcenterinsightsprojectslocationsissueModelslist" [
+export def "issue-models list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -815,7 +824,7 @@ export def "issue-models contactcenterinsightsprojectslocationsissueModelslist" 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/issueModels") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/issueModels") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -827,7 +836,7 @@ export def "issue-models contactcenterinsightsprojectslocationsissueModelslist" 
 # operationId: contactcenterinsights.projects.locations.issueModels.create
 # --inputDataConfig shape: {filter?: string, medium?: "MEDIUM_UNSPECIFIED"|"PHONE_CALL"|"CHAT"}
 # --trainingStats shape: {analyzedConversationsCount?: string, issueStats?: record, unclassifiedConversationsCount?: string}
-export def "issue-models contactcenterinsightsprojectslocationsissueModelscreate" [
+export def "issue-models create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -857,19 +866,19 @@ export def "issue-models contactcenterinsightsprojectslocationsissueModelscreate
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/issueModels") $qp)
-  let body = {"displayName": $display_name, "inputDataConfig": $input_data_config, "name": $name, "trainingStats": $training_stats} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/issueModels") $qp)
+  let req_body = {"displayName": $display_name, "inputDataConfig": $input_data_config, "name": $name, "trainingStats": $training_stats} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists issues.
 #
 # GET /v1/{parent}/issues
 # operationId: contactcenterinsights.projects.locations.issueModels.issues.list
-export def "issues contactcenterinsightsprojectslocationsissueModelsissueslist" [
+export def "issues list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -894,7 +903,7 @@ export def "issues contactcenterinsightsprojectslocationsissueModelsissueslist" 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/issues") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/issues") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -904,7 +913,7 @@ export def "issues contactcenterinsightsprojectslocationsissueModelsissueslist" 
 #
 # GET /v1/{parent}/phraseMatchers
 # operationId: contactcenterinsights.projects.locations.phraseMatchers.list
-export def "phrase-matchers contactcenterinsightsprojectslocationsphraseMatcherslist" [
+export def "phrase-matchers list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -932,7 +941,7 @@ export def "phrase-matchers contactcenterinsightsprojectslocationsphraseMatchers
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/phraseMatchers") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/phraseMatchers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -943,7 +952,7 @@ export def "phrase-matchers contactcenterinsightsprojectslocationsphraseMatchers
 # POST /v1/{parent}/phraseMatchers
 # operationId: contactcenterinsights.projects.locations.phraseMatchers.create
 # --phraseMatchRuleGroups item shape: {phraseMatchRules?: list, type?: "PHRASE_MATCH_RULE_GROUP_TYPE_UNSPECIFIED"|"ALL_OF"|"ANY_OF"}
-export def "phrase-matchers contactcenterinsightsprojectslocationsphraseMatcherscreate" [
+export def "phrase-matchers create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -976,19 +985,19 @@ export def "phrase-matchers contactcenterinsightsprojectslocationsphraseMatchers
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/phraseMatchers") $qp)
-  let body = {"active": $active, "displayName": $display_name, "name": $name, "phraseMatchRuleGroups": $phrase_match_rule_groups, "roleMatch": $role_match, "type": $type, "versionTag": $version_tag} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/phraseMatchers") $qp)
+  let req_body = {"active": $active, "displayName": $display_name, "name": $name, "phraseMatchRuleGroups": $phrase_match_rule_groups, "roleMatch": $role_match, "type": $type, "versionTag": $version_tag} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists views.
 #
 # GET /v1/{parent}/views
 # operationId: contactcenterinsights.projects.locations.views.list
-export def "views contactcenterinsightsprojectslocationsviewslist" [
+export def "views list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1015,7 +1024,7 @@ export def "views contactcenterinsightsprojectslocationsviewslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/views") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/views") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1025,7 +1034,7 @@ export def "views contactcenterinsightsprojectslocationsviewslist" [
 #
 # POST /v1/{parent}/views
 # operationId: contactcenterinsights.projects.locations.views.create
-export def "views contactcenterinsightsprojectslocationsviewscreate" [
+export def "views create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1054,10 +1063,10 @@ export def "views contactcenterinsightsprojectslocationsviewscreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/views") $qp)
-  let body = {"displayName": $display_name, "name": $name, "value": $value} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/views") $qp)
+  let req_body = {"displayName": $display_name, "name": $name, "value": $value} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

@@ -13,6 +13,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   match $scheme {
     "basic" => { {headers: {Authorization: $"Basic ($token_val)"}, query: ""} }
     "bearer" => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "basic-credentials" => { {headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: ""} }
     "none" => { {headers: {}, query: ""} }
     _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
   }
@@ -34,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
     "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
     _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -64,7 +74,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 }
 
 def base-url-completer [] { ["https://rest.ably.io"] }
-def auth-scheme-completer [] { ["basic" "bearer"] }
+def auth-scheme-completer [] { ["basic" "bearer" "basic-credentials"] }
 
 # Completers for enum parameters
 def format-completer [] { ["html" "json" "jsonp" "msgpack"] }
@@ -79,7 +89,7 @@ def unit-completer [] { ["day" "hour" "minute" "month"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "channels get-metadata-of-all" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "channels get-metadata-of-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -103,7 +113,7 @@ export def commands []: nothing -> table {
 #
 # GET /channels
 # operationId: getMetadataOfAllChannels
-export def "channels get-metadata-of-all" [
+export def "channels get-metadata-of-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -123,10 +133,10 @@ export def "channels get-metadata-of-all" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "prefix" $prefix "scalar") (serialize-qp "by" $by "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/channels" $qp)
-  let extra_headers = {"X-Ably-Version": $x_ably_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Ably-Version": $x_ably_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -134,7 +144,7 @@ export def "channels get-metadata-of-all" [
 #
 # GET /channels/{channel_id}
 # operationId: getMetadataOfChannel
-export def "channels get-metadata-of" [
+export def "channels get-metadata" [
   channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -147,7 +157,7 @@ export def "channels get-metadata-of" [
 ]: nothing -> record<channelId: string, isGlobalMaster: bool, region: string, status: record<isActive: bool, occupancy: record<presenceConnections: int, presenceMembers: int, presenceSubscribers: int, publishers: int, subscribers: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({channel_id: $channel_id} | format pattern "/channels/{channel_id}"))
+  let full_url = (build-url $base ({channel_id: (encode-path-segment $channel_id)} | format pattern "/channels/{channel_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -176,7 +186,7 @@ export def "channels-messages get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "direction" $direction "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({channel_id: $channel_id} | format pattern "/channels/{channel_id}/messages") $qp)
+  let full_url = (build-url $base ({channel_id: (encode-path-segment $channel_id)} | format pattern "/channels/{channel_id}/messages") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -187,7 +197,7 @@ export def "channels-messages get" [
 # POST /channels/{channel_id}/messages
 # operationId: publishMessagesToChannel
 # --extras shape: {push?: record}
-export def "channels-messages publish-messages-to" [
+export def "channels-messages publish" [
   channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -208,19 +218,19 @@ export def "channels-messages publish-messages-to" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({channel_id: $channel_id} | format pattern "/channels/{channel_id}/messages"))
-  let body = {"clientId": $client_id, "connectionId": $connection_id, "data": $data, "encoding": $encoding, "extras": $extras, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({channel_id: (encode-path-segment $channel_id)} | format pattern "/channels/{channel_id}/messages"))
+  let req_body = {"clientId": $client_id, "connectionId": $connection_id, "data": $data, "encoding": $encoding, "extras": $extras, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get presence of a channel
 #
 # GET /channels/{channel_id}/presence
 # operationId: getPresenceOfChannel
-export def "channels-presence get-presence-of" [
+export def "channels-presence get" [
   channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -238,7 +248,7 @@ export def "channels-presence get-presence-of" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "clientId" $client_id "scalar") (serialize-qp "connectionId" $connection_id "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({channel_id: $channel_id} | format pattern "/channels/{channel_id}/presence") $qp)
+  let full_url = (build-url $base ({channel_id: (encode-path-segment $channel_id)} | format pattern "/channels/{channel_id}/presence") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -248,7 +258,7 @@ export def "channels-presence get-presence-of" [
 #
 # GET /channels/{channel_id}/presence/history
 # operationId: getPresenceHistoryOfChannel
-export def "channels-presence-history get-presence-history-of" [
+export def "channels-presence-history get" [
   channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -267,7 +277,7 @@ export def "channels-presence-history get-presence-history-of" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "direction" $direction "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({channel_id: $channel_id} | format pattern "/channels/{channel_id}/presence/history") $qp)
+  let full_url = (build-url $base ({channel_id: (encode-path-segment $channel_id)} | format pattern "/channels/{channel_id}/presence/history") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -297,19 +307,19 @@ export def "keys-request-token request-access" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({key_name: $key_name} | format pattern "/keys/{key_name}/requestToken"))
-  let body = {"capability": $capability, "clientId": $client_id, "keyName": $body_key_name, "nonce": $nonce, "timestamp": $timestamp} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({key_name: (encode-path-segment $key_name)} | format pattern "/keys/{key_name}/requestToken"))
+  let req_body = {"capability": $capability, "clientId": $client_id, "keyName": $body_key_name, "nonce": $nonce, "timestamp": $timestamp} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a registered device's update token
 #
 # DELETE /push/channelSubscriptions
 # operationId: deletePushDeviceDetails
-export def "push-channel-subscriptions delete-push-device-details" [
+export def "push-channel-subscriptions delete-device-details" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -328,10 +338,10 @@ export def "push-channel-subscriptions delete-push-device-details" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "channel" $channel "scalar") (serialize-qp "deviceId" $device_id "scalar") (serialize-qp "clientId" $client_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/push/channelSubscriptions" $qp)
-  let extra_headers = {"X-Ably-Version": $x_ably_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Ably-Version": $x_ably_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -339,7 +349,7 @@ export def "push-channel-subscriptions delete-push-device-details" [
 #
 # GET /push/channelSubscriptions
 # operationId: getPushSubscriptionsOnChannels
-export def "push-channel-subscriptions get-push-subscriptions-on" [
+export def "push-channel-subscriptions get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -359,10 +369,10 @@ export def "push-channel-subscriptions get-push-subscriptions-on" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "channel" $channel "scalar") (serialize-qp "deviceId" $device_id "scalar") (serialize-qp "clientId" $client_id "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/push/channelSubscriptions" $qp)
-  let extra_headers = {"X-Ably-Version": $x_ably_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Ably-Version": $x_ably_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -370,7 +380,7 @@ export def "push-channel-subscriptions get-push-subscriptions-on" [
 #
 # POST /push/channelSubscriptions
 # operationId: subscribePushDeviceToChannel
-export def "push-channel-subscriptions subscribe-push-device-to" [
+export def "push-channel-subscriptions subscribe-device" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -390,20 +400,20 @@ export def "push-channel-subscriptions subscribe-push-device-to" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/push/channelSubscriptions" $qp)
-  let body = {"channel": $channel, "deviceId": $device_id, "clientId": $client_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Ably-Version": $x_ably_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"channel": $channel, "deviceId": $device_id, "clientId": $client_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Ably-Version": $x_ably_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List all channels with at least one subscribed device
 #
 # GET /push/channels
 # operationId: getChannelsWithPushSubscribers
-export def "push-channels get-channels-with-push-subscribers" [
+export def "push-channels get-with-subscribers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -420,10 +430,10 @@ export def "push-channels get-channels-with-push-subscribers" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/push/channels" $qp)
-  let extra_headers = {"X-Ably-Version": $x_ably_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Ably-Version": $x_ably_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -431,7 +441,7 @@ export def "push-channels get-channels-with-push-subscribers" [
 #
 # DELETE /push/deviceRegistrations
 # operationId: unregisterAllPushDevices
-export def "push-device-registrations delete-all" [
+export def "push-device-registrations delete-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -449,10 +459,10 @@ export def "push-device-registrations delete-all" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "deviceId" $device_id "scalar") (serialize-qp "clientId" $client_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/push/deviceRegistrations" $qp)
-  let extra_headers = {"X-Ably-Version": $x_ably_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Ably-Version": $x_ably_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -480,10 +490,10 @@ export def "push-device-registrations get-registered" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "deviceId" $device_id "scalar") (serialize-qp "clientId" $client_id "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/push/deviceRegistrations" $qp)
-  let extra_headers = {"X-Ably-Version": $x_ably_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Ably-Version": $x_ably_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -517,13 +527,13 @@ export def "push-device-registrations create" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/push/deviceRegistrations" $qp)
-  let body = {"clientId": $client_id, "deviceSecret": $device_secret, "formFactor": $form_factor, "id": $id, "metadata": $metadata, "platform": $platform, "push.recipient": $push_recipient} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Ably-Version": $x_ably_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"clientId": $client_id, "deviceSecret": $device_secret, "formFactor": $form_factor, "id": $id, "metadata": $metadata, "platform": $platform, "push.recipient": $push_recipient} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Ably-Version": $x_ably_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Unregister a single device for push notifications
@@ -543,7 +553,7 @@ export def "push-device-registrations delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({device_id: $device_id} | format pattern "/push/deviceRegistrations/{device_id}"))
+  let full_url = (build-url $base ({device_id: (encode-path-segment $device_id)} | format pattern "/push/deviceRegistrations/{device_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -553,7 +563,7 @@ export def "push-device-registrations delete" [
 #
 # GET /push/deviceRegistrations/{device_id}
 # operationId: getPushDeviceDetails
-export def "push-device-registrations get-push-device-details" [
+export def "push-device-registrations get-details" [
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -567,7 +577,7 @@ export def "push-device-registrations get-push-device-details" [
 ]: nothing -> record<clientId: string, deviceSecret: string, formFactor: string, id: string, metadata: record, platform: string, push_recipient: record<clientId: string, deviceId: string, deviceToken: string, registrationToken: string, transportType: string>, push_state: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({device_id: $device_id} | format pattern "/push/deviceRegistrations/{device_id}"))
+  let full_url = (build-url $base ({device_id: (encode-path-segment $device_id)} | format pattern "/push/deviceRegistrations/{device_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -578,7 +588,7 @@ export def "push-device-registrations get-push-device-details" [
 # PATCH /push/deviceRegistrations/{device_id}
 # operationId: patchPushDeviceDetails
 # --push.recipient shape: {clientId?: string, deviceId?: string, deviceToken?: string, registrationToken?: string, transportType?: "apns"|"fcm"|"gcm"}
-export def "push-device-registrations update-push-device-details-by-device_id" [
+export def "push-device-registrations update-details-by-device_id" [
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -600,12 +610,12 @@ export def "push-device-registrations update-push-device-details-by-device_id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({device_id: $device_id} | format pattern "/push/deviceRegistrations/{device_id}"))
-  let body = {"clientId": $client_id, "deviceSecret": $device_secret, "formFactor": $form_factor, "id": $id, "metadata": $metadata, "platform": $platform, "push.recipient": $push_recipient} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({device_id: (encode-path-segment $device_id)} | format pattern "/push/deviceRegistrations/{device_id}"))
+  let req_body = {"clientId": $client_id, "deviceSecret": $device_secret, "formFactor": $form_factor, "id": $id, "metadata": $metadata, "platform": $platform, "push.recipient": $push_recipient} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update a device registration
@@ -613,7 +623,7 @@ export def "push-device-registrations update-push-device-details-by-device_id" [
 # PUT /push/deviceRegistrations/{device_id}
 # operationId: putPushDeviceDetails
 # --push.recipient shape: {clientId?: string, deviceId?: string, deviceToken?: string, registrationToken?: string, transportType?: "apns"|"fcm"|"gcm"}
-export def "push-device-registrations update-push-device-details-by-device_id-1" [
+export def "push-device-registrations update-details-by-device_id-1" [
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -635,19 +645,19 @@ export def "push-device-registrations update-push-device-details-by-device_id-1"
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({device_id: $device_id} | format pattern "/push/deviceRegistrations/{device_id}"))
-  let body = {"clientId": $client_id, "deviceSecret": $device_secret, "formFactor": $form_factor, "id": $id, "metadata": $metadata, "platform": $platform, "push.recipient": $push_recipient} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({device_id: (encode-path-segment $device_id)} | format pattern "/push/deviceRegistrations/{device_id}"))
+  let req_body = {"clientId": $client_id, "deviceSecret": $device_secret, "formFactor": $form_factor, "id": $id, "metadata": $metadata, "platform": $platform, "push.recipient": $push_recipient} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Reset a registered device's update token
 #
 # GET /push/deviceRegistrations/{device_id}/resetUpdateToken
 # operationId: updatePushDeviceDetails
-export def "push-device-registrations-reset-update-token update-push-device-details" [
+export def "push-device-registrations-reset-update-token update-details" [
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -661,7 +671,7 @@ export def "push-device-registrations-reset-update-token update-push-device-deta
 ]: nothing -> record<clientId: string, deviceSecret: string, formFactor: string, id: string, metadata: record, platform: string, push_recipient: record<clientId: string, deviceId: string, deviceToken: string, registrationToken: string, transportType: string>, push_state: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({device_id: $device_id} | format pattern "/push/deviceRegistrations/{device_id}/resetUpdateToken"))
+  let full_url = (build-url $base ({device_id: (encode-path-segment $device_id)} | format pattern "/push/deviceRegistrations/{device_id}/resetUpdateToken"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -673,7 +683,7 @@ export def "push-device-registrations-reset-update-token update-push-device-deta
 # operationId: publishPushNotificationToDevices
 # --push shape: {apns?: record, data?: string, fcm?: record, notification?: record, web?: record}
 # --recipient shape: {clientId?: string, deviceId?: string, deviceToken?: string, registrationToken?: string, transportType?: "apns"|"fcm"|"gcm"}
-export def "push-publish publish-push-notification-to-devices" [
+export def "push-publish publish-notification-to-devices" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -692,13 +702,13 @@ export def "push-publish publish-push-notification-to-devices" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/push/publish" $qp)
-  let body = {"push": $push, "recipient": $recipient} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Ably-Version": $x_ably_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"push": $push, "recipient": $recipient} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Ably-Version": $x_ably_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve usage statistics for an application
@@ -750,9 +760,9 @@ export def "time get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/time" $qp)
-  let extra_headers = {"X-Ably-Version": $x_ably_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Ably-Version": $x_ably_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

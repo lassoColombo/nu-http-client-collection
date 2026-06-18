@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -89,7 +98,7 @@ def trip-type-completer [] { ["ONE_WAY" "ROUND_TRIP" "TRIP_TYPE_UNSPECIFIED" "on
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "walletobjects-event-ticket-class walletobjectseventticketclasslist" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "walletobjects-event-ticket-class list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -113,7 +122,7 @@ export def commands []: nothing -> table {
 #
 # GET /walletobjects/v1/eventTicketClass
 # operationId: walletobjects.eventticketclass.list
-export def "walletobjects-event-ticket-class walletobjectseventticketclasslist" [
+export def "walletobjects-event-ticket-class list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -174,7 +183,7 @@ export def "walletobjects-event-ticket-class walletobjectseventticketclasslist" 
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
 # --venue shape: {address?: record, kind?: string, name?: record}
 # --wordMark shape: {contentDescription?: record, kind?: string, sourceUri?: record}
-export def "walletobjects-event-ticket-class walletobjectseventticketclassinsert" [
+export def "walletobjects-event-ticket-class create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -224,7 +233,7 @@ export def "walletobjects-event-ticket-class walletobjectseventticketclassinsert
   --logo: record # Wrapping type for Google hosted images. Next ID: 7 — shape: {contentDescription?: record, kind?: string, sourceUri?: record}
   --messages: list # An array of messages displayed in the app. All users of this object will receive its associated messages. The maximum number of these fields is 10. — item shape: {body?: string, displayInterval?: record, header?: string, id?: string, kind?: string, localizedBody?: record, localizedHeader?: record, messageType?: "MESSAGE_TYPE_UNSPECIFIED"|"TEXT"|"text"|"EXPIRATION_NOTIFICATION"|"expirationNotification"}
   --multiple-devices-and-holders-allowed-status: string@multiple-devices-and-holders-allowed-status-completer # Identifies whether multiple users and devices will save the same object referencing this class.
-  --redemption-issuers: list # Identifies which redemption issuers can redeem the pass over Smart Tap. Redemption issuers are identified by their issuer ID. Redemption issuers must have at least one Smart Tap key configured. The `enableSmartTap` and object level `smartTapRedemptionLevel` fields must also be set up correctly in order for a pass to support Smart Tap.
+  --redemption-issuers: list<string> # Identifies which redemption issuers can redeem the pass over Smart Tap. Redemption issuers are identified by their issuer ID. Redemption issuers must have at least one Smart Tap key configured. The `enableSmartTap` and object level `smartTapRedemptionLevel` fields must also be set up correctly in order for a pass to support Smart Tap.
   --review: record # shape: {comments?: string}
   --review-status: string@review-status-completer # Required. The status of the class. This field can be set to `draft` or `underReview` using the insert, patch, or update API calls. Once the review state is changed from `draft` it may not be changed back to `draft`. You should keep this field to `draft` when the class is under development. A `draft` class cannot be used to create any object. You should set this field to `underReview` when you believe the class is ready for use. The platform will automatically set this field to `approved` and it can be immediately used to create or migrate objects. When updating an already `approved` class you should keep setting this field to `underReview`.
   --row-label: string@row-label-completer # The label to use for the row value (`eventTicketObject.seatInfo.row`) on the card detail view. Each available option maps to a set of localized strings, so that translations are shown to the user based on their locale. Both `rowLabel` and `customRowLabel` may not be set. If neither is set, the label will default to "Row", localized. If the row field is unset, this label will not be used.
@@ -242,18 +251,18 @@ export def "walletobjects-event-ticket-class walletobjectseventticketclassinsert
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/walletobjects/v1/eventTicketClass" $qp)
-  let body = {"allowMultipleUsersPerObject": $allow_multiple_users_per_object, "callbackOptions": $callback_options, "classTemplateInfo": $class_template_info, "confirmationCodeLabel": $confirmation_code_label, "countryCode": $country_code, "customConfirmationCodeLabel": $custom_confirmation_code_label, "customGateLabel": $custom_gate_label, "customRowLabel": $custom_row_label, "customSeatLabel": $custom_seat_label, "customSectionLabel": $custom_section_label, "dateTime": $date_time, "enableSmartTap": $enable_smart_tap, "eventId": $event_id, "eventName": $event_name, "finePrint": $fine_print, "gateLabel": $gate_label, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "homepageUri": $homepage_uri, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "issuerName": $issuer_name, "kind": $kind, "linksModuleData": $links_module_data, "localizedIssuerName": $localized_issuer_name, "locations": $locations, "logo": $logo, "messages": $messages, "multipleDevicesAndHoldersAllowedStatus": $multiple_devices_and_holders_allowed_status, "redemptionIssuers": $redemption_issuers, "review": $review, "reviewStatus": $review_status, "rowLabel": $row_label, "seatLabel": $seat_label, "sectionLabel": $section_label, "securityAnimation": $security_animation, "textModulesData": $text_modules_data, "venue": $venue, "version": $version, "viewUnlockRequirement": $view_unlock_requirement, "wordMark": $word_mark} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"allowMultipleUsersPerObject": $allow_multiple_users_per_object, "callbackOptions": $callback_options, "classTemplateInfo": $class_template_info, "confirmationCodeLabel": $confirmation_code_label, "countryCode": $country_code, "customConfirmationCodeLabel": $custom_confirmation_code_label, "customGateLabel": $custom_gate_label, "customRowLabel": $custom_row_label, "customSeatLabel": $custom_seat_label, "customSectionLabel": $custom_section_label, "dateTime": $date_time, "enableSmartTap": $enable_smart_tap, "eventId": $event_id, "eventName": $event_name, "finePrint": $fine_print, "gateLabel": $gate_label, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "homepageUri": $homepage_uri, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "issuerName": $issuer_name, "kind": $kind, "linksModuleData": $links_module_data, "localizedIssuerName": $localized_issuer_name, "locations": $locations, "logo": $logo, "messages": $messages, "multipleDevicesAndHoldersAllowedStatus": $multiple_devices_and_holders_allowed_status, "redemptionIssuers": $redemption_issuers, "review": $review, "reviewStatus": $review_status, "rowLabel": $row_label, "seatLabel": $seat_label, "sectionLabel": $section_label, "securityAnimation": $security_animation, "textModulesData": $text_modules_data, "venue": $venue, "version": $version, "viewUnlockRequirement": $view_unlock_requirement, "wordMark": $word_mark} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns the event ticket class with the given class ID.
 #
 # GET /walletobjects/v1/eventTicketClass/{resourceId}
 # operationId: walletobjects.eventticketclass.get
-export def "walletobjects-event-ticket-class walletobjectseventticketclassget" [
+export def "walletobjects-event-ticket-class get" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -278,7 +287,7 @@ export def "walletobjects-event-ticket-class walletobjectseventticketclassget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_id: $resource_id} | format pattern "/walletobjects/v1/eventTicketClass/{resource_id}") $qp)
+  let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/eventTicketClass/{resource_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -312,7 +321,7 @@ export def "walletobjects-event-ticket-class walletobjectseventticketclassget" [
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
 # --venue shape: {address?: record, kind?: string, name?: record}
 # --wordMark shape: {contentDescription?: record, kind?: string, sourceUri?: record}
-export def "walletobjects-event-ticket-class walletobjectseventticketclasspatch" [
+export def "walletobjects-event-ticket-class update-by-resourceId" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -363,7 +372,7 @@ export def "walletobjects-event-ticket-class walletobjectseventticketclasspatch"
   --logo: record # Wrapping type for Google hosted images. Next ID: 7 — shape: {contentDescription?: record, kind?: string, sourceUri?: record}
   --messages: list # An array of messages displayed in the app. All users of this object will receive its associated messages. The maximum number of these fields is 10. — item shape: {body?: string, displayInterval?: record, header?: string, id?: string, kind?: string, localizedBody?: record, localizedHeader?: record, messageType?: "MESSAGE_TYPE_UNSPECIFIED"|"TEXT"|"text"|"EXPIRATION_NOTIFICATION"|"expirationNotification"}
   --multiple-devices-and-holders-allowed-status: string@multiple-devices-and-holders-allowed-status-completer # Identifies whether multiple users and devices will save the same object referencing this class.
-  --redemption-issuers: list # Identifies which redemption issuers can redeem the pass over Smart Tap. Redemption issuers are identified by their issuer ID. Redemption issuers must have at least one Smart Tap key configured. The `enableSmartTap` and object level `smartTapRedemptionLevel` fields must also be set up correctly in order for a pass to support Smart Tap.
+  --redemption-issuers: list<string> # Identifies which redemption issuers can redeem the pass over Smart Tap. Redemption issuers are identified by their issuer ID. Redemption issuers must have at least one Smart Tap key configured. The `enableSmartTap` and object level `smartTapRedemptionLevel` fields must also be set up correctly in order for a pass to support Smart Tap.
   --review: record # shape: {comments?: string}
   --review-status: string@review-status-completer # Required. The status of the class. This field can be set to `draft` or `underReview` using the insert, patch, or update API calls. Once the review state is changed from `draft` it may not be changed back to `draft`. You should keep this field to `draft` when the class is under development. A `draft` class cannot be used to create any object. You should set this field to `underReview` when you believe the class is ready for use. The platform will automatically set this field to `approved` and it can be immediately used to create or migrate objects. When updating an already `approved` class you should keep setting this field to `underReview`.
   --row-label: string@row-label-completer # The label to use for the row value (`eventTicketObject.seatInfo.row`) on the card detail view. Each available option maps to a set of localized strings, so that translations are shown to the user based on their locale. Both `rowLabel` and `customRowLabel` may not be set. If neither is set, the label will default to "Row", localized. If the row field is unset, this label will not be used.
@@ -380,12 +389,12 @@ export def "walletobjects-event-ticket-class walletobjectseventticketclasspatch"
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_id: $resource_id} | format pattern "/walletobjects/v1/eventTicketClass/{resource_id}") $qp)
-  let body = {"allowMultipleUsersPerObject": $allow_multiple_users_per_object, "callbackOptions": $callback_options, "classTemplateInfo": $class_template_info, "confirmationCodeLabel": $confirmation_code_label, "countryCode": $country_code, "customConfirmationCodeLabel": $custom_confirmation_code_label, "customGateLabel": $custom_gate_label, "customRowLabel": $custom_row_label, "customSeatLabel": $custom_seat_label, "customSectionLabel": $custom_section_label, "dateTime": $date_time, "enableSmartTap": $enable_smart_tap, "eventId": $event_id, "eventName": $event_name, "finePrint": $fine_print, "gateLabel": $gate_label, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "homepageUri": $homepage_uri, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "issuerName": $issuer_name, "kind": $kind, "linksModuleData": $links_module_data, "localizedIssuerName": $localized_issuer_name, "locations": $locations, "logo": $logo, "messages": $messages, "multipleDevicesAndHoldersAllowedStatus": $multiple_devices_and_holders_allowed_status, "redemptionIssuers": $redemption_issuers, "review": $review, "reviewStatus": $review_status, "rowLabel": $row_label, "seatLabel": $seat_label, "sectionLabel": $section_label, "securityAnimation": $security_animation, "textModulesData": $text_modules_data, "venue": $venue, "version": $version, "viewUnlockRequirement": $view_unlock_requirement, "wordMark": $word_mark} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/eventTicketClass/{resource_id}") $qp)
+  let req_body = {"allowMultipleUsersPerObject": $allow_multiple_users_per_object, "callbackOptions": $callback_options, "classTemplateInfo": $class_template_info, "confirmationCodeLabel": $confirmation_code_label, "countryCode": $country_code, "customConfirmationCodeLabel": $custom_confirmation_code_label, "customGateLabel": $custom_gate_label, "customRowLabel": $custom_row_label, "customSeatLabel": $custom_seat_label, "customSectionLabel": $custom_section_label, "dateTime": $date_time, "enableSmartTap": $enable_smart_tap, "eventId": $event_id, "eventName": $event_name, "finePrint": $fine_print, "gateLabel": $gate_label, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "homepageUri": $homepage_uri, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "issuerName": $issuer_name, "kind": $kind, "linksModuleData": $links_module_data, "localizedIssuerName": $localized_issuer_name, "locations": $locations, "logo": $logo, "messages": $messages, "multipleDevicesAndHoldersAllowedStatus": $multiple_devices_and_holders_allowed_status, "redemptionIssuers": $redemption_issuers, "review": $review, "reviewStatus": $review_status, "rowLabel": $row_label, "seatLabel": $seat_label, "sectionLabel": $section_label, "securityAnimation": $security_animation, "textModulesData": $text_modules_data, "venue": $venue, "version": $version, "viewUnlockRequirement": $view_unlock_requirement, "wordMark": $word_mark} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates the event ticket class referenced by the given class ID.
@@ -416,7 +425,7 @@ export def "walletobjects-event-ticket-class walletobjectseventticketclasspatch"
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
 # --venue shape: {address?: record, kind?: string, name?: record}
 # --wordMark shape: {contentDescription?: record, kind?: string, sourceUri?: record}
-export def "walletobjects-event-ticket-class walletobjectseventticketclassupdate" [
+export def "walletobjects-event-ticket-class update-by-resourceId-1" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -467,7 +476,7 @@ export def "walletobjects-event-ticket-class walletobjectseventticketclassupdate
   --logo: record # Wrapping type for Google hosted images. Next ID: 7 — shape: {contentDescription?: record, kind?: string, sourceUri?: record}
   --messages: list # An array of messages displayed in the app. All users of this object will receive its associated messages. The maximum number of these fields is 10. — item shape: {body?: string, displayInterval?: record, header?: string, id?: string, kind?: string, localizedBody?: record, localizedHeader?: record, messageType?: "MESSAGE_TYPE_UNSPECIFIED"|"TEXT"|"text"|"EXPIRATION_NOTIFICATION"|"expirationNotification"}
   --multiple-devices-and-holders-allowed-status: string@multiple-devices-and-holders-allowed-status-completer # Identifies whether multiple users and devices will save the same object referencing this class.
-  --redemption-issuers: list # Identifies which redemption issuers can redeem the pass over Smart Tap. Redemption issuers are identified by their issuer ID. Redemption issuers must have at least one Smart Tap key configured. The `enableSmartTap` and object level `smartTapRedemptionLevel` fields must also be set up correctly in order for a pass to support Smart Tap.
+  --redemption-issuers: list<string> # Identifies which redemption issuers can redeem the pass over Smart Tap. Redemption issuers are identified by their issuer ID. Redemption issuers must have at least one Smart Tap key configured. The `enableSmartTap` and object level `smartTapRedemptionLevel` fields must also be set up correctly in order for a pass to support Smart Tap.
   --review: record # shape: {comments?: string}
   --review-status: string@review-status-completer # Required. The status of the class. This field can be set to `draft` or `underReview` using the insert, patch, or update API calls. Once the review state is changed from `draft` it may not be changed back to `draft`. You should keep this field to `draft` when the class is under development. A `draft` class cannot be used to create any object. You should set this field to `underReview` when you believe the class is ready for use. The platform will automatically set this field to `approved` and it can be immediately used to create or migrate objects. When updating an already `approved` class you should keep setting this field to `underReview`.
   --row-label: string@row-label-completer # The label to use for the row value (`eventTicketObject.seatInfo.row`) on the card detail view. Each available option maps to a set of localized strings, so that translations are shown to the user based on their locale. Both `rowLabel` and `customRowLabel` may not be set. If neither is set, the label will default to "Row", localized. If the row field is unset, this label will not be used.
@@ -484,12 +493,12 @@ export def "walletobjects-event-ticket-class walletobjectseventticketclassupdate
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_id: $resource_id} | format pattern "/walletobjects/v1/eventTicketClass/{resource_id}") $qp)
-  let body = {"allowMultipleUsersPerObject": $allow_multiple_users_per_object, "callbackOptions": $callback_options, "classTemplateInfo": $class_template_info, "confirmationCodeLabel": $confirmation_code_label, "countryCode": $country_code, "customConfirmationCodeLabel": $custom_confirmation_code_label, "customGateLabel": $custom_gate_label, "customRowLabel": $custom_row_label, "customSeatLabel": $custom_seat_label, "customSectionLabel": $custom_section_label, "dateTime": $date_time, "enableSmartTap": $enable_smart_tap, "eventId": $event_id, "eventName": $event_name, "finePrint": $fine_print, "gateLabel": $gate_label, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "homepageUri": $homepage_uri, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "issuerName": $issuer_name, "kind": $kind, "linksModuleData": $links_module_data, "localizedIssuerName": $localized_issuer_name, "locations": $locations, "logo": $logo, "messages": $messages, "multipleDevicesAndHoldersAllowedStatus": $multiple_devices_and_holders_allowed_status, "redemptionIssuers": $redemption_issuers, "review": $review, "reviewStatus": $review_status, "rowLabel": $row_label, "seatLabel": $seat_label, "sectionLabel": $section_label, "securityAnimation": $security_animation, "textModulesData": $text_modules_data, "venue": $venue, "version": $version, "viewUnlockRequirement": $view_unlock_requirement, "wordMark": $word_mark} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/eventTicketClass/{resource_id}") $qp)
+  let req_body = {"allowMultipleUsersPerObject": $allow_multiple_users_per_object, "callbackOptions": $callback_options, "classTemplateInfo": $class_template_info, "confirmationCodeLabel": $confirmation_code_label, "countryCode": $country_code, "customConfirmationCodeLabel": $custom_confirmation_code_label, "customGateLabel": $custom_gate_label, "customRowLabel": $custom_row_label, "customSeatLabel": $custom_seat_label, "customSectionLabel": $custom_section_label, "dateTime": $date_time, "enableSmartTap": $enable_smart_tap, "eventId": $event_id, "eventName": $event_name, "finePrint": $fine_print, "gateLabel": $gate_label, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "homepageUri": $homepage_uri, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "issuerName": $issuer_name, "kind": $kind, "linksModuleData": $links_module_data, "localizedIssuerName": $localized_issuer_name, "locations": $locations, "logo": $logo, "messages": $messages, "multipleDevicesAndHoldersAllowedStatus": $multiple_devices_and_holders_allowed_status, "redemptionIssuers": $redemption_issuers, "review": $review, "reviewStatus": $review_status, "rowLabel": $row_label, "seatLabel": $seat_label, "sectionLabel": $section_label, "securityAnimation": $security_animation, "textModulesData": $text_modules_data, "venue": $venue, "version": $version, "viewUnlockRequirement": $view_unlock_requirement, "wordMark": $word_mark} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Adds a message to the event ticket class referenced by the given class ID.
@@ -497,7 +506,7 @@ export def "walletobjects-event-ticket-class walletobjectseventticketclassupdate
 # POST /walletobjects/v1/eventTicketClass/{resourceId}/addMessage
 # operationId: walletobjects.eventticketclass.addmessage
 # --message shape: {body?: string, displayInterval?: record, header?: string, id?: string, kind?: string, localizedBody?: record, localizedHeader?: record, messageType?: "MESSAGE_TYPE_UNSPECIFIED"|"TEXT"|"text"|"EXPIRATION_NOTIFICATION"|"expirationNotification"}
-export def "walletobjects-event-ticket-class-add-message walletobjectseventticketclassaddmessage" [
+export def "walletobjects-event-ticket-class-add-message create-addmessage" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -524,19 +533,19 @@ export def "walletobjects-event-ticket-class-add-message walletobjectseventticke
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_id: $resource_id} | format pattern "/walletobjects/v1/eventTicketClass/{resource_id}/addMessage") $qp)
-  let body = {"message": $message} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/eventTicketClass/{resource_id}/addMessage") $qp)
+  let req_body = {"message": $message} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns a list of all event ticket objects for a given issuer ID.
 #
 # GET /walletobjects/v1/eventTicketObject
 # operationId: walletobjects.eventticketobject.list
-export def "walletobjects-event-ticket-object walletobjectseventticketobjectlist" [
+export def "walletobjects-event-ticket-object list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -575,7 +584,7 @@ export def "walletobjects-event-ticket-object walletobjectseventticketobjectlist
 # operationId: walletobjects.eventticketobject.insert
 # --appLinkData shape: {androidAppLinkInfo?: record, iosAppLinkInfo?: record, webAppLinkInfo?: record}
 # --barcode shape: {alternateText?: string, kind?: string, renderEncoding?: "RENDER_ENCODING_UNSPECIFIED"|"UTF_8", showCodeText?: record, type?: "BARCODE_TYPE_UNSPECIFIED"|"AZTEC"|"aztec"|"CODE_39"|"code39"|"CODE_128"|"code128"|"CODABAR"|"codabar"|"DATA_MATRIX"|"dataMatrix"|"EAN_8"|"ean8"|"EAN_13"|"ean13"|"EAN13"|"ITF_14"|"itf14"|"PDF_417"|"pdf417"|"PDF417"|"QR_CODE"|"qrCode"|"qrcode"|"UPC_A"|"upcA"|"TEXT_ONLY"|"textOnly", value?: string}
-# --classReference shape: {allowMultipleUsersPerObject?: bool, callbackOptions?: record, classTemplateInfo?: record, confirmationCodeLabel?: "CONFIRMATION_CODE_LABEL_UNSPECIFIED"|"CONFIRMATION_CODE"|"confirmationCode"|"CONFIRMATION_NUMBER"|"confirmationNumber"|"ORDER_NUMBER"|"orderNumber"|"RESERVATION_NUMBER"|"reservationNumber", countryCode?: string, customConfirmationCodeLabel?: record, customGateLabel?: record, customRowLabel?: record, customSeatLabel?: record, customSectionLabel?: record, dateTime?: record, enableSmartTap?: bool, eventId?: string, eventName?: record, finePrint?: record, gateLabel?: "GATE_LABEL_UNSPECIFIED"|"GATE"|"gate"|"DOOR"|"door"|"ENTRANCE"|"entrance", heroImage?: record, hexBackgroundColor?: string, homepageUri?: record, id?: string, imageModulesData?: list, infoModuleData?: record, issuerName?: string, kind?: string, linksModuleData?: record, localizedIssuerName?: record, locations?: list, logo?: record, messages?: list, multipleDevicesAndHoldersAllowedStatus?: "STATUS_UNSPECIFIED"|"MULTIPLE_HOLDERS"|"multipleHolders"|"ONE_USER_ALL_DEVICES"|"oneUserAllDevices"|"ONE_USER_ONE_DEVICE"|"oneUserOneDevice", redemptionIssuers?: list, review?: record, reviewStatus?: "REVIEW_STATUS_UNSPECIFIED"|"UNDER_REVIEW"|"underReview"|"APPROVED"|"approved"|"REJECTED"|"rejected"|"DRAFT"|"draft", rowLabel?: "ROW_LABEL_UNSPECIFIED"|"ROW"|"row", seatLabel?: "SEAT_LABEL_UNSPECIFIED"|"SEAT"|"seat", sectionLabel?: "SECTION_LABEL_UNSPECIFIED"|"SECTION"|"section"|"THEATER"|"theater", securityAnimation?: record, textModulesData?: list, venue?: record, version?: string, viewUnlockRequirement?: "VIEW_UNLOCK_REQUIREMENT_UNSPECIFIED"|"UNLOCK_NOT_REQUIRED"|"UNLOCK_REQUIRED_TO_VIEW", wordMark?: record}
+# --classReference shape: {allowMultipleUsersPerObject?: bool, callbackOptions?: record, classTemplateInfo?: record, confirmationCodeLabel?: "CONFIRMATION_CODE_LABEL_UNSPECIFIED"|"CONFIRMATION_CODE"|"confirmationCode"|"CONFIRMATION_NUMBER"|"confirmationNumber"|"ORDER_NUMBER"|"orderNumber"|"RESERVATION_NUMBER"|"reservationNumber", countryCode?: string, customConfirmationCodeLabel?: record, customGateLabel?: record, customRowLabel?: record, customSeatLabel?: record, customSectionLabel?: record, dateTime?: record, ... (31 more fields)}
 # --faceValue shape: {currencyCode?: string, kind?: string, micros?: string}
 # --groupingInfo shape: {groupingId?: string, sortIndex?: int}
 # --heroImage shape: {contentDescription?: record, kind?: string, sourceUri?: record}
@@ -591,7 +600,7 @@ export def "walletobjects-event-ticket-object walletobjectseventticketobjectlist
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
 # --ticketType shape: {defaultValue?: record, kind?: string, translatedValues?: list}
 # --validTimeInterval shape: {end?: record, kind?: string, start?: record}
-export def "walletobjects-event-ticket-object walletobjectseventticketobjectinsert" [
+export def "walletobjects-event-ticket-object create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -614,7 +623,7 @@ export def "walletobjects-event-ticket-object walletobjectseventticketobjectinse
   --app-link-data: record # shape: {androidAppLinkInfo?: record, iosAppLinkInfo?: record, webAppLinkInfo?: record}
   --barcode: record # shape: {alternateText?: string, kind?: string, renderEncoding?: "RENDER_ENCODING_UNSPECIFIED"|"UTF_8", showCodeText?: record, type?: "BARCODE_TYPE_UNSPECIFIED"|"AZTEC"|"aztec"|"CODE_39"|"code39"|"CODE_128"|"code128"|"CODABAR"|"codabar"|"DATA_MATRIX"|"dataMatrix"|"EAN_8"|"ean8"|"EAN_13"|"ean13"|"EAN13"|"ITF_14"|"itf14"|"PDF_417"|"pdf417"|"PDF417"|"QR_CODE"|"qrCode"|"qrcode"|"UPC_A"|"upcA"|"TEXT_ONLY"|"textOnly", value?: string}
   --class-id: string # Required. The class associated with this object. The class must be of the same type as this object, must already exist, and must be approved. Class IDs should follow the format issuer ID.identifier where the former is issued by Google and latter is chosen by you.
-  --class-reference: record # shape: {allowMultipleUsersPerObject?: bool, callbackOptions?: record, classTemplateInfo?: record, confirmationCodeLabel?: "CONFIRMATION_CODE_LABEL_UNSPECIFIED"|"CONFIRMATION_CODE"|"confirmationCode"|"CONFIRMATION_NUMBER"|"confirmationNumber"|"ORDER_NUMBER"|"orderNumber"|"RESERVATION_NUMBER"|"reservationNumber", countryCode?: string, customConfirmationCodeLabel?: record, customGateLabel?: record, customRowLabel?: record, customSeatLabel?: record, customSectionLabel?: record, dateTime?: record, enableSmartTap?: bool, eventId?: string, eventName?: record, finePrint?: record, gateLabel?: "GATE_LABEL_UNSPECIFIED"|"GATE"|"gate"|"DOOR"|"door"|"ENTRANCE"|"entrance", heroImage?: record, hexBackgroundColor?: string, homepageUri?: record, id?: string, imageModulesData?: list, infoModuleData?: record, issuerName?: string, kind?: string, linksModuleData?: record, localizedIssuerName?: record, locations?: list, logo?: record, messages?: list, multipleDevicesAndHoldersAllowedStatus?: "STATUS_UNSPECIFIED"|"MULTIPLE_HOLDERS"|"multipleHolders"|"ONE_USER_ALL_DEVICES"|"oneUserAllDevices"|"ONE_USER_ONE_DEVICE"|"oneUserOneDevice", redemptionIssuers?: list, review?: record, reviewStatus?: "REVIEW_STATUS_UNSPECIFIED"|"UNDER_REVIEW"|"underReview"|"APPROVED"|"approved"|"REJECTED"|"rejected"|"DRAFT"|"draft", rowLabel?: "ROW_LABEL_UNSPECIFIED"|"ROW"|"row", seatLabel?: "SEAT_LABEL_UNSPECIFIED"|"SEAT"|"seat", sectionLabel?: "SECTION_LABEL_UNSPECIFIED"|"SECTION"|"section"|"THEATER"|"theater", securityAnimation?: record, textModulesData?: list, venue?: record, version?: string, viewUnlockRequirement?: "VIEW_UNLOCK_REQUIREMENT_UNSPECIFIED"|"UNLOCK_NOT_REQUIRED"|"UNLOCK_REQUIRED_TO_VIEW", wordMark?: record}
+  --class-reference: record # shape: {allowMultipleUsersPerObject?: bool, callbackOptions?: record, classTemplateInfo?: record, confirmationCodeLabel?: "CONFIRMATION_CODE_LABEL_UNSPECIFIED"|"CONFIRMATION_CODE"|"confirmationCode"|"CONFIRMATION_NUMBER"|"confirmationNumber"|"ORDER_NUMBER"|"orderNumber"|"RESERVATION_NUMBER"|"reservationNumber", countryCode?: string, customConfirmationCodeLabel?: record, customGateLabel?: record, customRowLabel?: record, customSeatLabel?: record, customSectionLabel?: record, dateTime?: record, ... (31 more fields)}
   --disable-expiration-notification: oneof<nothing, bool> # Indicates if notifications should explicitly be suppressed. If this field is set to true, regardless of the `messages` field, expiration notifications to the user will be suppressed. By default, this field is set to false. Currently, this can only be set for offers.
   --face-value: record # shape: {currencyCode?: string, kind?: string, micros?: string}
   --grouping-info: record # shape: {groupingId?: string, sortIndex?: int}
@@ -626,7 +635,7 @@ export def "walletobjects-event-ticket-object walletobjectseventticketobjectinse
   --image-modules-data: list # Image module data. The maximum number of these fields displayed is 1 from object level and 1 for class object level. — item shape: {id?: string, mainImage?: record}
   --info-module-data: record # shape: {labelValueRows?: list, showLastUpdateTime?: bool}
   --kind: string # Identifies what kind of resource this is. Value: the fixed string `"walletobjects#eventTicketObject"`.
-  --linked-offer-ids: list # A list of offer objects linked to this event ticket. The offer objects must already exist. Offer object IDs should follow the format issuer ID. identifier where the former is issued by Google and latter is chosen by you.
+  --linked-offer-ids: list<string> # A list of offer objects linked to this event ticket. The offer objects must already exist. Offer object IDs should follow the format issuer ID. identifier where the former is issued by Google and latter is chosen by you.
   --links-module-data: record # shape: {uris?: list}
   --locations: list # Note: This field is currently not supported to trigger geo notifications. — item shape: {kind?: string, latitude?: float, longitude?: float}
   --messages: list # An array of messages displayed in the app. All users of this object will receive its associated messages. The maximum number of these fields is 10. — item shape: {body?: string, displayInterval?: record, header?: string, id?: string, kind?: string, localizedBody?: record, localizedHeader?: record, messageType?: "MESSAGE_TYPE_UNSPECIFIED"|"TEXT"|"text"|"EXPIRATION_NOTIFICATION"|"expirationNotification"}
@@ -648,18 +657,18 @@ export def "walletobjects-event-ticket-object walletobjectseventticketobjectinse
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/walletobjects/v1/eventTicketObject" $qp)
-  let body = {"appLinkData": $app_link_data, "barcode": $barcode, "classId": $class_id, "classReference": $class_reference, "disableExpirationNotification": $disable_expiration_notification, "faceValue": $face_value, "groupingInfo": $grouping_info, "hasLinkedDevice": $has_linked_device, "hasUsers": $has_users, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "kind": $kind, "linkedOfferIds": $linked_offer_ids, "linksModuleData": $links_module_data, "locations": $locations, "messages": $messages, "passConstraints": $pass_constraints, "reservationInfo": $reservation_info, "rotatingBarcode": $rotating_barcode, "seatInfo": $seat_info, "smartTapRedemptionValue": $smart_tap_redemption_value, "state": $state, "textModulesData": $text_modules_data, "ticketHolderName": $ticket_holder_name, "ticketNumber": $ticket_number, "ticketType": $ticket_type, "validTimeInterval": $valid_time_interval, "version": $version} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"appLinkData": $app_link_data, "barcode": $barcode, "classId": $class_id, "classReference": $class_reference, "disableExpirationNotification": $disable_expiration_notification, "faceValue": $face_value, "groupingInfo": $grouping_info, "hasLinkedDevice": $has_linked_device, "hasUsers": $has_users, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "kind": $kind, "linkedOfferIds": $linked_offer_ids, "linksModuleData": $links_module_data, "locations": $locations, "messages": $messages, "passConstraints": $pass_constraints, "reservationInfo": $reservation_info, "rotatingBarcode": $rotating_barcode, "seatInfo": $seat_info, "smartTapRedemptionValue": $smart_tap_redemption_value, "state": $state, "textModulesData": $text_modules_data, "ticketHolderName": $ticket_holder_name, "ticketNumber": $ticket_number, "ticketType": $ticket_type, "validTimeInterval": $valid_time_interval, "version": $version} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns the event ticket object with the given object ID.
 #
 # GET /walletobjects/v1/eventTicketObject/{resourceId}
 # operationId: walletobjects.eventticketobject.get
-export def "walletobjects-event-ticket-object walletobjectseventticketobjectget" [
+export def "walletobjects-event-ticket-object get" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -684,7 +693,7 @@ export def "walletobjects-event-ticket-object walletobjectseventticketobjectget"
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_id: $resource_id} | format pattern "/walletobjects/v1/eventTicketObject/{resource_id}") $qp)
+  let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/eventTicketObject/{resource_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -696,7 +705,7 @@ export def "walletobjects-event-ticket-object walletobjectseventticketobjectget"
 # operationId: walletobjects.eventticketobject.patch
 # --appLinkData shape: {androidAppLinkInfo?: record, iosAppLinkInfo?: record, webAppLinkInfo?: record}
 # --barcode shape: {alternateText?: string, kind?: string, renderEncoding?: "RENDER_ENCODING_UNSPECIFIED"|"UTF_8", showCodeText?: record, type?: "BARCODE_TYPE_UNSPECIFIED"|"AZTEC"|"aztec"|"CODE_39"|"code39"|"CODE_128"|"code128"|"CODABAR"|"codabar"|"DATA_MATRIX"|"dataMatrix"|"EAN_8"|"ean8"|"EAN_13"|"ean13"|"EAN13"|"ITF_14"|"itf14"|"PDF_417"|"pdf417"|"PDF417"|"QR_CODE"|"qrCode"|"qrcode"|"UPC_A"|"upcA"|"TEXT_ONLY"|"textOnly", value?: string}
-# --classReference shape: {allowMultipleUsersPerObject?: bool, callbackOptions?: record, classTemplateInfo?: record, confirmationCodeLabel?: "CONFIRMATION_CODE_LABEL_UNSPECIFIED"|"CONFIRMATION_CODE"|"confirmationCode"|"CONFIRMATION_NUMBER"|"confirmationNumber"|"ORDER_NUMBER"|"orderNumber"|"RESERVATION_NUMBER"|"reservationNumber", countryCode?: string, customConfirmationCodeLabel?: record, customGateLabel?: record, customRowLabel?: record, customSeatLabel?: record, customSectionLabel?: record, dateTime?: record, enableSmartTap?: bool, eventId?: string, eventName?: record, finePrint?: record, gateLabel?: "GATE_LABEL_UNSPECIFIED"|"GATE"|"gate"|"DOOR"|"door"|"ENTRANCE"|"entrance", heroImage?: record, hexBackgroundColor?: string, homepageUri?: record, id?: string, imageModulesData?: list, infoModuleData?: record, issuerName?: string, kind?: string, linksModuleData?: record, localizedIssuerName?: record, locations?: list, logo?: record, messages?: list, multipleDevicesAndHoldersAllowedStatus?: "STATUS_UNSPECIFIED"|"MULTIPLE_HOLDERS"|"multipleHolders"|"ONE_USER_ALL_DEVICES"|"oneUserAllDevices"|"ONE_USER_ONE_DEVICE"|"oneUserOneDevice", redemptionIssuers?: list, review?: record, reviewStatus?: "REVIEW_STATUS_UNSPECIFIED"|"UNDER_REVIEW"|"underReview"|"APPROVED"|"approved"|"REJECTED"|"rejected"|"DRAFT"|"draft", rowLabel?: "ROW_LABEL_UNSPECIFIED"|"ROW"|"row", seatLabel?: "SEAT_LABEL_UNSPECIFIED"|"SEAT"|"seat", sectionLabel?: "SECTION_LABEL_UNSPECIFIED"|"SECTION"|"section"|"THEATER"|"theater", securityAnimation?: record, textModulesData?: list, venue?: record, version?: string, viewUnlockRequirement?: "VIEW_UNLOCK_REQUIREMENT_UNSPECIFIED"|"UNLOCK_NOT_REQUIRED"|"UNLOCK_REQUIRED_TO_VIEW", wordMark?: record}
+# --classReference shape: {allowMultipleUsersPerObject?: bool, callbackOptions?: record, classTemplateInfo?: record, confirmationCodeLabel?: "CONFIRMATION_CODE_LABEL_UNSPECIFIED"|"CONFIRMATION_CODE"|"confirmationCode"|"CONFIRMATION_NUMBER"|"confirmationNumber"|"ORDER_NUMBER"|"orderNumber"|"RESERVATION_NUMBER"|"reservationNumber", countryCode?: string, customConfirmationCodeLabel?: record, customGateLabel?: record, customRowLabel?: record, customSeatLabel?: record, customSectionLabel?: record, dateTime?: record, ... (31 more fields)}
 # --faceValue shape: {currencyCode?: string, kind?: string, micros?: string}
 # --groupingInfo shape: {groupingId?: string, sortIndex?: int}
 # --heroImage shape: {contentDescription?: record, kind?: string, sourceUri?: record}
@@ -712,7 +721,7 @@ export def "walletobjects-event-ticket-object walletobjectseventticketobjectget"
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
 # --ticketType shape: {defaultValue?: record, kind?: string, translatedValues?: list}
 # --validTimeInterval shape: {end?: record, kind?: string, start?: record}
-export def "walletobjects-event-ticket-object walletobjectseventticketobjectpatch" [
+export def "walletobjects-event-ticket-object update-by-resourceId" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -736,7 +745,7 @@ export def "walletobjects-event-ticket-object walletobjectseventticketobjectpatc
   --app-link-data: record # shape: {androidAppLinkInfo?: record, iosAppLinkInfo?: record, webAppLinkInfo?: record}
   --barcode: record # shape: {alternateText?: string, kind?: string, renderEncoding?: "RENDER_ENCODING_UNSPECIFIED"|"UTF_8", showCodeText?: record, type?: "BARCODE_TYPE_UNSPECIFIED"|"AZTEC"|"aztec"|"CODE_39"|"code39"|"CODE_128"|"code128"|"CODABAR"|"codabar"|"DATA_MATRIX"|"dataMatrix"|"EAN_8"|"ean8"|"EAN_13"|"ean13"|"EAN13"|"ITF_14"|"itf14"|"PDF_417"|"pdf417"|"PDF417"|"QR_CODE"|"qrCode"|"qrcode"|"UPC_A"|"upcA"|"TEXT_ONLY"|"textOnly", value?: string}
   --class-id: string # Required. The class associated with this object. The class must be of the same type as this object, must already exist, and must be approved. Class IDs should follow the format issuer ID.identifier where the former is issued by Google and latter is chosen by you.
-  --class-reference: record # shape: {allowMultipleUsersPerObject?: bool, callbackOptions?: record, classTemplateInfo?: record, confirmationCodeLabel?: "CONFIRMATION_CODE_LABEL_UNSPECIFIED"|"CONFIRMATION_CODE"|"confirmationCode"|"CONFIRMATION_NUMBER"|"confirmationNumber"|"ORDER_NUMBER"|"orderNumber"|"RESERVATION_NUMBER"|"reservationNumber", countryCode?: string, customConfirmationCodeLabel?: record, customGateLabel?: record, customRowLabel?: record, customSeatLabel?: record, customSectionLabel?: record, dateTime?: record, enableSmartTap?: bool, eventId?: string, eventName?: record, finePrint?: record, gateLabel?: "GATE_LABEL_UNSPECIFIED"|"GATE"|"gate"|"DOOR"|"door"|"ENTRANCE"|"entrance", heroImage?: record, hexBackgroundColor?: string, homepageUri?: record, id?: string, imageModulesData?: list, infoModuleData?: record, issuerName?: string, kind?: string, linksModuleData?: record, localizedIssuerName?: record, locations?: list, logo?: record, messages?: list, multipleDevicesAndHoldersAllowedStatus?: "STATUS_UNSPECIFIED"|"MULTIPLE_HOLDERS"|"multipleHolders"|"ONE_USER_ALL_DEVICES"|"oneUserAllDevices"|"ONE_USER_ONE_DEVICE"|"oneUserOneDevice", redemptionIssuers?: list, review?: record, reviewStatus?: "REVIEW_STATUS_UNSPECIFIED"|"UNDER_REVIEW"|"underReview"|"APPROVED"|"approved"|"REJECTED"|"rejected"|"DRAFT"|"draft", rowLabel?: "ROW_LABEL_UNSPECIFIED"|"ROW"|"row", seatLabel?: "SEAT_LABEL_UNSPECIFIED"|"SEAT"|"seat", sectionLabel?: "SECTION_LABEL_UNSPECIFIED"|"SECTION"|"section"|"THEATER"|"theater", securityAnimation?: record, textModulesData?: list, venue?: record, version?: string, viewUnlockRequirement?: "VIEW_UNLOCK_REQUIREMENT_UNSPECIFIED"|"UNLOCK_NOT_REQUIRED"|"UNLOCK_REQUIRED_TO_VIEW", wordMark?: record}
+  --class-reference: record # shape: {allowMultipleUsersPerObject?: bool, callbackOptions?: record, classTemplateInfo?: record, confirmationCodeLabel?: "CONFIRMATION_CODE_LABEL_UNSPECIFIED"|"CONFIRMATION_CODE"|"confirmationCode"|"CONFIRMATION_NUMBER"|"confirmationNumber"|"ORDER_NUMBER"|"orderNumber"|"RESERVATION_NUMBER"|"reservationNumber", countryCode?: string, customConfirmationCodeLabel?: record, customGateLabel?: record, customRowLabel?: record, customSeatLabel?: record, customSectionLabel?: record, dateTime?: record, ... (31 more fields)}
   --disable-expiration-notification: oneof<nothing, bool> # Indicates if notifications should explicitly be suppressed. If this field is set to true, regardless of the `messages` field, expiration notifications to the user will be suppressed. By default, this field is set to false. Currently, this can only be set for offers.
   --face-value: record # shape: {currencyCode?: string, kind?: string, micros?: string}
   --grouping-info: record # shape: {groupingId?: string, sortIndex?: int}
@@ -748,7 +757,7 @@ export def "walletobjects-event-ticket-object walletobjectseventticketobjectpatc
   --image-modules-data: list # Image module data. The maximum number of these fields displayed is 1 from object level and 1 for class object level. — item shape: {id?: string, mainImage?: record}
   --info-module-data: record # shape: {labelValueRows?: list, showLastUpdateTime?: bool}
   --kind: string # Identifies what kind of resource this is. Value: the fixed string `"walletobjects#eventTicketObject"`.
-  --linked-offer-ids: list # A list of offer objects linked to this event ticket. The offer objects must already exist. Offer object IDs should follow the format issuer ID. identifier where the former is issued by Google and latter is chosen by you.
+  --linked-offer-ids: list<string> # A list of offer objects linked to this event ticket. The offer objects must already exist. Offer object IDs should follow the format issuer ID. identifier where the former is issued by Google and latter is chosen by you.
   --links-module-data: record # shape: {uris?: list}
   --locations: list # Note: This field is currently not supported to trigger geo notifications. — item shape: {kind?: string, latitude?: float, longitude?: float}
   --messages: list # An array of messages displayed in the app. All users of this object will receive its associated messages. The maximum number of these fields is 10. — item shape: {body?: string, displayInterval?: record, header?: string, id?: string, kind?: string, localizedBody?: record, localizedHeader?: record, messageType?: "MESSAGE_TYPE_UNSPECIFIED"|"TEXT"|"text"|"EXPIRATION_NOTIFICATION"|"expirationNotification"}
@@ -769,12 +778,12 @@ export def "walletobjects-event-ticket-object walletobjectseventticketobjectpatc
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_id: $resource_id} | format pattern "/walletobjects/v1/eventTicketObject/{resource_id}") $qp)
-  let body = {"appLinkData": $app_link_data, "barcode": $barcode, "classId": $class_id, "classReference": $class_reference, "disableExpirationNotification": $disable_expiration_notification, "faceValue": $face_value, "groupingInfo": $grouping_info, "hasLinkedDevice": $has_linked_device, "hasUsers": $has_users, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "kind": $kind, "linkedOfferIds": $linked_offer_ids, "linksModuleData": $links_module_data, "locations": $locations, "messages": $messages, "passConstraints": $pass_constraints, "reservationInfo": $reservation_info, "rotatingBarcode": $rotating_barcode, "seatInfo": $seat_info, "smartTapRedemptionValue": $smart_tap_redemption_value, "state": $state, "textModulesData": $text_modules_data, "ticketHolderName": $ticket_holder_name, "ticketNumber": $ticket_number, "ticketType": $ticket_type, "validTimeInterval": $valid_time_interval, "version": $version} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/eventTicketObject/{resource_id}") $qp)
+  let req_body = {"appLinkData": $app_link_data, "barcode": $barcode, "classId": $class_id, "classReference": $class_reference, "disableExpirationNotification": $disable_expiration_notification, "faceValue": $face_value, "groupingInfo": $grouping_info, "hasLinkedDevice": $has_linked_device, "hasUsers": $has_users, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "kind": $kind, "linkedOfferIds": $linked_offer_ids, "linksModuleData": $links_module_data, "locations": $locations, "messages": $messages, "passConstraints": $pass_constraints, "reservationInfo": $reservation_info, "rotatingBarcode": $rotating_barcode, "seatInfo": $seat_info, "smartTapRedemptionValue": $smart_tap_redemption_value, "state": $state, "textModulesData": $text_modules_data, "ticketHolderName": $ticket_holder_name, "ticketNumber": $ticket_number, "ticketType": $ticket_type, "validTimeInterval": $valid_time_interval, "version": $version} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates the event ticket object referenced by the given object ID.
@@ -783,7 +792,7 @@ export def "walletobjects-event-ticket-object walletobjectseventticketobjectpatc
 # operationId: walletobjects.eventticketobject.update
 # --appLinkData shape: {androidAppLinkInfo?: record, iosAppLinkInfo?: record, webAppLinkInfo?: record}
 # --barcode shape: {alternateText?: string, kind?: string, renderEncoding?: "RENDER_ENCODING_UNSPECIFIED"|"UTF_8", showCodeText?: record, type?: "BARCODE_TYPE_UNSPECIFIED"|"AZTEC"|"aztec"|"CODE_39"|"code39"|"CODE_128"|"code128"|"CODABAR"|"codabar"|"DATA_MATRIX"|"dataMatrix"|"EAN_8"|"ean8"|"EAN_13"|"ean13"|"EAN13"|"ITF_14"|"itf14"|"PDF_417"|"pdf417"|"PDF417"|"QR_CODE"|"qrCode"|"qrcode"|"UPC_A"|"upcA"|"TEXT_ONLY"|"textOnly", value?: string}
-# --classReference shape: {allowMultipleUsersPerObject?: bool, callbackOptions?: record, classTemplateInfo?: record, confirmationCodeLabel?: "CONFIRMATION_CODE_LABEL_UNSPECIFIED"|"CONFIRMATION_CODE"|"confirmationCode"|"CONFIRMATION_NUMBER"|"confirmationNumber"|"ORDER_NUMBER"|"orderNumber"|"RESERVATION_NUMBER"|"reservationNumber", countryCode?: string, customConfirmationCodeLabel?: record, customGateLabel?: record, customRowLabel?: record, customSeatLabel?: record, customSectionLabel?: record, dateTime?: record, enableSmartTap?: bool, eventId?: string, eventName?: record, finePrint?: record, gateLabel?: "GATE_LABEL_UNSPECIFIED"|"GATE"|"gate"|"DOOR"|"door"|"ENTRANCE"|"entrance", heroImage?: record, hexBackgroundColor?: string, homepageUri?: record, id?: string, imageModulesData?: list, infoModuleData?: record, issuerName?: string, kind?: string, linksModuleData?: record, localizedIssuerName?: record, locations?: list, logo?: record, messages?: list, multipleDevicesAndHoldersAllowedStatus?: "STATUS_UNSPECIFIED"|"MULTIPLE_HOLDERS"|"multipleHolders"|"ONE_USER_ALL_DEVICES"|"oneUserAllDevices"|"ONE_USER_ONE_DEVICE"|"oneUserOneDevice", redemptionIssuers?: list, review?: record, reviewStatus?: "REVIEW_STATUS_UNSPECIFIED"|"UNDER_REVIEW"|"underReview"|"APPROVED"|"approved"|"REJECTED"|"rejected"|"DRAFT"|"draft", rowLabel?: "ROW_LABEL_UNSPECIFIED"|"ROW"|"row", seatLabel?: "SEAT_LABEL_UNSPECIFIED"|"SEAT"|"seat", sectionLabel?: "SECTION_LABEL_UNSPECIFIED"|"SECTION"|"section"|"THEATER"|"theater", securityAnimation?: record, textModulesData?: list, venue?: record, version?: string, viewUnlockRequirement?: "VIEW_UNLOCK_REQUIREMENT_UNSPECIFIED"|"UNLOCK_NOT_REQUIRED"|"UNLOCK_REQUIRED_TO_VIEW", wordMark?: record}
+# --classReference shape: {allowMultipleUsersPerObject?: bool, callbackOptions?: record, classTemplateInfo?: record, confirmationCodeLabel?: "CONFIRMATION_CODE_LABEL_UNSPECIFIED"|"CONFIRMATION_CODE"|"confirmationCode"|"CONFIRMATION_NUMBER"|"confirmationNumber"|"ORDER_NUMBER"|"orderNumber"|"RESERVATION_NUMBER"|"reservationNumber", countryCode?: string, customConfirmationCodeLabel?: record, customGateLabel?: record, customRowLabel?: record, customSeatLabel?: record, customSectionLabel?: record, dateTime?: record, ... (31 more fields)}
 # --faceValue shape: {currencyCode?: string, kind?: string, micros?: string}
 # --groupingInfo shape: {groupingId?: string, sortIndex?: int}
 # --heroImage shape: {contentDescription?: record, kind?: string, sourceUri?: record}
@@ -799,7 +808,7 @@ export def "walletobjects-event-ticket-object walletobjectseventticketobjectpatc
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
 # --ticketType shape: {defaultValue?: record, kind?: string, translatedValues?: list}
 # --validTimeInterval shape: {end?: record, kind?: string, start?: record}
-export def "walletobjects-event-ticket-object walletobjectseventticketobjectupdate" [
+export def "walletobjects-event-ticket-object update-by-resourceId-1" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -823,7 +832,7 @@ export def "walletobjects-event-ticket-object walletobjectseventticketobjectupda
   --app-link-data: record # shape: {androidAppLinkInfo?: record, iosAppLinkInfo?: record, webAppLinkInfo?: record}
   --barcode: record # shape: {alternateText?: string, kind?: string, renderEncoding?: "RENDER_ENCODING_UNSPECIFIED"|"UTF_8", showCodeText?: record, type?: "BARCODE_TYPE_UNSPECIFIED"|"AZTEC"|"aztec"|"CODE_39"|"code39"|"CODE_128"|"code128"|"CODABAR"|"codabar"|"DATA_MATRIX"|"dataMatrix"|"EAN_8"|"ean8"|"EAN_13"|"ean13"|"EAN13"|"ITF_14"|"itf14"|"PDF_417"|"pdf417"|"PDF417"|"QR_CODE"|"qrCode"|"qrcode"|"UPC_A"|"upcA"|"TEXT_ONLY"|"textOnly", value?: string}
   --class-id: string # Required. The class associated with this object. The class must be of the same type as this object, must already exist, and must be approved. Class IDs should follow the format issuer ID.identifier where the former is issued by Google and latter is chosen by you.
-  --class-reference: record # shape: {allowMultipleUsersPerObject?: bool, callbackOptions?: record, classTemplateInfo?: record, confirmationCodeLabel?: "CONFIRMATION_CODE_LABEL_UNSPECIFIED"|"CONFIRMATION_CODE"|"confirmationCode"|"CONFIRMATION_NUMBER"|"confirmationNumber"|"ORDER_NUMBER"|"orderNumber"|"RESERVATION_NUMBER"|"reservationNumber", countryCode?: string, customConfirmationCodeLabel?: record, customGateLabel?: record, customRowLabel?: record, customSeatLabel?: record, customSectionLabel?: record, dateTime?: record, enableSmartTap?: bool, eventId?: string, eventName?: record, finePrint?: record, gateLabel?: "GATE_LABEL_UNSPECIFIED"|"GATE"|"gate"|"DOOR"|"door"|"ENTRANCE"|"entrance", heroImage?: record, hexBackgroundColor?: string, homepageUri?: record, id?: string, imageModulesData?: list, infoModuleData?: record, issuerName?: string, kind?: string, linksModuleData?: record, localizedIssuerName?: record, locations?: list, logo?: record, messages?: list, multipleDevicesAndHoldersAllowedStatus?: "STATUS_UNSPECIFIED"|"MULTIPLE_HOLDERS"|"multipleHolders"|"ONE_USER_ALL_DEVICES"|"oneUserAllDevices"|"ONE_USER_ONE_DEVICE"|"oneUserOneDevice", redemptionIssuers?: list, review?: record, reviewStatus?: "REVIEW_STATUS_UNSPECIFIED"|"UNDER_REVIEW"|"underReview"|"APPROVED"|"approved"|"REJECTED"|"rejected"|"DRAFT"|"draft", rowLabel?: "ROW_LABEL_UNSPECIFIED"|"ROW"|"row", seatLabel?: "SEAT_LABEL_UNSPECIFIED"|"SEAT"|"seat", sectionLabel?: "SECTION_LABEL_UNSPECIFIED"|"SECTION"|"section"|"THEATER"|"theater", securityAnimation?: record, textModulesData?: list, venue?: record, version?: string, viewUnlockRequirement?: "VIEW_UNLOCK_REQUIREMENT_UNSPECIFIED"|"UNLOCK_NOT_REQUIRED"|"UNLOCK_REQUIRED_TO_VIEW", wordMark?: record}
+  --class-reference: record # shape: {allowMultipleUsersPerObject?: bool, callbackOptions?: record, classTemplateInfo?: record, confirmationCodeLabel?: "CONFIRMATION_CODE_LABEL_UNSPECIFIED"|"CONFIRMATION_CODE"|"confirmationCode"|"CONFIRMATION_NUMBER"|"confirmationNumber"|"ORDER_NUMBER"|"orderNumber"|"RESERVATION_NUMBER"|"reservationNumber", countryCode?: string, customConfirmationCodeLabel?: record, customGateLabel?: record, customRowLabel?: record, customSeatLabel?: record, customSectionLabel?: record, dateTime?: record, ... (31 more fields)}
   --disable-expiration-notification: oneof<nothing, bool> # Indicates if notifications should explicitly be suppressed. If this field is set to true, regardless of the `messages` field, expiration notifications to the user will be suppressed. By default, this field is set to false. Currently, this can only be set for offers.
   --face-value: record # shape: {currencyCode?: string, kind?: string, micros?: string}
   --grouping-info: record # shape: {groupingId?: string, sortIndex?: int}
@@ -835,7 +844,7 @@ export def "walletobjects-event-ticket-object walletobjectseventticketobjectupda
   --image-modules-data: list # Image module data. The maximum number of these fields displayed is 1 from object level and 1 for class object level. — item shape: {id?: string, mainImage?: record}
   --info-module-data: record # shape: {labelValueRows?: list, showLastUpdateTime?: bool}
   --kind: string # Identifies what kind of resource this is. Value: the fixed string `"walletobjects#eventTicketObject"`.
-  --linked-offer-ids: list # A list of offer objects linked to this event ticket. The offer objects must already exist. Offer object IDs should follow the format issuer ID. identifier where the former is issued by Google and latter is chosen by you.
+  --linked-offer-ids: list<string> # A list of offer objects linked to this event ticket. The offer objects must already exist. Offer object IDs should follow the format issuer ID. identifier where the former is issued by Google and latter is chosen by you.
   --links-module-data: record # shape: {uris?: list}
   --locations: list # Note: This field is currently not supported to trigger geo notifications. — item shape: {kind?: string, latitude?: float, longitude?: float}
   --messages: list # An array of messages displayed in the app. All users of this object will receive its associated messages. The maximum number of these fields is 10. — item shape: {body?: string, displayInterval?: record, header?: string, id?: string, kind?: string, localizedBody?: record, localizedHeader?: record, messageType?: "MESSAGE_TYPE_UNSPECIFIED"|"TEXT"|"text"|"EXPIRATION_NOTIFICATION"|"expirationNotification"}
@@ -856,12 +865,12 @@ export def "walletobjects-event-ticket-object walletobjectseventticketobjectupda
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_id: $resource_id} | format pattern "/walletobjects/v1/eventTicketObject/{resource_id}") $qp)
-  let body = {"appLinkData": $app_link_data, "barcode": $barcode, "classId": $class_id, "classReference": $class_reference, "disableExpirationNotification": $disable_expiration_notification, "faceValue": $face_value, "groupingInfo": $grouping_info, "hasLinkedDevice": $has_linked_device, "hasUsers": $has_users, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "kind": $kind, "linkedOfferIds": $linked_offer_ids, "linksModuleData": $links_module_data, "locations": $locations, "messages": $messages, "passConstraints": $pass_constraints, "reservationInfo": $reservation_info, "rotatingBarcode": $rotating_barcode, "seatInfo": $seat_info, "smartTapRedemptionValue": $smart_tap_redemption_value, "state": $state, "textModulesData": $text_modules_data, "ticketHolderName": $ticket_holder_name, "ticketNumber": $ticket_number, "ticketType": $ticket_type, "validTimeInterval": $valid_time_interval, "version": $version} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/eventTicketObject/{resource_id}") $qp)
+  let req_body = {"appLinkData": $app_link_data, "barcode": $barcode, "classId": $class_id, "classReference": $class_reference, "disableExpirationNotification": $disable_expiration_notification, "faceValue": $face_value, "groupingInfo": $grouping_info, "hasLinkedDevice": $has_linked_device, "hasUsers": $has_users, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "kind": $kind, "linkedOfferIds": $linked_offer_ids, "linksModuleData": $links_module_data, "locations": $locations, "messages": $messages, "passConstraints": $pass_constraints, "reservationInfo": $reservation_info, "rotatingBarcode": $rotating_barcode, "seatInfo": $seat_info, "smartTapRedemptionValue": $smart_tap_redemption_value, "state": $state, "textModulesData": $text_modules_data, "ticketHolderName": $ticket_holder_name, "ticketNumber": $ticket_number, "ticketType": $ticket_type, "validTimeInterval": $valid_time_interval, "version": $version} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Adds a message to the event ticket object referenced by the given object ID.
@@ -869,7 +878,7 @@ export def "walletobjects-event-ticket-object walletobjectseventticketobjectupda
 # POST /walletobjects/v1/eventTicketObject/{resourceId}/addMessage
 # operationId: walletobjects.eventticketobject.addmessage
 # --message shape: {body?: string, displayInterval?: record, header?: string, id?: string, kind?: string, localizedBody?: record, localizedHeader?: record, messageType?: "MESSAGE_TYPE_UNSPECIFIED"|"TEXT"|"text"|"EXPIRATION_NOTIFICATION"|"expirationNotification"}
-export def "walletobjects-event-ticket-object-add-message walletobjectseventticketobjectaddmessage" [
+export def "walletobjects-event-ticket-object-add-message create-addmessage" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -896,20 +905,20 @@ export def "walletobjects-event-ticket-object-add-message walletobjectseventtick
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_id: $resource_id} | format pattern "/walletobjects/v1/eventTicketObject/{resource_id}/addMessage") $qp)
-  let body = {"message": $message} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/eventTicketObject/{resource_id}/addMessage") $qp)
+  let req_body = {"message": $message} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Modifies linked offer objects for the event ticket object with the given ID.
 #
 # POST /walletobjects/v1/eventTicketObject/{resourceId}/modifyLinkedOfferObjects
 # operationId: walletobjects.eventticketobject.modifylinkedofferobjects
-# --linkedOfferObjectIds shape: {addLinkedOfferObjectIds?: list, removeLinkedOfferObjectIds?: list}
-export def "walletobjects-event-ticket-object-modify-linked-offer-objects walletobjectseventticketobjectmodifylinkedofferobjects" [
+# --linkedOfferObjectIds shape: {addLinkedOfferObjectIds?: list<string>, removeLinkedOfferObjectIds?: list<string>}
+export def "walletobjects-event-ticket-object-modify-linked-offer-objects create-modifylinkedofferobjects" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -930,25 +939,25 @@ export def "walletobjects-event-ticket-object-modify-linked-offer-objects wallet
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --linked-offer-object-ids: record # shape: {addLinkedOfferObjectIds?: list, removeLinkedOfferObjectIds?: list}
+  --linked-offer-object-ids: record # shape: {addLinkedOfferObjectIds?: list<string>, removeLinkedOfferObjectIds?: list<string>}
 ]: any -> record<appLinkData: record<androidAppLinkInfo: record<appLogoImage: record, appTarget: record, description: record, title: record>, iosAppLinkInfo: record<appLogoImage: record, appTarget: record, description: record, title: record>, webAppLinkInfo: record<appLogoImage: record, appTarget: record, description: record, title: record>>, barcode: record<alternateText: string, kind: string, renderEncoding: string, showCodeText: record<defaultValue: record, kind: string, translatedValues: list>, type: string, value: string>, classId: string, classReference: record<allowMultipleUsersPerObject: bool, callbackOptions: record<updateRequestUrl: string, url: string>, classTemplateInfo: record<cardBarcodeSectionDetails: record, cardTemplateOverride: record, detailsTemplateOverride: record, listTemplateOverride: record>, confirmationCodeLabel: string, countryCode: string, customConfirmationCodeLabel: record<defaultValue: record, kind: string, translatedValues: list>, customGateLabel: record<defaultValue: record, kind: string, translatedValues: list>, customRowLabel: record<defaultValue: record, kind: string, translatedValues: list>, customSeatLabel: record<defaultValue: record, kind: string, translatedValues: list>, customSectionLabel: record<defaultValue: record, kind: string, translatedValues: list>, dateTime: record<customDoorsOpenLabel: record, doorsOpen: string, doorsOpenLabel: string, end: string, kind: string, start: string>, enableSmartTap: bool, eventId: string, eventName: record<defaultValue: record, kind: string, translatedValues: list>, finePrint: record<defaultValue: record, kind: string, translatedValues: list>, gateLabel: string, heroImage: record<contentDescription: record, kind: string, sourceUri: record>, hexBackgroundColor: string, homepageUri: record<description: string, id: string, kind: string, localizedDescription: record, uri: string>, id: string, imageModulesData: list<record>, infoModuleData: record<labelValueRows: list, showLastUpdateTime: bool>, issuerName: string, kind: string, linksModuleData: record<uris: list>, localizedIssuerName: record<defaultValue: record, kind: string, translatedValues: list>, locations: list<record>, logo: record<contentDescription: record, kind: string, sourceUri: record>, messages: list<record>, multipleDevicesAndHoldersAllowedStatus: string, redemptionIssuers: list<string>, review: record<comments: string>, reviewStatus: string, rowLabel: string, seatLabel: string, sectionLabel: string, securityAnimation: record<animationType: string>, textModulesData: list<record>, venue: record<address: record, kind: string, name: record>, version: string, viewUnlockRequirement: string, wordMark: record<contentDescription: record, kind: string, sourceUri: record>>, disableExpirationNotification: bool, faceValue: record<currencyCode: string, kind: string, micros: string>, groupingInfo: record<groupingId: string, sortIndex: int>, hasLinkedDevice: bool, hasUsers: bool, heroImage: record<contentDescription: record<defaultValue: record, kind: string, translatedValues: list>, kind: string, sourceUri: record<description: string, localizedDescription: record, uri: string>>, hexBackgroundColor: string, id: string, imageModulesData: table<id: string, mainImage: record>, infoModuleData: record<labelValueRows: list<record>, showLastUpdateTime: bool>, kind: string, linkedOfferIds: list<string>, linksModuleData: record<uris: list<record>>, locations: table<kind: string, latitude: float, longitude: float>, messages: table<body: string, displayInterval: record, header: string, id: string, kind: string, localizedBody: record, localizedHeader: record, messageType: string>, passConstraints: record<screenshotEligibility: string>, reservationInfo: record<confirmationCode: string, kind: string>, rotatingBarcode: record<alternateText: string, renderEncoding: string, showCodeText: record<defaultValue: record, kind: string, translatedValues: list>, totpDetails: record<algorithm: string, parameters: list, periodMillis: string>, type: string, valuePattern: string>, seatInfo: record<gate: record<defaultValue: record, kind: string, translatedValues: list>, kind: string, row: record<defaultValue: record, kind: string, translatedValues: list>, seat: record<defaultValue: record, kind: string, translatedValues: list>, section: record<defaultValue: record, kind: string, translatedValues: list>>, smartTapRedemptionValue: string, state: string, textModulesData: table<body: string, header: string, id: string, localizedBody: record, localizedHeader: record>, ticketHolderName: string, ticketNumber: string, ticketType: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, validTimeInterval: record<end: record<date: string>, kind: string, start: record<date: string>>, version: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_id: $resource_id} | format pattern "/walletobjects/v1/eventTicketObject/{resource_id}/modifyLinkedOfferObjects") $qp)
-  let body = {"linkedOfferObjectIds": $linked_offer_object_ids} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/eventTicketObject/{resource_id}/modifyLinkedOfferObjects") $qp)
+  let req_body = {"linkedOfferObjectIds": $linked_offer_object_ids} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns a list of all flight classes for a given issuer ID.
 #
 # GET /walletobjects/v1/flightClass
 # operationId: walletobjects.flightclass.list
-export def "walletobjects-flight-class walletobjectsflightclasslist" [
+export def "walletobjects-flight-class list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1003,7 +1012,7 @@ export def "walletobjects-flight-class walletobjectsflightclasslist" [
 # --securityAnimation shape: {animationType?: "ANIMATION_UNSPECIFIED"|"FOIL_SHIMMER"|"foilShimmer"}
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
 # --wordMark shape: {contentDescription?: record, kind?: string, sourceUri?: record}
-export def "walletobjects-flight-class walletobjectsflightclassinsert" [
+export def "walletobjects-flight-class create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1053,7 +1062,7 @@ export def "walletobjects-flight-class walletobjectsflightclassinsert" [
   --messages: list # An array of messages displayed in the app. All users of this object will receive its associated messages. The maximum number of these fields is 10. — item shape: {body?: string, displayInterval?: record, header?: string, id?: string, kind?: string, localizedBody?: record, localizedHeader?: record, messageType?: "MESSAGE_TYPE_UNSPECIFIED"|"TEXT"|"text"|"EXPIRATION_NOTIFICATION"|"expirationNotification"}
   --multiple-devices-and-holders-allowed-status: string@multiple-devices-and-holders-allowed-status-completer # Identifies whether multiple users and devices will save the same object referencing this class.
   --origin: record # shape: {airportIataCode?: string, airportNameOverride?: record, gate?: string, kind?: string, terminal?: string}
-  --redemption-issuers: list # Identifies which redemption issuers can redeem the pass over Smart Tap. Redemption issuers are identified by their issuer ID. Redemption issuers must have at least one Smart Tap key configured. The `enableSmartTap` and object level `smartTapRedemptionLevel` fields must also be set up correctly in order for a pass to support Smart Tap.
+  --redemption-issuers: list<string> # Identifies which redemption issuers can redeem the pass over Smart Tap. Redemption issuers are identified by their issuer ID. Redemption issuers must have at least one Smart Tap key configured. The `enableSmartTap` and object level `smartTapRedemptionLevel` fields must also be set up correctly in order for a pass to support Smart Tap.
   --review: record # shape: {comments?: string}
   --review-status: string@review-status-completer # Required. The status of the class. This field can be set to `draft` or `underReview` using the insert, patch, or update API calls. Once the review state is changed from `draft` it may not be changed back to `draft`. You should keep this field to `draft` when the class is under development. A `draft` class cannot be used to create any object. You should set this field to `underReview` when you believe the class is ready for use. The platform will automatically set this field to `approved` and it can be immediately used to create or migrate objects. When updating an already `approved` class you should keep setting this field to `underReview`.
   --security-animation: record # shape: {animationType?: "ANIMATION_UNSPECIFIED"|"FOIL_SHIMMER"|"foilShimmer"}
@@ -1067,18 +1076,18 @@ export def "walletobjects-flight-class walletobjectsflightclassinsert" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/walletobjects/v1/flightClass" $qp)
-  let body = {"allowMultipleUsersPerObject": $allow_multiple_users_per_object, "boardingAndSeatingPolicy": $boarding_and_seating_policy, "callbackOptions": $callback_options, "classTemplateInfo": $class_template_info, "countryCode": $country_code, "destination": $destination, "enableSmartTap": $enable_smart_tap, "flightHeader": $flight_header, "flightStatus": $flight_status, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "homepageUri": $homepage_uri, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "issuerName": $issuer_name, "kind": $kind, "languageOverride": $language_override, "linksModuleData": $links_module_data, "localBoardingDateTime": $local_boarding_date_time, "localEstimatedOrActualArrivalDateTime": $local_estimated_or_actual_arrival_date_time, "localEstimatedOrActualDepartureDateTime": $local_estimated_or_actual_departure_date_time, "localGateClosingDateTime": $local_gate_closing_date_time, "localScheduledArrivalDateTime": $local_scheduled_arrival_date_time, "localScheduledDepartureDateTime": $local_scheduled_departure_date_time, "localizedIssuerName": $localized_issuer_name, "locations": $locations, "messages": $messages, "multipleDevicesAndHoldersAllowedStatus": $multiple_devices_and_holders_allowed_status, "origin": $origin, "redemptionIssuers": $redemption_issuers, "review": $review, "reviewStatus": $review_status, "securityAnimation": $security_animation, "textModulesData": $text_modules_data, "version": $version, "viewUnlockRequirement": $view_unlock_requirement, "wordMark": $word_mark} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"allowMultipleUsersPerObject": $allow_multiple_users_per_object, "boardingAndSeatingPolicy": $boarding_and_seating_policy, "callbackOptions": $callback_options, "classTemplateInfo": $class_template_info, "countryCode": $country_code, "destination": $destination, "enableSmartTap": $enable_smart_tap, "flightHeader": $flight_header, "flightStatus": $flight_status, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "homepageUri": $homepage_uri, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "issuerName": $issuer_name, "kind": $kind, "languageOverride": $language_override, "linksModuleData": $links_module_data, "localBoardingDateTime": $local_boarding_date_time, "localEstimatedOrActualArrivalDateTime": $local_estimated_or_actual_arrival_date_time, "localEstimatedOrActualDepartureDateTime": $local_estimated_or_actual_departure_date_time, "localGateClosingDateTime": $local_gate_closing_date_time, "localScheduledArrivalDateTime": $local_scheduled_arrival_date_time, "localScheduledDepartureDateTime": $local_scheduled_departure_date_time, "localizedIssuerName": $localized_issuer_name, "locations": $locations, "messages": $messages, "multipleDevicesAndHoldersAllowedStatus": $multiple_devices_and_holders_allowed_status, "origin": $origin, "redemptionIssuers": $redemption_issuers, "review": $review, "reviewStatus": $review_status, "securityAnimation": $security_animation, "textModulesData": $text_modules_data, "version": $version, "viewUnlockRequirement": $view_unlock_requirement, "wordMark": $word_mark} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns the flight class with the given class ID.
 #
 # GET /walletobjects/v1/flightClass/{resourceId}
 # operationId: walletobjects.flightclass.get
-export def "walletobjects-flight-class walletobjectsflightclassget" [
+export def "walletobjects-flight-class get" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1103,7 +1112,7 @@ export def "walletobjects-flight-class walletobjectsflightclassget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_id: $resource_id} | format pattern "/walletobjects/v1/flightClass/{resource_id}") $qp)
+  let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/flightClass/{resource_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1131,7 +1140,7 @@ export def "walletobjects-flight-class walletobjectsflightclassget" [
 # --securityAnimation shape: {animationType?: "ANIMATION_UNSPECIFIED"|"FOIL_SHIMMER"|"foilShimmer"}
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
 # --wordMark shape: {contentDescription?: record, kind?: string, sourceUri?: record}
-export def "walletobjects-flight-class walletobjectsflightclasspatch" [
+export def "walletobjects-flight-class update-by-resourceId" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1182,7 +1191,7 @@ export def "walletobjects-flight-class walletobjectsflightclasspatch" [
   --messages: list # An array of messages displayed in the app. All users of this object will receive its associated messages. The maximum number of these fields is 10. — item shape: {body?: string, displayInterval?: record, header?: string, id?: string, kind?: string, localizedBody?: record, localizedHeader?: record, messageType?: "MESSAGE_TYPE_UNSPECIFIED"|"TEXT"|"text"|"EXPIRATION_NOTIFICATION"|"expirationNotification"}
   --multiple-devices-and-holders-allowed-status: string@multiple-devices-and-holders-allowed-status-completer # Identifies whether multiple users and devices will save the same object referencing this class.
   --origin: record # shape: {airportIataCode?: string, airportNameOverride?: record, gate?: string, kind?: string, terminal?: string}
-  --redemption-issuers: list # Identifies which redemption issuers can redeem the pass over Smart Tap. Redemption issuers are identified by their issuer ID. Redemption issuers must have at least one Smart Tap key configured. The `enableSmartTap` and object level `smartTapRedemptionLevel` fields must also be set up correctly in order for a pass to support Smart Tap.
+  --redemption-issuers: list<string> # Identifies which redemption issuers can redeem the pass over Smart Tap. Redemption issuers are identified by their issuer ID. Redemption issuers must have at least one Smart Tap key configured. The `enableSmartTap` and object level `smartTapRedemptionLevel` fields must also be set up correctly in order for a pass to support Smart Tap.
   --review: record # shape: {comments?: string}
   --review-status: string@review-status-completer # Required. The status of the class. This field can be set to `draft` or `underReview` using the insert, patch, or update API calls. Once the review state is changed from `draft` it may not be changed back to `draft`. You should keep this field to `draft` when the class is under development. A `draft` class cannot be used to create any object. You should set this field to `underReview` when you believe the class is ready for use. The platform will automatically set this field to `approved` and it can be immediately used to create or migrate objects. When updating an already `approved` class you should keep setting this field to `underReview`.
   --security-animation: record # shape: {animationType?: "ANIMATION_UNSPECIFIED"|"FOIL_SHIMMER"|"foilShimmer"}
@@ -1195,12 +1204,12 @@ export def "walletobjects-flight-class walletobjectsflightclasspatch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_id: $resource_id} | format pattern "/walletobjects/v1/flightClass/{resource_id}") $qp)
-  let body = {"allowMultipleUsersPerObject": $allow_multiple_users_per_object, "boardingAndSeatingPolicy": $boarding_and_seating_policy, "callbackOptions": $callback_options, "classTemplateInfo": $class_template_info, "countryCode": $country_code, "destination": $destination, "enableSmartTap": $enable_smart_tap, "flightHeader": $flight_header, "flightStatus": $flight_status, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "homepageUri": $homepage_uri, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "issuerName": $issuer_name, "kind": $kind, "languageOverride": $language_override, "linksModuleData": $links_module_data, "localBoardingDateTime": $local_boarding_date_time, "localEstimatedOrActualArrivalDateTime": $local_estimated_or_actual_arrival_date_time, "localEstimatedOrActualDepartureDateTime": $local_estimated_or_actual_departure_date_time, "localGateClosingDateTime": $local_gate_closing_date_time, "localScheduledArrivalDateTime": $local_scheduled_arrival_date_time, "localScheduledDepartureDateTime": $local_scheduled_departure_date_time, "localizedIssuerName": $localized_issuer_name, "locations": $locations, "messages": $messages, "multipleDevicesAndHoldersAllowedStatus": $multiple_devices_and_holders_allowed_status, "origin": $origin, "redemptionIssuers": $redemption_issuers, "review": $review, "reviewStatus": $review_status, "securityAnimation": $security_animation, "textModulesData": $text_modules_data, "version": $version, "viewUnlockRequirement": $view_unlock_requirement, "wordMark": $word_mark} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/flightClass/{resource_id}") $qp)
+  let req_body = {"allowMultipleUsersPerObject": $allow_multiple_users_per_object, "boardingAndSeatingPolicy": $boarding_and_seating_policy, "callbackOptions": $callback_options, "classTemplateInfo": $class_template_info, "countryCode": $country_code, "destination": $destination, "enableSmartTap": $enable_smart_tap, "flightHeader": $flight_header, "flightStatus": $flight_status, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "homepageUri": $homepage_uri, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "issuerName": $issuer_name, "kind": $kind, "languageOverride": $language_override, "linksModuleData": $links_module_data, "localBoardingDateTime": $local_boarding_date_time, "localEstimatedOrActualArrivalDateTime": $local_estimated_or_actual_arrival_date_time, "localEstimatedOrActualDepartureDateTime": $local_estimated_or_actual_departure_date_time, "localGateClosingDateTime": $local_gate_closing_date_time, "localScheduledArrivalDateTime": $local_scheduled_arrival_date_time, "localScheduledDepartureDateTime": $local_scheduled_departure_date_time, "localizedIssuerName": $localized_issuer_name, "locations": $locations, "messages": $messages, "multipleDevicesAndHoldersAllowedStatus": $multiple_devices_and_holders_allowed_status, "origin": $origin, "redemptionIssuers": $redemption_issuers, "review": $review, "reviewStatus": $review_status, "securityAnimation": $security_animation, "textModulesData": $text_modules_data, "version": $version, "viewUnlockRequirement": $view_unlock_requirement, "wordMark": $word_mark} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates the flight class referenced by the given class ID.
@@ -1225,7 +1234,7 @@ export def "walletobjects-flight-class walletobjectsflightclasspatch" [
 # --securityAnimation shape: {animationType?: "ANIMATION_UNSPECIFIED"|"FOIL_SHIMMER"|"foilShimmer"}
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
 # --wordMark shape: {contentDescription?: record, kind?: string, sourceUri?: record}
-export def "walletobjects-flight-class walletobjectsflightclassupdate" [
+export def "walletobjects-flight-class update-by-resourceId-1" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1276,7 +1285,7 @@ export def "walletobjects-flight-class walletobjectsflightclassupdate" [
   --messages: list # An array of messages displayed in the app. All users of this object will receive its associated messages. The maximum number of these fields is 10. — item shape: {body?: string, displayInterval?: record, header?: string, id?: string, kind?: string, localizedBody?: record, localizedHeader?: record, messageType?: "MESSAGE_TYPE_UNSPECIFIED"|"TEXT"|"text"|"EXPIRATION_NOTIFICATION"|"expirationNotification"}
   --multiple-devices-and-holders-allowed-status: string@multiple-devices-and-holders-allowed-status-completer # Identifies whether multiple users and devices will save the same object referencing this class.
   --origin: record # shape: {airportIataCode?: string, airportNameOverride?: record, gate?: string, kind?: string, terminal?: string}
-  --redemption-issuers: list # Identifies which redemption issuers can redeem the pass over Smart Tap. Redemption issuers are identified by their issuer ID. Redemption issuers must have at least one Smart Tap key configured. The `enableSmartTap` and object level `smartTapRedemptionLevel` fields must also be set up correctly in order for a pass to support Smart Tap.
+  --redemption-issuers: list<string> # Identifies which redemption issuers can redeem the pass over Smart Tap. Redemption issuers are identified by their issuer ID. Redemption issuers must have at least one Smart Tap key configured. The `enableSmartTap` and object level `smartTapRedemptionLevel` fields must also be set up correctly in order for a pass to support Smart Tap.
   --review: record # shape: {comments?: string}
   --review-status: string@review-status-completer # Required. The status of the class. This field can be set to `draft` or `underReview` using the insert, patch, or update API calls. Once the review state is changed from `draft` it may not be changed back to `draft`. You should keep this field to `draft` when the class is under development. A `draft` class cannot be used to create any object. You should set this field to `underReview` when you believe the class is ready for use. The platform will automatically set this field to `approved` and it can be immediately used to create or migrate objects. When updating an already `approved` class you should keep setting this field to `underReview`.
   --security-animation: record # shape: {animationType?: "ANIMATION_UNSPECIFIED"|"FOIL_SHIMMER"|"foilShimmer"}
@@ -1289,12 +1298,12 @@ export def "walletobjects-flight-class walletobjectsflightclassupdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_id: $resource_id} | format pattern "/walletobjects/v1/flightClass/{resource_id}") $qp)
-  let body = {"allowMultipleUsersPerObject": $allow_multiple_users_per_object, "boardingAndSeatingPolicy": $boarding_and_seating_policy, "callbackOptions": $callback_options, "classTemplateInfo": $class_template_info, "countryCode": $country_code, "destination": $destination, "enableSmartTap": $enable_smart_tap, "flightHeader": $flight_header, "flightStatus": $flight_status, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "homepageUri": $homepage_uri, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "issuerName": $issuer_name, "kind": $kind, "languageOverride": $language_override, "linksModuleData": $links_module_data, "localBoardingDateTime": $local_boarding_date_time, "localEstimatedOrActualArrivalDateTime": $local_estimated_or_actual_arrival_date_time, "localEstimatedOrActualDepartureDateTime": $local_estimated_or_actual_departure_date_time, "localGateClosingDateTime": $local_gate_closing_date_time, "localScheduledArrivalDateTime": $local_scheduled_arrival_date_time, "localScheduledDepartureDateTime": $local_scheduled_departure_date_time, "localizedIssuerName": $localized_issuer_name, "locations": $locations, "messages": $messages, "multipleDevicesAndHoldersAllowedStatus": $multiple_devices_and_holders_allowed_status, "origin": $origin, "redemptionIssuers": $redemption_issuers, "review": $review, "reviewStatus": $review_status, "securityAnimation": $security_animation, "textModulesData": $text_modules_data, "version": $version, "viewUnlockRequirement": $view_unlock_requirement, "wordMark": $word_mark} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/flightClass/{resource_id}") $qp)
+  let req_body = {"allowMultipleUsersPerObject": $allow_multiple_users_per_object, "boardingAndSeatingPolicy": $boarding_and_seating_policy, "callbackOptions": $callback_options, "classTemplateInfo": $class_template_info, "countryCode": $country_code, "destination": $destination, "enableSmartTap": $enable_smart_tap, "flightHeader": $flight_header, "flightStatus": $flight_status, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "homepageUri": $homepage_uri, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "issuerName": $issuer_name, "kind": $kind, "languageOverride": $language_override, "linksModuleData": $links_module_data, "localBoardingDateTime": $local_boarding_date_time, "localEstimatedOrActualArrivalDateTime": $local_estimated_or_actual_arrival_date_time, "localEstimatedOrActualDepartureDateTime": $local_estimated_or_actual_departure_date_time, "localGateClosingDateTime": $local_gate_closing_date_time, "localScheduledArrivalDateTime": $local_scheduled_arrival_date_time, "localScheduledDepartureDateTime": $local_scheduled_departure_date_time, "localizedIssuerName": $localized_issuer_name, "locations": $locations, "messages": $messages, "multipleDevicesAndHoldersAllowedStatus": $multiple_devices_and_holders_allowed_status, "origin": $origin, "redemptionIssuers": $redemption_issuers, "review": $review, "reviewStatus": $review_status, "securityAnimation": $security_animation, "textModulesData": $text_modules_data, "version": $version, "viewUnlockRequirement": $view_unlock_requirement, "wordMark": $word_mark} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Adds a message to the flight class referenced by the given class ID.
@@ -1302,7 +1311,7 @@ export def "walletobjects-flight-class walletobjectsflightclassupdate" [
 # POST /walletobjects/v1/flightClass/{resourceId}/addMessage
 # operationId: walletobjects.flightclass.addmessage
 # --message shape: {body?: string, displayInterval?: record, header?: string, id?: string, kind?: string, localizedBody?: record, localizedHeader?: record, messageType?: "MESSAGE_TYPE_UNSPECIFIED"|"TEXT"|"text"|"EXPIRATION_NOTIFICATION"|"expirationNotification"}
-export def "walletobjects-flight-class-add-message walletobjectsflightclassaddmessage" [
+export def "walletobjects-flight-class-add-message create-addmessage" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1329,19 +1338,19 @@ export def "walletobjects-flight-class-add-message walletobjectsflightclassaddme
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_id: $resource_id} | format pattern "/walletobjects/v1/flightClass/{resource_id}/addMessage") $qp)
-  let body = {"message": $message} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/flightClass/{resource_id}/addMessage") $qp)
+  let req_body = {"message": $message} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns a list of all flight objects for a given issuer ID.
 #
 # GET /walletobjects/v1/flightObject
 # operationId: walletobjects.flightobject.list
-export def "walletobjects-flight-object walletobjectsflightobjectlist" [
+export def "walletobjects-flight-object list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1381,7 +1390,7 @@ export def "walletobjects-flight-object walletobjectsflightobjectlist" [
 # --appLinkData shape: {androidAppLinkInfo?: record, iosAppLinkInfo?: record, webAppLinkInfo?: record}
 # --barcode shape: {alternateText?: string, kind?: string, renderEncoding?: "RENDER_ENCODING_UNSPECIFIED"|"UTF_8", showCodeText?: record, type?: "BARCODE_TYPE_UNSPECIFIED"|"AZTEC"|"aztec"|"CODE_39"|"code39"|"CODE_128"|"code128"|"CODABAR"|"codabar"|"DATA_MATRIX"|"dataMatrix"|"EAN_8"|"ean8"|"EAN_13"|"ean13"|"EAN13"|"ITF_14"|"itf14"|"PDF_417"|"pdf417"|"PDF417"|"QR_CODE"|"qrCode"|"qrcode"|"UPC_A"|"upcA"|"TEXT_ONLY"|"textOnly", value?: string}
 # --boardingAndSeatingInfo shape: {boardingDoor?: "BOARDING_DOOR_UNSPECIFIED"|"FRONT"|"front"|"BACK"|"back", boardingGroup?: string, boardingPosition?: string, boardingPrivilegeImage?: record, kind?: string, seatAssignment?: record, seatClass?: string, seatNumber?: string, sequenceNumber?: string}
-# --classReference shape: {allowMultipleUsersPerObject?: bool, boardingAndSeatingPolicy?: record, callbackOptions?: record, classTemplateInfo?: record, countryCode?: string, destination?: record, enableSmartTap?: bool, flightHeader?: record, flightStatus?: "FLIGHT_STATUS_UNSPECIFIED"|"SCHEDULED"|"scheduled"|"ACTIVE"|"active"|"LANDED"|"landed"|"CANCELLED"|"cancelled"|"REDIRECTED"|"redirected"|"DIVERTED"|"diverted", heroImage?: record, hexBackgroundColor?: string, homepageUri?: record, id?: string, imageModulesData?: list, infoModuleData?: record, issuerName?: string, kind?: string, languageOverride?: string, linksModuleData?: record, localBoardingDateTime?: string, localEstimatedOrActualArrivalDateTime?: string, localEstimatedOrActualDepartureDateTime?: string, localGateClosingDateTime?: string, localScheduledArrivalDateTime?: string, localScheduledDepartureDateTime?: string, localizedIssuerName?: record, locations?: list, messages?: list, multipleDevicesAndHoldersAllowedStatus?: "STATUS_UNSPECIFIED"|"MULTIPLE_HOLDERS"|"multipleHolders"|"ONE_USER_ALL_DEVICES"|"oneUserAllDevices"|"ONE_USER_ONE_DEVICE"|"oneUserOneDevice", origin?: record, redemptionIssuers?: list, review?: record, reviewStatus?: "REVIEW_STATUS_UNSPECIFIED"|"UNDER_REVIEW"|"underReview"|"APPROVED"|"approved"|"REJECTED"|"rejected"|"DRAFT"|"draft", securityAnimation?: record, textModulesData?: list, version?: string, viewUnlockRequirement?: "VIEW_UNLOCK_REQUIREMENT_UNSPECIFIED"|"UNLOCK_NOT_REQUIRED"|"UNLOCK_REQUIRED_TO_VIEW", wordMark?: record}
+# --classReference shape: {allowMultipleUsersPerObject?: bool, boardingAndSeatingPolicy?: record, callbackOptions?: record, classTemplateInfo?: record, countryCode?: string, destination?: record, enableSmartTap?: bool, flightHeader?: record, flightStatus?: "FLIGHT_STATUS_UNSPECIFIED"|"SCHEDULED"|"scheduled"|"ACTIVE"|"active"|"LANDED"|"landed"|"CANCELLED"|"cancelled"|"REDIRECTED"|"redirected"|"DIVERTED"|"diverted", heroImage?: record, hexBackgroundColor?: string, homepageUri?: record, id?: string, imageModulesData?: list, ... (24 more fields)}
 # --groupingInfo shape: {groupingId?: string, sortIndex?: int}
 # --heroImage shape: {contentDescription?: record, kind?: string, sourceUri?: record}
 # --imageModulesData item shape: {id?: string, mainImage?: record}
@@ -1395,7 +1404,7 @@ export def "walletobjects-flight-object walletobjectsflightobjectlist" [
 # --securityProgramLogo shape: {contentDescription?: record, kind?: string, sourceUri?: record}
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
 # --validTimeInterval shape: {end?: record, kind?: string, start?: record}
-export def "walletobjects-flight-object walletobjectsflightobjectinsert" [
+export def "walletobjects-flight-object create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1419,7 +1428,7 @@ export def "walletobjects-flight-object walletobjectsflightobjectinsert" [
   --barcode: record # shape: {alternateText?: string, kind?: string, renderEncoding?: "RENDER_ENCODING_UNSPECIFIED"|"UTF_8", showCodeText?: record, type?: "BARCODE_TYPE_UNSPECIFIED"|"AZTEC"|"aztec"|"CODE_39"|"code39"|"CODE_128"|"code128"|"CODABAR"|"codabar"|"DATA_MATRIX"|"dataMatrix"|"EAN_8"|"ean8"|"EAN_13"|"ean13"|"EAN13"|"ITF_14"|"itf14"|"PDF_417"|"pdf417"|"PDF417"|"QR_CODE"|"qrCode"|"qrcode"|"UPC_A"|"upcA"|"TEXT_ONLY"|"textOnly", value?: string}
   --boarding-and-seating-info: record # shape: {boardingDoor?: "BOARDING_DOOR_UNSPECIFIED"|"FRONT"|"front"|"BACK"|"back", boardingGroup?: string, boardingPosition?: string, boardingPrivilegeImage?: record, kind?: string, seatAssignment?: record, seatClass?: string, seatNumber?: string, sequenceNumber?: string}
   --class-id: string # Required. The class associated with this object. The class must be of the same type as this object, must already exist, and must be approved. Class IDs should follow the format issuer ID.identifier where the former is issued by Google and latter is chosen by you.
-  --class-reference: record # shape: {allowMultipleUsersPerObject?: bool, boardingAndSeatingPolicy?: record, callbackOptions?: record, classTemplateInfo?: record, countryCode?: string, destination?: record, enableSmartTap?: bool, flightHeader?: record, flightStatus?: "FLIGHT_STATUS_UNSPECIFIED"|"SCHEDULED"|"scheduled"|"ACTIVE"|"active"|"LANDED"|"landed"|"CANCELLED"|"cancelled"|"REDIRECTED"|"redirected"|"DIVERTED"|"diverted", heroImage?: record, hexBackgroundColor?: string, homepageUri?: record, id?: string, imageModulesData?: list, infoModuleData?: record, issuerName?: string, kind?: string, languageOverride?: string, linksModuleData?: record, localBoardingDateTime?: string, localEstimatedOrActualArrivalDateTime?: string, localEstimatedOrActualDepartureDateTime?: string, localGateClosingDateTime?: string, localScheduledArrivalDateTime?: string, localScheduledDepartureDateTime?: string, localizedIssuerName?: record, locations?: list, messages?: list, multipleDevicesAndHoldersAllowedStatus?: "STATUS_UNSPECIFIED"|"MULTIPLE_HOLDERS"|"multipleHolders"|"ONE_USER_ALL_DEVICES"|"oneUserAllDevices"|"ONE_USER_ONE_DEVICE"|"oneUserOneDevice", origin?: record, redemptionIssuers?: list, review?: record, reviewStatus?: "REVIEW_STATUS_UNSPECIFIED"|"UNDER_REVIEW"|"underReview"|"APPROVED"|"approved"|"REJECTED"|"rejected"|"DRAFT"|"draft", securityAnimation?: record, textModulesData?: list, version?: string, viewUnlockRequirement?: "VIEW_UNLOCK_REQUIREMENT_UNSPECIFIED"|"UNLOCK_NOT_REQUIRED"|"UNLOCK_REQUIRED_TO_VIEW", wordMark?: record}
+  --class-reference: record # shape: {allowMultipleUsersPerObject?: bool, boardingAndSeatingPolicy?: record, callbackOptions?: record, classTemplateInfo?: record, countryCode?: string, destination?: record, enableSmartTap?: bool, flightHeader?: record, flightStatus?: "FLIGHT_STATUS_UNSPECIFIED"|"SCHEDULED"|"scheduled"|"ACTIVE"|"active"|"LANDED"|"landed"|"CANCELLED"|"cancelled"|"REDIRECTED"|"redirected"|"DIVERTED"|"diverted", heroImage?: record, hexBackgroundColor?: string, homepageUri?: record, id?: string, imageModulesData?: list, ... (24 more fields)}
   --disable-expiration-notification: oneof<nothing, bool> # Indicates if notifications should explicitly be suppressed. If this field is set to true, regardless of the `messages` field, expiration notifications to the user will be suppressed. By default, this field is set to false. Currently, this can only be set for Flights.
   --grouping-info: record # shape: {groupingId?: string, sortIndex?: int}
   --has-linked-device: oneof<nothing, bool> # Whether this object is currently linked to a single device. This field is set by the platform when a user saves the object, linking it to their device. Intended for use by select partners. Contact support for additional information.
@@ -1449,18 +1458,18 @@ export def "walletobjects-flight-object walletobjectsflightobjectinsert" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/walletobjects/v1/flightObject" $qp)
-  let body = {"appLinkData": $app_link_data, "barcode": $barcode, "boardingAndSeatingInfo": $boarding_and_seating_info, "classId": $class_id, "classReference": $class_reference, "disableExpirationNotification": $disable_expiration_notification, "groupingInfo": $grouping_info, "hasLinkedDevice": $has_linked_device, "hasUsers": $has_users, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "kind": $kind, "linksModuleData": $links_module_data, "locations": $locations, "messages": $messages, "passConstraints": $pass_constraints, "passengerName": $passenger_name, "reservationInfo": $reservation_info, "rotatingBarcode": $rotating_barcode, "securityProgramLogo": $security_program_logo, "smartTapRedemptionValue": $smart_tap_redemption_value, "state": $state, "textModulesData": $text_modules_data, "validTimeInterval": $valid_time_interval, "version": $version} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"appLinkData": $app_link_data, "barcode": $barcode, "boardingAndSeatingInfo": $boarding_and_seating_info, "classId": $class_id, "classReference": $class_reference, "disableExpirationNotification": $disable_expiration_notification, "groupingInfo": $grouping_info, "hasLinkedDevice": $has_linked_device, "hasUsers": $has_users, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "kind": $kind, "linksModuleData": $links_module_data, "locations": $locations, "messages": $messages, "passConstraints": $pass_constraints, "passengerName": $passenger_name, "reservationInfo": $reservation_info, "rotatingBarcode": $rotating_barcode, "securityProgramLogo": $security_program_logo, "smartTapRedemptionValue": $smart_tap_redemption_value, "state": $state, "textModulesData": $text_modules_data, "validTimeInterval": $valid_time_interval, "version": $version} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns the flight object with the given object ID.
 #
 # GET /walletobjects/v1/flightObject/{resourceId}
 # operationId: walletobjects.flightobject.get
-export def "walletobjects-flight-object walletobjectsflightobjectget" [
+export def "walletobjects-flight-object get" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1485,7 +1494,7 @@ export def "walletobjects-flight-object walletobjectsflightobjectget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_id: $resource_id} | format pattern "/walletobjects/v1/flightObject/{resource_id}") $qp)
+  let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/flightObject/{resource_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1498,7 +1507,7 @@ export def "walletobjects-flight-object walletobjectsflightobjectget" [
 # --appLinkData shape: {androidAppLinkInfo?: record, iosAppLinkInfo?: record, webAppLinkInfo?: record}
 # --barcode shape: {alternateText?: string, kind?: string, renderEncoding?: "RENDER_ENCODING_UNSPECIFIED"|"UTF_8", showCodeText?: record, type?: "BARCODE_TYPE_UNSPECIFIED"|"AZTEC"|"aztec"|"CODE_39"|"code39"|"CODE_128"|"code128"|"CODABAR"|"codabar"|"DATA_MATRIX"|"dataMatrix"|"EAN_8"|"ean8"|"EAN_13"|"ean13"|"EAN13"|"ITF_14"|"itf14"|"PDF_417"|"pdf417"|"PDF417"|"QR_CODE"|"qrCode"|"qrcode"|"UPC_A"|"upcA"|"TEXT_ONLY"|"textOnly", value?: string}
 # --boardingAndSeatingInfo shape: {boardingDoor?: "BOARDING_DOOR_UNSPECIFIED"|"FRONT"|"front"|"BACK"|"back", boardingGroup?: string, boardingPosition?: string, boardingPrivilegeImage?: record, kind?: string, seatAssignment?: record, seatClass?: string, seatNumber?: string, sequenceNumber?: string}
-# --classReference shape: {allowMultipleUsersPerObject?: bool, boardingAndSeatingPolicy?: record, callbackOptions?: record, classTemplateInfo?: record, countryCode?: string, destination?: record, enableSmartTap?: bool, flightHeader?: record, flightStatus?: "FLIGHT_STATUS_UNSPECIFIED"|"SCHEDULED"|"scheduled"|"ACTIVE"|"active"|"LANDED"|"landed"|"CANCELLED"|"cancelled"|"REDIRECTED"|"redirected"|"DIVERTED"|"diverted", heroImage?: record, hexBackgroundColor?: string, homepageUri?: record, id?: string, imageModulesData?: list, infoModuleData?: record, issuerName?: string, kind?: string, languageOverride?: string, linksModuleData?: record, localBoardingDateTime?: string, localEstimatedOrActualArrivalDateTime?: string, localEstimatedOrActualDepartureDateTime?: string, localGateClosingDateTime?: string, localScheduledArrivalDateTime?: string, localScheduledDepartureDateTime?: string, localizedIssuerName?: record, locations?: list, messages?: list, multipleDevicesAndHoldersAllowedStatus?: "STATUS_UNSPECIFIED"|"MULTIPLE_HOLDERS"|"multipleHolders"|"ONE_USER_ALL_DEVICES"|"oneUserAllDevices"|"ONE_USER_ONE_DEVICE"|"oneUserOneDevice", origin?: record, redemptionIssuers?: list, review?: record, reviewStatus?: "REVIEW_STATUS_UNSPECIFIED"|"UNDER_REVIEW"|"underReview"|"APPROVED"|"approved"|"REJECTED"|"rejected"|"DRAFT"|"draft", securityAnimation?: record, textModulesData?: list, version?: string, viewUnlockRequirement?: "VIEW_UNLOCK_REQUIREMENT_UNSPECIFIED"|"UNLOCK_NOT_REQUIRED"|"UNLOCK_REQUIRED_TO_VIEW", wordMark?: record}
+# --classReference shape: {allowMultipleUsersPerObject?: bool, boardingAndSeatingPolicy?: record, callbackOptions?: record, classTemplateInfo?: record, countryCode?: string, destination?: record, enableSmartTap?: bool, flightHeader?: record, flightStatus?: "FLIGHT_STATUS_UNSPECIFIED"|"SCHEDULED"|"scheduled"|"ACTIVE"|"active"|"LANDED"|"landed"|"CANCELLED"|"cancelled"|"REDIRECTED"|"redirected"|"DIVERTED"|"diverted", heroImage?: record, hexBackgroundColor?: string, homepageUri?: record, id?: string, imageModulesData?: list, ... (24 more fields)}
 # --groupingInfo shape: {groupingId?: string, sortIndex?: int}
 # --heroImage shape: {contentDescription?: record, kind?: string, sourceUri?: record}
 # --imageModulesData item shape: {id?: string, mainImage?: record}
@@ -1512,7 +1521,7 @@ export def "walletobjects-flight-object walletobjectsflightobjectget" [
 # --securityProgramLogo shape: {contentDescription?: record, kind?: string, sourceUri?: record}
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
 # --validTimeInterval shape: {end?: record, kind?: string, start?: record}
-export def "walletobjects-flight-object walletobjectsflightobjectpatch" [
+export def "walletobjects-flight-object update-by-resourceId" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1537,7 +1546,7 @@ export def "walletobjects-flight-object walletobjectsflightobjectpatch" [
   --barcode: record # shape: {alternateText?: string, kind?: string, renderEncoding?: "RENDER_ENCODING_UNSPECIFIED"|"UTF_8", showCodeText?: record, type?: "BARCODE_TYPE_UNSPECIFIED"|"AZTEC"|"aztec"|"CODE_39"|"code39"|"CODE_128"|"code128"|"CODABAR"|"codabar"|"DATA_MATRIX"|"dataMatrix"|"EAN_8"|"ean8"|"EAN_13"|"ean13"|"EAN13"|"ITF_14"|"itf14"|"PDF_417"|"pdf417"|"PDF417"|"QR_CODE"|"qrCode"|"qrcode"|"UPC_A"|"upcA"|"TEXT_ONLY"|"textOnly", value?: string}
   --boarding-and-seating-info: record # shape: {boardingDoor?: "BOARDING_DOOR_UNSPECIFIED"|"FRONT"|"front"|"BACK"|"back", boardingGroup?: string, boardingPosition?: string, boardingPrivilegeImage?: record, kind?: string, seatAssignment?: record, seatClass?: string, seatNumber?: string, sequenceNumber?: string}
   --class-id: string # Required. The class associated with this object. The class must be of the same type as this object, must already exist, and must be approved. Class IDs should follow the format issuer ID.identifier where the former is issued by Google and latter is chosen by you.
-  --class-reference: record # shape: {allowMultipleUsersPerObject?: bool, boardingAndSeatingPolicy?: record, callbackOptions?: record, classTemplateInfo?: record, countryCode?: string, destination?: record, enableSmartTap?: bool, flightHeader?: record, flightStatus?: "FLIGHT_STATUS_UNSPECIFIED"|"SCHEDULED"|"scheduled"|"ACTIVE"|"active"|"LANDED"|"landed"|"CANCELLED"|"cancelled"|"REDIRECTED"|"redirected"|"DIVERTED"|"diverted", heroImage?: record, hexBackgroundColor?: string, homepageUri?: record, id?: string, imageModulesData?: list, infoModuleData?: record, issuerName?: string, kind?: string, languageOverride?: string, linksModuleData?: record, localBoardingDateTime?: string, localEstimatedOrActualArrivalDateTime?: string, localEstimatedOrActualDepartureDateTime?: string, localGateClosingDateTime?: string, localScheduledArrivalDateTime?: string, localScheduledDepartureDateTime?: string, localizedIssuerName?: record, locations?: list, messages?: list, multipleDevicesAndHoldersAllowedStatus?: "STATUS_UNSPECIFIED"|"MULTIPLE_HOLDERS"|"multipleHolders"|"ONE_USER_ALL_DEVICES"|"oneUserAllDevices"|"ONE_USER_ONE_DEVICE"|"oneUserOneDevice", origin?: record, redemptionIssuers?: list, review?: record, reviewStatus?: "REVIEW_STATUS_UNSPECIFIED"|"UNDER_REVIEW"|"underReview"|"APPROVED"|"approved"|"REJECTED"|"rejected"|"DRAFT"|"draft", securityAnimation?: record, textModulesData?: list, version?: string, viewUnlockRequirement?: "VIEW_UNLOCK_REQUIREMENT_UNSPECIFIED"|"UNLOCK_NOT_REQUIRED"|"UNLOCK_REQUIRED_TO_VIEW", wordMark?: record}
+  --class-reference: record # shape: {allowMultipleUsersPerObject?: bool, boardingAndSeatingPolicy?: record, callbackOptions?: record, classTemplateInfo?: record, countryCode?: string, destination?: record, enableSmartTap?: bool, flightHeader?: record, flightStatus?: "FLIGHT_STATUS_UNSPECIFIED"|"SCHEDULED"|"scheduled"|"ACTIVE"|"active"|"LANDED"|"landed"|"CANCELLED"|"cancelled"|"REDIRECTED"|"redirected"|"DIVERTED"|"diverted", heroImage?: record, hexBackgroundColor?: string, homepageUri?: record, id?: string, imageModulesData?: list, ... (24 more fields)}
   --disable-expiration-notification: oneof<nothing, bool> # Indicates if notifications should explicitly be suppressed. If this field is set to true, regardless of the `messages` field, expiration notifications to the user will be suppressed. By default, this field is set to false. Currently, this can only be set for Flights.
   --grouping-info: record # shape: {groupingId?: string, sortIndex?: int}
   --has-linked-device: oneof<nothing, bool> # Whether this object is currently linked to a single device. This field is set by the platform when a user saves the object, linking it to their device. Intended for use by select partners. Contact support for additional information.
@@ -1566,12 +1575,12 @@ export def "walletobjects-flight-object walletobjectsflightobjectpatch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_id: $resource_id} | format pattern "/walletobjects/v1/flightObject/{resource_id}") $qp)
-  let body = {"appLinkData": $app_link_data, "barcode": $barcode, "boardingAndSeatingInfo": $boarding_and_seating_info, "classId": $class_id, "classReference": $class_reference, "disableExpirationNotification": $disable_expiration_notification, "groupingInfo": $grouping_info, "hasLinkedDevice": $has_linked_device, "hasUsers": $has_users, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "kind": $kind, "linksModuleData": $links_module_data, "locations": $locations, "messages": $messages, "passConstraints": $pass_constraints, "passengerName": $passenger_name, "reservationInfo": $reservation_info, "rotatingBarcode": $rotating_barcode, "securityProgramLogo": $security_program_logo, "smartTapRedemptionValue": $smart_tap_redemption_value, "state": $state, "textModulesData": $text_modules_data, "validTimeInterval": $valid_time_interval, "version": $version} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/flightObject/{resource_id}") $qp)
+  let req_body = {"appLinkData": $app_link_data, "barcode": $barcode, "boardingAndSeatingInfo": $boarding_and_seating_info, "classId": $class_id, "classReference": $class_reference, "disableExpirationNotification": $disable_expiration_notification, "groupingInfo": $grouping_info, "hasLinkedDevice": $has_linked_device, "hasUsers": $has_users, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "kind": $kind, "linksModuleData": $links_module_data, "locations": $locations, "messages": $messages, "passConstraints": $pass_constraints, "passengerName": $passenger_name, "reservationInfo": $reservation_info, "rotatingBarcode": $rotating_barcode, "securityProgramLogo": $security_program_logo, "smartTapRedemptionValue": $smart_tap_redemption_value, "state": $state, "textModulesData": $text_modules_data, "validTimeInterval": $valid_time_interval, "version": $version} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates the flight object referenced by the given object ID.
@@ -1581,7 +1590,7 @@ export def "walletobjects-flight-object walletobjectsflightobjectpatch" [
 # --appLinkData shape: {androidAppLinkInfo?: record, iosAppLinkInfo?: record, webAppLinkInfo?: record}
 # --barcode shape: {alternateText?: string, kind?: string, renderEncoding?: "RENDER_ENCODING_UNSPECIFIED"|"UTF_8", showCodeText?: record, type?: "BARCODE_TYPE_UNSPECIFIED"|"AZTEC"|"aztec"|"CODE_39"|"code39"|"CODE_128"|"code128"|"CODABAR"|"codabar"|"DATA_MATRIX"|"dataMatrix"|"EAN_8"|"ean8"|"EAN_13"|"ean13"|"EAN13"|"ITF_14"|"itf14"|"PDF_417"|"pdf417"|"PDF417"|"QR_CODE"|"qrCode"|"qrcode"|"UPC_A"|"upcA"|"TEXT_ONLY"|"textOnly", value?: string}
 # --boardingAndSeatingInfo shape: {boardingDoor?: "BOARDING_DOOR_UNSPECIFIED"|"FRONT"|"front"|"BACK"|"back", boardingGroup?: string, boardingPosition?: string, boardingPrivilegeImage?: record, kind?: string, seatAssignment?: record, seatClass?: string, seatNumber?: string, sequenceNumber?: string}
-# --classReference shape: {allowMultipleUsersPerObject?: bool, boardingAndSeatingPolicy?: record, callbackOptions?: record, classTemplateInfo?: record, countryCode?: string, destination?: record, enableSmartTap?: bool, flightHeader?: record, flightStatus?: "FLIGHT_STATUS_UNSPECIFIED"|"SCHEDULED"|"scheduled"|"ACTIVE"|"active"|"LANDED"|"landed"|"CANCELLED"|"cancelled"|"REDIRECTED"|"redirected"|"DIVERTED"|"diverted", heroImage?: record, hexBackgroundColor?: string, homepageUri?: record, id?: string, imageModulesData?: list, infoModuleData?: record, issuerName?: string, kind?: string, languageOverride?: string, linksModuleData?: record, localBoardingDateTime?: string, localEstimatedOrActualArrivalDateTime?: string, localEstimatedOrActualDepartureDateTime?: string, localGateClosingDateTime?: string, localScheduledArrivalDateTime?: string, localScheduledDepartureDateTime?: string, localizedIssuerName?: record, locations?: list, messages?: list, multipleDevicesAndHoldersAllowedStatus?: "STATUS_UNSPECIFIED"|"MULTIPLE_HOLDERS"|"multipleHolders"|"ONE_USER_ALL_DEVICES"|"oneUserAllDevices"|"ONE_USER_ONE_DEVICE"|"oneUserOneDevice", origin?: record, redemptionIssuers?: list, review?: record, reviewStatus?: "REVIEW_STATUS_UNSPECIFIED"|"UNDER_REVIEW"|"underReview"|"APPROVED"|"approved"|"REJECTED"|"rejected"|"DRAFT"|"draft", securityAnimation?: record, textModulesData?: list, version?: string, viewUnlockRequirement?: "VIEW_UNLOCK_REQUIREMENT_UNSPECIFIED"|"UNLOCK_NOT_REQUIRED"|"UNLOCK_REQUIRED_TO_VIEW", wordMark?: record}
+# --classReference shape: {allowMultipleUsersPerObject?: bool, boardingAndSeatingPolicy?: record, callbackOptions?: record, classTemplateInfo?: record, countryCode?: string, destination?: record, enableSmartTap?: bool, flightHeader?: record, flightStatus?: "FLIGHT_STATUS_UNSPECIFIED"|"SCHEDULED"|"scheduled"|"ACTIVE"|"active"|"LANDED"|"landed"|"CANCELLED"|"cancelled"|"REDIRECTED"|"redirected"|"DIVERTED"|"diverted", heroImage?: record, hexBackgroundColor?: string, homepageUri?: record, id?: string, imageModulesData?: list, ... (24 more fields)}
 # --groupingInfo shape: {groupingId?: string, sortIndex?: int}
 # --heroImage shape: {contentDescription?: record, kind?: string, sourceUri?: record}
 # --imageModulesData item shape: {id?: string, mainImage?: record}
@@ -1595,7 +1604,7 @@ export def "walletobjects-flight-object walletobjectsflightobjectpatch" [
 # --securityProgramLogo shape: {contentDescription?: record, kind?: string, sourceUri?: record}
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
 # --validTimeInterval shape: {end?: record, kind?: string, start?: record}
-export def "walletobjects-flight-object walletobjectsflightobjectupdate" [
+export def "walletobjects-flight-object update-by-resourceId-1" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1620,7 +1629,7 @@ export def "walletobjects-flight-object walletobjectsflightobjectupdate" [
   --barcode: record # shape: {alternateText?: string, kind?: string, renderEncoding?: "RENDER_ENCODING_UNSPECIFIED"|"UTF_8", showCodeText?: record, type?: "BARCODE_TYPE_UNSPECIFIED"|"AZTEC"|"aztec"|"CODE_39"|"code39"|"CODE_128"|"code128"|"CODABAR"|"codabar"|"DATA_MATRIX"|"dataMatrix"|"EAN_8"|"ean8"|"EAN_13"|"ean13"|"EAN13"|"ITF_14"|"itf14"|"PDF_417"|"pdf417"|"PDF417"|"QR_CODE"|"qrCode"|"qrcode"|"UPC_A"|"upcA"|"TEXT_ONLY"|"textOnly", value?: string}
   --boarding-and-seating-info: record # shape: {boardingDoor?: "BOARDING_DOOR_UNSPECIFIED"|"FRONT"|"front"|"BACK"|"back", boardingGroup?: string, boardingPosition?: string, boardingPrivilegeImage?: record, kind?: string, seatAssignment?: record, seatClass?: string, seatNumber?: string, sequenceNumber?: string}
   --class-id: string # Required. The class associated with this object. The class must be of the same type as this object, must already exist, and must be approved. Class IDs should follow the format issuer ID.identifier where the former is issued by Google and latter is chosen by you.
-  --class-reference: record # shape: {allowMultipleUsersPerObject?: bool, boardingAndSeatingPolicy?: record, callbackOptions?: record, classTemplateInfo?: record, countryCode?: string, destination?: record, enableSmartTap?: bool, flightHeader?: record, flightStatus?: "FLIGHT_STATUS_UNSPECIFIED"|"SCHEDULED"|"scheduled"|"ACTIVE"|"active"|"LANDED"|"landed"|"CANCELLED"|"cancelled"|"REDIRECTED"|"redirected"|"DIVERTED"|"diverted", heroImage?: record, hexBackgroundColor?: string, homepageUri?: record, id?: string, imageModulesData?: list, infoModuleData?: record, issuerName?: string, kind?: string, languageOverride?: string, linksModuleData?: record, localBoardingDateTime?: string, localEstimatedOrActualArrivalDateTime?: string, localEstimatedOrActualDepartureDateTime?: string, localGateClosingDateTime?: string, localScheduledArrivalDateTime?: string, localScheduledDepartureDateTime?: string, localizedIssuerName?: record, locations?: list, messages?: list, multipleDevicesAndHoldersAllowedStatus?: "STATUS_UNSPECIFIED"|"MULTIPLE_HOLDERS"|"multipleHolders"|"ONE_USER_ALL_DEVICES"|"oneUserAllDevices"|"ONE_USER_ONE_DEVICE"|"oneUserOneDevice", origin?: record, redemptionIssuers?: list, review?: record, reviewStatus?: "REVIEW_STATUS_UNSPECIFIED"|"UNDER_REVIEW"|"underReview"|"APPROVED"|"approved"|"REJECTED"|"rejected"|"DRAFT"|"draft", securityAnimation?: record, textModulesData?: list, version?: string, viewUnlockRequirement?: "VIEW_UNLOCK_REQUIREMENT_UNSPECIFIED"|"UNLOCK_NOT_REQUIRED"|"UNLOCK_REQUIRED_TO_VIEW", wordMark?: record}
+  --class-reference: record # shape: {allowMultipleUsersPerObject?: bool, boardingAndSeatingPolicy?: record, callbackOptions?: record, classTemplateInfo?: record, countryCode?: string, destination?: record, enableSmartTap?: bool, flightHeader?: record, flightStatus?: "FLIGHT_STATUS_UNSPECIFIED"|"SCHEDULED"|"scheduled"|"ACTIVE"|"active"|"LANDED"|"landed"|"CANCELLED"|"cancelled"|"REDIRECTED"|"redirected"|"DIVERTED"|"diverted", heroImage?: record, hexBackgroundColor?: string, homepageUri?: record, id?: string, imageModulesData?: list, ... (24 more fields)}
   --disable-expiration-notification: oneof<nothing, bool> # Indicates if notifications should explicitly be suppressed. If this field is set to true, regardless of the `messages` field, expiration notifications to the user will be suppressed. By default, this field is set to false. Currently, this can only be set for Flights.
   --grouping-info: record # shape: {groupingId?: string, sortIndex?: int}
   --has-linked-device: oneof<nothing, bool> # Whether this object is currently linked to a single device. This field is set by the platform when a user saves the object, linking it to their device. Intended for use by select partners. Contact support for additional information.
@@ -1649,12 +1658,12 @@ export def "walletobjects-flight-object walletobjectsflightobjectupdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_id: $resource_id} | format pattern "/walletobjects/v1/flightObject/{resource_id}") $qp)
-  let body = {"appLinkData": $app_link_data, "barcode": $barcode, "boardingAndSeatingInfo": $boarding_and_seating_info, "classId": $class_id, "classReference": $class_reference, "disableExpirationNotification": $disable_expiration_notification, "groupingInfo": $grouping_info, "hasLinkedDevice": $has_linked_device, "hasUsers": $has_users, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "kind": $kind, "linksModuleData": $links_module_data, "locations": $locations, "messages": $messages, "passConstraints": $pass_constraints, "passengerName": $passenger_name, "reservationInfo": $reservation_info, "rotatingBarcode": $rotating_barcode, "securityProgramLogo": $security_program_logo, "smartTapRedemptionValue": $smart_tap_redemption_value, "state": $state, "textModulesData": $text_modules_data, "validTimeInterval": $valid_time_interval, "version": $version} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/flightObject/{resource_id}") $qp)
+  let req_body = {"appLinkData": $app_link_data, "barcode": $barcode, "boardingAndSeatingInfo": $boarding_and_seating_info, "classId": $class_id, "classReference": $class_reference, "disableExpirationNotification": $disable_expiration_notification, "groupingInfo": $grouping_info, "hasLinkedDevice": $has_linked_device, "hasUsers": $has_users, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "kind": $kind, "linksModuleData": $links_module_data, "locations": $locations, "messages": $messages, "passConstraints": $pass_constraints, "passengerName": $passenger_name, "reservationInfo": $reservation_info, "rotatingBarcode": $rotating_barcode, "securityProgramLogo": $security_program_logo, "smartTapRedemptionValue": $smart_tap_redemption_value, "state": $state, "textModulesData": $text_modules_data, "validTimeInterval": $valid_time_interval, "version": $version} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Adds a message to the flight object referenced by the given object ID.
@@ -1662,7 +1671,7 @@ export def "walletobjects-flight-object walletobjectsflightobjectupdate" [
 # POST /walletobjects/v1/flightObject/{resourceId}/addMessage
 # operationId: walletobjects.flightobject.addmessage
 # --message shape: {body?: string, displayInterval?: record, header?: string, id?: string, kind?: string, localizedBody?: record, localizedHeader?: record, messageType?: "MESSAGE_TYPE_UNSPECIFIED"|"TEXT"|"text"|"EXPIRATION_NOTIFICATION"|"expirationNotification"}
-export def "walletobjects-flight-object-add-message walletobjectsflightobjectaddmessage" [
+export def "walletobjects-flight-object-add-message create-addmessage" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1689,19 +1698,19 @@ export def "walletobjects-flight-object-add-message walletobjectsflightobjectadd
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_id: $resource_id} | format pattern "/walletobjects/v1/flightObject/{resource_id}/addMessage") $qp)
-  let body = {"message": $message} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/flightObject/{resource_id}/addMessage") $qp)
+  let req_body = {"message": $message} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns a list of all generic classes for a given issuer ID.
 #
 # GET /walletobjects/v1/genericClass
 # operationId: walletobjects.genericclass.list
-export def "walletobjects-generic-class walletobjectsgenericclasslist" [
+export def "walletobjects-generic-class list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1744,7 +1753,7 @@ export def "walletobjects-generic-class walletobjectsgenericclasslist" [
 # --linksModuleData shape: {uris?: list}
 # --securityAnimation shape: {animationType?: "ANIMATION_UNSPECIFIED"|"FOIL_SHIMMER"|"foilShimmer"}
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
-export def "walletobjects-generic-class walletobjectsgenericclassinsert" [
+export def "walletobjects-generic-class create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1771,7 +1780,7 @@ export def "walletobjects-generic-class walletobjectsgenericclassinsert" [
   --image-modules-data: list # Image module data. If `imageModulesData` is also defined on the object, both will be displayed. Only one of the image from class and one from object level will be rendered when both set. — item shape: {id?: string, mainImage?: record}
   --links-module-data: record # shape: {uris?: list}
   --multiple-devices-and-holders-allowed-status: string@multiple-devices-and-holders-allowed-status-completer # Identifies whether multiple users and devices will save the same object referencing this class.
-  --redemption-issuers: list # Identifies which redemption issuers can redeem the pass over Smart Tap. Redemption issuers are identified by their issuer ID. Redemption issuers must have at least one Smart Tap key configured. The `enableSmartTap` and object level `smartTapRedemptionLevel` fields must also be set up correctly in order for a pass to support Smart Tap.
+  --redemption-issuers: list<string> # Identifies which redemption issuers can redeem the pass over Smart Tap. Redemption issuers are identified by their issuer ID. Redemption issuers must have at least one Smart Tap key configured. The `enableSmartTap` and object level `smartTapRedemptionLevel` fields must also be set up correctly in order for a pass to support Smart Tap.
   --security-animation: record # shape: {animationType?: "ANIMATION_UNSPECIFIED"|"FOIL_SHIMMER"|"foilShimmer"}
   --text-modules-data: list # Text module data. If `textModulesData` is also defined on the object, both will be displayed. The maximum number of these fields displayed is 10 from class and 10 from object. — item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
   --view-unlock-requirement: string@view-unlock-requirement-completer # View Unlock Requirement options for the generic pass.
@@ -1781,18 +1790,18 @@ export def "walletobjects-generic-class walletobjectsgenericclassinsert" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/walletobjects/v1/genericClass" $qp)
-  let body = {"callbackOptions": $callback_options, "classTemplateInfo": $class_template_info, "enableSmartTap": $enable_smart_tap, "id": $id, "imageModulesData": $image_modules_data, "linksModuleData": $links_module_data, "multipleDevicesAndHoldersAllowedStatus": $multiple_devices_and_holders_allowed_status, "redemptionIssuers": $redemption_issuers, "securityAnimation": $security_animation, "textModulesData": $text_modules_data, "viewUnlockRequirement": $view_unlock_requirement} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"callbackOptions": $callback_options, "classTemplateInfo": $class_template_info, "enableSmartTap": $enable_smart_tap, "id": $id, "imageModulesData": $image_modules_data, "linksModuleData": $links_module_data, "multipleDevicesAndHoldersAllowedStatus": $multiple_devices_and_holders_allowed_status, "redemptionIssuers": $redemption_issuers, "securityAnimation": $security_animation, "textModulesData": $text_modules_data, "viewUnlockRequirement": $view_unlock_requirement} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns the generic class with the given class ID.
 #
 # GET /walletobjects/v1/genericClass/{resourceId}
 # operationId: walletobjects.genericclass.get
-export def "walletobjects-generic-class walletobjectsgenericclassget" [
+export def "walletobjects-generic-class get" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1817,7 +1826,7 @@ export def "walletobjects-generic-class walletobjectsgenericclassget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_id: $resource_id} | format pattern "/walletobjects/v1/genericClass/{resource_id}") $qp)
+  let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/genericClass/{resource_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1833,7 +1842,7 @@ export def "walletobjects-generic-class walletobjectsgenericclassget" [
 # --linksModuleData shape: {uris?: list}
 # --securityAnimation shape: {animationType?: "ANIMATION_UNSPECIFIED"|"FOIL_SHIMMER"|"foilShimmer"}
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
-export def "walletobjects-generic-class walletobjectsgenericclasspatch" [
+export def "walletobjects-generic-class update-by-resourceId" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1861,7 +1870,7 @@ export def "walletobjects-generic-class walletobjectsgenericclasspatch" [
   --image-modules-data: list # Image module data. If `imageModulesData` is also defined on the object, both will be displayed. Only one of the image from class and one from object level will be rendered when both set. — item shape: {id?: string, mainImage?: record}
   --links-module-data: record # shape: {uris?: list}
   --multiple-devices-and-holders-allowed-status: string@multiple-devices-and-holders-allowed-status-completer # Identifies whether multiple users and devices will save the same object referencing this class.
-  --redemption-issuers: list # Identifies which redemption issuers can redeem the pass over Smart Tap. Redemption issuers are identified by their issuer ID. Redemption issuers must have at least one Smart Tap key configured. The `enableSmartTap` and object level `smartTapRedemptionLevel` fields must also be set up correctly in order for a pass to support Smart Tap.
+  --redemption-issuers: list<string> # Identifies which redemption issuers can redeem the pass over Smart Tap. Redemption issuers are identified by their issuer ID. Redemption issuers must have at least one Smart Tap key configured. The `enableSmartTap` and object level `smartTapRedemptionLevel` fields must also be set up correctly in order for a pass to support Smart Tap.
   --security-animation: record # shape: {animationType?: "ANIMATION_UNSPECIFIED"|"FOIL_SHIMMER"|"foilShimmer"}
   --text-modules-data: list # Text module data. If `textModulesData` is also defined on the object, both will be displayed. The maximum number of these fields displayed is 10 from class and 10 from object. — item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
   --view-unlock-requirement: string@view-unlock-requirement-completer # View Unlock Requirement options for the generic pass.
@@ -1870,12 +1879,12 @@ export def "walletobjects-generic-class walletobjectsgenericclasspatch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_id: $resource_id} | format pattern "/walletobjects/v1/genericClass/{resource_id}") $qp)
-  let body = {"callbackOptions": $callback_options, "classTemplateInfo": $class_template_info, "enableSmartTap": $enable_smart_tap, "id": $id, "imageModulesData": $image_modules_data, "linksModuleData": $links_module_data, "multipleDevicesAndHoldersAllowedStatus": $multiple_devices_and_holders_allowed_status, "redemptionIssuers": $redemption_issuers, "securityAnimation": $security_animation, "textModulesData": $text_modules_data, "viewUnlockRequirement": $view_unlock_requirement} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/genericClass/{resource_id}") $qp)
+  let req_body = {"callbackOptions": $callback_options, "classTemplateInfo": $class_template_info, "enableSmartTap": $enable_smart_tap, "id": $id, "imageModulesData": $image_modules_data, "linksModuleData": $links_module_data, "multipleDevicesAndHoldersAllowedStatus": $multiple_devices_and_holders_allowed_status, "redemptionIssuers": $redemption_issuers, "securityAnimation": $security_animation, "textModulesData": $text_modules_data, "viewUnlockRequirement": $view_unlock_requirement} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates the Generic class referenced by the given class ID.
@@ -1888,7 +1897,7 @@ export def "walletobjects-generic-class walletobjectsgenericclasspatch" [
 # --linksModuleData shape: {uris?: list}
 # --securityAnimation shape: {animationType?: "ANIMATION_UNSPECIFIED"|"FOIL_SHIMMER"|"foilShimmer"}
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
-export def "walletobjects-generic-class walletobjectsgenericclassupdate" [
+export def "walletobjects-generic-class update-by-resourceId-1" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1916,7 +1925,7 @@ export def "walletobjects-generic-class walletobjectsgenericclassupdate" [
   --image-modules-data: list # Image module data. If `imageModulesData` is also defined on the object, both will be displayed. Only one of the image from class and one from object level will be rendered when both set. — item shape: {id?: string, mainImage?: record}
   --links-module-data: record # shape: {uris?: list}
   --multiple-devices-and-holders-allowed-status: string@multiple-devices-and-holders-allowed-status-completer # Identifies whether multiple users and devices will save the same object referencing this class.
-  --redemption-issuers: list # Identifies which redemption issuers can redeem the pass over Smart Tap. Redemption issuers are identified by their issuer ID. Redemption issuers must have at least one Smart Tap key configured. The `enableSmartTap` and object level `smartTapRedemptionLevel` fields must also be set up correctly in order for a pass to support Smart Tap.
+  --redemption-issuers: list<string> # Identifies which redemption issuers can redeem the pass over Smart Tap. Redemption issuers are identified by their issuer ID. Redemption issuers must have at least one Smart Tap key configured. The `enableSmartTap` and object level `smartTapRedemptionLevel` fields must also be set up correctly in order for a pass to support Smart Tap.
   --security-animation: record # shape: {animationType?: "ANIMATION_UNSPECIFIED"|"FOIL_SHIMMER"|"foilShimmer"}
   --text-modules-data: list # Text module data. If `textModulesData` is also defined on the object, both will be displayed. The maximum number of these fields displayed is 10 from class and 10 from object. — item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
   --view-unlock-requirement: string@view-unlock-requirement-completer # View Unlock Requirement options for the generic pass.
@@ -1925,19 +1934,19 @@ export def "walletobjects-generic-class walletobjectsgenericclassupdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_id: $resource_id} | format pattern "/walletobjects/v1/genericClass/{resource_id}") $qp)
-  let body = {"callbackOptions": $callback_options, "classTemplateInfo": $class_template_info, "enableSmartTap": $enable_smart_tap, "id": $id, "imageModulesData": $image_modules_data, "linksModuleData": $links_module_data, "multipleDevicesAndHoldersAllowedStatus": $multiple_devices_and_holders_allowed_status, "redemptionIssuers": $redemption_issuers, "securityAnimation": $security_animation, "textModulesData": $text_modules_data, "viewUnlockRequirement": $view_unlock_requirement} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/genericClass/{resource_id}") $qp)
+  let req_body = {"callbackOptions": $callback_options, "classTemplateInfo": $class_template_info, "enableSmartTap": $enable_smart_tap, "id": $id, "imageModulesData": $image_modules_data, "linksModuleData": $links_module_data, "multipleDevicesAndHoldersAllowedStatus": $multiple_devices_and_holders_allowed_status, "redemptionIssuers": $redemption_issuers, "securityAnimation": $security_animation, "textModulesData": $text_modules_data, "viewUnlockRequirement": $view_unlock_requirement} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns a list of all generic objects for a given issuer ID.
 #
 # GET /walletobjects/v1/genericObject
 # operationId: walletobjects.genericobject.list
-export def "walletobjects-generic-object walletobjectsgenericobjectlist" [
+export def "walletobjects-generic-object list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1989,7 +1998,7 @@ export def "walletobjects-generic-object walletobjectsgenericobjectlist" [
 # --subheader shape: {defaultValue?: record, kind?: string, translatedValues?: list}
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
 # --validTimeInterval shape: {end?: record, kind?: string, start?: record}
-export def "walletobjects-generic-object walletobjectsgenericobjectinsert" [
+export def "walletobjects-generic-object create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2037,18 +2046,18 @@ export def "walletobjects-generic-object walletobjectsgenericobjectinsert" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/walletobjects/v1/genericObject" $qp)
-  let body = {"appLinkData": $app_link_data, "barcode": $barcode, "cardTitle": $card_title, "classId": $class_id, "genericType": $generic_type, "groupingInfo": $grouping_info, "hasUsers": $has_users, "header": $header, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "id": $id, "imageModulesData": $image_modules_data, "linksModuleData": $links_module_data, "logo": $logo, "notifications": $notifications, "passConstraints": $pass_constraints, "rotatingBarcode": $rotating_barcode, "smartTapRedemptionValue": $smart_tap_redemption_value, "state": $state, "subheader": $subheader, "textModulesData": $text_modules_data, "validTimeInterval": $valid_time_interval} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"appLinkData": $app_link_data, "barcode": $barcode, "cardTitle": $card_title, "classId": $class_id, "genericType": $generic_type, "groupingInfo": $grouping_info, "hasUsers": $has_users, "header": $header, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "id": $id, "imageModulesData": $image_modules_data, "linksModuleData": $links_module_data, "logo": $logo, "notifications": $notifications, "passConstraints": $pass_constraints, "rotatingBarcode": $rotating_barcode, "smartTapRedemptionValue": $smart_tap_redemption_value, "state": $state, "subheader": $subheader, "textModulesData": $text_modules_data, "validTimeInterval": $valid_time_interval} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns the generic object with the given object ID.
 #
 # GET /walletobjects/v1/genericObject/{resourceId}
 # operationId: walletobjects.genericobject.get
-export def "walletobjects-generic-object walletobjectsgenericobjectget" [
+export def "walletobjects-generic-object get" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2073,7 +2082,7 @@ export def "walletobjects-generic-object walletobjectsgenericobjectget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_id: $resource_id} | format pattern "/walletobjects/v1/genericObject/{resource_id}") $qp)
+  let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/genericObject/{resource_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2098,7 +2107,7 @@ export def "walletobjects-generic-object walletobjectsgenericobjectget" [
 # --subheader shape: {defaultValue?: record, kind?: string, translatedValues?: list}
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
 # --validTimeInterval shape: {end?: record, kind?: string, start?: record}
-export def "walletobjects-generic-object walletobjectsgenericobjectpatch" [
+export def "walletobjects-generic-object update-by-resourceId" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2146,12 +2155,12 @@ export def "walletobjects-generic-object walletobjectsgenericobjectpatch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_id: $resource_id} | format pattern "/walletobjects/v1/genericObject/{resource_id}") $qp)
-  let body = {"appLinkData": $app_link_data, "barcode": $barcode, "cardTitle": $card_title, "classId": $class_id, "genericType": $generic_type, "groupingInfo": $grouping_info, "hasUsers": $has_users, "header": $header, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "id": $id, "imageModulesData": $image_modules_data, "linksModuleData": $links_module_data, "logo": $logo, "notifications": $notifications, "passConstraints": $pass_constraints, "rotatingBarcode": $rotating_barcode, "smartTapRedemptionValue": $smart_tap_redemption_value, "state": $state, "subheader": $subheader, "textModulesData": $text_modules_data, "validTimeInterval": $valid_time_interval} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/genericObject/{resource_id}") $qp)
+  let req_body = {"appLinkData": $app_link_data, "barcode": $barcode, "cardTitle": $card_title, "classId": $class_id, "genericType": $generic_type, "groupingInfo": $grouping_info, "hasUsers": $has_users, "header": $header, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "id": $id, "imageModulesData": $image_modules_data, "linksModuleData": $links_module_data, "logo": $logo, "notifications": $notifications, "passConstraints": $pass_constraints, "rotatingBarcode": $rotating_barcode, "smartTapRedemptionValue": $smart_tap_redemption_value, "state": $state, "subheader": $subheader, "textModulesData": $text_modules_data, "validTimeInterval": $valid_time_interval} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates the generic object referenced by the given object ID.
@@ -2173,7 +2182,7 @@ export def "walletobjects-generic-object walletobjectsgenericobjectpatch" [
 # --subheader shape: {defaultValue?: record, kind?: string, translatedValues?: list}
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
 # --validTimeInterval shape: {end?: record, kind?: string, start?: record}
-export def "walletobjects-generic-object walletobjectsgenericobjectupdate" [
+export def "walletobjects-generic-object update-by-resourceId-1" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2221,19 +2230,19 @@ export def "walletobjects-generic-object walletobjectsgenericobjectupdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_id: $resource_id} | format pattern "/walletobjects/v1/genericObject/{resource_id}") $qp)
-  let body = {"appLinkData": $app_link_data, "barcode": $barcode, "cardTitle": $card_title, "classId": $class_id, "genericType": $generic_type, "groupingInfo": $grouping_info, "hasUsers": $has_users, "header": $header, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "id": $id, "imageModulesData": $image_modules_data, "linksModuleData": $links_module_data, "logo": $logo, "notifications": $notifications, "passConstraints": $pass_constraints, "rotatingBarcode": $rotating_barcode, "smartTapRedemptionValue": $smart_tap_redemption_value, "state": $state, "subheader": $subheader, "textModulesData": $text_modules_data, "validTimeInterval": $valid_time_interval} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/genericObject/{resource_id}") $qp)
+  let req_body = {"appLinkData": $app_link_data, "barcode": $barcode, "cardTitle": $card_title, "classId": $class_id, "genericType": $generic_type, "groupingInfo": $grouping_info, "hasUsers": $has_users, "header": $header, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "id": $id, "imageModulesData": $image_modules_data, "linksModuleData": $links_module_data, "logo": $logo, "notifications": $notifications, "passConstraints": $pass_constraints, "rotatingBarcode": $rotating_barcode, "smartTapRedemptionValue": $smart_tap_redemption_value, "state": $state, "subheader": $subheader, "textModulesData": $text_modules_data, "validTimeInterval": $valid_time_interval} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns a list of all gift card classes for a given issuer ID.
 #
 # GET /walletobjects/v1/giftCardClass
 # operationId: walletobjects.giftcardclass.list
-export def "walletobjects-gift-card-class walletobjectsgiftcardclasslist" [
+export def "walletobjects-gift-card-class list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2289,7 +2298,7 @@ export def "walletobjects-gift-card-class walletobjectsgiftcardclasslist" [
 # --securityAnimation shape: {animationType?: "ANIMATION_UNSPECIFIED"|"FOIL_SHIMMER"|"foilShimmer"}
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
 # --wordMark shape: {contentDescription?: record, kind?: string, sourceUri?: record}
-export def "walletobjects-gift-card-class walletobjectsgiftcardclassinsert" [
+export def "walletobjects-gift-card-class create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2337,7 +2346,7 @@ export def "walletobjects-gift-card-class walletobjectsgiftcardclassinsert" [
   --multiple-devices-and-holders-allowed-status: string@multiple-devices-and-holders-allowed-status-completer # Identifies whether multiple users and devices will save the same object referencing this class.
   --pin-label: string # The label to display for the PIN, such as "4-digit PIN".
   --program-logo: record # Wrapping type for Google hosted images. Next ID: 7 — shape: {contentDescription?: record, kind?: string, sourceUri?: record}
-  --redemption-issuers: list # Identifies which redemption issuers can redeem the pass over Smart Tap. Redemption issuers are identified by their issuer ID. Redemption issuers must have at least one Smart Tap key configured. The `enableSmartTap` and object level `smartTapRedemptionLevel` fields must also be set up correctly in order for a pass to support Smart Tap.
+  --redemption-issuers: list<string> # Identifies which redemption issuers can redeem the pass over Smart Tap. Redemption issuers are identified by their issuer ID. Redemption issuers must have at least one Smart Tap key configured. The `enableSmartTap` and object level `smartTapRedemptionLevel` fields must also be set up correctly in order for a pass to support Smart Tap.
   --review: record # shape: {comments?: string}
   --review-status: string@review-status-completer # Required. The status of the class. This field can be set to `draft` or `underReview` using the insert, patch, or update API calls. Once the review state is changed from `draft` it may not be changed back to `draft`. You should keep this field to `draft` when the class is under development. A `draft` class cannot be used to create any object. You should set this field to `underReview` when you believe the class is ready for use. The platform will automatically set this field to `approved` and it can be immediately used to create or migrate objects. When updating an already `approved` class you should keep setting this field to `underReview`.
   --security-animation: record # shape: {animationType?: "ANIMATION_UNSPECIFIED"|"FOIL_SHIMMER"|"foilShimmer"}
@@ -2351,18 +2360,18 @@ export def "walletobjects-gift-card-class walletobjectsgiftcardclassinsert" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/walletobjects/v1/giftCardClass" $qp)
-  let body = {"allowBarcodeRedemption": $allow_barcode_redemption, "allowMultipleUsersPerObject": $allow_multiple_users_per_object, "callbackOptions": $callback_options, "cardNumberLabel": $card_number_label, "classTemplateInfo": $class_template_info, "countryCode": $country_code, "enableSmartTap": $enable_smart_tap, "eventNumberLabel": $event_number_label, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "homepageUri": $homepage_uri, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "issuerName": $issuer_name, "kind": $kind, "linksModuleData": $links_module_data, "localizedCardNumberLabel": $localized_card_number_label, "localizedEventNumberLabel": $localized_event_number_label, "localizedIssuerName": $localized_issuer_name, "localizedMerchantName": $localized_merchant_name, "localizedPinLabel": $localized_pin_label, "locations": $locations, "merchantName": $merchant_name, "messages": $messages, "multipleDevicesAndHoldersAllowedStatus": $multiple_devices_and_holders_allowed_status, "pinLabel": $pin_label, "programLogo": $program_logo, "redemptionIssuers": $redemption_issuers, "review": $review, "reviewStatus": $review_status, "securityAnimation": $security_animation, "textModulesData": $text_modules_data, "version": $version, "viewUnlockRequirement": $view_unlock_requirement, "wordMark": $word_mark} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"allowBarcodeRedemption": $allow_barcode_redemption, "allowMultipleUsersPerObject": $allow_multiple_users_per_object, "callbackOptions": $callback_options, "cardNumberLabel": $card_number_label, "classTemplateInfo": $class_template_info, "countryCode": $country_code, "enableSmartTap": $enable_smart_tap, "eventNumberLabel": $event_number_label, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "homepageUri": $homepage_uri, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "issuerName": $issuer_name, "kind": $kind, "linksModuleData": $links_module_data, "localizedCardNumberLabel": $localized_card_number_label, "localizedEventNumberLabel": $localized_event_number_label, "localizedIssuerName": $localized_issuer_name, "localizedMerchantName": $localized_merchant_name, "localizedPinLabel": $localized_pin_label, "locations": $locations, "merchantName": $merchant_name, "messages": $messages, "multipleDevicesAndHoldersAllowedStatus": $multiple_devices_and_holders_allowed_status, "pinLabel": $pin_label, "programLogo": $program_logo, "redemptionIssuers": $redemption_issuers, "review": $review, "reviewStatus": $review_status, "securityAnimation": $security_animation, "textModulesData": $text_modules_data, "version": $version, "viewUnlockRequirement": $view_unlock_requirement, "wordMark": $word_mark} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns the gift card class with the given class ID.
 #
 # GET /walletobjects/v1/giftCardClass/{resourceId}
 # operationId: walletobjects.giftcardclass.get
-export def "walletobjects-gift-card-class walletobjectsgiftcardclassget" [
+export def "walletobjects-gift-card-class get" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2387,7 +2396,7 @@ export def "walletobjects-gift-card-class walletobjectsgiftcardclassget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_id: $resource_id} | format pattern "/walletobjects/v1/giftCardClass/{resource_id}") $qp)
+  let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/giftCardClass/{resource_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2416,7 +2425,7 @@ export def "walletobjects-gift-card-class walletobjectsgiftcardclassget" [
 # --securityAnimation shape: {animationType?: "ANIMATION_UNSPECIFIED"|"FOIL_SHIMMER"|"foilShimmer"}
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
 # --wordMark shape: {contentDescription?: record, kind?: string, sourceUri?: record}
-export def "walletobjects-gift-card-class walletobjectsgiftcardclasspatch" [
+export def "walletobjects-gift-card-class update-by-resourceId" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2465,7 +2474,7 @@ export def "walletobjects-gift-card-class walletobjectsgiftcardclasspatch" [
   --multiple-devices-and-holders-allowed-status: string@multiple-devices-and-holders-allowed-status-completer # Identifies whether multiple users and devices will save the same object referencing this class.
   --pin-label: string # The label to display for the PIN, such as "4-digit PIN".
   --program-logo: record # Wrapping type for Google hosted images. Next ID: 7 — shape: {contentDescription?: record, kind?: string, sourceUri?: record}
-  --redemption-issuers: list # Identifies which redemption issuers can redeem the pass over Smart Tap. Redemption issuers are identified by their issuer ID. Redemption issuers must have at least one Smart Tap key configured. The `enableSmartTap` and object level `smartTapRedemptionLevel` fields must also be set up correctly in order for a pass to support Smart Tap.
+  --redemption-issuers: list<string> # Identifies which redemption issuers can redeem the pass over Smart Tap. Redemption issuers are identified by their issuer ID. Redemption issuers must have at least one Smart Tap key configured. The `enableSmartTap` and object level `smartTapRedemptionLevel` fields must also be set up correctly in order for a pass to support Smart Tap.
   --review: record # shape: {comments?: string}
   --review-status: string@review-status-completer # Required. The status of the class. This field can be set to `draft` or `underReview` using the insert, patch, or update API calls. Once the review state is changed from `draft` it may not be changed back to `draft`. You should keep this field to `draft` when the class is under development. A `draft` class cannot be used to create any object. You should set this field to `underReview` when you believe the class is ready for use. The platform will automatically set this field to `approved` and it can be immediately used to create or migrate objects. When updating an already `approved` class you should keep setting this field to `underReview`.
   --security-animation: record # shape: {animationType?: "ANIMATION_UNSPECIFIED"|"FOIL_SHIMMER"|"foilShimmer"}
@@ -2478,12 +2487,12 @@ export def "walletobjects-gift-card-class walletobjectsgiftcardclasspatch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_id: $resource_id} | format pattern "/walletobjects/v1/giftCardClass/{resource_id}") $qp)
-  let body = {"allowBarcodeRedemption": $allow_barcode_redemption, "allowMultipleUsersPerObject": $allow_multiple_users_per_object, "callbackOptions": $callback_options, "cardNumberLabel": $card_number_label, "classTemplateInfo": $class_template_info, "countryCode": $country_code, "enableSmartTap": $enable_smart_tap, "eventNumberLabel": $event_number_label, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "homepageUri": $homepage_uri, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "issuerName": $issuer_name, "kind": $kind, "linksModuleData": $links_module_data, "localizedCardNumberLabel": $localized_card_number_label, "localizedEventNumberLabel": $localized_event_number_label, "localizedIssuerName": $localized_issuer_name, "localizedMerchantName": $localized_merchant_name, "localizedPinLabel": $localized_pin_label, "locations": $locations, "merchantName": $merchant_name, "messages": $messages, "multipleDevicesAndHoldersAllowedStatus": $multiple_devices_and_holders_allowed_status, "pinLabel": $pin_label, "programLogo": $program_logo, "redemptionIssuers": $redemption_issuers, "review": $review, "reviewStatus": $review_status, "securityAnimation": $security_animation, "textModulesData": $text_modules_data, "version": $version, "viewUnlockRequirement": $view_unlock_requirement, "wordMark": $word_mark} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/giftCardClass/{resource_id}") $qp)
+  let req_body = {"allowBarcodeRedemption": $allow_barcode_redemption, "allowMultipleUsersPerObject": $allow_multiple_users_per_object, "callbackOptions": $callback_options, "cardNumberLabel": $card_number_label, "classTemplateInfo": $class_template_info, "countryCode": $country_code, "enableSmartTap": $enable_smart_tap, "eventNumberLabel": $event_number_label, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "homepageUri": $homepage_uri, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "issuerName": $issuer_name, "kind": $kind, "linksModuleData": $links_module_data, "localizedCardNumberLabel": $localized_card_number_label, "localizedEventNumberLabel": $localized_event_number_label, "localizedIssuerName": $localized_issuer_name, "localizedMerchantName": $localized_merchant_name, "localizedPinLabel": $localized_pin_label, "locations": $locations, "merchantName": $merchant_name, "messages": $messages, "multipleDevicesAndHoldersAllowedStatus": $multiple_devices_and_holders_allowed_status, "pinLabel": $pin_label, "programLogo": $program_logo, "redemptionIssuers": $redemption_issuers, "review": $review, "reviewStatus": $review_status, "securityAnimation": $security_animation, "textModulesData": $text_modules_data, "version": $version, "viewUnlockRequirement": $view_unlock_requirement, "wordMark": $word_mark} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates the gift card class referenced by the given class ID.
@@ -2509,7 +2518,7 @@ export def "walletobjects-gift-card-class walletobjectsgiftcardclasspatch" [
 # --securityAnimation shape: {animationType?: "ANIMATION_UNSPECIFIED"|"FOIL_SHIMMER"|"foilShimmer"}
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
 # --wordMark shape: {contentDescription?: record, kind?: string, sourceUri?: record}
-export def "walletobjects-gift-card-class walletobjectsgiftcardclassupdate" [
+export def "walletobjects-gift-card-class update-by-resourceId-1" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2558,7 +2567,7 @@ export def "walletobjects-gift-card-class walletobjectsgiftcardclassupdate" [
   --multiple-devices-and-holders-allowed-status: string@multiple-devices-and-holders-allowed-status-completer # Identifies whether multiple users and devices will save the same object referencing this class.
   --pin-label: string # The label to display for the PIN, such as "4-digit PIN".
   --program-logo: record # Wrapping type for Google hosted images. Next ID: 7 — shape: {contentDescription?: record, kind?: string, sourceUri?: record}
-  --redemption-issuers: list # Identifies which redemption issuers can redeem the pass over Smart Tap. Redemption issuers are identified by their issuer ID. Redemption issuers must have at least one Smart Tap key configured. The `enableSmartTap` and object level `smartTapRedemptionLevel` fields must also be set up correctly in order for a pass to support Smart Tap.
+  --redemption-issuers: list<string> # Identifies which redemption issuers can redeem the pass over Smart Tap. Redemption issuers are identified by their issuer ID. Redemption issuers must have at least one Smart Tap key configured. The `enableSmartTap` and object level `smartTapRedemptionLevel` fields must also be set up correctly in order for a pass to support Smart Tap.
   --review: record # shape: {comments?: string}
   --review-status: string@review-status-completer # Required. The status of the class. This field can be set to `draft` or `underReview` using the insert, patch, or update API calls. Once the review state is changed from `draft` it may not be changed back to `draft`. You should keep this field to `draft` when the class is under development. A `draft` class cannot be used to create any object. You should set this field to `underReview` when you believe the class is ready for use. The platform will automatically set this field to `approved` and it can be immediately used to create or migrate objects. When updating an already `approved` class you should keep setting this field to `underReview`.
   --security-animation: record # shape: {animationType?: "ANIMATION_UNSPECIFIED"|"FOIL_SHIMMER"|"foilShimmer"}
@@ -2571,12 +2580,12 @@ export def "walletobjects-gift-card-class walletobjectsgiftcardclassupdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_id: $resource_id} | format pattern "/walletobjects/v1/giftCardClass/{resource_id}") $qp)
-  let body = {"allowBarcodeRedemption": $allow_barcode_redemption, "allowMultipleUsersPerObject": $allow_multiple_users_per_object, "callbackOptions": $callback_options, "cardNumberLabel": $card_number_label, "classTemplateInfo": $class_template_info, "countryCode": $country_code, "enableSmartTap": $enable_smart_tap, "eventNumberLabel": $event_number_label, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "homepageUri": $homepage_uri, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "issuerName": $issuer_name, "kind": $kind, "linksModuleData": $links_module_data, "localizedCardNumberLabel": $localized_card_number_label, "localizedEventNumberLabel": $localized_event_number_label, "localizedIssuerName": $localized_issuer_name, "localizedMerchantName": $localized_merchant_name, "localizedPinLabel": $localized_pin_label, "locations": $locations, "merchantName": $merchant_name, "messages": $messages, "multipleDevicesAndHoldersAllowedStatus": $multiple_devices_and_holders_allowed_status, "pinLabel": $pin_label, "programLogo": $program_logo, "redemptionIssuers": $redemption_issuers, "review": $review, "reviewStatus": $review_status, "securityAnimation": $security_animation, "textModulesData": $text_modules_data, "version": $version, "viewUnlockRequirement": $view_unlock_requirement, "wordMark": $word_mark} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/giftCardClass/{resource_id}") $qp)
+  let req_body = {"allowBarcodeRedemption": $allow_barcode_redemption, "allowMultipleUsersPerObject": $allow_multiple_users_per_object, "callbackOptions": $callback_options, "cardNumberLabel": $card_number_label, "classTemplateInfo": $class_template_info, "countryCode": $country_code, "enableSmartTap": $enable_smart_tap, "eventNumberLabel": $event_number_label, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "homepageUri": $homepage_uri, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "issuerName": $issuer_name, "kind": $kind, "linksModuleData": $links_module_data, "localizedCardNumberLabel": $localized_card_number_label, "localizedEventNumberLabel": $localized_event_number_label, "localizedIssuerName": $localized_issuer_name, "localizedMerchantName": $localized_merchant_name, "localizedPinLabel": $localized_pin_label, "locations": $locations, "merchantName": $merchant_name, "messages": $messages, "multipleDevicesAndHoldersAllowedStatus": $multiple_devices_and_holders_allowed_status, "pinLabel": $pin_label, "programLogo": $program_logo, "redemptionIssuers": $redemption_issuers, "review": $review, "reviewStatus": $review_status, "securityAnimation": $security_animation, "textModulesData": $text_modules_data, "version": $version, "viewUnlockRequirement": $view_unlock_requirement, "wordMark": $word_mark} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Adds a message to the gift card class referenced by the given class ID.
@@ -2584,7 +2593,7 @@ export def "walletobjects-gift-card-class walletobjectsgiftcardclassupdate" [
 # POST /walletobjects/v1/giftCardClass/{resourceId}/addMessage
 # operationId: walletobjects.giftcardclass.addmessage
 # --message shape: {body?: string, displayInterval?: record, header?: string, id?: string, kind?: string, localizedBody?: record, localizedHeader?: record, messageType?: "MESSAGE_TYPE_UNSPECIFIED"|"TEXT"|"text"|"EXPIRATION_NOTIFICATION"|"expirationNotification"}
-export def "walletobjects-gift-card-class-add-message walletobjectsgiftcardclassaddmessage" [
+export def "walletobjects-gift-card-class-add-message create-addmessage" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2611,19 +2620,19 @@ export def "walletobjects-gift-card-class-add-message walletobjectsgiftcardclass
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_id: $resource_id} | format pattern "/walletobjects/v1/giftCardClass/{resource_id}/addMessage") $qp)
-  let body = {"message": $message} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/giftCardClass/{resource_id}/addMessage") $qp)
+  let req_body = {"message": $message} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns a list of all gift card objects for a given issuer ID.
 #
 # GET /walletobjects/v1/giftCardObject
 # operationId: walletobjects.giftcardobject.list
-export def "walletobjects-gift-card-object walletobjectsgiftcardobjectlist" [
+export def "walletobjects-gift-card-object list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2664,7 +2673,7 @@ export def "walletobjects-gift-card-object walletobjectsgiftcardobjectlist" [
 # --balance shape: {currencyCode?: string, kind?: string, micros?: string}
 # --balanceUpdateTime shape: {date?: string}
 # --barcode shape: {alternateText?: string, kind?: string, renderEncoding?: "RENDER_ENCODING_UNSPECIFIED"|"UTF_8", showCodeText?: record, type?: "BARCODE_TYPE_UNSPECIFIED"|"AZTEC"|"aztec"|"CODE_39"|"code39"|"CODE_128"|"code128"|"CODABAR"|"codabar"|"DATA_MATRIX"|"dataMatrix"|"EAN_8"|"ean8"|"EAN_13"|"ean13"|"EAN13"|"ITF_14"|"itf14"|"PDF_417"|"pdf417"|"PDF417"|"QR_CODE"|"qrCode"|"qrcode"|"UPC_A"|"upcA"|"TEXT_ONLY"|"textOnly", value?: string}
-# --classReference shape: {allowBarcodeRedemption?: bool, allowMultipleUsersPerObject?: bool, callbackOptions?: record, cardNumberLabel?: string, classTemplateInfo?: record, countryCode?: string, enableSmartTap?: bool, eventNumberLabel?: string, heroImage?: record, hexBackgroundColor?: string, homepageUri?: record, id?: string, imageModulesData?: list, infoModuleData?: record, issuerName?: string, kind?: string, linksModuleData?: record, localizedCardNumberLabel?: record, localizedEventNumberLabel?: record, localizedIssuerName?: record, localizedMerchantName?: record, localizedPinLabel?: record, locations?: list, merchantName?: string, messages?: list, multipleDevicesAndHoldersAllowedStatus?: "STATUS_UNSPECIFIED"|"MULTIPLE_HOLDERS"|"multipleHolders"|"ONE_USER_ALL_DEVICES"|"oneUserAllDevices"|"ONE_USER_ONE_DEVICE"|"oneUserOneDevice", pinLabel?: string, programLogo?: record, redemptionIssuers?: list, review?: record, reviewStatus?: "REVIEW_STATUS_UNSPECIFIED"|"UNDER_REVIEW"|"underReview"|"APPROVED"|"approved"|"REJECTED"|"rejected"|"DRAFT"|"draft", securityAnimation?: record, textModulesData?: list, version?: string, viewUnlockRequirement?: "VIEW_UNLOCK_REQUIREMENT_UNSPECIFIED"|"UNLOCK_NOT_REQUIRED"|"UNLOCK_REQUIRED_TO_VIEW", wordMark?: record}
+# --classReference shape: {allowBarcodeRedemption?: bool, allowMultipleUsersPerObject?: bool, callbackOptions?: record, cardNumberLabel?: string, classTemplateInfo?: record, countryCode?: string, enableSmartTap?: bool, eventNumberLabel?: string, heroImage?: record, hexBackgroundColor?: string, homepageUri?: record, id?: string, imageModulesData?: list, infoModuleData?: record, issuerName?: string, kind?: string, linksModuleData?: record, localizedCardNumberLabel?: record, localizedEventNumberLabel?: record, ... (17 more fields)}
 # --groupingInfo shape: {groupingId?: string, sortIndex?: int}
 # --heroImage shape: {contentDescription?: record, kind?: string, sourceUri?: record}
 # --imageModulesData item shape: {id?: string, mainImage?: record}
@@ -2676,7 +2685,7 @@ export def "walletobjects-gift-card-object walletobjectsgiftcardobjectlist" [
 # --rotatingBarcode shape: {alternateText?: string, renderEncoding?: "RENDER_ENCODING_UNSPECIFIED"|"UTF_8", showCodeText?: record, totpDetails?: record, type?: "BARCODE_TYPE_UNSPECIFIED"|"AZTEC"|"aztec"|"CODE_39"|"code39"|"CODE_128"|"code128"|"CODABAR"|"codabar"|"DATA_MATRIX"|"dataMatrix"|"EAN_8"|"ean8"|"EAN_13"|"ean13"|"EAN13"|"ITF_14"|"itf14"|"PDF_417"|"pdf417"|"PDF417"|"QR_CODE"|"qrCode"|"qrcode"|"UPC_A"|"upcA"|"TEXT_ONLY"|"textOnly", valuePattern?: string}
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
 # --validTimeInterval shape: {end?: record, kind?: string, start?: record}
-export def "walletobjects-gift-card-object walletobjectsgiftcardobjectinsert" [
+export def "walletobjects-gift-card-object create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2702,7 +2711,7 @@ export def "walletobjects-gift-card-object walletobjectsgiftcardobjectinsert" [
   --barcode: record # shape: {alternateText?: string, kind?: string, renderEncoding?: "RENDER_ENCODING_UNSPECIFIED"|"UTF_8", showCodeText?: record, type?: "BARCODE_TYPE_UNSPECIFIED"|"AZTEC"|"aztec"|"CODE_39"|"code39"|"CODE_128"|"code128"|"CODABAR"|"codabar"|"DATA_MATRIX"|"dataMatrix"|"EAN_8"|"ean8"|"EAN_13"|"ean13"|"EAN13"|"ITF_14"|"itf14"|"PDF_417"|"pdf417"|"PDF417"|"QR_CODE"|"qrCode"|"qrcode"|"UPC_A"|"upcA"|"TEXT_ONLY"|"textOnly", value?: string}
   --card-number: string # Required. The card's number.
   --class-id: string # Required. The class associated with this object. The class must be of the same type as this object, must already exist, and must be approved. Class IDs should follow the format issuer ID.identifier where the former is issued by Google and latter is chosen by you.
-  --class-reference: record # shape: {allowBarcodeRedemption?: bool, allowMultipleUsersPerObject?: bool, callbackOptions?: record, cardNumberLabel?: string, classTemplateInfo?: record, countryCode?: string, enableSmartTap?: bool, eventNumberLabel?: string, heroImage?: record, hexBackgroundColor?: string, homepageUri?: record, id?: string, imageModulesData?: list, infoModuleData?: record, issuerName?: string, kind?: string, linksModuleData?: record, localizedCardNumberLabel?: record, localizedEventNumberLabel?: record, localizedIssuerName?: record, localizedMerchantName?: record, localizedPinLabel?: record, locations?: list, merchantName?: string, messages?: list, multipleDevicesAndHoldersAllowedStatus?: "STATUS_UNSPECIFIED"|"MULTIPLE_HOLDERS"|"multipleHolders"|"ONE_USER_ALL_DEVICES"|"oneUserAllDevices"|"ONE_USER_ONE_DEVICE"|"oneUserOneDevice", pinLabel?: string, programLogo?: record, redemptionIssuers?: list, review?: record, reviewStatus?: "REVIEW_STATUS_UNSPECIFIED"|"UNDER_REVIEW"|"underReview"|"APPROVED"|"approved"|"REJECTED"|"rejected"|"DRAFT"|"draft", securityAnimation?: record, textModulesData?: list, version?: string, viewUnlockRequirement?: "VIEW_UNLOCK_REQUIREMENT_UNSPECIFIED"|"UNLOCK_NOT_REQUIRED"|"UNLOCK_REQUIRED_TO_VIEW", wordMark?: record}
+  --class-reference: record # shape: {allowBarcodeRedemption?: bool, allowMultipleUsersPerObject?: bool, callbackOptions?: record, cardNumberLabel?: string, classTemplateInfo?: record, countryCode?: string, enableSmartTap?: bool, eventNumberLabel?: string, heroImage?: record, hexBackgroundColor?: string, homepageUri?: record, id?: string, imageModulesData?: list, infoModuleData?: record, issuerName?: string, kind?: string, linksModuleData?: record, localizedCardNumberLabel?: record, localizedEventNumberLabel?: record, ... (17 more fields)}
   --disable-expiration-notification: oneof<nothing, bool> # Indicates if notifications should explicitly be suppressed. If this field is set to true, regardless of the `messages` field, expiration notifications to the user will be suppressed. By default, this field is set to false. Currently, this can only be set for offers.
   --event-number: string # The card's event number, an optional field used by some gift cards.
   --grouping-info: record # shape: {groupingId?: string, sortIndex?: int}
@@ -2730,18 +2739,18 @@ export def "walletobjects-gift-card-object walletobjectsgiftcardobjectinsert" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/walletobjects/v1/giftCardObject" $qp)
-  let body = {"appLinkData": $app_link_data, "balance": $balance, "balanceUpdateTime": $balance_update_time, "barcode": $barcode, "cardNumber": $card_number, "classId": $class_id, "classReference": $class_reference, "disableExpirationNotification": $disable_expiration_notification, "eventNumber": $event_number, "groupingInfo": $grouping_info, "hasLinkedDevice": $has_linked_device, "hasUsers": $has_users, "heroImage": $hero_image, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "kind": $kind, "linksModuleData": $links_module_data, "locations": $locations, "messages": $messages, "passConstraints": $pass_constraints, "pin": $pin, "rotatingBarcode": $rotating_barcode, "smartTapRedemptionValue": $smart_tap_redemption_value, "state": $state, "textModulesData": $text_modules_data, "validTimeInterval": $valid_time_interval, "version": $version} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"appLinkData": $app_link_data, "balance": $balance, "balanceUpdateTime": $balance_update_time, "barcode": $barcode, "cardNumber": $card_number, "classId": $class_id, "classReference": $class_reference, "disableExpirationNotification": $disable_expiration_notification, "eventNumber": $event_number, "groupingInfo": $grouping_info, "hasLinkedDevice": $has_linked_device, "hasUsers": $has_users, "heroImage": $hero_image, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "kind": $kind, "linksModuleData": $links_module_data, "locations": $locations, "messages": $messages, "passConstraints": $pass_constraints, "pin": $pin, "rotatingBarcode": $rotating_barcode, "smartTapRedemptionValue": $smart_tap_redemption_value, "state": $state, "textModulesData": $text_modules_data, "validTimeInterval": $valid_time_interval, "version": $version} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns the gift card object with the given object ID.
 #
 # GET /walletobjects/v1/giftCardObject/{resourceId}
 # operationId: walletobjects.giftcardobject.get
-export def "walletobjects-gift-card-object walletobjectsgiftcardobjectget" [
+export def "walletobjects-gift-card-object get" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2766,7 +2775,7 @@ export def "walletobjects-gift-card-object walletobjectsgiftcardobjectget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_id: $resource_id} | format pattern "/walletobjects/v1/giftCardObject/{resource_id}") $qp)
+  let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/giftCardObject/{resource_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2780,7 +2789,7 @@ export def "walletobjects-gift-card-object walletobjectsgiftcardobjectget" [
 # --balance shape: {currencyCode?: string, kind?: string, micros?: string}
 # --balanceUpdateTime shape: {date?: string}
 # --barcode shape: {alternateText?: string, kind?: string, renderEncoding?: "RENDER_ENCODING_UNSPECIFIED"|"UTF_8", showCodeText?: record, type?: "BARCODE_TYPE_UNSPECIFIED"|"AZTEC"|"aztec"|"CODE_39"|"code39"|"CODE_128"|"code128"|"CODABAR"|"codabar"|"DATA_MATRIX"|"dataMatrix"|"EAN_8"|"ean8"|"EAN_13"|"ean13"|"EAN13"|"ITF_14"|"itf14"|"PDF_417"|"pdf417"|"PDF417"|"QR_CODE"|"qrCode"|"qrcode"|"UPC_A"|"upcA"|"TEXT_ONLY"|"textOnly", value?: string}
-# --classReference shape: {allowBarcodeRedemption?: bool, allowMultipleUsersPerObject?: bool, callbackOptions?: record, cardNumberLabel?: string, classTemplateInfo?: record, countryCode?: string, enableSmartTap?: bool, eventNumberLabel?: string, heroImage?: record, hexBackgroundColor?: string, homepageUri?: record, id?: string, imageModulesData?: list, infoModuleData?: record, issuerName?: string, kind?: string, linksModuleData?: record, localizedCardNumberLabel?: record, localizedEventNumberLabel?: record, localizedIssuerName?: record, localizedMerchantName?: record, localizedPinLabel?: record, locations?: list, merchantName?: string, messages?: list, multipleDevicesAndHoldersAllowedStatus?: "STATUS_UNSPECIFIED"|"MULTIPLE_HOLDERS"|"multipleHolders"|"ONE_USER_ALL_DEVICES"|"oneUserAllDevices"|"ONE_USER_ONE_DEVICE"|"oneUserOneDevice", pinLabel?: string, programLogo?: record, redemptionIssuers?: list, review?: record, reviewStatus?: "REVIEW_STATUS_UNSPECIFIED"|"UNDER_REVIEW"|"underReview"|"APPROVED"|"approved"|"REJECTED"|"rejected"|"DRAFT"|"draft", securityAnimation?: record, textModulesData?: list, version?: string, viewUnlockRequirement?: "VIEW_UNLOCK_REQUIREMENT_UNSPECIFIED"|"UNLOCK_NOT_REQUIRED"|"UNLOCK_REQUIRED_TO_VIEW", wordMark?: record}
+# --classReference shape: {allowBarcodeRedemption?: bool, allowMultipleUsersPerObject?: bool, callbackOptions?: record, cardNumberLabel?: string, classTemplateInfo?: record, countryCode?: string, enableSmartTap?: bool, eventNumberLabel?: string, heroImage?: record, hexBackgroundColor?: string, homepageUri?: record, id?: string, imageModulesData?: list, infoModuleData?: record, issuerName?: string, kind?: string, linksModuleData?: record, localizedCardNumberLabel?: record, localizedEventNumberLabel?: record, ... (17 more fields)}
 # --groupingInfo shape: {groupingId?: string, sortIndex?: int}
 # --heroImage shape: {contentDescription?: record, kind?: string, sourceUri?: record}
 # --imageModulesData item shape: {id?: string, mainImage?: record}
@@ -2792,7 +2801,7 @@ export def "walletobjects-gift-card-object walletobjectsgiftcardobjectget" [
 # --rotatingBarcode shape: {alternateText?: string, renderEncoding?: "RENDER_ENCODING_UNSPECIFIED"|"UTF_8", showCodeText?: record, totpDetails?: record, type?: "BARCODE_TYPE_UNSPECIFIED"|"AZTEC"|"aztec"|"CODE_39"|"code39"|"CODE_128"|"code128"|"CODABAR"|"codabar"|"DATA_MATRIX"|"dataMatrix"|"EAN_8"|"ean8"|"EAN_13"|"ean13"|"EAN13"|"ITF_14"|"itf14"|"PDF_417"|"pdf417"|"PDF417"|"QR_CODE"|"qrCode"|"qrcode"|"UPC_A"|"upcA"|"TEXT_ONLY"|"textOnly", valuePattern?: string}
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
 # --validTimeInterval shape: {end?: record, kind?: string, start?: record}
-export def "walletobjects-gift-card-object walletobjectsgiftcardobjectpatch" [
+export def "walletobjects-gift-card-object update-by-resourceId" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2819,7 +2828,7 @@ export def "walletobjects-gift-card-object walletobjectsgiftcardobjectpatch" [
   --barcode: record # shape: {alternateText?: string, kind?: string, renderEncoding?: "RENDER_ENCODING_UNSPECIFIED"|"UTF_8", showCodeText?: record, type?: "BARCODE_TYPE_UNSPECIFIED"|"AZTEC"|"aztec"|"CODE_39"|"code39"|"CODE_128"|"code128"|"CODABAR"|"codabar"|"DATA_MATRIX"|"dataMatrix"|"EAN_8"|"ean8"|"EAN_13"|"ean13"|"EAN13"|"ITF_14"|"itf14"|"PDF_417"|"pdf417"|"PDF417"|"QR_CODE"|"qrCode"|"qrcode"|"UPC_A"|"upcA"|"TEXT_ONLY"|"textOnly", value?: string}
   --card-number: string # Required. The card's number.
   --class-id: string # Required. The class associated with this object. The class must be of the same type as this object, must already exist, and must be approved. Class IDs should follow the format issuer ID.identifier where the former is issued by Google and latter is chosen by you.
-  --class-reference: record # shape: {allowBarcodeRedemption?: bool, allowMultipleUsersPerObject?: bool, callbackOptions?: record, cardNumberLabel?: string, classTemplateInfo?: record, countryCode?: string, enableSmartTap?: bool, eventNumberLabel?: string, heroImage?: record, hexBackgroundColor?: string, homepageUri?: record, id?: string, imageModulesData?: list, infoModuleData?: record, issuerName?: string, kind?: string, linksModuleData?: record, localizedCardNumberLabel?: record, localizedEventNumberLabel?: record, localizedIssuerName?: record, localizedMerchantName?: record, localizedPinLabel?: record, locations?: list, merchantName?: string, messages?: list, multipleDevicesAndHoldersAllowedStatus?: "STATUS_UNSPECIFIED"|"MULTIPLE_HOLDERS"|"multipleHolders"|"ONE_USER_ALL_DEVICES"|"oneUserAllDevices"|"ONE_USER_ONE_DEVICE"|"oneUserOneDevice", pinLabel?: string, programLogo?: record, redemptionIssuers?: list, review?: record, reviewStatus?: "REVIEW_STATUS_UNSPECIFIED"|"UNDER_REVIEW"|"underReview"|"APPROVED"|"approved"|"REJECTED"|"rejected"|"DRAFT"|"draft", securityAnimation?: record, textModulesData?: list, version?: string, viewUnlockRequirement?: "VIEW_UNLOCK_REQUIREMENT_UNSPECIFIED"|"UNLOCK_NOT_REQUIRED"|"UNLOCK_REQUIRED_TO_VIEW", wordMark?: record}
+  --class-reference: record # shape: {allowBarcodeRedemption?: bool, allowMultipleUsersPerObject?: bool, callbackOptions?: record, cardNumberLabel?: string, classTemplateInfo?: record, countryCode?: string, enableSmartTap?: bool, eventNumberLabel?: string, heroImage?: record, hexBackgroundColor?: string, homepageUri?: record, id?: string, imageModulesData?: list, infoModuleData?: record, issuerName?: string, kind?: string, linksModuleData?: record, localizedCardNumberLabel?: record, localizedEventNumberLabel?: record, ... (17 more fields)}
   --disable-expiration-notification: oneof<nothing, bool> # Indicates if notifications should explicitly be suppressed. If this field is set to true, regardless of the `messages` field, expiration notifications to the user will be suppressed. By default, this field is set to false. Currently, this can only be set for offers.
   --event-number: string # The card's event number, an optional field used by some gift cards.
   --grouping-info: record # shape: {groupingId?: string, sortIndex?: int}
@@ -2846,12 +2855,12 @@ export def "walletobjects-gift-card-object walletobjectsgiftcardobjectpatch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_id: $resource_id} | format pattern "/walletobjects/v1/giftCardObject/{resource_id}") $qp)
-  let body = {"appLinkData": $app_link_data, "balance": $balance, "balanceUpdateTime": $balance_update_time, "barcode": $barcode, "cardNumber": $card_number, "classId": $class_id, "classReference": $class_reference, "disableExpirationNotification": $disable_expiration_notification, "eventNumber": $event_number, "groupingInfo": $grouping_info, "hasLinkedDevice": $has_linked_device, "hasUsers": $has_users, "heroImage": $hero_image, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "kind": $kind, "linksModuleData": $links_module_data, "locations": $locations, "messages": $messages, "passConstraints": $pass_constraints, "pin": $pin, "rotatingBarcode": $rotating_barcode, "smartTapRedemptionValue": $smart_tap_redemption_value, "state": $state, "textModulesData": $text_modules_data, "validTimeInterval": $valid_time_interval, "version": $version} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/giftCardObject/{resource_id}") $qp)
+  let req_body = {"appLinkData": $app_link_data, "balance": $balance, "balanceUpdateTime": $balance_update_time, "barcode": $barcode, "cardNumber": $card_number, "classId": $class_id, "classReference": $class_reference, "disableExpirationNotification": $disable_expiration_notification, "eventNumber": $event_number, "groupingInfo": $grouping_info, "hasLinkedDevice": $has_linked_device, "hasUsers": $has_users, "heroImage": $hero_image, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "kind": $kind, "linksModuleData": $links_module_data, "locations": $locations, "messages": $messages, "passConstraints": $pass_constraints, "pin": $pin, "rotatingBarcode": $rotating_barcode, "smartTapRedemptionValue": $smart_tap_redemption_value, "state": $state, "textModulesData": $text_modules_data, "validTimeInterval": $valid_time_interval, "version": $version} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates the gift card object referenced by the given object ID.
@@ -2862,7 +2871,7 @@ export def "walletobjects-gift-card-object walletobjectsgiftcardobjectpatch" [
 # --balance shape: {currencyCode?: string, kind?: string, micros?: string}
 # --balanceUpdateTime shape: {date?: string}
 # --barcode shape: {alternateText?: string, kind?: string, renderEncoding?: "RENDER_ENCODING_UNSPECIFIED"|"UTF_8", showCodeText?: record, type?: "BARCODE_TYPE_UNSPECIFIED"|"AZTEC"|"aztec"|"CODE_39"|"code39"|"CODE_128"|"code128"|"CODABAR"|"codabar"|"DATA_MATRIX"|"dataMatrix"|"EAN_8"|"ean8"|"EAN_13"|"ean13"|"EAN13"|"ITF_14"|"itf14"|"PDF_417"|"pdf417"|"PDF417"|"QR_CODE"|"qrCode"|"qrcode"|"UPC_A"|"upcA"|"TEXT_ONLY"|"textOnly", value?: string}
-# --classReference shape: {allowBarcodeRedemption?: bool, allowMultipleUsersPerObject?: bool, callbackOptions?: record, cardNumberLabel?: string, classTemplateInfo?: record, countryCode?: string, enableSmartTap?: bool, eventNumberLabel?: string, heroImage?: record, hexBackgroundColor?: string, homepageUri?: record, id?: string, imageModulesData?: list, infoModuleData?: record, issuerName?: string, kind?: string, linksModuleData?: record, localizedCardNumberLabel?: record, localizedEventNumberLabel?: record, localizedIssuerName?: record, localizedMerchantName?: record, localizedPinLabel?: record, locations?: list, merchantName?: string, messages?: list, multipleDevicesAndHoldersAllowedStatus?: "STATUS_UNSPECIFIED"|"MULTIPLE_HOLDERS"|"multipleHolders"|"ONE_USER_ALL_DEVICES"|"oneUserAllDevices"|"ONE_USER_ONE_DEVICE"|"oneUserOneDevice", pinLabel?: string, programLogo?: record, redemptionIssuers?: list, review?: record, reviewStatus?: "REVIEW_STATUS_UNSPECIFIED"|"UNDER_REVIEW"|"underReview"|"APPROVED"|"approved"|"REJECTED"|"rejected"|"DRAFT"|"draft", securityAnimation?: record, textModulesData?: list, version?: string, viewUnlockRequirement?: "VIEW_UNLOCK_REQUIREMENT_UNSPECIFIED"|"UNLOCK_NOT_REQUIRED"|"UNLOCK_REQUIRED_TO_VIEW", wordMark?: record}
+# --classReference shape: {allowBarcodeRedemption?: bool, allowMultipleUsersPerObject?: bool, callbackOptions?: record, cardNumberLabel?: string, classTemplateInfo?: record, countryCode?: string, enableSmartTap?: bool, eventNumberLabel?: string, heroImage?: record, hexBackgroundColor?: string, homepageUri?: record, id?: string, imageModulesData?: list, infoModuleData?: record, issuerName?: string, kind?: string, linksModuleData?: record, localizedCardNumberLabel?: record, localizedEventNumberLabel?: record, ... (17 more fields)}
 # --groupingInfo shape: {groupingId?: string, sortIndex?: int}
 # --heroImage shape: {contentDescription?: record, kind?: string, sourceUri?: record}
 # --imageModulesData item shape: {id?: string, mainImage?: record}
@@ -2874,7 +2883,7 @@ export def "walletobjects-gift-card-object walletobjectsgiftcardobjectpatch" [
 # --rotatingBarcode shape: {alternateText?: string, renderEncoding?: "RENDER_ENCODING_UNSPECIFIED"|"UTF_8", showCodeText?: record, totpDetails?: record, type?: "BARCODE_TYPE_UNSPECIFIED"|"AZTEC"|"aztec"|"CODE_39"|"code39"|"CODE_128"|"code128"|"CODABAR"|"codabar"|"DATA_MATRIX"|"dataMatrix"|"EAN_8"|"ean8"|"EAN_13"|"ean13"|"EAN13"|"ITF_14"|"itf14"|"PDF_417"|"pdf417"|"PDF417"|"QR_CODE"|"qrCode"|"qrcode"|"UPC_A"|"upcA"|"TEXT_ONLY"|"textOnly", valuePattern?: string}
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
 # --validTimeInterval shape: {end?: record, kind?: string, start?: record}
-export def "walletobjects-gift-card-object walletobjectsgiftcardobjectupdate" [
+export def "walletobjects-gift-card-object update-by-resourceId-1" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2901,7 +2910,7 @@ export def "walletobjects-gift-card-object walletobjectsgiftcardobjectupdate" [
   --barcode: record # shape: {alternateText?: string, kind?: string, renderEncoding?: "RENDER_ENCODING_UNSPECIFIED"|"UTF_8", showCodeText?: record, type?: "BARCODE_TYPE_UNSPECIFIED"|"AZTEC"|"aztec"|"CODE_39"|"code39"|"CODE_128"|"code128"|"CODABAR"|"codabar"|"DATA_MATRIX"|"dataMatrix"|"EAN_8"|"ean8"|"EAN_13"|"ean13"|"EAN13"|"ITF_14"|"itf14"|"PDF_417"|"pdf417"|"PDF417"|"QR_CODE"|"qrCode"|"qrcode"|"UPC_A"|"upcA"|"TEXT_ONLY"|"textOnly", value?: string}
   --card-number: string # Required. The card's number.
   --class-id: string # Required. The class associated with this object. The class must be of the same type as this object, must already exist, and must be approved. Class IDs should follow the format issuer ID.identifier where the former is issued by Google and latter is chosen by you.
-  --class-reference: record # shape: {allowBarcodeRedemption?: bool, allowMultipleUsersPerObject?: bool, callbackOptions?: record, cardNumberLabel?: string, classTemplateInfo?: record, countryCode?: string, enableSmartTap?: bool, eventNumberLabel?: string, heroImage?: record, hexBackgroundColor?: string, homepageUri?: record, id?: string, imageModulesData?: list, infoModuleData?: record, issuerName?: string, kind?: string, linksModuleData?: record, localizedCardNumberLabel?: record, localizedEventNumberLabel?: record, localizedIssuerName?: record, localizedMerchantName?: record, localizedPinLabel?: record, locations?: list, merchantName?: string, messages?: list, multipleDevicesAndHoldersAllowedStatus?: "STATUS_UNSPECIFIED"|"MULTIPLE_HOLDERS"|"multipleHolders"|"ONE_USER_ALL_DEVICES"|"oneUserAllDevices"|"ONE_USER_ONE_DEVICE"|"oneUserOneDevice", pinLabel?: string, programLogo?: record, redemptionIssuers?: list, review?: record, reviewStatus?: "REVIEW_STATUS_UNSPECIFIED"|"UNDER_REVIEW"|"underReview"|"APPROVED"|"approved"|"REJECTED"|"rejected"|"DRAFT"|"draft", securityAnimation?: record, textModulesData?: list, version?: string, viewUnlockRequirement?: "VIEW_UNLOCK_REQUIREMENT_UNSPECIFIED"|"UNLOCK_NOT_REQUIRED"|"UNLOCK_REQUIRED_TO_VIEW", wordMark?: record}
+  --class-reference: record # shape: {allowBarcodeRedemption?: bool, allowMultipleUsersPerObject?: bool, callbackOptions?: record, cardNumberLabel?: string, classTemplateInfo?: record, countryCode?: string, enableSmartTap?: bool, eventNumberLabel?: string, heroImage?: record, hexBackgroundColor?: string, homepageUri?: record, id?: string, imageModulesData?: list, infoModuleData?: record, issuerName?: string, kind?: string, linksModuleData?: record, localizedCardNumberLabel?: record, localizedEventNumberLabel?: record, ... (17 more fields)}
   --disable-expiration-notification: oneof<nothing, bool> # Indicates if notifications should explicitly be suppressed. If this field is set to true, regardless of the `messages` field, expiration notifications to the user will be suppressed. By default, this field is set to false. Currently, this can only be set for offers.
   --event-number: string # The card's event number, an optional field used by some gift cards.
   --grouping-info: record # shape: {groupingId?: string, sortIndex?: int}
@@ -2928,12 +2937,12 @@ export def "walletobjects-gift-card-object walletobjectsgiftcardobjectupdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_id: $resource_id} | format pattern "/walletobjects/v1/giftCardObject/{resource_id}") $qp)
-  let body = {"appLinkData": $app_link_data, "balance": $balance, "balanceUpdateTime": $balance_update_time, "barcode": $barcode, "cardNumber": $card_number, "classId": $class_id, "classReference": $class_reference, "disableExpirationNotification": $disable_expiration_notification, "eventNumber": $event_number, "groupingInfo": $grouping_info, "hasLinkedDevice": $has_linked_device, "hasUsers": $has_users, "heroImage": $hero_image, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "kind": $kind, "linksModuleData": $links_module_data, "locations": $locations, "messages": $messages, "passConstraints": $pass_constraints, "pin": $pin, "rotatingBarcode": $rotating_barcode, "smartTapRedemptionValue": $smart_tap_redemption_value, "state": $state, "textModulesData": $text_modules_data, "validTimeInterval": $valid_time_interval, "version": $version} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/giftCardObject/{resource_id}") $qp)
+  let req_body = {"appLinkData": $app_link_data, "balance": $balance, "balanceUpdateTime": $balance_update_time, "barcode": $barcode, "cardNumber": $card_number, "classId": $class_id, "classReference": $class_reference, "disableExpirationNotification": $disable_expiration_notification, "eventNumber": $event_number, "groupingInfo": $grouping_info, "hasLinkedDevice": $has_linked_device, "hasUsers": $has_users, "heroImage": $hero_image, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "kind": $kind, "linksModuleData": $links_module_data, "locations": $locations, "messages": $messages, "passConstraints": $pass_constraints, "pin": $pin, "rotatingBarcode": $rotating_barcode, "smartTapRedemptionValue": $smart_tap_redemption_value, "state": $state, "textModulesData": $text_modules_data, "validTimeInterval": $valid_time_interval, "version": $version} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Adds a message to the gift card object referenced by the given object ID.
@@ -2941,7 +2950,7 @@ export def "walletobjects-gift-card-object walletobjectsgiftcardobjectupdate" [
 # POST /walletobjects/v1/giftCardObject/{resourceId}/addMessage
 # operationId: walletobjects.giftcardobject.addmessage
 # --message shape: {body?: string, displayInterval?: record, header?: string, id?: string, kind?: string, localizedBody?: record, localizedHeader?: record, messageType?: "MESSAGE_TYPE_UNSPECIFIED"|"TEXT"|"text"|"EXPIRATION_NOTIFICATION"|"expirationNotification"}
-export def "walletobjects-gift-card-object-add-message walletobjectsgiftcardobjectaddmessage" [
+export def "walletobjects-gift-card-object-add-message create-addmessage" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2968,19 +2977,19 @@ export def "walletobjects-gift-card-object-add-message walletobjectsgiftcardobje
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_id: $resource_id} | format pattern "/walletobjects/v1/giftCardObject/{resource_id}/addMessage") $qp)
-  let body = {"message": $message} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/giftCardObject/{resource_id}/addMessage") $qp)
+  let req_body = {"message": $message} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns a list of all issuers shared to the caller.
 #
 # GET /walletobjects/v1/issuer
 # operationId: walletobjects.issuer.list
-export def "walletobjects-issuer walletobjectsissuerlist" [
+export def "walletobjects-issuer list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3014,9 +3023,9 @@ export def "walletobjects-issuer walletobjectsissuerlist" [
 #
 # POST /walletobjects/v1/issuer
 # operationId: walletobjects.issuer.insert
-# --contactInfo shape: {alertsEmails?: list, email?: string, name?: string, phone?: string}
+# --contactInfo shape: {alertsEmails?: list<string>, email?: string, name?: string, phone?: string}
 # --smartTapMerchantData shape: {authenticationKeys?: list, smartTapMerchantId?: string}
-export def "walletobjects-issuer walletobjectsissuerinsert" [
+export def "walletobjects-issuer create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3036,7 +3045,7 @@ export def "walletobjects-issuer walletobjectsissuerinsert" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --contact-info: record # shape: {alertsEmails?: list, email?: string, name?: string, phone?: string}
+  --contact-info: record # shape: {alertsEmails?: list<string>, email?: string, name?: string, phone?: string}
   --homepage-url: string # URL for the issuer's home page.
   --issuer-id: string # The unique identifier for an issuer account. This is automatically generated when the issuer is inserted. (format: int64)
   --name: string # The account name of the issuer.
@@ -3047,18 +3056,18 @@ export def "walletobjects-issuer walletobjectsissuerinsert" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/walletobjects/v1/issuer" $qp)
-  let body = {"contactInfo": $contact_info, "homepageUrl": $homepage_url, "issuerId": $issuer_id, "name": $name, "smartTapMerchantData": $smart_tap_merchant_data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"contactInfo": $contact_info, "homepageUrl": $homepage_url, "issuerId": $issuer_id, "name": $name, "smartTapMerchantData": $smart_tap_merchant_data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns the issuer with the given issuer ID.
 #
 # GET /walletobjects/v1/issuer/{resourceId}
 # operationId: walletobjects.issuer.get
-export def "walletobjects-issuer walletobjectsissuerget" [
+export def "walletobjects-issuer get" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3083,7 +3092,7 @@ export def "walletobjects-issuer walletobjectsissuerget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_id: $resource_id} | format pattern "/walletobjects/v1/issuer/{resource_id}") $qp)
+  let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/issuer/{resource_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3093,9 +3102,9 @@ export def "walletobjects-issuer walletobjectsissuerget" [
 #
 # PATCH /walletobjects/v1/issuer/{resourceId}
 # operationId: walletobjects.issuer.patch
-# --contactInfo shape: {alertsEmails?: list, email?: string, name?: string, phone?: string}
+# --contactInfo shape: {alertsEmails?: list<string>, email?: string, name?: string, phone?: string}
 # --smartTapMerchantData shape: {authenticationKeys?: list, smartTapMerchantId?: string}
-export def "walletobjects-issuer walletobjectsissuerpatch" [
+export def "walletobjects-issuer update-by-resourceId" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3116,7 +3125,7 @@ export def "walletobjects-issuer walletobjectsissuerpatch" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --contact-info: record # shape: {alertsEmails?: list, email?: string, name?: string, phone?: string}
+  --contact-info: record # shape: {alertsEmails?: list<string>, email?: string, name?: string, phone?: string}
   --homepage-url: string # URL for the issuer's home page.
   --issuer-id: string # The unique identifier for an issuer account. This is automatically generated when the issuer is inserted. (format: int64)
   --name: string # The account name of the issuer.
@@ -3126,21 +3135,21 @@ export def "walletobjects-issuer walletobjectsissuerpatch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_id: $resource_id} | format pattern "/walletobjects/v1/issuer/{resource_id}") $qp)
-  let body = {"contactInfo": $contact_info, "homepageUrl": $homepage_url, "issuerId": $issuer_id, "name": $name, "smartTapMerchantData": $smart_tap_merchant_data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/issuer/{resource_id}") $qp)
+  let req_body = {"contactInfo": $contact_info, "homepageUrl": $homepage_url, "issuerId": $issuer_id, "name": $name, "smartTapMerchantData": $smart_tap_merchant_data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates the issuer referenced by the given issuer ID.
 #
 # PUT /walletobjects/v1/issuer/{resourceId}
 # operationId: walletobjects.issuer.update
-# --contactInfo shape: {alertsEmails?: list, email?: string, name?: string, phone?: string}
+# --contactInfo shape: {alertsEmails?: list<string>, email?: string, name?: string, phone?: string}
 # --smartTapMerchantData shape: {authenticationKeys?: list, smartTapMerchantId?: string}
-export def "walletobjects-issuer walletobjectsissuerupdate" [
+export def "walletobjects-issuer update-by-resourceId-1" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3161,7 +3170,7 @@ export def "walletobjects-issuer walletobjectsissuerupdate" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --contact-info: record # shape: {alertsEmails?: list, email?: string, name?: string, phone?: string}
+  --contact-info: record # shape: {alertsEmails?: list<string>, email?: string, name?: string, phone?: string}
   --homepage-url: string # URL for the issuer's home page.
   --issuer-id: string # The unique identifier for an issuer account. This is automatically generated when the issuer is inserted. (format: int64)
   --name: string # The account name of the issuer.
@@ -3171,19 +3180,19 @@ export def "walletobjects-issuer walletobjectsissuerupdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_id: $resource_id} | format pattern "/walletobjects/v1/issuer/{resource_id}") $qp)
-  let body = {"contactInfo": $contact_info, "homepageUrl": $homepage_url, "issuerId": $issuer_id, "name": $name, "smartTapMerchantData": $smart_tap_merchant_data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/issuer/{resource_id}") $qp)
+  let req_body = {"contactInfo": $contact_info, "homepageUrl": $homepage_url, "issuerId": $issuer_id, "name": $name, "smartTapMerchantData": $smart_tap_merchant_data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Inserts the resources in the JWT.
 #
 # POST /walletobjects/v1/jwt
 # operationId: walletobjects.jwt.insert
-export def "walletobjects-jwt walletobjectsjwtinsert" [
+export def "walletobjects-jwt create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3210,18 +3219,18 @@ export def "walletobjects-jwt walletobjectsjwtinsert" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/walletobjects/v1/jwt" $qp)
-  let body = {"jwt": $jwt} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"jwt": $jwt} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns a list of all loyalty classes for a given issuer ID.
 #
 # GET /walletobjects/v1/loyaltyClass
 # operationId: walletobjects.loyaltyclass.list
-export def "walletobjects-loyalty-class walletobjectsloyaltyclasslist" [
+export def "walletobjects-loyalty-class list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3281,7 +3290,7 @@ export def "walletobjects-loyalty-class walletobjectsloyaltyclasslist" [
 # --securityAnimation shape: {animationType?: "ANIMATION_UNSPECIFIED"|"FOIL_SHIMMER"|"foilShimmer"}
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
 # --wordMark shape: {contentDescription?: record, kind?: string, sourceUri?: record}
-export def "walletobjects-loyalty-class walletobjectsloyaltyclassinsert" [
+export def "walletobjects-loyalty-class create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3331,7 +3340,7 @@ export def "walletobjects-loyalty-class walletobjectsloyaltyclassinsert" [
   --multiple-devices-and-holders-allowed-status: string@multiple-devices-and-holders-allowed-status-completer # Identifies whether multiple users and devices will save the same object referencing this class.
   --program-logo: record # Wrapping type for Google hosted images. Next ID: 7 — shape: {contentDescription?: record, kind?: string, sourceUri?: record}
   --program-name: string # Required. The program name, such as "Adam's Apparel". The app may display an ellipsis after the first 20 characters to ensure full string is displayed on smaller screens.
-  --redemption-issuers: list # Identifies which redemption issuers can redeem the pass over Smart Tap. Redemption issuers are identified by their issuer ID. Redemption issuers must have at least one Smart Tap key configured. The `enableSmartTap` and one of object level `smartTapRedemptionValue`, barcode.value`, or `accountId` fields must also be set up correctly in order for a pass to support Smart Tap.
+  --redemption-issuers: list<string> # Identifies which redemption issuers can redeem the pass over Smart Tap. Redemption issuers are identified by their issuer ID. Redemption issuers must have at least one Smart Tap key configured. The `enableSmartTap` and one of object level `smartTapRedemptionValue`, barcode.value`, or `accountId` fields must also be set up correctly in order for a pass to support Smart Tap.
   --review: record # shape: {comments?: string}
   --review-status: string@review-status-completer # Required. The status of the class. This field can be set to `draft` or `underReview` using the insert, patch, or update API calls. Once the review state is changed from `draft` it may not be changed back to `draft`. You should keep this field to `draft` when the class is under development. A `draft` class cannot be used to create any object. You should set this field to `underReview` when you believe the class is ready for use. The platform will automatically set this field to `approved` and it can be immediately used to create or migrate objects. When updating an already `approved` class you should keep setting this field to `underReview`.
   --rewards-tier: string # The rewards tier, such as "Gold" or "Platinum." Recommended maximum length is 7 characters to ensure full string is displayed on smaller screens.
@@ -3349,18 +3358,18 @@ export def "walletobjects-loyalty-class walletobjectsloyaltyclassinsert" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/walletobjects/v1/loyaltyClass" $qp)
-  let body = {"accountIdLabel": $account_id_label, "accountNameLabel": $account_name_label, "allowMultipleUsersPerObject": $allow_multiple_users_per_object, "callbackOptions": $callback_options, "classTemplateInfo": $class_template_info, "countryCode": $country_code, "discoverableProgram": $discoverable_program, "enableSmartTap": $enable_smart_tap, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "homepageUri": $homepage_uri, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "issuerName": $issuer_name, "kind": $kind, "linksModuleData": $links_module_data, "localizedAccountIdLabel": $localized_account_id_label, "localizedAccountNameLabel": $localized_account_name_label, "localizedIssuerName": $localized_issuer_name, "localizedProgramName": $localized_program_name, "localizedRewardsTier": $localized_rewards_tier, "localizedRewardsTierLabel": $localized_rewards_tier_label, "localizedSecondaryRewardsTier": $localized_secondary_rewards_tier, "localizedSecondaryRewardsTierLabel": $localized_secondary_rewards_tier_label, "locations": $locations, "messages": $messages, "multipleDevicesAndHoldersAllowedStatus": $multiple_devices_and_holders_allowed_status, "programLogo": $program_logo, "programName": $program_name, "redemptionIssuers": $redemption_issuers, "review": $review, "reviewStatus": $review_status, "rewardsTier": $rewards_tier, "rewardsTierLabel": $rewards_tier_label, "secondaryRewardsTier": $secondary_rewards_tier, "secondaryRewardsTierLabel": $secondary_rewards_tier_label, "securityAnimation": $security_animation, "textModulesData": $text_modules_data, "version": $version, "viewUnlockRequirement": $view_unlock_requirement, "wordMark": $word_mark} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"accountIdLabel": $account_id_label, "accountNameLabel": $account_name_label, "allowMultipleUsersPerObject": $allow_multiple_users_per_object, "callbackOptions": $callback_options, "classTemplateInfo": $class_template_info, "countryCode": $country_code, "discoverableProgram": $discoverable_program, "enableSmartTap": $enable_smart_tap, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "homepageUri": $homepage_uri, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "issuerName": $issuer_name, "kind": $kind, "linksModuleData": $links_module_data, "localizedAccountIdLabel": $localized_account_id_label, "localizedAccountNameLabel": $localized_account_name_label, "localizedIssuerName": $localized_issuer_name, "localizedProgramName": $localized_program_name, "localizedRewardsTier": $localized_rewards_tier, "localizedRewardsTierLabel": $localized_rewards_tier_label, "localizedSecondaryRewardsTier": $localized_secondary_rewards_tier, "localizedSecondaryRewardsTierLabel": $localized_secondary_rewards_tier_label, "locations": $locations, "messages": $messages, "multipleDevicesAndHoldersAllowedStatus": $multiple_devices_and_holders_allowed_status, "programLogo": $program_logo, "programName": $program_name, "redemptionIssuers": $redemption_issuers, "review": $review, "reviewStatus": $review_status, "rewardsTier": $rewards_tier, "rewardsTierLabel": $rewards_tier_label, "secondaryRewardsTier": $secondary_rewards_tier, "secondaryRewardsTierLabel": $secondary_rewards_tier_label, "securityAnimation": $security_animation, "textModulesData": $text_modules_data, "version": $version, "viewUnlockRequirement": $view_unlock_requirement, "wordMark": $word_mark} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns the loyalty class with the given class ID.
 #
 # GET /walletobjects/v1/loyaltyClass/{resourceId}
 # operationId: walletobjects.loyaltyclass.get
-export def "walletobjects-loyalty-class walletobjectsloyaltyclassget" [
+export def "walletobjects-loyalty-class get" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3385,7 +3394,7 @@ export def "walletobjects-loyalty-class walletobjectsloyaltyclassget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_id: $resource_id} | format pattern "/walletobjects/v1/loyaltyClass/{resource_id}") $qp)
+  let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/loyaltyClass/{resource_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3418,7 +3427,7 @@ export def "walletobjects-loyalty-class walletobjectsloyaltyclassget" [
 # --securityAnimation shape: {animationType?: "ANIMATION_UNSPECIFIED"|"FOIL_SHIMMER"|"foilShimmer"}
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
 # --wordMark shape: {contentDescription?: record, kind?: string, sourceUri?: record}
-export def "walletobjects-loyalty-class walletobjectsloyaltyclasspatch" [
+export def "walletobjects-loyalty-class update-by-resourceId" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3469,7 +3478,7 @@ export def "walletobjects-loyalty-class walletobjectsloyaltyclasspatch" [
   --multiple-devices-and-holders-allowed-status: string@multiple-devices-and-holders-allowed-status-completer # Identifies whether multiple users and devices will save the same object referencing this class.
   --program-logo: record # Wrapping type for Google hosted images. Next ID: 7 — shape: {contentDescription?: record, kind?: string, sourceUri?: record}
   --program-name: string # Required. The program name, such as "Adam's Apparel". The app may display an ellipsis after the first 20 characters to ensure full string is displayed on smaller screens.
-  --redemption-issuers: list # Identifies which redemption issuers can redeem the pass over Smart Tap. Redemption issuers are identified by their issuer ID. Redemption issuers must have at least one Smart Tap key configured. The `enableSmartTap` and one of object level `smartTapRedemptionValue`, barcode.value`, or `accountId` fields must also be set up correctly in order for a pass to support Smart Tap.
+  --redemption-issuers: list<string> # Identifies which redemption issuers can redeem the pass over Smart Tap. Redemption issuers are identified by their issuer ID. Redemption issuers must have at least one Smart Tap key configured. The `enableSmartTap` and one of object level `smartTapRedemptionValue`, barcode.value`, or `accountId` fields must also be set up correctly in order for a pass to support Smart Tap.
   --review: record # shape: {comments?: string}
   --review-status: string@review-status-completer # Required. The status of the class. This field can be set to `draft` or `underReview` using the insert, patch, or update API calls. Once the review state is changed from `draft` it may not be changed back to `draft`. You should keep this field to `draft` when the class is under development. A `draft` class cannot be used to create any object. You should set this field to `underReview` when you believe the class is ready for use. The platform will automatically set this field to `approved` and it can be immediately used to create or migrate objects. When updating an already `approved` class you should keep setting this field to `underReview`.
   --rewards-tier: string # The rewards tier, such as "Gold" or "Platinum." Recommended maximum length is 7 characters to ensure full string is displayed on smaller screens.
@@ -3486,12 +3495,12 @@ export def "walletobjects-loyalty-class walletobjectsloyaltyclasspatch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_id: $resource_id} | format pattern "/walletobjects/v1/loyaltyClass/{resource_id}") $qp)
-  let body = {"accountIdLabel": $account_id_label, "accountNameLabel": $account_name_label, "allowMultipleUsersPerObject": $allow_multiple_users_per_object, "callbackOptions": $callback_options, "classTemplateInfo": $class_template_info, "countryCode": $country_code, "discoverableProgram": $discoverable_program, "enableSmartTap": $enable_smart_tap, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "homepageUri": $homepage_uri, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "issuerName": $issuer_name, "kind": $kind, "linksModuleData": $links_module_data, "localizedAccountIdLabel": $localized_account_id_label, "localizedAccountNameLabel": $localized_account_name_label, "localizedIssuerName": $localized_issuer_name, "localizedProgramName": $localized_program_name, "localizedRewardsTier": $localized_rewards_tier, "localizedRewardsTierLabel": $localized_rewards_tier_label, "localizedSecondaryRewardsTier": $localized_secondary_rewards_tier, "localizedSecondaryRewardsTierLabel": $localized_secondary_rewards_tier_label, "locations": $locations, "messages": $messages, "multipleDevicesAndHoldersAllowedStatus": $multiple_devices_and_holders_allowed_status, "programLogo": $program_logo, "programName": $program_name, "redemptionIssuers": $redemption_issuers, "review": $review, "reviewStatus": $review_status, "rewardsTier": $rewards_tier, "rewardsTierLabel": $rewards_tier_label, "secondaryRewardsTier": $secondary_rewards_tier, "secondaryRewardsTierLabel": $secondary_rewards_tier_label, "securityAnimation": $security_animation, "textModulesData": $text_modules_data, "version": $version, "viewUnlockRequirement": $view_unlock_requirement, "wordMark": $word_mark} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/loyaltyClass/{resource_id}") $qp)
+  let req_body = {"accountIdLabel": $account_id_label, "accountNameLabel": $account_name_label, "allowMultipleUsersPerObject": $allow_multiple_users_per_object, "callbackOptions": $callback_options, "classTemplateInfo": $class_template_info, "countryCode": $country_code, "discoverableProgram": $discoverable_program, "enableSmartTap": $enable_smart_tap, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "homepageUri": $homepage_uri, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "issuerName": $issuer_name, "kind": $kind, "linksModuleData": $links_module_data, "localizedAccountIdLabel": $localized_account_id_label, "localizedAccountNameLabel": $localized_account_name_label, "localizedIssuerName": $localized_issuer_name, "localizedProgramName": $localized_program_name, "localizedRewardsTier": $localized_rewards_tier, "localizedRewardsTierLabel": $localized_rewards_tier_label, "localizedSecondaryRewardsTier": $localized_secondary_rewards_tier, "localizedSecondaryRewardsTierLabel": $localized_secondary_rewards_tier_label, "locations": $locations, "messages": $messages, "multipleDevicesAndHoldersAllowedStatus": $multiple_devices_and_holders_allowed_status, "programLogo": $program_logo, "programName": $program_name, "redemptionIssuers": $redemption_issuers, "review": $review, "reviewStatus": $review_status, "rewardsTier": $rewards_tier, "rewardsTierLabel": $rewards_tier_label, "secondaryRewardsTier": $secondary_rewards_tier, "secondaryRewardsTierLabel": $secondary_rewards_tier_label, "securityAnimation": $security_animation, "textModulesData": $text_modules_data, "version": $version, "viewUnlockRequirement": $view_unlock_requirement, "wordMark": $word_mark} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates the loyalty class referenced by the given class ID.
@@ -3521,7 +3530,7 @@ export def "walletobjects-loyalty-class walletobjectsloyaltyclasspatch" [
 # --securityAnimation shape: {animationType?: "ANIMATION_UNSPECIFIED"|"FOIL_SHIMMER"|"foilShimmer"}
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
 # --wordMark shape: {contentDescription?: record, kind?: string, sourceUri?: record}
-export def "walletobjects-loyalty-class walletobjectsloyaltyclassupdate" [
+export def "walletobjects-loyalty-class update-by-resourceId-1" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3572,7 +3581,7 @@ export def "walletobjects-loyalty-class walletobjectsloyaltyclassupdate" [
   --multiple-devices-and-holders-allowed-status: string@multiple-devices-and-holders-allowed-status-completer # Identifies whether multiple users and devices will save the same object referencing this class.
   --program-logo: record # Wrapping type for Google hosted images. Next ID: 7 — shape: {contentDescription?: record, kind?: string, sourceUri?: record}
   --program-name: string # Required. The program name, such as "Adam's Apparel". The app may display an ellipsis after the first 20 characters to ensure full string is displayed on smaller screens.
-  --redemption-issuers: list # Identifies which redemption issuers can redeem the pass over Smart Tap. Redemption issuers are identified by their issuer ID. Redemption issuers must have at least one Smart Tap key configured. The `enableSmartTap` and one of object level `smartTapRedemptionValue`, barcode.value`, or `accountId` fields must also be set up correctly in order for a pass to support Smart Tap.
+  --redemption-issuers: list<string> # Identifies which redemption issuers can redeem the pass over Smart Tap. Redemption issuers are identified by their issuer ID. Redemption issuers must have at least one Smart Tap key configured. The `enableSmartTap` and one of object level `smartTapRedemptionValue`, barcode.value`, or `accountId` fields must also be set up correctly in order for a pass to support Smart Tap.
   --review: record # shape: {comments?: string}
   --review-status: string@review-status-completer # Required. The status of the class. This field can be set to `draft` or `underReview` using the insert, patch, or update API calls. Once the review state is changed from `draft` it may not be changed back to `draft`. You should keep this field to `draft` when the class is under development. A `draft` class cannot be used to create any object. You should set this field to `underReview` when you believe the class is ready for use. The platform will automatically set this field to `approved` and it can be immediately used to create or migrate objects. When updating an already `approved` class you should keep setting this field to `underReview`.
   --rewards-tier: string # The rewards tier, such as "Gold" or "Platinum." Recommended maximum length is 7 characters to ensure full string is displayed on smaller screens.
@@ -3589,12 +3598,12 @@ export def "walletobjects-loyalty-class walletobjectsloyaltyclassupdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_id: $resource_id} | format pattern "/walletobjects/v1/loyaltyClass/{resource_id}") $qp)
-  let body = {"accountIdLabel": $account_id_label, "accountNameLabel": $account_name_label, "allowMultipleUsersPerObject": $allow_multiple_users_per_object, "callbackOptions": $callback_options, "classTemplateInfo": $class_template_info, "countryCode": $country_code, "discoverableProgram": $discoverable_program, "enableSmartTap": $enable_smart_tap, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "homepageUri": $homepage_uri, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "issuerName": $issuer_name, "kind": $kind, "linksModuleData": $links_module_data, "localizedAccountIdLabel": $localized_account_id_label, "localizedAccountNameLabel": $localized_account_name_label, "localizedIssuerName": $localized_issuer_name, "localizedProgramName": $localized_program_name, "localizedRewardsTier": $localized_rewards_tier, "localizedRewardsTierLabel": $localized_rewards_tier_label, "localizedSecondaryRewardsTier": $localized_secondary_rewards_tier, "localizedSecondaryRewardsTierLabel": $localized_secondary_rewards_tier_label, "locations": $locations, "messages": $messages, "multipleDevicesAndHoldersAllowedStatus": $multiple_devices_and_holders_allowed_status, "programLogo": $program_logo, "programName": $program_name, "redemptionIssuers": $redemption_issuers, "review": $review, "reviewStatus": $review_status, "rewardsTier": $rewards_tier, "rewardsTierLabel": $rewards_tier_label, "secondaryRewardsTier": $secondary_rewards_tier, "secondaryRewardsTierLabel": $secondary_rewards_tier_label, "securityAnimation": $security_animation, "textModulesData": $text_modules_data, "version": $version, "viewUnlockRequirement": $view_unlock_requirement, "wordMark": $word_mark} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/loyaltyClass/{resource_id}") $qp)
+  let req_body = {"accountIdLabel": $account_id_label, "accountNameLabel": $account_name_label, "allowMultipleUsersPerObject": $allow_multiple_users_per_object, "callbackOptions": $callback_options, "classTemplateInfo": $class_template_info, "countryCode": $country_code, "discoverableProgram": $discoverable_program, "enableSmartTap": $enable_smart_tap, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "homepageUri": $homepage_uri, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "issuerName": $issuer_name, "kind": $kind, "linksModuleData": $links_module_data, "localizedAccountIdLabel": $localized_account_id_label, "localizedAccountNameLabel": $localized_account_name_label, "localizedIssuerName": $localized_issuer_name, "localizedProgramName": $localized_program_name, "localizedRewardsTier": $localized_rewards_tier, "localizedRewardsTierLabel": $localized_rewards_tier_label, "localizedSecondaryRewardsTier": $localized_secondary_rewards_tier, "localizedSecondaryRewardsTierLabel": $localized_secondary_rewards_tier_label, "locations": $locations, "messages": $messages, "multipleDevicesAndHoldersAllowedStatus": $multiple_devices_and_holders_allowed_status, "programLogo": $program_logo, "programName": $program_name, "redemptionIssuers": $redemption_issuers, "review": $review, "reviewStatus": $review_status, "rewardsTier": $rewards_tier, "rewardsTierLabel": $rewards_tier_label, "secondaryRewardsTier": $secondary_rewards_tier, "secondaryRewardsTierLabel": $secondary_rewards_tier_label, "securityAnimation": $security_animation, "textModulesData": $text_modules_data, "version": $version, "viewUnlockRequirement": $view_unlock_requirement, "wordMark": $word_mark} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Adds a message to the loyalty class referenced by the given class ID.
@@ -3602,7 +3611,7 @@ export def "walletobjects-loyalty-class walletobjectsloyaltyclassupdate" [
 # POST /walletobjects/v1/loyaltyClass/{resourceId}/addMessage
 # operationId: walletobjects.loyaltyclass.addmessage
 # --message shape: {body?: string, displayInterval?: record, header?: string, id?: string, kind?: string, localizedBody?: record, localizedHeader?: record, messageType?: "MESSAGE_TYPE_UNSPECIFIED"|"TEXT"|"text"|"EXPIRATION_NOTIFICATION"|"expirationNotification"}
-export def "walletobjects-loyalty-class-add-message walletobjectsloyaltyclassaddmessage" [
+export def "walletobjects-loyalty-class-add-message create-addmessage" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3629,19 +3638,19 @@ export def "walletobjects-loyalty-class-add-message walletobjectsloyaltyclassadd
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_id: $resource_id} | format pattern "/walletobjects/v1/loyaltyClass/{resource_id}/addMessage") $qp)
-  let body = {"message": $message} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/loyaltyClass/{resource_id}/addMessage") $qp)
+  let req_body = {"message": $message} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns a list of all loyalty objects for a given issuer ID.
 #
 # GET /walletobjects/v1/loyaltyObject
 # operationId: walletobjects.loyaltyobject.list
-export def "walletobjects-loyalty-object walletobjectsloyaltyobjectlist" [
+export def "walletobjects-loyalty-object list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3680,7 +3689,7 @@ export def "walletobjects-loyalty-object walletobjectsloyaltyobjectlist" [
 # operationId: walletobjects.loyaltyobject.insert
 # --appLinkData shape: {androidAppLinkInfo?: record, iosAppLinkInfo?: record, webAppLinkInfo?: record}
 # --barcode shape: {alternateText?: string, kind?: string, renderEncoding?: "RENDER_ENCODING_UNSPECIFIED"|"UTF_8", showCodeText?: record, type?: "BARCODE_TYPE_UNSPECIFIED"|"AZTEC"|"aztec"|"CODE_39"|"code39"|"CODE_128"|"code128"|"CODABAR"|"codabar"|"DATA_MATRIX"|"dataMatrix"|"EAN_8"|"ean8"|"EAN_13"|"ean13"|"EAN13"|"ITF_14"|"itf14"|"PDF_417"|"pdf417"|"PDF417"|"QR_CODE"|"qrCode"|"qrcode"|"UPC_A"|"upcA"|"TEXT_ONLY"|"textOnly", value?: string}
-# --classReference shape: {accountIdLabel?: string, accountNameLabel?: string, allowMultipleUsersPerObject?: bool, callbackOptions?: record, classTemplateInfo?: record, countryCode?: string, discoverableProgram?: record, enableSmartTap?: bool, heroImage?: record, hexBackgroundColor?: string, homepageUri?: record, id?: string, imageModulesData?: list, infoModuleData?: record, issuerName?: string, kind?: string, linksModuleData?: record, localizedAccountIdLabel?: record, localizedAccountNameLabel?: record, localizedIssuerName?: record, localizedProgramName?: record, localizedRewardsTier?: record, localizedRewardsTierLabel?: record, localizedSecondaryRewardsTier?: record, localizedSecondaryRewardsTierLabel?: record, locations?: list, messages?: list, multipleDevicesAndHoldersAllowedStatus?: "STATUS_UNSPECIFIED"|"MULTIPLE_HOLDERS"|"multipleHolders"|"ONE_USER_ALL_DEVICES"|"oneUserAllDevices"|"ONE_USER_ONE_DEVICE"|"oneUserOneDevice", programLogo?: record, programName?: string, redemptionIssuers?: list, review?: record, reviewStatus?: "REVIEW_STATUS_UNSPECIFIED"|"UNDER_REVIEW"|"underReview"|"APPROVED"|"approved"|"REJECTED"|"rejected"|"DRAFT"|"draft", rewardsTier?: string, rewardsTierLabel?: string, secondaryRewardsTier?: string, secondaryRewardsTierLabel?: string, securityAnimation?: record, textModulesData?: list, version?: string, viewUnlockRequirement?: "VIEW_UNLOCK_REQUIREMENT_UNSPECIFIED"|"UNLOCK_NOT_REQUIRED"|"UNLOCK_REQUIRED_TO_VIEW", wordMark?: record}
+# --classReference shape: {accountIdLabel?: string, accountNameLabel?: string, allowMultipleUsersPerObject?: bool, callbackOptions?: record, classTemplateInfo?: record, countryCode?: string, discoverableProgram?: record, enableSmartTap?: bool, heroImage?: record, hexBackgroundColor?: string, homepageUri?: record, id?: string, imageModulesData?: list, infoModuleData?: record, issuerName?: string, kind?: string, linksModuleData?: record, localizedAccountIdLabel?: record, localizedAccountNameLabel?: record, ... (23 more fields)}
 # --groupingInfo shape: {groupingId?: string, sortIndex?: int}
 # --heroImage shape: {contentDescription?: record, kind?: string, sourceUri?: record}
 # --imageModulesData item shape: {id?: string, mainImage?: record}
@@ -3694,7 +3703,7 @@ export def "walletobjects-loyalty-object walletobjectsloyaltyobjectlist" [
 # --secondaryLoyaltyPoints shape: {balance?: record, label?: string, localizedLabel?: record}
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
 # --validTimeInterval shape: {end?: record, kind?: string, start?: record}
-export def "walletobjects-loyalty-object walletobjectsloyaltyobjectinsert" [
+export def "walletobjects-loyalty-object create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3719,7 +3728,7 @@ export def "walletobjects-loyalty-object walletobjectsloyaltyobjectinsert" [
   --app-link-data: record # shape: {androidAppLinkInfo?: record, iosAppLinkInfo?: record, webAppLinkInfo?: record}
   --barcode: record # shape: {alternateText?: string, kind?: string, renderEncoding?: "RENDER_ENCODING_UNSPECIFIED"|"UTF_8", showCodeText?: record, type?: "BARCODE_TYPE_UNSPECIFIED"|"AZTEC"|"aztec"|"CODE_39"|"code39"|"CODE_128"|"code128"|"CODABAR"|"codabar"|"DATA_MATRIX"|"dataMatrix"|"EAN_8"|"ean8"|"EAN_13"|"ean13"|"EAN13"|"ITF_14"|"itf14"|"PDF_417"|"pdf417"|"PDF417"|"QR_CODE"|"qrCode"|"qrcode"|"UPC_A"|"upcA"|"TEXT_ONLY"|"textOnly", value?: string}
   --class-id: string # Required. The class associated with this object. The class must be of the same type as this object, must already exist, and must be approved. Class IDs should follow the format issuer ID.identifier where the former is issued by Google and latter is chosen by you.
-  --class-reference: record # shape: {accountIdLabel?: string, accountNameLabel?: string, allowMultipleUsersPerObject?: bool, callbackOptions?: record, classTemplateInfo?: record, countryCode?: string, discoverableProgram?: record, enableSmartTap?: bool, heroImage?: record, hexBackgroundColor?: string, homepageUri?: record, id?: string, imageModulesData?: list, infoModuleData?: record, issuerName?: string, kind?: string, linksModuleData?: record, localizedAccountIdLabel?: record, localizedAccountNameLabel?: record, localizedIssuerName?: record, localizedProgramName?: record, localizedRewardsTier?: record, localizedRewardsTierLabel?: record, localizedSecondaryRewardsTier?: record, localizedSecondaryRewardsTierLabel?: record, locations?: list, messages?: list, multipleDevicesAndHoldersAllowedStatus?: "STATUS_UNSPECIFIED"|"MULTIPLE_HOLDERS"|"multipleHolders"|"ONE_USER_ALL_DEVICES"|"oneUserAllDevices"|"ONE_USER_ONE_DEVICE"|"oneUserOneDevice", programLogo?: record, programName?: string, redemptionIssuers?: list, review?: record, reviewStatus?: "REVIEW_STATUS_UNSPECIFIED"|"UNDER_REVIEW"|"underReview"|"APPROVED"|"approved"|"REJECTED"|"rejected"|"DRAFT"|"draft", rewardsTier?: string, rewardsTierLabel?: string, secondaryRewardsTier?: string, secondaryRewardsTierLabel?: string, securityAnimation?: record, textModulesData?: list, version?: string, viewUnlockRequirement?: "VIEW_UNLOCK_REQUIREMENT_UNSPECIFIED"|"UNLOCK_NOT_REQUIRED"|"UNLOCK_REQUIRED_TO_VIEW", wordMark?: record}
+  --class-reference: record # shape: {accountIdLabel?: string, accountNameLabel?: string, allowMultipleUsersPerObject?: bool, callbackOptions?: record, classTemplateInfo?: record, countryCode?: string, discoverableProgram?: record, enableSmartTap?: bool, heroImage?: record, hexBackgroundColor?: string, homepageUri?: record, id?: string, imageModulesData?: list, infoModuleData?: record, issuerName?: string, kind?: string, linksModuleData?: record, localizedAccountIdLabel?: record, localizedAccountNameLabel?: record, ... (23 more fields)}
   --disable-expiration-notification: oneof<nothing, bool> # Indicates if notifications should explicitly be suppressed. If this field is set to true, regardless of the `messages` field, expiration notifications to the user will be suppressed. By default, this field is set to false. Currently, this can only be set for offers.
   --grouping-info: record # shape: {groupingId?: string, sortIndex?: int}
   --has-linked-device: oneof<nothing, bool> # Whether this object is currently linked to a single device. This field is set by the platform when a user saves the object, linking it to their device. Intended for use by select partners. Contact support for additional information.
@@ -3729,7 +3738,7 @@ export def "walletobjects-loyalty-object walletobjectsloyaltyobjectinsert" [
   --image-modules-data: list # Image module data. The maximum number of these fields displayed is 1 from object level and 1 for class object level. — item shape: {id?: string, mainImage?: record}
   --info-module-data: record # shape: {labelValueRows?: list, showLastUpdateTime?: bool}
   --kind: string # Identifies what kind of resource this is. Value: the fixed string `"walletobjects#loyaltyObject"`.
-  --linked-offer-ids: list # A list of offer objects linked to this loyalty card. The offer objects must already exist. Offer object IDs should follow the format issuer ID. identifier where the former is issued by Google and latter is chosen by you.
+  --linked-offer-ids: list<string> # A list of offer objects linked to this loyalty card. The offer objects must already exist. Offer object IDs should follow the format issuer ID. identifier where the former is issued by Google and latter is chosen by you.
   --links-module-data: record # shape: {uris?: list}
   --locations: list # Note: This field is currently not supported to trigger geo notifications. — item shape: {kind?: string, latitude?: float, longitude?: float}
   --loyalty-points: record # shape: {balance?: record, label?: string, localizedLabel?: record}
@@ -3748,18 +3757,18 @@ export def "walletobjects-loyalty-object walletobjectsloyaltyobjectinsert" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/walletobjects/v1/loyaltyObject" $qp)
-  let body = {"accountId": $account_id, "accountName": $account_name, "appLinkData": $app_link_data, "barcode": $barcode, "classId": $class_id, "classReference": $class_reference, "disableExpirationNotification": $disable_expiration_notification, "groupingInfo": $grouping_info, "hasLinkedDevice": $has_linked_device, "hasUsers": $has_users, "heroImage": $hero_image, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "kind": $kind, "linkedOfferIds": $linked_offer_ids, "linksModuleData": $links_module_data, "locations": $locations, "loyaltyPoints": $loyalty_points, "messages": $messages, "passConstraints": $pass_constraints, "rotatingBarcode": $rotating_barcode, "secondaryLoyaltyPoints": $secondary_loyalty_points, "smartTapRedemptionValue": $smart_tap_redemption_value, "state": $state, "textModulesData": $text_modules_data, "validTimeInterval": $valid_time_interval, "version": $version} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"accountId": $account_id, "accountName": $account_name, "appLinkData": $app_link_data, "barcode": $barcode, "classId": $class_id, "classReference": $class_reference, "disableExpirationNotification": $disable_expiration_notification, "groupingInfo": $grouping_info, "hasLinkedDevice": $has_linked_device, "hasUsers": $has_users, "heroImage": $hero_image, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "kind": $kind, "linkedOfferIds": $linked_offer_ids, "linksModuleData": $links_module_data, "locations": $locations, "loyaltyPoints": $loyalty_points, "messages": $messages, "passConstraints": $pass_constraints, "rotatingBarcode": $rotating_barcode, "secondaryLoyaltyPoints": $secondary_loyalty_points, "smartTapRedemptionValue": $smart_tap_redemption_value, "state": $state, "textModulesData": $text_modules_data, "validTimeInterval": $valid_time_interval, "version": $version} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns the loyalty object with the given object ID.
 #
 # GET /walletobjects/v1/loyaltyObject/{resourceId}
 # operationId: walletobjects.loyaltyobject.get
-export def "walletobjects-loyalty-object walletobjectsloyaltyobjectget" [
+export def "walletobjects-loyalty-object get" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3784,7 +3793,7 @@ export def "walletobjects-loyalty-object walletobjectsloyaltyobjectget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_id: $resource_id} | format pattern "/walletobjects/v1/loyaltyObject/{resource_id}") $qp)
+  let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/loyaltyObject/{resource_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3796,7 +3805,7 @@ export def "walletobjects-loyalty-object walletobjectsloyaltyobjectget" [
 # operationId: walletobjects.loyaltyobject.patch
 # --appLinkData shape: {androidAppLinkInfo?: record, iosAppLinkInfo?: record, webAppLinkInfo?: record}
 # --barcode shape: {alternateText?: string, kind?: string, renderEncoding?: "RENDER_ENCODING_UNSPECIFIED"|"UTF_8", showCodeText?: record, type?: "BARCODE_TYPE_UNSPECIFIED"|"AZTEC"|"aztec"|"CODE_39"|"code39"|"CODE_128"|"code128"|"CODABAR"|"codabar"|"DATA_MATRIX"|"dataMatrix"|"EAN_8"|"ean8"|"EAN_13"|"ean13"|"EAN13"|"ITF_14"|"itf14"|"PDF_417"|"pdf417"|"PDF417"|"QR_CODE"|"qrCode"|"qrcode"|"UPC_A"|"upcA"|"TEXT_ONLY"|"textOnly", value?: string}
-# --classReference shape: {accountIdLabel?: string, accountNameLabel?: string, allowMultipleUsersPerObject?: bool, callbackOptions?: record, classTemplateInfo?: record, countryCode?: string, discoverableProgram?: record, enableSmartTap?: bool, heroImage?: record, hexBackgroundColor?: string, homepageUri?: record, id?: string, imageModulesData?: list, infoModuleData?: record, issuerName?: string, kind?: string, linksModuleData?: record, localizedAccountIdLabel?: record, localizedAccountNameLabel?: record, localizedIssuerName?: record, localizedProgramName?: record, localizedRewardsTier?: record, localizedRewardsTierLabel?: record, localizedSecondaryRewardsTier?: record, localizedSecondaryRewardsTierLabel?: record, locations?: list, messages?: list, multipleDevicesAndHoldersAllowedStatus?: "STATUS_UNSPECIFIED"|"MULTIPLE_HOLDERS"|"multipleHolders"|"ONE_USER_ALL_DEVICES"|"oneUserAllDevices"|"ONE_USER_ONE_DEVICE"|"oneUserOneDevice", programLogo?: record, programName?: string, redemptionIssuers?: list, review?: record, reviewStatus?: "REVIEW_STATUS_UNSPECIFIED"|"UNDER_REVIEW"|"underReview"|"APPROVED"|"approved"|"REJECTED"|"rejected"|"DRAFT"|"draft", rewardsTier?: string, rewardsTierLabel?: string, secondaryRewardsTier?: string, secondaryRewardsTierLabel?: string, securityAnimation?: record, textModulesData?: list, version?: string, viewUnlockRequirement?: "VIEW_UNLOCK_REQUIREMENT_UNSPECIFIED"|"UNLOCK_NOT_REQUIRED"|"UNLOCK_REQUIRED_TO_VIEW", wordMark?: record}
+# --classReference shape: {accountIdLabel?: string, accountNameLabel?: string, allowMultipleUsersPerObject?: bool, callbackOptions?: record, classTemplateInfo?: record, countryCode?: string, discoverableProgram?: record, enableSmartTap?: bool, heroImage?: record, hexBackgroundColor?: string, homepageUri?: record, id?: string, imageModulesData?: list, infoModuleData?: record, issuerName?: string, kind?: string, linksModuleData?: record, localizedAccountIdLabel?: record, localizedAccountNameLabel?: record, ... (23 more fields)}
 # --groupingInfo shape: {groupingId?: string, sortIndex?: int}
 # --heroImage shape: {contentDescription?: record, kind?: string, sourceUri?: record}
 # --imageModulesData item shape: {id?: string, mainImage?: record}
@@ -3810,7 +3819,7 @@ export def "walletobjects-loyalty-object walletobjectsloyaltyobjectget" [
 # --secondaryLoyaltyPoints shape: {balance?: record, label?: string, localizedLabel?: record}
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
 # --validTimeInterval shape: {end?: record, kind?: string, start?: record}
-export def "walletobjects-loyalty-object walletobjectsloyaltyobjectpatch" [
+export def "walletobjects-loyalty-object update-by-resourceId" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3836,7 +3845,7 @@ export def "walletobjects-loyalty-object walletobjectsloyaltyobjectpatch" [
   --app-link-data: record # shape: {androidAppLinkInfo?: record, iosAppLinkInfo?: record, webAppLinkInfo?: record}
   --barcode: record # shape: {alternateText?: string, kind?: string, renderEncoding?: "RENDER_ENCODING_UNSPECIFIED"|"UTF_8", showCodeText?: record, type?: "BARCODE_TYPE_UNSPECIFIED"|"AZTEC"|"aztec"|"CODE_39"|"code39"|"CODE_128"|"code128"|"CODABAR"|"codabar"|"DATA_MATRIX"|"dataMatrix"|"EAN_8"|"ean8"|"EAN_13"|"ean13"|"EAN13"|"ITF_14"|"itf14"|"PDF_417"|"pdf417"|"PDF417"|"QR_CODE"|"qrCode"|"qrcode"|"UPC_A"|"upcA"|"TEXT_ONLY"|"textOnly", value?: string}
   --class-id: string # Required. The class associated with this object. The class must be of the same type as this object, must already exist, and must be approved. Class IDs should follow the format issuer ID.identifier where the former is issued by Google and latter is chosen by you.
-  --class-reference: record # shape: {accountIdLabel?: string, accountNameLabel?: string, allowMultipleUsersPerObject?: bool, callbackOptions?: record, classTemplateInfo?: record, countryCode?: string, discoverableProgram?: record, enableSmartTap?: bool, heroImage?: record, hexBackgroundColor?: string, homepageUri?: record, id?: string, imageModulesData?: list, infoModuleData?: record, issuerName?: string, kind?: string, linksModuleData?: record, localizedAccountIdLabel?: record, localizedAccountNameLabel?: record, localizedIssuerName?: record, localizedProgramName?: record, localizedRewardsTier?: record, localizedRewardsTierLabel?: record, localizedSecondaryRewardsTier?: record, localizedSecondaryRewardsTierLabel?: record, locations?: list, messages?: list, multipleDevicesAndHoldersAllowedStatus?: "STATUS_UNSPECIFIED"|"MULTIPLE_HOLDERS"|"multipleHolders"|"ONE_USER_ALL_DEVICES"|"oneUserAllDevices"|"ONE_USER_ONE_DEVICE"|"oneUserOneDevice", programLogo?: record, programName?: string, redemptionIssuers?: list, review?: record, reviewStatus?: "REVIEW_STATUS_UNSPECIFIED"|"UNDER_REVIEW"|"underReview"|"APPROVED"|"approved"|"REJECTED"|"rejected"|"DRAFT"|"draft", rewardsTier?: string, rewardsTierLabel?: string, secondaryRewardsTier?: string, secondaryRewardsTierLabel?: string, securityAnimation?: record, textModulesData?: list, version?: string, viewUnlockRequirement?: "VIEW_UNLOCK_REQUIREMENT_UNSPECIFIED"|"UNLOCK_NOT_REQUIRED"|"UNLOCK_REQUIRED_TO_VIEW", wordMark?: record}
+  --class-reference: record # shape: {accountIdLabel?: string, accountNameLabel?: string, allowMultipleUsersPerObject?: bool, callbackOptions?: record, classTemplateInfo?: record, countryCode?: string, discoverableProgram?: record, enableSmartTap?: bool, heroImage?: record, hexBackgroundColor?: string, homepageUri?: record, id?: string, imageModulesData?: list, infoModuleData?: record, issuerName?: string, kind?: string, linksModuleData?: record, localizedAccountIdLabel?: record, localizedAccountNameLabel?: record, ... (23 more fields)}
   --disable-expiration-notification: oneof<nothing, bool> # Indicates if notifications should explicitly be suppressed. If this field is set to true, regardless of the `messages` field, expiration notifications to the user will be suppressed. By default, this field is set to false. Currently, this can only be set for offers.
   --grouping-info: record # shape: {groupingId?: string, sortIndex?: int}
   --has-linked-device: oneof<nothing, bool> # Whether this object is currently linked to a single device. This field is set by the platform when a user saves the object, linking it to their device. Intended for use by select partners. Contact support for additional information.
@@ -3846,7 +3855,7 @@ export def "walletobjects-loyalty-object walletobjectsloyaltyobjectpatch" [
   --image-modules-data: list # Image module data. The maximum number of these fields displayed is 1 from object level and 1 for class object level. — item shape: {id?: string, mainImage?: record}
   --info-module-data: record # shape: {labelValueRows?: list, showLastUpdateTime?: bool}
   --kind: string # Identifies what kind of resource this is. Value: the fixed string `"walletobjects#loyaltyObject"`.
-  --linked-offer-ids: list # A list of offer objects linked to this loyalty card. The offer objects must already exist. Offer object IDs should follow the format issuer ID. identifier where the former is issued by Google and latter is chosen by you.
+  --linked-offer-ids: list<string> # A list of offer objects linked to this loyalty card. The offer objects must already exist. Offer object IDs should follow the format issuer ID. identifier where the former is issued by Google and latter is chosen by you.
   --links-module-data: record # shape: {uris?: list}
   --locations: list # Note: This field is currently not supported to trigger geo notifications. — item shape: {kind?: string, latitude?: float, longitude?: float}
   --loyalty-points: record # shape: {balance?: record, label?: string, localizedLabel?: record}
@@ -3864,12 +3873,12 @@ export def "walletobjects-loyalty-object walletobjectsloyaltyobjectpatch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_id: $resource_id} | format pattern "/walletobjects/v1/loyaltyObject/{resource_id}") $qp)
-  let body = {"accountId": $account_id, "accountName": $account_name, "appLinkData": $app_link_data, "barcode": $barcode, "classId": $class_id, "classReference": $class_reference, "disableExpirationNotification": $disable_expiration_notification, "groupingInfo": $grouping_info, "hasLinkedDevice": $has_linked_device, "hasUsers": $has_users, "heroImage": $hero_image, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "kind": $kind, "linkedOfferIds": $linked_offer_ids, "linksModuleData": $links_module_data, "locations": $locations, "loyaltyPoints": $loyalty_points, "messages": $messages, "passConstraints": $pass_constraints, "rotatingBarcode": $rotating_barcode, "secondaryLoyaltyPoints": $secondary_loyalty_points, "smartTapRedemptionValue": $smart_tap_redemption_value, "state": $state, "textModulesData": $text_modules_data, "validTimeInterval": $valid_time_interval, "version": $version} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/loyaltyObject/{resource_id}") $qp)
+  let req_body = {"accountId": $account_id, "accountName": $account_name, "appLinkData": $app_link_data, "barcode": $barcode, "classId": $class_id, "classReference": $class_reference, "disableExpirationNotification": $disable_expiration_notification, "groupingInfo": $grouping_info, "hasLinkedDevice": $has_linked_device, "hasUsers": $has_users, "heroImage": $hero_image, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "kind": $kind, "linkedOfferIds": $linked_offer_ids, "linksModuleData": $links_module_data, "locations": $locations, "loyaltyPoints": $loyalty_points, "messages": $messages, "passConstraints": $pass_constraints, "rotatingBarcode": $rotating_barcode, "secondaryLoyaltyPoints": $secondary_loyalty_points, "smartTapRedemptionValue": $smart_tap_redemption_value, "state": $state, "textModulesData": $text_modules_data, "validTimeInterval": $valid_time_interval, "version": $version} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates the loyalty object referenced by the given object ID.
@@ -3878,7 +3887,7 @@ export def "walletobjects-loyalty-object walletobjectsloyaltyobjectpatch" [
 # operationId: walletobjects.loyaltyobject.update
 # --appLinkData shape: {androidAppLinkInfo?: record, iosAppLinkInfo?: record, webAppLinkInfo?: record}
 # --barcode shape: {alternateText?: string, kind?: string, renderEncoding?: "RENDER_ENCODING_UNSPECIFIED"|"UTF_8", showCodeText?: record, type?: "BARCODE_TYPE_UNSPECIFIED"|"AZTEC"|"aztec"|"CODE_39"|"code39"|"CODE_128"|"code128"|"CODABAR"|"codabar"|"DATA_MATRIX"|"dataMatrix"|"EAN_8"|"ean8"|"EAN_13"|"ean13"|"EAN13"|"ITF_14"|"itf14"|"PDF_417"|"pdf417"|"PDF417"|"QR_CODE"|"qrCode"|"qrcode"|"UPC_A"|"upcA"|"TEXT_ONLY"|"textOnly", value?: string}
-# --classReference shape: {accountIdLabel?: string, accountNameLabel?: string, allowMultipleUsersPerObject?: bool, callbackOptions?: record, classTemplateInfo?: record, countryCode?: string, discoverableProgram?: record, enableSmartTap?: bool, heroImage?: record, hexBackgroundColor?: string, homepageUri?: record, id?: string, imageModulesData?: list, infoModuleData?: record, issuerName?: string, kind?: string, linksModuleData?: record, localizedAccountIdLabel?: record, localizedAccountNameLabel?: record, localizedIssuerName?: record, localizedProgramName?: record, localizedRewardsTier?: record, localizedRewardsTierLabel?: record, localizedSecondaryRewardsTier?: record, localizedSecondaryRewardsTierLabel?: record, locations?: list, messages?: list, multipleDevicesAndHoldersAllowedStatus?: "STATUS_UNSPECIFIED"|"MULTIPLE_HOLDERS"|"multipleHolders"|"ONE_USER_ALL_DEVICES"|"oneUserAllDevices"|"ONE_USER_ONE_DEVICE"|"oneUserOneDevice", programLogo?: record, programName?: string, redemptionIssuers?: list, review?: record, reviewStatus?: "REVIEW_STATUS_UNSPECIFIED"|"UNDER_REVIEW"|"underReview"|"APPROVED"|"approved"|"REJECTED"|"rejected"|"DRAFT"|"draft", rewardsTier?: string, rewardsTierLabel?: string, secondaryRewardsTier?: string, secondaryRewardsTierLabel?: string, securityAnimation?: record, textModulesData?: list, version?: string, viewUnlockRequirement?: "VIEW_UNLOCK_REQUIREMENT_UNSPECIFIED"|"UNLOCK_NOT_REQUIRED"|"UNLOCK_REQUIRED_TO_VIEW", wordMark?: record}
+# --classReference shape: {accountIdLabel?: string, accountNameLabel?: string, allowMultipleUsersPerObject?: bool, callbackOptions?: record, classTemplateInfo?: record, countryCode?: string, discoverableProgram?: record, enableSmartTap?: bool, heroImage?: record, hexBackgroundColor?: string, homepageUri?: record, id?: string, imageModulesData?: list, infoModuleData?: record, issuerName?: string, kind?: string, linksModuleData?: record, localizedAccountIdLabel?: record, localizedAccountNameLabel?: record, ... (23 more fields)}
 # --groupingInfo shape: {groupingId?: string, sortIndex?: int}
 # --heroImage shape: {contentDescription?: record, kind?: string, sourceUri?: record}
 # --imageModulesData item shape: {id?: string, mainImage?: record}
@@ -3892,7 +3901,7 @@ export def "walletobjects-loyalty-object walletobjectsloyaltyobjectpatch" [
 # --secondaryLoyaltyPoints shape: {balance?: record, label?: string, localizedLabel?: record}
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
 # --validTimeInterval shape: {end?: record, kind?: string, start?: record}
-export def "walletobjects-loyalty-object walletobjectsloyaltyobjectupdate" [
+export def "walletobjects-loyalty-object update-by-resourceId-1" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3918,7 +3927,7 @@ export def "walletobjects-loyalty-object walletobjectsloyaltyobjectupdate" [
   --app-link-data: record # shape: {androidAppLinkInfo?: record, iosAppLinkInfo?: record, webAppLinkInfo?: record}
   --barcode: record # shape: {alternateText?: string, kind?: string, renderEncoding?: "RENDER_ENCODING_UNSPECIFIED"|"UTF_8", showCodeText?: record, type?: "BARCODE_TYPE_UNSPECIFIED"|"AZTEC"|"aztec"|"CODE_39"|"code39"|"CODE_128"|"code128"|"CODABAR"|"codabar"|"DATA_MATRIX"|"dataMatrix"|"EAN_8"|"ean8"|"EAN_13"|"ean13"|"EAN13"|"ITF_14"|"itf14"|"PDF_417"|"pdf417"|"PDF417"|"QR_CODE"|"qrCode"|"qrcode"|"UPC_A"|"upcA"|"TEXT_ONLY"|"textOnly", value?: string}
   --class-id: string # Required. The class associated with this object. The class must be of the same type as this object, must already exist, and must be approved. Class IDs should follow the format issuer ID.identifier where the former is issued by Google and latter is chosen by you.
-  --class-reference: record # shape: {accountIdLabel?: string, accountNameLabel?: string, allowMultipleUsersPerObject?: bool, callbackOptions?: record, classTemplateInfo?: record, countryCode?: string, discoverableProgram?: record, enableSmartTap?: bool, heroImage?: record, hexBackgroundColor?: string, homepageUri?: record, id?: string, imageModulesData?: list, infoModuleData?: record, issuerName?: string, kind?: string, linksModuleData?: record, localizedAccountIdLabel?: record, localizedAccountNameLabel?: record, localizedIssuerName?: record, localizedProgramName?: record, localizedRewardsTier?: record, localizedRewardsTierLabel?: record, localizedSecondaryRewardsTier?: record, localizedSecondaryRewardsTierLabel?: record, locations?: list, messages?: list, multipleDevicesAndHoldersAllowedStatus?: "STATUS_UNSPECIFIED"|"MULTIPLE_HOLDERS"|"multipleHolders"|"ONE_USER_ALL_DEVICES"|"oneUserAllDevices"|"ONE_USER_ONE_DEVICE"|"oneUserOneDevice", programLogo?: record, programName?: string, redemptionIssuers?: list, review?: record, reviewStatus?: "REVIEW_STATUS_UNSPECIFIED"|"UNDER_REVIEW"|"underReview"|"APPROVED"|"approved"|"REJECTED"|"rejected"|"DRAFT"|"draft", rewardsTier?: string, rewardsTierLabel?: string, secondaryRewardsTier?: string, secondaryRewardsTierLabel?: string, securityAnimation?: record, textModulesData?: list, version?: string, viewUnlockRequirement?: "VIEW_UNLOCK_REQUIREMENT_UNSPECIFIED"|"UNLOCK_NOT_REQUIRED"|"UNLOCK_REQUIRED_TO_VIEW", wordMark?: record}
+  --class-reference: record # shape: {accountIdLabel?: string, accountNameLabel?: string, allowMultipleUsersPerObject?: bool, callbackOptions?: record, classTemplateInfo?: record, countryCode?: string, discoverableProgram?: record, enableSmartTap?: bool, heroImage?: record, hexBackgroundColor?: string, homepageUri?: record, id?: string, imageModulesData?: list, infoModuleData?: record, issuerName?: string, kind?: string, linksModuleData?: record, localizedAccountIdLabel?: record, localizedAccountNameLabel?: record, ... (23 more fields)}
   --disable-expiration-notification: oneof<nothing, bool> # Indicates if notifications should explicitly be suppressed. If this field is set to true, regardless of the `messages` field, expiration notifications to the user will be suppressed. By default, this field is set to false. Currently, this can only be set for offers.
   --grouping-info: record # shape: {groupingId?: string, sortIndex?: int}
   --has-linked-device: oneof<nothing, bool> # Whether this object is currently linked to a single device. This field is set by the platform when a user saves the object, linking it to their device. Intended for use by select partners. Contact support for additional information.
@@ -3928,7 +3937,7 @@ export def "walletobjects-loyalty-object walletobjectsloyaltyobjectupdate" [
   --image-modules-data: list # Image module data. The maximum number of these fields displayed is 1 from object level and 1 for class object level. — item shape: {id?: string, mainImage?: record}
   --info-module-data: record # shape: {labelValueRows?: list, showLastUpdateTime?: bool}
   --kind: string # Identifies what kind of resource this is. Value: the fixed string `"walletobjects#loyaltyObject"`.
-  --linked-offer-ids: list # A list of offer objects linked to this loyalty card. The offer objects must already exist. Offer object IDs should follow the format issuer ID. identifier where the former is issued by Google and latter is chosen by you.
+  --linked-offer-ids: list<string> # A list of offer objects linked to this loyalty card. The offer objects must already exist. Offer object IDs should follow the format issuer ID. identifier where the former is issued by Google and latter is chosen by you.
   --links-module-data: record # shape: {uris?: list}
   --locations: list # Note: This field is currently not supported to trigger geo notifications. — item shape: {kind?: string, latitude?: float, longitude?: float}
   --loyalty-points: record # shape: {balance?: record, label?: string, localizedLabel?: record}
@@ -3946,12 +3955,12 @@ export def "walletobjects-loyalty-object walletobjectsloyaltyobjectupdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_id: $resource_id} | format pattern "/walletobjects/v1/loyaltyObject/{resource_id}") $qp)
-  let body = {"accountId": $account_id, "accountName": $account_name, "appLinkData": $app_link_data, "barcode": $barcode, "classId": $class_id, "classReference": $class_reference, "disableExpirationNotification": $disable_expiration_notification, "groupingInfo": $grouping_info, "hasLinkedDevice": $has_linked_device, "hasUsers": $has_users, "heroImage": $hero_image, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "kind": $kind, "linkedOfferIds": $linked_offer_ids, "linksModuleData": $links_module_data, "locations": $locations, "loyaltyPoints": $loyalty_points, "messages": $messages, "passConstraints": $pass_constraints, "rotatingBarcode": $rotating_barcode, "secondaryLoyaltyPoints": $secondary_loyalty_points, "smartTapRedemptionValue": $smart_tap_redemption_value, "state": $state, "textModulesData": $text_modules_data, "validTimeInterval": $valid_time_interval, "version": $version} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/loyaltyObject/{resource_id}") $qp)
+  let req_body = {"accountId": $account_id, "accountName": $account_name, "appLinkData": $app_link_data, "barcode": $barcode, "classId": $class_id, "classReference": $class_reference, "disableExpirationNotification": $disable_expiration_notification, "groupingInfo": $grouping_info, "hasLinkedDevice": $has_linked_device, "hasUsers": $has_users, "heroImage": $hero_image, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "kind": $kind, "linkedOfferIds": $linked_offer_ids, "linksModuleData": $links_module_data, "locations": $locations, "loyaltyPoints": $loyalty_points, "messages": $messages, "passConstraints": $pass_constraints, "rotatingBarcode": $rotating_barcode, "secondaryLoyaltyPoints": $secondary_loyalty_points, "smartTapRedemptionValue": $smart_tap_redemption_value, "state": $state, "textModulesData": $text_modules_data, "validTimeInterval": $valid_time_interval, "version": $version} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Adds a message to the loyalty object referenced by the given object ID.
@@ -3959,7 +3968,7 @@ export def "walletobjects-loyalty-object walletobjectsloyaltyobjectupdate" [
 # POST /walletobjects/v1/loyaltyObject/{resourceId}/addMessage
 # operationId: walletobjects.loyaltyobject.addmessage
 # --message shape: {body?: string, displayInterval?: record, header?: string, id?: string, kind?: string, localizedBody?: record, localizedHeader?: record, messageType?: "MESSAGE_TYPE_UNSPECIFIED"|"TEXT"|"text"|"EXPIRATION_NOTIFICATION"|"expirationNotification"}
-export def "walletobjects-loyalty-object-add-message walletobjectsloyaltyobjectaddmessage" [
+export def "walletobjects-loyalty-object-add-message create-addmessage" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3986,20 +3995,20 @@ export def "walletobjects-loyalty-object-add-message walletobjectsloyaltyobjecta
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_id: $resource_id} | format pattern "/walletobjects/v1/loyaltyObject/{resource_id}/addMessage") $qp)
-  let body = {"message": $message} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/loyaltyObject/{resource_id}/addMessage") $qp)
+  let req_body = {"message": $message} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Modifies linked offer objects for the loyalty object with the given ID.
 #
 # POST /walletobjects/v1/loyaltyObject/{resourceId}/modifyLinkedOfferObjects
 # operationId: walletobjects.loyaltyobject.modifylinkedofferobjects
-# --linkedOfferObjectIds shape: {addLinkedOfferObjectIds?: list, removeLinkedOfferObjectIds?: list}
-export def "walletobjects-loyalty-object-modify-linked-offer-objects walletobjectsloyaltyobjectmodifylinkedofferobjects" [
+# --linkedOfferObjectIds shape: {addLinkedOfferObjectIds?: list<string>, removeLinkedOfferObjectIds?: list<string>}
+export def "walletobjects-loyalty-object-modify-linked-offer-objects create-modifylinkedofferobjects" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4020,25 +4029,25 @@ export def "walletobjects-loyalty-object-modify-linked-offer-objects walletobjec
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --linked-offer-object-ids: record # shape: {addLinkedOfferObjectIds?: list, removeLinkedOfferObjectIds?: list}
+  --linked-offer-object-ids: record # shape: {addLinkedOfferObjectIds?: list<string>, removeLinkedOfferObjectIds?: list<string>}
 ]: any -> record<accountId: string, accountName: string, appLinkData: record<androidAppLinkInfo: record<appLogoImage: record, appTarget: record, description: record, title: record>, iosAppLinkInfo: record<appLogoImage: record, appTarget: record, description: record, title: record>, webAppLinkInfo: record<appLogoImage: record, appTarget: record, description: record, title: record>>, barcode: record<alternateText: string, kind: string, renderEncoding: string, showCodeText: record<defaultValue: record, kind: string, translatedValues: list>, type: string, value: string>, classId: string, classReference: record<accountIdLabel: string, accountNameLabel: string, allowMultipleUsersPerObject: bool, callbackOptions: record<updateRequestUrl: string, url: string>, classTemplateInfo: record<cardBarcodeSectionDetails: record, cardTemplateOverride: record, detailsTemplateOverride: record, listTemplateOverride: record>, countryCode: string, discoverableProgram: record<merchantSigninInfo: record, merchantSignupInfo: record, state: string>, enableSmartTap: bool, heroImage: record<contentDescription: record, kind: string, sourceUri: record>, hexBackgroundColor: string, homepageUri: record<description: string, id: string, kind: string, localizedDescription: record, uri: string>, id: string, imageModulesData: list<record>, infoModuleData: record<labelValueRows: list, showLastUpdateTime: bool>, issuerName: string, kind: string, linksModuleData: record<uris: list>, localizedAccountIdLabel: record<defaultValue: record, kind: string, translatedValues: list>, localizedAccountNameLabel: record<defaultValue: record, kind: string, translatedValues: list>, localizedIssuerName: record<defaultValue: record, kind: string, translatedValues: list>, localizedProgramName: record<defaultValue: record, kind: string, translatedValues: list>, localizedRewardsTier: record<defaultValue: record, kind: string, translatedValues: list>, localizedRewardsTierLabel: record<defaultValue: record, kind: string, translatedValues: list>, localizedSecondaryRewardsTier: record<defaultValue: record, kind: string, translatedValues: list>, localizedSecondaryRewardsTierLabel: record<defaultValue: record, kind: string, translatedValues: list>, locations: list<record>, messages: list<record>, multipleDevicesAndHoldersAllowedStatus: string, programLogo: record<contentDescription: record, kind: string, sourceUri: record>, programName: string, redemptionIssuers: list<string>, review: record<comments: string>, reviewStatus: string, rewardsTier: string, rewardsTierLabel: string, secondaryRewardsTier: string, secondaryRewardsTierLabel: string, securityAnimation: record<animationType: string>, textModulesData: list<record>, version: string, viewUnlockRequirement: string, wordMark: record<contentDescription: record, kind: string, sourceUri: record>>, disableExpirationNotification: bool, groupingInfo: record<groupingId: string, sortIndex: int>, hasLinkedDevice: bool, hasUsers: bool, heroImage: record<contentDescription: record<defaultValue: record, kind: string, translatedValues: list>, kind: string, sourceUri: record<description: string, localizedDescription: record, uri: string>>, id: string, imageModulesData: table<id: string, mainImage: record>, infoModuleData: record<labelValueRows: list<record>, showLastUpdateTime: bool>, kind: string, linkedOfferIds: list<string>, linksModuleData: record<uris: list<record>>, locations: table<kind: string, latitude: float, longitude: float>, loyaltyPoints: record<balance: record<double: float, int: int, money: record, string: string>, label: string, localizedLabel: record<defaultValue: record, kind: string, translatedValues: list>>, messages: table<body: string, displayInterval: record, header: string, id: string, kind: string, localizedBody: record, localizedHeader: record, messageType: string>, passConstraints: record<screenshotEligibility: string>, rotatingBarcode: record<alternateText: string, renderEncoding: string, showCodeText: record<defaultValue: record, kind: string, translatedValues: list>, totpDetails: record<algorithm: string, parameters: list, periodMillis: string>, type: string, valuePattern: string>, secondaryLoyaltyPoints: record<balance: record<double: float, int: int, money: record, string: string>, label: string, localizedLabel: record<defaultValue: record, kind: string, translatedValues: list>>, smartTapRedemptionValue: string, state: string, textModulesData: table<body: string, header: string, id: string, localizedBody: record, localizedHeader: record>, validTimeInterval: record<end: record<date: string>, kind: string, start: record<date: string>>, version: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_id: $resource_id} | format pattern "/walletobjects/v1/loyaltyObject/{resource_id}/modifyLinkedOfferObjects") $qp)
-  let body = {"linkedOfferObjectIds": $linked_offer_object_ids} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/loyaltyObject/{resource_id}/modifyLinkedOfferObjects") $qp)
+  let req_body = {"linkedOfferObjectIds": $linked_offer_object_ids} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns a list of all offer classes for a given issuer ID.
 #
 # GET /walletobjects/v1/offerClass
 # operationId: walletobjects.offerclass.list
-export def "walletobjects-offer-class walletobjectsofferclasslist" [
+export def "walletobjects-offer-class list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4096,7 +4105,7 @@ export def "walletobjects-offer-class walletobjectsofferclasslist" [
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
 # --titleImage shape: {contentDescription?: record, kind?: string, sourceUri?: record}
 # --wordMark shape: {contentDescription?: record, kind?: string, sourceUri?: record}
-export def "walletobjects-offer-class walletobjectsofferclassinsert" [
+export def "walletobjects-offer-class create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4144,7 +4153,7 @@ export def "walletobjects-offer-class walletobjectsofferclassinsert" [
   --multiple-devices-and-holders-allowed-status: string@multiple-devices-and-holders-allowed-status-completer # Identifies whether multiple users and devices will save the same object referencing this class.
   --provider: string # Required. The offer provider (either the aggregator name or merchant name). Recommended maximum length is 12 characters to ensure full string is displayed on smaller screens.
   --redemption-channel: string@redemption-channel-completer # Required. The redemption channels applicable to this offer.
-  --redemption-issuers: list # Identifies which redemption issuers can redeem the pass over Smart Tap. Redemption issuers are identified by their issuer ID. Redemption issuers must have at least one Smart Tap key configured. The `enableSmartTap` and object level `smartTapRedemptionLevel` fields must also be set up correctly in order for a pass to support Smart Tap.
+  --redemption-issuers: list<string> # Identifies which redemption issuers can redeem the pass over Smart Tap. Redemption issuers are identified by their issuer ID. Redemption issuers must have at least one Smart Tap key configured. The `enableSmartTap` and object level `smartTapRedemptionLevel` fields must also be set up correctly in order for a pass to support Smart Tap.
   --review: record # shape: {comments?: string}
   --review-status: string@review-status-completer # Required. The status of the class. This field can be set to `draft` or The status of the class. This field can be set to `draft` or `underReview` using the insert, patch, or update API calls. Once the review state is changed from `draft` it may not be changed back to `draft`. You should keep this field to `draft` when the class is under development. A `draft` class cannot be used to create any object. You should set this field to `underReview` when you believe the class is ready for use. The platform will automatically set this field to `approved` and it can be immediately used to create or migrate objects. When updating an already `approved` class you should keep setting this field to `underReview`.
   --security-animation: record # shape: {animationType?: "ANIMATION_UNSPECIFIED"|"FOIL_SHIMMER"|"foilShimmer"}
@@ -4161,18 +4170,18 @@ export def "walletobjects-offer-class walletobjectsofferclassinsert" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/walletobjects/v1/offerClass" $qp)
-  let body = {"allowMultipleUsersPerObject": $allow_multiple_users_per_object, "callbackOptions": $callback_options, "classTemplateInfo": $class_template_info, "countryCode": $country_code, "details": $details, "enableSmartTap": $enable_smart_tap, "finePrint": $fine_print, "helpUri": $help_uri, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "homepageUri": $homepage_uri, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "issuerName": $issuer_name, "kind": $kind, "linksModuleData": $links_module_data, "localizedDetails": $localized_details, "localizedFinePrint": $localized_fine_print, "localizedIssuerName": $localized_issuer_name, "localizedProvider": $localized_provider, "localizedShortTitle": $localized_short_title, "localizedTitle": $localized_title, "locations": $locations, "messages": $messages, "multipleDevicesAndHoldersAllowedStatus": $multiple_devices_and_holders_allowed_status, "provider": $provider, "redemptionChannel": $redemption_channel, "redemptionIssuers": $redemption_issuers, "review": $review, "reviewStatus": $review_status, "securityAnimation": $security_animation, "shortTitle": $short_title, "textModulesData": $text_modules_data, "title": $title, "titleImage": $title_image, "version": $version, "viewUnlockRequirement": $view_unlock_requirement, "wordMark": $word_mark} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"allowMultipleUsersPerObject": $allow_multiple_users_per_object, "callbackOptions": $callback_options, "classTemplateInfo": $class_template_info, "countryCode": $country_code, "details": $details, "enableSmartTap": $enable_smart_tap, "finePrint": $fine_print, "helpUri": $help_uri, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "homepageUri": $homepage_uri, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "issuerName": $issuer_name, "kind": $kind, "linksModuleData": $links_module_data, "localizedDetails": $localized_details, "localizedFinePrint": $localized_fine_print, "localizedIssuerName": $localized_issuer_name, "localizedProvider": $localized_provider, "localizedShortTitle": $localized_short_title, "localizedTitle": $localized_title, "locations": $locations, "messages": $messages, "multipleDevicesAndHoldersAllowedStatus": $multiple_devices_and_holders_allowed_status, "provider": $provider, "redemptionChannel": $redemption_channel, "redemptionIssuers": $redemption_issuers, "review": $review, "reviewStatus": $review_status, "securityAnimation": $security_animation, "shortTitle": $short_title, "textModulesData": $text_modules_data, "title": $title, "titleImage": $title_image, "version": $version, "viewUnlockRequirement": $view_unlock_requirement, "wordMark": $word_mark} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns the offer class with the given class ID.
 #
 # GET /walletobjects/v1/offerClass/{resourceId}
 # operationId: walletobjects.offerclass.get
-export def "walletobjects-offer-class walletobjectsofferclassget" [
+export def "walletobjects-offer-class get" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4197,7 +4206,7 @@ export def "walletobjects-offer-class walletobjectsofferclassget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_id: $resource_id} | format pattern "/walletobjects/v1/offerClass/{resource_id}") $qp)
+  let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/offerClass/{resource_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4228,7 +4237,7 @@ export def "walletobjects-offer-class walletobjectsofferclassget" [
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
 # --titleImage shape: {contentDescription?: record, kind?: string, sourceUri?: record}
 # --wordMark shape: {contentDescription?: record, kind?: string, sourceUri?: record}
-export def "walletobjects-offer-class walletobjectsofferclasspatch" [
+export def "walletobjects-offer-class update-by-resourceId" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4277,7 +4286,7 @@ export def "walletobjects-offer-class walletobjectsofferclasspatch" [
   --multiple-devices-and-holders-allowed-status: string@multiple-devices-and-holders-allowed-status-completer # Identifies whether multiple users and devices will save the same object referencing this class.
   --provider: string # Required. The offer provider (either the aggregator name or merchant name). Recommended maximum length is 12 characters to ensure full string is displayed on smaller screens.
   --redemption-channel: string@redemption-channel-completer # Required. The redemption channels applicable to this offer.
-  --redemption-issuers: list # Identifies which redemption issuers can redeem the pass over Smart Tap. Redemption issuers are identified by their issuer ID. Redemption issuers must have at least one Smart Tap key configured. The `enableSmartTap` and object level `smartTapRedemptionLevel` fields must also be set up correctly in order for a pass to support Smart Tap.
+  --redemption-issuers: list<string> # Identifies which redemption issuers can redeem the pass over Smart Tap. Redemption issuers are identified by their issuer ID. Redemption issuers must have at least one Smart Tap key configured. The `enableSmartTap` and object level `smartTapRedemptionLevel` fields must also be set up correctly in order for a pass to support Smart Tap.
   --review: record # shape: {comments?: string}
   --review-status: string@review-status-completer # Required. The status of the class. This field can be set to `draft` or The status of the class. This field can be set to `draft` or `underReview` using the insert, patch, or update API calls. Once the review state is changed from `draft` it may not be changed back to `draft`. You should keep this field to `draft` when the class is under development. A `draft` class cannot be used to create any object. You should set this field to `underReview` when you believe the class is ready for use. The platform will automatically set this field to `approved` and it can be immediately used to create or migrate objects. When updating an already `approved` class you should keep setting this field to `underReview`.
   --security-animation: record # shape: {animationType?: "ANIMATION_UNSPECIFIED"|"FOIL_SHIMMER"|"foilShimmer"}
@@ -4293,12 +4302,12 @@ export def "walletobjects-offer-class walletobjectsofferclasspatch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_id: $resource_id} | format pattern "/walletobjects/v1/offerClass/{resource_id}") $qp)
-  let body = {"allowMultipleUsersPerObject": $allow_multiple_users_per_object, "callbackOptions": $callback_options, "classTemplateInfo": $class_template_info, "countryCode": $country_code, "details": $details, "enableSmartTap": $enable_smart_tap, "finePrint": $fine_print, "helpUri": $help_uri, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "homepageUri": $homepage_uri, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "issuerName": $issuer_name, "kind": $kind, "linksModuleData": $links_module_data, "localizedDetails": $localized_details, "localizedFinePrint": $localized_fine_print, "localizedIssuerName": $localized_issuer_name, "localizedProvider": $localized_provider, "localizedShortTitle": $localized_short_title, "localizedTitle": $localized_title, "locations": $locations, "messages": $messages, "multipleDevicesAndHoldersAllowedStatus": $multiple_devices_and_holders_allowed_status, "provider": $provider, "redemptionChannel": $redemption_channel, "redemptionIssuers": $redemption_issuers, "review": $review, "reviewStatus": $review_status, "securityAnimation": $security_animation, "shortTitle": $short_title, "textModulesData": $text_modules_data, "title": $title, "titleImage": $title_image, "version": $version, "viewUnlockRequirement": $view_unlock_requirement, "wordMark": $word_mark} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/offerClass/{resource_id}") $qp)
+  let req_body = {"allowMultipleUsersPerObject": $allow_multiple_users_per_object, "callbackOptions": $callback_options, "classTemplateInfo": $class_template_info, "countryCode": $country_code, "details": $details, "enableSmartTap": $enable_smart_tap, "finePrint": $fine_print, "helpUri": $help_uri, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "homepageUri": $homepage_uri, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "issuerName": $issuer_name, "kind": $kind, "linksModuleData": $links_module_data, "localizedDetails": $localized_details, "localizedFinePrint": $localized_fine_print, "localizedIssuerName": $localized_issuer_name, "localizedProvider": $localized_provider, "localizedShortTitle": $localized_short_title, "localizedTitle": $localized_title, "locations": $locations, "messages": $messages, "multipleDevicesAndHoldersAllowedStatus": $multiple_devices_and_holders_allowed_status, "provider": $provider, "redemptionChannel": $redemption_channel, "redemptionIssuers": $redemption_issuers, "review": $review, "reviewStatus": $review_status, "securityAnimation": $security_animation, "shortTitle": $short_title, "textModulesData": $text_modules_data, "title": $title, "titleImage": $title_image, "version": $version, "viewUnlockRequirement": $view_unlock_requirement, "wordMark": $word_mark} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates the offer class referenced by the given class ID.
@@ -4326,7 +4335,7 @@ export def "walletobjects-offer-class walletobjectsofferclasspatch" [
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
 # --titleImage shape: {contentDescription?: record, kind?: string, sourceUri?: record}
 # --wordMark shape: {contentDescription?: record, kind?: string, sourceUri?: record}
-export def "walletobjects-offer-class walletobjectsofferclassupdate" [
+export def "walletobjects-offer-class update-by-resourceId-1" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4375,7 +4384,7 @@ export def "walletobjects-offer-class walletobjectsofferclassupdate" [
   --multiple-devices-and-holders-allowed-status: string@multiple-devices-and-holders-allowed-status-completer # Identifies whether multiple users and devices will save the same object referencing this class.
   --provider: string # Required. The offer provider (either the aggregator name or merchant name). Recommended maximum length is 12 characters to ensure full string is displayed on smaller screens.
   --redemption-channel: string@redemption-channel-completer # Required. The redemption channels applicable to this offer.
-  --redemption-issuers: list # Identifies which redemption issuers can redeem the pass over Smart Tap. Redemption issuers are identified by their issuer ID. Redemption issuers must have at least one Smart Tap key configured. The `enableSmartTap` and object level `smartTapRedemptionLevel` fields must also be set up correctly in order for a pass to support Smart Tap.
+  --redemption-issuers: list<string> # Identifies which redemption issuers can redeem the pass over Smart Tap. Redemption issuers are identified by their issuer ID. Redemption issuers must have at least one Smart Tap key configured. The `enableSmartTap` and object level `smartTapRedemptionLevel` fields must also be set up correctly in order for a pass to support Smart Tap.
   --review: record # shape: {comments?: string}
   --review-status: string@review-status-completer # Required. The status of the class. This field can be set to `draft` or The status of the class. This field can be set to `draft` or `underReview` using the insert, patch, or update API calls. Once the review state is changed from `draft` it may not be changed back to `draft`. You should keep this field to `draft` when the class is under development. A `draft` class cannot be used to create any object. You should set this field to `underReview` when you believe the class is ready for use. The platform will automatically set this field to `approved` and it can be immediately used to create or migrate objects. When updating an already `approved` class you should keep setting this field to `underReview`.
   --security-animation: record # shape: {animationType?: "ANIMATION_UNSPECIFIED"|"FOIL_SHIMMER"|"foilShimmer"}
@@ -4391,12 +4400,12 @@ export def "walletobjects-offer-class walletobjectsofferclassupdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_id: $resource_id} | format pattern "/walletobjects/v1/offerClass/{resource_id}") $qp)
-  let body = {"allowMultipleUsersPerObject": $allow_multiple_users_per_object, "callbackOptions": $callback_options, "classTemplateInfo": $class_template_info, "countryCode": $country_code, "details": $details, "enableSmartTap": $enable_smart_tap, "finePrint": $fine_print, "helpUri": $help_uri, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "homepageUri": $homepage_uri, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "issuerName": $issuer_name, "kind": $kind, "linksModuleData": $links_module_data, "localizedDetails": $localized_details, "localizedFinePrint": $localized_fine_print, "localizedIssuerName": $localized_issuer_name, "localizedProvider": $localized_provider, "localizedShortTitle": $localized_short_title, "localizedTitle": $localized_title, "locations": $locations, "messages": $messages, "multipleDevicesAndHoldersAllowedStatus": $multiple_devices_and_holders_allowed_status, "provider": $provider, "redemptionChannel": $redemption_channel, "redemptionIssuers": $redemption_issuers, "review": $review, "reviewStatus": $review_status, "securityAnimation": $security_animation, "shortTitle": $short_title, "textModulesData": $text_modules_data, "title": $title, "titleImage": $title_image, "version": $version, "viewUnlockRequirement": $view_unlock_requirement, "wordMark": $word_mark} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/offerClass/{resource_id}") $qp)
+  let req_body = {"allowMultipleUsersPerObject": $allow_multiple_users_per_object, "callbackOptions": $callback_options, "classTemplateInfo": $class_template_info, "countryCode": $country_code, "details": $details, "enableSmartTap": $enable_smart_tap, "finePrint": $fine_print, "helpUri": $help_uri, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "homepageUri": $homepage_uri, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "issuerName": $issuer_name, "kind": $kind, "linksModuleData": $links_module_data, "localizedDetails": $localized_details, "localizedFinePrint": $localized_fine_print, "localizedIssuerName": $localized_issuer_name, "localizedProvider": $localized_provider, "localizedShortTitle": $localized_short_title, "localizedTitle": $localized_title, "locations": $locations, "messages": $messages, "multipleDevicesAndHoldersAllowedStatus": $multiple_devices_and_holders_allowed_status, "provider": $provider, "redemptionChannel": $redemption_channel, "redemptionIssuers": $redemption_issuers, "review": $review, "reviewStatus": $review_status, "securityAnimation": $security_animation, "shortTitle": $short_title, "textModulesData": $text_modules_data, "title": $title, "titleImage": $title_image, "version": $version, "viewUnlockRequirement": $view_unlock_requirement, "wordMark": $word_mark} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Adds a message to the offer class referenced by the given class ID.
@@ -4404,7 +4413,7 @@ export def "walletobjects-offer-class walletobjectsofferclassupdate" [
 # POST /walletobjects/v1/offerClass/{resourceId}/addMessage
 # operationId: walletobjects.offerclass.addmessage
 # --message shape: {body?: string, displayInterval?: record, header?: string, id?: string, kind?: string, localizedBody?: record, localizedHeader?: record, messageType?: "MESSAGE_TYPE_UNSPECIFIED"|"TEXT"|"text"|"EXPIRATION_NOTIFICATION"|"expirationNotification"}
-export def "walletobjects-offer-class-add-message walletobjectsofferclassaddmessage" [
+export def "walletobjects-offer-class-add-message create-addmessage" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4431,19 +4440,19 @@ export def "walletobjects-offer-class-add-message walletobjectsofferclassaddmess
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_id: $resource_id} | format pattern "/walletobjects/v1/offerClass/{resource_id}/addMessage") $qp)
-  let body = {"message": $message} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/offerClass/{resource_id}/addMessage") $qp)
+  let req_body = {"message": $message} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns a list of all offer objects for a given issuer ID.
 #
 # GET /walletobjects/v1/offerObject
 # operationId: walletobjects.offerobject.list
-export def "walletobjects-offer-object walletobjectsofferobjectlist" [
+export def "walletobjects-offer-object list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4482,7 +4491,7 @@ export def "walletobjects-offer-object walletobjectsofferobjectlist" [
 # operationId: walletobjects.offerobject.insert
 # --appLinkData shape: {androidAppLinkInfo?: record, iosAppLinkInfo?: record, webAppLinkInfo?: record}
 # --barcode shape: {alternateText?: string, kind?: string, renderEncoding?: "RENDER_ENCODING_UNSPECIFIED"|"UTF_8", showCodeText?: record, type?: "BARCODE_TYPE_UNSPECIFIED"|"AZTEC"|"aztec"|"CODE_39"|"code39"|"CODE_128"|"code128"|"CODABAR"|"codabar"|"DATA_MATRIX"|"dataMatrix"|"EAN_8"|"ean8"|"EAN_13"|"ean13"|"EAN13"|"ITF_14"|"itf14"|"PDF_417"|"pdf417"|"PDF417"|"QR_CODE"|"qrCode"|"qrcode"|"UPC_A"|"upcA"|"TEXT_ONLY"|"textOnly", value?: string}
-# --classReference shape: {allowMultipleUsersPerObject?: bool, callbackOptions?: record, classTemplateInfo?: record, countryCode?: string, details?: string, enableSmartTap?: bool, finePrint?: string, helpUri?: record, heroImage?: record, hexBackgroundColor?: string, homepageUri?: record, id?: string, imageModulesData?: list, infoModuleData?: record, issuerName?: string, kind?: string, linksModuleData?: record, localizedDetails?: record, localizedFinePrint?: record, localizedIssuerName?: record, localizedProvider?: record, localizedShortTitle?: record, localizedTitle?: record, locations?: list, messages?: list, multipleDevicesAndHoldersAllowedStatus?: "STATUS_UNSPECIFIED"|"MULTIPLE_HOLDERS"|"multipleHolders"|"ONE_USER_ALL_DEVICES"|"oneUserAllDevices"|"ONE_USER_ONE_DEVICE"|"oneUserOneDevice", provider?: string, redemptionChannel?: "REDEMPTION_CHANNEL_UNSPECIFIED"|"INSTORE"|"instore"|"ONLINE"|"online"|"BOTH"|"both"|"TEMPORARY_PRICE_REDUCTION"|"temporaryPriceReduction", redemptionIssuers?: list, review?: record, reviewStatus?: "REVIEW_STATUS_UNSPECIFIED"|"UNDER_REVIEW"|"underReview"|"APPROVED"|"approved"|"REJECTED"|"rejected"|"DRAFT"|"draft", securityAnimation?: record, shortTitle?: string, textModulesData?: list, title?: string, titleImage?: record, version?: string, viewUnlockRequirement?: "VIEW_UNLOCK_REQUIREMENT_UNSPECIFIED"|"UNLOCK_NOT_REQUIRED"|"UNLOCK_REQUIRED_TO_VIEW", wordMark?: record}
+# --classReference shape: {allowMultipleUsersPerObject?: bool, callbackOptions?: record, classTemplateInfo?: record, countryCode?: string, details?: string, enableSmartTap?: bool, finePrint?: string, helpUri?: record, heroImage?: record, hexBackgroundColor?: string, homepageUri?: record, id?: string, imageModulesData?: list, infoModuleData?: record, issuerName?: string, kind?: string, linksModuleData?: record, localizedDetails?: record, localizedFinePrint?: record, localizedIssuerName?: record, localizedProvider?: record, ... (18 more fields)}
 # --groupingInfo shape: {groupingId?: string, sortIndex?: int}
 # --heroImage shape: {contentDescription?: record, kind?: string, sourceUri?: record}
 # --imageModulesData item shape: {id?: string, mainImage?: record}
@@ -4494,7 +4503,7 @@ export def "walletobjects-offer-object walletobjectsofferobjectlist" [
 # --rotatingBarcode shape: {alternateText?: string, renderEncoding?: "RENDER_ENCODING_UNSPECIFIED"|"UTF_8", showCodeText?: record, totpDetails?: record, type?: "BARCODE_TYPE_UNSPECIFIED"|"AZTEC"|"aztec"|"CODE_39"|"code39"|"CODE_128"|"code128"|"CODABAR"|"codabar"|"DATA_MATRIX"|"dataMatrix"|"EAN_8"|"ean8"|"EAN_13"|"ean13"|"EAN13"|"ITF_14"|"itf14"|"PDF_417"|"pdf417"|"PDF417"|"QR_CODE"|"qrCode"|"qrcode"|"UPC_A"|"upcA"|"TEXT_ONLY"|"textOnly", valuePattern?: string}
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
 # --validTimeInterval shape: {end?: record, kind?: string, start?: record}
-export def "walletobjects-offer-object walletobjectsofferobjectinsert" [
+export def "walletobjects-offer-object create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4517,7 +4526,7 @@ export def "walletobjects-offer-object walletobjectsofferobjectinsert" [
   --app-link-data: record # shape: {androidAppLinkInfo?: record, iosAppLinkInfo?: record, webAppLinkInfo?: record}
   --barcode: record # shape: {alternateText?: string, kind?: string, renderEncoding?: "RENDER_ENCODING_UNSPECIFIED"|"UTF_8", showCodeText?: record, type?: "BARCODE_TYPE_UNSPECIFIED"|"AZTEC"|"aztec"|"CODE_39"|"code39"|"CODE_128"|"code128"|"CODABAR"|"codabar"|"DATA_MATRIX"|"dataMatrix"|"EAN_8"|"ean8"|"EAN_13"|"ean13"|"EAN13"|"ITF_14"|"itf14"|"PDF_417"|"pdf417"|"PDF417"|"QR_CODE"|"qrCode"|"qrcode"|"UPC_A"|"upcA"|"TEXT_ONLY"|"textOnly", value?: string}
   --class-id: string # Required. The class associated with this object. The class must be of the same type as this object, must already exist, and must be approved. Class IDs should follow the format issuer ID.identifier where the former is issued by Google and latter is chosen by you.
-  --class-reference: record # shape: {allowMultipleUsersPerObject?: bool, callbackOptions?: record, classTemplateInfo?: record, countryCode?: string, details?: string, enableSmartTap?: bool, finePrint?: string, helpUri?: record, heroImage?: record, hexBackgroundColor?: string, homepageUri?: record, id?: string, imageModulesData?: list, infoModuleData?: record, issuerName?: string, kind?: string, linksModuleData?: record, localizedDetails?: record, localizedFinePrint?: record, localizedIssuerName?: record, localizedProvider?: record, localizedShortTitle?: record, localizedTitle?: record, locations?: list, messages?: list, multipleDevicesAndHoldersAllowedStatus?: "STATUS_UNSPECIFIED"|"MULTIPLE_HOLDERS"|"multipleHolders"|"ONE_USER_ALL_DEVICES"|"oneUserAllDevices"|"ONE_USER_ONE_DEVICE"|"oneUserOneDevice", provider?: string, redemptionChannel?: "REDEMPTION_CHANNEL_UNSPECIFIED"|"INSTORE"|"instore"|"ONLINE"|"online"|"BOTH"|"both"|"TEMPORARY_PRICE_REDUCTION"|"temporaryPriceReduction", redemptionIssuers?: list, review?: record, reviewStatus?: "REVIEW_STATUS_UNSPECIFIED"|"UNDER_REVIEW"|"underReview"|"APPROVED"|"approved"|"REJECTED"|"rejected"|"DRAFT"|"draft", securityAnimation?: record, shortTitle?: string, textModulesData?: list, title?: string, titleImage?: record, version?: string, viewUnlockRequirement?: "VIEW_UNLOCK_REQUIREMENT_UNSPECIFIED"|"UNLOCK_NOT_REQUIRED"|"UNLOCK_REQUIRED_TO_VIEW", wordMark?: record}
+  --class-reference: record # shape: {allowMultipleUsersPerObject?: bool, callbackOptions?: record, classTemplateInfo?: record, countryCode?: string, details?: string, enableSmartTap?: bool, finePrint?: string, helpUri?: record, heroImage?: record, hexBackgroundColor?: string, homepageUri?: record, id?: string, imageModulesData?: list, infoModuleData?: record, issuerName?: string, kind?: string, linksModuleData?: record, localizedDetails?: record, localizedFinePrint?: record, localizedIssuerName?: record, localizedProvider?: record, ... (18 more fields)}
   --disable-expiration-notification: oneof<nothing, bool> # Indicates if notifications should explicitly be suppressed. If this field is set to true, regardless of the `messages` field, expiration notifications to the user will be suppressed. By default, this field is set to false. Currently, this can only be set for offers.
   --grouping-info: record # shape: {groupingId?: string, sortIndex?: int}
   --has-linked-device: oneof<nothing, bool> # Whether this object is currently linked to a single device. This field is set by the platform when a user saves the object, linking it to their device. Intended for use by select partners. Contact support for additional information.
@@ -4543,18 +4552,18 @@ export def "walletobjects-offer-object walletobjectsofferobjectinsert" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/walletobjects/v1/offerObject" $qp)
-  let body = {"appLinkData": $app_link_data, "barcode": $barcode, "classId": $class_id, "classReference": $class_reference, "disableExpirationNotification": $disable_expiration_notification, "groupingInfo": $grouping_info, "hasLinkedDevice": $has_linked_device, "hasUsers": $has_users, "heroImage": $hero_image, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "kind": $kind, "linksModuleData": $links_module_data, "locations": $locations, "messages": $messages, "passConstraints": $pass_constraints, "rotatingBarcode": $rotating_barcode, "smartTapRedemptionValue": $smart_tap_redemption_value, "state": $state, "textModulesData": $text_modules_data, "validTimeInterval": $valid_time_interval, "version": $version} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"appLinkData": $app_link_data, "barcode": $barcode, "classId": $class_id, "classReference": $class_reference, "disableExpirationNotification": $disable_expiration_notification, "groupingInfo": $grouping_info, "hasLinkedDevice": $has_linked_device, "hasUsers": $has_users, "heroImage": $hero_image, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "kind": $kind, "linksModuleData": $links_module_data, "locations": $locations, "messages": $messages, "passConstraints": $pass_constraints, "rotatingBarcode": $rotating_barcode, "smartTapRedemptionValue": $smart_tap_redemption_value, "state": $state, "textModulesData": $text_modules_data, "validTimeInterval": $valid_time_interval, "version": $version} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns the offer object with the given object ID.
 #
 # GET /walletobjects/v1/offerObject/{resourceId}
 # operationId: walletobjects.offerobject.get
-export def "walletobjects-offer-object walletobjectsofferobjectget" [
+export def "walletobjects-offer-object get" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4579,7 +4588,7 @@ export def "walletobjects-offer-object walletobjectsofferobjectget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_id: $resource_id} | format pattern "/walletobjects/v1/offerObject/{resource_id}") $qp)
+  let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/offerObject/{resource_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4591,7 +4600,7 @@ export def "walletobjects-offer-object walletobjectsofferobjectget" [
 # operationId: walletobjects.offerobject.patch
 # --appLinkData shape: {androidAppLinkInfo?: record, iosAppLinkInfo?: record, webAppLinkInfo?: record}
 # --barcode shape: {alternateText?: string, kind?: string, renderEncoding?: "RENDER_ENCODING_UNSPECIFIED"|"UTF_8", showCodeText?: record, type?: "BARCODE_TYPE_UNSPECIFIED"|"AZTEC"|"aztec"|"CODE_39"|"code39"|"CODE_128"|"code128"|"CODABAR"|"codabar"|"DATA_MATRIX"|"dataMatrix"|"EAN_8"|"ean8"|"EAN_13"|"ean13"|"EAN13"|"ITF_14"|"itf14"|"PDF_417"|"pdf417"|"PDF417"|"QR_CODE"|"qrCode"|"qrcode"|"UPC_A"|"upcA"|"TEXT_ONLY"|"textOnly", value?: string}
-# --classReference shape: {allowMultipleUsersPerObject?: bool, callbackOptions?: record, classTemplateInfo?: record, countryCode?: string, details?: string, enableSmartTap?: bool, finePrint?: string, helpUri?: record, heroImage?: record, hexBackgroundColor?: string, homepageUri?: record, id?: string, imageModulesData?: list, infoModuleData?: record, issuerName?: string, kind?: string, linksModuleData?: record, localizedDetails?: record, localizedFinePrint?: record, localizedIssuerName?: record, localizedProvider?: record, localizedShortTitle?: record, localizedTitle?: record, locations?: list, messages?: list, multipleDevicesAndHoldersAllowedStatus?: "STATUS_UNSPECIFIED"|"MULTIPLE_HOLDERS"|"multipleHolders"|"ONE_USER_ALL_DEVICES"|"oneUserAllDevices"|"ONE_USER_ONE_DEVICE"|"oneUserOneDevice", provider?: string, redemptionChannel?: "REDEMPTION_CHANNEL_UNSPECIFIED"|"INSTORE"|"instore"|"ONLINE"|"online"|"BOTH"|"both"|"TEMPORARY_PRICE_REDUCTION"|"temporaryPriceReduction", redemptionIssuers?: list, review?: record, reviewStatus?: "REVIEW_STATUS_UNSPECIFIED"|"UNDER_REVIEW"|"underReview"|"APPROVED"|"approved"|"REJECTED"|"rejected"|"DRAFT"|"draft", securityAnimation?: record, shortTitle?: string, textModulesData?: list, title?: string, titleImage?: record, version?: string, viewUnlockRequirement?: "VIEW_UNLOCK_REQUIREMENT_UNSPECIFIED"|"UNLOCK_NOT_REQUIRED"|"UNLOCK_REQUIRED_TO_VIEW", wordMark?: record}
+# --classReference shape: {allowMultipleUsersPerObject?: bool, callbackOptions?: record, classTemplateInfo?: record, countryCode?: string, details?: string, enableSmartTap?: bool, finePrint?: string, helpUri?: record, heroImage?: record, hexBackgroundColor?: string, homepageUri?: record, id?: string, imageModulesData?: list, infoModuleData?: record, issuerName?: string, kind?: string, linksModuleData?: record, localizedDetails?: record, localizedFinePrint?: record, localizedIssuerName?: record, localizedProvider?: record, ... (18 more fields)}
 # --groupingInfo shape: {groupingId?: string, sortIndex?: int}
 # --heroImage shape: {contentDescription?: record, kind?: string, sourceUri?: record}
 # --imageModulesData item shape: {id?: string, mainImage?: record}
@@ -4603,7 +4612,7 @@ export def "walletobjects-offer-object walletobjectsofferobjectget" [
 # --rotatingBarcode shape: {alternateText?: string, renderEncoding?: "RENDER_ENCODING_UNSPECIFIED"|"UTF_8", showCodeText?: record, totpDetails?: record, type?: "BARCODE_TYPE_UNSPECIFIED"|"AZTEC"|"aztec"|"CODE_39"|"code39"|"CODE_128"|"code128"|"CODABAR"|"codabar"|"DATA_MATRIX"|"dataMatrix"|"EAN_8"|"ean8"|"EAN_13"|"ean13"|"EAN13"|"ITF_14"|"itf14"|"PDF_417"|"pdf417"|"PDF417"|"QR_CODE"|"qrCode"|"qrcode"|"UPC_A"|"upcA"|"TEXT_ONLY"|"textOnly", valuePattern?: string}
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
 # --validTimeInterval shape: {end?: record, kind?: string, start?: record}
-export def "walletobjects-offer-object walletobjectsofferobjectpatch" [
+export def "walletobjects-offer-object update-by-resourceId" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4627,7 +4636,7 @@ export def "walletobjects-offer-object walletobjectsofferobjectpatch" [
   --app-link-data: record # shape: {androidAppLinkInfo?: record, iosAppLinkInfo?: record, webAppLinkInfo?: record}
   --barcode: record # shape: {alternateText?: string, kind?: string, renderEncoding?: "RENDER_ENCODING_UNSPECIFIED"|"UTF_8", showCodeText?: record, type?: "BARCODE_TYPE_UNSPECIFIED"|"AZTEC"|"aztec"|"CODE_39"|"code39"|"CODE_128"|"code128"|"CODABAR"|"codabar"|"DATA_MATRIX"|"dataMatrix"|"EAN_8"|"ean8"|"EAN_13"|"ean13"|"EAN13"|"ITF_14"|"itf14"|"PDF_417"|"pdf417"|"PDF417"|"QR_CODE"|"qrCode"|"qrcode"|"UPC_A"|"upcA"|"TEXT_ONLY"|"textOnly", value?: string}
   --class-id: string # Required. The class associated with this object. The class must be of the same type as this object, must already exist, and must be approved. Class IDs should follow the format issuer ID.identifier where the former is issued by Google and latter is chosen by you.
-  --class-reference: record # shape: {allowMultipleUsersPerObject?: bool, callbackOptions?: record, classTemplateInfo?: record, countryCode?: string, details?: string, enableSmartTap?: bool, finePrint?: string, helpUri?: record, heroImage?: record, hexBackgroundColor?: string, homepageUri?: record, id?: string, imageModulesData?: list, infoModuleData?: record, issuerName?: string, kind?: string, linksModuleData?: record, localizedDetails?: record, localizedFinePrint?: record, localizedIssuerName?: record, localizedProvider?: record, localizedShortTitle?: record, localizedTitle?: record, locations?: list, messages?: list, multipleDevicesAndHoldersAllowedStatus?: "STATUS_UNSPECIFIED"|"MULTIPLE_HOLDERS"|"multipleHolders"|"ONE_USER_ALL_DEVICES"|"oneUserAllDevices"|"ONE_USER_ONE_DEVICE"|"oneUserOneDevice", provider?: string, redemptionChannel?: "REDEMPTION_CHANNEL_UNSPECIFIED"|"INSTORE"|"instore"|"ONLINE"|"online"|"BOTH"|"both"|"TEMPORARY_PRICE_REDUCTION"|"temporaryPriceReduction", redemptionIssuers?: list, review?: record, reviewStatus?: "REVIEW_STATUS_UNSPECIFIED"|"UNDER_REVIEW"|"underReview"|"APPROVED"|"approved"|"REJECTED"|"rejected"|"DRAFT"|"draft", securityAnimation?: record, shortTitle?: string, textModulesData?: list, title?: string, titleImage?: record, version?: string, viewUnlockRequirement?: "VIEW_UNLOCK_REQUIREMENT_UNSPECIFIED"|"UNLOCK_NOT_REQUIRED"|"UNLOCK_REQUIRED_TO_VIEW", wordMark?: record}
+  --class-reference: record # shape: {allowMultipleUsersPerObject?: bool, callbackOptions?: record, classTemplateInfo?: record, countryCode?: string, details?: string, enableSmartTap?: bool, finePrint?: string, helpUri?: record, heroImage?: record, hexBackgroundColor?: string, homepageUri?: record, id?: string, imageModulesData?: list, infoModuleData?: record, issuerName?: string, kind?: string, linksModuleData?: record, localizedDetails?: record, localizedFinePrint?: record, localizedIssuerName?: record, localizedProvider?: record, ... (18 more fields)}
   --disable-expiration-notification: oneof<nothing, bool> # Indicates if notifications should explicitly be suppressed. If this field is set to true, regardless of the `messages` field, expiration notifications to the user will be suppressed. By default, this field is set to false. Currently, this can only be set for offers.
   --grouping-info: record # shape: {groupingId?: string, sortIndex?: int}
   --has-linked-device: oneof<nothing, bool> # Whether this object is currently linked to a single device. This field is set by the platform when a user saves the object, linking it to their device. Intended for use by select partners. Contact support for additional information.
@@ -4652,12 +4661,12 @@ export def "walletobjects-offer-object walletobjectsofferobjectpatch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_id: $resource_id} | format pattern "/walletobjects/v1/offerObject/{resource_id}") $qp)
-  let body = {"appLinkData": $app_link_data, "barcode": $barcode, "classId": $class_id, "classReference": $class_reference, "disableExpirationNotification": $disable_expiration_notification, "groupingInfo": $grouping_info, "hasLinkedDevice": $has_linked_device, "hasUsers": $has_users, "heroImage": $hero_image, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "kind": $kind, "linksModuleData": $links_module_data, "locations": $locations, "messages": $messages, "passConstraints": $pass_constraints, "rotatingBarcode": $rotating_barcode, "smartTapRedemptionValue": $smart_tap_redemption_value, "state": $state, "textModulesData": $text_modules_data, "validTimeInterval": $valid_time_interval, "version": $version} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/offerObject/{resource_id}") $qp)
+  let req_body = {"appLinkData": $app_link_data, "barcode": $barcode, "classId": $class_id, "classReference": $class_reference, "disableExpirationNotification": $disable_expiration_notification, "groupingInfo": $grouping_info, "hasLinkedDevice": $has_linked_device, "hasUsers": $has_users, "heroImage": $hero_image, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "kind": $kind, "linksModuleData": $links_module_data, "locations": $locations, "messages": $messages, "passConstraints": $pass_constraints, "rotatingBarcode": $rotating_barcode, "smartTapRedemptionValue": $smart_tap_redemption_value, "state": $state, "textModulesData": $text_modules_data, "validTimeInterval": $valid_time_interval, "version": $version} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates the offer object referenced by the given object ID.
@@ -4666,7 +4675,7 @@ export def "walletobjects-offer-object walletobjectsofferobjectpatch" [
 # operationId: walletobjects.offerobject.update
 # --appLinkData shape: {androidAppLinkInfo?: record, iosAppLinkInfo?: record, webAppLinkInfo?: record}
 # --barcode shape: {alternateText?: string, kind?: string, renderEncoding?: "RENDER_ENCODING_UNSPECIFIED"|"UTF_8", showCodeText?: record, type?: "BARCODE_TYPE_UNSPECIFIED"|"AZTEC"|"aztec"|"CODE_39"|"code39"|"CODE_128"|"code128"|"CODABAR"|"codabar"|"DATA_MATRIX"|"dataMatrix"|"EAN_8"|"ean8"|"EAN_13"|"ean13"|"EAN13"|"ITF_14"|"itf14"|"PDF_417"|"pdf417"|"PDF417"|"QR_CODE"|"qrCode"|"qrcode"|"UPC_A"|"upcA"|"TEXT_ONLY"|"textOnly", value?: string}
-# --classReference shape: {allowMultipleUsersPerObject?: bool, callbackOptions?: record, classTemplateInfo?: record, countryCode?: string, details?: string, enableSmartTap?: bool, finePrint?: string, helpUri?: record, heroImage?: record, hexBackgroundColor?: string, homepageUri?: record, id?: string, imageModulesData?: list, infoModuleData?: record, issuerName?: string, kind?: string, linksModuleData?: record, localizedDetails?: record, localizedFinePrint?: record, localizedIssuerName?: record, localizedProvider?: record, localizedShortTitle?: record, localizedTitle?: record, locations?: list, messages?: list, multipleDevicesAndHoldersAllowedStatus?: "STATUS_UNSPECIFIED"|"MULTIPLE_HOLDERS"|"multipleHolders"|"ONE_USER_ALL_DEVICES"|"oneUserAllDevices"|"ONE_USER_ONE_DEVICE"|"oneUserOneDevice", provider?: string, redemptionChannel?: "REDEMPTION_CHANNEL_UNSPECIFIED"|"INSTORE"|"instore"|"ONLINE"|"online"|"BOTH"|"both"|"TEMPORARY_PRICE_REDUCTION"|"temporaryPriceReduction", redemptionIssuers?: list, review?: record, reviewStatus?: "REVIEW_STATUS_UNSPECIFIED"|"UNDER_REVIEW"|"underReview"|"APPROVED"|"approved"|"REJECTED"|"rejected"|"DRAFT"|"draft", securityAnimation?: record, shortTitle?: string, textModulesData?: list, title?: string, titleImage?: record, version?: string, viewUnlockRequirement?: "VIEW_UNLOCK_REQUIREMENT_UNSPECIFIED"|"UNLOCK_NOT_REQUIRED"|"UNLOCK_REQUIRED_TO_VIEW", wordMark?: record}
+# --classReference shape: {allowMultipleUsersPerObject?: bool, callbackOptions?: record, classTemplateInfo?: record, countryCode?: string, details?: string, enableSmartTap?: bool, finePrint?: string, helpUri?: record, heroImage?: record, hexBackgroundColor?: string, homepageUri?: record, id?: string, imageModulesData?: list, infoModuleData?: record, issuerName?: string, kind?: string, linksModuleData?: record, localizedDetails?: record, localizedFinePrint?: record, localizedIssuerName?: record, localizedProvider?: record, ... (18 more fields)}
 # --groupingInfo shape: {groupingId?: string, sortIndex?: int}
 # --heroImage shape: {contentDescription?: record, kind?: string, sourceUri?: record}
 # --imageModulesData item shape: {id?: string, mainImage?: record}
@@ -4678,7 +4687,7 @@ export def "walletobjects-offer-object walletobjectsofferobjectpatch" [
 # --rotatingBarcode shape: {alternateText?: string, renderEncoding?: "RENDER_ENCODING_UNSPECIFIED"|"UTF_8", showCodeText?: record, totpDetails?: record, type?: "BARCODE_TYPE_UNSPECIFIED"|"AZTEC"|"aztec"|"CODE_39"|"code39"|"CODE_128"|"code128"|"CODABAR"|"codabar"|"DATA_MATRIX"|"dataMatrix"|"EAN_8"|"ean8"|"EAN_13"|"ean13"|"EAN13"|"ITF_14"|"itf14"|"PDF_417"|"pdf417"|"PDF417"|"QR_CODE"|"qrCode"|"qrcode"|"UPC_A"|"upcA"|"TEXT_ONLY"|"textOnly", valuePattern?: string}
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
 # --validTimeInterval shape: {end?: record, kind?: string, start?: record}
-export def "walletobjects-offer-object walletobjectsofferobjectupdate" [
+export def "walletobjects-offer-object update-by-resourceId-1" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4702,7 +4711,7 @@ export def "walletobjects-offer-object walletobjectsofferobjectupdate" [
   --app-link-data: record # shape: {androidAppLinkInfo?: record, iosAppLinkInfo?: record, webAppLinkInfo?: record}
   --barcode: record # shape: {alternateText?: string, kind?: string, renderEncoding?: "RENDER_ENCODING_UNSPECIFIED"|"UTF_8", showCodeText?: record, type?: "BARCODE_TYPE_UNSPECIFIED"|"AZTEC"|"aztec"|"CODE_39"|"code39"|"CODE_128"|"code128"|"CODABAR"|"codabar"|"DATA_MATRIX"|"dataMatrix"|"EAN_8"|"ean8"|"EAN_13"|"ean13"|"EAN13"|"ITF_14"|"itf14"|"PDF_417"|"pdf417"|"PDF417"|"QR_CODE"|"qrCode"|"qrcode"|"UPC_A"|"upcA"|"TEXT_ONLY"|"textOnly", value?: string}
   --class-id: string # Required. The class associated with this object. The class must be of the same type as this object, must already exist, and must be approved. Class IDs should follow the format issuer ID.identifier where the former is issued by Google and latter is chosen by you.
-  --class-reference: record # shape: {allowMultipleUsersPerObject?: bool, callbackOptions?: record, classTemplateInfo?: record, countryCode?: string, details?: string, enableSmartTap?: bool, finePrint?: string, helpUri?: record, heroImage?: record, hexBackgroundColor?: string, homepageUri?: record, id?: string, imageModulesData?: list, infoModuleData?: record, issuerName?: string, kind?: string, linksModuleData?: record, localizedDetails?: record, localizedFinePrint?: record, localizedIssuerName?: record, localizedProvider?: record, localizedShortTitle?: record, localizedTitle?: record, locations?: list, messages?: list, multipleDevicesAndHoldersAllowedStatus?: "STATUS_UNSPECIFIED"|"MULTIPLE_HOLDERS"|"multipleHolders"|"ONE_USER_ALL_DEVICES"|"oneUserAllDevices"|"ONE_USER_ONE_DEVICE"|"oneUserOneDevice", provider?: string, redemptionChannel?: "REDEMPTION_CHANNEL_UNSPECIFIED"|"INSTORE"|"instore"|"ONLINE"|"online"|"BOTH"|"both"|"TEMPORARY_PRICE_REDUCTION"|"temporaryPriceReduction", redemptionIssuers?: list, review?: record, reviewStatus?: "REVIEW_STATUS_UNSPECIFIED"|"UNDER_REVIEW"|"underReview"|"APPROVED"|"approved"|"REJECTED"|"rejected"|"DRAFT"|"draft", securityAnimation?: record, shortTitle?: string, textModulesData?: list, title?: string, titleImage?: record, version?: string, viewUnlockRequirement?: "VIEW_UNLOCK_REQUIREMENT_UNSPECIFIED"|"UNLOCK_NOT_REQUIRED"|"UNLOCK_REQUIRED_TO_VIEW", wordMark?: record}
+  --class-reference: record # shape: {allowMultipleUsersPerObject?: bool, callbackOptions?: record, classTemplateInfo?: record, countryCode?: string, details?: string, enableSmartTap?: bool, finePrint?: string, helpUri?: record, heroImage?: record, hexBackgroundColor?: string, homepageUri?: record, id?: string, imageModulesData?: list, infoModuleData?: record, issuerName?: string, kind?: string, linksModuleData?: record, localizedDetails?: record, localizedFinePrint?: record, localizedIssuerName?: record, localizedProvider?: record, ... (18 more fields)}
   --disable-expiration-notification: oneof<nothing, bool> # Indicates if notifications should explicitly be suppressed. If this field is set to true, regardless of the `messages` field, expiration notifications to the user will be suppressed. By default, this field is set to false. Currently, this can only be set for offers.
   --grouping-info: record # shape: {groupingId?: string, sortIndex?: int}
   --has-linked-device: oneof<nothing, bool> # Whether this object is currently linked to a single device. This field is set by the platform when a user saves the object, linking it to their device. Intended for use by select partners. Contact support for additional information.
@@ -4727,12 +4736,12 @@ export def "walletobjects-offer-object walletobjectsofferobjectupdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_id: $resource_id} | format pattern "/walletobjects/v1/offerObject/{resource_id}") $qp)
-  let body = {"appLinkData": $app_link_data, "barcode": $barcode, "classId": $class_id, "classReference": $class_reference, "disableExpirationNotification": $disable_expiration_notification, "groupingInfo": $grouping_info, "hasLinkedDevice": $has_linked_device, "hasUsers": $has_users, "heroImage": $hero_image, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "kind": $kind, "linksModuleData": $links_module_data, "locations": $locations, "messages": $messages, "passConstraints": $pass_constraints, "rotatingBarcode": $rotating_barcode, "smartTapRedemptionValue": $smart_tap_redemption_value, "state": $state, "textModulesData": $text_modules_data, "validTimeInterval": $valid_time_interval, "version": $version} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/offerObject/{resource_id}") $qp)
+  let req_body = {"appLinkData": $app_link_data, "barcode": $barcode, "classId": $class_id, "classReference": $class_reference, "disableExpirationNotification": $disable_expiration_notification, "groupingInfo": $grouping_info, "hasLinkedDevice": $has_linked_device, "hasUsers": $has_users, "heroImage": $hero_image, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "kind": $kind, "linksModuleData": $links_module_data, "locations": $locations, "messages": $messages, "passConstraints": $pass_constraints, "rotatingBarcode": $rotating_barcode, "smartTapRedemptionValue": $smart_tap_redemption_value, "state": $state, "textModulesData": $text_modules_data, "validTimeInterval": $valid_time_interval, "version": $version} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Adds a message to the offer object referenced by the given object ID.
@@ -4740,7 +4749,7 @@ export def "walletobjects-offer-object walletobjectsofferobjectupdate" [
 # POST /walletobjects/v1/offerObject/{resourceId}/addMessage
 # operationId: walletobjects.offerobject.addmessage
 # --message shape: {body?: string, displayInterval?: record, header?: string, id?: string, kind?: string, localizedBody?: record, localizedHeader?: record, messageType?: "MESSAGE_TYPE_UNSPECIFIED"|"TEXT"|"text"|"EXPIRATION_NOTIFICATION"|"expirationNotification"}
-export def "walletobjects-offer-object-add-message walletobjectsofferobjectaddmessage" [
+export def "walletobjects-offer-object-add-message create-addmessage" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4767,19 +4776,19 @@ export def "walletobjects-offer-object-add-message walletobjectsofferobjectaddme
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_id: $resource_id} | format pattern "/walletobjects/v1/offerObject/{resource_id}/addMessage") $qp)
-  let body = {"message": $message} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/offerObject/{resource_id}/addMessage") $qp)
+  let req_body = {"message": $message} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns the permissions for the given issuer id.
 #
 # GET /walletobjects/v1/permissions/{resourceId}
 # operationId: walletobjects.permissions.get
-export def "walletobjects-permissions walletobjectspermissionsget" [
+export def "walletobjects-permissions get" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4804,7 +4813,7 @@ export def "walletobjects-permissions walletobjectspermissionsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_id: $resource_id} | format pattern "/walletobjects/v1/permissions/{resource_id}") $qp)
+  let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/permissions/{resource_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4815,7 +4824,7 @@ export def "walletobjects-permissions walletobjectspermissionsget" [
 # PUT /walletobjects/v1/permissions/{resourceId}
 # operationId: walletobjects.permissions.update
 # --permissions item shape: {emailAddress?: string, role?: "ROLE_UNSPECIFIED"|"OWNER"|"owner"|"READER"|"reader"|"WRITER"|"writer"}
-export def "walletobjects-permissions walletobjectspermissionsupdate" [
+export def "walletobjects-permissions update" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4843,12 +4852,12 @@ export def "walletobjects-permissions walletobjectspermissionsupdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_id: $resource_id} | format pattern "/walletobjects/v1/permissions/{resource_id}") $qp)
-  let body = {"issuerId": $issuer_id, "permissions": $permissions} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/permissions/{resource_id}") $qp)
+  let req_body = {"issuerId": $issuer_id, "permissions": $permissions} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Upload private data (text or URI) and returns an Id to be used in its place.
@@ -4857,7 +4866,7 @@ export def "walletobjects-permissions walletobjectspermissionsupdate" [
 # operationId: walletobjects.walletobjects.v1.privateContent.uploadPrivateData
 # --text shape: {body?: record, header?: record}
 # --uri shape: {description?: record, uri?: string}
-export def "walletobjects-private-content-upload-private-data walletobjectswalletobjectsv1privateContentuploadPrivateData" [
+export def "walletobjects-private-content-upload-private-data upload" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4886,18 +4895,18 @@ export def "walletobjects-private-content-upload-private-data walletobjectswalle
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/walletobjects/v1/privateContent/uploadPrivateData" $qp)
-  let body = {"issuerId": $issuer_id, "text": $text, "uri": $uri} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"issuerId": $issuer_id, "text": $text, "uri": $uri} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Uploads a private image and returns an Id to be used in its place.
 #
 # POST /walletobjects/v1/privateContent/{issuerId}/uploadPrivateImage
 # operationId: walletobjects.media.upload
-export def "walletobjects-private-content-upload-private-image walletobjectsmediaupload" [
+export def "walletobjects-private-content-upload-private-image upload" [
   issuer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4924,11 +4933,12 @@ export def "walletobjects-private-content-upload-private-image walletobjectsmedi
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({issuer_id: $issuer_id} | format pattern "/walletobjects/v1/privateContent/{issuer_id}/uploadPrivateImage") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({issuer_id: (encode-path-segment $issuer_id)} | format pattern "/walletobjects/v1/privateContent/{issuer_id}/uploadPrivateImage") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/octet-stream" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/octet-stream" $req_body
 }
 
 # Inserts the smart tap.
@@ -4936,7 +4946,7 @@ export def "walletobjects-private-content-upload-private-image walletobjectsmedi
 # POST /walletobjects/v1/smartTap
 # operationId: walletobjects.smarttap.insert
 # --infos item shape: {action?: "ACTION_UNSPECIFIED"|"S2AP"|"s2ap"|"SIGN_UP"|"signUp", signUpInfo?: record, url?: string, value?: string}
-export def "walletobjects-smart-tap walletobjectssmarttapinsert" [
+export def "walletobjects-smart-tap create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4966,18 +4976,18 @@ export def "walletobjects-smart-tap walletobjectssmarttapinsert" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/walletobjects/v1/smartTap" $qp)
-  let body = {"id": $id, "infos": $infos, "kind": $kind, "merchantId": $merchant_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"id": $id, "infos": $infos, "kind": $kind, "merchantId": $merchant_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns a list of all transit classes for a given issuer ID.
 #
 # GET /walletobjects/v1/transitClass
 # operationId: walletobjects.transitclass.list
-export def "walletobjects-transit-class walletobjectstransitclasslist" [
+export def "walletobjects-transit-class list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5051,7 +5061,7 @@ export def "walletobjects-transit-class walletobjectstransitclasslist" [
 # --transitOperatorName shape: {defaultValue?: record, kind?: string, translatedValues?: list}
 # --watermark shape: {contentDescription?: record, kind?: string, sourceUri?: record}
 # --wordMark shape: {contentDescription?: record, kind?: string, sourceUri?: record}
-export def "walletobjects-transit-class walletobjectstransitclassinsert" [
+export def "walletobjects-transit-class create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5111,7 +5121,7 @@ export def "walletobjects-transit-class walletobjectstransitclassinsert" [
   --logo: record # Wrapping type for Google hosted images. Next ID: 7 — shape: {contentDescription?: record, kind?: string, sourceUri?: record}
   --messages: list # An array of messages displayed in the app. All users of this object will receive its associated messages. The maximum number of these fields is 10. — item shape: {body?: string, displayInterval?: record, header?: string, id?: string, kind?: string, localizedBody?: record, localizedHeader?: record, messageType?: "MESSAGE_TYPE_UNSPECIFIED"|"TEXT"|"text"|"EXPIRATION_NOTIFICATION"|"expirationNotification"}
   --multiple-devices-and-holders-allowed-status: string@multiple-devices-and-holders-allowed-status-completer # Identifies whether multiple users and devices will save the same object referencing this class.
-  --redemption-issuers: list # Identifies which redemption issuers can redeem the pass over Smart Tap. Redemption issuers are identified by their issuer ID. Redemption issuers must have at least one Smart Tap key configured. The `enableSmartTap` and object level `smartTapRedemptionLevel` fields must also be set up correctly in order for a pass to support Smart Tap.
+  --redemption-issuers: list<string> # Identifies which redemption issuers can redeem the pass over Smart Tap. Redemption issuers are identified by their issuer ID. Redemption issuers must have at least one Smart Tap key configured. The `enableSmartTap` and object level `smartTapRedemptionLevel` fields must also be set up correctly in order for a pass to support Smart Tap.
   --review: record # shape: {comments?: string}
   --review-status: string@review-status-completer # Required. The status of the class. This field can be set to `draft` or `underReview` using the insert, patch, or update API calls. Once the review state is changed from `draft` it may not be changed back to `draft`. You should keep this field to `draft` when the class is under development. A `draft` class cannot be used to create any object. You should set this field to `underReview` when you believe the class is ready for use. The platform will automatically set this field to `approved` and it can be immediately used to create or migrate objects. When updating an already `approved` class you should keep setting this field to `underReview`.
   --security-animation: record # shape: {animationType?: "ANIMATION_UNSPECIFIED"|"FOIL_SHIMMER"|"foilShimmer"}
@@ -5128,18 +5138,18 @@ export def "walletobjects-transit-class walletobjectstransitclassinsert" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/walletobjects/v1/transitClass" $qp)
-  let body = {"activationOptions": $activation_options, "allowMultipleUsersPerObject": $allow_multiple_users_per_object, "callbackOptions": $callback_options, "classTemplateInfo": $class_template_info, "countryCode": $country_code, "customCarriageLabel": $custom_carriage_label, "customCoachLabel": $custom_coach_label, "customConcessionCategoryLabel": $custom_concession_category_label, "customConfirmationCodeLabel": $custom_confirmation_code_label, "customDiscountMessageLabel": $custom_discount_message_label, "customFareClassLabel": $custom_fare_class_label, "customFareNameLabel": $custom_fare_name_label, "customOtherRestrictionsLabel": $custom_other_restrictions_label, "customPlatformLabel": $custom_platform_label, "customPurchaseFaceValueLabel": $custom_purchase_face_value_label, "customPurchasePriceLabel": $custom_purchase_price_label, "customPurchaseReceiptNumberLabel": $custom_purchase_receipt_number_label, "customRouteRestrictionsDetailsLabel": $custom_route_restrictions_details_label, "customRouteRestrictionsLabel": $custom_route_restrictions_label, "customSeatLabel": $custom_seat_label, "customTicketNumberLabel": $custom_ticket_number_label, "customTimeRestrictionsLabel": $custom_time_restrictions_label, "customTransitTerminusNameLabel": $custom_transit_terminus_name_label, "customZoneLabel": $custom_zone_label, "enableSingleLegItinerary": $enable_single_leg_itinerary, "enableSmartTap": $enable_smart_tap, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "homepageUri": $homepage_uri, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "issuerName": $issuer_name, "languageOverride": $language_override, "linksModuleData": $links_module_data, "localizedIssuerName": $localized_issuer_name, "locations": $locations, "logo": $logo, "messages": $messages, "multipleDevicesAndHoldersAllowedStatus": $multiple_devices_and_holders_allowed_status, "redemptionIssuers": $redemption_issuers, "review": $review, "reviewStatus": $review_status, "securityAnimation": $security_animation, "textModulesData": $text_modules_data, "transitOperatorName": $transit_operator_name, "transitType": $transit_type, "version": $version, "viewUnlockRequirement": $view_unlock_requirement, "watermark": $watermark, "wordMark": $word_mark} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"activationOptions": $activation_options, "allowMultipleUsersPerObject": $allow_multiple_users_per_object, "callbackOptions": $callback_options, "classTemplateInfo": $class_template_info, "countryCode": $country_code, "customCarriageLabel": $custom_carriage_label, "customCoachLabel": $custom_coach_label, "customConcessionCategoryLabel": $custom_concession_category_label, "customConfirmationCodeLabel": $custom_confirmation_code_label, "customDiscountMessageLabel": $custom_discount_message_label, "customFareClassLabel": $custom_fare_class_label, "customFareNameLabel": $custom_fare_name_label, "customOtherRestrictionsLabel": $custom_other_restrictions_label, "customPlatformLabel": $custom_platform_label, "customPurchaseFaceValueLabel": $custom_purchase_face_value_label, "customPurchasePriceLabel": $custom_purchase_price_label, "customPurchaseReceiptNumberLabel": $custom_purchase_receipt_number_label, "customRouteRestrictionsDetailsLabel": $custom_route_restrictions_details_label, "customRouteRestrictionsLabel": $custom_route_restrictions_label, "customSeatLabel": $custom_seat_label, "customTicketNumberLabel": $custom_ticket_number_label, "customTimeRestrictionsLabel": $custom_time_restrictions_label, "customTransitTerminusNameLabel": $custom_transit_terminus_name_label, "customZoneLabel": $custom_zone_label, "enableSingleLegItinerary": $enable_single_leg_itinerary, "enableSmartTap": $enable_smart_tap, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "homepageUri": $homepage_uri, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "issuerName": $issuer_name, "languageOverride": $language_override, "linksModuleData": $links_module_data, "localizedIssuerName": $localized_issuer_name, "locations": $locations, "logo": $logo, "messages": $messages, "multipleDevicesAndHoldersAllowedStatus": $multiple_devices_and_holders_allowed_status, "redemptionIssuers": $redemption_issuers, "review": $review, "reviewStatus": $review_status, "securityAnimation": $security_animation, "textModulesData": $text_modules_data, "transitOperatorName": $transit_operator_name, "transitType": $transit_type, "version": $version, "viewUnlockRequirement": $view_unlock_requirement, "watermark": $watermark, "wordMark": $word_mark} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns the transit class with the given class ID.
 #
 # GET /walletobjects/v1/transitClass/{resourceId}
 # operationId: walletobjects.transitclass.get
-export def "walletobjects-transit-class walletobjectstransitclassget" [
+export def "walletobjects-transit-class get" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5164,7 +5174,7 @@ export def "walletobjects-transit-class walletobjectstransitclassget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_id: $resource_id} | format pattern "/walletobjects/v1/transitClass/{resource_id}") $qp)
+  let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/transitClass/{resource_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5211,7 +5221,7 @@ export def "walletobjects-transit-class walletobjectstransitclassget" [
 # --transitOperatorName shape: {defaultValue?: record, kind?: string, translatedValues?: list}
 # --watermark shape: {contentDescription?: record, kind?: string, sourceUri?: record}
 # --wordMark shape: {contentDescription?: record, kind?: string, sourceUri?: record}
-export def "walletobjects-transit-class walletobjectstransitclasspatch" [
+export def "walletobjects-transit-class update-by-resourceId" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5272,7 +5282,7 @@ export def "walletobjects-transit-class walletobjectstransitclasspatch" [
   --logo: record # Wrapping type for Google hosted images. Next ID: 7 — shape: {contentDescription?: record, kind?: string, sourceUri?: record}
   --messages: list # An array of messages displayed in the app. All users of this object will receive its associated messages. The maximum number of these fields is 10. — item shape: {body?: string, displayInterval?: record, header?: string, id?: string, kind?: string, localizedBody?: record, localizedHeader?: record, messageType?: "MESSAGE_TYPE_UNSPECIFIED"|"TEXT"|"text"|"EXPIRATION_NOTIFICATION"|"expirationNotification"}
   --multiple-devices-and-holders-allowed-status: string@multiple-devices-and-holders-allowed-status-completer # Identifies whether multiple users and devices will save the same object referencing this class.
-  --redemption-issuers: list # Identifies which redemption issuers can redeem the pass over Smart Tap. Redemption issuers are identified by their issuer ID. Redemption issuers must have at least one Smart Tap key configured. The `enableSmartTap` and object level `smartTapRedemptionLevel` fields must also be set up correctly in order for a pass to support Smart Tap.
+  --redemption-issuers: list<string> # Identifies which redemption issuers can redeem the pass over Smart Tap. Redemption issuers are identified by their issuer ID. Redemption issuers must have at least one Smart Tap key configured. The `enableSmartTap` and object level `smartTapRedemptionLevel` fields must also be set up correctly in order for a pass to support Smart Tap.
   --review: record # shape: {comments?: string}
   --review-status: string@review-status-completer # Required. The status of the class. This field can be set to `draft` or `underReview` using the insert, patch, or update API calls. Once the review state is changed from `draft` it may not be changed back to `draft`. You should keep this field to `draft` when the class is under development. A `draft` class cannot be used to create any object. You should set this field to `underReview` when you believe the class is ready for use. The platform will automatically set this field to `approved` and it can be immediately used to create or migrate objects. When updating an already `approved` class you should keep setting this field to `underReview`.
   --security-animation: record # shape: {animationType?: "ANIMATION_UNSPECIFIED"|"FOIL_SHIMMER"|"foilShimmer"}
@@ -5288,12 +5298,12 @@ export def "walletobjects-transit-class walletobjectstransitclasspatch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_id: $resource_id} | format pattern "/walletobjects/v1/transitClass/{resource_id}") $qp)
-  let body = {"activationOptions": $activation_options, "allowMultipleUsersPerObject": $allow_multiple_users_per_object, "callbackOptions": $callback_options, "classTemplateInfo": $class_template_info, "countryCode": $country_code, "customCarriageLabel": $custom_carriage_label, "customCoachLabel": $custom_coach_label, "customConcessionCategoryLabel": $custom_concession_category_label, "customConfirmationCodeLabel": $custom_confirmation_code_label, "customDiscountMessageLabel": $custom_discount_message_label, "customFareClassLabel": $custom_fare_class_label, "customFareNameLabel": $custom_fare_name_label, "customOtherRestrictionsLabel": $custom_other_restrictions_label, "customPlatformLabel": $custom_platform_label, "customPurchaseFaceValueLabel": $custom_purchase_face_value_label, "customPurchasePriceLabel": $custom_purchase_price_label, "customPurchaseReceiptNumberLabel": $custom_purchase_receipt_number_label, "customRouteRestrictionsDetailsLabel": $custom_route_restrictions_details_label, "customRouteRestrictionsLabel": $custom_route_restrictions_label, "customSeatLabel": $custom_seat_label, "customTicketNumberLabel": $custom_ticket_number_label, "customTimeRestrictionsLabel": $custom_time_restrictions_label, "customTransitTerminusNameLabel": $custom_transit_terminus_name_label, "customZoneLabel": $custom_zone_label, "enableSingleLegItinerary": $enable_single_leg_itinerary, "enableSmartTap": $enable_smart_tap, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "homepageUri": $homepage_uri, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "issuerName": $issuer_name, "languageOverride": $language_override, "linksModuleData": $links_module_data, "localizedIssuerName": $localized_issuer_name, "locations": $locations, "logo": $logo, "messages": $messages, "multipleDevicesAndHoldersAllowedStatus": $multiple_devices_and_holders_allowed_status, "redemptionIssuers": $redemption_issuers, "review": $review, "reviewStatus": $review_status, "securityAnimation": $security_animation, "textModulesData": $text_modules_data, "transitOperatorName": $transit_operator_name, "transitType": $transit_type, "version": $version, "viewUnlockRequirement": $view_unlock_requirement, "watermark": $watermark, "wordMark": $word_mark} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/transitClass/{resource_id}") $qp)
+  let req_body = {"activationOptions": $activation_options, "allowMultipleUsersPerObject": $allow_multiple_users_per_object, "callbackOptions": $callback_options, "classTemplateInfo": $class_template_info, "countryCode": $country_code, "customCarriageLabel": $custom_carriage_label, "customCoachLabel": $custom_coach_label, "customConcessionCategoryLabel": $custom_concession_category_label, "customConfirmationCodeLabel": $custom_confirmation_code_label, "customDiscountMessageLabel": $custom_discount_message_label, "customFareClassLabel": $custom_fare_class_label, "customFareNameLabel": $custom_fare_name_label, "customOtherRestrictionsLabel": $custom_other_restrictions_label, "customPlatformLabel": $custom_platform_label, "customPurchaseFaceValueLabel": $custom_purchase_face_value_label, "customPurchasePriceLabel": $custom_purchase_price_label, "customPurchaseReceiptNumberLabel": $custom_purchase_receipt_number_label, "customRouteRestrictionsDetailsLabel": $custom_route_restrictions_details_label, "customRouteRestrictionsLabel": $custom_route_restrictions_label, "customSeatLabel": $custom_seat_label, "customTicketNumberLabel": $custom_ticket_number_label, "customTimeRestrictionsLabel": $custom_time_restrictions_label, "customTransitTerminusNameLabel": $custom_transit_terminus_name_label, "customZoneLabel": $custom_zone_label, "enableSingleLegItinerary": $enable_single_leg_itinerary, "enableSmartTap": $enable_smart_tap, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "homepageUri": $homepage_uri, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "issuerName": $issuer_name, "languageOverride": $language_override, "linksModuleData": $links_module_data, "localizedIssuerName": $localized_issuer_name, "locations": $locations, "logo": $logo, "messages": $messages, "multipleDevicesAndHoldersAllowedStatus": $multiple_devices_and_holders_allowed_status, "redemptionIssuers": $redemption_issuers, "review": $review, "reviewStatus": $review_status, "securityAnimation": $security_animation, "textModulesData": $text_modules_data, "transitOperatorName": $transit_operator_name, "transitType": $transit_type, "version": $version, "viewUnlockRequirement": $view_unlock_requirement, "watermark": $watermark, "wordMark": $word_mark} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates the transit class referenced by the given class ID.
@@ -5337,7 +5347,7 @@ export def "walletobjects-transit-class walletobjectstransitclasspatch" [
 # --transitOperatorName shape: {defaultValue?: record, kind?: string, translatedValues?: list}
 # --watermark shape: {contentDescription?: record, kind?: string, sourceUri?: record}
 # --wordMark shape: {contentDescription?: record, kind?: string, sourceUri?: record}
-export def "walletobjects-transit-class walletobjectstransitclassupdate" [
+export def "walletobjects-transit-class update-by-resourceId-1" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5398,7 +5408,7 @@ export def "walletobjects-transit-class walletobjectstransitclassupdate" [
   --logo: record # Wrapping type for Google hosted images. Next ID: 7 — shape: {contentDescription?: record, kind?: string, sourceUri?: record}
   --messages: list # An array of messages displayed in the app. All users of this object will receive its associated messages. The maximum number of these fields is 10. — item shape: {body?: string, displayInterval?: record, header?: string, id?: string, kind?: string, localizedBody?: record, localizedHeader?: record, messageType?: "MESSAGE_TYPE_UNSPECIFIED"|"TEXT"|"text"|"EXPIRATION_NOTIFICATION"|"expirationNotification"}
   --multiple-devices-and-holders-allowed-status: string@multiple-devices-and-holders-allowed-status-completer # Identifies whether multiple users and devices will save the same object referencing this class.
-  --redemption-issuers: list # Identifies which redemption issuers can redeem the pass over Smart Tap. Redemption issuers are identified by their issuer ID. Redemption issuers must have at least one Smart Tap key configured. The `enableSmartTap` and object level `smartTapRedemptionLevel` fields must also be set up correctly in order for a pass to support Smart Tap.
+  --redemption-issuers: list<string> # Identifies which redemption issuers can redeem the pass over Smart Tap. Redemption issuers are identified by their issuer ID. Redemption issuers must have at least one Smart Tap key configured. The `enableSmartTap` and object level `smartTapRedemptionLevel` fields must also be set up correctly in order for a pass to support Smart Tap.
   --review: record # shape: {comments?: string}
   --review-status: string@review-status-completer # Required. The status of the class. This field can be set to `draft` or `underReview` using the insert, patch, or update API calls. Once the review state is changed from `draft` it may not be changed back to `draft`. You should keep this field to `draft` when the class is under development. A `draft` class cannot be used to create any object. You should set this field to `underReview` when you believe the class is ready for use. The platform will automatically set this field to `approved` and it can be immediately used to create or migrate objects. When updating an already `approved` class you should keep setting this field to `underReview`.
   --security-animation: record # shape: {animationType?: "ANIMATION_UNSPECIFIED"|"FOIL_SHIMMER"|"foilShimmer"}
@@ -5414,12 +5424,12 @@ export def "walletobjects-transit-class walletobjectstransitclassupdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_id: $resource_id} | format pattern "/walletobjects/v1/transitClass/{resource_id}") $qp)
-  let body = {"activationOptions": $activation_options, "allowMultipleUsersPerObject": $allow_multiple_users_per_object, "callbackOptions": $callback_options, "classTemplateInfo": $class_template_info, "countryCode": $country_code, "customCarriageLabel": $custom_carriage_label, "customCoachLabel": $custom_coach_label, "customConcessionCategoryLabel": $custom_concession_category_label, "customConfirmationCodeLabel": $custom_confirmation_code_label, "customDiscountMessageLabel": $custom_discount_message_label, "customFareClassLabel": $custom_fare_class_label, "customFareNameLabel": $custom_fare_name_label, "customOtherRestrictionsLabel": $custom_other_restrictions_label, "customPlatformLabel": $custom_platform_label, "customPurchaseFaceValueLabel": $custom_purchase_face_value_label, "customPurchasePriceLabel": $custom_purchase_price_label, "customPurchaseReceiptNumberLabel": $custom_purchase_receipt_number_label, "customRouteRestrictionsDetailsLabel": $custom_route_restrictions_details_label, "customRouteRestrictionsLabel": $custom_route_restrictions_label, "customSeatLabel": $custom_seat_label, "customTicketNumberLabel": $custom_ticket_number_label, "customTimeRestrictionsLabel": $custom_time_restrictions_label, "customTransitTerminusNameLabel": $custom_transit_terminus_name_label, "customZoneLabel": $custom_zone_label, "enableSingleLegItinerary": $enable_single_leg_itinerary, "enableSmartTap": $enable_smart_tap, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "homepageUri": $homepage_uri, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "issuerName": $issuer_name, "languageOverride": $language_override, "linksModuleData": $links_module_data, "localizedIssuerName": $localized_issuer_name, "locations": $locations, "logo": $logo, "messages": $messages, "multipleDevicesAndHoldersAllowedStatus": $multiple_devices_and_holders_allowed_status, "redemptionIssuers": $redemption_issuers, "review": $review, "reviewStatus": $review_status, "securityAnimation": $security_animation, "textModulesData": $text_modules_data, "transitOperatorName": $transit_operator_name, "transitType": $transit_type, "version": $version, "viewUnlockRequirement": $view_unlock_requirement, "watermark": $watermark, "wordMark": $word_mark} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/transitClass/{resource_id}") $qp)
+  let req_body = {"activationOptions": $activation_options, "allowMultipleUsersPerObject": $allow_multiple_users_per_object, "callbackOptions": $callback_options, "classTemplateInfo": $class_template_info, "countryCode": $country_code, "customCarriageLabel": $custom_carriage_label, "customCoachLabel": $custom_coach_label, "customConcessionCategoryLabel": $custom_concession_category_label, "customConfirmationCodeLabel": $custom_confirmation_code_label, "customDiscountMessageLabel": $custom_discount_message_label, "customFareClassLabel": $custom_fare_class_label, "customFareNameLabel": $custom_fare_name_label, "customOtherRestrictionsLabel": $custom_other_restrictions_label, "customPlatformLabel": $custom_platform_label, "customPurchaseFaceValueLabel": $custom_purchase_face_value_label, "customPurchasePriceLabel": $custom_purchase_price_label, "customPurchaseReceiptNumberLabel": $custom_purchase_receipt_number_label, "customRouteRestrictionsDetailsLabel": $custom_route_restrictions_details_label, "customRouteRestrictionsLabel": $custom_route_restrictions_label, "customSeatLabel": $custom_seat_label, "customTicketNumberLabel": $custom_ticket_number_label, "customTimeRestrictionsLabel": $custom_time_restrictions_label, "customTransitTerminusNameLabel": $custom_transit_terminus_name_label, "customZoneLabel": $custom_zone_label, "enableSingleLegItinerary": $enable_single_leg_itinerary, "enableSmartTap": $enable_smart_tap, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "homepageUri": $homepage_uri, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "issuerName": $issuer_name, "languageOverride": $language_override, "linksModuleData": $links_module_data, "localizedIssuerName": $localized_issuer_name, "locations": $locations, "logo": $logo, "messages": $messages, "multipleDevicesAndHoldersAllowedStatus": $multiple_devices_and_holders_allowed_status, "redemptionIssuers": $redemption_issuers, "review": $review, "reviewStatus": $review_status, "securityAnimation": $security_animation, "textModulesData": $text_modules_data, "transitOperatorName": $transit_operator_name, "transitType": $transit_type, "version": $version, "viewUnlockRequirement": $view_unlock_requirement, "watermark": $watermark, "wordMark": $word_mark} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Adds a message to the transit class referenced by the given class ID.
@@ -5427,7 +5437,7 @@ export def "walletobjects-transit-class walletobjectstransitclassupdate" [
 # POST /walletobjects/v1/transitClass/{resourceId}/addMessage
 # operationId: walletobjects.transitclass.addmessage
 # --message shape: {body?: string, displayInterval?: record, header?: string, id?: string, kind?: string, localizedBody?: record, localizedHeader?: record, messageType?: "MESSAGE_TYPE_UNSPECIFIED"|"TEXT"|"text"|"EXPIRATION_NOTIFICATION"|"expirationNotification"}
-export def "walletobjects-transit-class-add-message walletobjectstransitclassaddmessage" [
+export def "walletobjects-transit-class-add-message create-addmessage" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5454,19 +5464,19 @@ export def "walletobjects-transit-class-add-message walletobjectstransitclassadd
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_id: $resource_id} | format pattern "/walletobjects/v1/transitClass/{resource_id}/addMessage") $qp)
-  let body = {"message": $message} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/transitClass/{resource_id}/addMessage") $qp)
+  let req_body = {"message": $message} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns a list of all transit objects for a given issuer ID.
 #
 # GET /walletobjects/v1/transitObject
 # operationId: walletobjects.transitobject.list
-export def "walletobjects-transit-object walletobjectstransitobjectlist" [
+export def "walletobjects-transit-object list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5506,7 +5516,7 @@ export def "walletobjects-transit-object walletobjectstransitobjectlist" [
 # --activationStatus shape: {state?: "UNKNOWN_STATE"|"NOT_ACTIVATED"|"not_activated"|"ACTIVATED"|"activated"}
 # --appLinkData shape: {androidAppLinkInfo?: record, iosAppLinkInfo?: record, webAppLinkInfo?: record}
 # --barcode shape: {alternateText?: string, kind?: string, renderEncoding?: "RENDER_ENCODING_UNSPECIFIED"|"UTF_8", showCodeText?: record, type?: "BARCODE_TYPE_UNSPECIFIED"|"AZTEC"|"aztec"|"CODE_39"|"code39"|"CODE_128"|"code128"|"CODABAR"|"codabar"|"DATA_MATRIX"|"dataMatrix"|"EAN_8"|"ean8"|"EAN_13"|"ean13"|"EAN13"|"ITF_14"|"itf14"|"PDF_417"|"pdf417"|"PDF417"|"QR_CODE"|"qrCode"|"qrcode"|"UPC_A"|"upcA"|"TEXT_ONLY"|"textOnly", value?: string}
-# --classReference shape: {activationOptions?: record, allowMultipleUsersPerObject?: bool, callbackOptions?: record, classTemplateInfo?: record, countryCode?: string, customCarriageLabel?: record, customCoachLabel?: record, customConcessionCategoryLabel?: record, customConfirmationCodeLabel?: record, customDiscountMessageLabel?: record, customFareClassLabel?: record, customFareNameLabel?: record, customOtherRestrictionsLabel?: record, customPlatformLabel?: record, customPurchaseFaceValueLabel?: record, customPurchasePriceLabel?: record, customPurchaseReceiptNumberLabel?: record, customRouteRestrictionsDetailsLabel?: record, customRouteRestrictionsLabel?: record, customSeatLabel?: record, customTicketNumberLabel?: record, customTimeRestrictionsLabel?: record, customTransitTerminusNameLabel?: record, customZoneLabel?: record, enableSingleLegItinerary?: bool, enableSmartTap?: bool, heroImage?: record, hexBackgroundColor?: string, homepageUri?: record, id?: string, imageModulesData?: list, infoModuleData?: record, issuerName?: string, languageOverride?: string, linksModuleData?: record, localizedIssuerName?: record, locations?: list, logo?: record, messages?: list, multipleDevicesAndHoldersAllowedStatus?: "STATUS_UNSPECIFIED"|"MULTIPLE_HOLDERS"|"multipleHolders"|"ONE_USER_ALL_DEVICES"|"oneUserAllDevices"|"ONE_USER_ONE_DEVICE"|"oneUserOneDevice", redemptionIssuers?: list, review?: record, reviewStatus?: "REVIEW_STATUS_UNSPECIFIED"|"UNDER_REVIEW"|"underReview"|"APPROVED"|"approved"|"REJECTED"|"rejected"|"DRAFT"|"draft", securityAnimation?: record, textModulesData?: list, transitOperatorName?: record, transitType?: "TRANSIT_TYPE_UNSPECIFIED"|"BUS"|"bus"|"RAIL"|"rail"|"TRAM"|"tram"|"FERRY"|"ferry"|"OTHER"|"other", version?: string, viewUnlockRequirement?: "VIEW_UNLOCK_REQUIREMENT_UNSPECIFIED"|"UNLOCK_NOT_REQUIRED"|"UNLOCK_REQUIRED_TO_VIEW", watermark?: record, wordMark?: record}
+# --classReference shape: {activationOptions?: record, allowMultipleUsersPerObject?: bool, callbackOptions?: record, classTemplateInfo?: record, countryCode?: string, customCarriageLabel?: record, customCoachLabel?: record, customConcessionCategoryLabel?: record, customConfirmationCodeLabel?: record, customDiscountMessageLabel?: record, customFareClassLabel?: record, customFareNameLabel?: record, customOtherRestrictionsLabel?: record, customPlatformLabel?: record, customPurchaseFaceValueLabel?: record, ... (36 more fields)}
 # --customConcessionCategory shape: {defaultValue?: record, kind?: string, translatedValues?: list}
 # --customTicketStatus shape: {defaultValue?: record, kind?: string, translatedValues?: list}
 # --deviceContext shape: {deviceToken?: string}
@@ -5525,7 +5535,7 @@ export def "walletobjects-transit-object walletobjectstransitobjectlist" [
 # --ticketLegs item shape: {arrivalDateTime?: string, carriage?: string, departureDateTime?: string, destinationName?: record, destinationStationCode?: string, fareName?: record, originName?: record, originStationCode?: string, platform?: string, ticketSeat?: record, ticketSeats?: list, transitOperatorName?: record, transitTerminusName?: record, zone?: string}
 # --ticketRestrictions shape: {otherRestrictions?: record, routeRestrictions?: record, routeRestrictionsDetails?: record, timeRestrictions?: record}
 # --validTimeInterval shape: {end?: record, kind?: string, start?: record}
-export def "walletobjects-transit-object walletobjectstransitobjectinsert" [
+export def "walletobjects-transit-object create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5549,7 +5559,7 @@ export def "walletobjects-transit-object walletobjectstransitobjectinsert" [
   --app-link-data: record # shape: {androidAppLinkInfo?: record, iosAppLinkInfo?: record, webAppLinkInfo?: record}
   --barcode: record # shape: {alternateText?: string, kind?: string, renderEncoding?: "RENDER_ENCODING_UNSPECIFIED"|"UTF_8", showCodeText?: record, type?: "BARCODE_TYPE_UNSPECIFIED"|"AZTEC"|"aztec"|"CODE_39"|"code39"|"CODE_128"|"code128"|"CODABAR"|"codabar"|"DATA_MATRIX"|"dataMatrix"|"EAN_8"|"ean8"|"EAN_13"|"ean13"|"EAN13"|"ITF_14"|"itf14"|"PDF_417"|"pdf417"|"PDF417"|"QR_CODE"|"qrCode"|"qrcode"|"UPC_A"|"upcA"|"TEXT_ONLY"|"textOnly", value?: string}
   --class-id: string # Required. The class associated with this object. The class must be of the same type as this object, must already exist, and must be approved. Class IDs should follow the format issuer ID.identifier where the former is issued by Google and latter is chosen by you.
-  --class-reference: record # shape: {activationOptions?: record, allowMultipleUsersPerObject?: bool, callbackOptions?: record, classTemplateInfo?: record, countryCode?: string, customCarriageLabel?: record, customCoachLabel?: record, customConcessionCategoryLabel?: record, customConfirmationCodeLabel?: record, customDiscountMessageLabel?: record, customFareClassLabel?: record, customFareNameLabel?: record, customOtherRestrictionsLabel?: record, customPlatformLabel?: record, customPurchaseFaceValueLabel?: record, customPurchasePriceLabel?: record, customPurchaseReceiptNumberLabel?: record, customRouteRestrictionsDetailsLabel?: record, customRouteRestrictionsLabel?: record, customSeatLabel?: record, customTicketNumberLabel?: record, customTimeRestrictionsLabel?: record, customTransitTerminusNameLabel?: record, customZoneLabel?: record, enableSingleLegItinerary?: bool, enableSmartTap?: bool, heroImage?: record, hexBackgroundColor?: string, homepageUri?: record, id?: string, imageModulesData?: list, infoModuleData?: record, issuerName?: string, languageOverride?: string, linksModuleData?: record, localizedIssuerName?: record, locations?: list, logo?: record, messages?: list, multipleDevicesAndHoldersAllowedStatus?: "STATUS_UNSPECIFIED"|"MULTIPLE_HOLDERS"|"multipleHolders"|"ONE_USER_ALL_DEVICES"|"oneUserAllDevices"|"ONE_USER_ONE_DEVICE"|"oneUserOneDevice", redemptionIssuers?: list, review?: record, reviewStatus?: "REVIEW_STATUS_UNSPECIFIED"|"UNDER_REVIEW"|"underReview"|"APPROVED"|"approved"|"REJECTED"|"rejected"|"DRAFT"|"draft", securityAnimation?: record, textModulesData?: list, transitOperatorName?: record, transitType?: "TRANSIT_TYPE_UNSPECIFIED"|"BUS"|"bus"|"RAIL"|"rail"|"TRAM"|"tram"|"FERRY"|"ferry"|"OTHER"|"other", version?: string, viewUnlockRequirement?: "VIEW_UNLOCK_REQUIREMENT_UNSPECIFIED"|"UNLOCK_NOT_REQUIRED"|"UNLOCK_REQUIRED_TO_VIEW", watermark?: record, wordMark?: record}
+  --class-reference: record # shape: {activationOptions?: record, allowMultipleUsersPerObject?: bool, callbackOptions?: record, classTemplateInfo?: record, countryCode?: string, customCarriageLabel?: record, customCoachLabel?: record, customConcessionCategoryLabel?: record, customConfirmationCodeLabel?: record, customDiscountMessageLabel?: record, customFareClassLabel?: record, customFareNameLabel?: record, customOtherRestrictionsLabel?: record, customPlatformLabel?: record, customPurchaseFaceValueLabel?: record, ... (36 more fields)}
   --concession-category: string@concession-category-completer # The concession category for the ticket.
   --custom-concession-category: record # shape: {defaultValue?: record, kind?: string, translatedValues?: list}
   --custom-ticket-status: record # shape: {defaultValue?: record, kind?: string, translatedValues?: list}
@@ -5589,18 +5599,18 @@ export def "walletobjects-transit-object walletobjectstransitobjectinsert" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/walletobjects/v1/transitObject" $qp)
-  let body = {"activationStatus": $activation_status, "appLinkData": $app_link_data, "barcode": $barcode, "classId": $class_id, "classReference": $class_reference, "concessionCategory": $concession_category, "customConcessionCategory": $custom_concession_category, "customTicketStatus": $custom_ticket_status, "deviceContext": $device_context, "disableExpirationNotification": $disable_expiration_notification, "groupingInfo": $grouping_info, "hasLinkedDevice": $has_linked_device, "hasUsers": $has_users, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "linksModuleData": $links_module_data, "locations": $locations, "messages": $messages, "passConstraints": $pass_constraints, "passengerNames": $passenger_names, "passengerType": $passenger_type, "purchaseDetails": $purchase_details, "rotatingBarcode": $rotating_barcode, "smartTapRedemptionValue": $smart_tap_redemption_value, "state": $state, "textModulesData": $text_modules_data, "ticketLeg": $ticket_leg, "ticketLegs": $ticket_legs, "ticketNumber": $ticket_number, "ticketRestrictions": $ticket_restrictions, "ticketStatus": $ticket_status, "tripId": $trip_id, "tripType": $trip_type, "validTimeInterval": $valid_time_interval, "version": $version} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"activationStatus": $activation_status, "appLinkData": $app_link_data, "barcode": $barcode, "classId": $class_id, "classReference": $class_reference, "concessionCategory": $concession_category, "customConcessionCategory": $custom_concession_category, "customTicketStatus": $custom_ticket_status, "deviceContext": $device_context, "disableExpirationNotification": $disable_expiration_notification, "groupingInfo": $grouping_info, "hasLinkedDevice": $has_linked_device, "hasUsers": $has_users, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "linksModuleData": $links_module_data, "locations": $locations, "messages": $messages, "passConstraints": $pass_constraints, "passengerNames": $passenger_names, "passengerType": $passenger_type, "purchaseDetails": $purchase_details, "rotatingBarcode": $rotating_barcode, "smartTapRedemptionValue": $smart_tap_redemption_value, "state": $state, "textModulesData": $text_modules_data, "ticketLeg": $ticket_leg, "ticketLegs": $ticket_legs, "ticketNumber": $ticket_number, "ticketRestrictions": $ticket_restrictions, "ticketStatus": $ticket_status, "tripId": $trip_id, "tripType": $trip_type, "validTimeInterval": $valid_time_interval, "version": $version} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns the transit object with the given object ID.
 #
 # GET /walletobjects/v1/transitObject/{resourceId}
 # operationId: walletobjects.transitobject.get
-export def "walletobjects-transit-object walletobjectstransitobjectget" [
+export def "walletobjects-transit-object get" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5625,7 +5635,7 @@ export def "walletobjects-transit-object walletobjectstransitobjectget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_id: $resource_id} | format pattern "/walletobjects/v1/transitObject/{resource_id}") $qp)
+  let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/transitObject/{resource_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5638,7 +5648,7 @@ export def "walletobjects-transit-object walletobjectstransitobjectget" [
 # --activationStatus shape: {state?: "UNKNOWN_STATE"|"NOT_ACTIVATED"|"not_activated"|"ACTIVATED"|"activated"}
 # --appLinkData shape: {androidAppLinkInfo?: record, iosAppLinkInfo?: record, webAppLinkInfo?: record}
 # --barcode shape: {alternateText?: string, kind?: string, renderEncoding?: "RENDER_ENCODING_UNSPECIFIED"|"UTF_8", showCodeText?: record, type?: "BARCODE_TYPE_UNSPECIFIED"|"AZTEC"|"aztec"|"CODE_39"|"code39"|"CODE_128"|"code128"|"CODABAR"|"codabar"|"DATA_MATRIX"|"dataMatrix"|"EAN_8"|"ean8"|"EAN_13"|"ean13"|"EAN13"|"ITF_14"|"itf14"|"PDF_417"|"pdf417"|"PDF417"|"QR_CODE"|"qrCode"|"qrcode"|"UPC_A"|"upcA"|"TEXT_ONLY"|"textOnly", value?: string}
-# --classReference shape: {activationOptions?: record, allowMultipleUsersPerObject?: bool, callbackOptions?: record, classTemplateInfo?: record, countryCode?: string, customCarriageLabel?: record, customCoachLabel?: record, customConcessionCategoryLabel?: record, customConfirmationCodeLabel?: record, customDiscountMessageLabel?: record, customFareClassLabel?: record, customFareNameLabel?: record, customOtherRestrictionsLabel?: record, customPlatformLabel?: record, customPurchaseFaceValueLabel?: record, customPurchasePriceLabel?: record, customPurchaseReceiptNumberLabel?: record, customRouteRestrictionsDetailsLabel?: record, customRouteRestrictionsLabel?: record, customSeatLabel?: record, customTicketNumberLabel?: record, customTimeRestrictionsLabel?: record, customTransitTerminusNameLabel?: record, customZoneLabel?: record, enableSingleLegItinerary?: bool, enableSmartTap?: bool, heroImage?: record, hexBackgroundColor?: string, homepageUri?: record, id?: string, imageModulesData?: list, infoModuleData?: record, issuerName?: string, languageOverride?: string, linksModuleData?: record, localizedIssuerName?: record, locations?: list, logo?: record, messages?: list, multipleDevicesAndHoldersAllowedStatus?: "STATUS_UNSPECIFIED"|"MULTIPLE_HOLDERS"|"multipleHolders"|"ONE_USER_ALL_DEVICES"|"oneUserAllDevices"|"ONE_USER_ONE_DEVICE"|"oneUserOneDevice", redemptionIssuers?: list, review?: record, reviewStatus?: "REVIEW_STATUS_UNSPECIFIED"|"UNDER_REVIEW"|"underReview"|"APPROVED"|"approved"|"REJECTED"|"rejected"|"DRAFT"|"draft", securityAnimation?: record, textModulesData?: list, transitOperatorName?: record, transitType?: "TRANSIT_TYPE_UNSPECIFIED"|"BUS"|"bus"|"RAIL"|"rail"|"TRAM"|"tram"|"FERRY"|"ferry"|"OTHER"|"other", version?: string, viewUnlockRequirement?: "VIEW_UNLOCK_REQUIREMENT_UNSPECIFIED"|"UNLOCK_NOT_REQUIRED"|"UNLOCK_REQUIRED_TO_VIEW", watermark?: record, wordMark?: record}
+# --classReference shape: {activationOptions?: record, allowMultipleUsersPerObject?: bool, callbackOptions?: record, classTemplateInfo?: record, countryCode?: string, customCarriageLabel?: record, customCoachLabel?: record, customConcessionCategoryLabel?: record, customConfirmationCodeLabel?: record, customDiscountMessageLabel?: record, customFareClassLabel?: record, customFareNameLabel?: record, customOtherRestrictionsLabel?: record, customPlatformLabel?: record, customPurchaseFaceValueLabel?: record, ... (36 more fields)}
 # --customConcessionCategory shape: {defaultValue?: record, kind?: string, translatedValues?: list}
 # --customTicketStatus shape: {defaultValue?: record, kind?: string, translatedValues?: list}
 # --deviceContext shape: {deviceToken?: string}
@@ -5657,7 +5667,7 @@ export def "walletobjects-transit-object walletobjectstransitobjectget" [
 # --ticketLegs item shape: {arrivalDateTime?: string, carriage?: string, departureDateTime?: string, destinationName?: record, destinationStationCode?: string, fareName?: record, originName?: record, originStationCode?: string, platform?: string, ticketSeat?: record, ticketSeats?: list, transitOperatorName?: record, transitTerminusName?: record, zone?: string}
 # --ticketRestrictions shape: {otherRestrictions?: record, routeRestrictions?: record, routeRestrictionsDetails?: record, timeRestrictions?: record}
 # --validTimeInterval shape: {end?: record, kind?: string, start?: record}
-export def "walletobjects-transit-object walletobjectstransitobjectpatch" [
+export def "walletobjects-transit-object update-by-resourceId" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5682,7 +5692,7 @@ export def "walletobjects-transit-object walletobjectstransitobjectpatch" [
   --app-link-data: record # shape: {androidAppLinkInfo?: record, iosAppLinkInfo?: record, webAppLinkInfo?: record}
   --barcode: record # shape: {alternateText?: string, kind?: string, renderEncoding?: "RENDER_ENCODING_UNSPECIFIED"|"UTF_8", showCodeText?: record, type?: "BARCODE_TYPE_UNSPECIFIED"|"AZTEC"|"aztec"|"CODE_39"|"code39"|"CODE_128"|"code128"|"CODABAR"|"codabar"|"DATA_MATRIX"|"dataMatrix"|"EAN_8"|"ean8"|"EAN_13"|"ean13"|"EAN13"|"ITF_14"|"itf14"|"PDF_417"|"pdf417"|"PDF417"|"QR_CODE"|"qrCode"|"qrcode"|"UPC_A"|"upcA"|"TEXT_ONLY"|"textOnly", value?: string}
   --class-id: string # Required. The class associated with this object. The class must be of the same type as this object, must already exist, and must be approved. Class IDs should follow the format issuer ID.identifier where the former is issued by Google and latter is chosen by you.
-  --class-reference: record # shape: {activationOptions?: record, allowMultipleUsersPerObject?: bool, callbackOptions?: record, classTemplateInfo?: record, countryCode?: string, customCarriageLabel?: record, customCoachLabel?: record, customConcessionCategoryLabel?: record, customConfirmationCodeLabel?: record, customDiscountMessageLabel?: record, customFareClassLabel?: record, customFareNameLabel?: record, customOtherRestrictionsLabel?: record, customPlatformLabel?: record, customPurchaseFaceValueLabel?: record, customPurchasePriceLabel?: record, customPurchaseReceiptNumberLabel?: record, customRouteRestrictionsDetailsLabel?: record, customRouteRestrictionsLabel?: record, customSeatLabel?: record, customTicketNumberLabel?: record, customTimeRestrictionsLabel?: record, customTransitTerminusNameLabel?: record, customZoneLabel?: record, enableSingleLegItinerary?: bool, enableSmartTap?: bool, heroImage?: record, hexBackgroundColor?: string, homepageUri?: record, id?: string, imageModulesData?: list, infoModuleData?: record, issuerName?: string, languageOverride?: string, linksModuleData?: record, localizedIssuerName?: record, locations?: list, logo?: record, messages?: list, multipleDevicesAndHoldersAllowedStatus?: "STATUS_UNSPECIFIED"|"MULTIPLE_HOLDERS"|"multipleHolders"|"ONE_USER_ALL_DEVICES"|"oneUserAllDevices"|"ONE_USER_ONE_DEVICE"|"oneUserOneDevice", redemptionIssuers?: list, review?: record, reviewStatus?: "REVIEW_STATUS_UNSPECIFIED"|"UNDER_REVIEW"|"underReview"|"APPROVED"|"approved"|"REJECTED"|"rejected"|"DRAFT"|"draft", securityAnimation?: record, textModulesData?: list, transitOperatorName?: record, transitType?: "TRANSIT_TYPE_UNSPECIFIED"|"BUS"|"bus"|"RAIL"|"rail"|"TRAM"|"tram"|"FERRY"|"ferry"|"OTHER"|"other", version?: string, viewUnlockRequirement?: "VIEW_UNLOCK_REQUIREMENT_UNSPECIFIED"|"UNLOCK_NOT_REQUIRED"|"UNLOCK_REQUIRED_TO_VIEW", watermark?: record, wordMark?: record}
+  --class-reference: record # shape: {activationOptions?: record, allowMultipleUsersPerObject?: bool, callbackOptions?: record, classTemplateInfo?: record, countryCode?: string, customCarriageLabel?: record, customCoachLabel?: record, customConcessionCategoryLabel?: record, customConfirmationCodeLabel?: record, customDiscountMessageLabel?: record, customFareClassLabel?: record, customFareNameLabel?: record, customOtherRestrictionsLabel?: record, customPlatformLabel?: record, customPurchaseFaceValueLabel?: record, ... (36 more fields)}
   --concession-category: string@concession-category-completer # The concession category for the ticket.
   --custom-concession-category: record # shape: {defaultValue?: record, kind?: string, translatedValues?: list}
   --custom-ticket-status: record # shape: {defaultValue?: record, kind?: string, translatedValues?: list}
@@ -5721,12 +5731,12 @@ export def "walletobjects-transit-object walletobjectstransitobjectpatch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_id: $resource_id} | format pattern "/walletobjects/v1/transitObject/{resource_id}") $qp)
-  let body = {"activationStatus": $activation_status, "appLinkData": $app_link_data, "barcode": $barcode, "classId": $class_id, "classReference": $class_reference, "concessionCategory": $concession_category, "customConcessionCategory": $custom_concession_category, "customTicketStatus": $custom_ticket_status, "deviceContext": $device_context, "disableExpirationNotification": $disable_expiration_notification, "groupingInfo": $grouping_info, "hasLinkedDevice": $has_linked_device, "hasUsers": $has_users, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "linksModuleData": $links_module_data, "locations": $locations, "messages": $messages, "passConstraints": $pass_constraints, "passengerNames": $passenger_names, "passengerType": $passenger_type, "purchaseDetails": $purchase_details, "rotatingBarcode": $rotating_barcode, "smartTapRedemptionValue": $smart_tap_redemption_value, "state": $state, "textModulesData": $text_modules_data, "ticketLeg": $ticket_leg, "ticketLegs": $ticket_legs, "ticketNumber": $ticket_number, "ticketRestrictions": $ticket_restrictions, "ticketStatus": $ticket_status, "tripId": $trip_id, "tripType": $trip_type, "validTimeInterval": $valid_time_interval, "version": $version} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/transitObject/{resource_id}") $qp)
+  let req_body = {"activationStatus": $activation_status, "appLinkData": $app_link_data, "barcode": $barcode, "classId": $class_id, "classReference": $class_reference, "concessionCategory": $concession_category, "customConcessionCategory": $custom_concession_category, "customTicketStatus": $custom_ticket_status, "deviceContext": $device_context, "disableExpirationNotification": $disable_expiration_notification, "groupingInfo": $grouping_info, "hasLinkedDevice": $has_linked_device, "hasUsers": $has_users, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "linksModuleData": $links_module_data, "locations": $locations, "messages": $messages, "passConstraints": $pass_constraints, "passengerNames": $passenger_names, "passengerType": $passenger_type, "purchaseDetails": $purchase_details, "rotatingBarcode": $rotating_barcode, "smartTapRedemptionValue": $smart_tap_redemption_value, "state": $state, "textModulesData": $text_modules_data, "ticketLeg": $ticket_leg, "ticketLegs": $ticket_legs, "ticketNumber": $ticket_number, "ticketRestrictions": $ticket_restrictions, "ticketStatus": $ticket_status, "tripId": $trip_id, "tripType": $trip_type, "validTimeInterval": $valid_time_interval, "version": $version} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates the transit object referenced by the given object ID.
@@ -5736,7 +5746,7 @@ export def "walletobjects-transit-object walletobjectstransitobjectpatch" [
 # --activationStatus shape: {state?: "UNKNOWN_STATE"|"NOT_ACTIVATED"|"not_activated"|"ACTIVATED"|"activated"}
 # --appLinkData shape: {androidAppLinkInfo?: record, iosAppLinkInfo?: record, webAppLinkInfo?: record}
 # --barcode shape: {alternateText?: string, kind?: string, renderEncoding?: "RENDER_ENCODING_UNSPECIFIED"|"UTF_8", showCodeText?: record, type?: "BARCODE_TYPE_UNSPECIFIED"|"AZTEC"|"aztec"|"CODE_39"|"code39"|"CODE_128"|"code128"|"CODABAR"|"codabar"|"DATA_MATRIX"|"dataMatrix"|"EAN_8"|"ean8"|"EAN_13"|"ean13"|"EAN13"|"ITF_14"|"itf14"|"PDF_417"|"pdf417"|"PDF417"|"QR_CODE"|"qrCode"|"qrcode"|"UPC_A"|"upcA"|"TEXT_ONLY"|"textOnly", value?: string}
-# --classReference shape: {activationOptions?: record, allowMultipleUsersPerObject?: bool, callbackOptions?: record, classTemplateInfo?: record, countryCode?: string, customCarriageLabel?: record, customCoachLabel?: record, customConcessionCategoryLabel?: record, customConfirmationCodeLabel?: record, customDiscountMessageLabel?: record, customFareClassLabel?: record, customFareNameLabel?: record, customOtherRestrictionsLabel?: record, customPlatformLabel?: record, customPurchaseFaceValueLabel?: record, customPurchasePriceLabel?: record, customPurchaseReceiptNumberLabel?: record, customRouteRestrictionsDetailsLabel?: record, customRouteRestrictionsLabel?: record, customSeatLabel?: record, customTicketNumberLabel?: record, customTimeRestrictionsLabel?: record, customTransitTerminusNameLabel?: record, customZoneLabel?: record, enableSingleLegItinerary?: bool, enableSmartTap?: bool, heroImage?: record, hexBackgroundColor?: string, homepageUri?: record, id?: string, imageModulesData?: list, infoModuleData?: record, issuerName?: string, languageOverride?: string, linksModuleData?: record, localizedIssuerName?: record, locations?: list, logo?: record, messages?: list, multipleDevicesAndHoldersAllowedStatus?: "STATUS_UNSPECIFIED"|"MULTIPLE_HOLDERS"|"multipleHolders"|"ONE_USER_ALL_DEVICES"|"oneUserAllDevices"|"ONE_USER_ONE_DEVICE"|"oneUserOneDevice", redemptionIssuers?: list, review?: record, reviewStatus?: "REVIEW_STATUS_UNSPECIFIED"|"UNDER_REVIEW"|"underReview"|"APPROVED"|"approved"|"REJECTED"|"rejected"|"DRAFT"|"draft", securityAnimation?: record, textModulesData?: list, transitOperatorName?: record, transitType?: "TRANSIT_TYPE_UNSPECIFIED"|"BUS"|"bus"|"RAIL"|"rail"|"TRAM"|"tram"|"FERRY"|"ferry"|"OTHER"|"other", version?: string, viewUnlockRequirement?: "VIEW_UNLOCK_REQUIREMENT_UNSPECIFIED"|"UNLOCK_NOT_REQUIRED"|"UNLOCK_REQUIRED_TO_VIEW", watermark?: record, wordMark?: record}
+# --classReference shape: {activationOptions?: record, allowMultipleUsersPerObject?: bool, callbackOptions?: record, classTemplateInfo?: record, countryCode?: string, customCarriageLabel?: record, customCoachLabel?: record, customConcessionCategoryLabel?: record, customConfirmationCodeLabel?: record, customDiscountMessageLabel?: record, customFareClassLabel?: record, customFareNameLabel?: record, customOtherRestrictionsLabel?: record, customPlatformLabel?: record, customPurchaseFaceValueLabel?: record, ... (36 more fields)}
 # --customConcessionCategory shape: {defaultValue?: record, kind?: string, translatedValues?: list}
 # --customTicketStatus shape: {defaultValue?: record, kind?: string, translatedValues?: list}
 # --deviceContext shape: {deviceToken?: string}
@@ -5755,7 +5765,7 @@ export def "walletobjects-transit-object walletobjectstransitobjectpatch" [
 # --ticketLegs item shape: {arrivalDateTime?: string, carriage?: string, departureDateTime?: string, destinationName?: record, destinationStationCode?: string, fareName?: record, originName?: record, originStationCode?: string, platform?: string, ticketSeat?: record, ticketSeats?: list, transitOperatorName?: record, transitTerminusName?: record, zone?: string}
 # --ticketRestrictions shape: {otherRestrictions?: record, routeRestrictions?: record, routeRestrictionsDetails?: record, timeRestrictions?: record}
 # --validTimeInterval shape: {end?: record, kind?: string, start?: record}
-export def "walletobjects-transit-object walletobjectstransitobjectupdate" [
+export def "walletobjects-transit-object update-by-resourceId-1" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5780,7 +5790,7 @@ export def "walletobjects-transit-object walletobjectstransitobjectupdate" [
   --app-link-data: record # shape: {androidAppLinkInfo?: record, iosAppLinkInfo?: record, webAppLinkInfo?: record}
   --barcode: record # shape: {alternateText?: string, kind?: string, renderEncoding?: "RENDER_ENCODING_UNSPECIFIED"|"UTF_8", showCodeText?: record, type?: "BARCODE_TYPE_UNSPECIFIED"|"AZTEC"|"aztec"|"CODE_39"|"code39"|"CODE_128"|"code128"|"CODABAR"|"codabar"|"DATA_MATRIX"|"dataMatrix"|"EAN_8"|"ean8"|"EAN_13"|"ean13"|"EAN13"|"ITF_14"|"itf14"|"PDF_417"|"pdf417"|"PDF417"|"QR_CODE"|"qrCode"|"qrcode"|"UPC_A"|"upcA"|"TEXT_ONLY"|"textOnly", value?: string}
   --class-id: string # Required. The class associated with this object. The class must be of the same type as this object, must already exist, and must be approved. Class IDs should follow the format issuer ID.identifier where the former is issued by Google and latter is chosen by you.
-  --class-reference: record # shape: {activationOptions?: record, allowMultipleUsersPerObject?: bool, callbackOptions?: record, classTemplateInfo?: record, countryCode?: string, customCarriageLabel?: record, customCoachLabel?: record, customConcessionCategoryLabel?: record, customConfirmationCodeLabel?: record, customDiscountMessageLabel?: record, customFareClassLabel?: record, customFareNameLabel?: record, customOtherRestrictionsLabel?: record, customPlatformLabel?: record, customPurchaseFaceValueLabel?: record, customPurchasePriceLabel?: record, customPurchaseReceiptNumberLabel?: record, customRouteRestrictionsDetailsLabel?: record, customRouteRestrictionsLabel?: record, customSeatLabel?: record, customTicketNumberLabel?: record, customTimeRestrictionsLabel?: record, customTransitTerminusNameLabel?: record, customZoneLabel?: record, enableSingleLegItinerary?: bool, enableSmartTap?: bool, heroImage?: record, hexBackgroundColor?: string, homepageUri?: record, id?: string, imageModulesData?: list, infoModuleData?: record, issuerName?: string, languageOverride?: string, linksModuleData?: record, localizedIssuerName?: record, locations?: list, logo?: record, messages?: list, multipleDevicesAndHoldersAllowedStatus?: "STATUS_UNSPECIFIED"|"MULTIPLE_HOLDERS"|"multipleHolders"|"ONE_USER_ALL_DEVICES"|"oneUserAllDevices"|"ONE_USER_ONE_DEVICE"|"oneUserOneDevice", redemptionIssuers?: list, review?: record, reviewStatus?: "REVIEW_STATUS_UNSPECIFIED"|"UNDER_REVIEW"|"underReview"|"APPROVED"|"approved"|"REJECTED"|"rejected"|"DRAFT"|"draft", securityAnimation?: record, textModulesData?: list, transitOperatorName?: record, transitType?: "TRANSIT_TYPE_UNSPECIFIED"|"BUS"|"bus"|"RAIL"|"rail"|"TRAM"|"tram"|"FERRY"|"ferry"|"OTHER"|"other", version?: string, viewUnlockRequirement?: "VIEW_UNLOCK_REQUIREMENT_UNSPECIFIED"|"UNLOCK_NOT_REQUIRED"|"UNLOCK_REQUIRED_TO_VIEW", watermark?: record, wordMark?: record}
+  --class-reference: record # shape: {activationOptions?: record, allowMultipleUsersPerObject?: bool, callbackOptions?: record, classTemplateInfo?: record, countryCode?: string, customCarriageLabel?: record, customCoachLabel?: record, customConcessionCategoryLabel?: record, customConfirmationCodeLabel?: record, customDiscountMessageLabel?: record, customFareClassLabel?: record, customFareNameLabel?: record, customOtherRestrictionsLabel?: record, customPlatformLabel?: record, customPurchaseFaceValueLabel?: record, ... (36 more fields)}
   --concession-category: string@concession-category-completer # The concession category for the ticket.
   --custom-concession-category: record # shape: {defaultValue?: record, kind?: string, translatedValues?: list}
   --custom-ticket-status: record # shape: {defaultValue?: record, kind?: string, translatedValues?: list}
@@ -5819,12 +5829,12 @@ export def "walletobjects-transit-object walletobjectstransitobjectupdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_id: $resource_id} | format pattern "/walletobjects/v1/transitObject/{resource_id}") $qp)
-  let body = {"activationStatus": $activation_status, "appLinkData": $app_link_data, "barcode": $barcode, "classId": $class_id, "classReference": $class_reference, "concessionCategory": $concession_category, "customConcessionCategory": $custom_concession_category, "customTicketStatus": $custom_ticket_status, "deviceContext": $device_context, "disableExpirationNotification": $disable_expiration_notification, "groupingInfo": $grouping_info, "hasLinkedDevice": $has_linked_device, "hasUsers": $has_users, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "linksModuleData": $links_module_data, "locations": $locations, "messages": $messages, "passConstraints": $pass_constraints, "passengerNames": $passenger_names, "passengerType": $passenger_type, "purchaseDetails": $purchase_details, "rotatingBarcode": $rotating_barcode, "smartTapRedemptionValue": $smart_tap_redemption_value, "state": $state, "textModulesData": $text_modules_data, "ticketLeg": $ticket_leg, "ticketLegs": $ticket_legs, "ticketNumber": $ticket_number, "ticketRestrictions": $ticket_restrictions, "ticketStatus": $ticket_status, "tripId": $trip_id, "tripType": $trip_type, "validTimeInterval": $valid_time_interval, "version": $version} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/transitObject/{resource_id}") $qp)
+  let req_body = {"activationStatus": $activation_status, "appLinkData": $app_link_data, "barcode": $barcode, "classId": $class_id, "classReference": $class_reference, "concessionCategory": $concession_category, "customConcessionCategory": $custom_concession_category, "customTicketStatus": $custom_ticket_status, "deviceContext": $device_context, "disableExpirationNotification": $disable_expiration_notification, "groupingInfo": $grouping_info, "hasLinkedDevice": $has_linked_device, "hasUsers": $has_users, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "linksModuleData": $links_module_data, "locations": $locations, "messages": $messages, "passConstraints": $pass_constraints, "passengerNames": $passenger_names, "passengerType": $passenger_type, "purchaseDetails": $purchase_details, "rotatingBarcode": $rotating_barcode, "smartTapRedemptionValue": $smart_tap_redemption_value, "state": $state, "textModulesData": $text_modules_data, "ticketLeg": $ticket_leg, "ticketLegs": $ticket_legs, "ticketNumber": $ticket_number, "ticketRestrictions": $ticket_restrictions, "ticketStatus": $ticket_status, "tripId": $trip_id, "tripType": $trip_type, "validTimeInterval": $valid_time_interval, "version": $version} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Adds a message to the transit object referenced by the given object ID.
@@ -5832,7 +5842,7 @@ export def "walletobjects-transit-object walletobjectstransitobjectupdate" [
 # POST /walletobjects/v1/transitObject/{resourceId}/addMessage
 # operationId: walletobjects.transitobject.addmessage
 # --message shape: {body?: string, displayInterval?: record, header?: string, id?: string, kind?: string, localizedBody?: record, localizedHeader?: record, messageType?: "MESSAGE_TYPE_UNSPECIFIED"|"TEXT"|"text"|"EXPIRATION_NOTIFICATION"|"expirationNotification"}
-export def "walletobjects-transit-object-add-message walletobjectstransitobjectaddmessage" [
+export def "walletobjects-transit-object-add-message create-addmessage" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5859,10 +5869,10 @@ export def "walletobjects-transit-object-add-message walletobjectstransitobjecta
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_id: $resource_id} | format pattern "/walletobjects/v1/transitObject/{resource_id}/addMessage") $qp)
-  let body = {"message": $message} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/transitObject/{resource_id}/addMessage") $qp)
+  let req_body = {"message": $message} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

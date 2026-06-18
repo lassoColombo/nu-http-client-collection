@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -107,12 +116,12 @@ export def "globalwinescores list-historical-gws" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --wine-id: list # The exact `id` of the wine. Can be used multiple times (e.g `?wine_id=114959&wine_id=114952`) <br/> If you need to find the `wine_id` for your wines, use our <a href="https://api.globalwinescore.com/search/" target="_blank">search page</a>  (e.g. [114959, 114952])
+  --wine-id: list<int> # The exact `id` of the wine. Can be used multiple times (e.g `?wine_id=114959&wine_id=114952`) If you need to find the `wine_id` for your wines, use our search page (https://api.globalwinescore.com/search/) (e.g. [114959, 114952])
   --vintage: string # The vintage you want to search against. (e.g. 2000)
   --color: string@color-completer # The lowercase color of the wine.
-  --is-primeurs: oneof<nothing, bool> # Only show the <a href="See https://en.wikipedia.org/wiki/En_primeur">en primeur</a> GlobalWineScores  (default: false)
-  --lwin: string # L-WIN wine identifier (See definition <a href="https://www.liv-ex.com/lwin/" target="_blank">here</a>)  (e.g. 1014033)
-  --lwin-11: string # L-WIN wine/vintage identifier (See definition <a href="https://www.liv-ex.com/lwin/" target="_blank">here</a>)  (e.g. 10140332000)
+  --is-primeurs: oneof<nothing, bool> # Only show the en primeur (See https://en.wikipedia.org/wiki/En_primeur) GlobalWineScores (default: false)
+  --lwin: string # L-WIN wine identifier (See definition here (https://www.liv-ex.com/lwin/)) (e.g. 1014033)
+  --lwin-11: string # L-WIN wine/vintage identifier (See definition here (https://www.liv-ex.com/lwin/)) (e.g. 10140332000)
   --limit: int # Number of results to return per page. (default: 100)
   --offset: int # The initial index from which to return the results. (e.g. 100)
   --ordering: string@ordering-completer # Which field to use when ordering the results. (default: -date)
@@ -122,10 +131,10 @@ export def "globalwinescores list-historical-gws" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "wine_id" $wine_id "multi") (serialize-qp "vintage" $vintage "scalar") (serialize-qp "color" $color "scalar") (serialize-qp "is_primeurs" $is_primeurs "scalar") (serialize-qp "lwin" $lwin "scalar") (serialize-qp "lwin_11" $lwin_11 "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "ordering" $ordering "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/globalwinescores/" $qp)
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -142,12 +151,12 @@ export def "globalwinescores-latest get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --wine-id: list # The exact `id` of the wine. Can be used multiple times (e.g `?wine_id=114959&wine_id=114952`) <br/> If you need to find the `wine_id` for your wines, use our <a href="https://api.globalwinescore.com/search/" target="_blank">search page</a>  (e.g. [114959, 114952])
+  --wine-id: list<int> # The exact `id` of the wine. Can be used multiple times (e.g `?wine_id=114959&wine_id=114952`) If you need to find the `wine_id` for your wines, use our search page (https://api.globalwinescore.com/search/) (e.g. [114959, 114952])
   --vintage: string # The vintage you want to search against. (e.g. 2000)
   --color: string@color-completer # The lowercase color of the wine.
-  --is-primeurs: oneof<nothing, bool> # Only show the <a href="See https://en.wikipedia.org/wiki/En_primeur">en primeur</a> GlobalWineScores  (default: false)
-  --lwin: string # L-WIN wine identifier (See definition <a href="https://www.liv-ex.com/lwin/" target="_blank">here</a>)  (e.g. 1014033)
-  --lwin-11: string # L-WIN wine/vintage identifier (See definition <a href="https://www.liv-ex.com/lwin/" target="_blank">here</a>)  (e.g. 10140332000)
+  --is-primeurs: oneof<nothing, bool> # Only show the en primeur (See https://en.wikipedia.org/wiki/En_primeur) GlobalWineScores (default: false)
+  --lwin: string # L-WIN wine identifier (See definition here (https://www.liv-ex.com/lwin/)) (e.g. 1014033)
+  --lwin-11: string # L-WIN wine/vintage identifier (See definition here (https://www.liv-ex.com/lwin/)) (e.g. 10140332000)
   --limit: int # Number of results to return per page. (default: 100)
   --offset: int # The initial index from which to return the results. (e.g. 100)
   --ordering: string@ordering-completer # Which field to use when ordering the results. (default: -date)
@@ -157,9 +166,9 @@ export def "globalwinescores-latest get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "wine_id" $wine_id "multi") (serialize-qp "vintage" $vintage "scalar") (serialize-qp "color" $color "scalar") (serialize-qp "is_primeurs" $is_primeurs "scalar") (serialize-qp "lwin" $lwin "scalar") (serialize-qp "lwin_11" $lwin_11 "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "ordering" $ordering "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/globalwinescores/latest/" $qp)
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

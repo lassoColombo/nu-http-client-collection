@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -73,7 +82,7 @@ def health-completer [] { ["HEALTHY" "HEALTH_UNSPECIFIED" "TIMEOUT" "UNHEALTHY_M
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "projects tpuprojectslocationsoperationsdelete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "projects delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -97,7 +106,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /v2/{name}
 # operationId: tpu.projects.locations.operations.delete
-export def "projects tpuprojectslocationsoperationsdelete" [
+export def "projects delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -122,7 +131,7 @@ export def "projects tpuprojectslocationsoperationsdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v2/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v2/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -132,7 +141,7 @@ export def "projects tpuprojectslocationsoperationsdelete" [
 #
 # GET /v2/{name}
 # operationId: tpu.projects.locations.runtimeVersions.get
-export def "projects tpuprojectslocationsruntimeVersionsget" [
+export def "projects get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -157,7 +166,7 @@ export def "projects tpuprojectslocationsruntimeVersionsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v2/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v2/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -172,10 +181,10 @@ export def "projects tpuprojectslocationsruntimeVersionsget" [
 # --networkConfig shape: {canIpForward?: bool, enableExternalIps?: bool, network?: string, subnetwork?: string}
 # --networkEndpoints item shape: {accessConfig?: record, ipAddress?: string, port?: int}
 # --schedulingConfig shape: {preemptible?: bool, reserved?: bool}
-# --serviceAccount shape: {email?: string, scope?: list}
+# --serviceAccount shape: {email?: string, scope?: list<string>}
 # --shieldedInstanceConfig shape: {enableSecureBoot?: bool}
 # --symptoms item shape: {createTime?: string, details?: string, symptomType?: "SYMPTOM_TYPE_UNSPECIFIED"|"LOW_MEMORY"|"OUT_OF_MEMORY"|"EXECUTE_TIMED_OUT"|"MESH_BUILD_FAIL"|"HBM_OUT_OF_MEMORY"|"PROJECT_ABUSE", workerId?: string}
-export def "projects tpuprojectslocationsnodespatch" [
+export def "projects update" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -208,27 +217,27 @@ export def "projects tpuprojectslocationsnodespatch" [
   --network-config: record # Network related configurations. — shape: {canIpForward?: bool, enableExternalIps?: bool, network?: string, subnetwork?: string}
   --runtime-version: string # Required. The runtime version running in the Node.
   --scheduling-config: record # Sets the scheduling options for this node. — shape: {preemptible?: bool, reserved?: bool}
-  --service-account: record # A service account. — shape: {email?: string, scope?: list}
+  --service-account: record # A service account. — shape: {email?: string, scope?: list<string>}
   --shielded-instance-config: record # A set of Shielded Instance options. — shape: {enableSecureBoot?: bool}
-  --tags: list # Tags to apply to the TPU Node. Tags are used to identify valid sources or targets for network firewalls.
+  --tags: list<string> # Tags to apply to the TPU Node. Tags are used to identify valid sources or targets for network firewalls.
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v2/{name}") $qp)
-  let body = {"acceleratorConfig": $accelerator_config, "acceleratorType": $accelerator_type, "cidrBlock": $cidr_block, "dataDisks": $data_disks, "description": $description, "health": $health, "labels": $labels, "metadata": $metadata, "networkConfig": $network_config, "runtimeVersion": $runtime_version, "schedulingConfig": $scheduling_config, "serviceAccount": $service_account, "shieldedInstanceConfig": $shielded_instance_config, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v2/{name}") $qp)
+  let req_body = {"acceleratorConfig": $accelerator_config, "acceleratorType": $accelerator_type, "cidrBlock": $cidr_block, "dataDisks": $data_disks, "description": $description, "health": $health, "labels": $labels, "metadata": $metadata, "networkConfig": $network_config, "runtimeVersion": $runtime_version, "schedulingConfig": $scheduling_config, "serviceAccount": $service_account, "shieldedInstanceConfig": $shielded_instance_config, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists information about the supported locations for this service.
 #
 # GET /v2/{name}/locations
 # operationId: tpu.projects.locations.list
-export def "locations tpuprojectslocationslist" [
+export def "locations list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -256,7 +265,7 @@ export def "locations tpuprojectslocationslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v2/{name}/locations") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v2/{name}/locations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -266,7 +275,7 @@ export def "locations tpuprojectslocationslist" [
 #
 # GET /v2/{name}/operations
 # operationId: tpu.projects.locations.operations.list
-export def "operations tpuprojectslocationsoperationslist" [
+export def "operations list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -294,7 +303,7 @@ export def "operations tpuprojectslocationsoperationslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v2/{name}/operations") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v2/{name}/operations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -304,7 +313,7 @@ export def "operations tpuprojectslocationsoperationslist" [
 #
 # POST /v2/{name}:cancel
 # operationId: tpu.projects.locations.operations.cancel
-export def "projects tpuprojectslocationsoperationscancel" [
+export def "projects cancel" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -329,7 +338,7 @@ export def "projects tpuprojectslocationsoperationscancel" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v2/{name}:cancel") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v2/{name}:cancel") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -339,7 +348,7 @@ export def "projects tpuprojectslocationsoperationscancel" [
 #
 # POST /v2/{name}:getGuestAttributes
 # operationId: tpu.projects.locations.nodes.getGuestAttributes
-export def "projects tpuprojectslocationsnodesgetGuestAttributes" [
+export def "projects get-guest-attributes" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -361,25 +370,25 @@ export def "projects tpuprojectslocationsnodesgetGuestAttributes" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --query-path: string # The guest attributes path to be queried.
-  --worker-ids: list # The 0-based worker ID. If it is empty, all workers' GuestAttributes will be returned.
+  --worker-ids: list<string> # The 0-based worker ID. If it is empty, all workers' GuestAttributes will be returned.
 ]: any -> record<guestAttributes: table<queryPath: string, queryValue: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v2/{name}:getGuestAttributes") $qp)
-  let body = {"queryPath": $query_path, "workerIds": $worker_ids} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v2/{name}:getGuestAttributes") $qp)
+  let req_body = {"queryPath": $query_path, "workerIds": $worker_ids} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Starts a node.
 #
 # POST /v2/{name}:start
 # operationId: tpu.projects.locations.nodes.start
-export def "projects tpuprojectslocationsnodesstart" [
+export def "projects start" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -406,18 +415,19 @@ export def "projects tpuprojectslocationsnodesstart" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v2/{name}:start") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v2/{name}:start") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Stops a node. This operation is only available with single TPU nodes.
 #
 # POST /v2/{name}:stop
 # operationId: tpu.projects.locations.nodes.stop
-export def "projects tpuprojectslocationsnodesstop" [
+export def "projects stop" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -444,18 +454,19 @@ export def "projects tpuprojectslocationsnodesstop" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v2/{name}:stop") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v2/{name}:stop") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists accelerator types supported by this API.
 #
 # GET /v2/{parent}/acceleratorTypes
 # operationId: tpu.projects.locations.acceleratorTypes.list
-export def "accelerator-types tpuprojectslocationsacceleratorTypeslist" [
+export def "accelerator-types list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -484,7 +495,7 @@ export def "accelerator-types tpuprojectslocationsacceleratorTypeslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v2/{parent}/acceleratorTypes") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v2/{parent}/acceleratorTypes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -494,7 +505,7 @@ export def "accelerator-types tpuprojectslocationsacceleratorTypeslist" [
 #
 # GET /v2/{parent}/nodes
 # operationId: tpu.projects.locations.nodes.list
-export def "nodes tpuprojectslocationsnodeslist" [
+export def "nodes list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -521,7 +532,7 @@ export def "nodes tpuprojectslocationsnodeslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v2/{parent}/nodes") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v2/{parent}/nodes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -536,10 +547,10 @@ export def "nodes tpuprojectslocationsnodeslist" [
 # --networkConfig shape: {canIpForward?: bool, enableExternalIps?: bool, network?: string, subnetwork?: string}
 # --networkEndpoints item shape: {accessConfig?: record, ipAddress?: string, port?: int}
 # --schedulingConfig shape: {preemptible?: bool, reserved?: bool}
-# --serviceAccount shape: {email?: string, scope?: list}
+# --serviceAccount shape: {email?: string, scope?: list<string>}
 # --shieldedInstanceConfig shape: {enableSecureBoot?: bool}
 # --symptoms item shape: {createTime?: string, details?: string, symptomType?: "SYMPTOM_TYPE_UNSPECIFIED"|"LOW_MEMORY"|"OUT_OF_MEMORY"|"EXECUTE_TIMED_OUT"|"MESH_BUILD_FAIL"|"HBM_OUT_OF_MEMORY"|"PROJECT_ABUSE", workerId?: string}
-export def "nodes tpuprojectslocationsnodescreate" [
+export def "nodes create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -572,27 +583,27 @@ export def "nodes tpuprojectslocationsnodescreate" [
   --network-config: record # Network related configurations. — shape: {canIpForward?: bool, enableExternalIps?: bool, network?: string, subnetwork?: string}
   --runtime-version: string # Required. The runtime version running in the Node.
   --scheduling-config: record # Sets the scheduling options for this node. — shape: {preemptible?: bool, reserved?: bool}
-  --service-account: record # A service account. — shape: {email?: string, scope?: list}
+  --service-account: record # A service account. — shape: {email?: string, scope?: list<string>}
   --shielded-instance-config: record # A set of Shielded Instance options. — shape: {enableSecureBoot?: bool}
-  --tags: list # Tags to apply to the TPU Node. Tags are used to identify valid sources or targets for network firewalls.
+  --tags: list<string> # Tags to apply to the TPU Node. Tags are used to identify valid sources or targets for network firewalls.
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "nodeId" $node_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v2/{parent}/nodes") $qp)
-  let body = {"acceleratorConfig": $accelerator_config, "acceleratorType": $accelerator_type, "cidrBlock": $cidr_block, "dataDisks": $data_disks, "description": $description, "health": $health, "labels": $labels, "metadata": $metadata, "networkConfig": $network_config, "runtimeVersion": $runtime_version, "schedulingConfig": $scheduling_config, "serviceAccount": $service_account, "shieldedInstanceConfig": $shielded_instance_config, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v2/{parent}/nodes") $qp)
+  let req_body = {"acceleratorConfig": $accelerator_config, "acceleratorType": $accelerator_type, "cidrBlock": $cidr_block, "dataDisks": $data_disks, "description": $description, "health": $health, "labels": $labels, "metadata": $metadata, "networkConfig": $network_config, "runtimeVersion": $runtime_version, "schedulingConfig": $scheduling_config, "serviceAccount": $service_account, "shieldedInstanceConfig": $shielded_instance_config, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists runtime versions supported by this API.
 #
 # GET /v2/{parent}/runtimeVersions
 # operationId: tpu.projects.locations.runtimeVersions.list
-export def "runtime-versions tpuprojectslocationsruntimeVersionslist" [
+export def "runtime-versions list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -621,7 +632,7 @@ export def "runtime-versions tpuprojectslocationsruntimeVersionslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v2/{parent}/runtimeVersions") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v2/{parent}/runtimeVersions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -631,7 +642,7 @@ export def "runtime-versions tpuprojectslocationsruntimeVersionslist" [
 #
 # POST /v2/{parent}:generateServiceIdentity
 # operationId: tpu.projects.locations.generateServiceIdentity
-export def "projects tpuprojectslocationsgenerateServiceIdentity" [
+export def "projects generate-service-identity" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -658,9 +669,10 @@ export def "projects tpuprojectslocationsgenerateServiceIdentity" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v2/{parent}:generateServiceIdentity") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v2/{parent}:generateServiceIdentity") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

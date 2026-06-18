@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -72,7 +81,7 @@ def engine-type-completer [] { ["Elasticsearch" "OpenSearch"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "2015-01-01-es-ccs-inbound-connection-accept put" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "2015-01-01-es-ccs-inbound-connection-accept list-cross" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -96,7 +105,7 @@ export def commands []: nothing -> table {
 #
 # PUT /2015-01-01/es/ccs/inboundConnection/{ConnectionId}/accept
 # operationId: AcceptInboundCrossClusterSearchConnection
-export def "2015-01-01-es-ccs-inbound-connection-accept put" [
+export def "2015-01-01-es-ccs-inbound-connection-accept list-cross" [
   connection_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -116,15 +125,15 @@ export def "2015-01-01-es-ccs-inbound-connection-accept put" [
 ]: nothing -> record<CrossClusterSearchConnection: record<SourceDomainInfo: record<OwnerId: string, DomainName: string, Region: string>, DestinationDomainInfo: record<OwnerId: string, DomainName: string, Region: string>, CrossClusterSearchConnectionId: record, ConnectionStatus: record<StatusCode: record, Message: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({connection_id: $connection_id} | format pattern "/2015-01-01/es/ccs/inboundConnection/{connection_id}/accept"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({connection_id: (encode-path-segment $connection_id)} | format pattern "/2015-01-01/es/ccs/inboundConnection/{connection_id}/accept"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Attaches tags to an existing Elasticsearch domain. Tags are a set of case-sensitive key value pairs. An Elasticsearch domain may have up to 10 tags. See <a href="http://docs.aws.amazon.com/elasticsearch-service/latest/developerguide/es-managedomains.html#es-managedomains-awsresorcetagging" target="_blank"> Tagging Amazon Elasticsearch Service Domains for more information.</a>
+# Attaches tags to an existing Elasticsearch domain. Tags are a set of case-sensitive key value pairs. An Elasticsearch domain may have up to 10 tags. See Tagging Amazon Elasticsearch Service Domains for more information. (http://docs.aws.amazon.com/elasticsearch-service/latest/developerguide/es-managedomains.html#es-managedomains-awsresorcetagging)
 #
 # POST /2015-01-01/tags
 # operationId: AddTags
@@ -145,27 +154,27 @@ export def "2015-01-01-tags create" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  arn: string # The Amazon Resource Name (ARN) of the Elasticsearch domain. See <a href="http://docs.aws.amazon.com/IAM/latest/UserGuide/index.html?Using_Identifiers.html" target="_blank">Identifiers for IAM Entities</a> in <i>Using AWS Identity and Access Management</i> for more information.
-  tag_list: list # A list of <code>Tag</code>  — item shape: {Key: any, Value: any}
+  arn: string # The Amazon Resource Name (ARN) of the Elasticsearch domain. See Identifiers for IAM Entities (http://docs.aws.amazon.com/IAM/latest/UserGuide/index.html?Using_Identifiers.html) in Using AWS Identity and Access Management for more information.
+  tag_list: list # A list of Tag — item shape: {Key: any, Value: any}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/2015-01-01/tags")
-  let body = {"ARN": $arn, "TagList": $tag_list} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"ARN": $arn, "TagList": $tag_list} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Associates a package with an Amazon ES domain.
 #
 # POST /2015-01-01/packages/associate/{PackageID}/{DomainName}
 # operationId: AssociatePackage
-export def "2015-01-01-packages-associate post" [
+export def "2015-01-01-packages-associate create" [
   package_id: string
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -186,11 +195,11 @@ export def "2015-01-01-packages-associate post" [
 ]: nothing -> record<DomainPackageDetails: record<PackageID: record, PackageName: record, PackageType: record, LastUpdated: record, DomainName: record, DomainPackageStatus: record, PackageVersion: string, ReferencePath: record, ErrorDetails: record<ErrorType: string, ErrorMessage: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({package_id: $package_id, domain_name: $domain_name} | format pattern "/2015-01-01/packages/associate/{package_id}/{domain_name}"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({package_id: (encode-path-segment $package_id), domain_name: (encode-path-segment $domain_name)} | format pattern "/2015-01-01/packages/associate/{package_id}/{domain_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -198,7 +207,7 @@ export def "2015-01-01-packages-associate post" [
 #
 # POST /2015-01-01/es/domain/{DomainName}/authorizeVpcEndpointAccess
 # operationId: AuthorizeVpcEndpointAccess
-export def "2015-01-01-es-domain-authorize-vpc-endpoint-access post" [
+export def "2015-01-01-es-domain-authorize-vpc-endpoint-access create" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -220,17 +229,17 @@ export def "2015-01-01-es-domain-authorize-vpc-endpoint-access post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({domain_name: $domain_name} | format pattern "/2015-01-01/es/domain/{domain_name}/authorizeVpcEndpointAccess"))
-  let body = {"Account": $account} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/2015-01-01/es/domain/{domain_name}/authorizeVpcEndpointAccess"))
+  let req_body = {"Account": $account} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-# Cancels a scheduled service software update for an Amazon ES domain. You can only perform this operation before the <code>AutomatedUpdateDate</code> and when the <code>UpdateStatus</code> is in the <code>PENDING_UPDATE</code> state.
+# Cancels a scheduled service software update for an Amazon ES domain. You can only perform this operation before the AutomatedUpdateDate and when the UpdateStatus is in the PENDING_UPDATE state.
 #
 # POST /2015-01-01/es/serviceSoftwareUpdate/cancel
 # operationId: CancelElasticsearchServiceSoftwareUpdate
@@ -256,16 +265,16 @@ export def "2015-01-01-es-service-software-update-cancel cancel-elasticsearch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/2015-01-01/es/serviceSoftwareUpdate/cancel")
-  let body = {"DomainName": $domain_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"DomainName": $domain_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-# Creates a new Elasticsearch domain. For more information, see <a href="http://docs.aws.amazon.com/elasticsearch-service/latest/developerguide/es-createupdatedomains.html#es-createdomains" target="_blank">Creating Elasticsearch Domains</a> in the <i>Amazon Elasticsearch Service Developer Guide</i>.
+# Creates a new Elasticsearch domain. For more information, see Creating Elasticsearch Domains (http://docs.aws.amazon.com/elasticsearch-service/latest/developerguide/es-createupdatedomains.html#es-createdomains) in the Amazon Elasticsearch Service Developer Guide.
 #
 # POST /2015-01-01/es/domain
 # operationId: CreateElasticsearchDomain
@@ -297,33 +306,33 @@ export def "2015-01-01-es-domain create-elasticsearch" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   domain_name: string # The name of an Elasticsearch domain. Domain names are unique across the domains owned by an account within an AWS region. Domain names start with a letter or number and can contain the following characters: a-z (lowercase), 0-9, and - (hyphen).
-  --elasticsearch-version: string # String of format X.Y to specify version for the Elasticsearch domain eg. "1.5" or "2.3". For more information, see <a href="http://docs.aws.amazon.com/elasticsearch-service/latest/developerguide/es-createupdatedomains.html#es-createdomains" target="_blank">Creating Elasticsearch Domains</a> in the <i>Amazon Elasticsearch Service Developer Guide</i>.
+  --elasticsearch-version: string # String of format X.Y to specify version for the Elasticsearch domain eg. "1.5" or "2.3". For more information, see Creating Elasticsearch Domains (http://docs.aws.amazon.com/elasticsearch-service/latest/developerguide/es-createupdatedomains.html#es-createdomains) in the Amazon Elasticsearch Service Developer Guide.
   --elasticsearch-cluster-config: record # Specifies the configuration for the domain cluster, such as the type and number of instances. — shape: {InstanceType?: any, InstanceCount?: any, DedicatedMasterEnabled?: any, ZoneAwarenessEnabled?: any, ZoneAwarenessConfig?: any, DedicatedMasterType?: any, DedicatedMasterCount?: any, WarmEnabled?: any, WarmType?: any, WarmCount?: any, ColdStorageOptions?: any}
-  --ebs-options: record # Options to enable, disable, and specify the properties of EBS storage volumes. For more information, see <a href="http://docs.aws.amazon.com/elasticsearch-service/latest/developerguide/es-createupdatedomains.html#es-createdomain-configure-ebs" target="_blank"> Configuring EBS-based Storage</a>. — shape: {EBSEnabled?: any, VolumeType?: any, VolumeSize?: any, Iops?: any, Throughput?: any}
-  --access-policies: string # Access policy rules for an Elasticsearch domain service endpoints. For more information, see <a href="http://docs.aws.amazon.com/elasticsearch-service/latest/developerguide/es-createupdatedomains.html#es-createdomain-configure-access-policies" target="_blank">Configuring Access Policies</a> in the <i>Amazon Elasticsearch Service Developer Guide</i>. The maximum size of a policy document is 100 KB.
-  --snapshot-options: record # Specifies the time, in UTC format, when the service takes a daily automated snapshot of the specified Elasticsearch domain. Default value is <code>0</code> hours. — shape: {AutomatedSnapshotStartHour?: any}
-  --vpc-options: record # Options to specify the subnets and security groups for VPC endpoint. For more information, see <a href="http://docs.aws.amazon.com/elasticsearch-service/latest/developerguide/es-vpc.html" target="_blank"> VPC Endpoints for Amazon Elasticsearch Service Domains</a>. — shape: {SubnetIds?: any, SecurityGroupIds?: any}
-  --cognito-options: record # Options to specify the Cognito user and identity pools for Kibana authentication. For more information, see <a href="http://docs.aws.amazon.com/elasticsearch-service/latest/developerguide/es-cognito-auth.html" target="_blank">Amazon Cognito Authentication for Kibana</a>. — shape: {Enabled?: any, UserPoolId?: any, IdentityPoolId?: any, RoleArn?: any}
+  --ebs-options: record # Options to enable, disable, and specify the properties of EBS storage volumes. For more information, see Configuring EBS-based Storage (http://docs.aws.amazon.com/elasticsearch-service/latest/developerguide/es-createupdatedomains.html#es-createdomain-configure-ebs). — shape: {EBSEnabled?: any, VolumeType?: any, VolumeSize?: any, Iops?: any, Throughput?: any}
+  --access-policies: string # Access policy rules for an Elasticsearch domain service endpoints. For more information, see Configuring Access Policies (http://docs.aws.amazon.com/elasticsearch-service/latest/developerguide/es-createupdatedomains.html#es-createdomain-configure-access-policies) in the Amazon Elasticsearch Service Developer Guide. The maximum size of a policy document is 100 KB.
+  --snapshot-options: record # Specifies the time, in UTC format, when the service takes a daily automated snapshot of the specified Elasticsearch domain. Default value is 0 hours. — shape: {AutomatedSnapshotStartHour?: any}
+  --vpc-options: record # Options to specify the subnets and security groups for VPC endpoint. For more information, see VPC Endpoints for Amazon Elasticsearch Service Domains (http://docs.aws.amazon.com/elasticsearch-service/latest/developerguide/es-vpc.html). — shape: {SubnetIds?: any, SecurityGroupIds?: any}
+  --cognito-options: record # Options to specify the Cognito user and identity pools for Kibana authentication. For more information, see Amazon Cognito Authentication for Kibana (http://docs.aws.amazon.com/elasticsearch-service/latest/developerguide/es-cognito-auth.html). — shape: {Enabled?: any, UserPoolId?: any, IdentityPoolId?: any, RoleArn?: any}
   --encryption-at-rest-options: record # Specifies the Encryption At Rest Options. — shape: {Enabled?: any, KmsKeyId?: any}
   --node-to-node-encryption-options: record # Specifies the node-to-node encryption options. — shape: {Enabled?: any}
-  --advanced-options: record # <p> Exposes select native Elasticsearch configuration values from <code>elasticsearch.yml</code>. Currently, the following advanced options are available:</p> <ul> <li>Option to allow references to indices in an HTTP request body. Must be <code>false</code> when configuring access to individual sub-resources. By default, the value is <code>true</code>. See <a href="http://docs.aws.amazon.com/elasticsearch-service/latest/developerguide/es-createupdatedomains.html#es-createdomain-configure-advanced-options" target="_blank">Configuration Advanced Options</a> for more information.</li> <li>Option to specify the percentage of heap space that is allocated to field data. By default, this setting is unbounded.</li> </ul> <p>For more information, see <a href="http://docs.aws.amazon.com/elasticsearch-service/latest/developerguide/es-createupdatedomains.html#es-createdomain-configure-advanced-options">Configuring Advanced Options</a>.</p>
-  --log-publishing-options: record # Map of <code>LogType</code> and <code>LogPublishingOption</code>, each containing options to publish a given type of Elasticsearch log.
+  --advanced-options: record # Exposes select native Elasticsearch configuration values from elasticsearch.yml. Currently, the following advanced options are available: Option to allow references to indices in an HTTP request body. Must be false when configuring access to individual sub-resources. By default, the value is true. See Configuration Advanced Options (http://docs.aws.amazon.com/elasticsearch-service/latest/developerguide/es-createupdatedomains.html#es-createdomain-configure-advanced-options) for more information. Option to specify the percentage of heap space that is allocated to field data. By default, this setting is unbounded. For more information, see Configuring Advanced Options (http://docs.aws.amazon.com/elasticsearch-service/latest/developerguide/es-createupdatedomains.html#es-createdomain-configure-advanced-options).
+  --log-publishing-options: record # Map of LogType and LogPublishingOption, each containing options to publish a given type of Elasticsearch log.
   --domain-endpoint-options: record # Options to configure endpoint for the Elasticsearch domain. — shape: {EnforceHTTPS?: any, TLSSecurityPolicy?: any, CustomEndpointEnabled?: any, CustomEndpoint?: any, CustomEndpointCertificateArn?: any}
   --advanced-security-options: record # Specifies the advanced security configuration: whether advanced security is enabled, whether the internal database option is enabled, master username and password (if internal database is enabled), and master user ARN (if IAM is enabled). — shape: {Enabled?: any, InternalUserDatabaseEnabled?: any, MasterUserOptions?: any, SAMLOptions?: any, AnonymousAuthEnabled?: any}
   --auto-tune-options: record # Specifies the Auto-Tune options: the Auto-Tune desired state for the domain and list of maintenance schedules. — shape: {DesiredState?: any, MaintenanceSchedules?: any}
-  --tag-list: list # A list of <code>Tag</code>  — item shape: {Key: any, Value: any}
+  --tag-list: list # A list of Tag — item shape: {Key: any, Value: any}
 ]: any -> record<DomainStatus: record<DomainId: record, DomainName: record, ARN: record, Created: record, Deleted: record, Endpoint: record, Endpoints: record, Processing: record, UpgradeProcessing: record, ElasticsearchVersion: string, ElasticsearchClusterConfig: record<InstanceType: record, InstanceCount: record, DedicatedMasterEnabled: record, ZoneAwarenessEnabled: record, ZoneAwarenessConfig: record, DedicatedMasterType: record, DedicatedMasterCount: record, WarmEnabled: record, WarmType: record, WarmCount: record, ColdStorageOptions: record>, EBSOptions: record<EBSEnabled: record, VolumeType: record, VolumeSize: record, Iops: record, Throughput: record>, AccessPolicies: record, SnapshotOptions: record<AutomatedSnapshotStartHour: record>, VPCOptions: record<VPCId: record, SubnetIds: record, AvailabilityZones: record, SecurityGroupIds: record>, CognitoOptions: record<Enabled: record, UserPoolId: record, IdentityPoolId: record, RoleArn: record>, EncryptionAtRestOptions: record<Enabled: record, KmsKeyId: record>, NodeToNodeEncryptionOptions: record<Enabled: record>, AdvancedOptions: record, LogPublishingOptions: record, ServiceSoftwareOptions: record<CurrentVersion: record, NewVersion: record, UpdateAvailable: record, Cancellable: record, UpdateStatus: record, Description: record, AutomatedUpdateDate: record, OptionalDeployment: record>, DomainEndpointOptions: record<EnforceHTTPS: record, TLSSecurityPolicy: record, CustomEndpointEnabled: record, CustomEndpoint: record, CustomEndpointCertificateArn: record>, AdvancedSecurityOptions: record<Enabled: record, InternalUserDatabaseEnabled: record, SAMLOptions: record, AnonymousAuthDisableDate: record, AnonymousAuthEnabled: record>, AutoTuneOptions: record<State: record, ErrorMessage: record>, ChangeProgressDetails: record<ChangeId: record, Message: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/2015-01-01/es/domain")
-  let body = {"DomainName": $domain_name, "ElasticsearchVersion": $elasticsearch_version, "ElasticsearchClusterConfig": $elasticsearch_cluster_config, "EBSOptions": $ebs_options, "AccessPolicies": $access_policies, "SnapshotOptions": $snapshot_options, "VPCOptions": $vpc_options, "CognitoOptions": $cognito_options, "EncryptionAtRestOptions": $encryption_at_rest_options, "NodeToNodeEncryptionOptions": $node_to_node_encryption_options, "AdvancedOptions": $advanced_options, "LogPublishingOptions": $log_publishing_options, "DomainEndpointOptions": $domain_endpoint_options, "AdvancedSecurityOptions": $advanced_security_options, "AutoTuneOptions": $auto_tune_options, "TagList": $tag_list} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"DomainName": $domain_name, "ElasticsearchVersion": $elasticsearch_version, "ElasticsearchClusterConfig": $elasticsearch_cluster_config, "EBSOptions": $ebs_options, "AccessPolicies": $access_policies, "SnapshotOptions": $snapshot_options, "VPCOptions": $vpc_options, "CognitoOptions": $cognito_options, "EncryptionAtRestOptions": $encryption_at_rest_options, "NodeToNodeEncryptionOptions": $node_to_node_encryption_options, "AdvancedOptions": $advanced_options, "LogPublishingOptions": $log_publishing_options, "DomainEndpointOptions": $domain_endpoint_options, "AdvancedSecurityOptions": $advanced_security_options, "AutoTuneOptions": $auto_tune_options, "TagList": $tag_list} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Creates a new cross-cluster search connection from a source domain to a destination domain.
@@ -332,7 +341,7 @@ export def "2015-01-01-es-domain create-elasticsearch" [
 # operationId: CreateOutboundCrossClusterSearchConnection
 # --SourceDomainInfo shape: {OwnerId?: string, DomainName?: string, Region?: string}
 # --DestinationDomainInfo shape: {OwnerId?: string, DomainName?: string, Region?: string}
-export def "2015-01-01-es-ccs-outbound-connection create-outbound-cross-cluster-search" [
+export def "2015-01-01-es-ccs-outbound-connection create-cross-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -348,21 +357,21 @@ export def "2015-01-01-es-ccs-outbound-connection create-outbound-cross-cluster-
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  source_domain_info: record # Specifies the <code><a>DomainInformation</a></code> for the source Elasticsearch domain. — shape: {OwnerId?: string, DomainName?: string, Region?: string}
-  destination_domain_info: record # Specifies the <code><a>DomainInformation</a></code> for the destination Elasticsearch domain. — shape: {OwnerId?: string, DomainName?: string, Region?: string}
+  source_domain_info: record # Specifies the DomainInformation for the source Elasticsearch domain. — shape: {OwnerId?: string, DomainName?: string, Region?: string}
+  destination_domain_info: record # Specifies the DomainInformation for the destination Elasticsearch domain. — shape: {OwnerId?: string, DomainName?: string, Region?: string}
   connection_alias: string # Specifies the connection alias that will be used by the customer for this connection.
 ]: any -> record<SourceDomainInfo: record<OwnerId: string, DomainName: string, Region: string>, DestinationDomainInfo: record<OwnerId: string, DomainName: string, Region: string>, ConnectionAlias: record, ConnectionStatus: record<StatusCode: record, Message: record>, CrossClusterSearchConnectionId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/2015-01-01/es/ccs/outboundConnection")
-  let body = {"SourceDomainInfo": $source_domain_info, "DestinationDomainInfo": $destination_domain_info, "ConnectionAlias": $connection_alias} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"SourceDomainInfo": $source_domain_info, "DestinationDomainInfo": $destination_domain_info, "ConnectionAlias": $connection_alias} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create a package for use with Amazon ES domains.
@@ -389,19 +398,19 @@ export def "2015-01-01-packages create" [
   package_name: string # Unique identifier for the package.
   package_type: string@package-type-completer # Type of package. Currently supports only TXT-DICTIONARY.
   --package-description: string # Description of the package.
-  package_source: record # The S3 location for importing the package specified as <code>S3BucketName</code> and <code>S3Key</code> — shape: {S3BucketName?: any, S3Key?: any}
+  package_source: record # The S3 location for importing the package specified as S3BucketName and S3Key — shape: {S3BucketName?: any, S3Key?: any}
 ]: any -> record<PackageDetails: record<PackageID: record, PackageName: record, PackageType: record, PackageDescription: record, PackageStatus: record, CreatedAt: record, LastUpdatedAt: string, AvailablePackageVersion: string, ErrorDetails: record<ErrorType: string, ErrorMessage: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/2015-01-01/packages")
-  let body = {"PackageName": $package_name, "PackageType": $package_type, "PackageDescription": $package_description, "PackageSource": $package_source} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"PackageName": $package_name, "PackageType": $package_type, "PackageDescription": $package_description, "PackageSource": $package_source} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Creates an Amazon OpenSearch Service-managed VPC endpoint.
@@ -426,20 +435,20 @@ export def "2015-01-01-es-vpc-endpoints create" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   domain_arn: string # The Amazon Resource Name (ARN) of the domain to grant access to.
-  vpc_options: record # Options to specify the subnets and security groups for VPC endpoint. For more information, see <a href="http://docs.aws.amazon.com/elasticsearch-service/latest/developerguide/es-vpc.html" target="_blank"> VPC Endpoints for Amazon Elasticsearch Service Domains</a>. — shape: {SubnetIds?: any, SecurityGroupIds?: any}
+  vpc_options: record # Options to specify the subnets and security groups for VPC endpoint. For more information, see VPC Endpoints for Amazon Elasticsearch Service Domains (http://docs.aws.amazon.com/elasticsearch-service/latest/developerguide/es-vpc.html). — shape: {SubnetIds?: any, SecurityGroupIds?: any}
   --client-token: string # Unique, case-sensitive identifier to ensure idempotency of the request.
 ]: any -> record<VpcEndpoint: record<VpcEndpointId: record, VpcEndpointOwner: record, DomainArn: record, VpcOptions: record<VPCId: record, SubnetIds: record, AvailabilityZones: record, SecurityGroupIds: record>, Status: record, Endpoint: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/2015-01-01/es/vpcEndpoints")
-  let body = {"DomainArn": $domain_arn, "VpcOptions": $vpc_options, "ClientToken": $client_token} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"DomainArn": $domain_arn, "VpcOptions": $vpc_options, "ClientToken": $client_token} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieves all Amazon OpenSearch Service-managed VPC endpoints in the current account and Region.
@@ -468,10 +477,10 @@ export def "2015-01-01-es-vpc-endpoints list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/2015-01-01/es/vpcEndpoints" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -499,11 +508,11 @@ export def "2015-01-01-es-domain delete-elasticsearch" [
 ]: nothing -> record<DomainStatus: record<DomainId: record, DomainName: record, ARN: record, Created: record, Deleted: record, Endpoint: record, Endpoints: record, Processing: record, UpgradeProcessing: record, ElasticsearchVersion: string, ElasticsearchClusterConfig: record<InstanceType: record, InstanceCount: record, DedicatedMasterEnabled: record, ZoneAwarenessEnabled: record, ZoneAwarenessConfig: record, DedicatedMasterType: record, DedicatedMasterCount: record, WarmEnabled: record, WarmType: record, WarmCount: record, ColdStorageOptions: record>, EBSOptions: record<EBSEnabled: record, VolumeType: record, VolumeSize: record, Iops: record, Throughput: record>, AccessPolicies: record, SnapshotOptions: record<AutomatedSnapshotStartHour: record>, VPCOptions: record<VPCId: record, SubnetIds: record, AvailabilityZones: record, SecurityGroupIds: record>, CognitoOptions: record<Enabled: record, UserPoolId: record, IdentityPoolId: record, RoleArn: record>, EncryptionAtRestOptions: record<Enabled: record, KmsKeyId: record>, NodeToNodeEncryptionOptions: record<Enabled: record>, AdvancedOptions: record, LogPublishingOptions: record, ServiceSoftwareOptions: record<CurrentVersion: record, NewVersion: record, UpdateAvailable: record, Cancellable: record, UpdateStatus: record, Description: record, AutomatedUpdateDate: record, OptionalDeployment: record>, DomainEndpointOptions: record<EnforceHTTPS: record, TLSSecurityPolicy: record, CustomEndpointEnabled: record, CustomEndpoint: record, CustomEndpointCertificateArn: record>, AdvancedSecurityOptions: record<Enabled: record, InternalUserDatabaseEnabled: record, SAMLOptions: record, AnonymousAuthDisableDate: record, AnonymousAuthEnabled: record>, AutoTuneOptions: record<State: record, ErrorMessage: record>, ChangeProgressDetails: record<ChangeId: record, Message: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({domain_name: $domain_name} | format pattern "/2015-01-01/es/domain/{domain_name}"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/2015-01-01/es/domain/{domain_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -511,7 +520,7 @@ export def "2015-01-01-es-domain delete-elasticsearch" [
 #
 # GET /2015-01-01/es/domain/{DomainName}
 # operationId: DescribeElasticsearchDomain
-export def "2015-01-01-es-domain get" [
+export def "2015-01-01-es-domain get-elasticsearch" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -531,15 +540,15 @@ export def "2015-01-01-es-domain get" [
 ]: nothing -> record<DomainStatus: record<DomainId: record, DomainName: record, ARN: record, Created: record, Deleted: record, Endpoint: record, Endpoints: record, Processing: record, UpgradeProcessing: record, ElasticsearchVersion: string, ElasticsearchClusterConfig: record<InstanceType: record, InstanceCount: record, DedicatedMasterEnabled: record, ZoneAwarenessEnabled: record, ZoneAwarenessConfig: record, DedicatedMasterType: record, DedicatedMasterCount: record, WarmEnabled: record, WarmType: record, WarmCount: record, ColdStorageOptions: record>, EBSOptions: record<EBSEnabled: record, VolumeType: record, VolumeSize: record, Iops: record, Throughput: record>, AccessPolicies: record, SnapshotOptions: record<AutomatedSnapshotStartHour: record>, VPCOptions: record<VPCId: record, SubnetIds: record, AvailabilityZones: record, SecurityGroupIds: record>, CognitoOptions: record<Enabled: record, UserPoolId: record, IdentityPoolId: record, RoleArn: record>, EncryptionAtRestOptions: record<Enabled: record, KmsKeyId: record>, NodeToNodeEncryptionOptions: record<Enabled: record>, AdvancedOptions: record, LogPublishingOptions: record, ServiceSoftwareOptions: record<CurrentVersion: record, NewVersion: record, UpdateAvailable: record, Cancellable: record, UpdateStatus: record, Description: record, AutomatedUpdateDate: record, OptionalDeployment: record>, DomainEndpointOptions: record<EnforceHTTPS: record, TLSSecurityPolicy: record, CustomEndpointEnabled: record, CustomEndpoint: record, CustomEndpointCertificateArn: record>, AdvancedSecurityOptions: record<Enabled: record, InternalUserDatabaseEnabled: record, SAMLOptions: record, AnonymousAuthDisableDate: record, AnonymousAuthEnabled: record>, AutoTuneOptions: record<State: record, ErrorMessage: record>, ChangeProgressDetails: record<ChangeId: record, Message: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({domain_name: $domain_name} | format pattern "/2015-01-01/es/domain/{domain_name}"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/2015-01-01/es/domain/{domain_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Deletes the service-linked role that Elasticsearch Service uses to manage and maintain VPC domains. Role deletion will fail if any existing VPC domains use the role. You must delete any such Elasticsearch domains before deleting the role. See <a href="http://docs.aws.amazon.com/elasticsearch-service/latest/developerguide/es-vpc.html#es-enabling-slr" target="_blank">Deleting Elasticsearch Service Role</a> in <i>VPC Endpoints for Amazon Elasticsearch Service Domains</i>.
+# Deletes the service-linked role that Elasticsearch Service uses to manage and maintain VPC domains. Role deletion will fail if any existing VPC domains use the role. You must delete any such Elasticsearch domains before deleting the role. See Deleting Elasticsearch Service Role (http://docs.aws.amazon.com/elasticsearch-service/latest/developerguide/es-vpc.html#es-enabling-slr) in VPC Endpoints for Amazon Elasticsearch Service Domains.
 #
 # DELETE /2015-01-01/es/role
 # operationId: DeleteElasticsearchServiceRole
@@ -563,10 +572,10 @@ export def "2015-01-01-es-role delete-elasticsearch-service" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/2015-01-01/es/role")
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -574,7 +583,7 @@ export def "2015-01-01-es-role delete-elasticsearch-service" [
 #
 # DELETE /2015-01-01/es/ccs/inboundConnection/{ConnectionId}
 # operationId: DeleteInboundCrossClusterSearchConnection
-export def "2015-01-01-es-ccs-inbound-connection delete-inbound-cross-cluster-search" [
+export def "2015-01-01-es-ccs-inbound-connection delete-cross-list" [
   connection_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -594,11 +603,11 @@ export def "2015-01-01-es-ccs-inbound-connection delete-inbound-cross-cluster-se
 ]: nothing -> record<CrossClusterSearchConnection: record<SourceDomainInfo: record<OwnerId: string, DomainName: string, Region: string>, DestinationDomainInfo: record<OwnerId: string, DomainName: string, Region: string>, CrossClusterSearchConnectionId: record, ConnectionStatus: record<StatusCode: record, Message: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({connection_id: $connection_id} | format pattern "/2015-01-01/es/ccs/inboundConnection/{connection_id}"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({connection_id: (encode-path-segment $connection_id)} | format pattern "/2015-01-01/es/ccs/inboundConnection/{connection_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -606,7 +615,7 @@ export def "2015-01-01-es-ccs-inbound-connection delete-inbound-cross-cluster-se
 #
 # DELETE /2015-01-01/es/ccs/outboundConnection/{ConnectionId}
 # operationId: DeleteOutboundCrossClusterSearchConnection
-export def "2015-01-01-es-ccs-outbound-connection delete-outbound-cross-cluster-search" [
+export def "2015-01-01-es-ccs-outbound-connection delete-cross-list" [
   connection_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -626,11 +635,11 @@ export def "2015-01-01-es-ccs-outbound-connection delete-outbound-cross-cluster-
 ]: nothing -> record<CrossClusterSearchConnection: record<SourceDomainInfo: record<OwnerId: string, DomainName: string, Region: string>, DestinationDomainInfo: record<OwnerId: string, DomainName: string, Region: string>, CrossClusterSearchConnectionId: record, ConnectionAlias: record, ConnectionStatus: record<StatusCode: record, Message: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({connection_id: $connection_id} | format pattern "/2015-01-01/es/ccs/outboundConnection/{connection_id}"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({connection_id: (encode-path-segment $connection_id)} | format pattern "/2015-01-01/es/ccs/outboundConnection/{connection_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -658,11 +667,11 @@ export def "2015-01-01-packages delete" [
 ]: nothing -> record<PackageDetails: record<PackageID: record, PackageName: record, PackageType: record, PackageDescription: record, PackageStatus: record, CreatedAt: record, LastUpdatedAt: string, AvailablePackageVersion: string, ErrorDetails: record<ErrorType: string, ErrorMessage: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({package_id: $package_id} | format pattern "/2015-01-01/packages/{package_id}"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({package_id: (encode-path-segment $package_id)} | format pattern "/2015-01-01/packages/{package_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -690,11 +699,11 @@ export def "2015-01-01-es-vpc-endpoints delete" [
 ]: nothing -> record<VpcEndpointSummary: record<VpcEndpointId: record, VpcEndpointOwner: record, DomainArn: record, Status: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({vpc_endpoint_id: $vpc_endpoint_id} | format pattern "/2015-01-01/es/vpcEndpoints/{vpc_endpoint_id}"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({vpc_endpoint_id: (encode-path-segment $vpc_endpoint_id)} | format pattern "/2015-01-01/es/vpcEndpoints/{vpc_endpoint_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -721,28 +730,28 @@ export def "2015-01-01-es-domain-auto-tunes get" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --max-results: int #  Set this value to limit the number of results returned. 
-  --next-token: string #  Paginated APIs accepts NextToken input to returns next page results and provides a NextToken output in the response which can be used by the client to retrieve more results. 
+  --max-results: int # Set this value to limit the number of results returned.
+  --next-token: string # Paginated APIs accepts NextToken input to returns next page results and provides a NextToken output in the response which can be used by the client to retrieve more results.
 ]: any -> record<AutoTunes: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({domain_name: $domain_name} | format pattern "/2015-01-01/es/domain/{domain_name}/autoTunes") $qp)
-  let body = {"MaxResults": $max_results, "NextToken": $next_token} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/2015-01-01/es/domain/{domain_name}/autoTunes") $qp)
+  let req_body = {"MaxResults": $max_results, "NextToken": $next_token} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns information about the current blue/green deployment happening on a domain, including a change ID, status, and progress stages.
 #
 # GET /2015-01-01/es/domain/{DomainName}/progress
 # operationId: DescribeDomainChangeProgress
-export def "2015-01-01-es-domain-progress get" [
+export def "2015-01-01-es-domain-progress get-change" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -752,7 +761,7 @@ export def "2015-01-01-es-domain-progress get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --changeid: string # The specific change ID for which you want to get progress information. This is an optional parameter. If omitted, the service returns information about the most recent configuration change. 
+  --changeid: string # The specific change ID for which you want to get progress information. This is an optional parameter. If omitted, the service returns information about the most recent configuration change.
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -764,11 +773,11 @@ export def "2015-01-01-es-domain-progress get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "changeid" $changeid "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({domain_name: $domain_name} | format pattern "/2015-01-01/es/domain/{domain_name}/progress") $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/2015-01-01/es/domain/{domain_name}/progress") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -776,7 +785,7 @@ export def "2015-01-01-es-domain-progress get" [
 #
 # GET /2015-01-01/es/domain/{DomainName}/config
 # operationId: DescribeElasticsearchDomainConfig
-export def "2015-01-01-es-domain-config get" [
+export def "2015-01-01-es-domain-config get-elasticsearch" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -796,15 +805,15 @@ export def "2015-01-01-es-domain-config get" [
 ]: nothing -> record<DomainConfig: record<ElasticsearchVersion: record<Options: record, Status: record>, ElasticsearchClusterConfig: record<Options: record, Status: record>, EBSOptions: record<Options: record, Status: record>, AccessPolicies: record<Options: record, Status: record>, SnapshotOptions: record<Options: record, Status: record>, VPCOptions: record<Options: record, Status: record>, CognitoOptions: record<Options: record, Status: record>, EncryptionAtRestOptions: record<Options: record, Status: record>, NodeToNodeEncryptionOptions: record<Options: record, Status: record>, AdvancedOptions: record<Options: record, Status: record>, LogPublishingOptions: record<Options: record, Status: record>, DomainEndpointOptions: record<Options: record, Status: record>, AdvancedSecurityOptions: record<Options: record, Status: record>, AutoTuneOptions: record<Options: record, Status: record>, ChangeProgressDetails: record<ChangeId: record, Message: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({domain_name: $domain_name} | format pattern "/2015-01-01/es/domain/{domain_name}/config"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/2015-01-01/es/domain/{domain_name}/config"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Modifies the cluster configuration of the specified Elasticsearch domain, setting as setting the instance type and the number of instances. 
+# Modifies the cluster configuration of the specified Elasticsearch domain, setting as setting the instance type and the number of instances.
 #
 # POST /2015-01-01/es/domain/{DomainName}/config
 # operationId: UpdateElasticsearchDomainConfig
@@ -836,38 +845,38 @@ export def "2015-01-01-es-domain-config update-elasticsearch" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --elasticsearch-cluster-config: record # Specifies the configuration for the domain cluster, such as the type and number of instances. — shape: {InstanceType?: any, InstanceCount?: any, DedicatedMasterEnabled?: any, ZoneAwarenessEnabled?: any, ZoneAwarenessConfig?: any, DedicatedMasterType?: any, DedicatedMasterCount?: any, WarmEnabled?: any, WarmType?: any, WarmCount?: any, ColdStorageOptions?: any}
-  --ebs-options: record # Options to enable, disable, and specify the properties of EBS storage volumes. For more information, see <a href="http://docs.aws.amazon.com/elasticsearch-service/latest/developerguide/es-createupdatedomains.html#es-createdomain-configure-ebs" target="_blank"> Configuring EBS-based Storage</a>. — shape: {EBSEnabled?: any, VolumeType?: any, VolumeSize?: any, Iops?: any, Throughput?: any}
-  --snapshot-options: record # Specifies the time, in UTC format, when the service takes a daily automated snapshot of the specified Elasticsearch domain. Default value is <code>0</code> hours. — shape: {AutomatedSnapshotStartHour?: any}
-  --vpc-options: record # Options to specify the subnets and security groups for VPC endpoint. For more information, see <a href="http://docs.aws.amazon.com/elasticsearch-service/latest/developerguide/es-vpc.html" target="_blank"> VPC Endpoints for Amazon Elasticsearch Service Domains</a>. — shape: {SubnetIds?: any, SecurityGroupIds?: any}
-  --cognito-options: record # Options to specify the Cognito user and identity pools for Kibana authentication. For more information, see <a href="http://docs.aws.amazon.com/elasticsearch-service/latest/developerguide/es-cognito-auth.html" target="_blank">Amazon Cognito Authentication for Kibana</a>. — shape: {Enabled?: any, UserPoolId?: any, IdentityPoolId?: any, RoleArn?: any}
-  --advanced-options: record # <p> Exposes select native Elasticsearch configuration values from <code>elasticsearch.yml</code>. Currently, the following advanced options are available:</p> <ul> <li>Option to allow references to indices in an HTTP request body. Must be <code>false</code> when configuring access to individual sub-resources. By default, the value is <code>true</code>. See <a href="http://docs.aws.amazon.com/elasticsearch-service/latest/developerguide/es-createupdatedomains.html#es-createdomain-configure-advanced-options" target="_blank">Configuration Advanced Options</a> for more information.</li> <li>Option to specify the percentage of heap space that is allocated to field data. By default, this setting is unbounded.</li> </ul> <p>For more information, see <a href="http://docs.aws.amazon.com/elasticsearch-service/latest/developerguide/es-createupdatedomains.html#es-createdomain-configure-advanced-options">Configuring Advanced Options</a>.</p>
-  --access-policies: string # Access policy rules for an Elasticsearch domain service endpoints. For more information, see <a href="http://docs.aws.amazon.com/elasticsearch-service/latest/developerguide/es-createupdatedomains.html#es-createdomain-configure-access-policies" target="_blank">Configuring Access Policies</a> in the <i>Amazon Elasticsearch Service Developer Guide</i>. The maximum size of a policy document is 100 KB.
-  --log-publishing-options: record # Map of <code>LogType</code> and <code>LogPublishingOption</code>, each containing options to publish a given type of Elasticsearch log.
+  --ebs-options: record # Options to enable, disable, and specify the properties of EBS storage volumes. For more information, see Configuring EBS-based Storage (http://docs.aws.amazon.com/elasticsearch-service/latest/developerguide/es-createupdatedomains.html#es-createdomain-configure-ebs). — shape: {EBSEnabled?: any, VolumeType?: any, VolumeSize?: any, Iops?: any, Throughput?: any}
+  --snapshot-options: record # Specifies the time, in UTC format, when the service takes a daily automated snapshot of the specified Elasticsearch domain. Default value is 0 hours. — shape: {AutomatedSnapshotStartHour?: any}
+  --vpc-options: record # Options to specify the subnets and security groups for VPC endpoint. For more information, see VPC Endpoints for Amazon Elasticsearch Service Domains (http://docs.aws.amazon.com/elasticsearch-service/latest/developerguide/es-vpc.html). — shape: {SubnetIds?: any, SecurityGroupIds?: any}
+  --cognito-options: record # Options to specify the Cognito user and identity pools for Kibana authentication. For more information, see Amazon Cognito Authentication for Kibana (http://docs.aws.amazon.com/elasticsearch-service/latest/developerguide/es-cognito-auth.html). — shape: {Enabled?: any, UserPoolId?: any, IdentityPoolId?: any, RoleArn?: any}
+  --advanced-options: record # Exposes select native Elasticsearch configuration values from elasticsearch.yml. Currently, the following advanced options are available: Option to allow references to indices in an HTTP request body. Must be false when configuring access to individual sub-resources. By default, the value is true. See Configuration Advanced Options (http://docs.aws.amazon.com/elasticsearch-service/latest/developerguide/es-createupdatedomains.html#es-createdomain-configure-advanced-options) for more information. Option to specify the percentage of heap space that is allocated to field data. By default, this setting is unbounded. For more information, see Configuring Advanced Options (http://docs.aws.amazon.com/elasticsearch-service/latest/developerguide/es-createupdatedomains.html#es-createdomain-configure-advanced-options).
+  --access-policies: string # Access policy rules for an Elasticsearch domain service endpoints. For more information, see Configuring Access Policies (http://docs.aws.amazon.com/elasticsearch-service/latest/developerguide/es-createupdatedomains.html#es-createdomain-configure-access-policies) in the Amazon Elasticsearch Service Developer Guide. The maximum size of a policy document is 100 KB.
+  --log-publishing-options: record # Map of LogType and LogPublishingOption, each containing options to publish a given type of Elasticsearch log.
   --domain-endpoint-options: record # Options to configure endpoint for the Elasticsearch domain. — shape: {EnforceHTTPS?: any, TLSSecurityPolicy?: any, CustomEndpointEnabled?: any, CustomEndpoint?: any, CustomEndpointCertificateArn?: any}
   --advanced-security-options: record # Specifies the advanced security configuration: whether advanced security is enabled, whether the internal database option is enabled, master username and password (if internal database is enabled), and master user ARN (if IAM is enabled). — shape: {Enabled?: any, InternalUserDatabaseEnabled?: any, MasterUserOptions?: any, SAMLOptions?: any, AnonymousAuthEnabled?: any}
   --node-to-node-encryption-options: record # Specifies the node-to-node encryption options. — shape: {Enabled?: any}
   --encryption-at-rest-options: record # Specifies the Encryption At Rest Options. — shape: {Enabled?: any, KmsKeyId?: any}
   --auto-tune-options: record # Specifies the Auto-Tune options: the Auto-Tune desired state for the domain, rollback state when disabling Auto-Tune options and list of maintenance schedules. — shape: {DesiredState?: any, RollbackOnDisable?: any, MaintenanceSchedules?: any}
-  --body-dry-run: oneof<nothing, bool> #  This flag, when set to True, specifies whether the <code>UpdateElasticsearchDomain</code> request should return the results of validation checks without actually applying the change. This flag, when set to True, specifies the deployment mechanism through which the update shall be applied on the domain. This will not actually perform the Update. 
+  --body-dry-run: oneof<nothing, bool> # This flag, when set to True, specifies whether the UpdateElasticsearchDomain request should return the results of validation checks without actually applying the change. This flag, when set to True, specifies the deployment mechanism through which the update shall be applied on the domain. This will not actually perform the Update.
 ]: any -> record<DomainConfig: record<ElasticsearchVersion: record<Options: record, Status: record>, ElasticsearchClusterConfig: record<Options: record, Status: record>, EBSOptions: record<Options: record, Status: record>, AccessPolicies: record<Options: record, Status: record>, SnapshotOptions: record<Options: record, Status: record>, VPCOptions: record<Options: record, Status: record>, CognitoOptions: record<Options: record, Status: record>, EncryptionAtRestOptions: record<Options: record, Status: record>, NodeToNodeEncryptionOptions: record<Options: record, Status: record>, AdvancedOptions: record<Options: record, Status: record>, LogPublishingOptions: record<Options: record, Status: record>, DomainEndpointOptions: record<Options: record, Status: record>, AdvancedSecurityOptions: record<Options: record, Status: record>, AutoTuneOptions: record<Options: record, Status: record>, ChangeProgressDetails: record<ChangeId: record, Message: record>>, DryRunResults: record<DeploymentType: record, Message: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({domain_name: $domain_name} | format pattern "/2015-01-01/es/domain/{domain_name}/config"))
-  let body = {"ElasticsearchClusterConfig": $elasticsearch_cluster_config, "EBSOptions": $ebs_options, "SnapshotOptions": $snapshot_options, "VPCOptions": $vpc_options, "CognitoOptions": $cognito_options, "AdvancedOptions": $advanced_options, "AccessPolicies": $access_policies, "LogPublishingOptions": $log_publishing_options, "DomainEndpointOptions": $domain_endpoint_options, "AdvancedSecurityOptions": $advanced_security_options, "NodeToNodeEncryptionOptions": $node_to_node_encryption_options, "EncryptionAtRestOptions": $encryption_at_rest_options, "AutoTuneOptions": $auto_tune_options, "DryRun": $body_dry_run} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/2015-01-01/es/domain/{domain_name}/config"))
+  let req_body = {"ElasticsearchClusterConfig": $elasticsearch_cluster_config, "EBSOptions": $ebs_options, "SnapshotOptions": $snapshot_options, "VPCOptions": $vpc_options, "CognitoOptions": $cognito_options, "AdvancedOptions": $advanced_options, "AccessPolicies": $access_policies, "LogPublishingOptions": $log_publishing_options, "DomainEndpointOptions": $domain_endpoint_options, "AdvancedSecurityOptions": $advanced_security_options, "NodeToNodeEncryptionOptions": $node_to_node_encryption_options, "EncryptionAtRestOptions": $encryption_at_rest_options, "AutoTuneOptions": $auto_tune_options, "DryRun": $body_dry_run} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns domain configuration information about the specified Elasticsearch domains, including the domain ID, domain endpoint, and domain ARN.
 #
 # POST /2015-01-01/es/domain-info
 # operationId: DescribeElasticsearchDomains
-export def "2015-01-01-es-domain-info post" [
+export def "2015-01-01-es-domain-info get-elasticsearch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -883,26 +892,26 @@ export def "2015-01-01-es-domain-info post" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  domain_names: list # A list of Elasticsearch domain names.
+  domain_names: list<string> # A list of Elasticsearch domain names.
 ]: any -> record<DomainStatusList: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/2015-01-01/es/domain-info")
-  let body = {"DomainNames": $domain_names} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"DomainNames": $domain_names} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-#  Describe Elasticsearch Limits for a given InstanceType and ElasticsearchVersion. When modifying existing Domain, specify the <code> <a>DomainName</a> </code> to know what Limits are supported for modifying. 
+# Describe Elasticsearch Limits for a given InstanceType and ElasticsearchVersion. When modifying existing Domain, specify the DomainName to know what Limits are supported for modifying.
 #
 # GET /2015-01-01/es/instanceTypeLimits/{ElasticsearchVersion}/{InstanceType}
 # operationId: DescribeElasticsearchInstanceTypeLimits
-export def "2015-01-01-es-instance-type-limits get" [
+export def "2015-01-01-es-instance-type-limits get-elasticsearch" [
   elasticsearch_version: string
   instance_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -913,7 +922,7 @@ export def "2015-01-01-es-instance-type-limits get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain-name: string #  DomainName represents the name of the Domain that we are trying to modify. This should be present only if we are querying for Elasticsearch <code> <a>Limits</a> </code> for existing domain. 
+  --domain-name: string # DomainName represents the name of the Domain that we are trying to modify. This should be present only if we are querying for Elasticsearch Limits for existing domain.
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -925,11 +934,11 @@ export def "2015-01-01-es-instance-type-limits get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domainName" $domain_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({elasticsearch_version: $elasticsearch_version, instance_type: $instance_type} | format pattern "/2015-01-01/es/instanceTypeLimits/{elasticsearch_version}/{instance_type}") $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({elasticsearch_version: (encode-path-segment $elasticsearch_version), instance_type: (encode-path-segment $instance_type)} | format pattern "/2015-01-01/es/instanceTypeLimits/{elasticsearch_version}/{instance_type}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -938,7 +947,7 @@ export def "2015-01-01-es-instance-type-limits get" [
 # POST /2015-01-01/es/ccs/inboundConnection/search
 # operationId: DescribeInboundCrossClusterSearchConnections
 # --Filters item shape: {Name?: any, Values?: any}
-export def "2015-01-01-es-ccs-inbound-connection-search post" [
+export def "2015-01-01-es-ccs-inbound-connection-search get-cross" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -956,22 +965,22 @@ export def "2015-01-01-es-ccs-inbound-connection-search post" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --filters: list #  A list of filters used to match properties for inbound cross-cluster search connection. Available <code><a>Filter</a></code> names for this operation are: <ul> <li>cross-cluster-search-connection-id</li> <li>source-domain-info.domain-name</li> <li>source-domain-info.owner-id</li> <li>source-domain-info.region</li> <li>destination-domain-info.domain-name</li> </ul>  — item shape: {Name?: any, Values?: any}
-  --max-results: int #  Set this value to limit the number of results returned. 
-  --next-token: string #  Paginated APIs accepts NextToken input to returns next page results and provides a NextToken output in the response which can be used by the client to retrieve more results. 
+  --filters: list # A list of filters used to match properties for inbound cross-cluster search connection. Available Filter names for this operation are: cross-cluster-search-connection-id source-domain-info.domain-name source-domain-info.owner-id source-domain-info.region destination-domain-info.domain-name — item shape: {Name?: any, Values?: any}
+  --max-results: int # Set this value to limit the number of results returned.
+  --next-token: string # Paginated APIs accepts NextToken input to returns next page results and provides a NextToken output in the response which can be used by the client to retrieve more results.
 ]: any -> record<CrossClusterSearchConnections: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/2015-01-01/es/ccs/inboundConnection/search" $qp)
-  let body = {"Filters": $filters, "MaxResults": $max_results, "NextToken": $next_token} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"Filters": $filters, "MaxResults": $max_results, "NextToken": $next_token} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists all the outbound cross-cluster search connections for a source domain.
@@ -979,7 +988,7 @@ export def "2015-01-01-es-ccs-inbound-connection-search post" [
 # POST /2015-01-01/es/ccs/outboundConnection/search
 # operationId: DescribeOutboundCrossClusterSearchConnections
 # --Filters item shape: {Name?: any, Values?: any}
-export def "2015-01-01-es-ccs-outbound-connection-search post" [
+export def "2015-01-01-es-ccs-outbound-connection-search get-cross" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -997,22 +1006,22 @@ export def "2015-01-01-es-ccs-outbound-connection-search post" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --filters: list #  A list of filters used to match properties for outbound cross-cluster search connection. Available <code><a>Filter</a></code> names for this operation are: <ul> <li>cross-cluster-search-connection-id</li> <li>destination-domain-info.domain-name</li> <li>destination-domain-info.owner-id</li> <li>destination-domain-info.region</li> <li>source-domain-info.domain-name</li> </ul>  — item shape: {Name?: any, Values?: any}
-  --max-results: int #  Set this value to limit the number of results returned. 
-  --next-token: string #  Paginated APIs accepts NextToken input to returns next page results and provides a NextToken output in the response which can be used by the client to retrieve more results. 
+  --filters: list # A list of filters used to match properties for outbound cross-cluster search connection. Available Filter names for this operation are: cross-cluster-search-connection-id destination-domain-info.domain-name destination-domain-info.owner-id destination-domain-info.region source-domain-info.domain-name — item shape: {Name?: any, Values?: any}
+  --max-results: int # Set this value to limit the number of results returned.
+  --next-token: string # Paginated APIs accepts NextToken input to returns next page results and provides a NextToken output in the response which can be used by the client to retrieve more results.
 ]: any -> record<CrossClusterSearchConnections: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/2015-01-01/es/ccs/outboundConnection/search" $qp)
-  let body = {"Filters": $filters, "MaxResults": $max_results, "NextToken": $next_token} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"Filters": $filters, "MaxResults": $max_results, "NextToken": $next_token} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Describes all packages available to Amazon ES. Includes options for filtering, limiting the number of results, and pagination.
@@ -1020,7 +1029,7 @@ export def "2015-01-01-es-ccs-outbound-connection-search post" [
 # POST /2015-01-01/packages/describe
 # operationId: DescribePackages
 # --Filters item shape: {Name?: any, Value?: any}
-export def "2015-01-01-packages-describe post" [
+export def "2015-01-01-packages-describe get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1038,29 +1047,29 @@ export def "2015-01-01-packages-describe post" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --filters: list # A list of <code>DescribePackagesFilter</code> to filter the packages included in a <code>DescribePackages</code> response. — item shape: {Name?: any, Value?: any}
-  --max-results: int #  Set this value to limit the number of results returned. 
-  --next-token: string #  Paginated APIs accepts NextToken input to returns next page results and provides a NextToken output in the response which can be used by the client to retrieve more results. 
+  --filters: list # A list of DescribePackagesFilter to filter the packages included in a DescribePackages response. — item shape: {Name?: any, Value?: any}
+  --max-results: int # Set this value to limit the number of results returned.
+  --next-token: string # Paginated APIs accepts NextToken input to returns next page results and provides a NextToken output in the response which can be used by the client to retrieve more results.
 ]: any -> record<PackageDetailsList: record, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/2015-01-01/packages/describe" $qp)
-  let body = {"Filters": $filters, "MaxResults": $max_results, "NextToken": $next_token} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"Filters": $filters, "MaxResults": $max_results, "NextToken": $next_token} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists available reserved Elasticsearch instance offerings.
 #
 # GET /2015-01-01/es/reservedInstanceOfferings
 # operationId: DescribeReservedElasticsearchInstanceOfferings
-export def "2015-01-01-es-reserved-instance-offerings get" [
+export def "2015-01-01-es-reserved-instance-offerings get-elasticsearch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1086,10 +1095,10 @@ export def "2015-01-01-es-reserved-instance-offerings get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offeringId" $offering_id "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/2015-01-01/es/reservedInstanceOfferings" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1097,7 +1106,7 @@ export def "2015-01-01-es-reserved-instance-offerings get" [
 #
 # GET /2015-01-01/es/reservedInstances
 # operationId: DescribeReservedElasticsearchInstances
-export def "2015-01-01-es-reserved-instances get" [
+export def "2015-01-01-es-reserved-instances get-elasticsearch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1123,10 +1132,10 @@ export def "2015-01-01-es-reserved-instances get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "reservationId" $reservation_id "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/2015-01-01/es/reservedInstances" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1134,7 +1143,7 @@ export def "2015-01-01-es-reserved-instances get" [
 #
 # POST /2015-01-01/es/vpcEndpoints/describe
 # operationId: DescribeVpcEndpoints
-export def "2015-01-01-es-vpc-endpoints-describe post" [
+export def "2015-01-01-es-vpc-endpoints-describe get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1150,26 +1159,26 @@ export def "2015-01-01-es-vpc-endpoints-describe post" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  vpc_endpoint_ids: list # The unique identifiers of the endpoints to get information about.
+  vpc_endpoint_ids: list<string> # The unique identifiers of the endpoints to get information about.
 ]: any -> record<VpcEndpoints: record, VpcEndpointErrors: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/2015-01-01/es/vpcEndpoints/describe")
-  let body = {"VpcEndpointIds": $vpc_endpoint_ids} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"VpcEndpointIds": $vpc_endpoint_ids} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Dissociates a package from the Amazon ES domain.
 #
 # POST /2015-01-01/packages/dissociate/{PackageID}/{DomainName}
 # operationId: DissociatePackage
-export def "2015-01-01-packages-dissociate post" [
+export def "2015-01-01-packages-dissociate create" [
   package_id: string
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1190,19 +1199,19 @@ export def "2015-01-01-packages-dissociate post" [
 ]: nothing -> record<DomainPackageDetails: record<PackageID: record, PackageName: record, PackageType: record, LastUpdated: record, DomainName: record, DomainPackageStatus: record, PackageVersion: string, ReferencePath: record, ErrorDetails: record<ErrorType: string, ErrorMessage: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({package_id: $package_id, domain_name: $domain_name} | format pattern "/2015-01-01/packages/dissociate/{package_id}/{domain_name}"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({package_id: (encode-path-segment $package_id), domain_name: (encode-path-segment $domain_name)} | format pattern "/2015-01-01/packages/dissociate/{package_id}/{domain_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-#  Returns a list of upgrade compatible Elastisearch versions. You can optionally pass a <code> <a>DomainName</a> </code> to get all upgrade compatible Elasticsearch versions for that specific domain. 
+# Returns a list of upgrade compatible Elastisearch versions. You can optionally pass a DomainName to get all upgrade compatible Elasticsearch versions for that specific domain.
 #
 # GET /2015-01-01/es/compatibleVersions
 # operationId: GetCompatibleElasticsearchVersions
-export def "2015-01-01-es-compatible-versions get-compatible-elasticsearch" [
+export def "2015-01-01-es-compatible-versions get-elasticsearch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1224,10 +1233,10 @@ export def "2015-01-01-es-compatible-versions get-compatible-elasticsearch" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domainName" $domain_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/2015-01-01/es/compatibleVersions" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1235,7 +1244,7 @@ export def "2015-01-01-es-compatible-versions get-compatible-elasticsearch" [
 #
 # GET /2015-01-01/packages/{PackageID}/history
 # operationId: GetPackageVersionHistory
-export def "2015-01-01-packages-history get-package-version" [
+export def "2015-01-01-packages-history get-version" [
   package_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1260,11 +1269,11 @@ export def "2015-01-01-packages-history get-package-version" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_id: $package_id} | format pattern "/2015-01-01/packages/{package_id}/history") $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({package_id: (encode-path-segment $package_id)} | format pattern "/2015-01-01/packages/{package_id}/history") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1297,11 +1306,11 @@ export def "2015-01-01-es-upgrade-domain-history get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({domain_name: $domain_name} | format pattern "/2015-01-01/es/upgradeDomain/{domain_name}/history") $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/2015-01-01/es/upgradeDomain/{domain_name}/history") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1329,19 +1338,19 @@ export def "2015-01-01-es-upgrade-domain-status get" [
 ]: nothing -> record<UpgradeStep: record, StepStatus: record, UpgradeName: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({domain_name: $domain_name} | format pattern "/2015-01-01/es/upgradeDomain/{domain_name}/status"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/2015-01-01/es/upgradeDomain/{domain_name}/status"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Returns the name of all Elasticsearch domains owned by the current user's account. 
+# Returns the name of all Elasticsearch domains owned by the current user's account.
 #
 # GET /2015-01-01/domain
 # operationId: ListDomainNames
-export def "2015-01-01-domain list-domain-names" [
+export def "2015-01-01-domain list-names" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1350,7 +1359,7 @@ export def "2015-01-01-domain list-domain-names" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --engine-type: string@engine-type-completer #  Optional parameter to filter the output by domain engine type. Acceptable values are 'Elasticsearch' and 'OpenSearch'. 
+  --engine-type: string@engine-type-completer # Optional parameter to filter the output by domain engine type. Acceptable values are 'Elasticsearch' and 'OpenSearch'.
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1363,10 +1372,10 @@ export def "2015-01-01-domain list-domain-names" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "engineType" $engine_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/2015-01-01/domain" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1374,7 +1383,7 @@ export def "2015-01-01-domain list-domain-names" [
 #
 # GET /2015-01-01/packages/{PackageID}/domains
 # operationId: ListDomainsForPackage
-export def "2015-01-01-packages-domains list-domains-for" [
+export def "2015-01-01-packages-domains list" [
   package_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1399,11 +1408,11 @@ export def "2015-01-01-packages-domains list-domains-for" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_id: $package_id} | format pattern "/2015-01-01/packages/{package_id}/domains") $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({package_id: (encode-path-segment $package_id)} | format pattern "/2015-01-01/packages/{package_id}/domains") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1421,9 +1430,9 @@ export def "2015-01-01-es-instance-types list-elasticsearch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain-name: string # DomainName represents the name of the Domain that we are trying to modify. This should be present only if we are querying for list of available Elasticsearch instance types when modifying existing domain. 
-  --max-results: int #  Set this value to limit the number of results returned. Value provided must be greater than 30 else it wont be honored. 
-  --next-token: string # NextToken should be sent in case if earlier API call produced result containing NextToken. It is used for pagination. 
+  --domain-name: string # DomainName represents the name of the Domain that we are trying to modify. This should be present only if we are querying for list of available Elasticsearch instance types when modifying existing domain.
+  --max-results: int # Set this value to limit the number of results returned. Value provided must be greater than 30 else it wont be honored.
+  --next-token: string # NextToken should be sent in case if earlier API call produced result containing NextToken. It is used for pagination.
   --max-results: string # Pagination limit
   --next-token: string # Pagination token
   --x-amz-content-sha256: string
@@ -1437,11 +1446,11 @@ export def "2015-01-01-es-instance-types list-elasticsearch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domainName" $domain_name "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({elasticsearch_version: $elasticsearch_version} | format pattern "/2015-01-01/es/instanceTypes/{elasticsearch_version}") $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({elasticsearch_version: (encode-path-segment $elasticsearch_version)} | format pattern "/2015-01-01/es/instanceTypes/{elasticsearch_version}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1458,7 +1467,7 @@ export def "2015-01-01-es-versions list-elasticsearch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --max-results: int #  Set this value to limit the number of results returned. Value provided must be greater than 10 else it wont be honored. 
+  --max-results: int # Set this value to limit the number of results returned. Value provided must be greater than 10 else it wont be honored.
   --next-token: string
   --max-results: string # Pagination limit
   --next-token: string # Pagination token
@@ -1474,10 +1483,10 @@ export def "2015-01-01-es-versions list-elasticsearch" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/2015-01-01/es/versions" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1485,7 +1494,7 @@ export def "2015-01-01-es-versions list-elasticsearch" [
 #
 # GET /2015-01-01/domain/{DomainName}/packages
 # operationId: ListPackagesForDomain
-export def "2015-01-01-domain-packages list-packages-for" [
+export def "2015-01-01-domain-packages list" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1510,11 +1519,11 @@ export def "2015-01-01-domain-packages list-packages-for" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({domain_name: $domain_name} | format pattern "/2015-01-01/domain/{domain_name}/packages") $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/2015-01-01/domain/{domain_name}/packages") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1531,7 +1540,7 @@ export def "2015-01-01-tags-arn list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --arn: string #  Specify the <code>ARN</code> for the Elasticsearch domain to which the tags are attached that you want to view.
+  --arn: string # Specify the ARN for the Elasticsearch domain to which the tags are attached that you want to view.
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1544,10 +1553,10 @@ export def "2015-01-01-tags-arn list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "arn" $arn "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/2015-01-01/tags/#arn" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1577,11 +1586,11 @@ export def "2015-01-01-es-domain-list-vpc-endpoint-access list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({domain_name: $domain_name} | format pattern "/2015-01-01/es/domain/{domain_name}/listVpcEndpointAccess") $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/2015-01-01/es/domain/{domain_name}/listVpcEndpointAccess") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1589,7 +1598,7 @@ export def "2015-01-01-es-domain-list-vpc-endpoint-access list" [
 #
 # GET /2015-01-01/es/domain/{DomainName}/vpcEndpoints
 # operationId: ListVpcEndpointsForDomain
-export def "2015-01-01-es-domain-vpc-endpoints list-vpc-endpoints-for" [
+export def "2015-01-01-es-domain-vpc-endpoints list" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1611,11 +1620,11 @@ export def "2015-01-01-es-domain-vpc-endpoints list-vpc-endpoints-for" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({domain_name: $domain_name} | format pattern "/2015-01-01/es/domain/{domain_name}/vpcEndpoints") $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/2015-01-01/es/domain/{domain_name}/vpcEndpoints") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1623,7 +1632,7 @@ export def "2015-01-01-es-domain-vpc-endpoints list-vpc-endpoints-for" [
 #
 # POST /2015-01-01/es/purchaseReservedInstanceOffering
 # operationId: PurchaseReservedElasticsearchInstanceOffering
-export def "2015-01-01-es-purchase-reserved-instance-offering post" [
+export def "2015-01-01-es-purchase-reserved-instance-offering create-elasticsearch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1647,20 +1656,20 @@ export def "2015-01-01-es-purchase-reserved-instance-offering post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/2015-01-01/es/purchaseReservedInstanceOffering")
-  let body = {"ReservedElasticsearchInstanceOfferingId": $reserved_elasticsearch_instance_offering_id, "ReservationName": $reservation_name, "InstanceCount": $instance_count} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"ReservedElasticsearchInstanceOfferingId": $reserved_elasticsearch_instance_offering_id, "ReservationName": $reservation_name, "InstanceCount": $instance_count} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Allows the destination domain owner to reject an inbound cross-cluster search connection request.
 #
 # PUT /2015-01-01/es/ccs/inboundConnection/{ConnectionId}/reject
 # operationId: RejectInboundCrossClusterSearchConnection
-export def "2015-01-01-es-ccs-inbound-connection-reject reject-inbound-cross-cluster-search" [
+export def "2015-01-01-es-ccs-inbound-connection-reject list-cross" [
   connection_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1680,11 +1689,11 @@ export def "2015-01-01-es-ccs-inbound-connection-reject reject-inbound-cross-clu
 ]: nothing -> record<CrossClusterSearchConnection: record<SourceDomainInfo: record<OwnerId: string, DomainName: string, Region: string>, DestinationDomainInfo: record<OwnerId: string, DomainName: string, Region: string>, CrossClusterSearchConnectionId: record, ConnectionStatus: record<StatusCode: record, Message: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({connection_id: $connection_id} | format pattern "/2015-01-01/es/ccs/inboundConnection/{connection_id}/reject"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({connection_id: (encode-path-segment $connection_id)} | format pattern "/2015-01-01/es/ccs/inboundConnection/{connection_id}/reject"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1708,20 +1717,20 @@ export def "2015-01-01-tags-removal delete" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  arn: string # The Amazon Resource Name (ARN) of the Elasticsearch domain. See <a href="http://docs.aws.amazon.com/IAM/latest/UserGuide/index.html?Using_Identifiers.html" target="_blank">Identifiers for IAM Entities</a> in <i>Using AWS Identity and Access Management</i> for more information.
-  tag_keys: list # Specifies the <code>TagKey</code> list which you want to remove from the Elasticsearch domain.
+  arn: string # The Amazon Resource Name (ARN) of the Elasticsearch domain. See Identifiers for IAM Entities (http://docs.aws.amazon.com/IAM/latest/UserGuide/index.html?Using_Identifiers.html) in Using AWS Identity and Access Management for more information.
+  tag_keys: list<string> # Specifies the TagKey list which you want to remove from the Elasticsearch domain.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/2015-01-01/tags-removal")
-  let body = {"ARN": $arn, "TagKeys": $tag_keys} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"ARN": $arn, "TagKeys": $tag_keys} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Revokes access to an Amazon OpenSearch Service domain that was provided through an interface VPC endpoint.
@@ -1750,14 +1759,14 @@ export def "2015-01-01-es-domain-revoke-vpc-endpoint-access delete" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({domain_name: $domain_name} | format pattern "/2015-01-01/es/domain/{domain_name}/revokeVpcEndpointAccess"))
-  let body = {"Account": $account} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/2015-01-01/es/domain/{domain_name}/revokeVpcEndpointAccess"))
+  let req_body = {"Account": $account} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Schedules a service software update for an Amazon ES domain.
@@ -1786,13 +1795,13 @@ export def "2015-01-01-es-service-software-update-start start-elasticsearch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/2015-01-01/es/serviceSoftwareUpdate/start")
-  let body = {"DomainName": $domain_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"DomainName": $domain_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates a package for use with Amazon ES domains.
@@ -1817,21 +1826,21 @@ export def "2015-01-01-packages-update update" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   package_id: string # Unique identifier for the package.
-  package_source: record # The S3 location for importing the package specified as <code>S3BucketName</code> and <code>S3Key</code> — shape: {S3BucketName?: any, S3Key?: any}
+  package_source: record # The S3 location for importing the package specified as S3BucketName and S3Key — shape: {S3BucketName?: any, S3Key?: any}
   --package-description: string # New description of the package.
-  --commit-message: string # An info message for the new version which will be shown as part of <code>GetPackageVersionHistoryResponse</code>.
+  --commit-message: string # An info message for the new version which will be shown as part of GetPackageVersionHistoryResponse.
 ]: any -> record<PackageDetails: record<PackageID: record, PackageName: record, PackageType: record, PackageDescription: record, PackageStatus: record, CreatedAt: record, LastUpdatedAt: string, AvailablePackageVersion: string, ErrorDetails: record<ErrorType: string, ErrorMessage: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/2015-01-01/packages/update")
-  let body = {"PackageID": $package_id, "PackageSource": $package_source, "PackageDescription": $package_description, "CommitMessage": $commit_message} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"PackageID": $package_id, "PackageSource": $package_source, "PackageDescription": $package_description, "CommitMessage": $commit_message} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Modifies an Amazon OpenSearch Service-managed interface VPC endpoint.
@@ -1856,26 +1865,26 @@ export def "2015-01-01-es-vpc-endpoints-update update" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   vpc_endpoint_id: string # Unique identifier of the VPC endpoint to be updated.
-  vpc_options: record # Options to specify the subnets and security groups for VPC endpoint. For more information, see <a href="http://docs.aws.amazon.com/elasticsearch-service/latest/developerguide/es-vpc.html" target="_blank"> VPC Endpoints for Amazon Elasticsearch Service Domains</a>. — shape: {SubnetIds?: any, SecurityGroupIds?: any}
+  vpc_options: record # Options to specify the subnets and security groups for VPC endpoint. For more information, see VPC Endpoints for Amazon Elasticsearch Service Domains (http://docs.aws.amazon.com/elasticsearch-service/latest/developerguide/es-vpc.html). — shape: {SubnetIds?: any, SecurityGroupIds?: any}
 ]: any -> record<VpcEndpoint: record<VpcEndpointId: record, VpcEndpointOwner: record, DomainArn: record, VpcOptions: record<VPCId: record, SubnetIds: record, AvailabilityZones: record, SecurityGroupIds: record>, Status: record, Endpoint: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/2015-01-01/es/vpcEndpoints/update")
-  let body = {"VpcEndpointId": $vpc_endpoint_id, "VpcOptions": $vpc_options} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"VpcEndpointId": $vpc_endpoint_id, "VpcOptions": $vpc_options} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Allows you to either upgrade your domain or perform an Upgrade eligibility check to a compatible Elasticsearch version.
 #
 # POST /2015-01-01/es/upgradeDomain
 # operationId: UpgradeElasticsearchDomain
-export def "2015-01-01-es-upgrade-domain post" [
+export def "2015-01-01-es-upgrade-domain create-elasticsearch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1893,17 +1902,17 @@ export def "2015-01-01-es-upgrade-domain post" [
   --x-amz-signed-headers: string
   domain_name: string # The name of an Elasticsearch domain. Domain names are unique across the domains owned by an account within an AWS region. Domain names start with a letter or number and can contain the following characters: a-z (lowercase), 0-9, and - (hyphen).
   target_version: string # The version of Elasticsearch that you intend to upgrade the domain to.
-  --perform-check-only: oneof<nothing, bool> #  This flag, when set to True, indicates that an Upgrade Eligibility Check needs to be performed. This will not actually perform the Upgrade. 
+  --perform-check-only: oneof<nothing, bool> # This flag, when set to True, indicates that an Upgrade Eligibility Check needs to be performed. This will not actually perform the Upgrade.
 ]: any -> record<DomainName: string, TargetVersion: record, PerformCheckOnly: record, ChangeProgressDetails: record<ChangeId: record, Message: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/2015-01-01/es/upgradeDomain")
-  let body = {"DomainName": $domain_name, "TargetVersion": $target_version, "PerformCheckOnly": $perform_check_only} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"DomainName": $domain_name, "TargetVersion": $target_version, "PerformCheckOnly": $perform_check_only} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

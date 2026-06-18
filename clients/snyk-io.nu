@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -79,7 +88,7 @@ def encoding-completer [] { ["base64" "plain"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "group-audit post" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "group-audit get-level-logs" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -103,8 +112,8 @@ export def commands []: nothing -> table {
 #
 # POST /group/{groupId}/audit
 # operationId: Get group level audit logs
-# --filters shape: {email?: string, event?: "api.access"|"group.cloud_config.settings.edit"|"group.create"|"group.delete"|"group.edit"|"group.feature_flags.edit"|"group.notification_settings.edit"|"group.org.add"|"group.org.remove"|"group.policy.create"|"group.policy.delete"|"group.policy.edit"|"group.request_access_settings.edit"|"group.role.create"|"group.role.edit"|"group.service_account.create"|"group.service_account.delete"|"group.service_account.edit"|"group.settings.edit"|"group.settings.feature_flag.edit"|"group.sso.auth0_connection.create"|"group.sso.auth0_connection.edit"|"group.sso.create"|"group.sso.edit"|"group.tag.create"|"group.tag.delete"|"group.user.add"|"group.user.provision.accept"|"group.user.provision.create"|"group.user.provision.delete"|"group.user.remove"|"group.user.role.edit", excludeEvent?: "api.access"|"group.cloud_config.settings.edit"|"group.create"|"group.delete"|"group.edit"|"group.feature_flags.edit"|"group.notification_settings.edit"|"group.org.add"|"group.org.remove"|"group.policy.create"|"group.policy.delete"|"group.policy.edit"|"group.request_access_settings.edit"|"group.role.create"|"group.role.edit"|"group.service_account.create"|"group.service_account.delete"|"group.service_account.edit"|"group.settings.edit"|"group.settings.feature_flag.edit"|"group.sso.auth0_connection.create"|"group.sso.auth0_connection.edit"|"group.sso.create"|"group.sso.edit"|"group.tag.create"|"group.tag.delete"|"group.user.add"|"group.user.provision.accept"|"group.user.provision.create"|"group.user.provision.delete"|"group.user.remove"|"group.user.role.edit", projectId?: string, userId?: string}
-export def "group-audit post" [
+# --filters shape: {email?: string, ... (4 more fields)}
+export def "group-audit get-level-logs" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -118,25 +127,25 @@ export def "group-audit post" [
   --qp-to: string # The date you wish to fetch results until, in the format YYYY-MM-DD. Default is today. Please note that logs are only available for past 3 months. (e.g. 2019-07-07)
   --page: float # The page of results to request. Audit logs are returned in page sizes of 100 (e.g. 1)
   --sort-order: string # The sort order of the returned audit logs by date. Values: `ASC`, `DESC`. Default: `DESC`. (e.g. ASC)
-  --filters: record # shape: {email?: string, event?: "api.access"|"group.cloud_config.settings.edit"|"group.create"|"group.delete"|"group.edit"|"group.feature_flags.edit"|"group.notification_settings.edit"|"group.org.add"|"group.org.remove"|"group.policy.create"|"group.policy.delete"|"group.policy.edit"|"group.request_access_settings.edit"|"group.role.create"|"group.role.edit"|"group.service_account.create"|"group.service_account.delete"|"group.service_account.edit"|"group.settings.edit"|"group.settings.feature_flag.edit"|"group.sso.auth0_connection.create"|"group.sso.auth0_connection.edit"|"group.sso.create"|"group.sso.edit"|"group.tag.create"|"group.tag.delete"|"group.user.add"|"group.user.provision.accept"|"group.user.provision.create"|"group.user.provision.delete"|"group.user.remove"|"group.user.role.edit", excludeEvent?: "api.access"|"group.cloud_config.settings.edit"|"group.create"|"group.delete"|"group.edit"|"group.feature_flags.edit"|"group.notification_settings.edit"|"group.org.add"|"group.org.remove"|"group.policy.create"|"group.policy.delete"|"group.policy.edit"|"group.request_access_settings.edit"|"group.role.create"|"group.role.edit"|"group.service_account.create"|"group.service_account.delete"|"group.service_account.edit"|"group.settings.edit"|"group.settings.feature_flag.edit"|"group.sso.auth0_connection.create"|"group.sso.auth0_connection.edit"|"group.sso.create"|"group.sso.edit"|"group.tag.create"|"group.tag.delete"|"group.user.add"|"group.user.provision.accept"|"group.user.provision.create"|"group.user.provision.delete"|"group.user.remove"|"group.user.role.edit", projectId?: string, userId?: string}
+  --filters: record # shape: {email?: string, ... (4 more fields)}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "sortOrder" $sort_order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/group/{group_id}/audit") $qp)
-  let body = {"filters": $filters} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/group/{group_id}/audit") $qp)
+  let req_body = {"filters": $filters} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List all members in a group
 #
 # GET /group/{groupId}/members
 # operationId: List all members in a group
-export def "group-members get" [
+export def "group-members list-list" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -149,7 +158,7 @@ export def "group-members get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/group/{group_id}/members"))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/group/{group_id}/members"))
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -159,7 +168,7 @@ export def "group-members get" [
 #
 # POST /group/{groupId}/org/{orgId}/members
 # operationId: Add a member to an organization within a group
-export def "group-org-members post" [
+export def "group-org-members create-to-organization-within" [
   group_id: string
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -176,19 +185,19 @@ export def "group-org-members post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({group_id: $group_id, org_id: $org_id} | format pattern "/group/{group_id}/org/{org_id}/members"))
-  let body = {"role": $role, "userId": $user_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), org_id: (encode-path-segment $org_id)} | format pattern "/group/{group_id}/org/{org_id}/members"))
+  let req_body = {"role": $role, "userId": $user_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List all organizations in a group
 #
 # GET /group/{groupId}/orgs
 # operationId: List all organizations in a group
-export def "group-orgs get" [
+export def "group-orgs list-list-organizations" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -205,7 +214,7 @@ export def "group-orgs get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "perPage" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "name" $name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/group/{group_id}/orgs") $qp)
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/group/{group_id}/orgs") $qp)
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -215,7 +224,7 @@ export def "group-orgs get" [
 #
 # GET /group/{groupId}/roles
 # operationId: List all roles in a group
-export def "group-roles get" [
+export def "group-roles list-list" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -228,7 +237,7 @@ export def "group-roles get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/group/{group_id}/roles"))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/group/{group_id}/roles"))
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -238,7 +247,7 @@ export def "group-roles get" [
 #
 # GET /group/{groupId}/settings
 # operationId: View group settings
-export def "group-settings get" [
+export def "group-settings get-view" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -251,7 +260,7 @@ export def "group-settings get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/group/{group_id}/settings"))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/group/{group_id}/settings"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -261,7 +270,7 @@ export def "group-settings get" [
 #
 # PUT /group/{groupId}/settings
 # operationId: Update group settings
-export def "group-settings put" [
+export def "group-settings update" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -274,7 +283,7 @@ export def "group-settings put" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/group/{group_id}/settings"))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/group/{group_id}/settings"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -284,7 +293,7 @@ export def "group-settings put" [
 #
 # GET /group/{groupId}/tags
 # operationId: List all tags in a group
-export def "group-tags get" [
+export def "group-tags list-list" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -300,7 +309,7 @@ export def "group-tags get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "perPage" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/group/{group_id}/tags") $qp)
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/group/{group_id}/tags") $qp)
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -310,7 +319,7 @@ export def "group-tags get" [
 #
 # POST /group/{groupId}/tags/delete
 # operationId: Delete tag from group
-export def "group-tags-delete post" [
+export def "group-tags-delete delete" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -327,12 +336,12 @@ export def "group-tags-delete post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/group/{group_id}/tags/delete"))
-  let body = {"force": $force, "key": $key, "value": $value} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/group/{group_id}/tags/delete"))
+  let req_body = {"force": $force, "key": $key, "value": $value} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Monitor Dep Graph
@@ -341,7 +350,7 @@ export def "group-tags-delete post" [
 # operationId: Monitor Dep Graph
 # --depGraph shape: {graph: record, pkgManager: record, pkgs: list, schemaVersion: string}
 # --meta shape: {targetFramework?: string}
-export def "monitor-dep-graph post" [
+export def "monitor-dep-graph create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -359,18 +368,18 @@ export def "monitor-dep-graph post" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "org" $org "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/monitor/dep-graph" $qp)
-  let body = {"depGraph": $dep_graph, "meta": $meta} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"depGraph": $dep_graph, "meta": $meta} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create a new organization
 #
 # POST /org
 # operationId: Create a new organization
-export def "org post" [
+export def "org create-new-organization" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -381,24 +390,24 @@ export def "org post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --group-id: string # The group ID. The `API_KEY` must have access to this group.
   name: string # The name of the new organization
-  --source-org-id: string # The id of an organization to copy settings from.  If provided, this organization must be associated with the same group.  The items that will be copied are:  Source control integrations (GitHub, GitLab, BitBucket) \+ Container registries integrations (ACR, Docker Hub, ECR, GCR) \+ Container orchestrators integrations (Kubernetes) \+ PaaS and Serverless Integrations (Heroku, AWS Lambda) \+ Notification integrations (Slack, Jira) \+ Policies \+ Ignore settings \+ Language settings \+ Infrastructure as Code settings \+ Snyk Code settings  The following will not be copied across: Service accounts \+ Members \+ Projects \+ Notification preferences
+  --source-org-id: string # The id of an organization to copy settings from. If provided, this organization must be associated with the same group. The items that will be copied are: Source control integrations (GitHub, GitLab, BitBucket) \+ Container registries integrations (ACR, Docker Hub, ECR, GCR) \+ Container orchestrators integrations (Kubernetes) \+ PaaS and Serverless Integrations (Heroku, AWS Lambda) \+ Notification integrations (Slack, Jira) \+ Policies \+ Ignore settings \+ Language settings \+ Infrastructure as Code settings \+ Snyk Code settings The following will not be copied across: Service accounts \+ Members \+ Projects \+ Notification preferences
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/org")
-  let body = {"groupId": $group_id, "name": $name, "sourceOrgId": $source_org_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"groupId": $group_id, "name": $name, "sourceOrgId": $source_org_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Remove organization
 #
 # DELETE /org/{orgId}
 # operationId: Remove organization
-export def "org delete" [
+export def "org delete-organization" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -411,7 +420,7 @@ export def "org delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/org/{org_id}"))
+  let full_url = (build-url $base ({org_id: (encode-path-segment $org_id)} | format pattern "/org/{org_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -421,8 +430,8 @@ export def "org delete" [
 #
 # POST /org/{orgId}/audit
 # operationId: Get organization level audit logs
-# --filters shape: {email?: string, event?: "api.access"|"org.billing.info.edit"|"org.billing.subscription.edit"|"org.cloud_config.settings.edit"|"org.create"|"org.delete"|"org.edit"|"org.ignore_policy.edit"|"org.integration.create"|"org.integration.delete"|"org.integration.edit"|"org.integration.settings.edit"|"org.language_settings.edit"|"org.license_rule.create"|"org.license_rule.delete"|"org.license_rule.edit"|"org.notification_settings.edit"|"org.policy.edit"|"org.project.add"|"org.project.attributes.edit"|"org.project.delete"|"org.project.edit"|"org.project.fix_pr.auto_open"|"org.project.fix_pr.manual_open"|"org.project.ignore.create"|"org.project.ignore.delete"|"org.project.ignore.edit"|"org.project.monitor"|"org.project.pr_check.edit"|"org.project.remove"|"org.project.settings.delete"|"org.project.settings.edit"|"org.project.stop_monitor"|"org.project.tag.add"|"org.project.tag.remove"|"org.project.test"|"org.request_access_settings.edit"|"org.sast_settings.edit"|"org.service_account.create"|"org.service_account.delete"|"org.service_account.edit"|"org.service_account.membership.upsert"|"org.settings.feature_flag.edit"|"org.target.create"|"org.target.delete"|"org.user.add"|"org.user.invite"|"org.user.invite.accept"|"org.user.invite.revoke"|"org.user.invite_link.accept"|"org.user.invite_link.create"|"org.user.invite_link.revoke"|"org.user.leave"|"org.user.provision.accept"|"org.user.provision.create"|"org.user.provision.delete"|"org.user.remove"|"org.user.role.create"|"org.user.role.delete"|"org.user.role.details.edit"|"org.user.role.edit"|"org.user.role.permissions.edit"|"org.webhook.add"|"org.webhook.delete", excludeEvent?: "api.access"|"org.billing.info.edit"|"org.billing.subscription.edit"|"org.cloud_config.settings.edit"|"org.create"|"org.delete"|"org.edit"|"org.ignore_policy.edit"|"org.integration.create"|"org.integration.delete"|"org.integration.edit"|"org.integration.settings.edit"|"org.language_settings.edit"|"org.license_rule.create"|"org.license_rule.delete"|"org.license_rule.edit"|"org.notification_settings.edit"|"org.policy.edit"|"org.project.add"|"org.project.attributes.edit"|"org.project.delete"|"org.project.edit"|"org.project.fix_pr.auto_open"|"org.project.fix_pr.manual_open"|"org.project.ignore.create"|"org.project.ignore.delete"|"org.project.ignore.edit"|"org.project.monitor"|"org.project.pr_check.edit"|"org.project.remove"|"org.project.settings.delete"|"org.project.settings.edit"|"org.project.stop_monitor"|"org.project.tag.add"|"org.project.tag.remove"|"org.project.test"|"org.request_access_settings.edit"|"org.sast_settings.edit"|"org.service_account.create"|"org.service_account.delete"|"org.service_account.edit"|"org.service_account.membership.upsert"|"org.settings.feature_flag.edit"|"org.target.create"|"org.target.delete"|"org.user.add"|"org.user.invite"|"org.user.invite.accept"|"org.user.invite.revoke"|"org.user.invite_link.accept"|"org.user.invite_link.create"|"org.user.invite_link.revoke"|"org.user.leave"|"org.user.provision.accept"|"org.user.provision.create"|"org.user.provision.delete"|"org.user.remove"|"org.user.role.create"|"org.user.role.delete"|"org.user.role.details.edit"|"org.user.role.edit"|"org.user.role.permissions.edit"|"org.webhook.add"|"org.webhook.delete", projectId?: string, userId?: string}
-export def "org-audit post" [
+# --filters shape: {email?: string, ... (4 more fields)}
+export def "org-audit get-organization-level-logs" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -436,18 +445,18 @@ export def "org-audit post" [
   --qp-to: string # The date you wish to fetch results until, in the format YYYY-MM-DD. Default is today. Please note that logs are only available for past 3 months. (e.g. 2019-07-07)
   --page: float # The page of results to request. Audit logs are returned in page sizes of 100. (e.g. 1)
   --sort-order: string # The sort order of the returned audit logs by date. Values: `ASC`, `DESC`. Default: `DESC`. (e.g. ASC)
-  --filters: record # shape: {email?: string, event?: "api.access"|"org.billing.info.edit"|"org.billing.subscription.edit"|"org.cloud_config.settings.edit"|"org.create"|"org.delete"|"org.edit"|"org.ignore_policy.edit"|"org.integration.create"|"org.integration.delete"|"org.integration.edit"|"org.integration.settings.edit"|"org.language_settings.edit"|"org.license_rule.create"|"org.license_rule.delete"|"org.license_rule.edit"|"org.notification_settings.edit"|"org.policy.edit"|"org.project.add"|"org.project.attributes.edit"|"org.project.delete"|"org.project.edit"|"org.project.fix_pr.auto_open"|"org.project.fix_pr.manual_open"|"org.project.ignore.create"|"org.project.ignore.delete"|"org.project.ignore.edit"|"org.project.monitor"|"org.project.pr_check.edit"|"org.project.remove"|"org.project.settings.delete"|"org.project.settings.edit"|"org.project.stop_monitor"|"org.project.tag.add"|"org.project.tag.remove"|"org.project.test"|"org.request_access_settings.edit"|"org.sast_settings.edit"|"org.service_account.create"|"org.service_account.delete"|"org.service_account.edit"|"org.service_account.membership.upsert"|"org.settings.feature_flag.edit"|"org.target.create"|"org.target.delete"|"org.user.add"|"org.user.invite"|"org.user.invite.accept"|"org.user.invite.revoke"|"org.user.invite_link.accept"|"org.user.invite_link.create"|"org.user.invite_link.revoke"|"org.user.leave"|"org.user.provision.accept"|"org.user.provision.create"|"org.user.provision.delete"|"org.user.remove"|"org.user.role.create"|"org.user.role.delete"|"org.user.role.details.edit"|"org.user.role.edit"|"org.user.role.permissions.edit"|"org.webhook.add"|"org.webhook.delete", excludeEvent?: "api.access"|"org.billing.info.edit"|"org.billing.subscription.edit"|"org.cloud_config.settings.edit"|"org.create"|"org.delete"|"org.edit"|"org.ignore_policy.edit"|"org.integration.create"|"org.integration.delete"|"org.integration.edit"|"org.integration.settings.edit"|"org.language_settings.edit"|"org.license_rule.create"|"org.license_rule.delete"|"org.license_rule.edit"|"org.notification_settings.edit"|"org.policy.edit"|"org.project.add"|"org.project.attributes.edit"|"org.project.delete"|"org.project.edit"|"org.project.fix_pr.auto_open"|"org.project.fix_pr.manual_open"|"org.project.ignore.create"|"org.project.ignore.delete"|"org.project.ignore.edit"|"org.project.monitor"|"org.project.pr_check.edit"|"org.project.remove"|"org.project.settings.delete"|"org.project.settings.edit"|"org.project.stop_monitor"|"org.project.tag.add"|"org.project.tag.remove"|"org.project.test"|"org.request_access_settings.edit"|"org.sast_settings.edit"|"org.service_account.create"|"org.service_account.delete"|"org.service_account.edit"|"org.service_account.membership.upsert"|"org.settings.feature_flag.edit"|"org.target.create"|"org.target.delete"|"org.user.add"|"org.user.invite"|"org.user.invite.accept"|"org.user.invite.revoke"|"org.user.invite_link.accept"|"org.user.invite_link.create"|"org.user.invite_link.revoke"|"org.user.leave"|"org.user.provision.accept"|"org.user.provision.create"|"org.user.provision.delete"|"org.user.remove"|"org.user.role.create"|"org.user.role.delete"|"org.user.role.details.edit"|"org.user.role.edit"|"org.user.role.permissions.edit"|"org.webhook.add"|"org.webhook.delete", projectId?: string, userId?: string}
+  --filters: record # shape: {email?: string, ... (4 more fields)}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "sortOrder" $sort_order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/org/{org_id}/audit") $qp)
-  let body = {"filters": $filters} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({org_id: (encode-path-segment $org_id)} | format pattern "/org/{org_id}/audit") $qp)
+  let req_body = {"filters": $filters} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List all dependencies
@@ -455,7 +464,7 @@ export def "org-audit post" [
 # POST /org/{orgId}/dependencies
 # operationId: List all dependencies
 # --filters shape: {depStatus?: string, dependencies?: any, languages?: list, licenses?: any, projects?: any, severity?: list}
-export def "org-dependencies post" [
+export def "org-dependencies list-list" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -475,19 +484,19 @@ export def "org-dependencies post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "perPage" $per_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/org/{org_id}/dependencies") $qp)
-  let body = {"filters": $filters} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({org_id: (encode-path-segment $org_id)} | format pattern "/org/{org_id}/dependencies") $qp)
+  let req_body = {"filters": $filters} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get an organization's entitlement value
 #
 # GET /org/{orgId}/entitlement/{entitlementKey}
 # operationId: Get an organization's entitlement value
-export def "org-entitlement get" [
+export def "org-entitlement get-organizations-value" [
   org_id: string
   entitlement_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -501,7 +510,7 @@ export def "org-entitlement get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org_id: $org_id, entitlement_key: $entitlement_key} | format pattern "/org/{org_id}/entitlement/{entitlement_key}"))
+  let full_url = (build-url $base ({org_id: (encode-path-segment $org_id), entitlement_key: (encode-path-segment $entitlement_key)} | format pattern "/org/{org_id}/entitlement/{entitlement_key}"))
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -511,7 +520,7 @@ export def "org-entitlement get" [
 #
 # GET /org/{orgId}/entitlements
 # operationId: List all entitlements
-export def "org-entitlements get" [
+export def "org-entitlements list-list" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -524,7 +533,7 @@ export def "org-entitlements get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/org/{org_id}/entitlements"))
+  let full_url = (build-url $base ({org_id: (encode-path-segment $org_id)} | format pattern "/org/{org_id}/entitlements"))
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -547,7 +556,7 @@ export def "org-integrations list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/org/{org_id}/integrations"))
+  let full_url = (build-url $base ({org_id: (encode-path-segment $org_id)} | format pattern "/org/{org_id}/integrations"))
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -557,9 +566,9 @@ export def "org-integrations list" [
 #
 # POST /org/{orgId}/integrations
 # operationId: Add new integration
-# --credentials shape: {AcrCredentials?: record, ArtifactoryCrCredentials?: record, AzureReposCredentials?: record, BitbucketCloudCredentials?: record, BitbucketServerCredentials?: record, DigitalOceanCrCredentials?: record, DockerHubCredentials?: record, EcrCredentials?: record, GcrCredentials?: record, GitHubCredentials?: record, GitHubCrCredentials?: record, GitHubEnterpriseCredentials?: record, GitLabCredentials?: record, GitLabCrCredentials?: record, GoogleArtifactCrCredentials?: record, HarborCrCredentials?: record, NexusCrCredentials?: record, QuayCrCredentials?: record}
+# --credentials shape: {AcrCredentials?: record, ArtifactoryCrCredentials?: record, AzureReposCredentials?: record, BitbucketCloudCredentials?: record, BitbucketServerCredentials?: record, DigitalOceanCrCredentials?: record, DockerHubCredentials?: record, EcrCredentials?: record, GcrCredentials?: record, GitHubCredentials?: record, GitHubCrCredentials?: record, GitHubEnterpriseCredentials?: record, GitLabCredentials?: record, GitLabCrCredentials?: record, GoogleArtifactCrCredentials?: record, ... (3 more fields)}
 # --broker shape: {enabled?: bool}
-export def "org-integrations post" [
+export def "org-integrations create-new" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -569,19 +578,19 @@ export def "org-integrations post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --credentials: record # credentials for given integration — shape: {AcrCredentials?: record, ArtifactoryCrCredentials?: record, AzureReposCredentials?: record, BitbucketCloudCredentials?: record, BitbucketServerCredentials?: record, DigitalOceanCrCredentials?: record, DockerHubCredentials?: record, EcrCredentials?: record, GcrCredentials?: record, GitHubCredentials?: record, GitHubCrCredentials?: record, GitHubEnterpriseCredentials?: record, GitLabCredentials?: record, GitLabCrCredentials?: record, GoogleArtifactCrCredentials?: record, HarborCrCredentials?: record, NexusCrCredentials?: record, QuayCrCredentials?: record}
+  --credentials: record # credentials for given integration — shape: {AcrCredentials?: record, ArtifactoryCrCredentials?: record, AzureReposCredentials?: record, BitbucketCloudCredentials?: record, BitbucketServerCredentials?: record, DigitalOceanCrCredentials?: record, DockerHubCredentials?: record, EcrCredentials?: record, GcrCredentials?: record, GitHubCredentials?: record, GitHubCrCredentials?: record, GitHubEnterpriseCredentials?: record, GitLabCredentials?: record, GitLabCrCredentials?: record, GoogleArtifactCrCredentials?: record, ... (3 more fields)}
   --type: string@type-completer # integration type
   --broker: record # brokered integration settings — shape: {enabled?: bool}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/org/{org_id}/integrations"))
-  let body = {"credentials": $credentials, "type": $type, "broker": $broker} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({org_id: (encode-path-segment $org_id)} | format pattern "/org/{org_id}/integrations"))
+  let req_body = {"credentials": $credentials, "type": $type, "broker": $broker} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update existing integration
@@ -589,8 +598,8 @@ export def "org-integrations post" [
 # PUT /org/{orgId}/integrations/{integrationId}
 # operationId: Update existing integration
 # --broker shape: {enabled?: bool}
-# --credentials shape: {AcrCredentials?: record, ArtifactoryCrCredentials?: record, AzureReposCredentials?: record, BitbucketCloudCredentials?: record, BitbucketServerCredentials?: record, DigitalOceanCrCredentials?: record, DockerHubCredentials?: record, EcrCredentials?: record, GcrCredentials?: record, GitHubCredentials?: record, GitHubCrCredentials?: record, GitHubEnterpriseCredentials?: record, GitLabCredentials?: record, GitLabCrCredentials?: record, GoogleArtifactCrCredentials?: record, HarborCrCredentials?: record, NexusCrCredentials?: record, QuayCrCredentials?: record}
-export def "org-integrations put" [
+# --credentials shape: {AcrCredentials?: record, ArtifactoryCrCredentials?: record, AzureReposCredentials?: record, BitbucketCloudCredentials?: record, BitbucketServerCredentials?: record, DigitalOceanCrCredentials?: record, DockerHubCredentials?: record, EcrCredentials?: record, GcrCredentials?: record, GitHubCredentials?: record, GitHubCrCredentials?: record, GitHubEnterpriseCredentials?: record, GitLabCredentials?: record, GitLabCrCredentials?: record, GoogleArtifactCrCredentials?: record, ... (3 more fields)}
+export def "org-integrations update-existing" [
   org_id: string
   integration_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -603,24 +612,24 @@ export def "org-integrations put" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --broker: record # brokered integration settings — shape: {enabled?: bool}
   --type: string@type-completer # integration type
-  --credentials: record # credentials for given integration — shape: {AcrCredentials?: record, ArtifactoryCrCredentials?: record, AzureReposCredentials?: record, BitbucketCloudCredentials?: record, BitbucketServerCredentials?: record, DigitalOceanCrCredentials?: record, DockerHubCredentials?: record, EcrCredentials?: record, GcrCredentials?: record, GitHubCredentials?: record, GitHubCrCredentials?: record, GitHubEnterpriseCredentials?: record, GitLabCredentials?: record, GitLabCrCredentials?: record, GoogleArtifactCrCredentials?: record, HarborCrCredentials?: record, NexusCrCredentials?: record, QuayCrCredentials?: record}
+  --credentials: record # credentials for given integration — shape: {AcrCredentials?: record, ArtifactoryCrCredentials?: record, AzureReposCredentials?: record, BitbucketCloudCredentials?: record, BitbucketServerCredentials?: record, DigitalOceanCrCredentials?: record, DockerHubCredentials?: record, EcrCredentials?: record, GcrCredentials?: record, GitHubCredentials?: record, GitHubCrCredentials?: record, GitHubEnterpriseCredentials?: record, GitLabCredentials?: record, GitLabCrCredentials?: record, GoogleArtifactCrCredentials?: record, ... (3 more fields)}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org_id: $org_id, integration_id: $integration_id} | format pattern "/org/{org_id}/integrations/{integration_id}"))
-  let body = {"broker": $broker, "type": $type, "credentials": $credentials} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({org_id: (encode-path-segment $org_id), integration_id: (encode-path-segment $integration_id)} | format pattern "/org/{org_id}/integrations/{integration_id}"))
+  let req_body = {"broker": $broker, "type": $type, "credentials": $credentials} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete credentials
 #
 # DELETE /org/{orgId}/integrations/{integrationId}/authentication
 # operationId: Delete credentials
-export def "org-integrations-authentication delete" [
+export def "org-integrations-authentication delete-credentials" [
   org_id: string
   integration_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -634,7 +643,7 @@ export def "org-integrations-authentication delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org_id: $org_id, integration_id: $integration_id} | format pattern "/org/{org_id}/integrations/{integration_id}/authentication"))
+  let full_url = (build-url $base ({org_id: (encode-path-segment $org_id), integration_id: (encode-path-segment $integration_id)} | format pattern "/org/{org_id}/integrations/{integration_id}/authentication"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -644,7 +653,7 @@ export def "org-integrations-authentication delete" [
 #
 # POST /org/{orgId}/integrations/{integrationId}/authentication/provision-token
 # operationId: Provision new broker token
-export def "org-integrations-authentication-provision-token post" [
+export def "org-integrations-authentication-provision-token create-new-broker" [
   org_id: string
   integration_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -658,7 +667,7 @@ export def "org-integrations-authentication-provision-token post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org_id: $org_id, integration_id: $integration_id} | format pattern "/org/{org_id}/integrations/{integration_id}/authentication/provision-token"))
+  let full_url = (build-url $base ({org_id: (encode-path-segment $org_id), integration_id: (encode-path-segment $integration_id)} | format pattern "/org/{org_id}/integrations/{integration_id}/authentication/provision-token"))
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -668,7 +677,7 @@ export def "org-integrations-authentication-provision-token post" [
 #
 # POST /org/{orgId}/integrations/{integrationId}/authentication/switch-token
 # operationId: Switch between broker tokens
-export def "org-integrations-authentication-switch-token post" [
+export def "org-integrations-authentication-switch-token create-between-broker" [
   org_id: string
   integration_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -682,7 +691,7 @@ export def "org-integrations-authentication-switch-token post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org_id: $org_id, integration_id: $integration_id} | format pattern "/org/{org_id}/integrations/{integration_id}/authentication/switch-token"))
+  let full_url = (build-url $base ({org_id: (encode-path-segment $org_id), integration_id: (encode-path-segment $integration_id)} | format pattern "/org/{org_id}/integrations/{integration_id}/authentication/switch-token"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -692,7 +701,7 @@ export def "org-integrations-authentication-switch-token post" [
 #
 # POST /org/{orgId}/integrations/{integrationId}/clone
 # operationId: Clone an integration (with settings and credentials)
-export def "org-integrations-clone post" [
+export def "org-integrations-clone clone-with-settings-and-credentials" [
   org_id: string
   integration_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -708,12 +717,12 @@ export def "org-integrations-clone post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org_id: $org_id, integration_id: $integration_id} | format pattern "/org/{org_id}/integrations/{integration_id}/clone"))
-  let body = {"destinationOrgPublicId": $destination_org_public_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({org_id: (encode-path-segment $org_id), integration_id: (encode-path-segment $integration_id)} | format pattern "/org/{org_id}/integrations/{integration_id}/clone"))
+  let req_body = {"destinationOrgPublicId": $destination_org_public_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Import targets
@@ -721,7 +730,7 @@ export def "org-integrations-clone post" [
 # POST /org/{orgId}/integrations/{integrationId}/import
 # operationId: Import targets
 # --target shape: {branch: string, name: string, owner: string}
-export def "org-integrations-import post" [
+export def "org-integrations-import import-targets" [
   org_id: string
   integration_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -739,19 +748,19 @@ export def "org-integrations-import post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org_id: $org_id, integration_id: $integration_id} | format pattern "/org/{org_id}/integrations/{integration_id}/import"))
-  let body = {"exclusionGlobs": $exclusion_globs, "files": $files, "target": $target} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({org_id: (encode-path-segment $org_id), integration_id: (encode-path-segment $integration_id)} | format pattern "/org/{org_id}/integrations/{integration_id}/import"))
+  let req_body = {"exclusionGlobs": $exclusion_globs, "files": $files, "target": $target} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get import job details
 #
 # GET /org/{orgId}/integrations/{integrationId}/import/{jobId}
 # operationId: Get import job details
-export def "org-integrations-import get" [
+export def "org-integrations-import get-job-details" [
   org_id: string
   integration_id: string
   job_id: string
@@ -766,7 +775,7 @@ export def "org-integrations-import get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org_id: $org_id, integration_id: $integration_id, job_id: $job_id} | format pattern "/org/{org_id}/integrations/{integration_id}/import/{job_id}"))
+  let full_url = (build-url $base ({org_id: (encode-path-segment $org_id), integration_id: (encode-path-segment $integration_id), job_id: (encode-path-segment $job_id)} | format pattern "/org/{org_id}/integrations/{integration_id}/import/{job_id}"))
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -776,7 +785,7 @@ export def "org-integrations-import get" [
 #
 # GET /org/{orgId}/integrations/{integrationId}/settings
 # operationId: Retrieve
-export def "org-integrations-settings retrieve" [
+export def "org-integrations-settings get" [
   org_id: string
   integration_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -790,7 +799,7 @@ export def "org-integrations-settings retrieve" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org_id: $org_id, integration_id: $integration_id} | format pattern "/org/{org_id}/integrations/{integration_id}/settings"))
+  let full_url = (build-url $base ({org_id: (encode-path-segment $org_id), integration_id: (encode-path-segment $integration_id)} | format pattern "/org/{org_id}/integrations/{integration_id}/settings"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -829,19 +838,19 @@ export def "org-integrations-settings update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org_id: $org_id, integration_id: $integration_id} | format pattern "/org/{org_id}/integrations/{integration_id}/settings"))
-  let body = {"autoDepUpgradeEnabled": $auto_dep_upgrade_enabled, "autoDepUpgradeIgnoredDependencies": $auto_dep_upgrade_ignored_dependencies, "autoDepUpgradeLimit": $auto_dep_upgrade_limit, "autoDepUpgradeMinAge": $auto_dep_upgrade_min_age, "autoRemediationPrs": $auto_remediation_prs, "dockerfileSCMEnabled": $dockerfile_scm_enabled, "manualRemediationPrs": $manual_remediation_prs, "pullRequestAssignment": $pull_request_assignment, "pullRequestFailOnAnyVulns": $pull_request_fail_on_any_vulns, "pullRequestFailOnlyForHighSeverity": $pull_request_fail_only_for_high_severity, "pullRequestTestEnabled": $pull_request_test_enabled} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({org_id: (encode-path-segment $org_id), integration_id: (encode-path-segment $integration_id)} | format pattern "/org/{org_id}/integrations/{integration_id}/settings"))
+  let req_body = {"autoDepUpgradeEnabled": $auto_dep_upgrade_enabled, "autoDepUpgradeIgnoredDependencies": $auto_dep_upgrade_ignored_dependencies, "autoDepUpgradeLimit": $auto_dep_upgrade_limit, "autoDepUpgradeMinAge": $auto_dep_upgrade_min_age, "autoRemediationPrs": $auto_remediation_prs, "dockerfileSCMEnabled": $dockerfile_scm_enabled, "manualRemediationPrs": $manual_remediation_prs, "pullRequestAssignment": $pull_request_assignment, "pullRequestFailOnAnyVulns": $pull_request_fail_on_any_vulns, "pullRequestFailOnlyForHighSeverity": $pull_request_fail_only_for_high_severity, "pullRequestTestEnabled": $pull_request_test_enabled} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get existing integration by type
 #
 # GET /org/{orgId}/integrations/{type}
 # operationId: Get existing integration by type
-export def "org-integrations get" [
+export def "org-integrations get-existing" [
   org_id: string
   type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -855,7 +864,7 @@ export def "org-integrations get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org_id: $org_id, type: $type} | format pattern "/org/{org_id}/integrations/{type}"))
+  let full_url = (build-url $base ({org_id: (encode-path-segment $org_id), type: (encode-path-segment $type)} | format pattern "/org/{org_id}/integrations/{type}"))
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -865,7 +874,7 @@ export def "org-integrations get" [
 #
 # POST /org/{orgId}/invite
 # operationId: Invite users
-export def "org-invite post" [
+export def "org-invite create-users" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -881,12 +890,12 @@ export def "org-invite post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/org/{org_id}/invite"))
-  let body = {"email": $email, "isAdmin": $is_admin} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({org_id: (encode-path-segment $org_id)} | format pattern "/org/{org_id}/invite"))
+  let req_body = {"email": $email, "isAdmin": $is_admin} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List all licenses
@@ -894,7 +903,7 @@ export def "org-invite post" [
 # POST /org/{orgId}/licenses
 # operationId: List all licenses
 # --filters shape: {dependencies?: any, languages?: list, licenses?: any, projects?: any, severity?: list}
-export def "org-licenses post" [
+export def "org-licenses list-list" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -912,19 +921,19 @@ export def "org-licenses post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/org/{org_id}/licenses") $qp)
-  let body = {"filters": $filters} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({org_id: (encode-path-segment $org_id)} | format pattern "/org/{org_id}/licenses") $qp)
+  let req_body = {"filters": $filters} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List Members
 #
 # GET /org/{orgId}/members
 # operationId: List Members
-export def "org-members get" [
+export def "org-members list" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -939,7 +948,7 @@ export def "org-members get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "includeGroupAdmins" $include_group_admins "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/org/{org_id}/members") $qp)
+  let full_url = (build-url $base ({org_id: (encode-path-segment $org_id)} | format pattern "/org/{org_id}/members") $qp)
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -949,7 +958,7 @@ export def "org-members get" [
 #
 # PUT /org/{orgId}/members/update/{userId}
 # operationId: Update a member's role in the organization
-export def "org-members-update put" [
+export def "org-members-update update-members-role-in-organization" [
   org_id: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -965,19 +974,19 @@ export def "org-members-update put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org_id: $org_id, user_id: $user_id} | format pattern "/org/{org_id}/members/update/{user_id}"))
-  let body = {"rolePublicId": $role_public_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({org_id: (encode-path-segment $org_id), user_id: (encode-path-segment $user_id)} | format pattern "/org/{org_id}/members/update/{user_id}"))
+  let req_body = {"rolePublicId": $role_public_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Remove a member from the organization
 #
 # DELETE /org/{orgId}/members/{userId}
 # operationId: Remove a member from the organization
-export def "org-members delete" [
+export def "org-members delete-from-organization" [
   org_id: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -991,7 +1000,7 @@ export def "org-members delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org_id: $org_id, user_id: $user_id} | format pattern "/org/{org_id}/members/{user_id}"))
+  let full_url = (build-url $base ({org_id: (encode-path-segment $org_id), user_id: (encode-path-segment $user_id)} | format pattern "/org/{org_id}/members/{user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1001,7 +1010,7 @@ export def "org-members delete" [
 #
 # PUT /org/{orgId}/members/{userId}
 # operationId: Update a member in the organization
-export def "org-members put" [
+export def "org-members update-in-organization" [
   org_id: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1017,12 +1026,12 @@ export def "org-members put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org_id: $org_id, user_id: $user_id} | format pattern "/org/{org_id}/members/{user_id}"))
-  let body = {"role": $role} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({org_id: (encode-path-segment $org_id), user_id: (encode-path-segment $user_id)} | format pattern "/org/{org_id}/members/{user_id}"))
+  let req_body = {"role": $role} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get organization notification settings
@@ -1041,7 +1050,7 @@ export def "org-notification-settings get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/org/{org_id}/notification-settings"))
+  let full_url = (build-url $base ({org_id: (encode-path-segment $org_id)} | format pattern "/org/{org_id}/notification-settings"))
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1055,7 +1064,7 @@ export def "org-notification-settings get" [
 # --project-imported shape: {enabled: bool}
 # --test-limit shape: {enabled: bool}
 # --weekly-report shape: {enabled: bool}
-export def "org-notification-settings put" [
+export def "org-notification-settings update" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1073,12 +1082,12 @@ export def "org-notification-settings put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/org/{org_id}/notification-settings"))
-  let body = {"new-issues-remediations": $new_issues_remediations, "project-imported": $project_imported, "test-limit": $test_limit, "weekly-report": $weekly_report} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({org_id: (encode-path-segment $org_id)} | format pattern "/org/{org_id}/notification-settings"))
+  let req_body = {"new-issues-remediations": $new_issues_remediations, "project-imported": $project_imported, "test-limit": $test_limit, "weekly-report": $weekly_report} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a project
@@ -1099,7 +1108,7 @@ export def "org-project delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org_id: $org_id, project_id: $project_id} | format pattern "/org/{org_id}/project/{project_id}"))
+  let full_url = (build-url $base ({org_id: (encode-path-segment $org_id), project_id: (encode-path-segment $project_id)} | format pattern "/org/{org_id}/project/{project_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1109,7 +1118,7 @@ export def "org-project delete" [
 #
 # GET /org/{orgId}/project/{projectId}
 # operationId: Retrieve a single project
-export def "org-project get" [
+export def "org-project get-single" [
   org_id: string
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1123,7 +1132,7 @@ export def "org-project get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org_id: $org_id, project_id: $project_id} | format pattern "/org/{org_id}/project/{project_id}"))
+  let full_url = (build-url $base ({org_id: (encode-path-segment $org_id), project_id: (encode-path-segment $project_id)} | format pattern "/org/{org_id}/project/{project_id}"))
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1134,7 +1143,7 @@ export def "org-project get" [
 # PUT /org/{orgId}/project/{projectId}
 # operationId: Update a project
 # --owner shape: {id?: string}
-export def "org-project put" [
+export def "org-project update" [
   org_id: string
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1151,19 +1160,19 @@ export def "org-project put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org_id: $org_id, project_id: $project_id} | format pattern "/org/{org_id}/project/{project_id}"))
-  let body = {"branch": $branch, "owner": $owner} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({org_id: (encode-path-segment $org_id), project_id: (encode-path-segment $project_id)} | format pattern "/org/{org_id}/project/{project_id}"))
+  let req_body = {"branch": $branch, "owner": $owner} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Activate
 #
 # POST /org/{orgId}/project/{projectId}/activate
 # operationId: Activate
-export def "org-project-activate post" [
+export def "org-project-activate create" [
   org_id: string
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1177,7 +1186,7 @@ export def "org-project-activate post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org_id: $org_id, project_id: $project_id} | format pattern "/org/{org_id}/project/{project_id}/activate"))
+  let full_url = (build-url $base ({org_id: (encode-path-segment $org_id), project_id: (encode-path-segment $project_id)} | format pattern "/org/{org_id}/project/{project_id}/activate"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1188,7 +1197,7 @@ export def "org-project-activate post" [
 # POST /org/{orgId}/project/{projectId}/aggregated-issues
 # operationId: List all Aggregated issues
 # --filters shape: {exploitMaturity?: list, ignored?: bool, patched?: bool, priority?: record, severities?: list, types?: list}
-export def "org-project-aggregated-issues post" [
+export def "org-project-aggregated-issues list-list" [
   org_id: string
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1206,19 +1215,19 @@ export def "org-project-aggregated-issues post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org_id: $org_id, project_id: $project_id} | format pattern "/org/{org_id}/project/{project_id}/aggregated-issues"))
-  let body = {"filters": $filters, "includeDescription": $include_description, "includeIntroducedThrough": $include_introduced_through} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({org_id: (encode-path-segment $org_id), project_id: (encode-path-segment $project_id)} | format pattern "/org/{org_id}/project/{project_id}/aggregated-issues"))
+  let req_body = {"filters": $filters, "includeDescription": $include_description, "includeIntroducedThrough": $include_introduced_through} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Applying attributes
 #
 # POST /org/{orgId}/project/{projectId}/attributes
 # operationId: Applying attributes
-export def "org-project-attributes post" [
+export def "org-project-attributes create-applying" [
   org_id: string
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1236,19 +1245,19 @@ export def "org-project-attributes post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org_id: $org_id, project_id: $project_id} | format pattern "/org/{org_id}/project/{project_id}/attributes"))
-  let body = {"criticality": $criticality, "environment": $environment, "lifecycle": $lifecycle} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({org_id: (encode-path-segment $org_id), project_id: (encode-path-segment $project_id)} | format pattern "/org/{org_id}/project/{project_id}/attributes"))
+  let req_body = {"criticality": $criticality, "environment": $environment, "lifecycle": $lifecycle} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deactivate
 #
 # POST /org/{orgId}/project/{projectId}/deactivate
 # operationId: Deactivate
-export def "org-project-deactivate post" [
+export def "org-project-deactivate create" [
   org_id: string
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1262,7 +1271,7 @@ export def "org-project-deactivate post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org_id: $org_id, project_id: $project_id} | format pattern "/org/{org_id}/project/{project_id}/deactivate"))
+  let full_url = (build-url $base ({org_id: (encode-path-segment $org_id), project_id: (encode-path-segment $project_id)} | format pattern "/org/{org_id}/project/{project_id}/deactivate"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1272,7 +1281,7 @@ export def "org-project-deactivate post" [
 #
 # GET /org/{orgId}/project/{projectId}/dep-graph
 # operationId: Get Project dependency graph
-export def "org-project-dep-graph get" [
+export def "org-project-dep-graph get-dependency" [
   org_id: string
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1286,7 +1295,7 @@ export def "org-project-dep-graph get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org_id: $org_id, project_id: $project_id} | format pattern "/org/{org_id}/project/{project_id}/dep-graph"))
+  let full_url = (build-url $base ({org_id: (encode-path-segment $org_id), project_id: (encode-path-segment $project_id)} | format pattern "/org/{org_id}/project/{project_id}/dep-graph"))
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1297,7 +1306,7 @@ export def "org-project-dep-graph get" [
 # POST /org/{orgId}/project/{projectId}/history
 # operationId: List all project snapshots
 # --filters shape: {imageId?: string}
-export def "org-project-history post" [
+export def "org-project-history list-list-snapshots" [
   org_id: string
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1316,12 +1325,12 @@ export def "org-project-history post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "perPage" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({org_id: $org_id, project_id: $project_id} | format pattern "/org/{org_id}/project/{project_id}/history") $qp)
-  let body = {"filters": $filters} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({org_id: (encode-path-segment $org_id), project_id: (encode-path-segment $project_id)} | format pattern "/org/{org_id}/project/{project_id}/history") $qp)
+  let req_body = {"filters": $filters} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List all project snapshot aggregated issues
@@ -1329,7 +1338,7 @@ export def "org-project-history post" [
 # POST /org/{orgId}/project/{projectId}/history/{snapshotId}/aggregated-issues
 # operationId: List all project snapshot aggregated issues
 # --filters shape: {exploitMaturity?: list, ignored?: bool, patched?: bool, priority?: record, severities?: list, types?: list}
-export def "org-project-history-aggregated-issues post" [
+export def "org-project-history-aggregated-issues list-list-snapshot" [
   org_id: string
   project_id: string
   snapshot_id: string
@@ -1348,19 +1357,19 @@ export def "org-project-history-aggregated-issues post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org_id: $org_id, project_id: $project_id, snapshot_id: $snapshot_id} | format pattern "/org/{org_id}/project/{project_id}/history/{snapshot_id}/aggregated-issues"))
-  let body = {"filters": $filters, "includeDescription": $include_description, "includeIntroducedThrough": $include_introduced_through} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({org_id: (encode-path-segment $org_id), project_id: (encode-path-segment $project_id), snapshot_id: (encode-path-segment $snapshot_id)} | format pattern "/org/{org_id}/project/{project_id}/history/{snapshot_id}/aggregated-issues"))
+  let req_body = {"filters": $filters, "includeDescription": $include_description, "includeIntroducedThrough": $include_introduced_through} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List all project snapshot issue paths
 #
 # GET /org/{orgId}/project/{projectId}/history/{snapshotId}/issue/{issueId}/paths
 # operationId: List all project snapshot issue paths
-export def "org-project-history-issue-paths get" [
+export def "org-project-history-issue-paths list-list-snapshot" [
   org_id: string
   project_id: string
   snapshot_id: string
@@ -1379,7 +1388,7 @@ export def "org-project-history-issue-paths get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "perPage" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({org_id: $org_id, project_id: $project_id, snapshot_id: $snapshot_id, issue_id: $issue_id} | format pattern "/org/{org_id}/project/{project_id}/history/{snapshot_id}/issue/{issue_id}/paths") $qp)
+  let full_url = (build-url $base ({org_id: (encode-path-segment $org_id), project_id: (encode-path-segment $project_id), snapshot_id: (encode-path-segment $snapshot_id), issue_id: (encode-path-segment $issue_id)} | format pattern "/org/{org_id}/project/{project_id}/history/{snapshot_id}/issue/{issue_id}/paths") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1404,7 +1413,7 @@ export def "org-project-ignore delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org_id: $org_id, project_id: $project_id, issue_id: $issue_id} | format pattern "/org/{org_id}/project/{project_id}/ignore/{issue_id}"))
+  let full_url = (build-url $base ({org_id: (encode-path-segment $org_id), project_id: (encode-path-segment $project_id), issue_id: (encode-path-segment $issue_id)} | format pattern "/org/{org_id}/project/{project_id}/ignore/{issue_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1429,7 +1438,7 @@ export def "org-project-ignore get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org_id: $org_id, project_id: $project_id, issue_id: $issue_id} | format pattern "/org/{org_id}/project/{project_id}/ignore/{issue_id}"))
+  let full_url = (build-url $base ({org_id: (encode-path-segment $org_id), project_id: (encode-path-segment $project_id), issue_id: (encode-path-segment $issue_id)} | format pattern "/org/{org_id}/project/{project_id}/ignore/{issue_id}"))
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1439,7 +1448,7 @@ export def "org-project-ignore get" [
 #
 # POST /org/{orgId}/project/{projectId}/ignore/{issueId}
 # operationId: Add ignore
-export def "org-project-ignore post" [
+export def "org-project-ignore create" [
   org_id: string
   project_id: string
   issue_id: string
@@ -1460,19 +1469,19 @@ export def "org-project-ignore post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org_id: $org_id, project_id: $project_id, issue_id: $issue_id} | format pattern "/org/{org_id}/project/{project_id}/ignore/{issue_id}"))
-  let body = {"disregardIfFixable": $disregard_if_fixable, "expires": $expires, "ignorePath": $ignore_path, "reason": $reason, "reasonType": $reason_type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({org_id: (encode-path-segment $org_id), project_id: (encode-path-segment $project_id), issue_id: (encode-path-segment $issue_id)} | format pattern "/org/{org_id}/project/{project_id}/ignore/{issue_id}"))
+  let req_body = {"disregardIfFixable": $disregard_if_fixable, "expires": $expires, "ignorePath": $ignore_path, "reason": $reason, "reasonType": $reason_type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Replace ignores
 #
 # PUT /org/{orgId}/project/{projectId}/ignore/{issueId}
 # operationId: Replace ignores
-export def "org-project-ignore put" [
+export def "org-project-ignore update" [
   org_id: string
   project_id: string
   issue_id: string
@@ -1487,7 +1496,7 @@ export def "org-project-ignore put" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org_id: $org_id, project_id: $project_id, issue_id: $issue_id} | format pattern "/org/{org_id}/project/{project_id}/ignore/{issue_id}"))
+  let full_url = (build-url $base ({org_id: (encode-path-segment $org_id), project_id: (encode-path-segment $project_id), issue_id: (encode-path-segment $issue_id)} | format pattern "/org/{org_id}/project/{project_id}/ignore/{issue_id}"))
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1497,7 +1506,7 @@ export def "org-project-ignore put" [
 #
 # GET /org/{orgId}/project/{projectId}/ignores
 # operationId: List all ignores
-export def "org-project-ignores get" [
+export def "org-project-ignores list-list" [
   org_id: string
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1511,7 +1520,7 @@ export def "org-project-ignores get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org_id: $org_id, project_id: $project_id} | format pattern "/org/{org_id}/project/{project_id}/ignores"))
+  let full_url = (build-url $base ({org_id: (encode-path-segment $org_id), project_id: (encode-path-segment $project_id)} | format pattern "/org/{org_id}/project/{project_id}/ignores"))
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1522,7 +1531,7 @@ export def "org-project-ignores get" [
 # POST /org/{orgId}/project/{projectId}/issue/{issueId}/jira-issue
 # operationId: Create jira issue
 # --fields shape: {issuetype?: record, project?: record, summary?: string}
-export def "org-project-issue-jira-issue post" [
+export def "org-project-issue-jira-issue create" [
   org_id: string
   project_id: string
   issue_id: string
@@ -1539,19 +1548,19 @@ export def "org-project-issue-jira-issue post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org_id: $org_id, project_id: $project_id, issue_id: $issue_id} | format pattern "/org/{org_id}/project/{project_id}/issue/{issue_id}/jira-issue"))
-  let body = {"fields": $fields} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({org_id: (encode-path-segment $org_id), project_id: (encode-path-segment $project_id), issue_id: (encode-path-segment $issue_id)} | format pattern "/org/{org_id}/project/{project_id}/issue/{issue_id}/jira-issue"))
+  let req_body = {"fields": $fields} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List all project issue paths
 #
 # GET /org/{orgId}/project/{projectId}/issue/{issueId}/paths
 # operationId: List all project issue paths
-export def "org-project-issue-paths get" [
+export def "org-project-issue-paths list-list" [
   org_id: string
   project_id: string
   issue_id: string
@@ -1570,7 +1579,7 @@ export def "org-project-issue-paths get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "snapshotId" $snapshot_id "scalar") (serialize-qp "perPage" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({org_id: $org_id, project_id: $project_id, issue_id: $issue_id} | format pattern "/org/{org_id}/project/{project_id}/issue/{issue_id}/paths") $qp)
+  let full_url = (build-url $base ({org_id: (encode-path-segment $org_id), project_id: (encode-path-segment $project_id), issue_id: (encode-path-segment $issue_id)} | format pattern "/org/{org_id}/project/{project_id}/issue/{issue_id}/paths") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1580,7 +1589,7 @@ export def "org-project-issue-paths get" [
 #
 # GET /org/{orgId}/project/{projectId}/jira-issues
 # operationId: List all jira issues
-export def "org-project-jira-issues get" [
+export def "org-project-jira-issues list-list" [
   org_id: string
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1594,7 +1603,7 @@ export def "org-project-jira-issues get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org_id: $org_id, project_id: $project_id} | format pattern "/org/{org_id}/project/{project_id}/jira-issues"))
+  let full_url = (build-url $base ({org_id: (encode-path-segment $org_id), project_id: (encode-path-segment $project_id)} | format pattern "/org/{org_id}/project/{project_id}/jira-issues"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1604,7 +1613,7 @@ export def "org-project-jira-issues get" [
 #
 # PUT /org/{orgId}/project/{projectId}/move
 # operationId: Move project to a different organization
-export def "org-project-move put" [
+export def "org-project-move move-to-different-organization" [
   org_id: string
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1620,12 +1629,12 @@ export def "org-project-move put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org_id: $org_id, project_id: $project_id} | format pattern "/org/{org_id}/project/{project_id}/move"))
-  let body = {"targetOrgId": $target_org_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({org_id: (encode-path-segment $org_id), project_id: (encode-path-segment $project_id)} | format pattern "/org/{org_id}/project/{project_id}/move"))
+  let req_body = {"targetOrgId": $target_org_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete project settings
@@ -1646,7 +1655,7 @@ export def "org-project-settings delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org_id: $org_id, project_id: $project_id} | format pattern "/org/{org_id}/project/{project_id}/settings"))
+  let full_url = (build-url $base ({org_id: (encode-path-segment $org_id), project_id: (encode-path-segment $project_id)} | format pattern "/org/{org_id}/project/{project_id}/settings"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1656,7 +1665,7 @@ export def "org-project-settings delete" [
 #
 # GET /org/{orgId}/project/{projectId}/settings
 # operationId: List project settings
-export def "org-project-settings get" [
+export def "org-project-settings list" [
   org_id: string
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1670,7 +1679,7 @@ export def "org-project-settings get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org_id: $org_id, project_id: $project_id} | format pattern "/org/{org_id}/project/{project_id}/settings"))
+  let full_url = (build-url $base ({org_id: (encode-path-segment $org_id), project_id: (encode-path-segment $project_id)} | format pattern "/org/{org_id}/project/{project_id}/settings"))
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1682,7 +1691,7 @@ export def "org-project-settings get" [
 # operationId: Update project settings
 # --autoRemediationPrs shape: {backlogPrsEnabled?: bool, freshPrsEnabled?: bool, usePatchRemediation?: bool}
 # --pullRequestAssignment shape: {assignees?: list, enabled?: bool, type?: "auto"|"manual"}
-export def "org-project-settings put" [
+export def "org-project-settings update" [
   org_id: string
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1706,19 +1715,19 @@ export def "org-project-settings put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org_id: $org_id, project_id: $project_id} | format pattern "/org/{org_id}/project/{project_id}/settings"))
-  let body = {"autoDepUpgradeEnabled": $auto_dep_upgrade_enabled, "autoDepUpgradeIgnoredDependencies": $auto_dep_upgrade_ignored_dependencies, "autoDepUpgradeLimit": $auto_dep_upgrade_limit, "autoDepUpgradeMinAge": $auto_dep_upgrade_min_age, "autoRemediationPrs": $auto_remediation_prs, "pullRequestAssignment": $pull_request_assignment, "pullRequestFailOnAnyVulns": $pull_request_fail_on_any_vulns, "pullRequestFailOnlyForHighSeverity": $pull_request_fail_only_for_high_severity, "pullRequestTestEnabled": $pull_request_test_enabled} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({org_id: (encode-path-segment $org_id), project_id: (encode-path-segment $project_id)} | format pattern "/org/{org_id}/project/{project_id}/settings"))
+  let req_body = {"autoDepUpgradeEnabled": $auto_dep_upgrade_enabled, "autoDepUpgradeIgnoredDependencies": $auto_dep_upgrade_ignored_dependencies, "autoDepUpgradeLimit": $auto_dep_upgrade_limit, "autoDepUpgradeMinAge": $auto_dep_upgrade_min_age, "autoRemediationPrs": $auto_remediation_prs, "pullRequestAssignment": $pull_request_assignment, "pullRequestFailOnAnyVulns": $pull_request_fail_on_any_vulns, "pullRequestFailOnlyForHighSeverity": $pull_request_fail_only_for_high_severity, "pullRequestTestEnabled": $pull_request_test_enabled} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Add a tag to a project
 #
 # POST /org/{orgId}/project/{projectId}/tags
 # operationId: Add a tag to a project
-export def "org-project-tags post" [
+export def "org-project-tags create" [
   org_id: string
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1735,19 +1744,19 @@ export def "org-project-tags post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org_id: $org_id, project_id: $project_id} | format pattern "/org/{org_id}/project/{project_id}/tags"))
-  let body = {"key": $key, "value": $value} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({org_id: (encode-path-segment $org_id), project_id: (encode-path-segment $project_id)} | format pattern "/org/{org_id}/project/{project_id}/tags"))
+  let req_body = {"key": $key, "value": $value} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Remove a tag from a project
 #
 # POST /org/{orgId}/project/{projectId}/tags/remove
 # operationId: Remove a tag from a project
-export def "org-project-tags-remove post" [
+export def "org-project-tags-remove delete" [
   org_id: string
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1764,12 +1773,12 @@ export def "org-project-tags-remove post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org_id: $org_id, project_id: $project_id} | format pattern "/org/{org_id}/project/{project_id}/tags/remove"))
-  let body = {"key": $key, "value": $value} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({org_id: (encode-path-segment $org_id), project_id: (encode-path-segment $project_id)} | format pattern "/org/{org_id}/project/{project_id}/tags/remove"))
+  let req_body = {"key": $key, "value": $value} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List all projects
@@ -1777,7 +1786,7 @@ export def "org-project-tags-remove post" [
 # POST /org/{orgId}/projects
 # operationId: List all projects
 # --filters shape: {attributes?: record, isMonitored?: bool, name?: string, origin?: string, tags?: record, type?: string}
-export def "org-projects post" [
+export def "org-projects list-list" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1792,19 +1801,19 @@ export def "org-projects post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/org/{org_id}/projects"))
-  let body = {"filters": $filters} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({org_id: (encode-path-segment $org_id)} | format pattern "/org/{org_id}/projects"))
+  let req_body = {"filters": $filters} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete pending user provision
 #
 # DELETE /org/{orgId}/provision
 # operationId: Delete pending user provision
-export def "org-provision delete" [
+export def "org-provision delete-pending-user" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1817,7 +1826,7 @@ export def "org-provision delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/org/{org_id}/provision"))
+  let full_url = (build-url $base ({org_id: (encode-path-segment $org_id)} | format pattern "/org/{org_id}/provision"))
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1827,7 +1836,7 @@ export def "org-provision delete" [
 #
 # GET /org/{orgId}/provision
 # operationId: List pending user provisions
-export def "org-provision get" [
+export def "org-provision list-pending-user" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1840,7 +1849,7 @@ export def "org-provision get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/org/{org_id}/provision"))
+  let full_url = (build-url $base ({org_id: (encode-path-segment $org_id)} | format pattern "/org/{org_id}/provision"))
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1850,7 +1859,7 @@ export def "org-provision get" [
 #
 # POST /org/{orgId}/provision
 # operationId: Provision a user to the organization
-export def "org-provision post" [
+export def "org-provision create-user-to-organization" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1867,19 +1876,19 @@ export def "org-provision post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/org/{org_id}/provision"))
-  let body = {"email": $email, "role": $role, "rolePublicId": $role_public_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({org_id: (encode-path-segment $org_id)} | format pattern "/org/{org_id}/provision"))
+  let req_body = {"email": $email, "role": $role, "rolePublicId": $role_public_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # View organization settings
 #
 # GET /org/{orgId}/settings
 # operationId: View organization settings
-export def "org-settings get" [
+export def "org-settings get-view-organization" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1892,7 +1901,7 @@ export def "org-settings get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/org/{org_id}/settings"))
+  let full_url = (build-url $base ({org_id: (encode-path-segment $org_id)} | format pattern "/org/{org_id}/settings"))
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1903,7 +1912,7 @@ export def "org-settings get" [
 # PUT /org/{orgId}/settings
 # operationId: Update organization settings
 # --requestAccess shape: {enabled: bool}
-export def "org-settings put" [
+export def "org-settings update-organization" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1918,12 +1927,12 @@ export def "org-settings put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/org/{org_id}/settings"))
-  let body = {"requestAccess": $request_access} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({org_id: (encode-path-segment $org_id)} | format pattern "/org/{org_id}/settings"))
+  let req_body = {"requestAccess": $request_access} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List webhooks
@@ -1943,7 +1952,7 @@ export def "org-webhooks list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/org/{org_id}/webhooks"))
+  let full_url = (build-url $base ({org_id: (encode-path-segment $org_id)} | format pattern "/org/{org_id}/webhooks"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1953,7 +1962,7 @@ export def "org-webhooks list" [
 #
 # POST /org/{orgId}/webhooks
 # operationId: Create a webhook
-export def "org-webhooks post" [
+export def "org-webhooks create" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1964,17 +1973,17 @@ export def "org-webhooks post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --secret: string # This is a password you create, that Snyk uses to sign our transports to you, so you be sure the notification is authentic. Your `secret` should: Be a random string with high entropy; Not be used for anything else; Only known to Snyk and your webhook transport consuming code;
-  --body-url: string # Webhooks can only be configured for URLs using the `https` protocol. `http` is not allowed.
+  --url: string # Webhooks can only be configured for URLs using the `https` protocol. `http` is not allowed.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/org/{org_id}/webhooks"))
-  let body = {"secret": $secret, "url": $body_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({org_id: (encode-path-segment $org_id)} | format pattern "/org/{org_id}/webhooks"))
+  let req_body = {"secret": $secret, "url": $url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a webhook
@@ -1995,7 +2004,7 @@ export def "org-webhooks delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org_id: $org_id, webhook_id: $webhook_id} | format pattern "/org/{org_id}/webhooks/{webhook_id}"))
+  let full_url = (build-url $base ({org_id: (encode-path-segment $org_id), webhook_id: (encode-path-segment $webhook_id)} | format pattern "/org/{org_id}/webhooks/{webhook_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2019,7 +2028,7 @@ export def "org-webhooks get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org_id: $org_id, webhook_id: $webhook_id} | format pattern "/org/{org_id}/webhooks/{webhook_id}"))
+  let full_url = (build-url $base ({org_id: (encode-path-segment $org_id), webhook_id: (encode-path-segment $webhook_id)} | format pattern "/org/{org_id}/webhooks/{webhook_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2029,7 +2038,7 @@ export def "org-webhooks get" [
 #
 # POST /org/{orgId}/webhooks/{webhookId}/ping
 # operationId: Ping a webhook
-export def "org-webhooks-ping post" [
+export def "org-webhooks-ping ping" [
   org_id: string
   webhook_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2043,7 +2052,7 @@ export def "org-webhooks-ping post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org_id: $org_id, webhook_id: $webhook_id} | format pattern "/org/{org_id}/webhooks/{webhook_id}/ping"))
+  let full_url = (build-url $base ({org_id: (encode-path-segment $org_id), webhook_id: (encode-path-segment $webhook_id)} | format pattern "/org/{org_id}/webhooks/{webhook_id}/ping"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2053,7 +2062,7 @@ export def "org-webhooks-ping post" [
 #
 # GET /orgs
 # operationId: List all the organizations a user belongs to
-export def "orgs get" [
+export def "orgs list-list-organizations-user-belongs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2076,7 +2085,7 @@ export def "orgs get" [
 # POST /reporting/counts/issues
 # operationId: Get issue counts
 # --filters shape: {fixable?: bool, ignored?: bool, isPatchable?: bool, isPinnable?: bool, isUpgradable?: bool, languages?: list, orgs: any, patched?: bool, priorityScore?: record, projects?: any, severity?: list, types?: list}
-export def "reporting-counts-issues post" [
+export def "reporting-counts-issues get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2095,11 +2104,11 @@ export def "reporting-counts-issues post" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "groupBy" $group_by "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/reporting/counts/issues" $qp)
-  let body = {"filters": $filters} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"filters": $filters} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get latest issue counts
@@ -2107,7 +2116,7 @@ export def "reporting-counts-issues post" [
 # POST /reporting/counts/issues/latest
 # operationId: Get latest issue counts
 # --filters shape: {fixable?: bool, ignored?: bool, isPatchable?: bool, isPinnable?: bool, isUpgradable?: bool, languages?: list, orgs: any, patched?: bool, priorityScore?: record, projects?: any, severity?: list, types?: list}
-export def "reporting-counts-issues-latest post" [
+export def "reporting-counts-issues-latest get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2124,11 +2133,11 @@ export def "reporting-counts-issues-latest post" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "groupBy" $group_by "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/reporting/counts/issues/latest" $qp)
-  let body = {"filters": $filters} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"filters": $filters} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get project counts
@@ -2136,7 +2145,7 @@ export def "reporting-counts-issues-latest post" [
 # POST /reporting/counts/projects
 # operationId: Get project counts
 # --filters shape: {languages?: list, orgs: any, projects?: any}
-export def "reporting-counts-projects post" [
+export def "reporting-counts-projects get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2154,11 +2163,11 @@ export def "reporting-counts-projects post" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/reporting/counts/projects" $qp)
-  let body = {"filters": $filters} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"filters": $filters} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get latest project counts
@@ -2166,7 +2175,7 @@ export def "reporting-counts-projects post" [
 # POST /reporting/counts/projects/latest
 # operationId: Get latest project counts
 # --filters shape: {languages?: list, orgs: any, projects?: any}
-export def "reporting-counts-projects-latest post" [
+export def "reporting-counts-projects-latest get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2181,11 +2190,11 @@ export def "reporting-counts-projects-latest post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/reporting/counts/projects/latest")
-  let body = {"filters": $filters} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"filters": $filters} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get test counts
@@ -2193,7 +2202,7 @@ export def "reporting-counts-projects-latest post" [
 # POST /reporting/counts/tests
 # operationId: Get test counts
 # --filters shape: {isPrivate?: bool, issuesPrevented?: bool, orgs: any, projects?: any}
-export def "reporting-counts-tests post" [
+export def "reporting-counts-tests get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2212,11 +2221,11 @@ export def "reporting-counts-tests post" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "groupBy" $group_by "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/reporting/counts/tests" $qp)
-  let body = {"filters": $filters} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"filters": $filters} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get list of issues
@@ -2224,7 +2233,7 @@ export def "reporting-counts-tests post" [
 # POST /reporting/issues/
 # operationId: Get list of issues
 # --filters shape: {exploitMaturity?: list, fixable?: bool, identifier?: string, ignored?: bool, isFixed?: bool, isPatchable?: bool, isPinnable?: bool, isUpgradable?: bool, issues?: any, languages?: list, orgs: any, patched?: bool, priorityScore?: record, projects?: any, severity?: list, types?: list}
-export def "reporting-issues post" [
+export def "reporting-issues get-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2247,11 +2256,11 @@ export def "reporting-issues post" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "perPage" $per_page "scalar") (serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "groupBy" $group_by "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/reporting/issues/" $qp)
-  let body = {"filters": $filters} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"filters": $filters} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get list of latest issues
@@ -2259,7 +2268,7 @@ export def "reporting-issues post" [
 # POST /reporting/issues/latest
 # operationId: Get list of latest issues
 # --filters shape: {exploitMaturity?: list, fixable?: bool, identifier?: string, ignored?: bool, isFixed?: bool, isPatchable?: bool, isPinnable?: bool, isUpgradable?: bool, issues?: any, languages?: list, orgs: any, patched?: bool, priorityScore?: record, projects?: any, severity?: list, types?: list}
-export def "reporting-issues-latest post" [
+export def "reporting-issues-latest get-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2280,11 +2289,11 @@ export def "reporting-issues-latest post" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "perPage" $per_page "scalar") (serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "groupBy" $group_by "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/reporting/issues/latest" $qp)
-  let body = {"filters": $filters} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"filters": $filters} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Test composer.json & composer.lock file
@@ -2292,7 +2301,7 @@ export def "reporting-issues-latest post" [
 # POST /test/composer
 # operationId: Test composer.json & composer.lock file
 # --files shape: {additional: list, target: record}
-export def "test-composer post" [
+export def "test-composer lock-file" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2308,11 +2317,11 @@ export def "test-composer post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/test/composer")
-  let body = {"encoding": $encoding, "files": $files} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"encoding": $encoding, "files": $files} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Test Dep Graph
@@ -2320,7 +2329,7 @@ export def "test-composer post" [
 # POST /test/dep-graph
 # operationId: Test Dep Graph
 # --depGraph shape: {graph: record, pkgManager: record, pkgs: list, schemaVersion: string}
-export def "test-dep-graph post" [
+export def "test-dep-graph test" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2337,11 +2346,11 @@ export def "test-dep-graph post" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "org" $org "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/test/dep-graph" $qp)
-  let body = {"depGraph": $dep_graph} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"depGraph": $dep_graph} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Test Gopkg.toml & Gopkg.lock File
@@ -2349,7 +2358,7 @@ export def "test-dep-graph post" [
 # POST /test/golangdep
 # operationId: Test Gopkg.toml & Gopkg.lock File
 # --files shape: {additional: list, target: record}
-export def "test-golangdep post" [
+export def "test-golangdep lock-file" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2367,11 +2376,11 @@ export def "test-golangdep post" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "org" $org "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/test/golangdep" $qp)
-  let body = {"encoding": $encoding, "files": $files} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"encoding": $encoding, "files": $files} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Test vendor.json File
@@ -2379,7 +2388,7 @@ export def "test-golangdep post" [
 # POST /test/govendor
 # operationId: Test vendor.json File
 # --files shape: {target: record}
-export def "test-govendor post" [
+export def "test-govendor create-json-file" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2395,11 +2404,11 @@ export def "test-govendor post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/test/govendor")
-  let body = {"encoding": $encoding, "files": $files} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"encoding": $encoding, "files": $files} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Test gradle file
@@ -2407,7 +2416,7 @@ export def "test-govendor post" [
 # POST /test/gradle
 # operationId: Test gradle file
 # --files shape: {target: record}
-export def "test-gradle post" [
+export def "test-gradle test-file" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2423,18 +2432,18 @@ export def "test-gradle post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/test/gradle")
-  let body = {"encoding": $encoding, "files": $files} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"encoding": $encoding, "files": $files} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Test for issues in a public package by group, name and version
 #
 # GET /test/gradle/{group}/{name}/{version}
 # operationId: Test for issues in a public package by group, name and version
-export def "test-gradle get" [
+export def "test-gradle test-for-issues-in-public-package-by-group-and" [
   group: string
   name: string
   version: string
@@ -2452,7 +2461,7 @@ export def "test-gradle get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "org" $org "scalar") (serialize-qp "repository" $repository "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({group: $group, name: $name, version: $version} | format pattern "/test/gradle/{group}/{name}/{version}") $qp)
+  let full_url = (build-url $base ({group: (encode-path-segment $group), name: (encode-path-segment $name), version: (encode-path-segment $version)} | format pattern "/test/gradle/{group}/{name}/{version}") $qp)
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2463,7 +2472,7 @@ export def "test-gradle get" [
 # POST /test/maven
 # operationId: Test maven file
 # --files shape: {additional?: list, target: record}
-export def "test-maven post" [
+export def "test-maven test-file" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2482,18 +2491,18 @@ export def "test-maven post" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "org" $org "scalar") (serialize-qp "repository" $repository "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/test/maven" $qp)
-  let body = {"encoding": $encoding, "files": $files} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"encoding": $encoding, "files": $files} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Test for issues in a public package by group id, artifact id and version
 #
 # GET /test/maven/{groupId}/{artifactId}/{version}
 # operationId: Test for issues in a public package by group id, artifact id and version
-export def "test-maven get" [
+export def "test-maven test-for-issues-in-public-package-by-group-id-artifact-and" [
   group_id: string
   artifact_id: string
   version: string
@@ -2511,7 +2520,7 @@ export def "test-maven get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "org" $org "scalar") (serialize-qp "repository" $repository "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({group_id: $group_id, artifact_id: $artifact_id, version: $version} | format pattern "/test/maven/{group_id}/{artifact_id}/{version}") $qp)
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), artifact_id: (encode-path-segment $artifact_id), version: (encode-path-segment $version)} | format pattern "/test/maven/{group_id}/{artifact_id}/{version}") $qp)
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2522,7 +2531,7 @@ export def "test-maven get" [
 # POST /test/npm
 # operationId: Test package.json & package-lock.json File
 # --files shape: {additional?: list, target: record}
-export def "test-npm post" [
+export def "test-npm create-json-file" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2538,18 +2547,18 @@ export def "test-npm post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/test/npm")
-  let body = {"encoding": $encoding, "files": $files} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"encoding": $encoding, "files": $files} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Test for issues in a public package by name and version
 #
 # GET /test/npm/{packageName}/{version}
 # operationId: Test for issues in a public package by name and version
-export def "test-npm get" [
+export def "test-npm test-for-issues-in-public-package-by-name-and" [
   package_name: string
   version: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2565,7 +2574,7 @@ export def "test-npm get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "org" $org "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_name: $package_name, version: $version} | format pattern "/test/npm/{package_name}/{version}") $qp)
+  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name), version: (encode-path-segment $version)} | format pattern "/test/npm/{package_name}/{version}") $qp)
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2576,7 +2585,7 @@ export def "test-npm get" [
 # POST /test/pip
 # operationId: Test requirements.txt file
 # --files shape: {target: record}
-export def "test-pip post" [
+export def "test-pip create-txt-file" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2592,11 +2601,11 @@ export def "test-pip post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/test/pip")
-  let body = {"encoding": $encoding, "files": $files} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"encoding": $encoding, "files": $files} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Test for issues in a public package by name and version
@@ -2618,7 +2627,7 @@ export def "test-pip get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "org" $org "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_name: $package_name, version: $version} | format pattern "/test/pip/{package_name}/{version}") $qp)
+  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name), version: (encode-path-segment $version)} | format pattern "/test/pip/{package_name}/{version}") $qp)
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2629,7 +2638,7 @@ export def "test-pip get" [
 # POST /test/rubygems
 # operationId: Test gemfile.lock file
 # --files shape: {target: record}
-export def "test-rubygems post" [
+export def "test-rubygems lock-file" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2645,18 +2654,18 @@ export def "test-rubygems post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/test/rubygems")
-  let body = {"encoding": $encoding, "files": $files} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"encoding": $encoding, "files": $files} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Test for issues in a public gem by name and version
 #
 # GET /test/rubygems/{gemName}/{version}
 # operationId: Test for issues in a public gem by name and version
-export def "test-rubygems get" [
+export def "test-rubygems test-for-issues-in-public-gem-by-name-and" [
   gem_name: string
   version: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2672,7 +2681,7 @@ export def "test-rubygems get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "org" $org "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({gem_name: $gem_name, version: $version} | format pattern "/test/rubygems/{gem_name}/{version}") $qp)
+  let full_url = (build-url $base ({gem_name: (encode-path-segment $gem_name), version: (encode-path-segment $version)} | format pattern "/test/rubygems/{gem_name}/{version}") $qp)
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2683,7 +2692,7 @@ export def "test-rubygems get" [
 # POST /test/sbt
 # operationId: Test sbt file
 # --files shape: {target: record}
-export def "test-sbt post" [
+export def "test-sbt test-file" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2699,11 +2708,11 @@ export def "test-sbt post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/test/sbt")
-  let body = {"encoding": $encoding, "files": $files} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"encoding": $encoding, "files": $files} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Test for issues in a public package by group id, artifact id and version
@@ -2727,7 +2736,7 @@ export def "test-sbt get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "org" $org "scalar") (serialize-qp "repository" $repository "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({group_id: $group_id, artifact_id: $artifact_id, version: $version} | format pattern "/test/sbt/{group_id}/{artifact_id}/{version}") $qp)
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), artifact_id: (encode-path-segment $artifact_id), version: (encode-path-segment $version)} | format pattern "/test/sbt/{group_id}/{artifact_id}/{version}") $qp)
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2738,7 +2747,7 @@ export def "test-sbt get" [
 # POST /test/yarn
 # operationId: Test package.json & yarn.lock File
 # --files shape: {additional?: list, target: record}
-export def "test-yarn post" [
+export def "test-yarn lock-file" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2754,18 +2763,18 @@ export def "test-yarn post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/test/yarn")
-  let body = {"encoding": $encoding, "files": $files} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"encoding": $encoding, "files": $files} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get My Details
 #
 # GET /user/me
 # operationId: Get My Details
-export def "user-me get" [
+export def "user-me get-my-details" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2787,7 +2796,7 @@ export def "user-me get" [
 #
 # GET /user/me/notification-settings/org/{orgId}
 # operationId: Get organization notification settings
-export def "user-me-notification-settings-org get" [
+export def "user-me-notification-settings-org get-organization" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2800,7 +2809,7 @@ export def "user-me-notification-settings-org get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/user/me/notification-settings/org/{org_id}"))
+  let full_url = (build-url $base ({org_id: (encode-path-segment $org_id)} | format pattern "/user/me/notification-settings/org/{org_id}"))
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2814,7 +2823,7 @@ export def "user-me-notification-settings-org get" [
 # --project-imported shape: {enabled: bool}
 # --test-limit shape: {enabled: bool}
 # --weekly-report shape: {enabled: bool}
-export def "user-me-notification-settings-org put" [
+export def "user-me-notification-settings-org update-modify-organization" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2832,12 +2841,12 @@ export def "user-me-notification-settings-org put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/user/me/notification-settings/org/{org_id}"))
-  let body = {"new-issues-remediations": $new_issues_remediations, "project-imported": $project_imported, "test-limit": $test_limit, "weekly-report": $weekly_report} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({org_id: (encode-path-segment $org_id)} | format pattern "/user/me/notification-settings/org/{org_id}"))
+  let req_body = {"new-issues-remediations": $new_issues_remediations, "project-imported": $project_imported, "test-limit": $test_limit, "weekly-report": $weekly_report} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get project notification settings
@@ -2858,7 +2867,7 @@ export def "user-me-notification-settings-org-project get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org_id: $org_id, project_id: $project_id} | format pattern "/user/me/notification-settings/org/{org_id}/project/{project_id}"))
+  let full_url = (build-url $base ({org_id: (encode-path-segment $org_id), project_id: (encode-path-segment $project_id)} | format pattern "/user/me/notification-settings/org/{org_id}/project/{project_id}"))
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2869,7 +2878,7 @@ export def "user-me-notification-settings-org-project get" [
 # PUT /user/me/notification-settings/org/{orgId}/project/{projectId}
 # operationId: Modify project notification settings
 # --new-issues-remediations shape: {enabled: bool, issueSeverity: "all"|"high", issueType: "all"|"vuln"|"license"|"none"}
-export def "user-me-notification-settings-org-project put" [
+export def "user-me-notification-settings-org-project update-modify" [
   org_id: string
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2885,19 +2894,19 @@ export def "user-me-notification-settings-org-project put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org_id: $org_id, project_id: $project_id} | format pattern "/user/me/notification-settings/org/{org_id}/project/{project_id}"))
-  let body = {"new-issues-remediations": $new_issues_remediations} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({org_id: (encode-path-segment $org_id), project_id: (encode-path-segment $project_id)} | format pattern "/user/me/notification-settings/org/{org_id}/project/{project_id}"))
+  let req_body = {"new-issues-remediations": $new_issues_remediations} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get User Details
 #
 # GET /user/{userId}
 # operationId: Get User Details
-export def "user get" [
+export def "user get-details" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2910,7 +2919,7 @@ export def "user get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/user/{user_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}"))
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

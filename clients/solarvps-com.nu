@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -126,7 +135,7 @@ export def "dns get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({domain: $domain} | format pattern "/dns/{domain}"))
+  let full_url = (build-url $base ({domain: (encode-path-segment $domain)} | format pattern "/dns/{domain}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -135,7 +144,7 @@ export def "dns get" [
 # Add dns record for given domain
 #
 # POST /dns/{domain}/add
-export def "dns-add post" [
+export def "dns-add create" [
   domain: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -154,7 +163,7 @@ export def "dns-add post" [
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "content" $content "scalar") (serialize-qp "ttl" $ttl "scalar") (serialize-qp "prio" $prio "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({domain: $domain} | format pattern "/dns/{domain}/add") $qp)
+  let full_url = (build-url $base ({domain: (encode-path-segment $domain)} | format pattern "/dns/{domain}/add") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -163,7 +172,7 @@ export def "dns-add post" [
 # Delete dns record for a given domain
 #
 # POST /dns/{domain}/delete
-export def "dns-delete post" [
+export def "dns-delete create" [
   domain: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -178,7 +187,7 @@ export def "dns-delete post" [
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({domain: $domain} | format pattern "/dns/{domain}/delete") $qp)
+  let full_url = (build-url $base ({domain: (encode-path-segment $domain)} | format pattern "/dns/{domain}/delete") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -187,7 +196,7 @@ export def "dns-delete post" [
 # Update dns record for a given domain
 #
 # POST /dns/{domain}/update
-export def "dns-update post" [
+export def "dns-update create" [
   domain: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -207,7 +216,7 @@ export def "dns-update post" [
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "content" $content "scalar") (serialize-qp "ttl" $ttl "scalar") (serialize-qp "prio" $prio "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({domain: $domain} | format pattern "/dns/{domain}/update") $qp)
+  let full_url = (build-url $base ({domain: (encode-path-segment $domain)} | format pattern "/dns/{domain}/update") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -237,7 +246,7 @@ export def "domains get" [
 # Add domain to be managed by SolarVPS Distributed DNS
 #
 # POST /domains/add
-export def "domains-add post" [
+export def "domains-add create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -260,7 +269,7 @@ export def "domains-add post" [
 # Delete domain from SolarVPS Distributed DNS
 #
 # POST /domains/delete
-export def "domains-delete post" [
+export def "domains-delete create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -365,7 +374,7 @@ export def "pods get-by-podId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({pod_id: $pod_id} | format pattern "/pods/{pod_id}"))
+  let full_url = (build-url $base ({pod_id: (encode-path-segment $pod_id)} | format pattern "/pods/{pod_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -387,7 +396,7 @@ export def "pods-ping get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({pod_id: $pod_id} | format pattern "/pods/{pod_id}/ping"))
+  let full_url = (build-url $base ({pod_id: (encode-path-segment $pod_id)} | format pattern "/pods/{pod_id}/ping"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -410,7 +419,7 @@ export def "pods get-by-podId-action" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({pod_id: $pod_id, action: $action} | format pattern "/pods/{pod_id}/{action}"))
+  let full_url = (build-url $base ({pod_id: (encode-path-segment $pod_id), action: (encode-path-segment $action)} | format pattern "/pods/{pod_id}/{action}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -482,7 +491,7 @@ export def "tickets list" [
 # Open ticket with desired department
 #
 # POST /tickets/{department}/add
-export def "tickets-add post" [
+export def "tickets-add create" [
   department: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -498,7 +507,7 @@ export def "tickets-add post" [
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "subject" $subject "scalar") (serialize-qp "contents" $contents "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({department: $department} | format pattern "/tickets/{department}/add") $qp)
+  let full_url = (build-url $base ({department: (encode-path-segment $department)} | format pattern "/tickets/{department}/add") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -520,7 +529,7 @@ export def "tickets get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({ticket_id: $ticket_id} | format pattern "/tickets/{ticket_id}"))
+  let full_url = (build-url $base ({ticket_id: (encode-path-segment $ticket_id)} | format pattern "/tickets/{ticket_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -529,7 +538,7 @@ export def "tickets get" [
 # Post a reply to a ticket
 #
 # POST /tickets/{ticketid}/update
-export def "tickets-update post" [
+export def "tickets-update create" [
   ticketid: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -544,7 +553,7 @@ export def "tickets-update post" [
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "contents" $contents "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({ticketid: $ticketid} | format pattern "/tickets/{ticketid}/update") $qp)
+  let full_url = (build-url $base ({ticketid: (encode-path-segment $ticketid)} | format pattern "/tickets/{ticketid}/update") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -132,7 +141,7 @@ export def "contacts get" [
 ]: nothing -> record<data: record<district: string, email: string, id: string, name: string, phone: string, phone_type: string, relationship: string, sis_id: string, student: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/contacts/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/contacts/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -142,7 +151,7 @@ export def "contacts get" [
 #
 # GET /contacts/{id}/district
 # operationId: getDistrictForStudentContact
-export def "contacts-district get-district-for-student" [
+export def "contacts-district get-for-student" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -155,7 +164,7 @@ export def "contacts-district get-district-for-student" [
 ]: nothing -> record<data: record<id: string, mdr_number: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/contacts/{id}/district"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/contacts/{id}/district"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -165,7 +174,7 @@ export def "contacts-district get-district-for-student" [
 #
 # GET /contacts/{id}/student
 # operationId: getStudentForContact
-export def "contacts-student get-student-for" [
+export def "contacts-student get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -178,7 +187,7 @@ export def "contacts-student get-student-for" [
 ]: nothing -> record<data: record<created: string, credentials: record<district_username: string>, district: string, dob: string, ell_status: string, email: string, gender: string, grade: string, graduation_year: string, hispanic_ethnicity: string, id: string, last_modified: string, location: record<address: string, city: string, lat: string, lon: string, state: string, zip: string>, name: record<first: string, last: string, middle: string>, race: string, school: string, schools: list<string>, sis_id: string, state_id: string, student_number: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/contacts/{id}/student"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/contacts/{id}/student"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -227,7 +236,7 @@ export def "district-admins get" [
 ]: nothing -> record<data: record<district: string, email: string, id: string, name: record<first: string, last: string, middle: string>, title: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/district_admins/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/district_admins/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -274,7 +283,7 @@ export def "districts get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "include" $include "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/districts/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/districts/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -284,7 +293,7 @@ export def "districts get" [
 #
 # GET /districts/{id}/admins
 # operationId: getAdminsForDistrict
-export def "districts-admins get-admins-for" [
+export def "districts-admins get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -297,7 +306,7 @@ export def "districts-admins get-admins-for" [
 ]: nothing -> record<data: table<district: string, email: string, id: string, name: record, title: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/districts/{id}/admins"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/districts/{id}/admins"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -307,7 +316,7 @@ export def "districts-admins get-admins-for" [
 #
 # GET /districts/{id}/schools
 # operationId: getSchoolsForDistrict
-export def "districts-schools get-schools-for" [
+export def "districts-schools get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -325,7 +334,7 @@ export def "districts-schools get-schools-for" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "starting_after" $starting_after "scalar") (serialize-qp "ending_before" $ending_before "scalar") (serialize-qp "where" $qp_where "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/districts/{id}/schools") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/districts/{id}/schools") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -335,7 +344,7 @@ export def "districts-schools get-schools-for" [
 #
 # GET /districts/{id}/sections
 # operationId: getSectionsForDistrict
-export def "districts-sections get-sections-for" [
+export def "districts-sections get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -353,7 +362,7 @@ export def "districts-sections get-sections-for" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "starting_after" $starting_after "scalar") (serialize-qp "ending_before" $ending_before "scalar") (serialize-qp "where" $qp_where "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/districts/{id}/sections") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/districts/{id}/sections") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -376,7 +385,7 @@ export def "districts-status get" [
 ]: nothing -> record<data: table<data: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/districts/{id}/status"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/districts/{id}/status"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -386,7 +395,7 @@ export def "districts-status get" [
 #
 # GET /districts/{id}/students
 # operationId: getStudentsForDistrict
-export def "districts-students get-students-for" [
+export def "districts-students get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -404,7 +413,7 @@ export def "districts-students get-students-for" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "starting_after" $starting_after "scalar") (serialize-qp "ending_before" $ending_before "scalar") (serialize-qp "where" $qp_where "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/districts/{id}/students") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/districts/{id}/students") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -414,7 +423,7 @@ export def "districts-students get-students-for" [
 #
 # GET /districts/{id}/teachers
 # operationId: getTeachersForDistrict
-export def "districts-teachers get-teachers-for" [
+export def "districts-teachers get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -432,7 +441,7 @@ export def "districts-teachers get-teachers-for" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "starting_after" $starting_after "scalar") (serialize-qp "ending_before" $ending_before "scalar") (serialize-qp "where" $qp_where "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/districts/{id}/teachers") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/districts/{id}/teachers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -484,7 +493,7 @@ export def "school-admins get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "include" $include "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/school_admins/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/school_admins/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -494,7 +503,7 @@ export def "school-admins get" [
 #
 # GET /school_admins/{id}/schools
 # operationId: getSchoolsForSchoolAdmin
-export def "school-admins-schools get-schools-for" [
+export def "school-admins-schools get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -511,7 +520,7 @@ export def "school-admins-schools get-schools-for" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "starting_after" $starting_after "scalar") (serialize-qp "ending_before" $ending_before "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/school_admins/{id}/schools") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/school_admins/{id}/schools") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -561,7 +570,7 @@ export def "schools get" [
 ]: nothing -> record<data: record<created: string, district: string, high_grade: string, id: string, last_modified: string, location: record<address: string, city: string, lat: string, lon: string, state: string, zip: string>, low_grade: string, mdr_number: string, name: string, nces_id: string, phone: string, principal: record<email: string, name: string>, school_number: string, sis_id: string, state_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/schools/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/schools/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -571,7 +580,7 @@ export def "schools get" [
 #
 # GET /schools/{id}/district
 # operationId: getDistrictForSchool
-export def "schools-district get-district-for" [
+export def "schools-district get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -584,7 +593,7 @@ export def "schools-district get-district-for" [
 ]: nothing -> record<data: record<id: string, mdr_number: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/schools/{id}/district"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/schools/{id}/district"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -594,7 +603,7 @@ export def "schools-district get-district-for" [
 #
 # GET /schools/{id}/sections
 # operationId: getSectionsForSchool
-export def "schools-sections get-sections-for" [
+export def "schools-sections get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -612,7 +621,7 @@ export def "schools-sections get-sections-for" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "starting_after" $starting_after "scalar") (serialize-qp "ending_before" $ending_before "scalar") (serialize-qp "where" $qp_where "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/schools/{id}/sections") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/schools/{id}/sections") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -622,7 +631,7 @@ export def "schools-sections get-sections-for" [
 #
 # GET /schools/{id}/students
 # operationId: getStudentsForSchool
-export def "schools-students get-students-for" [
+export def "schools-students get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -640,7 +649,7 @@ export def "schools-students get-students-for" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "starting_after" $starting_after "scalar") (serialize-qp "ending_before" $ending_before "scalar") (serialize-qp "where" $qp_where "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/schools/{id}/students") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/schools/{id}/students") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -650,7 +659,7 @@ export def "schools-students get-students-for" [
 #
 # GET /schools/{id}/teachers
 # operationId: getTeachersForSchool
-export def "schools-teachers get-teachers-for" [
+export def "schools-teachers get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -668,7 +677,7 @@ export def "schools-teachers get-teachers-for" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "starting_after" $starting_after "scalar") (serialize-qp "ending_before" $ending_before "scalar") (serialize-qp "where" $qp_where "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/schools/{id}/teachers") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/schools/{id}/teachers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -718,7 +727,7 @@ export def "sections get" [
 ]: nothing -> record<data: record<course_description: string, course_name: string, course_number: string, created: string, district: string, grade: string, id: string, last_modified: string, name: string, period: string, school: string, section_number: string, sis_id: string, students: list<string>, subject: string, teacher: string, teachers: list<string>, term: record<end_date: string, name: string, start_date: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/sections/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/sections/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -728,7 +737,7 @@ export def "sections get" [
 #
 # GET /sections/{id}/district
 # operationId: getDistrictForSection
-export def "sections-district get-district-for" [
+export def "sections-district get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -741,7 +750,7 @@ export def "sections-district get-district-for" [
 ]: nothing -> record<data: record<id: string, mdr_number: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/sections/{id}/district"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/sections/{id}/district"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -751,7 +760,7 @@ export def "sections-district get-district-for" [
 #
 # GET /sections/{id}/school
 # operationId: getSchoolForSection
-export def "sections-school get-school-for" [
+export def "sections-school get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -764,7 +773,7 @@ export def "sections-school get-school-for" [
 ]: nothing -> record<data: record<created: string, district: string, high_grade: string, id: string, last_modified: string, location: record<address: string, city: string, lat: string, lon: string, state: string, zip: string>, low_grade: string, mdr_number: string, name: string, nces_id: string, phone: string, principal: record<email: string, name: string>, school_number: string, sis_id: string, state_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/sections/{id}/school"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/sections/{id}/school"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -774,7 +783,7 @@ export def "sections-school get-school-for" [
 #
 # GET /sections/{id}/students
 # operationId: getStudentsForSection
-export def "sections-students get-students-for" [
+export def "sections-students get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -791,7 +800,7 @@ export def "sections-students get-students-for" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "starting_after" $starting_after "scalar") (serialize-qp "ending_before" $ending_before "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/sections/{id}/students") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/sections/{id}/students") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -801,7 +810,7 @@ export def "sections-students get-students-for" [
 #
 # GET /sections/{id}/teacher
 # operationId: getTeacherForSection
-export def "sections-teacher get-teacher-for" [
+export def "sections-teacher get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -814,7 +823,7 @@ export def "sections-teacher get-teacher-for" [
 ]: nothing -> record<data: record<created: string, credentials: record<district_username: string>, district: string, email: string, id: string, last_modified: string, name: record<first: string, last: string, middle: string>, school: string, schools: list<string>, sis_id: string, state_id: string, teacher_number: string, title: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/sections/{id}/teacher"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/sections/{id}/teacher"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -824,7 +833,7 @@ export def "sections-teacher get-teacher-for" [
 #
 # GET /sections/{id}/teachers
 # operationId: getTeachersForSection
-export def "sections-teachers get-teachers-for" [
+export def "sections-teachers get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -841,7 +850,7 @@ export def "sections-teachers get-teachers-for" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "starting_after" $starting_after "scalar") (serialize-qp "ending_before" $ending_before "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/sections/{id}/teachers") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/sections/{id}/teachers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -893,7 +902,7 @@ export def "students get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "include" $include "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/students/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/students/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -903,7 +912,7 @@ export def "students get" [
 #
 # GET /students/{id}/contacts
 # operationId: getContactsForStudent
-export def "students-contacts get-contacts-for" [
+export def "students-contacts get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -918,7 +927,7 @@ export def "students-contacts get-contacts-for" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/students/{id}/contacts") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/students/{id}/contacts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -928,7 +937,7 @@ export def "students-contacts get-contacts-for" [
 #
 # GET /students/{id}/district
 # operationId: getDistrictForStudent
-export def "students-district get-district-for" [
+export def "students-district get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -941,7 +950,7 @@ export def "students-district get-district-for" [
 ]: nothing -> record<data: record<id: string, mdr_number: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/students/{id}/district"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/students/{id}/district"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -951,7 +960,7 @@ export def "students-district get-district-for" [
 #
 # GET /students/{id}/school
 # operationId: getSchoolForStudent
-export def "students-school get-school-for" [
+export def "students-school get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -964,7 +973,7 @@ export def "students-school get-school-for" [
 ]: nothing -> record<data: record<created: string, district: string, high_grade: string, id: string, last_modified: string, location: record<address: string, city: string, lat: string, lon: string, state: string, zip: string>, low_grade: string, mdr_number: string, name: string, nces_id: string, phone: string, principal: record<email: string, name: string>, school_number: string, sis_id: string, state_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/students/{id}/school"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/students/{id}/school"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -974,7 +983,7 @@ export def "students-school get-school-for" [
 #
 # GET /students/{id}/sections
 # operationId: getSectionsForStudent
-export def "students-sections get-sections-for" [
+export def "students-sections get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -991,7 +1000,7 @@ export def "students-sections get-sections-for" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "starting_after" $starting_after "scalar") (serialize-qp "ending_before" $ending_before "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/students/{id}/sections") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/students/{id}/sections") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1001,7 +1010,7 @@ export def "students-sections get-sections-for" [
 #
 # GET /students/{id}/teachers
 # operationId: getTeachersForStudent
-export def "students-teachers get-teachers-for" [
+export def "students-teachers get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1018,7 +1027,7 @@ export def "students-teachers get-teachers-for" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "starting_after" $starting_after "scalar") (serialize-qp "ending_before" $ending_before "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/students/{id}/teachers") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/students/{id}/teachers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1070,7 +1079,7 @@ export def "teachers get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "include" $include "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/teachers/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/teachers/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1080,7 +1089,7 @@ export def "teachers get" [
 #
 # GET /teachers/{id}/district
 # operationId: getDistrictForTeacher
-export def "teachers-district get-district-for" [
+export def "teachers-district get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1093,7 +1102,7 @@ export def "teachers-district get-district-for" [
 ]: nothing -> record<data: record<id: string, mdr_number: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/teachers/{id}/district"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/teachers/{id}/district"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1103,7 +1112,7 @@ export def "teachers-district get-district-for" [
 #
 # GET /teachers/{id}/grade_levels
 # operationId: getGradeLevelsForTeacher
-export def "teachers-grade-levels get-grade-levels-for" [
+export def "teachers-grade-levels get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1116,7 +1125,7 @@ export def "teachers-grade-levels get-grade-levels-for" [
 ]: nothing -> record<data: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/teachers/{id}/grade_levels"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/teachers/{id}/grade_levels"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1126,7 +1135,7 @@ export def "teachers-grade-levels get-grade-levels-for" [
 #
 # GET /teachers/{id}/school
 # operationId: getSchoolForTeacher
-export def "teachers-school get-school-for" [
+export def "teachers-school get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1139,7 +1148,7 @@ export def "teachers-school get-school-for" [
 ]: nothing -> record<data: record<created: string, district: string, high_grade: string, id: string, last_modified: string, location: record<address: string, city: string, lat: string, lon: string, state: string, zip: string>, low_grade: string, mdr_number: string, name: string, nces_id: string, phone: string, principal: record<email: string, name: string>, school_number: string, sis_id: string, state_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/teachers/{id}/school"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/teachers/{id}/school"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1149,7 +1158,7 @@ export def "teachers-school get-school-for" [
 #
 # GET /teachers/{id}/sections
 # operationId: getSectionsForTeacher
-export def "teachers-sections get-sections-for" [
+export def "teachers-sections get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1166,7 +1175,7 @@ export def "teachers-sections get-sections-for" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "starting_after" $starting_after "scalar") (serialize-qp "ending_before" $ending_before "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/teachers/{id}/sections") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/teachers/{id}/sections") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1176,7 +1185,7 @@ export def "teachers-sections get-sections-for" [
 #
 # GET /teachers/{id}/students
 # operationId: getStudentsForTeacher
-export def "teachers-students get-students-for" [
+export def "teachers-students get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1193,7 +1202,7 @@ export def "teachers-students get-students-for" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "starting_after" $starting_after "scalar") (serialize-qp "ending_before" $ending_before "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/teachers/{id}/students") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/teachers/{id}/students") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

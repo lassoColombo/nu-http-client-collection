@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -74,7 +83,7 @@ def format-completer [] { ["solr"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "datasources list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "datasources list-data-sources" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -99,7 +108,7 @@ export def commands []: nothing -> table {
 # GET /datasources
 # Docs: https://docs.microsoft.com/rest/api/searchservice/List-Data-Sources
 # operationId: DataSources_List
-export def "datasources list" [
+export def "datasources list-data-sources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -116,10 +125,10 @@ export def "datasources list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$select" $select "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/datasources" $qp)
-  let extra_headers = {"client-request-id": $client_request_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"client-request-id": $client_request_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -132,7 +141,7 @@ export def "datasources list" [
 # --credentials shape: {connectionString?: string}
 # --dataChangeDetectionPolicy shape: {@odata.type: string}
 # --dataDeletionDetectionPolicy shape: {@odata.type: string}
-export def "datasources create" [
+export def "datasources create-data-sources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -157,13 +166,13 @@ export def "datasources create" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/datasources" $qp)
-  let body = {"@odata.etag": $odata_etag, "container": $container, "credentials": $credentials, "dataChangeDetectionPolicy": $data_change_detection_policy, "dataDeletionDetectionPolicy": $data_deletion_detection_policy, "description": $description, "name": $name, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"client-request-id": $client_request_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"@odata.etag": $odata_etag, "container": $container, "credentials": $credentials, "dataChangeDetectionPolicy": $data_change_detection_policy, "dataDeletionDetectionPolicy": $data_deletion_detection_policy, "description": $description, "name": $name, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"client-request-id": $client_request_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes a datasource.
@@ -171,7 +180,7 @@ export def "datasources create" [
 # DELETE /datasources('{dataSourceName}')
 # Docs: https://docs.microsoft.com/rest/api/searchservice/Delete-Data-Source
 # operationId: DataSources_Delete
-export def "datasources delete" [
+export def "datasources delete-data-sources" [
   data_source_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -189,11 +198,11 @@ export def "datasources delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({data_source_name: $data_source_name} | format pattern "/datasources('{data_source_name}')") $qp)
-  let extra_headers = {"client-request-id": $client_request_id, "If-Match": $if_match, "If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({data_source_name: (encode-path-segment $data_source_name)} | format pattern "/datasources('{data_source_name}')") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"client-request-id": $client_request_id, "If-Match": $if_match, "If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -202,7 +211,7 @@ export def "datasources delete" [
 # GET /datasources('{dataSourceName}')
 # Docs: https://docs.microsoft.com/rest/api/searchservice/Get-Data-Source
 # operationId: DataSources_Get
-export def "datasources get" [
+export def "datasources get-data-sources" [
   data_source_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -218,11 +227,11 @@ export def "datasources get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({data_source_name: $data_source_name} | format pattern "/datasources('{data_source_name}')") $qp)
-  let extra_headers = {"client-request-id": $client_request_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({data_source_name: (encode-path-segment $data_source_name)} | format pattern "/datasources('{data_source_name}')") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"client-request-id": $client_request_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -235,7 +244,7 @@ export def "datasources get" [
 # --credentials shape: {connectionString?: string}
 # --dataChangeDetectionPolicy shape: {@odata.type: string}
 # --dataDeletionDetectionPolicy shape: {@odata.type: string}
-export def "datasources create-or-update" [
+export def "datasources create-data-sources-or-update" [
   data_source_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -263,14 +272,14 @@ export def "datasources create-or-update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({data_source_name: $data_source_name} | format pattern "/datasources('{data_source_name}')") $qp)
-  let body = {"@odata.etag": $odata_etag, "container": $container, "credentials": $credentials, "dataChangeDetectionPolicy": $data_change_detection_policy, "dataDeletionDetectionPolicy": $data_deletion_detection_policy, "description": $description, "name": $name, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"client-request-id": $client_request_id, "If-Match": $if_match, "If-None-Match": $if_none_match, "Prefer": $prefer} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({data_source_name: (encode-path-segment $data_source_name)} | format pattern "/datasources('{data_source_name}')") $qp)
+  let req_body = {"@odata.etag": $odata_etag, "container": $container, "credentials": $credentials, "dataChangeDetectionPolicy": $data_change_detection_policy, "dataDeletionDetectionPolicy": $data_deletion_detection_policy, "description": $description, "name": $name, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"client-request-id": $client_request_id, "If-Match": $if_match, "If-None-Match": $if_none_match, "Prefer": $prefer} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists all indexers available for a search service.
@@ -295,10 +304,10 @@ export def "indexers list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$select" $select "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/indexers" $qp)
-  let extra_headers = {"client-request-id": $client_request_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"client-request-id": $client_request_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -339,13 +348,13 @@ export def "indexers create" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/indexers" $qp)
-  let body = {"@odata.etag": $odata_etag, "dataSourceName": $data_source_name, "description": $description, "disabled": $disabled, "fieldMappings": $field_mappings, "name": $name, "outputFieldMappings": $output_field_mappings, "parameters": $parameters, "schedule": $schedule, "skillsetName": $skillset_name, "targetIndexName": $target_index_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"client-request-id": $client_request_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"@odata.etag": $odata_etag, "dataSourceName": $data_source_name, "description": $description, "disabled": $disabled, "fieldMappings": $field_mappings, "name": $name, "outputFieldMappings": $output_field_mappings, "parameters": $parameters, "schedule": $schedule, "skillsetName": $skillset_name, "targetIndexName": $target_index_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"client-request-id": $client_request_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes an indexer.
@@ -371,11 +380,11 @@ export def "indexers delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({indexer_name: $indexer_name} | format pattern "/indexers('{indexer_name}')") $qp)
-  let extra_headers = {"client-request-id": $client_request_id, "If-Match": $if_match, "If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({indexer_name: (encode-path-segment $indexer_name)} | format pattern "/indexers('{indexer_name}')") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"client-request-id": $client_request_id, "If-Match": $if_match, "If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -400,11 +409,11 @@ export def "indexers get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({indexer_name: $indexer_name} | format pattern "/indexers('{indexer_name}')") $qp)
-  let extra_headers = {"client-request-id": $client_request_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({indexer_name: (encode-path-segment $indexer_name)} | format pattern "/indexers('{indexer_name}')") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"client-request-id": $client_request_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -448,14 +457,14 @@ export def "indexers create-or-update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({indexer_name: $indexer_name} | format pattern "/indexers('{indexer_name}')") $qp)
-  let body = {"@odata.etag": $odata_etag, "dataSourceName": $data_source_name, "description": $description, "disabled": $disabled, "fieldMappings": $field_mappings, "name": $name, "outputFieldMappings": $output_field_mappings, "parameters": $parameters, "schedule": $schedule, "skillsetName": $skillset_name, "targetIndexName": $target_index_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"client-request-id": $client_request_id, "If-Match": $if_match, "If-None-Match": $if_none_match, "Prefer": $prefer} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({indexer_name: (encode-path-segment $indexer_name)} | format pattern "/indexers('{indexer_name}')") $qp)
+  let req_body = {"@odata.etag": $odata_etag, "dataSourceName": $data_source_name, "description": $description, "disabled": $disabled, "fieldMappings": $field_mappings, "name": $name, "outputFieldMappings": $output_field_mappings, "parameters": $parameters, "schedule": $schedule, "skillsetName": $skillset_name, "targetIndexName": $target_index_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"client-request-id": $client_request_id, "If-Match": $if_match, "If-None-Match": $if_none_match, "Prefer": $prefer} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Resets the change tracking state associated with an indexer.
@@ -463,7 +472,7 @@ export def "indexers create-or-update" [
 # POST /indexers('{indexerName}')/search.reset
 # Docs: https://docs.microsoft.com/rest/api/searchservice/Reset-Indexer
 # operationId: Indexers_Reset
-export def "indexers-searchreset reset" [
+export def "indexers-search-reset reset" [
   indexer_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -479,11 +488,11 @@ export def "indexers-searchreset reset" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({indexer_name: $indexer_name} | format pattern "/indexers('{indexer_name}')/search.reset") $qp)
-  let extra_headers = {"client-request-id": $client_request_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({indexer_name: (encode-path-segment $indexer_name)} | format pattern "/indexers('{indexer_name}')/search.reset") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"client-request-id": $client_request_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -492,7 +501,7 @@ export def "indexers-searchreset reset" [
 # POST /indexers('{indexerName}')/search.run
 # Docs: https://docs.microsoft.com/rest/api/searchservice/Run-Indexer
 # operationId: Indexers_Run
-export def "indexers-searchrun post" [
+export def "indexers-search-run create" [
   indexer_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -508,11 +517,11 @@ export def "indexers-searchrun post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({indexer_name: $indexer_name} | format pattern "/indexers('{indexer_name}')/search.run") $qp)
-  let extra_headers = {"client-request-id": $client_request_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({indexer_name: (encode-path-segment $indexer_name)} | format pattern "/indexers('{indexer_name}')/search.run") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"client-request-id": $client_request_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -521,7 +530,7 @@ export def "indexers-searchrun post" [
 # GET /indexers('{indexerName}')/search.status
 # Docs: https://docs.microsoft.com/rest/api/searchservice/Get-Indexer-Status
 # operationId: Indexers_GetStatus
-export def "indexers-searchstatus get-status" [
+export def "indexers-search-status get" [
   indexer_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -537,11 +546,11 @@ export def "indexers-searchstatus get-status" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({indexer_name: $indexer_name} | format pattern "/indexers('{indexer_name}')/search.status") $qp)
-  let extra_headers = {"client-request-id": $client_request_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({indexer_name: (encode-path-segment $indexer_name)} | format pattern "/indexers('{indexer_name}')/search.status") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"client-request-id": $client_request_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -567,10 +576,10 @@ export def "indexes list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$select" $select "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/indexes" $qp)
-  let extra_headers = {"client-request-id": $client_request_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"client-request-id": $client_request_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -581,11 +590,11 @@ export def "indexes list" [
 # operationId: Indexes_Create
 # --analyzers item shape: {@odata.type: string, name: string}
 # --charFilters item shape: {@odata.type: string, name: string}
-# --corsOptions shape: {allowedOrigins: list, maxAgeInSeconds?: int}
+# --corsOptions shape: {allowedOrigins: list<string>, maxAgeInSeconds?: int}
 # --encryptionKey shape: {accessCredentials?: any, keyVaultKeyName: string, keyVaultKeyVersion: string, keyVaultUri: string}
-# --fields item shape: {analyzer?: "ar.microsoft"|"ar.lucene"|"hy.lucene"|"bn.microsoft"|"eu.lucene"|"bg.microsoft"|"bg.lucene"|"ca.microsoft"|"ca.lucene"|"zh-Hans.microsoft"|"zh-Hans.lucene"|"zh-Hant.microsoft"|"zh-Hant.lucene"|"hr.microsoft"|"cs.microsoft"|"cs.lucene"|"da.microsoft"|"da.lucene"|"nl.microsoft"|"nl.lucene"|"en.microsoft"|"en.lucene"|"et.microsoft"|"fi.microsoft"|"fi.lucene"|"fr.microsoft"|"fr.lucene"|"gl.lucene"|"de.microsoft"|"de.lucene"|"el.microsoft"|"el.lucene"|"gu.microsoft"|"he.microsoft"|"hi.microsoft"|"hi.lucene"|"hu.microsoft"|"hu.lucene"|"is.microsoft"|"id.microsoft"|"id.lucene"|"ga.lucene"|"it.microsoft"|"it.lucene"|"ja.microsoft"|"ja.lucene"|"kn.microsoft"|"ko.microsoft"|"ko.lucene"|"lv.microsoft"|"lv.lucene"|"lt.microsoft"|"ml.microsoft"|"ms.microsoft"|"mr.microsoft"|"nb.microsoft"|"no.lucene"|"fa.lucene"|"pl.microsoft"|"pl.lucene"|"pt-BR.microsoft"|"pt-BR.lucene"|"pt-PT.microsoft"|"pt-PT.lucene"|"pa.microsoft"|"ro.microsoft"|"ro.lucene"|"ru.microsoft"|"ru.lucene"|"sr-cyrillic.microsoft"|"sr-latin.microsoft"|"sk.microsoft"|"sl.microsoft"|"es.microsoft"|"es.lucene"|"sv.microsoft"|"sv.lucene"|"ta.microsoft"|"te.microsoft"|"th.microsoft"|"th.lucene"|"tr.microsoft"|"tr.lucene"|"uk.microsoft"|"ur.microsoft"|"vi.microsoft"|"standard.lucene"|"standardasciifolding.lucene"|"keyword"|"pattern"|"simple"|"stop"|"whitespace", facetable?: bool, fields?: list, filterable?: bool, indexAnalyzer?: "ar.microsoft"|"ar.lucene"|"hy.lucene"|"bn.microsoft"|"eu.lucene"|"bg.microsoft"|"bg.lucene"|"ca.microsoft"|"ca.lucene"|"zh-Hans.microsoft"|"zh-Hans.lucene"|"zh-Hant.microsoft"|"zh-Hant.lucene"|"hr.microsoft"|"cs.microsoft"|"cs.lucene"|"da.microsoft"|"da.lucene"|"nl.microsoft"|"nl.lucene"|"en.microsoft"|"en.lucene"|"et.microsoft"|"fi.microsoft"|"fi.lucene"|"fr.microsoft"|"fr.lucene"|"gl.lucene"|"de.microsoft"|"de.lucene"|"el.microsoft"|"el.lucene"|"gu.microsoft"|"he.microsoft"|"hi.microsoft"|"hi.lucene"|"hu.microsoft"|"hu.lucene"|"is.microsoft"|"id.microsoft"|"id.lucene"|"ga.lucene"|"it.microsoft"|"it.lucene"|"ja.microsoft"|"ja.lucene"|"kn.microsoft"|"ko.microsoft"|"ko.lucene"|"lv.microsoft"|"lv.lucene"|"lt.microsoft"|"ml.microsoft"|"ms.microsoft"|"mr.microsoft"|"nb.microsoft"|"no.lucene"|"fa.lucene"|"pl.microsoft"|"pl.lucene"|"pt-BR.microsoft"|"pt-BR.lucene"|"pt-PT.microsoft"|"pt-PT.lucene"|"pa.microsoft"|"ro.microsoft"|"ro.lucene"|"ru.microsoft"|"ru.lucene"|"sr-cyrillic.microsoft"|"sr-latin.microsoft"|"sk.microsoft"|"sl.microsoft"|"es.microsoft"|"es.lucene"|"sv.microsoft"|"sv.lucene"|"ta.microsoft"|"te.microsoft"|"th.microsoft"|"th.lucene"|"tr.microsoft"|"tr.lucene"|"uk.microsoft"|"ur.microsoft"|"vi.microsoft"|"standard.lucene"|"standardasciifolding.lucene"|"keyword"|"pattern"|"simple"|"stop"|"whitespace", key?: bool, name: string, retrievable?: bool, searchAnalyzer?: "ar.microsoft"|"ar.lucene"|"hy.lucene"|"bn.microsoft"|"eu.lucene"|"bg.microsoft"|"bg.lucene"|"ca.microsoft"|"ca.lucene"|"zh-Hans.microsoft"|"zh-Hans.lucene"|"zh-Hant.microsoft"|"zh-Hant.lucene"|"hr.microsoft"|"cs.microsoft"|"cs.lucene"|"da.microsoft"|"da.lucene"|"nl.microsoft"|"nl.lucene"|"en.microsoft"|"en.lucene"|"et.microsoft"|"fi.microsoft"|"fi.lucene"|"fr.microsoft"|"fr.lucene"|"gl.lucene"|"de.microsoft"|"de.lucene"|"el.microsoft"|"el.lucene"|"gu.microsoft"|"he.microsoft"|"hi.microsoft"|"hi.lucene"|"hu.microsoft"|"hu.lucene"|"is.microsoft"|"id.microsoft"|"id.lucene"|"ga.lucene"|"it.microsoft"|"it.lucene"|"ja.microsoft"|"ja.lucene"|"kn.microsoft"|"ko.microsoft"|"ko.lucene"|"lv.microsoft"|"lv.lucene"|"lt.microsoft"|"ml.microsoft"|"ms.microsoft"|"mr.microsoft"|"nb.microsoft"|"no.lucene"|"fa.lucene"|"pl.microsoft"|"pl.lucene"|"pt-BR.microsoft"|"pt-BR.lucene"|"pt-PT.microsoft"|"pt-PT.lucene"|"pa.microsoft"|"ro.microsoft"|"ro.lucene"|"ru.microsoft"|"ru.lucene"|"sr-cyrillic.microsoft"|"sr-latin.microsoft"|"sk.microsoft"|"sl.microsoft"|"es.microsoft"|"es.lucene"|"sv.microsoft"|"sv.lucene"|"ta.microsoft"|"te.microsoft"|"th.microsoft"|"th.lucene"|"tr.microsoft"|"tr.lucene"|"uk.microsoft"|"ur.microsoft"|"vi.microsoft"|"standard.lucene"|"standardasciifolding.lucene"|"keyword"|"pattern"|"simple"|"stop"|"whitespace", searchable?: bool, sortable?: bool, synonymMaps?: list, type: "Edm.String"|"Edm.Int32"|"Edm.Int64"|"Edm.Double"|"Edm.Boolean"|"Edm.DateTimeOffset"|"Edm.GeographyPoint"|"Edm.ComplexType"}
+# --fields item shape: {analyzer?: "ar.microsoft"|"ar.lucene"|"hy.lucene"|"bn.microsoft"|"eu.lucene"|"bg.microsoft"|"bg.lucene"|"ca.microsoft"|"ca.lucene"|"zh-Hans.microsoft"|"zh-Hans.lucene"|"zh-Hant.microsoft"|"zh-Hant.lucene"|"hr.microsoft"|"cs.microsoft"|"cs.lucene"|"da.microsoft"|"da.lucene"|"nl.microsoft"|"nl.lucene"|"en.microsoft"|"en.lucene"|"et.microsoft"|"fi.microsoft"|"fi.lucene"|"fr.microsoft"|"fr.lucene"|"gl.lucene"|"de.microsoft"|"de.lucene"|"el.microsoft"|"el.lucene"|"gu.microsoft"|"he.microsoft"|"hi.microsoft"|"hi.lucene"|"hu.microsoft"|"hu.lucene"|"is.microsoft"|"id.microsoft"|"id.lucene"|"ga.lucene"|"it.microsoft"|"it.lucene"|"ja.microsoft"|"ja.lucene"|"kn.microsoft"|"ko.microsoft"|"ko.lucene"|"lv.microsoft"|"lv.lucene"|"lt.microsoft"|"ml.microsoft"|"ms.microsoft"|"mr.microsoft"|"nb.microsoft"|"no.lucene"|"fa.lucene"|"pl.microsoft"|"pl.lucene"|"pt-BR.microsoft"|"pt-BR.lucene"|"pt-PT.microsoft"|"pt-PT.lucene"|"pa.microsoft"|"ro.microsoft"|"ro.lucene"|"ru.microsoft"|"ru.lucene"|"sr-cyrillic.microsoft"|"sr-latin.microsoft"|"sk.microsoft"|"sl.microsoft"|"es.microsoft"|"es.lucene"|"sv.microsoft"|"sv.lucene"|"ta.microsoft"|"te.microsoft"|"th.microsoft"|"th.lucene"|"tr.microsoft"|"tr.lucene"|"uk.microsoft"|"ur.microsoft"|"vi.microsoft"|"standard.lucene"|"standardasciifolding.lucene"|"keyword"|"pattern"|"simple"|"stop"|"whitespace", ... (12 more fields)}
 # --scoringProfiles item shape: {functionAggregation?: "sum"|"average"|"minimum"|"maximum"|"firstMatching", functions?: list, name: string, text?: any}
-# --suggesters item shape: {name: string, searchMode: "analyzingInfixMatching", sourceFields: list}
+# --suggesters item shape: {name: string, searchMode: "analyzingInfixMatching", sourceFields: list<string>}
 # --tokenFilters item shape: {@odata.type: string, name: string}
 # --tokenizers item shape: {@odata.type: string, name: string}
 export def "indexes create" [
@@ -602,13 +611,13 @@ export def "indexes create" [
   --odata-etag: string # The ETag of the index.
   --analyzers: list # The analyzers for the index. — item shape: {@odata.type: string, name: string}
   --char-filters: list # The character filters for the index. — item shape: {@odata.type: string, name: string}
-  --cors-options: any # Defines options to control Cross-Origin Resource Sharing (CORS) for an index. — shape: {allowedOrigins: list, maxAgeInSeconds?: int}
+  --cors-options: any # Defines options to control Cross-Origin Resource Sharing (CORS) for an index. — shape: {allowedOrigins: list<string>, maxAgeInSeconds?: int}
   --default-scoring-profile: string # The name of the scoring profile to use if none is specified in the query. If this property is not set and no scoring profile is specified in the query, then default scoring (tf-idf) will be used.
   --encryption-key: any # A customer-managed encryption key in Azure Key Vault. Keys that you create and manage can be used to encrypt or decrypt data-at-rest in Azure Cognitive Search, such as indexes and synonym maps. — shape: {accessCredentials?: any, keyVaultKeyName: string, keyVaultKeyVersion: string, keyVaultUri: string}
-  fields: list # The fields of the index. — item shape: {analyzer?: "ar.microsoft"|"ar.lucene"|"hy.lucene"|"bn.microsoft"|"eu.lucene"|"bg.microsoft"|"bg.lucene"|"ca.microsoft"|"ca.lucene"|"zh-Hans.microsoft"|"zh-Hans.lucene"|"zh-Hant.microsoft"|"zh-Hant.lucene"|"hr.microsoft"|"cs.microsoft"|"cs.lucene"|"da.microsoft"|"da.lucene"|"nl.microsoft"|"nl.lucene"|"en.microsoft"|"en.lucene"|"et.microsoft"|"fi.microsoft"|"fi.lucene"|"fr.microsoft"|"fr.lucene"|"gl.lucene"|"de.microsoft"|"de.lucene"|"el.microsoft"|"el.lucene"|"gu.microsoft"|"he.microsoft"|"hi.microsoft"|"hi.lucene"|"hu.microsoft"|"hu.lucene"|"is.microsoft"|"id.microsoft"|"id.lucene"|"ga.lucene"|"it.microsoft"|"it.lucene"|"ja.microsoft"|"ja.lucene"|"kn.microsoft"|"ko.microsoft"|"ko.lucene"|"lv.microsoft"|"lv.lucene"|"lt.microsoft"|"ml.microsoft"|"ms.microsoft"|"mr.microsoft"|"nb.microsoft"|"no.lucene"|"fa.lucene"|"pl.microsoft"|"pl.lucene"|"pt-BR.microsoft"|"pt-BR.lucene"|"pt-PT.microsoft"|"pt-PT.lucene"|"pa.microsoft"|"ro.microsoft"|"ro.lucene"|"ru.microsoft"|"ru.lucene"|"sr-cyrillic.microsoft"|"sr-latin.microsoft"|"sk.microsoft"|"sl.microsoft"|"es.microsoft"|"es.lucene"|"sv.microsoft"|"sv.lucene"|"ta.microsoft"|"te.microsoft"|"th.microsoft"|"th.lucene"|"tr.microsoft"|"tr.lucene"|"uk.microsoft"|"ur.microsoft"|"vi.microsoft"|"standard.lucene"|"standardasciifolding.lucene"|"keyword"|"pattern"|"simple"|"stop"|"whitespace", facetable?: bool, fields?: list, filterable?: bool, indexAnalyzer?: "ar.microsoft"|"ar.lucene"|"hy.lucene"|"bn.microsoft"|"eu.lucene"|"bg.microsoft"|"bg.lucene"|"ca.microsoft"|"ca.lucene"|"zh-Hans.microsoft"|"zh-Hans.lucene"|"zh-Hant.microsoft"|"zh-Hant.lucene"|"hr.microsoft"|"cs.microsoft"|"cs.lucene"|"da.microsoft"|"da.lucene"|"nl.microsoft"|"nl.lucene"|"en.microsoft"|"en.lucene"|"et.microsoft"|"fi.microsoft"|"fi.lucene"|"fr.microsoft"|"fr.lucene"|"gl.lucene"|"de.microsoft"|"de.lucene"|"el.microsoft"|"el.lucene"|"gu.microsoft"|"he.microsoft"|"hi.microsoft"|"hi.lucene"|"hu.microsoft"|"hu.lucene"|"is.microsoft"|"id.microsoft"|"id.lucene"|"ga.lucene"|"it.microsoft"|"it.lucene"|"ja.microsoft"|"ja.lucene"|"kn.microsoft"|"ko.microsoft"|"ko.lucene"|"lv.microsoft"|"lv.lucene"|"lt.microsoft"|"ml.microsoft"|"ms.microsoft"|"mr.microsoft"|"nb.microsoft"|"no.lucene"|"fa.lucene"|"pl.microsoft"|"pl.lucene"|"pt-BR.microsoft"|"pt-BR.lucene"|"pt-PT.microsoft"|"pt-PT.lucene"|"pa.microsoft"|"ro.microsoft"|"ro.lucene"|"ru.microsoft"|"ru.lucene"|"sr-cyrillic.microsoft"|"sr-latin.microsoft"|"sk.microsoft"|"sl.microsoft"|"es.microsoft"|"es.lucene"|"sv.microsoft"|"sv.lucene"|"ta.microsoft"|"te.microsoft"|"th.microsoft"|"th.lucene"|"tr.microsoft"|"tr.lucene"|"uk.microsoft"|"ur.microsoft"|"vi.microsoft"|"standard.lucene"|"standardasciifolding.lucene"|"keyword"|"pattern"|"simple"|"stop"|"whitespace", key?: bool, name: string, retrievable?: bool, searchAnalyzer?: "ar.microsoft"|"ar.lucene"|"hy.lucene"|"bn.microsoft"|"eu.lucene"|"bg.microsoft"|"bg.lucene"|"ca.microsoft"|"ca.lucene"|"zh-Hans.microsoft"|"zh-Hans.lucene"|"zh-Hant.microsoft"|"zh-Hant.lucene"|"hr.microsoft"|"cs.microsoft"|"cs.lucene"|"da.microsoft"|"da.lucene"|"nl.microsoft"|"nl.lucene"|"en.microsoft"|"en.lucene"|"et.microsoft"|"fi.microsoft"|"fi.lucene"|"fr.microsoft"|"fr.lucene"|"gl.lucene"|"de.microsoft"|"de.lucene"|"el.microsoft"|"el.lucene"|"gu.microsoft"|"he.microsoft"|"hi.microsoft"|"hi.lucene"|"hu.microsoft"|"hu.lucene"|"is.microsoft"|"id.microsoft"|"id.lucene"|"ga.lucene"|"it.microsoft"|"it.lucene"|"ja.microsoft"|"ja.lucene"|"kn.microsoft"|"ko.microsoft"|"ko.lucene"|"lv.microsoft"|"lv.lucene"|"lt.microsoft"|"ml.microsoft"|"ms.microsoft"|"mr.microsoft"|"nb.microsoft"|"no.lucene"|"fa.lucene"|"pl.microsoft"|"pl.lucene"|"pt-BR.microsoft"|"pt-BR.lucene"|"pt-PT.microsoft"|"pt-PT.lucene"|"pa.microsoft"|"ro.microsoft"|"ro.lucene"|"ru.microsoft"|"ru.lucene"|"sr-cyrillic.microsoft"|"sr-latin.microsoft"|"sk.microsoft"|"sl.microsoft"|"es.microsoft"|"es.lucene"|"sv.microsoft"|"sv.lucene"|"ta.microsoft"|"te.microsoft"|"th.microsoft"|"th.lucene"|"tr.microsoft"|"tr.lucene"|"uk.microsoft"|"ur.microsoft"|"vi.microsoft"|"standard.lucene"|"standardasciifolding.lucene"|"keyword"|"pattern"|"simple"|"stop"|"whitespace", searchable?: bool, sortable?: bool, synonymMaps?: list, type: "Edm.String"|"Edm.Int32"|"Edm.Int64"|"Edm.Double"|"Edm.Boolean"|"Edm.DateTimeOffset"|"Edm.GeographyPoint"|"Edm.ComplexType"}
+  fields: list # The fields of the index. — item shape: {analyzer?: "ar.microsoft"|"ar.lucene"|"hy.lucene"|"bn.microsoft"|"eu.lucene"|"bg.microsoft"|"bg.lucene"|"ca.microsoft"|"ca.lucene"|"zh-Hans.microsoft"|"zh-Hans.lucene"|"zh-Hant.microsoft"|"zh-Hant.lucene"|"hr.microsoft"|"cs.microsoft"|"cs.lucene"|"da.microsoft"|"da.lucene"|"nl.microsoft"|"nl.lucene"|"en.microsoft"|"en.lucene"|"et.microsoft"|"fi.microsoft"|"fi.lucene"|"fr.microsoft"|"fr.lucene"|"gl.lucene"|"de.microsoft"|"de.lucene"|"el.microsoft"|"el.lucene"|"gu.microsoft"|"he.microsoft"|"hi.microsoft"|"hi.lucene"|"hu.microsoft"|"hu.lucene"|"is.microsoft"|"id.microsoft"|"id.lucene"|"ga.lucene"|"it.microsoft"|"it.lucene"|"ja.microsoft"|"ja.lucene"|"kn.microsoft"|"ko.microsoft"|"ko.lucene"|"lv.microsoft"|"lv.lucene"|"lt.microsoft"|"ml.microsoft"|"ms.microsoft"|"mr.microsoft"|"nb.microsoft"|"no.lucene"|"fa.lucene"|"pl.microsoft"|"pl.lucene"|"pt-BR.microsoft"|"pt-BR.lucene"|"pt-PT.microsoft"|"pt-PT.lucene"|"pa.microsoft"|"ro.microsoft"|"ro.lucene"|"ru.microsoft"|"ru.lucene"|"sr-cyrillic.microsoft"|"sr-latin.microsoft"|"sk.microsoft"|"sl.microsoft"|"es.microsoft"|"es.lucene"|"sv.microsoft"|"sv.lucene"|"ta.microsoft"|"te.microsoft"|"th.microsoft"|"th.lucene"|"tr.microsoft"|"tr.lucene"|"uk.microsoft"|"ur.microsoft"|"vi.microsoft"|"standard.lucene"|"standardasciifolding.lucene"|"keyword"|"pattern"|"simple"|"stop"|"whitespace", ... (12 more fields)}
   name: string # The name of the index.
   --scoring-profiles: list # The scoring profiles for the index. — item shape: {functionAggregation?: "sum"|"average"|"minimum"|"maximum"|"firstMatching", functions?: list, name: string, text?: any}
-  --suggesters: list # The suggesters for the index. — item shape: {name: string, searchMode: "analyzingInfixMatching", sourceFields: list}
+  --suggesters: list # The suggesters for the index. — item shape: {name: string, searchMode: "analyzingInfixMatching", sourceFields: list<string>}
   --token-filters: list # The token filters for the index. — item shape: {@odata.type: string, name: string}
   --tokenizers: list # The tokenizers for the index. — item shape: {@odata.type: string, name: string}
 ]: any -> record<_odata_etag: string, analyzers: table<_odata_type: string, name: string>, charFilters: table<_odata_type: string, name: string>, corsOptions: record<allowedOrigins: list<string>, maxAgeInSeconds: int>, defaultScoringProfile: string, encryptionKey: record<accessCredentials: record<applicationId: string, applicationSecret: string>, keyVaultKeyName: string, keyVaultKeyVersion: string, keyVaultUri: string>, fields: table<analyzer: string, facetable: bool, fields: list, filterable: bool, indexAnalyzer: string, key: bool, name: string, retrievable: bool, searchAnalyzer: string, searchable: bool, sortable: bool, synonymMaps: list, type: string>, name: string, scoringProfiles: table<functionAggregation: string, functions: list, name: string, text: record>, suggesters: table<name: string, searchMode: string, sourceFields: list>, tokenFilters: table<_odata_type: string, name: string>, tokenizers: table<_odata_type: string, name: string>> {
@@ -617,13 +626,13 @@ export def "indexes create" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/indexes" $qp)
-  let body = {"@odata.etag": $odata_etag, "analyzers": $analyzers, "charFilters": $char_filters, "corsOptions": $cors_options, "defaultScoringProfile": $default_scoring_profile, "encryptionKey": $encryption_key, "fields": $fields, "name": $name, "scoringProfiles": $scoring_profiles, "suggesters": $suggesters, "tokenFilters": $token_filters, "tokenizers": $tokenizers} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"client-request-id": $client_request_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"@odata.etag": $odata_etag, "analyzers": $analyzers, "charFilters": $char_filters, "corsOptions": $cors_options, "defaultScoringProfile": $default_scoring_profile, "encryptionKey": $encryption_key, "fields": $fields, "name": $name, "scoringProfiles": $scoring_profiles, "suggesters": $suggesters, "tokenFilters": $token_filters, "tokenizers": $tokenizers} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"client-request-id": $client_request_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes a search index and all the documents it contains.
@@ -649,11 +658,11 @@ export def "indexes delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({index_name: $index_name} | format pattern "/indexes('{index_name}')") $qp)
-  let extra_headers = {"client-request-id": $client_request_id, "If-Match": $if_match, "If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({index_name: (encode-path-segment $index_name)} | format pattern "/indexes('{index_name}')") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"client-request-id": $client_request_id, "If-Match": $if_match, "If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -678,11 +687,11 @@ export def "indexes get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({index_name: $index_name} | format pattern "/indexes('{index_name}')") $qp)
-  let extra_headers = {"client-request-id": $client_request_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({index_name: (encode-path-segment $index_name)} | format pattern "/indexes('{index_name}')") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"client-request-id": $client_request_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -693,11 +702,11 @@ export def "indexes get" [
 # operationId: Indexes_CreateOrUpdate
 # --analyzers item shape: {@odata.type: string, name: string}
 # --charFilters item shape: {@odata.type: string, name: string}
-# --corsOptions shape: {allowedOrigins: list, maxAgeInSeconds?: int}
+# --corsOptions shape: {allowedOrigins: list<string>, maxAgeInSeconds?: int}
 # --encryptionKey shape: {accessCredentials?: any, keyVaultKeyName: string, keyVaultKeyVersion: string, keyVaultUri: string}
-# --fields item shape: {analyzer?: "ar.microsoft"|"ar.lucene"|"hy.lucene"|"bn.microsoft"|"eu.lucene"|"bg.microsoft"|"bg.lucene"|"ca.microsoft"|"ca.lucene"|"zh-Hans.microsoft"|"zh-Hans.lucene"|"zh-Hant.microsoft"|"zh-Hant.lucene"|"hr.microsoft"|"cs.microsoft"|"cs.lucene"|"da.microsoft"|"da.lucene"|"nl.microsoft"|"nl.lucene"|"en.microsoft"|"en.lucene"|"et.microsoft"|"fi.microsoft"|"fi.lucene"|"fr.microsoft"|"fr.lucene"|"gl.lucene"|"de.microsoft"|"de.lucene"|"el.microsoft"|"el.lucene"|"gu.microsoft"|"he.microsoft"|"hi.microsoft"|"hi.lucene"|"hu.microsoft"|"hu.lucene"|"is.microsoft"|"id.microsoft"|"id.lucene"|"ga.lucene"|"it.microsoft"|"it.lucene"|"ja.microsoft"|"ja.lucene"|"kn.microsoft"|"ko.microsoft"|"ko.lucene"|"lv.microsoft"|"lv.lucene"|"lt.microsoft"|"ml.microsoft"|"ms.microsoft"|"mr.microsoft"|"nb.microsoft"|"no.lucene"|"fa.lucene"|"pl.microsoft"|"pl.lucene"|"pt-BR.microsoft"|"pt-BR.lucene"|"pt-PT.microsoft"|"pt-PT.lucene"|"pa.microsoft"|"ro.microsoft"|"ro.lucene"|"ru.microsoft"|"ru.lucene"|"sr-cyrillic.microsoft"|"sr-latin.microsoft"|"sk.microsoft"|"sl.microsoft"|"es.microsoft"|"es.lucene"|"sv.microsoft"|"sv.lucene"|"ta.microsoft"|"te.microsoft"|"th.microsoft"|"th.lucene"|"tr.microsoft"|"tr.lucene"|"uk.microsoft"|"ur.microsoft"|"vi.microsoft"|"standard.lucene"|"standardasciifolding.lucene"|"keyword"|"pattern"|"simple"|"stop"|"whitespace", facetable?: bool, fields?: list, filterable?: bool, indexAnalyzer?: "ar.microsoft"|"ar.lucene"|"hy.lucene"|"bn.microsoft"|"eu.lucene"|"bg.microsoft"|"bg.lucene"|"ca.microsoft"|"ca.lucene"|"zh-Hans.microsoft"|"zh-Hans.lucene"|"zh-Hant.microsoft"|"zh-Hant.lucene"|"hr.microsoft"|"cs.microsoft"|"cs.lucene"|"da.microsoft"|"da.lucene"|"nl.microsoft"|"nl.lucene"|"en.microsoft"|"en.lucene"|"et.microsoft"|"fi.microsoft"|"fi.lucene"|"fr.microsoft"|"fr.lucene"|"gl.lucene"|"de.microsoft"|"de.lucene"|"el.microsoft"|"el.lucene"|"gu.microsoft"|"he.microsoft"|"hi.microsoft"|"hi.lucene"|"hu.microsoft"|"hu.lucene"|"is.microsoft"|"id.microsoft"|"id.lucene"|"ga.lucene"|"it.microsoft"|"it.lucene"|"ja.microsoft"|"ja.lucene"|"kn.microsoft"|"ko.microsoft"|"ko.lucene"|"lv.microsoft"|"lv.lucene"|"lt.microsoft"|"ml.microsoft"|"ms.microsoft"|"mr.microsoft"|"nb.microsoft"|"no.lucene"|"fa.lucene"|"pl.microsoft"|"pl.lucene"|"pt-BR.microsoft"|"pt-BR.lucene"|"pt-PT.microsoft"|"pt-PT.lucene"|"pa.microsoft"|"ro.microsoft"|"ro.lucene"|"ru.microsoft"|"ru.lucene"|"sr-cyrillic.microsoft"|"sr-latin.microsoft"|"sk.microsoft"|"sl.microsoft"|"es.microsoft"|"es.lucene"|"sv.microsoft"|"sv.lucene"|"ta.microsoft"|"te.microsoft"|"th.microsoft"|"th.lucene"|"tr.microsoft"|"tr.lucene"|"uk.microsoft"|"ur.microsoft"|"vi.microsoft"|"standard.lucene"|"standardasciifolding.lucene"|"keyword"|"pattern"|"simple"|"stop"|"whitespace", key?: bool, name: string, retrievable?: bool, searchAnalyzer?: "ar.microsoft"|"ar.lucene"|"hy.lucene"|"bn.microsoft"|"eu.lucene"|"bg.microsoft"|"bg.lucene"|"ca.microsoft"|"ca.lucene"|"zh-Hans.microsoft"|"zh-Hans.lucene"|"zh-Hant.microsoft"|"zh-Hant.lucene"|"hr.microsoft"|"cs.microsoft"|"cs.lucene"|"da.microsoft"|"da.lucene"|"nl.microsoft"|"nl.lucene"|"en.microsoft"|"en.lucene"|"et.microsoft"|"fi.microsoft"|"fi.lucene"|"fr.microsoft"|"fr.lucene"|"gl.lucene"|"de.microsoft"|"de.lucene"|"el.microsoft"|"el.lucene"|"gu.microsoft"|"he.microsoft"|"hi.microsoft"|"hi.lucene"|"hu.microsoft"|"hu.lucene"|"is.microsoft"|"id.microsoft"|"id.lucene"|"ga.lucene"|"it.microsoft"|"it.lucene"|"ja.microsoft"|"ja.lucene"|"kn.microsoft"|"ko.microsoft"|"ko.lucene"|"lv.microsoft"|"lv.lucene"|"lt.microsoft"|"ml.microsoft"|"ms.microsoft"|"mr.microsoft"|"nb.microsoft"|"no.lucene"|"fa.lucene"|"pl.microsoft"|"pl.lucene"|"pt-BR.microsoft"|"pt-BR.lucene"|"pt-PT.microsoft"|"pt-PT.lucene"|"pa.microsoft"|"ro.microsoft"|"ro.lucene"|"ru.microsoft"|"ru.lucene"|"sr-cyrillic.microsoft"|"sr-latin.microsoft"|"sk.microsoft"|"sl.microsoft"|"es.microsoft"|"es.lucene"|"sv.microsoft"|"sv.lucene"|"ta.microsoft"|"te.microsoft"|"th.microsoft"|"th.lucene"|"tr.microsoft"|"tr.lucene"|"uk.microsoft"|"ur.microsoft"|"vi.microsoft"|"standard.lucene"|"standardasciifolding.lucene"|"keyword"|"pattern"|"simple"|"stop"|"whitespace", searchable?: bool, sortable?: bool, synonymMaps?: list, type: "Edm.String"|"Edm.Int32"|"Edm.Int64"|"Edm.Double"|"Edm.Boolean"|"Edm.DateTimeOffset"|"Edm.GeographyPoint"|"Edm.ComplexType"}
+# --fields item shape: {analyzer?: "ar.microsoft"|"ar.lucene"|"hy.lucene"|"bn.microsoft"|"eu.lucene"|"bg.microsoft"|"bg.lucene"|"ca.microsoft"|"ca.lucene"|"zh-Hans.microsoft"|"zh-Hans.lucene"|"zh-Hant.microsoft"|"zh-Hant.lucene"|"hr.microsoft"|"cs.microsoft"|"cs.lucene"|"da.microsoft"|"da.lucene"|"nl.microsoft"|"nl.lucene"|"en.microsoft"|"en.lucene"|"et.microsoft"|"fi.microsoft"|"fi.lucene"|"fr.microsoft"|"fr.lucene"|"gl.lucene"|"de.microsoft"|"de.lucene"|"el.microsoft"|"el.lucene"|"gu.microsoft"|"he.microsoft"|"hi.microsoft"|"hi.lucene"|"hu.microsoft"|"hu.lucene"|"is.microsoft"|"id.microsoft"|"id.lucene"|"ga.lucene"|"it.microsoft"|"it.lucene"|"ja.microsoft"|"ja.lucene"|"kn.microsoft"|"ko.microsoft"|"ko.lucene"|"lv.microsoft"|"lv.lucene"|"lt.microsoft"|"ml.microsoft"|"ms.microsoft"|"mr.microsoft"|"nb.microsoft"|"no.lucene"|"fa.lucene"|"pl.microsoft"|"pl.lucene"|"pt-BR.microsoft"|"pt-BR.lucene"|"pt-PT.microsoft"|"pt-PT.lucene"|"pa.microsoft"|"ro.microsoft"|"ro.lucene"|"ru.microsoft"|"ru.lucene"|"sr-cyrillic.microsoft"|"sr-latin.microsoft"|"sk.microsoft"|"sl.microsoft"|"es.microsoft"|"es.lucene"|"sv.microsoft"|"sv.lucene"|"ta.microsoft"|"te.microsoft"|"th.microsoft"|"th.lucene"|"tr.microsoft"|"tr.lucene"|"uk.microsoft"|"ur.microsoft"|"vi.microsoft"|"standard.lucene"|"standardasciifolding.lucene"|"keyword"|"pattern"|"simple"|"stop"|"whitespace", ... (12 more fields)}
 # --scoringProfiles item shape: {functionAggregation?: "sum"|"average"|"minimum"|"maximum"|"firstMatching", functions?: list, name: string, text?: any}
-# --suggesters item shape: {name: string, searchMode: "analyzingInfixMatching", sourceFields: list}
+# --suggesters item shape: {name: string, searchMode: "analyzingInfixMatching", sourceFields: list<string>}
 # --tokenFilters item shape: {@odata.type: string, name: string}
 # --tokenizers item shape: {@odata.type: string, name: string}
 export def "indexes create-or-update" [
@@ -719,13 +728,13 @@ export def "indexes create-or-update" [
   --odata-etag: string # The ETag of the index.
   --analyzers: list # The analyzers for the index. — item shape: {@odata.type: string, name: string}
   --char-filters: list # The character filters for the index. — item shape: {@odata.type: string, name: string}
-  --cors-options: any # Defines options to control Cross-Origin Resource Sharing (CORS) for an index. — shape: {allowedOrigins: list, maxAgeInSeconds?: int}
+  --cors-options: any # Defines options to control Cross-Origin Resource Sharing (CORS) for an index. — shape: {allowedOrigins: list<string>, maxAgeInSeconds?: int}
   --default-scoring-profile: string # The name of the scoring profile to use if none is specified in the query. If this property is not set and no scoring profile is specified in the query, then default scoring (tf-idf) will be used.
   --encryption-key: any # A customer-managed encryption key in Azure Key Vault. Keys that you create and manage can be used to encrypt or decrypt data-at-rest in Azure Cognitive Search, such as indexes and synonym maps. — shape: {accessCredentials?: any, keyVaultKeyName: string, keyVaultKeyVersion: string, keyVaultUri: string}
-  fields: list # The fields of the index. — item shape: {analyzer?: "ar.microsoft"|"ar.lucene"|"hy.lucene"|"bn.microsoft"|"eu.lucene"|"bg.microsoft"|"bg.lucene"|"ca.microsoft"|"ca.lucene"|"zh-Hans.microsoft"|"zh-Hans.lucene"|"zh-Hant.microsoft"|"zh-Hant.lucene"|"hr.microsoft"|"cs.microsoft"|"cs.lucene"|"da.microsoft"|"da.lucene"|"nl.microsoft"|"nl.lucene"|"en.microsoft"|"en.lucene"|"et.microsoft"|"fi.microsoft"|"fi.lucene"|"fr.microsoft"|"fr.lucene"|"gl.lucene"|"de.microsoft"|"de.lucene"|"el.microsoft"|"el.lucene"|"gu.microsoft"|"he.microsoft"|"hi.microsoft"|"hi.lucene"|"hu.microsoft"|"hu.lucene"|"is.microsoft"|"id.microsoft"|"id.lucene"|"ga.lucene"|"it.microsoft"|"it.lucene"|"ja.microsoft"|"ja.lucene"|"kn.microsoft"|"ko.microsoft"|"ko.lucene"|"lv.microsoft"|"lv.lucene"|"lt.microsoft"|"ml.microsoft"|"ms.microsoft"|"mr.microsoft"|"nb.microsoft"|"no.lucene"|"fa.lucene"|"pl.microsoft"|"pl.lucene"|"pt-BR.microsoft"|"pt-BR.lucene"|"pt-PT.microsoft"|"pt-PT.lucene"|"pa.microsoft"|"ro.microsoft"|"ro.lucene"|"ru.microsoft"|"ru.lucene"|"sr-cyrillic.microsoft"|"sr-latin.microsoft"|"sk.microsoft"|"sl.microsoft"|"es.microsoft"|"es.lucene"|"sv.microsoft"|"sv.lucene"|"ta.microsoft"|"te.microsoft"|"th.microsoft"|"th.lucene"|"tr.microsoft"|"tr.lucene"|"uk.microsoft"|"ur.microsoft"|"vi.microsoft"|"standard.lucene"|"standardasciifolding.lucene"|"keyword"|"pattern"|"simple"|"stop"|"whitespace", facetable?: bool, fields?: list, filterable?: bool, indexAnalyzer?: "ar.microsoft"|"ar.lucene"|"hy.lucene"|"bn.microsoft"|"eu.lucene"|"bg.microsoft"|"bg.lucene"|"ca.microsoft"|"ca.lucene"|"zh-Hans.microsoft"|"zh-Hans.lucene"|"zh-Hant.microsoft"|"zh-Hant.lucene"|"hr.microsoft"|"cs.microsoft"|"cs.lucene"|"da.microsoft"|"da.lucene"|"nl.microsoft"|"nl.lucene"|"en.microsoft"|"en.lucene"|"et.microsoft"|"fi.microsoft"|"fi.lucene"|"fr.microsoft"|"fr.lucene"|"gl.lucene"|"de.microsoft"|"de.lucene"|"el.microsoft"|"el.lucene"|"gu.microsoft"|"he.microsoft"|"hi.microsoft"|"hi.lucene"|"hu.microsoft"|"hu.lucene"|"is.microsoft"|"id.microsoft"|"id.lucene"|"ga.lucene"|"it.microsoft"|"it.lucene"|"ja.microsoft"|"ja.lucene"|"kn.microsoft"|"ko.microsoft"|"ko.lucene"|"lv.microsoft"|"lv.lucene"|"lt.microsoft"|"ml.microsoft"|"ms.microsoft"|"mr.microsoft"|"nb.microsoft"|"no.lucene"|"fa.lucene"|"pl.microsoft"|"pl.lucene"|"pt-BR.microsoft"|"pt-BR.lucene"|"pt-PT.microsoft"|"pt-PT.lucene"|"pa.microsoft"|"ro.microsoft"|"ro.lucene"|"ru.microsoft"|"ru.lucene"|"sr-cyrillic.microsoft"|"sr-latin.microsoft"|"sk.microsoft"|"sl.microsoft"|"es.microsoft"|"es.lucene"|"sv.microsoft"|"sv.lucene"|"ta.microsoft"|"te.microsoft"|"th.microsoft"|"th.lucene"|"tr.microsoft"|"tr.lucene"|"uk.microsoft"|"ur.microsoft"|"vi.microsoft"|"standard.lucene"|"standardasciifolding.lucene"|"keyword"|"pattern"|"simple"|"stop"|"whitespace", key?: bool, name: string, retrievable?: bool, searchAnalyzer?: "ar.microsoft"|"ar.lucene"|"hy.lucene"|"bn.microsoft"|"eu.lucene"|"bg.microsoft"|"bg.lucene"|"ca.microsoft"|"ca.lucene"|"zh-Hans.microsoft"|"zh-Hans.lucene"|"zh-Hant.microsoft"|"zh-Hant.lucene"|"hr.microsoft"|"cs.microsoft"|"cs.lucene"|"da.microsoft"|"da.lucene"|"nl.microsoft"|"nl.lucene"|"en.microsoft"|"en.lucene"|"et.microsoft"|"fi.microsoft"|"fi.lucene"|"fr.microsoft"|"fr.lucene"|"gl.lucene"|"de.microsoft"|"de.lucene"|"el.microsoft"|"el.lucene"|"gu.microsoft"|"he.microsoft"|"hi.microsoft"|"hi.lucene"|"hu.microsoft"|"hu.lucene"|"is.microsoft"|"id.microsoft"|"id.lucene"|"ga.lucene"|"it.microsoft"|"it.lucene"|"ja.microsoft"|"ja.lucene"|"kn.microsoft"|"ko.microsoft"|"ko.lucene"|"lv.microsoft"|"lv.lucene"|"lt.microsoft"|"ml.microsoft"|"ms.microsoft"|"mr.microsoft"|"nb.microsoft"|"no.lucene"|"fa.lucene"|"pl.microsoft"|"pl.lucene"|"pt-BR.microsoft"|"pt-BR.lucene"|"pt-PT.microsoft"|"pt-PT.lucene"|"pa.microsoft"|"ro.microsoft"|"ro.lucene"|"ru.microsoft"|"ru.lucene"|"sr-cyrillic.microsoft"|"sr-latin.microsoft"|"sk.microsoft"|"sl.microsoft"|"es.microsoft"|"es.lucene"|"sv.microsoft"|"sv.lucene"|"ta.microsoft"|"te.microsoft"|"th.microsoft"|"th.lucene"|"tr.microsoft"|"tr.lucene"|"uk.microsoft"|"ur.microsoft"|"vi.microsoft"|"standard.lucene"|"standardasciifolding.lucene"|"keyword"|"pattern"|"simple"|"stop"|"whitespace", searchable?: bool, sortable?: bool, synonymMaps?: list, type: "Edm.String"|"Edm.Int32"|"Edm.Int64"|"Edm.Double"|"Edm.Boolean"|"Edm.DateTimeOffset"|"Edm.GeographyPoint"|"Edm.ComplexType"}
+  fields: list # The fields of the index. — item shape: {analyzer?: "ar.microsoft"|"ar.lucene"|"hy.lucene"|"bn.microsoft"|"eu.lucene"|"bg.microsoft"|"bg.lucene"|"ca.microsoft"|"ca.lucene"|"zh-Hans.microsoft"|"zh-Hans.lucene"|"zh-Hant.microsoft"|"zh-Hant.lucene"|"hr.microsoft"|"cs.microsoft"|"cs.lucene"|"da.microsoft"|"da.lucene"|"nl.microsoft"|"nl.lucene"|"en.microsoft"|"en.lucene"|"et.microsoft"|"fi.microsoft"|"fi.lucene"|"fr.microsoft"|"fr.lucene"|"gl.lucene"|"de.microsoft"|"de.lucene"|"el.microsoft"|"el.lucene"|"gu.microsoft"|"he.microsoft"|"hi.microsoft"|"hi.lucene"|"hu.microsoft"|"hu.lucene"|"is.microsoft"|"id.microsoft"|"id.lucene"|"ga.lucene"|"it.microsoft"|"it.lucene"|"ja.microsoft"|"ja.lucene"|"kn.microsoft"|"ko.microsoft"|"ko.lucene"|"lv.microsoft"|"lv.lucene"|"lt.microsoft"|"ml.microsoft"|"ms.microsoft"|"mr.microsoft"|"nb.microsoft"|"no.lucene"|"fa.lucene"|"pl.microsoft"|"pl.lucene"|"pt-BR.microsoft"|"pt-BR.lucene"|"pt-PT.microsoft"|"pt-PT.lucene"|"pa.microsoft"|"ro.microsoft"|"ro.lucene"|"ru.microsoft"|"ru.lucene"|"sr-cyrillic.microsoft"|"sr-latin.microsoft"|"sk.microsoft"|"sl.microsoft"|"es.microsoft"|"es.lucene"|"sv.microsoft"|"sv.lucene"|"ta.microsoft"|"te.microsoft"|"th.microsoft"|"th.lucene"|"tr.microsoft"|"tr.lucene"|"uk.microsoft"|"ur.microsoft"|"vi.microsoft"|"standard.lucene"|"standardasciifolding.lucene"|"keyword"|"pattern"|"simple"|"stop"|"whitespace", ... (12 more fields)}
   name: string # The name of the index.
   --scoring-profiles: list # The scoring profiles for the index. — item shape: {functionAggregation?: "sum"|"average"|"minimum"|"maximum"|"firstMatching", functions?: list, name: string, text?: any}
-  --suggesters: list # The suggesters for the index. — item shape: {name: string, searchMode: "analyzingInfixMatching", sourceFields: list}
+  --suggesters: list # The suggesters for the index. — item shape: {name: string, searchMode: "analyzingInfixMatching", sourceFields: list<string>}
   --token-filters: list # The token filters for the index. — item shape: {@odata.type: string, name: string}
   --tokenizers: list # The tokenizers for the index. — item shape: {@odata.type: string, name: string}
 ]: any -> record<_odata_etag: string, analyzers: table<_odata_type: string, name: string>, charFilters: table<_odata_type: string, name: string>, corsOptions: record<allowedOrigins: list<string>, maxAgeInSeconds: int>, defaultScoringProfile: string, encryptionKey: record<accessCredentials: record<applicationId: string, applicationSecret: string>, keyVaultKeyName: string, keyVaultKeyVersion: string, keyVaultUri: string>, fields: table<analyzer: string, facetable: bool, fields: list, filterable: bool, indexAnalyzer: string, key: bool, name: string, retrievable: bool, searchAnalyzer: string, searchable: bool, sortable: bool, synonymMaps: list, type: string>, name: string, scoringProfiles: table<functionAggregation: string, functions: list, name: string, text: record>, suggesters: table<name: string, searchMode: string, sourceFields: list>, tokenFilters: table<_odata_type: string, name: string>, tokenizers: table<_odata_type: string, name: string>> {
@@ -733,14 +742,14 @@ export def "indexes create-or-update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "allowIndexDowntime" $allow_index_downtime "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({index_name: $index_name} | format pattern "/indexes('{index_name}')") $qp)
-  let body = {"@odata.etag": $odata_etag, "analyzers": $analyzers, "charFilters": $char_filters, "corsOptions": $cors_options, "defaultScoringProfile": $default_scoring_profile, "encryptionKey": $encryption_key, "fields": $fields, "name": $name, "scoringProfiles": $scoring_profiles, "suggesters": $suggesters, "tokenFilters": $token_filters, "tokenizers": $tokenizers} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"client-request-id": $client_request_id, "If-Match": $if_match, "If-None-Match": $if_none_match, "Prefer": $prefer} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({index_name: (encode-path-segment $index_name)} | format pattern "/indexes('{index_name}')") $qp)
+  let req_body = {"@odata.etag": $odata_etag, "analyzers": $analyzers, "charFilters": $char_filters, "corsOptions": $cors_options, "defaultScoringProfile": $default_scoring_profile, "encryptionKey": $encryption_key, "fields": $fields, "name": $name, "scoringProfiles": $scoring_profiles, "suggesters": $suggesters, "tokenFilters": $token_filters, "tokenizers": $tokenizers} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"client-request-id": $client_request_id, "If-Match": $if_match, "If-None-Match": $if_none_match, "Prefer": $prefer} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Shows how an analyzer breaks text into tokens.
@@ -748,7 +757,7 @@ export def "indexes create-or-update" [
 # POST /indexes('{indexName}')/search.analyze
 # Docs: https://docs.microsoft.com/rest/api/searchservice/test-analyzer
 # operationId: Indexes_Analyze
-export def "indexes-searchanalyze post" [
+export def "indexes-search-analyze create" [
   index_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -761,23 +770,23 @@ export def "indexes-searchanalyze post" [
   --api-version: string # Client Api Version.
   --client-request-id: string # The tracking ID sent with the request to help with debugging.
   --analyzer: string@analyzer-completer # Defines the names of all text analyzers supported by Azure Cognitive Search.
-  --char-filters: list # An optional list of character filters to use when breaking the given text. This parameter can only be set when using the tokenizer parameter.
+  --char-filters: list<string> # An optional list of character filters to use when breaking the given text. This parameter can only be set when using the tokenizer parameter.
   text: string # The text to break into tokens.
-  --token-filters: list # An optional list of token filters to use when breaking the given text. This parameter can only be set when using the tokenizer parameter.
+  --token-filters: list<string> # An optional list of token filters to use when breaking the given text. This parameter can only be set when using the tokenizer parameter.
   --tokenizer: string@tokenizer-completer # Defines the names of all tokenizers supported by Azure Cognitive Search.
 ]: any -> record<tokens: table<endOffset: int, position: int, startOffset: int, token: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({index_name: $index_name} | format pattern "/indexes('{index_name}')/search.analyze") $qp)
-  let body = {"analyzer": $analyzer, "charFilters": $char_filters, "text": $text, "tokenFilters": $token_filters, "tokenizer": $tokenizer} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"client-request-id": $client_request_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({index_name: (encode-path-segment $index_name)} | format pattern "/indexes('{index_name}')/search.analyze") $qp)
+  let req_body = {"analyzer": $analyzer, "charFilters": $char_filters, "text": $text, "tokenFilters": $token_filters, "tokenizer": $tokenizer} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"client-request-id": $client_request_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns statistics for the given index, including a document count and storage usage.
@@ -785,7 +794,7 @@ export def "indexes-searchanalyze post" [
 # GET /indexes('{indexName}')/search.stats
 # Docs: https://docs.microsoft.com/rest/api/searchservice/Get-Index-Statistics
 # operationId: Indexes_GetStatistics
-export def "indexes-searchstats get-statistics" [
+export def "indexes-search-stats get-statistics" [
   index_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -801,11 +810,11 @@ export def "indexes-searchstats get-statistics" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({index_name: $index_name} | format pattern "/indexes('{index_name}')/search.stats") $qp)
-  let extra_headers = {"client-request-id": $client_request_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({index_name: (encode-path-segment $index_name)} | format pattern "/indexes('{index_name}')/search.stats") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"client-request-id": $client_request_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -829,10 +838,10 @@ export def "servicestats get-service-statistics" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/servicestats" $qp)
-  let extra_headers = {"client-request-id": $client_request_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"client-request-id": $client_request_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -858,10 +867,10 @@ export def "skillsets list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$select" $select "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/skillsets" $qp)
-  let extra_headers = {"client-request-id": $client_request_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"client-request-id": $client_request_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -894,13 +903,13 @@ export def "skillsets create" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/skillsets" $qp)
-  let body = {"@odata.etag": $odata_etag, "cognitiveServices": $cognitive_services, "description": $description, "name": $name, "skills": $skills} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"client-request-id": $client_request_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"@odata.etag": $odata_etag, "cognitiveServices": $cognitive_services, "description": $description, "name": $name, "skills": $skills} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"client-request-id": $client_request_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes a skillset in a search service.
@@ -926,11 +935,11 @@ export def "skillsets delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({skillset_name: $skillset_name} | format pattern "/skillsets('{skillset_name}')") $qp)
-  let extra_headers = {"client-request-id": $client_request_id, "If-Match": $if_match, "If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({skillset_name: (encode-path-segment $skillset_name)} | format pattern "/skillsets('{skillset_name}')") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"client-request-id": $client_request_id, "If-Match": $if_match, "If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -955,11 +964,11 @@ export def "skillsets get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({skillset_name: $skillset_name} | format pattern "/skillsets('{skillset_name}')") $qp)
-  let extra_headers = {"client-request-id": $client_request_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({skillset_name: (encode-path-segment $skillset_name)} | format pattern "/skillsets('{skillset_name}')") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"client-request-id": $client_request_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -995,14 +1004,14 @@ export def "skillsets create-or-update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({skillset_name: $skillset_name} | format pattern "/skillsets('{skillset_name}')") $qp)
-  let body = {"@odata.etag": $odata_etag, "cognitiveServices": $cognitive_services, "description": $description, "name": $name, "skills": $skills} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"client-request-id": $client_request_id, "If-Match": $if_match, "If-None-Match": $if_none_match, "Prefer": $prefer} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({skillset_name: (encode-path-segment $skillset_name)} | format pattern "/skillsets('{skillset_name}')") $qp)
+  let req_body = {"@odata.etag": $odata_etag, "cognitiveServices": $cognitive_services, "description": $description, "name": $name, "skills": $skills} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"client-request-id": $client_request_id, "If-Match": $if_match, "If-None-Match": $if_none_match, "Prefer": $prefer} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists all synonym maps available for a search service.
@@ -1010,7 +1019,7 @@ export def "skillsets create-or-update" [
 # GET /synonymmaps
 # Docs: https://docs.microsoft.com/rest/api/searchservice/List-Synonym-Maps
 # operationId: SynonymMaps_List
-export def "synonymmaps list" [
+export def "synonymmaps list-synonym-maps" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1027,10 +1036,10 @@ export def "synonymmaps list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$select" $select "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/synonymmaps" $qp)
-  let extra_headers = {"client-request-id": $client_request_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"client-request-id": $client_request_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1040,7 +1049,7 @@ export def "synonymmaps list" [
 # Docs: https://docs.microsoft.com/rest/api/searchservice/Create-Synonym-Map
 # operationId: SynonymMaps_Create
 # --encryptionKey shape: {accessCredentials?: any, keyVaultKeyName: string, keyVaultKeyVersion: string, keyVaultUri: string}
-export def "synonymmaps create" [
+export def "synonymmaps create-synonym-maps" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1062,13 +1071,13 @@ export def "synonymmaps create" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/synonymmaps" $qp)
-  let body = {"@odata.etag": $odata_etag, "encryptionKey": $encryption_key, "format": $format, "name": $name, "synonyms": $synonyms} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"client-request-id": $client_request_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"@odata.etag": $odata_etag, "encryptionKey": $encryption_key, "format": $format, "name": $name, "synonyms": $synonyms} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"client-request-id": $client_request_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes a synonym map.
@@ -1076,7 +1085,7 @@ export def "synonymmaps create" [
 # DELETE /synonymmaps('{synonymMapName}')
 # Docs: https://docs.microsoft.com/rest/api/searchservice/Delete-Synonym-Map
 # operationId: SynonymMaps_Delete
-export def "synonymmaps delete" [
+export def "synonymmaps delete-synonym-maps" [
   synonym_map_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1094,11 +1103,11 @@ export def "synonymmaps delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({synonym_map_name: $synonym_map_name} | format pattern "/synonymmaps('{synonym_map_name}')") $qp)
-  let extra_headers = {"client-request-id": $client_request_id, "If-Match": $if_match, "If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({synonym_map_name: (encode-path-segment $synonym_map_name)} | format pattern "/synonymmaps('{synonym_map_name}')") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"client-request-id": $client_request_id, "If-Match": $if_match, "If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1107,7 +1116,7 @@ export def "synonymmaps delete" [
 # GET /synonymmaps('{synonymMapName}')
 # Docs: https://docs.microsoft.com/rest/api/searchservice/Get-Synonym-Map
 # operationId: SynonymMaps_Get
-export def "synonymmaps get" [
+export def "synonymmaps get-synonym-maps" [
   synonym_map_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1123,11 +1132,11 @@ export def "synonymmaps get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({synonym_map_name: $synonym_map_name} | format pattern "/synonymmaps('{synonym_map_name}')") $qp)
-  let extra_headers = {"client-request-id": $client_request_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({synonym_map_name: (encode-path-segment $synonym_map_name)} | format pattern "/synonymmaps('{synonym_map_name}')") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"client-request-id": $client_request_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1137,7 +1146,7 @@ export def "synonymmaps get" [
 # Docs: https://docs.microsoft.com/rest/api/searchservice/Update-Synonym-Map
 # operationId: SynonymMaps_CreateOrUpdate
 # --encryptionKey shape: {accessCredentials?: any, keyVaultKeyName: string, keyVaultKeyVersion: string, keyVaultUri: string}
-export def "synonymmaps create-or-update" [
+export def "synonymmaps create-synonym-maps-or-update" [
   synonym_map_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1162,12 +1171,12 @@ export def "synonymmaps create-or-update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({synonym_map_name: $synonym_map_name} | format pattern "/synonymmaps('{synonym_map_name}')") $qp)
-  let body = {"@odata.etag": $odata_etag, "encryptionKey": $encryption_key, "format": $format, "name": $name, "synonyms": $synonyms} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"client-request-id": $client_request_id, "If-Match": $if_match, "If-None-Match": $if_none_match, "Prefer": $prefer} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({synonym_map_name: (encode-path-segment $synonym_map_name)} | format pattern "/synonymmaps('{synonym_map_name}')") $qp)
+  let req_body = {"@odata.etag": $odata_etag, "encryptionKey": $encryption_key, "format": $format, "name": $name, "synonyms": $synonyms} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"client-request-id": $client_request_id, "If-Match": $if_match, "If-None-Match": $if_none_match, "Prefer": $prefer} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

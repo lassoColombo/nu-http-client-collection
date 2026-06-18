@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -79,7 +88,7 @@ def filter-completer [] { ["manufacturing_basic" "market"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "alliances get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "alliances list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -103,7 +112,7 @@ export def commands []: nothing -> table {
 #
 # GET /alliances/
 # operationId: get_alliances
-export def "alliances get" [
+export def "alliances list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -119,10 +128,10 @@ export def "alliances get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/alliances/" $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -130,7 +139,7 @@ export def "alliances get" [
 #
 # GET /alliances/{alliance_id}/
 # operationId: get_alliances_alliance_id
-export def "alliances id" [
+export def "alliances get" [
   alliance_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -146,11 +155,11 @@ export def "alliances id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({alliance_id: $alliance_id} | format pattern "/alliances/{alliance_id}/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({alliance_id: (encode-path-segment $alliance_id)} | format pattern "/alliances/{alliance_id}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -158,7 +167,7 @@ export def "alliances id" [
 #
 # GET /alliances/{alliance_id}/contacts/
 # operationId: get_alliances_alliance_id_contacts
-export def "alliances-contacts contacts" [
+export def "alliances-contacts get" [
   alliance_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -176,11 +185,11 @@ export def "alliances-contacts contacts" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({alliance_id: $alliance_id} | format pattern "/alliances/{alliance_id}/contacts/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({alliance_id: (encode-path-segment $alliance_id)} | format pattern "/alliances/{alliance_id}/contacts/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -188,7 +197,7 @@ export def "alliances-contacts contacts" [
 #
 # GET /alliances/{alliance_id}/contacts/labels/
 # operationId: get_alliances_alliance_id_contacts_labels
-export def "alliances-contacts-labels labels" [
+export def "alliances-contacts-labels get" [
   alliance_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -205,11 +214,11 @@ export def "alliances-contacts-labels labels" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({alliance_id: $alliance_id} | format pattern "/alliances/{alliance_id}/contacts/labels/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({alliance_id: (encode-path-segment $alliance_id)} | format pattern "/alliances/{alliance_id}/contacts/labels/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -217,7 +226,7 @@ export def "alliances-contacts-labels labels" [
 #
 # GET /alliances/{alliance_id}/corporations/
 # operationId: get_alliances_alliance_id_corporations
-export def "alliances-corporations corporations" [
+export def "alliances-corporations get" [
   alliance_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -233,11 +242,11 @@ export def "alliances-corporations corporations" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({alliance_id: $alliance_id} | format pattern "/alliances/{alliance_id}/corporations/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({alliance_id: (encode-path-segment $alliance_id)} | format pattern "/alliances/{alliance_id}/corporations/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -245,7 +254,7 @@ export def "alliances-corporations corporations" [
 #
 # GET /alliances/{alliance_id}/icons/
 # operationId: get_alliances_alliance_id_icons
-export def "alliances-icons icons" [
+export def "alliances-icons get" [
   alliance_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -261,11 +270,11 @@ export def "alliances-icons icons" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({alliance_id: $alliance_id} | format pattern "/alliances/{alliance_id}/icons/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({alliance_id: (encode-path-segment $alliance_id)} | format pattern "/alliances/{alliance_id}/icons/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -273,7 +282,7 @@ export def "alliances-icons icons" [
 #
 # POST /characters/affiliation/
 # operationId: post_characters_affiliation
-export def "characters-affiliation affiliation" [
+export def "characters-affiliation create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -290,17 +299,18 @@ export def "characters-affiliation affiliation" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/characters/affiliation/" $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get character's public information
 #
 # GET /characters/{character_id}/
 # operationId: get_characters_character_id
-export def "characters id" [
+export def "characters get" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -316,11 +326,11 @@ export def "characters id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -328,7 +338,7 @@ export def "characters id" [
 #
 # GET /characters/{character_id}/agents_research/
 # operationId: get_characters_character_id_agents_research
-export def "characters-agents-research research" [
+export def "characters-agents-research get" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -345,11 +355,11 @@ export def "characters-agents-research research" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/agents_research/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/agents_research/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -357,7 +367,7 @@ export def "characters-agents-research research" [
 #
 # GET /characters/{character_id}/assets/
 # operationId: get_characters_character_id_assets
-export def "characters-assets assets" [
+export def "characters-assets get" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -375,11 +385,11 @@ export def "characters-assets assets" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/assets/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/assets/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -387,7 +397,7 @@ export def "characters-assets assets" [
 #
 # POST /characters/{character_id}/assets/locations/
 # operationId: post_characters_character_id_assets_locations
-export def "characters-assets-locations locations" [
+export def "characters-assets-locations create" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -405,18 +415,19 @@ export def "characters-assets-locations locations" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/assets/locations/") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/assets/locations/") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get character asset names
 #
 # POST /characters/{character_id}/assets/names/
 # operationId: post_characters_character_id_assets_names
-export def "characters-assets-names names" [
+export def "characters-assets-names create" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -434,18 +445,19 @@ export def "characters-assets-names names" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/assets/names/") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/assets/names/") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get character attributes
 #
 # GET /characters/{character_id}/attributes/
 # operationId: get_characters_character_id_attributes
-export def "characters-attributes attributes" [
+export def "characters-attributes get" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -462,11 +474,11 @@ export def "characters-attributes attributes" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/attributes/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/attributes/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -474,7 +486,7 @@ export def "characters-attributes attributes" [
 #
 # GET /characters/{character_id}/blueprints/
 # operationId: get_characters_character_id_blueprints
-export def "characters-blueprints blueprints" [
+export def "characters-blueprints get" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -492,11 +504,11 @@ export def "characters-blueprints blueprints" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/blueprints/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/blueprints/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -504,7 +516,7 @@ export def "characters-blueprints blueprints" [
 #
 # GET /characters/{character_id}/bookmarks/
 # operationId: get_characters_character_id_bookmarks
-export def "characters-bookmarks bookmarks" [
+export def "characters-bookmarks get" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -522,11 +534,11 @@ export def "characters-bookmarks bookmarks" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/bookmarks/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/bookmarks/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -534,7 +546,7 @@ export def "characters-bookmarks bookmarks" [
 #
 # GET /characters/{character_id}/bookmarks/folders/
 # operationId: get_characters_character_id_bookmarks_folders
-export def "characters-bookmarks-folders folders" [
+export def "characters-bookmarks-folders get" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -552,11 +564,11 @@ export def "characters-bookmarks-folders folders" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/bookmarks/folders/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/bookmarks/folders/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -564,7 +576,7 @@ export def "characters-bookmarks-folders folders" [
 #
 # GET /characters/{character_id}/calendar/
 # operationId: get_characters_character_id_calendar
-export def "characters-calendar calendar" [
+export def "characters-calendar list" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -582,11 +594,11 @@ export def "characters-calendar calendar" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "from_event" $from_event "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/calendar/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/calendar/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -594,7 +606,7 @@ export def "characters-calendar calendar" [
 #
 # GET /characters/{character_id}/calendar/{event_id}/
 # operationId: get_characters_character_id_calendar_event_id
-export def "characters-calendar id-by-character_id-event_id" [
+export def "characters-calendar get" [
   character_id: int
   event_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -612,11 +624,11 @@ export def "characters-calendar id-by-character_id-event_id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: $character_id, event_id: $event_id} | format pattern "/characters/{character_id}/calendar/{event_id}/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id), event_id: (encode-path-segment $event_id)} | format pattern "/characters/{character_id}/calendar/{event_id}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -624,7 +636,7 @@ export def "characters-calendar id-by-character_id-event_id" [
 #
 # PUT /characters/{character_id}/calendar/{event_id}/
 # operationId: put_characters_character_id_calendar_event_id
-export def "characters-calendar id-by-character_id-event_id-1" [
+export def "characters-calendar update" [
   character_id: int
   event_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -643,19 +655,19 @@ export def "characters-calendar id-by-character_id-event_id-1" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: $character_id, event_id: $event_id} | format pattern "/characters/{character_id}/calendar/{event_id}/") $qp)
-  let body = {"response": $response} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id), event_id: (encode-path-segment $event_id)} | format pattern "/characters/{character_id}/calendar/{event_id}/") $qp)
+  let req_body = {"response": $response} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get attendees
 #
 # GET /characters/{character_id}/calendar/{event_id}/attendees/
 # operationId: get_characters_character_id_calendar_event_id_attendees
-export def "characters-calendar-attendees attendees" [
+export def "characters-calendar-attendees get" [
   character_id: int
   event_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -673,11 +685,11 @@ export def "characters-calendar-attendees attendees" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: $character_id, event_id: $event_id} | format pattern "/characters/{character_id}/calendar/{event_id}/attendees/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id), event_id: (encode-path-segment $event_id)} | format pattern "/characters/{character_id}/calendar/{event_id}/attendees/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -685,7 +697,7 @@ export def "characters-calendar-attendees attendees" [
 #
 # GET /characters/{character_id}/clones/
 # operationId: get_characters_character_id_clones
-export def "characters-clones clone-s" [
+export def "characters-clones get" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -702,11 +714,11 @@ export def "characters-clones clone-s" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/clones/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/clones/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -714,7 +726,7 @@ export def "characters-clones clone-s" [
 #
 # DELETE /characters/{character_id}/contacts/
 # operationId: delete_characters_character_id_contacts
-export def "characters-contacts contacts-by-character_id" [
+export def "characters-contacts delete" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -724,14 +736,14 @@ export def "characters-contacts contacts-by-character_id" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --contact-ids: list # A list of contacts to delete
+  --contact-ids: list<int> # A list of contacts to delete
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "contact_ids" $contact_ids "csv") (serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/contacts/") $qp)
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/contacts/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -741,7 +753,7 @@ export def "characters-contacts contacts-by-character_id" [
 #
 # GET /characters/{character_id}/contacts/
 # operationId: get_characters_character_id_contacts
-export def "characters-contacts contacts-by-character_id-1" [
+export def "characters-contacts get" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -759,11 +771,11 @@ export def "characters-contacts contacts-by-character_id-1" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/contacts/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/contacts/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -771,7 +783,7 @@ export def "characters-contacts contacts-by-character_id-1" [
 #
 # POST /characters/{character_id}/contacts/
 # operationId: post_characters_character_id_contacts
-export def "characters-contacts contacts-by-character_id-2" [
+export def "characters-contacts create" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -782,7 +794,7 @@ export def "characters-contacts contacts-by-character_id-2" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --label-ids: list # Add custom labels to the new contact
+  --label-ids: list<int> # Add custom labels to the new contact
   --standing: float # Standing for the contact (format: float)
   --qp-token: string # Access token to use if unable to set a header
   --watched: oneof<nothing, bool> # Whether the contact should be watched, note this is only effective on characters (default: false)
@@ -792,18 +804,19 @@ export def "characters-contacts contacts-by-character_id-2" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "label_ids" $label_ids "csv") (serialize-qp "standing" $standing "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "watched" $watched "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/contacts/") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/contacts/") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Edit contacts
 #
 # PUT /characters/{character_id}/contacts/
 # operationId: put_characters_character_id_contacts
-export def "characters-contacts contacts-by-character_id-3" [
+export def "characters-contacts update" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -814,7 +827,7 @@ export def "characters-contacts contacts-by-character_id-3" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --label-ids: list # Add custom labels to the contact
+  --label-ids: list<int> # Add custom labels to the contact
   --standing: float # Standing for the contact (format: float)
   --qp-token: string # Access token to use if unable to set a header
   --watched: oneof<nothing, bool> # Whether the contact should be watched, note this is only effective on characters (default: false)
@@ -824,18 +837,19 @@ export def "characters-contacts contacts-by-character_id-3" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "label_ids" $label_ids "csv") (serialize-qp "standing" $standing "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "watched" $watched "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/contacts/") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/contacts/") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get contact labels
 #
 # GET /characters/{character_id}/contacts/labels/
 # operationId: get_characters_character_id_contacts_labels
-export def "characters-contacts-labels labels" [
+export def "characters-contacts-labels get" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -852,11 +866,11 @@ export def "characters-contacts-labels labels" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/contacts/labels/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/contacts/labels/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -864,7 +878,7 @@ export def "characters-contacts-labels labels" [
 #
 # GET /characters/{character_id}/contracts/
 # operationId: get_characters_character_id_contracts
-export def "characters-contracts contracts" [
+export def "characters-contracts get" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -882,11 +896,11 @@ export def "characters-contracts contracts" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/contracts/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/contracts/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -894,7 +908,7 @@ export def "characters-contracts contracts" [
 #
 # GET /characters/{character_id}/contracts/{contract_id}/bids/
 # operationId: get_characters_character_id_contracts_contract_id_bids
-export def "characters-contracts-bids bids" [
+export def "characters-contracts-bids get" [
   character_id: int
   contract_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -912,11 +926,11 @@ export def "characters-contracts-bids bids" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: $character_id, contract_id: $contract_id} | format pattern "/characters/{character_id}/contracts/{contract_id}/bids/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id), contract_id: (encode-path-segment $contract_id)} | format pattern "/characters/{character_id}/contracts/{contract_id}/bids/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -924,7 +938,7 @@ export def "characters-contracts-bids bids" [
 #
 # GET /characters/{character_id}/contracts/{contract_id}/items/
 # operationId: get_characters_character_id_contracts_contract_id_items
-export def "characters-contracts-items items" [
+export def "characters-contracts-items get" [
   character_id: int
   contract_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -942,11 +956,11 @@ export def "characters-contracts-items items" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: $character_id, contract_id: $contract_id} | format pattern "/characters/{character_id}/contracts/{contract_id}/items/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id), contract_id: (encode-path-segment $contract_id)} | format pattern "/characters/{character_id}/contracts/{contract_id}/items/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -954,7 +968,7 @@ export def "characters-contracts-items items" [
 #
 # GET /characters/{character_id}/corporationhistory/
 # operationId: get_characters_character_id_corporationhistory
-export def "characters-corporationhistory corporationhistory" [
+export def "characters-corporationhistory get" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -970,11 +984,11 @@ export def "characters-corporationhistory corporationhistory" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/corporationhistory/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/corporationhistory/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -982,7 +996,7 @@ export def "characters-corporationhistory corporationhistory" [
 #
 # POST /characters/{character_id}/cspa/
 # operationId: post_characters_character_id_cspa
-export def "characters-cspa cspa" [
+export def "characters-cspa create" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1000,18 +1014,19 @@ export def "characters-cspa cspa" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/cspa/") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/cspa/") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get jump fatigue
 #
 # GET /characters/{character_id}/fatigue/
 # operationId: get_characters_character_id_fatigue
-export def "characters-fatigue fatigue" [
+export def "characters-fatigue get" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1028,11 +1043,11 @@ export def "characters-fatigue fatigue" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/fatigue/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/fatigue/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1040,7 +1055,7 @@ export def "characters-fatigue fatigue" [
 #
 # GET /characters/{character_id}/fittings/
 # operationId: get_characters_character_id_fittings
-export def "characters-fittings fittings-by-character_id" [
+export def "characters-fittings get" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1057,11 +1072,11 @@ export def "characters-fittings fittings-by-character_id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/fittings/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/fittings/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1070,7 +1085,7 @@ export def "characters-fittings fittings-by-character_id" [
 # POST /characters/{character_id}/fittings/
 # operationId: post_characters_character_id_fittings
 # --items item shape: {flag: int, quantity: int, type_id: int}
-export def "characters-fittings fittings-by-character_id-1" [
+export def "characters-fittings create" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1091,19 +1106,19 @@ export def "characters-fittings fittings-by-character_id-1" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/fittings/") $qp)
-  let body = {"description": $description, "items": $items, "name": $name, "ship_type_id": $ship_type_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/fittings/") $qp)
+  let req_body = {"description": $description, "items": $items, "name": $name, "ship_type_id": $ship_type_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete fitting
 #
 # DELETE /characters/{character_id}/fittings/{fitting_id}/
 # operationId: delete_characters_character_id_fittings_fitting_id
-export def "characters-fittings id" [
+export def "characters-fittings delete" [
   character_id: int
   fitting_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1120,7 +1135,7 @@ export def "characters-fittings id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: $character_id, fitting_id: $fitting_id} | format pattern "/characters/{character_id}/fittings/{fitting_id}/") $qp)
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id), fitting_id: (encode-path-segment $fitting_id)} | format pattern "/characters/{character_id}/fittings/{fitting_id}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1130,7 +1145,7 @@ export def "characters-fittings id" [
 #
 # GET /characters/{character_id}/fleet/
 # operationId: get_characters_character_id_fleet
-export def "characters-fleet fleet" [
+export def "characters-fleet get" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1147,11 +1162,11 @@ export def "characters-fleet fleet" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/fleet/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/fleet/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1159,7 +1174,7 @@ export def "characters-fleet fleet" [
 #
 # GET /characters/{character_id}/fw/stats/
 # operationId: get_characters_character_id_fw_stats
-export def "characters-fw-stats stats" [
+export def "characters-fw-stats get" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1176,11 +1191,11 @@ export def "characters-fw-stats stats" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/fw/stats/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/fw/stats/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1188,7 +1203,7 @@ export def "characters-fw-stats stats" [
 #
 # GET /characters/{character_id}/implants/
 # operationId: get_characters_character_id_implants
-export def "characters-implants implants" [
+export def "characters-implants get" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1205,11 +1220,11 @@ export def "characters-implants implants" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/implants/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/implants/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1217,7 +1232,7 @@ export def "characters-implants implants" [
 #
 # GET /characters/{character_id}/industry/jobs/
 # operationId: get_characters_character_id_industry_jobs
-export def "characters-industry-jobs jobs" [
+export def "characters-industry-jobs get" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1235,11 +1250,11 @@ export def "characters-industry-jobs jobs" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "include_completed" $include_completed "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/industry/jobs/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/industry/jobs/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1247,7 +1262,7 @@ export def "characters-industry-jobs jobs" [
 #
 # GET /characters/{character_id}/killmails/recent/
 # operationId: get_characters_character_id_killmails_recent
-export def "characters-killmails-recent recent" [
+export def "characters-killmails-recent get" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1265,11 +1280,11 @@ export def "characters-killmails-recent recent" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/killmails/recent/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/killmails/recent/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1277,7 +1292,7 @@ export def "characters-killmails-recent recent" [
 #
 # GET /characters/{character_id}/location/
 # operationId: get_characters_character_id_location
-export def "characters-location location" [
+export def "characters-location get" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1294,11 +1309,11 @@ export def "characters-location location" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/location/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/location/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1306,7 +1321,7 @@ export def "characters-location location" [
 #
 # GET /characters/{character_id}/loyalty/points/
 # operationId: get_characters_character_id_loyalty_points
-export def "characters-loyalty-points points" [
+export def "characters-loyalty-points get" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1323,11 +1338,11 @@ export def "characters-loyalty-points points" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/loyalty/points/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/loyalty/points/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1335,7 +1350,7 @@ export def "characters-loyalty-points points" [
 #
 # GET /characters/{character_id}/mail/
 # operationId: get_characters_character_id_mail
-export def "characters-mail mail-by-character_id" [
+export def "characters-mail list" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1346,7 +1361,7 @@ export def "characters-mail mail-by-character_id" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --labels: list # Fetch only mails that match one or more of the given labels
+  --labels: list<int> # Fetch only mails that match one or more of the given labels
   --last-mail-id: int # List only mail with an ID lower than the given ID, if present (format: int32)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
@@ -1354,11 +1369,11 @@ export def "characters-mail mail-by-character_id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "labels" $labels "csv") (serialize-qp "last_mail_id" $last_mail_id "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/mail/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/mail/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1367,7 +1382,7 @@ export def "characters-mail mail-by-character_id" [
 # POST /characters/{character_id}/mail/
 # operationId: post_characters_character_id_mail
 # --recipients item shape: {recipient_id: int, recipient_type: "alliance"|"character"|"corporation"|"mailing_list"}
-export def "characters-mail mail-by-character_id-1" [
+export def "characters-mail create" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1380,7 +1395,7 @@ export def "characters-mail mail-by-character_id-1" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
   --approved-cost: int # approved_cost integer (format: int64, default: 0)
-  --body-body: string # body string
+  body: string # body string
   recipients: list # recipients array — item shape: {recipient_id: int, recipient_type: "alliance"|"character"|"corporation"|"mailing_list"}
   subject: string # subject string
 ]: any -> int {
@@ -1388,19 +1403,19 @@ export def "characters-mail mail-by-character_id-1" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/mail/") $qp)
-  let body = {"approved_cost": $approved_cost, "body": $body_body, "recipients": $recipients, "subject": $subject} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/mail/") $qp)
+  let req_body = {"approved_cost": $approved_cost, "body": $body, "recipients": $recipients, "subject": $subject} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get mail labels and unread counts
 #
 # GET /characters/{character_id}/mail/labels/
 # operationId: get_characters_character_id_mail_labels
-export def "characters-mail-labels labels-by-character_id" [
+export def "characters-mail-labels get" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1417,11 +1432,11 @@ export def "characters-mail-labels labels-by-character_id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/mail/labels/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/mail/labels/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1429,7 +1444,7 @@ export def "characters-mail-labels labels-by-character_id" [
 #
 # POST /characters/{character_id}/mail/labels/
 # operationId: post_characters_character_id_mail_labels
-export def "characters-mail-labels labels-by-character_id-1" [
+export def "characters-mail-labels create" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1448,19 +1463,19 @@ export def "characters-mail-labels labels-by-character_id-1" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/mail/labels/") $qp)
-  let body = {"color": $color, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/mail/labels/") $qp)
+  let req_body = {"color": $color, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a mail label
 #
 # DELETE /characters/{character_id}/mail/labels/{label_id}/
 # operationId: delete_characters_character_id_mail_labels_label_id
-export def "characters-mail-labels id" [
+export def "characters-mail-labels delete" [
   character_id: int
   label_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1477,7 +1492,7 @@ export def "characters-mail-labels id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: $character_id, label_id: $label_id} | format pattern "/characters/{character_id}/mail/labels/{label_id}/") $qp)
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id), label_id: (encode-path-segment $label_id)} | format pattern "/characters/{character_id}/mail/labels/{label_id}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1487,7 +1502,7 @@ export def "characters-mail-labels id" [
 #
 # GET /characters/{character_id}/mail/lists/
 # operationId: get_characters_character_id_mail_lists
-export def "characters-mail-lists list-s" [
+export def "characters-mail-lists get" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1504,11 +1519,11 @@ export def "characters-mail-lists list-s" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/mail/lists/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/mail/lists/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1516,7 +1531,7 @@ export def "characters-mail-lists list-s" [
 #
 # DELETE /characters/{character_id}/mail/{mail_id}/
 # operationId: delete_characters_character_id_mail_mail_id
-export def "characters-mail id-by-character_id-mail_id" [
+export def "characters-mail delete" [
   character_id: int
   mail_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1533,7 +1548,7 @@ export def "characters-mail id-by-character_id-mail_id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: $character_id, mail_id: $mail_id} | format pattern "/characters/{character_id}/mail/{mail_id}/") $qp)
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id), mail_id: (encode-path-segment $mail_id)} | format pattern "/characters/{character_id}/mail/{mail_id}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1543,7 +1558,7 @@ export def "characters-mail id-by-character_id-mail_id" [
 #
 # GET /characters/{character_id}/mail/{mail_id}/
 # operationId: get_characters_character_id_mail_mail_id
-export def "characters-mail id-by-character_id-mail_id-1" [
+export def "characters-mail get" [
   character_id: int
   mail_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1561,11 +1576,11 @@ export def "characters-mail id-by-character_id-mail_id-1" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: $character_id, mail_id: $mail_id} | format pattern "/characters/{character_id}/mail/{mail_id}/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id), mail_id: (encode-path-segment $mail_id)} | format pattern "/characters/{character_id}/mail/{mail_id}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1573,7 +1588,7 @@ export def "characters-mail id-by-character_id-mail_id-1" [
 #
 # PUT /characters/{character_id}/mail/{mail_id}/
 # operationId: put_characters_character_id_mail_mail_id
-export def "characters-mail id-by-character_id-mail_id-2" [
+export def "characters-mail update" [
   character_id: int
   mail_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1586,26 +1601,26 @@ export def "characters-mail id-by-character_id-mail_id-2" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
-  --labels: list # Labels to assign to the mail. Pre-existing labels are unassigned.
+  --labels: list<int> # Labels to assign to the mail. Pre-existing labels are unassigned.
   --read: oneof<nothing, bool> # Whether the mail is flagged as read
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: $character_id, mail_id: $mail_id} | format pattern "/characters/{character_id}/mail/{mail_id}/") $qp)
-  let body = {"labels": $labels, "read": $read} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id), mail_id: (encode-path-segment $mail_id)} | format pattern "/characters/{character_id}/mail/{mail_id}/") $qp)
+  let req_body = {"labels": $labels, "read": $read} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get medals
 #
 # GET /characters/{character_id}/medals/
 # operationId: get_characters_character_id_medals
-export def "characters-medals medals" [
+export def "characters-medals get" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1622,11 +1637,11 @@ export def "characters-medals medals" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/medals/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/medals/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1634,7 +1649,7 @@ export def "characters-medals medals" [
 #
 # GET /characters/{character_id}/mining/
 # operationId: get_characters_character_id_mining
-export def "characters-mining mining" [
+export def "characters-mining get" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1652,11 +1667,11 @@ export def "characters-mining mining" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/mining/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/mining/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1664,7 +1679,7 @@ export def "characters-mining mining" [
 #
 # GET /characters/{character_id}/notifications/
 # operationId: get_characters_character_id_notifications
-export def "characters-notifications notifications" [
+export def "characters-notifications get" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1681,11 +1696,11 @@ export def "characters-notifications notifications" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/notifications/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/notifications/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1693,7 +1708,7 @@ export def "characters-notifications notifications" [
 #
 # GET /characters/{character_id}/notifications/contacts/
 # operationId: get_characters_character_id_notifications_contacts
-export def "characters-notifications-contacts contacts" [
+export def "characters-notifications-contacts get" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1710,11 +1725,11 @@ export def "characters-notifications-contacts contacts" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/notifications/contacts/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/notifications/contacts/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1722,7 +1737,7 @@ export def "characters-notifications-contacts contacts" [
 #
 # GET /characters/{character_id}/online/
 # operationId: get_characters_character_id_online
-export def "characters-online online" [
+export def "characters-online get" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1739,11 +1754,11 @@ export def "characters-online online" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/online/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/online/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1751,7 +1766,7 @@ export def "characters-online online" [
 #
 # GET /characters/{character_id}/opportunities/
 # operationId: get_characters_character_id_opportunities
-export def "characters-opportunities opportunities" [
+export def "characters-opportunities get" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1768,11 +1783,11 @@ export def "characters-opportunities opportunities" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/opportunities/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/opportunities/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1780,7 +1795,7 @@ export def "characters-opportunities opportunities" [
 #
 # GET /characters/{character_id}/orders/
 # operationId: get_characters_character_id_orders
-export def "characters-orders orders" [
+export def "characters-orders get" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1797,11 +1812,11 @@ export def "characters-orders orders" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/orders/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/orders/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1809,7 +1824,7 @@ export def "characters-orders orders" [
 #
 # GET /characters/{character_id}/orders/history/
 # operationId: get_characters_character_id_orders_history
-export def "characters-orders-history history" [
+export def "characters-orders-history get" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1827,11 +1842,11 @@ export def "characters-orders-history history" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/orders/history/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/orders/history/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1839,7 +1854,7 @@ export def "characters-orders-history history" [
 #
 # GET /characters/{character_id}/planets/
 # operationId: get_characters_character_id_planets
-export def "characters-planets planets" [
+export def "characters-planets list" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1856,11 +1871,11 @@ export def "characters-planets planets" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/planets/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/planets/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1868,7 +1883,7 @@ export def "characters-planets planets" [
 #
 # GET /characters/{character_id}/planets/{planet_id}/
 # operationId: get_characters_character_id_planets_planet_id
-export def "characters-planets id" [
+export def "characters-planets get" [
   character_id: int
   planet_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1886,11 +1901,11 @@ export def "characters-planets id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: $character_id, planet_id: $planet_id} | format pattern "/characters/{character_id}/planets/{planet_id}/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id), planet_id: (encode-path-segment $planet_id)} | format pattern "/characters/{character_id}/planets/{planet_id}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1898,7 +1913,7 @@ export def "characters-planets id" [
 #
 # GET /characters/{character_id}/portrait/
 # operationId: get_characters_character_id_portrait
-export def "characters-portrait portrait" [
+export def "characters-portrait get" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1914,11 +1929,11 @@ export def "characters-portrait portrait" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/portrait/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/portrait/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1926,7 +1941,7 @@ export def "characters-portrait portrait" [
 #
 # GET /characters/{character_id}/roles/
 # operationId: get_characters_character_id_roles
-export def "characters-roles roles" [
+export def "characters-roles get" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1943,11 +1958,11 @@ export def "characters-roles roles" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/roles/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/roles/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1955,7 +1970,7 @@ export def "characters-roles roles" [
 #
 # GET /characters/{character_id}/search/
 # operationId: get_characters_character_id_search
-export def "characters-search search" [
+export def "characters-search get" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1965,7 +1980,7 @@ export def "characters-search search" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --categories: list # Type of entities to search for
+  --categories: list<string> # Type of entities to search for
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --language: string@language-completer # Language to use in the response, takes precedence over Accept-Language (default: en-us)
   --search: string # The string to search on
@@ -1977,11 +1992,11 @@ export def "characters-search search" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "categories" $categories "csv") (serialize-qp "datasource" $datasource "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "strict" $strict "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/search/") $qp)
-  let extra_headers = {"Accept-Language": $accept_language, "If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/search/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": $accept_language, "If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1989,7 +2004,7 @@ export def "characters-search search" [
 #
 # GET /characters/{character_id}/ship/
 # operationId: get_characters_character_id_ship
-export def "characters-ship ship" [
+export def "characters-ship get" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2006,11 +2021,11 @@ export def "characters-ship ship" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/ship/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/ship/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2018,7 +2033,7 @@ export def "characters-ship ship" [
 #
 # GET /characters/{character_id}/skillqueue/
 # operationId: get_characters_character_id_skillqueue
-export def "characters-skillqueue skillqueue" [
+export def "characters-skillqueue get" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2035,11 +2050,11 @@ export def "characters-skillqueue skillqueue" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/skillqueue/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/skillqueue/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2047,7 +2062,7 @@ export def "characters-skillqueue skillqueue" [
 #
 # GET /characters/{character_id}/skills/
 # operationId: get_characters_character_id_skills
-export def "characters-skills skills" [
+export def "characters-skills get" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2064,11 +2079,11 @@ export def "characters-skills skills" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/skills/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/skills/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2076,7 +2091,7 @@ export def "characters-skills skills" [
 #
 # GET /characters/{character_id}/standings/
 # operationId: get_characters_character_id_standings
-export def "characters-standings standings" [
+export def "characters-standings get" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2093,11 +2108,11 @@ export def "characters-standings standings" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/standings/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/standings/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2105,7 +2120,7 @@ export def "characters-standings standings" [
 #
 # GET /characters/{character_id}/stats/
 # operationId: get_characters_character_id_stats
-export def "characters-stats stats" [
+export def "characters-stats get" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2122,11 +2137,11 @@ export def "characters-stats stats" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/stats/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/stats/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2134,7 +2149,7 @@ export def "characters-stats stats" [
 #
 # GET /characters/{character_id}/titles/
 # operationId: get_characters_character_id_titles
-export def "characters-titles titles" [
+export def "characters-titles get" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2151,11 +2166,11 @@ export def "characters-titles titles" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/titles/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/titles/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2163,7 +2178,7 @@ export def "characters-titles titles" [
 #
 # GET /characters/{character_id}/wallet/
 # operationId: get_characters_character_id_wallet
-export def "characters-wallet wallet" [
+export def "characters-wallet get" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2180,11 +2195,11 @@ export def "characters-wallet wallet" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/wallet/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/wallet/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2192,7 +2207,7 @@ export def "characters-wallet wallet" [
 #
 # GET /characters/{character_id}/wallet/journal/
 # operationId: get_characters_character_id_wallet_journal
-export def "characters-wallet-journal journal" [
+export def "characters-wallet-journal get" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2210,11 +2225,11 @@ export def "characters-wallet-journal journal" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/wallet/journal/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/wallet/journal/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2222,7 +2237,7 @@ export def "characters-wallet-journal journal" [
 #
 # GET /characters/{character_id}/wallet/transactions/
 # operationId: get_characters_character_id_wallet_transactions
-export def "characters-wallet-transactions transactions" [
+export def "characters-wallet-transactions get" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2240,11 +2255,11 @@ export def "characters-wallet-transactions transactions" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "from_id" $from_id "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/wallet/transactions/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/wallet/transactions/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2252,7 +2267,7 @@ export def "characters-wallet-transactions transactions" [
 #
 # GET /contracts/public/bids/{contract_id}/
 # operationId: get_contracts_public_bids_contract_id
-export def "contracts-public-bids id" [
+export def "contracts-public-bids get" [
   contract_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2269,11 +2284,11 @@ export def "contracts-public-bids id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({contract_id: $contract_id} | format pattern "/contracts/public/bids/{contract_id}/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({contract_id: (encode-path-segment $contract_id)} | format pattern "/contracts/public/bids/{contract_id}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2281,7 +2296,7 @@ export def "contracts-public-bids id" [
 #
 # GET /contracts/public/items/{contract_id}/
 # operationId: get_contracts_public_items_contract_id
-export def "contracts-public-items id" [
+export def "contracts-public-items get" [
   contract_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2298,11 +2313,11 @@ export def "contracts-public-items id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({contract_id: $contract_id} | format pattern "/contracts/public/items/{contract_id}/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({contract_id: (encode-path-segment $contract_id)} | format pattern "/contracts/public/items/{contract_id}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2310,7 +2325,7 @@ export def "contracts-public-items id" [
 #
 # GET /contracts/public/{region_id}/
 # operationId: get_contracts_public_region_id
-export def "contracts-public id" [
+export def "contracts-public get" [
   region_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2327,11 +2342,11 @@ export def "contracts-public id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({region_id: $region_id} | format pattern "/contracts/public/{region_id}/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({region_id: (encode-path-segment $region_id)} | format pattern "/contracts/public/{region_id}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2339,7 +2354,7 @@ export def "contracts-public id" [
 #
 # GET /corporation/{corporation_id}/mining/extractions/
 # operationId: get_corporation_corporation_id_mining_extractions
-export def "corporation-mining-extractions extractions" [
+export def "corporation-mining-extractions get" [
   corporation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2357,11 +2372,11 @@ export def "corporation-mining-extractions extractions" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({corporation_id: $corporation_id} | format pattern "/corporation/{corporation_id}/mining/extractions/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporation/{corporation_id}/mining/extractions/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2369,7 +2384,7 @@ export def "corporation-mining-extractions extractions" [
 #
 # GET /corporation/{corporation_id}/mining/observers/
 # operationId: get_corporation_corporation_id_mining_observers
-export def "corporation-mining-observers observers" [
+export def "corporation-mining-observers list" [
   corporation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2387,11 +2402,11 @@ export def "corporation-mining-observers observers" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({corporation_id: $corporation_id} | format pattern "/corporation/{corporation_id}/mining/observers/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporation/{corporation_id}/mining/observers/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2399,7 +2414,7 @@ export def "corporation-mining-observers observers" [
 #
 # GET /corporation/{corporation_id}/mining/observers/{observer_id}/
 # operationId: get_corporation_corporation_id_mining_observers_observer_id
-export def "corporation-mining-observers id" [
+export def "corporation-mining-observers get" [
   corporation_id: int
   observer_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2418,11 +2433,11 @@ export def "corporation-mining-observers id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({corporation_id: $corporation_id, observer_id: $observer_id} | format pattern "/corporation/{corporation_id}/mining/observers/{observer_id}/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id), observer_id: (encode-path-segment $observer_id)} | format pattern "/corporation/{corporation_id}/mining/observers/{observer_id}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2430,7 +2445,7 @@ export def "corporation-mining-observers id" [
 #
 # GET /corporations/npccorps/
 # operationId: get_corporations_npccorps
-export def "corporations-npccorps npccorps" [
+export def "corporations-npccorps get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2446,10 +2461,10 @@ export def "corporations-npccorps npccorps" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/corporations/npccorps/" $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2457,7 +2472,7 @@ export def "corporations-npccorps npccorps" [
 #
 # GET /corporations/{corporation_id}/
 # operationId: get_corporations_corporation_id
-export def "corporations id" [
+export def "corporations get" [
   corporation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2473,11 +2488,11 @@ export def "corporations id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({corporation_id: $corporation_id} | format pattern "/corporations/{corporation_id}/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2485,7 +2500,7 @@ export def "corporations id" [
 #
 # GET /corporations/{corporation_id}/alliancehistory/
 # operationId: get_corporations_corporation_id_alliancehistory
-export def "corporations-alliancehistory alliancehistory" [
+export def "corporations-alliancehistory get" [
   corporation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2501,11 +2516,11 @@ export def "corporations-alliancehistory alliancehistory" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({corporation_id: $corporation_id} | format pattern "/corporations/{corporation_id}/alliancehistory/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/alliancehistory/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2513,7 +2528,7 @@ export def "corporations-alliancehistory alliancehistory" [
 #
 # GET /corporations/{corporation_id}/assets/
 # operationId: get_corporations_corporation_id_assets
-export def "corporations-assets assets" [
+export def "corporations-assets get" [
   corporation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2531,11 +2546,11 @@ export def "corporations-assets assets" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({corporation_id: $corporation_id} | format pattern "/corporations/{corporation_id}/assets/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/assets/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2543,7 +2558,7 @@ export def "corporations-assets assets" [
 #
 # POST /corporations/{corporation_id}/assets/locations/
 # operationId: post_corporations_corporation_id_assets_locations
-export def "corporations-assets-locations locations" [
+export def "corporations-assets-locations create" [
   corporation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2561,18 +2576,19 @@ export def "corporations-assets-locations locations" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({corporation_id: $corporation_id} | format pattern "/corporations/{corporation_id}/assets/locations/") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/assets/locations/") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get corporation asset names
 #
 # POST /corporations/{corporation_id}/assets/names/
 # operationId: post_corporations_corporation_id_assets_names
-export def "corporations-assets-names names" [
+export def "corporations-assets-names create" [
   corporation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2590,18 +2606,19 @@ export def "corporations-assets-names names" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({corporation_id: $corporation_id} | format pattern "/corporations/{corporation_id}/assets/names/") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/assets/names/") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get corporation blueprints
 #
 # GET /corporations/{corporation_id}/blueprints/
 # operationId: get_corporations_corporation_id_blueprints
-export def "corporations-blueprints blueprints" [
+export def "corporations-blueprints get" [
   corporation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2619,11 +2636,11 @@ export def "corporations-blueprints blueprints" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({corporation_id: $corporation_id} | format pattern "/corporations/{corporation_id}/blueprints/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/blueprints/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2631,7 +2648,7 @@ export def "corporations-blueprints blueprints" [
 #
 # GET /corporations/{corporation_id}/bookmarks/
 # operationId: get_corporations_corporation_id_bookmarks
-export def "corporations-bookmarks bookmarks" [
+export def "corporations-bookmarks get" [
   corporation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2649,11 +2666,11 @@ export def "corporations-bookmarks bookmarks" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({corporation_id: $corporation_id} | format pattern "/corporations/{corporation_id}/bookmarks/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/bookmarks/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2661,7 +2678,7 @@ export def "corporations-bookmarks bookmarks" [
 #
 # GET /corporations/{corporation_id}/bookmarks/folders/
 # operationId: get_corporations_corporation_id_bookmarks_folders
-export def "corporations-bookmarks-folders folders" [
+export def "corporations-bookmarks-folders get" [
   corporation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2679,11 +2696,11 @@ export def "corporations-bookmarks-folders folders" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({corporation_id: $corporation_id} | format pattern "/corporations/{corporation_id}/bookmarks/folders/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/bookmarks/folders/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2691,7 +2708,7 @@ export def "corporations-bookmarks-folders folders" [
 #
 # GET /corporations/{corporation_id}/contacts/
 # operationId: get_corporations_corporation_id_contacts
-export def "corporations-contacts contacts" [
+export def "corporations-contacts get" [
   corporation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2709,11 +2726,11 @@ export def "corporations-contacts contacts" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({corporation_id: $corporation_id} | format pattern "/corporations/{corporation_id}/contacts/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/contacts/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2721,7 +2738,7 @@ export def "corporations-contacts contacts" [
 #
 # GET /corporations/{corporation_id}/contacts/labels/
 # operationId: get_corporations_corporation_id_contacts_labels
-export def "corporations-contacts-labels labels" [
+export def "corporations-contacts-labels get" [
   corporation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2738,11 +2755,11 @@ export def "corporations-contacts-labels labels" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({corporation_id: $corporation_id} | format pattern "/corporations/{corporation_id}/contacts/labels/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/contacts/labels/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2750,7 +2767,7 @@ export def "corporations-contacts-labels labels" [
 #
 # GET /corporations/{corporation_id}/containers/logs/
 # operationId: get_corporations_corporation_id_containers_logs
-export def "corporations-containers-logs logs" [
+export def "corporations-containers-logs get" [
   corporation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2768,11 +2785,11 @@ export def "corporations-containers-logs logs" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({corporation_id: $corporation_id} | format pattern "/corporations/{corporation_id}/containers/logs/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/containers/logs/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2780,7 +2797,7 @@ export def "corporations-containers-logs logs" [
 #
 # GET /corporations/{corporation_id}/contracts/
 # operationId: get_corporations_corporation_id_contracts
-export def "corporations-contracts contracts" [
+export def "corporations-contracts get" [
   corporation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2798,11 +2815,11 @@ export def "corporations-contracts contracts" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({corporation_id: $corporation_id} | format pattern "/corporations/{corporation_id}/contracts/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/contracts/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2810,7 +2827,7 @@ export def "corporations-contracts contracts" [
 #
 # GET /corporations/{corporation_id}/contracts/{contract_id}/bids/
 # operationId: get_corporations_corporation_id_contracts_contract_id_bids
-export def "corporations-contracts-bids bids" [
+export def "corporations-contracts-bids get" [
   corporation_id: int
   contract_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2829,11 +2846,11 @@ export def "corporations-contracts-bids bids" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({corporation_id: $corporation_id, contract_id: $contract_id} | format pattern "/corporations/{corporation_id}/contracts/{contract_id}/bids/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id), contract_id: (encode-path-segment $contract_id)} | format pattern "/corporations/{corporation_id}/contracts/{contract_id}/bids/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2841,7 +2858,7 @@ export def "corporations-contracts-bids bids" [
 #
 # GET /corporations/{corporation_id}/contracts/{contract_id}/items/
 # operationId: get_corporations_corporation_id_contracts_contract_id_items
-export def "corporations-contracts-items items" [
+export def "corporations-contracts-items get" [
   corporation_id: int
   contract_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2859,11 +2876,11 @@ export def "corporations-contracts-items items" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({corporation_id: $corporation_id, contract_id: $contract_id} | format pattern "/corporations/{corporation_id}/contracts/{contract_id}/items/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id), contract_id: (encode-path-segment $contract_id)} | format pattern "/corporations/{corporation_id}/contracts/{contract_id}/items/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2871,7 +2888,7 @@ export def "corporations-contracts-items items" [
 #
 # GET /corporations/{corporation_id}/customs_offices/
 # operationId: get_corporations_corporation_id_customs_offices
-export def "corporations-customs-offices offices" [
+export def "corporations-customs-offices get" [
   corporation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2889,11 +2906,11 @@ export def "corporations-customs-offices offices" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({corporation_id: $corporation_id} | format pattern "/corporations/{corporation_id}/customs_offices/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/customs_offices/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2901,7 +2918,7 @@ export def "corporations-customs-offices offices" [
 #
 # GET /corporations/{corporation_id}/divisions/
 # operationId: get_corporations_corporation_id_divisions
-export def "corporations-divisions divisions" [
+export def "corporations-divisions get" [
   corporation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2918,11 +2935,11 @@ export def "corporations-divisions divisions" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({corporation_id: $corporation_id} | format pattern "/corporations/{corporation_id}/divisions/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/divisions/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2930,7 +2947,7 @@ export def "corporations-divisions divisions" [
 #
 # GET /corporations/{corporation_id}/facilities/
 # operationId: get_corporations_corporation_id_facilities
-export def "corporations-facilities facilities" [
+export def "corporations-facilities get" [
   corporation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2947,11 +2964,11 @@ export def "corporations-facilities facilities" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({corporation_id: $corporation_id} | format pattern "/corporations/{corporation_id}/facilities/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/facilities/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2959,7 +2976,7 @@ export def "corporations-facilities facilities" [
 #
 # GET /corporations/{corporation_id}/fw/stats/
 # operationId: get_corporations_corporation_id_fw_stats
-export def "corporations-fw-stats stats" [
+export def "corporations-fw-stats get" [
   corporation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2976,11 +2993,11 @@ export def "corporations-fw-stats stats" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({corporation_id: $corporation_id} | format pattern "/corporations/{corporation_id}/fw/stats/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/fw/stats/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2988,7 +3005,7 @@ export def "corporations-fw-stats stats" [
 #
 # GET /corporations/{corporation_id}/icons/
 # operationId: get_corporations_corporation_id_icons
-export def "corporations-icons icons" [
+export def "corporations-icons get" [
   corporation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3004,11 +3021,11 @@ export def "corporations-icons icons" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({corporation_id: $corporation_id} | format pattern "/corporations/{corporation_id}/icons/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/icons/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3016,7 +3033,7 @@ export def "corporations-icons icons" [
 #
 # GET /corporations/{corporation_id}/industry/jobs/
 # operationId: get_corporations_corporation_id_industry_jobs
-export def "corporations-industry-jobs jobs" [
+export def "corporations-industry-jobs get" [
   corporation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3035,11 +3052,11 @@ export def "corporations-industry-jobs jobs" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "include_completed" $include_completed "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({corporation_id: $corporation_id} | format pattern "/corporations/{corporation_id}/industry/jobs/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/industry/jobs/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3047,7 +3064,7 @@ export def "corporations-industry-jobs jobs" [
 #
 # GET /corporations/{corporation_id}/killmails/recent/
 # operationId: get_corporations_corporation_id_killmails_recent
-export def "corporations-killmails-recent recent" [
+export def "corporations-killmails-recent get" [
   corporation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3065,11 +3082,11 @@ export def "corporations-killmails-recent recent" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({corporation_id: $corporation_id} | format pattern "/corporations/{corporation_id}/killmails/recent/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/killmails/recent/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3077,7 +3094,7 @@ export def "corporations-killmails-recent recent" [
 #
 # GET /corporations/{corporation_id}/medals/
 # operationId: get_corporations_corporation_id_medals
-export def "corporations-medals medals" [
+export def "corporations-medals get" [
   corporation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3095,11 +3112,11 @@ export def "corporations-medals medals" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({corporation_id: $corporation_id} | format pattern "/corporations/{corporation_id}/medals/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/medals/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3107,7 +3124,7 @@ export def "corporations-medals medals" [
 #
 # GET /corporations/{corporation_id}/medals/issued/
 # operationId: get_corporations_corporation_id_medals_issued
-export def "corporations-medals-issued issued" [
+export def "corporations-medals-issued get" [
   corporation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3125,11 +3142,11 @@ export def "corporations-medals-issued issued" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({corporation_id: $corporation_id} | format pattern "/corporations/{corporation_id}/medals/issued/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/medals/issued/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3137,7 +3154,7 @@ export def "corporations-medals-issued issued" [
 #
 # GET /corporations/{corporation_id}/members/
 # operationId: get_corporations_corporation_id_members
-export def "corporations-members members" [
+export def "corporations-members get" [
   corporation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3154,11 +3171,11 @@ export def "corporations-members members" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({corporation_id: $corporation_id} | format pattern "/corporations/{corporation_id}/members/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/members/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3166,7 +3183,7 @@ export def "corporations-members members" [
 #
 # GET /corporations/{corporation_id}/members/limit/
 # operationId: get_corporations_corporation_id_members_limit
-export def "corporations-members-limit limit" [
+export def "corporations-members-limit get" [
   corporation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3183,11 +3200,11 @@ export def "corporations-members-limit limit" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({corporation_id: $corporation_id} | format pattern "/corporations/{corporation_id}/members/limit/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/members/limit/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3195,7 +3212,7 @@ export def "corporations-members-limit limit" [
 #
 # GET /corporations/{corporation_id}/members/titles/
 # operationId: get_corporations_corporation_id_members_titles
-export def "corporations-members-titles titles" [
+export def "corporations-members-titles get" [
   corporation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3212,11 +3229,11 @@ export def "corporations-members-titles titles" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({corporation_id: $corporation_id} | format pattern "/corporations/{corporation_id}/members/titles/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/members/titles/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3224,7 +3241,7 @@ export def "corporations-members-titles titles" [
 #
 # GET /corporations/{corporation_id}/membertracking/
 # operationId: get_corporations_corporation_id_membertracking
-export def "corporations-membertracking membertracking" [
+export def "corporations-membertracking get" [
   corporation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3241,11 +3258,11 @@ export def "corporations-membertracking membertracking" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({corporation_id: $corporation_id} | format pattern "/corporations/{corporation_id}/membertracking/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/membertracking/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3253,7 +3270,7 @@ export def "corporations-membertracking membertracking" [
 #
 # GET /corporations/{corporation_id}/orders/
 # operationId: get_corporations_corporation_id_orders
-export def "corporations-orders orders" [
+export def "corporations-orders get" [
   corporation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3271,11 +3288,11 @@ export def "corporations-orders orders" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({corporation_id: $corporation_id} | format pattern "/corporations/{corporation_id}/orders/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/orders/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3283,7 +3300,7 @@ export def "corporations-orders orders" [
 #
 # GET /corporations/{corporation_id}/orders/history/
 # operationId: get_corporations_corporation_id_orders_history
-export def "corporations-orders-history history" [
+export def "corporations-orders-history get" [
   corporation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3301,11 +3318,11 @@ export def "corporations-orders-history history" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({corporation_id: $corporation_id} | format pattern "/corporations/{corporation_id}/orders/history/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/orders/history/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3313,7 +3330,7 @@ export def "corporations-orders-history history" [
 #
 # GET /corporations/{corporation_id}/roles/
 # operationId: get_corporations_corporation_id_roles
-export def "corporations-roles roles" [
+export def "corporations-roles get" [
   corporation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3330,11 +3347,11 @@ export def "corporations-roles roles" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({corporation_id: $corporation_id} | format pattern "/corporations/{corporation_id}/roles/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/roles/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3342,7 +3359,7 @@ export def "corporations-roles roles" [
 #
 # GET /corporations/{corporation_id}/roles/history/
 # operationId: get_corporations_corporation_id_roles_history
-export def "corporations-roles-history history" [
+export def "corporations-roles-history get" [
   corporation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3360,11 +3377,11 @@ export def "corporations-roles-history history" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({corporation_id: $corporation_id} | format pattern "/corporations/{corporation_id}/roles/history/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/roles/history/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3372,7 +3389,7 @@ export def "corporations-roles-history history" [
 #
 # GET /corporations/{corporation_id}/shareholders/
 # operationId: get_corporations_corporation_id_shareholders
-export def "corporations-shareholders shareholders" [
+export def "corporations-shareholders get" [
   corporation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3390,11 +3407,11 @@ export def "corporations-shareholders shareholders" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({corporation_id: $corporation_id} | format pattern "/corporations/{corporation_id}/shareholders/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/shareholders/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3402,7 +3419,7 @@ export def "corporations-shareholders shareholders" [
 #
 # GET /corporations/{corporation_id}/standings/
 # operationId: get_corporations_corporation_id_standings
-export def "corporations-standings standings" [
+export def "corporations-standings get" [
   corporation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3420,11 +3437,11 @@ export def "corporations-standings standings" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({corporation_id: $corporation_id} | format pattern "/corporations/{corporation_id}/standings/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/standings/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3432,7 +3449,7 @@ export def "corporations-standings standings" [
 #
 # GET /corporations/{corporation_id}/starbases/
 # operationId: get_corporations_corporation_id_starbases
-export def "corporations-starbases starbases" [
+export def "corporations-starbases list" [
   corporation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3450,11 +3467,11 @@ export def "corporations-starbases starbases" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({corporation_id: $corporation_id} | format pattern "/corporations/{corporation_id}/starbases/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/starbases/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3462,7 +3479,7 @@ export def "corporations-starbases starbases" [
 #
 # GET /corporations/{corporation_id}/starbases/{starbase_id}/
 # operationId: get_corporations_corporation_id_starbases_starbase_id
-export def "corporations-starbases id" [
+export def "corporations-starbases get" [
   corporation_id: int
   starbase_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3481,11 +3498,11 @@ export def "corporations-starbases id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "system_id" $system_id "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({corporation_id: $corporation_id, starbase_id: $starbase_id} | format pattern "/corporations/{corporation_id}/starbases/{starbase_id}/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id), starbase_id: (encode-path-segment $starbase_id)} | format pattern "/corporations/{corporation_id}/starbases/{starbase_id}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3493,7 +3510,7 @@ export def "corporations-starbases id" [
 #
 # GET /corporations/{corporation_id}/structures/
 # operationId: get_corporations_corporation_id_structures
-export def "corporations-structures structures" [
+export def "corporations-structures get" [
   corporation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3513,11 +3530,11 @@ export def "corporations-structures structures" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({corporation_id: $corporation_id} | format pattern "/corporations/{corporation_id}/structures/") $qp)
-  let extra_headers = {"Accept-Language": $accept_language, "If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/structures/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": $accept_language, "If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3525,7 +3542,7 @@ export def "corporations-structures structures" [
 #
 # GET /corporations/{corporation_id}/titles/
 # operationId: get_corporations_corporation_id_titles
-export def "corporations-titles titles" [
+export def "corporations-titles get" [
   corporation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3542,11 +3559,11 @@ export def "corporations-titles titles" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({corporation_id: $corporation_id} | format pattern "/corporations/{corporation_id}/titles/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/titles/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3554,7 +3571,7 @@ export def "corporations-titles titles" [
 #
 # GET /corporations/{corporation_id}/wallets/
 # operationId: get_corporations_corporation_id_wallets
-export def "corporations-wallets wallets" [
+export def "corporations-wallets get" [
   corporation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3571,11 +3588,11 @@ export def "corporations-wallets wallets" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({corporation_id: $corporation_id} | format pattern "/corporations/{corporation_id}/wallets/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/wallets/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3583,7 +3600,7 @@ export def "corporations-wallets wallets" [
 #
 # GET /corporations/{corporation_id}/wallets/{division}/journal/
 # operationId: get_corporations_corporation_id_wallets_division_journal
-export def "corporations-wallets-journal journal" [
+export def "corporations-wallets-journal get" [
   corporation_id: int
   division: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3602,11 +3619,11 @@ export def "corporations-wallets-journal journal" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({corporation_id: $corporation_id, division: $division} | format pattern "/corporations/{corporation_id}/wallets/{division}/journal/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id), division: (encode-path-segment $division)} | format pattern "/corporations/{corporation_id}/wallets/{division}/journal/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3614,7 +3631,7 @@ export def "corporations-wallets-journal journal" [
 #
 # GET /corporations/{corporation_id}/wallets/{division}/transactions/
 # operationId: get_corporations_corporation_id_wallets_division_transactions
-export def "corporations-wallets-transactions transactions" [
+export def "corporations-wallets-transactions get" [
   corporation_id: int
   division: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3633,11 +3650,11 @@ export def "corporations-wallets-transactions transactions" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "from_id" $from_id "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({corporation_id: $corporation_id, division: $division} | format pattern "/corporations/{corporation_id}/wallets/{division}/transactions/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id), division: (encode-path-segment $division)} | format pattern "/corporations/{corporation_id}/wallets/{division}/transactions/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3645,7 +3662,7 @@ export def "corporations-wallets-transactions transactions" [
 #
 # GET /dogma/attributes/
 # operationId: get_dogma_attributes
-export def "dogma-attributes attributes" [
+export def "dogma-attributes list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3661,10 +3678,10 @@ export def "dogma-attributes attributes" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dogma/attributes/" $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3672,7 +3689,7 @@ export def "dogma-attributes attributes" [
 #
 # GET /dogma/attributes/{attribute_id}/
 # operationId: get_dogma_attributes_attribute_id
-export def "dogma-attributes id" [
+export def "dogma-attributes get" [
   attribute_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3688,11 +3705,11 @@ export def "dogma-attributes id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({attribute_id: $attribute_id} | format pattern "/dogma/attributes/{attribute_id}/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({attribute_id: (encode-path-segment $attribute_id)} | format pattern "/dogma/attributes/{attribute_id}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3700,7 +3717,7 @@ export def "dogma-attributes id" [
 #
 # GET /dogma/dynamic/items/{type_id}/{item_id}/
 # operationId: get_dogma_dynamic_items_type_id_item_id
-export def "dogma-dynamic-items id" [
+export def "dogma-dynamic-items get" [
   type_id: int
   item_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3717,11 +3734,11 @@ export def "dogma-dynamic-items id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({type_id: $type_id, item_id: $item_id} | format pattern "/dogma/dynamic/items/{type_id}/{item_id}/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({type_id: (encode-path-segment $type_id), item_id: (encode-path-segment $item_id)} | format pattern "/dogma/dynamic/items/{type_id}/{item_id}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3729,7 +3746,7 @@ export def "dogma-dynamic-items id" [
 #
 # GET /dogma/effects/
 # operationId: get_dogma_effects
-export def "dogma-effects effects" [
+export def "dogma-effects list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3745,10 +3762,10 @@ export def "dogma-effects effects" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dogma/effects/" $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3756,7 +3773,7 @@ export def "dogma-effects effects" [
 #
 # GET /dogma/effects/{effect_id}/
 # operationId: get_dogma_effects_effect_id
-export def "dogma-effects id" [
+export def "dogma-effects get" [
   effect_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3772,11 +3789,11 @@ export def "dogma-effects id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({effect_id: $effect_id} | format pattern "/dogma/effects/{effect_id}/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({effect_id: (encode-path-segment $effect_id)} | format pattern "/dogma/effects/{effect_id}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3784,7 +3801,7 @@ export def "dogma-effects id" [
 #
 # GET /fleets/{fleet_id}/
 # operationId: get_fleets_fleet_id
-export def "fleets id-by-fleet_id" [
+export def "fleets get" [
   fleet_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3801,11 +3818,11 @@ export def "fleets id-by-fleet_id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({fleet_id: $fleet_id} | format pattern "/fleets/{fleet_id}/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({fleet_id: (encode-path-segment $fleet_id)} | format pattern "/fleets/{fleet_id}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3813,7 +3830,7 @@ export def "fleets id-by-fleet_id" [
 #
 # PUT /fleets/{fleet_id}/
 # operationId: put_fleets_fleet_id
-export def "fleets id-by-fleet_id-1" [
+export def "fleets update" [
   fleet_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3832,19 +3849,19 @@ export def "fleets id-by-fleet_id-1" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({fleet_id: $fleet_id} | format pattern "/fleets/{fleet_id}/") $qp)
-  let body = {"is_free_move": $is_free_move, "motd": $motd} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({fleet_id: (encode-path-segment $fleet_id)} | format pattern "/fleets/{fleet_id}/") $qp)
+  let req_body = {"is_free_move": $is_free_move, "motd": $motd} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get fleet members
 #
 # GET /fleets/{fleet_id}/members/
 # operationId: get_fleets_fleet_id_members
-export def "fleets-members members-by-fleet_id" [
+export def "fleets-members get" [
   fleet_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3863,11 +3880,11 @@ export def "fleets-members members-by-fleet_id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({fleet_id: $fleet_id} | format pattern "/fleets/{fleet_id}/members/") $qp)
-  let extra_headers = {"Accept-Language": $accept_language, "If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({fleet_id: (encode-path-segment $fleet_id)} | format pattern "/fleets/{fleet_id}/members/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": $accept_language, "If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3875,7 +3892,7 @@ export def "fleets-members members-by-fleet_id" [
 #
 # POST /fleets/{fleet_id}/members/
 # operationId: post_fleets_fleet_id_members
-export def "fleets-members members-by-fleet_id-1" [
+export def "fleets-members create" [
   fleet_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3896,19 +3913,19 @@ export def "fleets-members members-by-fleet_id-1" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({fleet_id: $fleet_id} | format pattern "/fleets/{fleet_id}/members/") $qp)
-  let body = {"character_id": $character_id, "role": $role, "squad_id": $squad_id, "wing_id": $wing_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({fleet_id: (encode-path-segment $fleet_id)} | format pattern "/fleets/{fleet_id}/members/") $qp)
+  let req_body = {"character_id": $character_id, "role": $role, "squad_id": $squad_id, "wing_id": $wing_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Kick fleet member
 #
 # DELETE /fleets/{fleet_id}/members/{member_id}/
 # operationId: delete_fleets_fleet_id_members_member_id
-export def "fleets-members id-by-fleet_id-member_id" [
+export def "fleets-members delete" [
   fleet_id: int
   member_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3925,7 +3942,7 @@ export def "fleets-members id-by-fleet_id-member_id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({fleet_id: $fleet_id, member_id: $member_id} | format pattern "/fleets/{fleet_id}/members/{member_id}/") $qp)
+  let full_url = (build-url $base ({fleet_id: (encode-path-segment $fleet_id), member_id: (encode-path-segment $member_id)} | format pattern "/fleets/{fleet_id}/members/{member_id}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3935,7 +3952,7 @@ export def "fleets-members id-by-fleet_id-member_id" [
 #
 # PUT /fleets/{fleet_id}/members/{member_id}/
 # operationId: put_fleets_fleet_id_members_member_id
-export def "fleets-members id-by-fleet_id-member_id-1" [
+export def "fleets-members update" [
   fleet_id: int
   member_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3956,19 +3973,19 @@ export def "fleets-members id-by-fleet_id-member_id-1" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({fleet_id: $fleet_id, member_id: $member_id} | format pattern "/fleets/{fleet_id}/members/{member_id}/") $qp)
-  let body = {"role": $role, "squad_id": $squad_id, "wing_id": $wing_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({fleet_id: (encode-path-segment $fleet_id), member_id: (encode-path-segment $member_id)} | format pattern "/fleets/{fleet_id}/members/{member_id}/") $qp)
+  let req_body = {"role": $role, "squad_id": $squad_id, "wing_id": $wing_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete fleet squad
 #
 # DELETE /fleets/{fleet_id}/squads/{squad_id}/
 # operationId: delete_fleets_fleet_id_squads_squad_id
-export def "fleets-squads id-by-fleet_id-squad_id" [
+export def "fleets-squads delete" [
   fleet_id: int
   squad_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3985,7 +4002,7 @@ export def "fleets-squads id-by-fleet_id-squad_id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({fleet_id: $fleet_id, squad_id: $squad_id} | format pattern "/fleets/{fleet_id}/squads/{squad_id}/") $qp)
+  let full_url = (build-url $base ({fleet_id: (encode-path-segment $fleet_id), squad_id: (encode-path-segment $squad_id)} | format pattern "/fleets/{fleet_id}/squads/{squad_id}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3995,7 +4012,7 @@ export def "fleets-squads id-by-fleet_id-squad_id" [
 #
 # PUT /fleets/{fleet_id}/squads/{squad_id}/
 # operationId: put_fleets_fleet_id_squads_squad_id
-export def "fleets-squads id-by-fleet_id-squad_id-1" [
+export def "fleets-squads update" [
   fleet_id: int
   squad_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4014,19 +4031,19 @@ export def "fleets-squads id-by-fleet_id-squad_id-1" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({fleet_id: $fleet_id, squad_id: $squad_id} | format pattern "/fleets/{fleet_id}/squads/{squad_id}/") $qp)
-  let body = {"name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({fleet_id: (encode-path-segment $fleet_id), squad_id: (encode-path-segment $squad_id)} | format pattern "/fleets/{fleet_id}/squads/{squad_id}/") $qp)
+  let req_body = {"name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get fleet wings
 #
 # GET /fleets/{fleet_id}/wings/
 # operationId: get_fleets_fleet_id_wings
-export def "fleets-wings wings-by-fleet_id" [
+export def "fleets-wings get" [
   fleet_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4045,11 +4062,11 @@ export def "fleets-wings wings-by-fleet_id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({fleet_id: $fleet_id} | format pattern "/fleets/{fleet_id}/wings/") $qp)
-  let extra_headers = {"Accept-Language": $accept_language, "If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({fleet_id: (encode-path-segment $fleet_id)} | format pattern "/fleets/{fleet_id}/wings/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": $accept_language, "If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4057,7 +4074,7 @@ export def "fleets-wings wings-by-fleet_id" [
 #
 # POST /fleets/{fleet_id}/wings/
 # operationId: post_fleets_fleet_id_wings
-export def "fleets-wings wings-by-fleet_id-1" [
+export def "fleets-wings create" [
   fleet_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4073,7 +4090,7 @@ export def "fleets-wings wings-by-fleet_id-1" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({fleet_id: $fleet_id} | format pattern "/fleets/{fleet_id}/wings/") $qp)
+  let full_url = (build-url $base ({fleet_id: (encode-path-segment $fleet_id)} | format pattern "/fleets/{fleet_id}/wings/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4083,7 +4100,7 @@ export def "fleets-wings wings-by-fleet_id-1" [
 #
 # DELETE /fleets/{fleet_id}/wings/{wing_id}/
 # operationId: delete_fleets_fleet_id_wings_wing_id
-export def "fleets-wings id-by-fleet_id-wing_id" [
+export def "fleets-wings delete" [
   fleet_id: int
   wing_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4100,7 +4117,7 @@ export def "fleets-wings id-by-fleet_id-wing_id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({fleet_id: $fleet_id, wing_id: $wing_id} | format pattern "/fleets/{fleet_id}/wings/{wing_id}/") $qp)
+  let full_url = (build-url $base ({fleet_id: (encode-path-segment $fleet_id), wing_id: (encode-path-segment $wing_id)} | format pattern "/fleets/{fleet_id}/wings/{wing_id}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4110,7 +4127,7 @@ export def "fleets-wings id-by-fleet_id-wing_id" [
 #
 # PUT /fleets/{fleet_id}/wings/{wing_id}/
 # operationId: put_fleets_fleet_id_wings_wing_id
-export def "fleets-wings id-by-fleet_id-wing_id-1" [
+export def "fleets-wings update" [
   fleet_id: int
   wing_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4129,19 +4146,19 @@ export def "fleets-wings id-by-fleet_id-wing_id-1" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({fleet_id: $fleet_id, wing_id: $wing_id} | format pattern "/fleets/{fleet_id}/wings/{wing_id}/") $qp)
-  let body = {"name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({fleet_id: (encode-path-segment $fleet_id), wing_id: (encode-path-segment $wing_id)} | format pattern "/fleets/{fleet_id}/wings/{wing_id}/") $qp)
+  let req_body = {"name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create fleet squad
 #
 # POST /fleets/{fleet_id}/wings/{wing_id}/squads/
 # operationId: post_fleets_fleet_id_wings_wing_id_squads
-export def "fleets-wings-squads squads" [
+export def "fleets-wings-squads create" [
   fleet_id: int
   wing_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4158,7 +4175,7 @@ export def "fleets-wings-squads squads" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({fleet_id: $fleet_id, wing_id: $wing_id} | format pattern "/fleets/{fleet_id}/wings/{wing_id}/squads/") $qp)
+  let full_url = (build-url $base ({fleet_id: (encode-path-segment $fleet_id), wing_id: (encode-path-segment $wing_id)} | format pattern "/fleets/{fleet_id}/wings/{wing_id}/squads/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4168,7 +4185,7 @@ export def "fleets-wings-squads squads" [
 #
 # GET /fw/leaderboards/
 # operationId: get_fw_leaderboards
-export def "fw-leaderboards leaderboards" [
+export def "fw-leaderboards get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4184,10 +4201,10 @@ export def "fw-leaderboards leaderboards" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/fw/leaderboards/" $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4195,7 +4212,7 @@ export def "fw-leaderboards leaderboards" [
 #
 # GET /fw/leaderboards/characters/
 # operationId: get_fw_leaderboards_characters
-export def "fw-leaderboards-characters characters" [
+export def "fw-leaderboards-characters get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4211,10 +4228,10 @@ export def "fw-leaderboards-characters characters" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/fw/leaderboards/characters/" $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4222,7 +4239,7 @@ export def "fw-leaderboards-characters characters" [
 #
 # GET /fw/leaderboards/corporations/
 # operationId: get_fw_leaderboards_corporations
-export def "fw-leaderboards-corporations corporations" [
+export def "fw-leaderboards-corporations get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4238,10 +4255,10 @@ export def "fw-leaderboards-corporations corporations" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/fw/leaderboards/corporations/" $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4249,7 +4266,7 @@ export def "fw-leaderboards-corporations corporations" [
 #
 # GET /fw/stats/
 # operationId: get_fw_stats
-export def "fw-stats stats" [
+export def "fw-stats get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4265,10 +4282,10 @@ export def "fw-stats stats" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/fw/stats/" $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4276,7 +4293,7 @@ export def "fw-stats stats" [
 #
 # GET /fw/systems/
 # operationId: get_fw_systems
-export def "fw-systems systems" [
+export def "fw-systems get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4292,10 +4309,10 @@ export def "fw-systems systems" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/fw/systems/" $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4303,7 +4320,7 @@ export def "fw-systems systems" [
 #
 # GET /fw/wars/
 # operationId: get_fw_wars
-export def "fw-wars wars" [
+export def "fw-wars get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4319,10 +4336,10 @@ export def "fw-wars wars" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/fw/wars/" $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4346,10 +4363,10 @@ export def "incursions get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/incursions/" $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4357,7 +4374,7 @@ export def "incursions get" [
 #
 # GET /industry/facilities/
 # operationId: get_industry_facilities
-export def "industry-facilities facilities" [
+export def "industry-facilities get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4373,10 +4390,10 @@ export def "industry-facilities facilities" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/industry/facilities/" $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4384,7 +4401,7 @@ export def "industry-facilities facilities" [
 #
 # GET /industry/systems/
 # operationId: get_industry_systems
-export def "industry-systems systems" [
+export def "industry-systems get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4400,10 +4417,10 @@ export def "industry-systems systems" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/industry/systems/" $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4411,7 +4428,7 @@ export def "industry-systems systems" [
 #
 # GET /insurance/prices/
 # operationId: get_insurance_prices
-export def "insurance-prices prices" [
+export def "insurance-prices get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4429,10 +4446,10 @@ export def "insurance-prices prices" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/insurance/prices/" $qp)
-  let extra_headers = {"Accept-Language": $accept_language, "If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": $accept_language, "If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4440,7 +4457,7 @@ export def "insurance-prices prices" [
 #
 # GET /killmails/{killmail_id}/{killmail_hash}/
 # operationId: get_killmails_killmail_id_killmail_hash
-export def "killmails hash" [
+export def "killmails get" [
   killmail_id: int
   killmail_hash: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4457,11 +4474,11 @@ export def "killmails hash" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({killmail_id: $killmail_id, killmail_hash: $killmail_hash} | format pattern "/killmails/{killmail_id}/{killmail_hash}/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({killmail_id: (encode-path-segment $killmail_id), killmail_hash: (encode-path-segment $killmail_hash)} | format pattern "/killmails/{killmail_id}/{killmail_hash}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4469,7 +4486,7 @@ export def "killmails hash" [
 #
 # GET /loyalty/stores/{corporation_id}/offers/
 # operationId: get_loyalty_stores_corporation_id_offers
-export def "loyalty-stores-offers offers" [
+export def "loyalty-stores-offers get" [
   corporation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4485,11 +4502,11 @@ export def "loyalty-stores-offers offers" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({corporation_id: $corporation_id} | format pattern "/loyalty/stores/{corporation_id}/offers/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/loyalty/stores/{corporation_id}/offers/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4497,7 +4514,7 @@ export def "loyalty-stores-offers offers" [
 #
 # GET /markets/groups/
 # operationId: get_markets_groups
-export def "markets-groups groups" [
+export def "markets-groups list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4513,10 +4530,10 @@ export def "markets-groups groups" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/markets/groups/" $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4524,7 +4541,7 @@ export def "markets-groups groups" [
 #
 # GET /markets/groups/{market_group_id}/
 # operationId: get_markets_groups_market_group_id
-export def "markets-groups id" [
+export def "markets-groups get" [
   market_group_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4542,11 +4559,11 @@ export def "markets-groups id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({market_group_id: $market_group_id} | format pattern "/markets/groups/{market_group_id}/") $qp)
-  let extra_headers = {"Accept-Language": $accept_language, "If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({market_group_id: (encode-path-segment $market_group_id)} | format pattern "/markets/groups/{market_group_id}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": $accept_language, "If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4554,7 +4571,7 @@ export def "markets-groups id" [
 #
 # GET /markets/prices/
 # operationId: get_markets_prices
-export def "markets-prices prices" [
+export def "markets-prices get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4570,10 +4587,10 @@ export def "markets-prices prices" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/markets/prices/" $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4581,7 +4598,7 @@ export def "markets-prices prices" [
 #
 # GET /markets/structures/{structure_id}/
 # operationId: get_markets_structures_structure_id
-export def "markets-structures id" [
+export def "markets-structures get" [
   structure_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4599,11 +4616,11 @@ export def "markets-structures id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({structure_id: $structure_id} | format pattern "/markets/structures/{structure_id}/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({structure_id: (encode-path-segment $structure_id)} | format pattern "/markets/structures/{structure_id}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4611,7 +4628,7 @@ export def "markets-structures id" [
 #
 # GET /markets/{region_id}/history/
 # operationId: get_markets_region_id_history
-export def "markets-history history" [
+export def "markets-history get" [
   region_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4628,11 +4645,11 @@ export def "markets-history history" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "type_id" $type_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({region_id: $region_id} | format pattern "/markets/{region_id}/history/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({region_id: (encode-path-segment $region_id)} | format pattern "/markets/{region_id}/history/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4640,7 +4657,7 @@ export def "markets-history history" [
 #
 # GET /markets/{region_id}/orders/
 # operationId: get_markets_region_id_orders
-export def "markets-orders orders" [
+export def "markets-orders get" [
   region_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4659,11 +4676,11 @@ export def "markets-orders orders" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "order_type" $order_type "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "type_id" $type_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({region_id: $region_id} | format pattern "/markets/{region_id}/orders/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({region_id: (encode-path-segment $region_id)} | format pattern "/markets/{region_id}/orders/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4671,7 +4688,7 @@ export def "markets-orders orders" [
 #
 # GET /markets/{region_id}/types/
 # operationId: get_markets_region_id_types
-export def "markets-types types" [
+export def "markets-types get" [
   region_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4688,11 +4705,11 @@ export def "markets-types types" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({region_id: $region_id} | format pattern "/markets/{region_id}/types/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({region_id: (encode-path-segment $region_id)} | format pattern "/markets/{region_id}/types/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4700,7 +4717,7 @@ export def "markets-types types" [
 #
 # GET /opportunities/groups/
 # operationId: get_opportunities_groups
-export def "opportunities-groups groups" [
+export def "opportunities-groups list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4716,10 +4733,10 @@ export def "opportunities-groups groups" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/opportunities/groups/" $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4727,7 +4744,7 @@ export def "opportunities-groups groups" [
 #
 # GET /opportunities/groups/{group_id}/
 # operationId: get_opportunities_groups_group_id
-export def "opportunities-groups id" [
+export def "opportunities-groups get" [
   group_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4745,11 +4762,11 @@ export def "opportunities-groups id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/opportunities/groups/{group_id}/") $qp)
-  let extra_headers = {"Accept-Language": $accept_language, "If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/opportunities/groups/{group_id}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": $accept_language, "If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4757,7 +4774,7 @@ export def "opportunities-groups id" [
 #
 # GET /opportunities/tasks/
 # operationId: get_opportunities_tasks
-export def "opportunities-tasks tasks" [
+export def "opportunities-tasks list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4773,10 +4790,10 @@ export def "opportunities-tasks tasks" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/opportunities/tasks/" $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4784,7 +4801,7 @@ export def "opportunities-tasks tasks" [
 #
 # GET /opportunities/tasks/{task_id}/
 # operationId: get_opportunities_tasks_task_id
-export def "opportunities-tasks id" [
+export def "opportunities-tasks get" [
   task_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4800,11 +4817,11 @@ export def "opportunities-tasks id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({task_id: $task_id} | format pattern "/opportunities/tasks/{task_id}/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({task_id: (encode-path-segment $task_id)} | format pattern "/opportunities/tasks/{task_id}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4812,7 +4829,7 @@ export def "opportunities-tasks id" [
 #
 # GET /route/{origin}/{destination}/
 # operationId: get_route_origin_destination
-export def "route destination" [
+export def "route get" [
   origin: int
   destination: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4823,7 +4840,7 @@ export def "route destination" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --avoid: list # avoid solar system ID(s)
+  --avoid: list<int> # avoid solar system ID(s)
   --connections: list # connected solar system pairs
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --flag: string@flag-completer # route security preference (default: shortest)
@@ -4832,11 +4849,11 @@ export def "route destination" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "avoid" $avoid "csv") (serialize-qp "connections" $connections "csv") (serialize-qp "datasource" $datasource "scalar") (serialize-qp "flag" $flag "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({origin: $origin, destination: $destination} | format pattern "/route/{origin}/{destination}/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({origin: (encode-path-segment $origin), destination: (encode-path-segment $destination)} | format pattern "/route/{origin}/{destination}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4853,7 +4870,7 @@ export def "search get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --categories: list # Type of entities to search for
+  --categories: list<string> # Type of entities to search for
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --language: string@language-completer # Language to use in the response, takes precedence over Accept-Language (default: en-us)
   --search: string # The string to search on
@@ -4865,10 +4882,10 @@ export def "search get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "categories" $categories "csv") (serialize-qp "datasource" $datasource "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "strict" $strict "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/search/" $qp)
-  let extra_headers = {"Accept-Language": $accept_language, "If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": $accept_language, "If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4876,7 +4893,7 @@ export def "search get" [
 #
 # GET /sovereignty/campaigns/
 # operationId: get_sovereignty_campaigns
-export def "sovereignty-campaigns campaigns" [
+export def "sovereignty-campaigns get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4892,10 +4909,10 @@ export def "sovereignty-campaigns campaigns" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/sovereignty/campaigns/" $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4903,7 +4920,7 @@ export def "sovereignty-campaigns campaigns" [
 #
 # GET /sovereignty/map/
 # operationId: get_sovereignty_map
-export def "sovereignty-map map" [
+export def "sovereignty-map get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4919,10 +4936,10 @@ export def "sovereignty-map map" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/sovereignty/map/" $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4930,7 +4947,7 @@ export def "sovereignty-map map" [
 #
 # GET /sovereignty/structures/
 # operationId: get_sovereignty_structures
-export def "sovereignty-structures structures" [
+export def "sovereignty-structures get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4946,10 +4963,10 @@ export def "sovereignty-structures structures" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/sovereignty/structures/" $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4973,10 +4990,10 @@ export def "status get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/status/" $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4984,7 +5001,7 @@ export def "status get" [
 #
 # POST /ui/autopilot/waypoint/
 # operationId: post_ui_autopilot_waypoint
-export def "ui-autopilot-waypoint waypoint" [
+export def "ui-autopilot-waypoint create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5012,7 +5029,7 @@ export def "ui-autopilot-waypoint waypoint" [
 #
 # POST /ui/openwindow/contract/
 # operationId: post_ui_openwindow_contract
-export def "ui-openwindow-contract contract" [
+export def "ui-openwindow-contract create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5038,7 +5055,7 @@ export def "ui-openwindow-contract contract" [
 #
 # POST /ui/openwindow/information/
 # operationId: post_ui_openwindow_information
-export def "ui-openwindow-information get-rmation" [
+export def "ui-openwindow-information create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5064,7 +5081,7 @@ export def "ui-openwindow-information get-rmation" [
 #
 # POST /ui/openwindow/marketdetails/
 # operationId: post_ui_openwindow_marketdetails
-export def "ui-openwindow-marketdetails marketdetails" [
+export def "ui-openwindow-marketdetails create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5090,7 +5107,7 @@ export def "ui-openwindow-marketdetails marketdetails" [
 #
 # POST /ui/openwindow/newmail/
 # operationId: post_ui_openwindow_newmail
-export def "ui-openwindow-newmail newmail" [
+export def "ui-openwindow-newmail create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5101,8 +5118,8 @@ export def "ui-openwindow-newmail newmail" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
-  --body-body: string # body string
-  recipients: list # recipients array
+  body: string # body string
+  recipients: list<int> # recipients array
   subject: string # subject string
   --to-corp-or-alliance-id: int # to_corp_or_alliance_id integer (format: int32)
   --to-mailing-list-id: int # Corporations, alliances and mailing lists are all types of mailing groups. You may only send to one mailing group, at a time, so you may fill out either this field or the to_corp_or_alliance_ids field (format: int32)
@@ -5112,18 +5129,18 @@ export def "ui-openwindow-newmail newmail" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ui/openwindow/newmail/" $qp)
-  let body = {"body": $body_body, "recipients": $recipients, "subject": $subject, "to_corp_or_alliance_id": $to_corp_or_alliance_id, "to_mailing_list_id": $to_mailing_list_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"body": $body, "recipients": $recipients, "subject": $subject, "to_corp_or_alliance_id": $to_corp_or_alliance_id, "to_mailing_list_id": $to_mailing_list_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get ancestries
 #
 # GET /universe/ancestries/
 # operationId: get_universe_ancestries
-export def "universe-ancestries ancestries" [
+export def "universe-ancestries get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5141,10 +5158,10 @@ export def "universe-ancestries ancestries" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/universe/ancestries/" $qp)
-  let extra_headers = {"Accept-Language": $accept_language, "If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": $accept_language, "If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5152,7 +5169,7 @@ export def "universe-ancestries ancestries" [
 #
 # GET /universe/asteroid_belts/{asteroid_belt_id}/
 # operationId: get_universe_asteroid_belts_asteroid_belt_id
-export def "universe-asteroid-belts id" [
+export def "universe-asteroid-belts get" [
   asteroid_belt_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5168,11 +5185,11 @@ export def "universe-asteroid-belts id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({asteroid_belt_id: $asteroid_belt_id} | format pattern "/universe/asteroid_belts/{asteroid_belt_id}/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({asteroid_belt_id: (encode-path-segment $asteroid_belt_id)} | format pattern "/universe/asteroid_belts/{asteroid_belt_id}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5180,7 +5197,7 @@ export def "universe-asteroid-belts id" [
 #
 # GET /universe/bloodlines/
 # operationId: get_universe_bloodlines
-export def "universe-bloodlines bloodlines" [
+export def "universe-bloodlines get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5198,10 +5215,10 @@ export def "universe-bloodlines bloodlines" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/universe/bloodlines/" $qp)
-  let extra_headers = {"Accept-Language": $accept_language, "If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": $accept_language, "If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5209,7 +5226,7 @@ export def "universe-bloodlines bloodlines" [
 #
 # GET /universe/categories/
 # operationId: get_universe_categories
-export def "universe-categories categories" [
+export def "universe-categories list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5225,10 +5242,10 @@ export def "universe-categories categories" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/universe/categories/" $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5236,7 +5253,7 @@ export def "universe-categories categories" [
 #
 # GET /universe/categories/{category_id}/
 # operationId: get_universe_categories_category_id
-export def "universe-categories id" [
+export def "universe-categories get" [
   category_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5254,11 +5271,11 @@ export def "universe-categories id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({category_id: $category_id} | format pattern "/universe/categories/{category_id}/") $qp)
-  let extra_headers = {"Accept-Language": $accept_language, "If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({category_id: (encode-path-segment $category_id)} | format pattern "/universe/categories/{category_id}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": $accept_language, "If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5266,7 +5283,7 @@ export def "universe-categories id" [
 #
 # GET /universe/constellations/
 # operationId: get_universe_constellations
-export def "universe-constellations constellations" [
+export def "universe-constellations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5282,10 +5299,10 @@ export def "universe-constellations constellations" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/universe/constellations/" $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5293,7 +5310,7 @@ export def "universe-constellations constellations" [
 #
 # GET /universe/constellations/{constellation_id}/
 # operationId: get_universe_constellations_constellation_id
-export def "universe-constellations id" [
+export def "universe-constellations get" [
   constellation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5311,11 +5328,11 @@ export def "universe-constellations id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({constellation_id: $constellation_id} | format pattern "/universe/constellations/{constellation_id}/") $qp)
-  let extra_headers = {"Accept-Language": $accept_language, "If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({constellation_id: (encode-path-segment $constellation_id)} | format pattern "/universe/constellations/{constellation_id}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": $accept_language, "If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5323,7 +5340,7 @@ export def "universe-constellations id" [
 #
 # GET /universe/factions/
 # operationId: get_universe_factions
-export def "universe-factions factions" [
+export def "universe-factions get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5341,10 +5358,10 @@ export def "universe-factions factions" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/universe/factions/" $qp)
-  let extra_headers = {"Accept-Language": $accept_language, "If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": $accept_language, "If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5352,7 +5369,7 @@ export def "universe-factions factions" [
 #
 # GET /universe/graphics/
 # operationId: get_universe_graphics
-export def "universe-graphics graphics" [
+export def "universe-graphics list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5368,10 +5385,10 @@ export def "universe-graphics graphics" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/universe/graphics/" $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5379,7 +5396,7 @@ export def "universe-graphics graphics" [
 #
 # GET /universe/graphics/{graphic_id}/
 # operationId: get_universe_graphics_graphic_id
-export def "universe-graphics id" [
+export def "universe-graphics get" [
   graphic_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5395,11 +5412,11 @@ export def "universe-graphics id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({graphic_id: $graphic_id} | format pattern "/universe/graphics/{graphic_id}/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({graphic_id: (encode-path-segment $graphic_id)} | format pattern "/universe/graphics/{graphic_id}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5407,7 +5424,7 @@ export def "universe-graphics id" [
 #
 # GET /universe/groups/
 # operationId: get_universe_groups
-export def "universe-groups groups" [
+export def "universe-groups list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5424,10 +5441,10 @@ export def "universe-groups groups" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/universe/groups/" $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5435,7 +5452,7 @@ export def "universe-groups groups" [
 #
 # GET /universe/groups/{group_id}/
 # operationId: get_universe_groups_group_id
-export def "universe-groups id" [
+export def "universe-groups get" [
   group_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5453,11 +5470,11 @@ export def "universe-groups id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/universe/groups/{group_id}/") $qp)
-  let extra_headers = {"Accept-Language": $accept_language, "If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/universe/groups/{group_id}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": $accept_language, "If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5465,7 +5482,7 @@ export def "universe-groups id" [
 #
 # POST /universe/ids/
 # operationId: post_universe_ids
-export def "universe-ids ids" [
+export def "universe-ids create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5484,19 +5501,20 @@ export def "universe-ids ids" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/universe/ids/" $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get moon information
 #
 # GET /universe/moons/{moon_id}/
 # operationId: get_universe_moons_moon_id
-export def "universe-moons id" [
+export def "universe-moons get" [
   moon_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5512,11 +5530,11 @@ export def "universe-moons id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({moon_id: $moon_id} | format pattern "/universe/moons/{moon_id}/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({moon_id: (encode-path-segment $moon_id)} | format pattern "/universe/moons/{moon_id}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5524,7 +5542,7 @@ export def "universe-moons id" [
 #
 # POST /universe/names/
 # operationId: post_universe_names
-export def "universe-names names" [
+export def "universe-names create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5541,17 +5559,18 @@ export def "universe-names names" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/universe/names/" $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get planet information
 #
 # GET /universe/planets/{planet_id}/
 # operationId: get_universe_planets_planet_id
-export def "universe-planets id" [
+export def "universe-planets get" [
   planet_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5567,11 +5586,11 @@ export def "universe-planets id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({planet_id: $planet_id} | format pattern "/universe/planets/{planet_id}/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({planet_id: (encode-path-segment $planet_id)} | format pattern "/universe/planets/{planet_id}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5579,7 +5598,7 @@ export def "universe-planets id" [
 #
 # GET /universe/races/
 # operationId: get_universe_races
-export def "universe-races races" [
+export def "universe-races get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5597,10 +5616,10 @@ export def "universe-races races" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/universe/races/" $qp)
-  let extra_headers = {"Accept-Language": $accept_language, "If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": $accept_language, "If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5608,7 +5627,7 @@ export def "universe-races races" [
 #
 # GET /universe/regions/
 # operationId: get_universe_regions
-export def "universe-regions regions" [
+export def "universe-regions list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5624,10 +5643,10 @@ export def "universe-regions regions" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/universe/regions/" $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5635,7 +5654,7 @@ export def "universe-regions regions" [
 #
 # GET /universe/regions/{region_id}/
 # operationId: get_universe_regions_region_id
-export def "universe-regions id" [
+export def "universe-regions get" [
   region_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5653,11 +5672,11 @@ export def "universe-regions id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({region_id: $region_id} | format pattern "/universe/regions/{region_id}/") $qp)
-  let extra_headers = {"Accept-Language": $accept_language, "If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({region_id: (encode-path-segment $region_id)} | format pattern "/universe/regions/{region_id}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": $accept_language, "If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5665,7 +5684,7 @@ export def "universe-regions id" [
 #
 # GET /universe/schematics/{schematic_id}/
 # operationId: get_universe_schematics_schematic_id
-export def "universe-schematics id" [
+export def "universe-schematics get" [
   schematic_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5681,11 +5700,11 @@ export def "universe-schematics id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({schematic_id: $schematic_id} | format pattern "/universe/schematics/{schematic_id}/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({schematic_id: (encode-path-segment $schematic_id)} | format pattern "/universe/schematics/{schematic_id}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5693,7 +5712,7 @@ export def "universe-schematics id" [
 #
 # GET /universe/stargates/{stargate_id}/
 # operationId: get_universe_stargates_stargate_id
-export def "universe-stargates id" [
+export def "universe-stargates get" [
   stargate_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5709,11 +5728,11 @@ export def "universe-stargates id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({stargate_id: $stargate_id} | format pattern "/universe/stargates/{stargate_id}/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({stargate_id: (encode-path-segment $stargate_id)} | format pattern "/universe/stargates/{stargate_id}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5721,7 +5740,7 @@ export def "universe-stargates id" [
 #
 # GET /universe/stars/{star_id}/
 # operationId: get_universe_stars_star_id
-export def "universe-stars id" [
+export def "universe-stars get" [
   star_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5737,11 +5756,11 @@ export def "universe-stars id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({star_id: $star_id} | format pattern "/universe/stars/{star_id}/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({star_id: (encode-path-segment $star_id)} | format pattern "/universe/stars/{star_id}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5749,7 +5768,7 @@ export def "universe-stars id" [
 #
 # GET /universe/stations/{station_id}/
 # operationId: get_universe_stations_station_id
-export def "universe-stations id" [
+export def "universe-stations get" [
   station_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5765,11 +5784,11 @@ export def "universe-stations id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({station_id: $station_id} | format pattern "/universe/stations/{station_id}/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({station_id: (encode-path-segment $station_id)} | format pattern "/universe/stations/{station_id}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5777,7 +5796,7 @@ export def "universe-stations id" [
 #
 # GET /universe/structures/
 # operationId: get_universe_structures
-export def "universe-structures structures" [
+export def "universe-structures list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5794,10 +5813,10 @@ export def "universe-structures structures" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/universe/structures/" $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5805,7 +5824,7 @@ export def "universe-structures structures" [
 #
 # GET /universe/structures/{structure_id}/
 # operationId: get_universe_structures_structure_id
-export def "universe-structures id" [
+export def "universe-structures get" [
   structure_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5822,11 +5841,11 @@ export def "universe-structures id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({structure_id: $structure_id} | format pattern "/universe/structures/{structure_id}/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({structure_id: (encode-path-segment $structure_id)} | format pattern "/universe/structures/{structure_id}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5834,7 +5853,7 @@ export def "universe-structures id" [
 #
 # GET /universe/system_jumps/
 # operationId: get_universe_system_jumps
-export def "universe-system-jumps jumps" [
+export def "universe-system-jumps get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5850,10 +5869,10 @@ export def "universe-system-jumps jumps" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/universe/system_jumps/" $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5861,7 +5880,7 @@ export def "universe-system-jumps jumps" [
 #
 # GET /universe/system_kills/
 # operationId: get_universe_system_kills
-export def "universe-system-kills kill-s" [
+export def "universe-system-kills get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5877,10 +5896,10 @@ export def "universe-system-kills kill-s" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/universe/system_kills/" $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5888,7 +5907,7 @@ export def "universe-system-kills kill-s" [
 #
 # GET /universe/systems/
 # operationId: get_universe_systems
-export def "universe-systems systems" [
+export def "universe-systems list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5904,10 +5923,10 @@ export def "universe-systems systems" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/universe/systems/" $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5915,7 +5934,7 @@ export def "universe-systems systems" [
 #
 # GET /universe/systems/{system_id}/
 # operationId: get_universe_systems_system_id
-export def "universe-systems id" [
+export def "universe-systems get" [
   system_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5933,11 +5952,11 @@ export def "universe-systems id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({system_id: $system_id} | format pattern "/universe/systems/{system_id}/") $qp)
-  let extra_headers = {"Accept-Language": $accept_language, "If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_id: (encode-path-segment $system_id)} | format pattern "/universe/systems/{system_id}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": $accept_language, "If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5945,7 +5964,7 @@ export def "universe-systems id" [
 #
 # GET /universe/types/
 # operationId: get_universe_types
-export def "universe-types types" [
+export def "universe-types list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5962,10 +5981,10 @@ export def "universe-types types" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/universe/types/" $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5973,7 +5992,7 @@ export def "universe-types types" [
 #
 # GET /universe/types/{type_id}/
 # operationId: get_universe_types_type_id
-export def "universe-types id" [
+export def "universe-types get" [
   type_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5991,11 +6010,11 @@ export def "universe-types id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({type_id: $type_id} | format pattern "/universe/types/{type_id}/") $qp)
-  let extra_headers = {"Accept-Language": $accept_language, "If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({type_id: (encode-path-segment $type_id)} | format pattern "/universe/types/{type_id}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": $accept_language, "If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -6003,7 +6022,7 @@ export def "universe-types id" [
 #
 # GET /wars/
 # operationId: get_wars
-export def "wars get" [
+export def "wars list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6020,10 +6039,10 @@ export def "wars get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "max_war_id" $max_war_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/wars/" $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -6031,7 +6050,7 @@ export def "wars get" [
 #
 # GET /wars/{war_id}/
 # operationId: get_wars_war_id
-export def "wars id" [
+export def "wars get" [
   war_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6047,11 +6066,11 @@ export def "wars id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({war_id: $war_id} | format pattern "/wars/{war_id}/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({war_id: (encode-path-segment $war_id)} | format pattern "/wars/{war_id}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -6059,7 +6078,7 @@ export def "wars id" [
 #
 # GET /wars/{war_id}/killmails/
 # operationId: get_wars_war_id_killmails
-export def "wars-killmails kill-mails" [
+export def "wars-killmails get" [
   war_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6076,10 +6095,10 @@ export def "wars-killmails kill-mails" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({war_id: $war_id} | format pattern "/wars/{war_id}/killmails/") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({war_id: (encode-path-segment $war_id)} | format pattern "/wars/{war_id}/killmails/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

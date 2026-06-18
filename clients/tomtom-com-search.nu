@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -112,7 +121,7 @@ export def "search-additional-data-ext get" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "geometries" $geometries "scalar") (serialize-qp "geometriesZoom" $geometries_zoom "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({version_number: $version_number, ext: $ext} | format pattern "/search/{version_number}/additionalData.{ext}") $qp)
+  let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), ext: (encode-path-segment $ext)} | format pattern "/search/{version_number}/additionalData.{ext}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -135,23 +144,23 @@ export def "search-c-s get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --typeahead: oneof<nothing, bool> # If the "typeahead" flag is set, the query will be interpreted as a partial input and the search will enter <b>predictive</b> mode. (default: false)
+  --typeahead: oneof<nothing, bool> # If the "typeahead" flag is set, the query will be interpreted as a partial input and the search will enter predictive mode. (default: false)
   --limit: int # Maximum number of search results that will be returned. (default: 10)
   --ofs: int # Starting offset of the returned results within the full result set. (default: 0)
   --country-set: string # Comma separated string of country codes. This will limit the search to the specified countries. (e.g. FR)
   --lat: float # Latitude where results should be biased. NOTE: supplying a lat/lon without a radius will return search results biased to that point. (format: float, e.g. 37.337)
   --lon: float # Longitude where results should be biased NOTE: supplying a lat/lon without a radius will return search results biased to that point. (format: float, e.g. -121.89)
-  --radius: int # If radius <b>and</b> position are set, the results will be constrained to the defined area. The radius parameter is specified in meters.
+  --radius: int # If radius and position are set, the results will be constrained to the defined area. The radius parameter is specified in meters.
   --top-left: string # Top left position of the bounding box. This is specified as a comma separated string composed of lat., lon. (e.g. 37.553,-122.453)
   --btm-right: string # Bottom right position of the bounding box. This is specified as a comma separated string composed of lat., lon. (e.g. 37.4,-122.55)
-  --language: string # Language in which search results should be returned. Should be one of <a href="/search-api/search-api-documentation/supported-languages">supported IETF language tags</a>, case insensitive.
-  --idx-set: string # A comma separated list of indexes which should be utilized for the search. Item order does not matter. Available indexes are:   - <b>Addr</b> = Address range interpolation (when there is no PAD)   - <b>Geo</b> = Geographies   - <b>PAD</b> = Point Addresses   - <b>POI</b> = Points of interest   - <b>Str</b> = Streets   - <b>Xstr</b> = Cross Streets (intersections) (e.g. POI)
+  --language: string # Language in which search results should be returned. Should be one of supported IETF language tags (/search-api/search-api-documentation/supported-languages), case insensitive.
+  --idx-set: string # A comma separated list of indexes which should be utilized for the search. Item order does not matter. Available indexes are: - Addr = Address range interpolation (when there is no PAD) - Geo = Geographies - PAD = Point Addresses - POI = Points of interest - Str = Streets - Xstr = Cross Streets (intersections) (e.g. POI)
   --view: string@view-completer # Geopolitical View. (default: Unified)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "typeahead" $typeahead "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "ofs" $ofs "scalar") (serialize-qp "countrySet" $country_set "scalar") (serialize-qp "lat" $lat "scalar") (serialize-qp "lon" $lon "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "topLeft" $top_left "scalar") (serialize-qp "btmRight" $btm_right "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "idxSet" $idx_set "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({version_number: $version_number, category: $category, ext: $ext} | format pattern "/search/{version_number}/cS/{category}.{ext}") $qp)
+  let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), category: (encode-path-segment $category), ext: (encode-path-segment $ext)} | format pattern "/search/{version_number}/cS/{category}.{ext}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -172,23 +181,23 @@ export def "search-category-search get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --typeahead: oneof<nothing, bool> # If the "typeahead" flag is set, the query will be interpreted as a partial input and the search will enter <b>predictive</b> mode. (default: false)
+  --typeahead: oneof<nothing, bool> # If the "typeahead" flag is set, the query will be interpreted as a partial input and the search will enter predictive mode. (default: false)
   --limit: int # Maximum number of search results that will be returned. (default: 10)
   --ofs: int # Starting offset of the returned results within the full result set. (default: 0)
   --country-set: string # Comma separated string of country codes. This will limit the search to the specified countries. (e.g. FR)
   --lat: float # Latitude where results should be biased. NOTE: supplying a lat/lon without a radius will return search results biased to that point. (format: float, e.g. 37.337)
   --lon: float # Longitude where results should be biased NOTE: supplying a lat/lon without a radius will return search results biased to that point. (format: float, e.g. -121.89)
-  --radius: int # If radius <b>and</b> position are set, the results will be constrained to the defined area. The radius parameter is specified in meters.
+  --radius: int # If radius and position are set, the results will be constrained to the defined area. The radius parameter is specified in meters.
   --top-left: string # Top left position of the bounding box. This is specified as a comma separated string composed of lat., lon. (e.g. 37.553,-122.453)
   --btm-right: string # Bottom right position of the bounding box. This is specified as a comma separated string composed of lat., lon. (e.g. 37.4,-122.55)
-  --language: string # Language in which search results should be returned. Should be one of <a href="/search-api/search-api-documentation/supported-languages">supported IETF language tags</a>, case insensitive.
-  --extended-postal-codes-for: string # Indexes for which extended postal codes should be included in the results. Available indexes are:   - <b>Addr</b> = Address ranges   - <b>Geo</b> = Geographies   - <b>PAD</b> = Point Addresses   - <b>POI</b> = Points of Interest   - <b>Str</b> = Streets   - <b>XStr</b> = Cross Streets (intersections)
+  --language: string # Language in which search results should be returned. Should be one of supported IETF language tags (/search-api/search-api-documentation/supported-languages), case insensitive.
+  --extended-postal-codes-for: string # Indexes for which extended postal codes should be included in the results. Available indexes are: - Addr = Address ranges - Geo = Geographies - PAD = Point Addresses - POI = Points of Interest - Str = Streets - XStr = Cross Streets (intersections)
   --view: string@view-completer # Geopolitical View. (default: Unified)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "typeahead" $typeahead "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "ofs" $ofs "scalar") (serialize-qp "countrySet" $country_set "scalar") (serialize-qp "lat" $lat "scalar") (serialize-qp "lon" $lon "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "topLeft" $top_left "scalar") (serialize-qp "btmRight" $btm_right "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "extendedPostalCodesFor" $extended_postal_codes_for "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({version_number: $version_number, query: $query, ext: $ext} | format pattern "/search/{version_number}/categorySearch/{query}.{ext}") $qp)
+  let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), query: (encode-path-segment $query), ext: (encode-path-segment $ext)} | format pattern "/search/{version_number}/categorySearch/{query}.{ext}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -211,23 +220,23 @@ export def "search-geocode get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --store-result: oneof<nothing, bool> # If the "storeResult" flag is set, the query will be interpreted as a stored geocode and will be billed according to the terms of use. (DEPRECATED, default: false)
-  --typeahead: oneof<nothing, bool> # If the "typeahead" flag is set, the query will be interpreted as a partial input and the search will enter <b>predictive</b> mode. (default: false)
+  --typeahead: oneof<nothing, bool> # If the "typeahead" flag is set, the query will be interpreted as a partial input and the search will enter predictive mode. (default: false)
   --limit: int # Maximum number of search results that will be returned. (default: 10)
   --ofs: int # Starting offset of the returned results within the full result set. (default: 0)
   --country-set: string # Comma separated string of country codes. This will limit the search to the specified countries. (e.g. FR)
   --lat: float # Latitude where results should be biased. NOTE: supplying a lat/lon without a radius will return search results biased to that point. (format: float, e.g. 37.337)
   --lon: float # Longitude where results should be biased NOTE: supplying a lat/lon without a radius will return search results biased to that point. (format: float, e.g. -121.89)
-  --radius: int # If radius <b>and</b> position are set, the results will be constrained to the defined area. The radius parameter is specified in meters.
+  --radius: int # If radius and position are set, the results will be constrained to the defined area. The radius parameter is specified in meters.
   --top-left: string # Top left position of the bounding box. This is specified as a comma separated string composed of lat., lon. (e.g. 37.553,-122.453)
   --btm-right: string # Bottom right position of the bounding box. This is specified as a comma separated string composed of lat., lon. (e.g. 37.4,-122.55)
-  --language: string # Language in which search results should be returned. Should be one of <a href="/search-api/search-api-documentation/supported-languages">supported IETF language tags</a>, case insensitive.
-  --extended-postal-codes-for: string # Indexes for which extended postal codes should be included in the results. Available indexes are:   - <b>Addr</b> = Address ranges   - <b>Geo</b> = Geographies   - <b>PAD</b> = Point Addresses   - <b>POI</b> = Points of Interest   - <b>Str</b> = Streets   - <b>XStr</b> = Cross Streets (intersections)
+  --language: string # Language in which search results should be returned. Should be one of supported IETF language tags (/search-api/search-api-documentation/supported-languages), case insensitive.
+  --extended-postal-codes-for: string # Indexes for which extended postal codes should be included in the results. Available indexes are: - Addr = Address ranges - Geo = Geographies - PAD = Point Addresses - POI = Points of Interest - Str = Streets - XStr = Cross Streets (intersections)
   --view: string@view-completer # Geopolitical View. (default: Unified)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "storeResult" $store_result "scalar") (serialize-qp "typeahead" $typeahead "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "ofs" $ofs "scalar") (serialize-qp "countrySet" $country_set "scalar") (serialize-qp "lat" $lat "scalar") (serialize-qp "lon" $lon "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "topLeft" $top_left "scalar") (serialize-qp "btmRight" $btm_right "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "extendedPostalCodesFor" $extended_postal_codes_for "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({version_number: $version_number, query: $query, ext: $ext} | format pattern "/search/{version_number}/geocode/{query}.{ext}") $qp)
+  let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), query: (encode-path-segment $query), ext: (encode-path-segment $ext)} | format pattern "/search/{version_number}/geocode/{query}.{ext}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -253,7 +262,7 @@ export def "search-geometry-filter-ext get" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "geometryList" $geometry_list "scalar") (serialize-qp "poiList" $poi_list "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({version_number: $version_number, ext: $ext} | format pattern "/search/{version_number}/geometryFilter.{ext}") $qp)
+  let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), ext: (encode-path-segment $ext)} | format pattern "/search/{version_number}/geometryFilter.{ext}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -262,9 +271,9 @@ export def "search-geometry-filter-ext get" [
 # Geometry Filter
 #
 # POST /search/{versionNumber}/geometryFilter.{ext}
-# --geometryList item shape: {position?: string, radius?: int, type?: string, vertices?: list}
+# --geometryList item shape: {position?: string, radius?: int, type?: string, vertices?: list<string>}
 # --poiList item shape: {address?: record, poi?: record, position?: record}
-export def "search-geometry-filter-ext post" [
+export def "search-geometry-filter-ext create" [
   version_number: int
   ext: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -275,18 +284,18 @@ export def "search-geometry-filter-ext post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --geometry-list: list # item shape: {position?: string, radius?: int, type?: string, vertices?: list}
+  --geometry-list: list # item shape: {position?: string, radius?: int, type?: string, vertices?: list<string>}
   --poi-list: list # item shape: {address?: record, poi?: record, position?: record}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({version_number: $version_number, ext: $ext} | format pattern "/search/{version_number}/geometryFilter.{ext}"))
-  let body = {"geometryList": $geometry_list, "poiList": $poi_list} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), ext: (encode-path-segment $ext)} | format pattern "/search/{version_number}/geometryFilter.{ext}"))
+  let req_body = {"geometryList": $geometry_list, "poiList": $poi_list} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Geometry Search
@@ -306,14 +315,14 @@ export def "search-geometry-search get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --geometry-list: string # List of geometries to filter by. Available types are CIRCLE (with the radius expressed in meters) and POLYGON. (e.g. [{"type":"POLYGON", "vertices":["37.7524152343544, -122.43576049804686", "37.70660472542312, -122.43301391601562", "37.712059855877314, -122.36434936523438", "37.75350561243041, -122.37396240234374"]}, {"type":"CIRCLE", "position":"37.71205, -121.36434", "radius":6000}, {"type":"CIRCLE", "position":"37.31205, -121.36434", "radius":1000}])
   --limit: int # Maximum number of search results that will be returned. (default: 10)
-  --language: string # Language in which search results should be returned. Should be one of <a href="/search-api/search-api-documentation/supported-languages">supported IETF language tags</a>, case insensitive.
-  --extended-postal-codes-for: string # Indexes for which extended postal codes should be included in the results. Available indexes are:   - <b>Addr</b> = Address ranges   - <b>Geo</b> = Geographies   - <b>PAD</b> = Point Addresses   - <b>POI</b> = Points of Interest   - <b>Str</b> = Streets   - <b>XStr</b> = Cross Streets (intersections)
-  --idx-set: string # A comma separated list of indexes which should be utilized for the search. Item order does not matter. Available indexes are:   - <b>Addr</b> = Address range interpolation (when there is no PAD)   - <b>Geo</b> = Geographies   - <b>PAD</b> = Point Addresses   - <b>POI</b> = Points of interest   - <b>Str</b> = Streets   - <b>Xstr</b> = Cross Streets (intersections) (e.g. POI)
+  --language: string # Language in which search results should be returned. Should be one of supported IETF language tags (/search-api/search-api-documentation/supported-languages), case insensitive.
+  --extended-postal-codes-for: string # Indexes for which extended postal codes should be included in the results. Available indexes are: - Addr = Address ranges - Geo = Geographies - PAD = Point Addresses - POI = Points of Interest - Str = Streets - XStr = Cross Streets (intersections)
+  --idx-set: string # A comma separated list of indexes which should be utilized for the search. Item order does not matter. Available indexes are: - Addr = Address range interpolation (when there is no PAD) - Geo = Geographies - PAD = Point Addresses - POI = Points of interest - Str = Streets - Xstr = Cross Streets (intersections) (e.g. POI)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "geometryList" $geometry_list "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "extendedPostalCodesFor" $extended_postal_codes_for "scalar") (serialize-qp "idxSet" $idx_set "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({version_number: $version_number, query: $query, ext: $ext} | format pattern "/search/{version_number}/geometrySearch/{query}.{ext}") $qp)
+  let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), query: (encode-path-segment $query), ext: (encode-path-segment $ext)} | format pattern "/search/{version_number}/geometrySearch/{query}.{ext}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -322,8 +331,8 @@ export def "search-geometry-search get" [
 # Geometry Search
 #
 # POST /search/{versionNumber}/geometrySearch/{query}.{ext}
-# --geometryList item shape: {position?: string, radius?: int, type?: string, vertices?: list}
-export def "search-geometry-search post" [
+# --geometryList item shape: {position?: string, radius?: int, type?: string, vertices?: list<string>}
+export def "search-geometry-search create" [
   version_number: int
   query: string
   ext: string
@@ -336,21 +345,21 @@ export def "search-geometry-search post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Maximum number of search results that will be returned. (default: 10)
-  --language: string # Language in which search results should be returned. Should be one of <a href="/search-api/search-api-documentation/supported-languages">supported IETF language tags</a>, case insensitive.
-  --extended-postal-codes-for: string # Indexes for which extended postal codes should be included in the results. Available indexes are:   - <b>Addr</b> = Address ranges   - <b>Geo</b> = Geographies   - <b>PAD</b> = Point Addresses   - <b>POI</b> = Points of Interest   - <b>Str</b> = Streets   - <b>XStr</b> = Cross Streets (intersections)
-  --idx-set: string # A comma separated list of indexes which should be utilized for the search. Item order does not matter. Available indexes are:   - <b>Addr</b> = Address range interpolation (when there is no PAD)   - <b>Geo</b> = Geographies   - <b>PAD</b> = Point Addresses   - <b>POI</b> = Points of interest   - <b>Str</b> = Streets   - <b>Xstr</b> = Cross Streets (intersections) (e.g. POI)
-  --geometry-list: list # item shape: {position?: string, radius?: int, type?: string, vertices?: list}
+  --language: string # Language in which search results should be returned. Should be one of supported IETF language tags (/search-api/search-api-documentation/supported-languages), case insensitive.
+  --extended-postal-codes-for: string # Indexes for which extended postal codes should be included in the results. Available indexes are: - Addr = Address ranges - Geo = Geographies - PAD = Point Addresses - POI = Points of Interest - Str = Streets - XStr = Cross Streets (intersections)
+  --idx-set: string # A comma separated list of indexes which should be utilized for the search. Item order does not matter. Available indexes are: - Addr = Address range interpolation (when there is no PAD) - Geo = Geographies - PAD = Point Addresses - POI = Points of interest - Str = Streets - Xstr = Cross Streets (intersections) (e.g. POI)
+  --geometry-list: list # item shape: {position?: string, radius?: int, type?: string, vertices?: list<string>}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "extendedPostalCodesFor" $extended_postal_codes_for "scalar") (serialize-qp "idxSet" $idx_set "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({version_number: $version_number, query: $query, ext: $ext} | format pattern "/search/{version_number}/geometrySearch/{query}.{ext}") $qp)
-  let body = {"geometryList": $geometry_list} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), query: (encode-path-segment $query), ext: (encode-path-segment $ext)} | format pattern "/search/{version_number}/geometrySearch/{query}.{ext}") $qp)
+  let req_body = {"geometryList": $geometry_list} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Nearby Search
@@ -377,17 +386,17 @@ export def "search-nearby-search-ext get" [
   --radius: int # If radius and position are set, the results will be constrained to the defined area. The radius parameter is specified in meters. (default: 10000)
   --top-left: string # Top left position of the bounding box. This is specified as a comma separated string composed of lat., lon. (DEPRECATED, e.g. 37.553,-122.453)
   --btm-right: string # Bottom right position of the bounding box. This is specified as a comma separated string composed of lat., lon. (DEPRECATED, e.g. 37.4,-122.55)
-  --language: string # Language in which search results should be returned. Should be one of <a href="/search-api/search-api-documentation/supported-languages">supported IETF language tags</a>, case insensitive.
-  --extended-postal-codes-for: string # Indexes for which extended postal codes should be included in the results. Available indexes are:   - <b>Addr</b> = Address ranges   - <b>Geo</b> = Geographies   - <b>PAD</b> = Point Addresses   - <b>POI</b> = Points of Interest   - <b>Str</b> = Streets   - <b>XStr</b> = Cross Streets (intersections)
+  --language: string # Language in which search results should be returned. Should be one of supported IETF language tags (/search-api/search-api-documentation/supported-languages), case insensitive.
+  --extended-postal-codes-for: string # Indexes for which extended postal codes should be included in the results. Available indexes are: - Addr = Address ranges - Geo = Geographies - PAD = Point Addresses - POI = Points of Interest - Str = Streets - XStr = Cross Streets (intersections)
   --min-fuzzy-level: int # Minimum fuzziness level to be used. (default: 1)
   --max-fuzzy-level: int # Maximum fuzziness level to be used. (default: 2)
-  --idx-set: string # A comma separated list of indexes which should be utilized for the search. Item order does not matter. Available indexes are:   - <b>Addr</b> = Address range interpolation (when there is no PAD)   - <b>Geo</b> = Geographies   - <b>PAD</b> = Point Addresses   - <b>POI</b> = Points of interest   - <b>Str</b> = Streets   - <b>Xstr</b> = Cross Streets (intersections) (e.g. POI)
+  --idx-set: string # A comma separated list of indexes which should be utilized for the search. Item order does not matter. Available indexes are: - Addr = Address range interpolation (when there is no PAD) - Geo = Geographies - PAD = Point Addresses - POI = Points of interest - Str = Streets - Xstr = Cross Streets (intersections) (e.g. POI)
   --view: string@view-completer # Geopolitical View. (default: Unified)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "lat" $lat "scalar") (serialize-qp "lon" $lon "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "ofs" $ofs "scalar") (serialize-qp "countrySet" $country_set "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "topLeft" $top_left "scalar") (serialize-qp "btmRight" $btm_right "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "extendedPostalCodesFor" $extended_postal_codes_for "scalar") (serialize-qp "minFuzzyLevel" $min_fuzzy_level "scalar") (serialize-qp "maxFuzzyLevel" $max_fuzzy_level "scalar") (serialize-qp "idxSet" $idx_set "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({version_number: $version_number, ext: $ext} | format pattern "/search/{version_number}/nearbySearch/.{ext}") $qp)
+  let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), ext: (encode-path-segment $ext)} | format pattern "/search/{version_number}/nearbySearch/.{ext}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -408,23 +417,23 @@ export def "search-poi-search get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --typeahead: oneof<nothing, bool> # If the "typeahead" flag is set, the query will be interpreted as a partial input and the search will enter <b>predictive</b> mode. (default: false)
+  --typeahead: oneof<nothing, bool> # If the "typeahead" flag is set, the query will be interpreted as a partial input and the search will enter predictive mode. (default: false)
   --limit: int # Maximum number of search results that will be returned. (default: 10)
   --ofs: int # Starting offset of the returned results within the full result set. (default: 0)
   --country-set: string # Comma separated string of country codes. This will limit the search to the specified countries. (e.g. FR)
   --lat: float # Latitude where results should be biased. NOTE: supplying a lat/lon without a radius will return search results biased to that point. (format: float, e.g. 37.337)
   --lon: float # Longitude where results should be biased NOTE: supplying a lat/lon without a radius will return search results biased to that point. (format: float, e.g. -121.89)
-  --radius: int # If radius <b>and</b> position are set, the results will be constrained to the defined area. The radius parameter is specified in meters.
+  --radius: int # If radius and position are set, the results will be constrained to the defined area. The radius parameter is specified in meters.
   --top-left: string # Top left position of the bounding box. This is specified as a comma separated string composed of lat., lon. (e.g. 37.553,-122.453)
   --btm-right: string # Bottom right position of the bounding box. This is specified as a comma separated string composed of lat., lon. (e.g. 37.4,-122.55)
-  --language: string # Language in which search results should be returned. Should be one of <a href="/search-api/search-api-documentation/supported-languages">supported IETF language tags</a>, case insensitive.
-  --extended-postal-codes-for: string # Indexes for which extended postal codes should be included in the results. Available indexes are:   - <b>Addr</b> = Address ranges   - <b>Geo</b> = Geographies   - <b>PAD</b> = Point Addresses   - <b>POI</b> = Points of Interest   - <b>Str</b> = Streets   - <b>XStr</b> = Cross Streets (intersections)
+  --language: string # Language in which search results should be returned. Should be one of supported IETF language tags (/search-api/search-api-documentation/supported-languages), case insensitive.
+  --extended-postal-codes-for: string # Indexes for which extended postal codes should be included in the results. Available indexes are: - Addr = Address ranges - Geo = Geographies - PAD = Point Addresses - POI = Points of Interest - Str = Streets - XStr = Cross Streets (intersections)
   --view: string@view-completer # Geopolitical View. (default: Unified)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "typeahead" $typeahead "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "ofs" $ofs "scalar") (serialize-qp "countrySet" $country_set "scalar") (serialize-qp "lat" $lat "scalar") (serialize-qp "lon" $lon "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "topLeft" $top_left "scalar") (serialize-qp "btmRight" $btm_right "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "extendedPostalCodesFor" $extended_postal_codes_for "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({version_number: $version_number, query: $query, ext: $ext} | format pattern "/search/{version_number}/poiSearch/{query}.{ext}") $qp)
+  let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), query: (encode-path-segment $query), ext: (encode-path-segment $ext)} | format pattern "/search/{version_number}/poiSearch/{query}.{ext}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -450,12 +459,12 @@ export def "search-reverse-geocode-cross-street get" [
   --spatial-keys: oneof<nothing, bool> # If the "spatialKeys" flag is set, the response will also contain a proprietary geospatial keys for a specified location. (DEPRECATED, default: false)
   --heading: float # The directional heading in degrees, usually similar to the course along a road segment. Entered in degrees, measured clockwise from north (so north is 0, east is 90, etc.) (format: float)
   --radius: int # The maximum distance in meters from the specified position for the reverse geocoder to consider. (default: 10000)
-  --language: string # Language in which search results should be returned. Should be one of <a href="/search-api/search-api-documentation/supported-languages">supported IETF language tags</a>, case insensitive.
+  --language: string # Language in which search results should be returned. Should be one of supported IETF language tags (/search-api/search-api-documentation/supported-languages), case insensitive.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "spatialKeys" $spatial_keys "scalar") (serialize-qp "heading" $heading "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({version_number: $version_number, position: $position, ext: $ext} | format pattern "/search/{version_number}/reverseGeocode/crossStreet/{position}.{ext}") $qp)
+  let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), position: (encode-path-segment $position), ext: (encode-path-segment $ext)} | format pattern "/search/{version_number}/reverseGeocode/crossStreet/{position}.{ext}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -489,7 +498,7 @@ export def "search-reverse-geocode get" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "spatialKeys" $spatial_keys "scalar") (serialize-qp "returnSpeedLimit" $return_speed_limit "scalar") (serialize-qp "heading" $heading "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "number" $number "scalar") (serialize-qp "returnRoadUse" $return_road_use "scalar") (serialize-qp "roadUse" $road_use "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({version_number: $version_number, position: $position, ext: $ext} | format pattern "/search/{version_number}/reverseGeocode/{position}.{ext}") $qp)
+  let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), position: (encode-path-segment $position), ext: (encode-path-segment $ext)} | format pattern "/search/{version_number}/reverseGeocode/{position}.{ext}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -519,7 +528,7 @@ export def "search-routed-filter get" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "poiList" $poi_list "scalar") (serialize-qp "routingTimeout" $routing_timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({version_number: $version_number, position: $position, heading: $heading, ext: $ext} | format pattern "/search/{version_number}/routedFilter/{position}/{heading}.{ext}") $qp)
+  let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), position: (encode-path-segment $position), heading: (encode-path-segment $heading), ext: (encode-path-segment $ext)} | format pattern "/search/{version_number}/routedFilter/{position}/{heading}.{ext}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -531,7 +540,7 @@ export def "search-routed-filter get" [
 # DEPRECATED
 # --poiList item shape: {address?: record, poi?: record, position?: record}
 @deprecated
-export def "search-routed-filter post" [
+export def "search-routed-filter create" [
   version_number: int
   position: string
   heading: float
@@ -551,12 +560,12 @@ export def "search-routed-filter post" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "routingTimeout" $routing_timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({version_number: $version_number, position: $position, heading: $heading, ext: $ext} | format pattern "/search/{version_number}/routedFilter/{position}/{heading}.{ext}") $qp)
-  let body = {"poiList": $poi_list} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), position: (encode-path-segment $position), heading: (encode-path-segment $heading), ext: (encode-path-segment $ext)} | format pattern "/search/{version_number}/routedFilter/{position}/{heading}.{ext}") $qp)
+  let req_body = {"poiList": $poi_list} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Routed Search
@@ -578,18 +587,18 @@ export def "search-routed-search get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --typeahead: oneof<nothing, bool> # If the "typeahead" flag is set, the query will be interpreted as a partial input and the search will enter <b>predictive</b> mode. (default: false)
+  --typeahead: oneof<nothing, bool> # If the "typeahead" flag is set, the query will be interpreted as a partial input and the search will enter predictive mode. (default: false)
   --limit: int # Maximum number of search results that will be returned. (default: 10)
   --multiplier: int # Multiplies the limit by N to gather more candidate POIs, which will then be sorted by drive distance, returning only the top candidates according to the limit. (default: 2)
   --routing-timeout: int # Only return results that arrive from routing engine within this time limit. (default: 4000)
-  --language: string # Language in which search results should be returned. Should be one of <a href="/search-api/search-api-documentation/supported-languages">supported IETF language tags</a>, case insensitive.
-  --extended-postal-codes-for: string # Indexes for which extended postal codes should be included in the results. Available indexes are:   - <b>Addr</b> = Address ranges   - <b>Geo</b> = Geographies   - <b>PAD</b> = Point Addresses   - <b>POI</b> = Points of Interest   - <b>Str</b> = Streets   - <b>XStr</b> = Cross Streets (intersections)
-  --idx-set: string # A comma separated list of indexes which should be utilized for the search. Item order does not matter. Available indexes are:   - <b>Addr</b> = Address range interpolation (when there is no PAD)   - <b>Geo</b> = Geographies   - <b>PAD</b> = Point Addresses   - <b>POI</b> = Points of interest   - <b>Str</b> = Streets   - <b>Xstr</b> = Cross Streets (intersections) (e.g. POI)
+  --language: string # Language in which search results should be returned. Should be one of supported IETF language tags (/search-api/search-api-documentation/supported-languages), case insensitive.
+  --extended-postal-codes-for: string # Indexes for which extended postal codes should be included in the results. Available indexes are: - Addr = Address ranges - Geo = Geographies - PAD = Point Addresses - POI = Points of Interest - Str = Streets - XStr = Cross Streets (intersections)
+  --idx-set: string # A comma separated list of indexes which should be utilized for the search. Item order does not matter. Available indexes are: - Addr = Address range interpolation (when there is no PAD) - Geo = Geographies - PAD = Point Addresses - POI = Points of interest - Str = Streets - Xstr = Cross Streets (intersections) (e.g. POI)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "typeahead" $typeahead "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "multiplier" $multiplier "scalar") (serialize-qp "routingTimeout" $routing_timeout "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "extendedPostalCodesFor" $extended_postal_codes_for "scalar") (serialize-qp "idxSet" $idx_set "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({version_number: $version_number, query: $query, position: $position, heading: $heading, ext: $ext} | format pattern "/search/{version_number}/routedSearch/{query}/{position}/{heading}.{ext}") $qp)
+  let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), query: (encode-path-segment $query), position: (encode-path-segment $position), heading: (encode-path-segment $heading), ext: (encode-path-segment $ext)} | format pattern "/search/{version_number}/routedSearch/{query}/{position}/{heading}.{ext}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -612,23 +621,23 @@ export def "search-s get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --typeahead: oneof<nothing, bool> # If the "typeahead" flag is set, the query will be interpreted as a partial input and the search will enter <b>predictive</b> mode. (default: false)
+  --typeahead: oneof<nothing, bool> # If the "typeahead" flag is set, the query will be interpreted as a partial input and the search will enter predictive mode. (default: false)
   --limit: int # Maximum number of search results that will be returned. (default: 10)
   --ofs: int # Starting offset of the returned results within the full result set. (default: 0)
   --country-set: string # Comma separated string of country codes. This will limit the search to the specified countries. (e.g. FR)
   --lat: float # Latitude where results should be biased. NOTE: supplying a lat/lon without a radius will return search results biased to that point. (format: float, e.g. 37.337)
   --lon: float # Longitude where results should be biased NOTE: supplying a lat/lon without a radius will return search results biased to that point. (format: float, e.g. -121.89)
-  --radius: int # If radius <b>and</b> position are set, the results will be constrained to the defined area. The radius parameter is specified in meters.
+  --radius: int # If radius and position are set, the results will be constrained to the defined area. The radius parameter is specified in meters.
   --top-left: string # Top left position of the bounding box. This is specified as a comma separated string composed of lat., lon. (e.g. 37.553,-122.453)
   --btm-right: string # Bottom right position of the bounding box. This is specified as a comma separated string composed of lat., lon. (e.g. 37.4,-122.55)
-  --language: string # Language in which search results should be returned. Should be one of <a href="/search-api/search-api-documentation/supported-languages">supported IETF language tags</a>, case insensitive.
-  --idx-set: string # A comma separated list of indexes which should be utilized for the search. Item order does not matter. Available indexes are:   - <b>Addr</b> = Address range interpolation (when there is no PAD)   - <b>Geo</b> = Geographies   - <b>PAD</b> = Point Addresses   - <b>POI</b> = Points of interest   - <b>Str</b> = Streets   - <b>Xstr</b> = Cross Streets (intersections) (e.g. POI)
+  --language: string # Language in which search results should be returned. Should be one of supported IETF language tags (/search-api/search-api-documentation/supported-languages), case insensitive.
+  --idx-set: string # A comma separated list of indexes which should be utilized for the search. Item order does not matter. Available indexes are: - Addr = Address range interpolation (when there is no PAD) - Geo = Geographies - PAD = Point Addresses - POI = Points of interest - Str = Streets - Xstr = Cross Streets (intersections) (e.g. POI)
   --view: string@view-completer # Geopolitical View. (default: Unified)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "typeahead" $typeahead "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "ofs" $ofs "scalar") (serialize-qp "countrySet" $country_set "scalar") (serialize-qp "lat" $lat "scalar") (serialize-qp "lon" $lon "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "topLeft" $top_left "scalar") (serialize-qp "btmRight" $btm_right "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "idxSet" $idx_set "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({version_number: $version_number, query: $query, ext: $ext} | format pattern "/search/{version_number}/s/{query}.{ext}") $qp)
+  let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), query: (encode-path-segment $query), ext: (encode-path-segment $ext)} | format pattern "/search/{version_number}/s/{query}.{ext}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -649,26 +658,26 @@ export def "search-search get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --typeahead: oneof<nothing, bool> # If the "typeahead" flag is set, the query will be interpreted as a partial input and the search will enter <b>predictive</b> mode. (default: false)
+  --typeahead: oneof<nothing, bool> # If the "typeahead" flag is set, the query will be interpreted as a partial input and the search will enter predictive mode. (default: false)
   --limit: int # Maximum number of search results that will be returned. (default: 10)
   --ofs: int # Starting offset of the returned results within the full result set. (default: 0)
   --country-set: string # Comma separated string of country codes. This will limit the search to the specified countries. (e.g. FR)
   --lat: float # Latitude where results should be biased. NOTE: supplying a lat/lon without a radius will return search results biased to that point. (format: float, e.g. 37.337)
   --lon: float # Longitude where results should be biased NOTE: supplying a lat/lon without a radius will return search results biased to that point. (format: float, e.g. -121.89)
-  --radius: int # If radius <b>and</b> position are set, the results will be constrained to the defined area. The radius parameter is specified in meters.
+  --radius: int # If radius and position are set, the results will be constrained to the defined area. The radius parameter is specified in meters.
   --top-left: string # Top left position of the bounding box. This is specified as a comma separated string composed of lat., lon. (e.g. 37.553,-122.453)
   --btm-right: string # Bottom right position of the bounding box. This is specified as a comma separated string composed of lat., lon. (e.g. 37.4,-122.55)
-  --language: string # Language in which search results should be returned. Should be one of <a href="/search-api/search-api-documentation/supported-languages">supported IETF language tags</a>, case insensitive.
-  --extended-postal-codes-for: string # Indexes for which extended postal codes should be included in the results. Available indexes are:   - <b>Addr</b> = Address ranges   - <b>Geo</b> = Geographies   - <b>PAD</b> = Point Addresses   - <b>POI</b> = Points of Interest   - <b>Str</b> = Streets   - <b>XStr</b> = Cross Streets (intersections)
+  --language: string # Language in which search results should be returned. Should be one of supported IETF language tags (/search-api/search-api-documentation/supported-languages), case insensitive.
+  --extended-postal-codes-for: string # Indexes for which extended postal codes should be included in the results. Available indexes are: - Addr = Address ranges - Geo = Geographies - PAD = Point Addresses - POI = Points of Interest - Str = Streets - XStr = Cross Streets (intersections)
   --min-fuzzy-level: int # Minimum fuzziness level to be used. (default: 1)
   --max-fuzzy-level: int # Maximum fuzziness level to be used. (default: 2)
-  --idx-set: string # A comma separated list of indexes which should be utilized for the search. Item order does not matter. Available indexes are:   - <b>Addr</b> = Address range interpolation (when there is no PAD)   - <b>Geo</b> = Geographies   - <b>PAD</b> = Point Addresses   - <b>POI</b> = Points of interest   - <b>Str</b> = Streets   - <b>Xstr</b> = Cross Streets (intersections) (e.g. POI)
+  --idx-set: string # A comma separated list of indexes which should be utilized for the search. Item order does not matter. Available indexes are: - Addr = Address range interpolation (when there is no PAD) - Geo = Geographies - PAD = Point Addresses - POI = Points of interest - Str = Streets - Xstr = Cross Streets (intersections) (e.g. POI)
   --view: string@view-completer # Geopolitical View. (default: Unified)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "typeahead" $typeahead "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "ofs" $ofs "scalar") (serialize-qp "countrySet" $country_set "scalar") (serialize-qp "lat" $lat "scalar") (serialize-qp "lon" $lon "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "topLeft" $top_left "scalar") (serialize-qp "btmRight" $btm_right "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "extendedPostalCodesFor" $extended_postal_codes_for "scalar") (serialize-qp "minFuzzyLevel" $min_fuzzy_level "scalar") (serialize-qp "maxFuzzyLevel" $max_fuzzy_level "scalar") (serialize-qp "idxSet" $idx_set "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({version_number: $version_number, query: $query, ext: $ext} | format pattern "/search/{version_number}/search/{query}.{ext}") $qp)
+  let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), query: (encode-path-segment $query), ext: (encode-path-segment $ext)} | format pattern "/search/{version_number}/search/{query}.{ext}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -678,7 +687,7 @@ export def "search-search get" [
 #
 # POST /search/{versionNumber}/searchAlongRoute/{query}.{ext}
 # --route shape: {points?: list}
-export def "search-search-along-route post" [
+export def "search-search-along-route create" [
   version_number: int
   query: string
   ext: string
@@ -698,12 +707,12 @@ export def "search-search-along-route post" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxDetourTime" $max_detour_time "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({version_number: $version_number, query: $query, ext: $ext} | format pattern "/search/{version_number}/searchAlongRoute/{query}.{ext}") $qp)
-  let body = {"route": $route} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), query: (encode-path-segment $query), ext: (encode-path-segment $ext)} | format pattern "/search/{version_number}/searchAlongRoute/{query}.{ext}") $qp)
+  let req_body = {"route": $route} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Structured Geocode
@@ -732,13 +741,13 @@ export def "search-structured-geocode-ext get" [
   --country-secondary-subdivision: string # The county for the structured address.
   --country-subdivision: string # The state or province for the structured address.
   --postal-code: string # The zip code or postal code for the structured address.
-  --language: string # Language in which search results should be returned. Should be one of <a href="/search-api/search-api-documentation/supported-languages">supported IETF language tags</a>, case insensitive.
-  --extended-postal-codes-for: string # Indexes for which extended postal codes should be included in the results. Available indexes are:   - <b>Addr</b> = Address ranges   - <b>Geo</b> = Geographies   - <b>PAD</b> = Point Addresses   - <b>POI</b> = Points of Interest   - <b>Str</b> = Streets   - <b>XStr</b> = Cross Streets (intersections)
+  --language: string # Language in which search results should be returned. Should be one of supported IETF language tags (/search-api/search-api-documentation/supported-languages), case insensitive.
+  --extended-postal-codes-for: string # Indexes for which extended postal codes should be included in the results. Available indexes are: - Addr = Address ranges - Geo = Geographies - PAD = Point Addresses - POI = Points of Interest - Str = Streets - XStr = Cross Streets (intersections)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "countryCode" $country_code "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "ofs" $ofs "scalar") (serialize-qp "streetNumber" $street_number "scalar") (serialize-qp "streetName" $street_name "scalar") (serialize-qp "crossStreet" $cross_street "scalar") (serialize-qp "municipality" $municipality "scalar") (serialize-qp "municipalitySubdivision" $municipality_subdivision "scalar") (serialize-qp "countryTertiarySubdivision" $country_tertiary_subdivision "scalar") (serialize-qp "countrySecondarySubdivision" $country_secondary_subdivision "scalar") (serialize-qp "countrySubdivision" $country_subdivision "scalar") (serialize-qp "postalCode" $postal_code "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "extendedPostalCodesFor" $extended_postal_codes_for "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({version_number: $version_number, ext: $ext} | format pattern "/search/{version_number}/structuredGeocode.{ext}") $qp)
+  let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), ext: (encode-path-segment $ext)} | format pattern "/search/{version_number}/structuredGeocode.{ext}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

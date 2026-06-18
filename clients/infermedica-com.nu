@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -131,7 +140,7 @@ export def "concepts get" [
 ]: nothing -> record<common_name: string, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/concepts/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/concepts/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -141,7 +150,7 @@ export def "concepts get" [
 #
 # GET /conditions
 # operationId: getAllConditions
-export def "conditions get-all" [
+export def "conditions get-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -184,7 +193,7 @@ export def "conditions get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "age.value" $age_value "scalar") (serialize-qp "age.unit" $age_unit "scalar") (serialize-qp "enable_triage_5" $enable_triage_5 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/conditions/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/conditions/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -195,7 +204,7 @@ export def "conditions get" [
 # POST /diagnosis
 # operationId: computeDiagnosis
 # --evidence item shape: {choice_id: "present"|"absent"|"unknown", id: string, observed_at?: string, source?: "initial"|"suggest"|"predefined"|"red_flags"}
-export def "diagnosis computeDiagnosis" [
+export def "diagnosis create-compute" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -213,11 +222,11 @@ export def "diagnosis computeDiagnosis" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/diagnosis")
-  let body = {"age": $age, "evidence": $evidence, "extras": $extras, "sex": $sex} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"age": $age, "evidence": $evidence, "extras": $extras, "sex": $sex} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Query diagnostic engine for explanation
@@ -225,7 +234,7 @@ export def "diagnosis computeDiagnosis" [
 # POST /explain
 # operationId: computeExplanation
 # --evidence item shape: {choice_id: "present"|"absent"|"unknown", id: string, observed_at?: string, source?: "initial"|"suggest"|"predefined"|"red_flags"}
-export def "explain computeExplanation" [
+export def "explain create-compute-explanation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -244,11 +253,11 @@ export def "explain computeExplanation" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/explain")
-  let body = {"age": $age, "evidence": $evidence, "extras": $extras, "sex": $sex, "target": $target} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"age": $age, "evidence": $evidence, "extras": $extras, "sex": $sex, "target": $target} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get database information
@@ -280,7 +289,7 @@ export def "info get-database" [
 #
 # GET /lab_tests
 # operationId: getAllLabTests
-export def "lab-tests get-all" [
+export def "lab-tests get-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -321,7 +330,7 @@ export def "lab-tests get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "age.value" $age_value "scalar") (serialize-qp "age.unit" $age_unit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/lab_tests/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/lab_tests/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -367,8 +376,8 @@ export def "parse get-mentions" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --concept-types: list # list of concept types that should be captured
-  --context: list # ordered list of ids of present symptoms that were already captured and can be used as context
+  --concept-types: list<string> # list of concept types that should be captured
+  --context: list<string> # ordered list of ids of present symptoms that were already captured and can be used as context
   --correct-spelling: oneof<nothing, bool> # correct spelling of input text before proper analysis
   --include-tokens: oneof<nothing, bool> # include tokenization details in output
   text: string # user text to process
@@ -377,11 +386,11 @@ export def "parse get-mentions" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/parse")
-  let body = {"concept_types": $concept_types, "context": $context, "correct_spelling": $correct_spelling, "include_tokens": $include_tokens, "text": $text} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"concept_types": $concept_types, "context": $context, "correct_spelling": $correct_spelling, "include_tokens": $include_tokens, "text": $text} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Query diagnostic engine for question rationale
@@ -389,7 +398,7 @@ export def "parse get-mentions" [
 # POST /rationale
 # operationId: computeRationale
 # --evidence item shape: {choice_id: "present"|"absent"|"unknown", id: string, observed_at?: string, source?: "initial"|"suggest"|"predefined"|"red_flags"}
-export def "rationale computeRationale" [
+export def "rationale create-compute" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -407,11 +416,11 @@ export def "rationale computeRationale" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rationale")
-  let body = {"age": $age, "evidence": $evidence, "extras": $extras, "sex": $sex} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"age": $age, "evidence": $evidence, "extras": $extras, "sex": $sex} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Query the diagnostic engine for possible red flag symptoms
@@ -419,7 +428,7 @@ export def "rationale computeRationale" [
 # POST /red_flags
 # operationId: computeRedFlags
 # --evidence item shape: {choice_id: "present"|"absent"|"unknown", id: string, observed_at?: string, source?: "initial"|"suggest"|"predefined"|"red_flags"}
-export def "red-flags computeRedFlags" [
+export def "red-flags create-compute" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -439,18 +448,18 @@ export def "red-flags computeRedFlags" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "max_results" $max_results "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/red_flags" $qp)
-  let body = {"age": $age, "evidence": $evidence, "extras": $extras, "sex": $sex} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"age": $age, "evidence": $evidence, "extras": $extras, "sex": $sex} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List all risk factors
 #
 # GET /risk_factors
 # operationId: getAllRiskFactors
-export def "risk-factors get-all" [
+export def "risk-factors get-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -493,7 +502,7 @@ export def "risk-factors get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "age.value" $age_value "scalar") (serialize-qp "age.unit" $age_unit "scalar") (serialize-qp "enable_triage_5" $enable_triage_5 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/risk_factors/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/risk_factors/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -517,7 +526,7 @@ export def "search get-matching-observations" [
   --age-value: int # age value (format: int32, e.g. 18)
   --age-unit: string@age-unit-completer # unit in which age value was provided (default: year, e.g. year)
   --max-results: int # maximum number of results (format: int32, default: 8)
-  --type: list # type of results
+  --type: list<string> # type of results
 ]: nothing -> table<id: string, label: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -553,18 +562,18 @@ export def "suggest get-suggestions" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "max_results" $max_results "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/suggest" $qp)
-  let body = {"age": $age, "evidence": $evidence, "extras": $extras, "sex": $sex} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"age": $age, "evidence": $evidence, "extras": $extras, "sex": $sex} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List all symptoms
 #
 # GET /symptoms
 # operationId: getAllSymptoms
-export def "symptoms get-all" [
+export def "symptoms get-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -607,7 +616,7 @@ export def "symptoms get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "age.value" $age_value "scalar") (serialize-qp "age.unit" $age_unit "scalar") (serialize-qp "enable_triage_5" $enable_triage_5 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/symptoms/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/symptoms/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -618,7 +627,7 @@ export def "symptoms get" [
 # POST /triage
 # operationId: computeTriage
 # --evidence item shape: {choice_id: "present"|"absent"|"unknown", id: string, observed_at?: string, source?: "initial"|"suggest"|"predefined"|"red_flags"}
-export def "triage computeTriage" [
+export def "triage create-compute" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -636,9 +645,9 @@ export def "triage computeTriage" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/triage")
-  let body = {"age": $age, "evidence": $evidence, "extras": $extras, "sex": $sex} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"age": $age, "evidence": $evidence, "extras": $extras, "sex": $sex} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

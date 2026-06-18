@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -71,7 +80,7 @@ def particle-completer-1 [] { ["alpha" "e+" "e-" "gamma" "mu+" "mu-" "neutron" "
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "cari7-ambient-dose dose" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "cari7-ambient-dose get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,7 +104,7 @@ export def commands []: nothing -> table {
 #
 # GET /cari7/ambient_dose
 # operationId: app.api_cari7.endpoints.CARI7.ambient_dose
-export def "cari7-ambient-dose dose" [
+export def "cari7-ambient-dose get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -111,7 +120,7 @@ export def "cari7-ambient-dose dose" [
   --month: int # Month in MM. (e.g. 12)
   --day: int # Day in DD. (e.g. 1)
   --utc: int # Hour in 24 hour time. (e.g. 3)
-  --particle: string@particle-completer # The particle type as a string. Specifying 'total' returns the dose for all particle types.  (e.g. total)
+  --particle: string@particle-completer # The particle type as a string. Specifying 'total' returns the dose for all particle types. (e.g. total)
 ]: nothing -> record<dose_rate: record<units: string, value: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -126,7 +135,7 @@ export def "cari7-ambient-dose dose" [
 #
 # GET /cari7/effective_dose
 # operationId: app.api_cari7.endpoints.CARI7.effective_dose
-export def "cari7-effective-dose dose" [
+export def "cari7-effective-dose get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -142,7 +151,7 @@ export def "cari7-effective-dose dose" [
   --month: int # Month in MM. (e.g. 12)
   --day: int # Day in DD. (e.g. 1)
   --utc: int # Hour in 24 hour time. (e.g. 3)
-  --particle: string@particle-completer # The particle type as a string. Specifying 'total' returns the dose for all particle types.  (e.g. total)
+  --particle: string@particle-completer # The particle type as a string. Specifying 'total' returns the dose for all particle types. (e.g. total)
 ]: nothing -> record<dose_rate: record<units: string, value: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -157,7 +166,7 @@ export def "cari7-effective-dose dose" [
 #
 # GET /parma/ambient_dose
 # operationId: app.api_parma.endpoints.PARMA.ambient_dose
-export def "parma-ambient-dose dose" [
+export def "parma-ambient-dose get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -167,13 +176,13 @@ export def "parma-ambient-dose dose" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --altitude: float # Altitude (in km). The minimum is 0 m, the maximum is 47 km (the upper limit of the stratosphere). (e.g. 11)
-  --atmospheric-depth: float # Atmospheric depth from the top of the atmosphere (in units of g/cm2). The minimum is 0.913 g/cm2, the maximum is 1032.66 g/cm2. WARNING: you can specify either altitude OR atmospheric depth, not both.  (e.g. 0.92)
+  --atmospheric-depth: float # Atmospheric depth from the top of the atmosphere (in units of g/cm2). The minimum is 0.913 g/cm2, the maximum is 1032.66 g/cm2. WARNING: you can specify either altitude OR atmospheric depth, not both. (e.g. 0.92)
   --latitude: float # Latitude. -90 (S) to 90 (N). (e.g. 30)
   --longitude: float # Longitude. -180 (W) to 180 (E). (e.g. 30)
   --year: int # Year in YYYY. (e.g. 2019)
   --month: int # Month in MM. (e.g. 12)
   --day: int # Day in DD. (e.g. 1)
-  --particle: string@particle-completer-1 # The particle type as a string. Specifying 'total', only used for the dose calculation, returns the dose for all particle types.  (e.g. proton)
+  --particle: string@particle-completer-1 # The particle type as a string. Specifying 'total', only used for the dose calculation, returns the dose for all particle types. (e.g. proton)
 ]: nothing -> record<dose_rate: record<units: string, value: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -188,7 +197,7 @@ export def "parma-ambient-dose dose" [
 #
 # GET /parma/differential_intensity
 # operationId: app.api_parma.endpoints.PARMA.differential_intensity
-export def "parma-differential-intensity intensity" [
+export def "parma-differential-intensity get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -198,13 +207,13 @@ export def "parma-differential-intensity intensity" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --altitude: float # Altitude (in km). The minimum is 0 m, the maximum is 47 km (the upper limit of the stratosphere). (e.g. 11)
-  --atmospheric-depth: float # Atmospheric depth from the top of the atmosphere (in units of g/cm2). The minimum is 0.913 g/cm2, the maximum is 1032.66 g/cm2. WARNING: you can specify either altitude OR atmospheric depth, not both.  (e.g. 0.92)
+  --atmospheric-depth: float # Atmospheric depth from the top of the atmosphere (in units of g/cm2). The minimum is 0.913 g/cm2, the maximum is 1032.66 g/cm2. WARNING: you can specify either altitude OR atmospheric depth, not both. (e.g. 0.92)
   --latitude: float # Latitude. -90 (S) to 90 (N). (e.g. 30)
   --longitude: float # Longitude. -180 (W) to 180 (E). (e.g. 30)
   --year: int # Year in YYYY. (e.g. 2019)
   --month: int # Month in MM. (e.g. 12)
   --day: int # Day in DD. (e.g. 1)
-  --particle: string@particle-completer-1 # The particle type as a string. Specifying 'total', only used for the dose calculation, returns the dose for all particle types.  (e.g. proton)
+  --particle: string@particle-completer-1 # The particle type as a string. Specifying 'total', only used for the dose calculation, returns the dose for all particle types. (e.g. proton)
   --angle: float # Direction cosine. 1.0 is in the downward direction. (e.g. 1)
 ]: nothing -> record<energies: record<data: list<float>, units: string>, intensities: record<data: list<float>, units: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -220,7 +229,7 @@ export def "parma-differential-intensity intensity" [
 #
 # GET /parma/effective_dose
 # operationId: app.api_parma.endpoints.PARMA.effective_dose
-export def "parma-effective-dose dose" [
+export def "parma-effective-dose get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -230,13 +239,13 @@ export def "parma-effective-dose dose" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --altitude: float # Altitude (in km). The minimum is 0 m, the maximum is 47 km (the upper limit of the stratosphere). (e.g. 11)
-  --atmospheric-depth: float # Atmospheric depth from the top of the atmosphere (in units of g/cm2). The minimum is 0.913 g/cm2, the maximum is 1032.66 g/cm2. WARNING: you can specify either altitude OR atmospheric depth, not both.  (e.g. 0.92)
+  --atmospheric-depth: float # Atmospheric depth from the top of the atmosphere (in units of g/cm2). The minimum is 0.913 g/cm2, the maximum is 1032.66 g/cm2. WARNING: you can specify either altitude OR atmospheric depth, not both. (e.g. 0.92)
   --latitude: float # Latitude. -90 (S) to 90 (N). (e.g. 30)
   --longitude: float # Longitude. -180 (W) to 180 (E). (e.g. 30)
   --year: int # Year in YYYY. (e.g. 2019)
   --month: int # Month in MM. (e.g. 12)
   --day: int # Day in DD. (e.g. 1)
-  --particle: string@particle-completer-1 # The particle type as a string. Specifying 'total', only used for the dose calculation, returns the dose for all particle types.  (e.g. proton)
+  --particle: string@particle-completer-1 # The particle type as a string. Specifying 'total', only used for the dose calculation, returns the dose for all particle types. (e.g. proton)
 ]: nothing -> record<dose_rate: record<units: string, value: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -251,7 +260,7 @@ export def "parma-effective-dose dose" [
 #
 # GET /route/ambient_dose
 # operationId: app.api_icaro.endpoints.ICARO.ambient_dose
-export def "route-ambient-dose dose" [
+export def "route-ambient-dose get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -265,9 +274,9 @@ export def "route-ambient-dose dose" [
   --altitude: float # Altitude (in km). The minimum is 0 m, the maximum is 20 km. (e.g. 10.1)
   --duration: float # The flight duration in hours. The minimum is 0, the maximum is 20 hrs. (e.g. 5)
   --initial-altitude: float # Initial altitude (in km). The minimum is 0 m, the maximum is 20 km. (e.g. 0)
-  --cruising-altitudes: list # Cruising altitudes (in km). The minimum is 0 m, the maximum is 20 km. (e.g. [10, 15])
-  --climb-times: list # Climb times for each cruising altitude (hours). (e.g. [0.1, 0.5])
-  --cruising-times: list # Cruising times at each cruising altitude (hours). (e.g. [1, 2])
+  --cruising-altitudes: list<float> # Cruising altitudes (in km). The minimum is 0 m, the maximum is 20 km. (e.g. [10, 15])
+  --climb-times: list<float> # Climb times for each cruising altitude (hours). (e.g. [0.1, 0.5])
+  --cruising-times: list<float> # Cruising times at each cruising altitude (hours). (e.g. [1, 2])
   --descent-time: float # Descent time from last cruising altitude to final altitude (hours). (e.g. 0.5)
   --final-altitude: float # Final altitude (in km). (e.g. 0)
   --year: int # Year in YYYY. (e.g. 2019)
@@ -287,7 +296,7 @@ export def "route-ambient-dose dose" [
 #
 # GET /route/effective_dose
 # operationId: app.api_icaro.endpoints.ICARO.effective_dose
-export def "route-effective-dose dose" [
+export def "route-effective-dose get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -301,9 +310,9 @@ export def "route-effective-dose dose" [
   --altitude: float # Altitude (in km). The minimum is 0 m, the maximum is 20 km. (e.g. 10.1)
   --duration: float # The flight duration in hours. The minimum is 0, the maximum is 20 hrs. (e.g. 5)
   --initial-altitude: float # Initial altitude (in km). The minimum is 0 m, the maximum is 20 km. (e.g. 0)
-  --cruising-altitudes: list # Cruising altitudes (in km). The minimum is 0 m, the maximum is 20 km. (e.g. [10, 15])
-  --climb-times: list # Climb times for each cruising altitude (hours). (e.g. [0.1, 0.5])
-  --cruising-times: list # Cruising times at each cruising altitude (hours). (e.g. [1, 2])
+  --cruising-altitudes: list<float> # Cruising altitudes (in km). The minimum is 0 m, the maximum is 20 km. (e.g. [10, 15])
+  --climb-times: list<float> # Climb times for each cruising altitude (hours). (e.g. [0.1, 0.5])
+  --cruising-times: list<float> # Cruising times at each cruising altitude (hours). (e.g. [1, 2])
   --descent-time: float # Descent time from last cruising altitude to final altitude (hours). (e.g. 0.5)
   --final-altitude: float # Final altitude (in km). (e.g. 0)
   --year: int # Year in YYYY. (e.g. 2019)

@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -134,7 +143,7 @@ export def "asset get" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "aliases" $aliases "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({asset_id: $asset_id} | format pattern "/asset/{asset_id}") $qp)
+  let full_url = (build-url $base ({asset_id: (encode-path-segment $asset_id)} | format pattern "/asset/{asset_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -159,7 +168,7 @@ export def "asset-contributor get" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "aliases" $aliases "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({asset_id: $asset_id} | format pattern "/asset/{asset_id}/contributor") $qp)
+  let full_url = (build-url $base ({asset_id: (encode-path-segment $asset_id)} | format pattern "/asset/{asset_id}/contributor") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -204,7 +213,7 @@ export def "catalogue get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({catalogue_id: $catalogue_id} | format pattern "/catalogue/{catalogue_id}"))
+  let full_url = (build-url $base ({catalogue_id: (encode-path-segment $catalogue_id)} | format pattern "/catalogue/{catalogue_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -234,7 +243,7 @@ export def "catalogue-asset get" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "title" $title "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "updatedAfter" $updated_after "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "aliases" $aliases "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({catalogue_id: $catalogue_id} | format pattern "/catalogue/{catalogue_id}/asset") $qp)
+  let full_url = (build-url $base ({catalogue_id: (encode-path-segment $catalogue_id)} | format pattern "/catalogue/{catalogue_id}/asset") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -244,7 +253,7 @@ export def "catalogue-asset get" [
 #
 # GET /catalogue/{catalogueId}/asset/{assetId}
 # operationId: getCatalogueAssetDetail
-export def "catalogue-asset get-catalogue-asset-detail" [
+export def "catalogue-asset get-detail" [
   catalogue_id: string
   asset_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -258,7 +267,7 @@ export def "catalogue-asset get-catalogue-asset-detail" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({catalogue_id: $catalogue_id, asset_id: $asset_id} | format pattern "/catalogue/{catalogue_id}/asset/{asset_id}"))
+  let full_url = (build-url $base ({catalogue_id: (encode-path-segment $catalogue_id), asset_id: (encode-path-segment $asset_id)} | format pattern "/catalogue/{catalogue_id}/asset/{asset_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -313,7 +322,7 @@ export def "channel get" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "aliases" $aliases "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({channel_id: $channel_id} | format pattern "/channel/{channel_id}") $qp)
+  let full_url = (build-url $base ({channel_id: (encode-path-segment $channel_id)} | format pattern "/channel/{channel_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -364,7 +373,7 @@ export def "contributor get" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "aliases" $aliases "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({contributor_id: $contributor_id} | format pattern "/contributor/{contributor_id}") $qp)
+  let full_url = (build-url $base ({contributor_id: (encode-path-segment $contributor_id)} | format pattern "/contributor/{contributor_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -436,7 +445,7 @@ export def "feature get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({feature_id: $feature_id} | format pattern "/feature/{feature_id}"))
+  let full_url = (build-url $base ({feature_id: (encode-path-segment $feature_id)} | format pattern "/feature/{feature_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -483,7 +492,7 @@ export def "platform get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({platform_id: $platform_id} | format pattern "/platform/{platform_id}"))
+  let full_url = (build-url $base ({platform_id: (encode-path-segment $platform_id)} | format pattern "/platform/{platform_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -508,7 +517,7 @@ export def "platform-region list" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "aliases" $aliases "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({platform_id: $platform_id} | format pattern "/platform/{platform_id}/region") $qp)
+  let full_url = (build-url $base ({platform_id: (encode-path-segment $platform_id)} | format pattern "/platform/{platform_id}/region") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

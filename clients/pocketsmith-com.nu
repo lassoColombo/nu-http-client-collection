@@ -36,6 +36,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -113,7 +122,7 @@ export def "accounts delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/accounts/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/accounts/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -135,7 +144,7 @@ export def "accounts get" [
 ]: nothing -> record<created_at: string, currency_code: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, id: int, is_net_worth: bool, primary_scenario: record<achieve_date: string, closing_balance: float, closing_balance_date: string, created_at: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, description: string, id: int, interest_rate: float, interest_rate_repeat_id: int, maximum_value: float, minimum_value: float, safe_balance: float, safe_balance_in_base_currency: float, starting_balance: float, starting_balance_date: string, title: string, type: string, updated_at: string>, primary_transaction_account: record<created_at: string, currency_code: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, id: int, institution: record<created_at: string, currency_code: string, id: int, title: string, updated_at: string>, name: string, number: string, safe_balance: float, safe_balance_in_base_currency: float, starting_balance: float, starting_balance_date: string, type: string, updated_at: string>, safe_balance: float, safe_balance_in_base_currency: float, scenarios: table<achieve_date: string, closing_balance: float, closing_balance_date: string, created_at: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, description: string, id: int, interest_rate: float, interest_rate_repeat_id: int, maximum_value: float, minimum_value: float, safe_balance: float, safe_balance_in_base_currency: float, starting_balance: float, starting_balance_date: string, title: string, type: string, updated_at: string>, title: string, transaction_accounts: table<created_at: string, currency_code: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, id: int, institution: record, name: string, number: string, safe_balance: float, safe_balance_in_base_currency: float, starting_balance: float, starting_balance_date: string, type: string, updated_at: string>, type: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/accounts/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/accounts/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -144,7 +153,7 @@ export def "accounts get" [
 # Update account
 #
 # PUT /accounts/{id}
-export def "accounts put" [
+export def "accounts update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -162,12 +171,12 @@ export def "accounts put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/accounts/{id}"))
-  let body = {"currency_code": $currency_code, "is_net_worth": $is_net_worth, "title": $title, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/accounts/{id}"))
+  let req_body = {"currency_code": $currency_code, "is_net_worth": $is_net_worth, "title": $title, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List transactions in account
@@ -195,7 +204,7 @@ export def "accounts-transactions get" [
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "updated_since" $updated_since "scalar") (serialize-qp "uncategorised" $uncategorised "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "needs_review" $needs_review "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/accounts/{id}/transactions") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/accounts/{id}/transactions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -217,7 +226,7 @@ export def "attachments delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/attachments/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/attachments/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -239,7 +248,7 @@ export def "attachments get" [
 ]: nothing -> record<content_type: string, content_type_meta: record<description: string, extension: string, title: string>, created_at: string, file_name: string, id: int, original_url: string, title: string, type: string, updated_at: string, variants: record<large_url: string, thumb_url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/attachments/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/attachments/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -248,7 +257,7 @@ export def "attachments get" [
 # Update attachment
 #
 # PUT /attachments/{id}
-export def "attachments put" [
+export def "attachments update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -263,12 +272,12 @@ export def "attachments put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/attachments/{id}"))
-  let body = {"title": $title} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/attachments/{id}"))
+  let req_body = {"title": $title} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete category
@@ -287,7 +296,7 @@ export def "categories delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/categories/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/categories/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -309,7 +318,7 @@ export def "categories get" [
 ]: nothing -> record<children: list<any>, colour: string, created_at: string, id: int, is_bill: bool, is_transfer: bool, parent_id: int, refund_behaviour: string, roll_up: bool, title: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/categories/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/categories/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -318,7 +327,7 @@ export def "categories get" [
 # Update category
 #
 # PUT /categories/{id}
-export def "categories put" [
+export def "categories update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -339,18 +348,18 @@ export def "categories put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/categories/{id}"))
-  let body = {"colour": $colour, "is_bill": $is_bill, "is_transfer": $is_transfer, "parent_id": $parent_id, "refund_behaviour": $refund_behaviour, "roll_up": $roll_up, "title": $title} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/categories/{id}"))
+  let req_body = {"colour": $colour, "is_bill": $is_bill, "is_transfer": $is_transfer, "parent_id": $parent_id, "refund_behaviour": $refund_behaviour, "roll_up": $roll_up, "title": $title} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create category rule in category
 #
 # POST /categories/{id}/category_rules
-export def "categories-category-rules post" [
+export def "categories-category-rules create" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -367,12 +376,12 @@ export def "categories-category-rules post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/categories/{id}/category_rules"))
-  let body = {"apply_to_all": $apply_to_all, "apply_to_uncategorised": $apply_to_uncategorised, "payee_matches": $payee_matches} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/categories/{id}/category_rules"))
+  let req_body = {"apply_to_all": $apply_to_all, "apply_to_uncategorised": $apply_to_uncategorised, "payee_matches": $payee_matches} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List transactions in categories
@@ -400,7 +409,7 @@ export def "categories-transactions get" [
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "updated_since" $updated_since "scalar") (serialize-qp "uncategorised" $uncategorised "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "needs_review" $needs_review "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/categories/{id}/transactions") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/categories/{id}/transactions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -443,7 +452,7 @@ export def "currencies get" [
 ]: nothing -> record<id: string, minor_unit: int, name: string, separators: record<major: string, minor: string>, symbol: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/currencies/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/currencies/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -467,7 +476,7 @@ export def "events delete" [
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "behaviour" $behaviour "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/events/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/events/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -489,7 +498,7 @@ export def "events get" [
 ]: nothing -> record<amount: float, amount_in_base_currency: float, category: record<children: list<any>, colour: string, created_at: string, id: int, is_bill: bool, is_transfer: bool, parent_id: int, refund_behaviour: string, roll_up: bool, title: string, updated_at: string>, colour: string, currency_code: string, date: string, id: string, infinite_series: bool, note: string, repeat_interval: int, repeat_type: string, scenario: record<achieve_date: string, closing_balance: float, closing_balance_date: string, created_at: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, description: string, id: int, interest_rate: float, interest_rate_repeat_id: int, maximum_value: float, minimum_value: float, safe_balance: float, safe_balance_in_base_currency: float, starting_balance: float, starting_balance_date: string, title: string, type: string, updated_at: string>, series_id: int, series_start_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/events/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/events/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -498,7 +507,7 @@ export def "events get" [
 # Update event
 #
 # PUT /events/{id}
-export def "events put" [
+export def "events update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -517,12 +526,12 @@ export def "events put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/events/{id}"))
-  let body = {"amount": $amount, "behaviour": $behaviour, "note": $note, "repeat_interval": $repeat_interval, "repeat_type": $repeat_type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/events/{id}"))
+  let req_body = {"amount": $amount, "behaviour": $behaviour, "note": $note, "repeat_interval": $repeat_interval, "repeat_type": $repeat_type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete institution
@@ -543,7 +552,7 @@ export def "institutions delete" [
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "merge_into_institution_id" $merge_into_institution_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/institutions/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/institutions/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -565,7 +574,7 @@ export def "institutions get" [
 ]: nothing -> record<created_at: string, currency_code: string, id: int, title: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/institutions/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/institutions/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -574,7 +583,7 @@ export def "institutions get" [
 # Update institution
 #
 # PUT /institutions/{id}
-export def "institutions put" [
+export def "institutions update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -590,12 +599,12 @@ export def "institutions put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/institutions/{id}"))
-  let body = {"currency_code": $currency_code, "title": $title} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/institutions/{id}"))
+  let req_body = {"currency_code": $currency_code, "title": $title} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List accounts in institution
@@ -614,7 +623,7 @@ export def "institutions-accounts get" [
 ]: nothing -> table<created_at: string, currency_code: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, id: int, is_net_worth: bool, primary_scenario: record<achieve_date: string, closing_balance: float, closing_balance_date: string, created_at: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, description: string, id: int, interest_rate: float, interest_rate_repeat_id: int, maximum_value: float, minimum_value: float, safe_balance: float, safe_balance_in_base_currency: float, starting_balance: float, starting_balance_date: string, title: string, type: string, updated_at: string>, primary_transaction_account: record<created_at: string, currency_code: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, id: int, institution: record, name: string, number: string, safe_balance: float, safe_balance_in_base_currency: float, starting_balance: float, starting_balance_date: string, type: string, updated_at: string>, safe_balance: float, safe_balance_in_base_currency: float, scenarios: list<record>, title: string, transaction_accounts: list<record>, type: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/institutions/{id}/accounts"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/institutions/{id}/accounts"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -660,7 +669,7 @@ export def "scenarios-events get" [
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/scenarios/{id}/events") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/scenarios/{id}/events") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -669,7 +678,7 @@ export def "scenarios-events get" [
 # Create event in scenario
 #
 # POST /scenarios/{id}/events
-export def "scenarios-events post" [
+export def "scenarios-events create" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -689,12 +698,12 @@ export def "scenarios-events post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/scenarios/{id}/events"))
-  let body = {"amount": $amount, "category_id": $category_id, "date": $date, "note": $note, "repeat_interval": $repeat_interval, "repeat_type": $repeat_type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/scenarios/{id}/events"))
+  let req_body = {"amount": $amount, "category_id": $category_id, "date": $date, "note": $note, "repeat_interval": $repeat_interval, "repeat_type": $repeat_type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List time zones
@@ -734,7 +743,7 @@ export def "transaction-accounts get" [
 ]: nothing -> record<created_at: string, currency_code: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, id: int, institution: record<created_at: string, currency_code: string, id: int, title: string, updated_at: string>, name: string, number: string, safe_balance: float, safe_balance_in_base_currency: float, starting_balance: float, starting_balance_date: string, type: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/transaction_accounts/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/transaction_accounts/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -743,7 +752,7 @@ export def "transaction-accounts get" [
 # Update transaction account
 #
 # PUT /transaction_accounts/{id}
-export def "transaction-accounts put" [
+export def "transaction-accounts update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -760,12 +769,12 @@ export def "transaction-accounts put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/transaction_accounts/{id}"))
-  let body = {"institution_id": $institution_id, "starting_balance": $starting_balance, "starting_balance_date": $starting_balance_date} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/transaction_accounts/{id}"))
+  let req_body = {"institution_id": $institution_id, "starting_balance": $starting_balance, "starting_balance_date": $starting_balance_date} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List transactions in transaction account
@@ -793,7 +802,7 @@ export def "transaction-accounts-transactions get" [
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "updated_since" $updated_since "scalar") (serialize-qp "uncategorised" $uncategorised "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "needs_review" $needs_review "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/transaction_accounts/{id}/transactions") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/transaction_accounts/{id}/transactions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -802,7 +811,7 @@ export def "transaction-accounts-transactions get" [
 # Create a transaction in transaction account
 #
 # POST /transaction_accounts/{id}/transactions
-export def "transaction-accounts-transactions post" [
+export def "transaction-accounts-transactions create" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -826,12 +835,12 @@ export def "transaction-accounts-transactions post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/transaction_accounts/{id}/transactions"))
-  let body = {"amount": $amount, "category_id": $category_id, "cheque_number": $cheque_number, "date": $date, "is_transfer": $is_transfer, "labels": $labels, "memo": $memo, "needs_review": $needs_review, "note": $note, "payee": $payee} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/transaction_accounts/{id}/transactions"))
+  let req_body = {"amount": $amount, "category_id": $category_id, "cheque_number": $cheque_number, "date": $date, "is_transfer": $is_transfer, "labels": $labels, "memo": $memo, "needs_review": $needs_review, "note": $note, "payee": $payee} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete transaction
@@ -850,7 +859,7 @@ export def "transactions delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/transactions/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/transactions/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -872,7 +881,7 @@ export def "transactions get" [
 ]: nothing -> record<amount: float, amount_in_base_currency: float, category: record<children: list<any>, colour: string, created_at: string, id: int, is_bill: bool, is_transfer: bool, parent_id: int, refund_behaviour: string, roll_up: bool, title: string, updated_at: string>, cheque_number: string, closing_balance: float, created_at: string, date: string, id: int, is_transfer: bool, labels: list<string>, memo: string, needs_review: bool, note: string, original_payee: string, payee: string, status: string, transaction_account: record<created_at: string, currency_code: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, id: int, institution: record<created_at: string, currency_code: string, id: int, title: string, updated_at: string>, name: string, number: string, safe_balance: float, safe_balance_in_base_currency: float, starting_balance: float, starting_balance_date: string, type: string, updated_at: string>, type: string, updated_at: string, upload_source: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/transactions/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/transactions/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -881,7 +890,7 @@ export def "transactions get" [
 # Update a transaction
 #
 # PUT /transactions/{id}
-export def "transactions put" [
+export def "transactions update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -905,12 +914,12 @@ export def "transactions put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/transactions/{id}"))
-  let body = {"amount": $amount, "category_id": $category_id, "cheque_number": $cheque_number, "date": $date, "is_transfer": $is_transfer, "labels": $labels, "memo": $memo, "needs_review": $needs_review, "note": $note, "payee": $payee} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/transactions/{id}"))
+  let req_body = {"amount": $amount, "category_id": $category_id, "cheque_number": $cheque_number, "date": $date, "is_transfer": $is_transfer, "labels": $labels, "memo": $memo, "needs_review": $needs_review, "note": $note, "payee": $payee} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List attachments in transaction
@@ -929,7 +938,7 @@ export def "transactions-attachments get" [
 ]: nothing -> table<content_type: string, content_type_meta: record<description: string, extension: string, title: string>, created_at: string, file_name: string, id: int, original_url: string, title: string, type: string, updated_at: string, variants: record<large_url: string, thumb_url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/transactions/{id}/attachments"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/transactions/{id}/attachments"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -938,7 +947,7 @@ export def "transactions-attachments get" [
 # Assigns attachment to transaction
 #
 # POST /transactions/{id}/attachments
-export def "transactions-attachments post" [
+export def "transactions-attachments create" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -953,12 +962,12 @@ export def "transactions-attachments post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/transactions/{id}/attachments"))
-  let body = {"attachment_id": $attachment_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/transactions/{id}/attachments"))
+  let req_body = {"attachment_id": $attachment_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Unassigns attachment in transaction
@@ -978,7 +987,7 @@ export def "transactions-attachments delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({transaction_id: $transaction_id, attachment_id: $attachment_id} | format pattern "/transactions/{transaction_id}/attachments/{attachment_id}"))
+  let full_url = (build-url $base ({transaction_id: (encode-path-segment $transaction_id), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/transactions/{transaction_id}/attachments/{attachment_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1000,7 +1009,7 @@ export def "users get" [
 ]: nothing -> record<always_show_base_currency: bool, available_accounts: int, available_budgets: int, avatar_url: string, base_currency_code: string, beta_user: bool, created_at: string, email: string, forecast_defer_recalculate: bool, forecast_end_date: string, forecast_last_accessed_at: string, forecast_last_updated_at: string, forecast_needs_recalculate: bool, forecast_start_date: string, id: int, is_reviewing_transactions: bool, last_activity_at: string, last_logged_in_at: string, login: string, name: string, time_zone: string, updated_at: string, using_multiple_currencies: bool, week_start_day: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/users/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1009,7 +1018,7 @@ export def "users get" [
 # Update user
 #
 # PUT /users/{id}
-export def "users put" [
+export def "users update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1030,12 +1039,12 @@ export def "users put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/users/{id}"))
-  let body = {"always_show_base_currency": $always_show_base_currency, "base_currency_code": $base_currency_code, "beta_user": $beta_user, "email": $email, "name": $name, "time_zone": $time_zone, "week_start_day": $week_start_day} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}"))
+  let req_body = {"always_show_base_currency": $always_show_base_currency, "base_currency_code": $base_currency_code, "beta_user": $beta_user, "email": $email, "name": $name, "time_zone": $time_zone, "week_start_day": $week_start_day} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List accounts in user
@@ -1054,7 +1063,7 @@ export def "users-accounts get" [
 ]: nothing -> table<created_at: string, currency_code: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, id: int, is_net_worth: bool, primary_scenario: record<achieve_date: string, closing_balance: float, closing_balance_date: string, created_at: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, description: string, id: int, interest_rate: float, interest_rate_repeat_id: int, maximum_value: float, minimum_value: float, safe_balance: float, safe_balance_in_base_currency: float, starting_balance: float, starting_balance_date: string, title: string, type: string, updated_at: string>, primary_transaction_account: record<created_at: string, currency_code: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, id: int, institution: record, name: string, number: string, safe_balance: float, safe_balance_in_base_currency: float, starting_balance: float, starting_balance_date: string, type: string, updated_at: string>, safe_balance: float, safe_balance_in_base_currency: float, scenarios: list<record>, title: string, transaction_accounts: list<record>, type: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/users/{id}/accounts"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}/accounts"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1063,7 +1072,7 @@ export def "users-accounts get" [
 # Create an account in user
 #
 # POST /users/{id}/accounts
-export def "users-accounts post" [
+export def "users-accounts create" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1081,19 +1090,19 @@ export def "users-accounts post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/users/{id}/accounts"))
-  let body = {"currency_code": $currency_code, "institution_id": $institution_id, "title": $title, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}/accounts"))
+  let req_body = {"currency_code": $currency_code, "institution_id": $institution_id, "title": $title, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update the display order of accounts in user
 #
 # PUT /users/{id}/accounts
-# --accounts item shape: {created_at?: string, currency_code?: string, current_balance?: float, current_balance_date?: string, current_balance_exchange_rate?: float, current_balance_in_base_currency?: float, id?: int, is_net_worth?: bool, primary_scenario?: record, primary_transaction_account?: record, safe_balance?: float, safe_balance_in_base_currency?: float, scenarios?: list, title?: string, transaction_accounts?: list, type?: "bank"|"credits"|"cash"|"stocks"|"mortgage"|"loans"|"vehicle"|"property"|"insurance"|"other_asset"|"other_liability", updated_at?: string}
-export def "users-accounts put" [
+# --accounts item shape: {created_at?: string, currency_code?: string, current_balance?: float, current_balance_date?: string, current_balance_exchange_rate?: float, current_balance_in_base_currency?: float, id?: int, is_net_worth?: bool, primary_scenario?: record, primary_transaction_account?: record, safe_balance?: float, safe_balance_in_base_currency?: float, scenarios?: list, title?: string, transaction_accounts?: list, ... (2 more fields)}
+export def "users-accounts update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1103,17 +1112,17 @@ export def "users-accounts put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  accounts: list # List the account objects in their new display order. — item shape: {created_at?: string, currency_code?: string, current_balance?: float, current_balance_date?: string, current_balance_exchange_rate?: float, current_balance_in_base_currency?: float, id?: int, is_net_worth?: bool, primary_scenario?: record, primary_transaction_account?: record, safe_balance?: float, safe_balance_in_base_currency?: float, scenarios?: list, title?: string, transaction_accounts?: list, type?: "bank"|"credits"|"cash"|"stocks"|"mortgage"|"loans"|"vehicle"|"property"|"insurance"|"other_asset"|"other_liability", updated_at?: string}
+  accounts: list # List the account objects in their new display order. — item shape: {created_at?: string, currency_code?: string, current_balance?: float, current_balance_date?: string, current_balance_exchange_rate?: float, current_balance_in_base_currency?: float, id?: int, is_net_worth?: bool, primary_scenario?: record, primary_transaction_account?: record, safe_balance?: float, safe_balance_in_base_currency?: float, scenarios?: list, title?: string, transaction_accounts?: list, ... (2 more fields)}
 ]: any -> table<created_at: string, currency_code: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, id: int, is_net_worth: bool, primary_scenario: record<achieve_date: string, closing_balance: float, closing_balance_date: string, created_at: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, description: string, id: int, interest_rate: float, interest_rate_repeat_id: int, maximum_value: float, minimum_value: float, safe_balance: float, safe_balance_in_base_currency: float, starting_balance: float, starting_balance_date: string, title: string, type: string, updated_at: string>, primary_transaction_account: record<created_at: string, currency_code: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, id: int, institution: record, name: string, number: string, safe_balance: float, safe_balance_in_base_currency: float, starting_balance: float, starting_balance_date: string, type: string, updated_at: string>, safe_balance: float, safe_balance_in_base_currency: float, scenarios: list<record>, title: string, transaction_accounts: list<record>, type: string, updated_at: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/users/{id}/accounts"))
-  let body = {"accounts": $accounts} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}/accounts"))
+  let req_body = {"accounts": $accounts} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists attachments in user
@@ -1134,7 +1143,7 @@ export def "users-attachments get" [
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "unassigned" $unassigned "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/users/{id}/attachments") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}/attachments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1143,7 +1152,7 @@ export def "users-attachments get" [
 # Create attachment in user
 #
 # POST /users/{id}/attachments
-export def "users-attachments post" [
+export def "users-attachments create" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1160,12 +1169,12 @@ export def "users-attachments post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/users/{id}/attachments"))
-  let body = {"file_data": $file_data, "file_name": $file_name, "title": $title} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}/attachments"))
+  let req_body = {"file_data": $file_data, "file_name": $file_name, "title": $title} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List budget for user
@@ -1186,7 +1195,7 @@ export def "users-budget get" [
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "roll_up" $roll_up "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/users/{id}/budget") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}/budget") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1213,7 +1222,7 @@ export def "users-budget-summary get" [
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "period" $period "scalar") (serialize-qp "interval" $interval "scalar") (serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/users/{id}/budget_summary") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}/budget_summary") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1235,7 +1244,7 @@ export def "users-categories get" [
 ]: nothing -> table<children: list<any>, colour: string, created_at: string, id: int, is_bill: bool, is_transfer: bool, parent_id: int, refund_behaviour: string, roll_up: bool, title: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/users/{id}/categories"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}/categories"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1244,7 +1253,7 @@ export def "users-categories get" [
 # Create category in user
 #
 # POST /users/{id}/categories
-export def "users-categories post" [
+export def "users-categories create" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1265,12 +1274,12 @@ export def "users-categories post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/users/{id}/categories"))
-  let body = {"colour": $colour, "is_bill": $is_bill, "is_transfer": $is_transfer, "parent_id": $parent_id, "refund_behaviour": $refund_behaviour, "roll_up": $roll_up, "title": $title} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}/categories"))
+  let req_body = {"colour": $colour, "is_bill": $is_bill, "is_transfer": $is_transfer, "parent_id": $parent_id, "refund_behaviour": $refund_behaviour, "roll_up": $roll_up, "title": $title} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List category rules in user
@@ -1289,7 +1298,7 @@ export def "users-category-rules get" [
 ]: nothing -> table<category: record<children: list, colour: string, created_at: string, id: int, is_bill: bool, is_transfer: bool, parent_id: int, refund_behaviour: string, roll_up: bool, title: string, updated_at: string>, created_at: string, id: int, payee_matches: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/users/{id}/category_rules"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}/category_rules"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1314,7 +1323,7 @@ export def "users-events get" [
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/users/{id}/events") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}/events") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1336,7 +1345,7 @@ export def "users-forecast-cache delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/users/{id}/forecast_cache"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}/forecast_cache"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1358,7 +1367,7 @@ export def "users-institutions get" [
 ]: nothing -> table<created_at: string, currency_code: string, id: int, title: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/users/{id}/institutions"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}/institutions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1367,7 +1376,7 @@ export def "users-institutions get" [
 # Create institution in user
 #
 # POST /users/{id}/institutions
-export def "users-institutions post" [
+export def "users-institutions create" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1383,12 +1392,12 @@ export def "users-institutions post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/users/{id}/institutions"))
-  let body = {"currency_code": $currency_code, "title": $title} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}/institutions"))
+  let req_body = {"currency_code": $currency_code, "title": $title} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List labels in user
@@ -1407,7 +1416,7 @@ export def "users-labels get" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/users/{id}/labels"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}/labels"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1429,7 +1438,7 @@ export def "users-saved-searches get" [
 ]: nothing -> table<created_at: string, id: int, title: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/users/{id}/saved_searches"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}/saved_searches"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1451,7 +1460,7 @@ export def "users-transaction-accounts get" [
 ]: nothing -> table<created_at: string, currency_code: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, id: int, institution: record<created_at: string, currency_code: string, id: int, title: string, updated_at: string>, name: string, number: string, safe_balance: float, safe_balance_in_base_currency: float, starting_balance: float, starting_balance_date: string, type: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/users/{id}/transaction_accounts"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}/transaction_accounts"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1482,7 +1491,7 @@ export def "users-transactions get" [
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "updated_since" $updated_since "scalar") (serialize-qp "uncategorised" $uncategorised "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "needs_review" $needs_review "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/users/{id}/transactions") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}/transactions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1511,7 +1520,7 @@ export def "users-trend-analysis get" [
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "period" $period "scalar") (serialize-qp "interval" $interval "scalar") (serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "categories" $categories "scalar") (serialize-qp "scenarios" $scenarios "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/users/{id}/trend_analysis") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}/trend_analysis") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

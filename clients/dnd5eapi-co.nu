@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -125,7 +134,7 @@ export def "ability-scores get" [
 ]: nothing -> record<index: string, name: string, url: string, desc: list<string>, full_name: string, skills: table<index: string, name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({index: $index} | format pattern "/api/ability-scores/{index}"))
+  let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/ability-scores/{index}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -147,7 +156,7 @@ export def "alignments get" [
 ]: nothing -> record<index: string, name: string, url: string, abbreviation: string, desc: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({index: $index} | format pattern "/api/alignments/{index}"))
+  let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/alignments/{index}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -169,7 +178,7 @@ export def "backgrounds get" [
 ]: nothing -> record<index: string, name: string, url: string, bonds: record<choose: float, desc: string, from: any, type: string>, feature: record<desc: list<string>, name: string>, flaws: record<choose: float, desc: string, from: any, type: string>, ideals: record<choose: float, desc: string, from: any, type: string>, language_options: record<choose: float, desc: string, from: any, type: string>, personality_traits: record, starting_equipment: table<index: string, name: string, url: string>, starting_equipment_options: record<choose: float, desc: string, from: any, type: string>, starting_proficiencies: table<index: string, name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({index: $index} | format pattern "/api/backgrounds/{index}"))
+  let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/backgrounds/{index}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -191,7 +200,7 @@ export def "classes get" [
 ]: nothing -> record<index: string, name: string, url: string, class_levels: string, hit_die: float, multi_classing: record<prerequisite_options: list<record>, prerequisites: list<record>, proficiencies: list<record>, proficiency_choices: list<record>>, proficiencies: table<index: string, name: string, url: string>, proficiency_choices: table<choose: float, desc: string, from: any, type: string>, saving_throws: table<index: string, name: string, url: string>, spellcasting: record<info: list<record>, level: float, spellcasting_ability: record<index: string, name: string, url: string>>, spells: string, starting_equipment: table<equipment: record, quantity: float>, starting_equipment_options: table<choose: float, desc: string, from: any, type: string>, subclasses: table<index: string, name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({index: $index} | format pattern "/api/classes/{index}"))
+  let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/classes/{index}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -213,7 +222,7 @@ export def "classes-features get" [
 ]: nothing -> record<count: float, results: table<index: string, name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({index: $index} | format pattern "/api/classes/{index}/features"))
+  let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/classes/{index}/features"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -237,7 +246,7 @@ export def "classes-levels list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "subclass" $subclass "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({index: $index} | format pattern "/api/classes/{index}/levels") $qp)
+  let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/classes/{index}/levels") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -260,7 +269,7 @@ export def "classes-levels get" [
 ]: nothing -> record<ability_score_bonuses: float, class_specific: any, features: table<index: string, name: string, url: string>, index: string, level: float, prof_bonus: float, spellcasting: record<cantrips_known: float, spell_slots_level_1: float, spell_slots_level_2: float, spell_slots_level_3: float, spell_slots_level_4: float, spell_slots_level_5: float, spell_slots_level_6: float, spell_slots_level_7: float, spell_slots_level_8: float, spell_slots_level_9: float, spells_known: float>, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({index: $index, class_level: $class_level} | format pattern "/api/classes/{index}/levels/{class_level}"))
+  let full_url = (build-url $base ({index: (encode-path-segment $index), class_level: (encode-path-segment $class_level)} | format pattern "/api/classes/{index}/levels/{class_level}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -283,7 +292,7 @@ export def "classes-levels-features get" [
 ]: nothing -> record<count: float, results: table<index: string, name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({index: $index, class_level: $class_level} | format pattern "/api/classes/{index}/levels/{class_level}/features"))
+  let full_url = (build-url $base ({index: (encode-path-segment $index), class_level: (encode-path-segment $class_level)} | format pattern "/api/classes/{index}/levels/{class_level}/features"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -306,7 +315,7 @@ export def "classes-levels-spells get" [
 ]: nothing -> record<count: float, results: table<index: string, name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({index: $index, spell_level: $spell_level} | format pattern "/api/classes/{index}/levels/{spell_level}/spells"))
+  let full_url = (build-url $base ({index: (encode-path-segment $index), spell_level: (encode-path-segment $spell_level)} | format pattern "/api/classes/{index}/levels/{spell_level}/spells"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -328,7 +337,7 @@ export def "classes-multi-classing get" [
 ]: nothing -> record<prerequisite_options: table<choose: float, desc: string, from: any, type: string>, prerequisites: table<ability_score: record, minimum_score: float>, proficiencies: table<index: string, name: string, url: string>, proficiency_choices: table<choose: float, desc: string, from: any, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({index: $index} | format pattern "/api/classes/{index}/multi-classing"))
+  let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/classes/{index}/multi-classing"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -350,7 +359,7 @@ export def "classes-proficiencies get" [
 ]: nothing -> record<count: float, results: table<index: string, name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({index: $index} | format pattern "/api/classes/{index}/proficiencies"))
+  let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/classes/{index}/proficiencies"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -372,7 +381,7 @@ export def "classes-spellcasting get" [
 ]: nothing -> record<info: table<desc: list, name: string>, level: float, spellcasting_ability: record<index: string, name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({index: $index} | format pattern "/api/classes/{index}/spellcasting"))
+  let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/classes/{index}/spellcasting"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -394,7 +403,7 @@ export def "classes-spells get" [
 ]: nothing -> record<count: float, results: table<index: string, name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({index: $index} | format pattern "/api/classes/{index}/spells"))
+  let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/classes/{index}/spells"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -416,7 +425,7 @@ export def "classes-subclasses get" [
 ]: nothing -> record<count: float, results: table<index: string, name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({index: $index} | format pattern "/api/classes/{index}/subclasses"))
+  let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/classes/{index}/subclasses"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -438,7 +447,7 @@ export def "conditions get" [
 ]: nothing -> record<index: string, name: string, url: string, desc: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({index: $index} | format pattern "/api/conditions/{index}"))
+  let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/conditions/{index}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -460,7 +469,7 @@ export def "damage-types get" [
 ]: nothing -> record<index: string, name: string, url: string, desc: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({index: $index} | format pattern "/api/damage-types/{index}"))
+  let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/damage-types/{index}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -482,7 +491,7 @@ export def "equipment-categories get" [
 ]: nothing -> record<index: string, name: string, url: string, equipment: table<index: string, name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({index: $index} | format pattern "/api/equipment-categories/{index}"))
+  let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/equipment-categories/{index}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -504,7 +513,7 @@ export def "equipment get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({index: $index} | format pattern "/api/equipment/{index}"))
+  let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/equipment/{index}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -526,7 +535,7 @@ export def "feats get" [
 ]: nothing -> record<index: string, name: string, url: string, desc: list<string>, prerequisites: table<ability_score: record, minimum_score: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({index: $index} | format pattern "/api/feats/{index}"))
+  let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/feats/{index}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -548,7 +557,7 @@ export def "features get" [
 ]: nothing -> record<index: string, name: string, url: string, desc: list<string>, class: record<index: string, name: string, url: string>, feature_specific: any, level: float, parent: record<index: string, name: string, url: string>, prerequisites: list<any>, subclass: record<index: string, name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({index: $index} | format pattern "/api/features/{index}"))
+  let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/features/{index}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -570,7 +579,7 @@ export def "languages get" [
 ]: nothing -> record<index: string, name: string, url: string, desc: string, script: string, type: string, typical_speakers: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({index: $index} | format pattern "/api/languages/{index}"))
+  let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/languages/{index}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -592,7 +601,7 @@ export def "magic-items get" [
 ]: nothing -> record<index: string, name: string, url: string, desc: list<string>, equipment_category: record<index: string, name: string, url: string>, rarity: record<name: string>, variant: bool, variants: table<index: string, name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({index: $index} | format pattern "/api/magic-items/{index}"))
+  let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/magic-items/{index}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -614,7 +623,7 @@ export def "magic-schools get" [
 ]: nothing -> record<index: string, name: string, url: string, desc: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({index: $index} | format pattern "/api/magic-schools/{index}"))
+  let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/magic-schools/{index}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -632,7 +641,7 @@ export def "monsters list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --challenge-rating: list # The challenge rating or ratings to filter on.
+  --challenge-rating: list<float> # The challenge rating or ratings to filter on.
 ]: nothing -> record<count: float, results: table<index: string, name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -656,10 +665,10 @@ export def "monsters get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<index: string, name: string, url: string, desc: list<string>, charisma: float, constitution: float, dexterity: float, intelligence: float, strength: float, wisdom: float, actions: table<action_options: record, actions: list, attack_bonus: float, attacks: list, damage: list, dc: record, desc: string, multiattack_type: string, name: string, options: record>, alignments: string, armor_class: list<record>, challenge_rating: float, condition_immunities: table<index: string, name: string, url: string>, damage_immunities: list<string>, damage_resistances: list<string>, damage_vulnerabilities: list<string>, forms: table<index: string, name: string, url: string>, hit_dice: string, hit_points: float, hit_points_roll: string, image: string, languages: string, legendary_actions: list<any>, proficiencies: table<proficiency: record, value: float>, reactions: list<any>, senses: record<blindsight: string, darkvision: string, passive_perception: float, tremorsense: string, truesight: string>, size: string, special_abilities: table<attack_bonus: float, damage: list, dc: record, desc: string, name: string, spellcasting: record, usage: record>, speed: record<burrow: string, climb: string, fly: string, swim: string, walk: string>, subtype: string, type: string, xp: float> {
+]: nothing -> record<index: string, name: string, url: string, desc: list<string>, charisma: float, constitution: float, dexterity: float, intelligence: float, strength: float, wisdom: float, actions: table<action_options: record, actions: list, attack_bonus: float, attacks: list, damage: list, dc: record, desc: string, multiattack_type: string, name: string, options: record>, alignments: string, armor_class: list<record>, challenge_rating: float, condition_immunities: table<index: string, name: string, url: string>, damage_immunities: list<string>, damage_resistances: list<string>, damage_vulnerabilities: list<string>, forms: table<index: string, name: string, url: string>, hit_dice: string, hit_points: float, hit_points_roll: string, image: string, languages: string, legendary_actions: table<action_options: record, actions: list, attack_bonus: float, attacks: list, damage: list, dc: record, desc: string, multiattack_type: string, name: string, options: record>, proficiencies: table<proficiency: record, value: float>, reactions: table<action_options: record, actions: list, attack_bonus: float, attacks: list, damage: list, dc: record, desc: string, multiattack_type: string, name: string, options: record>, senses: record<blindsight: string, darkvision: string, passive_perception: float, tremorsense: string, truesight: string>, size: string, special_abilities: table<attack_bonus: float, damage: list, dc: record, desc: string, name: string, spellcasting: record, usage: record>, speed: record<burrow: string, climb: string, fly: string, swim: string, walk: string>, subtype: string, type: string, xp: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({index: $index} | format pattern "/api/monsters/{index}"))
+  let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/monsters/{index}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -681,7 +690,7 @@ export def "proficiencies get" [
 ]: nothing -> record<index: string, name: string, url: string, classes: table<index: string, name: string, url: string>, races: table<index: string, name: string, url: string>, reference: record<index: string, name: string, url: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({index: $index} | format pattern "/api/proficiencies/{index}"))
+  let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/proficiencies/{index}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -703,7 +712,7 @@ export def "races get" [
 ]: nothing -> record<index: string, name: string, url: string, ability_bonuses: table<ability_score: record, bonus: float>, age: string, alignment: string, language_desc: string, languages: table<index: string, name: string, url: string>, size: string, size_description: string, speed: float, starting_proficiencies: table<index: string, name: string, url: string>, starting_proficiency_options: record<choose: float, desc: string, from: any, type: string>, subraces: table<index: string, name: string, url: string>, traits: table<index: string, name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({index: $index} | format pattern "/api/races/{index}"))
+  let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/races/{index}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -725,7 +734,7 @@ export def "races-proficiencies get" [
 ]: nothing -> record<count: float, results: table<index: string, name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({index: $index} | format pattern "/api/races/{index}/proficiencies"))
+  let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/races/{index}/proficiencies"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -747,7 +756,7 @@ export def "races-subraces get" [
 ]: nothing -> record<count: float, results: table<index: string, name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({index: $index} | format pattern "/api/races/{index}/subraces"))
+  let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/races/{index}/subraces"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -769,7 +778,7 @@ export def "races-traits get" [
 ]: nothing -> record<count: float, results: table<index: string, name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({index: $index} | format pattern "/api/races/{index}/traits"))
+  let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/races/{index}/traits"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -791,7 +800,7 @@ export def "rule-sections get" [
 ]: nothing -> record<index: string, name: string, url: string, desc: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({index: $index} | format pattern "/api/rule-sections/{index}"))
+  let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/rule-sections/{index}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -813,7 +822,7 @@ export def "rules get" [
 ]: nothing -> record<index: string, name: string, url: string, desc: string, subsections: table<index: string, name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({index: $index} | format pattern "/api/rules/{index}"))
+  let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/rules/{index}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -835,7 +844,7 @@ export def "skills get" [
 ]: nothing -> record<index: string, name: string, url: string, desc: list<string>, ability_score: record<index: string, name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({index: $index} | format pattern "/api/skills/{index}"))
+  let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/skills/{index}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -853,8 +862,8 @@ export def "spells list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --level: list # The level or levels to filter on.
-  --school: list # The magic school or schools to filter on.
+  --level: list<int> # The level or levels to filter on.
+  --school: list<string> # The magic school or schools to filter on.
 ]: nothing -> record<count: float, results: table<index: string, name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -881,7 +890,7 @@ export def "spells get" [
 ]: nothing -> record<index: string, name: string, url: string, desc: list<string>, area_of_effect: record<size: float, type: string>, attack_type: string, casting_time: string, classes: table<index: string, name: string, url: string>, components: list<string>, concentration: bool, damage: any, duration: string, higher_level: list<string>, level: float, material: string, range: string, ritual: bool, school: record<index: string, name: string, url: string>, subclasses: table<index: string, name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({index: $index} | format pattern "/api/spells/{index}"))
+  let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/spells/{index}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -903,7 +912,7 @@ export def "subclasses get" [
 ]: nothing -> record<index: string, name: string, url: string, desc: list<string>, class: record<index: string, name: string, url: string>, spells: table<prerequisites: list, spell: record>, subclass_flavor: string, subclass_levels: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({index: $index} | format pattern "/api/subclasses/{index}"))
+  let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/subclasses/{index}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -925,7 +934,7 @@ export def "subclasses-features get" [
 ]: nothing -> record<count: float, results: table<index: string, name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({index: $index} | format pattern "/api/subclasses/{index}/features"))
+  let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/subclasses/{index}/features"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -947,7 +956,7 @@ export def "subclasses-levels list" [
 ]: nothing -> table<class: record<index: string, name: string, url: string>, features: list<record>, index: string, level: float, subclass: record<index: string, name: string, url: string>, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({index: $index} | format pattern "/api/subclasses/{index}/levels"))
+  let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/subclasses/{index}/levels"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -970,7 +979,7 @@ export def "subclasses-levels get" [
 ]: nothing -> record<ability_score_bonuses: float, classspecific: any, features: table<index: string, name: string, url: string>, index: string, level: float, prof_bonus: float, spellcasting: record<cantrips_known: float, spell_slots_level_1: float, spell_slots_level_2: float, spell_slots_level_3: float, spell_slots_level_4: float, spell_slots_level_5: float, spell_slots_level_6: float, spell_slots_level_7: float, spell_slots_level_8: float, spell_slots_level_9: float, spells_known: float>, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({index: $index, subclass_level: $subclass_level} | format pattern "/api/subclasses/{index}/levels/{subclass_level}"))
+  let full_url = (build-url $base ({index: (encode-path-segment $index), subclass_level: (encode-path-segment $subclass_level)} | format pattern "/api/subclasses/{index}/levels/{subclass_level}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -993,7 +1002,7 @@ export def "subclasses-levels-features get" [
 ]: nothing -> record<count: float, results: table<index: string, name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({index: $index, subclass_level: $subclass_level} | format pattern "/api/subclasses/{index}/levels/{subclass_level}/features"))
+  let full_url = (build-url $base ({index: (encode-path-segment $index), subclass_level: (encode-path-segment $subclass_level)} | format pattern "/api/subclasses/{index}/levels/{subclass_level}/features"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1015,7 +1024,7 @@ export def "subraces get" [
 ]: nothing -> record<index: string, name: string, url: string, ability_bonuses: table<ability_score: record, bonus: float>, desc: string, language_options: record<choose: float, desc: string, from: any, type: string>, languages: table<index: string, name: string, url: string>, race: record<index: string, name: string, url: string>, racial_traits: table<index: string, name: string, url: string>, starting_proficiencies: table<index: string, name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({index: $index} | format pattern "/api/subraces/{index}"))
+  let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/subraces/{index}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1037,7 +1046,7 @@ export def "subraces-proficiencies get" [
 ]: nothing -> record<count: float, results: table<index: string, name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({index: $index} | format pattern "/api/subraces/{index}/proficiencies"))
+  let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/subraces/{index}/proficiencies"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1059,7 +1068,7 @@ export def "subraces-traits get" [
 ]: nothing -> record<count: float, results: table<index: string, name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({index: $index} | format pattern "/api/subraces/{index}/traits"))
+  let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/subraces/{index}/traits"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1081,7 +1090,7 @@ export def "traits get" [
 ]: nothing -> record<index: string, name: string, url: string, desc: list<string>, language_options: record<choose: float, desc: string, from: any, type: string>, proficiencies: table<index: string, name: string, url: string>, proficiency_choices: record<choose: float, desc: string, from: any, type: string>, races: table<index: string, name: string, url: string>, subraces: table<index: string, name: string, url: string>, trait_specific: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({index: $index} | format pattern "/api/traits/{index}"))
+  let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/traits/{index}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1103,7 +1112,7 @@ export def "weapon-properties get" [
 ]: nothing -> record<index: string, name: string, url: string, desc: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({index: $index} | format pattern "/api/weapon-properties/{index}"))
+  let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/weapon-properties/{index}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1125,7 +1134,7 @@ export def "common get" [
 ]: nothing -> record<count: float, results: table<index: string, name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({endpoint: $endpoint} | format pattern "/api/{endpoint}"))
+  let full_url = (build-url $base ({endpoint: (encode-path-segment $endpoint)} | format pattern "/api/{endpoint}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

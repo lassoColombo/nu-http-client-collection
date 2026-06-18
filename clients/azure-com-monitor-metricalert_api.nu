@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -69,7 +78,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-insights-metric-alerts list-by" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-insights-metric-alerts list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,7 +102,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Insights/metricAlerts
 # operationId: MetricAlerts_ListBySubscription
-export def "subscriptions-providers-microsoft-insights-metric-alerts list-by" [
+export def "subscriptions-providers-microsoft-insights-metric-alerts list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -108,7 +117,7 @@ export def "subscriptions-providers-microsoft-insights-metric-alerts list-by" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Insights/metricAlerts") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Insights/metricAlerts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -118,7 +127,7 @@ export def "subscriptions-providers-microsoft-insights-metric-alerts list-by" [
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Insights/metricAlerts
 # operationId: MetricAlerts_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-insights-metric-alerts list-by" [
+export def "subscriptions-resource-groups-providers-microsoft-insights-metric-alerts list" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -134,7 +143,7 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-metric-al
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Insights/metricAlerts") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Insights/metricAlerts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -161,7 +170,7 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-metric-al
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, rule_name: $rule_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Insights/metricAlerts/{rule_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), rule_name: (encode-path-segment $rule_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Insights/metricAlerts/{rule_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -188,7 +197,7 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-metric-al
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, rule_name: $rule_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Insights/metricAlerts/{rule_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), rule_name: (encode-path-segment $rule_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Insights/metricAlerts/{rule_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -198,7 +207,7 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-metric-al
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Insights/metricAlerts/{ruleName}
 # operationId: MetricAlerts_Update
-# --properties shape: {actions?: list, autoMitigate?: bool, criteria: record, description: string, enabled: bool, evaluationFrequency: string, scopes?: list, severity: int, targetResourceRegion?: string, targetResourceType?: string, windowSize: string}
+# --properties shape: {actions?: list, autoMitigate?: bool, criteria: record, description: string, enabled: bool, evaluationFrequency: string, scopes?: list<string>, severity: int, targetResourceRegion?: string, targetResourceType?: string, windowSize: string}
 export def "subscriptions-resource-groups-providers-microsoft-insights-metric-alerts update" [
   subscription_id: string
   resource_group_name: string
@@ -212,26 +221,26 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-metric-al
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
-  --properties: any # An alert rule. — shape: {actions?: list, autoMitigate?: bool, criteria: record, description: string, enabled: bool, evaluationFrequency: string, scopes?: list, severity: int, targetResourceRegion?: string, targetResourceType?: string, windowSize: string}
+  --properties: any # An alert rule. — shape: {actions?: list, autoMitigate?: bool, criteria: record, description: string, enabled: bool, evaluationFrequency: string, scopes?: list<string>, severity: int, targetResourceRegion?: string, targetResourceType?: string, windowSize: string}
   --tags: any # Resource tags
 ]: any -> record<properties: record<actions: list<record>, autoMitigate: bool, criteria: record<odata_type: any>, description: string, enabled: bool, evaluationFrequency: string, lastUpdatedTime: string, scopes: list<string>, severity: int, targetResourceRegion: string, targetResourceType: string, windowSize: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, rule_name: $rule_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Insights/metricAlerts/{rule_name}") $qp)
-  let body = {"properties": $properties, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), rule_name: (encode-path-segment $rule_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Insights/metricAlerts/{rule_name}") $qp)
+  let req_body = {"properties": $properties, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create or update an metric alert definition.
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Insights/metricAlerts/{ruleName}
 # operationId: MetricAlerts_CreateOrUpdate
-# --properties shape: {actions?: list, autoMitigate?: bool, criteria: record, description: string, enabled: bool, evaluationFrequency: string, scopes?: list, severity: int, targetResourceRegion?: string, targetResourceType?: string, windowSize: string}
+# --properties shape: {actions?: list, autoMitigate?: bool, criteria: record, description: string, enabled: bool, evaluationFrequency: string, scopes?: list<string>, severity: int, targetResourceRegion?: string, targetResourceType?: string, windowSize: string}
 export def "subscriptions-resource-groups-providers-microsoft-insights-metric-alerts create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -245,7 +254,7 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-metric-al
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
-  properties: any # An alert rule. — shape: {actions?: list, autoMitigate?: bool, criteria: record, description: string, enabled: bool, evaluationFrequency: string, scopes?: list, severity: int, targetResourceRegion?: string, targetResourceType?: string, windowSize: string}
+  properties: any # An alert rule. — shape: {actions?: list, autoMitigate?: bool, criteria: record, description: string, enabled: bool, evaluationFrequency: string, scopes?: list<string>, severity: int, targetResourceRegion?: string, targetResourceType?: string, windowSize: string}
   location: string # Resource location
   --tags: any # Resource tags
 ]: any -> record<properties: record<actions: list<record>, autoMitigate: bool, criteria: record<odata_type: any>, description: string, enabled: bool, evaluationFrequency: string, lastUpdatedTime: string, scopes: list<string>, severity: int, targetResourceRegion: string, targetResourceType: string, windowSize: string>> {
@@ -253,12 +262,12 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-metric-al
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, rule_name: $rule_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Insights/metricAlerts/{rule_name}") $qp)
-  let body = {"properties": $properties, "location": $location, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), rule_name: (encode-path-segment $rule_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Insights/metricAlerts/{rule_name}") $qp)
+  let req_body = {"properties": $properties, "location": $location, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve an alert rule status.
@@ -282,7 +291,7 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-metric-al
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, rule_name: $rule_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Insights/metricAlerts/{rule_name}/status") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), rule_name: (encode-path-segment $rule_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Insights/metricAlerts/{rule_name}/status") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -310,7 +319,7 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-metric-al
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, rule_name: $rule_name, status_name: $status_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Insights/metricAlerts/{rule_name}/status/{status_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), rule_name: (encode-path-segment $rule_name), status_name: (encode-path-segment $status_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Insights/metricAlerts/{rule_name}/status/{status_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

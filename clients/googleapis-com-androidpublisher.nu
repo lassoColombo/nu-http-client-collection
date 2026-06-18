@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -74,7 +83,7 @@ def status-completer [] { ["active" "inactive" "statusUnspecified"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "androidpublisher-applications-internalappsharing-artifacts-apk androidpublisherinternalappsharingartifactsuploadapk" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "androidpublisher-applications-internalappsharing-artifacts-apk create-uploadapk" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -98,7 +107,7 @@ export def commands []: nothing -> table {
 #
 # POST /androidpublisher/v3/applications/internalappsharing/{packageName}/artifacts/apk
 # operationId: androidpublisher.internalappsharingartifacts.uploadapk
-export def "androidpublisher-applications-internalappsharing-artifacts-apk androidpublisherinternalappsharingartifactsuploadapk" [
+export def "androidpublisher-applications-internalappsharing-artifacts-apk create-uploadapk" [
   package_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -123,7 +132,7 @@ export def "androidpublisher-applications-internalappsharing-artifacts-apk andro
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_name: $package_name} | format pattern "/androidpublisher/v3/applications/internalappsharing/{package_name}/artifacts/apk") $qp)
+  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name)} | format pattern "/androidpublisher/v3/applications/internalappsharing/{package_name}/artifacts/apk") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -133,7 +142,7 @@ export def "androidpublisher-applications-internalappsharing-artifacts-apk andro
 #
 # POST /androidpublisher/v3/applications/internalappsharing/{packageName}/artifacts/bundle
 # operationId: androidpublisher.internalappsharingartifacts.uploadbundle
-export def "androidpublisher-applications-internalappsharing-artifacts-bundle androidpublisherinternalappsharingartifactsuploadbundle" [
+export def "androidpublisher-applications-internalappsharing-artifacts-bundle create-uploadbundle" [
   package_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -158,7 +167,7 @@ export def "androidpublisher-applications-internalappsharing-artifacts-bundle an
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_name: $package_name} | format pattern "/androidpublisher/v3/applications/internalappsharing/{package_name}/artifacts/bundle") $qp)
+  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name)} | format pattern "/androidpublisher/v3/applications/internalappsharing/{package_name}/artifacts/bundle") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -168,7 +177,7 @@ export def "androidpublisher-applications-internalappsharing-artifacts-bundle an
 #
 # GET /androidpublisher/v3/applications/{packageName}/deviceTierConfigs
 # operationId: androidpublisher.applications.deviceTierConfigs.list
-export def "androidpublisher-applications-device-tier-configs androidpublisherapplicationsdeviceTierConfigslist" [
+export def "androidpublisher-applications-device-tier-configs list" [
   package_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -195,7 +204,7 @@ export def "androidpublisher-applications-device-tier-configs androidpublisherap
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_name: $package_name} | format pattern "/androidpublisher/v3/applications/{package_name}/deviceTierConfigs") $qp)
+  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name)} | format pattern "/androidpublisher/v3/applications/{package_name}/deviceTierConfigs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -207,8 +216,8 @@ export def "androidpublisher-applications-device-tier-configs androidpublisherap
 # operationId: androidpublisher.applications.deviceTierConfigs.create
 # --deviceGroups item shape: {deviceSelectors?: list, name?: string}
 # --deviceTierSet shape: {deviceTiers?: list}
-# --userCountrySets item shape: {countryCodes?: list, name?: string}
-export def "androidpublisher-applications-device-tier-configs androidpublisherapplicationsdeviceTierConfigscreate" [
+# --userCountrySets item shape: {countryCodes?: list<string>, name?: string}
+export def "androidpublisher-applications-device-tier-configs create" [
   package_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -232,25 +241,25 @@ export def "androidpublisher-applications-device-tier-configs androidpublisherap
   --allow-unknown-devices: oneof<nothing, bool> # Whether the service should accept device IDs that are unknown to Play's device catalog.
   --device-groups: list # Definition of device groups for the app. — item shape: {deviceSelectors?: list, name?: string}
   --device-tier-set: record # A set of device tiers. A tier set determines what variation of app content gets served to a specific device, for device-targeted content. You should assign a priority level to each tier, which determines the ordering by which they are evaluated by Play. See the documentation of DeviceTier.level for more details. — shape: {deviceTiers?: list}
-  --user-country-sets: list # Definition of user country sets for the app. — item shape: {countryCodes?: list, name?: string}
+  --user-country-sets: list # Definition of user country sets for the app. — item shape: {countryCodes?: list<string>, name?: string}
 ]: any -> record<deviceGroups: table<deviceSelectors: list, name: string>, deviceTierConfigId: string, deviceTierSet: record<deviceTiers: list<record>>, userCountrySets: table<countryCodes: list, name: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "allowUnknownDevices" $allow_unknown_devices "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_name: $package_name} | format pattern "/androidpublisher/v3/applications/{package_name}/deviceTierConfigs") $qp)
-  let body = {"deviceGroups": $device_groups, "deviceTierSet": $device_tier_set, "userCountrySets": $user_country_sets} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name)} | format pattern "/androidpublisher/v3/applications/{package_name}/deviceTierConfigs") $qp)
+  let req_body = {"deviceGroups": $device_groups, "deviceTierSet": $device_tier_set, "userCountrySets": $user_country_sets} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns a particular device tier config.
 #
 # GET /androidpublisher/v3/applications/{packageName}/deviceTierConfigs/{deviceTierConfigId}
 # operationId: androidpublisher.applications.deviceTierConfigs.get
-export def "androidpublisher-applications-device-tier-configs androidpublisherapplicationsdeviceTierConfigsget" [
+export def "androidpublisher-applications-device-tier-configs get" [
   package_name: string
   device_tier_config_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -276,7 +285,7 @@ export def "androidpublisher-applications-device-tier-configs androidpublisherap
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_name: $package_name, device_tier_config_id: $device_tier_config_id} | format pattern "/androidpublisher/v3/applications/{package_name}/deviceTierConfigs/{device_tier_config_id}") $qp)
+  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name), device_tier_config_id: (encode-path-segment $device_tier_config_id)} | format pattern "/androidpublisher/v3/applications/{package_name}/deviceTierConfigs/{device_tier_config_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -286,7 +295,7 @@ export def "androidpublisher-applications-device-tier-configs androidpublisherap
 #
 # POST /androidpublisher/v3/applications/{packageName}/edits
 # operationId: androidpublisher.edits.insert
-export def "androidpublisher-applications-edits androidpublishereditsinsert" [
+export def "androidpublisher-applications-edits create" [
   package_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -313,18 +322,19 @@ export def "androidpublisher-applications-edits androidpublishereditsinsert" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_name: $package_name} | format pattern "/androidpublisher/v3/applications/{package_name}/edits") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name)} | format pattern "/androidpublisher/v3/applications/{package_name}/edits") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes an app edit.
 #
 # DELETE /androidpublisher/v3/applications/{packageName}/edits/{editId}
 # operationId: androidpublisher.edits.delete
-export def "androidpublisher-applications-edits androidpublishereditsdelete" [
+export def "androidpublisher-applications-edits delete" [
   package_name: string
   edit_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -350,7 +360,7 @@ export def "androidpublisher-applications-edits androidpublishereditsdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_name: $package_name, edit_id: $edit_id} | format pattern "/androidpublisher/v3/applications/{package_name}/edits/{edit_id}") $qp)
+  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name), edit_id: (encode-path-segment $edit_id)} | format pattern "/androidpublisher/v3/applications/{package_name}/edits/{edit_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -360,7 +370,7 @@ export def "androidpublisher-applications-edits androidpublishereditsdelete" [
 #
 # GET /androidpublisher/v3/applications/{packageName}/edits/{editId}
 # operationId: androidpublisher.edits.get
-export def "androidpublisher-applications-edits androidpublishereditsget" [
+export def "androidpublisher-applications-edits get" [
   package_name: string
   edit_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -386,7 +396,7 @@ export def "androidpublisher-applications-edits androidpublishereditsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_name: $package_name, edit_id: $edit_id} | format pattern "/androidpublisher/v3/applications/{package_name}/edits/{edit_id}") $qp)
+  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name), edit_id: (encode-path-segment $edit_id)} | format pattern "/androidpublisher/v3/applications/{package_name}/edits/{edit_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -396,7 +406,7 @@ export def "androidpublisher-applications-edits androidpublishereditsget" [
 #
 # GET /androidpublisher/v3/applications/{packageName}/edits/{editId}/apks
 # operationId: androidpublisher.edits.apks.list
-export def "androidpublisher-applications-edits-apks androidpublishereditsapkslist" [
+export def "androidpublisher-applications-edits-apks list" [
   package_name: string
   edit_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -422,7 +432,7 @@ export def "androidpublisher-applications-edits-apks androidpublishereditsapksli
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_name: $package_name, edit_id: $edit_id} | format pattern "/androidpublisher/v3/applications/{package_name}/edits/{edit_id}/apks") $qp)
+  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name), edit_id: (encode-path-segment $edit_id)} | format pattern "/androidpublisher/v3/applications/{package_name}/edits/{edit_id}/apks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -432,7 +442,7 @@ export def "androidpublisher-applications-edits-apks androidpublishereditsapksli
 #
 # POST /androidpublisher/v3/applications/{packageName}/edits/{editId}/apks
 # operationId: androidpublisher.edits.apks.upload
-export def "androidpublisher-applications-edits-apks androidpublishereditsapksupload" [
+export def "androidpublisher-applications-edits-apks upload" [
   package_name: string
   edit_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -458,7 +468,7 @@ export def "androidpublisher-applications-edits-apks androidpublishereditsapksup
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_name: $package_name, edit_id: $edit_id} | format pattern "/androidpublisher/v3/applications/{package_name}/edits/{edit_id}/apks") $qp)
+  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name), edit_id: (encode-path-segment $edit_id)} | format pattern "/androidpublisher/v3/applications/{package_name}/edits/{edit_id}/apks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -468,8 +478,8 @@ export def "androidpublisher-applications-edits-apks androidpublishereditsapksup
 #
 # POST /androidpublisher/v3/applications/{packageName}/edits/{editId}/apks/externallyHosted
 # operationId: androidpublisher.edits.apks.addexternallyhosted
-# --externallyHostedApk shape: {applicationLabel?: string, certificateBase64s?: list, externallyHostedUrl?: string, fileSha1Base64?: string, fileSha256Base64?: string, fileSize?: string, iconBase64?: string, maximumSdk?: int, minimumSdk?: int, nativeCodes?: list, packageName?: string, usesFeatures?: list, usesPermissions?: list, versionCode?: int, versionName?: string}
-export def "androidpublisher-applications-edits-apks-externally-hosted androidpublishereditsapksaddexternallyhosted" [
+# --externallyHostedApk shape: {applicationLabel?: string, certificateBase64s?: list<string>, externallyHostedUrl?: string, fileSha1Base64?: string, fileSha256Base64?: string, fileSize?: string, iconBase64?: string, maximumSdk?: int, minimumSdk?: int, nativeCodes?: list<string>, packageName?: string, usesFeatures?: list<string>, usesPermissions?: list, versionCode?: int, versionName?: string}
+export def "androidpublisher-applications-edits-apks-externally-hosted create-addexternallyhosted" [
   package_name: string
   edit_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -491,25 +501,25 @@ export def "androidpublisher-applications-edits-apks-externally-hosted androidpu
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --externally-hosted-apk: record # Defines an APK available for this application that is hosted externally and not uploaded to Google Play. This function is only available to organizations using Managed Play whose application is configured to restrict distribution to the organizations. — shape: {applicationLabel?: string, certificateBase64s?: list, externallyHostedUrl?: string, fileSha1Base64?: string, fileSha256Base64?: string, fileSize?: string, iconBase64?: string, maximumSdk?: int, minimumSdk?: int, nativeCodes?: list, packageName?: string, usesFeatures?: list, usesPermissions?: list, versionCode?: int, versionName?: string}
+  --externally-hosted-apk: record # Defines an APK available for this application that is hosted externally and not uploaded to Google Play. This function is only available to organizations using Managed Play whose application is configured to restrict distribution to the organizations. — shape: {applicationLabel?: string, certificateBase64s?: list<string>, externallyHostedUrl?: string, fileSha1Base64?: string, fileSha256Base64?: string, fileSize?: string, iconBase64?: string, maximumSdk?: int, minimumSdk?: int, nativeCodes?: list<string>, packageName?: string, usesFeatures?: list<string>, usesPermissions?: list, versionCode?: int, versionName?: string}
 ]: any -> record<externallyHostedApk: record<applicationLabel: string, certificateBase64s: list<string>, externallyHostedUrl: string, fileSha1Base64: string, fileSha256Base64: string, fileSize: string, iconBase64: string, maximumSdk: int, minimumSdk: int, nativeCodes: list<string>, packageName: string, usesFeatures: list<string>, usesPermissions: list<record>, versionCode: int, versionName: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_name: $package_name, edit_id: $edit_id} | format pattern "/androidpublisher/v3/applications/{package_name}/edits/{edit_id}/apks/externallyHosted") $qp)
-  let body = {"externallyHostedApk": $externally_hosted_apk} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name), edit_id: (encode-path-segment $edit_id)} | format pattern "/androidpublisher/v3/applications/{package_name}/edits/{edit_id}/apks/externallyHosted") $qp)
+  let req_body = {"externallyHostedApk": $externally_hosted_apk} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Uploads a new deobfuscation file and attaches to the specified APK.
 #
 # POST /androidpublisher/v3/applications/{packageName}/edits/{editId}/apks/{apkVersionCode}/deobfuscationFiles/{deobfuscationFileType}
 # operationId: androidpublisher.edits.deobfuscationfiles.upload
-export def "androidpublisher-applications-edits-apks-deobfuscation-files androidpublishereditsdeobfuscationfilesupload" [
+export def "androidpublisher-applications-edits-apks-deobfuscation-files upload" [
   package_name: string
   edit_id: string
   apk_version_code: int
@@ -537,7 +547,7 @@ export def "androidpublisher-applications-edits-apks-deobfuscation-files android
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_name: $package_name, edit_id: $edit_id, apk_version_code: $apk_version_code, deobfuscation_file_type: $deobfuscation_file_type} | format pattern "/androidpublisher/v3/applications/{package_name}/edits/{edit_id}/apks/{apk_version_code}/deobfuscationFiles/{deobfuscation_file_type}") $qp)
+  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name), edit_id: (encode-path-segment $edit_id), apk_version_code: (encode-path-segment $apk_version_code), deobfuscation_file_type: (encode-path-segment $deobfuscation_file_type)} | format pattern "/androidpublisher/v3/applications/{package_name}/edits/{edit_id}/apks/{apk_version_code}/deobfuscationFiles/{deobfuscation_file_type}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -547,7 +557,7 @@ export def "androidpublisher-applications-edits-apks-deobfuscation-files android
 #
 # GET /androidpublisher/v3/applications/{packageName}/edits/{editId}/apks/{apkVersionCode}/expansionFiles/{expansionFileType}
 # operationId: androidpublisher.edits.expansionfiles.get
-export def "androidpublisher-applications-edits-apks-expansion-files androidpublishereditsexpansionfilesget" [
+export def "androidpublisher-applications-edits-apks-expansion-files get" [
   package_name: string
   edit_id: string
   apk_version_code: int
@@ -575,7 +585,7 @@ export def "androidpublisher-applications-edits-apks-expansion-files androidpubl
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_name: $package_name, edit_id: $edit_id, apk_version_code: $apk_version_code, expansion_file_type: $expansion_file_type} | format pattern "/androidpublisher/v3/applications/{package_name}/edits/{edit_id}/apks/{apk_version_code}/expansionFiles/{expansion_file_type}") $qp)
+  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name), edit_id: (encode-path-segment $edit_id), apk_version_code: (encode-path-segment $apk_version_code), expansion_file_type: (encode-path-segment $expansion_file_type)} | format pattern "/androidpublisher/v3/applications/{package_name}/edits/{edit_id}/apks/{apk_version_code}/expansionFiles/{expansion_file_type}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -585,7 +595,7 @@ export def "androidpublisher-applications-edits-apks-expansion-files androidpubl
 #
 # PATCH /androidpublisher/v3/applications/{packageName}/edits/{editId}/apks/{apkVersionCode}/expansionFiles/{expansionFileType}
 # operationId: androidpublisher.edits.expansionfiles.patch
-export def "androidpublisher-applications-edits-apks-expansion-files androidpublishereditsexpansionfilespatch" [
+export def "androidpublisher-applications-edits-apks-expansion-files update-by-packageName-editId-apkVersionCode-expansionFileType" [
   package_name: string
   edit_id: string
   apk_version_code: int
@@ -616,19 +626,19 @@ export def "androidpublisher-applications-edits-apks-expansion-files androidpubl
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_name: $package_name, edit_id: $edit_id, apk_version_code: $apk_version_code, expansion_file_type: $expansion_file_type} | format pattern "/androidpublisher/v3/applications/{package_name}/edits/{edit_id}/apks/{apk_version_code}/expansionFiles/{expansion_file_type}") $qp)
-  let body = {"fileSize": $file_size, "referencesVersion": $references_version} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name), edit_id: (encode-path-segment $edit_id), apk_version_code: (encode-path-segment $apk_version_code), expansion_file_type: (encode-path-segment $expansion_file_type)} | format pattern "/androidpublisher/v3/applications/{package_name}/edits/{edit_id}/apks/{apk_version_code}/expansionFiles/{expansion_file_type}") $qp)
+  let req_body = {"fileSize": $file_size, "referencesVersion": $references_version} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Uploads a new expansion file and attaches to the specified APK.
 #
 # POST /androidpublisher/v3/applications/{packageName}/edits/{editId}/apks/{apkVersionCode}/expansionFiles/{expansionFileType}
 # operationId: androidpublisher.edits.expansionfiles.upload
-export def "androidpublisher-applications-edits-apks-expansion-files androidpublishereditsexpansionfilesupload" [
+export def "androidpublisher-applications-edits-apks-expansion-files upload" [
   package_name: string
   edit_id: string
   apk_version_code: int
@@ -656,7 +666,7 @@ export def "androidpublisher-applications-edits-apks-expansion-files androidpubl
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_name: $package_name, edit_id: $edit_id, apk_version_code: $apk_version_code, expansion_file_type: $expansion_file_type} | format pattern "/androidpublisher/v3/applications/{package_name}/edits/{edit_id}/apks/{apk_version_code}/expansionFiles/{expansion_file_type}") $qp)
+  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name), edit_id: (encode-path-segment $edit_id), apk_version_code: (encode-path-segment $apk_version_code), expansion_file_type: (encode-path-segment $expansion_file_type)} | format pattern "/androidpublisher/v3/applications/{package_name}/edits/{edit_id}/apks/{apk_version_code}/expansionFiles/{expansion_file_type}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -666,7 +676,7 @@ export def "androidpublisher-applications-edits-apks-expansion-files androidpubl
 #
 # PUT /androidpublisher/v3/applications/{packageName}/edits/{editId}/apks/{apkVersionCode}/expansionFiles/{expansionFileType}
 # operationId: androidpublisher.edits.expansionfiles.update
-export def "androidpublisher-applications-edits-apks-expansion-files androidpublishereditsexpansionfilesupdate" [
+export def "androidpublisher-applications-edits-apks-expansion-files update-by-packageName-editId-apkVersionCode-expansionFileType-1" [
   package_name: string
   edit_id: string
   apk_version_code: int
@@ -697,19 +707,19 @@ export def "androidpublisher-applications-edits-apks-expansion-files androidpubl
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_name: $package_name, edit_id: $edit_id, apk_version_code: $apk_version_code, expansion_file_type: $expansion_file_type} | format pattern "/androidpublisher/v3/applications/{package_name}/edits/{edit_id}/apks/{apk_version_code}/expansionFiles/{expansion_file_type}") $qp)
-  let body = {"fileSize": $file_size, "referencesVersion": $references_version} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name), edit_id: (encode-path-segment $edit_id), apk_version_code: (encode-path-segment $apk_version_code), expansion_file_type: (encode-path-segment $expansion_file_type)} | format pattern "/androidpublisher/v3/applications/{package_name}/edits/{edit_id}/apks/{apk_version_code}/expansionFiles/{expansion_file_type}") $qp)
+  let req_body = {"fileSize": $file_size, "referencesVersion": $references_version} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists all current Android App Bundles of the app and edit.
 #
 # GET /androidpublisher/v3/applications/{packageName}/edits/{editId}/bundles
 # operationId: androidpublisher.edits.bundles.list
-export def "androidpublisher-applications-edits-bundles androidpublishereditsbundleslist" [
+export def "androidpublisher-applications-edits-bundles list" [
   package_name: string
   edit_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -735,7 +745,7 @@ export def "androidpublisher-applications-edits-bundles androidpublishereditsbun
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_name: $package_name, edit_id: $edit_id} | format pattern "/androidpublisher/v3/applications/{package_name}/edits/{edit_id}/bundles") $qp)
+  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name), edit_id: (encode-path-segment $edit_id)} | format pattern "/androidpublisher/v3/applications/{package_name}/edits/{edit_id}/bundles") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -745,7 +755,7 @@ export def "androidpublisher-applications-edits-bundles androidpublishereditsbun
 #
 # POST /androidpublisher/v3/applications/{packageName}/edits/{editId}/bundles
 # operationId: androidpublisher.edits.bundles.upload
-export def "androidpublisher-applications-edits-bundles androidpublishereditsbundlesupload" [
+export def "androidpublisher-applications-edits-bundles upload" [
   package_name: string
   edit_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -773,7 +783,7 @@ export def "androidpublisher-applications-edits-bundles androidpublishereditsbun
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "ackBundleInstallationWarning" $ack_bundle_installation_warning "scalar") (serialize-qp "deviceTierConfigId" $device_tier_config_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_name: $package_name, edit_id: $edit_id} | format pattern "/androidpublisher/v3/applications/{package_name}/edits/{edit_id}/bundles") $qp)
+  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name), edit_id: (encode-path-segment $edit_id)} | format pattern "/androidpublisher/v3/applications/{package_name}/edits/{edit_id}/bundles") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -783,7 +793,7 @@ export def "androidpublisher-applications-edits-bundles androidpublishereditsbun
 #
 # GET /androidpublisher/v3/applications/{packageName}/edits/{editId}/countryAvailability/{track}
 # operationId: androidpublisher.edits.countryavailability.get
-export def "androidpublisher-applications-edits-country-availability androidpublishereditscountryavailabilityget" [
+export def "androidpublisher-applications-edits-country-availability get" [
   package_name: string
   edit_id: string
   track: string
@@ -810,7 +820,7 @@ export def "androidpublisher-applications-edits-country-availability androidpubl
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_name: $package_name, edit_id: $edit_id, track: $track} | format pattern "/androidpublisher/v3/applications/{package_name}/edits/{edit_id}/countryAvailability/{track}") $qp)
+  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name), edit_id: (encode-path-segment $edit_id), track: (encode-path-segment $track)} | format pattern "/androidpublisher/v3/applications/{package_name}/edits/{edit_id}/countryAvailability/{track}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -820,7 +830,7 @@ export def "androidpublisher-applications-edits-country-availability androidpubl
 #
 # GET /androidpublisher/v3/applications/{packageName}/edits/{editId}/details
 # operationId: androidpublisher.edits.details.get
-export def "androidpublisher-applications-edits-details androidpublishereditsdetailsget" [
+export def "androidpublisher-applications-edits-details get" [
   package_name: string
   edit_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -846,7 +856,7 @@ export def "androidpublisher-applications-edits-details androidpublishereditsdet
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_name: $package_name, edit_id: $edit_id} | format pattern "/androidpublisher/v3/applications/{package_name}/edits/{edit_id}/details") $qp)
+  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name), edit_id: (encode-path-segment $edit_id)} | format pattern "/androidpublisher/v3/applications/{package_name}/edits/{edit_id}/details") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -856,7 +866,7 @@ export def "androidpublisher-applications-edits-details androidpublishereditsdet
 #
 # PATCH /androidpublisher/v3/applications/{packageName}/edits/{editId}/details
 # operationId: androidpublisher.edits.details.patch
-export def "androidpublisher-applications-edits-details androidpublishereditsdetailspatch" [
+export def "androidpublisher-applications-edits-details update-by-packageName-editId" [
   package_name: string
   edit_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -887,19 +897,19 @@ export def "androidpublisher-applications-edits-details androidpublishereditsdet
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_name: $package_name, edit_id: $edit_id} | format pattern "/androidpublisher/v3/applications/{package_name}/edits/{edit_id}/details") $qp)
-  let body = {"contactEmail": $contact_email, "contactPhone": $contact_phone, "contactWebsite": $contact_website, "defaultLanguage": $default_language} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name), edit_id: (encode-path-segment $edit_id)} | format pattern "/androidpublisher/v3/applications/{package_name}/edits/{edit_id}/details") $qp)
+  let req_body = {"contactEmail": $contact_email, "contactPhone": $contact_phone, "contactWebsite": $contact_website, "defaultLanguage": $default_language} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates details of an app.
 #
 # PUT /androidpublisher/v3/applications/{packageName}/edits/{editId}/details
 # operationId: androidpublisher.edits.details.update
-export def "androidpublisher-applications-edits-details androidpublishereditsdetailsupdate" [
+export def "androidpublisher-applications-edits-details update-by-packageName-editId-1" [
   package_name: string
   edit_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -930,19 +940,19 @@ export def "androidpublisher-applications-edits-details androidpublishereditsdet
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_name: $package_name, edit_id: $edit_id} | format pattern "/androidpublisher/v3/applications/{package_name}/edits/{edit_id}/details") $qp)
-  let body = {"contactEmail": $contact_email, "contactPhone": $contact_phone, "contactWebsite": $contact_website, "defaultLanguage": $default_language} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name), edit_id: (encode-path-segment $edit_id)} | format pattern "/androidpublisher/v3/applications/{package_name}/edits/{edit_id}/details") $qp)
+  let req_body = {"contactEmail": $contact_email, "contactPhone": $contact_phone, "contactWebsite": $contact_website, "defaultLanguage": $default_language} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes all store listings.
 #
 # DELETE /androidpublisher/v3/applications/{packageName}/edits/{editId}/listings
 # operationId: androidpublisher.edits.listings.deleteall
-export def "androidpublisher-applications-edits-listings androidpublishereditslistingsdeleteall" [
+export def "androidpublisher-applications-edits-listings delete-deleteall-by-packageName-editId" [
   package_name: string
   edit_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -968,7 +978,7 @@ export def "androidpublisher-applications-edits-listings androidpublishereditsli
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_name: $package_name, edit_id: $edit_id} | format pattern "/androidpublisher/v3/applications/{package_name}/edits/{edit_id}/listings") $qp)
+  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name), edit_id: (encode-path-segment $edit_id)} | format pattern "/androidpublisher/v3/applications/{package_name}/edits/{edit_id}/listings") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -978,7 +988,7 @@ export def "androidpublisher-applications-edits-listings androidpublishereditsli
 #
 # GET /androidpublisher/v3/applications/{packageName}/edits/{editId}/listings
 # operationId: androidpublisher.edits.listings.list
-export def "androidpublisher-applications-edits-listings androidpublishereditslistingslist" [
+export def "androidpublisher-applications-edits-listings list-by-packageName-editId" [
   package_name: string
   edit_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1004,7 +1014,7 @@ export def "androidpublisher-applications-edits-listings androidpublishereditsli
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_name: $package_name, edit_id: $edit_id} | format pattern "/androidpublisher/v3/applications/{package_name}/edits/{edit_id}/listings") $qp)
+  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name), edit_id: (encode-path-segment $edit_id)} | format pattern "/androidpublisher/v3/applications/{package_name}/edits/{edit_id}/listings") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1014,7 +1024,7 @@ export def "androidpublisher-applications-edits-listings androidpublishereditsli
 #
 # DELETE /androidpublisher/v3/applications/{packageName}/edits/{editId}/listings/{language}
 # operationId: androidpublisher.edits.listings.delete
-export def "androidpublisher-applications-edits-listings androidpublishereditslistingsdelete" [
+export def "androidpublisher-applications-edits-listings delete-by-packageName-editId-language" [
   package_name: string
   edit_id: string
   language: string
@@ -1041,7 +1051,7 @@ export def "androidpublisher-applications-edits-listings androidpublishereditsli
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_name: $package_name, edit_id: $edit_id, language: $language} | format pattern "/androidpublisher/v3/applications/{package_name}/edits/{edit_id}/listings/{language}") $qp)
+  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name), edit_id: (encode-path-segment $edit_id), language: (encode-path-segment $language)} | format pattern "/androidpublisher/v3/applications/{package_name}/edits/{edit_id}/listings/{language}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1051,7 +1061,7 @@ export def "androidpublisher-applications-edits-listings androidpublishereditsli
 #
 # GET /androidpublisher/v3/applications/{packageName}/edits/{editId}/listings/{language}
 # operationId: androidpublisher.edits.listings.get
-export def "androidpublisher-applications-edits-listings androidpublishereditslistingsget" [
+export def "androidpublisher-applications-edits-listings get" [
   package_name: string
   edit_id: string
   language: string
@@ -1078,7 +1088,7 @@ export def "androidpublisher-applications-edits-listings androidpublishereditsli
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_name: $package_name, edit_id: $edit_id, language: $language} | format pattern "/androidpublisher/v3/applications/{package_name}/edits/{edit_id}/listings/{language}") $qp)
+  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name), edit_id: (encode-path-segment $edit_id), language: (encode-path-segment $language)} | format pattern "/androidpublisher/v3/applications/{package_name}/edits/{edit_id}/listings/{language}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1088,7 +1098,7 @@ export def "androidpublisher-applications-edits-listings androidpublishereditsli
 #
 # PATCH /androidpublisher/v3/applications/{packageName}/edits/{editId}/listings/{language}
 # operationId: androidpublisher.edits.listings.patch
-export def "androidpublisher-applications-edits-listings androidpublishereditslistingspatch" [
+export def "androidpublisher-applications-edits-listings update-by-packageName-editId-language" [
   package_name: string
   edit_id: string
   language: string
@@ -1121,19 +1131,19 @@ export def "androidpublisher-applications-edits-listings androidpublishereditsli
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_name: $package_name, edit_id: $edit_id, language: $language} | format pattern "/androidpublisher/v3/applications/{package_name}/edits/{edit_id}/listings/{language}") $qp)
-  let body = {"fullDescription": $full_description, "language": $body_language, "shortDescription": $short_description, "title": $title, "video": $video} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name), edit_id: (encode-path-segment $edit_id), language: (encode-path-segment $language)} | format pattern "/androidpublisher/v3/applications/{package_name}/edits/{edit_id}/listings/{language}") $qp)
+  let req_body = {"fullDescription": $full_description, "language": $body_language, "shortDescription": $short_description, "title": $title, "video": $video} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Creates or updates a localized store listing.
 #
 # PUT /androidpublisher/v3/applications/{packageName}/edits/{editId}/listings/{language}
 # operationId: androidpublisher.edits.listings.update
-export def "androidpublisher-applications-edits-listings androidpublishereditslistingsupdate" [
+export def "androidpublisher-applications-edits-listings update-by-packageName-editId-language-1" [
   package_name: string
   edit_id: string
   language: string
@@ -1166,19 +1176,19 @@ export def "androidpublisher-applications-edits-listings androidpublishereditsli
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_name: $package_name, edit_id: $edit_id, language: $language} | format pattern "/androidpublisher/v3/applications/{package_name}/edits/{edit_id}/listings/{language}") $qp)
-  let body = {"fullDescription": $full_description, "language": $body_language, "shortDescription": $short_description, "title": $title, "video": $video} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name), edit_id: (encode-path-segment $edit_id), language: (encode-path-segment $language)} | format pattern "/androidpublisher/v3/applications/{package_name}/edits/{edit_id}/listings/{language}") $qp)
+  let req_body = {"fullDescription": $full_description, "language": $body_language, "shortDescription": $short_description, "title": $title, "video": $video} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes all images for the specified language and image type. Returns an empty response if no images are found.
 #
 # DELETE /androidpublisher/v3/applications/{packageName}/edits/{editId}/listings/{language}/{imageType}
 # operationId: androidpublisher.edits.images.deleteall
-export def "androidpublisher-applications-edits-listings androidpublishereditsimagesdeleteall" [
+export def "androidpublisher-applications-edits-listings delete-deleteall-by-packageName-editId-language-imageType" [
   package_name: string
   edit_id: string
   language: string
@@ -1206,7 +1216,7 @@ export def "androidpublisher-applications-edits-listings androidpublishereditsim
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_name: $package_name, edit_id: $edit_id, language: $language, image_type: $image_type} | format pattern "/androidpublisher/v3/applications/{package_name}/edits/{edit_id}/listings/{language}/{image_type}") $qp)
+  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name), edit_id: (encode-path-segment $edit_id), language: (encode-path-segment $language), image_type: (encode-path-segment $image_type)} | format pattern "/androidpublisher/v3/applications/{package_name}/edits/{edit_id}/listings/{language}/{image_type}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1216,7 +1226,7 @@ export def "androidpublisher-applications-edits-listings androidpublishereditsim
 #
 # GET /androidpublisher/v3/applications/{packageName}/edits/{editId}/listings/{language}/{imageType}
 # operationId: androidpublisher.edits.images.list
-export def "androidpublisher-applications-edits-listings androidpublishereditsimageslist" [
+export def "androidpublisher-applications-edits-listings list-by-packageName-editId-language-imageType" [
   package_name: string
   edit_id: string
   language: string
@@ -1244,7 +1254,7 @@ export def "androidpublisher-applications-edits-listings androidpublishereditsim
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_name: $package_name, edit_id: $edit_id, language: $language, image_type: $image_type} | format pattern "/androidpublisher/v3/applications/{package_name}/edits/{edit_id}/listings/{language}/{image_type}") $qp)
+  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name), edit_id: (encode-path-segment $edit_id), language: (encode-path-segment $language), image_type: (encode-path-segment $image_type)} | format pattern "/androidpublisher/v3/applications/{package_name}/edits/{edit_id}/listings/{language}/{image_type}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1254,7 +1264,7 @@ export def "androidpublisher-applications-edits-listings androidpublishereditsim
 #
 # POST /androidpublisher/v3/applications/{packageName}/edits/{editId}/listings/{language}/{imageType}
 # operationId: androidpublisher.edits.images.upload
-export def "androidpublisher-applications-edits-listings androidpublishereditsimagesupload" [
+export def "androidpublisher-applications-edits-listings upload" [
   package_name: string
   edit_id: string
   language: string
@@ -1282,7 +1292,7 @@ export def "androidpublisher-applications-edits-listings androidpublishereditsim
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_name: $package_name, edit_id: $edit_id, language: $language, image_type: $image_type} | format pattern "/androidpublisher/v3/applications/{package_name}/edits/{edit_id}/listings/{language}/{image_type}") $qp)
+  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name), edit_id: (encode-path-segment $edit_id), language: (encode-path-segment $language), image_type: (encode-path-segment $image_type)} | format pattern "/androidpublisher/v3/applications/{package_name}/edits/{edit_id}/listings/{language}/{image_type}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1292,7 +1302,7 @@ export def "androidpublisher-applications-edits-listings androidpublishereditsim
 #
 # DELETE /androidpublisher/v3/applications/{packageName}/edits/{editId}/listings/{language}/{imageType}/{imageId}
 # operationId: androidpublisher.edits.images.delete
-export def "androidpublisher-applications-edits-listings androidpublishereditsimagesdelete" [
+export def "androidpublisher-applications-edits-listings delete-by-packageName-editId-language-imageType-imageId" [
   package_name: string
   edit_id: string
   language: string
@@ -1321,7 +1331,7 @@ export def "androidpublisher-applications-edits-listings androidpublishereditsim
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_name: $package_name, edit_id: $edit_id, language: $language, image_type: $image_type, image_id: $image_id} | format pattern "/androidpublisher/v3/applications/{package_name}/edits/{edit_id}/listings/{language}/{image_type}/{image_id}") $qp)
+  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name), edit_id: (encode-path-segment $edit_id), language: (encode-path-segment $language), image_type: (encode-path-segment $image_type), image_id: (encode-path-segment $image_id)} | format pattern "/androidpublisher/v3/applications/{package_name}/edits/{edit_id}/listings/{language}/{image_type}/{image_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1331,7 +1341,7 @@ export def "androidpublisher-applications-edits-listings androidpublishereditsim
 #
 # GET /androidpublisher/v3/applications/{packageName}/edits/{editId}/testers/{track}
 # operationId: androidpublisher.edits.testers.get
-export def "androidpublisher-applications-edits-testers androidpublishereditstestersget" [
+export def "androidpublisher-applications-edits-testers get" [
   package_name: string
   edit_id: string
   track: string
@@ -1358,7 +1368,7 @@ export def "androidpublisher-applications-edits-testers androidpublishereditstes
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_name: $package_name, edit_id: $edit_id, track: $track} | format pattern "/androidpublisher/v3/applications/{package_name}/edits/{edit_id}/testers/{track}") $qp)
+  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name), edit_id: (encode-path-segment $edit_id), track: (encode-path-segment $track)} | format pattern "/androidpublisher/v3/applications/{package_name}/edits/{edit_id}/testers/{track}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1368,7 +1378,7 @@ export def "androidpublisher-applications-edits-testers androidpublishereditstes
 #
 # PATCH /androidpublisher/v3/applications/{packageName}/edits/{editId}/testers/{track}
 # operationId: androidpublisher.edits.testers.patch
-export def "androidpublisher-applications-edits-testers androidpublishereditstesterspatch" [
+export def "androidpublisher-applications-edits-testers update-by-packageName-editId-track" [
   package_name: string
   edit_id: string
   track: string
@@ -1391,25 +1401,25 @@ export def "androidpublisher-applications-edits-testers androidpublishereditstes
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --google-groups: list # All testing Google Groups, as email addresses.
+  --google-groups: list<string> # All testing Google Groups, as email addresses.
 ]: any -> record<googleGroups: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_name: $package_name, edit_id: $edit_id, track: $track} | format pattern "/androidpublisher/v3/applications/{package_name}/edits/{edit_id}/testers/{track}") $qp)
-  let body = {"googleGroups": $google_groups} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name), edit_id: (encode-path-segment $edit_id), track: (encode-path-segment $track)} | format pattern "/androidpublisher/v3/applications/{package_name}/edits/{edit_id}/testers/{track}") $qp)
+  let req_body = {"googleGroups": $google_groups} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates testers. Note: Testers resource does not support email lists.
 #
 # PUT /androidpublisher/v3/applications/{packageName}/edits/{editId}/testers/{track}
 # operationId: androidpublisher.edits.testers.update
-export def "androidpublisher-applications-edits-testers androidpublishereditstestersupdate" [
+export def "androidpublisher-applications-edits-testers update-by-packageName-editId-track-1" [
   package_name: string
   edit_id: string
   track: string
@@ -1432,25 +1442,25 @@ export def "androidpublisher-applications-edits-testers androidpublishereditstes
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --google-groups: list # All testing Google Groups, as email addresses.
+  --google-groups: list<string> # All testing Google Groups, as email addresses.
 ]: any -> record<googleGroups: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_name: $package_name, edit_id: $edit_id, track: $track} | format pattern "/androidpublisher/v3/applications/{package_name}/edits/{edit_id}/testers/{track}") $qp)
-  let body = {"googleGroups": $google_groups} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name), edit_id: (encode-path-segment $edit_id), track: (encode-path-segment $track)} | format pattern "/androidpublisher/v3/applications/{package_name}/edits/{edit_id}/testers/{track}") $qp)
+  let req_body = {"googleGroups": $google_groups} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists all tracks.
 #
 # GET /androidpublisher/v3/applications/{packageName}/edits/{editId}/tracks
 # operationId: androidpublisher.edits.tracks.list
-export def "androidpublisher-applications-edits-tracks androidpublishereditstrackslist" [
+export def "androidpublisher-applications-edits-tracks list" [
   package_name: string
   edit_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1476,7 +1486,7 @@ export def "androidpublisher-applications-edits-tracks androidpublishereditstrac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_name: $package_name, edit_id: $edit_id} | format pattern "/androidpublisher/v3/applications/{package_name}/edits/{edit_id}/tracks") $qp)
+  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name), edit_id: (encode-path-segment $edit_id)} | format pattern "/androidpublisher/v3/applications/{package_name}/edits/{edit_id}/tracks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1486,7 +1496,7 @@ export def "androidpublisher-applications-edits-tracks androidpublishereditstrac
 #
 # GET /androidpublisher/v3/applications/{packageName}/edits/{editId}/tracks/{track}
 # operationId: androidpublisher.edits.tracks.get
-export def "androidpublisher-applications-edits-tracks androidpublishereditstracksget" [
+export def "androidpublisher-applications-edits-tracks get" [
   package_name: string
   edit_id: string
   track: string
@@ -1513,7 +1523,7 @@ export def "androidpublisher-applications-edits-tracks androidpublishereditstrac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_name: $package_name, edit_id: $edit_id, track: $track} | format pattern "/androidpublisher/v3/applications/{package_name}/edits/{edit_id}/tracks/{track}") $qp)
+  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name), edit_id: (encode-path-segment $edit_id), track: (encode-path-segment $track)} | format pattern "/androidpublisher/v3/applications/{package_name}/edits/{edit_id}/tracks/{track}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1523,8 +1533,8 @@ export def "androidpublisher-applications-edits-tracks androidpublishereditstrac
 #
 # PATCH /androidpublisher/v3/applications/{packageName}/edits/{editId}/tracks/{track}
 # operationId: androidpublisher.edits.tracks.patch
-# --releases item shape: {countryTargeting?: record, inAppUpdatePriority?: int, name?: string, releaseNotes?: list, status?: "statusUnspecified"|"draft"|"inProgress"|"halted"|"completed", userFraction?: float, versionCodes?: list}
-export def "androidpublisher-applications-edits-tracks androidpublishereditstrackspatch" [
+# --releases item shape: {countryTargeting?: record, inAppUpdatePriority?: int, name?: string, releaseNotes?: list, status?: "statusUnspecified"|"draft"|"inProgress"|"halted"|"completed", userFraction?: float, versionCodes?: list<string>}
+export def "androidpublisher-applications-edits-tracks update-by-packageName-editId-track" [
   package_name: string
   edit_id: string
   track: string
@@ -1547,27 +1557,27 @@ export def "androidpublisher-applications-edits-tracks androidpublishereditstrac
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --releases: list # In a read request, represents all active releases in the track. In an update request, represents desired changes. — item shape: {countryTargeting?: record, inAppUpdatePriority?: int, name?: string, releaseNotes?: list, status?: "statusUnspecified"|"draft"|"inProgress"|"halted"|"completed", userFraction?: float, versionCodes?: list}
+  --releases: list # In a read request, represents all active releases in the track. In an update request, represents desired changes. — item shape: {countryTargeting?: record, inAppUpdatePriority?: int, name?: string, releaseNotes?: list, status?: "statusUnspecified"|"draft"|"inProgress"|"halted"|"completed", userFraction?: float, versionCodes?: list<string>}
   --body-track: string # Identifier of the track. Form factor tracks have a special prefix as an identifier, for example `wear:production`, `automotive:production`. [More on track name](https://developers.google.com/android-publisher/tracks#ff-track-name)
 ]: any -> record<releases: table<countryTargeting: record, inAppUpdatePriority: int, name: string, releaseNotes: list, status: string, userFraction: float, versionCodes: list>, track: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_name: $package_name, edit_id: $edit_id, track: $track} | format pattern "/androidpublisher/v3/applications/{package_name}/edits/{edit_id}/tracks/{track}") $qp)
-  let body = {"releases": $releases, "track": $body_track} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name), edit_id: (encode-path-segment $edit_id), track: (encode-path-segment $track)} | format pattern "/androidpublisher/v3/applications/{package_name}/edits/{edit_id}/tracks/{track}") $qp)
+  let req_body = {"releases": $releases, "track": $body_track} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates a track.
 #
 # PUT /androidpublisher/v3/applications/{packageName}/edits/{editId}/tracks/{track}
 # operationId: androidpublisher.edits.tracks.update
-# --releases item shape: {countryTargeting?: record, inAppUpdatePriority?: int, name?: string, releaseNotes?: list, status?: "statusUnspecified"|"draft"|"inProgress"|"halted"|"completed", userFraction?: float, versionCodes?: list}
-export def "androidpublisher-applications-edits-tracks androidpublishereditstracksupdate" [
+# --releases item shape: {countryTargeting?: record, inAppUpdatePriority?: int, name?: string, releaseNotes?: list, status?: "statusUnspecified"|"draft"|"inProgress"|"halted"|"completed", userFraction?: float, versionCodes?: list<string>}
+export def "androidpublisher-applications-edits-tracks update-by-packageName-editId-track-1" [
   package_name: string
   edit_id: string
   track: string
@@ -1590,26 +1600,26 @@ export def "androidpublisher-applications-edits-tracks androidpublishereditstrac
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --releases: list # In a read request, represents all active releases in the track. In an update request, represents desired changes. — item shape: {countryTargeting?: record, inAppUpdatePriority?: int, name?: string, releaseNotes?: list, status?: "statusUnspecified"|"draft"|"inProgress"|"halted"|"completed", userFraction?: float, versionCodes?: list}
+  --releases: list # In a read request, represents all active releases in the track. In an update request, represents desired changes. — item shape: {countryTargeting?: record, inAppUpdatePriority?: int, name?: string, releaseNotes?: list, status?: "statusUnspecified"|"draft"|"inProgress"|"halted"|"completed", userFraction?: float, versionCodes?: list<string>}
   --body-track: string # Identifier of the track. Form factor tracks have a special prefix as an identifier, for example `wear:production`, `automotive:production`. [More on track name](https://developers.google.com/android-publisher/tracks#ff-track-name)
 ]: any -> record<releases: table<countryTargeting: record, inAppUpdatePriority: int, name: string, releaseNotes: list, status: string, userFraction: float, versionCodes: list>, track: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_name: $package_name, edit_id: $edit_id, track: $track} | format pattern "/androidpublisher/v3/applications/{package_name}/edits/{edit_id}/tracks/{track}") $qp)
-  let body = {"releases": $releases, "track": $body_track} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name), edit_id: (encode-path-segment $edit_id), track: (encode-path-segment $track)} | format pattern "/androidpublisher/v3/applications/{package_name}/edits/{edit_id}/tracks/{track}") $qp)
+  let req_body = {"releases": $releases, "track": $body_track} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Commits an app edit.
 #
 # POST /androidpublisher/v3/applications/{packageName}/edits/{editId}:commit
 # operationId: androidpublisher.edits.commit
-export def "androidpublisher-applications-edits androidpublishereditscommit" [
+export def "androidpublisher-applications-edits commit" [
   package_name: string
   edit_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1636,7 +1646,7 @@ export def "androidpublisher-applications-edits androidpublishereditscommit" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "changesNotSentForReview" $changes_not_sent_for_review "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_name: $package_name, edit_id: $edit_id} | format pattern "/androidpublisher/v3/applications/{package_name}/edits/{edit_id}:commit") $qp)
+  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name), edit_id: (encode-path-segment $edit_id)} | format pattern "/androidpublisher/v3/applications/{package_name}/edits/{edit_id}:commit") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1646,7 +1656,7 @@ export def "androidpublisher-applications-edits androidpublishereditscommit" [
 #
 # POST /androidpublisher/v3/applications/{packageName}/edits/{editId}:validate
 # operationId: androidpublisher.edits.validate
-export def "androidpublisher-applications-edits androidpublishereditsvalidate" [
+export def "androidpublisher-applications-edits validate" [
   package_name: string
   edit_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1672,7 +1682,7 @@ export def "androidpublisher-applications-edits androidpublishereditsvalidate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_name: $package_name, edit_id: $edit_id} | format pattern "/androidpublisher/v3/applications/{package_name}/edits/{edit_id}:validate") $qp)
+  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name), edit_id: (encode-path-segment $edit_id)} | format pattern "/androidpublisher/v3/applications/{package_name}/edits/{edit_id}:validate") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1682,7 +1692,7 @@ export def "androidpublisher-applications-edits androidpublishereditsvalidate" [
 #
 # GET /androidpublisher/v3/applications/{packageName}/generatedApks/{versionCode}
 # operationId: androidpublisher.generatedapks.list
-export def "androidpublisher-applications-generated-apks androidpublishergeneratedapkslist" [
+export def "androidpublisher-applications-generated-apks list" [
   package_name: string
   version_code: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1708,7 +1718,7 @@ export def "androidpublisher-applications-generated-apks androidpublishergenerat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_name: $package_name, version_code: $version_code} | format pattern "/androidpublisher/v3/applications/{package_name}/generatedApks/{version_code}") $qp)
+  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name), version_code: (encode-path-segment $version_code)} | format pattern "/androidpublisher/v3/applications/{package_name}/generatedApks/{version_code}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1718,7 +1728,7 @@ export def "androidpublisher-applications-generated-apks androidpublishergenerat
 #
 # GET /androidpublisher/v3/applications/{packageName}/generatedApks/{versionCode}/downloads/{downloadId}:download
 # operationId: androidpublisher.generatedapks.download
-export def "androidpublisher-applications-generated-apks-downloads androidpublishergeneratedapksdownload" [
+export def "androidpublisher-applications-generated-apks-downloads download" [
   package_name: string
   version_code: int
   download_id: string
@@ -1745,7 +1755,7 @@ export def "androidpublisher-applications-generated-apks-downloads androidpublis
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_name: $package_name, version_code: $version_code, download_id: $download_id} | format pattern "/androidpublisher/v3/applications/{package_name}/generatedApks/{version_code}/downloads/{download_id}:download") $qp)
+  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name), version_code: (encode-path-segment $version_code), download_id: (encode-path-segment $download_id)} | format pattern "/androidpublisher/v3/applications/{package_name}/generatedApks/{version_code}/downloads/{download_id}:download") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1755,7 +1765,7 @@ export def "androidpublisher-applications-generated-apks-downloads androidpublis
 #
 # GET /androidpublisher/v3/applications/{packageName}/inappproducts
 # operationId: androidpublisher.inappproducts.list
-export def "androidpublisher-applications-inappproducts androidpublisherinappproductslist" [
+export def "androidpublisher-applications-inappproducts list" [
   package_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1783,7 +1793,7 @@ export def "androidpublisher-applications-inappproducts androidpublisherinapppro
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "startIndex" $start_index "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_name: $package_name} | format pattern "/androidpublisher/v3/applications/{package_name}/inappproducts") $qp)
+  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name)} | format pattern "/androidpublisher/v3/applications/{package_name}/inappproducts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1796,7 +1806,7 @@ export def "androidpublisher-applications-inappproducts androidpublisherinapppro
 # --defaultPrice shape: {currency?: string, priceMicros?: string}
 # --managedProductTaxesAndComplianceSettings shape: {eeaWithdrawalRightType?: "WITHDRAWAL_RIGHT_TYPE_UNSPECIFIED"|"WITHDRAWAL_RIGHT_DIGITAL_CONTENT"|"WITHDRAWAL_RIGHT_SERVICE", taxRateInfoByRegionCode?: record}
 # --subscriptionTaxesAndComplianceSettings shape: {eeaWithdrawalRightType?: "WITHDRAWAL_RIGHT_TYPE_UNSPECIFIED"|"WITHDRAWAL_RIGHT_DIGITAL_CONTENT"|"WITHDRAWAL_RIGHT_SERVICE", taxRateInfoByRegionCode?: record}
-export def "androidpublisher-applications-inappproducts androidpublisherinappproductsinsert" [
+export def "androidpublisher-applications-inappproducts create" [
   package_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1836,19 +1846,19 @@ export def "androidpublisher-applications-inappproducts androidpublisherinapppro
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "autoConvertMissingPrices" $auto_convert_missing_prices "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_name: $package_name} | format pattern "/androidpublisher/v3/applications/{package_name}/inappproducts") $qp)
-  let body = {"defaultLanguage": $default_language, "defaultPrice": $default_price, "gracePeriod": $grace_period, "listings": $listings, "managedProductTaxesAndComplianceSettings": $managed_product_taxes_and_compliance_settings, "packageName": $body_package_name, "prices": $prices, "purchaseType": $purchase_type, "sku": $sku, "status": $status, "subscriptionPeriod": $subscription_period, "subscriptionTaxesAndComplianceSettings": $subscription_taxes_and_compliance_settings, "trialPeriod": $trial_period} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name)} | format pattern "/androidpublisher/v3/applications/{package_name}/inappproducts") $qp)
+  let req_body = {"defaultLanguage": $default_language, "defaultPrice": $default_price, "gracePeriod": $grace_period, "listings": $listings, "managedProductTaxesAndComplianceSettings": $managed_product_taxes_and_compliance_settings, "packageName": $body_package_name, "prices": $prices, "purchaseType": $purchase_type, "sku": $sku, "status": $status, "subscriptionPeriod": $subscription_period, "subscriptionTaxesAndComplianceSettings": $subscription_taxes_and_compliance_settings, "trialPeriod": $trial_period} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes an in-app product (i.e. a managed product or a subscription).
 #
 # DELETE /androidpublisher/v3/applications/{packageName}/inappproducts/{sku}
 # operationId: androidpublisher.inappproducts.delete
-export def "androidpublisher-applications-inappproducts androidpublisherinappproductsdelete" [
+export def "androidpublisher-applications-inappproducts delete" [
   package_name: string
   sku: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1874,7 +1884,7 @@ export def "androidpublisher-applications-inappproducts androidpublisherinapppro
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_name: $package_name, sku: $sku} | format pattern "/androidpublisher/v3/applications/{package_name}/inappproducts/{sku}") $qp)
+  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name), sku: (encode-path-segment $sku)} | format pattern "/androidpublisher/v3/applications/{package_name}/inappproducts/{sku}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1884,7 +1894,7 @@ export def "androidpublisher-applications-inappproducts androidpublisherinapppro
 #
 # GET /androidpublisher/v3/applications/{packageName}/inappproducts/{sku}
 # operationId: androidpublisher.inappproducts.get
-export def "androidpublisher-applications-inappproducts androidpublisherinappproductsget" [
+export def "androidpublisher-applications-inappproducts get" [
   package_name: string
   sku: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1910,7 +1920,7 @@ export def "androidpublisher-applications-inappproducts androidpublisherinapppro
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_name: $package_name, sku: $sku} | format pattern "/androidpublisher/v3/applications/{package_name}/inappproducts/{sku}") $qp)
+  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name), sku: (encode-path-segment $sku)} | format pattern "/androidpublisher/v3/applications/{package_name}/inappproducts/{sku}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1923,7 +1933,7 @@ export def "androidpublisher-applications-inappproducts androidpublisherinapppro
 # --defaultPrice shape: {currency?: string, priceMicros?: string}
 # --managedProductTaxesAndComplianceSettings shape: {eeaWithdrawalRightType?: "WITHDRAWAL_RIGHT_TYPE_UNSPECIFIED"|"WITHDRAWAL_RIGHT_DIGITAL_CONTENT"|"WITHDRAWAL_RIGHT_SERVICE", taxRateInfoByRegionCode?: record}
 # --subscriptionTaxesAndComplianceSettings shape: {eeaWithdrawalRightType?: "WITHDRAWAL_RIGHT_TYPE_UNSPECIFIED"|"WITHDRAWAL_RIGHT_DIGITAL_CONTENT"|"WITHDRAWAL_RIGHT_SERVICE", taxRateInfoByRegionCode?: record}
-export def "androidpublisher-applications-inappproducts androidpublisherinappproductspatch" [
+export def "androidpublisher-applications-inappproducts update-by-packageName-sku" [
   package_name: string
   sku: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1964,12 +1974,12 @@ export def "androidpublisher-applications-inappproducts androidpublisherinapppro
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "autoConvertMissingPrices" $auto_convert_missing_prices "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_name: $package_name, sku: $sku} | format pattern "/androidpublisher/v3/applications/{package_name}/inappproducts/{sku}") $qp)
-  let body = {"defaultLanguage": $default_language, "defaultPrice": $default_price, "gracePeriod": $grace_period, "listings": $listings, "managedProductTaxesAndComplianceSettings": $managed_product_taxes_and_compliance_settings, "packageName": $body_package_name, "prices": $prices, "purchaseType": $purchase_type, "sku": $body_sku, "status": $status, "subscriptionPeriod": $subscription_period, "subscriptionTaxesAndComplianceSettings": $subscription_taxes_and_compliance_settings, "trialPeriod": $trial_period} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name), sku: (encode-path-segment $sku)} | format pattern "/androidpublisher/v3/applications/{package_name}/inappproducts/{sku}") $qp)
+  let req_body = {"defaultLanguage": $default_language, "defaultPrice": $default_price, "gracePeriod": $grace_period, "listings": $listings, "managedProductTaxesAndComplianceSettings": $managed_product_taxes_and_compliance_settings, "packageName": $body_package_name, "prices": $prices, "purchaseType": $purchase_type, "sku": $body_sku, "status": $status, "subscriptionPeriod": $subscription_period, "subscriptionTaxesAndComplianceSettings": $subscription_taxes_and_compliance_settings, "trialPeriod": $trial_period} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates an in-app product (i.e. a managed product or a subscription).
@@ -1979,7 +1989,7 @@ export def "androidpublisher-applications-inappproducts androidpublisherinapppro
 # --defaultPrice shape: {currency?: string, priceMicros?: string}
 # --managedProductTaxesAndComplianceSettings shape: {eeaWithdrawalRightType?: "WITHDRAWAL_RIGHT_TYPE_UNSPECIFIED"|"WITHDRAWAL_RIGHT_DIGITAL_CONTENT"|"WITHDRAWAL_RIGHT_SERVICE", taxRateInfoByRegionCode?: record}
 # --subscriptionTaxesAndComplianceSettings shape: {eeaWithdrawalRightType?: "WITHDRAWAL_RIGHT_TYPE_UNSPECIFIED"|"WITHDRAWAL_RIGHT_DIGITAL_CONTENT"|"WITHDRAWAL_RIGHT_SERVICE", taxRateInfoByRegionCode?: record}
-export def "androidpublisher-applications-inappproducts androidpublisherinappproductsupdate" [
+export def "androidpublisher-applications-inappproducts update-by-packageName-sku-1" [
   package_name: string
   sku: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2021,19 +2031,19 @@ export def "androidpublisher-applications-inappproducts androidpublisherinapppro
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "allowMissing" $allow_missing "scalar") (serialize-qp "autoConvertMissingPrices" $auto_convert_missing_prices "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_name: $package_name, sku: $sku} | format pattern "/androidpublisher/v3/applications/{package_name}/inappproducts/{sku}") $qp)
-  let body = {"defaultLanguage": $default_language, "defaultPrice": $default_price, "gracePeriod": $grace_period, "listings": $listings, "managedProductTaxesAndComplianceSettings": $managed_product_taxes_and_compliance_settings, "packageName": $body_package_name, "prices": $prices, "purchaseType": $purchase_type, "sku": $body_sku, "status": $status, "subscriptionPeriod": $subscription_period, "subscriptionTaxesAndComplianceSettings": $subscription_taxes_and_compliance_settings, "trialPeriod": $trial_period} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name), sku: (encode-path-segment $sku)} | format pattern "/androidpublisher/v3/applications/{package_name}/inappproducts/{sku}") $qp)
+  let req_body = {"defaultLanguage": $default_language, "defaultPrice": $default_price, "gracePeriod": $grace_period, "listings": $listings, "managedProductTaxesAndComplianceSettings": $managed_product_taxes_and_compliance_settings, "packageName": $body_package_name, "prices": $prices, "purchaseType": $purchase_type, "sku": $body_sku, "status": $status, "subscriptionPeriod": $subscription_period, "subscriptionTaxesAndComplianceSettings": $subscription_taxes_and_compliance_settings, "trialPeriod": $trial_period} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Refunds a user's subscription or in-app purchase order. Orders older than 1 year cannot be refunded.
 #
 # POST /androidpublisher/v3/applications/{packageName}/orders/{orderId}:refund
 # operationId: androidpublisher.orders.refund
-export def "androidpublisher-applications-orders androidpublisherordersrefund" [
+export def "androidpublisher-applications-orders create-refund" [
   package_name: string
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2060,7 +2070,7 @@ export def "androidpublisher-applications-orders androidpublisherordersrefund" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "revoke" $revoke "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_name: $package_name, order_id: $order_id} | format pattern "/androidpublisher/v3/applications/{package_name}/orders/{order_id}:refund") $qp)
+  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name), order_id: (encode-path-segment $order_id)} | format pattern "/androidpublisher/v3/applications/{package_name}/orders/{order_id}:refund") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2071,7 +2081,7 @@ export def "androidpublisher-applications-orders androidpublisherordersrefund" [
 # POST /androidpublisher/v3/applications/{packageName}/pricing:convertRegionPrices
 # operationId: androidpublisher.monetization.convertRegionPrices
 # --price shape: {currencyCode?: string, nanos?: int, units?: string}
-export def "androidpublisher-applications-pricing-convert-region-prices androidpublishermonetizationconvertRegionPrices" [
+export def "androidpublisher-applications-pricing-convert-region-prices create" [
   package_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2098,19 +2108,19 @@ export def "androidpublisher-applications-pricing-convert-region-prices androidp
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_name: $package_name} | format pattern "/androidpublisher/v3/applications/{package_name}/pricing:convertRegionPrices") $qp)
-  let body = {"price": $price} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name)} | format pattern "/androidpublisher/v3/applications/{package_name}/pricing:convertRegionPrices") $qp)
+  let req_body = {"price": $price} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Checks the purchase and consumption status of an inapp item.
 #
 # GET /androidpublisher/v3/applications/{packageName}/purchases/products/{productId}/tokens/{token}
 # operationId: androidpublisher.purchases.products.get
-export def "androidpublisher-applications-purchases-products-tokens androidpublisherpurchasesproductsget" [
+export def "androidpublisher-applications-purchases-products-tokens get" [
   package_name: string
   product_id: string
   token_arg: string
@@ -2137,7 +2147,7 @@ export def "androidpublisher-applications-purchases-products-tokens androidpubli
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_name: $package_name, product_id: $product_id, token_arg: $token_arg} | format pattern "/androidpublisher/v3/applications/{package_name}/purchases/products/{product_id}/tokens/{token_arg}") $qp)
+  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name), product_id: (encode-path-segment $product_id), token_arg: (encode-path-segment $token_arg)} | format pattern "/androidpublisher/v3/applications/{package_name}/purchases/products/{product_id}/tokens/{token_arg}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2147,7 +2157,7 @@ export def "androidpublisher-applications-purchases-products-tokens androidpubli
 #
 # POST /androidpublisher/v3/applications/{packageName}/purchases/products/{productId}/tokens/{token}:acknowledge
 # operationId: androidpublisher.purchases.products.acknowledge
-export def "androidpublisher-applications-purchases-products-tokens androidpublisherpurchasesproductsacknowledge" [
+export def "androidpublisher-applications-purchases-products-tokens create-acknowledge" [
   package_name: string
   product_id: string
   token_arg: string
@@ -2176,19 +2186,19 @@ export def "androidpublisher-applications-purchases-products-tokens androidpubli
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_name: $package_name, product_id: $product_id, token_arg: $token_arg} | format pattern "/androidpublisher/v3/applications/{package_name}/purchases/products/{product_id}/tokens/{token_arg}:acknowledge") $qp)
-  let body = {"developerPayload": $developer_payload} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name), product_id: (encode-path-segment $product_id), token_arg: (encode-path-segment $token_arg)} | format pattern "/androidpublisher/v3/applications/{package_name}/purchases/products/{product_id}/tokens/{token_arg}:acknowledge") $qp)
+  let req_body = {"developerPayload": $developer_payload} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Consumes a purchase for an inapp item.
 #
 # POST /androidpublisher/v3/applications/{packageName}/purchases/products/{productId}/tokens/{token}:consume
 # operationId: androidpublisher.purchases.products.consume
-export def "androidpublisher-applications-purchases-products-tokens androidpublisherpurchasesproductsconsume" [
+export def "androidpublisher-applications-purchases-products-tokens create-consume" [
   package_name: string
   product_id: string
   token_arg: string
@@ -2215,7 +2225,7 @@ export def "androidpublisher-applications-purchases-products-tokens androidpubli
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_name: $package_name, product_id: $product_id, token_arg: $token_arg} | format pattern "/androidpublisher/v3/applications/{package_name}/purchases/products/{product_id}/tokens/{token_arg}:consume") $qp)
+  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name), product_id: (encode-path-segment $product_id), token_arg: (encode-path-segment $token_arg)} | format pattern "/androidpublisher/v3/applications/{package_name}/purchases/products/{product_id}/tokens/{token_arg}:consume") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2225,7 +2235,7 @@ export def "androidpublisher-applications-purchases-products-tokens androidpubli
 #
 # GET /androidpublisher/v3/applications/{packageName}/purchases/subscriptions/{subscriptionId}/tokens/{token}
 # operationId: androidpublisher.purchases.subscriptions.get
-export def "androidpublisher-applications-purchases-subscriptions-tokens androidpublisherpurchasessubscriptionsget" [
+export def "androidpublisher-applications-purchases-subscriptions-tokens get" [
   package_name: string
   subscription_id: string
   token_arg: string
@@ -2252,7 +2262,7 @@ export def "androidpublisher-applications-purchases-subscriptions-tokens android
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_name: $package_name, subscription_id: $subscription_id, token_arg: $token_arg} | format pattern "/androidpublisher/v3/applications/{package_name}/purchases/subscriptions/{subscription_id}/tokens/{token_arg}") $qp)
+  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name), subscription_id: (encode-path-segment $subscription_id), token_arg: (encode-path-segment $token_arg)} | format pattern "/androidpublisher/v3/applications/{package_name}/purchases/subscriptions/{subscription_id}/tokens/{token_arg}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2262,7 +2272,7 @@ export def "androidpublisher-applications-purchases-subscriptions-tokens android
 #
 # POST /androidpublisher/v3/applications/{packageName}/purchases/subscriptions/{subscriptionId}/tokens/{token}:acknowledge
 # operationId: androidpublisher.purchases.subscriptions.acknowledge
-export def "androidpublisher-applications-purchases-subscriptions-tokens androidpublisherpurchasessubscriptionsacknowledge" [
+export def "androidpublisher-applications-purchases-subscriptions-tokens create-acknowledge" [
   package_name: string
   subscription_id: string
   token_arg: string
@@ -2291,19 +2301,19 @@ export def "androidpublisher-applications-purchases-subscriptions-tokens android
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_name: $package_name, subscription_id: $subscription_id, token_arg: $token_arg} | format pattern "/androidpublisher/v3/applications/{package_name}/purchases/subscriptions/{subscription_id}/tokens/{token_arg}:acknowledge") $qp)
-  let body = {"developerPayload": $developer_payload} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name), subscription_id: (encode-path-segment $subscription_id), token_arg: (encode-path-segment $token_arg)} | format pattern "/androidpublisher/v3/applications/{package_name}/purchases/subscriptions/{subscription_id}/tokens/{token_arg}:acknowledge") $qp)
+  let req_body = {"developerPayload": $developer_payload} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Cancels a user's subscription purchase. The subscription remains valid until its expiration time.
 #
 # POST /androidpublisher/v3/applications/{packageName}/purchases/subscriptions/{subscriptionId}/tokens/{token}:cancel
 # operationId: androidpublisher.purchases.subscriptions.cancel
-export def "androidpublisher-applications-purchases-subscriptions-tokens androidpublisherpurchasessubscriptionscancel" [
+export def "androidpublisher-applications-purchases-subscriptions-tokens cancel" [
   package_name: string
   subscription_id: string
   token_arg: string
@@ -2330,7 +2340,7 @@ export def "androidpublisher-applications-purchases-subscriptions-tokens android
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_name: $package_name, subscription_id: $subscription_id, token_arg: $token_arg} | format pattern "/androidpublisher/v3/applications/{package_name}/purchases/subscriptions/{subscription_id}/tokens/{token_arg}:cancel") $qp)
+  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name), subscription_id: (encode-path-segment $subscription_id), token_arg: (encode-path-segment $token_arg)} | format pattern "/androidpublisher/v3/applications/{package_name}/purchases/subscriptions/{subscription_id}/tokens/{token_arg}:cancel") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2341,7 +2351,7 @@ export def "androidpublisher-applications-purchases-subscriptions-tokens android
 # POST /androidpublisher/v3/applications/{packageName}/purchases/subscriptions/{subscriptionId}/tokens/{token}:defer
 # operationId: androidpublisher.purchases.subscriptions.defer
 # --deferralInfo shape: {desiredExpiryTimeMillis?: string, expectedExpiryTimeMillis?: string}
-export def "androidpublisher-applications-purchases-subscriptions-tokens androidpublisherpurchasessubscriptionsdefer" [
+export def "androidpublisher-applications-purchases-subscriptions-tokens create-defer" [
   package_name: string
   subscription_id: string
   token_arg: string
@@ -2370,19 +2380,19 @@ export def "androidpublisher-applications-purchases-subscriptions-tokens android
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_name: $package_name, subscription_id: $subscription_id, token_arg: $token_arg} | format pattern "/androidpublisher/v3/applications/{package_name}/purchases/subscriptions/{subscription_id}/tokens/{token_arg}:defer") $qp)
-  let body = {"deferralInfo": $deferral_info} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name), subscription_id: (encode-path-segment $subscription_id), token_arg: (encode-path-segment $token_arg)} | format pattern "/androidpublisher/v3/applications/{package_name}/purchases/subscriptions/{subscription_id}/tokens/{token_arg}:defer") $qp)
+  let req_body = {"deferralInfo": $deferral_info} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Refunds a user's subscription purchase, but the subscription remains valid until its expiration time and it will continue to recur.
 #
 # POST /androidpublisher/v3/applications/{packageName}/purchases/subscriptions/{subscriptionId}/tokens/{token}:refund
 # operationId: androidpublisher.purchases.subscriptions.refund
-export def "androidpublisher-applications-purchases-subscriptions-tokens androidpublisherpurchasessubscriptionsrefund" [
+export def "androidpublisher-applications-purchases-subscriptions-tokens create-refund" [
   package_name: string
   subscription_id: string
   token_arg: string
@@ -2409,7 +2419,7 @@ export def "androidpublisher-applications-purchases-subscriptions-tokens android
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_name: $package_name, subscription_id: $subscription_id, token_arg: $token_arg} | format pattern "/androidpublisher/v3/applications/{package_name}/purchases/subscriptions/{subscription_id}/tokens/{token_arg}:refund") $qp)
+  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name), subscription_id: (encode-path-segment $subscription_id), token_arg: (encode-path-segment $token_arg)} | format pattern "/androidpublisher/v3/applications/{package_name}/purchases/subscriptions/{subscription_id}/tokens/{token_arg}:refund") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2419,7 +2429,7 @@ export def "androidpublisher-applications-purchases-subscriptions-tokens android
 #
 # POST /androidpublisher/v3/applications/{packageName}/purchases/subscriptions/{subscriptionId}/tokens/{token}:revoke
 # operationId: androidpublisher.purchases.subscriptions.revoke
-export def "androidpublisher-applications-purchases-subscriptions-tokens androidpublisherpurchasessubscriptionsrevoke" [
+export def "androidpublisher-applications-purchases-subscriptions-tokens delete" [
   package_name: string
   subscription_id: string
   token_arg: string
@@ -2446,7 +2456,7 @@ export def "androidpublisher-applications-purchases-subscriptions-tokens android
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_name: $package_name, subscription_id: $subscription_id, token_arg: $token_arg} | format pattern "/androidpublisher/v3/applications/{package_name}/purchases/subscriptions/{subscription_id}/tokens/{token_arg}:revoke") $qp)
+  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name), subscription_id: (encode-path-segment $subscription_id), token_arg: (encode-path-segment $token_arg)} | format pattern "/androidpublisher/v3/applications/{package_name}/purchases/subscriptions/{subscription_id}/tokens/{token_arg}:revoke") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2456,7 +2466,7 @@ export def "androidpublisher-applications-purchases-subscriptions-tokens android
 #
 # GET /androidpublisher/v3/applications/{packageName}/purchases/subscriptionsv2/tokens/{token}
 # operationId: androidpublisher.purchases.subscriptionsv2.get
-export def "androidpublisher-applications-purchases-subscriptionsv2-tokens androidpublisherpurchasessubscriptionsv2get" [
+export def "androidpublisher-applications-purchases-subscriptionsv2-tokens get" [
   package_name: string
   token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2482,7 +2492,7 @@ export def "androidpublisher-applications-purchases-subscriptionsv2-tokens andro
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_name: $package_name, token_arg: $token_arg} | format pattern "/androidpublisher/v3/applications/{package_name}/purchases/subscriptionsv2/tokens/{token_arg}") $qp)
+  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name), token_arg: (encode-path-segment $token_arg)} | format pattern "/androidpublisher/v3/applications/{package_name}/purchases/subscriptionsv2/tokens/{token_arg}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2492,7 +2502,7 @@ export def "androidpublisher-applications-purchases-subscriptionsv2-tokens andro
 #
 # GET /androidpublisher/v3/applications/{packageName}/purchases/voidedpurchases
 # operationId: androidpublisher.purchases.voidedpurchases.list
-export def "androidpublisher-applications-purchases-voidedpurchases androidpublisherpurchasesvoidedpurchaseslist" [
+export def "androidpublisher-applications-purchases-voidedpurchases list" [
   package_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2523,7 +2533,7 @@ export def "androidpublisher-applications-purchases-voidedpurchases androidpubli
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "endTime" $end_time "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "startIndex" $start_index "scalar") (serialize-qp "startTime" $start_time "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_name: $package_name} | format pattern "/androidpublisher/v3/applications/{package_name}/purchases/voidedpurchases") $qp)
+  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name)} | format pattern "/androidpublisher/v3/applications/{package_name}/purchases/voidedpurchases") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2533,7 +2543,7 @@ export def "androidpublisher-applications-purchases-voidedpurchases androidpubli
 #
 # GET /androidpublisher/v3/applications/{packageName}/reviews
 # operationId: androidpublisher.reviews.list
-export def "androidpublisher-applications-reviews androidpublisherreviewslist" [
+export def "androidpublisher-applications-reviews list" [
   package_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2562,7 +2572,7 @@ export def "androidpublisher-applications-reviews androidpublisherreviewslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "startIndex" $start_index "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "translationLanguage" $translation_language "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_name: $package_name} | format pattern "/androidpublisher/v3/applications/{package_name}/reviews") $qp)
+  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name)} | format pattern "/androidpublisher/v3/applications/{package_name}/reviews") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2572,7 +2582,7 @@ export def "androidpublisher-applications-reviews androidpublisherreviewslist" [
 #
 # GET /androidpublisher/v3/applications/{packageName}/reviews/{reviewId}
 # operationId: androidpublisher.reviews.get
-export def "androidpublisher-applications-reviews androidpublisherreviewsget" [
+export def "androidpublisher-applications-reviews get" [
   package_name: string
   review_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2599,7 +2609,7 @@ export def "androidpublisher-applications-reviews androidpublisherreviewsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "translationLanguage" $translation_language "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_name: $package_name, review_id: $review_id} | format pattern "/androidpublisher/v3/applications/{package_name}/reviews/{review_id}") $qp)
+  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name), review_id: (encode-path-segment $review_id)} | format pattern "/androidpublisher/v3/applications/{package_name}/reviews/{review_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2609,7 +2619,7 @@ export def "androidpublisher-applications-reviews androidpublisherreviewsget" [
 #
 # POST /androidpublisher/v3/applications/{packageName}/reviews/{reviewId}:reply
 # operationId: androidpublisher.reviews.reply
-export def "androidpublisher-applications-reviews androidpublisherreviewsreply" [
+export def "androidpublisher-applications-reviews create-reply" [
   package_name: string
   review_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2637,19 +2647,19 @@ export def "androidpublisher-applications-reviews androidpublisherreviewsreply" 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_name: $package_name, review_id: $review_id} | format pattern "/androidpublisher/v3/applications/{package_name}/reviews/{review_id}:reply") $qp)
-  let body = {"replyText": $reply_text} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name), review_id: (encode-path-segment $review_id)} | format pattern "/androidpublisher/v3/applications/{package_name}/reviews/{review_id}:reply") $qp)
+  let req_body = {"replyText": $reply_text} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists all subscriptions under a given app.
 #
 # GET /androidpublisher/v3/applications/{packageName}/subscriptions
 # operationId: androidpublisher.monetization.subscriptions.list
-export def "androidpublisher-applications-subscriptions androidpublishermonetizationsubscriptionslist" [
+export def "androidpublisher-applications-subscriptions list" [
   package_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2677,7 +2687,7 @@ export def "androidpublisher-applications-subscriptions androidpublishermonetiza
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "showArchived" $show_archived "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_name: $package_name} | format pattern "/androidpublisher/v3/applications/{package_name}/subscriptions") $qp)
+  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name)} | format pattern "/androidpublisher/v3/applications/{package_name}/subscriptions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2688,9 +2698,9 @@ export def "androidpublisher-applications-subscriptions androidpublishermonetiza
 # POST /androidpublisher/v3/applications/{packageName}/subscriptions
 # operationId: androidpublisher.monetization.subscriptions.create
 # --basePlans item shape: {autoRenewingBasePlanType?: record, basePlanId?: string, offerTags?: list, otherRegionsConfig?: record, prepaidBasePlanType?: record, regionalConfigs?: list}
-# --listings item shape: {benefits?: list, description?: string, languageCode?: string, title?: string}
+# --listings item shape: {benefits?: list<string>, description?: string, languageCode?: string, title?: string}
 # --taxAndComplianceSettings shape: {eeaWithdrawalRightType?: "WITHDRAWAL_RIGHT_TYPE_UNSPECIFIED"|"WITHDRAWAL_RIGHT_DIGITAL_CONTENT"|"WITHDRAWAL_RIGHT_SERVICE", taxRateInfoByRegionCode?: record}
-export def "androidpublisher-applications-subscriptions androidpublishermonetizationsubscriptionscreate" [
+export def "androidpublisher-applications-subscriptions create" [
   package_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2714,7 +2724,7 @@ export def "androidpublisher-applications-subscriptions androidpublishermonetiza
   --product-id: string # Required. The ID to use for the subscription. For the requirements on this format, see the documentation of the product_id field on the Subscription resource.
   --regions-version-version: string # Required. A string representing version of the available regions being used for the specified resource. The current version is 2022/02.
   --base-plans: list # The set of base plans for this subscription. Represents the prices and duration of the subscription if no other offers apply. — item shape: {autoRenewingBasePlanType?: record, basePlanId?: string, offerTags?: list, otherRegionsConfig?: record, prepaidBasePlanType?: record, regionalConfigs?: list}
-  --listings: list # Required. List of localized listings for this subscription. Must contain at least an entry for the default language of the parent app. — item shape: {benefits?: list, description?: string, languageCode?: string, title?: string}
+  --listings: list # Required. List of localized listings for this subscription. Must contain at least an entry for the default language of the parent app. — item shape: {benefits?: list<string>, description?: string, languageCode?: string, title?: string}
   --body-package-name: string # Immutable. Package name of the parent app.
   --product-id: string # Immutable. Unique product ID of the product. Unique within the parent app. Product IDs must be composed of lower-case letters (a-z), numbers (0-9), underscores (_) and dots (.). It must start with a lower-case letter or number, and be between 1 and 40 (inclusive) characters in length.
   --tax-and-compliance-settings: record # Details about taxation, Google Play policy and legal compliance for subscription products. — shape: {eeaWithdrawalRightType?: "WITHDRAWAL_RIGHT_TYPE_UNSPECIFIED"|"WITHDRAWAL_RIGHT_DIGITAL_CONTENT"|"WITHDRAWAL_RIGHT_SERVICE", taxRateInfoByRegionCode?: record}
@@ -2723,19 +2733,19 @@ export def "androidpublisher-applications-subscriptions androidpublishermonetiza
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "productId" $product_id "scalar") (serialize-qp "regionsVersion.version" $regions_version_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_name: $package_name} | format pattern "/androidpublisher/v3/applications/{package_name}/subscriptions") $qp)
-  let body = {"basePlans": $base_plans, "listings": $listings, "packageName": $body_package_name, "productId": $product_id, "taxAndComplianceSettings": $tax_and_compliance_settings} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name)} | format pattern "/androidpublisher/v3/applications/{package_name}/subscriptions") $qp)
+  let req_body = {"basePlans": $base_plans, "listings": $listings, "packageName": $body_package_name, "productId": $product_id, "taxAndComplianceSettings": $tax_and_compliance_settings} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes a subscription. A subscription can only be deleted if it has never had a base plan published.
 #
 # DELETE /androidpublisher/v3/applications/{packageName}/subscriptions/{productId}
 # operationId: androidpublisher.monetization.subscriptions.delete
-export def "androidpublisher-applications-subscriptions androidpublishermonetizationsubscriptionsdelete" [
+export def "androidpublisher-applications-subscriptions delete" [
   package_name: string
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2761,7 +2771,7 @@ export def "androidpublisher-applications-subscriptions androidpublishermonetiza
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_name: $package_name, product_id: $product_id} | format pattern "/androidpublisher/v3/applications/{package_name}/subscriptions/{product_id}") $qp)
+  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name), product_id: (encode-path-segment $product_id)} | format pattern "/androidpublisher/v3/applications/{package_name}/subscriptions/{product_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2771,7 +2781,7 @@ export def "androidpublisher-applications-subscriptions androidpublishermonetiza
 #
 # GET /androidpublisher/v3/applications/{packageName}/subscriptions/{productId}
 # operationId: androidpublisher.monetization.subscriptions.get
-export def "androidpublisher-applications-subscriptions androidpublishermonetizationsubscriptionsget" [
+export def "androidpublisher-applications-subscriptions get" [
   package_name: string
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2797,7 +2807,7 @@ export def "androidpublisher-applications-subscriptions androidpublishermonetiza
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_name: $package_name, product_id: $product_id} | format pattern "/androidpublisher/v3/applications/{package_name}/subscriptions/{product_id}") $qp)
+  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name), product_id: (encode-path-segment $product_id)} | format pattern "/androidpublisher/v3/applications/{package_name}/subscriptions/{product_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2808,9 +2818,9 @@ export def "androidpublisher-applications-subscriptions androidpublishermonetiza
 # PATCH /androidpublisher/v3/applications/{packageName}/subscriptions/{productId}
 # operationId: androidpublisher.monetization.subscriptions.patch
 # --basePlans item shape: {autoRenewingBasePlanType?: record, basePlanId?: string, offerTags?: list, otherRegionsConfig?: record, prepaidBasePlanType?: record, regionalConfigs?: list}
-# --listings item shape: {benefits?: list, description?: string, languageCode?: string, title?: string}
+# --listings item shape: {benefits?: list<string>, description?: string, languageCode?: string, title?: string}
 # --taxAndComplianceSettings shape: {eeaWithdrawalRightType?: "WITHDRAWAL_RIGHT_TYPE_UNSPECIFIED"|"WITHDRAWAL_RIGHT_DIGITAL_CONTENT"|"WITHDRAWAL_RIGHT_SERVICE", taxRateInfoByRegionCode?: record}
-export def "androidpublisher-applications-subscriptions androidpublishermonetizationsubscriptionspatch" [
+export def "androidpublisher-applications-subscriptions update" [
   package_name: string
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2835,7 +2845,7 @@ export def "androidpublisher-applications-subscriptions androidpublishermonetiza
   --regions-version-version: string # Required. A string representing version of the available regions being used for the specified resource. The current version is 2022/02.
   --update-mask: string # Required. The list of fields to be updated.
   --base-plans: list # The set of base plans for this subscription. Represents the prices and duration of the subscription if no other offers apply. — item shape: {autoRenewingBasePlanType?: record, basePlanId?: string, offerTags?: list, otherRegionsConfig?: record, prepaidBasePlanType?: record, regionalConfigs?: list}
-  --listings: list # Required. List of localized listings for this subscription. Must contain at least an entry for the default language of the parent app. — item shape: {benefits?: list, description?: string, languageCode?: string, title?: string}
+  --listings: list # Required. List of localized listings for this subscription. Must contain at least an entry for the default language of the parent app. — item shape: {benefits?: list<string>, description?: string, languageCode?: string, title?: string}
   --body-package-name: string # Immutable. Package name of the parent app.
   --body-product-id: string # Immutable. Unique product ID of the product. Unique within the parent app. Product IDs must be composed of lower-case letters (a-z), numbers (0-9), underscores (_) and dots (.). It must start with a lower-case letter or number, and be between 1 and 40 (inclusive) characters in length.
   --tax-and-compliance-settings: record # Details about taxation, Google Play policy and legal compliance for subscription products. — shape: {eeaWithdrawalRightType?: "WITHDRAWAL_RIGHT_TYPE_UNSPECIFIED"|"WITHDRAWAL_RIGHT_DIGITAL_CONTENT"|"WITHDRAWAL_RIGHT_SERVICE", taxRateInfoByRegionCode?: record}
@@ -2844,19 +2854,19 @@ export def "androidpublisher-applications-subscriptions androidpublishermonetiza
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "regionsVersion.version" $regions_version_version "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_name: $package_name, product_id: $product_id} | format pattern "/androidpublisher/v3/applications/{package_name}/subscriptions/{product_id}") $qp)
-  let body = {"basePlans": $base_plans, "listings": $listings, "packageName": $body_package_name, "productId": $body_product_id, "taxAndComplianceSettings": $tax_and_compliance_settings} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name), product_id: (encode-path-segment $product_id)} | format pattern "/androidpublisher/v3/applications/{package_name}/subscriptions/{product_id}") $qp)
+  let req_body = {"basePlans": $base_plans, "listings": $listings, "packageName": $body_package_name, "productId": $body_product_id, "taxAndComplianceSettings": $tax_and_compliance_settings} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes a base plan. Can only be done for draft base plans. This action is irreversible.
 #
 # DELETE /androidpublisher/v3/applications/{packageName}/subscriptions/{productId}/basePlans/{basePlanId}
 # operationId: androidpublisher.monetization.subscriptions.basePlans.delete
-export def "androidpublisher-applications-subscriptions-base-plans androidpublishermonetizationsubscriptionsbasePlansdelete" [
+export def "androidpublisher-applications-subscriptions-base-plans delete" [
   package_name: string
   product_id: string
   base_plan_id: string
@@ -2883,7 +2893,7 @@ export def "androidpublisher-applications-subscriptions-base-plans androidpublis
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_name: $package_name, product_id: $product_id, base_plan_id: $base_plan_id} | format pattern "/androidpublisher/v3/applications/{package_name}/subscriptions/{product_id}/basePlans/{base_plan_id}") $qp)
+  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name), product_id: (encode-path-segment $product_id), base_plan_id: (encode-path-segment $base_plan_id)} | format pattern "/androidpublisher/v3/applications/{package_name}/subscriptions/{product_id}/basePlans/{base_plan_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2893,7 +2903,7 @@ export def "androidpublisher-applications-subscriptions-base-plans androidpublis
 #
 # GET /androidpublisher/v3/applications/{packageName}/subscriptions/{productId}/basePlans/{basePlanId}/offers
 # operationId: androidpublisher.monetization.subscriptions.basePlans.offers.list
-export def "androidpublisher-applications-subscriptions-base-plans-offers androidpublishermonetizationsubscriptionsbasePlansofferslist" [
+export def "androidpublisher-applications-subscriptions-base-plans-offers list" [
   package_name: string
   product_id: string
   base_plan_id: string
@@ -2922,7 +2932,7 @@ export def "androidpublisher-applications-subscriptions-base-plans-offers androi
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_name: $package_name, product_id: $product_id, base_plan_id: $base_plan_id} | format pattern "/androidpublisher/v3/applications/{package_name}/subscriptions/{product_id}/basePlans/{base_plan_id}/offers") $qp)
+  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name), product_id: (encode-path-segment $product_id), base_plan_id: (encode-path-segment $base_plan_id)} | format pattern "/androidpublisher/v3/applications/{package_name}/subscriptions/{product_id}/basePlans/{base_plan_id}/offers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2937,7 +2947,7 @@ export def "androidpublisher-applications-subscriptions-base-plans-offers androi
 # --phases item shape: {duration?: string, otherRegionsConfig?: record, recurrenceCount?: int, regionalConfigs?: list}
 # --regionalConfigs item shape: {newSubscriberAvailability?: bool, regionCode?: string}
 # --targeting shape: {acquisitionRule?: record, upgradeRule?: record}
-export def "androidpublisher-applications-subscriptions-base-plans-offers androidpublishermonetizationsubscriptionsbasePlansofferscreate" [
+export def "androidpublisher-applications-subscriptions-base-plans-offers create" [
   package_name: string
   product_id: string
   base_plan_id: string
@@ -2976,19 +2986,19 @@ export def "androidpublisher-applications-subscriptions-base-plans-offers androi
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "offerId" $offer_id "scalar") (serialize-qp "regionsVersion.version" $regions_version_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_name: $package_name, product_id: $product_id, base_plan_id: $base_plan_id} | format pattern "/androidpublisher/v3/applications/{package_name}/subscriptions/{product_id}/basePlans/{base_plan_id}/offers") $qp)
-  let body = {"basePlanId": $body_base_plan_id, "offerId": $offer_id, "offerTags": $offer_tags, "otherRegionsConfig": $other_regions_config, "packageName": $body_package_name, "phases": $phases, "productId": $body_product_id, "regionalConfigs": $regional_configs, "targeting": $targeting} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name), product_id: (encode-path-segment $product_id), base_plan_id: (encode-path-segment $base_plan_id)} | format pattern "/androidpublisher/v3/applications/{package_name}/subscriptions/{product_id}/basePlans/{base_plan_id}/offers") $qp)
+  let req_body = {"basePlanId": $body_base_plan_id, "offerId": $offer_id, "offerTags": $offer_tags, "otherRegionsConfig": $other_regions_config, "packageName": $body_package_name, "phases": $phases, "productId": $body_product_id, "regionalConfigs": $regional_configs, "targeting": $targeting} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes a subscription offer. Can only be done for draft offers. This action is irreversible.
 #
 # DELETE /androidpublisher/v3/applications/{packageName}/subscriptions/{productId}/basePlans/{basePlanId}/offers/{offerId}
 # operationId: androidpublisher.monetization.subscriptions.basePlans.offers.delete
-export def "androidpublisher-applications-subscriptions-base-plans-offers androidpublishermonetizationsubscriptionsbasePlansoffersdelete" [
+export def "androidpublisher-applications-subscriptions-base-plans-offers delete" [
   package_name: string
   product_id: string
   base_plan_id: string
@@ -3016,7 +3026,7 @@ export def "androidpublisher-applications-subscriptions-base-plans-offers androi
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_name: $package_name, product_id: $product_id, base_plan_id: $base_plan_id, offer_id: $offer_id} | format pattern "/androidpublisher/v3/applications/{package_name}/subscriptions/{product_id}/basePlans/{base_plan_id}/offers/{offer_id}") $qp)
+  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name), product_id: (encode-path-segment $product_id), base_plan_id: (encode-path-segment $base_plan_id), offer_id: (encode-path-segment $offer_id)} | format pattern "/androidpublisher/v3/applications/{package_name}/subscriptions/{product_id}/basePlans/{base_plan_id}/offers/{offer_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3026,7 +3036,7 @@ export def "androidpublisher-applications-subscriptions-base-plans-offers androi
 #
 # GET /androidpublisher/v3/applications/{packageName}/subscriptions/{productId}/basePlans/{basePlanId}/offers/{offerId}
 # operationId: androidpublisher.monetization.subscriptions.basePlans.offers.get
-export def "androidpublisher-applications-subscriptions-base-plans-offers androidpublishermonetizationsubscriptionsbasePlansoffersget" [
+export def "androidpublisher-applications-subscriptions-base-plans-offers get" [
   package_name: string
   product_id: string
   base_plan_id: string
@@ -3054,7 +3064,7 @@ export def "androidpublisher-applications-subscriptions-base-plans-offers androi
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_name: $package_name, product_id: $product_id, base_plan_id: $base_plan_id, offer_id: $offer_id} | format pattern "/androidpublisher/v3/applications/{package_name}/subscriptions/{product_id}/basePlans/{base_plan_id}/offers/{offer_id}") $qp)
+  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name), product_id: (encode-path-segment $product_id), base_plan_id: (encode-path-segment $base_plan_id), offer_id: (encode-path-segment $offer_id)} | format pattern "/androidpublisher/v3/applications/{package_name}/subscriptions/{product_id}/basePlans/{base_plan_id}/offers/{offer_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3069,7 +3079,7 @@ export def "androidpublisher-applications-subscriptions-base-plans-offers androi
 # --phases item shape: {duration?: string, otherRegionsConfig?: record, recurrenceCount?: int, regionalConfigs?: list}
 # --regionalConfigs item shape: {newSubscriberAvailability?: bool, regionCode?: string}
 # --targeting shape: {acquisitionRule?: record, upgradeRule?: record}
-export def "androidpublisher-applications-subscriptions-base-plans-offers androidpublishermonetizationsubscriptionsbasePlansofferspatch" [
+export def "androidpublisher-applications-subscriptions-base-plans-offers update" [
   package_name: string
   product_id: string
   base_plan_id: string
@@ -3109,19 +3119,19 @@ export def "androidpublisher-applications-subscriptions-base-plans-offers androi
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "regionsVersion.version" $regions_version_version "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_name: $package_name, product_id: $product_id, base_plan_id: $base_plan_id, offer_id: $offer_id} | format pattern "/androidpublisher/v3/applications/{package_name}/subscriptions/{product_id}/basePlans/{base_plan_id}/offers/{offer_id}") $qp)
-  let body = {"basePlanId": $body_base_plan_id, "offerId": $body_offer_id, "offerTags": $offer_tags, "otherRegionsConfig": $other_regions_config, "packageName": $body_package_name, "phases": $phases, "productId": $body_product_id, "regionalConfigs": $regional_configs, "targeting": $targeting} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name), product_id: (encode-path-segment $product_id), base_plan_id: (encode-path-segment $base_plan_id), offer_id: (encode-path-segment $offer_id)} | format pattern "/androidpublisher/v3/applications/{package_name}/subscriptions/{product_id}/basePlans/{base_plan_id}/offers/{offer_id}") $qp)
+  let req_body = {"basePlanId": $body_base_plan_id, "offerId": $body_offer_id, "offerTags": $offer_tags, "otherRegionsConfig": $other_regions_config, "packageName": $body_package_name, "phases": $phases, "productId": $body_product_id, "regionalConfigs": $regional_configs, "targeting": $targeting} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Activates a subscription offer. Once activated, subscription offers will be available to new subscribers.
 #
 # POST /androidpublisher/v3/applications/{packageName}/subscriptions/{productId}/basePlans/{basePlanId}/offers/{offerId}:activate
 # operationId: androidpublisher.monetization.subscriptions.basePlans.offers.activate
-export def "androidpublisher-applications-subscriptions-base-plans-offers androidpublishermonetizationsubscriptionsbasePlansoffersactivate" [
+export def "androidpublisher-applications-subscriptions-base-plans-offers create-activate" [
   package_name: string
   product_id: string
   base_plan_id: string
@@ -3151,18 +3161,19 @@ export def "androidpublisher-applications-subscriptions-base-plans-offers androi
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_name: $package_name, product_id: $product_id, base_plan_id: $base_plan_id, offer_id: $offer_id} | format pattern "/androidpublisher/v3/applications/{package_name}/subscriptions/{product_id}/basePlans/{base_plan_id}/offers/{offer_id}:activate") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name), product_id: (encode-path-segment $product_id), base_plan_id: (encode-path-segment $base_plan_id), offer_id: (encode-path-segment $offer_id)} | format pattern "/androidpublisher/v3/applications/{package_name}/subscriptions/{product_id}/basePlans/{base_plan_id}/offers/{offer_id}:activate") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deactivates a subscription offer. Once deactivated, existing subscribers will maintain their subscription, but the offer will become unavailable to new subscribers.
 #
 # POST /androidpublisher/v3/applications/{packageName}/subscriptions/{productId}/basePlans/{basePlanId}/offers/{offerId}:deactivate
 # operationId: androidpublisher.monetization.subscriptions.basePlans.offers.deactivate
-export def "androidpublisher-applications-subscriptions-base-plans-offers androidpublishermonetizationsubscriptionsbasePlansoffersdeactivate" [
+export def "androidpublisher-applications-subscriptions-base-plans-offers create-deactivate" [
   package_name: string
   product_id: string
   base_plan_id: string
@@ -3192,18 +3203,19 @@ export def "androidpublisher-applications-subscriptions-base-plans-offers androi
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_name: $package_name, product_id: $product_id, base_plan_id: $base_plan_id, offer_id: $offer_id} | format pattern "/androidpublisher/v3/applications/{package_name}/subscriptions/{product_id}/basePlans/{base_plan_id}/offers/{offer_id}:deactivate") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name), product_id: (encode-path-segment $product_id), base_plan_id: (encode-path-segment $base_plan_id), offer_id: (encode-path-segment $offer_id)} | format pattern "/androidpublisher/v3/applications/{package_name}/subscriptions/{product_id}/basePlans/{base_plan_id}/offers/{offer_id}:deactivate") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Activates a base plan. Once activated, base plans will be available to new subscribers.
 #
 # POST /androidpublisher/v3/applications/{packageName}/subscriptions/{productId}/basePlans/{basePlanId}:activate
 # operationId: androidpublisher.monetization.subscriptions.basePlans.activate
-export def "androidpublisher-applications-subscriptions-base-plans androidpublishermonetizationsubscriptionsbasePlansactivate" [
+export def "androidpublisher-applications-subscriptions-base-plans create-activate" [
   package_name: string
   product_id: string
   base_plan_id: string
@@ -3232,18 +3244,19 @@ export def "androidpublisher-applications-subscriptions-base-plans androidpublis
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_name: $package_name, product_id: $product_id, base_plan_id: $base_plan_id} | format pattern "/androidpublisher/v3/applications/{package_name}/subscriptions/{product_id}/basePlans/{base_plan_id}:activate") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name), product_id: (encode-path-segment $product_id), base_plan_id: (encode-path-segment $base_plan_id)} | format pattern "/androidpublisher/v3/applications/{package_name}/subscriptions/{product_id}/basePlans/{base_plan_id}:activate") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deactivates a base plan. Once deactivated, the base plan will become unavailable to new subscribers, but existing subscribers will maintain their subscription
 #
 # POST /androidpublisher/v3/applications/{packageName}/subscriptions/{productId}/basePlans/{basePlanId}:deactivate
 # operationId: androidpublisher.monetization.subscriptions.basePlans.deactivate
-export def "androidpublisher-applications-subscriptions-base-plans androidpublishermonetizationsubscriptionsbasePlansdeactivate" [
+export def "androidpublisher-applications-subscriptions-base-plans create-deactivate" [
   package_name: string
   product_id: string
   base_plan_id: string
@@ -3272,11 +3285,12 @@ export def "androidpublisher-applications-subscriptions-base-plans androidpublis
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_name: $package_name, product_id: $product_id, base_plan_id: $base_plan_id} | format pattern "/androidpublisher/v3/applications/{package_name}/subscriptions/{product_id}/basePlans/{base_plan_id}:deactivate") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name), product_id: (encode-path-segment $product_id), base_plan_id: (encode-path-segment $base_plan_id)} | format pattern "/androidpublisher/v3/applications/{package_name}/subscriptions/{product_id}/basePlans/{base_plan_id}:deactivate") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Migrates subscribers who are receiving an historical subscription price to the currently-offered price for the specified region. Requests will cause price change notifications to be sent to users who are currently receiving an historical price older than the supplied timestamp. Subscribers who do not agree to the new price will have their subscription ended at the next renewal.
@@ -3285,7 +3299,7 @@ export def "androidpublisher-applications-subscriptions-base-plans androidpublis
 # operationId: androidpublisher.monetization.subscriptions.basePlans.migratePrices
 # --regionalPriceMigrations item shape: {oldestAllowedPriceVersionTime?: string, regionCode?: string}
 # --regionsVersion shape: {version?: string}
-export def "androidpublisher-applications-subscriptions-base-plans androidpublishermonetizationsubscriptionsbasePlansmigratePrices" [
+export def "androidpublisher-applications-subscriptions-base-plans create-migrate-prices" [
   package_name: string
   product_id: string
   base_plan_id: string
@@ -3315,19 +3329,19 @@ export def "androidpublisher-applications-subscriptions-base-plans androidpublis
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_name: $package_name, product_id: $product_id, base_plan_id: $base_plan_id} | format pattern "/androidpublisher/v3/applications/{package_name}/subscriptions/{product_id}/basePlans/{base_plan_id}:migratePrices") $qp)
-  let body = {"regionalPriceMigrations": $regional_price_migrations, "regionsVersion": $regions_version} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name), product_id: (encode-path-segment $product_id), base_plan_id: (encode-path-segment $base_plan_id)} | format pattern "/androidpublisher/v3/applications/{package_name}/subscriptions/{product_id}/basePlans/{base_plan_id}:migratePrices") $qp)
+  let req_body = {"regionalPriceMigrations": $regional_price_migrations, "regionsVersion": $regions_version} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Archives a subscription. Can only be done if at least one base plan was active in the past, and no base plan is available for new or existing subscribers currently. This action is irreversible, and the subscription ID will remain reserved.
 #
 # POST /androidpublisher/v3/applications/{packageName}/subscriptions/{productId}:archive
 # operationId: androidpublisher.monetization.subscriptions.archive
-export def "androidpublisher-applications-subscriptions androidpublishermonetizationsubscriptionsarchive" [
+export def "androidpublisher-applications-subscriptions archive" [
   package_name: string
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3355,18 +3369,19 @@ export def "androidpublisher-applications-subscriptions androidpublishermonetiza
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_name: $package_name, product_id: $product_id} | format pattern "/androidpublisher/v3/applications/{package_name}/subscriptions/{product_id}:archive") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name), product_id: (encode-path-segment $product_id)} | format pattern "/androidpublisher/v3/applications/{package_name}/subscriptions/{product_id}:archive") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns the list of previously created system APK variants.
 #
 # GET /androidpublisher/v3/applications/{packageName}/systemApks/{versionCode}/variants
 # operationId: androidpublisher.systemapks.variants.list
-export def "androidpublisher-applications-system-apks-variants androidpublishersystemapksvariantslist" [
+export def "androidpublisher-applications-system-apks-variants list" [
   package_name: string
   version_code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3392,7 +3407,7 @@ export def "androidpublisher-applications-system-apks-variants androidpublishers
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_name: $package_name, version_code: $version_code} | format pattern "/androidpublisher/v3/applications/{package_name}/systemApks/{version_code}/variants") $qp)
+  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name), version_code: (encode-path-segment $version_code)} | format pattern "/androidpublisher/v3/applications/{package_name}/systemApks/{version_code}/variants") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3402,8 +3417,8 @@ export def "androidpublisher-applications-system-apks-variants androidpublishers
 #
 # POST /androidpublisher/v3/applications/{packageName}/systemApks/{versionCode}/variants
 # operationId: androidpublisher.systemapks.variants.create
-# --deviceSpec shape: {screenDensity?: int, supportedAbis?: list, supportedLocales?: list}
-export def "androidpublisher-applications-system-apks-variants androidpublishersystemapksvariantscreate" [
+# --deviceSpec shape: {screenDensity?: int, supportedAbis?: list<string>, supportedLocales?: list<string>}
+export def "androidpublisher-applications-system-apks-variants create" [
   package_name: string
   version_code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3425,25 +3440,25 @@ export def "androidpublisher-applications-system-apks-variants androidpublishers
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --device-spec: record # The device spec used to generate a system APK. — shape: {screenDensity?: int, supportedAbis?: list, supportedLocales?: list}
+  --device-spec: record # The device spec used to generate a system APK. — shape: {screenDensity?: int, supportedAbis?: list<string>, supportedLocales?: list<string>}
 ]: any -> record<deviceSpec: record<screenDensity: int, supportedAbis: list<string>, supportedLocales: list<string>>, variantId: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_name: $package_name, version_code: $version_code} | format pattern "/androidpublisher/v3/applications/{package_name}/systemApks/{version_code}/variants") $qp)
-  let body = {"deviceSpec": $device_spec} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name), version_code: (encode-path-segment $version_code)} | format pattern "/androidpublisher/v3/applications/{package_name}/systemApks/{version_code}/variants") $qp)
+  let req_body = {"deviceSpec": $device_spec} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns a previously created system APK variant.
 #
 # GET /androidpublisher/v3/applications/{packageName}/systemApks/{versionCode}/variants/{variantId}
 # operationId: androidpublisher.systemapks.variants.get
-export def "androidpublisher-applications-system-apks-variants androidpublishersystemapksvariantsget" [
+export def "androidpublisher-applications-system-apks-variants get" [
   package_name: string
   version_code: string
   variant_id: int
@@ -3470,7 +3485,7 @@ export def "androidpublisher-applications-system-apks-variants androidpublishers
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_name: $package_name, version_code: $version_code, variant_id: $variant_id} | format pattern "/androidpublisher/v3/applications/{package_name}/systemApks/{version_code}/variants/{variant_id}") $qp)
+  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name), version_code: (encode-path-segment $version_code), variant_id: (encode-path-segment $variant_id)} | format pattern "/androidpublisher/v3/applications/{package_name}/systemApks/{version_code}/variants/{variant_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3480,7 +3495,7 @@ export def "androidpublisher-applications-system-apks-variants androidpublishers
 #
 # GET /androidpublisher/v3/applications/{packageName}/systemApks/{versionCode}/variants/{variantId}:download
 # operationId: androidpublisher.systemapks.variants.download
-export def "androidpublisher-applications-system-apks-variants androidpublishersystemapksvariantsdownload" [
+export def "androidpublisher-applications-system-apks-variants download" [
   package_name: string
   version_code: string
   variant_id: int
@@ -3507,7 +3522,7 @@ export def "androidpublisher-applications-system-apks-variants androidpublishers
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({package_name: $package_name, version_code: $version_code, variant_id: $variant_id} | format pattern "/androidpublisher/v3/applications/{package_name}/systemApks/{version_code}/variants/{variant_id}:download") $qp)
+  let full_url = (build-url $base ({package_name: (encode-path-segment $package_name), version_code: (encode-path-segment $version_code), variant_id: (encode-path-segment $variant_id)} | format pattern "/androidpublisher/v3/applications/{package_name}/systemApks/{version_code}/variants/{variant_id}:download") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3517,7 +3532,7 @@ export def "androidpublisher-applications-system-apks-variants androidpublishers
 #
 # DELETE /androidpublisher/v3/{name}
 # operationId: androidpublisher.users.delete
-export def "androidpublisher androidpublisherusersdelete" [
+export def "androidpublisher delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3542,7 +3557,7 @@ export def "androidpublisher androidpublisherusersdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/androidpublisher/v3/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/androidpublisher/v3/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3552,7 +3567,7 @@ export def "androidpublisher androidpublisherusersdelete" [
 #
 # GET /androidpublisher/v3/{name}
 # operationId: androidpublisher.externaltransactions.getexternaltransaction
-export def "androidpublisher androidpublisherexternaltransactionsgetexternaltransaction" [
+export def "androidpublisher get-getexternaltransaction" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3577,7 +3592,7 @@ export def "androidpublisher androidpublisherexternaltransactionsgetexternaltran
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/androidpublisher/v3/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/androidpublisher/v3/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3587,8 +3602,8 @@ export def "androidpublisher androidpublisherexternaltransactionsgetexternaltran
 #
 # PATCH /androidpublisher/v3/{name}
 # operationId: androidpublisher.users.patch
-# --grants item shape: {appLevelPermissions?: list, name?: string, packageName?: string}
-export def "androidpublisher androidpublisheruserspatch" [
+# --grants item shape: {appLevelPermissions?: list<string>, name?: string, packageName?: string}
+export def "androidpublisher update" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3610,7 +3625,7 @@ export def "androidpublisher androidpublisheruserspatch" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --update-mask: string # Optional. The list of fields to be updated.
-  --developer-account-permissions: list # Permissions for the user which apply across the developer account.
+  --developer-account-permissions: list<string> # Permissions for the user which apply across the developer account.
   --email: string # Immutable. The user's email address.
   --expiration-time: string # The time at which the user's access expires, if set. When setting this value, it must always be in the future. (format: google-datetime)
   --body-name: string # Required. Resource name for this user, following the pattern "developers/{developer}/users/{email}".
@@ -3619,12 +3634,12 @@ export def "androidpublisher androidpublisheruserspatch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/androidpublisher/v3/{name}") $qp)
-  let body = {"developerAccountPermissions": $developer_account_permissions, "email": $email, "expirationTime": $expiration_time, "name": $body_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/androidpublisher/v3/{name}") $qp)
+  let req_body = {"developerAccountPermissions": $developer_account_permissions, "email": $email, "expirationTime": $expiration_time, "name": $body_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Refunds or partially refunds an existing external transaction.
@@ -3632,7 +3647,7 @@ export def "androidpublisher androidpublisheruserspatch" [
 # POST /androidpublisher/v3/{name}:refund
 # operationId: androidpublisher.externaltransactions.refundexternaltransaction
 # --partialRefund shape: {refundId?: string, refundPreTaxAmount?: record}
-export def "androidpublisher androidpublisherexternaltransactionsrefundexternaltransaction" [
+export def "androidpublisher create-refundexternaltransaction" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3661,12 +3676,12 @@ export def "androidpublisher androidpublisherexternaltransactionsrefundexternalt
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/androidpublisher/v3/{name}:refund") $qp)
-  let body = {"fullRefund": $full_refund, "partialRefund": $partial_refund, "refundTime": $refund_time} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/androidpublisher/v3/{name}:refund") $qp)
+  let req_body = {"fullRefund": $full_refund, "partialRefund": $partial_refund, "refundTime": $refund_time} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Creates a new external transaction.
@@ -3680,7 +3695,7 @@ export def "androidpublisher androidpublisherexternaltransactionsrefundexternalt
 # --originalTaxAmount shape: {currency?: string, priceMicros?: string}
 # --recurringTransaction shape: {externalSubscription?: record, externalTransactionToken?: string, initialExternalTransactionId?: string}
 # --userTaxAddress shape: {regionCode?: string}
-export def "androidpublisher-external-transactions androidpublisherexternaltransactionscreateexternaltransaction" [
+export def "androidpublisher-external-transactions create-createexternaltransaction" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3716,19 +3731,19 @@ export def "androidpublisher-external-transactions androidpublisherexternaltrans
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "externalTransactionId" $external_transaction_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/androidpublisher/v3/{parent}/externalTransactions") $qp)
-  let body = {"currentPreTaxAmount": $current_pre_tax_amount, "currentTaxAmount": $current_tax_amount, "oneTimeTransaction": $one_time_transaction, "originalPreTaxAmount": $original_pre_tax_amount, "originalTaxAmount": $original_tax_amount, "recurringTransaction": $recurring_transaction, "testPurchase": $test_purchase, "transactionTime": $transaction_time, "userTaxAddress": $user_tax_address} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/androidpublisher/v3/{parent}/externalTransactions") $qp)
+  let req_body = {"currentPreTaxAmount": $current_pre_tax_amount, "currentTaxAmount": $current_tax_amount, "oneTimeTransaction": $one_time_transaction, "originalPreTaxAmount": $original_pre_tax_amount, "originalTaxAmount": $original_tax_amount, "recurringTransaction": $recurring_transaction, "testPurchase": $test_purchase, "transactionTime": $transaction_time, "userTaxAddress": $user_tax_address} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Grant access for a user to the given package.
 #
 # POST /androidpublisher/v3/{parent}/grants
 # operationId: androidpublisher.grants.create
-export def "androidpublisher-grants androidpublishergrantscreate" [
+export def "androidpublisher-grants create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3749,7 +3764,7 @@ export def "androidpublisher-grants androidpublishergrantscreate" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --app-level-permissions: list # The permissions granted to the user for this app.
+  --app-level-permissions: list<string> # The permissions granted to the user for this app.
   --name: string # Required. Resource name for this grant, following the pattern "developers/{developer}/users/{email}/grants/{package_name}". If this grant is for a draft app, the app ID will be used in this resource name instead of the package name.
   --package-name: string # Immutable. The package name of the app. This will be empty for draft apps.
 ]: any -> record<appLevelPermissions: list<string>, name: string, packageName: string> {
@@ -3757,19 +3772,19 @@ export def "androidpublisher-grants androidpublishergrantscreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/androidpublisher/v3/{parent}/grants") $qp)
-  let body = {"appLevelPermissions": $app_level_permissions, "name": $name, "packageName": $package_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/androidpublisher/v3/{parent}/grants") $qp)
+  let req_body = {"appLevelPermissions": $app_level_permissions, "name": $name, "packageName": $package_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists all users with access to a developer account.
 #
 # GET /androidpublisher/v3/{parent}/users
 # operationId: androidpublisher.users.list
-export def "androidpublisher-users androidpublisheruserslist" [
+export def "androidpublisher-users list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3796,7 +3811,7 @@ export def "androidpublisher-users androidpublisheruserslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/androidpublisher/v3/{parent}/users") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/androidpublisher/v3/{parent}/users") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3806,8 +3821,8 @@ export def "androidpublisher-users androidpublisheruserslist" [
 #
 # POST /androidpublisher/v3/{parent}/users
 # operationId: androidpublisher.users.create
-# --grants item shape: {appLevelPermissions?: list, name?: string, packageName?: string}
-export def "androidpublisher-users androidpublisheruserscreate" [
+# --grants item shape: {appLevelPermissions?: list<string>, name?: string, packageName?: string}
+export def "androidpublisher-users create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3828,7 +3843,7 @@ export def "androidpublisher-users androidpublisheruserscreate" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --developer-account-permissions: list # Permissions for the user which apply across the developer account.
+  --developer-account-permissions: list<string> # Permissions for the user which apply across the developer account.
   --email: string # Immutable. The user's email address.
   --expiration-time: string # The time at which the user's access expires, if set. When setting this value, it must always be in the future. (format: google-datetime)
   --name: string # Required. Resource name for this user, following the pattern "developers/{developer}/users/{email}".
@@ -3837,10 +3852,10 @@ export def "androidpublisher-users androidpublisheruserscreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/androidpublisher/v3/{parent}/users") $qp)
-  let body = {"developerAccountPermissions": $developer_account_permissions, "email": $email, "expirationTime": $expiration_time, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/androidpublisher/v3/{parent}/users") $qp)
+  let req_body = {"developerAccountPermissions": $developer_account_permissions, "email": $email, "expirationTime": $expiration_time, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

@@ -12,6 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
   match $scheme {
     "basic" => { {headers: {Authorization: $"Basic ($token_val)"}, query: ""} }
+    "basic-credentials" => { {headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: ""} }
     "none" => { {headers: {}, query: ""} }
     _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
   }
@@ -33,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
     "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
     _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -63,7 +73,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 }
 
 def base-url-completer [] { ["https://microvisor.twilio.com"] }
-def auth-scheme-completer [] { ["basic"] }
+def auth-scheme-completer [] { ["basic" "basic-credentials"] }
 
 
 # List all available API commands with their parameters
@@ -132,7 +142,7 @@ export def "apps-manifest get" [
 ]: nothing -> record<app_sid: string, encoded_bytes: string, hash: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://microvisor.twilio.com")
-  let full_url = (build-url $base ({app_sid: $app_sid} | format pattern "/v1/Apps/{app_sid}/Manifest"))
+  let full_url = (build-url $base ({app_sid: (encode-path-segment $app_sid)} | format pattern "/v1/Apps/{app_sid}/Manifest"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -155,7 +165,7 @@ export def "apps delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://microvisor.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/Apps/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Apps/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -178,7 +188,7 @@ export def "apps get" [
 ]: nothing -> record<account_sid: string, date_created: string, date_updated: string, hash: string, links: record, sid: string, unique_name: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://microvisor.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/Apps/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Apps/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -230,11 +240,12 @@ export def "configs create-account" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://microvisor.twilio.com")
   let full_url = (build-url $base "/v1/Configs")
-  let body = {"Key": $key, "Value": $value} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"Key": $key, "Value": $value} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Delete a config for an Account.
@@ -254,7 +265,7 @@ export def "configs delete-account" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://microvisor.twilio.com")
-  let full_url = (build-url $base ({key: $key} | format pattern "/v1/Configs/{key}"))
+  let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/v1/Configs/{key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -277,7 +288,7 @@ export def "configs get-account" [
 ]: nothing -> record<date_updated: string, key: string, url: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://microvisor.twilio.com")
-  let full_url = (build-url $base ({key: $key} | format pattern "/v1/Configs/{key}"))
+  let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/v1/Configs/{key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -302,12 +313,13 @@ export def "configs update-account" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://microvisor.twilio.com")
-  let full_url = (build-url $base ({key: $key} | format pattern "/v1/Configs/{key}"))
-  let body = {"Value": $value} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/v1/Configs/{key}"))
+  let req_body = {"Value": $value} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Retrieve a list of all Devices registered with the Account.
@@ -357,7 +369,7 @@ export def "devices-configs list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://microvisor.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({device_sid: $device_sid} | format pattern "/v1/Devices/{device_sid}/Configs") $qp)
+  let full_url = (build-url $base ({device_sid: (encode-path-segment $device_sid)} | format pattern "/v1/Devices/{device_sid}/Configs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -383,12 +395,13 @@ export def "devices-configs create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://microvisor.twilio.com")
-  let full_url = (build-url $base ({device_sid: $device_sid} | format pattern "/v1/Devices/{device_sid}/Configs"))
-  let body = {"Key": $key, "Value": $value} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({device_sid: (encode-path-segment $device_sid)} | format pattern "/v1/Devices/{device_sid}/Configs"))
+  let req_body = {"Key": $key, "Value": $value} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Delete a config for a Microvisor Device.
@@ -409,7 +422,7 @@ export def "devices-configs delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://microvisor.twilio.com")
-  let full_url = (build-url $base ({device_sid: $device_sid, key: $key} | format pattern "/v1/Devices/{device_sid}/Configs/{key}"))
+  let full_url = (build-url $base ({device_sid: (encode-path-segment $device_sid), key: (encode-path-segment $key)} | format pattern "/v1/Devices/{device_sid}/Configs/{key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -433,7 +446,7 @@ export def "devices-configs get" [
 ]: nothing -> record<date_updated: string, device_sid: string, key: string, url: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://microvisor.twilio.com")
-  let full_url = (build-url $base ({device_sid: $device_sid, key: $key} | format pattern "/v1/Devices/{device_sid}/Configs/{key}"))
+  let full_url = (build-url $base ({device_sid: (encode-path-segment $device_sid), key: (encode-path-segment $key)} | format pattern "/v1/Devices/{device_sid}/Configs/{key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -459,12 +472,13 @@ export def "devices-configs update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://microvisor.twilio.com")
-  let full_url = (build-url $base ({device_sid: $device_sid, key: $key} | format pattern "/v1/Devices/{device_sid}/Configs/{key}"))
-  let body = {"Value": $value} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({device_sid: (encode-path-segment $device_sid), key: (encode-path-segment $key)} | format pattern "/v1/Devices/{device_sid}/Configs/{key}"))
+  let req_body = {"Value": $value} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Retrieve a list of all Secrets for a Device.
@@ -488,7 +502,7 @@ export def "devices-secrets list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://microvisor.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({device_sid: $device_sid} | format pattern "/v1/Devices/{device_sid}/Secrets") $qp)
+  let full_url = (build-url $base ({device_sid: (encode-path-segment $device_sid)} | format pattern "/v1/Devices/{device_sid}/Secrets") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -514,12 +528,13 @@ export def "devices-secrets create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://microvisor.twilio.com")
-  let full_url = (build-url $base ({device_sid: $device_sid} | format pattern "/v1/Devices/{device_sid}/Secrets"))
-  let body = {"Key": $key, "Value": $value} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({device_sid: (encode-path-segment $device_sid)} | format pattern "/v1/Devices/{device_sid}/Secrets"))
+  let req_body = {"Key": $key, "Value": $value} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Delete a secret for a Microvisor Device.
@@ -540,7 +555,7 @@ export def "devices-secrets delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://microvisor.twilio.com")
-  let full_url = (build-url $base ({device_sid: $device_sid, key: $key} | format pattern "/v1/Devices/{device_sid}/Secrets/{key}"))
+  let full_url = (build-url $base ({device_sid: (encode-path-segment $device_sid), key: (encode-path-segment $key)} | format pattern "/v1/Devices/{device_sid}/Secrets/{key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -564,7 +579,7 @@ export def "devices-secrets get" [
 ]: nothing -> record<date_rotated: string, device_sid: string, key: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://microvisor.twilio.com")
-  let full_url = (build-url $base ({device_sid: $device_sid, key: $key} | format pattern "/v1/Devices/{device_sid}/Secrets/{key}"))
+  let full_url = (build-url $base ({device_sid: (encode-path-segment $device_sid), key: (encode-path-segment $key)} | format pattern "/v1/Devices/{device_sid}/Secrets/{key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -590,12 +605,13 @@ export def "devices-secrets update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://microvisor.twilio.com")
-  let full_url = (build-url $base ({device_sid: $device_sid, key: $key} | format pattern "/v1/Devices/{device_sid}/Secrets/{key}"))
-  let body = {"Value": $value} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({device_sid: (encode-path-segment $device_sid), key: (encode-path-segment $key)} | format pattern "/v1/Devices/{device_sid}/Secrets/{key}"))
+  let req_body = {"Value": $value} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Fetch a specific Device.
@@ -615,7 +631,7 @@ export def "devices get" [
 ]: nothing -> record<account_sid: string, app: any, date_created: string, date_updated: string, links: record, logging: any, sid: string, unique_name: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://microvisor.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/Devices/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Devices/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -642,12 +658,13 @@ export def "devices update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://microvisor.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/Devices/{sid}"))
-  let body = {"LoggingEnabled": $logging_enabled, "TargetApp": $target_app, "UniqueName": $unique_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Devices/{sid}"))
+  let req_body = {"LoggingEnabled": $logging_enabled, "TargetApp": $target_app, "UniqueName": $unique_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Retrieve a list of all Secrets for an Account.
@@ -696,11 +713,12 @@ export def "secrets create-account" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://microvisor.twilio.com")
   let full_url = (build-url $base "/v1/Secrets")
-  let body = {"Key": $key, "Value": $value} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"Key": $key, "Value": $value} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Delete a secret for an Account.
@@ -720,7 +738,7 @@ export def "secrets delete-account" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://microvisor.twilio.com")
-  let full_url = (build-url $base ({key: $key} | format pattern "/v1/Secrets/{key}"))
+  let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/v1/Secrets/{key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -743,7 +761,7 @@ export def "secrets get-account" [
 ]: nothing -> record<date_rotated: string, key: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://microvisor.twilio.com")
-  let full_url = (build-url $base ({key: $key} | format pattern "/v1/Secrets/{key}"))
+  let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/v1/Secrets/{key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -768,10 +786,11 @@ export def "secrets update-account" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://microvisor.twilio.com")
-  let full_url = (build-url $base ({key: $key} | format pattern "/v1/Secrets/{key}"))
-  let body = {"Value": $value} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/v1/Secrets/{key}"))
+  let req_body = {"Value": $value} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }

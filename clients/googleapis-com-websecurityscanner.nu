@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -75,7 +84,7 @@ def user-agent-completer [] { ["CHROME_ANDROID" "CHROME_LINUX" "SAFARI_IPHONE" "
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1beta websecurityscannerprojectsscanConfigsdelete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1beta delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -99,7 +108,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /v1beta/{name}
 # operationId: websecurityscanner.projects.scanConfigs.delete
-export def "v1beta websecurityscannerprojectsscanConfigsdelete" [
+export def "v1beta delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -124,7 +133,7 @@ export def "v1beta websecurityscannerprojectsscanConfigsdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1beta/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -134,7 +143,7 @@ export def "v1beta websecurityscannerprojectsscanConfigsdelete" [
 #
 # GET /v1beta/{name}
 # operationId: websecurityscanner.projects.scanConfigs.scanRuns.findings.get
-export def "v1beta websecurityscannerprojectsscanConfigsscanRunsfindingsget" [
+export def "v1beta get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -159,7 +168,7 @@ export def "v1beta websecurityscannerprojectsscanConfigsscanRunsfindingsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1beta/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -172,7 +181,7 @@ export def "v1beta websecurityscannerprojectsscanConfigsscanRunsfindingsget" [
 # --authentication shape: {customAccount?: record, googleAccount?: record, iapCredential?: record}
 # --latestRun shape: {endTime?: string, errorTrace?: record, executionState?: "EXECUTION_STATE_UNSPECIFIED"|"QUEUED"|"SCANNING"|"FINISHED", hasVulnerabilities?: bool, name?: string, progressPercent?: int, resultState?: "RESULT_STATE_UNSPECIFIED"|"SUCCESS"|"ERROR"|"KILLED", startTime?: string, urlsCrawledCount?: string, urlsTestedCount?: string, warningTraces?: list}
 # --schedule shape: {intervalDurationDays?: int, scheduleTime?: string}
-export def "v1beta websecurityscannerprojectsscanConfigspatch" [
+export def "v1beta update" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -195,7 +204,7 @@ export def "v1beta websecurityscannerprojectsscanConfigspatch" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --update-mask: string # Required. The update mask applies to the resource. For the `FieldMask` definition, see https://developers.google.com/protocol-buffers/docs/reference/google.protobuf#fieldmask
   --authentication: record # Scan authentication configuration. — shape: {customAccount?: record, googleAccount?: record, iapCredential?: record}
-  --blacklist-patterns: list # The excluded URL patterns as described in https://cloud.google.com/security-command-center/docs/how-to-use-web-security-scanner#excluding_urls
+  --blacklist-patterns: list<string> # The excluded URL patterns as described in https://cloud.google.com/security-command-center/docs/how-to-use-web-security-scanner#excluding_urls
   --display-name: string # Required. The user provided display name of the ScanConfig.
   --export-to-security-command-center: string@export-to-security-command-center-completer # Controls export of scan configurations and results to Security Command Center.
   --ignore-http-status-errors: oneof<nothing, bool> # Whether to keep scanning even if most requests return HTTP error codes.
@@ -205,28 +214,28 @@ export def "v1beta websecurityscannerprojectsscanConfigspatch" [
   --body-name: string # The resource name of the ScanConfig. The name follows the format of 'projects/{projectId}/scanConfigs/{scanConfigId}'. The ScanConfig IDs are generated by the system.
   --risk-level: string@risk-level-completer # The risk level selected for the scan
   --schedule: record # Scan schedule configuration. — shape: {intervalDurationDays?: int, scheduleTime?: string}
-  --starting-urls: list # Required. The starting URLs from which the scanner finds site pages.
+  --starting-urls: list<string> # Required. The starting URLs from which the scanner finds site pages.
   --static-ip-scan: oneof<nothing, bool> # Whether the scan configuration has enabled static IP address scan feature. If enabled, the scanner will access applications from static IP addresses.
-  --target-platforms: list # Set of Google Cloud platforms targeted by the scan. If empty, APP_ENGINE will be used as a default.
+  --target-platforms: list<string> # Set of Google Cloud platforms targeted by the scan. If empty, APP_ENGINE will be used as a default.
   --user-agent: string@user-agent-completer # The user agent used during scanning.
 ]: any -> record<authentication: record<customAccount: record<loginUrl: string, password: string, username: string>, googleAccount: record<password: string, username: string>, iapCredential: record<iapTestServiceAccountInfo: record>>, blacklistPatterns: list<string>, displayName: string, exportToSecurityCommandCenter: string, ignoreHttpStatusErrors: bool, latestRun: record<endTime: string, errorTrace: record<code: string, mostCommonHttpErrorCode: int, scanConfigError: record>, executionState: string, hasVulnerabilities: bool, name: string, progressPercent: int, resultState: string, startTime: string, urlsCrawledCount: string, urlsTestedCount: string, warningTraces: list<record>>, managedScan: bool, maxQps: int, name: string, riskLevel: string, schedule: record<intervalDurationDays: int, scheduleTime: string>, startingUrls: list<string>, staticIpScan: bool, targetPlatforms: list<string>, userAgent: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1beta/{name}") $qp)
-  let body = {"authentication": $authentication, "blacklistPatterns": $blacklist_patterns, "displayName": $display_name, "exportToSecurityCommandCenter": $export_to_security_command_center, "ignoreHttpStatusErrors": $ignore_http_status_errors, "latestRun": $latest_run, "managedScan": $managed_scan, "maxQps": $max_qps, "name": $body_name, "riskLevel": $risk_level, "schedule": $schedule, "startingUrls": $starting_urls, "staticIpScan": $static_ip_scan, "targetPlatforms": $target_platforms, "userAgent": $user_agent} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta/{name}") $qp)
+  let req_body = {"authentication": $authentication, "blacklistPatterns": $blacklist_patterns, "displayName": $display_name, "exportToSecurityCommandCenter": $export_to_security_command_center, "ignoreHttpStatusErrors": $ignore_http_status_errors, "latestRun": $latest_run, "managedScan": $managed_scan, "maxQps": $max_qps, "name": $body_name, "riskLevel": $risk_level, "schedule": $schedule, "startingUrls": $starting_urls, "staticIpScan": $static_ip_scan, "targetPlatforms": $target_platforms, "userAgent": $user_agent} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Start a ScanRun according to the given ScanConfig.
 #
 # POST /v1beta/{name}:start
 # operationId: websecurityscanner.projects.scanConfigs.start
-export def "v1beta websecurityscannerprojectsscanConfigsstart" [
+export def "v1beta start" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -253,18 +262,19 @@ export def "v1beta websecurityscannerprojectsscanConfigsstart" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1beta/{name}:start") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta/{name}:start") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Stops a ScanRun. The stopped ScanRun is returned.
 #
 # POST /v1beta/{name}:stop
 # operationId: websecurityscanner.projects.scanConfigs.scanRuns.stop
-export def "v1beta websecurityscannerprojectsscanConfigsscanRunsstop" [
+export def "v1beta stop" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -291,18 +301,19 @@ export def "v1beta websecurityscannerprojectsscanConfigsscanRunsstop" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1beta/{name}:stop") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta/{name}:stop") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List CrawledUrls under a given ScanRun.
 #
 # GET /v1beta/{parent}/crawledUrls
 # operationId: websecurityscanner.projects.scanConfigs.scanRuns.crawledUrls.list
-export def "v1beta-crawled-urls websecurityscannerprojectsscanConfigsscanRunscrawledUrlslist" [
+export def "v1beta-crawled-urls list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -329,7 +340,7 @@ export def "v1beta-crawled-urls websecurityscannerprojectsscanConfigsscanRunscra
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta/{parent}/crawledUrls") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta/{parent}/crawledUrls") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -339,7 +350,7 @@ export def "v1beta-crawled-urls websecurityscannerprojectsscanConfigsscanRunscra
 #
 # GET /v1beta/{parent}/findingTypeStats
 # operationId: websecurityscanner.projects.scanConfigs.scanRuns.findingTypeStats.list
-export def "v1beta-finding-type-stats websecurityscannerprojectsscanConfigsscanRunsfindingTypeStatslist" [
+export def "v1beta-finding-type-stats list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -364,7 +375,7 @@ export def "v1beta-finding-type-stats websecurityscannerprojectsscanConfigsscanR
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta/{parent}/findingTypeStats") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta/{parent}/findingTypeStats") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -374,7 +385,7 @@ export def "v1beta-finding-type-stats websecurityscannerprojectsscanConfigsscanR
 #
 # GET /v1beta/{parent}/findings
 # operationId: websecurityscanner.projects.scanConfigs.scanRuns.findings.list
-export def "v1beta-findings websecurityscannerprojectsscanConfigsscanRunsfindingslist" [
+export def "v1beta-findings list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -402,7 +413,7 @@ export def "v1beta-findings websecurityscannerprojectsscanConfigsscanRunsfinding
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta/{parent}/findings") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta/{parent}/findings") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -412,7 +423,7 @@ export def "v1beta-findings websecurityscannerprojectsscanConfigsscanRunsfinding
 #
 # GET /v1beta/{parent}/scanConfigs
 # operationId: websecurityscanner.projects.scanConfigs.list
-export def "v1beta-scan-configs websecurityscannerprojectsscanConfigslist" [
+export def "v1beta-scan-configs list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -439,7 +450,7 @@ export def "v1beta-scan-configs websecurityscannerprojectsscanConfigslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta/{parent}/scanConfigs") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta/{parent}/scanConfigs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -452,7 +463,7 @@ export def "v1beta-scan-configs websecurityscannerprojectsscanConfigslist" [
 # --authentication shape: {customAccount?: record, googleAccount?: record, iapCredential?: record}
 # --latestRun shape: {endTime?: string, errorTrace?: record, executionState?: "EXECUTION_STATE_UNSPECIFIED"|"QUEUED"|"SCANNING"|"FINISHED", hasVulnerabilities?: bool, name?: string, progressPercent?: int, resultState?: "RESULT_STATE_UNSPECIFIED"|"SUCCESS"|"ERROR"|"KILLED", startTime?: string, urlsCrawledCount?: string, urlsTestedCount?: string, warningTraces?: list}
 # --schedule shape: {intervalDurationDays?: int, scheduleTime?: string}
-export def "v1beta-scan-configs websecurityscannerprojectsscanConfigscreate" [
+export def "v1beta-scan-configs create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -474,7 +485,7 @@ export def "v1beta-scan-configs websecurityscannerprojectsscanConfigscreate" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --authentication: record # Scan authentication configuration. — shape: {customAccount?: record, googleAccount?: record, iapCredential?: record}
-  --blacklist-patterns: list # The excluded URL patterns as described in https://cloud.google.com/security-command-center/docs/how-to-use-web-security-scanner#excluding_urls
+  --blacklist-patterns: list<string> # The excluded URL patterns as described in https://cloud.google.com/security-command-center/docs/how-to-use-web-security-scanner#excluding_urls
   --display-name: string # Required. The user provided display name of the ScanConfig.
   --export-to-security-command-center: string@export-to-security-command-center-completer # Controls export of scan configurations and results to Security Command Center.
   --ignore-http-status-errors: oneof<nothing, bool> # Whether to keep scanning even if most requests return HTTP error codes.
@@ -484,28 +495,28 @@ export def "v1beta-scan-configs websecurityscannerprojectsscanConfigscreate" [
   --name: string # The resource name of the ScanConfig. The name follows the format of 'projects/{projectId}/scanConfigs/{scanConfigId}'. The ScanConfig IDs are generated by the system.
   --risk-level: string@risk-level-completer # The risk level selected for the scan
   --schedule: record # Scan schedule configuration. — shape: {intervalDurationDays?: int, scheduleTime?: string}
-  --starting-urls: list # Required. The starting URLs from which the scanner finds site pages.
+  --starting-urls: list<string> # Required. The starting URLs from which the scanner finds site pages.
   --static-ip-scan: oneof<nothing, bool> # Whether the scan configuration has enabled static IP address scan feature. If enabled, the scanner will access applications from static IP addresses.
-  --target-platforms: list # Set of Google Cloud platforms targeted by the scan. If empty, APP_ENGINE will be used as a default.
+  --target-platforms: list<string> # Set of Google Cloud platforms targeted by the scan. If empty, APP_ENGINE will be used as a default.
   --user-agent: string@user-agent-completer # The user agent used during scanning.
 ]: any -> record<authentication: record<customAccount: record<loginUrl: string, password: string, username: string>, googleAccount: record<password: string, username: string>, iapCredential: record<iapTestServiceAccountInfo: record>>, blacklistPatterns: list<string>, displayName: string, exportToSecurityCommandCenter: string, ignoreHttpStatusErrors: bool, latestRun: record<endTime: string, errorTrace: record<code: string, mostCommonHttpErrorCode: int, scanConfigError: record>, executionState: string, hasVulnerabilities: bool, name: string, progressPercent: int, resultState: string, startTime: string, urlsCrawledCount: string, urlsTestedCount: string, warningTraces: list<record>>, managedScan: bool, maxQps: int, name: string, riskLevel: string, schedule: record<intervalDurationDays: int, scheduleTime: string>, startingUrls: list<string>, staticIpScan: bool, targetPlatforms: list<string>, userAgent: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta/{parent}/scanConfigs") $qp)
-  let body = {"authentication": $authentication, "blacklistPatterns": $blacklist_patterns, "displayName": $display_name, "exportToSecurityCommandCenter": $export_to_security_command_center, "ignoreHttpStatusErrors": $ignore_http_status_errors, "latestRun": $latest_run, "managedScan": $managed_scan, "maxQps": $max_qps, "name": $name, "riskLevel": $risk_level, "schedule": $schedule, "startingUrls": $starting_urls, "staticIpScan": $static_ip_scan, "targetPlatforms": $target_platforms, "userAgent": $user_agent} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta/{parent}/scanConfigs") $qp)
+  let req_body = {"authentication": $authentication, "blacklistPatterns": $blacklist_patterns, "displayName": $display_name, "exportToSecurityCommandCenter": $export_to_security_command_center, "ignoreHttpStatusErrors": $ignore_http_status_errors, "latestRun": $latest_run, "managedScan": $managed_scan, "maxQps": $max_qps, "name": $name, "riskLevel": $risk_level, "schedule": $schedule, "startingUrls": $starting_urls, "staticIpScan": $static_ip_scan, "targetPlatforms": $target_platforms, "userAgent": $user_agent} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists ScanRuns under a given ScanConfig, in descending order of ScanRun stop time.
 #
 # GET /v1beta/{parent}/scanRuns
 # operationId: websecurityscanner.projects.scanConfigs.scanRuns.list
-export def "v1beta-scan-runs websecurityscannerprojectsscanConfigsscanRunslist" [
+export def "v1beta-scan-runs list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -532,7 +543,7 @@ export def "v1beta-scan-runs websecurityscannerprojectsscanConfigsscanRunslist" 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta/{parent}/scanRuns") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta/{parent}/scanRuns") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

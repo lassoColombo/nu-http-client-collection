@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -75,7 +84,7 @@ def delete-policy-completer [] { ["ABANDON" "DELETE"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "deploymentmanager-v2beta-projects-global-composite-types deploymentmanagercompositeTypeslist" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "deploymentmanager-v2beta-projects-global-composite-types list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -99,7 +108,7 @@ export def commands []: nothing -> table {
 #
 # GET /deploymentmanager/v2beta/projects/{project}/global/compositeTypes
 # operationId: deploymentmanager.compositeTypes.list
-export def "deploymentmanager-v2beta-projects-global-composite-types deploymentmanagercompositeTypeslist" [
+export def "deploymentmanager-v2beta-projects-global-composite-types list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -128,7 +137,7 @@ export def "deploymentmanager-v2beta-projects-global-composite-types deploymentm
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project: $project} | format pattern "/deploymentmanager/v2beta/projects/{project}/global/compositeTypes") $qp)
+  let full_url = (build-url $base ({project: (encode-path-segment $project)} | format pattern "/deploymentmanager/v2beta/projects/{project}/global/compositeTypes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -141,7 +150,7 @@ export def "deploymentmanager-v2beta-projects-global-composite-types deploymentm
 # --labels item shape: {key?: string, value?: string}
 # --operation shape: {clientOperationId?: string, creationTimestamp?: string, description?: string, endTime?: string, error?: record, httpErrorMessage?: string, httpErrorStatusCode?: int, id?: string, insertTime?: string, kind?: string, name?: string, operationGroupId?: string, operationType?: string, progress?: int, region?: string, selfLink?: string, startTime?: string, status?: "PENDING"|"RUNNING"|"DONE", statusMessage?: string, targetId?: string, targetLink?: string, user?: string, warnings?: list, zone?: string}
 # --templateContents shape: {imports?: list, interpreter?: "UNKNOWN_INTERPRETER"|"PYTHON"|"JINJA", mainTemplate?: string, schema?: string, template?: string}
-export def "deploymentmanager-v2beta-projects-global-composite-types deploymentmanagercompositeTypesinsert" [
+export def "deploymentmanager-v2beta-projects-global-composite-types create" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -176,19 +185,19 @@ export def "deploymentmanager-v2beta-projects-global-composite-types deploymentm
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project: $project} | format pattern "/deploymentmanager/v2beta/projects/{project}/global/compositeTypes") $qp)
-  let body = {"description": $description, "id": $id, "insertTime": $insert_time, "labels": $labels, "name": $name, "operation": $operation, "selfLink": $self_link, "status": $status, "templateContents": $template_contents} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({project: (encode-path-segment $project)} | format pattern "/deploymentmanager/v2beta/projects/{project}/global/compositeTypes") $qp)
+  let req_body = {"description": $description, "id": $id, "insertTime": $insert_time, "labels": $labels, "name": $name, "operation": $operation, "selfLink": $self_link, "status": $status, "templateContents": $template_contents} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes a composite type.
 #
 # DELETE /deploymentmanager/v2beta/projects/{project}/global/compositeTypes/{compositeType}
 # operationId: deploymentmanager.compositeTypes.delete
-export def "deploymentmanager-v2beta-projects-global-composite-types deploymentmanagercompositeTypesdelete" [
+export def "deploymentmanager-v2beta-projects-global-composite-types delete" [
   project: string
   composite_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -214,7 +223,7 @@ export def "deploymentmanager-v2beta-projects-global-composite-types deploymentm
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project: $project, composite_type: $composite_type} | format pattern "/deploymentmanager/v2beta/projects/{project}/global/compositeTypes/{composite_type}") $qp)
+  let full_url = (build-url $base ({project: (encode-path-segment $project), composite_type: (encode-path-segment $composite_type)} | format pattern "/deploymentmanager/v2beta/projects/{project}/global/compositeTypes/{composite_type}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -224,7 +233,7 @@ export def "deploymentmanager-v2beta-projects-global-composite-types deploymentm
 #
 # GET /deploymentmanager/v2beta/projects/{project}/global/compositeTypes/{compositeType}
 # operationId: deploymentmanager.compositeTypes.get
-export def "deploymentmanager-v2beta-projects-global-composite-types deploymentmanagercompositeTypesget" [
+export def "deploymentmanager-v2beta-projects-global-composite-types get" [
   project: string
   composite_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -250,7 +259,7 @@ export def "deploymentmanager-v2beta-projects-global-composite-types deploymentm
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project: $project, composite_type: $composite_type} | format pattern "/deploymentmanager/v2beta/projects/{project}/global/compositeTypes/{composite_type}") $qp)
+  let full_url = (build-url $base ({project: (encode-path-segment $project), composite_type: (encode-path-segment $composite_type)} | format pattern "/deploymentmanager/v2beta/projects/{project}/global/compositeTypes/{composite_type}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -263,7 +272,7 @@ export def "deploymentmanager-v2beta-projects-global-composite-types deploymentm
 # --labels item shape: {key?: string, value?: string}
 # --operation shape: {clientOperationId?: string, creationTimestamp?: string, description?: string, endTime?: string, error?: record, httpErrorMessage?: string, httpErrorStatusCode?: int, id?: string, insertTime?: string, kind?: string, name?: string, operationGroupId?: string, operationType?: string, progress?: int, region?: string, selfLink?: string, startTime?: string, status?: "PENDING"|"RUNNING"|"DONE", statusMessage?: string, targetId?: string, targetLink?: string, user?: string, warnings?: list, zone?: string}
 # --templateContents shape: {imports?: list, interpreter?: "UNKNOWN_INTERPRETER"|"PYTHON"|"JINJA", mainTemplate?: string, schema?: string, template?: string}
-export def "deploymentmanager-v2beta-projects-global-composite-types deploymentmanagercompositeTypespatch" [
+export def "deploymentmanager-v2beta-projects-global-composite-types update-by-project-compositeType" [
   project: string
   composite_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -299,12 +308,12 @@ export def "deploymentmanager-v2beta-projects-global-composite-types deploymentm
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project: $project, composite_type: $composite_type} | format pattern "/deploymentmanager/v2beta/projects/{project}/global/compositeTypes/{composite_type}") $qp)
-  let body = {"description": $description, "id": $id, "insertTime": $insert_time, "labels": $labels, "name": $name, "operation": $operation, "selfLink": $self_link, "status": $status, "templateContents": $template_contents} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({project: (encode-path-segment $project), composite_type: (encode-path-segment $composite_type)} | format pattern "/deploymentmanager/v2beta/projects/{project}/global/compositeTypes/{composite_type}") $qp)
+  let req_body = {"description": $description, "id": $id, "insertTime": $insert_time, "labels": $labels, "name": $name, "operation": $operation, "selfLink": $self_link, "status": $status, "templateContents": $template_contents} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates a composite type.
@@ -314,7 +323,7 @@ export def "deploymentmanager-v2beta-projects-global-composite-types deploymentm
 # --labels item shape: {key?: string, value?: string}
 # --operation shape: {clientOperationId?: string, creationTimestamp?: string, description?: string, endTime?: string, error?: record, httpErrorMessage?: string, httpErrorStatusCode?: int, id?: string, insertTime?: string, kind?: string, name?: string, operationGroupId?: string, operationType?: string, progress?: int, region?: string, selfLink?: string, startTime?: string, status?: "PENDING"|"RUNNING"|"DONE", statusMessage?: string, targetId?: string, targetLink?: string, user?: string, warnings?: list, zone?: string}
 # --templateContents shape: {imports?: list, interpreter?: "UNKNOWN_INTERPRETER"|"PYTHON"|"JINJA", mainTemplate?: string, schema?: string, template?: string}
-export def "deploymentmanager-v2beta-projects-global-composite-types deploymentmanagercompositeTypesupdate" [
+export def "deploymentmanager-v2beta-projects-global-composite-types update-by-project-compositeType-1" [
   project: string
   composite_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -350,19 +359,19 @@ export def "deploymentmanager-v2beta-projects-global-composite-types deploymentm
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project: $project, composite_type: $composite_type} | format pattern "/deploymentmanager/v2beta/projects/{project}/global/compositeTypes/{composite_type}") $qp)
-  let body = {"description": $description, "id": $id, "insertTime": $insert_time, "labels": $labels, "name": $name, "operation": $operation, "selfLink": $self_link, "status": $status, "templateContents": $template_contents} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({project: (encode-path-segment $project), composite_type: (encode-path-segment $composite_type)} | format pattern "/deploymentmanager/v2beta/projects/{project}/global/compositeTypes/{composite_type}") $qp)
+  let req_body = {"description": $description, "id": $id, "insertTime": $insert_time, "labels": $labels, "name": $name, "operation": $operation, "selfLink": $self_link, "status": $status, "templateContents": $template_contents} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists all deployments for a given project.
 #
 # GET /deploymentmanager/v2beta/projects/{project}/global/deployments
 # operationId: deploymentmanager.deployments.list
-export def "deploymentmanager-v2beta-projects-global-deployments deploymentmanagerdeploymentslist" [
+export def "deploymentmanager-v2beta-projects-global-deployments list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -391,7 +400,7 @@ export def "deploymentmanager-v2beta-projects-global-deployments deploymentmanag
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project: $project} | format pattern "/deploymentmanager/v2beta/projects/{project}/global/deployments") $qp)
+  let full_url = (build-url $base ({project: (encode-path-segment $project)} | format pattern "/deploymentmanager/v2beta/projects/{project}/global/deployments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -405,7 +414,7 @@ export def "deploymentmanager-v2beta-projects-global-deployments deploymentmanag
 # --operation shape: {clientOperationId?: string, creationTimestamp?: string, description?: string, endTime?: string, error?: record, httpErrorMessage?: string, httpErrorStatusCode?: int, id?: string, insertTime?: string, kind?: string, name?: string, operationGroupId?: string, operationType?: string, progress?: int, region?: string, selfLink?: string, startTime?: string, status?: "PENDING"|"RUNNING"|"DONE", statusMessage?: string, targetId?: string, targetLink?: string, user?: string, warnings?: list, zone?: string}
 # --target shape: {config?: record, imports?: list}
 # --update shape: {description?: string, labels?: list, manifest?: string}
-export def "deploymentmanager-v2beta-projects-global-deployments deploymentmanagerdeploymentsinsert" [
+export def "deploymentmanager-v2beta-projects-global-deployments create" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -445,19 +454,19 @@ export def "deploymentmanager-v2beta-projects-global-deployments deploymentmanag
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "createPolicy" $create_policy "scalar") (serialize-qp "preview" $preview "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project: $project} | format pattern "/deploymentmanager/v2beta/projects/{project}/global/deployments") $qp)
-  let body = {"description": $description, "fingerprint": $fingerprint, "id": $id, "insertTime": $insert_time, "labels": $labels, "manifest": $manifest, "name": $name, "operation": $operation, "selfLink": $self_link, "target": $target, "update": $update, "updateTime": $update_time} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({project: (encode-path-segment $project)} | format pattern "/deploymentmanager/v2beta/projects/{project}/global/deployments") $qp)
+  let req_body = {"description": $description, "fingerprint": $fingerprint, "id": $id, "insertTime": $insert_time, "labels": $labels, "manifest": $manifest, "name": $name, "operation": $operation, "selfLink": $self_link, "target": $target, "update": $update, "updateTime": $update_time} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes a deployment and all of the resources in the deployment.
 #
 # DELETE /deploymentmanager/v2beta/projects/{project}/global/deployments/{deployment}
 # operationId: deploymentmanager.deployments.delete
-export def "deploymentmanager-v2beta-projects-global-deployments deploymentmanagerdeploymentsdelete" [
+export def "deploymentmanager-v2beta-projects-global-deployments delete" [
   project: string
   deployment: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -484,7 +493,7 @@ export def "deploymentmanager-v2beta-projects-global-deployments deploymentmanag
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "deletePolicy" $delete_policy "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project: $project, deployment: $deployment} | format pattern "/deploymentmanager/v2beta/projects/{project}/global/deployments/{deployment}") $qp)
+  let full_url = (build-url $base ({project: (encode-path-segment $project), deployment: (encode-path-segment $deployment)} | format pattern "/deploymentmanager/v2beta/projects/{project}/global/deployments/{deployment}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -494,7 +503,7 @@ export def "deploymentmanager-v2beta-projects-global-deployments deploymentmanag
 #
 # GET /deploymentmanager/v2beta/projects/{project}/global/deployments/{deployment}
 # operationId: deploymentmanager.deployments.get
-export def "deploymentmanager-v2beta-projects-global-deployments deploymentmanagerdeploymentsget" [
+export def "deploymentmanager-v2beta-projects-global-deployments get" [
   project: string
   deployment: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -520,7 +529,7 @@ export def "deploymentmanager-v2beta-projects-global-deployments deploymentmanag
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project: $project, deployment: $deployment} | format pattern "/deploymentmanager/v2beta/projects/{project}/global/deployments/{deployment}") $qp)
+  let full_url = (build-url $base ({project: (encode-path-segment $project), deployment: (encode-path-segment $deployment)} | format pattern "/deploymentmanager/v2beta/projects/{project}/global/deployments/{deployment}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -534,7 +543,7 @@ export def "deploymentmanager-v2beta-projects-global-deployments deploymentmanag
 # --operation shape: {clientOperationId?: string, creationTimestamp?: string, description?: string, endTime?: string, error?: record, httpErrorMessage?: string, httpErrorStatusCode?: int, id?: string, insertTime?: string, kind?: string, name?: string, operationGroupId?: string, operationType?: string, progress?: int, region?: string, selfLink?: string, startTime?: string, status?: "PENDING"|"RUNNING"|"DONE", statusMessage?: string, targetId?: string, targetLink?: string, user?: string, warnings?: list, zone?: string}
 # --target shape: {config?: record, imports?: list}
 # --update shape: {description?: string, labels?: list, manifest?: string}
-export def "deploymentmanager-v2beta-projects-global-deployments deploymentmanagerdeploymentspatch" [
+export def "deploymentmanager-v2beta-projects-global-deployments update-by-project-deployment" [
   project: string
   deployment: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -576,12 +585,12 @@ export def "deploymentmanager-v2beta-projects-global-deployments deploymentmanag
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "createPolicy" $create_policy "scalar") (serialize-qp "deletePolicy" $delete_policy "scalar") (serialize-qp "preview" $preview "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project: $project, deployment: $deployment} | format pattern "/deploymentmanager/v2beta/projects/{project}/global/deployments/{deployment}") $qp)
-  let body = {"description": $description, "fingerprint": $fingerprint, "id": $id, "insertTime": $insert_time, "labels": $labels, "manifest": $manifest, "name": $name, "operation": $operation, "selfLink": $self_link, "target": $target, "update": $update, "updateTime": $update_time} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({project: (encode-path-segment $project), deployment: (encode-path-segment $deployment)} | format pattern "/deploymentmanager/v2beta/projects/{project}/global/deployments/{deployment}") $qp)
+  let req_body = {"description": $description, "fingerprint": $fingerprint, "id": $id, "insertTime": $insert_time, "labels": $labels, "manifest": $manifest, "name": $name, "operation": $operation, "selfLink": $self_link, "target": $target, "update": $update, "updateTime": $update_time} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates a deployment and all of the resources described by the deployment manifest.
@@ -592,7 +601,7 @@ export def "deploymentmanager-v2beta-projects-global-deployments deploymentmanag
 # --operation shape: {clientOperationId?: string, creationTimestamp?: string, description?: string, endTime?: string, error?: record, httpErrorMessage?: string, httpErrorStatusCode?: int, id?: string, insertTime?: string, kind?: string, name?: string, operationGroupId?: string, operationType?: string, progress?: int, region?: string, selfLink?: string, startTime?: string, status?: "PENDING"|"RUNNING"|"DONE", statusMessage?: string, targetId?: string, targetLink?: string, user?: string, warnings?: list, zone?: string}
 # --target shape: {config?: record, imports?: list}
 # --update shape: {description?: string, labels?: list, manifest?: string}
-export def "deploymentmanager-v2beta-projects-global-deployments deploymentmanagerdeploymentsupdate" [
+export def "deploymentmanager-v2beta-projects-global-deployments update-by-project-deployment-1" [
   project: string
   deployment: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -634,19 +643,19 @@ export def "deploymentmanager-v2beta-projects-global-deployments deploymentmanag
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "createPolicy" $create_policy "scalar") (serialize-qp "deletePolicy" $delete_policy "scalar") (serialize-qp "preview" $preview "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project: $project, deployment: $deployment} | format pattern "/deploymentmanager/v2beta/projects/{project}/global/deployments/{deployment}") $qp)
-  let body = {"description": $description, "fingerprint": $fingerprint, "id": $id, "insertTime": $insert_time, "labels": $labels, "manifest": $manifest, "name": $name, "operation": $operation, "selfLink": $self_link, "target": $target, "update": $update, "updateTime": $update_time} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({project: (encode-path-segment $project), deployment: (encode-path-segment $deployment)} | format pattern "/deploymentmanager/v2beta/projects/{project}/global/deployments/{deployment}") $qp)
+  let req_body = {"description": $description, "fingerprint": $fingerprint, "id": $id, "insertTime": $insert_time, "labels": $labels, "manifest": $manifest, "name": $name, "operation": $operation, "selfLink": $self_link, "target": $target, "update": $update, "updateTime": $update_time} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Cancels and removes the preview currently associated with the deployment.
 #
 # POST /deploymentmanager/v2beta/projects/{project}/global/deployments/{deployment}/cancelPreview
 # operationId: deploymentmanager.deployments.cancelPreview
-export def "deploymentmanager-v2beta-projects-global-deployments-cancel-preview deploymentmanagerdeploymentscancelPreview" [
+export def "deploymentmanager-v2beta-projects-global-deployments-cancel-preview cancel" [
   project: string
   deployment: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -674,19 +683,19 @@ export def "deploymentmanager-v2beta-projects-global-deployments-cancel-preview 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project: $project, deployment: $deployment} | format pattern "/deploymentmanager/v2beta/projects/{project}/global/deployments/{deployment}/cancelPreview") $qp)
-  let body = {"fingerprint": $fingerprint} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({project: (encode-path-segment $project), deployment: (encode-path-segment $deployment)} | format pattern "/deploymentmanager/v2beta/projects/{project}/global/deployments/{deployment}/cancelPreview") $qp)
+  let req_body = {"fingerprint": $fingerprint} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists all manifests for a given deployment.
 #
 # GET /deploymentmanager/v2beta/projects/{project}/global/deployments/{deployment}/manifests
 # operationId: deploymentmanager.manifests.list
-export def "deploymentmanager-v2beta-projects-global-deployments-manifests deploymentmanagermanifestslist" [
+export def "deploymentmanager-v2beta-projects-global-deployments-manifests list" [
   project: string
   deployment: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -716,7 +725,7 @@ export def "deploymentmanager-v2beta-projects-global-deployments-manifests deplo
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project: $project, deployment: $deployment} | format pattern "/deploymentmanager/v2beta/projects/{project}/global/deployments/{deployment}/manifests") $qp)
+  let full_url = (build-url $base ({project: (encode-path-segment $project), deployment: (encode-path-segment $deployment)} | format pattern "/deploymentmanager/v2beta/projects/{project}/global/deployments/{deployment}/manifests") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -726,7 +735,7 @@ export def "deploymentmanager-v2beta-projects-global-deployments-manifests deplo
 #
 # GET /deploymentmanager/v2beta/projects/{project}/global/deployments/{deployment}/manifests/{manifest}
 # operationId: deploymentmanager.manifests.get
-export def "deploymentmanager-v2beta-projects-global-deployments-manifests deploymentmanagermanifestsget" [
+export def "deploymentmanager-v2beta-projects-global-deployments-manifests get" [
   project: string
   deployment: string
   manifest: string
@@ -753,7 +762,7 @@ export def "deploymentmanager-v2beta-projects-global-deployments-manifests deplo
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project: $project, deployment: $deployment, manifest: $manifest} | format pattern "/deploymentmanager/v2beta/projects/{project}/global/deployments/{deployment}/manifests/{manifest}") $qp)
+  let full_url = (build-url $base ({project: (encode-path-segment $project), deployment: (encode-path-segment $deployment), manifest: (encode-path-segment $manifest)} | format pattern "/deploymentmanager/v2beta/projects/{project}/global/deployments/{deployment}/manifests/{manifest}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -763,7 +772,7 @@ export def "deploymentmanager-v2beta-projects-global-deployments-manifests deplo
 #
 # GET /deploymentmanager/v2beta/projects/{project}/global/deployments/{deployment}/resources
 # operationId: deploymentmanager.resources.list
-export def "deploymentmanager-v2beta-projects-global-deployments-resources deploymentmanagerresourceslist" [
+export def "deploymentmanager-v2beta-projects-global-deployments-resources list" [
   project: string
   deployment: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -793,7 +802,7 @@ export def "deploymentmanager-v2beta-projects-global-deployments-resources deplo
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project: $project, deployment: $deployment} | format pattern "/deploymentmanager/v2beta/projects/{project}/global/deployments/{deployment}/resources") $qp)
+  let full_url = (build-url $base ({project: (encode-path-segment $project), deployment: (encode-path-segment $deployment)} | format pattern "/deploymentmanager/v2beta/projects/{project}/global/deployments/{deployment}/resources") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -803,7 +812,7 @@ export def "deploymentmanager-v2beta-projects-global-deployments-resources deplo
 #
 # GET /deploymentmanager/v2beta/projects/{project}/global/deployments/{deployment}/resources/{resource}
 # operationId: deploymentmanager.resources.get
-export def "deploymentmanager-v2beta-projects-global-deployments-resources deploymentmanagerresourcesget" [
+export def "deploymentmanager-v2beta-projects-global-deployments-resources get" [
   project: string
   deployment: string
   resource: string
@@ -830,7 +839,7 @@ export def "deploymentmanager-v2beta-projects-global-deployments-resources deplo
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project: $project, deployment: $deployment, resource: $resource} | format pattern "/deploymentmanager/v2beta/projects/{project}/global/deployments/{deployment}/resources/{resource}") $qp)
+  let full_url = (build-url $base ({project: (encode-path-segment $project), deployment: (encode-path-segment $deployment), resource: (encode-path-segment $resource)} | format pattern "/deploymentmanager/v2beta/projects/{project}/global/deployments/{deployment}/resources/{resource}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -840,7 +849,7 @@ export def "deploymentmanager-v2beta-projects-global-deployments-resources deplo
 #
 # POST /deploymentmanager/v2beta/projects/{project}/global/deployments/{deployment}/stop
 # operationId: deploymentmanager.deployments.stop
-export def "deploymentmanager-v2beta-projects-global-deployments-stop deploymentmanagerdeploymentsstop" [
+export def "deploymentmanager-v2beta-projects-global-deployments-stop stop" [
   project: string
   deployment: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -868,19 +877,19 @@ export def "deploymentmanager-v2beta-projects-global-deployments-stop deployment
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project: $project, deployment: $deployment} | format pattern "/deploymentmanager/v2beta/projects/{project}/global/deployments/{deployment}/stop") $qp)
-  let body = {"fingerprint": $fingerprint} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({project: (encode-path-segment $project), deployment: (encode-path-segment $deployment)} | format pattern "/deploymentmanager/v2beta/projects/{project}/global/deployments/{deployment}/stop") $qp)
+  let req_body = {"fingerprint": $fingerprint} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets the access control policy for a resource. May be empty if no such policy or resource exists.
 #
 # GET /deploymentmanager/v2beta/projects/{project}/global/deployments/{resource}/getIamPolicy
 # operationId: deploymentmanager.deployments.getIamPolicy
-export def "deploymentmanager-v2beta-projects-global-deployments-get-iam-policy deploymentmanagerdeploymentsgetIamPolicy" [
+export def "deploymentmanager-v2beta-projects-global-deployments-get-iam-policy get" [
   project: string
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -907,7 +916,7 @@ export def "deploymentmanager-v2beta-projects-global-deployments-get-iam-policy 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "optionsRequestedPolicyVersion" $options_requested_policy_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project: $project, resource: $resource} | format pattern "/deploymentmanager/v2beta/projects/{project}/global/deployments/{resource}/getIamPolicy") $qp)
+  let full_url = (build-url $base ({project: (encode-path-segment $project), resource: (encode-path-segment $resource)} | format pattern "/deploymentmanager/v2beta/projects/{project}/global/deployments/{resource}/getIamPolicy") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -917,9 +926,9 @@ export def "deploymentmanager-v2beta-projects-global-deployments-get-iam-policy 
 #
 # POST /deploymentmanager/v2beta/projects/{project}/global/deployments/{resource}/setIamPolicy
 # operationId: deploymentmanager.deployments.setIamPolicy
-# --bindings item shape: {condition?: record, members?: list, role?: string}
+# --bindings item shape: {condition?: record, members?: list<string>, role?: string}
 # --policy shape: {auditConfigs?: list, bindings?: list, etag?: string, version?: int}
-export def "deploymentmanager-v2beta-projects-global-deployments-set-iam-policy deploymentmanagerdeploymentssetIamPolicy" [
+export def "deploymentmanager-v2beta-projects-global-deployments-set-iam-policy update" [
   project: string
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -941,7 +950,7 @@ export def "deploymentmanager-v2beta-projects-global-deployments-set-iam-policy 
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --bindings: list # Flatten Policy to create a backward compatible wire-format. Deprecated. Use 'policy' to specify bindings. — item shape: {condition?: record, members?: list, role?: string}
+  --bindings: list # Flatten Policy to create a backward compatible wire-format. Deprecated. Use 'policy' to specify bindings. — item shape: {condition?: record, members?: list<string>, role?: string}
   --etag: string # Flatten Policy to create a backward compatible wire-format. Deprecated. Use 'policy' to specify the etag. (format: byte)
   --policy: record # An Identity and Access Management (IAM) policy, which specifies access controls for Google Cloud resources. A `Policy` is a collection of `bindings`. A `binding` binds one or more `members`, or principals, to a single `role`. Principals can be user accounts, service accounts, Google groups, and domains (such as G Suite). A `role` is a named list of permissions; each `role` can be an IAM predefined role or a user-created custom role. For some types of Google Cloud resources, a `binding` can also specify a `condition`, which is a logical expression that allows access to a resource only if the expression evaluates to `true`. A condition can add constraints based on attributes of the request, the resource, or both. To learn which resources support conditions in their IAM policies, see the [IAM documentation](https://cloud.google.com/iam/help/conditions/resource-policies). **JSON example:** { "bindings": [ { "role": "roles/resourcemanager.organizationAdmin", "members": [ "user:mike@example.com", "group:admins@example.com", "domain:google.com", "serviceAccount:my-project-id@appspot.gserviceaccount.com" ] }, { "role": "roles/resourcemanager.organizationViewer", "members": [ "user:eve@example.com" ], "condition": { "title": "expirable access", "description": "Does not grant access after Sep 2020", "expression": "request.time < timestamp('2020-10-01T00:00:00.000Z')", } } ], "etag": "BwWWja0YfJA=", "version": 3 } **YAML example:** bindings: - members: - user:mike@example.com - group:admins@example.com - domain:google.com - serviceAccount:my-project-id@appspot.gserviceaccount.com role: roles/resourcemanager.organizationAdmin - members: - user:eve@example.com role: roles/resourcemanager.organizationViewer condition: title: expirable access description: Does not grant access after Sep 2020 expression: request.time < timestamp('2020-10-01T00:00:00.000Z') etag: BwWWja0YfJA= version: 3 For a description of IAM and its features, see the [IAM documentation](https://cloud.google.com/iam/docs/). — shape: {auditConfigs?: list, bindings?: list, etag?: string, version?: int}
 ]: any -> record<auditConfigs: table<auditLogConfigs: list, service: string>, bindings: table<condition: record, members: list, role: string>, etag: string, version: int> {
@@ -949,19 +958,19 @@ export def "deploymentmanager-v2beta-projects-global-deployments-set-iam-policy 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project: $project, resource: $resource} | format pattern "/deploymentmanager/v2beta/projects/{project}/global/deployments/{resource}/setIamPolicy") $qp)
-  let body = {"bindings": $bindings, "etag": $etag, "policy": $policy} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({project: (encode-path-segment $project), resource: (encode-path-segment $resource)} | format pattern "/deploymentmanager/v2beta/projects/{project}/global/deployments/{resource}/setIamPolicy") $qp)
+  let req_body = {"bindings": $bindings, "etag": $etag, "policy": $policy} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns permissions that a caller has on the specified resource.
 #
 # POST /deploymentmanager/v2beta/projects/{project}/global/deployments/{resource}/testIamPermissions
 # operationId: deploymentmanager.deployments.testIamPermissions
-export def "deploymentmanager-v2beta-projects-global-deployments-test-iam-permissions deploymentmanagerdeploymentstestIamPermissions" [
+export def "deploymentmanager-v2beta-projects-global-deployments-test-iam-permissions test" [
   project: string
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -983,25 +992,25 @@ export def "deploymentmanager-v2beta-projects-global-deployments-test-iam-permis
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --permissions: list # The set of permissions to check for the 'resource'. Permissions with wildcards (such as '*' or 'storage.*') are not allowed.
+  --permissions: list<string> # The set of permissions to check for the 'resource'. Permissions with wildcards (such as '*' or 'storage.*') are not allowed.
 ]: any -> record<permissions: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project: $project, resource: $resource} | format pattern "/deploymentmanager/v2beta/projects/{project}/global/deployments/{resource}/testIamPermissions") $qp)
-  let body = {"permissions": $permissions} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({project: (encode-path-segment $project), resource: (encode-path-segment $resource)} | format pattern "/deploymentmanager/v2beta/projects/{project}/global/deployments/{resource}/testIamPermissions") $qp)
+  let req_body = {"permissions": $permissions} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists all operations for a project.
 #
 # GET /deploymentmanager/v2beta/projects/{project}/global/operations
 # operationId: deploymentmanager.operations.list
-export def "deploymentmanager-v2beta-projects-global-operations deploymentmanageroperationslist" [
+export def "deploymentmanager-v2beta-projects-global-operations list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1030,7 +1039,7 @@ export def "deploymentmanager-v2beta-projects-global-operations deploymentmanage
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project: $project} | format pattern "/deploymentmanager/v2beta/projects/{project}/global/operations") $qp)
+  let full_url = (build-url $base ({project: (encode-path-segment $project)} | format pattern "/deploymentmanager/v2beta/projects/{project}/global/operations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1040,7 +1049,7 @@ export def "deploymentmanager-v2beta-projects-global-operations deploymentmanage
 #
 # GET /deploymentmanager/v2beta/projects/{project}/global/operations/{operation}
 # operationId: deploymentmanager.operations.get
-export def "deploymentmanager-v2beta-projects-global-operations deploymentmanageroperationsget" [
+export def "deploymentmanager-v2beta-projects-global-operations get" [
   project: string
   operation: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1066,7 +1075,7 @@ export def "deploymentmanager-v2beta-projects-global-operations deploymentmanage
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project: $project, operation: $operation} | format pattern "/deploymentmanager/v2beta/projects/{project}/global/operations/{operation}") $qp)
+  let full_url = (build-url $base ({project: (encode-path-segment $project), operation: (encode-path-segment $operation)} | format pattern "/deploymentmanager/v2beta/projects/{project}/global/operations/{operation}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1076,7 +1085,7 @@ export def "deploymentmanager-v2beta-projects-global-operations deploymentmanage
 #
 # GET /deploymentmanager/v2beta/projects/{project}/global/typeProviders
 # operationId: deploymentmanager.typeProviders.list
-export def "deploymentmanager-v2beta-projects-global-type-providers deploymentmanagertypeProviderslist" [
+export def "deploymentmanager-v2beta-projects-global-type-providers list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1105,7 +1114,7 @@ export def "deploymentmanager-v2beta-projects-global-type-providers deploymentma
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project: $project} | format pattern "/deploymentmanager/v2beta/projects/{project}/global/typeProviders") $qp)
+  let full_url = (build-url $base ({project: (encode-path-segment $project)} | format pattern "/deploymentmanager/v2beta/projects/{project}/global/typeProviders") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1120,7 +1129,7 @@ export def "deploymentmanager-v2beta-projects-global-type-providers deploymentma
 # --labels item shape: {key?: string, value?: string}
 # --operation shape: {clientOperationId?: string, creationTimestamp?: string, description?: string, endTime?: string, error?: record, httpErrorMessage?: string, httpErrorStatusCode?: int, id?: string, insertTime?: string, kind?: string, name?: string, operationGroupId?: string, operationType?: string, progress?: int, region?: string, selfLink?: string, startTime?: string, status?: "PENDING"|"RUNNING"|"DONE", statusMessage?: string, targetId?: string, targetLink?: string, user?: string, warnings?: list, zone?: string}
 # --options shape: {asyncOptions?: list, inputMappings?: list, validationOptions?: record, virtualProperties?: string}
-export def "deploymentmanager-v2beta-projects-global-type-providers deploymentmanagertypeProvidersinsert" [
+export def "deploymentmanager-v2beta-projects-global-type-providers create" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1143,7 +1152,7 @@ export def "deploymentmanager-v2beta-projects-global-type-providers deploymentma
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --collection-overrides: list # Allows resource handling overrides for specific collections — item shape: {collection?: string, options?: record}
   --credential: record # The credential used by Deployment Manager and TypeProvider. Only one of the options is permitted. — shape: {basicAuth?: record, serviceAccount?: record, useProjectDefault?: bool}
-  --custom-certificate-authority-roots: list # List of up to 2 custom certificate authority roots to use for TLS authentication when making calls on behalf of this type provider. If set, TLS authentication will exclusively use these roots instead of relying on publicly trusted certificate authorities when validating TLS certificate authenticity. The certificates must be in base64-encoded PEM format. The maximum size of each certificate must not exceed 10KB.
+  --custom-certificate-authority-roots: list<string> # List of up to 2 custom certificate authority roots to use for TLS authentication when making calls on behalf of this type provider. If set, TLS authentication will exclusively use these roots instead of relying on publicly trusted certificate authorities when validating TLS certificate authenticity. The certificates must be in base64-encoded PEM format. The maximum size of each certificate must not exceed 10KB.
   --description: string # An optional textual description of the resource; provided by the client when the resource is created.
   --descriptor-url: string # Descriptor Url for the this type provider.
   --id: string # Output only. Unique identifier for the resource defined by the server. (format: uint64)
@@ -1158,19 +1167,19 @@ export def "deploymentmanager-v2beta-projects-global-type-providers deploymentma
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project: $project} | format pattern "/deploymentmanager/v2beta/projects/{project}/global/typeProviders") $qp)
-  let body = {"collectionOverrides": $collection_overrides, "credential": $credential, "customCertificateAuthorityRoots": $custom_certificate_authority_roots, "description": $description, "descriptorUrl": $descriptor_url, "id": $id, "insertTime": $insert_time, "labels": $labels, "name": $name, "operation": $operation, "options": $options, "selfLink": $self_link} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({project: (encode-path-segment $project)} | format pattern "/deploymentmanager/v2beta/projects/{project}/global/typeProviders") $qp)
+  let req_body = {"collectionOverrides": $collection_overrides, "credential": $credential, "customCertificateAuthorityRoots": $custom_certificate_authority_roots, "description": $description, "descriptorUrl": $descriptor_url, "id": $id, "insertTime": $insert_time, "labels": $labels, "name": $name, "operation": $operation, "options": $options, "selfLink": $self_link} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes a type provider.
 #
 # DELETE /deploymentmanager/v2beta/projects/{project}/global/typeProviders/{typeProvider}
 # operationId: deploymentmanager.typeProviders.delete
-export def "deploymentmanager-v2beta-projects-global-type-providers deploymentmanagertypeProvidersdelete" [
+export def "deploymentmanager-v2beta-projects-global-type-providers delete" [
   project: string
   type_provider: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1196,7 +1205,7 @@ export def "deploymentmanager-v2beta-projects-global-type-providers deploymentma
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project: $project, type_provider: $type_provider} | format pattern "/deploymentmanager/v2beta/projects/{project}/global/typeProviders/{type_provider}") $qp)
+  let full_url = (build-url $base ({project: (encode-path-segment $project), type_provider: (encode-path-segment $type_provider)} | format pattern "/deploymentmanager/v2beta/projects/{project}/global/typeProviders/{type_provider}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1206,7 +1215,7 @@ export def "deploymentmanager-v2beta-projects-global-type-providers deploymentma
 #
 # GET /deploymentmanager/v2beta/projects/{project}/global/typeProviders/{typeProvider}
 # operationId: deploymentmanager.typeProviders.get
-export def "deploymentmanager-v2beta-projects-global-type-providers deploymentmanagertypeProvidersget" [
+export def "deploymentmanager-v2beta-projects-global-type-providers get" [
   project: string
   type_provider: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1232,7 +1241,7 @@ export def "deploymentmanager-v2beta-projects-global-type-providers deploymentma
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project: $project, type_provider: $type_provider} | format pattern "/deploymentmanager/v2beta/projects/{project}/global/typeProviders/{type_provider}") $qp)
+  let full_url = (build-url $base ({project: (encode-path-segment $project), type_provider: (encode-path-segment $type_provider)} | format pattern "/deploymentmanager/v2beta/projects/{project}/global/typeProviders/{type_provider}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1247,7 +1256,7 @@ export def "deploymentmanager-v2beta-projects-global-type-providers deploymentma
 # --labels item shape: {key?: string, value?: string}
 # --operation shape: {clientOperationId?: string, creationTimestamp?: string, description?: string, endTime?: string, error?: record, httpErrorMessage?: string, httpErrorStatusCode?: int, id?: string, insertTime?: string, kind?: string, name?: string, operationGroupId?: string, operationType?: string, progress?: int, region?: string, selfLink?: string, startTime?: string, status?: "PENDING"|"RUNNING"|"DONE", statusMessage?: string, targetId?: string, targetLink?: string, user?: string, warnings?: list, zone?: string}
 # --options shape: {asyncOptions?: list, inputMappings?: list, validationOptions?: record, virtualProperties?: string}
-export def "deploymentmanager-v2beta-projects-global-type-providers deploymentmanagertypeProviderspatch" [
+export def "deploymentmanager-v2beta-projects-global-type-providers update-by-project-typeProvider" [
   project: string
   type_provider: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1271,7 +1280,7 @@ export def "deploymentmanager-v2beta-projects-global-type-providers deploymentma
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --collection-overrides: list # Allows resource handling overrides for specific collections — item shape: {collection?: string, options?: record}
   --credential: record # The credential used by Deployment Manager and TypeProvider. Only one of the options is permitted. — shape: {basicAuth?: record, serviceAccount?: record, useProjectDefault?: bool}
-  --custom-certificate-authority-roots: list # List of up to 2 custom certificate authority roots to use for TLS authentication when making calls on behalf of this type provider. If set, TLS authentication will exclusively use these roots instead of relying on publicly trusted certificate authorities when validating TLS certificate authenticity. The certificates must be in base64-encoded PEM format. The maximum size of each certificate must not exceed 10KB.
+  --custom-certificate-authority-roots: list<string> # List of up to 2 custom certificate authority roots to use for TLS authentication when making calls on behalf of this type provider. If set, TLS authentication will exclusively use these roots instead of relying on publicly trusted certificate authorities when validating TLS certificate authenticity. The certificates must be in base64-encoded PEM format. The maximum size of each certificate must not exceed 10KB.
   --description: string # An optional textual description of the resource; provided by the client when the resource is created.
   --descriptor-url: string # Descriptor Url for the this type provider.
   --id: string # Output only. Unique identifier for the resource defined by the server. (format: uint64)
@@ -1286,12 +1295,12 @@ export def "deploymentmanager-v2beta-projects-global-type-providers deploymentma
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project: $project, type_provider: $type_provider} | format pattern "/deploymentmanager/v2beta/projects/{project}/global/typeProviders/{type_provider}") $qp)
-  let body = {"collectionOverrides": $collection_overrides, "credential": $credential, "customCertificateAuthorityRoots": $custom_certificate_authority_roots, "description": $description, "descriptorUrl": $descriptor_url, "id": $id, "insertTime": $insert_time, "labels": $labels, "name": $name, "operation": $operation, "options": $options, "selfLink": $self_link} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({project: (encode-path-segment $project), type_provider: (encode-path-segment $type_provider)} | format pattern "/deploymentmanager/v2beta/projects/{project}/global/typeProviders/{type_provider}") $qp)
+  let req_body = {"collectionOverrides": $collection_overrides, "credential": $credential, "customCertificateAuthorityRoots": $custom_certificate_authority_roots, "description": $description, "descriptorUrl": $descriptor_url, "id": $id, "insertTime": $insert_time, "labels": $labels, "name": $name, "operation": $operation, "options": $options, "selfLink": $self_link} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates a type provider.
@@ -1303,7 +1312,7 @@ export def "deploymentmanager-v2beta-projects-global-type-providers deploymentma
 # --labels item shape: {key?: string, value?: string}
 # --operation shape: {clientOperationId?: string, creationTimestamp?: string, description?: string, endTime?: string, error?: record, httpErrorMessage?: string, httpErrorStatusCode?: int, id?: string, insertTime?: string, kind?: string, name?: string, operationGroupId?: string, operationType?: string, progress?: int, region?: string, selfLink?: string, startTime?: string, status?: "PENDING"|"RUNNING"|"DONE", statusMessage?: string, targetId?: string, targetLink?: string, user?: string, warnings?: list, zone?: string}
 # --options shape: {asyncOptions?: list, inputMappings?: list, validationOptions?: record, virtualProperties?: string}
-export def "deploymentmanager-v2beta-projects-global-type-providers deploymentmanagertypeProvidersupdate" [
+export def "deploymentmanager-v2beta-projects-global-type-providers update-by-project-typeProvider-1" [
   project: string
   type_provider: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1327,7 +1336,7 @@ export def "deploymentmanager-v2beta-projects-global-type-providers deploymentma
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --collection-overrides: list # Allows resource handling overrides for specific collections — item shape: {collection?: string, options?: record}
   --credential: record # The credential used by Deployment Manager and TypeProvider. Only one of the options is permitted. — shape: {basicAuth?: record, serviceAccount?: record, useProjectDefault?: bool}
-  --custom-certificate-authority-roots: list # List of up to 2 custom certificate authority roots to use for TLS authentication when making calls on behalf of this type provider. If set, TLS authentication will exclusively use these roots instead of relying on publicly trusted certificate authorities when validating TLS certificate authenticity. The certificates must be in base64-encoded PEM format. The maximum size of each certificate must not exceed 10KB.
+  --custom-certificate-authority-roots: list<string> # List of up to 2 custom certificate authority roots to use for TLS authentication when making calls on behalf of this type provider. If set, TLS authentication will exclusively use these roots instead of relying on publicly trusted certificate authorities when validating TLS certificate authenticity. The certificates must be in base64-encoded PEM format. The maximum size of each certificate must not exceed 10KB.
   --description: string # An optional textual description of the resource; provided by the client when the resource is created.
   --descriptor-url: string # Descriptor Url for the this type provider.
   --id: string # Output only. Unique identifier for the resource defined by the server. (format: uint64)
@@ -1342,19 +1351,19 @@ export def "deploymentmanager-v2beta-projects-global-type-providers deploymentma
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project: $project, type_provider: $type_provider} | format pattern "/deploymentmanager/v2beta/projects/{project}/global/typeProviders/{type_provider}") $qp)
-  let body = {"collectionOverrides": $collection_overrides, "credential": $credential, "customCertificateAuthorityRoots": $custom_certificate_authority_roots, "description": $description, "descriptorUrl": $descriptor_url, "id": $id, "insertTime": $insert_time, "labels": $labels, "name": $name, "operation": $operation, "options": $options, "selfLink": $self_link} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({project: (encode-path-segment $project), type_provider: (encode-path-segment $type_provider)} | format pattern "/deploymentmanager/v2beta/projects/{project}/global/typeProviders/{type_provider}") $qp)
+  let req_body = {"collectionOverrides": $collection_overrides, "credential": $credential, "customCertificateAuthorityRoots": $custom_certificate_authority_roots, "description": $description, "descriptorUrl": $descriptor_url, "id": $id, "insertTime": $insert_time, "labels": $labels, "name": $name, "operation": $operation, "options": $options, "selfLink": $self_link} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists all the type info for a TypeProvider.
 #
 # GET /deploymentmanager/v2beta/projects/{project}/global/typeProviders/{typeProvider}/types
 # operationId: deploymentmanager.typeProviders.listTypes
-export def "deploymentmanager-v2beta-projects-global-type-providers-types deploymentmanagertypeProviderslistTypes" [
+export def "deploymentmanager-v2beta-projects-global-type-providers-types list" [
   project: string
   type_provider: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1384,7 +1393,7 @@ export def "deploymentmanager-v2beta-projects-global-type-providers-types deploy
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project: $project, type_provider: $type_provider} | format pattern "/deploymentmanager/v2beta/projects/{project}/global/typeProviders/{type_provider}/types") $qp)
+  let full_url = (build-url $base ({project: (encode-path-segment $project), type_provider: (encode-path-segment $type_provider)} | format pattern "/deploymentmanager/v2beta/projects/{project}/global/typeProviders/{type_provider}/types") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1394,7 +1403,7 @@ export def "deploymentmanager-v2beta-projects-global-type-providers-types deploy
 #
 # GET /deploymentmanager/v2beta/projects/{project}/global/typeProviders/{typeProvider}/types/{type}
 # operationId: deploymentmanager.typeProviders.getType
-export def "deploymentmanager-v2beta-projects-global-type-providers-types deploymentmanagertypeProvidersgetType" [
+export def "deploymentmanager-v2beta-projects-global-type-providers-types get" [
   project: string
   type_provider: string
   type: string
@@ -1421,7 +1430,7 @@ export def "deploymentmanager-v2beta-projects-global-type-providers-types deploy
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project: $project, type_provider: $type_provider, type: $type} | format pattern "/deploymentmanager/v2beta/projects/{project}/global/typeProviders/{type_provider}/types/{type}") $qp)
+  let full_url = (build-url $base ({project: (encode-path-segment $project), type_provider: (encode-path-segment $type_provider), type: (encode-path-segment $type)} | format pattern "/deploymentmanager/v2beta/projects/{project}/global/typeProviders/{type_provider}/types/{type}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1431,7 +1440,7 @@ export def "deploymentmanager-v2beta-projects-global-type-providers-types deploy
 #
 # GET /deploymentmanager/v2beta/projects/{project}/global/types
 # operationId: deploymentmanager.types.list
-export def "deploymentmanager-v2beta-projects-global-types deploymentmanagertypeslist" [
+export def "deploymentmanager-v2beta-projects-global-types list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1460,7 +1469,7 @@ export def "deploymentmanager-v2beta-projects-global-types deploymentmanagertype
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project: $project} | format pattern "/deploymentmanager/v2beta/projects/{project}/global/types") $qp)
+  let full_url = (build-url $base ({project: (encode-path-segment $project)} | format pattern "/deploymentmanager/v2beta/projects/{project}/global/types") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

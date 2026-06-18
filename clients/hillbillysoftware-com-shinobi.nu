@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -109,7 +118,7 @@ export def "actors-search get" [
 ]: nothing -> table<Bio: string, BirthYear: string, DeathYear: string, Gender: string, Name: string, PopularityIndex: string, ProfileImage: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({accesstoken: $accesstoken, query: $query} | format pattern "/Actors/Search/{accesstoken}/{query}"))
+  let full_url = (build-url $base ({accesstoken: (encode-path-segment $accesstoken), query: (encode-path-segment $query)} | format pattern "/Actors/Search/{accesstoken}/{query}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -142,11 +151,11 @@ export def "add-actor create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/AddActor")
-  let body = {"AccessToken": $access_token, "Bio": $bio, "BirthYear": $birth_year, "DeathYear": $death_year, "Gender": $gender, "Name": $name, "PopularityIndex": $popularity_index, "ProfileImage": $profile_image} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"AccessToken": $access_token, "Bio": $bio, "BirthYear": $birth_year, "DeathYear": $death_year, "Gender": $gender, "Name": $name, "PopularityIndex": $popularity_index, "ProfileImage": $profile_image} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Add new show to database
@@ -179,11 +188,11 @@ export def "add-tv-show create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/AddTVShow")
-  let body = {"AccessToken": $access_token, "EpisodeCount": $episode_count, "EpisodeRuntime": $episode_runtime, "Genres": $genres, "ImdbID": $imdb_id, "PremierYear": $premier_year, "Seasons": $seasons, "ShowImage": $show_image, "ShowStatus": $show_status, "Synopsis": $synopsis, "Title": $title} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"AccessToken": $access_token, "EpisodeCount": $episode_count, "EpisodeRuntime": $episode_runtime, "Genres": $genres, "ImdbID": $imdb_id, "PremierYear": $premier_year, "Seasons": $seasons, "ShowImage": $show_image, "ShowStatus": $show_status, "Synopsis": $synopsis, "Title": $title} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get known aliases for Movies or Television shows from passed imdbID
@@ -205,7 +214,7 @@ export def "aliases-by-id get" [
 ]: nothing -> table<Aka: string, ExternalIDs: list<record>, Name: string, OriginalName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({access_token: $access_token, imdb_id: $imdb_id} | format pattern "/Aliases/ByID/{access_token}/{imdb_id}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), imdb_id: (encode-path-segment $imdb_id)} | format pattern "/Aliases/ByID/{access_token}/{imdb_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -230,7 +239,7 @@ export def "aliases-by-name get" [
 ]: nothing -> table<Aka: string, ExternalIDs: list<record>, Name: string, OriginalName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({access_token: $access_token, title: $title} | format pattern "/Aliases/ByName/{access_token}/{title}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), title: (encode-path-segment $title)} | format pattern "/Aliases/ByName/{access_token}/{title}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -240,7 +249,7 @@ export def "aliases-by-name get" [
 #
 # GET /Awards/ByWinner/{AccessToken}/{Nominee}
 # operationId: AwardsbyWinner_Get
-export def "awards-by-winner get" [
+export def "awards-by-winner get-awardsby" [
   access_token: string
   nominee: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -255,7 +264,7 @@ export def "awards-by-winner get" [
 ]: nothing -> table<Category: string, Nominee: string, Type: string, Winner: string, Year: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({access_token: $access_token, nominee: $nominee} | format pattern "/Awards/ByWinner/{access_token}/{nominee}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), nominee: (encode-path-segment $nominee)} | format pattern "/Awards/ByWinner/{access_token}/{nominee}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -279,7 +288,7 @@ export def "awards-by-year get" [
 ]: nothing -> table<Category: string, Nominee: string, Type: string, Winner: string, Year: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({year: $year} | format pattern "/Awards/ByYear/{year}"))
+  let full_url = (build-url $base ({year: (encode-path-segment $year)} | format pattern "/Awards/ByYear/{year}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -289,7 +298,7 @@ export def "awards-by-year get" [
 #
 # GET /Calendar/ByDate/{AccessToken}/{Date}/{Country}
 # operationId: ScheduleByDate_Get
-export def "calendar-by-date get" [
+export def "calendar-by-date get-schedule" [
   access_token: string
   date: string
   country: string
@@ -305,7 +314,7 @@ export def "calendar-by-date get" [
 ]: nothing -> table<AirDate: string, AirTime: string, Country: string, DaysOn: string, Episode: string, ID: string, Image: string, Network: string, PremiereDate: string, Runtime: string, Season: string, ShowName: string, Summary: string, Title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({access_token: $access_token, date: $date, country: $country} | format pattern "/Calendar/ByDate/{access_token}/{date}/{country}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), date: (encode-path-segment $date), country: (encode-path-segment $country)} | format pattern "/Calendar/ByDate/{access_token}/{date}/{country}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -329,7 +338,7 @@ export def "calendar-countries get" [
 ]: nothing -> table<Name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({access_token: $access_token} | format pattern "/Calendar/Countries/{access_token}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token)} | format pattern "/Calendar/Countries/{access_token}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -353,7 +362,7 @@ export def "calendar-networks get" [
 ]: nothing -> table<Country: string, Network: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({access_token: $access_token} | format pattern "/Calendar/Networks/{access_token}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token)} | format pattern "/Calendar/Networks/{access_token}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -363,7 +372,7 @@ export def "calendar-networks get" [
 #
 # GET /Calendar/Seasons/{AccessToken}/{Name}
 # operationId: CalendarShowSeasons_Get
-export def "calendar-seasons get" [
+export def "calendar-seasons get-show" [
   access_token: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -378,7 +387,7 @@ export def "calendar-seasons get" [
 ]: nothing -> table<Year: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({access_token: $access_token, name: $name} | format pattern "/Calendar/Seasons/{access_token}/{name}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), name: (encode-path-segment $name)} | format pattern "/Calendar/Seasons/{access_token}/{name}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -388,7 +397,7 @@ export def "calendar-seasons get" [
 #
 # GET /Calendar/Show/Season/{AccessToken}/{Name}/{Season}
 # operationId: CalendarbyShownameSeason_Get
-export def "calendar-show-season get" [
+export def "calendar-show-season get-calendarby-showname" [
   access_token: string
   name: string
   season: string
@@ -404,7 +413,7 @@ export def "calendar-show-season get" [
 ]: nothing -> table<AirDate: string, AirTime: string, Country: string, DaysOn: string, Episode: string, ID: string, Image: string, Network: string, PremiereDate: string, Runtime: string, Season: string, ShowName: string, Summary: string, Title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({access_token: $access_token, name: $name, season: $season} | format pattern "/Calendar/Show/Season/{access_token}/{name}/{season}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), name: (encode-path-segment $name), season: (encode-path-segment $season)} | format pattern "/Calendar/Show/Season/{access_token}/{name}/{season}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -414,7 +423,7 @@ export def "calendar-show-season get" [
 #
 # GET /Calendar/Show/{AccessToken}/{Name}/{Year}
 # operationId: CalendarByShowName_Get
-export def "calendar-show get" [
+export def "calendar-show get-by" [
   access_token: string
   name: string
   year: string
@@ -430,7 +439,7 @@ export def "calendar-show get" [
 ]: nothing -> table<AirDate: string, AirTime: string, Country: string, DaysOn: string, Episode: string, ID: string, Image: string, Network: string, PremiereDate: string, Runtime: string, Season: string, ShowName: string, Summary: string, Title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({access_token: $access_token, name: $name, year: $year} | format pattern "/Calendar/Show/{access_token}/{name}/{year}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), name: (encode-path-segment $name), year: (encode-path-segment $year)} | format pattern "/Calendar/Show/{access_token}/{name}/{year}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -454,7 +463,7 @@ export def "calendar-today get" [
 ]: nothing -> table<AirDate: string, AirTime: string, Country: string, DaysOn: string, Episode: string, ID: string, Image: string, Network: string, PremiereDate: string, Runtime: string, Season: string, ShowName: string, Summary: string, Title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({access_token: $access_token} | format pattern "/Calendar/Today/{access_token}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token)} | format pattern "/Calendar/Today/{access_token}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -464,7 +473,7 @@ export def "calendar-today get" [
 #
 # GET /Cast/ActorBySearch/{AccessToken}/{Actor}
 # operationId: ActorInShows_Get
-export def "cast-actor-by-search get" [
+export def "cast-actor-by-search get-in-shows" [
   access_token: string
   actor: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -479,7 +488,7 @@ export def "cast-actor-by-search get" [
 ]: nothing -> table<Externals: list<record>, Image: string, Name: string, Role: string, ShowName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({access_token: $access_token, actor: $actor} | format pattern "/Cast/ActorBySearch/{access_token}/{actor}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), actor: (encode-path-segment $actor)} | format pattern "/Cast/ActorBySearch/{access_token}/{actor}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -504,7 +513,7 @@ export def "cast-by-actor get" [
 ]: nothing -> table<Externals: list<record>, Image: string, Name: string, Role: string, ShowName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({access_token: $access_token, actor: $actor} | format pattern "/Cast/ByActor/{access_token}/{actor}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), actor: (encode-path-segment $actor)} | format pattern "/Cast/ByActor/{access_token}/{actor}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -514,7 +523,7 @@ export def "cast-by-actor get" [
 #
 # GET /Cast/ByTVShow/{accesstoken}/{ShowName}
 # operationId: ActorsInTVShow_Get
-export def "cast-by-tv-show get" [
+export def "cast-by-tv-show get-actors-in" [
   accesstoken: string
   show_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -529,7 +538,7 @@ export def "cast-by-tv-show get" [
 ]: nothing -> table<Externals: list<record>, Image: string, Name: string, Role: string, ShowName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({accesstoken: $accesstoken, show_name: $show_name} | format pattern "/Cast/ByTVShow/{accesstoken}/{show_name}"))
+  let full_url = (build-url $base ({accesstoken: (encode-path-segment $accesstoken), show_name: (encode-path-segment $show_name)} | format pattern "/Cast/ByTVShow/{accesstoken}/{show_name}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -554,7 +563,7 @@ export def "crew-by-id get" [
 ]: nothing -> table<Externals: list<record>, Image: string, Name: string, ShowName: string, Type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({access_token: $access_token, id: $id} | format pattern "/Crew/ByID/{access_token}/{id}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), id: (encode-path-segment $id)} | format pattern "/Crew/ByID/{access_token}/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -579,7 +588,7 @@ export def "crew-by-person get" [
 ]: nothing -> table<Externals: list<record>, Image: string, Name: string, ShowName: string, Type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({access_token: $access_token, person_name: $person_name} | format pattern "/Crew/ByPerson/{access_token}/{person_name}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), person_name: (encode-path-segment $person_name)} | format pattern "/Crew/ByPerson/{access_token}/{person_name}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -589,7 +598,7 @@ export def "crew-by-person get" [
 #
 # GET /Crew/ByShowName/{AccessToken}/{ShowName}
 # operationId: CrewbyShowname_Get
-export def "crew-by-show-name get" [
+export def "crew-by-show-name get-crewby" [
   access_token: string
   show_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -604,7 +613,7 @@ export def "crew-by-show-name get" [
 ]: nothing -> table<Externals: list<record>, Image: string, Name: string, ShowName: string, Type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({access_token: $access_token, show_name: $show_name} | format pattern "/Crew/ByShowName/{access_token}/{show_name}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), show_name: (encode-path-segment $show_name)} | format pattern "/Crew/ByShowName/{access_token}/{show_name}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -629,7 +638,7 @@ export def "crew-search get" [
 ]: nothing -> table<Externals: list<record>, Image: string, Name: string, ShowName: string, Type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({access_token: $access_token, phrase: $phrase} | format pattern "/Crew/Search/{access_token}/{phrase}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), phrase: (encode-path-segment $phrase)} | format pattern "/Crew/Search/{access_token}/{phrase}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -654,7 +663,7 @@ export def "episodes-by-id get" [
 ]: nothing -> table<Airdate: string, Airtime: string, EpisodeNo: string, Externals: list<record>, Image: string, Season: string, Synopsis: string, Title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({access_token: $access_token, id: $id} | format pattern "/Episodes/ByID/{access_token}/{id}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), id: (encode-path-segment $id)} | format pattern "/Episodes/ByID/{access_token}/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -680,7 +689,7 @@ export def "episodes-by-season get" [
 ]: nothing -> table<Airdate: string, Airtime: string, EpisodeNo: string, Externals: list<record>, Image: string, Season: string, Synopsis: string, Title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({access_token: $access_token, id: $id, season: $season} | format pattern "/Episodes/BySeason/{access_token}/{id}/{season}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), id: (encode-path-segment $id), season: (encode-path-segment $season)} | format pattern "/Episodes/BySeason/{access_token}/{id}/{season}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -705,7 +714,7 @@ export def "episodes-by-show-name get" [
 ]: nothing -> table<Airdate: string, Airtime: string, EpisodeNo: string, Externals: list<record>, Image: string, Season: string, Synopsis: string, Title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({access_token: $access_token, showname: $showname} | format pattern "/Episodes/ByShowName/{access_token}/{showname}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), showname: (encode-path-segment $showname)} | format pattern "/Episodes/ByShowName/{access_token}/{showname}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -715,7 +724,7 @@ export def "episodes-by-show-name get" [
 #
 # GET /Episodes/LatestSeason/Show/{AccessToken}/{Name}
 # operationId: EpisodesLastAvailableSeasonbyName_Get
-export def "episodes-latest-season-show get" [
+export def "episodes-latest-season-show get-last-available-seasonby" [
   access_token: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -730,7 +739,7 @@ export def "episodes-latest-season-show get" [
 ]: nothing -> record<Season: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({access_token: $access_token, name: $name} | format pattern "/Episodes/LatestSeason/Show/{access_token}/{name}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), name: (encode-path-segment $name)} | format pattern "/Episodes/LatestSeason/Show/{access_token}/{name}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -740,7 +749,7 @@ export def "episodes-latest-season-show get" [
 #
 # GET /Episodes/LatestSeason/{AccessToken}/{ID}
 # operationId: EpisodesLastAvailableSeason_Get
-export def "episodes-latest-season get" [
+export def "episodes-latest-season get-last-available" [
   access_token: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -755,7 +764,7 @@ export def "episodes-latest-season get" [
 ]: nothing -> record<Season: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({access_token: $access_token, id: $id} | format pattern "/Episodes/LatestSeason/{access_token}/{id}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), id: (encode-path-segment $id)} | format pattern "/Episodes/LatestSeason/{access_token}/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -780,7 +789,7 @@ export def "episodes-season-count get" [
 ]: nothing -> record<Episodes: string, Externals: table<ID: string, Name: string>, Seasons: string, Showname: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({access_token: $access_token, id: $id} | format pattern "/Episodes/SeasonCount/{access_token}/{id}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), id: (encode-path-segment $id)} | format pattern "/Episodes/SeasonCount/{access_token}/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -805,7 +814,7 @@ export def "get-imd-bid-by-id get-async" [
 ]: nothing -> table<ID: string, ShinobiID: string, Title: string, Type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({access_token: $access_token, query: $query} | format pattern "/GetIMDBid/ByID/{access_token}/{query}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), query: (encode-path-segment $query)} | format pattern "/GetIMDBid/ByID/{access_token}/{query}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -830,7 +839,7 @@ export def "images-by-id get" [
 ]: nothing -> table<Backdrops: list<string>, Posters: list<string>, Type: string, imdbID: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({access_token: $access_token, imdb_id: $imdb_id} | format pattern "/Images/ByID/{access_token}/{imdb_id}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), imdb_id: (encode-path-segment $imdb_id)} | format pattern "/Images/ByID/{access_token}/{imdb_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -857,13 +866,13 @@ export def "images-search get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "Strictmatch" $strictmatch "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({accesstoken: $accesstoken, query: $query} | format pattern "/Images/Search/{accesstoken}/{query}") $qp)
+  let full_url = (build-url $base ({accesstoken: (encode-path-segment $accesstoken), query: (encode-path-segment $query)} | format pattern "/Images/Search/{accesstoken}/{query}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Gets available magnet hashes on passed date (yyyy-mm-dd).  Feature not available on free plan, please donate to be able to use this feature.
+# Gets available magnet hashes on passed date (yyyy-mm-dd). Feature not available on free plan, please donate to be able to use this feature.
 #
 # GET /Magnets/ByDate/{AccessToken}/{Date}
 # operationId: MagnetsByDate_GetAsync
@@ -882,17 +891,17 @@ export def "magnets-by-date get-async" [
 ]: nothing -> table<Externals: list<record>, FirstSeenDate: string, Hash: string, Image: string, Name: string, Peers: string, Seeds: string, Size: string, Title: string, Type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({access_token: $access_token, date: $date} | format pattern "/Magnets/ByDate/{access_token}/{date}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), date: (encode-path-segment $date)} | format pattern "/Magnets/ByDate/{access_token}/{date}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Returns list of magnet hashes for passed IMDBID.  Feature not available on free plan, please donate to be able to use this feature.
+# Returns list of magnet hashes for passed IMDBID. Feature not available on free plan, please donate to be able to use this feature.
 #
 # GET /Magnets/ByIMDB/{AccessToken}/{imdbID}
 # operationId: MagnetsByimdbID_GetAsync
-export def "magnets-by-imdb get-async" [
+export def "magnets-by-imdb get-byimdb-async" [
   access_token: string
   imdb_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -907,17 +916,17 @@ export def "magnets-by-imdb get-async" [
 ]: nothing -> table<Externals: list<record>, FirstSeenDate: string, Hash: string, Image: string, Name: string, Peers: string, Seeds: string, Size: string, Title: string, Type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({access_token: $access_token, imdb_id: $imdb_id} | format pattern "/Magnets/ByIMDB/{access_token}/{imdb_id}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), imdb_id: (encode-path-segment $imdb_id)} | format pattern "/Magnets/ByIMDB/{access_token}/{imdb_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Try and find magnet links for queried movie.  Feature not available on free plan, please donate to be able to use this feature
+# Try and find magnet links for queried movie. Feature not available on free plan, please donate to be able to use this feature
 #
 # GET /Magnets/Search/{AccessToken}/{Query}
 # operationId: magnetsMovieByID_GetAsync
-export def "magnets-search get-async" [
+export def "magnets-search get-movie-by-async" [
   access_token: string
   query: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -932,7 +941,7 @@ export def "magnets-search get-async" [
 ]: nothing -> table<Externals: list<record>, FirstSeenDate: string, Hash: string, Image: string, Name: string, Peers: string, Seeds: string, Size: string, Title: string, Type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({access_token: $access_token, query: $query} | format pattern "/Magnets/Search/{access_token}/{query}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), query: (encode-path-segment $query)} | format pattern "/Magnets/Search/{access_token}/{query}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -942,7 +951,7 @@ export def "magnets-search get-async" [
 #
 # GET /Magnets/TVShow/{AccessToken}/{TVShow}
 # operationId: TVShowsearch_Get
-export def "magnets-tv-show get" [
+export def "magnets-tv-show get-showsearch" [
   access_token: string
   tv_show: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -957,7 +966,7 @@ export def "magnets-tv-show get" [
 ]: nothing -> table<Externals: list<record>, FirstSeenDate: string, Hash: string, Image: string, Name: string, Peers: string, Seeds: string, Size: string, Title: string, Type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({access_token: $access_token, tv_show: $tv_show} | format pattern "/Magnets/TVShow/{access_token}/{tv_show}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), tv_show: (encode-path-segment $tv_show)} | format pattern "/Magnets/TVShow/{access_token}/{tv_show}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -981,7 +990,7 @@ export def "movie-by-id get" [
 ]: nothing -> record<ID: string, ImdbID: string, ReleaseYear: string, Runtime: string, Synopsis: string, Title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({accesstoken: $accesstoken, imdb_id: $imdb_id} | format pattern "/Movie/ByID/{accesstoken}/{imdb_id}"))
+  let full_url = (build-url $base ({accesstoken: (encode-path-segment $accesstoken), imdb_id: (encode-path-segment $imdb_id)} | format pattern "/Movie/ByID/{accesstoken}/{imdb_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1006,7 +1015,7 @@ export def "movie-search get-async" [
 ]: nothing -> table<ID: string, ImdbID: string, ReleaseYear: string, Runtime: string, Synopsis: string, Title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({access_token: $access_token, query: $query} | format pattern "/Movie/Search/{access_token}/{query}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), query: (encode-path-segment $query)} | format pattern "/Movie/Search/{access_token}/{query}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1031,7 +1040,7 @@ export def "music-albums-art get" [
 ]: nothing -> record<AlbumID: string, Albumname: string, Art: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({access_token: $access_token, album_id: $album_id} | format pattern "/Music/Albums/Art/{access_token}/{album_id}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), album_id: (encode-path-segment $album_id)} | format pattern "/Music/Albums/Art/{access_token}/{album_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1041,7 +1050,7 @@ export def "music-albums-art get" [
 #
 # GET /Music/Albums/CoverArt/{AccessToken}/{MBID}
 # operationId: musicCDCovers_Get
-export def "music-albums-cover-art get" [
+export def "music-albums-cover-art get-cd" [
   access_token: string
   mbid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1056,7 +1065,7 @@ export def "music-albums-cover-art get" [
 ]: nothing -> table<CoverImage: string, CoverThumbMedium: string, CoverThumbSmall: string, CoverType: string, MusicBrainzID: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({access_token: $access_token, mbid: $mbid} | format pattern "/Music/Albums/CoverArt/{access_token}/{mbid}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), mbid: (encode-path-segment $mbid)} | format pattern "/Music/Albums/CoverArt/{access_token}/{mbid}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1066,7 +1075,7 @@ export def "music-albums-cover-art get" [
 #
 # GET /Music/Albums/MusicBrainzID/{AccessToken}/{MBID}
 # operationId: MusicByMusicBrainz_Get
-export def "music-albums-music-brainz-id get" [
+export def "music-albums-music-brainz-id get-by" [
   access_token: string
   mbid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1081,7 +1090,7 @@ export def "music-albums-music-brainz-id get" [
 ]: nothing -> table<ArtistID: string, Banner: string, Biography: string, DisbandedYear: string, FormationYear: string, Genre: string, Logo: string, Members: string, MusicBrainzID: string, Name: string, SocialMedia: string, WebSite: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({access_token: $access_token, mbid: $mbid} | format pattern "/Music/Albums/MusicBrainzID/{access_token}/{mbid}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), mbid: (encode-path-segment $mbid)} | format pattern "/Music/Albums/MusicBrainzID/{access_token}/{mbid}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1106,7 +1115,7 @@ export def "music-albums get" [
 ]: nothing -> table<AlbumArt: string, AlbumID: string, ArtistID: string, Bibliography: string, Label: string, Name: string, Releaseyear: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({access_token: $access_token, artist_id: $artist_id} | format pattern "/Music/Albums/{access_token}/{artist_id}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), artist_id: (encode-path-segment $artist_id)} | format pattern "/Music/Albums/{access_token}/{artist_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1116,7 +1125,7 @@ export def "music-albums get" [
 #
 # GET /Music/Artist/Art/ID/{AccessToken}/{ArtistID}
 # operationId: musicCoverArt_Get
-export def "music-artist-art-id get" [
+export def "music-artist-art-id get-cover" [
   access_token: string
   artist_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1131,7 +1140,7 @@ export def "music-artist-art-id get" [
 ]: nothing -> record<ArtistID: string, Banner: string, Logo: string, Name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({access_token: $access_token, artist_id: $artist_id} | format pattern "/Music/Artist/Art/ID/{access_token}/{artist_id}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), artist_id: (encode-path-segment $artist_id)} | format pattern "/Music/Artist/Art/ID/{access_token}/{artist_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1141,7 +1150,7 @@ export def "music-artist-art-id get" [
 #
 # GET /Music/Artist/Art/Name/{AccessToken}/{Name}
 # operationId: musicCoverArtByName_Get
-export def "music-artist-art-name get" [
+export def "music-artist-art-name get-cover-by" [
   access_token: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1156,7 +1165,7 @@ export def "music-artist-art-name get" [
 ]: nothing -> record<ArtistID: string, Banner: string, Logo: string, Name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({access_token: $access_token, name: $name} | format pattern "/Music/Artist/Art/Name/{access_token}/{name}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), name: (encode-path-segment $name)} | format pattern "/Music/Artist/Art/Name/{access_token}/{name}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1181,7 +1190,7 @@ export def "music-artist-extended get" [
 ]: nothing -> table<Albums: list<record>, ArtistID: string, Banner: string, Biography: string, DisbandedYear: string, FormationYear: string, Genre: string, Logo: string, Members: string, MusicBrainzID: string, Name: string, SocialMedia: string, Videos: list<record>, WebSite: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({access_token: $access_token, name: $name} | format pattern "/Music/Artist/Extended/{access_token}/{name}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), name: (encode-path-segment $name)} | format pattern "/Music/Artist/Extended/{access_token}/{name}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1206,7 +1215,7 @@ export def "music-artist get" [
 ]: nothing -> table<ArtistID: string, Banner: string, Biography: string, DisbandedYear: string, FormationYear: string, Genre: string, Logo: string, Members: string, MusicBrainzID: string, Name: string, SocialMedia: string, WebSite: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({access_token: $access_token, name: $name} | format pattern "/Music/Artist/{access_token}/{name}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), name: (encode-path-segment $name)} | format pattern "/Music/Artist/{access_token}/{name}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1216,7 +1225,7 @@ export def "music-artist get" [
 #
 # GET /Music/Lyrics/AlbumID/{AccessToken}/{AlbumID}
 # operationId: musicLyricsbyAlbumID_Get
-export def "music-lyrics-album-id get" [
+export def "music-lyrics-album-id get-lyricsby" [
   access_token: string
   album_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1231,7 +1240,7 @@ export def "music-lyrics-album-id get" [
 ]: nothing -> table<AlbumID: string, Artist: string, Lyrics: string, Song: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({access_token: $access_token, album_id: $album_id} | format pattern "/Music/Lyrics/AlbumID/{access_token}/{album_id}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), album_id: (encode-path-segment $album_id)} | format pattern "/Music/Lyrics/AlbumID/{access_token}/{album_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1256,7 +1265,7 @@ export def "music-lyrics-by-name get" [
 ]: nothing -> table<AlbumID: string, Artist: string, Lyrics: string, Song: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({access_token: $access_token, name: $name} | format pattern "/Music/Lyrics/ByName/{access_token}/{name}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), name: (encode-path-segment $name)} | format pattern "/Music/Lyrics/ByName/{access_token}/{name}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1281,7 +1290,7 @@ export def "music-lyrics-by-song get" [
 ]: nothing -> table<AlbumID: string, Artist: string, Lyrics: string, Song: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({access_token: $access_token, song: $song} | format pattern "/Music/Lyrics/BySong/{access_token}/{song}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), song: (encode-path-segment $song)} | format pattern "/Music/Lyrics/BySong/{access_token}/{song}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1306,7 +1315,7 @@ export def "music-tracks get" [
 ]: nothing -> table<AlbumID: string, ArtistID: string, Length: string, TrackName: string, TrackNo: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({access_token: $access_token, album_id: $album_id} | format pattern "/Music/Tracks/{access_token}/{album_id}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), album_id: (encode-path-segment $album_id)} | format pattern "/Music/Tracks/{access_token}/{album_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1316,7 +1325,7 @@ export def "music-tracks get" [
 #
 # GET /Music/Videos/{AccessToken}/{ArtistID}
 # operationId: MusiVideos_Get
-export def "music-videos get" [
+export def "music-videos get-musi" [
   access_token: string
   artist_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1331,7 +1340,7 @@ export def "music-videos get" [
 ]: nothing -> table<AlbumID: string, ArtistID: string, Decription: string, Video: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({access_token: $access_token, artist_id: $artist_id} | format pattern "/Music/Videos/{access_token}/{artist_id}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), artist_id: (encode-path-segment $artist_id)} | format pattern "/Music/Videos/{access_token}/{artist_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1356,7 +1365,7 @@ export def "rating-by-id get" [
 ]: nothing -> record<EpisoDate: string, IMDB: string, MetaCritics: string, Name: string, RottenTomatoes: string, RottenTomatoesAudienceScore: string, TVDB: string, TVMaze: string, Trakt: string, imdbID: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({access_token: $access_token, imdb_id: $imdb_id} | format pattern "/Rating/ByID/{access_token}/{imdb_id}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), imdb_id: (encode-path-segment $imdb_id)} | format pattern "/Rating/ByID/{access_token}/{imdb_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1380,7 +1389,7 @@ export def "rating-by-name get" [
 ]: nothing -> table<EpisoDate: string, IMDB: string, MetaCritics: string, Name: string, RottenTomatoes: string, RottenTomatoesAudienceScore: string, TVDB: string, TVMaze: string, Trakt: string, imdbID: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({access_token: $access_token, name: $name} | format pattern "/Rating/ByName/{access_token}/{name}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), name: (encode-path-segment $name)} | format pattern "/Rating/ByName/{access_token}/{name}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1390,7 +1399,7 @@ export def "rating-by-name get" [
 #
 # GET /Status/{AccessToken}/{Query}
 # operationId: ShowStatus_Get
-export def "status get" [
+export def "status get-show" [
   access_token: string
   query: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1405,7 +1414,7 @@ export def "status get" [
 ]: nothing -> table<Enddate: string, ID: string, Title: string, YearsOn: string, imdbID: string, status: string, tvdbID: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({access_token: $access_token, query: $query} | format pattern "/Status/{access_token}/{query}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), query: (encode-path-segment $query)} | format pattern "/Status/{access_token}/{query}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1415,7 +1424,7 @@ export def "status get" [
 #
 # GET /TV/ByID/{accesstoken}/{imdbID}
 # operationId: TVShowID_Get
-export def "tv-by-id get" [
+export def "tv-by-id get-show" [
   accesstoken: string
   imdb_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1432,7 +1441,7 @@ export def "tv-by-id get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({accesstoken: $accesstoken, imdb_id: $imdb_id} | format pattern "/TV/ByID/{accesstoken}/{imdb_id}") $qp)
+  let full_url = (build-url $base ({accesstoken: (encode-path-segment $accesstoken), imdb_id: (encode-path-segment $imdb_id)} | format pattern "/TV/ByID/{accesstoken}/{imdb_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1442,7 +1451,7 @@ export def "tv-by-id get" [
 #
 # GET /TV/ByName/{AccessToken}/{Query}
 # operationId: TVShowByName_Get
-export def "tv-by-name get" [
+export def "tv-by-name get-show" [
   access_token: string
   query: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1457,7 +1466,7 @@ export def "tv-by-name get" [
 ]: nothing -> table<EpisodeCount: string, EpisodeRuntime: string, Externals: list<record>, ID: string, ReleaseYear: string, Seasons: string, ShowImage: string, ShowStatus: string, Synopsis: string, Title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({access_token: $access_token, query: $query} | format pattern "/TV/ByName/{access_token}/{query}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), query: (encode-path-segment $query)} | format pattern "/TV/ByName/{access_token}/{query}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1467,7 +1476,7 @@ export def "tv-by-name get" [
 #
 # GET /Trailers/ByID/{AccessToken}/{imdbID}
 # operationId: TrailersbyID_Get
-export def "trailers-by-id get" [
+export def "trailers-by-id get-trailersby" [
   access_token: string
   imdb_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1482,7 +1491,7 @@ export def "trailers-by-id get" [
 ]: nothing -> table<Episode: string, Key: string, MediaType: string, Season: string, Site: string, TrailerName: string, TrailerSize: string, TrailerType: string, YouTubeEmbeddedCode: string, YouTubeURL: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({access_token: $access_token, imdb_id: $imdb_id} | format pattern "/Trailers/ByID/{access_token}/{imdb_id}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), imdb_id: (encode-path-segment $imdb_id)} | format pattern "/Trailers/ByID/{access_token}/{imdb_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1507,7 +1516,7 @@ export def "trailers-count-by-id get" [
 ]: nothing -> record<Count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({access_token: $access_token, imdb_id: $imdb_id} | format pattern "/Trailers/CountByID/{access_token}/{imdb_id}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), imdb_id: (encode-path-segment $imdb_id)} | format pattern "/Trailers/CountByID/{access_token}/{imdb_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1532,7 +1541,7 @@ export def "trailers-count-by-name get" [
 ]: nothing -> record<Count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({access_token: $access_token, name: $name} | format pattern "/Trailers/CountByName/{access_token}/{name}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), name: (encode-path-segment $name)} | format pattern "/Trailers/CountByName/{access_token}/{name}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1557,7 +1566,7 @@ export def "trailers-search get" [
 ]: nothing -> table<Episode: string, Key: string, MediaType: string, Season: string, Site: string, TrailerName: string, TrailerSize: string, TrailerType: string, YouTubeEmbeddedCode: string, YouTubeURL: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({access_token: $access_token, phrase: $phrase} | format pattern "/Trailers/Search/{access_token}/{phrase}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), phrase: (encode-path-segment $phrase)} | format pattern "/Trailers/Search/{access_token}/{phrase}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

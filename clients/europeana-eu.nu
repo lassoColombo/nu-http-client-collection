@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -72,7 +81,7 @@ def accept-completer-2 [] { ["application/turtle" "application/x-turtle" "text/t
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "record-opensearchrss open-search" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "record-opensearch-rss open-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -96,7 +105,7 @@ export def commands []: nothing -> table {
 #
 # GET /record/v2/opensearch.rss
 # operationId: openSearch
-export def "record-opensearchrss open-search" [
+export def "record-opensearch-rss open-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -123,7 +132,7 @@ export def "record-opensearchrss open-search" [
 #
 # GET /record/v2/search.json
 # operationId: searchRecords
-export def "record-searchjson list" [
+export def "record-search-json list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -134,9 +143,9 @@ export def "record-searchjson list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --boost: string # boost
   --callback: string # callback
-  --colourpalette: list # colourpalette
+  --colourpalette: list<string> # colourpalette
   --cursor: string # cursor
-  --facet: list # facet
+  --facet: list<string> # facet
   --hit-fl: string # hit.fl
   --hit-selectors: string # hit.selectors
   --landingpage: oneof<nothing, bool> # landingpage
@@ -145,9 +154,9 @@ export def "record-searchjson list" [
   --profile: string # profile (default: standard)
   --q-source: string # q.source
   --q-target: string # q.target
-  --qf: list # qf
+  --qf: list<string> # qf
   --query: string # query
-  --reusability: list # reusability
+  --reusability: list<string> # reusability
   --rows: int # rows (format: int32, default: 12)
   --qp-sort: string # sort
   --start: int # start (format: int32, default: 1)
@@ -170,7 +179,7 @@ export def "record-searchjson list" [
 # POST /record/v2/search.json
 # operationId: searchRecordsPost
 # --hit shape: {fl?: string, selectors?: string}
-export def "record-searchjson list-records-post" [
+export def "record-search-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -182,18 +191,18 @@ export def "record-searchjson list-records-post" [
   --wskey: string # wskey
   --boost: string
   --callback: string
-  --colour-palette: list
+  --colour-palette: list<string>
   --cursor: string
-  --facet: list
+  --facet: list<string>
   --hit: record # shape: {fl?: string, selectors?: string}
   --landing-page: oneof<nothing, bool>
   --media: oneof<nothing, bool>
-  --profile: list
-  --qf: list
+  --profile: list<string>
+  --qf: list<string>
   query: string
-  --reusability: list
+  --reusability: list<string>
   --rows: int # format: int32
-  --body-sort: list
+  --body-sort: list<string>
   --start: int # format: int32
   --text-fulltext: oneof<nothing, bool>
   --theme: string
@@ -204,18 +213,18 @@ export def "record-searchjson list-records-post" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "wskey" $wskey "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/record/v2/search.json" $qp)
-  let body = {"boost": $boost, "callback": $callback, "colourPalette": $colour_palette, "cursor": $cursor, "facet": $facet, "hit": $hit, "landingPage": $landing_page, "media": $media, "profile": $profile, "qf": $qf, "query": $query, "reusability": $reusability, "rows": $rows, "sort": $body_sort, "start": $start, "textFulltext": $text_fulltext, "theme": $theme, "thumbnail": $thumbnail} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"boost": $boost, "callback": $callback, "colourPalette": $colour_palette, "cursor": $cursor, "facet": $facet, "hit": $hit, "landingPage": $landing_page, "media": $media, "profile": $profile, "qf": $qf, "query": $query, "reusability": $reusability, "rows": $rows, "sort": $body_sort, "start": $start, "textFulltext": $text_fulltext, "theme": $theme, "thumbnail": $thumbnail} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # translate a term to different languages
 #
 # GET /record/v2/translateQuery.json
 # operationId: translateQueryUsingGET
-export def "record-translate-queryjson translateQueryUsingGET" [
+export def "record-translate-query-json get-using" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -225,7 +234,7 @@ export def "record-translate-queryjson translateQueryUsingGET" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --callback: string # callback
-  --language-codes: list # languageCodes
+  --language-codes: list<string> # languageCodes
   --profile: string # profile
   --term: string # term
   --wskey: string # wskey
@@ -243,7 +252,7 @@ export def "record-translate-queryjson translateQueryUsingGET" [
 #
 # GET /record/v2/{collectionId}/{recordId}.json
 # operationId: getSingleRecordJson
-export def "record get-single-record-json" [
+export def "record get-single-json" [
   collection_id: string
   record_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -262,7 +271,7 @@ export def "record get-single-record-json" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "callback" $callback "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "profile" $profile "scalar") (serialize-qp "wskey" $wskey "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({collection_id: $collection_id, record_id: $record_id} | format pattern "/record/v2/{collection_id}/{record_id}.json") $qp)
+  let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id), record_id: (encode-path-segment $record_id)} | format pattern "/record/v2/{collection_id}/{record_id}.json") $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -272,7 +281,7 @@ export def "record get-single-record-json" [
 #
 # GET /record/v2/{collectionId}/{recordId}.jsonld
 # operationId: getSingleRecordJsonLD
-export def "record get-single-record-json-ld" [
+export def "record get-single-json-ld" [
   collection_id: string
   record_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -292,7 +301,7 @@ export def "record get-single-record-json-ld" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "callback" $callback "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "profile" $profile "scalar") (serialize-qp "wskey" $wskey "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({collection_id: $collection_id, record_id: $record_id} | format pattern "/record/v2/{collection_id}/{record_id}.jsonld") $qp)
+  let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id), record_id: (encode-path-segment $record_id)} | format pattern "/record/v2/{collection_id}/{record_id}.jsonld") $qp)
   let accept_val = ($accept | default "application/json;charset=UTF-8")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -302,7 +311,7 @@ export def "record get-single-record-json-ld" [
 #
 # GET /record/v2/{collectionId}/{recordId}.rdf
 # operationId: getSingleRecordRDF
-export def "record get-single-record-rdf" [
+export def "record get-single-rdf" [
   collection_id: string
   record_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -320,7 +329,7 @@ export def "record get-single-record-rdf" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "lang" $lang "scalar") (serialize-qp "profile" $profile "scalar") (serialize-qp "wskey" $wskey "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({collection_id: $collection_id, record_id: $record_id} | format pattern "/record/v2/{collection_id}/{record_id}.rdf") $qp)
+  let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id), record_id: (encode-path-segment $record_id)} | format pattern "/record/v2/{collection_id}/{record_id}.rdf") $qp)
   let accept_val = "application/rdf+xml;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -330,7 +339,7 @@ export def "record get-single-record-rdf" [
 #
 # GET /record/v2/{collectionId}/{recordId}.schema.jsonld
 # operationId: getSingleRecordSchemaOrg
-export def "record get-single-record-schema-org" [
+export def "record get-single-schema-org" [
   collection_id: string
   record_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -350,7 +359,7 @@ export def "record get-single-record-schema-org" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "callback" $callback "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "profile" $profile "scalar") (serialize-qp "wskey" $wskey "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({collection_id: $collection_id, record_id: $record_id} | format pattern "/record/v2/{collection_id}/{record_id}.schema.jsonld") $qp)
+  let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id), record_id: (encode-path-segment $record_id)} | format pattern "/record/v2/{collection_id}/{record_id}.schema.jsonld") $qp)
   let accept_val = ($accept | default "application/json;charset=UTF-8")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -360,7 +369,7 @@ export def "record get-single-record-schema-org" [
 #
 # GET /record/v2/{collectionId}/{recordId}.ttl
 # operationId: getSingleRecordTurtle
-export def "record get-single-record-turtle" [
+export def "record get-single-turtle" [
   collection_id: string
   record_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -379,7 +388,7 @@ export def "record get-single-record-turtle" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "lang" $lang "scalar") (serialize-qp "profile" $profile "scalar") (serialize-qp "wskey" $wskey "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({collection_id: $collection_id, record_id: $record_id} | format pattern "/record/v2/{collection_id}/{record_id}.ttl") $qp)
+  let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id), record_id: (encode-path-segment $record_id)} | format pattern "/record/v2/{collection_id}/{record_id}.ttl") $qp)
   let accept_val = ($accept | default "application/x-turtle")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

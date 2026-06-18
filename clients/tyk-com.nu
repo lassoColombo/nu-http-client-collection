@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -88,7 +97,7 @@ export def commands []: nothing -> table {
   }
 }
 
-# Gets a list of *API Definition* objects that are currently live on the gateway 
+# Gets a list of *API Definition* objects that are currently live on the gateway
 #
 # GET /tyk/apis/
 export def "tyk-apis list" [
@@ -105,10 +114,10 @@ export def "tyk-apis list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tyk/apis/")
-  let extra_headers = {"x-tyk-authorization": $x_tyk_authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-tyk-authorization": $x_tyk_authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -118,10 +127,10 @@ export def "tyk-apis list" [
 # --auth shape: {auth_header_name?: string, use_cookie?: bool, use_param?: bool}
 # --definition shape: {key?: string, location?: string}
 # --notifications shape: {oauth_on_keychange_url?: string, shared_secret?: string}
-# --oauth_meta shape: {allowed_access_types?: list, allowed_authorize_types?: list, auth_login_redirect?: string}
-# --uptime_tests shape: {CORS?: record, active?: bool, allowed_ips?: list, cache_options?: record, check_list?: list, config?: record, custom_middleware?: record, do_not_track?: string, domain?: string, dont_set_quota_on_create?: bool, enable_batch_request_support?: bool, enable_ip_whitelisting?: bool, event_handlers?: record, expire_analytics_after?: float, proxy?: record, response_processors?: list, session_lifetime?: float, tags?: list}
+# --oauth_meta shape: {allowed_access_types?: list<string>, allowed_authorize_types?: list<string>, auth_login_redirect?: string}
+# --uptime_tests shape: {CORS?: record, active?: bool, allowed_ips?: list<string>, cache_options?: record, check_list?: list, config?: record, custom_middleware?: record, do_not_track?: string, domain?: string, dont_set_quota_on_create?: bool, enable_batch_request_support?: bool, enable_ip_whitelisting?: bool, event_handlers?: record, expire_analytics_after?: float, proxy?: record, response_processors?: list, session_lifetime?: float, tags?: list<string>}
 # --version_data shape: {not_versioned?: bool, versions?: record}
-export def "tyk-apis post" [
+export def "tyk-apis create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -143,10 +152,10 @@ export def "tyk-apis post" [
   --jwt-source: string
   --name: string
   --notifications: record # shape: {oauth_on_keychange_url?: string, shared_secret?: string}
-  --oauth-meta: record # shape: {allowed_access_types?: list, allowed_authorize_types?: list, auth_login_redirect?: string}
+  --oauth-meta: record # shape: {allowed_access_types?: list<string>, allowed_authorize_types?: list<string>, auth_login_redirect?: string}
   --org-id: string
   --slug: string
-  --uptime-tests: record # shape: {CORS?: record, active?: bool, allowed_ips?: list, cache_options?: record, check_list?: list, config?: record, custom_middleware?: record, do_not_track?: string, domain?: string, dont_set_quota_on_create?: bool, enable_batch_request_support?: bool, enable_ip_whitelisting?: bool, event_handlers?: record, expire_analytics_after?: float, proxy?: record, response_processors?: list, session_lifetime?: float, tags?: list}
+  --uptime-tests: record # shape: {CORS?: record, active?: bool, allowed_ips?: list<string>, cache_options?: record, check_list?: list, config?: record, custom_middleware?: record, do_not_track?: string, domain?: string, dont_set_quota_on_create?: bool, enable_batch_request_support?: bool, enable_ip_whitelisting?: bool, event_handlers?: record, expire_analytics_after?: float, proxy?: record, response_processors?: list, session_lifetime?: float, tags?: list<string>}
   --use-basic-auth: oneof<nothing, bool>
   --use-keyless: oneof<nothing, bool>
   --use-oauth2: oneof<nothing, bool>
@@ -156,11 +165,11 @@ export def "tyk-apis post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tyk/apis/")
-  let body = {"api_id": $api_id, "auth": $body_auth, "definition": $definition, "enable_jwt": $enable_jwt, "enable_signature_checking": $enable_signature_checking, "hmac_allowed_clock_skew": $hmac_allowed_clock_skew, "id": $id, "jwt_identity_base_field": $jwt_identity_base_field, "jwt_policy_field_name": $jwt_policy_field_name, "jwt_signing_method": $jwt_signing_method, "jwt_source": $jwt_source, "name": $name, "notifications": $notifications, "oauth_meta": $oauth_meta, "org_id": $org_id, "slug": $slug, "uptime_tests": $uptime_tests, "use_basic_auth": $use_basic_auth, "use_keyless": $use_keyless, "use_oauth2": $use_oauth2, "version_data": $version_data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"api_id": $api_id, "auth": $body_auth, "definition": $definition, "enable_jwt": $enable_jwt, "enable_signature_checking": $enable_signature_checking, "hmac_allowed_clock_skew": $hmac_allowed_clock_skew, "id": $id, "jwt_identity_base_field": $jwt_identity_base_field, "jwt_policy_field_name": $jwt_policy_field_name, "jwt_signing_method": $jwt_signing_method, "jwt_source": $jwt_source, "name": $name, "notifications": $notifications, "oauth_meta": $oauth_meta, "org_id": $org_id, "slug": $slug, "uptime_tests": $uptime_tests, "use_basic_auth": $use_basic_auth, "use_keyless": $use_keyless, "use_oauth2": $use_oauth2, "version_data": $version_data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes an *API Definition* object, if it exists
@@ -180,11 +189,11 @@ export def "tyk-apis delete" [
 ]: nothing -> record<action: string, key: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_id: $api_id} | format pattern "/tyk/apis/{api_id}"))
-  let extra_headers = {"x-tyk-authorization": $x_tyk_authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({api_id: (encode-path-segment $api_id)} | format pattern "/tyk/apis/{api_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-tyk-authorization": $x_tyk_authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -205,11 +214,11 @@ export def "tyk-apis get" [
 ]: nothing -> record<api_id: string, auth: record<auth_header_name: string, use_cookie: bool, use_param: bool>, definition: record<key: string, location: string>, enable_jwt: bool, enable_signature_checking: bool, hmac_allowed_clock_skew: float, id: string, jwt_identity_base_field: string, jwt_policy_field_name: string, jwt_signing_method: string, jwt_source: string, name: string, notifications: record<oauth_on_keychange_url: string, shared_secret: string>, oauth_meta: record<allowed_access_types: list<string>, allowed_authorize_types: list<string>, auth_login_redirect: string>, org_id: string, slug: string, uptime_tests: record<CORS: record<allow_credentials: bool, allowed_headers: list, allowed_methods: list, allowed_origins: list, debug: bool, enable: bool, exposed_headers: list, max_age: float, options_passthrough: bool>, active: bool, allowed_ips: list<string>, cache_options: record<cache_all_safe_requests: bool, cache_timeout: float, enable_cache: bool, enable_upstream_cache_control: bool>, check_list: list<record>, config: record<expire_utime_after: float, recheck_wait: float, service_discovery: record>, custom_middleware: record<post: list, pre: list, response: list>, do_not_track: string, domain: string, dont_set_quota_on_create: bool, enable_batch_request_support: bool, enable_ip_whitelisting: bool, event_handlers: record, expire_analytics_after: float, proxy: record<check_host_against_uptime_tests: bool, enable_load_balancing: bool, listen_path: string, preserve_host_header: bool, service_discovery: record, strip_listen_path: bool, target_list: list, target_url: string>, response_processors: list<record>, session_lifetime: float, tags: list<string>>, use_basic_auth: bool, use_keyless: bool, use_oauth2: bool, version_data: record<not_versioned: bool, versions: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_id: $api_id} | format pattern "/tyk/apis/{api_id}"))
-  let extra_headers = {"x-tyk-authorization": $x_tyk_authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({api_id: (encode-path-segment $api_id)} | format pattern "/tyk/apis/{api_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-tyk-authorization": $x_tyk_authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -219,10 +228,10 @@ export def "tyk-apis get" [
 # --auth shape: {auth_header_name?: string, use_cookie?: bool, use_param?: bool}
 # --definition shape: {key?: string, location?: string}
 # --notifications shape: {oauth_on_keychange_url?: string, shared_secret?: string}
-# --oauth_meta shape: {allowed_access_types?: list, allowed_authorize_types?: list, auth_login_redirect?: string}
-# --uptime_tests shape: {CORS?: record, active?: bool, allowed_ips?: list, cache_options?: record, check_list?: list, config?: record, custom_middleware?: record, do_not_track?: string, domain?: string, dont_set_quota_on_create?: bool, enable_batch_request_support?: bool, enable_ip_whitelisting?: bool, event_handlers?: record, expire_analytics_after?: float, proxy?: record, response_processors?: list, session_lifetime?: float, tags?: list}
+# --oauth_meta shape: {allowed_access_types?: list<string>, allowed_authorize_types?: list<string>, auth_login_redirect?: string}
+# --uptime_tests shape: {CORS?: record, active?: bool, allowed_ips?: list<string>, cache_options?: record, check_list?: list, config?: record, custom_middleware?: record, do_not_track?: string, domain?: string, dont_set_quota_on_create?: bool, enable_batch_request_support?: bool, enable_ip_whitelisting?: bool, event_handlers?: record, expire_analytics_after?: float, proxy?: record, response_processors?: list, session_lifetime?: float, tags?: list<string>}
 # --version_data shape: {not_versioned?: bool, versions?: record}
-export def "tyk-apis put" [
+export def "tyk-apis update" [
   api_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -246,10 +255,10 @@ export def "tyk-apis put" [
   --jwt-source: string
   --name: string
   --notifications: record # shape: {oauth_on_keychange_url?: string, shared_secret?: string}
-  --oauth-meta: record # shape: {allowed_access_types?: list, allowed_authorize_types?: list, auth_login_redirect?: string}
+  --oauth-meta: record # shape: {allowed_access_types?: list<string>, allowed_authorize_types?: list<string>, auth_login_redirect?: string}
   --org-id: string
   --slug: string
-  --uptime-tests: record # shape: {CORS?: record, active?: bool, allowed_ips?: list, cache_options?: record, check_list?: list, config?: record, custom_middleware?: record, do_not_track?: string, domain?: string, dont_set_quota_on_create?: bool, enable_batch_request_support?: bool, enable_ip_whitelisting?: bool, event_handlers?: record, expire_analytics_after?: float, proxy?: record, response_processors?: list, session_lifetime?: float, tags?: list}
+  --uptime-tests: record # shape: {CORS?: record, active?: bool, allowed_ips?: list<string>, cache_options?: record, check_list?: list, config?: record, custom_middleware?: record, do_not_track?: string, domain?: string, dont_set_quota_on_create?: bool, enable_batch_request_support?: bool, enable_ip_whitelisting?: bool, event_handlers?: record, expire_analytics_after?: float, proxy?: record, response_processors?: list, session_lifetime?: float, tags?: list<string>}
   --use-basic-auth: oneof<nothing, bool>
   --use-keyless: oneof<nothing, bool>
   --use-oauth2: oneof<nothing, bool>
@@ -258,14 +267,14 @@ export def "tyk-apis put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_id: $api_id} | format pattern "/tyk/apis/{api_id}"))
-  let body = {"api_id": $body_api_id, "auth": $body_auth, "definition": $definition, "enable_jwt": $enable_jwt, "enable_signature_checking": $enable_signature_checking, "hmac_allowed_clock_skew": $hmac_allowed_clock_skew, "id": $id, "jwt_identity_base_field": $jwt_identity_base_field, "jwt_policy_field_name": $jwt_policy_field_name, "jwt_signing_method": $jwt_signing_method, "jwt_source": $jwt_source, "name": $name, "notifications": $notifications, "oauth_meta": $oauth_meta, "org_id": $org_id, "slug": $slug, "uptime_tests": $uptime_tests, "use_basic_auth": $use_basic_auth, "use_keyless": $use_keyless, "use_oauth2": $use_oauth2, "version_data": $version_data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-tyk-authorization": $x_tyk_authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({api_id: (encode-path-segment $api_id)} | format pattern "/tyk/apis/{api_id}"))
+  let req_body = {"api_id": $body_api_id, "auth": $body_auth, "definition": $definition, "enable_jwt": $enable_jwt, "enable_signature_checking": $enable_signature_checking, "hmac_allowed_clock_skew": $hmac_allowed_clock_skew, "id": $id, "jwt_identity_base_field": $jwt_identity_base_field, "jwt_policy_field_name": $jwt_policy_field_name, "jwt_signing_method": $jwt_signing_method, "jwt_source": $jwt_source, "name": $name, "notifications": $notifications, "oauth_meta": $oauth_meta, "org_id": $org_id, "slug": $slug, "uptime_tests": $uptime_tests, "use_basic_auth": $use_basic_auth, "use_keyless": $use_keyless, "use_oauth2": $use_oauth2, "version_data": $version_data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"x-tyk-authorization": $x_tyk_authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets the health check values for an API if it is being recorded
@@ -287,10 +296,10 @@ export def "tyk-health get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api_id" $api_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/tyk/health/" $qp)
-  let extra_headers = {"x-tyk-authorization": $x_tyk_authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-tyk-authorization": $x_tyk_authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -313,10 +322,10 @@ export def "tyk-keys get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api_id" $api_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/tyk/keys/" $qp)
-  let extra_headers = {"x-tyk-authorization": $x_tyk_authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-tyk-authorization": $x_tyk_authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -325,8 +334,8 @@ export def "tyk-keys get" [
 # POST /tyk/keys/create
 # --basic_auth_data shape: {hash_type?: ""|"bcrypt", password?: string}
 # --jwt_data shape: {secret?: string}
-# --monitor shape: {trigger_limits?: list}
-export def "tyk-keys-create post" [
+# --monitor shape: {trigger_limits?: list<string>}
+export def "tyk-keys-create create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -347,7 +356,7 @@ export def "tyk-keys-create post" [
   --is-inactive: oneof<nothing, bool>
   --jwt-data: record # shape: {secret?: string}
   --meta-data: record
-  --monitor: record # shape: {trigger_limits?: list}
+  --monitor: record # shape: {trigger_limits?: list<string>}
   --oauth-client-id: string
   --org-id: string
   --per: float
@@ -356,20 +365,20 @@ export def "tyk-keys-create post" [
   --quota-renewal-rate: string
   --quota-renews: float
   --rate: float
-  --tags: list
+  --tags: list<string>
 ]: any -> record<action: string, key: string, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "suppress_reset" $suppress_reset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/tyk/keys/create" $qp)
-  let body = {"access_rights": $access_rights, "allowance": $allowance, "apply_policy_id": $apply_policy_id, "basic_auth_data": $basic_auth_data, "expires": $expires, "hmac_enabled": $hmac_enabled, "hmac_string": $hmac_string, "is_inactive": $is_inactive, "jwt_data": $jwt_data, "meta_data": $meta_data, "monitor": $monitor, "oauth_client_id": $oauth_client_id, "org_id": $org_id, "per": $per, "quota_max": $quota_max, "quota_remaining": $quota_remaining, "quota_renewal_rate": $quota_renewal_rate, "quota_renews": $quota_renews, "rate": $rate, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-tyk-authorization": $x_tyk_authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"access_rights": $access_rights, "allowance": $allowance, "apply_policy_id": $apply_policy_id, "basic_auth_data": $basic_auth_data, "expires": $expires, "hmac_enabled": $hmac_enabled, "hmac_string": $hmac_string, "is_inactive": $is_inactive, "jwt_data": $jwt_data, "meta_data": $meta_data, "monitor": $monitor, "oauth_client_id": $oauth_client_id, "org_id": $org_id, "per": $per, "quota_max": $quota_max, "quota_remaining": $quota_remaining, "quota_renewal_rate": $quota_renewal_rate, "quota_renews": $quota_renews, "rate": $rate, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"x-tyk-authorization": $x_tyk_authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Remove this *API token* from the gateway, this will completely destroy the token and metadata associated with the token and instantly stop access from being granted
@@ -391,11 +400,11 @@ export def "tyk-keys delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api_id" $api_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({key_id: $key_id} | format pattern "/tyk/keys/{key_id}") $qp)
-  let extra_headers = {"x-tyk-authorization": $x_tyk_authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({key_id: (encode-path-segment $key_id)} | format pattern "/tyk/keys/{key_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-tyk-authorization": $x_tyk_authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -404,8 +413,8 @@ export def "tyk-keys delete" [
 # POST /tyk/keys/{keyId}
 # --basic_auth_data shape: {hash_type?: ""|"bcrypt", password?: string}
 # --jwt_data shape: {secret?: string}
-# --monitor shape: {trigger_limits?: list}
-export def "tyk-keys post" [
+# --monitor shape: {trigger_limits?: list<string>}
+export def "tyk-keys create" [
   key_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -426,7 +435,7 @@ export def "tyk-keys post" [
   --is-inactive: oneof<nothing, bool>
   --jwt-data: record # shape: {secret?: string}
   --meta-data: record
-  --monitor: record # shape: {trigger_limits?: list}
+  --monitor: record # shape: {trigger_limits?: list<string>}
   --oauth-client-id: string
   --org-id: string
   --per: float
@@ -435,19 +444,19 @@ export def "tyk-keys post" [
   --quota-renewal-rate: string
   --quota-renews: float
   --rate: float
-  --tags: list
+  --tags: list<string>
 ]: any -> record<action: string, key: string, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({key_id: $key_id} | format pattern "/tyk/keys/{key_id}"))
-  let body = {"access_rights": $access_rights, "allowance": $allowance, "apply_policy_id": $apply_policy_id, "basic_auth_data": $basic_auth_data, "expires": $expires, "hmac_enabled": $hmac_enabled, "hmac_string": $hmac_string, "is_inactive": $is_inactive, "jwt_data": $jwt_data, "meta_data": $meta_data, "monitor": $monitor, "oauth_client_id": $oauth_client_id, "org_id": $org_id, "per": $per, "quota_max": $quota_max, "quota_remaining": $quota_remaining, "quota_renewal_rate": $quota_renewal_rate, "quota_renews": $quota_renews, "rate": $rate, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-tyk-authorization": $x_tyk_authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({key_id: (encode-path-segment $key_id)} | format pattern "/tyk/keys/{key_id}"))
+  let req_body = {"access_rights": $access_rights, "allowance": $allowance, "apply_policy_id": $apply_policy_id, "basic_auth_data": $basic_auth_data, "expires": $expires, "hmac_enabled": $hmac_enabled, "hmac_string": $hmac_string, "is_inactive": $is_inactive, "jwt_data": $jwt_data, "meta_data": $meta_data, "monitor": $monitor, "oauth_client_id": $oauth_client_id, "org_id": $org_id, "per": $per, "quota_max": $quota_max, "quota_remaining": $quota_remaining, "quota_renewal_rate": $quota_renewal_rate, "quota_renews": $quota_renews, "rate": $rate, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"x-tyk-authorization": $x_tyk_authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update an *API token* with the *session object* defined in the body, this operatin overwrites the existing object
@@ -455,8 +464,8 @@ export def "tyk-keys post" [
 # PUT /tyk/keys/{keyId}
 # --basic_auth_data shape: {hash_type?: ""|"bcrypt", password?: string}
 # --jwt_data shape: {secret?: string}
-# --monitor shape: {trigger_limits?: list}
-export def "tyk-keys put" [
+# --monitor shape: {trigger_limits?: list<string>}
+export def "tyk-keys update" [
   key_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -479,7 +488,7 @@ export def "tyk-keys put" [
   --is-inactive: oneof<nothing, bool>
   --jwt-data: record # shape: {secret?: string}
   --meta-data: record
-  --monitor: record # shape: {trigger_limits?: list}
+  --monitor: record # shape: {trigger_limits?: list<string>}
   --oauth-client-id: string
   --org-id: string
   --per: float
@@ -488,26 +497,26 @@ export def "tyk-keys put" [
   --quota-renewal-rate: string
   --quota-renews: float
   --rate: float
-  --tags: list
+  --tags: list<string>
 ]: any -> record<action: string, key: string, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "suppress_reset" $suppress_reset "scalar") (serialize-qp "api_id" $api_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({key_id: $key_id} | format pattern "/tyk/keys/{key_id}") $qp)
-  let body = {"access_rights": $access_rights, "allowance": $allowance, "apply_policy_id": $apply_policy_id, "basic_auth_data": $basic_auth_data, "expires": $expires, "hmac_enabled": $hmac_enabled, "hmac_string": $hmac_string, "is_inactive": $is_inactive, "jwt_data": $jwt_data, "meta_data": $meta_data, "monitor": $monitor, "oauth_client_id": $oauth_client_id, "org_id": $org_id, "per": $per, "quota_max": $quota_max, "quota_remaining": $quota_remaining, "quota_renewal_rate": $quota_renewal_rate, "quota_renews": $quota_renews, "rate": $rate, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-tyk-authorization": $x_tyk_authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({key_id: (encode-path-segment $key_id)} | format pattern "/tyk/keys/{key_id}") $qp)
+  let req_body = {"access_rights": $access_rights, "allowance": $allowance, "apply_policy_id": $apply_policy_id, "basic_auth_data": $basic_auth_data, "expires": $expires, "hmac_enabled": $hmac_enabled, "hmac_string": $hmac_string, "is_inactive": $is_inactive, "jwt_data": $jwt_data, "meta_data": $meta_data, "monitor": $monitor, "oauth_client_id": $oauth_client_id, "org_id": $org_id, "per": $per, "quota_max": $quota_max, "quota_remaining": $quota_remaining, "quota_renewal_rate": $quota_renewal_rate, "quota_renews": $quota_renews, "rate": $rate, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"x-tyk-authorization": $x_tyk_authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # The final request from an authorising party for a redirect URI during the Tyk OAuth flow
 #
 # POST /tyk/oauth/authorize-client/
-export def "tyk-oauth-authorize-client post" [
+export def "tyk-oauth-authorize-client create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -526,19 +535,20 @@ export def "tyk-oauth-authorize-client post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tyk/oauth/authorize-client/")
-  let body = {"response_type": $response_type, "client_id": $client_id, "redirect_uri": $redirect_uri, "key_rules": $key_rules} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-tyk-authorization": $x_tyk_authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"response_type": $response_type, "client_id": $client_id, "redirect_uri": $redirect_uri, "key_rules": $key_rules} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"x-tyk-authorization": $x_tyk_authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Create a new OAuth client
 #
 # POST /tyk/oauth/clients/create
-export def "tyk-oauth-clients-create post" [
+export def "tyk-oauth-clients-create create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -555,16 +565,16 @@ export def "tyk-oauth-clients-create post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tyk/oauth/clients/create")
-  let body = {"api_id": $api_id, "redirect_uri": $redirect_uri} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-tyk-authorization": $x_tyk_authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"api_id": $api_id, "redirect_uri": $redirect_uri} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"x-tyk-authorization": $x_tyk_authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-# Get a list of OAuth clients bound to this back end 
+# Get a list of OAuth clients bound to this back end
 #
 # GET /tyk/oauth/clients/{apiId}
 export def "tyk-oauth-clients get" [
@@ -581,11 +591,11 @@ export def "tyk-oauth-clients get" [
 ]: nothing -> table<client_id: string, redirect_uri: string, secret: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_id: $api_id} | format pattern "/tyk/oauth/clients/{api_id}"))
-  let extra_headers = {"x-tyk-authorization": $x_tyk_authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({api_id: (encode-path-segment $api_id)} | format pattern "/tyk/oauth/clients/{api_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-tyk-authorization": $x_tyk_authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -607,11 +617,11 @@ export def "tyk-oauth-clients delete" [
 ]: nothing -> record<action: string, key: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_id: $api_id, client_id: $client_id} | format pattern "/tyk/oauth/clients/{api_id}/{client_id}"))
-  let extra_headers = {"x-tyk-authorization": $x_tyk_authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({api_id: (encode-path-segment $api_id), client_id: (encode-path-segment $client_id)} | format pattern "/tyk/oauth/clients/{api_id}/{client_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-tyk-authorization": $x_tyk_authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -634,11 +644,11 @@ export def "tyk-oauth-refresh delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "apiID" $api_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({key_id: $key_id} | format pattern "/tyk/oauth/refresh/{key_id}") $qp)
-  let extra_headers = {"x-tyk-authorization": $x_tyk_authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({key_id: (encode-path-segment $key_id)} | format pattern "/tyk/oauth/refresh/{key_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-tyk-authorization": $x_tyk_authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -659,10 +669,10 @@ export def "tyk-reload get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tyk/reload/")
-  let extra_headers = {"x-tyk-authorization": $x_tyk_authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-tyk-authorization": $x_tyk_authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -683,9 +693,9 @@ export def "tyk-reload-group get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tyk/reload/group")
-  let extra_headers = {"x-tyk-authorization": $x_tyk_authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-tyk-authorization": $x_tyk_authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

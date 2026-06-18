@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -74,7 +83,7 @@ def thumbnail-properties-thumbnail-size-completer [] { ["LARGE" "MEDIUM" "SMALL"
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "presentations slidespresentationscreate" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "presentations create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -103,7 +112,7 @@ export def commands []: nothing -> table {
 # --notesMaster shape: {layoutProperties?: record, masterProperties?: record, notesProperties?: record, objectId?: string, pageElements?: list, pageProperties?: record, pageType?: "SLIDE"|"MASTER"|"LAYOUT"|"NOTES"|"NOTES_MASTER", revisionId?: string, slideProperties?: record}
 # --pageSize shape: {height?: record, width?: record}
 # --slides item shape: {layoutProperties?: record, masterProperties?: record, notesProperties?: record, objectId?: string, pageElements?: list, pageProperties?: record, pageType?: "SLIDE"|"MASTER"|"LAYOUT"|"NOTES"|"NOTES_MASTER", revisionId?: string, slideProperties?: record}
-export def "presentations slidespresentationscreate" [
+export def "presentations create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -138,18 +147,18 @@ export def "presentations slidespresentationscreate" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/presentations" $qp)
-  let body = {"layouts": $layouts, "locale": $locale, "masters": $masters, "notesMaster": $notes_master, "pageSize": $page_size, "presentationId": $presentation_id, "revisionId": $revision_id, "slides": $slides, "title": $title} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"layouts": $layouts, "locale": $locale, "masters": $masters, "notesMaster": $notes_master, "pageSize": $page_size, "presentationId": $presentation_id, "revisionId": $revision_id, "slides": $slides, "title": $title} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets the latest version of the specified presentation.
 #
 # GET /v1/presentations/{presentationId}
 # operationId: slides.presentations.get
-export def "presentations slidespresentationsget" [
+export def "presentations get" [
   presentation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -174,7 +183,7 @@ export def "presentations slidespresentationsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({presentation_id: $presentation_id} | format pattern "/v1/presentations/{presentation_id}") $qp)
+  let full_url = (build-url $base ({presentation_id: (encode-path-segment $presentation_id)} | format pattern "/v1/presentations/{presentation_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -184,7 +193,7 @@ export def "presentations slidespresentationsget" [
 #
 # GET /v1/presentations/{presentationId}/pages/{pageObjectId}
 # operationId: slides.presentations.pages.get
-export def "presentations-pages slidespresentationspagesget" [
+export def "presentations-pages get" [
   presentation_id: string
   page_object_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -210,7 +219,7 @@ export def "presentations-pages slidespresentationspagesget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({presentation_id: $presentation_id, page_object_id: $page_object_id} | format pattern "/v1/presentations/{presentation_id}/pages/{page_object_id}") $qp)
+  let full_url = (build-url $base ({presentation_id: (encode-path-segment $presentation_id), page_object_id: (encode-path-segment $page_object_id)} | format pattern "/v1/presentations/{presentation_id}/pages/{page_object_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -220,7 +229,7 @@ export def "presentations-pages slidespresentationspagesget" [
 #
 # GET /v1/presentations/{presentationId}/pages/{pageObjectId}/thumbnail
 # operationId: slides.presentations.pages.getThumbnail
-export def "presentations-pages-thumbnail slidespresentationspagesgetThumbnail" [
+export def "presentations-pages-thumbnail get" [
   presentation_id: string
   page_object_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -248,7 +257,7 @@ export def "presentations-pages-thumbnail slidespresentationspagesgetThumbnail" 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "thumbnailProperties.mimeType" $thumbnail_properties_mime_type "scalar") (serialize-qp "thumbnailProperties.thumbnailSize" $thumbnail_properties_thumbnail_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({presentation_id: $presentation_id, page_object_id: $page_object_id} | format pattern "/v1/presentations/{presentation_id}/pages/{page_object_id}/thumbnail") $qp)
+  let full_url = (build-url $base ({presentation_id: (encode-path-segment $presentation_id), page_object_id: (encode-path-segment $page_object_id)} | format pattern "/v1/presentations/{presentation_id}/pages/{page_object_id}/thumbnail") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -258,9 +267,9 @@ export def "presentations-pages-thumbnail slidespresentationspagesgetThumbnail" 
 #
 # POST /v1/presentations/{presentationId}:batchUpdate
 # operationId: slides.presentations.batchUpdate
-# --requests item shape: {createImage?: record, createLine?: record, createParagraphBullets?: record, createShape?: record, createSheetsChart?: record, createSlide?: record, createTable?: record, createVideo?: record, deleteObject?: record, deleteParagraphBullets?: record, deleteTableColumn?: record, deleteTableRow?: record, deleteText?: record, duplicateObject?: record, groupObjects?: record, insertTableColumns?: record, insertTableRows?: record, insertText?: record, mergeTableCells?: record, refreshSheetsChart?: record, replaceAllShapesWithImage?: record, replaceAllShapesWithSheetsChart?: record, replaceAllText?: record, replaceImage?: record, rerouteLine?: record, ungroupObjects?: record, unmergeTableCells?: record, updateImageProperties?: record, updateLineCategory?: record, updateLineProperties?: record, updatePageElementAltText?: record, updatePageElementTransform?: record, updatePageElementsZOrder?: record, updatePageProperties?: record, updateParagraphStyle?: record, updateShapeProperties?: record, updateSlideProperties?: record, updateSlidesPosition?: record, updateTableBorderProperties?: record, updateTableCellProperties?: record, updateTableColumnProperties?: record, updateTableRowProperties?: record, updateTextStyle?: record, updateVideoProperties?: record}
+# --requests item shape: {createImage?: record, createLine?: record, createParagraphBullets?: record, createShape?: record, createSheetsChart?: record, createSlide?: record, createTable?: record, createVideo?: record, deleteObject?: record, deleteParagraphBullets?: record, deleteTableColumn?: record, deleteTableRow?: record, deleteText?: record, duplicateObject?: record, groupObjects?: record, insertTableColumns?: record, insertTableRows?: record, insertText?: record, mergeTableCells?: record, refreshSheetsChart?: record, ... (24 more fields)}
 # --writeControl shape: {requiredRevisionId?: string}
-export def "presentations slidespresentationsbatchUpdate" [
+export def "presentations update-batch" [
   presentation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -281,17 +290,17 @@ export def "presentations slidespresentationsbatchUpdate" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --requests: list # A list of updates to apply to the presentation. — item shape: {createImage?: record, createLine?: record, createParagraphBullets?: record, createShape?: record, createSheetsChart?: record, createSlide?: record, createTable?: record, createVideo?: record, deleteObject?: record, deleteParagraphBullets?: record, deleteTableColumn?: record, deleteTableRow?: record, deleteText?: record, duplicateObject?: record, groupObjects?: record, insertTableColumns?: record, insertTableRows?: record, insertText?: record, mergeTableCells?: record, refreshSheetsChart?: record, replaceAllShapesWithImage?: record, replaceAllShapesWithSheetsChart?: record, replaceAllText?: record, replaceImage?: record, rerouteLine?: record, ungroupObjects?: record, unmergeTableCells?: record, updateImageProperties?: record, updateLineCategory?: record, updateLineProperties?: record, updatePageElementAltText?: record, updatePageElementTransform?: record, updatePageElementsZOrder?: record, updatePageProperties?: record, updateParagraphStyle?: record, updateShapeProperties?: record, updateSlideProperties?: record, updateSlidesPosition?: record, updateTableBorderProperties?: record, updateTableCellProperties?: record, updateTableColumnProperties?: record, updateTableRowProperties?: record, updateTextStyle?: record, updateVideoProperties?: record}
+  --requests: list # A list of updates to apply to the presentation. — item shape: {createImage?: record, createLine?: record, createParagraphBullets?: record, createShape?: record, createSheetsChart?: record, createSlide?: record, createTable?: record, createVideo?: record, deleteObject?: record, deleteParagraphBullets?: record, deleteTableColumn?: record, deleteTableRow?: record, deleteText?: record, duplicateObject?: record, groupObjects?: record, insertTableColumns?: record, insertTableRows?: record, insertText?: record, mergeTableCells?: record, refreshSheetsChart?: record, ... (24 more fields)}
   --write-control: record # Provides control over how write requests are executed. — shape: {requiredRevisionId?: string}
 ]: any -> record<presentationId: string, replies: table<createImage: record, createLine: record, createShape: record, createSheetsChart: record, createSlide: record, createTable: record, createVideo: record, duplicateObject: record, groupObjects: record, replaceAllShapesWithImage: record, replaceAllShapesWithSheetsChart: record, replaceAllText: record>, writeControl: record<requiredRevisionId: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({presentation_id: $presentation_id} | format pattern "/v1/presentations/{presentation_id}:batchUpdate") $qp)
-  let body = {"requests": $requests, "writeControl": $write_control} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({presentation_id: (encode-path-segment $presentation_id)} | format pattern "/v1/presentations/{presentation_id}:batchUpdate") $qp)
+  let req_body = {"requests": $requests, "writeControl": $write_control} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

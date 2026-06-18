@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -72,7 +81,7 @@ def client-info-platform-completer [] { ["ANDROID" "EDITOR" "IOS" "LINUX" "MAC_O
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "terraintiles vectortileterraintilesget" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "terraintiles get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -96,7 +105,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/{name}
 # operationId: vectortile.terraintiles.get
-export def "terraintiles vectortileterraintilesget" [
+export def "terraintiles get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -126,8 +135,8 @@ export def "terraintiles vectortileterraintilesget" [
   --client-info-platform: string@client-info-platform-completer # Platform where the application is running.
   --client-info-user-id: string # Required. A client-generated user ID. The ID should be generated and persisted during the first user session or whenever a pre-existing ID is not found. The exact format is up to the client. This must be non-empty in a GetFeatureTileRequest (whether via the header or GetFeatureTileRequest.client_info).
   --max-elevation-resolution-cells: int # The maximum allowed resolution for the returned elevation heightmap. Possible values: between 1 and 1024 (and not less than min_elevation_resolution_cells). Over-sized heightmaps will be non-uniformly down-sampled such that each edge is no longer than this value. Non-uniformity is chosen to maximise the amount of preserved data. For example: Original resolution: 100px (width) * 30px (height) max_elevation_resolution: 30 New resolution: 30px (width) * 30px (height)
-  --min-elevation-resolution-cells: int #  api-linter: core::0131::request-unknown-fields=disabled aip.dev/not-precedent: Maintaining existing request parameter pattern. The minimum allowed resolution for the returned elevation heightmap. Possible values: between 0 and 1024 (and not more than max_elevation_resolution_cells). Zero is supported for backward compatibility. Under-sized heightmaps will be non-uniformly up-sampled such that each edge is no shorter than this value. Non-uniformity is chosen to maximise the amount of preserved data. For example: Original resolution: 30px (width) * 10px (height) min_elevation_resolution: 30 New resolution: 30px (width) * 30px (height)
-  --terrain-formats: list # Terrain formats that the client understands.
+  --min-elevation-resolution-cells: int # api-linter: core::0131::request-unknown-fields=disabled aip.dev/not-precedent: Maintaining existing request parameter pattern. The minimum allowed resolution for the returned elevation heightmap. Possible values: between 0 and 1024 (and not more than max_elevation_resolution_cells). Zero is supported for backward compatibility. Under-sized heightmaps will be non-uniformly up-sampled such that each edge is no shorter than this value. Non-uniformity is chosen to maximise the amount of preserved data. For example: Original resolution: 30px (width) * 10px (height) min_elevation_resolution: 30 New resolution: 30px (width) * 30px (height)
+  --terrain-formats: list<string> # Terrain formats that the client understands.
   --enable-modeled-volumes: oneof<nothing, bool> # Flag indicating whether 3D building models should be enabled. If this is set structures will be returned as 3D modeled volumes rather than 2.5D extruded areas where possible.
   --enable-political-features: oneof<nothing, bool> # Flag indicating whether political features should be returned.
   --enable-private-roads: oneof<nothing, bool> # Flag indicating whether the returned tile will contain road features that are marked private. Private roads are indicated by the Feature.segment_info.road_info.is_private field.
@@ -138,7 +147,7 @@ export def "terraintiles vectortileterraintilesget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "altitudePrecisionCentimeters" $altitude_precision_centimeters "scalar") (serialize-qp "clientInfo.apiClient" $client_info_api_client "scalar") (serialize-qp "clientInfo.applicationId" $client_info_application_id "scalar") (serialize-qp "clientInfo.applicationVersion" $client_info_application_version "scalar") (serialize-qp "clientInfo.deviceModel" $client_info_device_model "scalar") (serialize-qp "clientInfo.operatingSystem" $client_info_operating_system "scalar") (serialize-qp "clientInfo.platform" $client_info_platform "scalar") (serialize-qp "clientInfo.userId" $client_info_user_id "scalar") (serialize-qp "maxElevationResolutionCells" $max_elevation_resolution_cells "scalar") (serialize-qp "minElevationResolutionCells" $min_elevation_resolution_cells "scalar") (serialize-qp "terrainFormats" $terrain_formats "multi") (serialize-qp "enableModeledVolumes" $enable_modeled_volumes "scalar") (serialize-qp "enablePoliticalFeatures" $enable_political_features "scalar") (serialize-qp "enablePrivateRoads" $enable_private_roads "scalar") (serialize-qp "enableUnclippedBuildings" $enable_unclipped_buildings "scalar") (serialize-qp "languageCode" $language_code "scalar") (serialize-qp "regionCode" $region_code "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

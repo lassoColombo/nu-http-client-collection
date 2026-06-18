@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -110,7 +119,7 @@ export def "subscriptions-providers-microsoft-compute-galleries list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Compute/galleries") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Compute/galleries") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -120,7 +129,7 @@ export def "subscriptions-providers-microsoft-compute-galleries list" [
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/galleries
 # operationId: Galleries_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-compute-galleries list-by" [
+export def "subscriptions-resource-groups-providers-microsoft-compute-galleries list" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -136,7 +145,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-galleries 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Compute/galleries") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Compute/galleries") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -163,7 +172,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-galleries 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, gallery_name: $gallery_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Compute/galleries/{gallery_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), gallery_name: (encode-path-segment $gallery_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Compute/galleries/{gallery_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -190,7 +199,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-galleries 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, gallery_name: $gallery_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Compute/galleries/{gallery_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), gallery_name: (encode-path-segment $gallery_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Compute/galleries/{gallery_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -221,12 +230,12 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-galleries 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, gallery_name: $gallery_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Compute/galleries/{gallery_name}") $qp)
-  let body = {"properties": $properties, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), gallery_name: (encode-path-segment $gallery_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Compute/galleries/{gallery_name}") $qp)
+  let req_body = {"properties": $properties, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create or update a Shared Image Gallery.
@@ -255,19 +264,19 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-galleries 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, gallery_name: $gallery_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Compute/galleries/{gallery_name}") $qp)
-  let body = {"properties": $properties, "location": $location, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), gallery_name: (encode-path-segment $gallery_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Compute/galleries/{gallery_name}") $qp)
+  let req_body = {"properties": $properties, "location": $location, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List gallery Application Definitions in a gallery.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/galleries/{galleryName}/applications
 # operationId: GalleryApplications_ListByGallery
-export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-applications list-by-gallery" [
+export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-applications list-gallery-by-gallery" [
   subscription_id: string
   resource_group_name: string
   gallery_name: string
@@ -284,7 +293,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, gallery_name: $gallery_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Compute/galleries/{gallery_name}/applications") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), gallery_name: (encode-path-segment $gallery_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Compute/galleries/{gallery_name}/applications") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -294,7 +303,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/galleries/{galleryName}/applications/{galleryApplicationName}
 # operationId: GalleryApplications_Delete
-export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-applications delete" [
+export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-applications delete-gallery" [
   subscription_id: string
   resource_group_name: string
   gallery_name: string
@@ -312,7 +321,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, gallery_name: $gallery_name, gallery_application_name: $gallery_application_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Compute/galleries/{gallery_name}/applications/{gallery_application_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), gallery_name: (encode-path-segment $gallery_name), gallery_application_name: (encode-path-segment $gallery_application_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Compute/galleries/{gallery_name}/applications/{gallery_application_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -322,7 +331,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/galleries/{galleryName}/applications/{galleryApplicationName}
 # operationId: GalleryApplications_Get
-export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-applications get" [
+export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-applications get-gallery" [
   subscription_id: string
   resource_group_name: string
   gallery_name: string
@@ -340,7 +349,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, gallery_name: $gallery_name, gallery_application_name: $gallery_application_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Compute/galleries/{gallery_name}/applications/{gallery_application_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), gallery_name: (encode-path-segment $gallery_name), gallery_application_name: (encode-path-segment $gallery_application_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Compute/galleries/{gallery_name}/applications/{gallery_application_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -351,7 +360,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/galleries/{galleryName}/applications/{galleryApplicationName}
 # operationId: GalleryApplications_Update
 # --properties shape: {description?: string, endOfLifeDate?: string, eula?: string, privacyStatementUri?: string, releaseNoteUri?: string, supportedOSType: "Windows"|"Linux"}
-export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-applications update" [
+export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-applications update-gallery" [
   subscription_id: string
   resource_group_name: string
   gallery_name: string
@@ -372,12 +381,12 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, gallery_name: $gallery_name, gallery_application_name: $gallery_application_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Compute/galleries/{gallery_name}/applications/{gallery_application_name}") $qp)
-  let body = {"properties": $properties, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), gallery_name: (encode-path-segment $gallery_name), gallery_application_name: (encode-path-segment $gallery_application_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Compute/galleries/{gallery_name}/applications/{gallery_application_name}") $qp)
+  let req_body = {"properties": $properties, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create or update a gallery Application Definition.
@@ -385,7 +394,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/galleries/{galleryName}/applications/{galleryApplicationName}
 # operationId: GalleryApplications_CreateOrUpdate
 # --properties shape: {description?: string, endOfLifeDate?: string, eula?: string, privacyStatementUri?: string, releaseNoteUri?: string, supportedOSType: "Windows"|"Linux"}
-export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-applications create-or-update" [
+export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-applications create-gallery-or-update" [
   subscription_id: string
   resource_group_name: string
   gallery_name: string
@@ -407,19 +416,19 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, gallery_name: $gallery_name, gallery_application_name: $gallery_application_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Compute/galleries/{gallery_name}/applications/{gallery_application_name}") $qp)
-  let body = {"properties": $properties, "location": $location, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), gallery_name: (encode-path-segment $gallery_name), gallery_application_name: (encode-path-segment $gallery_application_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Compute/galleries/{gallery_name}/applications/{gallery_application_name}") $qp)
+  let req_body = {"properties": $properties, "location": $location, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List gallery Application Versions in a gallery Application Definition.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/galleries/{galleryName}/applications/{galleryApplicationName}/versions
 # operationId: GalleryApplicationVersions_ListByGalleryApplication
-export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-applications-versions list-by-gallery" [
+export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-applications-versions list-gallery-by-gallery" [
   subscription_id: string
   resource_group_name: string
   gallery_name: string
@@ -437,7 +446,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, gallery_name: $gallery_name, gallery_application_name: $gallery_application_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Compute/galleries/{gallery_name}/applications/{gallery_application_name}/versions") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), gallery_name: (encode-path-segment $gallery_name), gallery_application_name: (encode-path-segment $gallery_application_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Compute/galleries/{gallery_name}/applications/{gallery_application_name}/versions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -447,7 +456,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/galleries/{galleryName}/applications/{galleryApplicationName}/versions/{galleryApplicationVersionName}
 # operationId: GalleryApplicationVersions_Delete
-export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-applications-versions delete" [
+export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-applications-versions delete-gallery" [
   subscription_id: string
   resource_group_name: string
   gallery_name: string
@@ -466,7 +475,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, gallery_name: $gallery_name, gallery_application_name: $gallery_application_name, gallery_application_version_name: $gallery_application_version_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Compute/galleries/{gallery_name}/applications/{gallery_application_name}/versions/{gallery_application_version_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), gallery_name: (encode-path-segment $gallery_name), gallery_application_name: (encode-path-segment $gallery_application_name), gallery_application_version_name: (encode-path-segment $gallery_application_version_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Compute/galleries/{gallery_name}/applications/{gallery_application_name}/versions/{gallery_application_version_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -476,7 +485,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/galleries/{galleryName}/applications/{galleryApplicationName}/versions/{galleryApplicationVersionName}
 # operationId: GalleryApplicationVersions_Get
-export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-applications-versions get" [
+export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-applications-versions get-gallery" [
   subscription_id: string
   resource_group_name: string
   gallery_name: string
@@ -496,7 +505,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, gallery_name: $gallery_name, gallery_application_name: $gallery_application_name, gallery_application_version_name: $gallery_application_version_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Compute/galleries/{gallery_name}/applications/{gallery_application_name}/versions/{gallery_application_version_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), gallery_name: (encode-path-segment $gallery_name), gallery_application_name: (encode-path-segment $gallery_application_name), gallery_application_version_name: (encode-path-segment $gallery_application_version_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Compute/galleries/{gallery_name}/applications/{gallery_application_name}/versions/{gallery_application_version_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -507,7 +516,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/galleries/{galleryName}/applications/{galleryApplicationName}/versions/{galleryApplicationVersionName}
 # operationId: GalleryApplicationVersions_Update
 # --properties shape: {publishingProfile: any, replicationStatus?: any}
-export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-applications-versions update" [
+export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-applications-versions update-gallery" [
   subscription_id: string
   resource_group_name: string
   gallery_name: string
@@ -529,12 +538,12 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, gallery_name: $gallery_name, gallery_application_name: $gallery_application_name, gallery_application_version_name: $gallery_application_version_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Compute/galleries/{gallery_name}/applications/{gallery_application_name}/versions/{gallery_application_version_name}") $qp)
-  let body = {"properties": $properties, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), gallery_name: (encode-path-segment $gallery_name), gallery_application_name: (encode-path-segment $gallery_application_name), gallery_application_version_name: (encode-path-segment $gallery_application_version_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Compute/galleries/{gallery_name}/applications/{gallery_application_name}/versions/{gallery_application_version_name}") $qp)
+  let req_body = {"properties": $properties, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create or update a gallery Application Version.
@@ -542,7 +551,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/galleries/{galleryName}/applications/{galleryApplicationName}/versions/{galleryApplicationVersionName}
 # operationId: GalleryApplicationVersions_CreateOrUpdate
 # --properties shape: {publishingProfile: any, replicationStatus?: any}
-export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-applications-versions create-or-update" [
+export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-applications-versions create-gallery-or-update" [
   subscription_id: string
   resource_group_name: string
   gallery_name: string
@@ -565,19 +574,19 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, gallery_name: $gallery_name, gallery_application_name: $gallery_application_name, gallery_application_version_name: $gallery_application_version_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Compute/galleries/{gallery_name}/applications/{gallery_application_name}/versions/{gallery_application_version_name}") $qp)
-  let body = {"properties": $properties, "location": $location, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), gallery_name: (encode-path-segment $gallery_name), gallery_application_name: (encode-path-segment $gallery_application_name), gallery_application_version_name: (encode-path-segment $gallery_application_version_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Compute/galleries/{gallery_name}/applications/{gallery_application_name}/versions/{gallery_application_version_name}") $qp)
+  let req_body = {"properties": $properties, "location": $location, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List gallery Image Definitions in a gallery.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/galleries/{galleryName}/images
 # operationId: GalleryImages_ListByGallery
-export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-images list-by-gallery" [
+export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-images list-gallery-by-gallery" [
   subscription_id: string
   resource_group_name: string
   gallery_name: string
@@ -594,7 +603,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, gallery_name: $gallery_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Compute/galleries/{gallery_name}/images") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), gallery_name: (encode-path-segment $gallery_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Compute/galleries/{gallery_name}/images") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -604,7 +613,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/galleries/{galleryName}/images/{galleryImageName}
 # operationId: GalleryImages_Delete
-export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-images delete" [
+export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-images delete-gallery" [
   subscription_id: string
   resource_group_name: string
   gallery_name: string
@@ -622,7 +631,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, gallery_name: $gallery_name, gallery_image_name: $gallery_image_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Compute/galleries/{gallery_name}/images/{gallery_image_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), gallery_name: (encode-path-segment $gallery_name), gallery_image_name: (encode-path-segment $gallery_image_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Compute/galleries/{gallery_name}/images/{gallery_image_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -632,7 +641,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/galleries/{galleryName}/images/{galleryImageName}
 # operationId: GalleryImages_Get
-export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-images get" [
+export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-images get-gallery" [
   subscription_id: string
   resource_group_name: string
   gallery_name: string
@@ -650,7 +659,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, gallery_name: $gallery_name, gallery_image_name: $gallery_image_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Compute/galleries/{gallery_name}/images/{gallery_image_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), gallery_name: (encode-path-segment $gallery_name), gallery_image_name: (encode-path-segment $gallery_image_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Compute/galleries/{gallery_name}/images/{gallery_image_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -661,7 +670,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/galleries/{galleryName}/images/{galleryImageName}
 # operationId: GalleryImages_Update
 # --properties shape: {description?: string, disallowed?: any, endOfLifeDate?: string, eula?: string, hyperVGeneration?: "V1"|"V2", identifier: any, osState: "Generalized"|"Specialized", osType: "Windows"|"Linux", privacyStatementUri?: string, purchasePlan?: any, recommended?: any, releaseNoteUri?: string}
-export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-images update" [
+export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-images update-gallery" [
   subscription_id: string
   resource_group_name: string
   gallery_name: string
@@ -682,12 +691,12 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, gallery_name: $gallery_name, gallery_image_name: $gallery_image_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Compute/galleries/{gallery_name}/images/{gallery_image_name}") $qp)
-  let body = {"properties": $properties, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), gallery_name: (encode-path-segment $gallery_name), gallery_image_name: (encode-path-segment $gallery_image_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Compute/galleries/{gallery_name}/images/{gallery_image_name}") $qp)
+  let req_body = {"properties": $properties, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create or update a gallery Image Definition.
@@ -695,7 +704,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/galleries/{galleryName}/images/{galleryImageName}
 # operationId: GalleryImages_CreateOrUpdate
 # --properties shape: {description?: string, disallowed?: any, endOfLifeDate?: string, eula?: string, hyperVGeneration?: "V1"|"V2", identifier: any, osState: "Generalized"|"Specialized", osType: "Windows"|"Linux", privacyStatementUri?: string, purchasePlan?: any, recommended?: any, releaseNoteUri?: string}
-export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-images create-or-update" [
+export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-images create-gallery-or-update" [
   subscription_id: string
   resource_group_name: string
   gallery_name: string
@@ -717,19 +726,19 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, gallery_name: $gallery_name, gallery_image_name: $gallery_image_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Compute/galleries/{gallery_name}/images/{gallery_image_name}") $qp)
-  let body = {"properties": $properties, "location": $location, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), gallery_name: (encode-path-segment $gallery_name), gallery_image_name: (encode-path-segment $gallery_image_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Compute/galleries/{gallery_name}/images/{gallery_image_name}") $qp)
+  let req_body = {"properties": $properties, "location": $location, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List gallery Image Versions in a gallery Image Definition.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/galleries/{galleryName}/images/{galleryImageName}/versions
 # operationId: GalleryImageVersions_ListByGalleryImage
-export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-images-versions list-by-gallery" [
+export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-images-versions list-gallery-by-gallery" [
   subscription_id: string
   resource_group_name: string
   gallery_name: string
@@ -747,7 +756,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, gallery_name: $gallery_name, gallery_image_name: $gallery_image_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Compute/galleries/{gallery_name}/images/{gallery_image_name}/versions") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), gallery_name: (encode-path-segment $gallery_name), gallery_image_name: (encode-path-segment $gallery_image_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Compute/galleries/{gallery_name}/images/{gallery_image_name}/versions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -757,7 +766,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/galleries/{galleryName}/images/{galleryImageName}/versions/{galleryImageVersionName}
 # operationId: GalleryImageVersions_Delete
-export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-images-versions delete" [
+export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-images-versions delete-gallery" [
   subscription_id: string
   resource_group_name: string
   gallery_name: string
@@ -776,7 +785,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, gallery_name: $gallery_name, gallery_image_name: $gallery_image_name, gallery_image_version_name: $gallery_image_version_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Compute/galleries/{gallery_name}/images/{gallery_image_name}/versions/{gallery_image_version_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), gallery_name: (encode-path-segment $gallery_name), gallery_image_name: (encode-path-segment $gallery_image_name), gallery_image_version_name: (encode-path-segment $gallery_image_version_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Compute/galleries/{gallery_name}/images/{gallery_image_name}/versions/{gallery_image_version_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -786,7 +795,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/galleries/{galleryName}/images/{galleryImageName}/versions/{galleryImageVersionName}
 # operationId: GalleryImageVersions_Get
-export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-images-versions get" [
+export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-images-versions get-gallery" [
   subscription_id: string
   resource_group_name: string
   gallery_name: string
@@ -806,7 +815,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, gallery_name: $gallery_name, gallery_image_name: $gallery_image_name, gallery_image_version_name: $gallery_image_version_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Compute/galleries/{gallery_name}/images/{gallery_image_name}/versions/{gallery_image_version_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), gallery_name: (encode-path-segment $gallery_name), gallery_image_name: (encode-path-segment $gallery_image_name), gallery_image_version_name: (encode-path-segment $gallery_image_version_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Compute/galleries/{gallery_name}/images/{gallery_image_name}/versions/{gallery_image_version_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -817,7 +826,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/galleries/{galleryName}/images/{galleryImageName}/versions/{galleryImageVersionName}
 # operationId: GalleryImageVersions_Update
 # --properties shape: {publishingProfile?: any, replicationStatus?: any, storageProfile: any}
-export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-images-versions update" [
+export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-images-versions update-gallery" [
   subscription_id: string
   resource_group_name: string
   gallery_name: string
@@ -839,12 +848,12 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, gallery_name: $gallery_name, gallery_image_name: $gallery_image_name, gallery_image_version_name: $gallery_image_version_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Compute/galleries/{gallery_name}/images/{gallery_image_name}/versions/{gallery_image_version_name}") $qp)
-  let body = {"properties": $properties, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), gallery_name: (encode-path-segment $gallery_name), gallery_image_name: (encode-path-segment $gallery_image_name), gallery_image_version_name: (encode-path-segment $gallery_image_version_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Compute/galleries/{gallery_name}/images/{gallery_image_name}/versions/{gallery_image_version_name}") $qp)
+  let req_body = {"properties": $properties, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create or update a gallery Image Version.
@@ -852,7 +861,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/galleries/{galleryName}/images/{galleryImageName}/versions/{galleryImageVersionName}
 # operationId: GalleryImageVersions_CreateOrUpdate
 # --properties shape: {publishingProfile?: any, replicationStatus?: any, storageProfile: any}
-export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-images-versions create-or-update" [
+export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-images-versions create-gallery-or-update" [
   subscription_id: string
   resource_group_name: string
   gallery_name: string
@@ -875,10 +884,10 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, gallery_name: $gallery_name, gallery_image_name: $gallery_image_name, gallery_image_version_name: $gallery_image_version_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Compute/galleries/{gallery_name}/images/{gallery_image_name}/versions/{gallery_image_version_name}") $qp)
-  let body = {"properties": $properties, "location": $location, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), gallery_name: (encode-path-segment $gallery_name), gallery_image_name: (encode-path-segment $gallery_image_name), gallery_image_version_name: (encode-path-segment $gallery_image_version_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Compute/galleries/{gallery_name}/images/{gallery_image_name}/versions/{gallery_image_version_name}") $qp)
+  let req_body = {"properties": $properties, "location": $location, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

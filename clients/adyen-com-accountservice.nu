@@ -13,6 +13,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   match $scheme {
     "x-api-key" => { {headers: {X-API-Key: $token_val}, query: ""} }
     "basic" => { {headers: {Authorization: $"Basic ($token_val)"}, query: ""} }
+    "basic-credentials" => { {headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: ""} }
     "none" => { {headers: {}, query: ""} }
     _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
   }
@@ -34,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
     "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
     _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -64,7 +74,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 }
 
 def base-url-completer [] { ["https://cal-test.adyen.com/cal/services/Account/v6"] }
-def auth-scheme-completer [] { ["x-api-key" "basic"] }
+def auth-scheme-completer [] { ["x-api-key" "basic" "basic-credentials"] }
 
 # Completers for enum parameters
 def account-state-type-completer [] { ["LimitedPayout" "LimitedProcessing" "LimitlessPayout" "LimitlessProcessing" "Payout" "Processing"] }
@@ -76,7 +86,7 @@ def state-type-completer [] { ["LimitedPayout" "LimitedProcessing" "LimitlessPay
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "check-account-holder post-checkAccountHolder" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "check-account-holder create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -100,7 +110,7 @@ export def commands []: nothing -> table {
 #
 # POST /checkAccountHolder
 # operationId: post-checkAccountHolder
-export def "check-account-holder post-checkAccountHolder" [
+export def "check-account-holder create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -117,18 +127,18 @@ export def "check-account-holder post-checkAccountHolder" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/checkAccountHolder")
-  let body = {"accountHolderCode": $account_holder_code, "accountStateType": $account_state_type, "tier": $tier} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"accountHolderCode": $account_holder_code, "accountStateType": $account_state_type, "tier": $tier} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Close an account
 #
 # POST /closeAccount
 # operationId: post-closeAccount
-export def "close-account post-closeAccount" [
+export def "close-account create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -143,18 +153,18 @@ export def "close-account post-closeAccount" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/closeAccount")
-  let body = {"accountCode": $account_code} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"accountCode": $account_code} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Close an account holder
 #
 # POST /closeAccountHolder
 # operationId: post-closeAccountHolder
-export def "close-account-holder post-closeAccountHolder" [
+export def "close-account-holder create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -169,18 +179,18 @@ export def "close-account-holder post-closeAccountHolder" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/closeAccountHolder")
-  let body = {"accountHolderCode": $account_holder_code} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"accountHolderCode": $account_holder_code} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Close stores
 #
 # POST /closeStores
 # operationId: post-closeStores
-export def "close-stores post-closeStores" [
+export def "close-stores create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -190,24 +200,24 @@ export def "close-stores post-closeStores" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   account_holder_code: string # The code of the account holder.
-  stores: list # List of stores to be closed.
+  stores: list<string> # List of stores to be closed.
 ]: any -> record<invalidFields: table<errorCode: int, errorDescription: string, fieldType: record>, pspReference: string, resultCode: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/closeStores")
-  let body = {"accountHolderCode": $account_holder_code, "stores": $stores} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"accountHolderCode": $account_holder_code, "stores": $stores} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create an account
 #
 # POST /createAccount
 # operationId: post-createAccount
-export def "create-account post-createAccount" [
+export def "create-account create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -229,11 +239,11 @@ export def "create-account post-createAccount" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/createAccount")
-  let body = {"accountHolderCode": $account_holder_code, "bankAccountUUID": $bank_account_uuid, "description": $description, "metadata": $metadata, "payoutMethodCode": $payout_method_code, "payoutSchedule": $payout_schedule, "payoutScheduleReason": $payout_schedule_reason, "payoutSpeed": $payout_speed} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"accountHolderCode": $account_holder_code, "bankAccountUUID": $bank_account_uuid, "description": $description, "metadata": $metadata, "payoutMethodCode": $payout_method_code, "payoutSchedule": $payout_schedule, "payoutScheduleReason": $payout_schedule_reason, "payoutSpeed": $payout_speed} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create an account holder
@@ -242,7 +252,7 @@ export def "create-account post-createAccount" [
 # operationId: post-createAccountHolder
 # --accountHolderDetails shape: {address?: record, bankAccountDetails?: list, bankAggregatorDataReference?: string, businessDetails?: record, email?: string, fullPhoneNumber?: string, individualDetails?: record, lastReviewDate?: string, legalArrangements?: list, merchantCategoryCode?: string, metadata?: record, payoutMethods?: list, principalBusinessAddress?: record, storeDetails?: list, webAddress?: string}
 @deprecated --flag primary-currency
-export def "create-account-holder post-createAccountHolder" [
+export def "create-account-holder create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -255,7 +265,7 @@ export def "create-account-holder post-createAccountHolder" [
   account_holder_details: record # shape: {address?: record, bankAccountDetails?: list, bankAggregatorDataReference?: string, businessDetails?: record, email?: string, fullPhoneNumber?: string, individualDetails?: record, lastReviewDate?: string, legalArrangements?: list, merchantCategoryCode?: string, metadata?: record, payoutMethods?: list, principalBusinessAddress?: record, storeDetails?: list, webAddress?: string}
   --create-default-account: oneof<nothing, bool> # If set to **true**, an account with the default options is automatically created for the account holder. By default, this field is set to **true**.
   --description: string # A description of the prospective account holder, maximum 256 characters. You can use alphanumeric characters (A-Z, a-z, 0-9), white spaces, and underscores `_`.
-  legal_entity: string@legal-entity-completer # The legal entity type of the account holder. This determines the information that should be provided in the request.  Possible values: **Business**, **Individual**, or **NonProfit**.  * If set to **Business** or **NonProfit**, then `accountHolderDetails.businessDetails` must be provided, with at least one entry in the `accountHolderDetails.businessDetails.shareholders` list.  * If set to **Individual**, then `accountHolderDetails.individualDetails` must be provided.
+  legal_entity: string@legal-entity-completer # The legal entity type of the account holder. This determines the information that should be provided in the request. Possible values: **Business**, **Individual**, or **NonProfit**. * If set to **Business** or **NonProfit**, then `accountHolderDetails.businessDetails` must be provided, with at least one entry in the `accountHolderDetails.businessDetails.shareholders` list. * If set to **Individual**, then `accountHolderDetails.individualDetails` must be provided.
   --primary-currency: string # The three-character [ISO currency code](https://docs.adyen.com/development-resources/currency-codes), with which the prospective account holder primarily deals. (DEPRECATED)
   --processing-tier: int # The starting [processing tier](https://docs.adyen.com/marketplaces-and-platforms/classic/onboarding-and-verification/precheck-kyc-information) for the prospective account holder. (format: int32)
   --verification-profile: string # The identifier of the profile that applies to this entity.
@@ -264,18 +274,18 @@ export def "create-account-holder post-createAccountHolder" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/createAccountHolder")
-  let body = {"accountHolderCode": $account_holder_code, "accountHolderDetails": $account_holder_details, "createDefaultAccount": $create_default_account, "description": $description, "legalEntity": $legal_entity, "primaryCurrency": $primary_currency, "processingTier": $processing_tier, "verificationProfile": $verification_profile} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"accountHolderCode": $account_holder_code, "accountHolderDetails": $account_holder_details, "createDefaultAccount": $create_default_account, "description": $description, "legalEntity": $legal_entity, "primaryCurrency": $primary_currency, "processingTier": $processing_tier, "verificationProfile": $verification_profile} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete bank accounts
 #
 # POST /deleteBankAccounts
 # operationId: post-deleteBankAccounts
-export def "delete-bank-accounts post-deleteBankAccounts" [
+export def "delete-bank-accounts create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -285,25 +295,25 @@ export def "delete-bank-accounts post-deleteBankAccounts" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   account_holder_code: string # The code of the Account Holder from which to delete the Bank Account(s).
-  bank_account_uui_ds: list # The code(s) of the Bank Accounts to be deleted.
+  bank_account_uui_ds: list<string> # The code(s) of the Bank Accounts to be deleted.
 ]: any -> record<invalidFields: table<errorCode: int, errorDescription: string, fieldType: record>, pspReference: string, resultCode: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/deleteBankAccounts")
-  let body = {"accountHolderCode": $account_holder_code, "bankAccountUUIDs": $bank_account_uui_ds} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"accountHolderCode": $account_holder_code, "bankAccountUUIDs": $bank_account_uui_ds} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete legal arrangements
 #
 # POST /deleteLegalArrangements
 # operationId: post-deleteLegalArrangements
-# --legalArrangements item shape: {legalArrangementCode: string, legalArrangementEntityCodes?: list}
-export def "delete-legal-arrangements post-deleteLegalArrangements" [
+# --legalArrangements item shape: {legalArrangementCode: string, legalArrangementEntityCodes?: list<string>}
+export def "delete-legal-arrangements create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -313,24 +323,24 @@ export def "delete-legal-arrangements post-deleteLegalArrangements" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   account_holder_code: string # The code of the account holder.
-  legal_arrangements: list # List of legal arrangements. — item shape: {legalArrangementCode: string, legalArrangementEntityCodes?: list}
+  legal_arrangements: list # List of legal arrangements. — item shape: {legalArrangementCode: string, legalArrangementEntityCodes?: list<string>}
 ]: any -> record<invalidFields: table<errorCode: int, errorDescription: string, fieldType: record>, pspReference: string, resultCode: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/deleteLegalArrangements")
-  let body = {"accountHolderCode": $account_holder_code, "legalArrangements": $legal_arrangements} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"accountHolderCode": $account_holder_code, "legalArrangements": $legal_arrangements} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete payout methods
 #
 # POST /deletePayoutMethods
 # operationId: post-deletePayoutMethods
-export def "delete-payout-methods post-deletePayoutMethods" [
+export def "delete-payout-methods create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -340,24 +350,24 @@ export def "delete-payout-methods post-deletePayoutMethods" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   account_holder_code: string # The code of the account holder, from which to delete the payout methods.
-  payout_method_codes: list # The codes of the payout methods to be deleted.
+  payout_method_codes: list<string> # The codes of the payout methods to be deleted.
 ]: any -> record<invalidFields: table<errorCode: int, errorDescription: string, fieldType: record>, pspReference: string, resultCode: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/deletePayoutMethods")
-  let body = {"accountHolderCode": $account_holder_code, "payoutMethodCodes": $payout_method_codes} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"accountHolderCode": $account_holder_code, "payoutMethodCodes": $payout_method_codes} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete shareholders
 #
 # POST /deleteShareholders
 # operationId: post-deleteShareholders
-export def "delete-shareholders post-deleteShareholders" [
+export def "delete-shareholders create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -367,24 +377,24 @@ export def "delete-shareholders post-deleteShareholders" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   account_holder_code: string # The code of the Account Holder from which to delete the Shareholders.
-  shareholder_codes: list # The code(s) of the Shareholders to be deleted.
+  shareholder_codes: list<string> # The code(s) of the Shareholders to be deleted.
 ]: any -> record<invalidFields: table<errorCode: int, errorDescription: string, fieldType: record>, pspReference: string, resultCode: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/deleteShareholders")
-  let body = {"accountHolderCode": $account_holder_code, "shareholderCodes": $shareholder_codes} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"accountHolderCode": $account_holder_code, "shareholderCodes": $shareholder_codes} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete signatories
 #
 # POST /deleteSignatories
 # operationId: post-deleteSignatories
-export def "delete-signatories post-deleteSignatories" [
+export def "delete-signatories create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -394,24 +404,24 @@ export def "delete-signatories post-deleteSignatories" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   account_holder_code: string # The code of the account holder from which to delete the signatories.
-  signatory_codes: list # Array of codes of the signatories to be deleted.
+  signatory_codes: list<string> # Array of codes of the signatories to be deleted.
 ]: any -> record<invalidFields: table<errorCode: int, errorDescription: string, fieldType: record>, pspReference: string, resultCode: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/deleteSignatories")
-  let body = {"accountHolderCode": $account_holder_code, "signatoryCodes": $signatory_codes} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"accountHolderCode": $account_holder_code, "signatoryCodes": $signatory_codes} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get an account holder
 #
 # POST /getAccountHolder
 # operationId: post-getAccountHolder
-export def "get-account-holder post-getAccountHolder" [
+export def "get-account-holder create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -428,18 +438,18 @@ export def "get-account-holder post-getAccountHolder" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/getAccountHolder")
-  let body = {"accountCode": $account_code, "accountHolderCode": $account_holder_code, "showDetails": $show_details} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"accountCode": $account_code, "accountHolderCode": $account_holder_code, "showDetails": $show_details} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get a tax form
 #
 # POST /getTaxForm
 # operationId: post-getTaxForm
-export def "get-tax-form post-getTaxForm" [
+export def "get-tax-form create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -456,18 +466,18 @@ export def "get-tax-form post-getTaxForm" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/getTaxForm")
-  let body = {"accountHolderCode": $account_holder_code, "formType": $form_type, "year": $year} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"accountHolderCode": $account_holder_code, "formType": $form_type, "year": $year} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get documents
 #
 # POST /getUploadedDocuments
 # operationId: post-getUploadedDocuments
-export def "get-uploaded-documents post-getUploadedDocuments" [
+export def "get-uploaded-documents create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -484,18 +494,18 @@ export def "get-uploaded-documents post-getUploadedDocuments" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/getUploadedDocuments")
-  let body = {"accountHolderCode": $account_holder_code, "bankAccountUUID": $bank_account_uuid, "shareholderCode": $shareholder_code} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"accountHolderCode": $account_holder_code, "bankAccountUUID": $bank_account_uuid, "shareholderCode": $shareholder_code} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Suspend an account holder
 #
 # POST /suspendAccountHolder
 # operationId: post-suspendAccountHolder
-export def "suspend-account-holder post-suspendAccountHolder" [
+export def "suspend-account-holder create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -510,18 +520,18 @@ export def "suspend-account-holder post-suspendAccountHolder" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/suspendAccountHolder")
-  let body = {"accountHolderCode": $account_holder_code} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"accountHolderCode": $account_holder_code} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Unsuspend an account holder
 #
 # POST /unSuspendAccountHolder
 # operationId: post-unSuspendAccountHolder
-export def "un-suspend-account-holder post-unSuspendAccountHolder" [
+export def "un-suspend-account-holder create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -536,11 +546,11 @@ export def "un-suspend-account-holder post-unSuspendAccountHolder" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/unSuspendAccountHolder")
-  let body = {"accountHolderCode": $account_holder_code} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"accountHolderCode": $account_holder_code} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update an account
@@ -548,7 +558,7 @@ export def "un-suspend-account-holder post-unSuspendAccountHolder" [
 # POST /updateAccount
 # operationId: post-updateAccount
 # --payoutSchedule shape: {action?: "CLOSE"|"NOTHING"|"UPDATE", reason?: string, schedule: "BIWEEKLY_ON_1ST_AND_15TH_AT_MIDNIGHT"|"DAILY"|"DAILY_AU"|"DAILY_EU"|"DAILY_SG"|"DAILY_US"|"HOLD"|"MONTHLY"|"WEEKLY"|"WEEKLY_MON_TO_FRI_AU"|"WEEKLY_MON_TO_FRI_EU"|"WEEKLY_MON_TO_FRI_US"|"WEEKLY_ON_TUE_FRI_MIDNIGHT"|"WEEKLY_SUN_TO_THU_AU"|"WEEKLY_SUN_TO_THU_US"}
-export def "update-account post-updateAccount" [
+export def "update-account create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -569,11 +579,11 @@ export def "update-account post-updateAccount" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/updateAccount")
-  let body = {"accountCode": $account_code, "bankAccountUUID": $bank_account_uuid, "description": $description, "metadata": $metadata, "payoutMethodCode": $payout_method_code, "payoutSchedule": $payout_schedule, "payoutSpeed": $payout_speed} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"accountCode": $account_code, "bankAccountUUID": $bank_account_uuid, "description": $description, "metadata": $metadata, "payoutMethodCode": $payout_method_code, "payoutSchedule": $payout_schedule, "payoutSpeed": $payout_speed} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update an account holder
@@ -582,7 +592,7 @@ export def "update-account post-updateAccount" [
 # operationId: post-updateAccountHolder
 # --accountHolderDetails shape: {address?: record, bankAccountDetails?: list, bankAggregatorDataReference?: string, businessDetails?: record, email?: string, fullPhoneNumber?: string, individualDetails?: record, lastReviewDate?: string, legalArrangements?: list, merchantCategoryCode?: string, metadata?: record, payoutMethods?: list, principalBusinessAddress?: record, storeDetails?: list, webAddress?: string}
 @deprecated --flag primary-currency
-export def "update-account-holder post-updateAccountHolder" [
+export def "update-account-holder create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -594,27 +604,27 @@ export def "update-account-holder post-updateAccountHolder" [
   account_holder_code: string # The code of the Account Holder to be updated.
   --account-holder-details: record # shape: {address?: record, bankAccountDetails?: list, bankAggregatorDataReference?: string, businessDetails?: record, email?: string, fullPhoneNumber?: string, individualDetails?: record, lastReviewDate?: string, legalArrangements?: list, merchantCategoryCode?: string, metadata?: record, payoutMethods?: list, principalBusinessAddress?: record, storeDetails?: list, webAddress?: string}
   --description: string # A description of the account holder, maximum 256 characters. You can use alphanumeric characters (A-Z, a-z, 0-9), white spaces, and underscores `_`.
-  --legal-entity: string@legal-entity-completer # The legal entity type of the account holder. This determines the information that should be provided in the request.  Possible values: **Business**, **Individual**, or **NonProfit**.  * If set to **Business** or **NonProfit**, then `accountHolderDetails.businessDetails` must be provided, with at least one entry in the `accountHolderDetails.businessDetails.shareholders` list.  * If set to **Individual**, then `accountHolderDetails.individualDetails` must be provided.
+  --legal-entity: string@legal-entity-completer # The legal entity type of the account holder. This determines the information that should be provided in the request. Possible values: **Business**, **Individual**, or **NonProfit**. * If set to **Business** or **NonProfit**, then `accountHolderDetails.businessDetails` must be provided, with at least one entry in the `accountHolderDetails.businessDetails.shareholders` list. * If set to **Individual**, then `accountHolderDetails.individualDetails` must be provided.
   --primary-currency: string # The primary three-character [ISO currency code](https://docs.adyen.com/development-resources/currency-codes), to which the account holder should be updated. (DEPRECATED)
-  --processing-tier: int # The processing tier to which the Account Holder should be updated. >The processing tier can not be lowered through this request.  >Required if accountHolderDetails are not provided. (format: int32)
+  --processing-tier: int # The processing tier to which the Account Holder should be updated. >The processing tier can not be lowered through this request. >Required if accountHolderDetails are not provided. (format: int32)
   --verification-profile: string # The identifier of the profile that applies to this entity.
 ]: any -> record<accountHolderCode: string, accountHolderDetails: record<address: record<city: string, country: string, houseNumberOrName: string, postalCode: string, stateOrProvince: string, street: string>, bankAccountDetails: list<record>, bankAggregatorDataReference: string, businessDetails: record<doingBusinessAs: string, legalBusinessName: string, listedUltimateParentCompany: list, registrationNumber: string, shareholders: list, signatories: list, stockExchange: string, stockNumber: string, stockTicker: string, taxId: string>, email: string, fullPhoneNumber: string, individualDetails: record<name: record, personalData: record>, lastReviewDate: string, legalArrangements: list<record>, merchantCategoryCode: string, metadata: record, payoutMethods: list<record>, principalBusinessAddress: record<city: string, country: string, houseNumberOrName: string, postalCode: string, stateOrProvince: string, street: string>, storeDetails: list<record>, webAddress: string>, accountHolderStatus: record<events: list<record>, payoutState: record<allowPayout: bool, disableReason: string, disabled: bool, notAllowedReason: string, payoutLimit: record, tierNumber: int>, processingState: record<disableReason: string, disabled: bool, processedFrom: record, processedTo: record, tierNumber: int>, status: string, statusReason: string>, description: string, invalidFields: table<errorCode: int, errorDescription: string, fieldType: record>, legalEntity: string, primaryCurrency: string, pspReference: string, resultCode: string, verification: record<accountHolder: record<checks: list>, legalArrangements: list<record>, legalArrangementsEntities: list<record>, payoutMethods: list<record>, shareholders: list<record>, signatories: list<record>, ultimateParentCompany: list<record>>, verificationProfile: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/updateAccountHolder")
-  let body = {"accountHolderCode": $account_holder_code, "accountHolderDetails": $account_holder_details, "description": $description, "legalEntity": $legal_entity, "primaryCurrency": $primary_currency, "processingTier": $processing_tier, "verificationProfile": $verification_profile} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"accountHolderCode": $account_holder_code, "accountHolderDetails": $account_holder_details, "description": $description, "legalEntity": $legal_entity, "primaryCurrency": $primary_currency, "processingTier": $processing_tier, "verificationProfile": $verification_profile} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update payout or processing state
 #
 # POST /updateAccountHolderState
 # operationId: post-updateAccountHolderState
-export def "update-account-holder-state post-updateAccountHolderState" [
+export def "update-account-holder-state create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -624,7 +634,7 @@ export def "update-account-holder-state post-updateAccountHolderState" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   account_holder_code: string # The code of the Account Holder on which to update the state.
-  --disable: oneof<nothing, bool> # If true, disable the requested state.  If false, enable the requested state.
+  --disable: oneof<nothing, bool> # If true, disable the requested state. If false, enable the requested state.
   --reason: string # The reason that the state is being updated. >Required if the state is being disabled.
   state_type: string@state-type-completer # The state to be updated. >Permitted values are: `Processing`, `Payout`
 ]: any -> record<accountHolderCode: string, accountHolderStatus: record<events: list<record>, payoutState: record<allowPayout: bool, disableReason: string, disabled: bool, notAllowedReason: string, payoutLimit: record, tierNumber: int>, processingState: record<disableReason: string, disabled: bool, processedFrom: record, processedTo: record, tierNumber: int>, status: string, statusReason: string>, invalidFields: table<errorCode: int, errorDescription: string, fieldType: record>, pspReference: string, resultCode: string> {
@@ -632,11 +642,11 @@ export def "update-account-holder-state post-updateAccountHolderState" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/updateAccountHolderState")
-  let body = {"accountHolderCode": $account_holder_code, "disable": $disable, "reason": $reason, "stateType": $state_type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"accountHolderCode": $account_holder_code, "disable": $disable, "reason": $reason, "stateType": $state_type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Upload a document
@@ -644,7 +654,7 @@ export def "update-account-holder-state post-updateAccountHolderState" [
 # POST /uploadDocument
 # operationId: post-uploadDocument
 # --documentDetail shape: {accountHolderCode?: string, bankAccountUUID?: string, description?: string, documentType: "BANK_STATEMENT"|"BSN"|"COMPANY_REGISTRATION_SCREENING"|"CONSTITUTIONAL_DOCUMENT"|"DRIVING_LICENCE"|"DRIVING_LICENCE_BACK"|"DRIVING_LICENCE_FRONT"|"ID_CARD"|"ID_CARD_BACK"|"ID_CARD_FRONT"|"PASSPORT"|"PROOF_OF_RESIDENCY"|"SSN"|"SUPPORTING_DOCUMENTS", filename?: string, legalArrangementCode?: string, legalArrangementEntityCode?: string, shareholderCode?: string, signatoryCode?: string}
-export def "upload-document post-uploadDocument" [
+export def "upload-document create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -653,16 +663,16 @@ export def "upload-document post-uploadDocument" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  document_content: string # The content of the document, in Base64-encoded string format.  To learn about document requirements, refer to [Verification checks](https://docs.adyen.com/marketplaces-and-platforms/classic/verification-checks).
+  document_content: string # The content of the document, in Base64-encoded string format. To learn about document requirements, refer to [Verification checks](https://docs.adyen.com/marketplaces-and-platforms/classic/verification-checks).
   document_detail: record # shape: {accountHolderCode?: string, bankAccountUUID?: string, description?: string, documentType: "BANK_STATEMENT"|"BSN"|"COMPANY_REGISTRATION_SCREENING"|"CONSTITUTIONAL_DOCUMENT"|"DRIVING_LICENCE"|"DRIVING_LICENCE_BACK"|"DRIVING_LICENCE_FRONT"|"ID_CARD"|"ID_CARD_BACK"|"ID_CARD_FRONT"|"PASSPORT"|"PROOF_OF_RESIDENCY"|"SSN"|"SUPPORTING_DOCUMENTS", filename?: string, legalArrangementCode?: string, legalArrangementEntityCode?: string, shareholderCode?: string, signatoryCode?: string}
 ]: any -> record<accountHolderCode: string, accountHolderDetails: record<address: record<city: string, country: string, houseNumberOrName: string, postalCode: string, stateOrProvince: string, street: string>, bankAccountDetails: list<record>, bankAggregatorDataReference: string, businessDetails: record<doingBusinessAs: string, legalBusinessName: string, listedUltimateParentCompany: list, registrationNumber: string, shareholders: list, signatories: list, stockExchange: string, stockNumber: string, stockTicker: string, taxId: string>, email: string, fullPhoneNumber: string, individualDetails: record<name: record, personalData: record>, lastReviewDate: string, legalArrangements: list<record>, merchantCategoryCode: string, metadata: record, payoutMethods: list<record>, principalBusinessAddress: record<city: string, country: string, houseNumberOrName: string, postalCode: string, stateOrProvince: string, street: string>, storeDetails: list<record>, webAddress: string>, accountHolderStatus: record<events: list<record>, payoutState: record<allowPayout: bool, disableReason: string, disabled: bool, notAllowedReason: string, payoutLimit: record, tierNumber: int>, processingState: record<disableReason: string, disabled: bool, processedFrom: record, processedTo: record, tierNumber: int>, status: string, statusReason: string>, description: string, invalidFields: table<errorCode: int, errorDescription: string, fieldType: record>, legalEntity: string, primaryCurrency: string, pspReference: string, resultCode: string, verification: record<accountHolder: record<checks: list>, legalArrangements: list<record>, legalArrangementsEntities: list<record>, payoutMethods: list<record>, shareholders: list<record>, signatories: list<record>, ultimateParentCompany: list<record>>, verificationProfile: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/uploadDocument")
-  let body = {"documentContent": $document_content, "documentDetail": $document_detail} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"documentContent": $document_content, "documentDetail": $document_detail} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

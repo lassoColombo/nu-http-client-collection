@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -73,7 +82,7 @@ def parameters-question-type-completer [] { ["Substantive" "Topical"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "early-day-motion get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "early-day-motion get-published" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -97,7 +106,7 @@ export def commands []: nothing -> table {
 #
 # GET /EarlyDayMotion/{id}
 # operationId: PublishedEarlyDayMotion_Get
-export def "early-day-motion get" [
+export def "early-day-motion get-published" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -111,7 +120,7 @@ export def "early-day-motion get" [
 ]: nothing -> record<Errors: list<string>, PagingInfo: record<GlobalStatusCounts: list<record>, GlobalTotal: int, Skip: int, StatusCounts: list<record>, Take: int, Total: int>, Response: table<Answer: string, AnsweredWhen: string, AnsweringBody: string, AnsweringBodyId: int, AnsweringMinister: record, AnsweringMinisterId: int, AnsweringMinisterTitle: string, AskingMember: record, AskingMemberId: int, DueForAnswer: string, Id: int, QuestionText: string, QuestionType: string, TabledWhen: string, UIN: int>, StatusCode: string, Success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/EarlyDayMotion/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/EarlyDayMotion/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -130,7 +139,7 @@ export def "early-day-motions-list get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --parameters-edm-ids: list # Early Day Motions with an ID in the list provided.
+  --parameters-edm-ids: list<int> # Early Day Motions with an ID in the list provided.
   --parameters-u-in-with-amendment-suffix: string # Early Day Motions with an UINWithAmendmentSuffix provided.
   --parameters-search-term: string # Early Day Motions where the title includes the search term provided.
   --parameters-current-status-date-start: string # Early Day Motions where the current status has been set on or after the date provided. Date format YYYY-MM-DD. (format: date-time)
@@ -140,7 +149,7 @@ export def "early-day-motions-list get" [
   --parameters-include-sponsored-by-member: oneof<nothing, bool> # Include Early Day Motions sponsored by Member specified
   --parameters-tabled-start-date: string # Early Day Motions where the date tabled is on or after the date provided. Date format YYYY-MM-DD. (format: date-time)
   --parameters-tabled-end-date: string # Early Day Motions where the date tabled is on or before the date provided. Date format YYYY-MM-DD. (format: date-time)
-  --parameters-statuses: list # Early Day Motions where current status is in the selected list.
+  --parameters-statuses: list<string> # Early Day Motions where current status is in the selected list.
   --parameters-order-by: string@parameters-order-by-completer # Order results by date tabled, title or signature count. Default is date tabled.
   --parameters-skip: int # The number of records to skip from the first, default is 0. (format: int32)
   --parameters-take: int # The number of records to return, default is 25, maximum is 100. (format: int32)
@@ -158,7 +167,7 @@ export def "early-day-motions-list get" [
 #
 # GET /oralquestions/list
 # operationId: PublishedOralQuestion_Get
-export def "oralquestions-list get" [
+export def "oralquestions-list get-published-oral-question" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -172,9 +181,9 @@ export def "oralquestions-list get" [
   --parameters-answering-date-end: string # Oral Questions where the answering date has been set on or before the date provided. Date format YYYY-MM-DD. (format: date-time)
   --parameters-question-type: string@parameters-question-type-completer # Oral Questions where the question type is the selected type, substantive or topical.
   --parameters-oral-question-time-id: int # Oral Questions where the question is within the question time with the ID provided (format: int32)
-  --parameters-asking-member-ids: list # The ID of the member asking the question. Lists of member IDs for each house are available <a href="http://data.parliament.uk/membersdataplatform/services/mnis/members/query/house=Commons" target="_blank">Commons</a> and <a href="http://data.parliament.uk/membersdataplatform/services/mnis/members/query/house=Lords" target="_blank">Lords</a>.
-  --parameters-u-i-ns: list # The UIN for the question - note that UINs reset at the start of each Parliamentary session.
-  --parameters-answering-body-ids: list # Which answering body is to respond. A list of answering bodies can be found <a target="_blank" href="http://data.parliament.uk/membersdataplatform/services/mnis/referencedata/AnsweringBodies/">here</a>.
+  --parameters-asking-member-ids: list<int> # The ID of the member asking the question. Lists of member IDs for each house are available Commons (http://data.parliament.uk/membersdataplatform/services/mnis/members/query/house=Commons) and Lords (http://data.parliament.uk/membersdataplatform/services/mnis/members/query/house=Lords).
+  --parameters-u-i-ns: list<int> # The UIN for the question - note that UINs reset at the start of each Parliamentary session.
+  --parameters-answering-body-ids: list<int> # Which answering body is to respond. A list of answering bodies can be found here (http://data.parliament.uk/membersdataplatform/services/mnis/referencedata/AnsweringBodies/).
   --parameters-skip: int # The number of records to skip from the first, default is 0. (format: int32)
   --parameters-take: int # The number of records to return, default is 25, maximum is 100. (format: int32)
 ]: nothing -> record<Errors: list<string>, PagingInfo: record<GlobalStatusCounts: list<record>, GlobalTotal: int, Skip: int, StatusCounts: list<record>, Take: int, Total: int>, Response: table<Answer: string, AnsweredWhen: string, AnsweringBody: string, AnsweringBodyId: int, AnsweringMinister: record, AnsweringMinisterId: int, AnsweringMinisterTitle: string, AskingMember: record, AskingMemberId: int, DueForAnswer: string, Id: int, QuestionText: string, QuestionType: string, TabledWhen: string, UIN: int>, StatusCode: string, Success: bool> {
@@ -191,7 +200,7 @@ export def "oralquestions-list get" [
 #
 # GET /oralquestiontimes/list
 # operationId: PublishedOralQuestionTime_Get
-export def "oralquestiontimes-list get" [
+export def "oralquestiontimes-list get-published-oral-question-time" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -206,7 +215,7 @@ export def "oralquestiontimes-list get" [
   --parameters-deadline-date-start: string # Oral Questions Time where the deadline date has been set on or after the date provided. Date format YYYY-MM-DD. (format: date-time)
   --parameters-deadline-date-end: string # Oral Questions Time where the deadline date has been set on or before the date provided. Date format YYYY-MM-DD. (format: date-time)
   --parameters-oral-question-time-id: int # Identifier of the OQT (format: int32)
-  --parameters-answering-body-ids: list # Which answering body is to respond. A list of answering bodies can be found <a target="_blank" href="http://data.parliament.uk/membersdataplatform/services/mnis/referencedata/AnsweringBodies/">here</a>.
+  --parameters-answering-body-ids: list<int> # Which answering body is to respond. A list of answering bodies can be found here (http://data.parliament.uk/membersdataplatform/services/mnis/referencedata/AnsweringBodies/).
   --parameters-skip: int # The number of records to skip from the first, default is 0. (format: int32)
   --parameters-take: int # The number of records to return, default is 25, maximum is 100. (format: int32)
 ]: nothing -> record<Errors: list<string>, PagingInfo: record<GlobalStatusCounts: list<record>, GlobalTotal: int, Skip: int, StatusCounts: list<record>, Take: int, Total: int>, Response: table<Answer: string, AnsweredWhen: string, AnsweringBody: string, AnsweringBodyId: int, AnsweringMinister: record, AnsweringMinisterId: int, AnsweringMinisterTitle: string, AskingMember: record, AskingMemberId: int, DueForAnswer: string, Id: int, QuestionText: string, QuestionType: string, TabledWhen: string, UIN: int>, StatusCode: string, Success: bool> {

@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -120,7 +129,7 @@ export def "discovery-attractions find" [
   --include-test: string@include-test-completer # True if you want to have entities flag as test in the response. Only, if you only wanted test entities (default: no, e.g. )
   --page: string # Page number (default: 0, e.g. )
   --size: string # Page size of the response (default: 20, e.g. )
-  --locale: string # The locale in ISO code format. Multiple comma-separated values can be provided. When omitting the country part of the code (e.g. only 'en' or 'fr') then the first matching locale is used. When using a '*' it matches all locales. '*' can only be used at the end (e.g. 'en-us,en,*')  (default: en, e.g. en-us,en,fr)
+  --locale: string # The locale in ISO code format. Multiple comma-separated values can be provided. When omitting the country part of the code (e.g. only 'en' or 'fr') then the first matching locale is used. When using a '*' it matches all locales. '*' can only be used at the end (e.g. 'en-us,en,*') (default: en, e.g. en-us,en,fr)
   --include-licensed-content: string@include-licensed-content-completer # Yes if you want to display licensed content (default: no, e.g. )
   --include-spellcheck: string@include-spellcheck-completer # yes, to include spell check suggestions in the response. (default: no, e.g. )
 ]: nothing -> any {
@@ -147,13 +156,13 @@ export def "discovery-attractions get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --locale: string # The locale in ISO code format. Multiple comma-separated values can be provided. When omitting the country part of the code (e.g. only 'en' or 'fr') then the first matching locale is used. When using a '*' it matches all locales. '*' can only be used at the end (e.g. 'en-us,en,*')  (default: en, e.g. en-us,en,fr)
+  --locale: string # The locale in ISO code format. Multiple comma-separated values can be provided. When omitting the country part of the code (e.g. only 'en' or 'fr') then the first matching locale is used. When using a '*' it matches all locales. '*' can only be used at the end (e.g. 'en-us,en,*') (default: en, e.g. en-us,en,fr)
   --include-licensed-content: string@include-licensed-content-completer # True if you want to display licensed content (default: no, e.g. )
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "locale" $locale "scalar") (serialize-qp "includeLicensedContent" $include_licensed_content "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/discovery/v2/attractions/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/discovery/v2/attractions/{id}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -178,7 +187,7 @@ export def "discovery-classifications list" [
   --include-test: string@include-test-completer # True if you want to have entities flag as test in the response. Only, if you only wanted test entities (default: no, e.g. )
   --page: string # Page number (default: 0, e.g. )
   --size: string # Page size of the response (default: 20, e.g. )
-  --locale: string # The locale in ISO code format. Multiple comma-separated values can be provided. When omitting the country part of the code (e.g. only 'en' or 'fr') then the first matching locale is used. When using a '*' it matches all locales. '*' can only be used at the end (e.g. 'en-us,en,*')  (default: en, e.g. en-us,en,fr)
+  --locale: string # The locale in ISO code format. Multiple comma-separated values can be provided. When omitting the country part of the code (e.g. only 'en' or 'fr') then the first matching locale is used. When using a '*' it matches all locales. '*' can only be used at the end (e.g. 'en-us,en,*') (default: en, e.g. en-us,en,fr)
   --include-licensed-content: string@include-licensed-content-completer # Yes if you want to display licensed content (default: no, e.g. )
   --include-spellcheck: string@include-spellcheck-completer # yes, to include spell check suggestions in the response. (default: no, e.g. )
 ]: nothing -> any {
@@ -205,13 +214,13 @@ export def "discovery-classifications-genres get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --locale: string # The locale in ISO code format. Multiple comma-separated values can be provided. When omitting the country part of the code (e.g. only 'en' or 'fr') then the first matching locale is used. When using a '*' it matches all locales. '*' can only be used at the end (e.g. 'en-us,en,*')  (default: en, e.g. en-us,en,fr)
+  --locale: string # The locale in ISO code format. Multiple comma-separated values can be provided. When omitting the country part of the code (e.g. only 'en' or 'fr') then the first matching locale is used. When using a '*' it matches all locales. '*' can only be used at the end (e.g. 'en-us,en,*') (default: en, e.g. en-us,en,fr)
   --include-licensed-content: string@include-licensed-content-completer # True if you want to display licensed content (default: no, e.g. )
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "locale" $locale "scalar") (serialize-qp "includeLicensedContent" $include_licensed_content "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/discovery/v2/classifications/genres/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/discovery/v2/classifications/genres/{id}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -231,13 +240,13 @@ export def "discovery-classifications-segments get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --locale: string # The locale in ISO code format. Multiple comma-separated values can be provided. When omitting the country part of the code (e.g. only 'en' or 'fr') then the first matching locale is used. When using a '*' it matches all locales. '*' can only be used at the end (e.g. 'en-us,en,*')  (default: en, e.g. en-us,en,fr)
+  --locale: string # The locale in ISO code format. Multiple comma-separated values can be provided. When omitting the country part of the code (e.g. only 'en' or 'fr') then the first matching locale is used. When using a '*' it matches all locales. '*' can only be used at the end (e.g. 'en-us,en,*') (default: en, e.g. en-us,en,fr)
   --include-licensed-content: string@include-licensed-content-completer # True if you want to display licensed content (default: no, e.g. )
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "locale" $locale "scalar") (serialize-qp "includeLicensedContent" $include_licensed_content "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/discovery/v2/classifications/segments/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/discovery/v2/classifications/segments/{id}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -257,13 +266,13 @@ export def "discovery-classifications-subgenres get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --locale: string # The locale in ISO code format. Multiple comma-separated values can be provided. When omitting the country part of the code (e.g. only 'en' or 'fr') then the first matching locale is used. When using a '*' it matches all locales. '*' can only be used at the end (e.g. 'en-us,en,*')  (default: en, e.g. en-us,en,fr)
+  --locale: string # The locale in ISO code format. Multiple comma-separated values can be provided. When omitting the country part of the code (e.g. only 'en' or 'fr') then the first matching locale is used. When using a '*' it matches all locales. '*' can only be used at the end (e.g. 'en-us,en,*') (default: en, e.g. en-us,en,fr)
   --include-licensed-content: string@include-licensed-content-completer # True if you want to display licensed content (default: no, e.g. )
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "locale" $locale "scalar") (serialize-qp "includeLicensedContent" $include_licensed_content "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/discovery/v2/classifications/subgenres/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/discovery/v2/classifications/subgenres/{id}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -282,13 +291,13 @@ export def "discovery-classifications get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --locale: string # The locale in ISO code format. Multiple comma-separated values can be provided. When omitting the country part of the code (e.g. only 'en' or 'fr') then the first matching locale is used. When using a '*' it matches all locales. '*' can only be used at the end (e.g. 'en-us,en,*')  (default: en, e.g. en-us,en,fr)
+  --locale: string # The locale in ISO code format. Multiple comma-separated values can be provided. When omitting the country part of the code (e.g. only 'en' or 'fr') then the first matching locale is used. When using a '*' it matches all locales. '*' can only be used at the end (e.g. 'en-us,en,*') (default: en, e.g. en-us,en,fr)
   --include-licensed-content: string@include-licensed-content-completer # True if you want to display licensed content (default: no, e.g. )
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "locale" $locale "scalar") (serialize-qp "includeLicensedContent" $include_licensed_content "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/discovery/v2/classifications/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/discovery/v2/classifications/{id}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -339,7 +348,7 @@ export def "discovery-events list" [
   --include-test: string@include-test-completer # True if you want to have entities flag as test in the response. Only, if you only wanted test entities (default: no, e.g. )
   --page: string # Page number (default: 0, e.g. )
   --size: string # Page size of the response (default: 20, e.g. )
-  --locale: string # The locale in ISO code format. Multiple comma-separated values can be provided. When omitting the country part of the code (e.g. only 'en' or 'fr') then the first matching locale is used. When using a '*' it matches all locales. '*' can only be used at the end (e.g. 'en-us,en,*')  (default: en, e.g. en-us,en,fr)
+  --locale: string # The locale in ISO code format. Multiple comma-separated values can be provided. When omitting the country part of the code (e.g. only 'en' or 'fr') then the first matching locale is used. When using a '*' it matches all locales. '*' can only be used at the end (e.g. 'en-us,en,*') (default: en, e.g. en-us,en,fr)
   --include-licensed-content: string@include-licensed-content-completer # Yes if you want to display licensed content (default: no, e.g. )
   --include-spellcheck: string@include-spellcheck-completer # yes, to include spell check suggestions in the response. (default: no, e.g. )
 ]: nothing -> any {
@@ -365,13 +374,13 @@ export def "discovery-events get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --locale: string # The locale in ISO code format. Multiple comma-separated values can be provided. When omitting the country part of the code (e.g. only 'en' or 'fr') then the first matching locale is used. When using a '*' it matches all locales. '*' can only be used at the end (e.g. 'en-us,en,*')  (default: en, e.g. en-us,en,fr)
+  --locale: string # The locale in ISO code format. Multiple comma-separated values can be provided. When omitting the country part of the code (e.g. only 'en' or 'fr') then the first matching locale is used. When using a '*' it matches all locales. '*' can only be used at the end (e.g. 'en-us,en,*') (default: en, e.g. en-us,en,fr)
   --include-licensed-content: string@include-licensed-content-completer # True if you want to display licensed content (default: no, e.g. )
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "locale" $locale "scalar") (serialize-qp "includeLicensedContent" $include_licensed_content "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/discovery/v2/events/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/discovery/v2/events/{id}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -391,13 +400,13 @@ export def "discovery-events-images get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --locale: string # The locale in ISO code format. Multiple comma-separated values can be provided. When omitting the country part of the code (e.g. only 'en' or 'fr') then the first matching locale is used. When using a '*' it matches all locales. '*' can only be used at the end (e.g. 'en-us,en,*')  (default: en, e.g. en-us,en,fr)
+  --locale: string # The locale in ISO code format. Multiple comma-separated values can be provided. When omitting the country part of the code (e.g. only 'en' or 'fr') then the first matching locale is used. When using a '*' it matches all locales. '*' can only be used at the end (e.g. 'en-us,en,*') (default: en, e.g. en-us,en,fr)
   --include-licensed-content: string@include-licensed-content-completer # True if you want to display licensed content (default: no, e.g. )
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "locale" $locale "scalar") (serialize-qp "includeLicensedContent" $include_licensed_content "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/discovery/v2/events/{id}/images") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/discovery/v2/events/{id}/images") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -429,7 +438,7 @@ export def "discovery-suggest get" [
   --include-tbd: string@include-tbd-completer # True, to include event with a date to be defined (TBD) (default: no if date parameter sent, yes otherwise, e.g. )
   --segment-id: string # Filter suggestions by segment id (default: , e.g. )
   --geo-point: string # filter events by geoHash (default: , e.g. dr5rh)
-  --locale: string # The locale in ISO code format. Multiple comma-separated values can be provided. When omitting the country part of the code (e.g. only 'en' or 'fr') then the first matching locale is used. When using a '*' it matches all locales. '*' can only be used at the end (e.g. 'en-us,en,*')  (default: en, e.g. en-us,en,fr)
+  --locale: string # The locale in ISO code format. Multiple comma-separated values can be provided. When omitting the country part of the code (e.g. only 'en' or 'fr') then the first matching locale is used. When using a '*' it matches all locales. '*' can only be used at the end (e.g. 'en-us,en,*') (default: en, e.g. en-us,en,fr)
   --include-licensed-content: string@include-licensed-content-completer # Yes if you want to display licensed content (default: no, e.g. )
   --include-spellcheck: string@include-spellcheck-completer # yes, to include spell check suggestions in the response. (default: no, e.g. )
 ]: nothing -> any {
@@ -467,7 +476,7 @@ export def "discovery-venues list" [
   --include-test: string@include-test-completer # True if you want to have entities flag as test in the response. Only, if you only wanted test entities (default: no, e.g. )
   --page: string # Page number (default: 0, e.g. )
   --size: string # Page size of the response (default: 20, e.g. )
-  --locale: string # The locale in ISO code format. Multiple comma-separated values can be provided. When omitting the country part of the code (e.g. only 'en' or 'fr') then the first matching locale is used. When using a '*' it matches all locales. '*' can only be used at the end (e.g. 'en-us,en,*')  (default: en, e.g. en-us,en,fr)
+  --locale: string # The locale in ISO code format. Multiple comma-separated values can be provided. When omitting the country part of the code (e.g. only 'en' or 'fr') then the first matching locale is used. When using a '*' it matches all locales. '*' can only be used at the end (e.g. 'en-us,en,*') (default: en, e.g. en-us,en,fr)
   --include-licensed-content: string@include-licensed-content-completer # Yes if you want to display licensed content (default: no, e.g. )
   --include-spellcheck: string@include-spellcheck-completer # yes, to include spell check suggestions in the response. (default: no, e.g. )
 ]: nothing -> any {
@@ -493,13 +502,13 @@ export def "discovery-venues get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --locale: string # The locale in ISO code format. Multiple comma-separated values can be provided. When omitting the country part of the code (e.g. only 'en' or 'fr') then the first matching locale is used. When using a '*' it matches all locales. '*' can only be used at the end (e.g. 'en-us,en,*')  (default: en, e.g. en-us,en,fr)
+  --locale: string # The locale in ISO code format. Multiple comma-separated values can be provided. When omitting the country part of the code (e.g. only 'en' or 'fr') then the first matching locale is used. When using a '*' it matches all locales. '*' can only be used at the end (e.g. 'en-us,en,*') (default: en, e.g. en-us,en,fr)
   --include-licensed-content: string@include-licensed-content-completer # True if you want to display licensed content (default: no, e.g. )
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "locale" $locale "scalar") (serialize-qp "includeLicensedContent" $include_licensed_content "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/discovery/v2/venues/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/discovery/v2/venues/{id}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

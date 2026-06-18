@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -68,7 +77,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "admin-allapps get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "admin-allapps get-dev-assets" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -92,7 +101,7 @@ export def commands []: nothing -> table {
 #
 # GET /admin/allapps
 # operationId: DevGetAssets
-export def "admin-allapps get" [
+export def "admin-allapps get-dev-assets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -106,10 +115,10 @@ export def "admin-allapps get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin/allapps")
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -117,7 +126,7 @@ export def "admin-allapps get" [
 #
 # GET /admin/allcollections
 # operationId: DevGetCollections
-export def "admin-allcollections get" [
+export def "admin-allcollections get-dev-collections" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -133,10 +142,10 @@ export def "admin-allcollections get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "appid" $appid "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/admin/allcollections" $qp)
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -158,14 +167,14 @@ export def "admin-allsystems get-systems" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin/allsystems")
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# AUDIT  - Get Audit Info
+# AUDIT - Get Audit Info
 #
 # GET /admin/audit
 # operationId: GetAudit
@@ -185,10 +194,10 @@ export def "admin-audit get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/admin/audit" $qp)
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -210,18 +219,18 @@ export def "admin-audit-count get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin/audit/count")
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# AUDIT  - Get Audit Info
+# AUDIT - Get Audit Info
 #
 # GET /admin/audit/{systemKey}
 # operationId: GetAuditDev
-export def "admin-audit get-audit-dev" [
+export def "admin-audit get-dev" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -237,11 +246,11 @@ export def "admin-audit get-audit-dev" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({system_key: $system_key} | format pattern "/admin/audit/{system_key}") $qp)
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/audit/{system_key}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -249,7 +258,7 @@ export def "admin-audit get-audit-dev" [
 #
 # GET /admin/audit/{systemKey}/count
 # operationId: GetCountsDev
-export def "admin-audit-count get-counts-dev" [
+export def "admin-audit-count get-dev" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -263,11 +272,11 @@ export def "admin-audit-count get-counts-dev" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key} | format pattern "/admin/audit/{system_key}/count"))
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/audit/{system_key}/count"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -275,7 +284,7 @@ export def "admin-audit-count get-counts-dev" [
 #
 # POST /admin/auth
 # operationId: AuthDev
-export def "admin-auth post" [
+export def "admin-auth create-dev" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -291,11 +300,11 @@ export def "admin-auth post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin/auth")
-  let body = {"email": $email, "password": $password} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"email": $email, "password": $password} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DEVELOPER - Verifies access to the system
@@ -316,10 +325,10 @@ export def "admin-checkauth verify-auth" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin/checkauth")
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -327,7 +336,7 @@ export def "admin-checkauth verify-auth" [
 #
 # DELETE /admin/collectionmanagement
 # operationId: DevDeleteCollection
-export def "admin-collectionmanagement delete" [
+export def "admin-collectionmanagement delete-dev-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -343,10 +352,10 @@ export def "admin-collectionmanagement delete" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/admin/collectionmanagement" $qp)
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -354,7 +363,7 @@ export def "admin-collectionmanagement delete" [
 #
 # POST /admin/collectionmanagement
 # operationId: DevCreateCollection
-export def "admin-collectionmanagement post" [
+export def "admin-collectionmanagement create-dev-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -372,13 +381,13 @@ export def "admin-collectionmanagement post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin/collectionmanagement")
-  let body = {"appID": $app_id, "collectionID": $collection_id, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"appID": $app_id, "collectionID": $collection_id, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DEVELOPER - Update collection
@@ -386,7 +395,7 @@ export def "admin-collectionmanagement post" [
 # PUT /admin/collectionmanagement
 # operationId: DevUpdateCollection
 # --addColumn shape: {id: string, name: string, type: string}
-export def "admin-collectionmanagement put" [
+export def "admin-collectionmanagement update-dev-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -403,20 +412,20 @@ export def "admin-collectionmanagement put" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin/collectionmanagement")
-  let body = {"addColumn": $add_column, "id": $id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"addColumn": $add_column, "id": $id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # ADMIN - Get number of admin developers
 #
 # GET /admin/count/developers
 # operationId: GetAdminDevCount
-export def "admin-count-developers get-admin-dev" [
+export def "admin-count-developers get-dev" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -430,10 +439,10 @@ export def "admin-count-developers get-admin-dev" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin/count/developers")
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -455,10 +464,10 @@ export def "admin-count-systems get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin/count/systems")
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -488,7 +497,7 @@ export def "admin-database-status get" [
 #
 # PUT /admin/developers/{systemKey}
 # operationId: AdminOwnerChange
-export def "admin-developers put" [
+export def "admin-developers update-owner-change" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -505,14 +514,14 @@ export def "admin-developers put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key} | format pattern "/admin/developers/{system_key}"))
-  let body = {"change": $change, "owner": $owner} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/developers/{system_key}"))
+  let req_body = {"change": $change, "owner": $owner} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DEVELOPER - Delete rotating keys for a device
@@ -534,11 +543,11 @@ export def "admin-devices-keys delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key, device_name: $device_name} | format pattern "/admin/devices/keys/{system_key}/{device_name}"))
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), device_name: (encode-path-segment $device_name)} | format pattern "/admin/devices/keys/{system_key}/{device_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -563,13 +572,14 @@ export def "admin-devices-keys create-rotating" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key, device_name: $device_name} | format pattern "/admin/devices/keys/{system_key}/{device_name}"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), device_name: (encode-path-segment $device_name)} | format pattern "/admin/devices/keys/{system_key}/{device_name}"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DEVELOPER - Delete devices using a query
@@ -592,11 +602,11 @@ export def "admin-devices delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({system_key: $system_key} | format pattern "/admin/devices/{system_key}") $qp)
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/devices/{system_key}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -620,11 +630,11 @@ export def "admin-devices list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({system_key: $system_key} | format pattern "/admin/devices/{system_key}") $qp)
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/devices/{system_key}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -651,14 +661,14 @@ export def "admin-devices update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key} | format pattern "/admin/devices/{system_key}"))
-  let body = {"$set": $set, "query": $query} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/devices/{system_key}"))
+  let req_body = {"$set": $set, "query": $query} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DEVELOPER - Delete device
@@ -680,11 +690,11 @@ export def "admin-devices delete-system" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key, name: $name} | format pattern "/admin/devices/{system_key}/{name}"))
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/admin/devices/{system_key}/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -707,11 +717,11 @@ export def "admin-devices get-system" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key, name: $name} | format pattern "/admin/devices/{system_key}/{name}"))
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/admin/devices/{system_key}/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -746,14 +756,14 @@ export def "admin-devices create-system" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key, name: $name} | format pattern "/admin/devices/{system_key}/{name}"))
-  let body = {"active_key": $active_key, "allow_certificate_auth": $allow_certificate_auth, "allow_key_auth": $allow_key_auth, "certificate": $certificate, "custom": $custom, "description": $description, "enabled": $enabled, "keys": $keys, "name": $body_name, "state": $state, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/admin/devices/{system_key}/{name}"))
+  let req_body = {"active_key": $active_key, "allow_certificate_auth": $allow_certificate_auth, "allow_key_auth": $allow_key_auth, "certificate": $certificate, "custom": $custom, "description": $description, "enabled": $enabled, "keys": $keys, "name": $body_name, "state": $state, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DEVELOPER - Update device
@@ -786,14 +796,14 @@ export def "admin-devices update-system" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key, name: $name} | format pattern "/admin/devices/{system_key}/{name}"))
-  let body = {"active_key": $active_key, "allow_certificate_auth": $allow_certificate_auth, "allow_key_auth": $allow_key_auth, "certificate": $certificate, "custom": $custom, "description": $description, "enabled": $enabled, "keys": $keys, "state": $state, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/admin/devices/{system_key}/{name}"))
+  let req_body = {"active_key": $active_key, "allow_certificate_auth": $allow_certificate_auth, "allow_key_auth": $allow_key_auth, "certificate": $certificate, "custom": $custom, "description": $description, "enabled": $enabled, "keys": $keys, "state": $state, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DEVELOPER - Get edge template
@@ -814,11 +824,11 @@ export def "admin-edges-template get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key} | format pattern "/admin/edges/template/{system_key}"))
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/edges/template/{system_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -845,14 +855,14 @@ export def "admin-edges-template update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key, edge_name: $edge_name} | format pattern "/admin/edges/template/{system_key}/{edge_name}"))
-  let body = {"def_module": $def_module, "def_name": $def_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), edge_name: (encode-path-segment $edge_name)} | format pattern "/admin/edges/template/{system_key}/{edge_name}"))
+  let req_body = {"def_module": $def_module, "def_name": $def_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DEVELOPER - Get edges
@@ -873,11 +883,11 @@ export def "admin-edges list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key} | format pattern "/admin/edges/{system_key}"))
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/edges/{system_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -899,11 +909,11 @@ export def "admin-edges-control get-adapter" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key} | format pattern "/admin/edges/{system_key}/control"))
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/edges/{system_key}/control"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -926,11 +936,11 @@ export def "admin-edges delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key, edge_name: $edge_name} | format pattern "/admin/edges/{system_key}/{edge_name}"))
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), edge_name: (encode-path-segment $edge_name)} | format pattern "/admin/edges/{system_key}/{edge_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -953,11 +963,11 @@ export def "admin-edges get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key, edge_name: $edge_name} | format pattern "/admin/edges/{system_key}/{edge_name}"))
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), edge_name: (encode-path-segment $edge_name)} | format pattern "/admin/edges/{system_key}/{edge_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -991,14 +1001,14 @@ export def "admin-edges create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key, edge_name: $edge_name} | format pattern "/admin/edges/{system_key}/{edge_name}"))
-  let body = {"description": $description, "local_addr": $local_addr, "local_port": $local_port, "location": $location, "mac_address": $mac_address, "public_addr": $public_addr, "public_port": $public_port, "system_key": $body_system_key, "system_secret": $system_secret, "token": $body_token} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), edge_name: (encode-path-segment $edge_name)} | format pattern "/admin/edges/{system_key}/{edge_name}"))
+  let req_body = {"description": $description, "local_addr": $local_addr, "local_port": $local_port, "location": $location, "mac_address": $mac_address, "public_addr": $public_addr, "public_port": $public_port, "system_key": $body_system_key, "system_secret": $system_secret, "token": $body_token} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DEVELOPER - Update edge
@@ -1031,21 +1041,21 @@ export def "admin-edges update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key, edge_name: $edge_name} | format pattern "/admin/edges/{system_key}/{edge_name}"))
-  let body = {"description": $description, "local_addr": $local_addr, "local_port": $local_port, "location": $location, "mac_address": $mac_address, "public_addr": $public_addr, "public_port": $public_port, "system_key": $body_system_key, "system_secret": $system_secret, "token": $body_token} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), edge_name: (encode-path-segment $edge_name)} | format pattern "/admin/edges/{system_key}/{edge_name}"))
+  let req_body = {"description": $description, "local_addr": $local_addr, "local_port": $local_port, "location": $location, "mac_address": $mac_address, "public_addr": $public_addr, "public_port": $public_port, "system_key": $body_system_key, "system_secret": $system_secret, "token": $body_token} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DEVELOPER - Log out dev
 #
 # POST /admin/logout
 # operationId: DevLogout
-export def "admin-logout post" [
+export def "admin-logout create-dev" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1059,10 +1069,10 @@ export def "admin-logout post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin/logout")
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1084,10 +1094,10 @@ export def "admin-pkey get-license-key" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin/pkey")
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1111,10 +1121,10 @@ export def "admin-platform-developer get-dev" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "developer" $developer "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/admin/platform/developer" $qp)
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1140,13 +1150,13 @@ export def "admin-platform-developer disable-dev" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin/platform/developer")
-  let body = {"admin": $admin, "disabled": $disabled, "email": $email} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"admin": $admin, "disabled": $disabled, "email": $email} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # ADMIN - Get developers
@@ -1172,10 +1182,10 @@ export def "admin-platform-developers get-devs" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "pagenum" $pagenum "scalar") (serialize-qp "total" $total "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/admin/platform/developers" $qp)
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1183,7 +1193,7 @@ export def "admin-platform-developers get-devs" [
 #
 # GET /admin/platform/systems
 # operationId: GetSystemUpdates
-export def "admin-platform-systems get-system-updates" [
+export def "admin-platform-systems get-updates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1199,10 +1209,10 @@ export def "admin-platform-systems get-system-updates" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/admin/platform/systems" $qp)
-  let extra_headers = {"Clearblade-DevToken": $clearblade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Clearblade-DevToken": $clearblade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1210,7 +1220,7 @@ export def "admin-platform-systems get-system-updates" [
 #
 # GET /admin/platform/systems/{systemKey}
 # operationId: GetSystemUpdatesDev
-export def "admin-platform-systems get-system-updates-dev" [
+export def "admin-platform-systems get-updates-dev" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1226,11 +1236,11 @@ export def "admin-platform-systems get-system-updates-dev" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({system_key: $system_key} | format pattern "/admin/platform/systems/{system_key}") $qp)
-  let extra_headers = {"clearblade-devtoken": $clearblade_devtoken} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/platform/systems/{system_key}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"clearblade-devtoken": $clearblade_devtoken} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1252,11 +1262,11 @@ export def "admin-platform get-system-status" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key} | format pattern "/admin/platform/{system_key}"))
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/platform/{system_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1264,7 +1274,7 @@ export def "admin-platform get-system-status" [
 #
 # GET /admin/portals/{systemKey}
 # operationId: GetPortalInfo
-export def "admin-portals get-portal-info" [
+export def "admin-portals get-get" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1278,11 +1288,11 @@ export def "admin-portals get-portal-info" [
 ]: nothing -> table<config: record, description: string, last_updated: string, name: string, namespace: string, system_key: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key} | format pattern "/admin/portals/{system_key}"))
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/portals/{system_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1290,7 +1300,7 @@ export def "admin-portals get-portal-info" [
 #
 # PUT /admin/putpass
 # operationId: ChangeDevPassword
-export def "admin-putpass put" [
+export def "admin-putpass update-change-dev-password" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1307,20 +1317,20 @@ export def "admin-putpass put" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin/putpass")
-  let body = {"new_password": $new_password, "old_password": $old_password} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"new_password": $new_password, "old_password": $old_password} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DEVELOPER - Register new dev
 #
 # POST /admin/reg
 # operationId: RegDev
-export def "admin-reg post" [
+export def "admin-reg create-dev" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1339,18 +1349,18 @@ export def "admin-reg post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin/reg")
-  let body = {"email": $email, "fname": $fname, "lname": $lname, "org": $org, "password": $password} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"email": $email, "fname": $fname, "lname": $lname, "org": $org, "password": $password} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DEVELOPER - Regen secret
 #
 # PUT /admin/regensystemsecret
 # operationId: RegenSecret
-export def "admin-regensystemsecret put" [
+export def "admin-regensystemsecret update-regen-secret" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1366,13 +1376,13 @@ export def "admin-regensystemsecret put" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin/regensystemsecret")
-  let body = {"id": $id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"id": $id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # ADMIN - Change dev password (Admin)
@@ -1396,13 +1406,13 @@ export def "admin-resetpassword reset-password" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin/resetpassword")
-  let body = {"email": $email, "new_password": $new_password} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"email": $email, "new_password": $new_password} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # 2FA - Delete email settings
@@ -1423,10 +1433,10 @@ export def "admin-settings-email-service delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin/settings/email-service")
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1448,10 +1458,10 @@ export def "admin-settings-email-service get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin/settings/email-service")
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1459,7 +1469,7 @@ export def "admin-settings-email-service get" [
 #
 # POST /admin/settings/email-service
 # operationId: CreateEmailCommunication
-export def "admin-settings-email-service create-email-communication" [
+export def "admin-settings-email-service create-communication" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1485,13 +1495,13 @@ export def "admin-settings-email-service create-email-communication" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin/settings/email-service")
-  let body = {"encryption_type": $encryption_type, "from": $body_from, "host": $host, "password": $password, "port": $port, "protocol": $protocol, "two_factor_message": $two_factor_message, "two_factor_subject": $two_factor_subject, "username": $username, "validation_message": $validation_message, "validation_subject": $validation_subject} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"encryption_type": $encryption_type, "from": $body_from, "host": $host, "password": $password, "port": $port, "protocol": $protocol, "two_factor_message": $two_factor_message, "two_factor_subject": $two_factor_subject, "username": $username, "validation_message": $validation_message, "validation_subject": $validation_subject} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # 2FA - Update Email Settings
@@ -1524,13 +1534,13 @@ export def "admin-settings-email-service update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin/settings/email-service")
-  let body = {"encryption_type": $encryption_type, "from": $body_from, "host": $host, "password": $password, "port": $port, "protocol": $protocol, "two_factor_message": $two_factor_message, "two_factor_subject": $two_factor_subject, "username": $username, "validation_message": $validation_message, "validation_subject": $validation_subject} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"encryption_type": $encryption_type, "from": $body_from, "host": $host, "password": $password, "port": $port, "protocol": $protocol, "two_factor_message": $two_factor_message, "two_factor_subject": $two_factor_subject, "username": $username, "validation_message": $validation_message, "validation_subject": $validation_subject} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # 2FA - Test Email Service
@@ -1553,20 +1563,20 @@ export def "admin-settings-email-service-test test" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin/settings/email-service/test")
-  let body = {"recipient": $recipient} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"recipient": $recipient} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # 2FA - View Security Settings
 #
 # GET /admin/settings/security
 # operationId: ViewSecurity
-export def "admin-settings-security get" [
+export def "admin-settings-security get-view" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1580,10 +1590,10 @@ export def "admin-settings-security get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin/settings/security")
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1609,13 +1619,13 @@ export def "admin-settings-security update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin/settings/security")
-  let body = {"developer_token_ttl": $developer_token_ttl, "two_factor_auth": $two_factor_auth} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"developer_token_ttl": $developer_token_ttl, "two_factor_auth": $two_factor_auth} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # 2FA - Delete SMS settings
@@ -1636,10 +1646,10 @@ export def "admin-settings-sms-service delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin/settings/sms-service")
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1661,10 +1671,10 @@ export def "admin-settings-sms-service get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin/settings/sms-service")
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1672,7 +1682,7 @@ export def "admin-settings-sms-service get" [
 #
 # POST /admin/settings/sms-service
 # operationId: CreateSMSCommunication
-export def "admin-settings-sms-service create-sms-communication" [
+export def "admin-settings-sms-service create-communication" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1686,7 +1696,7 @@ export def "admin-settings-sms-service create-sms-communication" [
   --password: string # e.g. test
   --service-name: string # Only Twilio is supported. (e.g. Twilio)
   --two-factor-message: string # e.g. Please use the code to log in: $CODE
-  --body-url: string # e.g. https://api.twilio.com
+  --url: string # e.g. https://api.twilio.com
   --username: string # e.g. AC25b4eb989b9db8
   --validation-message: string # e.g. Please validate your email here: $LINK
 ]: any -> record<success: bool> {
@@ -1694,13 +1704,13 @@ export def "admin-settings-sms-service create-sms-communication" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin/settings/sms-service")
-  let body = {"from": $body_from, "password": $password, "service_name": $service_name, "two_factor_message": $two_factor_message, "url": $body_url, "username": $username, "validation_message": $validation_message} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"from": $body_from, "password": $password, "service_name": $service_name, "two_factor_message": $two_factor_message, "url": $url, "username": $username, "validation_message": $validation_message} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # 2FA - Update SMS Settings
@@ -1721,7 +1731,7 @@ export def "admin-settings-sms-service update" [
   --password: string # e.g. test
   --service-name: string # Only Twilio is supported. (e.g. Twilio)
   --two-factor-message: string # e.g. Please use the code to log in: $CODE
-  --body-url: string # e.g. https://api.twilio.com
+  --url: string # e.g. https://api.twilio.com
   --username: string # e.g. AC25b4eb989b9db8
   --validation-message: string # e.g. Please validate your email here: $LINK
 ]: any -> record<success: bool> {
@@ -1729,13 +1739,13 @@ export def "admin-settings-sms-service update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin/settings/sms-service")
-  let body = {"from": $body_from, "password": $password, "service_name": $service_name, "two_factor_message": $two_factor_message, "url": $body_url, "username": $username, "validation_message": $validation_message} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"from": $body_from, "password": $password, "service_name": $service_name, "two_factor_message": $two_factor_message, "url": $url, "username": $username, "validation_message": $validation_message} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # 2FA - Test SMS Service
@@ -1758,20 +1768,20 @@ export def "admin-settings-sms-service-test test" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin/settings/sms-service/test")
-  let body = {"recipient": $recipient} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"recipient": $recipient} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get Systems for a developer
 #
 # GET /admin/systems/{devEmail}
 # operationId: GetSystemsForDev
-export def "admin-systems get-systems-for-dev" [
+export def "admin-systems get-for-dev" [
   dev_email: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1785,11 +1795,11 @@ export def "admin-systems get-systems-for-dev" [
 ]: nothing -> table<developers: list<any>, disabled: bool, diskUsage: int, lastUpdated: int, name: string, numAPIReqsMonth: int, numAPIReqsTotal: int, numAPIReqsYear: int, numDeployments: int, numDevices: int, numDevs: int, numEdges: int, numLibraries: int, numPub: int, numPubMonth: int, numPubYear: int, numRecMonth: int, numRecTotal: int, numRecYear: int, numRoles: int, numServices: int, numUsers: int, owner: string, system_key: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({dev_email: $dev_email} | format pattern "/admin/systems/{dev_email}"))
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({dev_email: (encode-path-segment $dev_email)} | format pattern "/admin/systems/{dev_email}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1811,10 +1821,10 @@ export def "admin-triggers-definitions get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin/triggers/definitions")
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1836,11 +1846,11 @@ export def "admin-triggers-handlers list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key} | format pattern "/admin/triggers/handlers/{system_key}"))
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/triggers/handlers/{system_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1863,11 +1873,11 @@ export def "admin-triggers-handlers delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key, name: $name} | format pattern "/admin/triggers/handlers/{system_key}/{name}"))
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/admin/triggers/handlers/{system_key}/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1890,11 +1900,11 @@ export def "admin-triggers-handlers get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key, name: $name} | format pattern "/admin/triggers/handlers/{system_key}/{name}"))
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/admin/triggers/handlers/{system_key}/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1924,14 +1934,14 @@ export def "admin-triggers-handlers create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key, name: $name} | format pattern "/admin/triggers/handlers/{system_key}/{name}"))
-  let body = {"def_module": $def_module, "def_name": $def_name, "disabled": $disabled, "key_value_pairs": $key_value_pairs, "service_name": $service_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/admin/triggers/handlers/{system_key}/{name}"))
+  let req_body = {"def_module": $def_module, "def_name": $def_name, "disabled": $disabled, "key_value_pairs": $key_value_pairs, "service_name": $service_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DEVELOPER - Update trigger handler
@@ -1960,21 +1970,21 @@ export def "admin-triggers-handlers update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key, name: $name} | format pattern "/admin/triggers/handlers/{system_key}/{name}"))
-  let body = {"def_module": $def_module, "def_name": $def_name, "disabled": $disabled, "key_value_pairs": $key_value_pairs, "service_name": $service_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/admin/triggers/handlers/{system_key}/{name}"))
+  let req_body = {"def_module": $def_module, "def_name": $def_name, "disabled": $disabled, "key_value_pairs": $key_value_pairs, "service_name": $service_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DEVELOPER - Get timer handlers
 #
 # GET /admin/triggers/timers/{systemKey}
 # operationId: GetTimerHandlers
-export def "admin-triggers-timers get-timer-handlers" [
+export def "admin-triggers-timers get-handlers" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1988,11 +1998,11 @@ export def "admin-triggers-timers get-timer-handlers" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key} | format pattern "/admin/triggers/timers/{system_key}"))
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/triggers/timers/{system_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2000,7 +2010,7 @@ export def "admin-triggers-timers get-timer-handlers" [
 #
 # DELETE /admin/triggers/timers/{systemKey}/{name}
 # operationId: DeleteTimerHandler
-export def "admin-triggers-timers delete-timer-handler" [
+export def "admin-triggers-timers delete-handler" [
   system_key: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2015,11 +2025,11 @@ export def "admin-triggers-timers delete-timer-handler" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key, name: $name} | format pattern "/admin/triggers/timers/{system_key}/{name}"))
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/admin/triggers/timers/{system_key}/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2027,7 +2037,7 @@ export def "admin-triggers-timers delete-timer-handler" [
 #
 # GET /admin/triggers/timers/{systemKey}/{name}
 # operationId: GetTimerHandler
-export def "admin-triggers-timers get-timer-handler" [
+export def "admin-triggers-timers get-handler" [
   system_key: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2042,11 +2052,11 @@ export def "admin-triggers-timers get-timer-handler" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key, name: $name} | format pattern "/admin/triggers/timers/{system_key}/{name}"))
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/admin/triggers/timers/{system_key}/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2054,7 +2064,7 @@ export def "admin-triggers-timers get-timer-handler" [
 #
 # POST /admin/triggers/timers/{systemKey}/{name}
 # operationId: create_timer_handler
-export def "admin-triggers-timers handler" [
+export def "admin-triggers-timers create-handler" [
   system_key: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2076,21 +2086,21 @@ export def "admin-triggers-timers handler" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key, name: $name} | format pattern "/admin/triggers/timers/{system_key}/{name}"))
-  let body = {"description": $description, "disabled": $disabled, "frequency": $frequency, "name": $body_name, "repeats": $repeats, "service_name": $service_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/admin/triggers/timers/{system_key}/{name}"))
+  let req_body = {"description": $description, "disabled": $disabled, "frequency": $frequency, "name": $body_name, "repeats": $repeats, "service_name": $service_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DEVELOPER - Update timer handler
 #
 # PUT /admin/triggers/timers/{systemKey}/{name}
 # operationId: UpdateTimerHandler
-export def "admin-triggers-timers update-timer-handler" [
+export def "admin-triggers-timers update-handler" [
   system_key: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2112,14 +2122,14 @@ export def "admin-triggers-timers update-timer-handler" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key, name: $name} | format pattern "/admin/triggers/timers/{system_key}/{name}"))
-  let body = {"description": $description, "disabled": $disabled, "frequency": $frequency, "name": $body_name, "repeats": $repeats, "service_name": $service_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/admin/triggers/timers/{system_key}/{name}"))
+  let req_body = {"description": $description, "disabled": $disabled, "frequency": $frequency, "name": $body_name, "repeats": $repeats, "service_name": $service_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DEVELOPER - Delete user
@@ -2142,11 +2152,11 @@ export def "admin-user delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "user" $user "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({system_key: $system_key} | format pattern "/admin/user/{system_key}") $qp)
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/user/{system_key}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2154,7 +2164,7 @@ export def "admin-user delete" [
 #
 # GET /admin/user/{systemKey}
 # operationId: GetUserList
-export def "admin-user get-user-list" [
+export def "admin-user get-list" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2170,11 +2180,11 @@ export def "admin-user get-user-list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({system_key: $system_key} | format pattern "/admin/user/{system_key}") $qp)
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/user/{system_key}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2199,14 +2209,14 @@ export def "admin-user create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key} | format pattern "/admin/user/{system_key}"))
-  let body = {"email": $email, "password": $password} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/user/{system_key}"))
+  let req_body = {"email": $email, "password": $password} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DEVELOPER - Change user information and permissions
@@ -2214,7 +2224,7 @@ export def "admin-user create" [
 # PUT /admin/user/{systemKey}
 # operationId: UserChangeUserInfo
 # --changes shape: {roles: any}
-export def "admin-user get" [
+export def "admin-user get-change" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2231,21 +2241,21 @@ export def "admin-user get" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key} | format pattern "/admin/user/{system_key}"))
-  let body = {"changes": $changes, "user": $user} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/user/{system_key}"))
+  let req_body = {"changes": $changes, "user": $user} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DEVELOPER - Get users column info.
 #
 # GET /admin/user/{systemKey}/columns
 # operationId: GetUserColumnData
-export def "admin-user-columns get-user-column-data" [
+export def "admin-user-columns get-data" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2259,11 +2269,11 @@ export def "admin-user-columns get-user-column-data" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key} | format pattern "/admin/user/{system_key}/columns"))
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/user/{system_key}/columns"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2288,14 +2298,14 @@ export def "admin-user-columns create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key} | format pattern "/admin/user/{system_key}/columns"))
-  let body = {"column_name": $column_name, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/user/{system_key}/columns"))
+  let req_body = {"column_name": $column_name, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DEVELOPER - Delete roles
@@ -2318,11 +2328,11 @@ export def "admin-user-roles delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({system_key: $system_key} | format pattern "/admin/user/{system_key}/roles") $qp)
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/user/{system_key}/roles") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2346,11 +2356,11 @@ export def "admin-user-roles get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({system_key: $system_key} | format pattern "/admin/user/{system_key}/roles") $qp)
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/user/{system_key}/roles") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2378,14 +2388,14 @@ export def "admin-user-roles create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key} | format pattern "/admin/user/{system_key}/roles"))
-  let body = {"collections": $collections, "description": $description, "name": $name, "services": $services, "topics": $topics} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/user/{system_key}/roles"))
+  let req_body = {"collections": $collections, "description": $description, "name": $name, "services": $services, "topics": $topics} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DEVELOPER - Changes roles settings
@@ -2393,7 +2403,7 @@ export def "admin-user-roles create" [
 # PUT /admin/user/{systemKey}/roles
 # operationId: SettingsChanges
 # --changes shape: {allcollections?: any, allservices?: record, collections?: any, deployments?: record, description?: string, devices?: record, edges?: any, msgHistory?: record, portals?: any, roles?: record, services?: any, topics?: any, triggers?: record, users?: record}
-export def "admin-user-roles put" [
+export def "admin-user-roles changes-settings" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2410,14 +2420,14 @@ export def "admin-user-roles put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key} | format pattern "/admin/user/{system_key}/roles"))
-  let body = {"changes": $changes, "id": $id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/user/{system_key}/roles"))
+  let req_body = {"changes": $changes, "id": $id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DEVELOPER - Get number of roles
@@ -2440,11 +2450,11 @@ export def "admin-user-roles-count get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "user" $user "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({system_key: $system_key} | format pattern "/admin/user/{system_key}/roles/count") $qp)
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/user/{system_key}/roles/count") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2452,7 +2462,7 @@ export def "admin-user-roles-count get" [
 #
 # GET /admin/userinfo
 # operationId: GetDevInfo
-export def "admin-userinfo get-dev-info" [
+export def "admin-userinfo get-dev-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2466,10 +2476,10 @@ export def "admin-userinfo get-dev-info" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin/userinfo")
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2495,13 +2505,13 @@ export def "admin-userinfo update-dev2-fa" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin/userinfo")
-  let body = {"phone": $phone, "two_factor_enabled": $two_factor_enabled, "two_factor_method": $two_factor_method} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"phone": $phone, "two_factor_enabled": $two_factor_enabled, "two_factor_method": $two_factor_method} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # SHARED CACHE - Gets shared caches for a system
@@ -2522,11 +2532,11 @@ export def "admin-v-4-service-caches get-shared" [
 ]: nothing -> table<description: string, id: string, name: string, system_key: string, ttl: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key} | format pattern "/admin/v/4/service_caches/{system_key}"))
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/v/4/service_caches/{system_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2549,11 +2559,11 @@ export def "admin-v-4-service-caches delete-shared" [
 ]: nothing -> record<success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key, cache_name: $cache_name} | format pattern "/admin/v/4/service_caches/{system_key}/{cache_name}"))
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), cache_name: (encode-path-segment $cache_name)} | format pattern "/admin/v/4/service_caches/{system_key}/{cache_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2580,14 +2590,14 @@ export def "admin-v-4-service-caches create-shared" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key, cache_name: $cache_name} | format pattern "/admin/v/4/service_caches/{system_key}/{cache_name}"))
-  let body = {"description": $description, "name": $name, "ttl": $ttl} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), cache_name: (encode-path-segment $cache_name)} | format pattern "/admin/v/4/service_caches/{system_key}/{cache_name}"))
+  let req_body = {"description": $description, "name": $name, "ttl": $ttl} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # SHARED CACHE - Update a shared cache
@@ -2612,17 +2622,17 @@ export def "admin-v-4-service-caches update-shared" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key, cache_name: $cache_name} | format pattern "/admin/v/4/service_caches/{system_key}/{cache_name}"))
-  let body = {"description": $description, "ttl": $ttl} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), cache_name: (encode-path-segment $cache_name)} | format pattern "/admin/v/4/service_caches/{system_key}/{cache_name}"))
+  let req_body = {"description": $description, "ttl": $ttl} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-# SESSION  - Delete device session
+# SESSION - Delete device session
 #
 # DELETE /admin/v/4/session/{systemKey}/device
 # operationId: DeleteDeviceSession
@@ -2642,15 +2652,15 @@ export def "admin-v-4-session-device delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({system_key: $system_key} | format pattern "/admin/v/4/session/{system_key}/device") $qp)
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/v/4/session/{system_key}/device") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# SESSION  - Get device session info
+# SESSION - Get device session info
 #
 # GET /admin/v/4/session/{systemKey}/device
 # operationId: GetDeviceSession
@@ -2670,15 +2680,15 @@ export def "admin-v-4-session-device get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({system_key: $system_key} | format pattern "/admin/v/4/session/{system_key}/device") $qp)
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/v/4/session/{system_key}/device") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# SESSION  - Get device session count
+# SESSION - Get device session count
 #
 # GET /admin/v/4/session/{systemKey}/device/count
 # operationId: GetDeviceSessionCount
@@ -2698,15 +2708,15 @@ export def "admin-v-4-session-device-count get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({system_key: $system_key} | format pattern "/admin/v/4/session/{system_key}/device/count") $qp)
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/v/4/session/{system_key}/device/count") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# SESSION  - Delete user session
+# SESSION - Delete user session
 #
 # DELETE /admin/v/4/session/{systemKey}/user
 # operationId: DeleteUserSession
@@ -2726,15 +2736,15 @@ export def "admin-v-4-session-user delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({system_key: $system_key} | format pattern "/admin/v/4/session/{system_key}/user") $qp)
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/v/4/session/{system_key}/user") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# SESSION  - Get user session info
+# SESSION - Get user session info
 #
 # GET /admin/v/4/session/{systemKey}/user
 # operationId: GetUserSession
@@ -2754,15 +2764,15 @@ export def "admin-v-4-session-user get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({system_key: $system_key} | format pattern "/admin/v/4/session/{system_key}/user") $qp)
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/v/4/session/{system_key}/user") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# SESSION  - Get user session count
+# SESSION - Get user session count
 #
 # GET /admin/v/4/session/{systemKey}/user/count
 # operationId: GetUserSessionCount
@@ -2782,11 +2792,11 @@ export def "admin-v-4-session-user-count get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({system_key: $system_key} | format pattern "/admin/v/4/session/{system_key}/user/count") $qp)
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/v/4/session/{system_key}/user/count") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2810,10 +2820,10 @@ export def "admin-v-4-systemmanagement delete-system" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/admin/v/4/systemmanagement" $qp)
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2821,7 +2831,7 @@ export def "admin-v-4-systemmanagement delete-system" [
 #
 # GET /admin/v/4/systemmanagement
 # operationId: GetSystemInfo
-export def "admin-v-4-systemmanagement get-system-info" [
+export def "admin-v-4-systemmanagement get-system-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2837,10 +2847,10 @@ export def "admin-v-4-systemmanagement get-system-info" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/admin/v/4/systemmanagement" $qp)
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2865,13 +2875,13 @@ export def "admin-v-4-systemmanagement create-system" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin/v/4/systemmanagement")
-  let body = {"description": $description, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"description": $description, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DEVELOPER - Update system info
@@ -2896,22 +2906,22 @@ export def "admin-v-4-systemmanagement update-system" [
   --name: string # e.g. ExampleSystem
   --reg-service: string # Configure the system to have all registration requests go through a specific Code Service. (e.g. )
   --registration: string # e.g. 
-  --token-ttl: string # ttl for developer tokens in seconds. Min - 86400   (1 day), Max- 2592000 (30 days), Default - 432000 Infinite - -1 (e.g. 432000)
-  --token-ttl-anon: int # ttl for anonymous tokens in seconds. Min - 3600   (1 hour), Max- 7776000 (90 days), Default - 432000 (5 days) Infinite - -1 (e.g. 432000)
-  --token-ttl-device: string # ttl for device tokens in seconds. Min - 3600   (1 hour), Max- 7776000 (90 days), Default - 432000 (5 days) Infinite - -1 (e.g. 432000)
-  --token-ttl-user: string # ttl for user tokens in seconds. Min - 3600   (1 hour), Max- 7776000 (90 days), Default - 432000 (5 days) Infinite - -1 (e.g. 432000)
+  --token-ttl: string # ttl for developer tokens in seconds. Min - 86400 (1 day), Max- 2592000 (30 days), Default - 432000 Infinite - -1 (e.g. 432000)
+  --token-ttl-anon: int # ttl for anonymous tokens in seconds. Min - 3600 (1 hour), Max- 7776000 (90 days), Default - 432000 (5 days) Infinite - -1 (e.g. 432000)
+  --token-ttl-device: string # ttl for device tokens in seconds. Min - 3600 (1 hour), Max- 7776000 (90 days), Default - 432000 (5 days) Infinite - -1 (e.g. 432000)
+  --token-ttl-user: string # ttl for user tokens in seconds. Min - 3600 (1 hour), Max- 7776000 (90 days), Default - 432000 (5 days) Infinite - -1 (e.g. 432000)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin/v/4/systemmanagement")
-  let body = {"Dev": $dev, "appId": $app_id, "appSecret": $app_secret, "auth_service": $auth_service, "description": $description, "name": $name, "reg_service": $reg_service, "registration": $registration, "token_ttl": $token_ttl, "token_ttl_anon": $token_ttl_anon, "token_ttl_device": $token_ttl_device, "token_ttl_user": $token_ttl_user} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"Dev": $dev, "appId": $app_id, "appSecret": $app_secret, "auth_service": $auth_service, "description": $description, "name": $name, "reg_service": $reg_service, "registration": $registration, "token_ttl": $token_ttl, "token_ttl_anon": $token_ttl_anon, "token_ttl_device": $token_ttl_device, "token_ttl_user": $token_ttl_user} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # WEBHOOKS - Returns webhooks in the system
@@ -2932,11 +2942,11 @@ export def "admin-v-4-webhook get" [
 ]: nothing -> table<auth_method: string, description: string, id: string, name: string, service_name: string, system_key: string, system_secret: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key} | format pattern "/admin/v/4/webhook/{system_key}"))
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/v/4/webhook/{system_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2959,11 +2969,11 @@ export def "admin-v-4-webhook delete" [
 ]: nothing -> record<success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key, name: $name} | format pattern "/admin/v/4/webhook/{system_key}/{name}"))
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/admin/v/4/webhook/{system_key}/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2991,14 +3001,14 @@ export def "admin-v-4-webhook create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key, name: $name} | format pattern "/admin/v/4/webhook/{system_key}/{name}"))
-  let body = {"auth_method": $auth_method, "description": $description, "name": $body_name, "service_name": $service_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/admin/v/4/webhook/{system_key}/{name}"))
+  let req_body = {"auth_method": $auth_method, "description": $description, "name": $body_name, "service_name": $service_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # WEBHOOKS - Update a webhook
@@ -3023,14 +3033,14 @@ export def "admin-v-4-webhook update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key, name: $name} | format pattern "/admin/v/4/webhook/{system_key}/{name}"))
-  let body = {"auth_method": $auth_method, "description": $description} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/admin/v/4/webhook/{system_key}/{name}"))
+  let req_body = {"auth_method": $auth_method, "description": $description} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # 2FA - Send validation link
@@ -3053,20 +3063,20 @@ export def "admin-validate send-validation" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin/validate")
-  let body = {"type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # EDGE - Gets sync status for all edges
 #
 # GET /admin/{systemKey}/sync/alledges/status
 # operationId: AllEdgeSyncStatus
-export def "admin-sync-alledges-status get" [
+export def "admin-sync-alledges-status list-edge" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3080,11 +3090,11 @@ export def "admin-sync-alledges-status get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key} | format pattern "/admin/{system_key}/sync/alledges/status"))
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/{system_key}/sync/alledges/status"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3107,11 +3117,11 @@ export def "admin-sync-deployment-status get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key, deployment_name: $deployment_name} | format pattern "/admin/{system_key}/sync/deployment/status/{deployment_name}"))
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), deployment_name: (encode-path-segment $deployment_name)} | format pattern "/admin/{system_key}/sync/deployment/status/{deployment_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3119,7 +3129,7 @@ export def "admin-sync-deployment-status get" [
 #
 # GET /admin/{systemKey}/sync/edge/status/{edgeName}
 # operationId: EdgeSyncStatus
-export def "admin-sync-edge-status get" [
+export def "admin-sync-edge-status sync" [
   system_key: string
   edge_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3134,11 +3144,11 @@ export def "admin-sync-edge-status get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key, edge_name: $edge_name} | format pattern "/admin/{system_key}/sync/edge/status/{edge_name}"))
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), edge_name: (encode-path-segment $edge_name)} | format pattern "/admin/{system_key}/sync/edge/status/{edge_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3166,14 +3176,14 @@ export def "admin-sync-retry sync" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key} | format pattern "/admin/{system_key}/sync/retry"))
-  let body = {"asset_class": $asset_class, "asset_id": $asset_id, "edge": $edge, "is_collection": $is_collection, "sync_event": $sync_event} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/{system_key}/sync/retry"))
+  let req_body = {"asset_class": $asset_class, "asset_id": $asset_id, "edge": $edge, "is_collection": $is_collection, "sync_event": $sync_event} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DEVELOPER - Gets the information for the platform
@@ -3217,11 +3227,11 @@ export def "v-1-code get-service" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key, service_name: $service_name} | format pattern "/api/v/1/code/{system_key}/{service_name}"))
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), service_name: (encode-path-segment $service_name)} | format pattern "/api/v/1/code/{system_key}/{service_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3229,7 +3239,7 @@ export def "v-1-code get-service" [
 #
 # POST /api/v/1/code/{systemKey}/{serviceName}
 # operationId: ExecuteService
-export def "v-1-code exec-ute-service" [
+export def "v-1-code create-execute-service" [
   system_key: string
   service_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3246,20 +3256,21 @@ export def "v-1-code exec-ute-service" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key, service_name: $service_name} | format pattern "/api/v/1/code/{system_key}/{service_name}"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), service_name: (encode-path-segment $service_name)} | format pattern "/api/v/1/code/{system_key}/{service_name}"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DATA(name) - Delete items
 #
 # DELETE /api/v/1/collection/{systemKey}/{collectionName}
 # operationId: DeleteCollectionData
-export def "v-1-collection delete-collection-data" [
+export def "v-1-collection delete-data" [
   system_key: string
   collection_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3276,11 +3287,11 @@ export def "v-1-collection delete-collection-data" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({system_key: $system_key, collection_name: $collection_name} | format pattern "/api/v/1/collection/{system_key}/{collection_name}") $qp)
-  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), collection_name: (encode-path-segment $collection_name)} | format pattern "/api/v/1/collection/{system_key}/{collection_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3288,7 +3299,7 @@ export def "v-1-collection delete-collection-data" [
 #
 # GET /api/v/1/collection/{systemKey}/{collectionName}
 # operationId: GetCollectionData
-export def "v-1-collection get-collection-data" [
+export def "v-1-collection get-data" [
   system_key: string
   collection_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3305,11 +3316,11 @@ export def "v-1-collection get-collection-data" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({system_key: $system_key, collection_name: $collection_name} | format pattern "/api/v/1/collection/{system_key}/{collection_name}") $qp)
-  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), collection_name: (encode-path-segment $collection_name)} | format pattern "/api/v/1/collection/{system_key}/{collection_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3317,7 +3328,7 @@ export def "v-1-collection get-collection-data" [
 #
 # POST /api/v/1/collection/{systemKey}/{collectionName}
 # operationId: CreateCollectionData
-export def "v-1-collection create-collection-data" [
+export def "v-1-collection create-data" [
   system_key: string
   collection_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3334,13 +3345,14 @@ export def "v-1-collection create-collection-data" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key, collection_name: $collection_name} | format pattern "/api/v/1/collection/{system_key}/{collection_name}"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), collection_name: (encode-path-segment $collection_name)} | format pattern "/api/v/1/collection/{system_key}/{collection_name}"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DATA(name) - Update items
@@ -3349,7 +3361,7 @@ export def "v-1-collection create-collection-data" [
 # operationId: UpdateCollectionData
 # --$set shape: {columnName?: any}
 # --query shape: {FILTERS?: list}
-export def "v-1-collection update-collection-data" [
+export def "v-1-collection update-data" [
   system_key: string
   collection_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3367,21 +3379,21 @@ export def "v-1-collection update-collection-data" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key, collection_name: $collection_name} | format pattern "/api/v/1/collection/{system_key}/{collection_name}"))
-  let body = {"$set": $set, "query": $query} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), collection_name: (encode-path-segment $collection_name)} | format pattern "/api/v/1/collection/{system_key}/{collection_name}"))
+  let req_body = {"$set": $set, "query": $query} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DATA(id) - Delete items
 #
 # DELETE /api/v/1/data/{collectionID}
 # operationId: DeleteCollectionDataAlt
-export def "v-1-data delete-collection-data-alt" [
+export def "v-1-data delete-collection-alt" [
   collection_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3397,11 +3409,11 @@ export def "v-1-data delete-collection-data-alt" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({collection_id: $collection_id} | format pattern "/api/v/1/data/{collection_id}") $qp)
-  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id)} | format pattern "/api/v/1/data/{collection_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3409,7 +3421,7 @@ export def "v-1-data delete-collection-data-alt" [
 #
 # GET /api/v/1/data/{collectionID}
 # operationId: GetCollectionDataAlt
-export def "v-1-data get-collection-data-alt" [
+export def "v-1-data get-collection-alt" [
   collection_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3425,11 +3437,11 @@ export def "v-1-data get-collection-data-alt" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({collection_id: $collection_id} | format pattern "/api/v/1/data/{collection_id}") $qp)
-  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id)} | format pattern "/api/v/1/data/{collection_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3437,7 +3449,7 @@ export def "v-1-data get-collection-data-alt" [
 #
 # POST /api/v/1/data/{collectionID}
 # operationId: CreateCollectionDataAlt
-export def "v-1-data create-collection-data-alt" [
+export def "v-1-data create-collection-alt" [
   collection_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3453,13 +3465,14 @@ export def "v-1-data create-collection-data-alt" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({collection_id: $collection_id} | format pattern "/api/v/1/data/{collection_id}"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id)} | format pattern "/api/v/1/data/{collection_id}"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DATA(id) - Update items
@@ -3468,7 +3481,7 @@ export def "v-1-data create-collection-data-alt" [
 # operationId: UpdateCollectionDataAlt
 # --$set shape: {columnName?: any}
 # --query shape: {FILTERS?: list}
-export def "v-1-data update-collection-data-alt" [
+export def "v-1-data update-collection-alt" [
   collection_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3485,14 +3498,14 @@ export def "v-1-data update-collection-data-alt" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({collection_id: $collection_id} | format pattern "/api/v/1/data/{collection_id}"))
-  let body = {"$set": $set, "query": $query} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id)} | format pattern "/api/v/1/data/{collection_id}"))
+  let req_body = {"$set": $set, "query": $query} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DATA(id) - Get columns
@@ -3515,11 +3528,11 @@ export def "v-1-data-columns get" [
 ]: nothing -> table<ColumnName: string, ColumnType: string, PK: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({collection_id: $collection_id} | format pattern "/api/v/1/data/{collection_id}/columns"))
-  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token, "ClearBlade-SystemKey": $clear_blade_system_key, "ClearBlade-SystemSecret": $clear_blade_system_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id)} | format pattern "/api/v/1/data/{collection_id}/columns"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token, "ClearBlade-SystemKey": $clear_blade_system_key, "ClearBlade-SystemSecret": $clear_blade_system_secret} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3527,7 +3540,7 @@ export def "v-1-data-columns get" [
 #
 # DELETE /api/v/1/message/{systemKey}
 # operationId: DeleteMessageHistory
-export def "v-1-message delete-message-history" [
+export def "v-1-message delete-history" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3547,11 +3560,11 @@ export def "v-1-message delete-message-history" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "topic" $topic "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "last" $last "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "stop" $stop "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({system_key: $system_key} | format pattern "/api/v/1/message/{system_key}") $qp)
-  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/api/v/1/message/{system_key}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3559,7 +3572,7 @@ export def "v-1-message delete-message-history" [
 #
 # GET /api/v/1/message/{systemKey}
 # operationId: GetMessageHistory
-export def "v-1-message get-message-history" [
+export def "v-1-message get-history" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3579,11 +3592,11 @@ export def "v-1-message get-message-history" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "topic" $topic "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "last" $last "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "stop" $stop "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({system_key: $system_key} | format pattern "/api/v/1/message/{system_key}") $qp)
-  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/api/v/1/message/{system_key}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3602,21 +3615,21 @@ export def "v-1-message-publish publish" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --clear-blade-user-token: string # Token obtained through user authentication.
-  --body-body: string # e.g. {"temperature":43}
+  --body: string # e.g. {"temperature":43}
   --qos: float # e.g. 0
   topic: string # e.g. /sensor/111111
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key} | format pattern "/api/v/1/message/{system_key}/publish"))
-  let body = {"body": $body_body, "qos": $qos, "topic": $topic} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/api/v/1/message/{system_key}/publish"))
+  let req_body = {"body": $body, "qos": $qos, "topic": $topic} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # USERS - Get all users
@@ -3639,10 +3652,10 @@ export def "v-1-user get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v/1/user" $qp)
-  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3650,7 +3663,7 @@ export def "v-1-user get" [
 #
 # POST /api/v/1/user/anon
 # operationId: AuthAnon
-export def "v-1-user-anon post" [
+export def "v-1-user-anon create-auth" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3665,10 +3678,10 @@ export def "v-1-user-anon post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v/1/user/anon")
-  let extra_headers = {"ClearBlade-SystemKey": $clear_blade_system_key, "ClearBlade-SystemSecret": $clear_blade_system_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-SystemKey": $clear_blade_system_key, "ClearBlade-SystemSecret": $clear_blade_system_secret} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3676,7 +3689,7 @@ export def "v-1-user-anon post" [
 #
 # POST /api/v/1/user/auth
 # operationId: AuthUser
-export def "v-1-user-auth post" [
+export def "v-1-user-auth create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3694,20 +3707,20 @@ export def "v-1-user-auth post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v/1/user/auth")
-  let body = {"email": $email, "password": $password} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"ClearBlade-SystemKey": $clear_blade_system_key, "ClearBlade-SystemSecret": $clear_blade_system_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"email": $email, "password": $password} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"ClearBlade-SystemKey": $clear_blade_system_key, "ClearBlade-SystemSecret": $clear_blade_system_secret} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # USERS - Check user auth
 #
 # POST /api/v/1/user/checkauth
 # operationId: UserCheckAuth
-export def "v-1-user-checkauth post" [
+export def "v-1-user-checkauth check-auth" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3722,10 +3735,10 @@ export def "v-1-user-checkauth post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v/1/user/checkauth")
-  let extra_headers = {"ClearBlade-SystemKey": $clear_blade_system_key, "ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-SystemKey": $clear_blade_system_key, "ClearBlade-UserToken": $clear_blade_user_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3733,7 +3746,7 @@ export def "v-1-user-checkauth post" [
 #
 # DELETE /api/v/1/user/info
 # operationId: DeleteUserAsUser
-export def "v-1-user-info delete-user-as" [
+export def "v-1-user-info delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3751,13 +3764,13 @@ export def "v-1-user-info delete-user-as" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v/1/user/info")
-  let body = {"user_id": $user_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token, "ClearBlade-SystemKey": $clear_blade_system_key, "ClearBlade-SystemSecret": $clear_blade_system_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"user_id": $user_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token, "ClearBlade-SystemKey": $clear_blade_system_key, "ClearBlade-SystemSecret": $clear_blade_system_secret} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # USERS - Get user info
@@ -3778,10 +3791,10 @@ export def "v-1-user-info get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v/1/user/info")
-  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3805,20 +3818,20 @@ export def "v-1-user-info update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v/1/user/info")
-  let body = {"column_name": $column_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"column_name": $column_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # USERS - Log out user
 #
 # POST /api/v/1/user/logout
 # operationId: UserLogout
-export def "v-1-user-logout post" [
+export def "v-1-user-logout create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3832,10 +3845,10 @@ export def "v-1-user-logout post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v/1/user/logout")
-  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3860,20 +3873,20 @@ export def "v-1-user-pass update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v/1/user/pass")
-  let body = {"new_password": $new_password, "old_password": $old_password} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"new_password": $new_password, "old_password": $old_password} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # USERS - Register new user
 #
 # POST /api/v/1/user/reg
 # operationId: RegUser
-export def "v-1-user-reg post" [
+export def "v-1-user-reg create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3892,13 +3905,13 @@ export def "v-1-user-reg post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v/1/user/reg")
-  let body = {"email": $email, "password": $password} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"ClearBlade-SystemKey": $clear_blade_system_key, "ClearBlade-SystemSecret": $clear_blade_system_secret, "ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"email": $email, "password": $password} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"ClearBlade-SystemKey": $clear_blade_system_key, "ClearBlade-SystemSecret": $clear_blade_system_secret, "ClearBlade-UserToken": $clear_blade_user_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DEVICES - Delete devices using a query
@@ -3921,11 +3934,11 @@ export def "v-2-devices delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({system_key: $system_key} | format pattern "/api/v/2/devices/{system_key}") $qp)
-  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/api/v/2/devices/{system_key}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3949,11 +3962,11 @@ export def "v-2-devices get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({system_key: $system_key} | format pattern "/api/v/2/devices/{system_key}") $qp)
-  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/api/v/2/devices/{system_key}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3980,21 +3993,21 @@ export def "v-2-devices update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key} | format pattern "/api/v/2/devices/{system_key}"))
-  let body = {"$set": $set, "query": $query} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/api/v/2/devices/{system_key}"))
+  let req_body = {"$set": $set, "query": $query} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DEVICES - Authenticate device
 #
 # POST /api/v/2/devices/{SystemKey}/auth
 # operationId: AuthDevice
-export def "v-2-devices-auth post" [
+export def "v-2-devices-auth create" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4010,12 +4023,12 @@ export def "v-2-devices-auth post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key} | format pattern "/api/v/2/devices/{system_key}/auth"))
-  let body = {"activeKey": $active_key, "deviceName": $device_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/api/v/2/devices/{system_key}/auth"))
+  let req_body = {"activeKey": $active_key, "deviceName": $device_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DEVICES - Adds a device
@@ -4046,21 +4059,21 @@ export def "v-2-devices create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key, name: $name} | format pattern "/api/v/2/devices/{system_key}/{name}"))
-  let body = {"active_key": $active_key, "allow_certificate_auth": $allow_certificate_auth, "allow_key_auth": $allow_key_auth, "certificate": $certificate, "description": $description, "name": $body_name, "state": $state, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/api/v/2/devices/{system_key}/{name}"))
+  let req_body = {"active_key": $active_key, "allow_certificate_auth": $allow_certificate_auth, "allow_key_auth": $allow_key_auth, "certificate": $certificate, "description": $description, "name": $body_name, "state": $state, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DEVICES - Update info
 #
 # PUT /api/v/2/devices/{systemKey}/{name}
 # operationId: UpdateDeviceInfo
-export def "v-2-devices update-device-info" [
+export def "v-2-devices update-get" [
   system_key: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4078,21 +4091,21 @@ export def "v-2-devices update-device-info" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key, name: $name} | format pattern "/api/v/2/devices/{system_key}/{name}"))
-  let body = {"custom_attribute": $custom_attribute, "state": $state} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/api/v/2/devices/{system_key}/{name}"))
+  let req_body = {"custom_attribute": $custom_attribute, "state": $state} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # EDGE - Fetch all edges
 #
 # GET /api/v/2/edges/{systemKey}
 # operationId: GetAllEdges
-export def "v-2-edges get-all" [
+export def "v-2-edges get-list" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4108,11 +4121,11 @@ export def "v-2-edges get-all" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({system_key: $system_key} | format pattern "/api/v/2/edges/{system_key}") $qp)
-  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/api/v/2/edges/{system_key}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4134,11 +4147,11 @@ export def "v-3-allcollections get-collections" [
 ]: nothing -> table<appID: string, collectionID: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key} | format pattern "/api/v/3/allcollections/{system_key}"))
-  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/api/v/3/allcollections/{system_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4146,7 +4159,7 @@ export def "v-3-allcollections get-collections" [
 #
 # GET /api/v/3/code/codemeta/{systemKey}
 # operationId: ReturnServiceSettings
-export def "v-3-code-codemeta get" [
+export def "v-3-code-codemeta get-return-service-settings" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4160,11 +4173,11 @@ export def "v-3-code-codemeta get" [
 ]: nothing -> record<code: table<auto_balance: bool, auto_balance_euid: string, auto_restart: bool, concurrency: int, euid: string, execution_timeout: int, logging_enabled: bool, name: string, namespace: string, system_key: string, uuid: string, version: int, version_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key} | format pattern "/api/v/3/code/codemeta/{system_key}"))
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/api/v/3/code/codemeta/{system_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4187,11 +4200,11 @@ export def "v-3-code-timer delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key, name: $name} | format pattern "/api/v/3/code/{system_key}/timer/{name}"))
-  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/api/v/3/code/{system_key}/timer/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4214,11 +4227,11 @@ export def "v-3-code-timer get" [
 ]: nothing -> record<description: string, frequency: int, name: string, namespace: string, repeats: int, service_name: string, start_time: string, system_key: string, system_secret: string, timer_key: string, user_id: string, user_token: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key, name: $name} | format pattern "/api/v/3/code/{system_key}/timer/{name}"))
-  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/api/v/3/code/{system_key}/timer/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4248,14 +4261,14 @@ export def "v-3-code-timer create-new" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key, name: $name} | format pattern "/api/v/3/code/{system_key}/timer/{name}"))
-  let body = {"description": $description, "disabled": $disabled, "frequency": $frequency, "name": $body_name, "repeats": $repeats, "service_name": $service_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/api/v/3/code/{system_key}/timer/{name}"))
+  let req_body = {"description": $description, "disabled": $disabled, "frequency": $frequency, "name": $body_name, "repeats": $repeats, "service_name": $service_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # HANDLERS - Update timer handler
@@ -4284,21 +4297,21 @@ export def "v-3-code-timer update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key, name: $name} | format pattern "/api/v/3/code/{system_key}/timer/{name}"))
-  let body = {"description": $description, "disabled": $disabled, "frequency": $frequency, "name": $body_name, "repeats": $repeats, "service_name": $service_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/api/v/3/code/{system_key}/timer/{name}"))
+  let req_body = {"description": $description, "disabled": $disabled, "frequency": $frequency, "name": $body_name, "repeats": $repeats, "service_name": $service_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # HANDLERS - Get timer handlers
 #
 # GET /api/v/3/code/{systemKey}/timers
 # operationId: GetAllTimers
-export def "v-3-code-timers get-all" [
+export def "v-3-code-timers get-list" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4312,11 +4325,11 @@ export def "v-3-code-timers get-all" [
 ]: nothing -> table<description: string, frequency: int, name: string, namespace: string, repeats: int, service_name: string, start_time: string, system_key: string, system_secret: string, timer_key: string, user_id: string, user_token: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key} | format pattern "/api/v/3/code/{system_key}/timers"))
-  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/api/v/3/code/{system_key}/timers"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4339,11 +4352,11 @@ export def "v-3-code-trigger delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key, name: $name} | format pattern "/api/v/3/code/{system_key}/trigger/{name}"))
-  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/api/v/3/code/{system_key}/trigger/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4366,11 +4379,11 @@ export def "v-3-code-trigger get" [
 ]: nothing -> table<event_definition: record<def_keys: list, def_module: string, def_name: string, visibility: bool>, key_value_pairs: record, name: string, namespace: string, service_name: string, system_key: string, system_secret: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key, name: $name} | format pattern "/api/v/3/code/{system_key}/trigger/{name}"))
-  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/api/v/3/code/{system_key}/trigger/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4400,14 +4413,14 @@ export def "v-3-code-trigger create-new" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key, name: $name} | format pattern "/api/v/3/code/{system_key}/trigger/{name}"))
-  let body = {"def_module": $def_module, "def_name": $def_name, "disabled": $disabled, "key_value_pairs": $key_value_pairs, "service_name": $service_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/api/v/3/code/{system_key}/trigger/{name}"))
+  let req_body = {"def_module": $def_module, "def_name": $def_name, "disabled": $disabled, "key_value_pairs": $key_value_pairs, "service_name": $service_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # HANDLERS - Update trigger handler
@@ -4436,21 +4449,21 @@ export def "v-3-code-trigger update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key, name: $name} | format pattern "/api/v/3/code/{system_key}/trigger/{name}"))
-  let body = {"def_module": $def_module, "def_name": $def_name, "disabled": $disabled, "key_value_pairs": $key_value_pairs, "service_name": $service_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/api/v/3/code/{system_key}/trigger/{name}"))
+  let req_body = {"def_module": $def_module, "def_name": $def_name, "disabled": $disabled, "key_value_pairs": $key_value_pairs, "service_name": $service_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # HANDLERS - Get trigger handlers
 #
 # GET /api/v/3/code/{systemKey}/triggers
 # operationId: GetAllTrigger
-export def "v-3-code-triggers get-all" [
+export def "v-3-code-triggers get-list" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4464,11 +4477,11 @@ export def "v-3-code-triggers get-all" [
 ]: nothing -> table<event_definition: record<def_keys: list, def_module: string, def_name: string, visibility: bool>, key_value_pairs: record, name: string, namespace: string, service_name: string, system_key: string, system_secret: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key} | format pattern "/api/v/3/code/{system_key}/triggers"))
-  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/api/v/3/code/{system_key}/triggers"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4493,10 +4506,10 @@ export def "v-3-collectionmanagement delete-collection" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v/3/collectionmanagement" $qp)
-  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token, "ClearBlade-SystemKey": $clear_blade_system_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token, "ClearBlade-SystemKey": $clear_blade_system_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4523,13 +4536,13 @@ export def "v-3-collectionmanagement create-collection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v/3/collectionmanagement")
-  let body = {"appID": $app_id, "collectionID": $collection_id, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token, "ClearBlade-SystemKey": $clear_blade_system_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"appID": $app_id, "collectionID": $collection_id, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token, "ClearBlade-SystemKey": $clear_blade_system_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DATA - Update collection
@@ -4555,20 +4568,20 @@ export def "v-3-collectionmanagement update-collection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v/3/collectionmanagement")
-  let body = {"addColumn": $add_column, "id": $id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token, "ClearBlade-SystemKey": $clear_blade_system_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"addColumn": $add_column, "id": $id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token, "ClearBlade-SystemKey": $clear_blade_system_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # EDGE - Get device columns
 #
 # GET /api/v/3/devices/{systemKey}/columns
 # operationId: GetDeviceTableSchema
-export def "v-3-devices-columns get-device-table-schema" [
+export def "v-3-devices-columns get-table-schema" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4582,11 +4595,11 @@ export def "v-3-devices-columns get-device-table-schema" [
 ]: nothing -> table<ColumnName: string, ColumnType: string, PK: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key} | format pattern "/api/v/3/devices/{system_key}/columns"))
-  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/api/v/3/devices/{system_key}/columns"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4608,11 +4621,11 @@ export def "v-3-devices-count get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key} | format pattern "/api/v/3/devices/{system_key}/count"))
-  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/api/v/3/devices/{system_key}/count"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4620,7 +4633,7 @@ export def "v-3-devices-count get" [
 #
 # GET /api/v/3/edges/{systemKey}/columns
 # operationId: GetEdgeTableSchema
-export def "v-3-edges-columns get-edge-table-schema" [
+export def "v-3-edges-columns get-table-schema" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4634,11 +4647,11 @@ export def "v-3-edges-columns get-edge-table-schema" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key} | format pattern "/api/v/3/edges/{system_key}/columns"))
-  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/api/v/3/edges/{system_key}/columns"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4660,11 +4673,11 @@ export def "v-3-edges-count get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key} | format pattern "/api/v/3/edges/{system_key}/count"))
-  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/api/v/3/edges/{system_key}/count"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4687,11 +4700,11 @@ export def "v-3-edges delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key, name: $name} | format pattern "/api/v/3/edges/{system_key}/{name}"))
-  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/api/v/3/edges/{system_key}/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4699,7 +4712,7 @@ export def "v-3-edges delete" [
 #
 # GET /api/v/3/edges/{systemKey}/{name}
 # operationId: GetEdgeDataByName
-export def "v-3-edges get-edge-data" [
+export def "v-3-edges get-data" [
   system_key: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4714,11 +4727,11 @@ export def "v-3-edges get-edge-data" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key, name: $name} | format pattern "/api/v/3/edges/{system_key}/{name}"))
-  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/api/v/3/edges/{system_key}/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4752,14 +4765,14 @@ export def "v-3-edges create-new" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key, name: $name} | format pattern "/api/v/3/edges/{system_key}/{name}"))
-  let body = {"description": $description, "local_addr": $local_addr, "local_port": $local_port, "location": $location, "mac_address": $mac_address, "public_addr": $public_addr, "public_port": $public_port, "system_key": $body_system_key, "system_secret": $system_secret, "token": $body_token} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/api/v/3/edges/{system_key}/{name}"))
+  let req_body = {"description": $description, "local_addr": $local_addr, "local_port": $local_port, "location": $location, "mac_address": $mac_address, "public_addr": $public_addr, "public_port": $public_port, "system_key": $body_system_key, "system_secret": $system_secret, "token": $body_token} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # EDGE - Update edge
@@ -4792,21 +4805,21 @@ export def "v-3-edges update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key, name: $name} | format pattern "/api/v/3/edges/{system_key}/{name}"))
-  let body = {"description": $description, "local_addr": $local_addr, "local_port": $local_port, "location": $location, "mac_address": $mac_address, "public_addr": $public_addr, "public_port": $public_port, "system_key": $body_system_key, "system_secret": $system_secret, "token": $body_token} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/api/v/3/edges/{system_key}/{name}"))
+  let req_body = {"description": $description, "local_addr": $local_addr, "local_port": $local_port, "location": $location, "mac_address": $mac_address, "public_addr": $public_addr, "public_port": $public_port, "system_key": $body_system_key, "system_secret": $system_secret, "token": $body_token} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DEPLOYMENTS - Gets all deployment names and descriptions for a system
 #
 # GET /api/v/3/{systemKey}/deployments
 # operationId: GetAllDeployments
-export def "v-3-deployments get-all" [
+export def "v-3-deployments get-list" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4822,11 +4835,11 @@ export def "v-3-deployments get-all" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({system_key: $system_key} | format pattern "/api/v/3/{system_key}/deployments") $qp)
-  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/api/v/3/{system_key}/deployments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4853,14 +4866,14 @@ export def "v-3-deployments create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key} | format pattern "/api/v/3/{system_key}/deployments"))
-  let body = {"assets": $assets, "edges": $edges, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/api/v/3/{system_key}/deployments"))
+  let req_body = {"assets": $assets, "edges": $edges, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DEPLOYMENT - Delete a deployment
@@ -4882,11 +4895,11 @@ export def "v-3-deployments delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key, deployment_name: $deployment_name} | format pattern "/api/v/3/{system_key}/deployments/{deployment_name}"))
-  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), deployment_name: (encode-path-segment $deployment_name)} | format pattern "/api/v/3/{system_key}/deployments/{deployment_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4909,11 +4922,11 @@ export def "v-3-deployments get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key, deployment_name: $deployment_name} | format pattern "/api/v/3/{system_key}/deployments/{deployment_name}"))
-  let extra_headers = {"clearblade-usertoken": $clearblade_usertoken} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), deployment_name: (encode-path-segment $deployment_name)} | format pattern "/api/v/3/{system_key}/deployments/{deployment_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"clearblade-usertoken": $clearblade_usertoken} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4922,7 +4935,7 @@ export def "v-3-deployments get" [
 # PUT /api/v/3/{systemKey}/deployments/{deploymentName}
 # operationId: UpdateDeployment
 # --assets shape: {add?: list, remove?: list}
-# --edges shape: {adds?: list, removes?: list}
+# --edges shape: {adds?: list<string>, removes?: list<string>}
 export def "v-3-deployments update" [
   system_key: string
   deployment_name: string
@@ -4936,26 +4949,26 @@ export def "v-3-deployments update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --clear-blade-user-token: string # User Token obtained through user authentication.
   assets: record # Assets to be added and removed from deployment — shape: {add?: list, remove?: list}
-  edges: record # Edges to be added and removed from deployment — shape: {adds?: list, removes?: list}
+  edges: record # Edges to be added and removed from deployment — shape: {adds?: list<string>, removes?: list<string>}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key, deployment_name: $deployment_name} | format pattern "/api/v/3/{system_key}/deployments/{deployment_name}"))
-  let body = {"assets": $assets, "edges": $edges} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), deployment_name: (encode-path-segment $deployment_name)} | format pattern "/api/v/3/{system_key}/deployments/{deployment_name}"))
+  let req_body = {"assets": $assets, "edges": $edges} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-# FILES  - Returns a list of metadata for buckets in system
+# FILES - Returns a list of metadata for buckets in system
 #
 # GET /api/v/4/bucket_sets/{systemKey}
 # operationId: GetBucketsData
-export def "v-4-bucket-sets get-buckets-data" [
+export def "v-4-bucket-sets get-data" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4969,19 +4982,19 @@ export def "v-4-bucket-sets get-buckets-data" [
 ]: nothing -> table<deployment_name: string, edge_config: list<any>, edge_storage: string, platform_config: list<any>, platform_storage: string, system_key: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key} | format pattern "/api/v/4/bucket_sets/{system_key}"))
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/api/v/4/bucket_sets/{system_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# FILES  - Returns metadata for specified bucket
+# FILES - Returns metadata for specified bucket
 #
 # GET /api/v/4/bucket_sets/{systemKey}/{deploymentName}
 # operationId: GetSingleBucketData
-export def "v-4-bucket-sets get-single-bucket-data" [
+export def "v-4-bucket-sets get-single-data" [
   system_key: string
   deployment_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4996,15 +5009,15 @@ export def "v-4-bucket-sets get-single-bucket-data" [
 ]: nothing -> record<deployment_name: string, edge_config: list<any>, edge_storage: string, platform_config: list<any>, platform_storage: string, system_key: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key, deployment_name: $deployment_name} | format pattern "/api/v/4/bucket_sets/{system_key}/{deployment_name}"))
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), deployment_name: (encode-path-segment $deployment_name)} | format pattern "/api/v/4/bucket_sets/{system_key}/{deployment_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# FILES  - Copies a file to a new location within buckets
+# FILES - Copies a file to a new location within buckets
 #
 # POST /api/v/4/bucket_sets/{systemKey}/{deploymentName}/file/copy
 # operationId: CopyBucketFile
@@ -5028,17 +5041,17 @@ export def "v-4-bucket-sets-file-copy copy" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key, deployment_name: $deployment_name} | format pattern "/api/v/4/bucket_sets/{system_key}/{deployment_name}/file/copy"))
-  let body = {"from_box": $from_box, "from_path": $from_path, "to_box": $to_box, "to_path": $to_path} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), deployment_name: (encode-path-segment $deployment_name)} | format pattern "/api/v/4/bucket_sets/{system_key}/{deployment_name}/file/copy"))
+  let req_body = {"from_box": $from_box, "from_path": $from_path, "to_box": $to_box, "to_path": $to_path} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-# FILES  - Creates a new file in a bucket
+# FILES - Creates a new file in a bucket
 #
 # POST /api/v/4/bucket_sets/{systemKey}/{deploymentName}/file/create
 # operationId: CreateBucketFile
@@ -5061,17 +5074,17 @@ export def "v-4-bucket-sets-file-create create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key, deployment_name: $deployment_name} | format pattern "/api/v/4/bucket_sets/{system_key}/{deployment_name}/file/create"))
-  let body = {"box": $box, "contents": $contents, "path": $path} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), deployment_name: (encode-path-segment $deployment_name)} | format pattern "/api/v/4/bucket_sets/{system_key}/{deployment_name}/file/create"))
+  let req_body = {"box": $box, "contents": $contents, "path": $path} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-# FILES  - Deletes a file from the bucket.
+# FILES - Deletes a file from the bucket.
 #
 # POST /api/v/4/bucket_sets/{systemKey}/{deploymentName}/file/delete
 # operationId: DeleteBucketFile
@@ -5093,17 +5106,17 @@ export def "v-4-bucket-sets-file-delete delete" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key, deployment_name: $deployment_name} | format pattern "/api/v/4/bucket_sets/{system_key}/{deployment_name}/file/delete"))
-  let body = {"box": $box, "path": $path} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), deployment_name: (encode-path-segment $deployment_name)} | format pattern "/api/v/4/bucket_sets/{system_key}/{deployment_name}/file/delete"))
+  let req_body = {"box": $box, "path": $path} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-# FILES  - Get a file's metadata in a box
+# FILES - Get a file's metadata in a box
 #
 # GET /api/v/4/bucket_sets/{systemKey}/{deploymentName}/file/meta
 # operationId: GetBoxFilesMeta
@@ -5125,15 +5138,15 @@ export def "v-4-bucket-sets-file-meta get-box" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "box" $box "scalar") (serialize-qp "path" $path "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({system_key: $system_key, deployment_name: $deployment_name} | format pattern "/api/v/4/bucket_sets/{system_key}/{deployment_name}/file/meta") $qp)
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), deployment_name: (encode-path-segment $deployment_name)} | format pattern "/api/v/4/bucket_sets/{system_key}/{deployment_name}/file/meta") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# FILES  - Moves a file to a new location within buckets.
+# FILES - Moves a file to a new location within buckets.
 #
 # POST /api/v/4/bucket_sets/{systemKey}/{deploymentName}/file/move
 # operationId: MoveBucketFile
@@ -5157,17 +5170,17 @@ export def "v-4-bucket-sets-file-move move" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key, deployment_name: $deployment_name} | format pattern "/api/v/4/bucket_sets/{system_key}/{deployment_name}/file/move"))
-  let body = {"from_box": $from_box, "from_path": $from_path, "to_box": $to_box, "to_path": $to_path} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), deployment_name: (encode-path-segment $deployment_name)} | format pattern "/api/v/4/bucket_sets/{system_key}/{deployment_name}/file/move"))
+  let req_body = {"from_box": $from_box, "from_path": $from_path, "to_box": $to_box, "to_path": $to_path} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-# FILES  - Get all files metadata in a box
+# FILES - Get all files metadata in a box
 #
 # GET /api/v/4/bucket_sets/{systemKey}/{deploymentName}/files
 # operationId: GetBoxFiles
@@ -5188,11 +5201,11 @@ export def "v-4-bucket-sets-files get-box" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "box" $box "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({system_key: $system_key, deployment_name: $deployment_name} | format pattern "/api/v/4/bucket_sets/{system_key}/{deployment_name}/files") $qp)
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), deployment_name: (encode-path-segment $deployment_name)} | format pattern "/api/v/4/bucket_sets/{system_key}/{deployment_name}/files") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5211,17 +5224,17 @@ export def "v-4-data-index delete-non-unique" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --column-name: string # <COLUMN TO INDEX>
+  --column-name: string
   --clear-blade-dev-token: string # Dev Token obtained through dev authentication.
 ]: nothing -> record<success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "columnName" $column_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({system_key: $system_key, collection_name: $collection_name} | format pattern "/api/v/4/data/{system_key}/{collection_name}/index") $qp)
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), collection_name: (encode-path-segment $collection_name)} | format pattern "/api/v/4/data/{system_key}/{collection_name}/index") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5240,17 +5253,17 @@ export def "v-4-data-index create-non-unique" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --column-name: string # <COLUMN TO INDEX>
+  --column-name: string
   --clear-blade-dev-token: string # Dev Token obtained through dev authentication.
 ]: nothing -> record<success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "columnName" $column_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({system_key: $system_key, collection_name: $collection_name} | format pattern "/api/v/4/data/{system_key}/{collection_name}/index") $qp)
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), collection_name: (encode-path-segment $collection_name)} | format pattern "/api/v/4/data/{system_key}/{collection_name}/index") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5273,11 +5286,11 @@ export def "v-4-data-listindexes get-indexes" [
 ]: nothing -> record<Data: table<name: string, type: string>, Total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key, collection_name: $collection_name} | format pattern "/api/v/4/data/{system_key}/{collection_name}/listindexes"))
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), collection_name: (encode-path-segment $collection_name)} | format pattern "/api/v/4/data/{system_key}/{collection_name}/listindexes"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5285,7 +5298,7 @@ export def "v-4-data-listindexes get-indexes" [
 #
 # DELETE /api/v/4/data/{systemKey}/{collectionName}/uniqueindex
 # operationId: DeleteUniqueIndex
-export def "v-4-data-uniqueindex delete" [
+export def "v-4-data-uniqueindex delete-unique-index" [
   system_key: string
   collection_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5296,17 +5309,17 @@ export def "v-4-data-uniqueindex delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --column-name: string # <COLUMN TO INDEX>
+  --column-name: string
   --clear-blade-dev-token: string # Dev Token obtained through dev authentication.
 ]: nothing -> record<success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "columnName" $column_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({system_key: $system_key, collection_name: $collection_name} | format pattern "/api/v/4/data/{system_key}/{collection_name}/uniqueindex") $qp)
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), collection_name: (encode-path-segment $collection_name)} | format pattern "/api/v/4/data/{system_key}/{collection_name}/uniqueindex") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5314,7 +5327,7 @@ export def "v-4-data-uniqueindex delete" [
 #
 # POST /api/v/4/data/{systemKey}/{collectionName}/uniqueindex
 # operationId: CreateUniqueIndex
-export def "v-4-data-uniqueindex create" [
+export def "v-4-data-uniqueindex create-unique-index" [
   system_key: string
   collection_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5325,17 +5338,17 @@ export def "v-4-data-uniqueindex create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --column-name: string # <COLUMN TO INDEX>
+  --column-name: string
   --clear-blade-dev-token: string # Dev Token obtained through dev authentication.
 ]: nothing -> record<success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "columnName" $column_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({system_key: $system_key, collection_name: $collection_name} | format pattern "/api/v/4/data/{system_key}/{collection_name}/uniqueindex") $qp)
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), collection_name: (encode-path-segment $collection_name)} | format pattern "/api/v/4/data/{system_key}/{collection_name}/uniqueindex") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5360,11 +5373,11 @@ export def "v-4-data-upsert update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "conflictColumn" $conflict_column "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({system_key: $system_key, collection_name: $collection_name} | format pattern "/api/v/4/data/{system_key}/{collection_name}/upsert") $qp)
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), collection_name: (encode-path-segment $collection_name)} | format pattern "/api/v/4/data/{system_key}/{collection_name}/upsert") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5372,7 +5385,7 @@ export def "v-4-data-upsert update" [
 #
 # GET /api/v/4/devices/{systemKey}/connectioncount
 # operationId: ConnectedDeviceCount
-export def "v-4-devices-connectioncount get" [
+export def "v-4-devices-connectioncount get-connected-count" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5386,11 +5399,11 @@ export def "v-4-devices-connectioncount get" [
 ]: nothing -> record<total_device_connections: int, total_devices: int, unique_device_connections: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key} | format pattern "/api/v/4/devices/{system_key}/connectioncount"))
-  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/api/v/4/devices/{system_key}/connectioncount"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5398,7 +5411,7 @@ export def "v-4-devices-connectioncount get" [
 #
 # GET /api/v/4/devices/{systemKey}/connections
 # operationId: GetConnectedDeviceList
-export def "v-4-devices-connections get-connected-device-list" [
+export def "v-4-devices-connections get-connected-list" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5412,11 +5425,11 @@ export def "v-4-devices-connections get-connected-device-list" [
 ]: nothing -> record<device_name: table<client_id: string, time_connected: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key} | format pattern "/api/v/4/devices/{system_key}/connections"))
-  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/api/v/4/devices/{system_key}/connections"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5424,7 +5437,7 @@ export def "v-4-devices-connections get-connected-device-list" [
 #
 # GET /api/v/4/devices/{systemKey}/connections/{name}
 # operationId: GetConnectedDeviceInfo
-export def "v-4-devices-connections get-connected-device-info" [
+export def "v-4-devices-connections get-connected-get" [
   system_key: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5439,11 +5452,11 @@ export def "v-4-devices-connections get-connected-device-info" [
 ]: nothing -> record<allow_certificate_auth: bool, allow_key_auth: bool, certificate: string, connections: table<client_id: string, time_connected: string>, created_date: int, description: string, device_key: string, enabled: bool, has_keys: bool, last_active_date: int, name: string, state: string, system_key: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key, name: $name} | format pattern "/api/v/4/devices/{system_key}/connections/{name}"))
-  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/api/v/4/devices/{system_key}/connections/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5451,7 +5464,7 @@ export def "v-4-devices-connections get-connected-device-info" [
 #
 # GET /api/v/4/external-db/{systemKey}
 # operationId: GetAllExternalDB
-export def "v-4-external-db get-all" [
+export def "v-4-external-db get-list" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5465,11 +5478,11 @@ export def "v-4-external-db get-all" [
 ]: nothing -> table<dbtype: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key} | format pattern "/api/v/4/external-db/{system_key}"))
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/api/v/4/external-db/{system_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5496,14 +5509,14 @@ export def "v-4-external-db create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key} | format pattern "/api/v/4/external-db/{system_key}"))
-  let body = {"credentials": $credentials, "dbtype": $dbtype, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/api/v/4/external-db/{system_key}"))
+  let req_body = {"credentials": $credentials, "dbtype": $dbtype, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DATABASES - Delete a external database connection
@@ -5525,11 +5538,11 @@ export def "v-4-external-db delete" [
 ]: nothing -> record<success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key, name: $name} | format pattern "/api/v/4/external-db/{system_key}/{name}"))
-  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/api/v/4/external-db/{system_key}/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5552,11 +5565,11 @@ export def "v-4-external-db get" [
 ]: nothing -> record<credentials: record<address: string, dbname: string, password: string, port: string, user: string>, dbtype: string, id: int, name: string, system_key: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key, name: $name} | format pattern "/api/v/4/external-db/{system_key}/{name}"))
-  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/api/v/4/external-db/{system_key}/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5585,21 +5598,21 @@ export def "v-4-external-db update-database-credentials" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key, name: $name} | format pattern "/api/v/4/external-db/{system_key}/{name}"))
-  let body = {"address": $address, "dbname": $dbname, "password": $password, "port": $port, "user": $user} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/api/v/4/external-db/{system_key}/{name}"))
+  let req_body = {"address": $address, "dbname": $dbname, "password": $password, "port": $port, "user": $user} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DATABASES - Create a external database connection
 #
 # POST /api/v/4/external-db/{systemKey}/{name}/data
 # operationId: PerformDBOperation
-export def "v-4-external-db-data post" [
+export def "v-4-external-db-data create-perform-operation" [
   system_key: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5616,14 +5629,14 @@ export def "v-4-external-db-data post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key, name: $name} | format pattern "/api/v/4/external-db/{system_key}/{name}/data"))
-  let body = {"operation": $operation} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/api/v/4/external-db/{system_key}/{name}/data"))
+  let req_body = {"operation": $operation} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # MESSAGING - Gets list of topics
@@ -5646,11 +5659,11 @@ export def "v-4-message-topics get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({system_key: $system_key} | format pattern "/api/v/4/message/{system_key}/topics") $qp)
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/api/v/4/message/{system_key}/topics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5672,11 +5685,11 @@ export def "v-4-message-topics-count get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key} | format pattern "/api/v/4/message/{system_key}/topics/count"))
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/api/v/4/message/{system_key}/topics/count"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5685,7 +5698,7 @@ export def "v-4-message-topics-count get" [
 # PUT /api/v/4/user/manage
 # operationId: ChangeUserInfo
 # --changes shape: {password?: string, roles?: any}
-export def "v-4-user-manage get" [
+export def "v-4-user-manage get-change" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5702,20 +5715,20 @@ export def "v-4-user-manage get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v/4/user/manage")
-  let body = {"changes": $changes, "user": $user} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"changes": $changes, "user": $user} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # WEBHOOKS - Executes query string payload webhook
 #
 # GET /api/v/4/webhook/execute/{systemKey}/{webhookName}
 # operationId: PayloadWebhookQuery
-export def "v-4-webhook-execute list" [
+export def "v-4-webhook-execute list-payload" [
   system_key: string
   webhook_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5731,7 +5744,7 @@ export def "v-4-webhook-execute list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({system_key: $system_key, webhook_name: $webhook_name} | format pattern "/api/v/4/webhook/execute/{system_key}/{webhook_name}") $qp)
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), webhook_name: (encode-path-segment $webhook_name)} | format pattern "/api/v/4/webhook/execute/{system_key}/{webhook_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5741,7 +5754,7 @@ export def "v-4-webhook-execute list" [
 #
 # POST /api/v/4/webhook/execute/{systemKey}/{webhookName}
 # operationId: ExecuteWebhook
-export def "v-4-webhook-execute exec-ute" [
+export def "v-4-webhook-execute create" [
   system_key: string
   webhook_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5758,14 +5771,14 @@ export def "v-4-webhook-execute exec-ute" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key, webhook_name: $webhook_name} | format pattern "/api/v/4/webhook/execute/{system_key}/{webhook_name}"))
-  let body = {"data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), webhook_name: (encode-path-segment $webhook_name)} | format pattern "/api/v/4/webhook/execute/{system_key}/{webhook_name}"))
+  let req_body = {"data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # ADAPTERS - Get all adapters
@@ -5786,11 +5799,11 @@ export def "v-4-adapters get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key} | format pattern "/api/v/4/{system_key}/adapters"))
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/api/v/4/{system_key}/adapters"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5816,20 +5829,20 @@ export def "v-4-adapters create" [
   --os: string # The os this adapter is going to run on. (e.g. linux)
   --start-command: string # A command or shell script that will be executed to start the adapter on a ClearBlade Edge. If a start-up command is not specified , the adapter would need to be manually started by connecting to the gateway device (via ssh) and issuing an appropriate start (e.g. )
   --status-command: string # A command or shell script that will be run to determine the status of the adapter on a specific ClearBlade Edge. A shell script that echoes the status of an adapter should be supplied (e.g. )
-  --stop-command: string # A command or shell script that will be run to stop the adapter on a ClearBlade Edge.  If the Stop Command is not specified, the adapter would need to be manually stopped by connecting to the gateway device (via ssh) and issuing an appropriate stop command. (e.g. )
+  --stop-command: string # A command or shell script that will be run to stop the adapter on a ClearBlade Edge. If the Stop Command is not specified, the adapter would need to be manually stopped by connecting to the gateway device (via ssh) and issuing an appropriate stop command. (e.g. )
   --undeploy-command: string # A command or shell script that will be run to uninstall the adapter from a ClearBlade Edge. If the Undeploy Command is not specified the default behavior of the ClearBlade platform is to remove the adapter files from the directory where Edge is running. (e.g. )
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key} | format pattern "/api/v/4/{system_key}/adapters"))
-  let body = {"architecture": $architecture, "deploy_command": $deploy_command, "logs_command": $logs_command, "name": $name, "os": $os, "start_command": $start_command, "status_command": $status_command, "stop_command": $stop_command, "undeploy_command": $undeploy_command} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/api/v/4/{system_key}/adapters"))
+  let req_body = {"architecture": $architecture, "deploy_command": $deploy_command, "logs_command": $logs_command, "name": $name, "os": $os, "start_command": $start_command, "status_command": $status_command, "stop_command": $stop_command, "undeploy_command": $undeploy_command} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # ADAPTERS - Delete adapter
@@ -5851,11 +5864,11 @@ export def "v-4-adapters delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key, adapter_name: $adapter_name} | format pattern "/api/v/4/{system_key}/adapters/{adapter_name}"))
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), adapter_name: (encode-path-segment $adapter_name)} | format pattern "/api/v/4/{system_key}/adapters/{adapter_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5863,7 +5876,7 @@ export def "v-4-adapters delete" [
 #
 # PUT /api/v/4/{SystemKey}/adapters/{AdapterName}
 # operationId: MapAdapterCommand
-export def "v-4-adapters put" [
+export def "v-4-adapters update-map-command" [
   system_key: string
   adapter_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5884,20 +5897,20 @@ export def "v-4-adapters put" [
   --run-stop-on-deploy: oneof<nothing, bool> # e.g. true
   --start-command: string # A command or shell script that will be executed to start the adapter on a ClearBlade Edge. If a start-up command is not specified , the adapter would need to be manually started by connecting to the gateway device (via ssh) and issuing an appropriate start (e.g. ./start.sh)
   --status-command: string # A command or shell script that will be run to determine the status of the adapter on a specific ClearBlade Edge. A shell script that echoes the status of an adapter should be supplied (e.g. ./status.sh)
-  --stop-command: string # A command or shell script that will be run to stop the adapter on a ClearBlade Edge.  If the Stop Command is not specified, the adapter would need to be manually stopped by connecting to the gateway device (via ssh) and issuing an appropriate stop command. (e.g. ./stop.sh)
+  --stop-command: string # A command or shell script that will be run to stop the adapter on a ClearBlade Edge. If the Stop Command is not specified, the adapter would need to be manually stopped by connecting to the gateway device (via ssh) and issuing an appropriate stop command. (e.g. ./stop.sh)
   --undeploy-command: string # A command or shell script that will be run to uninstall the adapter from a ClearBlade Edge. If the Undeploy Command is not specified the default behavior of the ClearBlade platform is to remove the adapter files from the directory where Edge is running. (e.g. ./undeploy.sh)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key, adapter_name: $adapter_name} | format pattern "/api/v/4/{system_key}/adapters/{adapter_name}"))
-  let body = {"architecture": $architecture, "deploy_command": $deploy_command, "logs_command": $logs_command, "os": $os, "run_deploy_on_deploy": $run_deploy_on_deploy, "run_start_on_deploy": $run_start_on_deploy, "run_stop_on_deploy": $run_stop_on_deploy, "start_command": $start_command, "status_command": $status_command, "stop_command": $stop_command, "undeploy_command": $undeploy_command} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), adapter_name: (encode-path-segment $adapter_name)} | format pattern "/api/v/4/{system_key}/adapters/{adapter_name}"))
+  let req_body = {"architecture": $architecture, "deploy_command": $deploy_command, "logs_command": $logs_command, "os": $os, "run_deploy_on_deploy": $run_deploy_on_deploy, "run_start_on_deploy": $run_start_on_deploy, "run_stop_on_deploy": $run_stop_on_deploy, "start_command": $start_command, "status_command": $status_command, "stop_command": $stop_command, "undeploy_command": $undeploy_command} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # ADAPTERS - Send command to edge
@@ -5922,21 +5935,21 @@ export def "v-4-adapters-control create-edge-command" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key, adapter_name: $adapter_name} | format pattern "/api/v/4/{system_key}/adapters/{adapter_name}/control"))
-  let body = {"command": $command, "edges": $edges} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), adapter_name: (encode-path-segment $adapter_name)} | format pattern "/api/v/4/{system_key}/adapters/{adapter_name}/control"))
+  let req_body = {"command": $command, "edges": $edges} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets list of configuration information for all adapter files
 #
 # GET /api/v/4/{SystemKey}/adapters/{AdapterName}/files
 # operationId: AdapterConfig
-export def "v-4-adapters-files get" [
+export def "v-4-adapters-files get-config" [
   system_key: string
   adapter_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5951,11 +5964,11 @@ export def "v-4-adapters-files get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key, adapter_name: $adapter_name} | format pattern "/api/v/4/{system_key}/adapters/{adapter_name}/files"))
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), adapter_name: (encode-path-segment $adapter_name)} | format pattern "/api/v/4/{system_key}/adapters/{adapter_name}/files"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5963,7 +5976,7 @@ export def "v-4-adapters-files get" [
 #
 # POST /api/v/4/{SystemKey}/adapters/{AdapterName}/files
 # operationId: updateFileInfo
-export def "v-4-adapters-files update-file-info" [
+export def "v-4-adapters-files update-get" [
   system_key: string
   adapter_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5983,14 +5996,14 @@ export def "v-4-adapters-files update-file-info" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key, adapter_name: $adapter_name} | format pattern "/api/v/4/{system_key}/adapters/{adapter_name}/files"))
-  let body = {"adapter_name": $body_adapter_name, "file": $file, "name": $name, "path_name": $path_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), adapter_name: (encode-path-segment $adapter_name)} | format pattern "/api/v/4/{system_key}/adapters/{adapter_name}/files"))
+  let req_body = {"adapter_name": $body_adapter_name, "file": $file, "name": $name, "path_name": $path_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # ADAPTERS - Delete adapter files
@@ -6013,11 +6026,11 @@ export def "v-4-adapters-files delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key, adapter_name: $adapter_name, file_name: $file_name} | format pattern "/api/v/4/{system_key}/adapters/{adapter_name}/files/{file_name}"))
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), adapter_name: (encode-path-segment $adapter_name), file_name: (encode-path-segment $file_name)} | format pattern "/api/v/4/{system_key}/adapters/{adapter_name}/files/{file_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -6041,11 +6054,11 @@ export def "v-4-adapters-files download" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key, adapter_name: $adapter_name, file_name: $file_name} | format pattern "/api/v/4/{system_key}/adapters/{adapter_name}/files/{file_name}"))
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), adapter_name: (encode-path-segment $adapter_name), file_name: (encode-path-segment $file_name)} | format pattern "/api/v/4/{system_key}/adapters/{adapter_name}/files/{file_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -6053,7 +6066,7 @@ export def "v-4-adapters-files download" [
 #
 # PUT /api/v/4/{SystemKey}/adapters/{AdapterName}/files/{fileName}
 # operationId: updateExistingFileContent
-export def "v-4-adapters-files update-existing-file-content" [
+export def "v-4-adapters-files update-existing-content" [
   system_key: string
   adapter_name: string
   file_name: string
@@ -6071,21 +6084,21 @@ export def "v-4-adapters-files update-existing-file-content" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key, adapter_name: $adapter_name, file_name: $file_name} | format pattern "/api/v/4/{system_key}/adapters/{adapter_name}/files/{file_name}"))
-  let body = {"file": $file} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), adapter_name: (encode-path-segment $adapter_name), file_name: (encode-path-segment $file_name)} | format pattern "/api/v/4/{system_key}/adapters/{adapter_name}/files/{file_name}"))
+  let req_body = {"file": $file} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # CODE - Get all failed services using Query
 #
 # GET /api/v/4/{systemKey}/code/failed
 # operationId: GetFailedServiceQuery
-export def "v-4-code-failed get-failed-service-query" [
+export def "v-4-code-failed get-service-list" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6101,11 +6114,11 @@ export def "v-4-code-failed get-failed-service-query" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({system_key: $system_key} | format pattern "/api/v/4/{system_key}/code/failed") $qp)
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/api/v/4/{system_key}/code/failed") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -6113,7 +6126,7 @@ export def "v-4-code-failed get-failed-service-query" [
 #
 # GET /codeadmin/failed
 # operationId: GetFailedServices
-export def "codeadmin-failed get-failed-services" [
+export def "codeadmin-failed get-services" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6127,10 +6140,10 @@ export def "codeadmin-failed get-failed-services" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/codeadmin/failed")
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -6138,7 +6151,7 @@ export def "codeadmin-failed get-failed-services" [
 #
 # DELETE /codeadmin/failed/{systemKey}
 # operationId: DeleteFailedService
-export def "codeadmin-failed delete-failed-service" [
+export def "codeadmin-failed delete-service" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6154,20 +6167,21 @@ export def "codeadmin-failed delete-failed-service" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key} | format pattern "/codeadmin/failed/{system_key}"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/codeadmin/failed/{system_key}"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DEVELOPER - Get system's failed services
 #
 # GET /codeadmin/failed/{systemKey}
 # operationId: GetSystemFailedServices
-export def "codeadmin-failed get-system-failed-services" [
+export def "codeadmin-failed get-system-services" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6181,11 +6195,11 @@ export def "codeadmin-failed get-system-failed-services" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key} | format pattern "/codeadmin/failed/{system_key}"))
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/codeadmin/failed/{system_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -6193,7 +6207,7 @@ export def "codeadmin-failed get-system-failed-services" [
 #
 # POST /codeadmin/failed/{systemKey}
 # operationId: RetryFailedService
-export def "codeadmin-failed post" [
+export def "codeadmin-failed create-retry-service" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6209,13 +6223,14 @@ export def "codeadmin-failed post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key} | format pattern "/codeadmin/failed/{system_key}"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/codeadmin/failed/{system_key}"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DEVELOPER - Get library history
@@ -6237,11 +6252,11 @@ export def "codeadmin-v-2-history-library get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key, lib_name: $lib_name} | format pattern "/codeadmin/v/2/history/library/{system_key}/{lib_name}"))
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), lib_name: (encode-path-segment $lib_name)} | format pattern "/codeadmin/v/2/history/library/{system_key}/{lib_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -6249,7 +6264,7 @@ export def "codeadmin-v-2-history-library get" [
 #
 # GET /codeadmin/v/2/history/library/{systemKey}/{libName}/{libVersion}
 # operationId: GetOldLibraryVersion
-export def "codeadmin-v-2-history-library get-old-library-version" [
+export def "codeadmin-v-2-history-library get-old-version" [
   system_key: string
   lib_name: string
   lib_version: string
@@ -6265,11 +6280,11 @@ export def "codeadmin-v-2-history-library get-old-library-version" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key, lib_name: $lib_name, lib_version: $lib_version} | format pattern "/codeadmin/v/2/history/library/{system_key}/{lib_name}/{lib_version}"))
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), lib_name: (encode-path-segment $lib_name), lib_version: (encode-path-segment $lib_version)} | format pattern "/codeadmin/v/2/history/library/{system_key}/{lib_name}/{lib_version}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -6291,11 +6306,11 @@ export def "codeadmin-v-2-library get-libraries" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key} | format pattern "/codeadmin/v/2/library/{system_key}"))
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/codeadmin/v/2/library/{system_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -6318,11 +6333,11 @@ export def "codeadmin-v-2-library delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key, lib_name: $lib_name} | format pattern "/codeadmin/v/2/library/{system_key}/{lib_name}"))
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), lib_name: (encode-path-segment $lib_name)} | format pattern "/codeadmin/v/2/library/{system_key}/{lib_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -6345,11 +6360,11 @@ export def "codeadmin-v-2-library get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key, lib_name: $lib_name} | format pattern "/codeadmin/v/2/library/{system_key}/{lib_name}"))
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), lib_name: (encode-path-segment $lib_name)} | format pattern "/codeadmin/v/2/library/{system_key}/{lib_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -6376,14 +6391,14 @@ export def "codeadmin-v-2-library create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key, lib_name: $lib_name} | format pattern "/codeadmin/v/2/library/{system_key}/{lib_name}"))
-  let body = {"code": $code, "dependencies": $dependencies, "visibility": $visibility} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), lib_name: (encode-path-segment $lib_name)} | format pattern "/codeadmin/v/2/library/{system_key}/{lib_name}"))
+  let req_body = {"code": $code, "dependencies": $dependencies, "visibility": $visibility} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DEVELOPER - Update library
@@ -6409,14 +6424,14 @@ export def "codeadmin-v-2-library update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key, lib_name: $lib_name} | format pattern "/codeadmin/v/2/library/{system_key}/{lib_name}"))
-  let body = {"code": $code, "dependencies": $dependencies, "description": $description} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), lib_name: (encode-path-segment $lib_name)} | format pattern "/codeadmin/v/2/library/{system_key}/{lib_name}"))
+  let req_body = {"code": $code, "dependencies": $dependencies, "description": $description} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DEVELOPER - Get services logs
@@ -6438,11 +6453,11 @@ export def "codeadmin-v-2-logs get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key, service_name: $service_name} | format pattern "/codeadmin/v/2/logs/{system_key}/{service_name}"))
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), service_name: (encode-path-segment $service_name)} | format pattern "/codeadmin/v/2/logs/{system_key}/{service_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -6465,11 +6480,11 @@ export def "codeadmin-v-2 delete-service" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key, service_name: $service_name} | format pattern "/codeadmin/v/2/{system_key}/{service_name}"))
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), service_name: (encode-path-segment $service_name)} | format pattern "/codeadmin/v/2/{system_key}/{service_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -6499,14 +6514,14 @@ export def "codeadmin-v-2 create-service" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key, service_name: $service_name} | format pattern "/codeadmin/v/2/{system_key}/{service_name}"))
-  let body = {"code": $code, "dependencies": $dependencies, "name": $name, "parameters": $parameters, "run_user": $run_user, "systemID": $system_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), service_name: (encode-path-segment $service_name)} | format pattern "/codeadmin/v/2/{system_key}/{service_name}"))
+  let req_body = {"code": $code, "dependencies": $dependencies, "name": $name, "parameters": $parameters, "run_user": $run_user, "systemID": $system_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DEVELOPER - Update code service
@@ -6542,12 +6557,12 @@ export def "codeadmin-v-2 update-service" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({system_key: $system_key, service_name: $service_name} | format pattern "/codeadmin/v/2/{system_key}/{service_name}"))
-  let body = {"auto_balance": $auto_balance, "auto_restart": $auto_restart, "code": $code, "concurrency": $concurrency, "current_version": $current_version, "dependencies": $dependencies, "execution_timeout": $execution_timeout, "logging_enabled": $logging_enabled, "name": $name, "parameters": $parameters, "run_user": $run_user, "timers": $timers, "triggers": $triggers} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), service_name: (encode-path-segment $service_name)} | format pattern "/codeadmin/v/2/{system_key}/{service_name}"))
+  let req_body = {"auto_balance": $auto_balance, "auto_restart": $auto_restart, "code": $code, "concurrency": $concurrency, "current_version": $current_version, "dependencies": $dependencies, "execution_timeout": $execution_timeout, "logging_enabled": $logging_enabled, "name": $name, "parameters": $parameters, "run_user": $run_user, "timers": $timers, "triggers": $triggers} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -71,7 +80,7 @@ def container-provider-type-completer [] { ["EKS"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "virtualclusters-jobruns cancel" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "virtualclusters-jobruns cancel-job-run" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,7 +104,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /virtualclusters/{virtualClusterId}/jobruns/{jobRunId}
 # operationId: CancelJobRun
-export def "virtualclusters-jobruns cancel" [
+export def "virtualclusters-jobruns cancel-job-run" [
   virtual_cluster_id: string
   job_run_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -116,11 +125,11 @@ export def "virtualclusters-jobruns cancel" [
 ]: nothing -> record<id: record, virtualClusterId: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({virtual_cluster_id: $virtual_cluster_id, job_run_id: $job_run_id} | format pattern "/virtualclusters/{virtual_cluster_id}/jobruns/{job_run_id}"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({virtual_cluster_id: (encode-path-segment $virtual_cluster_id), job_run_id: (encode-path-segment $job_run_id)} | format pattern "/virtualclusters/{virtual_cluster_id}/jobruns/{job_run_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -128,7 +137,7 @@ export def "virtualclusters-jobruns cancel" [
 #
 # GET /virtualclusters/{virtualClusterId}/jobruns/{jobRunId}
 # operationId: DescribeJobRun
-export def "virtualclusters-jobruns get" [
+export def "virtualclusters-jobruns get-job-run" [
   virtual_cluster_id: string
   job_run_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -149,11 +158,11 @@ export def "virtualclusters-jobruns get" [
 ]: nothing -> record<jobRun: record<id: record, name: record, virtualClusterId: record, arn: record, state: record, clientToken: record, executionRoleArn: record, releaseLabel: record, configurationOverrides: record<applicationConfiguration: record, monitoringConfiguration: record>, jobDriver: record<sparkSubmitJobDriver: record, sparkSqlJobDriver: record>, createdAt: record, createdBy: record, finishedAt: record, stateDetails: record, failureReason: record, tags: record, retryPolicyConfiguration: record<maxAttempts: record>, retryPolicyExecution: record<currentAttemptCount: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({virtual_cluster_id: $virtual_cluster_id, job_run_id: $job_run_id} | format pattern "/virtualclusters/{virtual_cluster_id}/jobruns/{job_run_id}"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({virtual_cluster_id: (encode-path-segment $virtual_cluster_id), job_run_id: (encode-path-segment $job_run_id)} | format pattern "/virtualclusters/{virtual_cluster_id}/jobruns/{job_run_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -162,7 +171,7 @@ export def "virtualclusters-jobruns get" [
 # POST /jobtemplates
 # operationId: CreateJobTemplate
 # --jobTemplateData shape: {executionRoleArn?: any, releaseLabel?: any, configurationOverrides?: any, jobDriver?: record, parameterConfiguration?: any, jobTags?: any}
-export def "jobtemplates create" [
+export def "jobtemplates create-job-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -188,20 +197,20 @@ export def "jobtemplates create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/jobtemplates")
-  let body = {"name": $name, "clientToken": $client_token, "jobTemplateData": $job_template_data, "tags": $tags, "kmsKeyArn": $kms_key_arn} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"name": $name, "clientToken": $client_token, "jobTemplateData": $job_template_data, "tags": $tags, "kmsKeyArn": $kms_key_arn} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists job templates based on a set of parameters. Job template stores values of StartJobRun API request in a template and can be used to start a job run. Job template allows two use cases: avoid repeating recurring StartJobRun API request values, enforcing certain values in StartJobRun API request.
 #
 # GET /jobtemplates
 # operationId: ListJobTemplates
-export def "jobtemplates list" [
+export def "jobtemplates list-job-templates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -211,9 +220,9 @@ export def "jobtemplates list" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --created-after: string # The date and time after which the job templates were created. (format: date-time)
-  --created-before: string #  The date and time before which the job templates were created. (format: date-time)
-  --max-results: int #  The maximum number of job templates that can be listed.
-  --next-token: string #  The token for the next set of job templates to return.
+  --created-before: string # The date and time before which the job templates were created. (format: date-time)
+  --max-results: int # The maximum number of job templates that can be listed.
+  --next-token: string # The token for the next set of job templates to return.
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -226,10 +235,10 @@ export def "jobtemplates list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "createdAfter" $created_after "scalar") (serialize-qp "createdBefore" $created_before "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/jobtemplates" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -262,19 +271,19 @@ export def "virtualclusters-endpoints create-managed" [
   --certificate-arn: string # The certificate ARN provided by users for the managed endpoint. This field is under deprecation and will be removed in future releases.
   --configuration-overrides: record # A configuration specification to be used to override existing configurations. — shape: {applicationConfiguration?: any, monitoringConfiguration?: any}
   client_token: string # The client idempotency token for this create call.
-  --tags: record # The tags of the managed endpoint. 
+  --tags: record # The tags of the managed endpoint.
 ]: any -> record<id: record, name: record, arn: record, virtualClusterId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({virtual_cluster_id: $virtual_cluster_id} | format pattern "/virtualclusters/{virtual_cluster_id}/endpoints"))
-  let body = {"name": $name, "type": $type, "releaseLabel": $release_label, "executionRoleArn": $execution_role_arn, "certificateArn": $certificate_arn, "configurationOverrides": $configuration_overrides, "clientToken": $client_token, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({virtual_cluster_id: (encode-path-segment $virtual_cluster_id)} | format pattern "/virtualclusters/{virtual_cluster_id}/endpoints"))
+  let req_body = {"name": $name, "type": $type, "releaseLabel": $release_label, "executionRoleArn": $execution_role_arn, "certificateArn": $certificate_arn, "configurationOverrides": $configuration_overrides, "clientToken": $client_token, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists managed endpoints based on a set of parameters. A managed endpoint is a gateway that connects Amazon EMR Studio to Amazon EMR on EKS so that Amazon EMR Studio can communicate with your virtual cluster.
@@ -292,11 +301,11 @@ export def "virtualclusters-endpoints list-managed" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --created-before: string # The date and time before which the endpoints are created. (format: date-time)
-  --created-after: string #  The date and time after which the endpoints are created. (format: date-time)
+  --created-after: string # The date and time after which the endpoints are created. (format: date-time)
   --types: list # The types of the managed endpoints.
   --states: list # The states of the managed endpoints.
   --max-results: int # The maximum number of managed endpoints that can be listed.
-  --next-token: string #  The token for the next set of managed endpoints to return. 
+  --next-token: string # The token for the next set of managed endpoints to return.
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -308,11 +317,11 @@ export def "virtualclusters-endpoints list-managed" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "createdBefore" $created_before "scalar") (serialize-qp "createdAfter" $created_after "scalar") (serialize-qp "types" $types "multi") (serialize-qp "states" $states "multi") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({virtual_cluster_id: $virtual_cluster_id} | format pattern "/virtualclusters/{virtual_cluster_id}/endpoints") $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({virtual_cluster_id: (encode-path-segment $virtual_cluster_id)} | format pattern "/virtualclusters/{virtual_cluster_id}/endpoints") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -321,7 +330,7 @@ export def "virtualclusters-endpoints list-managed" [
 # POST /virtualclusters
 # operationId: CreateVirtualCluster
 # --containerProvider shape: {type?: any, id?: any, info?: any}
-export def "virtualclusters create" [
+export def "virtualclusters create-virtual" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -346,20 +355,20 @@ export def "virtualclusters create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/virtualclusters")
-  let body = {"name": $name, "containerProvider": $container_provider, "clientToken": $client_token, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"name": $name, "containerProvider": $container_provider, "clientToken": $client_token, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists information about the specified virtual cluster. Virtual cluster is a managed entity on Amazon EMR on EKS. You can create, describe, list and delete virtual clusters. They do not consume any additional resource in your system. A single virtual cluster maps to a single Kubernetes namespace. Given this relationship, you can model virtual clusters the same way you model Kubernetes namespaces to meet your requirements.
 #
 # GET /virtualclusters
 # operationId: ListVirtualClusters
-export def "virtualclusters list" [
+export def "virtualclusters list-virtual-clusters" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -374,7 +383,7 @@ export def "virtualclusters list" [
   --created-before: string # The date and time before which the virtual clusters are created. (format: date-time)
   --states: list # The states of the requested virtual clusters.
   --max-results: int # The maximum number of virtual clusters that can be listed.
-  --next-token: string # The token for the next set of virtual clusters to return. 
+  --next-token: string # The token for the next set of virtual clusters to return.
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -387,10 +396,10 @@ export def "virtualclusters list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "containerProviderId" $container_provider_id "scalar") (serialize-qp "containerProviderType" $container_provider_type "scalar") (serialize-qp "createdAfter" $created_after "scalar") (serialize-qp "createdBefore" $created_before "scalar") (serialize-qp "states" $states "multi") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/virtualclusters" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -398,7 +407,7 @@ export def "virtualclusters list" [
 #
 # DELETE /jobtemplates/{templateId}
 # operationId: DeleteJobTemplate
-export def "jobtemplates delete" [
+export def "jobtemplates delete-job-template" [
   template_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -418,11 +427,11 @@ export def "jobtemplates delete" [
 ]: nothing -> record<id: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({template_id: $template_id} | format pattern "/jobtemplates/{template_id}"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({template_id: (encode-path-segment $template_id)} | format pattern "/jobtemplates/{template_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -430,7 +439,7 @@ export def "jobtemplates delete" [
 #
 # GET /jobtemplates/{templateId}
 # operationId: DescribeJobTemplate
-export def "jobtemplates get" [
+export def "jobtemplates get-job-template" [
   template_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -450,11 +459,11 @@ export def "jobtemplates get" [
 ]: nothing -> record<jobTemplate: record<name: record, id: record, arn: record, createdAt: record, createdBy: record, tags: record, jobTemplateData: record<executionRoleArn: record, releaseLabel: record, configurationOverrides: record, jobDriver: record, parameterConfiguration: record, jobTags: record>, kmsKeyArn: record, decryptionError: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({template_id: $template_id} | format pattern "/jobtemplates/{template_id}"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({template_id: (encode-path-segment $template_id)} | format pattern "/jobtemplates/{template_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -483,11 +492,11 @@ export def "virtualclusters-endpoints delete-managed" [
 ]: nothing -> record<id: record, virtualClusterId: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({virtual_cluster_id: $virtual_cluster_id, endpoint_id: $endpoint_id} | format pattern "/virtualclusters/{virtual_cluster_id}/endpoints/{endpoint_id}"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({virtual_cluster_id: (encode-path-segment $virtual_cluster_id), endpoint_id: (encode-path-segment $endpoint_id)} | format pattern "/virtualclusters/{virtual_cluster_id}/endpoints/{endpoint_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -495,7 +504,7 @@ export def "virtualclusters-endpoints delete-managed" [
 #
 # GET /virtualclusters/{virtualClusterId}/endpoints/{endpointId}
 # operationId: DescribeManagedEndpoint
-export def "virtualclusters-endpoints get" [
+export def "virtualclusters-endpoints get-managed" [
   virtual_cluster_id: string
   endpoint_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -516,11 +525,11 @@ export def "virtualclusters-endpoints get" [
 ]: nothing -> record<endpoint: record<id: record, name: record, arn: record, virtualClusterId: record, type: record, state: record, releaseLabel: record, executionRoleArn: record, certificateArn: record, certificateAuthority: record<certificateArn: record, certificateData: record>, configurationOverrides: record<applicationConfiguration: record, monitoringConfiguration: record>, serverUrl: record, createdAt: record, securityGroup: record, subnetIds: record, stateDetails: record, failureReason: record, tags: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({virtual_cluster_id: $virtual_cluster_id, endpoint_id: $endpoint_id} | format pattern "/virtualclusters/{virtual_cluster_id}/endpoints/{endpoint_id}"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({virtual_cluster_id: (encode-path-segment $virtual_cluster_id), endpoint_id: (encode-path-segment $endpoint_id)} | format pattern "/virtualclusters/{virtual_cluster_id}/endpoints/{endpoint_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -528,7 +537,7 @@ export def "virtualclusters-endpoints get" [
 #
 # DELETE /virtualclusters/{virtualClusterId}
 # operationId: DeleteVirtualCluster
-export def "virtualclusters delete" [
+export def "virtualclusters delete-virtual" [
   virtual_cluster_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -548,11 +557,11 @@ export def "virtualclusters delete" [
 ]: nothing -> record<id: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({virtual_cluster_id: $virtual_cluster_id} | format pattern "/virtualclusters/{virtual_cluster_id}"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({virtual_cluster_id: (encode-path-segment $virtual_cluster_id)} | format pattern "/virtualclusters/{virtual_cluster_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -560,7 +569,7 @@ export def "virtualclusters delete" [
 #
 # GET /virtualclusters/{virtualClusterId}
 # operationId: DescribeVirtualCluster
-export def "virtualclusters get" [
+export def "virtualclusters get-virtual" [
   virtual_cluster_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -580,11 +589,11 @@ export def "virtualclusters get" [
 ]: nothing -> record<virtualCluster: record<id: record, name: record, arn: record, state: record, containerProvider: record<type: record, id: record, info: record>, createdAt: record, tags: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({virtual_cluster_id: $virtual_cluster_id} | format pattern "/virtualclusters/{virtual_cluster_id}"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({virtual_cluster_id: (encode-path-segment $virtual_cluster_id)} | format pattern "/virtualclusters/{virtual_cluster_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -592,7 +601,7 @@ export def "virtualclusters get" [
 #
 # GET /virtualclusters/{virtualClusterId}/jobruns
 # operationId: ListJobRuns
-export def "virtualclusters-jobruns list" [
+export def "virtualclusters-jobruns list-job-runs" [
   virtual_cluster_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -619,11 +628,11 @@ export def "virtualclusters-jobruns list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "createdBefore" $created_before "scalar") (serialize-qp "createdAfter" $created_after "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "states" $states "multi") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({virtual_cluster_id: $virtual_cluster_id} | format pattern "/virtualclusters/{virtual_cluster_id}/jobruns") $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({virtual_cluster_id: (encode-path-segment $virtual_cluster_id)} | format pattern "/virtualclusters/{virtual_cluster_id}/jobruns") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -634,7 +643,7 @@ export def "virtualclusters-jobruns list" [
 # --jobDriver shape: {sparkSubmitJobDriver?: any, sparkSqlJobDriver?: any}
 # --configurationOverrides shape: {applicationConfiguration?: any, monitoringConfiguration?: any}
 # --retryPolicyConfiguration shape: {maxAttempts?: any}
-export def "virtualclusters-jobruns start" [
+export def "virtualclusters-jobruns start-job-run" [
   virtual_cluster_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -652,7 +661,7 @@ export def "virtualclusters-jobruns start" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --name: string # The name of the job run.
-  client_token: string # The client idempotency token of the job run request. 
+  client_token: string # The client idempotency token of the job run request.
   --execution-role-arn: string # The execution role ARN for the job run.
   --release-label: string # The Amazon EMR release version to use for the job run.
   --job-driver: record # Specify the driver that the job runs on. Exactly one of the two available job drivers is required, either sparkSqlJobDriver or sparkSubmitJobDriver. — shape: {sparkSubmitJobDriver?: any, sparkSqlJobDriver?: any}
@@ -665,21 +674,21 @@ export def "virtualclusters-jobruns start" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({virtual_cluster_id: $virtual_cluster_id} | format pattern "/virtualclusters/{virtual_cluster_id}/jobruns"))
-  let body = {"name": $name, "clientToken": $client_token, "executionRoleArn": $execution_role_arn, "releaseLabel": $release_label, "jobDriver": $job_driver, "configurationOverrides": $configuration_overrides, "tags": $tags, "jobTemplateId": $job_template_id, "jobTemplateParameters": $job_template_parameters, "retryPolicyConfiguration": $retry_policy_configuration} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({virtual_cluster_id: (encode-path-segment $virtual_cluster_id)} | format pattern "/virtualclusters/{virtual_cluster_id}/jobruns"))
+  let req_body = {"name": $name, "clientToken": $client_token, "executionRoleArn": $execution_role_arn, "releaseLabel": $release_label, "jobDriver": $job_driver, "configurationOverrides": $configuration_overrides, "tags": $tags, "jobTemplateId": $job_template_id, "jobTemplateParameters": $job_template_parameters, "retryPolicyConfiguration": $retry_policy_configuration} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists the tags assigned to the resources.
 #
 # GET /tags/{resourceArn}
 # operationId: ListTagsForResource
-export def "tags list-tags-for-resource" [
+export def "tags list-for-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -699,11 +708,11 @@ export def "tags list-tags-for-resource" [
 ]: nothing -> record<tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({resource_arn: $resource_arn} | format pattern "/tags/{resource_arn}"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/tags/{resource_arn}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -733,14 +742,14 @@ export def "tags tag-resource" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({resource_arn: $resource_arn} | format pattern "/tags/{resource_arn}"))
-  let body = {"tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/tags/{resource_arn}"))
+  let req_body = {"tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Removes tags from resources.
@@ -769,10 +778,10 @@ export def "tags untag-resource" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "tagKeys" $tag_keys "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_arn: $resource_arn} | format pattern "/tags/{resource_arn}#tagKeys") $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/tags/{resource_arn}#tagKeys") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -68,7 +77,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "history get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "history get-generated-items-get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -92,7 +101,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/history
 # operationId: Get_generated_items_v1_history_get
-export def "history get" [
+export def "history get-generated-items-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -106,10 +115,10 @@ export def "history get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/history")
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -119,7 +128,7 @@ export def "history get" [
 # DEPRECATED
 # operationId: Delete_history_items_v1_history_delete_post
 @deprecated
-export def "history-delete post" [
+export def "history-delete create-items" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -129,26 +138,26 @@ export def "history-delete post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programatically. You can view your xi-api-key using the 'Profile' tab on the website.
-  history_item_ids: list # A list of history items to remove, you can get IDs of history items and other metadata using the GET https://api.elevenlabs.io/v1/history endpoint.
+  history_item_ids: list<string> # A list of history items to remove, you can get IDs of history items and other metadata using the GET https://api.elevenlabs.io/v1/history endpoint.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/history/delete")
-  let body = {"history_item_ids": $history_item_ids} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"history_item_ids": $history_item_ids} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Download History Items
 #
 # POST /v1/history/download
 # operationId: Download_history_items_v1_history_download_post
-export def "history-download post" [
+export def "history-download create-items" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -158,26 +167,26 @@ export def "history-download post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programatically. You can view your xi-api-key using the 'Profile' tab on the website.
-  history_item_ids: list # A list of history items to download, you can get IDs of history items and other metadata using the GET https://api.elevenlabs.io/v1/history endpoint.
+  history_item_ids: list<string> # A list of history items to download, you can get IDs of history items and other metadata using the GET https://api.elevenlabs.io/v1/history endpoint.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/history/download")
-  let body = {"history_item_ids": $history_item_ids} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"history_item_ids": $history_item_ids} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete History Item
 #
 # DELETE /v1/history/{history_item_id}
 # operationId: Delete_history_item_v1_history__history_item_id__delete
-export def "history delete" [
+export def "history delete-delete" [
   history_item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -191,11 +200,11 @@ export def "history delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({history_item_id: $history_item_id} | format pattern "/v1/history/{history_item_id}"))
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({history_item_id: (encode-path-segment $history_item_id)} | format pattern "/v1/history/{history_item_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -203,7 +212,7 @@ export def "history delete" [
 #
 # GET /v1/history/{history_item_id}/audio
 # operationId: Get_audio_from_history_item_v1_history__history_item_id__audio_get
-export def "history-audio get" [
+export def "history-audio get-from-get" [
   history_item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -217,11 +226,11 @@ export def "history-audio get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({history_item_id: $history_item_id} | format pattern "/v1/history/{history_item_id}/audio"))
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({history_item_id: (encode-path-segment $history_item_id)} | format pattern "/v1/history/{history_item_id}/audio"))
   let accept_val = "audio/mpeg"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -229,7 +238,7 @@ export def "history-audio get" [
 #
 # POST /v1/text-to-speech/{voice_id}
 # operationId: Text_to_speech_v1_text_to_speech__voice_id__post
-export def "text-to-speech post" [
+export def "text-to-speech create" [
   voice_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -246,21 +255,21 @@ export def "text-to-speech post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({voice_id: $voice_id} | format pattern "/v1/text-to-speech/{voice_id}"))
-  let body = {"text": $text, "voice_settings": $voice_settings} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({voice_id: (encode-path-segment $voice_id)} | format pattern "/v1/text-to-speech/{voice_id}"))
+  let req_body = {"text": $text, "voice_settings": $voice_settings} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "audio/mpeg"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Text To Speech
 #
 # POST /v1/text-to-speech/{voice_id}/stream
 # operationId: Text_to_speech_v1_text_to_speech__voice_id__stream_post
-export def "text-to-speech-stream post" [
+export def "text-to-speech-stream create" [
   voice_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -277,21 +286,21 @@ export def "text-to-speech-stream post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({voice_id: $voice_id} | format pattern "/v1/text-to-speech/{voice_id}/stream"))
-  let body = {"text": $text, "voice_settings": $voice_settings} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({voice_id: (encode-path-segment $voice_id)} | format pattern "/v1/text-to-speech/{voice_id}/stream"))
+  let req_body = {"text": $text, "voice_settings": $voice_settings} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get User Info
 #
 # GET /v1/user
 # operationId: Get_user_info_v1_user_get
-export def "user get" [
+export def "user get-get-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -305,10 +314,10 @@ export def "user get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/user")
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -316,7 +325,7 @@ export def "user get" [
 #
 # GET /v1/user/subscription
 # operationId: Get_user_subscription_info_v1_user_subscription_get
-export def "user-subscription get" [
+export def "user-subscription get-get-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -330,10 +339,10 @@ export def "user-subscription get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/user/subscription")
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -355,10 +364,10 @@ export def "voices list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/voices")
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -366,7 +375,7 @@ export def "voices list" [
 #
 # POST /v1/voices/add
 # operationId: Add_voice_v1_voices_add_post
-export def "voices-add post" [
+export def "voices-add create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -377,7 +386,7 @@ export def "voices-add post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programatically. You can view your xi-api-key using the 'Profile' tab on the website.
   --description: string # How would you describe the voice?
-  files: list # One or more audio files to clone the voice from
+  files: list<string> # One or more audio files to clone the voice from
   --labels: string # Serialized labels dictionary for the voice.
   name: string # The name that identifies this voice. This will be displayed in the dropdown of the website.
 ]: any -> record<voice_id: string> {
@@ -385,20 +394,21 @@ export def "voices-add post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/voices/add")
-  let body = {"description": $description, "files": $files, "labels": $labels, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"description": $description, "files": $files, "labels": $labels, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let mp = (build-multipart-body $req_body [])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # Get Default Voice Settings.
 #
 # GET /v1/voices/settings/default
 # operationId: Get_default_voice_settings__v1_voices_settings_default_get
-export def "voices-settings-default get" [
+export def "voices-settings-default get-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -420,7 +430,7 @@ export def "voices-settings-default get" [
 #
 # DELETE /v1/voices/{voice_id}
 # operationId: Delete_voice_v1_voices__voice_id__delete
-export def "voices delete" [
+export def "voices delete-delete" [
   voice_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -434,11 +444,11 @@ export def "voices delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({voice_id: $voice_id} | format pattern "/v1/voices/{voice_id}"))
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({voice_id: (encode-path-segment $voice_id)} | format pattern "/v1/voices/{voice_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -446,7 +456,7 @@ export def "voices delete" [
 #
 # GET /v1/voices/{voice_id}
 # operationId: Get_voice_v1_voices__voice_id__get
-export def "voices get" [
+export def "voices get-get" [
   voice_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -462,11 +472,11 @@ export def "voices get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "with_settings" $with_settings "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({voice_id: $voice_id} | format pattern "/v1/voices/{voice_id}") $qp)
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({voice_id: (encode-path-segment $voice_id)} | format pattern "/v1/voices/{voice_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -474,7 +484,7 @@ export def "voices get" [
 #
 # POST /v1/voices/{voice_id}/edit
 # operationId: Edit_voice_v1_voices__voice_id__edit_post
-export def "voices-edit post" [
+export def "voices-edit create" [
   voice_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -486,28 +496,29 @@ export def "voices-edit post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programatically. You can view your xi-api-key using the 'Profile' tab on the website.
   --description: string # How would you describe the voice?
-  --files: list # Audio files to add to the voice
+  --files: list<string> # Audio files to add to the voice
   --labels: string # Serialized labels dictionary for the voice.
   name: string # The name that identifies this voice. This will be displayed in the dropdown of the website.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({voice_id: $voice_id} | format pattern "/v1/voices/{voice_id}/edit"))
-  let body = {"description": $description, "files": $files, "labels": $labels, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({voice_id: (encode-path-segment $voice_id)} | format pattern "/v1/voices/{voice_id}/edit"))
+  let req_body = {"description": $description, "files": $files, "labels": $labels, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let mp = (build-multipart-body $req_body [])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # Delete Sample
 #
 # DELETE /v1/voices/{voice_id}/samples/{sample_id}
 # operationId: Delete_sample_v1_voices__voice_id__samples__sample_id__delete
-export def "voices-samples delete" [
+export def "voices-samples delete-delete" [
   voice_id: string
   sample_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -522,11 +533,11 @@ export def "voices-samples delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({voice_id: $voice_id, sample_id: $sample_id} | format pattern "/v1/voices/{voice_id}/samples/{sample_id}"))
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({voice_id: (encode-path-segment $voice_id), sample_id: (encode-path-segment $sample_id)} | format pattern "/v1/voices/{voice_id}/samples/{sample_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -534,7 +545,7 @@ export def "voices-samples delete" [
 #
 # GET /v1/voices/{voice_id}/samples/{sample_id}/audio
 # operationId: Get_audio_from_sample_v1_voices__voice_id__samples__sample_id__audio_get
-export def "voices-samples-audio get" [
+export def "voices-samples-audio get-from-get" [
   voice_id: string
   sample_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -549,11 +560,11 @@ export def "voices-samples-audio get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({voice_id: $voice_id, sample_id: $sample_id} | format pattern "/v1/voices/{voice_id}/samples/{sample_id}/audio"))
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({voice_id: (encode-path-segment $voice_id), sample_id: (encode-path-segment $sample_id)} | format pattern "/v1/voices/{voice_id}/samples/{sample_id}/audio"))
   let accept_val = "audio/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -561,7 +572,7 @@ export def "voices-samples-audio get" [
 #
 # GET /v1/voices/{voice_id}/settings
 # operationId: Get_voice_settings_v1_voices__voice_id__settings_get
-export def "voices-settings get" [
+export def "voices-settings get-get" [
   voice_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -575,11 +586,11 @@ export def "voices-settings get" [
 ]: nothing -> record<similarity_boost: float, stability: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({voice_id: $voice_id} | format pattern "/v1/voices/{voice_id}/settings"))
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({voice_id: (encode-path-segment $voice_id)} | format pattern "/v1/voices/{voice_id}/settings"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -587,7 +598,7 @@ export def "voices-settings get" [
 #
 # POST /v1/voices/{voice_id}/settings/edit
 # operationId: Edit_voice_settings_v1_voices__voice_id__settings_edit_post
-export def "voices-settings-edit post" [
+export def "voices-settings-edit create" [
   voice_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -604,12 +615,12 @@ export def "voices-settings-edit post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({voice_id: $voice_id} | format pattern "/v1/voices/{voice_id}/settings/edit"))
-  let body = {"similarity_boost": $similarity_boost, "stability": $stability} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({voice_id: (encode-path-segment $voice_id)} | format pattern "/v1/voices/{voice_id}/settings/edit"))
+  let req_body = {"similarity_boost": $similarity_boost, "stability": $stability} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

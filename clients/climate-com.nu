@@ -36,6 +36,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -97,7 +106,7 @@ export def commands []: nothing -> table {
 #
 # POST /v4/boundaries
 # operationId: uploadBoundary
-# --geometry shape: {coordinates: list, type: "Point"|"Polygon"|"MultiPolygon"}
+# --geometry shape: {coordinates: list<string>, type: "Point"|"Polygon"|"MultiPolygon"}
 export def "boundaries upload-boundary" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -107,17 +116,17 @@ export def "boundaries upload-boundary" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  geometry: any # GeoJSON (e.g. {coordinates: [0, 0], type: Point}) — shape: {coordinates: list, type: "Point"|"Polygon"|"MultiPolygon"}
+  geometry: any # GeoJSON (e.g. {coordinates: [0, 0], type: Point}) — shape: {coordinates: list<string>, type: "Point"|"Polygon"|"MultiPolygon"}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/boundaries")
-  let body = {"geometry": $geometry} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"geometry": $geometry} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve Boundaries in batch
@@ -133,17 +142,17 @@ export def "boundaries-query get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  ids: list
+  ids: list<string>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/boundaries/query")
-  let body = {"ids": $ids} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"ids": $ids} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve a Boundary by ID
@@ -163,7 +172,7 @@ export def "boundaries get-boundary" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({boundary_id: $boundary_id} | format pattern "/v4/boundaries/{boundary_id}"))
+  let full_url = (build-url $base ({boundary_id: (encode-path-segment $boundary_id)} | format pattern "/v4/boundaries/{boundary_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -189,11 +198,11 @@ export def "exports create" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/exports")
-  let body = {"contentType": $content_type, "definition": $definition} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"contentType": $content_type, "definition": $definition} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve the binary contents of a processed export request.
@@ -215,11 +224,11 @@ export def "exports-contents get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({export_id: $export_id} | format pattern "/v4/exports/{export_id}/contents"))
-  let extra_headers = {"Accept": $hdr_accept, "Range": $range} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({export_id: (encode-path-segment $export_id)} | format pattern "/v4/exports/{export_id}/contents"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept": $hdr_accept, "Range": $range} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -240,7 +249,7 @@ export def "exports-status get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({export_id: $export_id} | format pattern "/v4/exports/{export_id}/status"))
+  let full_url = (build-url $base ({export_id: (encode-path-segment $export_id)} | format pattern "/v4/exports/{export_id}/status"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -250,7 +259,7 @@ export def "exports-status get" [
 #
 # GET /v4/farmOrganizations/{farmOrganizationType}/{farmOrganizationId}
 # operationId: fetchFarmOrganizationByTypeAndId
-export def "farm-organizations get" [
+export def "farm-organizations get-by-type-and" [
   farm_organization_type: string
   farm_organization_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -264,7 +273,7 @@ export def "farm-organizations get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({farm_organization_type: $farm_organization_type, farm_organization_id: $farm_organization_id} | format pattern "/v4/farmOrganizations/{farm_organization_type}/{farm_organization_id}"))
+  let full_url = (build-url $base ({farm_organization_type: (encode-path-segment $farm_organization_type), farm_organization_id: (encode-path-segment $farm_organization_id)} | format pattern "/v4/farmOrganizations/{farm_organization_type}/{farm_organization_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -284,17 +293,17 @@ export def "fields list" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --field-name: string # Optional prefix filter for field name. Must be at least 3 characters.
-  --x-next-token: string # Opaque string which allows for fetching the next batch of results.  Can be used to poll for changes.
-  --x-limit: int # Max number of results to return per batch.  Must be between 1 and 100 inclusive.  Defaults to 100.
+  --x-next-token: string # Opaque string which allows for fetching the next batch of results. Can be used to poll for changes.
+  --x-limit: int # Max number of results to return per batch. Must be between 1 and 100 inclusive. Defaults to 100.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fieldName" $field_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v4/fields" $qp)
-  let extra_headers = {"X-Next-Token": $x_next_token, "X-Limit": $x_limit} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Next-Token": $x_next_token, "X-Limit": $x_limit} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -312,17 +321,17 @@ export def "fields-all get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --field-name: string # Optional prefix filter for field name. Must be at least 3 characters.
-  --x-next-token: string # Opaque string which allows for fetching the next batch of results.  Can be used to poll for changes.
-  --x-limit: int # Max number of results to return per batch.  Must be between 1 and 100 inclusive.  Defaults to 100.
+  --x-next-token: string # Opaque string which allows for fetching the next batch of results. Can be used to poll for changes.
+  --x-limit: int # Max number of results to return per batch. Must be between 1 and 100 inclusive. Defaults to 100.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fieldName" $field_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v4/fields/all" $qp)
-  let extra_headers = {"X-Next-Token": $x_next_token, "X-Limit": $x_limit} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Next-Token": $x_next_token, "X-Limit": $x_limit} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -343,7 +352,7 @@ export def "fields get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({field_id: $field_id} | format pattern "/v4/fields/{field_id}"))
+  let full_url = (build-url $base ({field_id: (encode-path-segment $field_id)} | format pattern "/v4/fields/{field_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -361,22 +370,22 @@ export def "layers-as-applied get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --resource-owner-id: string # Optional unique identifier of the resource owner.  If resourceOwnerId is not specified, it defaults to the x-authenticated-user-uuid. (format: uuid)
+  --resource-owner-id: string # Optional unique identifier of the resource owner. If resourceOwnerId is not specified, it defaults to the x-authenticated-user-uuid. (format: uuid)
   --occurred-after: string # Optional start time by which to filter layer results. Time must be in ISO 8601 format with time zone, e.g. 2016-05-13T00:00:00Z (https://tools.ietf.org/html/rfc3339). Layers with an end time at or after (inclusive) the specified time will match this filter. If both occurredAfter and occurredBefore are populated, occurredAfter must be <= occurredBefore. (format: date-time)
   --occurred-before: string # Optional end time by which to filter layer results. Time must be in ISO 8601 format with time zone, e.g. 2016-05-13T00:00:00Z (https://tools.ietf.org/html/rfc3339). Layers with a start time at or before (inclusive) the specified time. If both occurredAfter and occurredBefore are populated, occurredAfter must be <= occurredBefore. (format: date-time)
   --updated-after: string # Optional updated time by which to filter layer results. Time must be in ISO 8601 format with time zone, e.g. 2016-05-13T00:00:00Z (https://tools.ietf.org/html/rfc3339). Layers with a modification time at or after (inclusive) the specified time. (format: date-time)
   --hdr-accept: string # Must be either \*/* or application/octet-stream,application/json
-  --x-next-token: string # Opaque string which allows for fetching the next batch of results.  Can be used to poll for changes.
-  --x-limit: int # Max number of results to return per batch.  Must be between 1 and 100 inclusive.  Defaults to 100.
+  --x-next-token: string # Opaque string which allows for fetching the next batch of results. Can be used to poll for changes.
+  --x-limit: int # Max number of results to return per batch. Must be between 1 and 100 inclusive. Defaults to 100.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "resourceOwnerId" $resource_owner_id "scalar") (serialize-qp "occurredAfter" $occurred_after "scalar") (serialize-qp "occurredBefore" $occurred_before "scalar") (serialize-qp "updatedAfter" $updated_after "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v4/layers/asApplied" $qp)
-  let extra_headers = {"Accept": $hdr_accept, "X-Next-Token": $x_next_token, "X-Limit": $x_limit} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept": $hdr_accept, "X-Next-Token": $x_next_token, "X-Limit": $x_limit} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -398,11 +407,11 @@ export def "layers-as-applied-contents get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({activity_id: $activity_id} | format pattern "/v4/layers/asApplied/{activity_id}/contents"))
-  let extra_headers = {"Accept": $hdr_accept, "Range": $range} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({activity_id: (encode-path-segment $activity_id)} | format pattern "/v4/layers/asApplied/{activity_id}/contents"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept": $hdr_accept, "Range": $range} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -418,22 +427,22 @@ export def "layers-as-harvested get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --resource-owner-id: string # Optional unique identifier of the resource owner.  If resourceOwnerId is not specified, it defaults to the x-authenticated-user-uuid. (format: uuid)
+  --resource-owner-id: string # Optional unique identifier of the resource owner. If resourceOwnerId is not specified, it defaults to the x-authenticated-user-uuid. (format: uuid)
   --occurred-after: string # Optional start time by which to filter layer results. Time must be in ISO 8601 format with time zone, e.g. 2016-05-13T00:00:00Z (https://tools.ietf.org/html/rfc3339). Layers with an end time at or after (inclusive) the specified time will match this filter. If both occurredAfter and occurredBefore are populated, occurredAfter must be <= occurredBefore. (format: date-time)
   --occurred-before: string # Optional end time by which to filter layer results. Time must be in ISO 8601 format with time zone, e.g. 2016-05-13T00:00:00Z (https://tools.ietf.org/html/rfc3339). Layers with a start time at or before (inclusive) the specified time. If both occurredAfter and occurredBefore are populated, occurredAfter must be <= occurredBefore. (format: date-time)
   --updated-after: string # Optional updated time by which to filter layer results. Time must be in ISO 8601 format with time zone, e.g. 2016-05-13T00:00:00Z (https://tools.ietf.org/html/rfc3339). Layers with a modification time at or after (inclusive) the specified time. (format: date-time)
   --hdr-accept: string # Must be either \*/* or application/octet-stream,application/json
-  --x-next-token: string # Opaque string which allows for fetching the next batch of results.  Can be used to poll for changes.
-  --x-limit: int # Max number of results to return per batch.  Must be between 1 and 100 inclusive.  Defaults to 100.
+  --x-next-token: string # Opaque string which allows for fetching the next batch of results. Can be used to poll for changes.
+  --x-limit: int # Max number of results to return per batch. Must be between 1 and 100 inclusive. Defaults to 100.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "resourceOwnerId" $resource_owner_id "scalar") (serialize-qp "occurredAfter" $occurred_after "scalar") (serialize-qp "occurredBefore" $occurred_before "scalar") (serialize-qp "updatedAfter" $updated_after "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v4/layers/asHarvested" $qp)
-  let extra_headers = {"Accept": $hdr_accept, "X-Next-Token": $x_next_token, "X-Limit": $x_limit} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept": $hdr_accept, "X-Next-Token": $x_next_token, "X-Limit": $x_limit} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -455,11 +464,11 @@ export def "layers-as-harvested-contents get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({activity_id: $activity_id} | format pattern "/v4/layers/asHarvested/{activity_id}/contents"))
-  let extra_headers = {"Accept": $hdr_accept, "Range": $range} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({activity_id: (encode-path-segment $activity_id)} | format pattern "/v4/layers/asHarvested/{activity_id}/contents"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept": $hdr_accept, "Range": $range} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -475,22 +484,22 @@ export def "layers-as-planted get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --resource-owner-id: string # Optional unique identifier of the resource owner.  If resourceOwnerId is not specified, it defaults to the x-authenticated-user-uuid. (format: uuid)
+  --resource-owner-id: string # Optional unique identifier of the resource owner. If resourceOwnerId is not specified, it defaults to the x-authenticated-user-uuid. (format: uuid)
   --occurred-after: string # Optional start time by which to filter layer results. Time must be in ISO 8601 format with time zone, e.g. 2016-05-13T00:00:00Z (https://tools.ietf.org/html/rfc3339). Layers with an end time at or after (inclusive) the specified time will match this filter. If both occurredAfter and occurredBefore are populated, occurredAfter must be <= occurredBefore. (format: date-time)
   --occurred-before: string # Optional end time by which to filter layer results. Time must be in ISO 8601 format with time zone, e.g. 2016-05-13T00:00:00Z (https://tools.ietf.org/html/rfc3339). Layers with a start time at or before (inclusive) the specified time. If both occurredAfter and occurredBefore are populated, occurredAfter must be <= occurredBefore. (format: date-time)
   --updated-after: string # Optional updated time by which to filter layer results. Time must be in ISO 8601 format with time zone, e.g. 2016-05-13T00:00:00Z (https://tools.ietf.org/html/rfc3339). Layers with a modification time at or after (inclusive) the specified time. (format: date-time)
   --hdr-accept: string # Must be either \*/* or application/octet-stream,application/json
-  --x-next-token: string # Opaque string which allows for fetching the next batch of results.  Can be used to poll for changes.
-  --x-limit: int # Max number of results to return per batch.  Must be between 1 and 100 inclusive.  Defaults to 100.
+  --x-next-token: string # Opaque string which allows for fetching the next batch of results. Can be used to poll for changes.
+  --x-limit: int # Max number of results to return per batch. Must be between 1 and 100 inclusive. Defaults to 100.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "resourceOwnerId" $resource_owner_id "scalar") (serialize-qp "occurredAfter" $occurred_after "scalar") (serialize-qp "occurredBefore" $occurred_before "scalar") (serialize-qp "updatedAfter" $updated_after "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v4/layers/asPlanted" $qp)
-  let extra_headers = {"Accept": $hdr_accept, "X-Next-Token": $x_next_token, "X-Limit": $x_limit} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept": $hdr_accept, "X-Next-Token": $x_next_token, "X-Limit": $x_limit} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -512,11 +521,11 @@ export def "layers-as-planted-contents get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({activity_id: $activity_id} | format pattern "/v4/layers/asPlanted/{activity_id}/contents"))
-  let extra_headers = {"Accept": $hdr_accept, "Range": $range} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({activity_id: (encode-path-segment $activity_id)} | format pattern "/v4/layers/asPlanted/{activity_id}/contents"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept": $hdr_accept, "Range": $range} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -534,17 +543,17 @@ export def "layers-scouting-observations list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --occurred-after: string # Optional start time by which to filter layer results. Time must be in ISO 8601 format with time zone, e.g. 2016-05-13T00:00:00Z (https://tools.ietf.org/html/rfc3339). Layers with an end time at or after (inclusive) the specified time will match this filter. If both occurredAfter and occurredBefore are populated, occurredAfter must be <= occurredBefore. (format: date-time)
   --occurred-before: string # Optional end time by which to filter layer results. Time must be in ISO 8601 format with time zone, e.g. 2016-05-13T00:00:00Z (https://tools.ietf.org/html/rfc3339). Layers with a start time at or before (inclusive) the specified time. If both occurredAfter and occurredBefore are populated, occurredAfter must be <= occurredBefore. (format: date-time)
-  --x-next-token: string # Opaque string which allows for fetching the next batch of results.  Can be used to poll for changes.
-  --x-limit: int # Max number of results to return per batch.  Must be between 1 and 100 inclusive.  Defaults to 100.
+  --x-next-token: string # Opaque string which allows for fetching the next batch of results. Can be used to poll for changes.
+  --x-limit: int # Max number of results to return per batch. Must be between 1 and 100 inclusive. Defaults to 100.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "occurredAfter" $occurred_after "scalar") (serialize-qp "occurredBefore" $occurred_before "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v4/layers/scoutingObservations" $qp)
-  let extra_headers = {"X-Next-Token": $x_next_token, "X-Limit": $x_limit} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Next-Token": $x_next_token, "X-Limit": $x_limit} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -564,7 +573,7 @@ export def "layers-scouting-observations get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({scouting_observation_id: $scouting_observation_id} | format pattern "/v4/layers/scoutingObservations/{scouting_observation_id}"))
+  let full_url = (build-url $base ({scouting_observation_id: (encode-path-segment $scouting_observation_id)} | format pattern "/v4/layers/scoutingObservations/{scouting_observation_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -583,16 +592,16 @@ export def "layers-scouting-observations-attachments get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-next-token: string # Opaque string which allows for fetching the next batch of results.  Can be used to poll for changes.
-  --x-limit: int # Max number of results to return per batch.  Must be between 1 and 100 inclusive.  Defaults to 100.
+  --x-next-token: string # Opaque string which allows for fetching the next batch of results. Can be used to poll for changes.
+  --x-limit: int # Max number of results to return per batch. Must be between 1 and 100 inclusive. Defaults to 100.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({scouting_observation_id: $scouting_observation_id} | format pattern "/v4/layers/scoutingObservations/{scouting_observation_id}/attachments"))
-  let extra_headers = {"X-Next-Token": $x_next_token, "X-Limit": $x_limit} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({scouting_observation_id: (encode-path-segment $scouting_observation_id)} | format pattern "/v4/layers/scoutingObservations/{scouting_observation_id}/attachments"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Next-Token": $x_next_token, "X-Limit": $x_limit} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -615,11 +624,11 @@ export def "layers-scouting-observations-attachments-contents get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({scouting_observation_id: $scouting_observation_id, attachment_id: $attachment_id} | format pattern "/v4/layers/scoutingObservations/{scouting_observation_id}/attachments/{attachment_id}/contents"))
-  let extra_headers = {"Accept": $hdr_accept, "Range": $range} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({scouting_observation_id: (encode-path-segment $scouting_observation_id), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/v4/layers/scoutingObservations/{scouting_observation_id}/attachments/{attachment_id}/contents"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept": $hdr_accept, "Range": $range} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -664,7 +673,7 @@ export def "resource-owners get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({resource_owner_id: $resource_owner_id} | format pattern "/v4/resourceOwners/{resource_owner_id}"))
+  let full_url = (build-url $base ({resource_owner_id: (encode-path-segment $resource_owner_id)} | format pattern "/v4/resourceOwners/{resource_owner_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -693,20 +702,20 @@ export def "uploads create" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/uploads")
-  let body = {"contentType": $content_type, "length": $length, "md5": $md5, "metadata": $metadata} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Recipient-Email": $x_recipient_email} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"contentType": $content_type, "length": $length, "md5": $md5, "metadata": $metadata} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Recipient-Email": $x_recipient_email} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve Upload statuses in batch
 #
 # POST /v4/uploads/status/query
 # operationId: fetchUploadStatuses
-export def "uploads-status-query get-upload-statuses" [
+export def "uploads-status-query get-statuses" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -715,24 +724,24 @@ export def "uploads-status-query get-upload-statuses" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  ids: list
+  ids: list<string>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/uploads/status/query")
-  let body = {"ids": $ids} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"ids": $ids} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Chunked upload of data
 #
 # PUT /v4/uploads/{uploadId}
 # operationId: chunkedUpload
-export def "uploads chunkedUpload" [
+export def "uploads upload-chunked" [
   upload_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -747,11 +756,11 @@ export def "uploads chunkedUpload" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({upload_id: $upload_id} | format pattern "/v4/uploads/{upload_id}"))
-  let extra_headers = {"Content-Range": $content_range, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({upload_id: (encode-path-segment $upload_id)} | format pattern "/v4/uploads/{upload_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Range": $content_range, "Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -772,7 +781,7 @@ export def "uploads-status get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({upload_id: $upload_id} | format pattern "/v4/uploads/{upload_id}/status"))
+  let full_url = (build-url $base ({upload_id: (encode-path-segment $upload_id)} | format pattern "/v4/uploads/{upload_id}/status"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

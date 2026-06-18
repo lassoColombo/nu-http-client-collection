@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -90,7 +99,7 @@ export def commands []: nothing -> table {
   }
 }
 
-# Metadata about this API&#58; version number, release date and available languages.  Metadata requests are NOT billed.
+# Metadata about this API&#58; version number, release date and available languages. Metadata requests are NOT billed.
 #
 # GET /about
 export def "about get" [
@@ -103,7 +112,7 @@ export def "about get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --output-format: string # **The format of the returned metadata.**  Allowed values are *json*, *xml* and *yaml*.  The default value is *xml*.
+  --output-format: string # **The format of the returned metadata.** Allowed values are *json*, *xml* and *yaml*. The default value is *xml*.
 ]: nothing -> record<apiReleaseDateIso8601: string, apiVersion: record<majorNumber: int, minorNumber: int>, availableLanguagesIso639_1: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -114,7 +123,7 @@ export def "about get" [
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# The entropy calculator - alias ec -, analyzes a password and calculates its entropy.  Entropy calculator requests are billed.
+# The entropy calculator - alias ec -, analyzes a password and calculates its entropy. Entropy calculator requests are billed.
 #
 # GET /ec
 export def "ec get" [
@@ -127,10 +136,10 @@ export def "ec get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --password: string # **The password to be analyzed.**  Minimum length is 4 characters; maximum length is 128 characters.  Beware that certain characters like '&#35;', '&#61;' or '&#63;' must be properly encoded.  For more information about this issue, please refer to RFC 3986 ("*Uniform Resource Identifier (URI): Generic Syntax*"), sections 2.1, 2.2 and 2.4.
-  --output-format: string # **The format of the returned analysis.**  Allowed values are *json*, *xml* and *yaml*.  The default value is *xml*.
-  --penalty: float # **The penalty applied to each character that is part of a word, number sequence, alphabet sequence, etc.**  The penalty is a float number in the range [0, 1]. Full penalty, 0; no penalty, 1.  The character used as decimal separator is always '&#46;'. Hence, a parameter value like *0,33* would be illegal.  The default value is *0.25*.
-  --req-id: string # **An identifier for this request.**  The request identifier is a string that must match the regular expression */(?i)^[a-z0-9]{8,16}$/*.  This identifier is echoed in the returned response. Its value has no effect on the password analysis.  If this parameter is unset, a randomly generated identifier will be automatically assigned to this request.
+  --password: string # **The password to be analyzed.** Minimum length is 4 characters; maximum length is 128 characters. Beware that certain characters like '&#35;', '&#61;' or '&#63;' must be properly encoded. For more information about this issue, please refer to RFC 3986 ("*Uniform Resource Identifier (URI): Generic Syntax*"), sections 2.1, 2.2 and 2.4.
+  --output-format: string # **The format of the returned analysis.** Allowed values are *json*, *xml* and *yaml*. The default value is *xml*.
+  --penalty: float # **The penalty applied to each character that is part of a word, number sequence, alphabet sequence, etc.** The penalty is a float number in the range [0, 1]. Full penalty, 0; no penalty, 1. The character used as decimal separator is always '&#46;'. Hence, a parameter value like *0,33* would be illegal. The default value is *0.25*.
+  --req-id: string # **An identifier for this request.** The request identifier is a string that must match the regular expression */(?i)^[a-z0-9]{8,16}$/*. This identifier is echoed in the returned response. Its value has no effect on the password analysis. If this parameter is unset, a randomly generated identifier will be automatically assigned to this request.
 ]: nothing -> record<alphabetSequence: table<char: string, l33tchar: string, penalty: float>, apiVersion: string, detectedKeyboard: string, efficiency: float, entropy: float, entropyDistribution: table<char: string, l33tchar: string, percentage: float>, idealEntropy: float, keyboardSequence: table<char: string, l33tchar: string, penalty: float>, l33tPassword: string, nonUniformEntropyDistributionPenalty: float, numberSequence: table<char: string, l33tchar: string, penalty: float>, password: string, passwordLength: int, penalty: float, repeatedChars: table<char: string, l33tchar: string, penalty: float>, requestId: string, requestTimestamp: float, summary: list<string>, total: table<char: string, l33tchar: string, penalty: float>, words: table<char: string, l33tchar: string, penalty: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

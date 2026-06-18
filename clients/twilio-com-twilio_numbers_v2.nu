@@ -12,6 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
   match $scheme {
     "basic" => { {headers: {Authorization: $"Basic ($token_val)"}, query: ""} }
+    "basic-credentials" => { {headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: ""} }
     "none" => { {headers: {}, query: ""} }
     _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
   }
@@ -33,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
     "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
     _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -63,7 +73,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 }
 
 def base-url-completer [] { ["https://numbers.twilio.com"] }
-def auth-scheme-completer [] { ["basic"] }
+def auth-scheme-completer [] { ["basic" "basic-credentials"] }
 
 # Completers for enum parameters
 def status-completer [] { ["draft" "in-review" "pending-review" "provisionally-approved" "twilio-approved" "twilio-rejected"] }
@@ -157,18 +167,19 @@ export def "regulatory-compliance-bundles create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://numbers.twilio.com")
   let full_url = (build-url $base "/v2/RegulatoryCompliance/Bundles")
-  let body = {"Email": $email, "EndUserType": $end_user_type, "FriendlyName": $friendly_name, "IsoCountry": $iso_country, "NumberType": $number_type, "RegulationSid": $regulation_sid, "StatusCallback": $status_callback} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"Email": $email, "EndUserType": $end_user_type, "FriendlyName": $friendly_name, "IsoCountry": $iso_country, "NumberType": $number_type, "RegulationSid": $regulation_sid, "StatusCallback": $status_callback} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Retrieve a list of all Bundles Copies for a Bundle.
 #
 # GET /v2/RegulatoryCompliance/Bundles/{BundleSid}/Copies
 # operationId: ListBundleCopy
-export def "regulatory-compliance-bundles-copies list-bundle-copy" [
+export def "regulatory-compliance-bundles-copies list-copy" [
   bundle_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -185,7 +196,7 @@ export def "regulatory-compliance-bundles-copies list-bundle-copy" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://numbers.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bundle_sid: $bundle_sid} | format pattern "/v2/RegulatoryCompliance/Bundles/{bundle_sid}/Copies") $qp)
+  let full_url = (build-url $base ({bundle_sid: (encode-path-segment $bundle_sid)} | format pattern "/v2/RegulatoryCompliance/Bundles/{bundle_sid}/Copies") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -195,7 +206,7 @@ export def "regulatory-compliance-bundles-copies list-bundle-copy" [
 #
 # POST /v2/RegulatoryCompliance/Bundles/{BundleSid}/Copies
 # operationId: CreateBundleCopy
-export def "regulatory-compliance-bundles-copies create-bundle-copy" [
+export def "regulatory-compliance-bundles-copies create-copy" [
   bundle_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -210,12 +221,13 @@ export def "regulatory-compliance-bundles-copies create-bundle-copy" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://numbers.twilio.com")
-  let full_url = (build-url $base ({bundle_sid: $bundle_sid} | format pattern "/v2/RegulatoryCompliance/Bundles/{bundle_sid}/Copies"))
-  let body = {"FriendlyName": $friendly_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({bundle_sid: (encode-path-segment $bundle_sid)} | format pattern "/v2/RegulatoryCompliance/Bundles/{bundle_sid}/Copies"))
+  let req_body = {"FriendlyName": $friendly_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Retrieve a list of Evaluations associated to the Bundle resource.
@@ -239,7 +251,7 @@ export def "regulatory-compliance-bundles-evaluations list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://numbers.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bundle_sid: $bundle_sid} | format pattern "/v2/RegulatoryCompliance/Bundles/{bundle_sid}/Evaluations") $qp)
+  let full_url = (build-url $base ({bundle_sid: (encode-path-segment $bundle_sid)} | format pattern "/v2/RegulatoryCompliance/Bundles/{bundle_sid}/Evaluations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -262,7 +274,7 @@ export def "regulatory-compliance-bundles-evaluations create" [
 ]: nothing -> record<account_sid: string, bundle_sid: string, date_created: string, regulation_sid: string, results: list<any>, sid: string, status: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://numbers.twilio.com")
-  let full_url = (build-url $base ({bundle_sid: $bundle_sid} | format pattern "/v2/RegulatoryCompliance/Bundles/{bundle_sid}/Evaluations"))
+  let full_url = (build-url $base ({bundle_sid: (encode-path-segment $bundle_sid)} | format pattern "/v2/RegulatoryCompliance/Bundles/{bundle_sid}/Evaluations"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -286,7 +298,7 @@ export def "regulatory-compliance-bundles-evaluations get" [
 ]: nothing -> record<account_sid: string, bundle_sid: string, date_created: string, regulation_sid: string, results: list<any>, sid: string, status: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://numbers.twilio.com")
-  let full_url = (build-url $base ({bundle_sid: $bundle_sid, sid: $sid} | format pattern "/v2/RegulatoryCompliance/Bundles/{bundle_sid}/Evaluations/{sid}"))
+  let full_url = (build-url $base ({bundle_sid: (encode-path-segment $bundle_sid), sid: (encode-path-segment $sid)} | format pattern "/v2/RegulatoryCompliance/Bundles/{bundle_sid}/Evaluations/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -313,7 +325,7 @@ export def "regulatory-compliance-bundles-item-assignments list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://numbers.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bundle_sid: $bundle_sid} | format pattern "/v2/RegulatoryCompliance/Bundles/{bundle_sid}/ItemAssignments") $qp)
+  let full_url = (build-url $base ({bundle_sid: (encode-path-segment $bundle_sid)} | format pattern "/v2/RegulatoryCompliance/Bundles/{bundle_sid}/ItemAssignments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -338,12 +350,13 @@ export def "regulatory-compliance-bundles-item-assignments create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://numbers.twilio.com")
-  let full_url = (build-url $base ({bundle_sid: $bundle_sid} | format pattern "/v2/RegulatoryCompliance/Bundles/{bundle_sid}/ItemAssignments"))
-  let body = {"ObjectSid": $object_sid} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({bundle_sid: (encode-path-segment $bundle_sid)} | format pattern "/v2/RegulatoryCompliance/Bundles/{bundle_sid}/ItemAssignments"))
+  let req_body = {"ObjectSid": $object_sid} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Remove an Assignment Item Instance.
@@ -364,7 +377,7 @@ export def "regulatory-compliance-bundles-item-assignments delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://numbers.twilio.com")
-  let full_url = (build-url $base ({bundle_sid: $bundle_sid, sid: $sid} | format pattern "/v2/RegulatoryCompliance/Bundles/{bundle_sid}/ItemAssignments/{sid}"))
+  let full_url = (build-url $base ({bundle_sid: (encode-path-segment $bundle_sid), sid: (encode-path-segment $sid)} | format pattern "/v2/RegulatoryCompliance/Bundles/{bundle_sid}/ItemAssignments/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -388,7 +401,7 @@ export def "regulatory-compliance-bundles-item-assignments get" [
 ]: nothing -> record<account_sid: string, bundle_sid: string, date_created: string, object_sid: string, sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://numbers.twilio.com")
-  let full_url = (build-url $base ({bundle_sid: $bundle_sid, sid: $sid} | format pattern "/v2/RegulatoryCompliance/Bundles/{bundle_sid}/ItemAssignments/{sid}"))
+  let full_url = (build-url $base ({bundle_sid: (encode-path-segment $bundle_sid), sid: (encode-path-segment $sid)} | format pattern "/v2/RegulatoryCompliance/Bundles/{bundle_sid}/ItemAssignments/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -413,12 +426,13 @@ export def "regulatory-compliance-bundles-replace-items create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://numbers.twilio.com")
-  let full_url = (build-url $base ({bundle_sid: $bundle_sid} | format pattern "/v2/RegulatoryCompliance/Bundles/{bundle_sid}/ReplaceItems"))
-  let body = {"FromBundleSid": $from_bundle_sid} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({bundle_sid: (encode-path-segment $bundle_sid)} | format pattern "/v2/RegulatoryCompliance/Bundles/{bundle_sid}/ReplaceItems"))
+  let req_body = {"FromBundleSid": $from_bundle_sid} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Delete a specific Bundle.
@@ -438,7 +452,7 @@ export def "regulatory-compliance-bundles delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://numbers.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v2/RegulatoryCompliance/Bundles/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v2/RegulatoryCompliance/Bundles/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -461,7 +475,7 @@ export def "regulatory-compliance-bundles get" [
 ]: nothing -> record<account_sid: string, date_created: string, date_updated: string, email: string, friendly_name: string, links: record, regulation_sid: string, sid: string, status: string, status_callback: string, url: string, valid_until: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://numbers.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v2/RegulatoryCompliance/Bundles/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v2/RegulatoryCompliance/Bundles/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -489,12 +503,13 @@ export def "regulatory-compliance-bundles update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://numbers.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v2/RegulatoryCompliance/Bundles/{sid}"))
-  let body = {"Email": $email, "FriendlyName": $friendly_name, "Status": $status, "StatusCallback": $status_callback} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v2/RegulatoryCompliance/Bundles/{sid}"))
+  let req_body = {"Email": $email, "FriendlyName": $friendly_name, "Status": $status, "StatusCallback": $status_callback} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Retrieve a list of all End-User Types.
@@ -540,7 +555,7 @@ export def "regulatory-compliance-end-user-types get" [
 ]: nothing -> record<fields: list<any>, friendly_name: string, machine_name: string, sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://numbers.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v2/RegulatoryCompliance/EndUserTypes/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v2/RegulatoryCompliance/EndUserTypes/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -593,11 +608,12 @@ export def "regulatory-compliance-end-users create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://numbers.twilio.com")
   let full_url = (build-url $base "/v2/RegulatoryCompliance/EndUsers")
-  let body = {"Attributes": $attributes, "FriendlyName": $friendly_name, "Type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"Attributes": $attributes, "FriendlyName": $friendly_name, "Type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Delete a specific End User.
@@ -617,7 +633,7 @@ export def "regulatory-compliance-end-users delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://numbers.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v2/RegulatoryCompliance/EndUsers/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v2/RegulatoryCompliance/EndUsers/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -640,7 +656,7 @@ export def "regulatory-compliance-end-users get" [
 ]: nothing -> record<account_sid: string, attributes: any, date_created: string, date_updated: string, friendly_name: string, sid: string, type: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://numbers.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v2/RegulatoryCompliance/EndUsers/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v2/RegulatoryCompliance/EndUsers/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -666,12 +682,13 @@ export def "regulatory-compliance-end-users update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://numbers.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v2/RegulatoryCompliance/EndUsers/{sid}"))
-  let body = {"Attributes": $attributes, "FriendlyName": $friendly_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v2/RegulatoryCompliance/EndUsers/{sid}"))
+  let req_body = {"Attributes": $attributes, "FriendlyName": $friendly_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Retrieve a list of all Regulations.
@@ -720,7 +737,7 @@ export def "regulatory-compliance-regulations get" [
 ]: nothing -> record<end_user_type: string, friendly_name: string, iso_country: string, number_type: string, requirements: any, sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://numbers.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v2/RegulatoryCompliance/Regulations/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v2/RegulatoryCompliance/Regulations/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -769,7 +786,7 @@ export def "regulatory-compliance-supporting-document-types get" [
 ]: nothing -> record<fields: list<any>, friendly_name: string, machine_name: string, sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://numbers.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v2/RegulatoryCompliance/SupportingDocumentTypes/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v2/RegulatoryCompliance/SupportingDocumentTypes/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -822,11 +839,12 @@ export def "regulatory-compliance-supporting-documents create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://numbers.twilio.com")
   let full_url = (build-url $base "/v2/RegulatoryCompliance/SupportingDocuments")
-  let body = {"Attributes": $attributes, "FriendlyName": $friendly_name, "Type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"Attributes": $attributes, "FriendlyName": $friendly_name, "Type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Delete a specific Supporting Document.
@@ -846,7 +864,7 @@ export def "regulatory-compliance-supporting-documents delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://numbers.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v2/RegulatoryCompliance/SupportingDocuments/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v2/RegulatoryCompliance/SupportingDocuments/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -869,7 +887,7 @@ export def "regulatory-compliance-supporting-documents get" [
 ]: nothing -> record<account_sid: string, attributes: any, date_created: string, date_updated: string, failure_reason: string, friendly_name: string, mime_type: string, sid: string, status: string, type: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://numbers.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v2/RegulatoryCompliance/SupportingDocuments/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v2/RegulatoryCompliance/SupportingDocuments/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -895,10 +913,11 @@ export def "regulatory-compliance-supporting-documents update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://numbers.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v2/RegulatoryCompliance/SupportingDocuments/{sid}"))
-  let body = {"Attributes": $attributes, "FriendlyName": $friendly_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v2/RegulatoryCompliance/SupportingDocuments/{sid}"))
+  let req_body = {"Attributes": $attributes, "FriendlyName": $friendly_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }

@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -77,7 +86,7 @@ def include-rank-type-completer [] { ["ALL" "FRIENDS" "INCLUDE_RANK_TYPE_UNSPECI
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "games-achievements gamesachievementDefinitionslist" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "games-achievements list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -101,7 +110,7 @@ export def commands []: nothing -> table {
 #
 # GET /games/v1/achievements
 # operationId: games.achievementDefinitions.list
-export def "games-achievements gamesachievementDefinitionslist" [
+export def "games-achievements list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -139,7 +148,7 @@ export def "games-achievements gamesachievementDefinitionslist" [
 # POST /games/v1/achievements/updateMultiple
 # operationId: games.achievements.updateMultiple
 # --updates item shape: {achievementId?: string, incrementPayload?: record, kind?: string, setStepsAtLeastPayload?: record, updateType?: "ACHIEVEMENT_UPDATE_TYPE_UNSPECIFIED"|"REVEAL"|"UNLOCK"|"INCREMENT"|"SET_STEPS_AT_LEAST"}
-export def "games-achievements-update-multiple gamesachievementsupdateMultiple" [
+export def "games-achievements-update-multiple update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -167,18 +176,18 @@ export def "games-achievements-update-multiple gamesachievementsupdateMultiple" 
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/games/v1/achievements/updateMultiple" $qp)
-  let body = {"kind": $kind, "updates": $updates} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"kind": $kind, "updates": $updates} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Increments the steps of the achievement with the given ID for the currently authenticated player.
 #
 # POST /games/v1/achievements/{achievementId}/increment
 # operationId: games.achievements.increment
-export def "games-achievements-increment gamesachievementsincrement" [
+export def "games-achievements-increment create" [
   achievement_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -205,7 +214,7 @@ export def "games-achievements-increment gamesachievementsincrement" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "stepsToIncrement" $steps_to_increment "scalar") (serialize-qp "requestId" $request_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({achievement_id: $achievement_id} | format pattern "/games/v1/achievements/{achievement_id}/increment") $qp)
+  let full_url = (build-url $base ({achievement_id: (encode-path-segment $achievement_id)} | format pattern "/games/v1/achievements/{achievement_id}/increment") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -215,7 +224,7 @@ export def "games-achievements-increment gamesachievementsincrement" [
 #
 # POST /games/v1/achievements/{achievementId}/reveal
 # operationId: games.achievements.reveal
-export def "games-achievements-reveal gamesachievementsreveal" [
+export def "games-achievements-reveal create" [
   achievement_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -240,7 +249,7 @@ export def "games-achievements-reveal gamesachievementsreveal" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({achievement_id: $achievement_id} | format pattern "/games/v1/achievements/{achievement_id}/reveal") $qp)
+  let full_url = (build-url $base ({achievement_id: (encode-path-segment $achievement_id)} | format pattern "/games/v1/achievements/{achievement_id}/reveal") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -250,7 +259,7 @@ export def "games-achievements-reveal gamesachievementsreveal" [
 #
 # POST /games/v1/achievements/{achievementId}/setStepsAtLeast
 # operationId: games.achievements.setStepsAtLeast
-export def "games-achievements-set-steps-at-least gamesachievementssetStepsAtLeast" [
+export def "games-achievements-set-steps-at-least update" [
   achievement_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -276,7 +285,7 @@ export def "games-achievements-set-steps-at-least gamesachievementssetStepsAtLea
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "steps" $steps "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({achievement_id: $achievement_id} | format pattern "/games/v1/achievements/{achievement_id}/setStepsAtLeast") $qp)
+  let full_url = (build-url $base ({achievement_id: (encode-path-segment $achievement_id)} | format pattern "/games/v1/achievements/{achievement_id}/setStepsAtLeast") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -286,7 +295,7 @@ export def "games-achievements-set-steps-at-least gamesachievementssetStepsAtLea
 #
 # POST /games/v1/achievements/{achievementId}/unlock
 # operationId: games.achievements.unlock
-export def "games-achievements-unlock gamesachievementsunlock" [
+export def "games-achievements-unlock unlock" [
   achievement_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -311,7 +320,7 @@ export def "games-achievements-unlock gamesachievementsunlock" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({achievement_id: $achievement_id} | format pattern "/games/v1/achievements/{achievement_id}/unlock") $qp)
+  let full_url = (build-url $base ({achievement_id: (encode-path-segment $achievement_id)} | format pattern "/games/v1/achievements/{achievement_id}/unlock") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -321,7 +330,7 @@ export def "games-achievements-unlock gamesachievementsunlock" [
 #
 # POST /games/v1/applications/getEndPoint
 # operationId: games.applications.getEndPoint
-export def "games-applications-get-end-point gamesapplicationsgetEndPoint" [
+export def "games-applications-get-end-point get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -357,7 +366,7 @@ export def "games-applications-get-end-point gamesapplicationsgetEndPoint" [
 #
 # POST /games/v1/applications/played
 # operationId: games.applications.played
-export def "games-applications-played gamesapplicationsplayed" [
+export def "games-applications-played create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -391,7 +400,7 @@ export def "games-applications-played gamesapplicationsplayed" [
 #
 # GET /games/v1/applications/{applicationId}
 # operationId: games.applications.get
-export def "games-applications gamesapplicationsget" [
+export def "games-applications get" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -418,7 +427,7 @@ export def "games-applications gamesapplicationsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "platformType" $platform_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({application_id: $application_id} | format pattern "/games/v1/applications/{application_id}") $qp)
+  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/games/v1/applications/{application_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -428,7 +437,7 @@ export def "games-applications gamesapplicationsget" [
 #
 # GET /games/v1/applications/{applicationId}/verify
 # operationId: games.applications.verify
-export def "games-applications-verify gamesapplicationsverify" [
+export def "games-applications-verify verify" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -453,7 +462,7 @@ export def "games-applications-verify gamesapplicationsverify" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({application_id: $application_id} | format pattern "/games/v1/applications/{application_id}/verify") $qp)
+  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/games/v1/applications/{application_id}/verify") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -463,7 +472,7 @@ export def "games-applications-verify gamesapplicationsverify" [
 #
 # GET /games/v1/eventDefinitions
 # operationId: games.events.listDefinitions
-export def "games-event-definitions gameseventslistDefinitions" [
+export def "games-event-definitions list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -500,7 +509,7 @@ export def "games-event-definitions gameseventslistDefinitions" [
 #
 # GET /games/v1/events
 # operationId: games.events.listByPlayer
-export def "games-events gameseventslistByPlayer" [
+export def "games-events list-by-player" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -538,7 +547,7 @@ export def "games-events gameseventslistByPlayer" [
 # POST /games/v1/events
 # operationId: games.events.record
 # --timePeriods item shape: {kind?: string, timePeriod?: record, updates?: list}
-export def "games-events gameseventsrecord" [
+export def "games-events create-record" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -569,18 +578,18 @@ export def "games-events gameseventsrecord" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/games/v1/events" $qp)
-  let body = {"currentTimeMillis": $current_time_millis, "kind": $kind, "requestId": $request_id, "timePeriods": $time_periods} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"currentTimeMillis": $current_time_millis, "kind": $kind, "requestId": $request_id, "timePeriods": $time_periods} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists all the leaderboard metadata for your application.
 #
 # GET /games/v1/leaderboards
 # operationId: games.leaderboards.list
-export def "games-leaderboards gamesleaderboardslist" [
+export def "games-leaderboards list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -618,7 +627,7 @@ export def "games-leaderboards gamesleaderboardslist" [
 # POST /games/v1/leaderboards/scores
 # operationId: games.scores.submitMultiple
 # --scores item shape: {kind?: string, leaderboardId?: string, score?: string, scoreTag?: string, signature?: string}
-export def "games-leaderboards-scores gamesscoressubmitMultiple" [
+export def "games-leaderboards-scores submit-multiple" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -647,18 +656,18 @@ export def "games-leaderboards-scores gamesscoressubmitMultiple" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/games/v1/leaderboards/scores" $qp)
-  let body = {"kind": $kind, "scores": $scores} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"kind": $kind, "scores": $scores} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieves the metadata of the leaderboard with the given ID.
 #
 # GET /games/v1/leaderboards/{leaderboardId}
 # operationId: games.leaderboards.get
-export def "games-leaderboards gamesleaderboardsget" [
+export def "games-leaderboards get" [
   leaderboard_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -684,7 +693,7 @@ export def "games-leaderboards gamesleaderboardsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({leaderboard_id: $leaderboard_id} | format pattern "/games/v1/leaderboards/{leaderboard_id}") $qp)
+  let full_url = (build-url $base ({leaderboard_id: (encode-path-segment $leaderboard_id)} | format pattern "/games/v1/leaderboards/{leaderboard_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -694,7 +703,7 @@ export def "games-leaderboards gamesleaderboardsget" [
 #
 # POST /games/v1/leaderboards/{leaderboardId}/scores
 # operationId: games.scores.submit
-export def "games-leaderboards-scores gamesscoressubmit" [
+export def "games-leaderboards-scores submit" [
   leaderboard_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -722,7 +731,7 @@ export def "games-leaderboards-scores gamesscoressubmit" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "score" $score "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "scoreTag" $score_tag "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({leaderboard_id: $leaderboard_id} | format pattern "/games/v1/leaderboards/{leaderboard_id}/scores") $qp)
+  let full_url = (build-url $base ({leaderboard_id: (encode-path-segment $leaderboard_id)} | format pattern "/games/v1/leaderboards/{leaderboard_id}/scores") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -732,7 +741,7 @@ export def "games-leaderboards-scores gamesscoressubmit" [
 #
 # GET /games/v1/leaderboards/{leaderboardId}/scores/{collection}
 # operationId: games.scores.list
-export def "games-leaderboards-scores gamesscoreslist" [
+export def "games-leaderboards-scores list" [
   leaderboard_id: string
   collection: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -762,7 +771,7 @@ export def "games-leaderboards-scores gamesscoreslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "timeSpan" $time_span "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({leaderboard_id: $leaderboard_id, collection: $collection} | format pattern "/games/v1/leaderboards/{leaderboard_id}/scores/{collection}") $qp)
+  let full_url = (build-url $base ({leaderboard_id: (encode-path-segment $leaderboard_id), collection: (encode-path-segment $collection)} | format pattern "/games/v1/leaderboards/{leaderboard_id}/scores/{collection}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -772,7 +781,7 @@ export def "games-leaderboards-scores gamesscoreslist" [
 #
 # GET /games/v1/leaderboards/{leaderboardId}/window/{collection}
 # operationId: games.scores.listWindow
-export def "games-leaderboards-window gamesscoreslistWindow" [
+export def "games-leaderboards-window list" [
   leaderboard_id: string
   collection: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -804,7 +813,7 @@ export def "games-leaderboards-window gamesscoreslistWindow" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "timeSpan" $time_span "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "resultsAbove" $results_above "scalar") (serialize-qp "returnTopIfAbsent" $return_top_if_absent "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({leaderboard_id: $leaderboard_id, collection: $collection} | format pattern "/games/v1/leaderboards/{leaderboard_id}/window/{collection}") $qp)
+  let full_url = (build-url $base ({leaderboard_id: (encode-path-segment $leaderboard_id), collection: (encode-path-segment $collection)} | format pattern "/games/v1/leaderboards/{leaderboard_id}/window/{collection}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -814,7 +823,7 @@ export def "games-leaderboards-window gamesscoreslistWindow" [
 #
 # GET /games/v1/metagameConfig
 # operationId: games.metagame.getMetagameConfig
-export def "games-metagame-config gamesmetagamegetMetagameConfig" [
+export def "games-metagame-config get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -848,7 +857,7 @@ export def "games-metagame-config gamesmetagamegetMetagameConfig" [
 #
 # GET /games/v1/players/me/multipleApplicationPlayerIds
 # operationId: games.players.getMultipleApplicationPlayerIds
-export def "games-players-me-multiple-application-player-ids gamesplayersgetMultipleApplicationPlayerIds" [
+export def "games-players-me-multiple-application-player-ids get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -868,7 +877,7 @@ export def "games-players-me-multiple-application-player-ids gamesplayersgetMult
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --application-ids: list # Required. The application IDs from the Google Play developer console for the games to return scoped ids for.
+  --application-ids: list<string> # Required. The application IDs from the Google Play developer console for the games to return scoped ids for.
 ]: nothing -> record<playerIds: table<applicationId: string, playerId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -883,7 +892,7 @@ export def "games-players-me-multiple-application-player-ids gamesplayersgetMult
 #
 # GET /games/v1/players/me/players/{collection}
 # operationId: games.players.list
-export def "games-players-me-players gamesplayerslist" [
+export def "games-players-me-players list" [
   collection: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -911,7 +920,7 @@ export def "games-players-me-players gamesplayerslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({collection: $collection} | format pattern "/games/v1/players/me/players/{collection}") $qp)
+  let full_url = (build-url $base ({collection: (encode-path-segment $collection)} | format pattern "/games/v1/players/me/players/{collection}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -921,7 +930,7 @@ export def "games-players-me-players gamesplayerslist" [
 #
 # GET /games/v1/players/me/scopedIds
 # operationId: games.players.getScopedPlayerIds
-export def "games-players-me-scoped-ids gamesplayersgetScopedPlayerIds" [
+export def "games-players-me-scoped-ids get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -955,7 +964,7 @@ export def "games-players-me-scoped-ids gamesplayersgetScopedPlayerIds" [
 #
 # GET /games/v1/players/{playerId}
 # operationId: games.players.get
-export def "games-players gamesplayersget" [
+export def "games-players get" [
   player_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -982,7 +991,7 @@ export def "games-players gamesplayersget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "playerIdConsistencyToken" $player_id_consistency_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({player_id: $player_id} | format pattern "/games/v1/players/{player_id}") $qp)
+  let full_url = (build-url $base ({player_id: (encode-path-segment $player_id)} | format pattern "/games/v1/players/{player_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -992,7 +1001,7 @@ export def "games-players gamesplayersget" [
 #
 # GET /games/v1/players/{playerId}/achievements
 # operationId: games.achievements.list
-export def "games-players-achievements gamesachievementslist" [
+export def "games-players-achievements list" [
   player_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1021,7 +1030,7 @@ export def "games-players-achievements gamesachievementslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "state" $state "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({player_id: $player_id} | format pattern "/games/v1/players/{player_id}/achievements") $qp)
+  let full_url = (build-url $base ({player_id: (encode-path-segment $player_id)} | format pattern "/games/v1/players/{player_id}/achievements") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1031,7 +1040,7 @@ export def "games-players-achievements gamesachievementslist" [
 #
 # GET /games/v1/players/{playerId}/categories/{collection}
 # operationId: games.metagame.listCategoriesByPlayer
-export def "games-players-categories gamesmetagamelistCategoriesByPlayer" [
+export def "games-players-categories list" [
   player_id: string
   collection: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1060,7 +1069,7 @@ export def "games-players-categories gamesmetagamelistCategoriesByPlayer" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({player_id: $player_id, collection: $collection} | format pattern "/games/v1/players/{player_id}/categories/{collection}") $qp)
+  let full_url = (build-url $base ({player_id: (encode-path-segment $player_id), collection: (encode-path-segment $collection)} | format pattern "/games/v1/players/{player_id}/categories/{collection}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1070,7 +1079,7 @@ export def "games-players-categories gamesmetagamelistCategoriesByPlayer" [
 #
 # GET /games/v1/players/{playerId}/leaderboards/{leaderboardId}/scores/{timeSpan}
 # operationId: games.scores.get
-export def "games-players-leaderboards-scores gamesscoresget" [
+export def "games-players-leaderboards-scores get" [
   player_id: string
   leaderboard_id: string
   time_span: string
@@ -1101,7 +1110,7 @@ export def "games-players-leaderboards-scores gamesscoresget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "includeRankType" $include_rank_type "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({player_id: $player_id, leaderboard_id: $leaderboard_id, time_span: $time_span} | format pattern "/games/v1/players/{player_id}/leaderboards/{leaderboard_id}/scores/{time_span}") $qp)
+  let full_url = (build-url $base ({player_id: (encode-path-segment $player_id), leaderboard_id: (encode-path-segment $leaderboard_id), time_span: (encode-path-segment $time_span)} | format pattern "/games/v1/players/{player_id}/leaderboards/{leaderboard_id}/scores/{time_span}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1111,7 +1120,7 @@ export def "games-players-leaderboards-scores gamesscoresget" [
 #
 # GET /games/v1/players/{playerId}/snapshots
 # operationId: games.snapshots.list
-export def "games-players-snapshots gamessnapshotslist" [
+export def "games-players-snapshots list" [
   player_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1139,7 +1148,7 @@ export def "games-players-snapshots gamessnapshotslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({player_id: $player_id} | format pattern "/games/v1/players/{player_id}/snapshots") $qp)
+  let full_url = (build-url $base ({player_id: (encode-path-segment $player_id)} | format pattern "/games/v1/players/{player_id}/snapshots") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1149,7 +1158,7 @@ export def "games-players-snapshots gamessnapshotslist" [
 #
 # GET /games/v1/revisions/check
 # operationId: games.revisions.check
-export def "games-revisions-check gamesrevisionscheck" [
+export def "games-revisions-check check" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1184,7 +1193,7 @@ export def "games-revisions-check gamesrevisionscheck" [
 #
 # GET /games/v1/snapshots/{snapshotId}
 # operationId: games.snapshots.get
-export def "games-snapshots gamessnapshotsget" [
+export def "games-snapshots get" [
   snapshot_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1210,7 +1219,7 @@ export def "games-snapshots gamessnapshotsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({snapshot_id: $snapshot_id} | format pattern "/games/v1/snapshots/{snapshot_id}") $qp)
+  let full_url = (build-url $base ({snapshot_id: (encode-path-segment $snapshot_id)} | format pattern "/games/v1/snapshots/{snapshot_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1220,7 +1229,7 @@ export def "games-snapshots gamessnapshotsget" [
 #
 # GET /games/v1/stats
 # operationId: games.stats.get
-export def "games-stats gamesstatsget" [
+export def "games-stats get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

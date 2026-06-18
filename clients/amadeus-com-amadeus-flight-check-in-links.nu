@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -68,7 +77,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "reference-data-urls-checkin-links get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "reference-data-urls-checkin-links get-ur-ls" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -92,7 +101,7 @@ export def commands []: nothing -> table {
 #
 # GET /reference-data/urls/checkin-links
 # operationId: getCheckinURLs
-export def "reference-data-urls-checkin-links get" [
+export def "reference-data-urls-checkin-links get-ur-ls" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -101,8 +110,8 @@ export def "reference-data-urls-checkin-links get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --airline-code: string # Airline code following IATA or ICAO standard - e.g. 1X; AF or ESY  [IATA table codes](http://www.iata.org/publications/Pages/code-search.aspx)  [ICAO airlines table codes](https://en.wikipedia.org/wiki/List_of_airline_codes)  (e.g. BA)
-  --language: string # Check-in page language with one of the following patterns 'languageCode' (e.g. EN) or 'languageCode-IATAcountryCode' (e.g. en-GB).   Default value is **en-GB** (used when required language is not available or when no value is specified).
+  --airline-code: string # Airline code following IATA or ICAO standard - e.g. 1X; AF or ESY [IATA table codes](http://www.iata.org/publications/Pages/code-search.aspx) [ICAO airlines table codes](https://en.wikipedia.org/wiki/List_of_airline_codes) (e.g. BA)
+  --language: string # Check-in page language with one of the following patterns 'languageCode' (e.g. EN) or 'languageCode-IATAcountryCode' (e.g. en-GB). Default value is **en-GB** (used when required language is not available or when no value is specified).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

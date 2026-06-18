@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -73,7 +82,7 @@ def sampling-level-completer [] { ["DEFAULT" "FASTER" "HIGHER_PRECISION"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "data-ga analyticsdatagaget" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "data-ga get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -97,7 +106,7 @@ export def commands []: nothing -> table {
 #
 # GET /data/ga
 # operationId: analytics.data.ga.get
-export def "data-ga analyticsdatagaget" [
+export def "data-ga get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -140,7 +149,7 @@ export def "data-ga analyticsdatagaget" [
 #
 # GET /data/mcf
 # operationId: analytics.data.mcf.get
-export def "data-mcf analyticsdatamcfget" [
+export def "data-mcf get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -180,7 +189,7 @@ export def "data-mcf analyticsdatamcfget" [
 #
 # GET /data/realtime
 # operationId: analytics.data.realtime.get
-export def "data-realtime analyticsdatarealtimeget" [
+export def "data-realtime get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -216,7 +225,7 @@ export def "data-realtime analyticsdatarealtimeget" [
 #
 # GET /management/accountSummaries
 # operationId: analytics.management.accountSummaries.list
-export def "management-account-summaries analyticsmanagementaccountSummarieslist" [
+export def "management-account-summaries list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -248,7 +257,7 @@ export def "management-account-summaries analyticsmanagementaccountSummarieslist
 #
 # GET /management/accounts
 # operationId: analytics.management.accounts.list
-export def "management-accounts analyticsmanagementaccountslist" [
+export def "management-accounts list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -280,7 +289,7 @@ export def "management-accounts analyticsmanagementaccountslist" [
 #
 # GET /management/accounts/{accountId}/entityUserLinks
 # operationId: analytics.management.accountUserLinks.list
-export def "management-accounts-entity-user-links analyticsmanagementaccountUserLinkslist" [
+export def "management-accounts-entity-user-links list" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -303,7 +312,7 @@ export def "management-accounts-entity-user-links analyticsmanagementaccountUser
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "start-index" $start_index "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/management/accounts/{account_id}/entityUserLinks") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/management/accounts/{account_id}/entityUserLinks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -314,9 +323,9 @@ export def "management-accounts-entity-user-links analyticsmanagementaccountUser
 # POST /management/accounts/{accountId}/entityUserLinks
 # operationId: analytics.management.accountUserLinks.insert
 # --entity shape: {accountRef?: record, profileRef?: record, webPropertyRef?: record}
-# --permissions shape: {local?: list}
+# --permissions shape: {local?: list<string>}
 # --userRef shape: {email?: string, id?: string, kind?: string}
-export def "management-accounts-entity-user-links analyticsmanagementaccountUserLinksinsert" [
+export def "management-accounts-entity-user-links create" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -336,7 +345,7 @@ export def "management-accounts-entity-user-links analyticsmanagementaccountUser
   --entity: record # Entity for this link. It can be an account, a web property, or a view (profile). — shape: {accountRef?: record, profileRef?: record, webPropertyRef?: record}
   --id: string # Entity user link ID
   --kind: string # Resource type for entity user link. (default: analytics#entityUserLink)
-  --permissions: record # Permissions the user has for this entity. — shape: {local?: list}
+  --permissions: record # Permissions the user has for this entity. — shape: {local?: list<string>}
   --self-link: string # Self link for this resource.
   --user-ref: record # JSON template for a user reference. — shape: {email?: string, id?: string, kind?: string}
 ]: any -> record<entity: record<accountRef: record<href: string, id: string, kind: string, name: string>, profileRef: record<accountId: string, href: string, id: string, internalWebPropertyId: string, kind: string, name: string, webPropertyId: string>, webPropertyRef: record<accountId: string, href: string, id: string, internalWebPropertyId: string, kind: string, name: string>>, id: string, kind: string, permissions: record<effective: list<string>, local: list<string>>, selfLink: string, userRef: record<email: string, id: string, kind: string>> {
@@ -344,19 +353,19 @@ export def "management-accounts-entity-user-links analyticsmanagementaccountUser
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/management/accounts/{account_id}/entityUserLinks") $qp)
-  let body = {"entity": $entity, "id": $id, "kind": $kind, "permissions": $permissions, "selfLink": $self_link, "userRef": $user_ref} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/management/accounts/{account_id}/entityUserLinks") $qp)
+  let req_body = {"entity": $entity, "id": $id, "kind": $kind, "permissions": $permissions, "selfLink": $self_link, "userRef": $user_ref} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Removes a user from the given account.
 #
 # DELETE /management/accounts/{accountId}/entityUserLinks/{linkId}
 # operationId: analytics.management.accountUserLinks.delete
-export def "management-accounts-entity-user-links analyticsmanagementaccountUserLinksdelete" [
+export def "management-accounts-entity-user-links delete" [
   account_id: string
   link_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -378,7 +387,7 @@ export def "management-accounts-entity-user-links analyticsmanagementaccountUser
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, link_id: $link_id} | format pattern "/management/accounts/{account_id}/entityUserLinks/{link_id}") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), link_id: (encode-path-segment $link_id)} | format pattern "/management/accounts/{account_id}/entityUserLinks/{link_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -389,9 +398,9 @@ export def "management-accounts-entity-user-links analyticsmanagementaccountUser
 # PUT /management/accounts/{accountId}/entityUserLinks/{linkId}
 # operationId: analytics.management.accountUserLinks.update
 # --entity shape: {accountRef?: record, profileRef?: record, webPropertyRef?: record}
-# --permissions shape: {local?: list}
+# --permissions shape: {local?: list<string>}
 # --userRef shape: {email?: string, id?: string, kind?: string}
-export def "management-accounts-entity-user-links analyticsmanagementaccountUserLinksupdate" [
+export def "management-accounts-entity-user-links update" [
   account_id: string
   link_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -412,7 +421,7 @@ export def "management-accounts-entity-user-links analyticsmanagementaccountUser
   --entity: record # Entity for this link. It can be an account, a web property, or a view (profile). — shape: {accountRef?: record, profileRef?: record, webPropertyRef?: record}
   --id: string # Entity user link ID
   --kind: string # Resource type for entity user link. (default: analytics#entityUserLink)
-  --permissions: record # Permissions the user has for this entity. — shape: {local?: list}
+  --permissions: record # Permissions the user has for this entity. — shape: {local?: list<string>}
   --self-link: string # Self link for this resource.
   --user-ref: record # JSON template for a user reference. — shape: {email?: string, id?: string, kind?: string}
 ]: any -> record<entity: record<accountRef: record<href: string, id: string, kind: string, name: string>, profileRef: record<accountId: string, href: string, id: string, internalWebPropertyId: string, kind: string, name: string, webPropertyId: string>, webPropertyRef: record<accountId: string, href: string, id: string, internalWebPropertyId: string, kind: string, name: string>>, id: string, kind: string, permissions: record<effective: list<string>, local: list<string>>, selfLink: string, userRef: record<email: string, id: string, kind: string>> {
@@ -420,19 +429,19 @@ export def "management-accounts-entity-user-links analyticsmanagementaccountUser
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, link_id: $link_id} | format pattern "/management/accounts/{account_id}/entityUserLinks/{link_id}") $qp)
-  let body = {"entity": $entity, "id": $id, "kind": $kind, "permissions": $permissions, "selfLink": $self_link, "userRef": $user_ref} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), link_id: (encode-path-segment $link_id)} | format pattern "/management/accounts/{account_id}/entityUserLinks/{link_id}") $qp)
+  let req_body = {"entity": $entity, "id": $id, "kind": $kind, "permissions": $permissions, "selfLink": $self_link, "userRef": $user_ref} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists all filters for an account
 #
 # GET /management/accounts/{accountId}/filters
 # operationId: analytics.management.filters.list
-export def "management-accounts-filters analyticsmanagementfilterslist" [
+export def "management-accounts-filters list" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -455,7 +464,7 @@ export def "management-accounts-filters analyticsmanagementfilterslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "start-index" $start_index "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/management/accounts/{account_id}/filters") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/management/accounts/{account_id}/filters") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -472,7 +481,7 @@ export def "management-accounts-filters analyticsmanagementfilterslist" [
 # --parentLink shape: {href?: string, type?: string}
 # --searchAndReplaceDetails shape: {caseSensitive?: bool, field?: string, fieldIndex?: int, replaceString?: string, searchString?: string}
 # --uppercaseDetails shape: {field?: string, fieldIndex?: int}
-export def "management-accounts-filters analyticsmanagementfiltersinsert" [
+export def "management-accounts-filters create" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -505,19 +514,19 @@ export def "management-accounts-filters analyticsmanagementfiltersinsert" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/management/accounts/{account_id}/filters") $qp)
-  let body = {"accountId": $body_account_id, "advancedDetails": $advanced_details, "excludeDetails": $exclude_details, "id": $id, "includeDetails": $include_details, "lowercaseDetails": $lowercase_details, "name": $name, "parentLink": $parent_link, "searchAndReplaceDetails": $search_and_replace_details, "type": $type, "uppercaseDetails": $uppercase_details} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/management/accounts/{account_id}/filters") $qp)
+  let req_body = {"accountId": $body_account_id, "advancedDetails": $advanced_details, "excludeDetails": $exclude_details, "id": $id, "includeDetails": $include_details, "lowercaseDetails": $lowercase_details, "name": $name, "parentLink": $parent_link, "searchAndReplaceDetails": $search_and_replace_details, "type": $type, "uppercaseDetails": $uppercase_details} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a filter.
 #
 # DELETE /management/accounts/{accountId}/filters/{filterId}
 # operationId: analytics.management.filters.delete
-export def "management-accounts-filters analyticsmanagementfiltersdelete" [
+export def "management-accounts-filters delete" [
   account_id: string
   filter_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -539,7 +548,7 @@ export def "management-accounts-filters analyticsmanagementfiltersdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, filter_id: $filter_id} | format pattern "/management/accounts/{account_id}/filters/{filter_id}") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), filter_id: (encode-path-segment $filter_id)} | format pattern "/management/accounts/{account_id}/filters/{filter_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -549,7 +558,7 @@ export def "management-accounts-filters analyticsmanagementfiltersdelete" [
 #
 # GET /management/accounts/{accountId}/filters/{filterId}
 # operationId: analytics.management.filters.get
-export def "management-accounts-filters analyticsmanagementfiltersget" [
+export def "management-accounts-filters get" [
   account_id: string
   filter_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -571,7 +580,7 @@ export def "management-accounts-filters analyticsmanagementfiltersget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, filter_id: $filter_id} | format pattern "/management/accounts/{account_id}/filters/{filter_id}") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), filter_id: (encode-path-segment $filter_id)} | format pattern "/management/accounts/{account_id}/filters/{filter_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -588,7 +597,7 @@ export def "management-accounts-filters analyticsmanagementfiltersget" [
 # --parentLink shape: {href?: string, type?: string}
 # --searchAndReplaceDetails shape: {caseSensitive?: bool, field?: string, fieldIndex?: int, replaceString?: string, searchString?: string}
 # --uppercaseDetails shape: {field?: string, fieldIndex?: int}
-export def "management-accounts-filters analyticsmanagementfilterspatch" [
+export def "management-accounts-filters update-by-accountId-filterId" [
   account_id: string
   filter_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -622,12 +631,12 @@ export def "management-accounts-filters analyticsmanagementfilterspatch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, filter_id: $filter_id} | format pattern "/management/accounts/{account_id}/filters/{filter_id}") $qp)
-  let body = {"accountId": $body_account_id, "advancedDetails": $advanced_details, "excludeDetails": $exclude_details, "id": $id, "includeDetails": $include_details, "lowercaseDetails": $lowercase_details, "name": $name, "parentLink": $parent_link, "searchAndReplaceDetails": $search_and_replace_details, "type": $type, "uppercaseDetails": $uppercase_details} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), filter_id: (encode-path-segment $filter_id)} | format pattern "/management/accounts/{account_id}/filters/{filter_id}") $qp)
+  let req_body = {"accountId": $body_account_id, "advancedDetails": $advanced_details, "excludeDetails": $exclude_details, "id": $id, "includeDetails": $include_details, "lowercaseDetails": $lowercase_details, "name": $name, "parentLink": $parent_link, "searchAndReplaceDetails": $search_and_replace_details, "type": $type, "uppercaseDetails": $uppercase_details} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates an existing filter.
@@ -641,7 +650,7 @@ export def "management-accounts-filters analyticsmanagementfilterspatch" [
 # --parentLink shape: {href?: string, type?: string}
 # --searchAndReplaceDetails shape: {caseSensitive?: bool, field?: string, fieldIndex?: int, replaceString?: string, searchString?: string}
 # --uppercaseDetails shape: {field?: string, fieldIndex?: int}
-export def "management-accounts-filters analyticsmanagementfiltersupdate" [
+export def "management-accounts-filters update-by-accountId-filterId-1" [
   account_id: string
   filter_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -675,19 +684,19 @@ export def "management-accounts-filters analyticsmanagementfiltersupdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, filter_id: $filter_id} | format pattern "/management/accounts/{account_id}/filters/{filter_id}") $qp)
-  let body = {"accountId": $body_account_id, "advancedDetails": $advanced_details, "excludeDetails": $exclude_details, "id": $id, "includeDetails": $include_details, "lowercaseDetails": $lowercase_details, "name": $name, "parentLink": $parent_link, "searchAndReplaceDetails": $search_and_replace_details, "type": $type, "uppercaseDetails": $uppercase_details} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), filter_id: (encode-path-segment $filter_id)} | format pattern "/management/accounts/{account_id}/filters/{filter_id}") $qp)
+  let req_body = {"accountId": $body_account_id, "advancedDetails": $advanced_details, "excludeDetails": $exclude_details, "id": $id, "includeDetails": $include_details, "lowercaseDetails": $lowercase_details, "name": $name, "parentLink": $parent_link, "searchAndReplaceDetails": $search_and_replace_details, "type": $type, "uppercaseDetails": $uppercase_details} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists web properties to which the user has access.
 #
 # GET /management/accounts/{accountId}/webproperties
 # operationId: analytics.management.webproperties.list
-export def "management-accounts-webproperties analyticsmanagementwebpropertieslist" [
+export def "management-accounts-webproperties list" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -710,7 +719,7 @@ export def "management-accounts-webproperties analyticsmanagementwebpropertiesli
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "start-index" $start_index "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/management/accounts/{account_id}/webproperties") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/management/accounts/{account_id}/webproperties") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -722,7 +731,7 @@ export def "management-accounts-webproperties analyticsmanagementwebpropertiesli
 # operationId: analytics.management.webproperties.insert
 # --childLink shape: {href?: string, type?: string}
 # --parentLink shape: {href?: string, type?: string}
-export def "management-accounts-webproperties analyticsmanagementwebpropertiesinsert" [
+export def "management-accounts-webproperties create" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -756,19 +765,19 @@ export def "management-accounts-webproperties analyticsmanagementwebpropertiesin
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/management/accounts/{account_id}/webproperties") $qp)
-  let body = {"accountId": $body_account_id, "childLink": $child_link, "dataRetentionResetOnNewActivity": $data_retention_reset_on_new_activity, "dataRetentionTtl": $data_retention_ttl, "defaultProfileId": $default_profile_id, "id": $id, "industryVertical": $industry_vertical, "name": $name, "parentLink": $parent_link, "permissions": $permissions, "starred": $starred, "websiteUrl": $website_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/management/accounts/{account_id}/webproperties") $qp)
+  let req_body = {"accountId": $body_account_id, "childLink": $child_link, "dataRetentionResetOnNewActivity": $data_retention_reset_on_new_activity, "dataRetentionTtl": $data_retention_ttl, "defaultProfileId": $default_profile_id, "id": $id, "industryVertical": $industry_vertical, "name": $name, "parentLink": $parent_link, "permissions": $permissions, "starred": $starred, "websiteUrl": $website_url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets a web property to which the user has access.
 #
 # GET /management/accounts/{accountId}/webproperties/{webPropertyId}
 # operationId: analytics.management.webproperties.get
-export def "management-accounts-webproperties analyticsmanagementwebpropertiesget" [
+export def "management-accounts-webproperties get" [
   account_id: string
   web_property_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -790,7 +799,7 @@ export def "management-accounts-webproperties analyticsmanagementwebpropertiesge
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, web_property_id: $web_property_id} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -802,7 +811,7 @@ export def "management-accounts-webproperties analyticsmanagementwebpropertiesge
 # operationId: analytics.management.webproperties.patch
 # --childLink shape: {href?: string, type?: string}
 # --parentLink shape: {href?: string, type?: string}
-export def "management-accounts-webproperties analyticsmanagementwebpropertiespatch" [
+export def "management-accounts-webproperties update-by-accountId-webPropertyId" [
   account_id: string
   web_property_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -837,12 +846,12 @@ export def "management-accounts-webproperties analyticsmanagementwebpropertiespa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, web_property_id: $web_property_id} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}") $qp)
-  let body = {"accountId": $body_account_id, "childLink": $child_link, "dataRetentionResetOnNewActivity": $data_retention_reset_on_new_activity, "dataRetentionTtl": $data_retention_ttl, "defaultProfileId": $default_profile_id, "id": $id, "industryVertical": $industry_vertical, "name": $name, "parentLink": $parent_link, "permissions": $permissions, "starred": $starred, "websiteUrl": $website_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}") $qp)
+  let req_body = {"accountId": $body_account_id, "childLink": $child_link, "dataRetentionResetOnNewActivity": $data_retention_reset_on_new_activity, "dataRetentionTtl": $data_retention_ttl, "defaultProfileId": $default_profile_id, "id": $id, "industryVertical": $industry_vertical, "name": $name, "parentLink": $parent_link, "permissions": $permissions, "starred": $starred, "websiteUrl": $website_url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates an existing web property.
@@ -851,7 +860,7 @@ export def "management-accounts-webproperties analyticsmanagementwebpropertiespa
 # operationId: analytics.management.webproperties.update
 # --childLink shape: {href?: string, type?: string}
 # --parentLink shape: {href?: string, type?: string}
-export def "management-accounts-webproperties analyticsmanagementwebpropertiesupdate" [
+export def "management-accounts-webproperties update-by-accountId-webPropertyId-1" [
   account_id: string
   web_property_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -886,19 +895,19 @@ export def "management-accounts-webproperties analyticsmanagementwebpropertiesup
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, web_property_id: $web_property_id} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}") $qp)
-  let body = {"accountId": $body_account_id, "childLink": $child_link, "dataRetentionResetOnNewActivity": $data_retention_reset_on_new_activity, "dataRetentionTtl": $data_retention_ttl, "defaultProfileId": $default_profile_id, "id": $id, "industryVertical": $industry_vertical, "name": $name, "parentLink": $parent_link, "permissions": $permissions, "starred": $starred, "websiteUrl": $website_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}") $qp)
+  let req_body = {"accountId": $body_account_id, "childLink": $child_link, "dataRetentionResetOnNewActivity": $data_retention_reset_on_new_activity, "dataRetentionTtl": $data_retention_ttl, "defaultProfileId": $default_profile_id, "id": $id, "industryVertical": $industry_vertical, "name": $name, "parentLink": $parent_link, "permissions": $permissions, "starred": $starred, "websiteUrl": $website_url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List custom data sources to which the user has access.
 #
 # GET /management/accounts/{accountId}/webproperties/{webPropertyId}/customDataSources
 # operationId: analytics.management.customDataSources.list
-export def "management-accounts-webproperties-custom-data-sources analyticsmanagementcustomDataSourceslist" [
+export def "management-accounts-webproperties-custom-data-sources list" [
   account_id: string
   web_property_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -922,7 +931,7 @@ export def "management-accounts-webproperties-custom-data-sources analyticsmanag
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "start-index" $start_index "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, web_property_id: $web_property_id} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/customDataSources") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/customDataSources") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -932,7 +941,7 @@ export def "management-accounts-webproperties-custom-data-sources analyticsmanag
 #
 # POST /management/accounts/{accountId}/webproperties/{webPropertyId}/customDataSources/{customDataSourceId}/deleteUploadData
 # operationId: analytics.management.uploads.deleteUploadData
-export def "management-accounts-webproperties-custom-data-sources-delete-upload-data analyticsmanagementuploadsdeleteUploadData" [
+export def "management-accounts-webproperties-custom-data-sources-delete-upload-data delete" [
   account_id: string
   web_property_id: string
   custom_data_source_id: string
@@ -951,25 +960,25 @@ export def "management-accounts-webproperties-custom-data-sources-delete-upload-
   --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --user-ip: string # Deprecated. Please use quotaUser instead.
-  --custom-data-import-uids: list # A list of upload UIDs.
+  --custom-data-import-uids: list<string> # A list of upload UIDs.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, web_property_id: $web_property_id, custom_data_source_id: $custom_data_source_id} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/customDataSources/{custom_data_source_id}/deleteUploadData") $qp)
-  let body = {"customDataImportUids": $custom_data_import_uids} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), custom_data_source_id: (encode-path-segment $custom_data_source_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/customDataSources/{custom_data_source_id}/deleteUploadData") $qp)
+  let req_body = {"customDataImportUids": $custom_data_import_uids} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List uploads to which the user has access.
 #
 # GET /management/accounts/{accountId}/webproperties/{webPropertyId}/customDataSources/{customDataSourceId}/uploads
 # operationId: analytics.management.uploads.list
-export def "management-accounts-webproperties-custom-data-sources-uploads analyticsmanagementuploadslist" [
+export def "management-accounts-webproperties-custom-data-sources-uploads list" [
   account_id: string
   web_property_id: string
   custom_data_source_id: string
@@ -994,7 +1003,7 @@ export def "management-accounts-webproperties-custom-data-sources-uploads analyt
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "start-index" $start_index "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, web_property_id: $web_property_id, custom_data_source_id: $custom_data_source_id} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/customDataSources/{custom_data_source_id}/uploads") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), custom_data_source_id: (encode-path-segment $custom_data_source_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/customDataSources/{custom_data_source_id}/uploads") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1004,7 +1013,7 @@ export def "management-accounts-webproperties-custom-data-sources-uploads analyt
 #
 # POST /management/accounts/{accountId}/webproperties/{webPropertyId}/customDataSources/{customDataSourceId}/uploads
 # operationId: analytics.management.uploads.uploadData
-export def "management-accounts-webproperties-custom-data-sources-uploads analyticsmanagementuploadsuploadData" [
+export def "management-accounts-webproperties-custom-data-sources-uploads upload" [
   account_id: string
   web_property_id: string
   custom_data_source_id: string
@@ -1027,7 +1036,7 @@ export def "management-accounts-webproperties-custom-data-sources-uploads analyt
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, web_property_id: $web_property_id, custom_data_source_id: $custom_data_source_id} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/customDataSources/{custom_data_source_id}/uploads") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), custom_data_source_id: (encode-path-segment $custom_data_source_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/customDataSources/{custom_data_source_id}/uploads") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1037,7 +1046,7 @@ export def "management-accounts-webproperties-custom-data-sources-uploads analyt
 #
 # GET /management/accounts/{accountId}/webproperties/{webPropertyId}/customDataSources/{customDataSourceId}/uploads/{uploadId}
 # operationId: analytics.management.uploads.get
-export def "management-accounts-webproperties-custom-data-sources-uploads analyticsmanagementuploadsget" [
+export def "management-accounts-webproperties-custom-data-sources-uploads get" [
   account_id: string
   web_property_id: string
   custom_data_source_id: string
@@ -1061,7 +1070,7 @@ export def "management-accounts-webproperties-custom-data-sources-uploads analyt
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, web_property_id: $web_property_id, custom_data_source_id: $custom_data_source_id, upload_id: $upload_id} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/customDataSources/{custom_data_source_id}/uploads/{upload_id}") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), custom_data_source_id: (encode-path-segment $custom_data_source_id), upload_id: (encode-path-segment $upload_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/customDataSources/{custom_data_source_id}/uploads/{upload_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1071,7 +1080,7 @@ export def "management-accounts-webproperties-custom-data-sources-uploads analyt
 #
 # GET /management/accounts/{accountId}/webproperties/{webPropertyId}/customDimensions
 # operationId: analytics.management.customDimensions.list
-export def "management-accounts-webproperties-custom-dimensions analyticsmanagementcustomDimensionslist" [
+export def "management-accounts-webproperties-custom-dimensions list" [
   account_id: string
   web_property_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1095,7 +1104,7 @@ export def "management-accounts-webproperties-custom-dimensions analyticsmanagem
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "start-index" $start_index "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, web_property_id: $web_property_id} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/customDimensions") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/customDimensions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1106,7 +1115,7 @@ export def "management-accounts-webproperties-custom-dimensions analyticsmanagem
 # POST /management/accounts/{accountId}/webproperties/{webPropertyId}/customDimensions
 # operationId: analytics.management.customDimensions.insert
 # --parentLink shape: {href?: string, type?: string}
-export def "management-accounts-webproperties-custom-dimensions analyticsmanagementcustomDimensionsinsert" [
+export def "management-accounts-webproperties-custom-dimensions create" [
   account_id: string
   web_property_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1136,19 +1145,19 @@ export def "management-accounts-webproperties-custom-dimensions analyticsmanagem
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, web_property_id: $web_property_id} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/customDimensions") $qp)
-  let body = {"accountId": $body_account_id, "active": $active, "id": $id, "name": $name, "parentLink": $parent_link, "scope": $scope, "webPropertyId": $body_web_property_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/customDimensions") $qp)
+  let req_body = {"accountId": $body_account_id, "active": $active, "id": $id, "name": $name, "parentLink": $parent_link, "scope": $scope, "webPropertyId": $body_web_property_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get a custom dimension to which the user has access.
 #
 # GET /management/accounts/{accountId}/webproperties/{webPropertyId}/customDimensions/{customDimensionId}
 # operationId: analytics.management.customDimensions.get
-export def "management-accounts-webproperties-custom-dimensions analyticsmanagementcustomDimensionsget" [
+export def "management-accounts-webproperties-custom-dimensions get" [
   account_id: string
   web_property_id: string
   custom_dimension_id: string
@@ -1171,7 +1180,7 @@ export def "management-accounts-webproperties-custom-dimensions analyticsmanagem
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, web_property_id: $web_property_id, custom_dimension_id: $custom_dimension_id} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/customDimensions/{custom_dimension_id}") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), custom_dimension_id: (encode-path-segment $custom_dimension_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/customDimensions/{custom_dimension_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1182,7 +1191,7 @@ export def "management-accounts-webproperties-custom-dimensions analyticsmanagem
 # PATCH /management/accounts/{accountId}/webproperties/{webPropertyId}/customDimensions/{customDimensionId}
 # operationId: analytics.management.customDimensions.patch
 # --parentLink shape: {href?: string, type?: string}
-export def "management-accounts-webproperties-custom-dimensions analyticsmanagementcustomDimensionspatch" [
+export def "management-accounts-webproperties-custom-dimensions update-by-accountId-webPropertyId-customDimensionId" [
   account_id: string
   web_property_id: string
   custom_dimension_id: string
@@ -1214,12 +1223,12 @@ export def "management-accounts-webproperties-custom-dimensions analyticsmanagem
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "ignoreCustomDataSourceLinks" $ignore_custom_data_source_links "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, web_property_id: $web_property_id, custom_dimension_id: $custom_dimension_id} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/customDimensions/{custom_dimension_id}") $qp)
-  let body = {"accountId": $body_account_id, "active": $active, "id": $id, "name": $name, "parentLink": $parent_link, "scope": $scope, "webPropertyId": $body_web_property_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), custom_dimension_id: (encode-path-segment $custom_dimension_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/customDimensions/{custom_dimension_id}") $qp)
+  let req_body = {"accountId": $body_account_id, "active": $active, "id": $id, "name": $name, "parentLink": $parent_link, "scope": $scope, "webPropertyId": $body_web_property_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates an existing custom dimension.
@@ -1227,7 +1236,7 @@ export def "management-accounts-webproperties-custom-dimensions analyticsmanagem
 # PUT /management/accounts/{accountId}/webproperties/{webPropertyId}/customDimensions/{customDimensionId}
 # operationId: analytics.management.customDimensions.update
 # --parentLink shape: {href?: string, type?: string}
-export def "management-accounts-webproperties-custom-dimensions analyticsmanagementcustomDimensionsupdate" [
+export def "management-accounts-webproperties-custom-dimensions update-by-accountId-webPropertyId-customDimensionId-1" [
   account_id: string
   web_property_id: string
   custom_dimension_id: string
@@ -1259,19 +1268,19 @@ export def "management-accounts-webproperties-custom-dimensions analyticsmanagem
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "ignoreCustomDataSourceLinks" $ignore_custom_data_source_links "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, web_property_id: $web_property_id, custom_dimension_id: $custom_dimension_id} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/customDimensions/{custom_dimension_id}") $qp)
-  let body = {"accountId": $body_account_id, "active": $active, "id": $id, "name": $name, "parentLink": $parent_link, "scope": $scope, "webPropertyId": $body_web_property_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), custom_dimension_id: (encode-path-segment $custom_dimension_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/customDimensions/{custom_dimension_id}") $qp)
+  let req_body = {"accountId": $body_account_id, "active": $active, "id": $id, "name": $name, "parentLink": $parent_link, "scope": $scope, "webPropertyId": $body_web_property_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists custom metrics to which the user has access.
 #
 # GET /management/accounts/{accountId}/webproperties/{webPropertyId}/customMetrics
 # operationId: analytics.management.customMetrics.list
-export def "management-accounts-webproperties-custom-metrics analyticsmanagementcustomMetricslist" [
+export def "management-accounts-webproperties-custom-metrics list" [
   account_id: string
   web_property_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1295,7 +1304,7 @@ export def "management-accounts-webproperties-custom-metrics analyticsmanagement
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "start-index" $start_index "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, web_property_id: $web_property_id} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/customMetrics") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/customMetrics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1306,7 +1315,7 @@ export def "management-accounts-webproperties-custom-metrics analyticsmanagement
 # POST /management/accounts/{accountId}/webproperties/{webPropertyId}/customMetrics
 # operationId: analytics.management.customMetrics.insert
 # --parentLink shape: {href?: string, type?: string}
-export def "management-accounts-webproperties-custom-metrics analyticsmanagementcustomMetricsinsert" [
+export def "management-accounts-webproperties-custom-metrics create" [
   account_id: string
   web_property_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1339,19 +1348,19 @@ export def "management-accounts-webproperties-custom-metrics analyticsmanagement
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, web_property_id: $web_property_id} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/customMetrics") $qp)
-  let body = {"accountId": $body_account_id, "active": $active, "id": $id, "max_value": $max_value, "min_value": $min_value, "name": $name, "parentLink": $parent_link, "scope": $scope, "type": $type, "webPropertyId": $body_web_property_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/customMetrics") $qp)
+  let req_body = {"accountId": $body_account_id, "active": $active, "id": $id, "max_value": $max_value, "min_value": $min_value, "name": $name, "parentLink": $parent_link, "scope": $scope, "type": $type, "webPropertyId": $body_web_property_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get a custom metric to which the user has access.
 #
 # GET /management/accounts/{accountId}/webproperties/{webPropertyId}/customMetrics/{customMetricId}
 # operationId: analytics.management.customMetrics.get
-export def "management-accounts-webproperties-custom-metrics analyticsmanagementcustomMetricsget" [
+export def "management-accounts-webproperties-custom-metrics get" [
   account_id: string
   web_property_id: string
   custom_metric_id: string
@@ -1374,7 +1383,7 @@ export def "management-accounts-webproperties-custom-metrics analyticsmanagement
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, web_property_id: $web_property_id, custom_metric_id: $custom_metric_id} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/customMetrics/{custom_metric_id}") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), custom_metric_id: (encode-path-segment $custom_metric_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/customMetrics/{custom_metric_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1385,7 +1394,7 @@ export def "management-accounts-webproperties-custom-metrics analyticsmanagement
 # PATCH /management/accounts/{accountId}/webproperties/{webPropertyId}/customMetrics/{customMetricId}
 # operationId: analytics.management.customMetrics.patch
 # --parentLink shape: {href?: string, type?: string}
-export def "management-accounts-webproperties-custom-metrics analyticsmanagementcustomMetricspatch" [
+export def "management-accounts-webproperties-custom-metrics update-by-accountId-webPropertyId-customMetricId" [
   account_id: string
   web_property_id: string
   custom_metric_id: string
@@ -1420,12 +1429,12 @@ export def "management-accounts-webproperties-custom-metrics analyticsmanagement
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "ignoreCustomDataSourceLinks" $ignore_custom_data_source_links "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, web_property_id: $web_property_id, custom_metric_id: $custom_metric_id} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/customMetrics/{custom_metric_id}") $qp)
-  let body = {"accountId": $body_account_id, "active": $active, "id": $id, "max_value": $max_value, "min_value": $min_value, "name": $name, "parentLink": $parent_link, "scope": $scope, "type": $type, "webPropertyId": $body_web_property_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), custom_metric_id: (encode-path-segment $custom_metric_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/customMetrics/{custom_metric_id}") $qp)
+  let req_body = {"accountId": $body_account_id, "active": $active, "id": $id, "max_value": $max_value, "min_value": $min_value, "name": $name, "parentLink": $parent_link, "scope": $scope, "type": $type, "webPropertyId": $body_web_property_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates an existing custom metric.
@@ -1433,7 +1442,7 @@ export def "management-accounts-webproperties-custom-metrics analyticsmanagement
 # PUT /management/accounts/{accountId}/webproperties/{webPropertyId}/customMetrics/{customMetricId}
 # operationId: analytics.management.customMetrics.update
 # --parentLink shape: {href?: string, type?: string}
-export def "management-accounts-webproperties-custom-metrics analyticsmanagementcustomMetricsupdate" [
+export def "management-accounts-webproperties-custom-metrics update-by-accountId-webPropertyId-customMetricId-1" [
   account_id: string
   web_property_id: string
   custom_metric_id: string
@@ -1468,19 +1477,19 @@ export def "management-accounts-webproperties-custom-metrics analyticsmanagement
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "ignoreCustomDataSourceLinks" $ignore_custom_data_source_links "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, web_property_id: $web_property_id, custom_metric_id: $custom_metric_id} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/customMetrics/{custom_metric_id}") $qp)
-  let body = {"accountId": $body_account_id, "active": $active, "id": $id, "max_value": $max_value, "min_value": $min_value, "name": $name, "parentLink": $parent_link, "scope": $scope, "type": $type, "webPropertyId": $body_web_property_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), custom_metric_id: (encode-path-segment $custom_metric_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/customMetrics/{custom_metric_id}") $qp)
+  let req_body = {"accountId": $body_account_id, "active": $active, "id": $id, "max_value": $max_value, "min_value": $min_value, "name": $name, "parentLink": $parent_link, "scope": $scope, "type": $type, "webPropertyId": $body_web_property_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists webProperty-Google Ads links for a given web property.
 #
 # GET /management/accounts/{accountId}/webproperties/{webPropertyId}/entityAdWordsLinks
 # operationId: analytics.management.webPropertyAdWordsLinks.list
-export def "management-accounts-webproperties-entity-ad-words-links analyticsmanagementwebPropertyAdWordsLinkslist" [
+export def "management-accounts-webproperties-entity-ad-words-links list" [
   account_id: string
   web_property_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1504,7 +1513,7 @@ export def "management-accounts-webproperties-entity-ad-words-links analyticsman
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "start-index" $start_index "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, web_property_id: $web_property_id} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/entityAdWordsLinks") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/entityAdWordsLinks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1516,7 +1525,7 @@ export def "management-accounts-webproperties-entity-ad-words-links analyticsman
 # operationId: analytics.management.webPropertyAdWordsLinks.insert
 # --adWordsAccounts item shape: {autoTaggingEnabled?: bool, customerId?: string, kind?: string}
 # --entity shape: {webPropertyRef?: record}
-export def "management-accounts-webproperties-entity-ad-words-links analyticsmanagementwebPropertyAdWordsLinksinsert" [
+export def "management-accounts-webproperties-entity-ad-words-links create" [
   account_id: string
   web_property_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1539,26 +1548,26 @@ export def "management-accounts-webproperties-entity-ad-words-links analyticsman
   --id: string # Entity Google Ads link ID
   --kind: string # Resource type for entity Google Ads link. (default: analytics#entityAdWordsLink)
   --name: string # Name of the link. This field is required when creating a Google Ads link.
-  --profile-ids: list # IDs of linked Views (Profiles) represented as strings.
+  --profile-ids: list<string> # IDs of linked Views (Profiles) represented as strings.
   --self-link: string # URL link for this Google Analytics - Google Ads link.
 ]: any -> record<adWordsAccounts: table<autoTaggingEnabled: bool, customerId: string, kind: string>, entity: record<webPropertyRef: record<accountId: string, href: string, id: string, internalWebPropertyId: string, kind: string, name: string>>, id: string, kind: string, name: string, profileIds: list<string>, selfLink: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, web_property_id: $web_property_id} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/entityAdWordsLinks") $qp)
-  let body = {"adWordsAccounts": $ad_words_accounts, "entity": $entity, "id": $id, "kind": $kind, "name": $name, "profileIds": $profile_ids, "selfLink": $self_link} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/entityAdWordsLinks") $qp)
+  let req_body = {"adWordsAccounts": $ad_words_accounts, "entity": $entity, "id": $id, "kind": $kind, "name": $name, "profileIds": $profile_ids, "selfLink": $self_link} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes a web property-Google Ads link.
 #
 # DELETE /management/accounts/{accountId}/webproperties/{webPropertyId}/entityAdWordsLinks/{webPropertyAdWordsLinkId}
 # operationId: analytics.management.webPropertyAdWordsLinks.delete
-export def "management-accounts-webproperties-entity-ad-words-links analyticsmanagementwebPropertyAdWordsLinksdelete" [
+export def "management-accounts-webproperties-entity-ad-words-links delete" [
   account_id: string
   web_property_id: string
   web_property_ad_words_link_id: string
@@ -1581,7 +1590,7 @@ export def "management-accounts-webproperties-entity-ad-words-links analyticsman
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, web_property_id: $web_property_id, web_property_ad_words_link_id: $web_property_ad_words_link_id} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/entityAdWordsLinks/{web_property_ad_words_link_id}") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), web_property_ad_words_link_id: (encode-path-segment $web_property_ad_words_link_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/entityAdWordsLinks/{web_property_ad_words_link_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1591,7 +1600,7 @@ export def "management-accounts-webproperties-entity-ad-words-links analyticsman
 #
 # GET /management/accounts/{accountId}/webproperties/{webPropertyId}/entityAdWordsLinks/{webPropertyAdWordsLinkId}
 # operationId: analytics.management.webPropertyAdWordsLinks.get
-export def "management-accounts-webproperties-entity-ad-words-links analyticsmanagementwebPropertyAdWordsLinksget" [
+export def "management-accounts-webproperties-entity-ad-words-links get" [
   account_id: string
   web_property_id: string
   web_property_ad_words_link_id: string
@@ -1614,7 +1623,7 @@ export def "management-accounts-webproperties-entity-ad-words-links analyticsman
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, web_property_id: $web_property_id, web_property_ad_words_link_id: $web_property_ad_words_link_id} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/entityAdWordsLinks/{web_property_ad_words_link_id}") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), web_property_ad_words_link_id: (encode-path-segment $web_property_ad_words_link_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/entityAdWordsLinks/{web_property_ad_words_link_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1626,7 +1635,7 @@ export def "management-accounts-webproperties-entity-ad-words-links analyticsman
 # operationId: analytics.management.webPropertyAdWordsLinks.patch
 # --adWordsAccounts item shape: {autoTaggingEnabled?: bool, customerId?: string, kind?: string}
 # --entity shape: {webPropertyRef?: record}
-export def "management-accounts-webproperties-entity-ad-words-links analyticsmanagementwebPropertyAdWordsLinkspatch" [
+export def "management-accounts-webproperties-entity-ad-words-links update-by-accountId-webPropertyId-webPropertyAdWordsLinkId" [
   account_id: string
   web_property_id: string
   web_property_ad_words_link_id: string
@@ -1650,19 +1659,19 @@ export def "management-accounts-webproperties-entity-ad-words-links analyticsman
   --id: string # Entity Google Ads link ID
   --kind: string # Resource type for entity Google Ads link. (default: analytics#entityAdWordsLink)
   --name: string # Name of the link. This field is required when creating a Google Ads link.
-  --profile-ids: list # IDs of linked Views (Profiles) represented as strings.
+  --profile-ids: list<string> # IDs of linked Views (Profiles) represented as strings.
   --self-link: string # URL link for this Google Analytics - Google Ads link.
 ]: any -> record<adWordsAccounts: table<autoTaggingEnabled: bool, customerId: string, kind: string>, entity: record<webPropertyRef: record<accountId: string, href: string, id: string, internalWebPropertyId: string, kind: string, name: string>>, id: string, kind: string, name: string, profileIds: list<string>, selfLink: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, web_property_id: $web_property_id, web_property_ad_words_link_id: $web_property_ad_words_link_id} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/entityAdWordsLinks/{web_property_ad_words_link_id}") $qp)
-  let body = {"adWordsAccounts": $ad_words_accounts, "entity": $entity, "id": $id, "kind": $kind, "name": $name, "profileIds": $profile_ids, "selfLink": $self_link} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), web_property_ad_words_link_id: (encode-path-segment $web_property_ad_words_link_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/entityAdWordsLinks/{web_property_ad_words_link_id}") $qp)
+  let req_body = {"adWordsAccounts": $ad_words_accounts, "entity": $entity, "id": $id, "kind": $kind, "name": $name, "profileIds": $profile_ids, "selfLink": $self_link} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates an existing webProperty-Google Ads link.
@@ -1671,7 +1680,7 @@ export def "management-accounts-webproperties-entity-ad-words-links analyticsman
 # operationId: analytics.management.webPropertyAdWordsLinks.update
 # --adWordsAccounts item shape: {autoTaggingEnabled?: bool, customerId?: string, kind?: string}
 # --entity shape: {webPropertyRef?: record}
-export def "management-accounts-webproperties-entity-ad-words-links analyticsmanagementwebPropertyAdWordsLinksupdate" [
+export def "management-accounts-webproperties-entity-ad-words-links update-by-accountId-webPropertyId-webPropertyAdWordsLinkId-1" [
   account_id: string
   web_property_id: string
   web_property_ad_words_link_id: string
@@ -1695,26 +1704,26 @@ export def "management-accounts-webproperties-entity-ad-words-links analyticsman
   --id: string # Entity Google Ads link ID
   --kind: string # Resource type for entity Google Ads link. (default: analytics#entityAdWordsLink)
   --name: string # Name of the link. This field is required when creating a Google Ads link.
-  --profile-ids: list # IDs of linked Views (Profiles) represented as strings.
+  --profile-ids: list<string> # IDs of linked Views (Profiles) represented as strings.
   --self-link: string # URL link for this Google Analytics - Google Ads link.
 ]: any -> record<adWordsAccounts: table<autoTaggingEnabled: bool, customerId: string, kind: string>, entity: record<webPropertyRef: record<accountId: string, href: string, id: string, internalWebPropertyId: string, kind: string, name: string>>, id: string, kind: string, name: string, profileIds: list<string>, selfLink: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, web_property_id: $web_property_id, web_property_ad_words_link_id: $web_property_ad_words_link_id} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/entityAdWordsLinks/{web_property_ad_words_link_id}") $qp)
-  let body = {"adWordsAccounts": $ad_words_accounts, "entity": $entity, "id": $id, "kind": $kind, "name": $name, "profileIds": $profile_ids, "selfLink": $self_link} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), web_property_ad_words_link_id: (encode-path-segment $web_property_ad_words_link_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/entityAdWordsLinks/{web_property_ad_words_link_id}") $qp)
+  let req_body = {"adWordsAccounts": $ad_words_accounts, "entity": $entity, "id": $id, "kind": $kind, "name": $name, "profileIds": $profile_ids, "selfLink": $self_link} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists webProperty-user links for a given web property.
 #
 # GET /management/accounts/{accountId}/webproperties/{webPropertyId}/entityUserLinks
 # operationId: analytics.management.webpropertyUserLinks.list
-export def "management-accounts-webproperties-entity-user-links analyticsmanagementwebpropertyUserLinkslist" [
+export def "management-accounts-webproperties-entity-user-links list" [
   account_id: string
   web_property_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1738,7 +1747,7 @@ export def "management-accounts-webproperties-entity-user-links analyticsmanagem
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "start-index" $start_index "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, web_property_id: $web_property_id} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/entityUserLinks") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/entityUserLinks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1749,9 +1758,9 @@ export def "management-accounts-webproperties-entity-user-links analyticsmanagem
 # POST /management/accounts/{accountId}/webproperties/{webPropertyId}/entityUserLinks
 # operationId: analytics.management.webpropertyUserLinks.insert
 # --entity shape: {accountRef?: record, profileRef?: record, webPropertyRef?: record}
-# --permissions shape: {local?: list}
+# --permissions shape: {local?: list<string>}
 # --userRef shape: {email?: string, id?: string, kind?: string}
-export def "management-accounts-webproperties-entity-user-links analyticsmanagementwebpropertyUserLinksinsert" [
+export def "management-accounts-webproperties-entity-user-links create" [
   account_id: string
   web_property_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1772,7 +1781,7 @@ export def "management-accounts-webproperties-entity-user-links analyticsmanagem
   --entity: record # Entity for this link. It can be an account, a web property, or a view (profile). — shape: {accountRef?: record, profileRef?: record, webPropertyRef?: record}
   --id: string # Entity user link ID
   --kind: string # Resource type for entity user link. (default: analytics#entityUserLink)
-  --permissions: record # Permissions the user has for this entity. — shape: {local?: list}
+  --permissions: record # Permissions the user has for this entity. — shape: {local?: list<string>}
   --self-link: string # Self link for this resource.
   --user-ref: record # JSON template for a user reference. — shape: {email?: string, id?: string, kind?: string}
 ]: any -> record<entity: record<accountRef: record<href: string, id: string, kind: string, name: string>, profileRef: record<accountId: string, href: string, id: string, internalWebPropertyId: string, kind: string, name: string, webPropertyId: string>, webPropertyRef: record<accountId: string, href: string, id: string, internalWebPropertyId: string, kind: string, name: string>>, id: string, kind: string, permissions: record<effective: list<string>, local: list<string>>, selfLink: string, userRef: record<email: string, id: string, kind: string>> {
@@ -1780,19 +1789,19 @@ export def "management-accounts-webproperties-entity-user-links analyticsmanagem
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, web_property_id: $web_property_id} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/entityUserLinks") $qp)
-  let body = {"entity": $entity, "id": $id, "kind": $kind, "permissions": $permissions, "selfLink": $self_link, "userRef": $user_ref} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/entityUserLinks") $qp)
+  let req_body = {"entity": $entity, "id": $id, "kind": $kind, "permissions": $permissions, "selfLink": $self_link, "userRef": $user_ref} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Removes a user from the given web property.
 #
 # DELETE /management/accounts/{accountId}/webproperties/{webPropertyId}/entityUserLinks/{linkId}
 # operationId: analytics.management.webpropertyUserLinks.delete
-export def "management-accounts-webproperties-entity-user-links analyticsmanagementwebpropertyUserLinksdelete" [
+export def "management-accounts-webproperties-entity-user-links delete" [
   account_id: string
   web_property_id: string
   link_id: string
@@ -1815,7 +1824,7 @@ export def "management-accounts-webproperties-entity-user-links analyticsmanagem
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, web_property_id: $web_property_id, link_id: $link_id} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/entityUserLinks/{link_id}") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), link_id: (encode-path-segment $link_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/entityUserLinks/{link_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1826,9 +1835,9 @@ export def "management-accounts-webproperties-entity-user-links analyticsmanagem
 # PUT /management/accounts/{accountId}/webproperties/{webPropertyId}/entityUserLinks/{linkId}
 # operationId: analytics.management.webpropertyUserLinks.update
 # --entity shape: {accountRef?: record, profileRef?: record, webPropertyRef?: record}
-# --permissions shape: {local?: list}
+# --permissions shape: {local?: list<string>}
 # --userRef shape: {email?: string, id?: string, kind?: string}
-export def "management-accounts-webproperties-entity-user-links analyticsmanagementwebpropertyUserLinksupdate" [
+export def "management-accounts-webproperties-entity-user-links update" [
   account_id: string
   web_property_id: string
   link_id: string
@@ -1850,7 +1859,7 @@ export def "management-accounts-webproperties-entity-user-links analyticsmanagem
   --entity: record # Entity for this link. It can be an account, a web property, or a view (profile). — shape: {accountRef?: record, profileRef?: record, webPropertyRef?: record}
   --id: string # Entity user link ID
   --kind: string # Resource type for entity user link. (default: analytics#entityUserLink)
-  --permissions: record # Permissions the user has for this entity. — shape: {local?: list}
+  --permissions: record # Permissions the user has for this entity. — shape: {local?: list<string>}
   --self-link: string # Self link for this resource.
   --user-ref: record # JSON template for a user reference. — shape: {email?: string, id?: string, kind?: string}
 ]: any -> record<entity: record<accountRef: record<href: string, id: string, kind: string, name: string>, profileRef: record<accountId: string, href: string, id: string, internalWebPropertyId: string, kind: string, name: string, webPropertyId: string>, webPropertyRef: record<accountId: string, href: string, id: string, internalWebPropertyId: string, kind: string, name: string>>, id: string, kind: string, permissions: record<effective: list<string>, local: list<string>>, selfLink: string, userRef: record<email: string, id: string, kind: string>> {
@@ -1858,19 +1867,19 @@ export def "management-accounts-webproperties-entity-user-links analyticsmanagem
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, web_property_id: $web_property_id, link_id: $link_id} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/entityUserLinks/{link_id}") $qp)
-  let body = {"entity": $entity, "id": $id, "kind": $kind, "permissions": $permissions, "selfLink": $self_link, "userRef": $user_ref} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), link_id: (encode-path-segment $link_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/entityUserLinks/{link_id}") $qp)
+  let req_body = {"entity": $entity, "id": $id, "kind": $kind, "permissions": $permissions, "selfLink": $self_link, "userRef": $user_ref} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists views (profiles) to which the user has access.
 #
 # GET /management/accounts/{accountId}/webproperties/{webPropertyId}/profiles
 # operationId: analytics.management.profiles.list
-export def "management-accounts-webproperties-profiles analyticsmanagementprofileslist" [
+export def "management-accounts-webproperties-profiles list" [
   account_id: string
   web_property_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1894,7 +1903,7 @@ export def "management-accounts-webproperties-profiles analyticsmanagementprofil
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "start-index" $start_index "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, web_property_id: $web_property_id} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1906,7 +1915,7 @@ export def "management-accounts-webproperties-profiles analyticsmanagementprofil
 # operationId: analytics.management.profiles.insert
 # --childLink shape: {href?: string, type?: string}
 # --parentLink shape: {href?: string, type?: string}
-export def "management-accounts-webproperties-profiles analyticsmanagementprofilesinsert" [
+export def "management-accounts-webproperties-profiles create" [
   account_id: string
   web_property_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1949,19 +1958,19 @@ export def "management-accounts-webproperties-profiles analyticsmanagementprofil
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, web_property_id: $web_property_id} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles") $qp)
-  let body = {"accountId": $body_account_id, "botFilteringEnabled": $bot_filtering_enabled, "childLink": $child_link, "currency": $currency, "defaultPage": $default_page, "eCommerceTracking": $e_commerce_tracking, "enhancedECommerceTracking": $enhanced_e_commerce_tracking, "excludeQueryParameters": $exclude_query_parameters, "id": $id, "name": $name, "parentLink": $parent_link, "permissions": $permissions, "siteSearchCategoryParameters": $site_search_category_parameters, "siteSearchQueryParameters": $site_search_query_parameters, "starred": $starred, "stripSiteSearchCategoryParameters": $strip_site_search_category_parameters, "stripSiteSearchQueryParameters": $strip_site_search_query_parameters, "timezone": $timezone, "type": $type, "websiteUrl": $website_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles") $qp)
+  let req_body = {"accountId": $body_account_id, "botFilteringEnabled": $bot_filtering_enabled, "childLink": $child_link, "currency": $currency, "defaultPage": $default_page, "eCommerceTracking": $e_commerce_tracking, "enhancedECommerceTracking": $enhanced_e_commerce_tracking, "excludeQueryParameters": $exclude_query_parameters, "id": $id, "name": $name, "parentLink": $parent_link, "permissions": $permissions, "siteSearchCategoryParameters": $site_search_category_parameters, "siteSearchQueryParameters": $site_search_query_parameters, "starred": $starred, "stripSiteSearchCategoryParameters": $strip_site_search_category_parameters, "stripSiteSearchQueryParameters": $strip_site_search_query_parameters, "timezone": $timezone, "type": $type, "websiteUrl": $website_url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes a view (profile).
 #
 # DELETE /management/accounts/{accountId}/webproperties/{webPropertyId}/profiles/{profileId}
 # operationId: analytics.management.profiles.delete
-export def "management-accounts-webproperties-profiles analyticsmanagementprofilesdelete" [
+export def "management-accounts-webproperties-profiles delete" [
   account_id: string
   web_property_id: string
   profile_id: string
@@ -1984,7 +1993,7 @@ export def "management-accounts-webproperties-profiles analyticsmanagementprofil
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, web_property_id: $web_property_id, profile_id: $profile_id} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), profile_id: (encode-path-segment $profile_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1994,7 +2003,7 @@ export def "management-accounts-webproperties-profiles analyticsmanagementprofil
 #
 # GET /management/accounts/{accountId}/webproperties/{webPropertyId}/profiles/{profileId}
 # operationId: analytics.management.profiles.get
-export def "management-accounts-webproperties-profiles analyticsmanagementprofilesget" [
+export def "management-accounts-webproperties-profiles get" [
   account_id: string
   web_property_id: string
   profile_id: string
@@ -2017,7 +2026,7 @@ export def "management-accounts-webproperties-profiles analyticsmanagementprofil
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, web_property_id: $web_property_id, profile_id: $profile_id} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), profile_id: (encode-path-segment $profile_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2029,7 +2038,7 @@ export def "management-accounts-webproperties-profiles analyticsmanagementprofil
 # operationId: analytics.management.profiles.patch
 # --childLink shape: {href?: string, type?: string}
 # --parentLink shape: {href?: string, type?: string}
-export def "management-accounts-webproperties-profiles analyticsmanagementprofilespatch" [
+export def "management-accounts-webproperties-profiles update-by-accountId-webPropertyId-profileId" [
   account_id: string
   web_property_id: string
   profile_id: string
@@ -2073,12 +2082,12 @@ export def "management-accounts-webproperties-profiles analyticsmanagementprofil
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, web_property_id: $web_property_id, profile_id: $profile_id} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}") $qp)
-  let body = {"accountId": $body_account_id, "botFilteringEnabled": $bot_filtering_enabled, "childLink": $child_link, "currency": $currency, "defaultPage": $default_page, "eCommerceTracking": $e_commerce_tracking, "enhancedECommerceTracking": $enhanced_e_commerce_tracking, "excludeQueryParameters": $exclude_query_parameters, "id": $id, "name": $name, "parentLink": $parent_link, "permissions": $permissions, "siteSearchCategoryParameters": $site_search_category_parameters, "siteSearchQueryParameters": $site_search_query_parameters, "starred": $starred, "stripSiteSearchCategoryParameters": $strip_site_search_category_parameters, "stripSiteSearchQueryParameters": $strip_site_search_query_parameters, "timezone": $timezone, "type": $type, "websiteUrl": $website_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), profile_id: (encode-path-segment $profile_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}") $qp)
+  let req_body = {"accountId": $body_account_id, "botFilteringEnabled": $bot_filtering_enabled, "childLink": $child_link, "currency": $currency, "defaultPage": $default_page, "eCommerceTracking": $e_commerce_tracking, "enhancedECommerceTracking": $enhanced_e_commerce_tracking, "excludeQueryParameters": $exclude_query_parameters, "id": $id, "name": $name, "parentLink": $parent_link, "permissions": $permissions, "siteSearchCategoryParameters": $site_search_category_parameters, "siteSearchQueryParameters": $site_search_query_parameters, "starred": $starred, "stripSiteSearchCategoryParameters": $strip_site_search_category_parameters, "stripSiteSearchQueryParameters": $strip_site_search_query_parameters, "timezone": $timezone, "type": $type, "websiteUrl": $website_url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates an existing view (profile).
@@ -2087,7 +2096,7 @@ export def "management-accounts-webproperties-profiles analyticsmanagementprofil
 # operationId: analytics.management.profiles.update
 # --childLink shape: {href?: string, type?: string}
 # --parentLink shape: {href?: string, type?: string}
-export def "management-accounts-webproperties-profiles analyticsmanagementprofilesupdate" [
+export def "management-accounts-webproperties-profiles update-by-accountId-webPropertyId-profileId-1" [
   account_id: string
   web_property_id: string
   profile_id: string
@@ -2131,19 +2140,19 @@ export def "management-accounts-webproperties-profiles analyticsmanagementprofil
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, web_property_id: $web_property_id, profile_id: $profile_id} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}") $qp)
-  let body = {"accountId": $body_account_id, "botFilteringEnabled": $bot_filtering_enabled, "childLink": $child_link, "currency": $currency, "defaultPage": $default_page, "eCommerceTracking": $e_commerce_tracking, "enhancedECommerceTracking": $enhanced_e_commerce_tracking, "excludeQueryParameters": $exclude_query_parameters, "id": $id, "name": $name, "parentLink": $parent_link, "permissions": $permissions, "siteSearchCategoryParameters": $site_search_category_parameters, "siteSearchQueryParameters": $site_search_query_parameters, "starred": $starred, "stripSiteSearchCategoryParameters": $strip_site_search_category_parameters, "stripSiteSearchQueryParameters": $strip_site_search_query_parameters, "timezone": $timezone, "type": $type, "websiteUrl": $website_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), profile_id: (encode-path-segment $profile_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}") $qp)
+  let req_body = {"accountId": $body_account_id, "botFilteringEnabled": $bot_filtering_enabled, "childLink": $child_link, "currency": $currency, "defaultPage": $default_page, "eCommerceTracking": $e_commerce_tracking, "enhancedECommerceTracking": $enhanced_e_commerce_tracking, "excludeQueryParameters": $exclude_query_parameters, "id": $id, "name": $name, "parentLink": $parent_link, "permissions": $permissions, "siteSearchCategoryParameters": $site_search_category_parameters, "siteSearchQueryParameters": $site_search_query_parameters, "starred": $starred, "stripSiteSearchCategoryParameters": $strip_site_search_category_parameters, "stripSiteSearchQueryParameters": $strip_site_search_query_parameters, "timezone": $timezone, "type": $type, "websiteUrl": $website_url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists profile-user links for a given view (profile).
 #
 # GET /management/accounts/{accountId}/webproperties/{webPropertyId}/profiles/{profileId}/entityUserLinks
 # operationId: analytics.management.profileUserLinks.list
-export def "management-accounts-webproperties-profiles-entity-user-links analyticsmanagementprofileUserLinkslist" [
+export def "management-accounts-webproperties-profiles-entity-user-links list" [
   account_id: string
   web_property_id: string
   profile_id: string
@@ -2168,7 +2177,7 @@ export def "management-accounts-webproperties-profiles-entity-user-links analyti
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "start-index" $start_index "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, web_property_id: $web_property_id, profile_id: $profile_id} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/entityUserLinks") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), profile_id: (encode-path-segment $profile_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/entityUserLinks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2179,9 +2188,9 @@ export def "management-accounts-webproperties-profiles-entity-user-links analyti
 # POST /management/accounts/{accountId}/webproperties/{webPropertyId}/profiles/{profileId}/entityUserLinks
 # operationId: analytics.management.profileUserLinks.insert
 # --entity shape: {accountRef?: record, profileRef?: record, webPropertyRef?: record}
-# --permissions shape: {local?: list}
+# --permissions shape: {local?: list<string>}
 # --userRef shape: {email?: string, id?: string, kind?: string}
-export def "management-accounts-webproperties-profiles-entity-user-links analyticsmanagementprofileUserLinksinsert" [
+export def "management-accounts-webproperties-profiles-entity-user-links create" [
   account_id: string
   web_property_id: string
   profile_id: string
@@ -2203,7 +2212,7 @@ export def "management-accounts-webproperties-profiles-entity-user-links analyti
   --entity: record # Entity for this link. It can be an account, a web property, or a view (profile). — shape: {accountRef?: record, profileRef?: record, webPropertyRef?: record}
   --id: string # Entity user link ID
   --kind: string # Resource type for entity user link. (default: analytics#entityUserLink)
-  --permissions: record # Permissions the user has for this entity. — shape: {local?: list}
+  --permissions: record # Permissions the user has for this entity. — shape: {local?: list<string>}
   --self-link: string # Self link for this resource.
   --user-ref: record # JSON template for a user reference. — shape: {email?: string, id?: string, kind?: string}
 ]: any -> record<entity: record<accountRef: record<href: string, id: string, kind: string, name: string>, profileRef: record<accountId: string, href: string, id: string, internalWebPropertyId: string, kind: string, name: string, webPropertyId: string>, webPropertyRef: record<accountId: string, href: string, id: string, internalWebPropertyId: string, kind: string, name: string>>, id: string, kind: string, permissions: record<effective: list<string>, local: list<string>>, selfLink: string, userRef: record<email: string, id: string, kind: string>> {
@@ -2211,19 +2220,19 @@ export def "management-accounts-webproperties-profiles-entity-user-links analyti
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, web_property_id: $web_property_id, profile_id: $profile_id} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/entityUserLinks") $qp)
-  let body = {"entity": $entity, "id": $id, "kind": $kind, "permissions": $permissions, "selfLink": $self_link, "userRef": $user_ref} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), profile_id: (encode-path-segment $profile_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/entityUserLinks") $qp)
+  let req_body = {"entity": $entity, "id": $id, "kind": $kind, "permissions": $permissions, "selfLink": $self_link, "userRef": $user_ref} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Removes a user from the given view (profile).
 #
 # DELETE /management/accounts/{accountId}/webproperties/{webPropertyId}/profiles/{profileId}/entityUserLinks/{linkId}
 # operationId: analytics.management.profileUserLinks.delete
-export def "management-accounts-webproperties-profiles-entity-user-links analyticsmanagementprofileUserLinksdelete" [
+export def "management-accounts-webproperties-profiles-entity-user-links delete" [
   account_id: string
   web_property_id: string
   profile_id: string
@@ -2247,7 +2256,7 @@ export def "management-accounts-webproperties-profiles-entity-user-links analyti
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, web_property_id: $web_property_id, profile_id: $profile_id, link_id: $link_id} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/entityUserLinks/{link_id}") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), profile_id: (encode-path-segment $profile_id), link_id: (encode-path-segment $link_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/entityUserLinks/{link_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2258,9 +2267,9 @@ export def "management-accounts-webproperties-profiles-entity-user-links analyti
 # PUT /management/accounts/{accountId}/webproperties/{webPropertyId}/profiles/{profileId}/entityUserLinks/{linkId}
 # operationId: analytics.management.profileUserLinks.update
 # --entity shape: {accountRef?: record, profileRef?: record, webPropertyRef?: record}
-# --permissions shape: {local?: list}
+# --permissions shape: {local?: list<string>}
 # --userRef shape: {email?: string, id?: string, kind?: string}
-export def "management-accounts-webproperties-profiles-entity-user-links analyticsmanagementprofileUserLinksupdate" [
+export def "management-accounts-webproperties-profiles-entity-user-links update" [
   account_id: string
   web_property_id: string
   profile_id: string
@@ -2283,7 +2292,7 @@ export def "management-accounts-webproperties-profiles-entity-user-links analyti
   --entity: record # Entity for this link. It can be an account, a web property, or a view (profile). — shape: {accountRef?: record, profileRef?: record, webPropertyRef?: record}
   --id: string # Entity user link ID
   --kind: string # Resource type for entity user link. (default: analytics#entityUserLink)
-  --permissions: record # Permissions the user has for this entity. — shape: {local?: list}
+  --permissions: record # Permissions the user has for this entity. — shape: {local?: list<string>}
   --self-link: string # Self link for this resource.
   --user-ref: record # JSON template for a user reference. — shape: {email?: string, id?: string, kind?: string}
 ]: any -> record<entity: record<accountRef: record<href: string, id: string, kind: string, name: string>, profileRef: record<accountId: string, href: string, id: string, internalWebPropertyId: string, kind: string, name: string, webPropertyId: string>, webPropertyRef: record<accountId: string, href: string, id: string, internalWebPropertyId: string, kind: string, name: string>>, id: string, kind: string, permissions: record<effective: list<string>, local: list<string>>, selfLink: string, userRef: record<email: string, id: string, kind: string>> {
@@ -2291,19 +2300,19 @@ export def "management-accounts-webproperties-profiles-entity-user-links analyti
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, web_property_id: $web_property_id, profile_id: $profile_id, link_id: $link_id} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/entityUserLinks/{link_id}") $qp)
-  let body = {"entity": $entity, "id": $id, "kind": $kind, "permissions": $permissions, "selfLink": $self_link, "userRef": $user_ref} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), profile_id: (encode-path-segment $profile_id), link_id: (encode-path-segment $link_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/entityUserLinks/{link_id}") $qp)
+  let req_body = {"entity": $entity, "id": $id, "kind": $kind, "permissions": $permissions, "selfLink": $self_link, "userRef": $user_ref} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists experiments to which the user has access.
 #
 # GET /management/accounts/{accountId}/webproperties/{webPropertyId}/profiles/{profileId}/experiments
 # operationId: analytics.management.experiments.list
-export def "management-accounts-webproperties-profiles-experiments analyticsmanagementexperimentslist" [
+export def "management-accounts-webproperties-profiles-experiments list" [
   account_id: string
   web_property_id: string
   profile_id: string
@@ -2328,7 +2337,7 @@ export def "management-accounts-webproperties-profiles-experiments analyticsmana
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "start-index" $start_index "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, web_property_id: $web_property_id, profile_id: $profile_id} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/experiments") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), profile_id: (encode-path-segment $profile_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/experiments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2340,7 +2349,7 @@ export def "management-accounts-webproperties-profiles-experiments analyticsmana
 # operationId: analytics.management.experiments.insert
 # --parentLink shape: {href?: string, type?: string}
 # --variations item shape: {name?: string, status?: string, url?: string, weight?: float, won?: bool}
-export def "management-accounts-webproperties-profiles-experiments analyticsmanagementexperimentsinsert" [
+export def "management-accounts-webproperties-profiles-experiments create" [
   account_id: string
   web_property_id: string
   profile_id: string
@@ -2377,7 +2386,7 @@ export def "management-accounts-webproperties-profiles-experiments analyticsmana
   --reason-experiment-ended: string # Why the experiment ended. Possible values: "STOPPED_BY_USER", "WINNER_FOUND", "EXPERIMENT_EXPIRED", "ENDED_WITH_NO_WINNER", "GOAL_OBJECTIVE_CHANGED". "ENDED_WITH_NO_WINNER" means that the experiment didn't expire but no winner was projected to be found. If the experiment status is changed via the API to ENDED this field is set to STOPPED_BY_USER. This field is read-only.
   --rewrite-variation-urls-as-original: oneof<nothing, bool> # Boolean specifying whether variations URLS are rewritten to match those of the original. This field may not be changed for an experiments whose status is ENDED.
   --self-link: string # Link for this experiment. This field is read-only.
-  --serving-framework: string # The framework used to serve the experiment variations and evaluate the results. One of:   - REDIRECT: Google Analytics redirects traffic to different variation pages, reports the chosen variation and evaluates the results. - API: Google Analytics chooses and reports the variation to serve and evaluates the results; the caller is responsible for serving the selected variation. - EXTERNAL: The variations will be served externally and the chosen variation reported to Google Analytics. The caller is responsible for serving the selected variation and evaluating the results.
+  --serving-framework: string # The framework used to serve the experiment variations and evaluate the results. One of: - REDIRECT: Google Analytics redirects traffic to different variation pages, reports the chosen variation and evaluates the results. - API: Google Analytics chooses and reports the variation to serve and evaluates the results; the caller is responsible for serving the selected variation. - EXTERNAL: The variations will be served externally and the chosen variation reported to Google Analytics. The caller is responsible for serving the selected variation and evaluating the results.
   --snippet: string # The snippet of code to include on the control page(s). This field is read-only.
   --start-time: string # The starting time of the experiment (the time the status changed from READY_TO_RUN to RUNNING). This field is present only if the experiment has started. This field is read-only. (format: date-time)
   --status: string # Experiment status. Possible values: "DRAFT", "READY_TO_RUN", "RUNNING", "ENDED". Experiments can be created in the "DRAFT", "READY_TO_RUN" or "RUNNING" state. This field is required when creating an experiment.
@@ -2392,19 +2401,19 @@ export def "management-accounts-webproperties-profiles-experiments analyticsmana
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, web_property_id: $web_property_id, profile_id: $profile_id} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/experiments") $qp)
-  let body = {"accountId": $body_account_id, "created": $created, "description": $description, "editableInGaUi": $editable_in_ga_ui, "endTime": $end_time, "equalWeighting": $equal_weighting, "id": $id, "internalWebPropertyId": $internal_web_property_id, "kind": $kind, "minimumExperimentLengthInDays": $minimum_experiment_length_in_days, "name": $name, "objectiveMetric": $objective_metric, "optimizationType": $optimization_type, "parentLink": $parent_link, "profileId": $body_profile_id, "reasonExperimentEnded": $reason_experiment_ended, "rewriteVariationUrlsAsOriginal": $rewrite_variation_urls_as_original, "selfLink": $self_link, "servingFramework": $serving_framework, "snippet": $snippet, "startTime": $start_time, "status": $status, "trafficCoverage": $traffic_coverage, "updated": $updated, "variations": $variations, "webPropertyId": $body_web_property_id, "winnerConfidenceLevel": $winner_confidence_level, "winnerFound": $winner_found} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), profile_id: (encode-path-segment $profile_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/experiments") $qp)
+  let req_body = {"accountId": $body_account_id, "created": $created, "description": $description, "editableInGaUi": $editable_in_ga_ui, "endTime": $end_time, "equalWeighting": $equal_weighting, "id": $id, "internalWebPropertyId": $internal_web_property_id, "kind": $kind, "minimumExperimentLengthInDays": $minimum_experiment_length_in_days, "name": $name, "objectiveMetric": $objective_metric, "optimizationType": $optimization_type, "parentLink": $parent_link, "profileId": $body_profile_id, "reasonExperimentEnded": $reason_experiment_ended, "rewriteVariationUrlsAsOriginal": $rewrite_variation_urls_as_original, "selfLink": $self_link, "servingFramework": $serving_framework, "snippet": $snippet, "startTime": $start_time, "status": $status, "trafficCoverage": $traffic_coverage, "updated": $updated, "variations": $variations, "webPropertyId": $body_web_property_id, "winnerConfidenceLevel": $winner_confidence_level, "winnerFound": $winner_found} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete an experiment.
 #
 # DELETE /management/accounts/{accountId}/webproperties/{webPropertyId}/profiles/{profileId}/experiments/{experimentId}
 # operationId: analytics.management.experiments.delete
-export def "management-accounts-webproperties-profiles-experiments analyticsmanagementexperimentsdelete" [
+export def "management-accounts-webproperties-profiles-experiments delete" [
   account_id: string
   web_property_id: string
   profile_id: string
@@ -2428,7 +2437,7 @@ export def "management-accounts-webproperties-profiles-experiments analyticsmana
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, web_property_id: $web_property_id, profile_id: $profile_id, experiment_id: $experiment_id} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/experiments/{experiment_id}") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), profile_id: (encode-path-segment $profile_id), experiment_id: (encode-path-segment $experiment_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/experiments/{experiment_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2438,7 +2447,7 @@ export def "management-accounts-webproperties-profiles-experiments analyticsmana
 #
 # GET /management/accounts/{accountId}/webproperties/{webPropertyId}/profiles/{profileId}/experiments/{experimentId}
 # operationId: analytics.management.experiments.get
-export def "management-accounts-webproperties-profiles-experiments analyticsmanagementexperimentsget" [
+export def "management-accounts-webproperties-profiles-experiments get" [
   account_id: string
   web_property_id: string
   profile_id: string
@@ -2462,7 +2471,7 @@ export def "management-accounts-webproperties-profiles-experiments analyticsmana
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, web_property_id: $web_property_id, profile_id: $profile_id, experiment_id: $experiment_id} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/experiments/{experiment_id}") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), profile_id: (encode-path-segment $profile_id), experiment_id: (encode-path-segment $experiment_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/experiments/{experiment_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2474,7 +2483,7 @@ export def "management-accounts-webproperties-profiles-experiments analyticsmana
 # operationId: analytics.management.experiments.patch
 # --parentLink shape: {href?: string, type?: string}
 # --variations item shape: {name?: string, status?: string, url?: string, weight?: float, won?: bool}
-export def "management-accounts-webproperties-profiles-experiments analyticsmanagementexperimentspatch" [
+export def "management-accounts-webproperties-profiles-experiments update-by-accountId-webPropertyId-profileId-experimentId" [
   account_id: string
   web_property_id: string
   profile_id: string
@@ -2512,7 +2521,7 @@ export def "management-accounts-webproperties-profiles-experiments analyticsmana
   --reason-experiment-ended: string # Why the experiment ended. Possible values: "STOPPED_BY_USER", "WINNER_FOUND", "EXPERIMENT_EXPIRED", "ENDED_WITH_NO_WINNER", "GOAL_OBJECTIVE_CHANGED". "ENDED_WITH_NO_WINNER" means that the experiment didn't expire but no winner was projected to be found. If the experiment status is changed via the API to ENDED this field is set to STOPPED_BY_USER. This field is read-only.
   --rewrite-variation-urls-as-original: oneof<nothing, bool> # Boolean specifying whether variations URLS are rewritten to match those of the original. This field may not be changed for an experiments whose status is ENDED.
   --self-link: string # Link for this experiment. This field is read-only.
-  --serving-framework: string # The framework used to serve the experiment variations and evaluate the results. One of:   - REDIRECT: Google Analytics redirects traffic to different variation pages, reports the chosen variation and evaluates the results. - API: Google Analytics chooses and reports the variation to serve and evaluates the results; the caller is responsible for serving the selected variation. - EXTERNAL: The variations will be served externally and the chosen variation reported to Google Analytics. The caller is responsible for serving the selected variation and evaluating the results.
+  --serving-framework: string # The framework used to serve the experiment variations and evaluate the results. One of: - REDIRECT: Google Analytics redirects traffic to different variation pages, reports the chosen variation and evaluates the results. - API: Google Analytics chooses and reports the variation to serve and evaluates the results; the caller is responsible for serving the selected variation. - EXTERNAL: The variations will be served externally and the chosen variation reported to Google Analytics. The caller is responsible for serving the selected variation and evaluating the results.
   --snippet: string # The snippet of code to include on the control page(s). This field is read-only.
   --start-time: string # The starting time of the experiment (the time the status changed from READY_TO_RUN to RUNNING). This field is present only if the experiment has started. This field is read-only. (format: date-time)
   --status: string # Experiment status. Possible values: "DRAFT", "READY_TO_RUN", "RUNNING", "ENDED". Experiments can be created in the "DRAFT", "READY_TO_RUN" or "RUNNING" state. This field is required when creating an experiment.
@@ -2527,12 +2536,12 @@ export def "management-accounts-webproperties-profiles-experiments analyticsmana
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, web_property_id: $web_property_id, profile_id: $profile_id, experiment_id: $experiment_id} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/experiments/{experiment_id}") $qp)
-  let body = {"accountId": $body_account_id, "created": $created, "description": $description, "editableInGaUi": $editable_in_ga_ui, "endTime": $end_time, "equalWeighting": $equal_weighting, "id": $id, "internalWebPropertyId": $internal_web_property_id, "kind": $kind, "minimumExperimentLengthInDays": $minimum_experiment_length_in_days, "name": $name, "objectiveMetric": $objective_metric, "optimizationType": $optimization_type, "parentLink": $parent_link, "profileId": $body_profile_id, "reasonExperimentEnded": $reason_experiment_ended, "rewriteVariationUrlsAsOriginal": $rewrite_variation_urls_as_original, "selfLink": $self_link, "servingFramework": $serving_framework, "snippet": $snippet, "startTime": $start_time, "status": $status, "trafficCoverage": $traffic_coverage, "updated": $updated, "variations": $variations, "webPropertyId": $body_web_property_id, "winnerConfidenceLevel": $winner_confidence_level, "winnerFound": $winner_found} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), profile_id: (encode-path-segment $profile_id), experiment_id: (encode-path-segment $experiment_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/experiments/{experiment_id}") $qp)
+  let req_body = {"accountId": $body_account_id, "created": $created, "description": $description, "editableInGaUi": $editable_in_ga_ui, "endTime": $end_time, "equalWeighting": $equal_weighting, "id": $id, "internalWebPropertyId": $internal_web_property_id, "kind": $kind, "minimumExperimentLengthInDays": $minimum_experiment_length_in_days, "name": $name, "objectiveMetric": $objective_metric, "optimizationType": $optimization_type, "parentLink": $parent_link, "profileId": $body_profile_id, "reasonExperimentEnded": $reason_experiment_ended, "rewriteVariationUrlsAsOriginal": $rewrite_variation_urls_as_original, "selfLink": $self_link, "servingFramework": $serving_framework, "snippet": $snippet, "startTime": $start_time, "status": $status, "trafficCoverage": $traffic_coverage, "updated": $updated, "variations": $variations, "webPropertyId": $body_web_property_id, "winnerConfidenceLevel": $winner_confidence_level, "winnerFound": $winner_found} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update an existing experiment.
@@ -2541,7 +2550,7 @@ export def "management-accounts-webproperties-profiles-experiments analyticsmana
 # operationId: analytics.management.experiments.update
 # --parentLink shape: {href?: string, type?: string}
 # --variations item shape: {name?: string, status?: string, url?: string, weight?: float, won?: bool}
-export def "management-accounts-webproperties-profiles-experiments analyticsmanagementexperimentsupdate" [
+export def "management-accounts-webproperties-profiles-experiments update-by-accountId-webPropertyId-profileId-experimentId-1" [
   account_id: string
   web_property_id: string
   profile_id: string
@@ -2579,7 +2588,7 @@ export def "management-accounts-webproperties-profiles-experiments analyticsmana
   --reason-experiment-ended: string # Why the experiment ended. Possible values: "STOPPED_BY_USER", "WINNER_FOUND", "EXPERIMENT_EXPIRED", "ENDED_WITH_NO_WINNER", "GOAL_OBJECTIVE_CHANGED". "ENDED_WITH_NO_WINNER" means that the experiment didn't expire but no winner was projected to be found. If the experiment status is changed via the API to ENDED this field is set to STOPPED_BY_USER. This field is read-only.
   --rewrite-variation-urls-as-original: oneof<nothing, bool> # Boolean specifying whether variations URLS are rewritten to match those of the original. This field may not be changed for an experiments whose status is ENDED.
   --self-link: string # Link for this experiment. This field is read-only.
-  --serving-framework: string # The framework used to serve the experiment variations and evaluate the results. One of:   - REDIRECT: Google Analytics redirects traffic to different variation pages, reports the chosen variation and evaluates the results. - API: Google Analytics chooses and reports the variation to serve and evaluates the results; the caller is responsible for serving the selected variation. - EXTERNAL: The variations will be served externally and the chosen variation reported to Google Analytics. The caller is responsible for serving the selected variation and evaluating the results.
+  --serving-framework: string # The framework used to serve the experiment variations and evaluate the results. One of: - REDIRECT: Google Analytics redirects traffic to different variation pages, reports the chosen variation and evaluates the results. - API: Google Analytics chooses and reports the variation to serve and evaluates the results; the caller is responsible for serving the selected variation. - EXTERNAL: The variations will be served externally and the chosen variation reported to Google Analytics. The caller is responsible for serving the selected variation and evaluating the results.
   --snippet: string # The snippet of code to include on the control page(s). This field is read-only.
   --start-time: string # The starting time of the experiment (the time the status changed from READY_TO_RUN to RUNNING). This field is present only if the experiment has started. This field is read-only. (format: date-time)
   --status: string # Experiment status. Possible values: "DRAFT", "READY_TO_RUN", "RUNNING", "ENDED". Experiments can be created in the "DRAFT", "READY_TO_RUN" or "RUNNING" state. This field is required when creating an experiment.
@@ -2594,19 +2603,19 @@ export def "management-accounts-webproperties-profiles-experiments analyticsmana
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, web_property_id: $web_property_id, profile_id: $profile_id, experiment_id: $experiment_id} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/experiments/{experiment_id}") $qp)
-  let body = {"accountId": $body_account_id, "created": $created, "description": $description, "editableInGaUi": $editable_in_ga_ui, "endTime": $end_time, "equalWeighting": $equal_weighting, "id": $id, "internalWebPropertyId": $internal_web_property_id, "kind": $kind, "minimumExperimentLengthInDays": $minimum_experiment_length_in_days, "name": $name, "objectiveMetric": $objective_metric, "optimizationType": $optimization_type, "parentLink": $parent_link, "profileId": $body_profile_id, "reasonExperimentEnded": $reason_experiment_ended, "rewriteVariationUrlsAsOriginal": $rewrite_variation_urls_as_original, "selfLink": $self_link, "servingFramework": $serving_framework, "snippet": $snippet, "startTime": $start_time, "status": $status, "trafficCoverage": $traffic_coverage, "updated": $updated, "variations": $variations, "webPropertyId": $body_web_property_id, "winnerConfidenceLevel": $winner_confidence_level, "winnerFound": $winner_found} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), profile_id: (encode-path-segment $profile_id), experiment_id: (encode-path-segment $experiment_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/experiments/{experiment_id}") $qp)
+  let req_body = {"accountId": $body_account_id, "created": $created, "description": $description, "editableInGaUi": $editable_in_ga_ui, "endTime": $end_time, "equalWeighting": $equal_weighting, "id": $id, "internalWebPropertyId": $internal_web_property_id, "kind": $kind, "minimumExperimentLengthInDays": $minimum_experiment_length_in_days, "name": $name, "objectiveMetric": $objective_metric, "optimizationType": $optimization_type, "parentLink": $parent_link, "profileId": $body_profile_id, "reasonExperimentEnded": $reason_experiment_ended, "rewriteVariationUrlsAsOriginal": $rewrite_variation_urls_as_original, "selfLink": $self_link, "servingFramework": $serving_framework, "snippet": $snippet, "startTime": $start_time, "status": $status, "trafficCoverage": $traffic_coverage, "updated": $updated, "variations": $variations, "webPropertyId": $body_web_property_id, "winnerConfidenceLevel": $winner_confidence_level, "winnerFound": $winner_found} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists goals to which the user has access.
 #
 # GET /management/accounts/{accountId}/webproperties/{webPropertyId}/profiles/{profileId}/goals
 # operationId: analytics.management.goals.list
-export def "management-accounts-webproperties-profiles-goals analyticsmanagementgoalslist" [
+export def "management-accounts-webproperties-profiles-goals list" [
   account_id: string
   web_property_id: string
   profile_id: string
@@ -2631,7 +2640,7 @@ export def "management-accounts-webproperties-profiles-goals analyticsmanagement
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "start-index" $start_index "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, web_property_id: $web_property_id, profile_id: $profile_id} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/goals") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), profile_id: (encode-path-segment $profile_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/goals") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2646,7 +2655,7 @@ export def "management-accounts-webproperties-profiles-goals analyticsmanagement
 # --urlDestinationDetails shape: {caseSensitive?: bool, firstStepRequired?: bool, matchType?: string, steps?: list, url?: string}
 # --visitNumPagesDetails shape: {comparisonType?: string, comparisonValue?: string}
 # --visitTimeOnSiteDetails shape: {comparisonType?: string, comparisonValue?: string}
-export def "management-accounts-webproperties-profiles-goals analyticsmanagementgoalsinsert" [
+export def "management-accounts-webproperties-profiles-goals create" [
   account_id: string
   web_property_id: string
   profile_id: string
@@ -2688,19 +2697,19 @@ export def "management-accounts-webproperties-profiles-goals analyticsmanagement
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, web_property_id: $web_property_id, profile_id: $profile_id} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/goals") $qp)
-  let body = {"accountId": $body_account_id, "active": $active, "created": $created, "eventDetails": $event_details, "id": $id, "internalWebPropertyId": $internal_web_property_id, "kind": $kind, "name": $name, "parentLink": $parent_link, "profileId": $body_profile_id, "selfLink": $self_link, "type": $type, "updated": $updated, "urlDestinationDetails": $url_destination_details, "value": $value, "visitNumPagesDetails": $visit_num_pages_details, "visitTimeOnSiteDetails": $visit_time_on_site_details, "webPropertyId": $body_web_property_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), profile_id: (encode-path-segment $profile_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/goals") $qp)
+  let req_body = {"accountId": $body_account_id, "active": $active, "created": $created, "eventDetails": $event_details, "id": $id, "internalWebPropertyId": $internal_web_property_id, "kind": $kind, "name": $name, "parentLink": $parent_link, "profileId": $body_profile_id, "selfLink": $self_link, "type": $type, "updated": $updated, "urlDestinationDetails": $url_destination_details, "value": $value, "visitNumPagesDetails": $visit_num_pages_details, "visitTimeOnSiteDetails": $visit_time_on_site_details, "webPropertyId": $body_web_property_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets a goal to which the user has access.
 #
 # GET /management/accounts/{accountId}/webproperties/{webPropertyId}/profiles/{profileId}/goals/{goalId}
 # operationId: analytics.management.goals.get
-export def "management-accounts-webproperties-profiles-goals analyticsmanagementgoalsget" [
+export def "management-accounts-webproperties-profiles-goals get" [
   account_id: string
   web_property_id: string
   profile_id: string
@@ -2724,7 +2733,7 @@ export def "management-accounts-webproperties-profiles-goals analyticsmanagement
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, web_property_id: $web_property_id, profile_id: $profile_id, goal_id: $goal_id} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/goals/{goal_id}") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), profile_id: (encode-path-segment $profile_id), goal_id: (encode-path-segment $goal_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/goals/{goal_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2739,7 +2748,7 @@ export def "management-accounts-webproperties-profiles-goals analyticsmanagement
 # --urlDestinationDetails shape: {caseSensitive?: bool, firstStepRequired?: bool, matchType?: string, steps?: list, url?: string}
 # --visitNumPagesDetails shape: {comparisonType?: string, comparisonValue?: string}
 # --visitTimeOnSiteDetails shape: {comparisonType?: string, comparisonValue?: string}
-export def "management-accounts-webproperties-profiles-goals analyticsmanagementgoalspatch" [
+export def "management-accounts-webproperties-profiles-goals update-by-accountId-webPropertyId-profileId-goalId" [
   account_id: string
   web_property_id: string
   profile_id: string
@@ -2782,12 +2791,12 @@ export def "management-accounts-webproperties-profiles-goals analyticsmanagement
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, web_property_id: $web_property_id, profile_id: $profile_id, goal_id: $goal_id} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/goals/{goal_id}") $qp)
-  let body = {"accountId": $body_account_id, "active": $active, "created": $created, "eventDetails": $event_details, "id": $id, "internalWebPropertyId": $internal_web_property_id, "kind": $kind, "name": $name, "parentLink": $parent_link, "profileId": $body_profile_id, "selfLink": $self_link, "type": $type, "updated": $updated, "urlDestinationDetails": $url_destination_details, "value": $value, "visitNumPagesDetails": $visit_num_pages_details, "visitTimeOnSiteDetails": $visit_time_on_site_details, "webPropertyId": $body_web_property_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), profile_id: (encode-path-segment $profile_id), goal_id: (encode-path-segment $goal_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/goals/{goal_id}") $qp)
+  let req_body = {"accountId": $body_account_id, "active": $active, "created": $created, "eventDetails": $event_details, "id": $id, "internalWebPropertyId": $internal_web_property_id, "kind": $kind, "name": $name, "parentLink": $parent_link, "profileId": $body_profile_id, "selfLink": $self_link, "type": $type, "updated": $updated, "urlDestinationDetails": $url_destination_details, "value": $value, "visitNumPagesDetails": $visit_num_pages_details, "visitTimeOnSiteDetails": $visit_time_on_site_details, "webPropertyId": $body_web_property_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates an existing goal.
@@ -2799,7 +2808,7 @@ export def "management-accounts-webproperties-profiles-goals analyticsmanagement
 # --urlDestinationDetails shape: {caseSensitive?: bool, firstStepRequired?: bool, matchType?: string, steps?: list, url?: string}
 # --visitNumPagesDetails shape: {comparisonType?: string, comparisonValue?: string}
 # --visitTimeOnSiteDetails shape: {comparisonType?: string, comparisonValue?: string}
-export def "management-accounts-webproperties-profiles-goals analyticsmanagementgoalsupdate" [
+export def "management-accounts-webproperties-profiles-goals update-by-accountId-webPropertyId-profileId-goalId-1" [
   account_id: string
   web_property_id: string
   profile_id: string
@@ -2842,19 +2851,19 @@ export def "management-accounts-webproperties-profiles-goals analyticsmanagement
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, web_property_id: $web_property_id, profile_id: $profile_id, goal_id: $goal_id} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/goals/{goal_id}") $qp)
-  let body = {"accountId": $body_account_id, "active": $active, "created": $created, "eventDetails": $event_details, "id": $id, "internalWebPropertyId": $internal_web_property_id, "kind": $kind, "name": $name, "parentLink": $parent_link, "profileId": $body_profile_id, "selfLink": $self_link, "type": $type, "updated": $updated, "urlDestinationDetails": $url_destination_details, "value": $value, "visitNumPagesDetails": $visit_num_pages_details, "visitTimeOnSiteDetails": $visit_time_on_site_details, "webPropertyId": $body_web_property_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), profile_id: (encode-path-segment $profile_id), goal_id: (encode-path-segment $goal_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/goals/{goal_id}") $qp)
+  let req_body = {"accountId": $body_account_id, "active": $active, "created": $created, "eventDetails": $event_details, "id": $id, "internalWebPropertyId": $internal_web_property_id, "kind": $kind, "name": $name, "parentLink": $parent_link, "profileId": $body_profile_id, "selfLink": $self_link, "type": $type, "updated": $updated, "urlDestinationDetails": $url_destination_details, "value": $value, "visitNumPagesDetails": $visit_num_pages_details, "visitTimeOnSiteDetails": $visit_time_on_site_details, "webPropertyId": $body_web_property_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists all profile filter links for a profile.
 #
 # GET /management/accounts/{accountId}/webproperties/{webPropertyId}/profiles/{profileId}/profileFilterLinks
 # operationId: analytics.management.profileFilterLinks.list
-export def "management-accounts-webproperties-profiles-profile-filter-links analyticsmanagementprofileFilterLinkslist" [
+export def "management-accounts-webproperties-profiles-profile-filter-links list" [
   account_id: string
   web_property_id: string
   profile_id: string
@@ -2879,7 +2888,7 @@ export def "management-accounts-webproperties-profiles-profile-filter-links anal
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "start-index" $start_index "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, web_property_id: $web_property_id, profile_id: $profile_id} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/profileFilterLinks") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), profile_id: (encode-path-segment $profile_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/profileFilterLinks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2891,7 +2900,7 @@ export def "management-accounts-webproperties-profiles-profile-filter-links anal
 # operationId: analytics.management.profileFilterLinks.insert
 # --filterRef shape: {href?: string, id?: string, kind?: string}
 # --profileRef shape: {accountId?: string, href?: string, id?: string, internalWebPropertyId?: string, kind?: string, name?: string, webPropertyId?: string}
-export def "management-accounts-webproperties-profiles-profile-filter-links analyticsmanagementprofileFilterLinksinsert" [
+export def "management-accounts-webproperties-profiles-profile-filter-links create" [
   account_id: string
   web_property_id: string
   profile_id: string
@@ -2919,19 +2928,19 @@ export def "management-accounts-webproperties-profiles-profile-filter-links anal
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, web_property_id: $web_property_id, profile_id: $profile_id} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/profileFilterLinks") $qp)
-  let body = {"filterRef": $filter_ref, "id": $id, "profileRef": $profile_ref, "rank": $rank} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), profile_id: (encode-path-segment $profile_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/profileFilterLinks") $qp)
+  let req_body = {"filterRef": $filter_ref, "id": $id, "profileRef": $profile_ref, "rank": $rank} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a profile filter link.
 #
 # DELETE /management/accounts/{accountId}/webproperties/{webPropertyId}/profiles/{profileId}/profileFilterLinks/{linkId}
 # operationId: analytics.management.profileFilterLinks.delete
-export def "management-accounts-webproperties-profiles-profile-filter-links analyticsmanagementprofileFilterLinksdelete" [
+export def "management-accounts-webproperties-profiles-profile-filter-links delete" [
   account_id: string
   web_property_id: string
   profile_id: string
@@ -2955,7 +2964,7 @@ export def "management-accounts-webproperties-profiles-profile-filter-links anal
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, web_property_id: $web_property_id, profile_id: $profile_id, link_id: $link_id} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/profileFilterLinks/{link_id}") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), profile_id: (encode-path-segment $profile_id), link_id: (encode-path-segment $link_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/profileFilterLinks/{link_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2965,7 +2974,7 @@ export def "management-accounts-webproperties-profiles-profile-filter-links anal
 #
 # GET /management/accounts/{accountId}/webproperties/{webPropertyId}/profiles/{profileId}/profileFilterLinks/{linkId}
 # operationId: analytics.management.profileFilterLinks.get
-export def "management-accounts-webproperties-profiles-profile-filter-links analyticsmanagementprofileFilterLinksget" [
+export def "management-accounts-webproperties-profiles-profile-filter-links get" [
   account_id: string
   web_property_id: string
   profile_id: string
@@ -2989,7 +2998,7 @@ export def "management-accounts-webproperties-profiles-profile-filter-links anal
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, web_property_id: $web_property_id, profile_id: $profile_id, link_id: $link_id} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/profileFilterLinks/{link_id}") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), profile_id: (encode-path-segment $profile_id), link_id: (encode-path-segment $link_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/profileFilterLinks/{link_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3001,7 +3010,7 @@ export def "management-accounts-webproperties-profiles-profile-filter-links anal
 # operationId: analytics.management.profileFilterLinks.patch
 # --filterRef shape: {href?: string, id?: string, kind?: string}
 # --profileRef shape: {accountId?: string, href?: string, id?: string, internalWebPropertyId?: string, kind?: string, name?: string, webPropertyId?: string}
-export def "management-accounts-webproperties-profiles-profile-filter-links analyticsmanagementprofileFilterLinkspatch" [
+export def "management-accounts-webproperties-profiles-profile-filter-links update-by-accountId-webPropertyId-profileId-linkId" [
   account_id: string
   web_property_id: string
   profile_id: string
@@ -3030,12 +3039,12 @@ export def "management-accounts-webproperties-profiles-profile-filter-links anal
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, web_property_id: $web_property_id, profile_id: $profile_id, link_id: $link_id} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/profileFilterLinks/{link_id}") $qp)
-  let body = {"filterRef": $filter_ref, "id": $id, "profileRef": $profile_ref, "rank": $rank} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), profile_id: (encode-path-segment $profile_id), link_id: (encode-path-segment $link_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/profileFilterLinks/{link_id}") $qp)
+  let req_body = {"filterRef": $filter_ref, "id": $id, "profileRef": $profile_ref, "rank": $rank} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update an existing profile filter link.
@@ -3044,7 +3053,7 @@ export def "management-accounts-webproperties-profiles-profile-filter-links anal
 # operationId: analytics.management.profileFilterLinks.update
 # --filterRef shape: {href?: string, id?: string, kind?: string}
 # --profileRef shape: {accountId?: string, href?: string, id?: string, internalWebPropertyId?: string, kind?: string, name?: string, webPropertyId?: string}
-export def "management-accounts-webproperties-profiles-profile-filter-links analyticsmanagementprofileFilterLinksupdate" [
+export def "management-accounts-webproperties-profiles-profile-filter-links update-by-accountId-webPropertyId-profileId-linkId-1" [
   account_id: string
   web_property_id: string
   profile_id: string
@@ -3073,19 +3082,19 @@ export def "management-accounts-webproperties-profiles-profile-filter-links anal
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, web_property_id: $web_property_id, profile_id: $profile_id, link_id: $link_id} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/profileFilterLinks/{link_id}") $qp)
-  let body = {"filterRef": $filter_ref, "id": $id, "profileRef": $profile_ref, "rank": $rank} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), profile_id: (encode-path-segment $profile_id), link_id: (encode-path-segment $link_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/profileFilterLinks/{link_id}") $qp)
+  let req_body = {"filterRef": $filter_ref, "id": $id, "profileRef": $profile_ref, "rank": $rank} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists unsampled reports to which the user has access.
 #
 # GET /management/accounts/{accountId}/webproperties/{webPropertyId}/profiles/{profileId}/unsampledReports
 # operationId: analytics.management.unsampledReports.list
-export def "management-accounts-webproperties-profiles-unsampled-reports analyticsmanagementunsampledReportslist" [
+export def "management-accounts-webproperties-profiles-unsampled-reports list" [
   account_id: string
   web_property_id: string
   profile_id: string
@@ -3110,7 +3119,7 @@ export def "management-accounts-webproperties-profiles-unsampled-reports analyti
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "start-index" $start_index "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, web_property_id: $web_property_id, profile_id: $profile_id} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/unsampledReports") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), profile_id: (encode-path-segment $profile_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/unsampledReports") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3122,7 +3131,7 @@ export def "management-accounts-webproperties-profiles-unsampled-reports analyti
 # operationId: analytics.management.unsampledReports.insert
 # --cloudStorageDownloadDetails shape: {bucketId?: string, objectId?: string}
 # --driveDownloadDetails shape: {documentId?: string}
-export def "management-accounts-webproperties-profiles-unsampled-reports analyticsmanagementunsampledReportsinsert" [
+export def "management-accounts-webproperties-profiles-unsampled-reports create" [
   account_id: string
   web_property_id: string
   profile_id: string
@@ -3157,19 +3166,19 @@ export def "management-accounts-webproperties-profiles-unsampled-reports analyti
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, web_property_id: $web_property_id, profile_id: $profile_id} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/unsampledReports") $qp)
-  let body = {"accountId": $body_account_id, "dimensions": $dimensions, "end-date": $end_date, "filters": $filters, "id": $id, "metrics": $metrics, "profileId": $body_profile_id, "segment": $segment, "start-date": $start_date, "title": $title, "webPropertyId": $body_web_property_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), profile_id: (encode-path-segment $profile_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/unsampledReports") $qp)
+  let req_body = {"accountId": $body_account_id, "dimensions": $dimensions, "end-date": $end_date, "filters": $filters, "id": $id, "metrics": $metrics, "profileId": $body_profile_id, "segment": $segment, "start-date": $start_date, "title": $title, "webPropertyId": $body_web_property_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes an unsampled report.
 #
 # DELETE /management/accounts/{accountId}/webproperties/{webPropertyId}/profiles/{profileId}/unsampledReports/{unsampledReportId}
 # operationId: analytics.management.unsampledReports.delete
-export def "management-accounts-webproperties-profiles-unsampled-reports analyticsmanagementunsampledReportsdelete" [
+export def "management-accounts-webproperties-profiles-unsampled-reports delete" [
   account_id: string
   web_property_id: string
   profile_id: string
@@ -3193,7 +3202,7 @@ export def "management-accounts-webproperties-profiles-unsampled-reports analyti
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, web_property_id: $web_property_id, profile_id: $profile_id, unsampled_report_id: $unsampled_report_id} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/unsampledReports/{unsampled_report_id}") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), profile_id: (encode-path-segment $profile_id), unsampled_report_id: (encode-path-segment $unsampled_report_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/unsampledReports/{unsampled_report_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3203,7 +3212,7 @@ export def "management-accounts-webproperties-profiles-unsampled-reports analyti
 #
 # GET /management/accounts/{accountId}/webproperties/{webPropertyId}/profiles/{profileId}/unsampledReports/{unsampledReportId}
 # operationId: analytics.management.unsampledReports.get
-export def "management-accounts-webproperties-profiles-unsampled-reports analyticsmanagementunsampledReportsget" [
+export def "management-accounts-webproperties-profiles-unsampled-reports get" [
   account_id: string
   web_property_id: string
   profile_id: string
@@ -3227,7 +3236,7 @@ export def "management-accounts-webproperties-profiles-unsampled-reports analyti
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, web_property_id: $web_property_id, profile_id: $profile_id, unsampled_report_id: $unsampled_report_id} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/unsampledReports/{unsampled_report_id}") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), profile_id: (encode-path-segment $profile_id), unsampled_report_id: (encode-path-segment $unsampled_report_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/profiles/{profile_id}/unsampledReports/{unsampled_report_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3237,7 +3246,7 @@ export def "management-accounts-webproperties-profiles-unsampled-reports analyti
 #
 # GET /management/accounts/{accountId}/webproperties/{webPropertyId}/remarketingAudiences
 # operationId: analytics.management.remarketingAudience.list
-export def "management-accounts-webproperties-remarketing-audiences analyticsmanagementremarketingAudiencelist" [
+export def "management-accounts-webproperties-remarketing-audiences list" [
   account_id: string
   web_property_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3262,7 +3271,7 @@ export def "management-accounts-webproperties-remarketing-audiences analyticsman
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "start-index" $start_index "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, web_property_id: $web_property_id} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/remarketingAudiences") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/remarketingAudiences") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3275,7 +3284,7 @@ export def "management-accounts-webproperties-remarketing-audiences analyticsman
 # --audienceDefinition shape: {includeConditions?: record}
 # --linkedAdAccounts item shape: {accountId?: string, id?: string, kind?: string, linkedAccountId?: string, remarketingAudienceId?: string, status?: string, type?: string, webPropertyId?: string}
 # --stateBasedAudienceDefinition shape: {excludeConditions?: record, includeConditions?: record}
-export def "management-accounts-webproperties-remarketing-audiences analyticsmanagementremarketingAudienceinsert" [
+export def "management-accounts-webproperties-remarketing-audiences create" [
   account_id: string
   web_property_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3299,7 +3308,7 @@ export def "management-accounts-webproperties-remarketing-audiences analyticsman
   --id: string # Remarketing Audience ID.
   --kind: string # Collection type. (default: analytics#remarketingAudience)
   --linked-ad-accounts: list # The linked ad accounts associated with this remarketing audience. A remarketing audience can have only one linkedAdAccount currently. — item shape: {accountId?: string, id?: string, kind?: string, linkedAccountId?: string, remarketingAudienceId?: string, status?: string, type?: string, webPropertyId?: string}
-  --linked-views: list # The views (profiles) that this remarketing audience is linked to.
+  --linked-views: list<string> # The views (profiles) that this remarketing audience is linked to.
   --name: string # The name of this remarketing audience.
   --state-based-audience-definition: record # A state based audience definition that will cause a user to be added or removed from an audience. — shape: {excludeConditions?: record, includeConditions?: record}
   --body-web-property-id: string # Web property ID of the form UA-XXXXX-YY to which this remarketing audience belongs.
@@ -3308,19 +3317,19 @@ export def "management-accounts-webproperties-remarketing-audiences analyticsman
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, web_property_id: $web_property_id} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/remarketingAudiences") $qp)
-  let body = {"accountId": $body_account_id, "audienceDefinition": $audience_definition, "audienceType": $audience_type, "id": $id, "kind": $kind, "linkedAdAccounts": $linked_ad_accounts, "linkedViews": $linked_views, "name": $name, "stateBasedAudienceDefinition": $state_based_audience_definition, "webPropertyId": $body_web_property_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/remarketingAudiences") $qp)
+  let req_body = {"accountId": $body_account_id, "audienceDefinition": $audience_definition, "audienceType": $audience_type, "id": $id, "kind": $kind, "linkedAdAccounts": $linked_ad_accounts, "linkedViews": $linked_views, "name": $name, "stateBasedAudienceDefinition": $state_based_audience_definition, "webPropertyId": $body_web_property_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a remarketing audience.
 #
 # DELETE /management/accounts/{accountId}/webproperties/{webPropertyId}/remarketingAudiences/{remarketingAudienceId}
 # operationId: analytics.management.remarketingAudience.delete
-export def "management-accounts-webproperties-remarketing-audiences analyticsmanagementremarketingAudiencedelete" [
+export def "management-accounts-webproperties-remarketing-audiences delete" [
   account_id: string
   web_property_id: string
   remarketing_audience_id: string
@@ -3343,7 +3352,7 @@ export def "management-accounts-webproperties-remarketing-audiences analyticsman
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, web_property_id: $web_property_id, remarketing_audience_id: $remarketing_audience_id} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/remarketingAudiences/{remarketing_audience_id}") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), remarketing_audience_id: (encode-path-segment $remarketing_audience_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/remarketingAudiences/{remarketing_audience_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3353,7 +3362,7 @@ export def "management-accounts-webproperties-remarketing-audiences analyticsman
 #
 # GET /management/accounts/{accountId}/webproperties/{webPropertyId}/remarketingAudiences/{remarketingAudienceId}
 # operationId: analytics.management.remarketingAudience.get
-export def "management-accounts-webproperties-remarketing-audiences analyticsmanagementremarketingAudienceget" [
+export def "management-accounts-webproperties-remarketing-audiences get" [
   account_id: string
   web_property_id: string
   remarketing_audience_id: string
@@ -3376,7 +3385,7 @@ export def "management-accounts-webproperties-remarketing-audiences analyticsman
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, web_property_id: $web_property_id, remarketing_audience_id: $remarketing_audience_id} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/remarketingAudiences/{remarketing_audience_id}") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), remarketing_audience_id: (encode-path-segment $remarketing_audience_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/remarketingAudiences/{remarketing_audience_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3389,7 +3398,7 @@ export def "management-accounts-webproperties-remarketing-audiences analyticsman
 # --audienceDefinition shape: {includeConditions?: record}
 # --linkedAdAccounts item shape: {accountId?: string, id?: string, kind?: string, linkedAccountId?: string, remarketingAudienceId?: string, status?: string, type?: string, webPropertyId?: string}
 # --stateBasedAudienceDefinition shape: {excludeConditions?: record, includeConditions?: record}
-export def "management-accounts-webproperties-remarketing-audiences analyticsmanagementremarketingAudiencepatch" [
+export def "management-accounts-webproperties-remarketing-audiences update-by-accountId-webPropertyId-remarketingAudienceId" [
   account_id: string
   web_property_id: string
   remarketing_audience_id: string
@@ -3414,7 +3423,7 @@ export def "management-accounts-webproperties-remarketing-audiences analyticsman
   --id: string # Remarketing Audience ID.
   --kind: string # Collection type. (default: analytics#remarketingAudience)
   --linked-ad-accounts: list # The linked ad accounts associated with this remarketing audience. A remarketing audience can have only one linkedAdAccount currently. — item shape: {accountId?: string, id?: string, kind?: string, linkedAccountId?: string, remarketingAudienceId?: string, status?: string, type?: string, webPropertyId?: string}
-  --linked-views: list # The views (profiles) that this remarketing audience is linked to.
+  --linked-views: list<string> # The views (profiles) that this remarketing audience is linked to.
   --name: string # The name of this remarketing audience.
   --state-based-audience-definition: record # A state based audience definition that will cause a user to be added or removed from an audience. — shape: {excludeConditions?: record, includeConditions?: record}
   --body-web-property-id: string # Web property ID of the form UA-XXXXX-YY to which this remarketing audience belongs.
@@ -3423,12 +3432,12 @@ export def "management-accounts-webproperties-remarketing-audiences analyticsman
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, web_property_id: $web_property_id, remarketing_audience_id: $remarketing_audience_id} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/remarketingAudiences/{remarketing_audience_id}") $qp)
-  let body = {"accountId": $body_account_id, "audienceDefinition": $audience_definition, "audienceType": $audience_type, "id": $id, "kind": $kind, "linkedAdAccounts": $linked_ad_accounts, "linkedViews": $linked_views, "name": $name, "stateBasedAudienceDefinition": $state_based_audience_definition, "webPropertyId": $body_web_property_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), remarketing_audience_id: (encode-path-segment $remarketing_audience_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/remarketingAudiences/{remarketing_audience_id}") $qp)
+  let req_body = {"accountId": $body_account_id, "audienceDefinition": $audience_definition, "audienceType": $audience_type, "id": $id, "kind": $kind, "linkedAdAccounts": $linked_ad_accounts, "linkedViews": $linked_views, "name": $name, "stateBasedAudienceDefinition": $state_based_audience_definition, "webPropertyId": $body_web_property_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates an existing remarketing audience.
@@ -3438,7 +3447,7 @@ export def "management-accounts-webproperties-remarketing-audiences analyticsman
 # --audienceDefinition shape: {includeConditions?: record}
 # --linkedAdAccounts item shape: {accountId?: string, id?: string, kind?: string, linkedAccountId?: string, remarketingAudienceId?: string, status?: string, type?: string, webPropertyId?: string}
 # --stateBasedAudienceDefinition shape: {excludeConditions?: record, includeConditions?: record}
-export def "management-accounts-webproperties-remarketing-audiences analyticsmanagementremarketingAudienceupdate" [
+export def "management-accounts-webproperties-remarketing-audiences update-by-accountId-webPropertyId-remarketingAudienceId-1" [
   account_id: string
   web_property_id: string
   remarketing_audience_id: string
@@ -3463,7 +3472,7 @@ export def "management-accounts-webproperties-remarketing-audiences analyticsman
   --id: string # Remarketing Audience ID.
   --kind: string # Collection type. (default: analytics#remarketingAudience)
   --linked-ad-accounts: list # The linked ad accounts associated with this remarketing audience. A remarketing audience can have only one linkedAdAccount currently. — item shape: {accountId?: string, id?: string, kind?: string, linkedAccountId?: string, remarketingAudienceId?: string, status?: string, type?: string, webPropertyId?: string}
-  --linked-views: list # The views (profiles) that this remarketing audience is linked to.
+  --linked-views: list<string> # The views (profiles) that this remarketing audience is linked to.
   --name: string # The name of this remarketing audience.
   --state-based-audience-definition: record # A state based audience definition that will cause a user to be added or removed from an audience. — shape: {excludeConditions?: record, includeConditions?: record}
   --body-web-property-id: string # Web property ID of the form UA-XXXXX-YY to which this remarketing audience belongs.
@@ -3472,19 +3481,19 @@ export def "management-accounts-webproperties-remarketing-audiences analyticsman
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, web_property_id: $web_property_id, remarketing_audience_id: $remarketing_audience_id} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/remarketingAudiences/{remarketing_audience_id}") $qp)
-  let body = {"accountId": $body_account_id, "audienceDefinition": $audience_definition, "audienceType": $audience_type, "id": $id, "kind": $kind, "linkedAdAccounts": $linked_ad_accounts, "linkedViews": $linked_views, "name": $name, "stateBasedAudienceDefinition": $state_based_audience_definition, "webPropertyId": $body_web_property_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), web_property_id: (encode-path-segment $web_property_id), remarketing_audience_id: (encode-path-segment $remarketing_audience_id)} | format pattern "/management/accounts/{account_id}/webproperties/{web_property_id}/remarketingAudiences/{remarketing_audience_id}") $qp)
+  let req_body = {"accountId": $body_account_id, "audienceDefinition": $audience_definition, "audienceType": $audience_type, "id": $id, "kind": $kind, "linkedAdAccounts": $linked_ad_accounts, "linkedViews": $linked_views, "name": $name, "stateBasedAudienceDefinition": $state_based_audience_definition, "webPropertyId": $body_web_property_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Hashes the given Client ID.
 #
 # POST /management/clientId:hashClientId
 # operationId: analytics.management.clientId.hashClientId
-export def "management-client-id-hash-client-id analyticsmanagementclientIdhashClientId" [
+export def "management-client-id-hash-client-id create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3509,18 +3518,18 @@ export def "management-client-id-hash-client-id analyticsmanagementclientIdhashC
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/management/clientId:hashClientId" $qp)
-  let body = {"clientId": $client_id, "kind": $kind, "webPropertyId": $web_property_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"clientId": $client_id, "kind": $kind, "webPropertyId": $web_property_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists segments to which the user has access.
 #
 # GET /management/segments
 # operationId: analytics.management.segments.list
-export def "management-segments analyticsmanagementsegmentslist" [
+export def "management-segments list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3552,7 +3561,7 @@ export def "management-segments analyticsmanagementsegmentslist" [
 #
 # GET /metadata/{reportType}/columns
 # operationId: analytics.metadata.columns.list
-export def "metadata-columns analyticsmetadatacolumnslist" [
+export def "metadata-columns list" [
   report_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3573,7 +3582,7 @@ export def "metadata-columns analyticsmetadatacolumnslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({report_type: $report_type} | format pattern "/metadata/{report_type}/columns") $qp)
+  let full_url = (build-url $base ({report_type: (encode-path-segment $report_type)} | format pattern "/metadata/{report_type}/columns") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3586,7 +3595,7 @@ export def "metadata-columns analyticsmetadatacolumnslist" [
 # --account shape: {childLink?: record, created?: string, id?: string, kind?: string, name?: string, permissions?: record, selfLink?: string, starred?: bool, updated?: string}
 # --profile shape: {accountId?: string, botFilteringEnabled?: bool, childLink?: record, currency?: string, defaultPage?: string, eCommerceTracking?: bool, enhancedECommerceTracking?: bool, excludeQueryParameters?: string, id?: string, name?: string, parentLink?: record, permissions?: record, siteSearchCategoryParameters?: string, siteSearchQueryParameters?: string, starred?: bool, stripSiteSearchCategoryParameters?: bool, stripSiteSearchQueryParameters?: bool, timezone?: string, type?: string, websiteUrl?: string}
 # --webproperty shape: {accountId?: string, childLink?: record, dataRetentionResetOnNewActivity?: bool, dataRetentionTtl?: string, defaultProfileId?: string, id?: string, industryVertical?: string, name?: string, parentLink?: record, permissions?: record, starred?: bool, websiteUrl?: string}
-export def "provisioning-create-account-ticket analyticsprovisioningcreateAccountTicket" [
+export def "provisioning-create-account-ticket create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3614,18 +3623,18 @@ export def "provisioning-create-account-ticket analyticsprovisioningcreateAccoun
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/provisioning/createAccountTicket" $qp)
-  let body = {"account": $account, "id": $id, "kind": $kind, "profile": $profile, "redirectUri": $redirect_uri, "webproperty": $webproperty} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"account": $account, "id": $id, "kind": $kind, "profile": $profile, "redirectUri": $redirect_uri, "webproperty": $webproperty} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Provision account.
 #
 # POST /provisioning/createAccountTree
 # operationId: analytics.provisioning.createAccountTree
-export def "provisioning-create-account-tree analyticsprovisioningcreateAccountTree" [
+export def "provisioning-create-account-tree create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3653,11 +3662,11 @@ export def "provisioning-create-account-tree analyticsprovisioningcreateAccountT
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/provisioning/createAccountTree" $qp)
-  let body = {"accountName": $account_name, "kind": $kind, "profileName": $profile_name, "timezone": $timezone, "webpropertyName": $webproperty_name, "websiteUrl": $website_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"accountName": $account_name, "kind": $kind, "profileName": $profile_name, "timezone": $timezone, "webpropertyName": $webproperty_name, "websiteUrl": $website_url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Insert or update a user deletion requests.
@@ -3665,7 +3674,7 @@ export def "provisioning-create-account-tree analyticsprovisioningcreateAccountT
 # POST /userDeletion/userDeletionRequests:upsert
 # operationId: analytics.userDeletion.userDeletionRequest.upsert
 # --id shape: {type?: string, userId?: string}
-export def "user-deletion-user-deletion-requests-upsert analyticsuserDeletionuserDeletionRequestupsert" [
+export def "user-deletion-user-deletion-requests-upsert update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3692,9 +3701,9 @@ export def "user-deletion-user-deletion-requests-upsert analyticsuserDeletionuse
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/userDeletion/userDeletionRequests:upsert" $qp)
-  let body = {"firebaseProjectId": $firebase_project_id, "id": $id, "kind": $kind, "propertyId": $property_id, "webPropertyId": $web_property_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"firebaseProjectId": $firebase_project_id, "id": $id, "kind": $kind, "propertyId": $property_id, "webPropertyId": $web_property_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -73,7 +82,7 @@ def method-completer [] { ["INGESTION_ENDPOINT" "WEBRTC_PULL" "WEBRTC_PUSH"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "rest-v11-account-account get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "rest-v1-1-account-account get-by-access-key-using-get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -97,7 +106,7 @@ export def commands []: nothing -> table {
 #
 # GET /rest/v1.1/account/account
 # operationId: getAccountByAccessKeyUsingGET
-export def "rest-v11-account-account get" [
+export def "rest-v1-1-account-account get-by-access-key-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -122,7 +131,7 @@ export def "rest-v11-account-account get" [
 #
 # GET /rest/v1.1/account/billing
 # operationId: getBillingPerAccountUsingGET
-export def "rest-v11-account-billing get-billing-per-account-using-get" [
+export def "rest-v1-1-account-billing get-per-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -150,7 +159,7 @@ export def "rest-v11-account-billing get-billing-per-account-using-get" [
 #
 # POST /rest/v1.1/account/changePassword
 # operationId: changePasswordUsingPOST
-export def "rest-v11-account-change-password changePasswordUsingPOST" [
+export def "rest-v1-1-account-change-password create-using" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -176,7 +185,7 @@ export def "rest-v11-account-change-password changePasswordUsingPOST" [
 #
 # POST /rest/v1.1/account/login
 # operationId: loginWithEmailUsingPOST
-export def "rest-v11-account-login loginWithEmailUsingPOST" [
+export def "rest-v1-1-account-login create-with-email-using" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -201,7 +210,7 @@ export def "rest-v11-account-login loginWithEmailUsingPOST" [
 #
 # GET /rest/v1.1/analysis/compare
 # operationId: compareFacesUsingGET
-export def "rest-v11-analysis-compare compareFacesUsingGET" [
+export def "rest-v1-1-analysis-compare get-faces-using" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -212,7 +221,7 @@ export def "rest-v11-analysis-compare compareFacesUsingGET" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --access-key: string # The accessKey provided by VisageCloud
   --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud
-  --face-hashes: list # The IDs of the faces which you want compared, comma-separated
+  --face-hashes: list<string> # The IDs of the faces which you want compared, comma-separated
   --show-details: oneof<nothing, bool> # Show details (default: false)
 ]: nothing -> record<message: string, payload: record, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -228,7 +237,7 @@ export def "rest-v11-analysis-compare compareFacesUsingGET" [
 #
 # POST /rest/v1.1/analysis/detection
 # operationId: performAnalysisUsingPOST
-export def "rest-v11-analysis-detection performAnalysisUsingPOST" [
+export def "rest-v1-1-analysis-detection create-perform-using" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -248,7 +257,7 @@ export def "rest-v11-analysis-detection performAnalysisUsingPOST" [
   --auto-rotate: oneof<nothing, bool> # Auto-rotate to find flipped or rotate faces (default: false)
   --skip-exif: oneof<nothing, bool> # Skip EXIF rotation procesing (default: false)
   --wait-for-picture-upload: oneof<nothing, bool> # Waits until the picture is successfully uploaded, before returning the response back the the client (default: false)
-  --filters: list # [For advanced users only] Change feature filters for robustness of feature extraction. Tweaking this parameter may affect per
+  --filters: list<string> # [For advanced users only] Change feature filters for robustness of feature extraction. Tweaking this parameter may affect per
   --options: string # [For advanced users only] Options for preprocessing of image.
   --picture: string # The multipart/form-data version of the image, in case a direct upload is used. At least one of picture or pictureURL must be present
 ]: any -> record<message: string, payload: record, status: string> {
@@ -257,18 +266,19 @@ export def "rest-v11-analysis-detection performAnalysisUsingPOST" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "storeAnalysisPicture" $store_analysis_picture "scalar") (serialize-qp "storeFacePictures" $store_face_pictures "scalar") (serialize-qp "storeResult" $store_result "scalar") (serialize-qp "retentionTime" $retention_time "scalar") (serialize-qp "pictureURL" $picture_url "scalar") (serialize-qp "algorithmVersion" $algorithm_version "scalar") (serialize-qp "autoRotate" $auto_rotate "scalar") (serialize-qp "skipEXIF" $skip_exif "scalar") (serialize-qp "waitForPictureUpload" $wait_for_picture_upload "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "options" $options "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/v1.1/analysis/detection" $qp)
-  let body = {"picture": $picture} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"picture": $picture} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Retrieve the last *count* operations per current account
 #
 # GET /rest/v1.1/analysis/listLatest
 # operationId: retriveLatestUsingGET
-export def "rest-v11-analysis-list-latest retriveLatestUsingGET" [
+export def "rest-v1-1-analysis-list-latest get-retrive-using" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -294,7 +304,7 @@ export def "rest-v11-analysis-list-latest retriveLatestUsingGET" [
 #
 # POST /rest/v1.1/analysis/recognition
 # operationId: performRecognitionUsingPOST
-export def "rest-v11-analysis-recognition performRecognitionUsingPOST" [
+export def "rest-v1-1-analysis-recognition create-perform-using" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -310,14 +320,14 @@ export def "rest-v11-analysis-recognition performRecognitionUsingPOST" [
   --store-result: oneof<nothing, bool> # Boolean value indicating whether you want the result of the analysis to be stored (default: true)
   --retention-time: int # How many seconds the results should be retained in stoarage? (format: int32)
   --collection-id: string # Uniquely identified collection that can store multiple profiles
-  --labels: list # Labels associated with the given picture or picture URL
-  --attribute-filters: list@attribute-filters-completer # Filters that will be applied on the recognition operation
+  --labels: list<string> # Labels associated with the given picture or picture URL
+  --attribute-filters: list<string>@attribute-filters-completer # Filters that will be applied on the recognition operation
   --picture-url: string # The URL of the picture
   --algorithm-version: string@algorithm-version-completer # Algorithm version (V2 is more performant but not backward compatible) (default: V2)
   --auto-rotate: oneof<nothing, bool> # Auto-rotate to find flipped or rotate faces (default: false)
   --skip-exif-rotation-processing: oneof<nothing, bool> # Skip EXIF rotation procesing (default: false)
   --wait-for-picture-upload: oneof<nothing, bool> # Waits until the picture is successfully uploaded, before returning the response back the the client (default: false)
-  --filters: list # [For advanced users only] Change feature filters for robustness of feature extraction. Tweaking this parameter may affect per
+  --filters: list<string> # [For advanced users only] Change feature filters for robustness of feature extraction. Tweaking this parameter may affect per
   --options: string # [For advanced users only] Options for preprocessing of image.
   --picture: string # The picture itself
 ]: any -> record<message: string, payload: record, status: string> {
@@ -326,18 +336,19 @@ export def "rest-v11-analysis-recognition performRecognitionUsingPOST" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "storeAnalysisPicture" $store_analysis_picture "scalar") (serialize-qp "storeFacePictures" $store_face_pictures "scalar") (serialize-qp "storeResult" $store_result "scalar") (serialize-qp "retentionTime" $retention_time "scalar") (serialize-qp "collectionId" $collection_id "scalar") (serialize-qp "labels" $labels "multi") (serialize-qp "attributeFilters" $attribute_filters "multi") (serialize-qp "pictureURL" $picture_url "scalar") (serialize-qp "algorithmVersion" $algorithm_version "scalar") (serialize-qp "autoRotate" $auto_rotate "scalar") (serialize-qp "skipEXIF rotation processing" $skip_exif_rotation_processing "scalar") (serialize-qp "waitForPictureUpload" $wait_for_picture_upload "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "options" $options "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/v1.1/analysis/recognition" $qp)
-  let body = {"picture": $picture} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"picture": $picture} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Retrieve a complete analysis object including both detection and recognition information
 #
 # GET /rest/v1.1/analysis/retrieve
 # operationId: retrieveAnalysisUsingGET
-export def "rest-v11-analysis-retrieve retrieve-analysis-using-get" [
+export def "rest-v1-1-analysis-retrieve get-using" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -363,7 +374,7 @@ export def "rest-v11-analysis-retrieve retrieve-analysis-using-get" [
 #
 # POST /rest/v1.1/analytics/counting
 # operationId: counterUsingPOST
-export def "rest-v11-analytics-counting counterUsingPOST" [
+export def "rest-v1-1-analytics-counting create-counter-using" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -374,8 +385,8 @@ export def "rest-v11-analytics-counting counterUsingPOST" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --access-key: string # The accessKey provided by VisageCloud
   --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud
-  --collection-ids: list # Collection ids
-  --stream-ids: list # Stream Ids
+  --collection-ids: list<string> # Collection ids
+  --stream-ids: list<string> # Stream Ids
   --start-date-time: string # startDateTime (format: date-time)
   --end-date-time: string # endDateTime (format: date-time)
   --visit-duration: int # visitDuration (format: int64, default: 3600000)
@@ -398,7 +409,7 @@ export def "rest-v11-analytics-counting counterUsingPOST" [
 #
 # POST /rest/v1.1/analytics/presence/timeseries
 # operationId: presenceTimeseriesUsingPOST
-export def "rest-v11-analytics-presence-timeseries presenceTimeseriesUsingPOST" [
+export def "rest-v1-1-analytics-presence-timeseries create-using" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -409,11 +420,11 @@ export def "rest-v11-analytics-presence-timeseries presenceTimeseriesUsingPOST" 
   --dry-run(-n) # Return the request that would be sent without executing it
   --access-key: string # The accessKey provided by VisageCloud
   --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud
-  --stream-ids: list # Stream Ids
+  --stream-ids: list<string> # Stream Ids
   --start-date-time: string # startDateTime (format: date-time)
   --end-date-time: string # endDateTime (format: date-time)
   --step: int # step (format: int64, default: 3600)
-  --attributes: list # attributes
+  --attributes: list<string> # attributes
 ]: nothing -> record<message: string, payload: record, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -428,7 +439,7 @@ export def "rest-v11-analytics-presence-timeseries presenceTimeseriesUsingPOST" 
 #
 # POST /rest/v1.1/analytics/presence/total
 # operationId: presenceTotalUsingPOST
-export def "rest-v11-analytics-presence-total presenceTotalUsingPOST" [
+export def "rest-v1-1-analytics-presence-total create-using" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -439,10 +450,10 @@ export def "rest-v11-analytics-presence-total presenceTotalUsingPOST" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --access-key: string # The accessKey provided by VisageCloud
   --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud
-  --stream-ids: list # Stream Ids
+  --stream-ids: list<string> # Stream Ids
   --start-date-time: string # startDateTime (format: date-time)
   --end-date-time: string # endDateTime (format: date-time)
-  --attributes: list # attributes
+  --attributes: list<string> # attributes
 ]: nothing -> record<message: string, payload: record, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -457,7 +468,7 @@ export def "rest-v11-analytics-presence-total presenceTotalUsingPOST" [
 #
 # DELETE /rest/v1.1/classifier/svm
 # operationId: removeClassiferUsingDELETE
-export def "rest-v11-classifier-svm delete-classifer-using-delete" [
+export def "rest-v1-1-classifier-svm delete-classifer-using-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -483,7 +494,7 @@ export def "rest-v11-classifier-svm delete-classifer-using-delete" [
 #
 # GET /rest/v1.1/classifier/svm
 # operationId: getClassiferFullUsingGET
-export def "rest-v11-classifier-svm get-classifer-full-using-get" [
+export def "rest-v1-1-classifier-svm get-classifer-full-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -509,7 +520,7 @@ export def "rest-v11-classifier-svm get-classifer-full-using-get" [
 #
 # POST /rest/v1.1/classifier/svm
 # operationId: addSVMClassifierUsingPOST
-export def "rest-v11-classifier-svm create-svm-classifier-using-post" [
+export def "rest-v1-1-classifier-svm create-using-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -521,7 +532,7 @@ export def "rest-v11-classifier-svm create-svm-classifier-using-post" [
   --access-key: string # The accessKey provided by VisageCloud
   --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud
   --name: string # The name of the SVM classifier that will be created
-  --collection-ids: list # Collection ids
+  --collection-ids: list<string> # Collection ids
   --preprocessor: string # Preprocessor (default: FeaturePreprocessor)
   --classification-attribute-name: string # Classification attribute name
   --consider-view-points: oneof<nothing, bool> # Consider view point (default: false)
@@ -549,7 +560,7 @@ export def "rest-v11-classifier-svm create-svm-classifier-using-post" [
 #
 # GET /rest/v1.1/classifier/svm/status
 # operationId: getClassiferStatusUsingGET
-export def "rest-v11-classifier-svm-status get-classifer-status-using-get" [
+export def "rest-v1-1-classifier-svm-status get-classifer-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -575,7 +586,7 @@ export def "rest-v11-classifier-svm-status get-classifer-status-using-get" [
 #
 # GET /rest/v1.1/collection/
 # operationId: getAllCollectionsUsingGET
-export def "rest-v11-collection get-all-collections-using-get" [
+export def "rest-v1-1-collection get-list-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -600,7 +611,7 @@ export def "rest-v11-collection get-all-collections-using-get" [
 #
 # POST /rest/v1.1/collection/
 # operationId: addCollectionUsingPOST
-export def "rest-v11-collection create-collection-using-post" [
+export def "rest-v1-1-collection create-using-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -620,11 +631,12 @@ export def "rest-v11-collection create-collection-using-post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/v1.1/collection/")
-  let body = {"accessKey": $access_key, "secretKey": $secret_key, "name": $name, "preload": $preload, "evictable": $evictable, "purposes": $purposes} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"accessKey": $access_key, "secretKey": $secret_key, "name": $name, "preload": $preload, "evictable": $evictable, "purposes": $purposes} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Retrieve all collections
@@ -633,7 +645,7 @@ export def "rest-v11-collection create-collection-using-post" [
 # DEPRECATED
 # operationId: getAllCollections2UsingGET
 @deprecated
-export def "rest-v11-collection-all get-all-collections2-using-get" [
+export def "rest-v1-1-collection-all get-collections2-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -660,7 +672,7 @@ export def "rest-v11-collection-all get-all-collections2-using-get" [
 # DEPRECATED
 # operationId: deleteCollection2UsingDELETE
 @deprecated
-export def "rest-v11-collection-collection delete-collection2-using-delete" [
+export def "rest-v1-1-collection-collection delete-collection2-using-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -688,7 +700,7 @@ export def "rest-v11-collection-collection delete-collection2-using-delete" [
 # DEPRECATED
 # operationId: getCollection2UsingGET
 @deprecated
-export def "rest-v11-collection-collection get-collection2-using-get" [
+export def "rest-v1-1-collection-collection get-collection2-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -716,7 +728,7 @@ export def "rest-v11-collection-collection get-collection2-using-get" [
 # DEPRECATED
 # operationId: addCollection2UsingPOST
 @deprecated
-export def "rest-v11-collection-collection create-collection2-using-post" [
+export def "rest-v1-1-collection-collection create-collection2-using-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -730,7 +742,7 @@ export def "rest-v11-collection-collection create-collection2-using-post" [
   --collection-name: string # The name of the collection that will be created
   --preload: oneof<nothing, bool> # Defined whether to preload collection (default: false)
   --evictable: oneof<nothing, bool> # Defined whether the collection can be evicted (default: true)
-  --purposes: list@purposes-completer # The newly declared purposes of the collection
+  --purposes: list<string>@purposes-completer # The newly declared purposes of the collection
 ]: nothing -> record<message: string, payload: record, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -745,7 +757,7 @@ export def "rest-v11-collection-collection create-collection2-using-post" [
 #
 # GET /rest/v1.1/collection/export/csv
 # operationId: exportCSVUsingGET
-export def "rest-v11-collection-export-csv export-csv-using-get" [
+export def "rest-v1-1-collection-export-csv get-using" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -773,7 +785,7 @@ export def "rest-v11-collection-export-csv export-csv-using-get" [
 # DEPRECATED
 # operationId: repurposeCollectionUsingPUT
 @deprecated
-export def "rest-v11-collection-purpose repurposeCollectionUsingPUT" [
+export def "rest-v1-1-collection-purpose update-repurpose-using" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -785,7 +797,7 @@ export def "rest-v11-collection-purpose repurposeCollectionUsingPUT" [
   --access-key: string # The accessKey provided by VisageCloud
   --secret-key: string # The secretKey provided by VisageCloud
   --collection-id: string # The id of the collection for which the data will be retrieved
-  --purposes: list@purposes-completer # The newly declared purposes of the collection
+  --purposes: list<string>@purposes-completer # The newly declared purposes of the collection
 ]: nothing -> record<message: string, payload: record, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -800,7 +812,7 @@ export def "rest-v11-collection-purpose repurposeCollectionUsingPUT" [
 #
 # DELETE /rest/v1.1/collection/{id}
 # operationId: deleteCollectionUsingDELETE
-export def "rest-v11-collection delete-collection-using-delete" [
+export def "rest-v1-1-collection delete-using-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -816,7 +828,7 @@ export def "rest-v11-collection delete-collection-using-delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/rest/v1.1/collection/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/v1.1/collection/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -826,7 +838,7 @@ export def "rest-v11-collection delete-collection-using-delete" [
 #
 # GET /rest/v1.1/collection/{id}
 # operationId: getCollectionUsingGET
-export def "rest-v11-collection get-collection-using-get" [
+export def "rest-v1-1-collection get-using-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -842,7 +854,7 @@ export def "rest-v11-collection get-collection-using-get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/rest/v1.1/collection/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/v1.1/collection/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -852,7 +864,7 @@ export def "rest-v11-collection get-collection-using-get" [
 #
 # PATCH /rest/v1.1/collection/{id}
 # operationId: updateCollectionUsingPATCH
-export def "rest-v11-collection update-collection-using-patch" [
+export def "rest-v1-1-collection update-using-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -865,12 +877,12 @@ export def "rest-v11-collection update-collection-using-patch" [
   --access-key: string # The accessKey provided by VisageCloud
   --secret-key: string # The secretKey provided by VisageCloud
   --name: string # The name of the collection that will be updated
-  --purposes: list@purposes-completer # The newly declared purposes of the collection
+  --purposes: list<string>@purposes-completer # The newly declared purposes of the collection
 ]: nothing -> record<message: string, payload: record, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "purposes" $purposes "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/rest/v1.1/collection/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/v1.1/collection/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -882,7 +894,7 @@ export def "rest-v11-collection update-collection-using-patch" [
 # DEPRECATED
 # operationId: updateCollection2UsingPOST
 @deprecated
-export def "rest-v11-collection update-collection2-using-post" [
+export def "rest-v1-1-collection update-collection2-using-create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -895,12 +907,12 @@ export def "rest-v11-collection update-collection2-using-post" [
   --access-key: string # The accessKey provided by VisageCloud
   --secret-key: string # The secretKey provided by VisageCloud
   --name: string # The name of the collection that will be updated
-  --purposes: list@purposes-completer # The newly declared purposes of the collection
+  --purposes: list<string>@purposes-completer # The newly declared purposes of the collection
 ]: nothing -> record<message: string, payload: record, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "purposes" $purposes "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/rest/v1.1/collection/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/v1.1/collection/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -910,7 +922,7 @@ export def "rest-v11-collection update-collection2-using-post" [
 #
 # GET /rest/v1.1/collection/{id}/profile
 # operationId: getAllCollectionProfilesUsingGET
-export def "rest-v11-collection-profile get-all-collection-profiles-using-get" [
+export def "rest-v1-1-collection-profile get-list-using-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -926,7 +938,7 @@ export def "rest-v11-collection-profile get-all-collection-profiles-using-get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/rest/v1.1/collection/{id}/profile") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/v1.1/collection/{id}/profile") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -938,7 +950,7 @@ export def "rest-v11-collection-profile get-all-collection-profiles-using-get" [
 # DEPRECATED
 # operationId: removeClassificationAttributesFromProfileUsingDELETE
 @deprecated
-export def "rest-v11-profile-classification-attributes delete-classification-attributes-from-profile-using-delete" [
+export def "rest-v1-1-profile-classification-attributes delete-from-using-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -967,7 +979,7 @@ export def "rest-v11-profile-classification-attributes delete-classification-att
 # DEPRECATED
 # operationId: getClassificationAttributesFromProfileUsingGET
 @deprecated
-export def "rest-v11-profile-classification-attributes get-classification-attributes-from-profile-using-get" [
+export def "rest-v1-1-profile-classification-attributes get-from-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -996,7 +1008,7 @@ export def "rest-v11-profile-classification-attributes get-classification-attrib
 # DEPRECATED
 # operationId: mapClassificationAttributesToProfileUsingPUT
 @deprecated
-export def "rest-v11-profile-classification-attributes mapClassificationAttributesToProfileUsingPUT" [
+export def "rest-v1-1-profile-classification-attributes update-map-to-using" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1024,7 +1036,7 @@ export def "rest-v11-profile-classification-attributes mapClassificationAttribut
 #
 # GET /rest/v1.1/profile/enrollmentStatus
 # operationId: getProfileEnrollmentStatusUsingGET
-export def "rest-v11-profile-enrollment-status get-profile-enrollment-status-using-get" [
+export def "rest-v1-1-profile-enrollment-status get-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1051,7 +1063,7 @@ export def "rest-v11-profile-enrollment-status get-profile-enrollment-status-usi
 #
 # DELETE /rest/v1.1/profile/map
 # operationId: removeFacesFromProfileUsingDELETE
-export def "rest-v11-profile-map delete-faces-from-profile-using-delete" [
+export def "rest-v1-1-profile-map delete-faces-from-using-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1079,7 +1091,7 @@ export def "rest-v11-profile-map delete-faces-from-profile-using-delete" [
 #
 # GET /rest/v1.1/profile/map
 # operationId: getFacesFromProfileUsingGET
-export def "rest-v11-profile-map get-faces-from-profile-using-get" [
+export def "rest-v1-1-profile-map get-faces-from-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1106,7 +1118,7 @@ export def "rest-v11-profile-map get-faces-from-profile-using-get" [
 #
 # POST /rest/v1.1/profile/map
 # operationId: mapFacesToProfileUsingPOST
-export def "rest-v11-profile-map mapFacesToProfileUsingPOST" [
+export def "rest-v1-1-profile-map create-faces-to-using" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1136,7 +1148,7 @@ export def "rest-v11-profile-map mapFacesToProfileUsingPOST" [
 # DEPRECATED
 # operationId: deleteProfile2UsingDELETE
 @deprecated
-export def "rest-v11-profile-profile delete-profile2-using-delete" [
+export def "rest-v1-1-profile-profile delete-profile2-using-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1163,7 +1175,7 @@ export def "rest-v11-profile-profile delete-profile2-using-delete" [
 #
 # POST /rest/v1.1/profile/profile
 # operationId: addProfileUsingPOST
-export def "rest-v11-profile-profile create-profile-using-post" [
+export def "rest-v1-1-profile-profile create-using-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1177,7 +1189,7 @@ export def "rest-v11-profile-profile create-profile-using-post" [
   --collection-id: string # Uniquely identified collection that can store multiple profiles
   --external-id: string # External reference to additional information you don’t want to share with VisageCloud
   --screen-name: string # Human-readable label for the profile
-  --labels: list # Allows you to do finer filtering in face recognition
+  --labels: list<string> # Allows you to do finer filtering in face recognition
   --classification-attributes: string # Comma separated key:value classification attributes
   --details: string # Comma separated key:value details of profile
 ]: nothing -> record<message: string, payload: record, status: string> {
@@ -1194,7 +1206,7 @@ export def "rest-v11-profile-profile create-profile-using-post" [
 #
 # DELETE /rest/v1.1/profile/{id}
 # operationId: deleteProfileUsingDELETE
-export def "rest-v11-profile delete-profile-using-delete" [
+export def "rest-v1-1-profile delete-using-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1211,7 +1223,7 @@ export def "rest-v11-profile delete-profile-using-delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "collectionId" $collection_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/rest/v1.1/profile/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/v1.1/profile/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1221,7 +1233,7 @@ export def "rest-v11-profile delete-profile-using-delete" [
 #
 # GET /rest/v1.1/profile/{id}
 # operationId: getProfileUsingGET
-export def "rest-v11-profile get-profile-using-get" [
+export def "rest-v1-1-profile get-using-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1239,7 +1251,7 @@ export def "rest-v11-profile get-profile-using-get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "collectionId" $collection_id "scalar") (serialize-qp "withFaces" $with_faces "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/rest/v1.1/profile/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/v1.1/profile/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1249,7 +1261,7 @@ export def "rest-v11-profile get-profile-using-get" [
 #
 # PATCH /rest/v1.1/profile/{id}
 # operationId: updateProfileUsingPATCH
-export def "rest-v11-profile update-profile-using-patch" [
+export def "rest-v1-1-profile update-using-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1264,14 +1276,14 @@ export def "rest-v11-profile update-profile-using-patch" [
   --collection-id: string # Uniquely identified collection that can store multiple profiles
   --external-id: string # External reference to additional information you don’t want to share with VisageCloud
   --screen-name: string # Human-readable label for the profile
-  --labels: list # Allows you to do finer filtering in face recognition
+  --labels: list<string> # Allows you to do finer filtering in face recognition
   --classification-attributes: string # Comma separated key:value classification attributes
   --details: string # Comma separated key:value details of profile
 ]: nothing -> record<message: string, payload: record, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "collectionId" $collection_id "scalar") (serialize-qp "externalId" $external_id "scalar") (serialize-qp "screenName" $screen_name "scalar") (serialize-qp "labels" $labels "multi") (serialize-qp "classificationAttributes" $classification_attributes "scalar") (serialize-qp "details" $details "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/rest/v1.1/profile/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/v1.1/profile/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1281,7 +1293,7 @@ export def "rest-v11-profile update-profile-using-patch" [
 #
 # GET /rest/v1.1/stream/all
 # operationId: streamsByAccountUsingGET
-export def "rest-v11-stream-all streamsByAccountUsingGET" [
+export def "rest-v1-1-stream-all get-by-account-using" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1306,7 +1318,7 @@ export def "rest-v11-stream-all streamsByAccountUsingGET" [
 #
 # GET /rest/v1.1/stream/attendance
 # operationId: getLastNAttedanceUsingGET
-export def "rest-v11-stream-attendance get-last-n-attedance-using-get" [
+export def "rest-v1-1-stream-attendance get-last-n-attedance-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1317,7 +1329,7 @@ export def "rest-v11-stream-attendance get-last-n-attedance-using-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --access-key: string # The accessKey provided by VisageCloud
   --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud
-  --stream-ids: list # The id of the stream for which the frames will be retrieved
+  --stream-ids: list<string> # The id of the stream for which the frames will be retrieved
   --count: int # How many frames to retrieve at a time (format: int32, default: 10)
 ]: nothing -> record<message: string, payload: record, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1333,7 +1345,7 @@ export def "rest-v11-stream-attendance get-last-n-attedance-using-get" [
 #
 # PATCH /rest/v1.1/stream/cleanup
 # operationId: cleanupStreamUsingPATCH
-export def "rest-v11-stream-cleanup cleanupStreamUsingPATCH" [
+export def "rest-v1-1-stream-cleanup update-using" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1360,7 +1372,7 @@ export def "rest-v11-stream-cleanup cleanupStreamUsingPATCH" [
 #
 # GET /rest/v1.1/stream/frameImage
 # operationId: getFrameImageUsingGET
-export def "rest-v11-stream-frame-image get-frame-image-using-get" [
+export def "rest-v1-1-stream-frame-image get-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1387,7 +1399,7 @@ export def "rest-v11-stream-frame-image get-frame-image-using-get" [
 #
 # GET /rest/v1.1/stream/frames
 # operationId: getLastNFramesUsingGET
-export def "rest-v11-stream-frames get-last-n-frames-using-get" [
+export def "rest-v1-1-stream-frames get-last-n-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1401,8 +1413,8 @@ export def "rest-v11-stream-frames get-last-n-frames-using-get" [
   --stream-id: string # The id of the stream for which the frames will be retrieved
   --count: int # How many frames to retrieve at a time (format: int32, default: 10)
   --collection-id: string # The collection id you want to run recognition against
-  --labels: list # Labels associated with the given picture or picture URL
-  --attribute-filters: list@attribute-filters-completer # Filters that will be applied on the recognition operation
+  --labels: list<string> # Labels associated with the given picture or picture URL
+  --attribute-filters: list<string>@attribute-filters-completer # Filters that will be applied on the recognition operation
 ]: nothing -> record<message: string, payload: record, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1417,7 +1429,7 @@ export def "rest-v11-stream-frames get-last-n-frames-using-get" [
 #
 # PATCH /rest/v1.1/stream/start
 # operationId: startStreamUsingPATCH
-export def "rest-v11-stream-start start-stream-using-patch" [
+export def "rest-v1-1-stream-start update-using" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1443,7 +1455,7 @@ export def "rest-v11-stream-start start-stream-using-patch" [
 #
 # PATCH /rest/v1.1/stream/stop
 # operationId: stopStreamUsingPATCH
-export def "rest-v11-stream-stop stop-stream-using-patch" [
+export def "rest-v1-1-stream-stop update-using" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1469,7 +1481,7 @@ export def "rest-v11-stream-stop stop-stream-using-patch" [
 #
 # POST /rest/v1.1/stream/stream
 # operationId: addStreamUsingPOST
-export def "rest-v11-stream-stream create-stream-using-post" [
+export def "rest-v1-1-stream-stream create-using-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1481,7 +1493,7 @@ export def "rest-v11-stream-stream create-stream-using-post" [
   --access-key: string # The accessKey provided by VisageCloud
   --secret-key: string # The secretKey provided by VisageCloud
   --name: string # The name of the stream that will be created
-  --qp-url: string # The url of the stream
+  --url: string # The url of the stream
   --method: string@method-completer # Streaming method (default: WEBRTC_PUSH)
   --username: string # Username
   --password: string # Password
@@ -1491,12 +1503,12 @@ export def "rest-v11-stream-stream create-stream-using-post" [
   --store-attendance-faces: oneof<nothing, bool> # Boolean value indicating whether you want to store permanently store faces clippings of the recognized faces (default: false)
   --store-attendance-frames: oneof<nothing, bool> # Boolean value indicating whether you want to store permanently store frames with a recognized face in them (default: false)
   --is-active: oneof<nothing, bool> # Boolean value indicating whether the stream is currently active or not (default: false)
-  --associated-collections: list # List of collection ids which will be used to measure attendance
+  --associated-collections: list<string> # List of collection ids which will be used to measure attendance
   --attributes: string # Attributes of the stream
 ]: nothing -> record<message: string, payload: record, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "url" $qp_url "scalar") (serialize-qp "method" $method "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "password" $password "scalar") (serialize-qp "skipFramesWithNoFaces" $skip_frames_with_no_faces "scalar") (serialize-qp "retentionTime" $retention_time "scalar") (serialize-qp "storeOriginalFrames" $store_original_frames "scalar") (serialize-qp "storeAttendanceFaces" $store_attendance_faces "scalar") (serialize-qp "storeAttendanceFrames" $store_attendance_frames "scalar") (serialize-qp "isActive" $is_active "scalar") (serialize-qp "associatedCollections" $associated_collections "multi") (serialize-qp "attributes" $attributes "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "url" $url "scalar") (serialize-qp "method" $method "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "password" $password "scalar") (serialize-qp "skipFramesWithNoFaces" $skip_frames_with_no_faces "scalar") (serialize-qp "retentionTime" $retention_time "scalar") (serialize-qp "storeOriginalFrames" $store_original_frames "scalar") (serialize-qp "storeAttendanceFaces" $store_attendance_faces "scalar") (serialize-qp "storeAttendanceFrames" $store_attendance_frames "scalar") (serialize-qp "isActive" $is_active "scalar") (serialize-qp "associatedCollections" $associated_collections "multi") (serialize-qp "attributes" $attributes "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/v1.1/stream/stream" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1507,7 +1519,7 @@ export def "rest-v11-stream-stream create-stream-using-post" [
 #
 # DELETE /rest/v1.1/stream/{id}
 # operationId: removeStreamUsingDELETE
-export def "rest-v11-stream delete-stream-using-delete" [
+export def "rest-v1-1-stream delete-using-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1523,7 +1535,7 @@ export def "rest-v11-stream delete-stream-using-delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/rest/v1.1/stream/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/v1.1/stream/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1533,7 +1545,7 @@ export def "rest-v11-stream delete-stream-using-delete" [
 #
 # GET /rest/v1.1/stream/{streamId}
 # operationId: getStreamUsingGET
-export def "rest-v11-stream get-stream-using-get" [
+export def "rest-v1-1-stream get-using-get" [
   stream_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1549,7 +1561,7 @@ export def "rest-v11-stream get-stream-using-get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({stream_id: $stream_id} | format pattern "/rest/v1.1/stream/{stream_id}") $qp)
+  let full_url = (build-url $base ({stream_id: (encode-path-segment $stream_id)} | format pattern "/rest/v1.1/stream/{stream_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1559,7 +1571,7 @@ export def "rest-v11-stream get-stream-using-get" [
 #
 # PATCH /rest/v1.1/stream/{streamId}
 # operationId: updateStreamUsingPATCH
-export def "rest-v11-stream update-stream-using-patch" [
+export def "rest-v1-1-stream update-using-update" [
   stream_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1572,7 +1584,7 @@ export def "rest-v11-stream update-stream-using-patch" [
   --access-key: string # The accessKey provided by VisageCloud
   --secret-key: string # The secretKey provided by VisageCloud
   --name: string # The name of the stream that will be updated
-  --qp-url: string # The url of the stream
+  --url: string # The url of the stream
   --method: string@method-completer # Streaming method
   --username: string # Username
   --password: string # Password
@@ -1582,13 +1594,13 @@ export def "rest-v11-stream update-stream-using-patch" [
   --store-attendance-faces: oneof<nothing, bool> # Boolean value indicating whether you want to store permanently store faces clippings of the recognized faces
   --store-attendance-frames: oneof<nothing, bool> # Boolean value indicating whether you want to store permanently store frames with a recognized face in them
   --is-active: oneof<nothing, bool> # Boolean value indicating whether the stream is currently active or not
-  --associated-collections: list # List of collection ids which will be used to measure attendance
+  --associated-collections: list<string> # List of collection ids which will be used to measure attendance
   --attributes: string # Attributes of the stream
 ]: nothing -> record<message: string, payload: record, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "url" $qp_url "scalar") (serialize-qp "method" $method "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "password" $password "scalar") (serialize-qp "skipFramesWithNoFaces" $skip_frames_with_no_faces "scalar") (serialize-qp "retentionTime" $retention_time "scalar") (serialize-qp "storeOriginalFrames" $store_original_frames "scalar") (serialize-qp "storeAttendanceFaces" $store_attendance_faces "scalar") (serialize-qp "storeAttendanceFrames" $store_attendance_frames "scalar") (serialize-qp "isActive" $is_active "scalar") (serialize-qp "associatedCollections" $associated_collections "multi") (serialize-qp "attributes" $attributes "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({stream_id: $stream_id} | format pattern "/rest/v1.1/stream/{stream_id}") $qp)
+  let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "url" $url "scalar") (serialize-qp "method" $method "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "password" $password "scalar") (serialize-qp "skipFramesWithNoFaces" $skip_frames_with_no_faces "scalar") (serialize-qp "retentionTime" $retention_time "scalar") (serialize-qp "storeOriginalFrames" $store_original_frames "scalar") (serialize-qp "storeAttendanceFaces" $store_attendance_faces "scalar") (serialize-qp "storeAttendanceFrames" $store_attendance_frames "scalar") (serialize-qp "isActive" $is_active "scalar") (serialize-qp "associatedCollections" $associated_collections "multi") (serialize-qp "attributes" $attributes "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({stream_id: (encode-path-segment $stream_id)} | format pattern "/rest/v1.1/stream/{stream_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

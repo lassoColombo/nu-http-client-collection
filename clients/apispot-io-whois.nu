@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -128,7 +137,7 @@ export def "batch create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  domains: list # e.g. [foo.com, foo.net, foo.io]
+  domains: list<string> # e.g. [foo.com, foo.net, foo.io]
   operation: string@operation-completer
   --options: record # shape: {format?: "raw"|"formatted"|"json"}
 ]: any -> record<completed: bool, count: int, created_at: string, id: string, operation: string, results: list<any>, status: string> {
@@ -136,11 +145,11 @@ export def "batch create" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/batch")
-  let body = {"domains": $domains, "operation": $operation, "options": $options} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"domains": $domains, "operation": $operation, "options": $options} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete batch
@@ -160,7 +169,7 @@ export def "batch delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/batch/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/batch/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -183,7 +192,7 @@ export def "batch get" [
 ]: nothing -> record<completed: bool, count: int, created_at: string, id: string, operation: string, results: list<any>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/batch/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/batch/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -230,7 +239,7 @@ export def "domains-check check" [
 ]: nothing -> record<isAvailable: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({domain: $domain} | format pattern "/domains/{domain}/check"))
+  let full_url = (build-url $base ({domain: (encode-path-segment $domain)} | format pattern "/domains/{domain}/check"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -240,7 +249,7 @@ export def "domains-check check" [
 #
 # GET /domains/{domain}/rank
 # operationId: domainRank
-export def "domains-rank domainRank" [
+export def "domains-rank get" [
   domain: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -253,7 +262,7 @@ export def "domains-rank domainRank" [
 ]: nothing -> record<rank: float> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({domain: $domain} | format pattern "/domains/{domain}/rank"))
+  let full_url = (build-url $base ({domain: (encode-path-segment $domain)} | format pattern "/domains/{domain}/rank"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -263,7 +272,7 @@ export def "domains-rank domainRank" [
 #
 # GET /domains/{domain}/whois
 # operationId: whois
-export def "domains-whois whois" [
+export def "domains-whois get" [
   domain: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -278,7 +287,7 @@ export def "domains-whois whois" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({domain: $domain} | format pattern "/domains/{domain}/whois") $qp)
+  let full_url = (build-url $base ({domain: (encode-path-segment $domain)} | format pattern "/domains/{domain}/whois") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

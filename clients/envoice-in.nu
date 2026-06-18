@@ -36,6 +36,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -77,7 +86,7 @@ def query-options-order-completer [] { ["Asc" "Desc" "None"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "client-all get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "client-all list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -101,7 +110,7 @@ export def commands []: nothing -> table {
 #
 # GET /api/client/all
 # operationId: ClientApi_All
-export def "client-all get" [
+export def "client-all list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -117,10 +126,10 @@ export def "client-all get" [
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/client/all")
-  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -128,7 +137,7 @@ export def "client-all get" [
 #
 # GET /api/client/candelete
 # operationId: ClientApi_CanDelete
-export def "client-candelete get" [
+export def "client-candelete delete-can" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -146,10 +155,10 @@ export def "client-candelete get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/client/candelete" $qp)
-  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -175,13 +184,13 @@ export def "client-delete delete" [
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/client/delete")
-  let body = {"Id": $id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"Id": $id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Return client details. Activities and invoices included.
@@ -206,10 +215,10 @@ export def "client-details get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/client/details" $qp)
-  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -218,7 +227,7 @@ export def "client-details get" [
 # POST /api/client/new
 # operationId: ClientApi_New
 # --AdditionalEmails item shape: {Email?: string}
-export def "client-new post" [
+export def "client-new create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -246,13 +255,13 @@ export def "client-new post" [
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/client/new")
-  let body = {"AdditionalEmails": $additional_emails, "Address": $address, "ClientCountryId": $client_country_id, "ClientCurrencyId": $client_currency_id, "CompanyRegistrationNumber": $company_registration_number, "DefaultDueDateInDays": $default_due_date_in_days, "Email": $email, "Name": $name, "PhoneNumber": $phone_number, "UiLanguageId": $ui_language_id, "Vat": $vat} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"AdditionalEmails": $additional_emails, "Address": $address, "ClientCountryId": $client_country_id, "ClientCurrencyId": $client_currency_id, "CompanyRegistrationNumber": $company_registration_number, "DefaultDueDateInDays": $default_due_date_in_days, "Email": $email, "Name": $name, "PhoneNumber": $phone_number, "UiLanguageId": $ui_language_id, "Vat": $vat} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update an existing client
@@ -288,20 +297,20 @@ export def "client-update update" [
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/client/update")
-  let body = {"AdditionalEmails": $additional_emails, "Address": $address, "ClientCountryId": $client_country_id, "ClientCurrencyId": $client_currency_id, "CompanyRegistrationNumber": $company_registration_number, "DefaultDueDateInDays": $default_due_date_in_days, "Email": $email, "Id": $id, "Name": $name, "PhoneNumber": $phone_number, "UiLanguageId": $ui_language_id, "Vat": $vat} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"AdditionalEmails": $additional_emails, "Address": $address, "ClientCountryId": $client_country_id, "ClientCurrencyId": $client_currency_id, "CompanyRegistrationNumber": $company_registration_number, "DefaultDueDateInDays": $default_due_date_in_days, "Email": $email, "Id": $id, "Name": $name, "PhoneNumber": $phone_number, "UiLanguageId": $ui_language_id, "Vat": $vat} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Return all estimation for the account
 #
 # GET /api/estimation/all
 # operationId: EstimationApi_All
-export def "estimation-all get" [
+export def "estimation-all list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -320,10 +329,10 @@ export def "estimation-all get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "queryOptions.page" $query_options_page "scalar") (serialize-qp "queryOptions.pageSize" $query_options_page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/estimation/all" $qp)
-  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -331,7 +340,7 @@ export def "estimation-all get" [
 #
 # POST /api/estimation/changestatus
 # operationId: EstimationApi_ChangeStatus
-export def "estimation-changestatus changes-tatus" [
+export def "estimation-changestatus create-change-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -350,20 +359,20 @@ export def "estimation-changestatus changes-tatus" [
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/estimation/changestatus")
-  let body = {"Id": $id, "Status": $status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"Id": $id, "Status": $status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Convert the estimation to an invoice
 #
 # POST /api/estimation/convert
 # operationId: EstimationApi_Convert
-export def "estimation-convert post" [
+export def "estimation-convert create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -381,12 +390,13 @@ export def "estimation-convert post" [
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/estimation/convert")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete an existing estimation
@@ -411,13 +421,13 @@ export def "estimation-delete delete" [
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/estimation/delete")
-  let body = {"Id": $id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"Id": $id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Return estimation data
@@ -442,10 +452,10 @@ export def "estimation-details get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/estimation/details" $qp)
-  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -456,7 +466,7 @@ export def "estimation-details get" [
 # --Attachments item shape: {Link?: string, ObfuscatedFileName?: string, OriginalFileName?: string, Size?: int, Type?: "External"|"Uploaded"}
 # --Items item shape: {Cost?: float, Description?: string, DiscountPercentage?: float, Quantity?: float, TaxId?: int, TaxPercentage?: float, WorkTypeId?: int}
 # --PaymentGateways item shape: {Name?: string}
-export def "estimation-new post" [
+export def "estimation-new create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -486,13 +496,13 @@ export def "estimation-new post" [
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/estimation/new")
-  let body = {"Attachments": $attachments, "ClientId": $client_id, "ClonedFromId": $cloned_from_id, "CurrencyId": $currency_id, "ExpiresOn": $expires_on, "IssuedOn": $issued_on, "Items": $items, "Notes": $notes, "Number": $number, "PaymentGateways": $payment_gateways, "PoNumber": $po_number, "Status": $status, "Terms": $terms} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"Attachments": $attachments, "ClientId": $client_id, "ClonedFromId": $cloned_from_id, "CurrencyId": $currency_id, "ExpiresOn": $expires_on, "IssuedOn": $issued_on, "Items": $items, "Notes": $notes, "Number": $number, "PaymentGateways": $payment_gateways, "PoNumber": $po_number, "Status": $status, "Terms": $terms} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Send the provided estimation to the client
@@ -522,13 +532,13 @@ export def "estimation-sendtoclient send-to-client" [
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/estimation/sendtoclient")
-  let body = {"AttachPdf": $attach_pdf, "EstimationId": $estimation_id, "Id": $id, "Message": $message, "SendToSelf": $send_to_self, "Subject": $subject} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"AttachPdf": $attach_pdf, "EstimationId": $estimation_id, "Id": $id, "Message": $message, "SendToSelf": $send_to_self, "Subject": $subject} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve the status of the estimation
@@ -553,10 +563,10 @@ export def "estimation-status get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/estimation/status" $qp)
-  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -598,13 +608,13 @@ export def "estimation-update update" [
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/estimation/update")
-  let body = {"Attachments": $attachments, "ClientId": $client_id, "ClonedFromId": $cloned_from_id, "CurrencyId": $currency_id, "ExpiresOn": $expires_on, "Id": $id, "IssuedOn": $issued_on, "Items": $items, "Notes": $notes, "Number": $number, "PaymentGateways": $payment_gateways, "PoNumber": $po_number, "Status": $status, "Terms": $terms} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"Attachments": $attachments, "ClientId": $client_id, "ClonedFromId": $cloned_from_id, "CurrencyId": $currency_id, "ExpiresOn": $expires_on, "Id": $id, "IssuedOn": $issued_on, "Items": $items, "Notes": $notes, "Number": $number, "PaymentGateways": $payment_gateways, "PoNumber": $po_number, "Status": $status, "Terms": $terms} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Return the unique url to the client's invoice
@@ -629,10 +639,10 @@ export def "estimation-uri get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/estimation/uri" $qp)
-  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -656,10 +666,10 @@ export def "general-countries get" [
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/general/countries")
-  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -683,10 +693,10 @@ export def "general-currencies get" [
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/general/currencies")
-  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -694,7 +704,7 @@ export def "general-currencies get" [
 #
 # GET /api/general/dateformats
 # operationId: GeneralApi_DateFormats
-export def "general-dateformats get" [
+export def "general-dateformats get-date-formats" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -710,10 +720,10 @@ export def "general-dateformats get" [
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/general/dateformats")
-  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -721,7 +731,7 @@ export def "general-dateformats get" [
 #
 # GET /api/general/uilanguages
 # operationId: GeneralApi_UiLanguages
-export def "general-uilanguages get" [
+export def "general-uilanguages get-ui-languages" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -737,10 +747,10 @@ export def "general-uilanguages get" [
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/general/uilanguages")
-  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -748,7 +758,7 @@ export def "general-uilanguages get" [
 #
 # GET /api/invoice/all
 # operationId: InvoiceApi_All
-export def "invoice-all get" [
+export def "invoice-all list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -767,10 +777,10 @@ export def "invoice-all get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "queryOptions.page" $query_options_page "scalar") (serialize-qp "queryOptions.pageSize" $query_options_page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/invoice/all" $qp)
-  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -795,10 +805,10 @@ export def "invoice-allcategories get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/invoice/allcategories" $qp)
-  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -806,7 +816,7 @@ export def "invoice-allcategories get" [
 #
 # POST /api/invoice/changestatus
 # operationId: InvoiceApi_ChangeStatus
-export def "invoice-changestatus changes-tatus" [
+export def "invoice-changestatus create-change-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -825,13 +835,13 @@ export def "invoice-changestatus changes-tatus" [
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/invoice/changestatus")
-  let body = {"Id": $id, "Status": $status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"Id": $id, "Status": $status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete an existing invoice
@@ -856,19 +866,19 @@ export def "invoice-delete delete" [
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/invoice/delete")
-  let body = {"Id": $id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"Id": $id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete an existing invoice category
 #
 # POST /api/invoice/deletecategory
-export def "invoice-deletecategory post" [
+export def "invoice-deletecategory create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -886,13 +896,13 @@ export def "invoice-deletecategory post" [
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/invoice/deletecategory")
-  let body = {"Id": $id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"Id": $id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Return invoice data
@@ -917,10 +927,10 @@ export def "invoice-details get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/invoice/details" $qp)
-  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -932,7 +942,7 @@ export def "invoice-details get" [
 # --Items item shape: {Cost?: float, Description?: string, DiscountPercentage?: float, Quantity?: float, TaxId?: int, TaxPercentage?: float, WorkTypeId?: int}
 # --PaymentGateways item shape: {Name?: string}
 # --RecurringProfile shape: {DayOfMonth?: int, DayOfWeek?: "Sunday"|"Monday"|"Tuesday"|"Wednesday"|"Thursday"|"Friday"|"Saturday", DueDateInDays?: int, EndOfRecurrance?: string, Month?: int, RecurrancePattern?: "Daily"|"Weekly"|"Monthly"|"Yearly", RecurranceValue?: int, StartOfRecurrance?: string, Status?: "Pending"|"Active"|"Cancelled"|"Finished", Title?: string}
-export def "invoice-new post" [
+export def "invoice-new create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -966,19 +976,19 @@ export def "invoice-new post" [
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/invoice/new")
-  let body = {"Attachments": $attachments, "ClientId": $client_id, "ClonedFromId": $cloned_from_id, "CurrencyId": $currency_id, "Duedate": $duedate, "InvoiceCategoryId": $invoice_category_id, "IssuedOn": $issued_on, "Items": $items, "Notes": $notes, "Number": $number, "PaymentGateways": $payment_gateways, "PoNumber": $po_number, "RecurringProfile": $recurring_profile, "RecurringProfileId": $recurring_profile_id, "ShouldSendReminders": $should_send_reminders, "Status": $status, "Terms": $terms} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"Attachments": $attachments, "ClientId": $client_id, "ClonedFromId": $cloned_from_id, "CurrencyId": $currency_id, "Duedate": $duedate, "InvoiceCategoryId": $invoice_category_id, "IssuedOn": $issued_on, "Items": $items, "Notes": $notes, "Number": $number, "PaymentGateways": $payment_gateways, "PoNumber": $po_number, "RecurringProfile": $recurring_profile, "RecurringProfileId": $recurring_profile_id, "ShouldSendReminders": $should_send_reminders, "Status": $status, "Terms": $terms} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create an invoice category
 #
 # POST /api/invoice/newcategory
-export def "invoice-newcategory post" [
+export def "invoice-newcategory create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -996,13 +1006,13 @@ export def "invoice-newcategory post" [
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/invoice/newcategory")
-  let body = {"Name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"Name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Return the PDF for the invoice
@@ -1028,10 +1038,10 @@ export def "invoice-pdf get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "signedVersion" $signed_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/invoice/pdf" $qp)
-  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1057,13 +1067,13 @@ export def "invoice-sendtoaccountant send-to-accountant" [
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/invoice/sendtoaccountant")
-  let body = {"Id": $id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"Id": $id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Send the provided invoice to the client
@@ -1093,13 +1103,13 @@ export def "invoice-sendtoclient send-to-client" [
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/invoice/sendtoclient")
-  let body = {"AttachPdf": $attach_pdf, "Id": $id, "InvoiceId": $invoice_id, "Message": $message, "SendToSelf": $send_to_self, "Subject": $subject} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"AttachPdf": $attach_pdf, "Id": $id, "InvoiceId": $invoice_id, "Message": $message, "SendToSelf": $send_to_self, "Subject": $subject} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve the status of the invoice
@@ -1124,10 +1134,10 @@ export def "invoice-status get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/invoice/status" $qp)
-  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1174,19 +1184,19 @@ export def "invoice-update update" [
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/invoice/update")
-  let body = {"Attachments": $attachments, "ClientId": $client_id, "ClonedFromId": $cloned_from_id, "CurrencyId": $currency_id, "Duedate": $duedate, "Id": $id, "InvoiceCategoryId": $invoice_category_id, "IssuedOn": $issued_on, "Items": $items, "Notes": $notes, "Number": $number, "PaymentGateways": $payment_gateways, "PoNumber": $po_number, "RecurringProfile": $recurring_profile, "RecurringProfileId": $recurring_profile_id, "ShouldSendReminders": $should_send_reminders, "Status": $status, "Terms": $terms} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"Attachments": $attachments, "ClientId": $client_id, "ClonedFromId": $cloned_from_id, "CurrencyId": $currency_id, "Duedate": $duedate, "Id": $id, "InvoiceCategoryId": $invoice_category_id, "IssuedOn": $issued_on, "Items": $items, "Notes": $notes, "Number": $number, "PaymentGateways": $payment_gateways, "PoNumber": $po_number, "RecurringProfile": $recurring_profile, "RecurringProfileId": $recurring_profile_id, "ShouldSendReminders": $should_send_reminders, "Status": $status, "Terms": $terms} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update an existing invoice category
 #
 # POST /api/invoice/updatecategory
-export def "invoice-updatecategory post" [
+export def "invoice-updatecategory create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1205,13 +1215,13 @@ export def "invoice-updatecategory post" [
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/invoice/updatecategory")
-  let body = {"Id": $id, "Name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"Id": $id, "Name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Return the unique url to the client's invoice
@@ -1236,10 +1246,10 @@ export def "invoice-uri get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/invoice/uri" $qp)
-  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1247,7 +1257,7 @@ export def "invoice-uri get" [
 #
 # GET /api/order/all
 # operationId: OrderApi_All
-export def "order-all get" [
+export def "order-all list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1266,10 +1276,10 @@ export def "order-all get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "queryOptions.page" $query_options_page "scalar") (serialize-qp "queryOptions.pageSize" $query_options_page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/order/all" $qp)
-  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1277,7 +1287,7 @@ export def "order-all get" [
 #
 # POST /api/order/changeshippingdetails
 # operationId: OrderApi_ChangeShippingDetails
-export def "order-changeshippingdetails changes-hipping-details" [
+export def "order-changeshippingdetails create-change-shipping-details" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1300,20 +1310,20 @@ export def "order-changeshippingdetails changes-hipping-details" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "orderId" $order_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/order/changeshippingdetails" $qp)
-  let body = {"Address": $address, "CountryId": $country_id, "Email": $email, "Name": $name, "PhoneNumber": $phone_number} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"Address": $address, "CountryId": $country_id, "Email": $email, "Name": $name, "PhoneNumber": $phone_number} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Change order status
 #
 # POST /api/order/changestatus
 # operationId: OrderApi_ChangeStatus
-export def "order-changestatus changes-tatus" [
+export def "order-changestatus create-change-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1332,13 +1342,13 @@ export def "order-changestatus changes-tatus" [
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/order/changestatus")
-  let body = {"Id": $id, "Reason": $reason, "Status": $status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"Id": $id, "Reason": $reason, "Status": $status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete an existing order
@@ -1363,13 +1373,13 @@ export def "order-delete delete" [
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/order/delete")
-  let body = {"Id": $id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"Id": $id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Return order details
@@ -1394,10 +1404,10 @@ export def "order-details get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/order/details" $qp)
-  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1409,7 +1419,7 @@ export def "order-details get" [
 # --Items item shape: {Cost?: float, Description?: string, ProductItemId?: int, Quantity?: float, ReferenceId?: string, SubTotalAmount?: float, TaxAmount?: float, TaxId?: int, TaxPercentage?: float, TotalAmount?: float, WorkTypeId?: int}
 # --OrderBillingDetails shape: {Address?: string, CountryId?: int, Email?: string, Name?: string, PhoneNumber?: string}
 # --OrderShippingDetails shape: {Address?: string, CountryId?: int, Email?: string, Name?: string, PhoneNumber?: string}
-export def "order-new post" [
+export def "order-new create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1446,13 +1456,13 @@ export def "order-new post" [
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/order/new")
-  let body = {"AfterPaymentDescription": $after_payment_description, "Attachments": $attachments, "CouponCode": $coupon_code, "CurrencyId": $currency_id, "Description": $description, "DiscountAmount": $discount_amount, "Items": $items, "Name": $name, "Note": $note, "OrderBillingDetails": $order_billing_details, "OrderShippingDetails": $order_shipping_details, "ProductId": $product_id, "Referral": $referral, "ShippingAmount": $shipping_amount, "ShippingDescription": $shipping_description, "Status": $status, "SubTotalAmount": $sub_total_amount, "TaxAmount": $tax_amount, "TotalAmount": $total_amount, "WhatHappensNextDescription": $what_happens_next_description} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"AfterPaymentDescription": $after_payment_description, "Attachments": $attachments, "CouponCode": $coupon_code, "CurrencyId": $currency_id, "Description": $description, "DiscountAmount": $discount_amount, "Items": $items, "Name": $name, "Note": $note, "OrderBillingDetails": $order_billing_details, "OrderShippingDetails": $order_shipping_details, "ProductId": $product_id, "Referral": $referral, "ShippingAmount": $shipping_amount, "ShippingDescription": $shipping_description, "Status": $status, "SubTotalAmount": $sub_total_amount, "TaxAmount": $tax_amount, "TotalAmount": $total_amount, "WhatHappensNextDescription": $what_happens_next_description} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Return all supported payment gateways (no currencies means all are supported)
@@ -1475,10 +1485,10 @@ export def "payment-supported get" [
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/payment/supported")
-  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1486,7 +1496,7 @@ export def "payment-supported get" [
 #
 # GET /api/paymentlink/all
 # operationId: PaymentLinkApi_All
-export def "paymentlink-all get" [
+export def "paymentlink-all list-payment-link" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1505,10 +1515,10 @@ export def "paymentlink-all get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "queryOptions.page" $query_options_page "scalar") (serialize-qp "queryOptions.pageSize" $query_options_page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/paymentlink/all" $qp)
-  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1518,10 +1528,10 @@ export def "paymentlink-all get" [
 # operationId: PaymentLinkApi_Delete
 # --Client shape: {Address?: string, ClientCountryId?: int, ClientCurrencyId?: int, CompanyRegistrationNumber?: string, DefaultDueDateInDays?: int, Email?: string, Id?: int, Name?: string, PhoneNumber?: string, UiLanguageId?: int, UserId?: int, Vat?: string}
 # --Currency shape: {Code?: string, Id?: int, Name?: string, Symbol?: string, Value?: string}
-# --Invoice shape: {AccessToken?: string, Activities?: list, Attachments?: list, ClientId?: int, ClonedFromId?: int, CurrencyId?: int, DiscountAmount?: float, Duedate?: string, EnablePartialPayments?: bool, EstimationId?: int, Id?: int, InvoiceCategoryId?: int, IsDigitallySigned?: bool, IssuedOn?: string, Items?: list, Notes?: string, Number?: string, OrderId?: int, PaymentGateways?: list, PaymentLinkId?: int, Payments?: list, PoNumber?: string, RecurringProfileId?: int, ShouldSendReminders?: bool, Status?: "Draft"|"Paid"|"Unpaid"|"Overdue"|"Void", SubTotalAmount?: float, TaxAmount?: float, Terms?: string, TotalAmount?: float, UserId?: int}
+# --Invoice shape: {AccessToken?: string, Activities?: list, Attachments?: list, ClientId?: int, ClonedFromId?: int, CurrencyId?: int, DiscountAmount?: float, Duedate?: string, EnablePartialPayments?: bool, EstimationId?: int, Id?: int, InvoiceCategoryId?: int, IsDigitallySigned?: bool, IssuedOn?: string, Items?: list, Notes?: string, Number?: string, OrderId?: int, PaymentGateways?: list, PaymentLinkId?: int, Payments?: list, PoNumber?: string, RecurringProfileId?: int, ShouldSendReminders?: bool, ... (6 more fields)}
 # --Items item shape: {Cost?: float, DiscountAmount?: float, DiscountPercentage?: float, Id?: int, PaymentLinkId?: int, Quantity?: float, SubTotalAmount?: float, Tax?: record, TaxAmount?: float, TaxId?: int, TaxPercentage?: float, TotalAmount?: float, WorkType?: record, WorkTypeId?: int}
-# --User shape: {ActionNotificationsLastReadOn?: string, Email?: string, ExternalConnections?: list, HasBeenOnboarded?: bool, Id?: int, IsLocked?: bool, IsVerified?: bool, KnowledgeNotificationsLastReadOn?: string, LastSeenOn?: string, Name?: string, Password?: string, PasswordSalt?: string, ReferralPath?: string, ReferredUsers?: int, ReferrerKey?: string, Settings?: record, Status?: "Normal"|"Fraudlent"|"Locked", SubscriptionPlan?: record, Type?: "Anonymous"|"Customer"|"SystemAdministrator"|"Collaborator", Username?: string, VerifiedOn?: string, YearsOfExperience?: "One"|"OneToThree"|"ThreeToFive"|"SixPlus"}
-export def "paymentlink-delete delete" [
+# --User shape: {ActionNotificationsLastReadOn?: string, Email?: string, ExternalConnections?: list, HasBeenOnboarded?: bool, Id?: int, IsLocked?: bool, IsVerified?: bool, KnowledgeNotificationsLastReadOn?: string, LastSeenOn?: string, Name?: string, Password?: string, PasswordSalt?: string, ReferralPath?: string, ReferredUsers?: int, ReferrerKey?: string, Settings?: record, Status?: "Normal"|"Fraudlent"|"Locked", SubscriptionPlan?: record, Type?: "Anonymous"|"Customer"|"SystemAdministrator"|"Collaborator", ... (3 more fields)}
+export def "paymentlink-delete delete-payment-link" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1540,26 +1550,26 @@ export def "paymentlink-delete delete" [
   --currency-id: int # format: int32
   --discount-amount: float # format: double
   --id: int # format: int32
-  --invoice: record # shape: {AccessToken?: string, Activities?: list, Attachments?: list, ClientId?: int, ClonedFromId?: int, CurrencyId?: int, DiscountAmount?: float, Duedate?: string, EnablePartialPayments?: bool, EstimationId?: int, Id?: int, InvoiceCategoryId?: int, IsDigitallySigned?: bool, IssuedOn?: string, Items?: list, Notes?: string, Number?: string, OrderId?: int, PaymentGateways?: list, PaymentLinkId?: int, Payments?: list, PoNumber?: string, RecurringProfileId?: int, ShouldSendReminders?: bool, Status?: "Draft"|"Paid"|"Unpaid"|"Overdue"|"Void", SubTotalAmount?: float, TaxAmount?: float, Terms?: string, TotalAmount?: float, UserId?: int}
+  --invoice: record # shape: {AccessToken?: string, Activities?: list, Attachments?: list, ClientId?: int, ClonedFromId?: int, CurrencyId?: int, DiscountAmount?: float, Duedate?: string, EnablePartialPayments?: bool, EstimationId?: int, Id?: int, InvoiceCategoryId?: int, IsDigitallySigned?: bool, IssuedOn?: string, Items?: list, Notes?: string, Number?: string, OrderId?: int, PaymentGateways?: list, PaymentLinkId?: int, Payments?: list, PoNumber?: string, RecurringProfileId?: int, ShouldSendReminders?: bool, ... (6 more fields)}
   --items: list # item shape: {Cost?: float, DiscountAmount?: float, DiscountPercentage?: float, Id?: int, PaymentLinkId?: int, Quantity?: float, SubTotalAmount?: float, Tax?: record, TaxAmount?: float, TaxId?: int, TaxPercentage?: float, TotalAmount?: float, WorkType?: record, WorkTypeId?: int}
   --number: string
   --sub-total-amount: float # format: double
   --tax-amount: float # format: double
   --total-amount: float # format: double
-  --user: record # shape: {ActionNotificationsLastReadOn?: string, Email?: string, ExternalConnections?: list, HasBeenOnboarded?: bool, Id?: int, IsLocked?: bool, IsVerified?: bool, KnowledgeNotificationsLastReadOn?: string, LastSeenOn?: string, Name?: string, Password?: string, PasswordSalt?: string, ReferralPath?: string, ReferredUsers?: int, ReferrerKey?: string, Settings?: record, Status?: "Normal"|"Fraudlent"|"Locked", SubscriptionPlan?: record, Type?: "Anonymous"|"Customer"|"SystemAdministrator"|"Collaborator", Username?: string, VerifiedOn?: string, YearsOfExperience?: "One"|"OneToThree"|"ThreeToFive"|"SixPlus"}
+  --user: record # shape: {ActionNotificationsLastReadOn?: string, Email?: string, ExternalConnections?: list, HasBeenOnboarded?: bool, Id?: int, IsLocked?: bool, IsVerified?: bool, KnowledgeNotificationsLastReadOn?: string, LastSeenOn?: string, Name?: string, Password?: string, PasswordSalt?: string, ReferralPath?: string, ReferredUsers?: int, ReferrerKey?: string, Settings?: record, Status?: "Normal"|"Fraudlent"|"Locked", SubscriptionPlan?: record, Type?: "Anonymous"|"Customer"|"SystemAdministrator"|"Collaborator", ... (3 more fields)}
   --user-id: int # format: int32
 ]: any -> int {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/paymentlink/delete")
-  let body = {"AccessToken": $access_token, "Client": $client, "ClientId": $client_id, "Currency": $currency, "CurrencyId": $currency_id, "DiscountAmount": $discount_amount, "Id": $id, "Invoice": $invoice, "Items": $items, "Number": $number, "SubTotalAmount": $sub_total_amount, "TaxAmount": $tax_amount, "TotalAmount": $total_amount, "User": $user, "UserId": $user_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"AccessToken": $access_token, "Client": $client, "ClientId": $client_id, "Currency": $currency, "CurrencyId": $currency_id, "DiscountAmount": $discount_amount, "Id": $id, "Invoice": $invoice, "Items": $items, "Number": $number, "SubTotalAmount": $sub_total_amount, "TaxAmount": $tax_amount, "TotalAmount": $total_amount, "User": $user, "UserId": $user_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create a payment link
@@ -1568,10 +1578,10 @@ export def "paymentlink-delete delete" [
 # operationId: PaymentLinkApi_New
 # --Client shape: {Address?: string, ClientCountryId?: int, ClientCurrencyId?: int, CompanyRegistrationNumber?: string, DefaultDueDateInDays?: int, Email?: string, Id?: int, Name?: string, PhoneNumber?: string, UiLanguageId?: int, UserId?: int, Vat?: string}
 # --Currency shape: {Code?: string, Id?: int, Name?: string, Symbol?: string, Value?: string}
-# --Invoice shape: {AccessToken?: string, Activities?: list, Attachments?: list, ClientId?: int, ClonedFromId?: int, CurrencyId?: int, DiscountAmount?: float, Duedate?: string, EnablePartialPayments?: bool, EstimationId?: int, Id?: int, InvoiceCategoryId?: int, IsDigitallySigned?: bool, IssuedOn?: string, Items?: list, Notes?: string, Number?: string, OrderId?: int, PaymentGateways?: list, PaymentLinkId?: int, Payments?: list, PoNumber?: string, RecurringProfileId?: int, ShouldSendReminders?: bool, Status?: "Draft"|"Paid"|"Unpaid"|"Overdue"|"Void", SubTotalAmount?: float, TaxAmount?: float, Terms?: string, TotalAmount?: float, UserId?: int}
+# --Invoice shape: {AccessToken?: string, Activities?: list, Attachments?: list, ClientId?: int, ClonedFromId?: int, CurrencyId?: int, DiscountAmount?: float, Duedate?: string, EnablePartialPayments?: bool, EstimationId?: int, Id?: int, InvoiceCategoryId?: int, IsDigitallySigned?: bool, IssuedOn?: string, Items?: list, Notes?: string, Number?: string, OrderId?: int, PaymentGateways?: list, PaymentLinkId?: int, Payments?: list, PoNumber?: string, RecurringProfileId?: int, ShouldSendReminders?: bool, ... (6 more fields)}
 # --Items item shape: {Cost?: float, DiscountAmount?: float, DiscountPercentage?: float, Id?: int, PaymentLinkId?: int, Quantity?: float, SubTotalAmount?: float, Tax?: record, TaxAmount?: float, TaxId?: int, TaxPercentage?: float, TotalAmount?: float, WorkType?: record, WorkTypeId?: int}
-# --User shape: {ActionNotificationsLastReadOn?: string, Email?: string, ExternalConnections?: list, HasBeenOnboarded?: bool, Id?: int, IsLocked?: bool, IsVerified?: bool, KnowledgeNotificationsLastReadOn?: string, LastSeenOn?: string, Name?: string, Password?: string, PasswordSalt?: string, ReferralPath?: string, ReferredUsers?: int, ReferrerKey?: string, Settings?: record, Status?: "Normal"|"Fraudlent"|"Locked", SubscriptionPlan?: record, Type?: "Anonymous"|"Customer"|"SystemAdministrator"|"Collaborator", Username?: string, VerifiedOn?: string, YearsOfExperience?: "One"|"OneToThree"|"ThreeToFive"|"SixPlus"}
-export def "paymentlink-new post" [
+# --User shape: {ActionNotificationsLastReadOn?: string, Email?: string, ExternalConnections?: list, HasBeenOnboarded?: bool, Id?: int, IsLocked?: bool, IsVerified?: bool, KnowledgeNotificationsLastReadOn?: string, LastSeenOn?: string, Name?: string, Password?: string, PasswordSalt?: string, ReferralPath?: string, ReferredUsers?: int, ReferrerKey?: string, Settings?: record, Status?: "Normal"|"Fraudlent"|"Locked", SubscriptionPlan?: record, Type?: "Anonymous"|"Customer"|"SystemAdministrator"|"Collaborator", ... (3 more fields)}
+export def "paymentlink-new create-payment-link" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1590,33 +1600,33 @@ export def "paymentlink-new post" [
   --currency-id: int # format: int32
   --discount-amount: float # format: double
   --id: int # format: int32
-  --invoice: record # shape: {AccessToken?: string, Activities?: list, Attachments?: list, ClientId?: int, ClonedFromId?: int, CurrencyId?: int, DiscountAmount?: float, Duedate?: string, EnablePartialPayments?: bool, EstimationId?: int, Id?: int, InvoiceCategoryId?: int, IsDigitallySigned?: bool, IssuedOn?: string, Items?: list, Notes?: string, Number?: string, OrderId?: int, PaymentGateways?: list, PaymentLinkId?: int, Payments?: list, PoNumber?: string, RecurringProfileId?: int, ShouldSendReminders?: bool, Status?: "Draft"|"Paid"|"Unpaid"|"Overdue"|"Void", SubTotalAmount?: float, TaxAmount?: float, Terms?: string, TotalAmount?: float, UserId?: int}
+  --invoice: record # shape: {AccessToken?: string, Activities?: list, Attachments?: list, ClientId?: int, ClonedFromId?: int, CurrencyId?: int, DiscountAmount?: float, Duedate?: string, EnablePartialPayments?: bool, EstimationId?: int, Id?: int, InvoiceCategoryId?: int, IsDigitallySigned?: bool, IssuedOn?: string, Items?: list, Notes?: string, Number?: string, OrderId?: int, PaymentGateways?: list, PaymentLinkId?: int, Payments?: list, PoNumber?: string, RecurringProfileId?: int, ShouldSendReminders?: bool, ... (6 more fields)}
   --items: list # item shape: {Cost?: float, DiscountAmount?: float, DiscountPercentage?: float, Id?: int, PaymentLinkId?: int, Quantity?: float, SubTotalAmount?: float, Tax?: record, TaxAmount?: float, TaxId?: int, TaxPercentage?: float, TotalAmount?: float, WorkType?: record, WorkTypeId?: int}
   --number: string
   --sub-total-amount: float # format: double
   --tax-amount: float # format: double
   --total-amount: float # format: double
-  --user: record # shape: {ActionNotificationsLastReadOn?: string, Email?: string, ExternalConnections?: list, HasBeenOnboarded?: bool, Id?: int, IsLocked?: bool, IsVerified?: bool, KnowledgeNotificationsLastReadOn?: string, LastSeenOn?: string, Name?: string, Password?: string, PasswordSalt?: string, ReferralPath?: string, ReferredUsers?: int, ReferrerKey?: string, Settings?: record, Status?: "Normal"|"Fraudlent"|"Locked", SubscriptionPlan?: record, Type?: "Anonymous"|"Customer"|"SystemAdministrator"|"Collaborator", Username?: string, VerifiedOn?: string, YearsOfExperience?: "One"|"OneToThree"|"ThreeToFive"|"SixPlus"}
+  --user: record # shape: {ActionNotificationsLastReadOn?: string, Email?: string, ExternalConnections?: list, HasBeenOnboarded?: bool, Id?: int, IsLocked?: bool, IsVerified?: bool, KnowledgeNotificationsLastReadOn?: string, LastSeenOn?: string, Name?: string, Password?: string, PasswordSalt?: string, ReferralPath?: string, ReferredUsers?: int, ReferrerKey?: string, Settings?: record, Status?: "Normal"|"Fraudlent"|"Locked", SubscriptionPlan?: record, Type?: "Anonymous"|"Customer"|"SystemAdministrator"|"Collaborator", ... (3 more fields)}
   --user-id: int # format: int32
 ]: any -> int {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/paymentlink/new")
-  let body = {"AccessToken": $access_token, "Client": $client, "ClientId": $client_id, "Currency": $currency, "CurrencyId": $currency_id, "DiscountAmount": $discount_amount, "Id": $id, "Invoice": $invoice, "Items": $items, "Number": $number, "SubTotalAmount": $sub_total_amount, "TaxAmount": $tax_amount, "TotalAmount": $total_amount, "User": $user, "UserId": $user_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"AccessToken": $access_token, "Client": $client, "ClientId": $client_id, "Currency": $currency, "CurrencyId": $currency_id, "DiscountAmount": $discount_amount, "Id": $id, "Invoice": $invoice, "Items": $items, "Number": $number, "SubTotalAmount": $sub_total_amount, "TaxAmount": $tax_amount, "TotalAmount": $total_amount, "User": $user, "UserId": $user_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Return the unique url to the client's payment link
 #
 # GET /api/paymentlink/uri
 # operationId: PaymentLinkApi_Uri
-export def "paymentlink-uri get" [
+export def "paymentlink-uri get-payment-link" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1634,10 +1644,10 @@ export def "paymentlink-uri get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/paymentlink/uri" $qp)
-  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1645,7 +1655,7 @@ export def "paymentlink-uri get" [
 #
 # GET /api/product/all
 # operationId: ProductApi_All
-export def "product-all get" [
+export def "product-all list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1664,10 +1674,10 @@ export def "product-all get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "queryOptions.page" $query_options_page "scalar") (serialize-qp "queryOptions.pageSize" $query_options_page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/product/all" $qp)
-  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1693,13 +1703,13 @@ export def "product-delete delete" [
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/product/delete")
-  let body = {"Id": $id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"Id": $id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Return product details
@@ -1724,10 +1734,10 @@ export def "product-details get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/product/details" $qp)
-  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1740,7 +1750,7 @@ export def "product-details get" [
 # --Discounts item shape: {DiscountAmount?: float, DiscountPercentage?: float, Id?: int, Name?: string, ValidFrom?: string, ValidTo?: string}
 # --Items item shape: {Cost?: float, Description?: string, Id?: int, MinimumQuantity?: float, ReferenceId?: string, SubTotalAmount?: float, TaxAmount?: float, TaxId?: int, TaxPercentage?: float, TotalAmount?: float, WorkTypeId?: int}
 # --PaymentGateways item shape: {Name?: string}
-export def "product-new post" [
+export def "product-new create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1772,13 +1782,13 @@ export def "product-new post" [
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/product/new")
-  let body = {"AfterPaymentDescription": $after_payment_description, "Attachments": $attachments, "ButtonCallToAction": $button_call_to_action, "Coupons": $coupons, "CurrencyId": $currency_id, "Description": $description, "Discounts": $discounts, "IsFeatured": $is_featured, "Items": $items, "Name": $name, "PaymentGateways": $payment_gateways, "ShippingAmount": $shipping_amount, "ShippingDescription": $shipping_description, "Status": $status, "WhatHappensNextDescription": $what_happens_next_description} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"AfterPaymentDescription": $after_payment_description, "Attachments": $attachments, "ButtonCallToAction": $button_call_to_action, "Coupons": $coupons, "CurrencyId": $currency_id, "Description": $description, "Discounts": $discounts, "IsFeatured": $is_featured, "Items": $items, "Name": $name, "PaymentGateways": $payment_gateways, "ShippingAmount": $shipping_amount, "ShippingDescription": $shipping_description, "Status": $status, "WhatHappensNextDescription": $what_happens_next_description} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update an existing product
@@ -1822,20 +1832,20 @@ export def "product-update update" [
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/product/update")
-  let body = {"AfterPaymentDescription": $after_payment_description, "Attachments": $attachments, "ButtonCallToAction": $button_call_to_action, "Coupons": $coupons, "CurrencyId": $currency_id, "Description": $description, "Discounts": $discounts, "Id": $id, "IsFeatured": $is_featured, "Items": $items, "Name": $name, "PaymentGateways": $payment_gateways, "ShippingAmount": $shipping_amount, "ShippingDescription": $shipping_description, "Status": $status, "WhatHappensNextDescription": $what_happens_next_description} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"AfterPaymentDescription": $after_payment_description, "Attachments": $attachments, "ButtonCallToAction": $button_call_to_action, "Coupons": $coupons, "CurrencyId": $currency_id, "Description": $description, "Discounts": $discounts, "Id": $id, "IsFeatured": $is_featured, "Items": $items, "Name": $name, "PaymentGateways": $payment_gateways, "ShippingAmount": $shipping_amount, "ShippingDescription": $shipping_description, "Status": $status, "WhatHappensNextDescription": $what_happens_next_description} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Return all taxes for the account
 #
 # GET /api/tax/all
 # operationId: TaxApi_All
-export def "tax-all get" [
+export def "tax-all list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1851,10 +1861,10 @@ export def "tax-all get" [
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/tax/all")
-  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1880,20 +1890,20 @@ export def "tax-delete delete" [
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/tax/delete")
-  let body = {"Id": $id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"Id": $id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create a tax
 #
 # POST /api/tax/new
 # operationId: TaxApi_New
-export def "tax-new post" [
+export def "tax-new create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1912,13 +1922,13 @@ export def "tax-new post" [
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/tax/new")
-  let body = {"Name": $name, "Percentage": $percentage} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"Name": $name, "Percentage": $percentage} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update an existing tax
@@ -1944,20 +1954,20 @@ export def "tax-update update" [
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/tax/update")
-  let body = {"Id": $id, "Name": $name, "Percentage": $percentage} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"Id": $id, "Name": $name, "Percentage": $percentage} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Return all work types for the account
 #
 # GET /api/worktype/all
 # operationId: WorkTypeApi_All
-export def "worktype-all get" [
+export def "worktype-all list-work-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1973,10 +1983,10 @@ export def "worktype-all get" [
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/worktype/all")
-  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1984,7 +1994,7 @@ export def "worktype-all get" [
 #
 # POST /api/worktype/delete
 # operationId: WorkTypeApi_Delete
-export def "worktype-delete delete" [
+export def "worktype-delete delete-work-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2002,20 +2012,20 @@ export def "worktype-delete delete" [
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/worktype/delete")
-  let body = {"Id": $id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"Id": $id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Return work type details
 #
 # GET /api/worktype/details
 # operationId: WorkTypeApi_Details
-export def "worktype-details get" [
+export def "worktype-details get-work-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2033,10 +2043,10 @@ export def "worktype-details get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "workTypeId" $work_type_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/worktype/details" $qp)
-  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2044,7 +2054,7 @@ export def "worktype-details get" [
 #
 # POST /api/worktype/new
 # operationId: WorkTypeApi_New
-export def "worktype-new post" [
+export def "worktype-new create-work-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2062,20 +2072,20 @@ export def "worktype-new post" [
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/worktype/new")
-  let body = {"Title": $title} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"Title": $title} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Return all work types for the account that match the query param
 #
 # GET /api/worktype/search
 # operationId: WorkTypeApi_Search
-export def "worktype-search list" [
+export def "worktype-search list-work-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2097,10 +2107,10 @@ export def "worktype-search list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "queryOptions.query" $query_options_query "scalar") (serialize-qp "queryOptions.orderBy" $query_options_order_by "scalar") (serialize-qp "queryOptions.order" $query_options_order "scalar") (serialize-qp "queryOptions.page" $query_options_page "scalar") (serialize-qp "queryOptions.pageSize" $query_options_page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/worktype/search" $qp)
-  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2108,7 +2118,7 @@ export def "worktype-search list" [
 #
 # POST /api/worktype/update
 # operationId: WorkTypeApi_Update
-export def "worktype-update update" [
+export def "worktype-update update-work-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2126,11 +2136,11 @@ export def "worktype-update update" [
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/worktype/update")
-  let body = {"Id": $id, "Title": $title} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"Id": $id, "Title": $title} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

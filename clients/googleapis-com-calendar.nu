@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -74,7 +83,7 @@ def min-access-role-completer [] { ["freeBusyReader" "owner" "reader" "writer"] 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "calendars calendarcalendarsinsert" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "calendars create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -98,8 +107,8 @@ export def commands []: nothing -> table {
 #
 # POST /calendars
 # operationId: calendar.calendars.insert
-# --conferenceProperties shape: {allowedConferenceSolutionTypes?: list}
-export def "calendars calendarcalendarsinsert" [
+# --conferenceProperties shape: {allowedConferenceSolutionTypes?: list<string>}
+export def "calendars create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -115,7 +124,7 @@ export def "calendars calendarcalendarsinsert" [
   --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --user-ip: string # Deprecated. Please use quotaUser instead.
-  --conference-properties: record # shape: {allowedConferenceSolutionTypes?: list}
+  --conference-properties: record # shape: {allowedConferenceSolutionTypes?: list<string>}
   --description: string # Description of the calendar. Optional.
   --etag: string # ETag of the resource.
   --id: string # Identifier of the calendar. To retrieve IDs call the calendarList.list() method.
@@ -129,18 +138,18 @@ export def "calendars calendarcalendarsinsert" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/calendars" $qp)
-  let body = {"conferenceProperties": $conference_properties, "description": $description, "etag": $etag, "id": $id, "kind": $kind, "location": $location, "summary": $summary, "timeZone": $time_zone} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"conferenceProperties": $conference_properties, "description": $description, "etag": $etag, "id": $id, "kind": $kind, "location": $location, "summary": $summary, "timeZone": $time_zone} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes a secondary calendar. Use calendars.clear for clearing all events on primary calendars.
 #
 # DELETE /calendars/{calendarId}
 # operationId: calendar.calendars.delete
-export def "calendars calendarcalendarsdelete" [
+export def "calendars delete" [
   calendar_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -161,7 +170,7 @@ export def "calendars calendarcalendarsdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({calendar_id: $calendar_id} | format pattern "/calendars/{calendar_id}") $qp)
+  let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id)} | format pattern "/calendars/{calendar_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -171,7 +180,7 @@ export def "calendars calendarcalendarsdelete" [
 #
 # GET /calendars/{calendarId}
 # operationId: calendar.calendars.get
-export def "calendars calendarcalendarsget" [
+export def "calendars get" [
   calendar_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -192,7 +201,7 @@ export def "calendars calendarcalendarsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({calendar_id: $calendar_id} | format pattern "/calendars/{calendar_id}") $qp)
+  let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id)} | format pattern "/calendars/{calendar_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -202,8 +211,8 @@ export def "calendars calendarcalendarsget" [
 #
 # PATCH /calendars/{calendarId}
 # operationId: calendar.calendars.patch
-# --conferenceProperties shape: {allowedConferenceSolutionTypes?: list}
-export def "calendars calendarcalendarspatch" [
+# --conferenceProperties shape: {allowedConferenceSolutionTypes?: list<string>}
+export def "calendars update-by-calendarId" [
   calendar_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -220,7 +229,7 @@ export def "calendars calendarcalendarspatch" [
   --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --user-ip: string # Deprecated. Please use quotaUser instead.
-  --conference-properties: record # shape: {allowedConferenceSolutionTypes?: list}
+  --conference-properties: record # shape: {allowedConferenceSolutionTypes?: list<string>}
   --description: string # Description of the calendar. Optional.
   --etag: string # ETag of the resource.
   --id: string # Identifier of the calendar. To retrieve IDs call the calendarList.list() method.
@@ -233,20 +242,20 @@ export def "calendars calendarcalendarspatch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({calendar_id: $calendar_id} | format pattern "/calendars/{calendar_id}") $qp)
-  let body = {"conferenceProperties": $conference_properties, "description": $description, "etag": $etag, "id": $id, "kind": $kind, "location": $location, "summary": $summary, "timeZone": $time_zone} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id)} | format pattern "/calendars/{calendar_id}") $qp)
+  let req_body = {"conferenceProperties": $conference_properties, "description": $description, "etag": $etag, "id": $id, "kind": $kind, "location": $location, "summary": $summary, "timeZone": $time_zone} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates metadata for a calendar.
 #
 # PUT /calendars/{calendarId}
 # operationId: calendar.calendars.update
-# --conferenceProperties shape: {allowedConferenceSolutionTypes?: list}
-export def "calendars calendarcalendarsupdate" [
+# --conferenceProperties shape: {allowedConferenceSolutionTypes?: list<string>}
+export def "calendars update-by-calendarId-1" [
   calendar_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -263,7 +272,7 @@ export def "calendars calendarcalendarsupdate" [
   --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --user-ip: string # Deprecated. Please use quotaUser instead.
-  --conference-properties: record # shape: {allowedConferenceSolutionTypes?: list}
+  --conference-properties: record # shape: {allowedConferenceSolutionTypes?: list<string>}
   --description: string # Description of the calendar. Optional.
   --etag: string # ETag of the resource.
   --id: string # Identifier of the calendar. To retrieve IDs call the calendarList.list() method.
@@ -276,19 +285,19 @@ export def "calendars calendarcalendarsupdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({calendar_id: $calendar_id} | format pattern "/calendars/{calendar_id}") $qp)
-  let body = {"conferenceProperties": $conference_properties, "description": $description, "etag": $etag, "id": $id, "kind": $kind, "location": $location, "summary": $summary, "timeZone": $time_zone} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id)} | format pattern "/calendars/{calendar_id}") $qp)
+  let req_body = {"conferenceProperties": $conference_properties, "description": $description, "etag": $etag, "id": $id, "kind": $kind, "location": $location, "summary": $summary, "timeZone": $time_zone} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns the rules in the access control list for the calendar.
 #
 # GET /calendars/{calendarId}/acl
 # operationId: calendar.acl.list
-export def "calendars-acl calendaracllist" [
+export def "calendars-acl list" [
   calendar_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -313,7 +322,7 @@ export def "calendars-acl calendaracllist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "showDeleted" $show_deleted "scalar") (serialize-qp "syncToken" $sync_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({calendar_id: $calendar_id} | format pattern "/calendars/{calendar_id}/acl") $qp)
+  let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id)} | format pattern "/calendars/{calendar_id}/acl") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -324,7 +333,7 @@ export def "calendars-acl calendaracllist" [
 # POST /calendars/{calendarId}/acl
 # operationId: calendar.acl.insert
 # --scope shape: {type?: string, value?: string}
-export def "calendars-acl calendaraclinsert" [
+export def "calendars-acl create" [
   calendar_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -345,26 +354,26 @@ export def "calendars-acl calendaraclinsert" [
   --etag: string # ETag of the resource.
   --id: string # Identifier of the Access Control List (ACL) rule. See Sharing calendars.
   --kind: string # Type of the resource ("calendar#aclRule"). (default: calendar#aclRule)
-  --role: string # The role assigned to the scope. Possible values are:   - "none" - Provides no access.  - "freeBusyReader" - Provides read access to free/busy information.  - "reader" - Provides read access to the calendar. Private events will appear to users with reader access, but event details will be hidden.  - "writer" - Provides read and write access to the calendar. Private events will appear to users with writer access, and event details will be visible.  - "owner" - Provides ownership of the calendar. This role has all of the permissions of the writer role with the additional ability to see and manipulate ACLs.
+  --role: string # The role assigned to the scope. Possible values are: - "none" - Provides no access. - "freeBusyReader" - Provides read access to free/busy information. - "reader" - Provides read access to the calendar. Private events will appear to users with reader access, but event details will be hidden. - "writer" - Provides read and write access to the calendar. Private events will appear to users with writer access, and event details will be visible. - "owner" - Provides ownership of the calendar. This role has all of the permissions of the writer role with the additional ability to see and manipulate ACLs.
   --scope: record # The extent to which calendar access is granted by this ACL rule. — shape: {type?: string, value?: string}
 ]: any -> record<etag: string, id: string, kind: string, role: string, scope: record<type: string, value: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "sendNotifications" $send_notifications "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({calendar_id: $calendar_id} | format pattern "/calendars/{calendar_id}/acl") $qp)
-  let body = {"etag": $etag, "id": $id, "kind": $kind, "role": $role, "scope": $scope} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id)} | format pattern "/calendars/{calendar_id}/acl") $qp)
+  let req_body = {"etag": $etag, "id": $id, "kind": $kind, "role": $role, "scope": $scope} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Watch for changes to ACL resources.
 #
 # POST /calendars/{calendarId}/acl/watch
 # operationId: calendar.acl.watch
-export def "calendars-acl-watch calendaraclwatch" [
+export def "calendars-acl-watch watch" [
   calendar_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -400,19 +409,19 @@ export def "calendars-acl-watch calendaraclwatch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "showDeleted" $show_deleted "scalar") (serialize-qp "syncToken" $sync_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({calendar_id: $calendar_id} | format pattern "/calendars/{calendar_id}/acl/watch") $qp)
-  let body = {"address": $address, "expiration": $expiration, "id": $id, "kind": $kind, "params": $params, "payload": $payload, "resourceId": $resource_id, "resourceUri": $resource_uri, "token": $body_token, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id)} | format pattern "/calendars/{calendar_id}/acl/watch") $qp)
+  let req_body = {"address": $address, "expiration": $expiration, "id": $id, "kind": $kind, "params": $params, "payload": $payload, "resourceId": $resource_id, "resourceUri": $resource_uri, "token": $body_token, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes an access control rule.
 #
 # DELETE /calendars/{calendarId}/acl/{ruleId}
 # operationId: calendar.acl.delete
-export def "calendars-acl calendaracldelete" [
+export def "calendars-acl delete" [
   calendar_id: string
   rule_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -434,7 +443,7 @@ export def "calendars-acl calendaracldelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({calendar_id: $calendar_id, rule_id: $rule_id} | format pattern "/calendars/{calendar_id}/acl/{rule_id}") $qp)
+  let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id), rule_id: (encode-path-segment $rule_id)} | format pattern "/calendars/{calendar_id}/acl/{rule_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -444,7 +453,7 @@ export def "calendars-acl calendaracldelete" [
 #
 # GET /calendars/{calendarId}/acl/{ruleId}
 # operationId: calendar.acl.get
-export def "calendars-acl calendaraclget" [
+export def "calendars-acl get" [
   calendar_id: string
   rule_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -466,7 +475,7 @@ export def "calendars-acl calendaraclget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({calendar_id: $calendar_id, rule_id: $rule_id} | format pattern "/calendars/{calendar_id}/acl/{rule_id}") $qp)
+  let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id), rule_id: (encode-path-segment $rule_id)} | format pattern "/calendars/{calendar_id}/acl/{rule_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -477,7 +486,7 @@ export def "calendars-acl calendaraclget" [
 # PATCH /calendars/{calendarId}/acl/{ruleId}
 # operationId: calendar.acl.patch
 # --scope shape: {type?: string, value?: string}
-export def "calendars-acl calendaraclpatch" [
+export def "calendars-acl update-by-calendarId-ruleId" [
   calendar_id: string
   rule_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -499,19 +508,19 @@ export def "calendars-acl calendaraclpatch" [
   --etag: string # ETag of the resource.
   --id: string # Identifier of the Access Control List (ACL) rule. See Sharing calendars.
   --kind: string # Type of the resource ("calendar#aclRule"). (default: calendar#aclRule)
-  --role: string # The role assigned to the scope. Possible values are:   - "none" - Provides no access.  - "freeBusyReader" - Provides read access to free/busy information.  - "reader" - Provides read access to the calendar. Private events will appear to users with reader access, but event details will be hidden.  - "writer" - Provides read and write access to the calendar. Private events will appear to users with writer access, and event details will be visible.  - "owner" - Provides ownership of the calendar. This role has all of the permissions of the writer role with the additional ability to see and manipulate ACLs.
+  --role: string # The role assigned to the scope. Possible values are: - "none" - Provides no access. - "freeBusyReader" - Provides read access to free/busy information. - "reader" - Provides read access to the calendar. Private events will appear to users with reader access, but event details will be hidden. - "writer" - Provides read and write access to the calendar. Private events will appear to users with writer access, and event details will be visible. - "owner" - Provides ownership of the calendar. This role has all of the permissions of the writer role with the additional ability to see and manipulate ACLs.
   --scope: record # The extent to which calendar access is granted by this ACL rule. — shape: {type?: string, value?: string}
 ]: any -> record<etag: string, id: string, kind: string, role: string, scope: record<type: string, value: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "sendNotifications" $send_notifications "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({calendar_id: $calendar_id, rule_id: $rule_id} | format pattern "/calendars/{calendar_id}/acl/{rule_id}") $qp)
-  let body = {"etag": $etag, "id": $id, "kind": $kind, "role": $role, "scope": $scope} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id), rule_id: (encode-path-segment $rule_id)} | format pattern "/calendars/{calendar_id}/acl/{rule_id}") $qp)
+  let req_body = {"etag": $etag, "id": $id, "kind": $kind, "role": $role, "scope": $scope} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates an access control rule.
@@ -519,7 +528,7 @@ export def "calendars-acl calendaraclpatch" [
 # PUT /calendars/{calendarId}/acl/{ruleId}
 # operationId: calendar.acl.update
 # --scope shape: {type?: string, value?: string}
-export def "calendars-acl calendaraclupdate" [
+export def "calendars-acl update-by-calendarId-ruleId-1" [
   calendar_id: string
   rule_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -541,26 +550,26 @@ export def "calendars-acl calendaraclupdate" [
   --etag: string # ETag of the resource.
   --id: string # Identifier of the Access Control List (ACL) rule. See Sharing calendars.
   --kind: string # Type of the resource ("calendar#aclRule"). (default: calendar#aclRule)
-  --role: string # The role assigned to the scope. Possible values are:   - "none" - Provides no access.  - "freeBusyReader" - Provides read access to free/busy information.  - "reader" - Provides read access to the calendar. Private events will appear to users with reader access, but event details will be hidden.  - "writer" - Provides read and write access to the calendar. Private events will appear to users with writer access, and event details will be visible.  - "owner" - Provides ownership of the calendar. This role has all of the permissions of the writer role with the additional ability to see and manipulate ACLs.
+  --role: string # The role assigned to the scope. Possible values are: - "none" - Provides no access. - "freeBusyReader" - Provides read access to free/busy information. - "reader" - Provides read access to the calendar. Private events will appear to users with reader access, but event details will be hidden. - "writer" - Provides read and write access to the calendar. Private events will appear to users with writer access, and event details will be visible. - "owner" - Provides ownership of the calendar. This role has all of the permissions of the writer role with the additional ability to see and manipulate ACLs.
   --scope: record # The extent to which calendar access is granted by this ACL rule. — shape: {type?: string, value?: string}
 ]: any -> record<etag: string, id: string, kind: string, role: string, scope: record<type: string, value: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "sendNotifications" $send_notifications "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({calendar_id: $calendar_id, rule_id: $rule_id} | format pattern "/calendars/{calendar_id}/acl/{rule_id}") $qp)
-  let body = {"etag": $etag, "id": $id, "kind": $kind, "role": $role, "scope": $scope} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id), rule_id: (encode-path-segment $rule_id)} | format pattern "/calendars/{calendar_id}/acl/{rule_id}") $qp)
+  let req_body = {"etag": $etag, "id": $id, "kind": $kind, "role": $role, "scope": $scope} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Clears a primary calendar. This operation deletes all events associated with the primary calendar of an account.
 #
 # POST /calendars/{calendarId}/clear
 # operationId: calendar.calendars.clear
-export def "calendars-clear calendarcalendarsclear" [
+export def "calendars-clear create" [
   calendar_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -581,7 +590,7 @@ export def "calendars-clear calendarcalendarsclear" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({calendar_id: $calendar_id} | format pattern "/calendars/{calendar_id}/clear") $qp)
+  let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id)} | format pattern "/calendars/{calendar_id}/clear") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -591,7 +600,7 @@ export def "calendars-clear calendarcalendarsclear" [
 #
 # GET /calendars/{calendarId}/events
 # operationId: calendar.events.list
-export def "calendars-events calendareventslist" [
+export def "calendars-events list" [
   calendar_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -609,19 +618,19 @@ export def "calendars-events calendareventslist" [
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --always-include-email: oneof<nothing, bool> # Deprecated and ignored. A value will always be returned in the email field for the organizer, creator and attendees, even if no real email address is available (i.e. a generated, non-working value will be provided).
-  --event-types: list # Event types to return. Optional. Possible values are:  - "default"  - "focusTime"  - "outOfOffice"This parameter can be repeated multiple times to return events of different types. Currently, this is the only allowed value for this field:  - ["default", "focusTime", "outOfOffice"] This value will be the default.  If you're enrolled in the Working Location developer preview program, in addition to the default value above you can also set the "workingLocation" event type:  - ["default", "focusTime", "outOfOffice", "workingLocation"]  - ["workingLocation"] Additional combinations of these 4 event types will be made available in later releases. Developer Preview.
+  --event-types: list<string> # Event types to return. Optional. Possible values are: - "default" - "focusTime" - "outOfOffice"This parameter can be repeated multiple times to return events of different types. Currently, this is the only allowed value for this field: - ["default", "focusTime", "outOfOffice"] This value will be the default. If you're enrolled in the Working Location developer preview program, in addition to the default value above you can also set the "workingLocation" event type: - ["default", "focusTime", "outOfOffice", "workingLocation"] - ["workingLocation"] Additional combinations of these 4 event types will be made available in later releases. Developer Preview.
   --i-cal-uid: string # Specifies an event ID in the iCalendar format to be provided in the response. Optional. Use this if you want to search for an event by its iCalendar ID.
   --max-attendees: int # The maximum number of attendees to include in the response. If there are more than the specified number of attendees, only the participant is returned. Optional.
   --max-results: int # Maximum number of events returned on one result page. The number of events in the resulting page may be less than this value, or none at all, even if there are more events matching the query. Incomplete pages can be detected by a non-empty nextPageToken field in the response. By default the value is 250 events. The page size can never be larger than 2500 events. Optional.
   --order-by: string@order-by-completer # The order of the events returned in the result. Optional. The default is an unspecified, stable order.
   --page-token: string # Token specifying which result page to return. Optional.
-  --private-extended-property: list # Extended properties constraint specified as propertyName=value. Matches only private properties. This parameter might be repeated multiple times to return events that match all given constraints.
+  --private-extended-property: list<string> # Extended properties constraint specified as propertyName=value. Matches only private properties. This parameter might be repeated multiple times to return events that match all given constraints.
   --q: string # Free text search terms to find events that match these terms in the following fields: summary, description, location, attendee's displayName, attendee's email. Optional.
-  --shared-extended-property: list # Extended properties constraint specified as propertyName=value. Matches only shared properties. This parameter might be repeated multiple times to return events that match all given constraints.
+  --shared-extended-property: list<string> # Extended properties constraint specified as propertyName=value. Matches only shared properties. This parameter might be repeated multiple times to return events that match all given constraints.
   --show-deleted: oneof<nothing, bool> # Whether to include deleted events (with status equals "cancelled") in the result. Cancelled instances of recurring events (but not the underlying recurring event) will still be included if showDeleted and singleEvents are both False. If showDeleted and singleEvents are both True, only single instances of deleted events (but not the underlying recurring events) are returned. Optional. The default is False.
   --show-hidden-invitations: oneof<nothing, bool> # Whether to include hidden invitations in the result. Optional. The default is False.
   --single-events: oneof<nothing, bool> # Whether to expand recurring events into instances and only return single one-off events and instances of recurring events, but not the underlying recurring events themselves. Optional. The default is False.
-  --sync-token: string # Token obtained from the nextSyncToken field returned on the last page of results from the previous list request. It makes the result of this list request contain only entries that have changed since then. All events deleted since the previous list request will always be in the result set and it is not allowed to set showDeleted to False. There are several query parameters that cannot be specified together with nextSyncToken to ensure consistency of the client state.  These are:  - iCalUID  - orderBy  - privateExtendedProperty  - q  - sharedExtendedProperty  - timeMin  - timeMax  - updatedMin If the syncToken expires, the server will respond with a 410 GONE response code and the client should clear its storage and perform a full synchronization without any syncToken. Learn more about incremental synchronization. Optional. The default is to return all entries.
+  --sync-token: string # Token obtained from the nextSyncToken field returned on the last page of results from the previous list request. It makes the result of this list request contain only entries that have changed since then. All events deleted since the previous list request will always be in the result set and it is not allowed to set showDeleted to False. There are several query parameters that cannot be specified together with nextSyncToken to ensure consistency of the client state. These are: - iCalUID - orderBy - privateExtendedProperty - q - sharedExtendedProperty - timeMin - timeMax - updatedMin If the syncToken expires, the server will respond with a 410 GONE response code and the client should clear its storage and perform a full synchronization without any syncToken. Learn more about incremental synchronization. Optional. The default is to return all entries.
   --time-max: string # Upper bound (exclusive) for an event's start time to filter by. Optional. The default is not to filter by start time. Must be an RFC3339 timestamp with mandatory time zone offset, for example, 2011-06-03T10:00:00-07:00, 2011-06-03T10:00:00Z. Milliseconds may be provided but are ignored. If timeMin is set, timeMax must be greater than timeMin.
   --time-min: string # Lower bound (exclusive) for an event's end time to filter by. Optional. The default is not to filter by end time. Must be an RFC3339 timestamp with mandatory time zone offset, for example, 2011-06-03T10:00:00-07:00, 2011-06-03T10:00:00Z. Milliseconds may be provided but are ignored. If timeMax is set, timeMin must be smaller than timeMax.
   --time-zone: string # Time zone used in the response. Optional. The default is the time zone of the calendar.
@@ -630,7 +639,7 @@ export def "calendars-events calendareventslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "alwaysIncludeEmail" $always_include_email "scalar") (serialize-qp "eventTypes" $event_types "multi") (serialize-qp "iCalUID" $i_cal_uid "scalar") (serialize-qp "maxAttendees" $max_attendees "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "privateExtendedProperty" $private_extended_property "multi") (serialize-qp "q" $q "scalar") (serialize-qp "sharedExtendedProperty" $shared_extended_property "multi") (serialize-qp "showDeleted" $show_deleted "scalar") (serialize-qp "showHiddenInvitations" $show_hidden_invitations "scalar") (serialize-qp "singleEvents" $single_events "scalar") (serialize-qp "syncToken" $sync_token "scalar") (serialize-qp "timeMax" $time_max "scalar") (serialize-qp "timeMin" $time_min "scalar") (serialize-qp "timeZone" $time_zone "scalar") (serialize-qp "updatedMin" $updated_min "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({calendar_id: $calendar_id} | format pattern "/calendars/{calendar_id}/events") $qp)
+  let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id)} | format pattern "/calendars/{calendar_id}/events") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -653,7 +662,7 @@ export def "calendars-events calendareventslist" [
 # --source shape: {title?: string, url?: string}
 # --start shape: {date?: string, dateTime?: string, timeZone?: string}
 # --workingLocationProperties shape: {customLocation?: record, homeOffice?: any, officeLocation?: record}
-export def "calendars-events calendareventsinsert" [
+export def "calendars-events create" [
   calendar_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -672,14 +681,14 @@ export def "calendars-events calendareventsinsert" [
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --conference-data-version: int # Version number of conference data supported by the API client. Version 0 assumes no conference data support and ignores conference data in the event's body. Version 1 enables support for copying of ConferenceData as well as for creating new conferences using the createRequest field of conferenceData. The default is 0.
   --max-attendees: int # The maximum number of attendees to include in the response. If there are more than the specified number of attendees, only the participant is returned. Optional.
-  --send-notifications: oneof<nothing, bool> # Deprecated. Please use sendUpdates instead.  Whether to send notifications about the creation of the new event. Note that some emails might still be sent even if you set the value to false. The default is false.
+  --send-notifications: oneof<nothing, bool> # Deprecated. Please use sendUpdates instead. Whether to send notifications about the creation of the new event. Note that some emails might still be sent even if you set the value to false. The default is false.
   --send-updates: string@send-updates-completer # Whether to send notifications about the creation of the new event. Note that some emails might still be sent. The default is false.
   --supports-attachments: oneof<nothing, bool> # Whether API client performing operation supports event attachments. Optional. The default is False.
   --anyone-can-add-self: oneof<nothing, bool> # Whether anyone can invite themselves to the event (deprecated). Optional. The default is False. (default: false)
   --attachments: list # File attachments for the event. In order to modify attachments the supportsAttachments request parameter should be set to true. There can be at most 25 attachments per event, — item shape: {fileId?: string, fileUrl?: string, iconLink?: string, mimeType?: string, title?: string}
   --attendees: list # The attendees of the event. See the Events with attendees guide for more information on scheduling events with other calendar users. Service accounts need to use domain-wide delegation of authority to populate the attendee list. — item shape: {additionalGuests?: int, comment?: string, displayName?: string, email?: string, id?: string, optional?: bool, organizer?: bool, resource?: bool, responseStatus?: string, self?: bool}
   --attendees-omitted: oneof<nothing, bool> # Whether attendees may have been omitted from the event's representation. When retrieving an event, this may be due to a restriction specified by the maxAttendee query parameter. When updating an event, this can be used to only update the participant's response. Optional. The default is False. (default: false)
-  --color-id: string # The color of the event. This is an ID referring to an entry in the event section of the colors definition (see the  colors endpoint). Optional.
+  --color-id: string # The color of the event. This is an ID referring to an entry in the event section of the colors definition (see the colors endpoint). Optional.
   --conference-data: record # shape: {conferenceId?: string, conferenceSolution?: record, createRequest?: record, entryPoints?: list, notes?: string, parameters?: record, signature?: string}
   --created: string # Creation time of the event (as a RFC3339 timestamp). Read-only. (format: date-time)
   --creator: record # The creator of the event. Read-only. — shape: {displayName?: string, email?: string, id?: string, self?: bool}
@@ -687,7 +696,7 @@ export def "calendars-events calendareventsinsert" [
   --end: record # shape: {date?: string, dateTime?: string, timeZone?: string}
   --end-time-unspecified: oneof<nothing, bool> # Whether the end time is actually unspecified. An end time is still provided for compatibility reasons, even if this attribute is set to True. The default is False. (default: false)
   --etag: string # ETag of the resource.
-  --event-type: string # Specific type of the event. Read-only. Possible values are:   - "default" - A regular event or not further specified.  - "outOfOffice" - An out-of-office event.  - "focusTime" - A focus-time event.  - "workingLocation" - A working location event. Developer Preview. (default: default)
+  --event-type: string # Specific type of the event. Read-only. Possible values are: - "default" - A regular event or not further specified. - "outOfOffice" - An out-of-office event. - "focusTime" - A focus-time event. - "workingLocation" - A working location event. Developer Preview. (default: default)
   --extended-properties: record # Extended properties of the event. — shape: {private?: record, shared?: record}
   --gadget: record # A gadget that extends this event. Gadgets are deprecated; this structure is instead only used for returning birthday calendar metadata. — shape: {display?: string, height?: int, iconLink?: string, link?: string, preferences?: record, title?: string, type?: string, width?: int}
   --guests-can-invite-others: oneof<nothing, bool> # Whether attendees other than the organizer can invite others to the event. Optional. The default is True. (default: true)
@@ -696,36 +705,36 @@ export def "calendars-events calendareventsinsert" [
   --hangout-link: string # An absolute link to the Google Hangout associated with this event. Read-only.
   --html-link: string # An absolute link to this event in the Google Calendar Web UI. Read-only.
   --i-cal-uid: string # Event unique identifier as defined in RFC5545. It is used to uniquely identify events accross calendaring systems and must be supplied when importing events via the import method. Note that the iCalUID and the id are not identical and only one of them should be supplied at event creation time. One difference in their semantics is that in recurring events, all occurrences of one event have different ids while they all share the same iCalUIDs. To retrieve an event using its iCalUID, call the events.list method using the iCalUID parameter. To retrieve an event using its id, call the events.get method.
-  --id: string # Opaque identifier of the event. When creating new single or recurring events, you can specify their IDs. Provided IDs must follow these rules:   - characters allowed in the ID are those used in base32hex encoding, i.e. lowercase letters a-v and digits 0-9, see section 3.1.2 in RFC2938  - the length of the ID must be between 5 and 1024 characters  - the ID must be unique per calendar  Due to the globally distributed nature of the system, we cannot guarantee that ID collisions will be detected at event creation time. To minimize the risk of collisions we recommend using an established UUID algorithm such as one described in RFC4122. If you do not specify an ID, it will be automatically generated by the server. Note that the icalUID and the id are not identical and only one of them should be supplied at event creation time. One difference in their semantics is that in recurring events, all occurrences of one event have different ids while they all share the same icalUIDs.
+  --id: string # Opaque identifier of the event. When creating new single or recurring events, you can specify their IDs. Provided IDs must follow these rules: - characters allowed in the ID are those used in base32hex encoding, i.e. lowercase letters a-v and digits 0-9, see section 3.1.2 in RFC2938 - the length of the ID must be between 5 and 1024 characters - the ID must be unique per calendar Due to the globally distributed nature of the system, we cannot guarantee that ID collisions will be detected at event creation time. To minimize the risk of collisions we recommend using an established UUID algorithm such as one described in RFC4122. If you do not specify an ID, it will be automatically generated by the server. Note that the icalUID and the id are not identical and only one of them should be supplied at event creation time. One difference in their semantics is that in recurring events, all occurrences of one event have different ids while they all share the same icalUIDs.
   --kind: string # Type of the resource ("calendar#event"). (default: calendar#event)
   --location: string # Geographic location of the event as free-form text. Optional.
   --locked: oneof<nothing, bool> # Whether this is a locked event copy where no changes can be made to the main event fields "summary", "description", "location", "start", "end" or "recurrence". The default is False. Read-Only. (default: false)
   --organizer: record # The organizer of the event. If the organizer is also an attendee, this is indicated with a separate entry in attendees with the organizer field set to True. To change the organizer, use the move operation. Read-only, except when importing an event. — shape: {displayName?: string, email?: string, id?: string, self?: bool}
   --original-start-time: record # shape: {date?: string, dateTime?: string, timeZone?: string}
   --private-copy: oneof<nothing, bool> # If set to True, Event propagation is disabled. Note that it is not the same thing as Private event properties. Optional. Immutable. The default is False. (default: false)
-  --recurrence: list # List of RRULE, EXRULE, RDATE and EXDATE lines for a recurring event, as specified in RFC5545. Note that DTSTART and DTEND lines are not allowed in this field; event start and end times are specified in the start and end fields. This field is omitted for single events or instances of recurring events.
+  --recurrence: list<string> # List of RRULE, EXRULE, RDATE and EXDATE lines for a recurring event, as specified in RFC5545. Note that DTSTART and DTEND lines are not allowed in this field; event start and end times are specified in the start and end fields. This field is omitted for single events or instances of recurring events.
   --recurring-event-id: string # For an instance of a recurring event, this is the id of the recurring event to which this instance belongs. Immutable.
   --reminders: record # Information about the event's reminders for the authenticated user. — shape: {overrides?: list, useDefault?: bool}
   --sequence: int # Sequence number as per iCalendar. (format: int32)
   --body-source: record # Source from which the event was created. For example, a web page, an email message or any document identifiable by an URL with HTTP or HTTPS scheme. Can only be seen or modified by the creator of the event. — shape: {title?: string, url?: string}
   --start: record # shape: {date?: string, dateTime?: string, timeZone?: string}
-  --status: string # Status of the event. Optional. Possible values are:   - "confirmed" - The event is confirmed. This is the default status.  - "tentative" - The event is tentatively confirmed.  - "cancelled" - The event is cancelled (deleted). The list method returns cancelled events only on incremental sync (when syncToken or updatedMin are specified) or if the showDeleted flag is set to true. The get method always returns them. A cancelled status represents two different states depending on the event type:   - Cancelled exceptions of an uncancelled recurring event indicate that this instance should no longer be presented to the user. Clients should store these events for the lifetime of the parent recurring event. Cancelled exceptions are only guaranteed to have values for the id, recurringEventId and originalStartTime fields populated. The other fields might be empty.   - All other cancelled events represent deleted events. Clients should remove their locally synced copies. Such cancelled events will eventually disappear, so do not rely on them being available indefinitely. Deleted events are only guaranteed to have the id field populated.   On the organizer's calendar, cancelled events continue to expose event details (summary, location, etc.) so that they can be restored (undeleted). Similarly, the events to which the user was invited and that they manually removed continue to provide details. However, incremental sync requests with showDeleted set to false will not return these details. If an event changes its organizer (for example via the move operation) and the original organizer is not on the attendee list, it will leave behind a cancelled event where only the id field is guaranteed to be populated.
+  --status: string # Status of the event. Optional. Possible values are: - "confirmed" - The event is confirmed. This is the default status. - "tentative" - The event is tentatively confirmed. - "cancelled" - The event is cancelled (deleted). The list method returns cancelled events only on incremental sync (when syncToken or updatedMin are specified) or if the showDeleted flag is set to true. The get method always returns them. A cancelled status represents two different states depending on the event type: - Cancelled exceptions of an uncancelled recurring event indicate that this instance should no longer be presented to the user. Clients should store these events for the lifetime of the parent recurring event. Cancelled exceptions are only guaranteed to have values for the id, recurringEventId and originalStartTime fields populated. The other fields might be empty. - All other cancelled events represent deleted events. Clients should remove their locally synced copies. Such cancelled events will eventually disappear, so do not rely on them being available indefinitely. Deleted events are only guaranteed to have the id field populated. On the organizer's calendar, cancelled events continue to expose event details (summary, location, etc.) so that they can be restored (undeleted). Similarly, the events to which the user was invited and that they manually removed continue to provide details. However, incremental sync requests with showDeleted set to false will not return these details. If an event changes its organizer (for example via the move operation) and the original organizer is not on the attendee list, it will leave behind a cancelled event where only the id field is guaranteed to be populated.
   --summary: string # Title of the event.
-  --transparency: string # Whether the event blocks time on the calendar. Optional. Possible values are:   - "opaque" - Default value. The event does block time on the calendar. This is equivalent to setting Show me as to Busy in the Calendar UI.  - "transparent" - The event does not block time on the calendar. This is equivalent to setting Show me as to Available in the Calendar UI. (default: opaque)
+  --transparency: string # Whether the event blocks time on the calendar. Optional. Possible values are: - "opaque" - Default value. The event does block time on the calendar. This is equivalent to setting Show me as to Busy in the Calendar UI. - "transparent" - The event does not block time on the calendar. This is equivalent to setting Show me as to Available in the Calendar UI. (default: opaque)
   --updated: string # Last modification time of the event (as a RFC3339 timestamp). Read-only. (format: date-time)
-  --visibility: string # Visibility of the event. Optional. Possible values are:   - "default" - Uses the default visibility for events on the calendar. This is the default value.  - "public" - The event is public and event details are visible to all readers of the calendar.  - "private" - The event is private and only event attendees may view event details.  - "confidential" - The event is private. This value is provided for compatibility reasons. (default: default)
+  --visibility: string # Visibility of the event. Optional. Possible values are: - "default" - Uses the default visibility for events on the calendar. This is the default value. - "public" - The event is public and event details are visible to all readers of the calendar. - "private" - The event is private and only event attendees may view event details. - "confidential" - The event is private. This value is provided for compatibility reasons. (default: default)
   --working-location-properties: record # shape: {customLocation?: record, homeOffice?: any, officeLocation?: record}
 ]: any -> record<anyoneCanAddSelf: bool, attachments: table<fileId: string, fileUrl: string, iconLink: string, mimeType: string, title: string>, attendees: table<additionalGuests: int, comment: string, displayName: string, email: string, id: string, optional: bool, organizer: bool, resource: bool, responseStatus: string, self: bool>, attendeesOmitted: bool, colorId: string, conferenceData: record<conferenceId: string, conferenceSolution: record<iconUri: string, key: record, name: string>, createRequest: record<conferenceSolutionKey: record, requestId: string, status: record>, entryPoints: list<record>, notes: string, parameters: record<addOnParameters: record>, signature: string>, created: string, creator: record<displayName: string, email: string, id: string, self: bool>, description: string, end: record<date: string, dateTime: string, timeZone: string>, endTimeUnspecified: bool, etag: string, eventType: string, extendedProperties: record<private: record, shared: record>, gadget: record<display: string, height: int, iconLink: string, link: string, preferences: record, title: string, type: string, width: int>, guestsCanInviteOthers: bool, guestsCanModify: bool, guestsCanSeeOtherGuests: bool, hangoutLink: string, htmlLink: string, iCalUID: string, id: string, kind: string, location: string, locked: bool, organizer: record<displayName: string, email: string, id: string, self: bool>, originalStartTime: record<date: string, dateTime: string, timeZone: string>, privateCopy: bool, recurrence: list<string>, recurringEventId: string, reminders: record<overrides: list<record>, useDefault: bool>, sequence: int, source: record<title: string, url: string>, start: record<date: string, dateTime: string, timeZone: string>, status: string, summary: string, transparency: string, updated: string, visibility: string, workingLocationProperties: record<customLocation: record<label: string>, homeOffice: any, officeLocation: record<buildingId: string, deskId: string, floorId: string, floorSectionId: string, label: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "conferenceDataVersion" $conference_data_version "scalar") (serialize-qp "maxAttendees" $max_attendees "scalar") (serialize-qp "sendNotifications" $send_notifications "scalar") (serialize-qp "sendUpdates" $send_updates "scalar") (serialize-qp "supportsAttachments" $supports_attachments "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({calendar_id: $calendar_id} | format pattern "/calendars/{calendar_id}/events") $qp)
-  let body = {"anyoneCanAddSelf": $anyone_can_add_self, "attachments": $attachments, "attendees": $attendees, "attendeesOmitted": $attendees_omitted, "colorId": $color_id, "conferenceData": $conference_data, "created": $created, "creator": $creator, "description": $description, "end": $end, "endTimeUnspecified": $end_time_unspecified, "etag": $etag, "eventType": $event_type, "extendedProperties": $extended_properties, "gadget": $gadget, "guestsCanInviteOthers": $guests_can_invite_others, "guestsCanModify": $guests_can_modify, "guestsCanSeeOtherGuests": $guests_can_see_other_guests, "hangoutLink": $hangout_link, "htmlLink": $html_link, "iCalUID": $i_cal_uid, "id": $id, "kind": $kind, "location": $location, "locked": $locked, "organizer": $organizer, "originalStartTime": $original_start_time, "privateCopy": $private_copy, "recurrence": $recurrence, "recurringEventId": $recurring_event_id, "reminders": $reminders, "sequence": $sequence, "source": $body_source, "start": $start, "status": $status, "summary": $summary, "transparency": $transparency, "updated": $updated, "visibility": $visibility, "workingLocationProperties": $working_location_properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id)} | format pattern "/calendars/{calendar_id}/events") $qp)
+  let req_body = {"anyoneCanAddSelf": $anyone_can_add_self, "attachments": $attachments, "attendees": $attendees, "attendeesOmitted": $attendees_omitted, "colorId": $color_id, "conferenceData": $conference_data, "created": $created, "creator": $creator, "description": $description, "end": $end, "endTimeUnspecified": $end_time_unspecified, "etag": $etag, "eventType": $event_type, "extendedProperties": $extended_properties, "gadget": $gadget, "guestsCanInviteOthers": $guests_can_invite_others, "guestsCanModify": $guests_can_modify, "guestsCanSeeOtherGuests": $guests_can_see_other_guests, "hangoutLink": $hangout_link, "htmlLink": $html_link, "iCalUID": $i_cal_uid, "id": $id, "kind": $kind, "location": $location, "locked": $locked, "organizer": $organizer, "originalStartTime": $original_start_time, "privateCopy": $private_copy, "recurrence": $recurrence, "recurringEventId": $recurring_event_id, "reminders": $reminders, "sequence": $sequence, "source": $body_source, "start": $start, "status": $status, "summary": $summary, "transparency": $transparency, "updated": $updated, "visibility": $visibility, "workingLocationProperties": $working_location_properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Imports an event. This operation is used to add a private copy of an existing event to a calendar.
@@ -745,7 +754,7 @@ export def "calendars-events calendareventsinsert" [
 # --source shape: {title?: string, url?: string}
 # --start shape: {date?: string, dateTime?: string, timeZone?: string}
 # --workingLocationProperties shape: {customLocation?: record, homeOffice?: any, officeLocation?: record}
-export def "calendars-events-import calendareventsimport" [
+export def "calendars-events-import import" [
   calendar_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -768,7 +777,7 @@ export def "calendars-events-import calendareventsimport" [
   --attachments: list # File attachments for the event. In order to modify attachments the supportsAttachments request parameter should be set to true. There can be at most 25 attachments per event, — item shape: {fileId?: string, fileUrl?: string, iconLink?: string, mimeType?: string, title?: string}
   --attendees: list # The attendees of the event. See the Events with attendees guide for more information on scheduling events with other calendar users. Service accounts need to use domain-wide delegation of authority to populate the attendee list. — item shape: {additionalGuests?: int, comment?: string, displayName?: string, email?: string, id?: string, optional?: bool, organizer?: bool, resource?: bool, responseStatus?: string, self?: bool}
   --attendees-omitted: oneof<nothing, bool> # Whether attendees may have been omitted from the event's representation. When retrieving an event, this may be due to a restriction specified by the maxAttendee query parameter. When updating an event, this can be used to only update the participant's response. Optional. The default is False. (default: false)
-  --color-id: string # The color of the event. This is an ID referring to an entry in the event section of the colors definition (see the  colors endpoint). Optional.
+  --color-id: string # The color of the event. This is an ID referring to an entry in the event section of the colors definition (see the colors endpoint). Optional.
   --conference-data: record # shape: {conferenceId?: string, conferenceSolution?: record, createRequest?: record, entryPoints?: list, notes?: string, parameters?: record, signature?: string}
   --created: string # Creation time of the event (as a RFC3339 timestamp). Read-only. (format: date-time)
   --creator: record # The creator of the event. Read-only. — shape: {displayName?: string, email?: string, id?: string, self?: bool}
@@ -776,7 +785,7 @@ export def "calendars-events-import calendareventsimport" [
   --end: record # shape: {date?: string, dateTime?: string, timeZone?: string}
   --end-time-unspecified: oneof<nothing, bool> # Whether the end time is actually unspecified. An end time is still provided for compatibility reasons, even if this attribute is set to True. The default is False. (default: false)
   --etag: string # ETag of the resource.
-  --event-type: string # Specific type of the event. Read-only. Possible values are:   - "default" - A regular event or not further specified.  - "outOfOffice" - An out-of-office event.  - "focusTime" - A focus-time event.  - "workingLocation" - A working location event. Developer Preview. (default: default)
+  --event-type: string # Specific type of the event. Read-only. Possible values are: - "default" - A regular event or not further specified. - "outOfOffice" - An out-of-office event. - "focusTime" - A focus-time event. - "workingLocation" - A working location event. Developer Preview. (default: default)
   --extended-properties: record # Extended properties of the event. — shape: {private?: record, shared?: record}
   --gadget: record # A gadget that extends this event. Gadgets are deprecated; this structure is instead only used for returning birthday calendar metadata. — shape: {display?: string, height?: int, iconLink?: string, link?: string, preferences?: record, title?: string, type?: string, width?: int}
   --guests-can-invite-others: oneof<nothing, bool> # Whether attendees other than the organizer can invite others to the event. Optional. The default is True. (default: true)
@@ -785,43 +794,43 @@ export def "calendars-events-import calendareventsimport" [
   --hangout-link: string # An absolute link to the Google Hangout associated with this event. Read-only.
   --html-link: string # An absolute link to this event in the Google Calendar Web UI. Read-only.
   --i-cal-uid: string # Event unique identifier as defined in RFC5545. It is used to uniquely identify events accross calendaring systems and must be supplied when importing events via the import method. Note that the iCalUID and the id are not identical and only one of them should be supplied at event creation time. One difference in their semantics is that in recurring events, all occurrences of one event have different ids while they all share the same iCalUIDs. To retrieve an event using its iCalUID, call the events.list method using the iCalUID parameter. To retrieve an event using its id, call the events.get method.
-  --id: string # Opaque identifier of the event. When creating new single or recurring events, you can specify their IDs. Provided IDs must follow these rules:   - characters allowed in the ID are those used in base32hex encoding, i.e. lowercase letters a-v and digits 0-9, see section 3.1.2 in RFC2938  - the length of the ID must be between 5 and 1024 characters  - the ID must be unique per calendar  Due to the globally distributed nature of the system, we cannot guarantee that ID collisions will be detected at event creation time. To minimize the risk of collisions we recommend using an established UUID algorithm such as one described in RFC4122. If you do not specify an ID, it will be automatically generated by the server. Note that the icalUID and the id are not identical and only one of them should be supplied at event creation time. One difference in their semantics is that in recurring events, all occurrences of one event have different ids while they all share the same icalUIDs.
+  --id: string # Opaque identifier of the event. When creating new single or recurring events, you can specify their IDs. Provided IDs must follow these rules: - characters allowed in the ID are those used in base32hex encoding, i.e. lowercase letters a-v and digits 0-9, see section 3.1.2 in RFC2938 - the length of the ID must be between 5 and 1024 characters - the ID must be unique per calendar Due to the globally distributed nature of the system, we cannot guarantee that ID collisions will be detected at event creation time. To minimize the risk of collisions we recommend using an established UUID algorithm such as one described in RFC4122. If you do not specify an ID, it will be automatically generated by the server. Note that the icalUID and the id are not identical and only one of them should be supplied at event creation time. One difference in their semantics is that in recurring events, all occurrences of one event have different ids while they all share the same icalUIDs.
   --kind: string # Type of the resource ("calendar#event"). (default: calendar#event)
   --location: string # Geographic location of the event as free-form text. Optional.
   --locked: oneof<nothing, bool> # Whether this is a locked event copy where no changes can be made to the main event fields "summary", "description", "location", "start", "end" or "recurrence". The default is False. Read-Only. (default: false)
   --organizer: record # The organizer of the event. If the organizer is also an attendee, this is indicated with a separate entry in attendees with the organizer field set to True. To change the organizer, use the move operation. Read-only, except when importing an event. — shape: {displayName?: string, email?: string, id?: string, self?: bool}
   --original-start-time: record # shape: {date?: string, dateTime?: string, timeZone?: string}
   --private-copy: oneof<nothing, bool> # If set to True, Event propagation is disabled. Note that it is not the same thing as Private event properties. Optional. Immutable. The default is False. (default: false)
-  --recurrence: list # List of RRULE, EXRULE, RDATE and EXDATE lines for a recurring event, as specified in RFC5545. Note that DTSTART and DTEND lines are not allowed in this field; event start and end times are specified in the start and end fields. This field is omitted for single events or instances of recurring events.
+  --recurrence: list<string> # List of RRULE, EXRULE, RDATE and EXDATE lines for a recurring event, as specified in RFC5545. Note that DTSTART and DTEND lines are not allowed in this field; event start and end times are specified in the start and end fields. This field is omitted for single events or instances of recurring events.
   --recurring-event-id: string # For an instance of a recurring event, this is the id of the recurring event to which this instance belongs. Immutable.
   --reminders: record # Information about the event's reminders for the authenticated user. — shape: {overrides?: list, useDefault?: bool}
   --sequence: int # Sequence number as per iCalendar. (format: int32)
   --body-source: record # Source from which the event was created. For example, a web page, an email message or any document identifiable by an URL with HTTP or HTTPS scheme. Can only be seen or modified by the creator of the event. — shape: {title?: string, url?: string}
   --start: record # shape: {date?: string, dateTime?: string, timeZone?: string}
-  --status: string # Status of the event. Optional. Possible values are:   - "confirmed" - The event is confirmed. This is the default status.  - "tentative" - The event is tentatively confirmed.  - "cancelled" - The event is cancelled (deleted). The list method returns cancelled events only on incremental sync (when syncToken or updatedMin are specified) or if the showDeleted flag is set to true. The get method always returns them. A cancelled status represents two different states depending on the event type:   - Cancelled exceptions of an uncancelled recurring event indicate that this instance should no longer be presented to the user. Clients should store these events for the lifetime of the parent recurring event. Cancelled exceptions are only guaranteed to have values for the id, recurringEventId and originalStartTime fields populated. The other fields might be empty.   - All other cancelled events represent deleted events. Clients should remove their locally synced copies. Such cancelled events will eventually disappear, so do not rely on them being available indefinitely. Deleted events are only guaranteed to have the id field populated.   On the organizer's calendar, cancelled events continue to expose event details (summary, location, etc.) so that they can be restored (undeleted). Similarly, the events to which the user was invited and that they manually removed continue to provide details. However, incremental sync requests with showDeleted set to false will not return these details. If an event changes its organizer (for example via the move operation) and the original organizer is not on the attendee list, it will leave behind a cancelled event where only the id field is guaranteed to be populated.
+  --status: string # Status of the event. Optional. Possible values are: - "confirmed" - The event is confirmed. This is the default status. - "tentative" - The event is tentatively confirmed. - "cancelled" - The event is cancelled (deleted). The list method returns cancelled events only on incremental sync (when syncToken or updatedMin are specified) or if the showDeleted flag is set to true. The get method always returns them. A cancelled status represents two different states depending on the event type: - Cancelled exceptions of an uncancelled recurring event indicate that this instance should no longer be presented to the user. Clients should store these events for the lifetime of the parent recurring event. Cancelled exceptions are only guaranteed to have values for the id, recurringEventId and originalStartTime fields populated. The other fields might be empty. - All other cancelled events represent deleted events. Clients should remove their locally synced copies. Such cancelled events will eventually disappear, so do not rely on them being available indefinitely. Deleted events are only guaranteed to have the id field populated. On the organizer's calendar, cancelled events continue to expose event details (summary, location, etc.) so that they can be restored (undeleted). Similarly, the events to which the user was invited and that they manually removed continue to provide details. However, incremental sync requests with showDeleted set to false will not return these details. If an event changes its organizer (for example via the move operation) and the original organizer is not on the attendee list, it will leave behind a cancelled event where only the id field is guaranteed to be populated.
   --summary: string # Title of the event.
-  --transparency: string # Whether the event blocks time on the calendar. Optional. Possible values are:   - "opaque" - Default value. The event does block time on the calendar. This is equivalent to setting Show me as to Busy in the Calendar UI.  - "transparent" - The event does not block time on the calendar. This is equivalent to setting Show me as to Available in the Calendar UI. (default: opaque)
+  --transparency: string # Whether the event blocks time on the calendar. Optional. Possible values are: - "opaque" - Default value. The event does block time on the calendar. This is equivalent to setting Show me as to Busy in the Calendar UI. - "transparent" - The event does not block time on the calendar. This is equivalent to setting Show me as to Available in the Calendar UI. (default: opaque)
   --updated: string # Last modification time of the event (as a RFC3339 timestamp). Read-only. (format: date-time)
-  --visibility: string # Visibility of the event. Optional. Possible values are:   - "default" - Uses the default visibility for events on the calendar. This is the default value.  - "public" - The event is public and event details are visible to all readers of the calendar.  - "private" - The event is private and only event attendees may view event details.  - "confidential" - The event is private. This value is provided for compatibility reasons. (default: default)
+  --visibility: string # Visibility of the event. Optional. Possible values are: - "default" - Uses the default visibility for events on the calendar. This is the default value. - "public" - The event is public and event details are visible to all readers of the calendar. - "private" - The event is private and only event attendees may view event details. - "confidential" - The event is private. This value is provided for compatibility reasons. (default: default)
   --working-location-properties: record # shape: {customLocation?: record, homeOffice?: any, officeLocation?: record}
 ]: any -> record<anyoneCanAddSelf: bool, attachments: table<fileId: string, fileUrl: string, iconLink: string, mimeType: string, title: string>, attendees: table<additionalGuests: int, comment: string, displayName: string, email: string, id: string, optional: bool, organizer: bool, resource: bool, responseStatus: string, self: bool>, attendeesOmitted: bool, colorId: string, conferenceData: record<conferenceId: string, conferenceSolution: record<iconUri: string, key: record, name: string>, createRequest: record<conferenceSolutionKey: record, requestId: string, status: record>, entryPoints: list<record>, notes: string, parameters: record<addOnParameters: record>, signature: string>, created: string, creator: record<displayName: string, email: string, id: string, self: bool>, description: string, end: record<date: string, dateTime: string, timeZone: string>, endTimeUnspecified: bool, etag: string, eventType: string, extendedProperties: record<private: record, shared: record>, gadget: record<display: string, height: int, iconLink: string, link: string, preferences: record, title: string, type: string, width: int>, guestsCanInviteOthers: bool, guestsCanModify: bool, guestsCanSeeOtherGuests: bool, hangoutLink: string, htmlLink: string, iCalUID: string, id: string, kind: string, location: string, locked: bool, organizer: record<displayName: string, email: string, id: string, self: bool>, originalStartTime: record<date: string, dateTime: string, timeZone: string>, privateCopy: bool, recurrence: list<string>, recurringEventId: string, reminders: record<overrides: list<record>, useDefault: bool>, sequence: int, source: record<title: string, url: string>, start: record<date: string, dateTime: string, timeZone: string>, status: string, summary: string, transparency: string, updated: string, visibility: string, workingLocationProperties: record<customLocation: record<label: string>, homeOffice: any, officeLocation: record<buildingId: string, deskId: string, floorId: string, floorSectionId: string, label: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "conferenceDataVersion" $conference_data_version "scalar") (serialize-qp "supportsAttachments" $supports_attachments "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({calendar_id: $calendar_id} | format pattern "/calendars/{calendar_id}/events/import") $qp)
-  let body = {"anyoneCanAddSelf": $anyone_can_add_self, "attachments": $attachments, "attendees": $attendees, "attendeesOmitted": $attendees_omitted, "colorId": $color_id, "conferenceData": $conference_data, "created": $created, "creator": $creator, "description": $description, "end": $end, "endTimeUnspecified": $end_time_unspecified, "etag": $etag, "eventType": $event_type, "extendedProperties": $extended_properties, "gadget": $gadget, "guestsCanInviteOthers": $guests_can_invite_others, "guestsCanModify": $guests_can_modify, "guestsCanSeeOtherGuests": $guests_can_see_other_guests, "hangoutLink": $hangout_link, "htmlLink": $html_link, "iCalUID": $i_cal_uid, "id": $id, "kind": $kind, "location": $location, "locked": $locked, "organizer": $organizer, "originalStartTime": $original_start_time, "privateCopy": $private_copy, "recurrence": $recurrence, "recurringEventId": $recurring_event_id, "reminders": $reminders, "sequence": $sequence, "source": $body_source, "start": $start, "status": $status, "summary": $summary, "transparency": $transparency, "updated": $updated, "visibility": $visibility, "workingLocationProperties": $working_location_properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id)} | format pattern "/calendars/{calendar_id}/events/import") $qp)
+  let req_body = {"anyoneCanAddSelf": $anyone_can_add_self, "attachments": $attachments, "attendees": $attendees, "attendeesOmitted": $attendees_omitted, "colorId": $color_id, "conferenceData": $conference_data, "created": $created, "creator": $creator, "description": $description, "end": $end, "endTimeUnspecified": $end_time_unspecified, "etag": $etag, "eventType": $event_type, "extendedProperties": $extended_properties, "gadget": $gadget, "guestsCanInviteOthers": $guests_can_invite_others, "guestsCanModify": $guests_can_modify, "guestsCanSeeOtherGuests": $guests_can_see_other_guests, "hangoutLink": $hangout_link, "htmlLink": $html_link, "iCalUID": $i_cal_uid, "id": $id, "kind": $kind, "location": $location, "locked": $locked, "organizer": $organizer, "originalStartTime": $original_start_time, "privateCopy": $private_copy, "recurrence": $recurrence, "recurringEventId": $recurring_event_id, "reminders": $reminders, "sequence": $sequence, "source": $body_source, "start": $start, "status": $status, "summary": $summary, "transparency": $transparency, "updated": $updated, "visibility": $visibility, "workingLocationProperties": $working_location_properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Creates an event based on a simple text string.
 #
 # POST /calendars/{calendarId}/events/quickAdd
 # operationId: calendar.events.quickAdd
-export def "calendars-events-quick-add calendareventsquickAdd" [
+export def "calendars-events-quick-add create" [
   calendar_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -839,13 +848,13 @@ export def "calendars-events-quick-add calendareventsquickAdd" [
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --text: string # The text describing the event to be created.
-  --send-notifications: oneof<nothing, bool> # Deprecated. Please use sendUpdates instead.  Whether to send notifications about the creation of the event. Note that some emails might still be sent even if you set the value to false. The default is false.
+  --send-notifications: oneof<nothing, bool> # Deprecated. Please use sendUpdates instead. Whether to send notifications about the creation of the event. Note that some emails might still be sent even if you set the value to false. The default is false.
   --send-updates: string@send-updates-completer # Guests who should receive notifications about the creation of the new event.
 ]: nothing -> record<anyoneCanAddSelf: bool, attachments: table<fileId: string, fileUrl: string, iconLink: string, mimeType: string, title: string>, attendees: table<additionalGuests: int, comment: string, displayName: string, email: string, id: string, optional: bool, organizer: bool, resource: bool, responseStatus: string, self: bool>, attendeesOmitted: bool, colorId: string, conferenceData: record<conferenceId: string, conferenceSolution: record<iconUri: string, key: record, name: string>, createRequest: record<conferenceSolutionKey: record, requestId: string, status: record>, entryPoints: list<record>, notes: string, parameters: record<addOnParameters: record>, signature: string>, created: string, creator: record<displayName: string, email: string, id: string, self: bool>, description: string, end: record<date: string, dateTime: string, timeZone: string>, endTimeUnspecified: bool, etag: string, eventType: string, extendedProperties: record<private: record, shared: record>, gadget: record<display: string, height: int, iconLink: string, link: string, preferences: record, title: string, type: string, width: int>, guestsCanInviteOthers: bool, guestsCanModify: bool, guestsCanSeeOtherGuests: bool, hangoutLink: string, htmlLink: string, iCalUID: string, id: string, kind: string, location: string, locked: bool, organizer: record<displayName: string, email: string, id: string, self: bool>, originalStartTime: record<date: string, dateTime: string, timeZone: string>, privateCopy: bool, recurrence: list<string>, recurringEventId: string, reminders: record<overrides: list<record>, useDefault: bool>, sequence: int, source: record<title: string, url: string>, start: record<date: string, dateTime: string, timeZone: string>, status: string, summary: string, transparency: string, updated: string, visibility: string, workingLocationProperties: record<customLocation: record<label: string>, homeOffice: any, officeLocation: record<buildingId: string, deskId: string, floorId: string, floorSectionId: string, label: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "text" $text "scalar") (serialize-qp "sendNotifications" $send_notifications "scalar") (serialize-qp "sendUpdates" $send_updates "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({calendar_id: $calendar_id} | format pattern "/calendars/{calendar_id}/events/quickAdd") $qp)
+  let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id)} | format pattern "/calendars/{calendar_id}/events/quickAdd") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -855,7 +864,7 @@ export def "calendars-events-quick-add calendareventsquickAdd" [
 #
 # POST /calendars/{calendarId}/events/watch
 # operationId: calendar.events.watch
-export def "calendars-events-watch calendareventswatch" [
+export def "calendars-events-watch watch" [
   calendar_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -873,19 +882,19 @@ export def "calendars-events-watch calendareventswatch" [
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --always-include-email: oneof<nothing, bool> # Deprecated and ignored. A value will always be returned in the email field for the organizer, creator and attendees, even if no real email address is available (i.e. a generated, non-working value will be provided).
-  --event-types: list # Event types to return. Optional. Possible values are:  - "default"  - "focusTime"  - "outOfOffice"This parameter can be repeated multiple times to return events of different types. Currently, this is the only allowed value for this field:  - ["default", "focusTime", "outOfOffice"] This value will be the default.  If you're enrolled in the Working Location developer preview program, in addition to the default value above you can also set the "workingLocation" event type:  - ["default", "focusTime", "outOfOffice", "workingLocation"]  - ["workingLocation"] Additional combinations of these 4 event types will be made available in later releases. Developer Preview.
+  --event-types: list<string> # Event types to return. Optional. Possible values are: - "default" - "focusTime" - "outOfOffice"This parameter can be repeated multiple times to return events of different types. Currently, this is the only allowed value for this field: - ["default", "focusTime", "outOfOffice"] This value will be the default. If you're enrolled in the Working Location developer preview program, in addition to the default value above you can also set the "workingLocation" event type: - ["default", "focusTime", "outOfOffice", "workingLocation"] - ["workingLocation"] Additional combinations of these 4 event types will be made available in later releases. Developer Preview.
   --i-cal-uid: string # Specifies an event ID in the iCalendar format to be provided in the response. Optional. Use this if you want to search for an event by its iCalendar ID.
   --max-attendees: int # The maximum number of attendees to include in the response. If there are more than the specified number of attendees, only the participant is returned. Optional.
   --max-results: int # Maximum number of events returned on one result page. The number of events in the resulting page may be less than this value, or none at all, even if there are more events matching the query. Incomplete pages can be detected by a non-empty nextPageToken field in the response. By default the value is 250 events. The page size can never be larger than 2500 events. Optional.
   --order-by: string@order-by-completer # The order of the events returned in the result. Optional. The default is an unspecified, stable order.
   --page-token: string # Token specifying which result page to return. Optional.
-  --private-extended-property: list # Extended properties constraint specified as propertyName=value. Matches only private properties. This parameter might be repeated multiple times to return events that match all given constraints.
+  --private-extended-property: list<string> # Extended properties constraint specified as propertyName=value. Matches only private properties. This parameter might be repeated multiple times to return events that match all given constraints.
   --q: string # Free text search terms to find events that match these terms in the following fields: summary, description, location, attendee's displayName, attendee's email. Optional.
-  --shared-extended-property: list # Extended properties constraint specified as propertyName=value. Matches only shared properties. This parameter might be repeated multiple times to return events that match all given constraints.
+  --shared-extended-property: list<string> # Extended properties constraint specified as propertyName=value. Matches only shared properties. This parameter might be repeated multiple times to return events that match all given constraints.
   --show-deleted: oneof<nothing, bool> # Whether to include deleted events (with status equals "cancelled") in the result. Cancelled instances of recurring events (but not the underlying recurring event) will still be included if showDeleted and singleEvents are both False. If showDeleted and singleEvents are both True, only single instances of deleted events (but not the underlying recurring events) are returned. Optional. The default is False.
   --show-hidden-invitations: oneof<nothing, bool> # Whether to include hidden invitations in the result. Optional. The default is False.
   --single-events: oneof<nothing, bool> # Whether to expand recurring events into instances and only return single one-off events and instances of recurring events, but not the underlying recurring events themselves. Optional. The default is False.
-  --sync-token: string # Token obtained from the nextSyncToken field returned on the last page of results from the previous list request. It makes the result of this list request contain only entries that have changed since then. All events deleted since the previous list request will always be in the result set and it is not allowed to set showDeleted to False. There are several query parameters that cannot be specified together with nextSyncToken to ensure consistency of the client state.  These are:  - iCalUID  - orderBy  - privateExtendedProperty  - q  - sharedExtendedProperty  - timeMin  - timeMax  - updatedMin If the syncToken expires, the server will respond with a 410 GONE response code and the client should clear its storage and perform a full synchronization without any syncToken. Learn more about incremental synchronization. Optional. The default is to return all entries.
+  --sync-token: string # Token obtained from the nextSyncToken field returned on the last page of results from the previous list request. It makes the result of this list request contain only entries that have changed since then. All events deleted since the previous list request will always be in the result set and it is not allowed to set showDeleted to False. There are several query parameters that cannot be specified together with nextSyncToken to ensure consistency of the client state. These are: - iCalUID - orderBy - privateExtendedProperty - q - sharedExtendedProperty - timeMin - timeMax - updatedMin If the syncToken expires, the server will respond with a 410 GONE response code and the client should clear its storage and perform a full synchronization without any syncToken. Learn more about incremental synchronization. Optional. The default is to return all entries.
   --time-max: string # Upper bound (exclusive) for an event's start time to filter by. Optional. The default is not to filter by start time. Must be an RFC3339 timestamp with mandatory time zone offset, for example, 2011-06-03T10:00:00-07:00, 2011-06-03T10:00:00Z. Milliseconds may be provided but are ignored. If timeMin is set, timeMax must be greater than timeMin.
   --time-min: string # Lower bound (exclusive) for an event's end time to filter by. Optional. The default is not to filter by end time. Must be an RFC3339 timestamp with mandatory time zone offset, for example, 2011-06-03T10:00:00-07:00, 2011-06-03T10:00:00Z. Milliseconds may be provided but are ignored. If timeMax is set, timeMin must be smaller than timeMax.
   --time-zone: string # Time zone used in the response. Optional. The default is the time zone of the calendar.
@@ -905,19 +914,19 @@ export def "calendars-events-watch calendareventswatch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "alwaysIncludeEmail" $always_include_email "scalar") (serialize-qp "eventTypes" $event_types "multi") (serialize-qp "iCalUID" $i_cal_uid "scalar") (serialize-qp "maxAttendees" $max_attendees "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "privateExtendedProperty" $private_extended_property "multi") (serialize-qp "q" $q "scalar") (serialize-qp "sharedExtendedProperty" $shared_extended_property "multi") (serialize-qp "showDeleted" $show_deleted "scalar") (serialize-qp "showHiddenInvitations" $show_hidden_invitations "scalar") (serialize-qp "singleEvents" $single_events "scalar") (serialize-qp "syncToken" $sync_token "scalar") (serialize-qp "timeMax" $time_max "scalar") (serialize-qp "timeMin" $time_min "scalar") (serialize-qp "timeZone" $time_zone "scalar") (serialize-qp "updatedMin" $updated_min "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({calendar_id: $calendar_id} | format pattern "/calendars/{calendar_id}/events/watch") $qp)
-  let body = {"address": $address, "expiration": $expiration, "id": $id, "kind": $kind, "params": $params, "payload": $payload, "resourceId": $resource_id, "resourceUri": $resource_uri, "token": $body_token, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id)} | format pattern "/calendars/{calendar_id}/events/watch") $qp)
+  let req_body = {"address": $address, "expiration": $expiration, "id": $id, "kind": $kind, "params": $params, "payload": $payload, "resourceId": $resource_id, "resourceUri": $resource_uri, "token": $body_token, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes an event.
 #
 # DELETE /calendars/{calendarId}/events/{eventId}
 # operationId: calendar.events.delete
-export def "calendars-events calendareventsdelete" [
+export def "calendars-events delete" [
   calendar_id: string
   event_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -935,13 +944,13 @@ export def "calendars-events calendareventsdelete" [
   --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --user-ip: string # Deprecated. Please use quotaUser instead.
-  --send-notifications: oneof<nothing, bool> # Deprecated. Please use sendUpdates instead.  Whether to send notifications about the deletion of the event. Note that some emails might still be sent even if you set the value to false. The default is false.
+  --send-notifications: oneof<nothing, bool> # Deprecated. Please use sendUpdates instead. Whether to send notifications about the deletion of the event. Note that some emails might still be sent even if you set the value to false. The default is false.
   --send-updates: string@send-updates-completer # Guests who should receive notifications about the deletion of the event.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "sendNotifications" $send_notifications "scalar") (serialize-qp "sendUpdates" $send_updates "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({calendar_id: $calendar_id, event_id: $event_id} | format pattern "/calendars/{calendar_id}/events/{event_id}") $qp)
+  let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id), event_id: (encode-path-segment $event_id)} | format pattern "/calendars/{calendar_id}/events/{event_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -951,7 +960,7 @@ export def "calendars-events calendareventsdelete" [
 #
 # GET /calendars/{calendarId}/events/{eventId}
 # operationId: calendar.events.get
-export def "calendars-events calendareventsget" [
+export def "calendars-events get" [
   calendar_id: string
   event_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -976,7 +985,7 @@ export def "calendars-events calendareventsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "alwaysIncludeEmail" $always_include_email "scalar") (serialize-qp "maxAttendees" $max_attendees "scalar") (serialize-qp "timeZone" $time_zone "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({calendar_id: $calendar_id, event_id: $event_id} | format pattern "/calendars/{calendar_id}/events/{event_id}") $qp)
+  let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id), event_id: (encode-path-segment $event_id)} | format pattern "/calendars/{calendar_id}/events/{event_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -999,7 +1008,7 @@ export def "calendars-events calendareventsget" [
 # --source shape: {title?: string, url?: string}
 # --start shape: {date?: string, dateTime?: string, timeZone?: string}
 # --workingLocationProperties shape: {customLocation?: record, homeOffice?: any, officeLocation?: record}
-export def "calendars-events calendareventspatch" [
+export def "calendars-events update-by-calendarId-eventId" [
   calendar_id: string
   event_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1020,14 +1029,14 @@ export def "calendars-events calendareventspatch" [
   --always-include-email: oneof<nothing, bool> # Deprecated and ignored. A value will always be returned in the email field for the organizer, creator and attendees, even if no real email address is available (i.e. a generated, non-working value will be provided).
   --conference-data-version: int # Version number of conference data supported by the API client. Version 0 assumes no conference data support and ignores conference data in the event's body. Version 1 enables support for copying of ConferenceData as well as for creating new conferences using the createRequest field of conferenceData. The default is 0.
   --max-attendees: int # The maximum number of attendees to include in the response. If there are more than the specified number of attendees, only the participant is returned. Optional.
-  --send-notifications: oneof<nothing, bool> # Deprecated. Please use sendUpdates instead.  Whether to send notifications about the event update (for example, description changes, etc.). Note that some emails might still be sent even if you set the value to false. The default is false.
+  --send-notifications: oneof<nothing, bool> # Deprecated. Please use sendUpdates instead. Whether to send notifications about the event update (for example, description changes, etc.). Note that some emails might still be sent even if you set the value to false. The default is false.
   --send-updates: string@send-updates-completer # Guests who should receive notifications about the event update (for example, title changes, etc.).
   --supports-attachments: oneof<nothing, bool> # Whether API client performing operation supports event attachments. Optional. The default is False.
   --anyone-can-add-self: oneof<nothing, bool> # Whether anyone can invite themselves to the event (deprecated). Optional. The default is False. (default: false)
   --attachments: list # File attachments for the event. In order to modify attachments the supportsAttachments request parameter should be set to true. There can be at most 25 attachments per event, — item shape: {fileId?: string, fileUrl?: string, iconLink?: string, mimeType?: string, title?: string}
   --attendees: list # The attendees of the event. See the Events with attendees guide for more information on scheduling events with other calendar users. Service accounts need to use domain-wide delegation of authority to populate the attendee list. — item shape: {additionalGuests?: int, comment?: string, displayName?: string, email?: string, id?: string, optional?: bool, organizer?: bool, resource?: bool, responseStatus?: string, self?: bool}
   --attendees-omitted: oneof<nothing, bool> # Whether attendees may have been omitted from the event's representation. When retrieving an event, this may be due to a restriction specified by the maxAttendee query parameter. When updating an event, this can be used to only update the participant's response. Optional. The default is False. (default: false)
-  --color-id: string # The color of the event. This is an ID referring to an entry in the event section of the colors definition (see the  colors endpoint). Optional.
+  --color-id: string # The color of the event. This is an ID referring to an entry in the event section of the colors definition (see the colors endpoint). Optional.
   --conference-data: record # shape: {conferenceId?: string, conferenceSolution?: record, createRequest?: record, entryPoints?: list, notes?: string, parameters?: record, signature?: string}
   --created: string # Creation time of the event (as a RFC3339 timestamp). Read-only. (format: date-time)
   --creator: record # The creator of the event. Read-only. — shape: {displayName?: string, email?: string, id?: string, self?: bool}
@@ -1035,7 +1044,7 @@ export def "calendars-events calendareventspatch" [
   --end: record # shape: {date?: string, dateTime?: string, timeZone?: string}
   --end-time-unspecified: oneof<nothing, bool> # Whether the end time is actually unspecified. An end time is still provided for compatibility reasons, even if this attribute is set to True. The default is False. (default: false)
   --etag: string # ETag of the resource.
-  --event-type: string # Specific type of the event. Read-only. Possible values are:   - "default" - A regular event or not further specified.  - "outOfOffice" - An out-of-office event.  - "focusTime" - A focus-time event.  - "workingLocation" - A working location event. Developer Preview. (default: default)
+  --event-type: string # Specific type of the event. Read-only. Possible values are: - "default" - A regular event or not further specified. - "outOfOffice" - An out-of-office event. - "focusTime" - A focus-time event. - "workingLocation" - A working location event. Developer Preview. (default: default)
   --extended-properties: record # Extended properties of the event. — shape: {private?: record, shared?: record}
   --gadget: record # A gadget that extends this event. Gadgets are deprecated; this structure is instead only used for returning birthday calendar metadata. — shape: {display?: string, height?: int, iconLink?: string, link?: string, preferences?: record, title?: string, type?: string, width?: int}
   --guests-can-invite-others: oneof<nothing, bool> # Whether attendees other than the organizer can invite others to the event. Optional. The default is True. (default: true)
@@ -1044,36 +1053,36 @@ export def "calendars-events calendareventspatch" [
   --hangout-link: string # An absolute link to the Google Hangout associated with this event. Read-only.
   --html-link: string # An absolute link to this event in the Google Calendar Web UI. Read-only.
   --i-cal-uid: string # Event unique identifier as defined in RFC5545. It is used to uniquely identify events accross calendaring systems and must be supplied when importing events via the import method. Note that the iCalUID and the id are not identical and only one of them should be supplied at event creation time. One difference in their semantics is that in recurring events, all occurrences of one event have different ids while they all share the same iCalUIDs. To retrieve an event using its iCalUID, call the events.list method using the iCalUID parameter. To retrieve an event using its id, call the events.get method.
-  --id: string # Opaque identifier of the event. When creating new single or recurring events, you can specify their IDs. Provided IDs must follow these rules:   - characters allowed in the ID are those used in base32hex encoding, i.e. lowercase letters a-v and digits 0-9, see section 3.1.2 in RFC2938  - the length of the ID must be between 5 and 1024 characters  - the ID must be unique per calendar  Due to the globally distributed nature of the system, we cannot guarantee that ID collisions will be detected at event creation time. To minimize the risk of collisions we recommend using an established UUID algorithm such as one described in RFC4122. If you do not specify an ID, it will be automatically generated by the server. Note that the icalUID and the id are not identical and only one of them should be supplied at event creation time. One difference in their semantics is that in recurring events, all occurrences of one event have different ids while they all share the same icalUIDs.
+  --id: string # Opaque identifier of the event. When creating new single or recurring events, you can specify their IDs. Provided IDs must follow these rules: - characters allowed in the ID are those used in base32hex encoding, i.e. lowercase letters a-v and digits 0-9, see section 3.1.2 in RFC2938 - the length of the ID must be between 5 and 1024 characters - the ID must be unique per calendar Due to the globally distributed nature of the system, we cannot guarantee that ID collisions will be detected at event creation time. To minimize the risk of collisions we recommend using an established UUID algorithm such as one described in RFC4122. If you do not specify an ID, it will be automatically generated by the server. Note that the icalUID and the id are not identical and only one of them should be supplied at event creation time. One difference in their semantics is that in recurring events, all occurrences of one event have different ids while they all share the same icalUIDs.
   --kind: string # Type of the resource ("calendar#event"). (default: calendar#event)
   --location: string # Geographic location of the event as free-form text. Optional.
   --locked: oneof<nothing, bool> # Whether this is a locked event copy where no changes can be made to the main event fields "summary", "description", "location", "start", "end" or "recurrence". The default is False. Read-Only. (default: false)
   --organizer: record # The organizer of the event. If the organizer is also an attendee, this is indicated with a separate entry in attendees with the organizer field set to True. To change the organizer, use the move operation. Read-only, except when importing an event. — shape: {displayName?: string, email?: string, id?: string, self?: bool}
   --original-start-time: record # shape: {date?: string, dateTime?: string, timeZone?: string}
   --private-copy: oneof<nothing, bool> # If set to True, Event propagation is disabled. Note that it is not the same thing as Private event properties. Optional. Immutable. The default is False. (default: false)
-  --recurrence: list # List of RRULE, EXRULE, RDATE and EXDATE lines for a recurring event, as specified in RFC5545. Note that DTSTART and DTEND lines are not allowed in this field; event start and end times are specified in the start and end fields. This field is omitted for single events or instances of recurring events.
+  --recurrence: list<string> # List of RRULE, EXRULE, RDATE and EXDATE lines for a recurring event, as specified in RFC5545. Note that DTSTART and DTEND lines are not allowed in this field; event start and end times are specified in the start and end fields. This field is omitted for single events or instances of recurring events.
   --recurring-event-id: string # For an instance of a recurring event, this is the id of the recurring event to which this instance belongs. Immutable.
   --reminders: record # Information about the event's reminders for the authenticated user. — shape: {overrides?: list, useDefault?: bool}
   --sequence: int # Sequence number as per iCalendar. (format: int32)
   --body-source: record # Source from which the event was created. For example, a web page, an email message or any document identifiable by an URL with HTTP or HTTPS scheme. Can only be seen or modified by the creator of the event. — shape: {title?: string, url?: string}
   --start: record # shape: {date?: string, dateTime?: string, timeZone?: string}
-  --status: string # Status of the event. Optional. Possible values are:   - "confirmed" - The event is confirmed. This is the default status.  - "tentative" - The event is tentatively confirmed.  - "cancelled" - The event is cancelled (deleted). The list method returns cancelled events only on incremental sync (when syncToken or updatedMin are specified) or if the showDeleted flag is set to true. The get method always returns them. A cancelled status represents two different states depending on the event type:   - Cancelled exceptions of an uncancelled recurring event indicate that this instance should no longer be presented to the user. Clients should store these events for the lifetime of the parent recurring event. Cancelled exceptions are only guaranteed to have values for the id, recurringEventId and originalStartTime fields populated. The other fields might be empty.   - All other cancelled events represent deleted events. Clients should remove their locally synced copies. Such cancelled events will eventually disappear, so do not rely on them being available indefinitely. Deleted events are only guaranteed to have the id field populated.   On the organizer's calendar, cancelled events continue to expose event details (summary, location, etc.) so that they can be restored (undeleted). Similarly, the events to which the user was invited and that they manually removed continue to provide details. However, incremental sync requests with showDeleted set to false will not return these details. If an event changes its organizer (for example via the move operation) and the original organizer is not on the attendee list, it will leave behind a cancelled event where only the id field is guaranteed to be populated.
+  --status: string # Status of the event. Optional. Possible values are: - "confirmed" - The event is confirmed. This is the default status. - "tentative" - The event is tentatively confirmed. - "cancelled" - The event is cancelled (deleted). The list method returns cancelled events only on incremental sync (when syncToken or updatedMin are specified) or if the showDeleted flag is set to true. The get method always returns them. A cancelled status represents two different states depending on the event type: - Cancelled exceptions of an uncancelled recurring event indicate that this instance should no longer be presented to the user. Clients should store these events for the lifetime of the parent recurring event. Cancelled exceptions are only guaranteed to have values for the id, recurringEventId and originalStartTime fields populated. The other fields might be empty. - All other cancelled events represent deleted events. Clients should remove their locally synced copies. Such cancelled events will eventually disappear, so do not rely on them being available indefinitely. Deleted events are only guaranteed to have the id field populated. On the organizer's calendar, cancelled events continue to expose event details (summary, location, etc.) so that they can be restored (undeleted). Similarly, the events to which the user was invited and that they manually removed continue to provide details. However, incremental sync requests with showDeleted set to false will not return these details. If an event changes its organizer (for example via the move operation) and the original organizer is not on the attendee list, it will leave behind a cancelled event where only the id field is guaranteed to be populated.
   --summary: string # Title of the event.
-  --transparency: string # Whether the event blocks time on the calendar. Optional. Possible values are:   - "opaque" - Default value. The event does block time on the calendar. This is equivalent to setting Show me as to Busy in the Calendar UI.  - "transparent" - The event does not block time on the calendar. This is equivalent to setting Show me as to Available in the Calendar UI. (default: opaque)
+  --transparency: string # Whether the event blocks time on the calendar. Optional. Possible values are: - "opaque" - Default value. The event does block time on the calendar. This is equivalent to setting Show me as to Busy in the Calendar UI. - "transparent" - The event does not block time on the calendar. This is equivalent to setting Show me as to Available in the Calendar UI. (default: opaque)
   --updated: string # Last modification time of the event (as a RFC3339 timestamp). Read-only. (format: date-time)
-  --visibility: string # Visibility of the event. Optional. Possible values are:   - "default" - Uses the default visibility for events on the calendar. This is the default value.  - "public" - The event is public and event details are visible to all readers of the calendar.  - "private" - The event is private and only event attendees may view event details.  - "confidential" - The event is private. This value is provided for compatibility reasons. (default: default)
+  --visibility: string # Visibility of the event. Optional. Possible values are: - "default" - Uses the default visibility for events on the calendar. This is the default value. - "public" - The event is public and event details are visible to all readers of the calendar. - "private" - The event is private and only event attendees may view event details. - "confidential" - The event is private. This value is provided for compatibility reasons. (default: default)
   --working-location-properties: record # shape: {customLocation?: record, homeOffice?: any, officeLocation?: record}
 ]: any -> record<anyoneCanAddSelf: bool, attachments: table<fileId: string, fileUrl: string, iconLink: string, mimeType: string, title: string>, attendees: table<additionalGuests: int, comment: string, displayName: string, email: string, id: string, optional: bool, organizer: bool, resource: bool, responseStatus: string, self: bool>, attendeesOmitted: bool, colorId: string, conferenceData: record<conferenceId: string, conferenceSolution: record<iconUri: string, key: record, name: string>, createRequest: record<conferenceSolutionKey: record, requestId: string, status: record>, entryPoints: list<record>, notes: string, parameters: record<addOnParameters: record>, signature: string>, created: string, creator: record<displayName: string, email: string, id: string, self: bool>, description: string, end: record<date: string, dateTime: string, timeZone: string>, endTimeUnspecified: bool, etag: string, eventType: string, extendedProperties: record<private: record, shared: record>, gadget: record<display: string, height: int, iconLink: string, link: string, preferences: record, title: string, type: string, width: int>, guestsCanInviteOthers: bool, guestsCanModify: bool, guestsCanSeeOtherGuests: bool, hangoutLink: string, htmlLink: string, iCalUID: string, id: string, kind: string, location: string, locked: bool, organizer: record<displayName: string, email: string, id: string, self: bool>, originalStartTime: record<date: string, dateTime: string, timeZone: string>, privateCopy: bool, recurrence: list<string>, recurringEventId: string, reminders: record<overrides: list<record>, useDefault: bool>, sequence: int, source: record<title: string, url: string>, start: record<date: string, dateTime: string, timeZone: string>, status: string, summary: string, transparency: string, updated: string, visibility: string, workingLocationProperties: record<customLocation: record<label: string>, homeOffice: any, officeLocation: record<buildingId: string, deskId: string, floorId: string, floorSectionId: string, label: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "alwaysIncludeEmail" $always_include_email "scalar") (serialize-qp "conferenceDataVersion" $conference_data_version "scalar") (serialize-qp "maxAttendees" $max_attendees "scalar") (serialize-qp "sendNotifications" $send_notifications "scalar") (serialize-qp "sendUpdates" $send_updates "scalar") (serialize-qp "supportsAttachments" $supports_attachments "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({calendar_id: $calendar_id, event_id: $event_id} | format pattern "/calendars/{calendar_id}/events/{event_id}") $qp)
-  let body = {"anyoneCanAddSelf": $anyone_can_add_self, "attachments": $attachments, "attendees": $attendees, "attendeesOmitted": $attendees_omitted, "colorId": $color_id, "conferenceData": $conference_data, "created": $created, "creator": $creator, "description": $description, "end": $end, "endTimeUnspecified": $end_time_unspecified, "etag": $etag, "eventType": $event_type, "extendedProperties": $extended_properties, "gadget": $gadget, "guestsCanInviteOthers": $guests_can_invite_others, "guestsCanModify": $guests_can_modify, "guestsCanSeeOtherGuests": $guests_can_see_other_guests, "hangoutLink": $hangout_link, "htmlLink": $html_link, "iCalUID": $i_cal_uid, "id": $id, "kind": $kind, "location": $location, "locked": $locked, "organizer": $organizer, "originalStartTime": $original_start_time, "privateCopy": $private_copy, "recurrence": $recurrence, "recurringEventId": $recurring_event_id, "reminders": $reminders, "sequence": $sequence, "source": $body_source, "start": $start, "status": $status, "summary": $summary, "transparency": $transparency, "updated": $updated, "visibility": $visibility, "workingLocationProperties": $working_location_properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id), event_id: (encode-path-segment $event_id)} | format pattern "/calendars/{calendar_id}/events/{event_id}") $qp)
+  let req_body = {"anyoneCanAddSelf": $anyone_can_add_self, "attachments": $attachments, "attendees": $attendees, "attendeesOmitted": $attendees_omitted, "colorId": $color_id, "conferenceData": $conference_data, "created": $created, "creator": $creator, "description": $description, "end": $end, "endTimeUnspecified": $end_time_unspecified, "etag": $etag, "eventType": $event_type, "extendedProperties": $extended_properties, "gadget": $gadget, "guestsCanInviteOthers": $guests_can_invite_others, "guestsCanModify": $guests_can_modify, "guestsCanSeeOtherGuests": $guests_can_see_other_guests, "hangoutLink": $hangout_link, "htmlLink": $html_link, "iCalUID": $i_cal_uid, "id": $id, "kind": $kind, "location": $location, "locked": $locked, "organizer": $organizer, "originalStartTime": $original_start_time, "privateCopy": $private_copy, "recurrence": $recurrence, "recurringEventId": $recurring_event_id, "reminders": $reminders, "sequence": $sequence, "source": $body_source, "start": $start, "status": $status, "summary": $summary, "transparency": $transparency, "updated": $updated, "visibility": $visibility, "workingLocationProperties": $working_location_properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates an event.
@@ -1093,7 +1102,7 @@ export def "calendars-events calendareventspatch" [
 # --source shape: {title?: string, url?: string}
 # --start shape: {date?: string, dateTime?: string, timeZone?: string}
 # --workingLocationProperties shape: {customLocation?: record, homeOffice?: any, officeLocation?: record}
-export def "calendars-events calendareventsupdate" [
+export def "calendars-events update-by-calendarId-eventId-1" [
   calendar_id: string
   event_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1114,14 +1123,14 @@ export def "calendars-events calendareventsupdate" [
   --always-include-email: oneof<nothing, bool> # Deprecated and ignored. A value will always be returned in the email field for the organizer, creator and attendees, even if no real email address is available (i.e. a generated, non-working value will be provided).
   --conference-data-version: int # Version number of conference data supported by the API client. Version 0 assumes no conference data support and ignores conference data in the event's body. Version 1 enables support for copying of ConferenceData as well as for creating new conferences using the createRequest field of conferenceData. The default is 0.
   --max-attendees: int # The maximum number of attendees to include in the response. If there are more than the specified number of attendees, only the participant is returned. Optional.
-  --send-notifications: oneof<nothing, bool> # Deprecated. Please use sendUpdates instead.  Whether to send notifications about the event update (for example, description changes, etc.). Note that some emails might still be sent even if you set the value to false. The default is false.
+  --send-notifications: oneof<nothing, bool> # Deprecated. Please use sendUpdates instead. Whether to send notifications about the event update (for example, description changes, etc.). Note that some emails might still be sent even if you set the value to false. The default is false.
   --send-updates: string@send-updates-completer # Guests who should receive notifications about the event update (for example, title changes, etc.).
   --supports-attachments: oneof<nothing, bool> # Whether API client performing operation supports event attachments. Optional. The default is False.
   --anyone-can-add-self: oneof<nothing, bool> # Whether anyone can invite themselves to the event (deprecated). Optional. The default is False. (default: false)
   --attachments: list # File attachments for the event. In order to modify attachments the supportsAttachments request parameter should be set to true. There can be at most 25 attachments per event, — item shape: {fileId?: string, fileUrl?: string, iconLink?: string, mimeType?: string, title?: string}
   --attendees: list # The attendees of the event. See the Events with attendees guide for more information on scheduling events with other calendar users. Service accounts need to use domain-wide delegation of authority to populate the attendee list. — item shape: {additionalGuests?: int, comment?: string, displayName?: string, email?: string, id?: string, optional?: bool, organizer?: bool, resource?: bool, responseStatus?: string, self?: bool}
   --attendees-omitted: oneof<nothing, bool> # Whether attendees may have been omitted from the event's representation. When retrieving an event, this may be due to a restriction specified by the maxAttendee query parameter. When updating an event, this can be used to only update the participant's response. Optional. The default is False. (default: false)
-  --color-id: string # The color of the event. This is an ID referring to an entry in the event section of the colors definition (see the  colors endpoint). Optional.
+  --color-id: string # The color of the event. This is an ID referring to an entry in the event section of the colors definition (see the colors endpoint). Optional.
   --conference-data: record # shape: {conferenceId?: string, conferenceSolution?: record, createRequest?: record, entryPoints?: list, notes?: string, parameters?: record, signature?: string}
   --created: string # Creation time of the event (as a RFC3339 timestamp). Read-only. (format: date-time)
   --creator: record # The creator of the event. Read-only. — shape: {displayName?: string, email?: string, id?: string, self?: bool}
@@ -1129,7 +1138,7 @@ export def "calendars-events calendareventsupdate" [
   --end: record # shape: {date?: string, dateTime?: string, timeZone?: string}
   --end-time-unspecified: oneof<nothing, bool> # Whether the end time is actually unspecified. An end time is still provided for compatibility reasons, even if this attribute is set to True. The default is False. (default: false)
   --etag: string # ETag of the resource.
-  --event-type: string # Specific type of the event. Read-only. Possible values are:   - "default" - A regular event or not further specified.  - "outOfOffice" - An out-of-office event.  - "focusTime" - A focus-time event.  - "workingLocation" - A working location event. Developer Preview. (default: default)
+  --event-type: string # Specific type of the event. Read-only. Possible values are: - "default" - A regular event or not further specified. - "outOfOffice" - An out-of-office event. - "focusTime" - A focus-time event. - "workingLocation" - A working location event. Developer Preview. (default: default)
   --extended-properties: record # Extended properties of the event. — shape: {private?: record, shared?: record}
   --gadget: record # A gadget that extends this event. Gadgets are deprecated; this structure is instead only used for returning birthday calendar metadata. — shape: {display?: string, height?: int, iconLink?: string, link?: string, preferences?: record, title?: string, type?: string, width?: int}
   --guests-can-invite-others: oneof<nothing, bool> # Whether attendees other than the organizer can invite others to the event. Optional. The default is True. (default: true)
@@ -1138,43 +1147,43 @@ export def "calendars-events calendareventsupdate" [
   --hangout-link: string # An absolute link to the Google Hangout associated with this event. Read-only.
   --html-link: string # An absolute link to this event in the Google Calendar Web UI. Read-only.
   --i-cal-uid: string # Event unique identifier as defined in RFC5545. It is used to uniquely identify events accross calendaring systems and must be supplied when importing events via the import method. Note that the iCalUID and the id are not identical and only one of them should be supplied at event creation time. One difference in their semantics is that in recurring events, all occurrences of one event have different ids while they all share the same iCalUIDs. To retrieve an event using its iCalUID, call the events.list method using the iCalUID parameter. To retrieve an event using its id, call the events.get method.
-  --id: string # Opaque identifier of the event. When creating new single or recurring events, you can specify their IDs. Provided IDs must follow these rules:   - characters allowed in the ID are those used in base32hex encoding, i.e. lowercase letters a-v and digits 0-9, see section 3.1.2 in RFC2938  - the length of the ID must be between 5 and 1024 characters  - the ID must be unique per calendar  Due to the globally distributed nature of the system, we cannot guarantee that ID collisions will be detected at event creation time. To minimize the risk of collisions we recommend using an established UUID algorithm such as one described in RFC4122. If you do not specify an ID, it will be automatically generated by the server. Note that the icalUID and the id are not identical and only one of them should be supplied at event creation time. One difference in their semantics is that in recurring events, all occurrences of one event have different ids while they all share the same icalUIDs.
+  --id: string # Opaque identifier of the event. When creating new single or recurring events, you can specify their IDs. Provided IDs must follow these rules: - characters allowed in the ID are those used in base32hex encoding, i.e. lowercase letters a-v and digits 0-9, see section 3.1.2 in RFC2938 - the length of the ID must be between 5 and 1024 characters - the ID must be unique per calendar Due to the globally distributed nature of the system, we cannot guarantee that ID collisions will be detected at event creation time. To minimize the risk of collisions we recommend using an established UUID algorithm such as one described in RFC4122. If you do not specify an ID, it will be automatically generated by the server. Note that the icalUID and the id are not identical and only one of them should be supplied at event creation time. One difference in their semantics is that in recurring events, all occurrences of one event have different ids while they all share the same icalUIDs.
   --kind: string # Type of the resource ("calendar#event"). (default: calendar#event)
   --location: string # Geographic location of the event as free-form text. Optional.
   --locked: oneof<nothing, bool> # Whether this is a locked event copy where no changes can be made to the main event fields "summary", "description", "location", "start", "end" or "recurrence". The default is False. Read-Only. (default: false)
   --organizer: record # The organizer of the event. If the organizer is also an attendee, this is indicated with a separate entry in attendees with the organizer field set to True. To change the organizer, use the move operation. Read-only, except when importing an event. — shape: {displayName?: string, email?: string, id?: string, self?: bool}
   --original-start-time: record # shape: {date?: string, dateTime?: string, timeZone?: string}
   --private-copy: oneof<nothing, bool> # If set to True, Event propagation is disabled. Note that it is not the same thing as Private event properties. Optional. Immutable. The default is False. (default: false)
-  --recurrence: list # List of RRULE, EXRULE, RDATE and EXDATE lines for a recurring event, as specified in RFC5545. Note that DTSTART and DTEND lines are not allowed in this field; event start and end times are specified in the start and end fields. This field is omitted for single events or instances of recurring events.
+  --recurrence: list<string> # List of RRULE, EXRULE, RDATE and EXDATE lines for a recurring event, as specified in RFC5545. Note that DTSTART and DTEND lines are not allowed in this field; event start and end times are specified in the start and end fields. This field is omitted for single events or instances of recurring events.
   --recurring-event-id: string # For an instance of a recurring event, this is the id of the recurring event to which this instance belongs. Immutable.
   --reminders: record # Information about the event's reminders for the authenticated user. — shape: {overrides?: list, useDefault?: bool}
   --sequence: int # Sequence number as per iCalendar. (format: int32)
   --body-source: record # Source from which the event was created. For example, a web page, an email message or any document identifiable by an URL with HTTP or HTTPS scheme. Can only be seen or modified by the creator of the event. — shape: {title?: string, url?: string}
   --start: record # shape: {date?: string, dateTime?: string, timeZone?: string}
-  --status: string # Status of the event. Optional. Possible values are:   - "confirmed" - The event is confirmed. This is the default status.  - "tentative" - The event is tentatively confirmed.  - "cancelled" - The event is cancelled (deleted). The list method returns cancelled events only on incremental sync (when syncToken or updatedMin are specified) or if the showDeleted flag is set to true. The get method always returns them. A cancelled status represents two different states depending on the event type:   - Cancelled exceptions of an uncancelled recurring event indicate that this instance should no longer be presented to the user. Clients should store these events for the lifetime of the parent recurring event. Cancelled exceptions are only guaranteed to have values for the id, recurringEventId and originalStartTime fields populated. The other fields might be empty.   - All other cancelled events represent deleted events. Clients should remove their locally synced copies. Such cancelled events will eventually disappear, so do not rely on them being available indefinitely. Deleted events are only guaranteed to have the id field populated.   On the organizer's calendar, cancelled events continue to expose event details (summary, location, etc.) so that they can be restored (undeleted). Similarly, the events to which the user was invited and that they manually removed continue to provide details. However, incremental sync requests with showDeleted set to false will not return these details. If an event changes its organizer (for example via the move operation) and the original organizer is not on the attendee list, it will leave behind a cancelled event where only the id field is guaranteed to be populated.
+  --status: string # Status of the event. Optional. Possible values are: - "confirmed" - The event is confirmed. This is the default status. - "tentative" - The event is tentatively confirmed. - "cancelled" - The event is cancelled (deleted). The list method returns cancelled events only on incremental sync (when syncToken or updatedMin are specified) or if the showDeleted flag is set to true. The get method always returns them. A cancelled status represents two different states depending on the event type: - Cancelled exceptions of an uncancelled recurring event indicate that this instance should no longer be presented to the user. Clients should store these events for the lifetime of the parent recurring event. Cancelled exceptions are only guaranteed to have values for the id, recurringEventId and originalStartTime fields populated. The other fields might be empty. - All other cancelled events represent deleted events. Clients should remove their locally synced copies. Such cancelled events will eventually disappear, so do not rely on them being available indefinitely. Deleted events are only guaranteed to have the id field populated. On the organizer's calendar, cancelled events continue to expose event details (summary, location, etc.) so that they can be restored (undeleted). Similarly, the events to which the user was invited and that they manually removed continue to provide details. However, incremental sync requests with showDeleted set to false will not return these details. If an event changes its organizer (for example via the move operation) and the original organizer is not on the attendee list, it will leave behind a cancelled event where only the id field is guaranteed to be populated.
   --summary: string # Title of the event.
-  --transparency: string # Whether the event blocks time on the calendar. Optional. Possible values are:   - "opaque" - Default value. The event does block time on the calendar. This is equivalent to setting Show me as to Busy in the Calendar UI.  - "transparent" - The event does not block time on the calendar. This is equivalent to setting Show me as to Available in the Calendar UI. (default: opaque)
+  --transparency: string # Whether the event blocks time on the calendar. Optional. Possible values are: - "opaque" - Default value. The event does block time on the calendar. This is equivalent to setting Show me as to Busy in the Calendar UI. - "transparent" - The event does not block time on the calendar. This is equivalent to setting Show me as to Available in the Calendar UI. (default: opaque)
   --updated: string # Last modification time of the event (as a RFC3339 timestamp). Read-only. (format: date-time)
-  --visibility: string # Visibility of the event. Optional. Possible values are:   - "default" - Uses the default visibility for events on the calendar. This is the default value.  - "public" - The event is public and event details are visible to all readers of the calendar.  - "private" - The event is private and only event attendees may view event details.  - "confidential" - The event is private. This value is provided for compatibility reasons. (default: default)
+  --visibility: string # Visibility of the event. Optional. Possible values are: - "default" - Uses the default visibility for events on the calendar. This is the default value. - "public" - The event is public and event details are visible to all readers of the calendar. - "private" - The event is private and only event attendees may view event details. - "confidential" - The event is private. This value is provided for compatibility reasons. (default: default)
   --working-location-properties: record # shape: {customLocation?: record, homeOffice?: any, officeLocation?: record}
 ]: any -> record<anyoneCanAddSelf: bool, attachments: table<fileId: string, fileUrl: string, iconLink: string, mimeType: string, title: string>, attendees: table<additionalGuests: int, comment: string, displayName: string, email: string, id: string, optional: bool, organizer: bool, resource: bool, responseStatus: string, self: bool>, attendeesOmitted: bool, colorId: string, conferenceData: record<conferenceId: string, conferenceSolution: record<iconUri: string, key: record, name: string>, createRequest: record<conferenceSolutionKey: record, requestId: string, status: record>, entryPoints: list<record>, notes: string, parameters: record<addOnParameters: record>, signature: string>, created: string, creator: record<displayName: string, email: string, id: string, self: bool>, description: string, end: record<date: string, dateTime: string, timeZone: string>, endTimeUnspecified: bool, etag: string, eventType: string, extendedProperties: record<private: record, shared: record>, gadget: record<display: string, height: int, iconLink: string, link: string, preferences: record, title: string, type: string, width: int>, guestsCanInviteOthers: bool, guestsCanModify: bool, guestsCanSeeOtherGuests: bool, hangoutLink: string, htmlLink: string, iCalUID: string, id: string, kind: string, location: string, locked: bool, organizer: record<displayName: string, email: string, id: string, self: bool>, originalStartTime: record<date: string, dateTime: string, timeZone: string>, privateCopy: bool, recurrence: list<string>, recurringEventId: string, reminders: record<overrides: list<record>, useDefault: bool>, sequence: int, source: record<title: string, url: string>, start: record<date: string, dateTime: string, timeZone: string>, status: string, summary: string, transparency: string, updated: string, visibility: string, workingLocationProperties: record<customLocation: record<label: string>, homeOffice: any, officeLocation: record<buildingId: string, deskId: string, floorId: string, floorSectionId: string, label: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "alwaysIncludeEmail" $always_include_email "scalar") (serialize-qp "conferenceDataVersion" $conference_data_version "scalar") (serialize-qp "maxAttendees" $max_attendees "scalar") (serialize-qp "sendNotifications" $send_notifications "scalar") (serialize-qp "sendUpdates" $send_updates "scalar") (serialize-qp "supportsAttachments" $supports_attachments "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({calendar_id: $calendar_id, event_id: $event_id} | format pattern "/calendars/{calendar_id}/events/{event_id}") $qp)
-  let body = {"anyoneCanAddSelf": $anyone_can_add_self, "attachments": $attachments, "attendees": $attendees, "attendeesOmitted": $attendees_omitted, "colorId": $color_id, "conferenceData": $conference_data, "created": $created, "creator": $creator, "description": $description, "end": $end, "endTimeUnspecified": $end_time_unspecified, "etag": $etag, "eventType": $event_type, "extendedProperties": $extended_properties, "gadget": $gadget, "guestsCanInviteOthers": $guests_can_invite_others, "guestsCanModify": $guests_can_modify, "guestsCanSeeOtherGuests": $guests_can_see_other_guests, "hangoutLink": $hangout_link, "htmlLink": $html_link, "iCalUID": $i_cal_uid, "id": $id, "kind": $kind, "location": $location, "locked": $locked, "organizer": $organizer, "originalStartTime": $original_start_time, "privateCopy": $private_copy, "recurrence": $recurrence, "recurringEventId": $recurring_event_id, "reminders": $reminders, "sequence": $sequence, "source": $body_source, "start": $start, "status": $status, "summary": $summary, "transparency": $transparency, "updated": $updated, "visibility": $visibility, "workingLocationProperties": $working_location_properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id), event_id: (encode-path-segment $event_id)} | format pattern "/calendars/{calendar_id}/events/{event_id}") $qp)
+  let req_body = {"anyoneCanAddSelf": $anyone_can_add_self, "attachments": $attachments, "attendees": $attendees, "attendeesOmitted": $attendees_omitted, "colorId": $color_id, "conferenceData": $conference_data, "created": $created, "creator": $creator, "description": $description, "end": $end, "endTimeUnspecified": $end_time_unspecified, "etag": $etag, "eventType": $event_type, "extendedProperties": $extended_properties, "gadget": $gadget, "guestsCanInviteOthers": $guests_can_invite_others, "guestsCanModify": $guests_can_modify, "guestsCanSeeOtherGuests": $guests_can_see_other_guests, "hangoutLink": $hangout_link, "htmlLink": $html_link, "iCalUID": $i_cal_uid, "id": $id, "kind": $kind, "location": $location, "locked": $locked, "organizer": $organizer, "originalStartTime": $original_start_time, "privateCopy": $private_copy, "recurrence": $recurrence, "recurringEventId": $recurring_event_id, "reminders": $reminders, "sequence": $sequence, "source": $body_source, "start": $start, "status": $status, "summary": $summary, "transparency": $transparency, "updated": $updated, "visibility": $visibility, "workingLocationProperties": $working_location_properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns instances of the specified recurring event.
 #
 # GET /calendars/{calendarId}/events/{eventId}/instances
 # operationId: calendar.events.instances
-export def "calendars-events-instances calendareventsinstances" [
+export def "calendars-events-instances get" [
   calendar_id: string
   event_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1205,7 +1214,7 @@ export def "calendars-events-instances calendareventsinstances" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "alwaysIncludeEmail" $always_include_email "scalar") (serialize-qp "maxAttendees" $max_attendees "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "originalStart" $original_start "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "showDeleted" $show_deleted "scalar") (serialize-qp "timeMax" $time_max "scalar") (serialize-qp "timeMin" $time_min "scalar") (serialize-qp "timeZone" $time_zone "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({calendar_id: $calendar_id, event_id: $event_id} | format pattern "/calendars/{calendar_id}/events/{event_id}/instances") $qp)
+  let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id), event_id: (encode-path-segment $event_id)} | format pattern "/calendars/{calendar_id}/events/{event_id}/instances") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1215,7 +1224,7 @@ export def "calendars-events-instances calendareventsinstances" [
 #
 # POST /calendars/{calendarId}/events/{eventId}/move
 # operationId: calendar.events.move
-export def "calendars-events-move calendareventsmove" [
+export def "calendars-events-move move" [
   calendar_id: string
   event_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1234,13 +1243,13 @@ export def "calendars-events-move calendareventsmove" [
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --destination: string # Calendar identifier of the target calendar where the event is to be moved to.
-  --send-notifications: oneof<nothing, bool> # Deprecated. Please use sendUpdates instead.  Whether to send notifications about the change of the event's organizer. Note that some emails might still be sent even if you set the value to false. The default is false.
+  --send-notifications: oneof<nothing, bool> # Deprecated. Please use sendUpdates instead. Whether to send notifications about the change of the event's organizer. Note that some emails might still be sent even if you set the value to false. The default is false.
   --send-updates: string@send-updates-completer # Guests who should receive notifications about the change of the event's organizer.
 ]: nothing -> record<anyoneCanAddSelf: bool, attachments: table<fileId: string, fileUrl: string, iconLink: string, mimeType: string, title: string>, attendees: table<additionalGuests: int, comment: string, displayName: string, email: string, id: string, optional: bool, organizer: bool, resource: bool, responseStatus: string, self: bool>, attendeesOmitted: bool, colorId: string, conferenceData: record<conferenceId: string, conferenceSolution: record<iconUri: string, key: record, name: string>, createRequest: record<conferenceSolutionKey: record, requestId: string, status: record>, entryPoints: list<record>, notes: string, parameters: record<addOnParameters: record>, signature: string>, created: string, creator: record<displayName: string, email: string, id: string, self: bool>, description: string, end: record<date: string, dateTime: string, timeZone: string>, endTimeUnspecified: bool, etag: string, eventType: string, extendedProperties: record<private: record, shared: record>, gadget: record<display: string, height: int, iconLink: string, link: string, preferences: record, title: string, type: string, width: int>, guestsCanInviteOthers: bool, guestsCanModify: bool, guestsCanSeeOtherGuests: bool, hangoutLink: string, htmlLink: string, iCalUID: string, id: string, kind: string, location: string, locked: bool, organizer: record<displayName: string, email: string, id: string, self: bool>, originalStartTime: record<date: string, dateTime: string, timeZone: string>, privateCopy: bool, recurrence: list<string>, recurringEventId: string, reminders: record<overrides: list<record>, useDefault: bool>, sequence: int, source: record<title: string, url: string>, start: record<date: string, dateTime: string, timeZone: string>, status: string, summary: string, transparency: string, updated: string, visibility: string, workingLocationProperties: record<customLocation: record<label: string>, homeOffice: any, officeLocation: record<buildingId: string, deskId: string, floorId: string, floorSectionId: string, label: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "destination" $destination "scalar") (serialize-qp "sendNotifications" $send_notifications "scalar") (serialize-qp "sendUpdates" $send_updates "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({calendar_id: $calendar_id, event_id: $event_id} | format pattern "/calendars/{calendar_id}/events/{event_id}/move") $qp)
+  let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id), event_id: (encode-path-segment $event_id)} | format pattern "/calendars/{calendar_id}/events/{event_id}/move") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1250,7 +1259,7 @@ export def "calendars-events-move calendareventsmove" [
 #
 # POST /channels/stop
 # operationId: calendar.channels.stop
-export def "channels-stop calendarchannelsstop" [
+export def "channels-stop stop" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1282,18 +1291,18 @@ export def "channels-stop calendarchannelsstop" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/channels/stop" $qp)
-  let body = {"address": $address, "expiration": $expiration, "id": $id, "kind": $kind, "params": $params, "payload": $payload, "resourceId": $resource_id, "resourceUri": $resource_uri, "token": $body_token, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"address": $address, "expiration": $expiration, "id": $id, "kind": $kind, "params": $params, "payload": $payload, "resourceId": $resource_id, "resourceUri": $resource_uri, "token": $body_token, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns the color definitions for calendars and events.
 #
 # GET /colors
 # operationId: calendar.colors.get
-export def "colors calendarcolorsget" [
+export def "colors get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1324,7 +1333,7 @@ export def "colors calendarcolorsget" [
 # POST /freeBusy
 # operationId: calendar.freebusy.query
 # --items item shape: {id?: string}
-export def "free-busy calendarfreebusyquery" [
+export def "free-busy list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1352,18 +1361,18 @@ export def "free-busy calendarfreebusyquery" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/freeBusy" $qp)
-  let body = {"calendarExpansionMax": $calendar_expansion_max, "groupExpansionMax": $group_expansion_max, "items": $items, "timeMax": $time_max, "timeMin": $time_min, "timeZone": $time_zone} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"calendarExpansionMax": $calendar_expansion_max, "groupExpansionMax": $group_expansion_max, "items": $items, "timeMax": $time_max, "timeMin": $time_min, "timeZone": $time_zone} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns the calendars on the user's calendar list.
 #
 # GET /users/me/calendarList
 # operationId: calendar.calendarList.list
-export def "users-me-calendar-list calendarcalendarListlist" [
+export def "users-me-calendar-list list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1399,10 +1408,10 @@ export def "users-me-calendar-list calendarcalendarListlist" [
 #
 # POST /users/me/calendarList
 # operationId: calendar.calendarList.insert
-# --conferenceProperties shape: {allowedConferenceSolutionTypes?: list}
+# --conferenceProperties shape: {allowedConferenceSolutionTypes?: list<string>}
 # --defaultReminders item shape: {method?: string, minutes?: int}
 # --notificationSettings shape: {notifications?: list}
-export def "users-me-calendar-list calendarcalendarListinsert" [
+export def "users-me-calendar-list create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1419,10 +1428,10 @@ export def "users-me-calendar-list calendarcalendarListinsert" [
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --color-rgb-format: oneof<nothing, bool> # Whether to use the foregroundColor and backgroundColor fields to write the calendar colors (RGB). If this feature is used, the index-based colorId field will be set to the best matching option automatically. Optional. The default is False.
-  --access-role: string # The effective access role that the authenticated user has on the calendar. Read-only. Possible values are:   - "freeBusyReader" - Provides read access to free/busy information.  - "reader" - Provides read access to the calendar. Private events will appear to users with reader access, but event details will be hidden.  - "writer" - Provides read and write access to the calendar. Private events will appear to users with writer access, and event details will be visible.  - "owner" - Provides ownership of the calendar. This role has all of the permissions of the writer role with the additional ability to see and manipulate ACLs.
+  --access-role: string # The effective access role that the authenticated user has on the calendar. Read-only. Possible values are: - "freeBusyReader" - Provides read access to free/busy information. - "reader" - Provides read access to the calendar. Private events will appear to users with reader access, but event details will be hidden. - "writer" - Provides read and write access to the calendar. Private events will appear to users with writer access, and event details will be visible. - "owner" - Provides ownership of the calendar. This role has all of the permissions of the writer role with the additional ability to see and manipulate ACLs.
   --background-color: string # The main color of the calendar in the hexadecimal format "#0088aa". This property supersedes the index-based colorId property. To set or change this property, you need to specify colorRgbFormat=true in the parameters of the insert, update and patch methods. Optional.
   --color-id: string # The color of the calendar. This is an ID referring to an entry in the calendar section of the colors definition (see the colors endpoint). This property is superseded by the backgroundColor and foregroundColor properties and can be ignored when using these properties. Optional.
-  --conference-properties: record # shape: {allowedConferenceSolutionTypes?: list}
+  --conference-properties: record # shape: {allowedConferenceSolutionTypes?: list<string>}
   --default-reminders: list # The default reminders that the authenticated user has for this calendar. — item shape: {method?: string, minutes?: int}
   --deleted: oneof<nothing, bool> # Whether this calendar list entry has been deleted from the calendar list. Read-only. Optional. The default is False. (default: false)
   --description: string # Description of the calendar. Optional. Read-only.
@@ -1444,18 +1453,18 @@ export def "users-me-calendar-list calendarcalendarListinsert" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "colorRgbFormat" $color_rgb_format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/users/me/calendarList" $qp)
-  let body = {"accessRole": $access_role, "backgroundColor": $background_color, "colorId": $color_id, "conferenceProperties": $conference_properties, "defaultReminders": $default_reminders, "deleted": $deleted, "description": $description, "etag": $etag, "foregroundColor": $foreground_color, "hidden": $hidden, "id": $id, "kind": $kind, "location": $location, "notificationSettings": $notification_settings, "primary": $primary, "selected": $selected, "summary": $summary, "summaryOverride": $summary_override, "timeZone": $time_zone} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"accessRole": $access_role, "backgroundColor": $background_color, "colorId": $color_id, "conferenceProperties": $conference_properties, "defaultReminders": $default_reminders, "deleted": $deleted, "description": $description, "etag": $etag, "foregroundColor": $foreground_color, "hidden": $hidden, "id": $id, "kind": $kind, "location": $location, "notificationSettings": $notification_settings, "primary": $primary, "selected": $selected, "summary": $summary, "summaryOverride": $summary_override, "timeZone": $time_zone} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Watch for changes to CalendarList resources.
 #
 # POST /users/me/calendarList/watch
 # operationId: calendar.calendarList.watch
-export def "users-me-calendar-list-watch calendarcalendarListwatch" [
+export def "users-me-calendar-list-watch watch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1493,18 +1502,18 @@ export def "users-me-calendar-list-watch calendarcalendarListwatch" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "minAccessRole" $min_access_role "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "showDeleted" $show_deleted "scalar") (serialize-qp "showHidden" $show_hidden "scalar") (serialize-qp "syncToken" $sync_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/users/me/calendarList/watch" $qp)
-  let body = {"address": $address, "expiration": $expiration, "id": $id, "kind": $kind, "params": $params, "payload": $payload, "resourceId": $resource_id, "resourceUri": $resource_uri, "token": $body_token, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"address": $address, "expiration": $expiration, "id": $id, "kind": $kind, "params": $params, "payload": $payload, "resourceId": $resource_id, "resourceUri": $resource_uri, "token": $body_token, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Removes a calendar from the user's calendar list.
 #
 # DELETE /users/me/calendarList/{calendarId}
 # operationId: calendar.calendarList.delete
-export def "users-me-calendar-list calendarcalendarListdelete" [
+export def "users-me-calendar-list delete" [
   calendar_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1525,7 +1534,7 @@ export def "users-me-calendar-list calendarcalendarListdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({calendar_id: $calendar_id} | format pattern "/users/me/calendarList/{calendar_id}") $qp)
+  let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id)} | format pattern "/users/me/calendarList/{calendar_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1535,7 +1544,7 @@ export def "users-me-calendar-list calendarcalendarListdelete" [
 #
 # GET /users/me/calendarList/{calendarId}
 # operationId: calendar.calendarList.get
-export def "users-me-calendar-list calendarcalendarListget" [
+export def "users-me-calendar-list get" [
   calendar_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1556,7 +1565,7 @@ export def "users-me-calendar-list calendarcalendarListget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({calendar_id: $calendar_id} | format pattern "/users/me/calendarList/{calendar_id}") $qp)
+  let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id)} | format pattern "/users/me/calendarList/{calendar_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1566,10 +1575,10 @@ export def "users-me-calendar-list calendarcalendarListget" [
 #
 # PATCH /users/me/calendarList/{calendarId}
 # operationId: calendar.calendarList.patch
-# --conferenceProperties shape: {allowedConferenceSolutionTypes?: list}
+# --conferenceProperties shape: {allowedConferenceSolutionTypes?: list<string>}
 # --defaultReminders item shape: {method?: string, minutes?: int}
 # --notificationSettings shape: {notifications?: list}
-export def "users-me-calendar-list calendarcalendarListpatch" [
+export def "users-me-calendar-list update-by-calendarId" [
   calendar_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1587,10 +1596,10 @@ export def "users-me-calendar-list calendarcalendarListpatch" [
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --color-rgb-format: oneof<nothing, bool> # Whether to use the foregroundColor and backgroundColor fields to write the calendar colors (RGB). If this feature is used, the index-based colorId field will be set to the best matching option automatically. Optional. The default is False.
-  --access-role: string # The effective access role that the authenticated user has on the calendar. Read-only. Possible values are:   - "freeBusyReader" - Provides read access to free/busy information.  - "reader" - Provides read access to the calendar. Private events will appear to users with reader access, but event details will be hidden.  - "writer" - Provides read and write access to the calendar. Private events will appear to users with writer access, and event details will be visible.  - "owner" - Provides ownership of the calendar. This role has all of the permissions of the writer role with the additional ability to see and manipulate ACLs.
+  --access-role: string # The effective access role that the authenticated user has on the calendar. Read-only. Possible values are: - "freeBusyReader" - Provides read access to free/busy information. - "reader" - Provides read access to the calendar. Private events will appear to users with reader access, but event details will be hidden. - "writer" - Provides read and write access to the calendar. Private events will appear to users with writer access, and event details will be visible. - "owner" - Provides ownership of the calendar. This role has all of the permissions of the writer role with the additional ability to see and manipulate ACLs.
   --background-color: string # The main color of the calendar in the hexadecimal format "#0088aa". This property supersedes the index-based colorId property. To set or change this property, you need to specify colorRgbFormat=true in the parameters of the insert, update and patch methods. Optional.
   --color-id: string # The color of the calendar. This is an ID referring to an entry in the calendar section of the colors definition (see the colors endpoint). This property is superseded by the backgroundColor and foregroundColor properties and can be ignored when using these properties. Optional.
-  --conference-properties: record # shape: {allowedConferenceSolutionTypes?: list}
+  --conference-properties: record # shape: {allowedConferenceSolutionTypes?: list<string>}
   --default-reminders: list # The default reminders that the authenticated user has for this calendar. — item shape: {method?: string, minutes?: int}
   --deleted: oneof<nothing, bool> # Whether this calendar list entry has been deleted from the calendar list. Read-only. Optional. The default is False. (default: false)
   --description: string # Description of the calendar. Optional. Read-only.
@@ -1611,22 +1620,22 @@ export def "users-me-calendar-list calendarcalendarListpatch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "colorRgbFormat" $color_rgb_format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({calendar_id: $calendar_id} | format pattern "/users/me/calendarList/{calendar_id}") $qp)
-  let body = {"accessRole": $access_role, "backgroundColor": $background_color, "colorId": $color_id, "conferenceProperties": $conference_properties, "defaultReminders": $default_reminders, "deleted": $deleted, "description": $description, "etag": $etag, "foregroundColor": $foreground_color, "hidden": $hidden, "id": $id, "kind": $kind, "location": $location, "notificationSettings": $notification_settings, "primary": $primary, "selected": $selected, "summary": $summary, "summaryOverride": $summary_override, "timeZone": $time_zone} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id)} | format pattern "/users/me/calendarList/{calendar_id}") $qp)
+  let req_body = {"accessRole": $access_role, "backgroundColor": $background_color, "colorId": $color_id, "conferenceProperties": $conference_properties, "defaultReminders": $default_reminders, "deleted": $deleted, "description": $description, "etag": $etag, "foregroundColor": $foreground_color, "hidden": $hidden, "id": $id, "kind": $kind, "location": $location, "notificationSettings": $notification_settings, "primary": $primary, "selected": $selected, "summary": $summary, "summaryOverride": $summary_override, "timeZone": $time_zone} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates an existing calendar on the user's calendar list.
 #
 # PUT /users/me/calendarList/{calendarId}
 # operationId: calendar.calendarList.update
-# --conferenceProperties shape: {allowedConferenceSolutionTypes?: list}
+# --conferenceProperties shape: {allowedConferenceSolutionTypes?: list<string>}
 # --defaultReminders item shape: {method?: string, minutes?: int}
 # --notificationSettings shape: {notifications?: list}
-export def "users-me-calendar-list calendarcalendarListupdate" [
+export def "users-me-calendar-list update-by-calendarId-1" [
   calendar_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1644,10 +1653,10 @@ export def "users-me-calendar-list calendarcalendarListupdate" [
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --color-rgb-format: oneof<nothing, bool> # Whether to use the foregroundColor and backgroundColor fields to write the calendar colors (RGB). If this feature is used, the index-based colorId field will be set to the best matching option automatically. Optional. The default is False.
-  --access-role: string # The effective access role that the authenticated user has on the calendar. Read-only. Possible values are:   - "freeBusyReader" - Provides read access to free/busy information.  - "reader" - Provides read access to the calendar. Private events will appear to users with reader access, but event details will be hidden.  - "writer" - Provides read and write access to the calendar. Private events will appear to users with writer access, and event details will be visible.  - "owner" - Provides ownership of the calendar. This role has all of the permissions of the writer role with the additional ability to see and manipulate ACLs.
+  --access-role: string # The effective access role that the authenticated user has on the calendar. Read-only. Possible values are: - "freeBusyReader" - Provides read access to free/busy information. - "reader" - Provides read access to the calendar. Private events will appear to users with reader access, but event details will be hidden. - "writer" - Provides read and write access to the calendar. Private events will appear to users with writer access, and event details will be visible. - "owner" - Provides ownership of the calendar. This role has all of the permissions of the writer role with the additional ability to see and manipulate ACLs.
   --background-color: string # The main color of the calendar in the hexadecimal format "#0088aa". This property supersedes the index-based colorId property. To set or change this property, you need to specify colorRgbFormat=true in the parameters of the insert, update and patch methods. Optional.
   --color-id: string # The color of the calendar. This is an ID referring to an entry in the calendar section of the colors definition (see the colors endpoint). This property is superseded by the backgroundColor and foregroundColor properties and can be ignored when using these properties. Optional.
-  --conference-properties: record # shape: {allowedConferenceSolutionTypes?: list}
+  --conference-properties: record # shape: {allowedConferenceSolutionTypes?: list<string>}
   --default-reminders: list # The default reminders that the authenticated user has for this calendar. — item shape: {method?: string, minutes?: int}
   --deleted: oneof<nothing, bool> # Whether this calendar list entry has been deleted from the calendar list. Read-only. Optional. The default is False. (default: false)
   --description: string # Description of the calendar. Optional. Read-only.
@@ -1668,19 +1677,19 @@ export def "users-me-calendar-list calendarcalendarListupdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "colorRgbFormat" $color_rgb_format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({calendar_id: $calendar_id} | format pattern "/users/me/calendarList/{calendar_id}") $qp)
-  let body = {"accessRole": $access_role, "backgroundColor": $background_color, "colorId": $color_id, "conferenceProperties": $conference_properties, "defaultReminders": $default_reminders, "deleted": $deleted, "description": $description, "etag": $etag, "foregroundColor": $foreground_color, "hidden": $hidden, "id": $id, "kind": $kind, "location": $location, "notificationSettings": $notification_settings, "primary": $primary, "selected": $selected, "summary": $summary, "summaryOverride": $summary_override, "timeZone": $time_zone} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id)} | format pattern "/users/me/calendarList/{calendar_id}") $qp)
+  let req_body = {"accessRole": $access_role, "backgroundColor": $background_color, "colorId": $color_id, "conferenceProperties": $conference_properties, "defaultReminders": $default_reminders, "deleted": $deleted, "description": $description, "etag": $etag, "foregroundColor": $foreground_color, "hidden": $hidden, "id": $id, "kind": $kind, "location": $location, "notificationSettings": $notification_settings, "primary": $primary, "selected": $selected, "summary": $summary, "summaryOverride": $summary_override, "timeZone": $time_zone} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns all user settings for the authenticated user.
 #
 # GET /users/me/settings
 # operationId: calendar.settings.list
-export def "users-me-settings calendarsettingslist" [
+export def "users-me-settings list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1713,7 +1722,7 @@ export def "users-me-settings calendarsettingslist" [
 #
 # POST /users/me/settings/watch
 # operationId: calendar.settings.watch
-export def "users-me-settings-watch calendarsettingswatch" [
+export def "users-me-settings-watch watch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1748,18 +1757,18 @@ export def "users-me-settings-watch calendarsettingswatch" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "syncToken" $sync_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/users/me/settings/watch" $qp)
-  let body = {"address": $address, "expiration": $expiration, "id": $id, "kind": $kind, "params": $params, "payload": $payload, "resourceId": $resource_id, "resourceUri": $resource_uri, "token": $body_token, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"address": $address, "expiration": $expiration, "id": $id, "kind": $kind, "params": $params, "payload": $payload, "resourceId": $resource_id, "resourceUri": $resource_uri, "token": $body_token, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns a single user setting.
 #
 # GET /users/me/settings/{setting}
 # operationId: calendar.settings.get
-export def "users-me-settings calendarsettingsget" [
+export def "users-me-settings get" [
   setting: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1780,7 +1789,7 @@ export def "users-me-settings calendarsettingsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({setting: $setting} | format pattern "/users/me/settings/{setting}") $qp)
+  let full_url = (build-url $base ({setting: (encode-path-segment $setting)} | format pattern "/users/me/settings/{setting}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

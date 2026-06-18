@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -72,7 +81,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "reports-batch-get analyticsreportingreportsbatchGet" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "reports-batch-get get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -97,7 +106,7 @@ export def commands []: nothing -> table {
 # POST /v4/reports:batchGet
 # operationId: analyticsreporting.reports.batchGet
 # --reportRequests item shape: {cohortGroup?: record, dateRanges?: list, dimensionFilterClauses?: list, dimensions?: list, filtersExpression?: string, hideTotals?: bool, hideValueRanges?: bool, includeEmptyRows?: bool, metricFilterClauses?: list, metrics?: list, orderBys?: list, pageSize?: int, pageToken?: string, pivots?: list, samplingLevel?: "SAMPLING_UNSPECIFIED"|"DEFAULT"|"SMALL"|"LARGE", segments?: list, viewId?: string}
-export def "reports-batch-get analyticsreportingreportsbatchGet" [
+export def "reports-batch-get get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -125,11 +134,11 @@ export def "reports-batch-get analyticsreportingreportsbatchGet" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v4/reports:batchGet" $qp)
-  let body = {"reportRequests": $report_requests, "useResourceQuotas": $use_resource_quotas} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"reportRequests": $report_requests, "useResourceQuotas": $use_resource_quotas} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns User Activity data.
@@ -138,7 +147,7 @@ export def "reports-batch-get analyticsreportingreportsbatchGet" [
 # operationId: analyticsreporting.userActivity.search
 # --dateRange shape: {endDate?: string, startDate?: string}
 # --user shape: {type?: "USER_ID_TYPE_UNSPECIFIED"|"USER_ID"|"CLIENT_ID", userId?: string}
-export def "user-activity-search analyticsreportinguserActivitysearch" [
+export def "user-activity-search list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -158,7 +167,7 @@ export def "user-activity-search analyticsreportinguserActivitysearch" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --activity-types: list # Set of all activity types being requested. Only acvities matching these types will be returned in the response. If empty, all activies will be returned.
+  --activity-types: list<string> # Set of all activity types being requested. Only acvities matching these types will be returned in the response. If empty, all activies will be returned.
   --date-range: record # A contiguous set of days: startDate, startDate + 1 day, ..., endDate. The start and end dates are specified in [ISO8601](https://en.wikipedia.org/wiki/ISO_8601) date format `YYYY-MM-DD`. — shape: {endDate?: string, startDate?: string}
   --page-size: int # Page size is for paging and specifies the maximum number of returned rows. Page size should be > 0. If the value is 0 or if the field isn't specified, the request returns the default of 1000 rows per page. (format: int32)
   --page-token: string # A continuation token to get the next page of the results. Adding this to the request will return the rows after the pageToken. The pageToken should be the value returned in the nextPageToken parameter in the response to the [SearchUserActivityRequest](#SearchUserActivityRequest) request.
@@ -170,9 +179,9 @@ export def "user-activity-search analyticsreportinguserActivitysearch" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v4/userActivity:search" $qp)
-  let body = {"activityTypes": $activity_types, "dateRange": $date_range, "pageSize": $page_size, "pageToken": $page_token, "user": $user, "viewId": $view_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"activityTypes": $activity_types, "dateRange": $date_range, "pageSize": $page_size, "pageToken": $page_token, "user": $user, "viewId": $view_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

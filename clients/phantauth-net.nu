@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -68,7 +77,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "client post" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "client create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -91,7 +100,7 @@ export def commands []: nothing -> table {
 # Create a Client Selfie
 #
 # POST /client
-export def "client post" [
+export def "client create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -103,11 +112,11 @@ export def "client post" [
   --id: string # URL of the Client's JSON representation.
   client_id: string # OAuth 2.0 client identifier string.
   --client-name: string # Human-readable string name of the client to be presented to the end-user during authorization.
-  --client-secret: string # OAuth 2.0 client secret string. 
+  --client-secret: string # OAuth 2.0 client secret string.
   --client-uri: string # URL string of a web page providing information about the client.
   --contacts: list # Array of strings representing ways to contact people responsible for this client, typically email addresses.
   --grant-types: list # Array of OAuth 2.0 grant type strings that the client can use at the token endpoint.
-  --jwks: list # Client's JSON Web Key Set [RFC7517] document value, which contains the client's public keys.  The value of this field MUST be a JSON object containing a valid JWK Set.
+  --jwks: list # Client's JSON Web Key Set [RFC7517] document value, which contains the client's public keys. The value of this field MUST be a JSON object containing a valid JWK Set.
   --jwks-uri: string # URL string referencing the client's JSON Web Key (JWK) Set [RFC7517] document, which contains the client's public keys.
   --logo-email: string # An email address used to generate a gravatar.com logo_uri.
   --logo-uri: string # URL string that references a logo for the client.
@@ -124,11 +133,11 @@ export def "client post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/client")
-  let body = {"@id": $id, "client_id": $client_id, "client_name": $client_name, "client_secret": $client_secret, "client_uri": $client_uri, "contacts": $contacts, "grant_types": $grant_types, "jwks": $jwks, "jwks_uri": $jwks_uri, "logo_email": $logo_email, "logo_uri": $logo_uri, "policy_uri": $policy_uri, "redirect_uris": $redirect_uris, "response_types": $response_types, "scope": $scope, "software_id": $software_id, "software_version": $software_version, "token_endpoint_auth_method": $token_endpoint_auth_method, "tos_uri": $tos_uri} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"@id": $id, "client_id": $client_id, "client_name": $client_name, "client_secret": $client_secret, "client_uri": $client_uri, "contacts": $contacts, "grant_types": $grant_types, "jwks": $jwks, "jwks_uri": $jwks_uri, "logo_email": $logo_email, "logo_uri": $logo_uri, "policy_uri": $policy_uri, "redirect_uris": $redirect_uris, "response_types": $response_types, "scope": $scope, "software_id": $software_id, "software_version": $software_version, "token_endpoint_auth_method": $token_endpoint_auth_method, "tos_uri": $tos_uri} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get a Client
@@ -147,7 +156,7 @@ export def "client get" [
 ]: nothing -> record<_id: string, client_id: string, client_name: string, client_secret: string, client_uri: string, contacts: list<any>, grant_types: list<any>, jwks: list<any>, jwks_uri: string, logo_email: string, logo_uri: string, policy_uri: string, redirect_uris: list<any>, response_types: list<any>, scope: string, software_id: string, software_version: string, token_endpoint_auth_method: string, tos_uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({client_id: $client_id} | format pattern "/client/{client_id}"))
+  let full_url = (build-url $base ({client_id: (encode-path-segment $client_id)} | format pattern "/client/{client_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -170,7 +179,7 @@ export def "client-token get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({client_id: $client_id, kind: $kind} | format pattern "/client/{client_id}/token/{kind}"))
+  let full_url = (build-url $base ({client_id: (encode-path-segment $client_id), kind: (encode-path-segment $kind)} | format pattern "/client/{client_id}/token/{kind}"))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -192,7 +201,7 @@ export def "domain get" [
 ]: nothing -> record<_id: string, logo: string, members: list<any>, name: string, profile: string, sub: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({domainname: $domainname} | format pattern "/domain/{domainname}"))
+  let full_url = (build-url $base ({domainname: (encode-path-segment $domainname)} | format pattern "/domain/{domainname}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -214,7 +223,7 @@ export def "fleet get" [
 ]: nothing -> record<_id: string, logo: string, logo_email: string, members: list<any>, name: string, profile: string, sub: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({fleetname: $fleetname} | format pattern "/fleet/{fleetname}"))
+  let full_url = (build-url $base ({fleetname: (encode-path-segment $fleetname)} | format pattern "/fleet/{fleetname}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -236,7 +245,7 @@ export def "team get" [
 ]: nothing -> record<_id: string, logo: string, logo_email: string, members: list<any>, name: string, profile: string, sub: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({teamname: $teamname} | format pattern "/team/{teamname}"))
+  let full_url = (build-url $base ({teamname: (encode-path-segment $teamname)} | format pattern "/team/{teamname}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -258,7 +267,7 @@ export def "tenant get" [
 ]: nothing -> record<_id: string, about: string, attribution: string, depot: string, depots: list<any>, domain: bool, factories: list<any>, factory: string, favicon: string, issuer: string, logo: string, name: string, script: string, sheet: string, sub: string, subtenant: bool, summary: string, template: string, theme: string, userinfo: string, website: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({tenantname: $tenantname} | format pattern "/tenant/{tenantname}"))
+  let full_url = (build-url $base ({tenantname: (encode-path-segment $tenantname)} | format pattern "/tenant/{tenantname}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -268,7 +277,7 @@ export def "tenant get" [
 #
 # POST /user
 # --address shape: {country?: string, formatted?: string, locality?: string, postal_code?: string, region?: string, street_address?: string}
-export def "user post" [
+export def "user create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -307,11 +316,11 @@ export def "user post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user")
-  let body = {"@id": $id, "address": $address, "birthdate": $birthdate, "email": $email, "email_verified": $email_verified, "family_name": $family_name, "gender": $gender, "given_name": $given_name, "locale": $locale, "me": $me, "middle_name": $middle_name, "name": $name, "nickname": $nickname, "password": $password, "phone_number": $phone_number, "phone_number_verified": $phone_number_verified, "picture": $picture, "preferred_username": $preferred_username, "profile": $profile, "sub": $sub, "uid": $uid, "updated_at": $updated_at, "webmail": $webmail, "website": $website, "zoneinfo": $zoneinfo} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"@id": $id, "address": $address, "birthdate": $birthdate, "email": $email, "email_verified": $email_verified, "family_name": $family_name, "gender": $gender, "given_name": $given_name, "locale": $locale, "me": $me, "middle_name": $middle_name, "name": $name, "nickname": $nickname, "password": $password, "phone_number": $phone_number, "phone_number_verified": $phone_number_verified, "picture": $picture, "preferred_username": $preferred_username, "profile": $profile, "sub": $sub, "uid": $uid, "updated_at": $updated_at, "webmail": $webmail, "website": $website, "zoneinfo": $zoneinfo} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get a User
@@ -330,7 +339,7 @@ export def "user get" [
 ]: nothing -> record<_id: string, address: record<country: string, formatted: string, locality: string, postal_code: string, region: string, street_address: string>, birthdate: string, email: string, email_verified: bool, family_name: string, gender: string, given_name: string, locale: string, me: string, middle_name: string, name: string, nickname: string, password: string, phone_number: string, phone_number_verified: bool, picture: string, preferred_username: string, profile: string, sub: string, uid: string, updated_at: float, webmail: string, website: string, zoneinfo: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({username: $username} | format pattern "/user/{username}"))
+  let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/user/{username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -355,7 +364,7 @@ export def "user-token get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "scope" $scope "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({username: $username, kind: $kind} | format pattern "/user/{username}/token/{kind}") $qp)
+  let full_url = (build-url $base ({username: (encode-path-segment $username), kind: (encode-path-segment $kind)} | format pattern "/user/{username}/token/{kind}") $qp)
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

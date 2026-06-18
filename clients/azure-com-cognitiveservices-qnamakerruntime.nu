@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -69,7 +78,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "knowledgebases-generate-answer post" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "knowledgebases-generate-answer generate-runtime" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,7 +102,7 @@ export def commands []: nothing -> table {
 #
 # POST /knowledgebases/{kbId}/generateAnswer
 # operationId: Runtime_GenerateAnswer
-export def "knowledgebases-generate-answer post" [
+export def "knowledgebases-generate-answer generate-runtime" [
   kb_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -106,7 +115,7 @@ export def "knowledgebases-generate-answer post" [
 ]: nothing -> record<answers: table<answer: string, context: record, id: int, metadata: list, questions: list, score: float, source: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({kb_id: $kb_id} | format pattern "/knowledgebases/{kb_id}/generateAnswer"))
+  let full_url = (build-url $base ({kb_id: (encode-path-segment $kb_id)} | format pattern "/knowledgebases/{kb_id}/generateAnswer"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -116,7 +125,7 @@ export def "knowledgebases-generate-answer post" [
 #
 # POST /knowledgebases/{kbId}/train
 # operationId: Runtime_Train
-export def "knowledgebases-train post" [
+export def "knowledgebases-train create-runtime" [
   kb_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -129,7 +138,7 @@ export def "knowledgebases-train post" [
 ]: nothing -> record<error: record<code: string, details: list<record>, innerError: record<code: string, innerError: any>, message: string, target: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({kb_id: $kb_id} | format pattern "/knowledgebases/{kb_id}/train"))
+  let full_url = (build-url $base ({kb_id: (encode-path-segment $kb_id)} | format pattern "/knowledgebases/{kb_id}/train"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

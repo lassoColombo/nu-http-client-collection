@@ -36,6 +36,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -70,7 +79,7 @@ def auth-scheme-completer [] { ["ocp-apim-subscription-key" "query-subscription-
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "h5-players-gamevariants 58acde292109180bdcacc40d" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "h5-players-gamevariants get-58acde292109180bdcacc40d" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -94,7 +103,7 @@ export def commands []: nothing -> table {
 #
 # GET /h5/players/{player}/gamevariants
 # operationId: 58acde292109180bdcacc40d
-export def "h5-players-gamevariants 58acde292109180bdcacc40d" [
+export def "h5-players-gamevariants get-58acde292109180bdcacc40d" [
   player: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -112,7 +121,7 @@ export def "h5-players-gamevariants 58acde292109180bdcacc40d" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({player: $player} | format pattern "/h5/players/{player}/gamevariants") $qp)
+  let full_url = (build-url $base ({player: (encode-path-segment $player)} | format pattern "/h5/players/{player}/gamevariants") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -122,7 +131,7 @@ export def "h5-players-gamevariants 58acde292109180bdcacc40d" [
 #
 # GET /h5/players/{player}/gamevariants/{variant}
 # operationId: 58acde292109180bdcacc40c
-export def "h5-players-gamevariants 58acde292109180bdcacc40c" [
+export def "h5-players-gamevariants get-58acde292109180bdcacc40c" [
   player: string
   variant: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -136,7 +145,7 @@ export def "h5-players-gamevariants 58acde292109180bdcacc40c" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({player: $player, variant: $variant} | format pattern "/h5/players/{player}/gamevariants/{variant}"))
+  let full_url = (build-url $base ({player: (encode-path-segment $player), variant: (encode-path-segment $variant)} | format pattern "/h5/players/{player}/gamevariants/{variant}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -146,7 +155,7 @@ export def "h5-players-gamevariants 58acde292109180bdcacc40c" [
 #
 # GET /h5/players/{player}/mapvariants
 # operationId: 58acde292109180bdcacc40f
-export def "h5-players-mapvariants 58acde292109180bdcacc40f" [
+export def "h5-players-mapvariants get-58acde292109180bdcacc40f" [
   player: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -164,7 +173,7 @@ export def "h5-players-mapvariants 58acde292109180bdcacc40f" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({player: $player} | format pattern "/h5/players/{player}/mapvariants") $qp)
+  let full_url = (build-url $base ({player: (encode-path-segment $player)} | format pattern "/h5/players/{player}/mapvariants") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -174,7 +183,7 @@ export def "h5-players-mapvariants 58acde292109180bdcacc40f" [
 #
 # GET /h5/players/{player}/mapvariants/{variant}
 # operationId: 58acde292109180bdcacc40e
-export def "h5-players-mapvariants 58acde292109180bdcacc40e" [
+export def "h5-players-mapvariants get-58acde292109180bdcacc40e" [
   player: string
   variant: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -188,7 +197,7 @@ export def "h5-players-mapvariants 58acde292109180bdcacc40e" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({player: $player, variant: $variant} | format pattern "/h5/players/{player}/mapvariants/{variant}"))
+  let full_url = (build-url $base ({player: (encode-path-segment $player), variant: (encode-path-segment $variant)} | format pattern "/h5/players/{player}/mapvariants/{variant}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

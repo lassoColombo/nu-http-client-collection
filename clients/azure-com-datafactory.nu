@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -136,7 +145,7 @@ export def "subscriptions-providers-microsoft-data-factory-factories list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.DataFactory/factories") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.DataFactory/factories") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -147,7 +156,7 @@ export def "subscriptions-providers-microsoft-data-factory-factories list" [
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.DataFactory/locations/{locationId}/configureFactoryRepo
 # operationId: Factories_ConfigureFactoryRepo
 # --repoConfiguration shape: {accountName: string, collaborationBranch: string, lastCommitId?: string, repositoryName: string, rootFolder: string, type: string}
-export def "subscriptions-providers-microsoft-data-factory-locations-configure-factory-repo post" [
+export def "subscriptions-providers-microsoft-data-factory-locations-configure-factory-repo create-factories" [
   subscription_id: string
   location_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -166,19 +175,19 @@ export def "subscriptions-providers-microsoft-data-factory-locations-configure-f
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, location_id: $location_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.DataFactory/locations/{location_id}/configureFactoryRepo") $qp)
-  let body = {"factoryResourceId": $factory_resource_id, "repoConfiguration": $repo_configuration} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), location_id: (encode-path-segment $location_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.DataFactory/locations/{location_id}/configureFactoryRepo") $qp)
+  let req_body = {"factoryResourceId": $factory_resource_id, "repoConfiguration": $repo_configuration} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get exposure control feature for specific location.
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.DataFactory/locations/{locationId}/getFeatureValue
 # operationId: ExposureControl_GetFeatureValue
-export def "subscriptions-providers-microsoft-data-factory-locations-get-feature-value get" [
+export def "subscriptions-providers-microsoft-data-factory-locations-get-feature-value get-exposure-control" [
   subscription_id: string
   location_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -197,19 +206,19 @@ export def "subscriptions-providers-microsoft-data-factory-locations-get-feature
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, location_id: $location_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.DataFactory/locations/{location_id}/getFeatureValue") $qp)
-  let body = {"featureName": $feature_name, "featureType": $feature_type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), location_id: (encode-path-segment $location_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.DataFactory/locations/{location_id}/getFeatureValue") $qp)
+  let req_body = {"featureName": $feature_name, "featureType": $feature_type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists factories.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories
 # operationId: Factories_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories list-by" [
+export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories list" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -225,7 +234,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -252,7 +261,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, factory_name: $factory_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -280,11 +289,11 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, factory_name: $factory_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -313,12 +322,12 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, factory_name: $factory_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}") $qp)
-  let body = {"identity": $identity, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}") $qp)
+  let req_body = {"identity": $identity, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Creates or updates a factory.
@@ -350,14 +359,14 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, factory_name: $factory_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}") $qp)
-  let body = {"identity": $identity, "properties": $properties, "location": $location, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"If-Match": $if_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}") $qp)
+  let req_body = {"identity": $identity, "properties": $properties, "location": $location, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"If-Match": $if_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Add a data flow into debug session.
@@ -393,12 +402,12 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, factory_name: $factory_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/addDataFlowToDebugSession") $qp)
-  let body = {"dataFlow": $data_flow, "datasets": $datasets, "debugSettings": $debug_settings, "linkedServices": $linked_services, "sessionId": $session_id, "staging": $staging} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/addDataFlowToDebugSession") $qp)
+  let req_body = {"dataFlow": $data_flow, "datasets": $datasets, "debugSettings": $debug_settings, "linkedServices": $linked_services, "sessionId": $session_id, "staging": $staging} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Creates a data flow debug session.
@@ -428,19 +437,19 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, factory_name: $factory_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/createDataFlowDebugSession") $qp)
-  let body = {"computeType": $compute_type, "coreCount": $core_count, "integrationRuntime": $integration_runtime, "timeToLive": $time_to_live} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/createDataFlowDebugSession") $qp)
+  let req_body = {"computeType": $compute_type, "coreCount": $core_count, "integrationRuntime": $integration_runtime, "timeToLive": $time_to_live} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists data flows.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/dataflows
 # operationId: DataFlows_ListByFactory
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-dataflows list-by" [
+export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-dataflows list-flows" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -457,7 +466,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, factory_name: $factory_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/dataflows") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/dataflows") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -467,7 +476,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/dataflows/{dataFlowName}
 # operationId: DataFlows_Delete
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-dataflows delete" [
+export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-dataflows delete-flows" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -485,7 +494,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, factory_name: $factory_name, data_flow_name: $data_flow_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/dataflows/{data_flow_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), data_flow_name: (encode-path-segment $data_flow_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/dataflows/{data_flow_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -495,7 +504,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/dataflows/{dataFlowName}
 # operationId: DataFlows_Get
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-dataflows get" [
+export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-dataflows get-flows" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -514,11 +523,11 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, factory_name: $factory_name, data_flow_name: $data_flow_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/dataflows/{data_flow_name}") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), data_flow_name: (encode-path-segment $data_flow_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/dataflows/{data_flow_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -527,7 +536,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/dataflows/{dataFlowName}
 # operationId: DataFlows_CreateOrUpdate
 # --properties shape: {annotations?: list, description?: string, folder?: record, type: string}
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-dataflows create-or-update" [
+export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-dataflows create-flows-or-update" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -548,21 +557,21 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, factory_name: $factory_name, data_flow_name: $data_flow_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/dataflows/{data_flow_name}") $qp)
-  let body = {"properties": $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"If-Match": $if_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), data_flow_name: (encode-path-segment $data_flow_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/dataflows/{data_flow_name}") $qp)
+  let req_body = {"properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"If-Match": $if_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists datasets.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/datasets
 # operationId: Datasets_ListByFactory
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-datasets list-by" [
+export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-datasets list" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -579,7 +588,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, factory_name: $factory_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/datasets") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/datasets") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -607,7 +616,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, factory_name: $factory_name, dataset_name: $dataset_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/datasets/{dataset_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), dataset_name: (encode-path-segment $dataset_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/datasets/{dataset_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -636,11 +645,11 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, factory_name: $factory_name, dataset_name: $dataset_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/datasets/{dataset_name}") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), dataset_name: (encode-path-segment $dataset_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/datasets/{dataset_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -663,21 +672,21 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version.
-  --if-match: string # ETag of the dataset entity.  Should only be specified for update, for which it should match existing entity or can be * for unconditional update.
+  --if-match: string # ETag of the dataset entity. Should only be specified for update, for which it should match existing entity or can be * for unconditional update.
   properties: record # The Azure Data Factory nested object which identifies data within different data stores, such as tables, files, folders, and documents. — shape: {annotations?: list, description?: string, folder?: record, linkedServiceName: any, parameters?: record, schema?: record, structure?: record, type: string}
 ]: any -> record<properties: record<annotations: list<record>, description: string, folder: record<name: string>, linkedServiceName: record<parameters: record, referenceName: string, type: string>, parameters: record, schema: record, structure: record, type: string>, etag: string, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, factory_name: $factory_name, dataset_name: $dataset_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/datasets/{dataset_name}") $qp)
-  let body = {"properties": $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"If-Match": $if_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), dataset_name: (encode-path-segment $dataset_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/datasets/{dataset_name}") $qp)
+  let req_body = {"properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"If-Match": $if_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes a data flow debug session.
@@ -703,20 +712,20 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, factory_name: $factory_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/deleteDataFlowDebugSession") $qp)
-  let body = {"sessionId": $session_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/deleteDataFlowDebugSession") $qp)
+  let req_body = {"sessionId": $session_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Execute a data flow debug command.
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/executeDataFlowDebugCommand
 # operationId: DataFlowDebugSession_ExecuteCommand
-# --commandPayload shape: {columns?: list, expression?: string, rowLimits?: int, streamName: string}
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-execute-data-flow-debug-command exec-ute" [
+# --commandPayload shape: {columns?: list<string>, expression?: string, rowLimits?: int, streamName: string}
+export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-execute-data-flow-debug-command create-session" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -730,19 +739,19 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version.
   --command: string@command-completer # The command type.
-  --command-payload: record # Structure of command payload. — shape: {columns?: list, expression?: string, rowLimits?: int, streamName: string}
+  --command-payload: record # Structure of command payload. — shape: {columns?: list<string>, expression?: string, rowLimits?: int, streamName: string}
   --session-id: string # The ID of data flow debug session.
 ]: any -> record<data: string, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, factory_name: $factory_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/executeDataFlowDebugCommand") $qp)
-  let body = {"command": $command, "commandPayload": $command_payload, "sessionId": $session_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/executeDataFlowDebugCommand") $qp)
+  let req_body = {"command": $command, "commandPayload": $command_payload, "sessionId": $session_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get Data Plane access.
@@ -772,19 +781,19 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, factory_name: $factory_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/getDataPlaneAccess") $qp)
-  let body = {"accessResourcePath": $access_resource_path, "expireTime": $expire_time, "permissions": $permissions, "profileName": $profile_name, "startTime": $start_time} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/getDataPlaneAccess") $qp)
+  let req_body = {"accessResourcePath": $access_resource_path, "expireTime": $expire_time, "permissions": $permissions, "profileName": $profile_name, "startTime": $start_time} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get exposure control feature for specific factory.
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/getFeatureValue
 # operationId: ExposureControl_GetFeatureValueByFactory
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-get-feature-value get" [
+export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-get-feature-value get-exposure-control" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -804,12 +813,12 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, factory_name: $factory_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/getFeatureValue") $qp)
-  let body = {"featureName": $feature_name, "featureType": $feature_type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/getFeatureValue") $qp)
+  let req_body = {"featureName": $feature_name, "featureType": $feature_type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get GitHub Access Token.
@@ -837,19 +846,19 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, factory_name: $factory_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/getGitHubAccessToken") $qp)
-  let body = {"gitHubAccessCode": $git_hub_access_code, "gitHubAccessTokenBaseUrl": $git_hub_access_token_base_url, "gitHubClientId": $git_hub_client_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/getGitHubAccessToken") $qp)
+  let req_body = {"gitHubAccessCode": $git_hub_access_code, "gitHubAccessTokenBaseUrl": $git_hub_access_token_base_url, "gitHubClientId": $git_hub_client_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists integration runtimes.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/integrationRuntimes
 # operationId: IntegrationRuntimes_ListByFactory
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-integration-runtimes list-by" [
+export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-integration-runtimes list" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -866,7 +875,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, factory_name: $factory_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/integrationRuntimes") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/integrationRuntimes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -894,7 +903,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, factory_name: $factory_name, integration_runtime_name: $integration_runtime_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/integrationRuntimes/{integration_runtime_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), integration_runtime_name: (encode-path-segment $integration_runtime_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/integrationRuntimes/{integration_runtime_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -923,11 +932,11 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, factory_name: $factory_name, integration_runtime_name: $integration_runtime_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/integrationRuntimes/{integration_runtime_name}") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), integration_runtime_name: (encode-path-segment $integration_runtime_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/integrationRuntimes/{integration_runtime_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -956,12 +965,12 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, factory_name: $factory_name, integration_runtime_name: $integration_runtime_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/integrationRuntimes/{integration_runtime_name}") $qp)
-  let body = {"autoUpdate": $auto_update, "updateDelayOffset": $update_delay_offset} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), integration_runtime_name: (encode-path-segment $integration_runtime_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/integrationRuntimes/{integration_runtime_name}") $qp)
+  let req_body = {"autoUpdate": $auto_update, "updateDelayOffset": $update_delay_offset} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Creates or updates an integration runtime.
@@ -990,14 +999,14 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, factory_name: $factory_name, integration_runtime_name: $integration_runtime_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/integrationRuntimes/{integration_runtime_name}") $qp)
-  let body = {"properties": $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"If-Match": $if_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), integration_runtime_name: (encode-path-segment $integration_runtime_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/integrationRuntimes/{integration_runtime_name}") $qp)
+  let req_body = {"properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"If-Match": $if_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets the on-premises integration runtime connection information for encrypting the on-premises data source credentials.
@@ -1022,7 +1031,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, factory_name: $factory_name, integration_runtime_name: $integration_runtime_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/integrationRuntimes/{integration_runtime_name}/getConnectionInfo") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), integration_runtime_name: (encode-path-segment $integration_runtime_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/integrationRuntimes/{integration_runtime_name}/getConnectionInfo") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1052,12 +1061,12 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, factory_name: $factory_name, integration_runtime_name: $integration_runtime_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/integrationRuntimes/{integration_runtime_name}/getObjectMetadata") $qp)
-  let body = {"metadataPath": $metadata_path} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), integration_runtime_name: (encode-path-segment $integration_runtime_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/integrationRuntimes/{integration_runtime_name}/getObjectMetadata") $qp)
+  let req_body = {"metadataPath": $metadata_path} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets detailed status information for an integration runtime.
@@ -1082,7 +1091,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, factory_name: $factory_name, integration_runtime_name: $integration_runtime_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/integrationRuntimes/{integration_runtime_name}/getStatus") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), integration_runtime_name: (encode-path-segment $integration_runtime_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/integrationRuntimes/{integration_runtime_name}/getStatus") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1115,12 +1124,12 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, factory_name: $factory_name, integration_runtime_name: $integration_runtime_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/integrationRuntimes/{integration_runtime_name}/linkedIntegrationRuntime") $qp)
-  let body = {"dataFactoryLocation": $data_factory_location, "dataFactoryName": $data_factory_name, "name": $name, "subscriptionId": $body_subscription_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), integration_runtime_name: (encode-path-segment $integration_runtime_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/integrationRuntimes/{integration_runtime_name}/linkedIntegrationRuntime") $qp)
+  let req_body = {"dataFactoryLocation": $data_factory_location, "dataFactoryName": $data_factory_name, "name": $name, "subscriptionId": $body_subscription_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieves the authentication keys for an integration runtime.
@@ -1145,7 +1154,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, factory_name: $factory_name, integration_runtime_name: $integration_runtime_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/integrationRuntimes/{integration_runtime_name}/listAuthKeys") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), integration_runtime_name: (encode-path-segment $integration_runtime_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/integrationRuntimes/{integration_runtime_name}/listAuthKeys") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1173,7 +1182,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, factory_name: $factory_name, integration_runtime_name: $integration_runtime_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/integrationRuntimes/{integration_runtime_name}/monitoringData") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), integration_runtime_name: (encode-path-segment $integration_runtime_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/integrationRuntimes/{integration_runtime_name}/monitoringData") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1202,7 +1211,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, factory_name: $factory_name, integration_runtime_name: $integration_runtime_name, node_name: $node_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/integrationRuntimes/{integration_runtime_name}/nodes/{node_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), integration_runtime_name: (encode-path-segment $integration_runtime_name), node_name: (encode-path-segment $node_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/integrationRuntimes/{integration_runtime_name}/nodes/{node_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1231,7 +1240,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, factory_name: $factory_name, integration_runtime_name: $integration_runtime_name, node_name: $node_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/integrationRuntimes/{integration_runtime_name}/nodes/{node_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), integration_runtime_name: (encode-path-segment $integration_runtime_name), node_name: (encode-path-segment $node_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/integrationRuntimes/{integration_runtime_name}/nodes/{node_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1262,12 +1271,12 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, factory_name: $factory_name, integration_runtime_name: $integration_runtime_name, node_name: $node_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/integrationRuntimes/{integration_runtime_name}/nodes/{node_name}") $qp)
-  let body = {"concurrentJobsLimit": $concurrent_jobs_limit} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), integration_runtime_name: (encode-path-segment $integration_runtime_name), node_name: (encode-path-segment $node_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/integrationRuntimes/{integration_runtime_name}/nodes/{node_name}") $qp)
+  let req_body = {"concurrentJobsLimit": $concurrent_jobs_limit} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get the IP address of self-hosted integration runtime node.
@@ -1293,7 +1302,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, factory_name: $factory_name, integration_runtime_name: $integration_runtime_name, node_name: $node_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/integrationRuntimes/{integration_runtime_name}/nodes/{node_name}/ipAddress") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), integration_runtime_name: (encode-path-segment $integration_runtime_name), node_name: (encode-path-segment $node_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/integrationRuntimes/{integration_runtime_name}/nodes/{node_name}/ipAddress") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1321,7 +1330,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, factory_name: $factory_name, integration_runtime_name: $integration_runtime_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/integrationRuntimes/{integration_runtime_name}/refreshObjectMetadata") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), integration_runtime_name: (encode-path-segment $integration_runtime_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/integrationRuntimes/{integration_runtime_name}/refreshObjectMetadata") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1331,7 +1340,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/integrationRuntimes/{integrationRuntimeName}/regenerateAuthKey
 # operationId: IntegrationRuntimes_RegenerateAuthKey
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-integration-runtimes-regenerate-auth-key post" [
+export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-integration-runtimes-regenerate-auth-key create" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -1351,12 +1360,12 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, factory_name: $factory_name, integration_runtime_name: $integration_runtime_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/integrationRuntimes/{integration_runtime_name}/regenerateAuthKey") $qp)
-  let body = {"keyName": $key_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), integration_runtime_name: (encode-path-segment $integration_runtime_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/integrationRuntimes/{integration_runtime_name}/regenerateAuthKey") $qp)
+  let req_body = {"keyName": $key_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Remove all linked integration runtimes under specific data factory in a self-hosted integration runtime.
@@ -1383,12 +1392,12 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, factory_name: $factory_name, integration_runtime_name: $integration_runtime_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/integrationRuntimes/{integration_runtime_name}/removeLinks") $qp)
-  let body = {"factoryName": $body_factory_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), integration_runtime_name: (encode-path-segment $integration_runtime_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/integrationRuntimes/{integration_runtime_name}/removeLinks") $qp)
+  let req_body = {"factoryName": $body_factory_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Starts a ManagedReserved type integration runtime.
@@ -1413,7 +1422,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, factory_name: $factory_name, integration_runtime_name: $integration_runtime_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/integrationRuntimes/{integration_runtime_name}/start") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), integration_runtime_name: (encode-path-segment $integration_runtime_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/integrationRuntimes/{integration_runtime_name}/start") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1441,7 +1450,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, factory_name: $factory_name, integration_runtime_name: $integration_runtime_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/integrationRuntimes/{integration_runtime_name}/stop") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), integration_runtime_name: (encode-path-segment $integration_runtime_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/integrationRuntimes/{integration_runtime_name}/stop") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1469,7 +1478,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, factory_name: $factory_name, integration_runtime_name: $integration_runtime_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/integrationRuntimes/{integration_runtime_name}/syncCredentials") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), integration_runtime_name: (encode-path-segment $integration_runtime_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/integrationRuntimes/{integration_runtime_name}/syncCredentials") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1479,7 +1488,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/integrationRuntimes/{integrationRuntimeName}/upgrade
 # operationId: IntegrationRuntimes_Upgrade
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-integration-runtimes-upgrade post" [
+export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-integration-runtimes-upgrade create" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -1497,7 +1506,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, factory_name: $factory_name, integration_runtime_name: $integration_runtime_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/integrationRuntimes/{integration_runtime_name}/upgrade") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), integration_runtime_name: (encode-path-segment $integration_runtime_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/integrationRuntimes/{integration_runtime_name}/upgrade") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1507,7 +1516,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/linkedservices
 # operationId: LinkedServices_ListByFactory
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-linkedservices list-by" [
+export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-linkedservices list-linked-services" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -1524,7 +1533,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, factory_name: $factory_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/linkedservices") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/linkedservices") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1534,7 +1543,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/linkedservices/{linkedServiceName}
 # operationId: LinkedServices_Delete
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-linkedservices delete" [
+export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-linkedservices delete-linked-services" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -1552,7 +1561,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, factory_name: $factory_name, linked_service_name: $linked_service_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/linkedservices/{linked_service_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), linked_service_name: (encode-path-segment $linked_service_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/linkedservices/{linked_service_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1562,7 +1571,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/linkedservices/{linkedServiceName}
 # operationId: LinkedServices_Get
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-linkedservices get" [
+export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-linkedservices get-linked-services" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -1581,11 +1590,11 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, factory_name: $factory_name, linked_service_name: $linked_service_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/linkedservices/{linked_service_name}") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), linked_service_name: (encode-path-segment $linked_service_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/linkedservices/{linked_service_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1594,7 +1603,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/linkedservices/{linkedServiceName}
 # operationId: LinkedServices_CreateOrUpdate
 # --properties shape: {annotations?: list, connectVia?: any, description?: string, parameters?: record, type: string}
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-linkedservices create-or-update" [
+export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-linkedservices create-linked-services-or-update" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -1608,28 +1617,28 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version.
-  --if-match: string # ETag of the linkedService entity.  Should only be specified for update, for which it should match existing entity or can be * for unconditional update.
+  --if-match: string # ETag of the linkedService entity. Should only be specified for update, for which it should match existing entity or can be * for unconditional update.
   properties: record # The Azure Data Factory nested object which contains the information and credential which can be used to connect with related store or compute resource. — shape: {annotations?: list, connectVia?: any, description?: string, parameters?: record, type: string}
 ]: any -> record<properties: record<annotations: list<record>, connectVia: record<parameters: record, referenceName: string, type: string>, description: string, parameters: record, type: string>, etag: string, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, factory_name: $factory_name, linked_service_name: $linked_service_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/linkedservices/{linked_service_name}") $qp)
-  let body = {"properties": $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"If-Match": $if_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), linked_service_name: (encode-path-segment $linked_service_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/linkedservices/{linked_service_name}") $qp)
+  let req_body = {"properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"If-Match": $if_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get a pipeline run by its run ID.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/pipelineruns/{runId}
 # operationId: PipelineRuns_Get
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-pipelineruns get" [
+export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-pipelineruns get-pipeline-runs" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -1647,7 +1656,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, factory_name: $factory_name, run_id: $run_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/pipelineruns/{run_id}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), run_id: (encode-path-segment $run_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/pipelineruns/{run_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1657,7 +1666,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/pipelineruns/{runId}/cancel
 # operationId: PipelineRuns_Cancel
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-pipelineruns-cancel cancel" [
+export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-pipelineruns-cancel cancel-pipeline-runs" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -1676,7 +1685,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "isRecursive" $is_recursive "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, factory_name: $factory_name, run_id: $run_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/pipelineruns/{run_id}/cancel") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), run_id: (encode-path-segment $run_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/pipelineruns/{run_id}/cancel") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1686,9 +1695,9 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/pipelineruns/{runId}/queryActivityruns
 # operationId: ActivityRuns_QueryByPipelineRun
-# --filters item shape: {operand: "PipelineName"|"Status"|"RunStart"|"RunEnd"|"ActivityName"|"ActivityRunStart"|"ActivityRunEnd"|"ActivityType"|"TriggerName"|"TriggerRunTimestamp"|"RunGroupId"|"LatestOnly", operator: "Equals"|"NotEquals"|"In"|"NotIn", values: list}
+# --filters item shape: {operand: "PipelineName"|"Status"|"RunStart"|"RunEnd"|"ActivityName"|"ActivityRunStart"|"ActivityRunEnd"|"ActivityType"|"TriggerName"|"TriggerRunTimestamp"|"RunGroupId"|"LatestOnly", operator: "Equals"|"NotEquals"|"In"|"NotIn", values: list<string>}
 # --orderBy item shape: {order: "ASC"|"DESC", orderBy: "RunStart"|"RunEnd"|"PipelineName"|"Status"|"ActivityName"|"ActivityRunStart"|"ActivityRunEnd"|"TriggerName"|"TriggerRunTimestamp"}
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-pipelineruns-query-activityruns list-by" [
+export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-pipelineruns-query-activityruns list-activity-runs-by-pipeline-run" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -1703,7 +1712,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version.
   --continuation-token: string # The continuation token for getting the next page of results. Null for first page.
-  --filters: list # List of filters. — item shape: {operand: "PipelineName"|"Status"|"RunStart"|"RunEnd"|"ActivityName"|"ActivityRunStart"|"ActivityRunEnd"|"ActivityType"|"TriggerName"|"TriggerRunTimestamp"|"RunGroupId"|"LatestOnly", operator: "Equals"|"NotEquals"|"In"|"NotIn", values: list}
+  --filters: list # List of filters. — item shape: {operand: "PipelineName"|"Status"|"RunStart"|"RunEnd"|"ActivityName"|"ActivityRunStart"|"ActivityRunEnd"|"ActivityType"|"TriggerName"|"TriggerRunTimestamp"|"RunGroupId"|"LatestOnly", operator: "Equals"|"NotEquals"|"In"|"NotIn", values: list<string>}
   last_updated_after: string # The time at or after which the run event was updated in 'ISO 8601' format. (format: date-time)
   last_updated_before: string # The time at or before which the run event was updated in 'ISO 8601' format. (format: date-time)
   --order-by: list # List of OrderBy option. — item shape: {order: "ASC"|"DESC", orderBy: "RunStart"|"RunEnd"|"PipelineName"|"Status"|"ActivityName"|"ActivityRunStart"|"ActivityRunEnd"|"TriggerName"|"TriggerRunTimestamp"}
@@ -1712,19 +1721,19 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, factory_name: $factory_name, run_id: $run_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/pipelineruns/{run_id}/queryActivityruns") $qp)
-  let body = {"continuationToken": $continuation_token, "filters": $filters, "lastUpdatedAfter": $last_updated_after, "lastUpdatedBefore": $last_updated_before, "orderBy": $order_by} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), run_id: (encode-path-segment $run_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/pipelineruns/{run_id}/queryActivityruns") $qp)
+  let req_body = {"continuationToken": $continuation_token, "filters": $filters, "lastUpdatedAfter": $last_updated_after, "lastUpdatedBefore": $last_updated_before, "orderBy": $order_by} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists pipelines.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/pipelines
 # operationId: Pipelines_ListByFactory
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-pipelines list-by" [
+export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-pipelines list" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -1741,7 +1750,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, factory_name: $factory_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/pipelines") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/pipelines") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1769,7 +1778,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, factory_name: $factory_name, pipeline_name: $pipeline_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/pipelines/{pipeline_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), pipeline_name: (encode-path-segment $pipeline_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/pipelines/{pipeline_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1798,11 +1807,11 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, factory_name: $factory_name, pipeline_name: $pipeline_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/pipelines/{pipeline_name}") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), pipeline_name: (encode-path-segment $pipeline_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/pipelines/{pipeline_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1825,21 +1834,21 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version.
-  --if-match: string # ETag of the pipeline entity.  Should only be specified for update, for which it should match existing entity or can be * for unconditional update.
+  --if-match: string # ETag of the pipeline entity. Should only be specified for update, for which it should match existing entity or can be * for unconditional update.
   properties: record # A data factory pipeline. — shape: {activities?: list, annotations?: list, concurrency?: int, description?: string, folder?: record, parameters?: record, runDimensions?: record, variables?: record}
 ]: any -> record<properties: record<activities: list<record>, annotations: list<record>, concurrency: int, description: string, folder: record<name: string>, parameters: record, runDimensions: record, variables: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, factory_name: $factory_name, pipeline_name: $pipeline_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/pipelines/{pipeline_name}") $qp)
-  let body = {"properties": $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"If-Match": $if_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), pipeline_name: (encode-path-segment $pipeline_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/pipelines/{pipeline_name}") $qp)
+  let req_body = {"properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"If-Match": $if_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Creates a run of a pipeline.
@@ -1869,18 +1878,19 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "referencePipelineRunId" $reference_pipeline_run_id "scalar") (serialize-qp "isRecovery" $is_recovery "scalar") (serialize-qp "startActivityName" $start_activity_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, factory_name: $factory_name, pipeline_name: $pipeline_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/pipelines/{pipeline_name}/createRun") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), pipeline_name: (encode-path-segment $pipeline_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/pipelines/{pipeline_name}/createRun") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Query all active data flow debug sessions.
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/queryDataFlowDebugSessions
 # operationId: DataFlowDebugSession_QueryByFactory
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-query-data-flow-debug-sessions list-by" [
+export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-query-data-flow-debug-sessions list" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -1897,7 +1907,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, factory_name: $factory_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/queryDataFlowDebugSessions") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/queryDataFlowDebugSessions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1907,9 +1917,9 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/queryPipelineRuns
 # operationId: PipelineRuns_QueryByFactory
-# --filters item shape: {operand: "PipelineName"|"Status"|"RunStart"|"RunEnd"|"ActivityName"|"ActivityRunStart"|"ActivityRunEnd"|"ActivityType"|"TriggerName"|"TriggerRunTimestamp"|"RunGroupId"|"LatestOnly", operator: "Equals"|"NotEquals"|"In"|"NotIn", values: list}
+# --filters item shape: {operand: "PipelineName"|"Status"|"RunStart"|"RunEnd"|"ActivityName"|"ActivityRunStart"|"ActivityRunEnd"|"ActivityType"|"TriggerName"|"TriggerRunTimestamp"|"RunGroupId"|"LatestOnly", operator: "Equals"|"NotEquals"|"In"|"NotIn", values: list<string>}
 # --orderBy item shape: {order: "ASC"|"DESC", orderBy: "RunStart"|"RunEnd"|"PipelineName"|"Status"|"ActivityName"|"ActivityRunStart"|"ActivityRunEnd"|"TriggerName"|"TriggerRunTimestamp"}
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-query-pipeline-runs list-by" [
+export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-query-pipeline-runs list" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -1923,7 +1933,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version.
   --continuation-token: string # The continuation token for getting the next page of results. Null for first page.
-  --filters: list # List of filters. — item shape: {operand: "PipelineName"|"Status"|"RunStart"|"RunEnd"|"ActivityName"|"ActivityRunStart"|"ActivityRunEnd"|"ActivityType"|"TriggerName"|"TriggerRunTimestamp"|"RunGroupId"|"LatestOnly", operator: "Equals"|"NotEquals"|"In"|"NotIn", values: list}
+  --filters: list # List of filters. — item shape: {operand: "PipelineName"|"Status"|"RunStart"|"RunEnd"|"ActivityName"|"ActivityRunStart"|"ActivityRunEnd"|"ActivityType"|"TriggerName"|"TriggerRunTimestamp"|"RunGroupId"|"LatestOnly", operator: "Equals"|"NotEquals"|"In"|"NotIn", values: list<string>}
   last_updated_after: string # The time at or after which the run event was updated in 'ISO 8601' format. (format: date-time)
   last_updated_before: string # The time at or before which the run event was updated in 'ISO 8601' format. (format: date-time)
   --order-by: list # List of OrderBy option. — item shape: {order: "ASC"|"DESC", orderBy: "RunStart"|"RunEnd"|"PipelineName"|"Status"|"ActivityName"|"ActivityRunStart"|"ActivityRunEnd"|"TriggerName"|"TriggerRunTimestamp"}
@@ -1932,21 +1942,21 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, factory_name: $factory_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/queryPipelineRuns") $qp)
-  let body = {"continuationToken": $continuation_token, "filters": $filters, "lastUpdatedAfter": $last_updated_after, "lastUpdatedBefore": $last_updated_before, "orderBy": $order_by} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/queryPipelineRuns") $qp)
+  let req_body = {"continuationToken": $continuation_token, "filters": $filters, "lastUpdatedAfter": $last_updated_after, "lastUpdatedBefore": $last_updated_before, "orderBy": $order_by} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Query trigger runs.
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/queryTriggerRuns
 # operationId: TriggerRuns_QueryByFactory
-# --filters item shape: {operand: "PipelineName"|"Status"|"RunStart"|"RunEnd"|"ActivityName"|"ActivityRunStart"|"ActivityRunEnd"|"ActivityType"|"TriggerName"|"TriggerRunTimestamp"|"RunGroupId"|"LatestOnly", operator: "Equals"|"NotEquals"|"In"|"NotIn", values: list}
+# --filters item shape: {operand: "PipelineName"|"Status"|"RunStart"|"RunEnd"|"ActivityName"|"ActivityRunStart"|"ActivityRunEnd"|"ActivityType"|"TriggerName"|"TriggerRunTimestamp"|"RunGroupId"|"LatestOnly", operator: "Equals"|"NotEquals"|"In"|"NotIn", values: list<string>}
 # --orderBy item shape: {order: "ASC"|"DESC", orderBy: "RunStart"|"RunEnd"|"PipelineName"|"Status"|"ActivityName"|"ActivityRunStart"|"ActivityRunEnd"|"TriggerName"|"TriggerRunTimestamp"}
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-query-trigger-runs list-by" [
+export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-query-trigger-runs trigger" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -1960,7 +1970,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version.
   --continuation-token: string # The continuation token for getting the next page of results. Null for first page.
-  --filters: list # List of filters. — item shape: {operand: "PipelineName"|"Status"|"RunStart"|"RunEnd"|"ActivityName"|"ActivityRunStart"|"ActivityRunEnd"|"ActivityType"|"TriggerName"|"TriggerRunTimestamp"|"RunGroupId"|"LatestOnly", operator: "Equals"|"NotEquals"|"In"|"NotIn", values: list}
+  --filters: list # List of filters. — item shape: {operand: "PipelineName"|"Status"|"RunStart"|"RunEnd"|"ActivityName"|"ActivityRunStart"|"ActivityRunEnd"|"ActivityType"|"TriggerName"|"TriggerRunTimestamp"|"RunGroupId"|"LatestOnly", operator: "Equals"|"NotEquals"|"In"|"NotIn", values: list<string>}
   last_updated_after: string # The time at or after which the run event was updated in 'ISO 8601' format. (format: date-time)
   last_updated_before: string # The time at or before which the run event was updated in 'ISO 8601' format. (format: date-time)
   --order-by: list # List of OrderBy option. — item shape: {order: "ASC"|"DESC", orderBy: "RunStart"|"RunEnd"|"PipelineName"|"Status"|"ActivityName"|"ActivityRunStart"|"ActivityRunEnd"|"TriggerName"|"TriggerRunTimestamp"}
@@ -1969,19 +1979,19 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, factory_name: $factory_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/queryTriggerRuns") $qp)
-  let body = {"continuationToken": $continuation_token, "filters": $filters, "lastUpdatedAfter": $last_updated_after, "lastUpdatedBefore": $last_updated_before, "orderBy": $order_by} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/queryTriggerRuns") $qp)
+  let req_body = {"continuationToken": $continuation_token, "filters": $filters, "lastUpdatedAfter": $last_updated_after, "lastUpdatedBefore": $last_updated_before, "orderBy": $order_by} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists triggers.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/triggers
 # operationId: Triggers_ListByFactory
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-triggers list-by" [
+export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-triggers list" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -1998,7 +2008,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, factory_name: $factory_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/triggers") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/triggers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2026,7 +2036,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, factory_name: $factory_name, trigger_name: $trigger_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/triggers/{trigger_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), trigger_name: (encode-path-segment $trigger_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/triggers/{trigger_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2055,11 +2065,11 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, factory_name: $factory_name, trigger_name: $trigger_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/triggers/{trigger_name}") $qp)
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), trigger_name: (encode-path-segment $trigger_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/triggers/{trigger_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2082,21 +2092,21 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version.
-  --if-match: string # ETag of the trigger entity.  Should only be specified for update, for which it should match existing entity or can be * for unconditional update.
+  --if-match: string # ETag of the trigger entity. Should only be specified for update, for which it should match existing entity or can be * for unconditional update.
   properties: record # Azure data factory nested object which contains information about creating pipeline run — shape: {annotations?: list, description?: string, runtimeState?: "Started"|"Stopped"|"Disabled", type: string}
 ]: any -> record<properties: record<annotations: list<record>, description: string, runtimeState: string, type: string>, etag: string, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, factory_name: $factory_name, trigger_name: $trigger_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/triggers/{trigger_name}") $qp)
-  let body = {"properties": $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"If-Match": $if_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), trigger_name: (encode-path-segment $trigger_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/triggers/{trigger_name}") $qp)
+  let req_body = {"properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"If-Match": $if_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get a trigger's event subscription status.
@@ -2121,7 +2131,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, factory_name: $factory_name, trigger_name: $trigger_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/triggers/{trigger_name}/getEventSubscriptionStatus") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), trigger_name: (encode-path-segment $trigger_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/triggers/{trigger_name}/getEventSubscriptionStatus") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2131,7 +2141,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/triggers/{triggerName}/rerunTriggers
 # operationId: RerunTriggers_ListByTrigger
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-triggers-rerun-triggers list-by" [
+export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-triggers-rerun-triggers list" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -2149,7 +2159,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, factory_name: $factory_name, trigger_name: $trigger_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/triggers/{trigger_name}/rerunTriggers") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), trigger_name: (encode-path-segment $trigger_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/triggers/{trigger_name}/rerunTriggers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2182,12 +2192,12 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, factory_name: $factory_name, trigger_name: $trigger_name, rerun_trigger_name: $rerun_trigger_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/triggers/{trigger_name}/rerunTriggers/{rerun_trigger_name}") $qp)
-  let body = {"endTime": $end_time, "maxConcurrency": $max_concurrency, "startTime": $start_time} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), trigger_name: (encode-path-segment $trigger_name), rerun_trigger_name: (encode-path-segment $rerun_trigger_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/triggers/{trigger_name}/rerunTriggers/{rerun_trigger_name}") $qp)
+  let req_body = {"endTime": $end_time, "maxConcurrency": $max_concurrency, "startTime": $start_time} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Cancels a trigger.
@@ -2213,7 +2223,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, factory_name: $factory_name, trigger_name: $trigger_name, rerun_trigger_name: $rerun_trigger_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/triggers/{trigger_name}/rerunTriggers/{rerun_trigger_name}/cancel") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), trigger_name: (encode-path-segment $trigger_name), rerun_trigger_name: (encode-path-segment $rerun_trigger_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/triggers/{trigger_name}/rerunTriggers/{rerun_trigger_name}/cancel") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2242,7 +2252,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, factory_name: $factory_name, trigger_name: $trigger_name, rerun_trigger_name: $rerun_trigger_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/triggers/{trigger_name}/rerunTriggers/{rerun_trigger_name}/start") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), trigger_name: (encode-path-segment $trigger_name), rerun_trigger_name: (encode-path-segment $rerun_trigger_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/triggers/{trigger_name}/rerunTriggers/{rerun_trigger_name}/start") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2271,7 +2281,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, factory_name: $factory_name, trigger_name: $trigger_name, rerun_trigger_name: $rerun_trigger_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/triggers/{trigger_name}/rerunTriggers/{rerun_trigger_name}/stop") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), trigger_name: (encode-path-segment $trigger_name), rerun_trigger_name: (encode-path-segment $rerun_trigger_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/triggers/{trigger_name}/rerunTriggers/{rerun_trigger_name}/stop") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2299,7 +2309,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, factory_name: $factory_name, trigger_name: $trigger_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/triggers/{trigger_name}/start") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), trigger_name: (encode-path-segment $trigger_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/triggers/{trigger_name}/start") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2327,7 +2337,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, factory_name: $factory_name, trigger_name: $trigger_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/triggers/{trigger_name}/stop") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), trigger_name: (encode-path-segment $trigger_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/triggers/{trigger_name}/stop") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2355,7 +2365,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, factory_name: $factory_name, trigger_name: $trigger_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/triggers/{trigger_name}/subscribeToEvents") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), trigger_name: (encode-path-segment $trigger_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/triggers/{trigger_name}/subscribeToEvents") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2365,7 +2375,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/triggers/{triggerName}/triggerRuns/{runId}/rerun
 # operationId: TriggerRuns_Rerun
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-triggers-trigger-runs-rerun post" [
+export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-triggers-trigger-runs-rerun trigger" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -2384,7 +2394,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, factory_name: $factory_name, trigger_name: $trigger_name, run_id: $run_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/triggers/{trigger_name}/triggerRuns/{run_id}/rerun") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), trigger_name: (encode-path-segment $trigger_name), run_id: (encode-path-segment $run_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/triggers/{trigger_name}/triggerRuns/{run_id}/rerun") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2412,7 +2422,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, factory_name: $factory_name, trigger_name: $trigger_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/triggers/{trigger_name}/unsubscribeFromEvents") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), trigger_name: (encode-path-segment $trigger_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/triggers/{trigger_name}/unsubscribeFromEvents") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

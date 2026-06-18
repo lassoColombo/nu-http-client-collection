@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -68,7 +77,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "listjson list-p-is" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "list-json list-ap-is" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -92,7 +101,7 @@ export def commands []: nothing -> table {
 #
 # GET /list.json
 # operationId: listAPIs
-export def "listjson list-p-is" [
+export def "list-json list-ap-is" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -114,7 +123,7 @@ export def "listjson list-p-is" [
 #
 # GET /metrics.json
 # operationId: getMetrics
-export def "metricsjson get-metrics" [
+export def "metrics-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -136,7 +145,7 @@ export def "metricsjson get-metrics" [
 #
 # GET /providers.json
 # operationId: getProviders
-export def "providersjson get-providers" [
+export def "providers-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -158,7 +167,7 @@ export def "providersjson get-providers" [
 #
 # GET /specs/{provider}/{api}.json
 # operationId: getAPI
-export def "specs get-pi" [
+export def "specs list" [
   provider: string
   api: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -172,7 +181,7 @@ export def "specs get-pi" [
 ]: nothing -> record<added: string, preferred: string, versions: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({provider: $provider, api: $api} | format pattern "/specs/{provider}/{api}.json"))
+  let full_url = (build-url $base ({provider: (encode-path-segment $provider), api: (encode-path-segment $api)} | format pattern "/specs/{provider}/{api}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -197,7 +206,7 @@ export def "specs get" [
 ]: nothing -> record<added: string, preferred: string, versions: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({provider: $provider, service: $service, api: $api} | format pattern "/specs/{provider}/{service}/{api}.json"))
+  let full_url = (build-url $base ({provider: (encode-path-segment $provider), service: (encode-path-segment $service), api: (encode-path-segment $api)} | format pattern "/specs/{provider}/{service}/{api}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -220,7 +229,7 @@ export def "ap-is get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({provider: $provider} | format pattern "/{provider}.json"))
+  let full_url = (build-url $base ({provider: (encode-path-segment $provider)} | format pattern "/{provider}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -230,7 +239,7 @@ export def "ap-is get" [
 #
 # GET /{provider}/services.json
 # operationId: getServices
-export def "servicesjson get-services" [
+export def "services-json get" [
   provider: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -243,7 +252,7 @@ export def "servicesjson get-services" [
 ]: nothing -> record<data: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({provider: $provider} | format pattern "/{provider}/services.json"))
+  let full_url = (build-url $base ({provider: (encode-path-segment $provider)} | format pattern "/{provider}/services.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

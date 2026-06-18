@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -71,7 +80,7 @@ def granularity-completer [] { ["daily" "hourly" "minutely" "monthly" "weekly" "
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "timeseries-change-point-detect post" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "timeseries-change-point-detect create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -96,7 +105,7 @@ export def commands []: nothing -> table {
 # POST /timeseries/changePoint/detect
 # operationId: ChangePointDetect
 # --series item shape: {timestamp: string, value: float}
-export def "timeseries-change-point-detect post" [
+export def "timeseries-change-point-detect create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -116,11 +125,11 @@ export def "timeseries-change-point-detect post" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/timeseries/changePoint/detect")
-  let body = {"customInterval": $custom_interval, "granularity": $granularity, "period": $period, "series": $series, "stableTrendWindow": $stable_trend_window, "threshold": $threshold} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"customInterval": $custom_interval, "granularity": $granularity, "period": $period, "series": $series, "stableTrendWindow": $stable_trend_window, "threshold": $threshold} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Detect anomalies for the entire series in batch.
@@ -128,7 +137,7 @@ export def "timeseries-change-point-detect post" [
 # POST /timeseries/entire/detect
 # operationId: EntireDetect
 # --series item shape: {timestamp: string, value: float}
-export def "timeseries-entire-detect post" [
+export def "timeseries-entire-detect create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -148,11 +157,11 @@ export def "timeseries-entire-detect post" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/timeseries/entire/detect")
-  let body = {"customInterval": $custom_interval, "granularity": $granularity, "maxAnomalyRatio": $max_anomaly_ratio, "period": $period, "sensitivity": $sensitivity, "series": $series} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"customInterval": $custom_interval, "granularity": $granularity, "maxAnomalyRatio": $max_anomaly_ratio, "period": $period, "sensitivity": $sensitivity, "series": $series} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Detect anomaly status of the latest point in time series.
@@ -160,7 +169,7 @@ export def "timeseries-entire-detect post" [
 # POST /timeseries/last/detect
 # operationId: LastDetect
 # --series item shape: {timestamp: string, value: float}
-export def "timeseries-last-detect post" [
+export def "timeseries-last-detect create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -180,9 +189,9 @@ export def "timeseries-last-detect post" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/timeseries/last/detect")
-  let body = {"customInterval": $custom_interval, "granularity": $granularity, "maxAnomalyRatio": $max_anomaly_ratio, "period": $period, "sensitivity": $sensitivity, "series": $series} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"customInterval": $custom_interval, "granularity": $granularity, "maxAnomalyRatio": $max_anomaly_ratio, "period": $period, "sensitivity": $sensitivity, "series": $series} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

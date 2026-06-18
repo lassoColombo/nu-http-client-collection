@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -72,7 +81,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1alpha1-claims-search factchecktoolsclaimssearch" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1alpha1-claims-search list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -96,7 +105,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1alpha1/claims:search
 # operationId: factchecktools.claims.search
-export def "v1alpha1-claims-search factchecktoolsclaimssearch" [
+export def "v1alpha1-claims-search list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -137,7 +146,7 @@ export def "v1alpha1-claims-search factchecktoolsclaimssearch" [
 #
 # GET /v1alpha1/pages
 # operationId: factchecktools.pages.list
-export def "v1alpha1-pages factchecktoolspageslist" [
+export def "v1alpha1-pages list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -161,11 +170,11 @@ export def "v1alpha1-pages factchecktoolspageslist" [
   --organization: string # The organization for which we want to fetch markups for. For instance, "site.com". Cannot be specified along with an URL.
   --page-size: int # The pagination size. We will return up to that many results. Defaults to 10 if not set. Has no effect if a URL is requested.
   --page-token: string # The pagination token. You may provide the `next_page_token` returned from a previous List request, if any, in order to get the next page. All other fields must have the same values as in the previous request.
-  --qp-url: string # The URL from which to get `ClaimReview` markup. There will be at most one result. If markup is associated with a more canonical version of the URL provided, we will return that URL instead. Cannot be specified along with an organization.
+  --url: string # The URL from which to get `ClaimReview` markup. There will be at most one result. If markup is associated with a more canonical version of the URL provided, we will return that URL instead. Cannot be specified along with an organization.
 ]: nothing -> record<claimReviewMarkupPages: table<claimReviewAuthor: record, claimReviewMarkups: list, name: string, pageUrl: string, publishDate: string, versionId: string>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "organization" $organization "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "url" $qp_url "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "organization" $organization "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "url" $url "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1alpha1/pages" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -177,8 +186,8 @@ export def "v1alpha1-pages factchecktoolspageslist" [
 # POST /v1alpha1/pages
 # operationId: factchecktools.pages.create
 # --claimReviewAuthor shape: {imageUrl?: string, name?: string}
-# --claimReviewMarkups item shape: {claimAppearances?: list, claimAuthor?: record, claimDate?: string, claimFirstAppearance?: string, claimLocation?: string, claimReviewed?: string, rating?: record, url?: string}
-export def "v1alpha1-pages factchecktoolspagescreate" [
+# --claimReviewMarkups item shape: {claimAppearances?: list<string>, claimAuthor?: record, claimDate?: string, claimFirstAppearance?: string, claimLocation?: string, claimReviewed?: string, rating?: record, url?: string}
+export def "v1alpha1-pages create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -199,7 +208,7 @@ export def "v1alpha1-pages factchecktoolspagescreate" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --claim-review-author: record # Information about the claim review author. — shape: {imageUrl?: string, name?: string}
-  --claim-review-markups: list # A list of individual claim reviews for this page. Each item in the list corresponds to one `ClaimReview` element. — item shape: {claimAppearances?: list, claimAuthor?: record, claimDate?: string, claimFirstAppearance?: string, claimLocation?: string, claimReviewed?: string, rating?: record, url?: string}
+  --claim-review-markups: list # A list of individual claim reviews for this page. Each item in the list corresponds to one `ClaimReview` element. — item shape: {claimAppearances?: list<string>, claimAuthor?: record, claimDate?: string, claimFirstAppearance?: string, claimLocation?: string, claimReviewed?: string, rating?: record, url?: string}
   --name: string # The name of this `ClaimReview` markup page resource, in the form of `pages/{page_id}`. Except for update requests, this field is output-only and should not be set by the user.
   --page-url: string # The URL of the page associated with this `ClaimReview` markup. While every individual `ClaimReview` has its own URL field, semantically this is a page-level field, and each `ClaimReview` on this page will use this value unless individually overridden. Corresponds to `ClaimReview.url`
   --publish-date: string # The date when the fact check was published. Similar to the URL, semantically this is a page-level field, and each `ClaimReview` on this page will contain the same value. Corresponds to `ClaimReview.datePublished`
@@ -210,18 +219,18 @@ export def "v1alpha1-pages factchecktoolspagescreate" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1alpha1/pages" $qp)
-  let body = {"claimReviewAuthor": $claim_review_author, "claimReviewMarkups": $claim_review_markups, "name": $name, "pageUrl": $page_url, "publishDate": $publish_date, "versionId": $version_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"claimReviewAuthor": $claim_review_author, "claimReviewMarkups": $claim_review_markups, "name": $name, "pageUrl": $page_url, "publishDate": $publish_date, "versionId": $version_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete all `ClaimReview` markup on a page.
 #
 # DELETE /v1alpha1/{name}
 # operationId: factchecktools.pages.delete
-export def "v1alpha1 factchecktoolspagesdelete" [
+export def "v1alpha1 delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -246,7 +255,7 @@ export def "v1alpha1 factchecktoolspagesdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1alpha1/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1alpha1/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -256,7 +265,7 @@ export def "v1alpha1 factchecktoolspagesdelete" [
 #
 # GET /v1alpha1/{name}
 # operationId: factchecktools.pages.get
-export def "v1alpha1 factchecktoolspagesget" [
+export def "v1alpha1 get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -281,7 +290,7 @@ export def "v1alpha1 factchecktoolspagesget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1alpha1/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1alpha1/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -292,8 +301,8 @@ export def "v1alpha1 factchecktoolspagesget" [
 # PUT /v1alpha1/{name}
 # operationId: factchecktools.pages.update
 # --claimReviewAuthor shape: {imageUrl?: string, name?: string}
-# --claimReviewMarkups item shape: {claimAppearances?: list, claimAuthor?: record, claimDate?: string, claimFirstAppearance?: string, claimLocation?: string, claimReviewed?: string, rating?: record, url?: string}
-export def "v1alpha1 factchecktoolspagesupdate" [
+# --claimReviewMarkups item shape: {claimAppearances?: list<string>, claimAuthor?: record, claimDate?: string, claimFirstAppearance?: string, claimLocation?: string, claimReviewed?: string, rating?: record, url?: string}
+export def "v1alpha1 update" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -315,7 +324,7 @@ export def "v1alpha1 factchecktoolspagesupdate" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --claim-review-author: record # Information about the claim review author. — shape: {imageUrl?: string, name?: string}
-  --claim-review-markups: list # A list of individual claim reviews for this page. Each item in the list corresponds to one `ClaimReview` element. — item shape: {claimAppearances?: list, claimAuthor?: record, claimDate?: string, claimFirstAppearance?: string, claimLocation?: string, claimReviewed?: string, rating?: record, url?: string}
+  --claim-review-markups: list # A list of individual claim reviews for this page. Each item in the list corresponds to one `ClaimReview` element. — item shape: {claimAppearances?: list<string>, claimAuthor?: record, claimDate?: string, claimFirstAppearance?: string, claimLocation?: string, claimReviewed?: string, rating?: record, url?: string}
   --body-name: string # The name of this `ClaimReview` markup page resource, in the form of `pages/{page_id}`. Except for update requests, this field is output-only and should not be set by the user.
   --page-url: string # The URL of the page associated with this `ClaimReview` markup. While every individual `ClaimReview` has its own URL field, semantically this is a page-level field, and each `ClaimReview` on this page will use this value unless individually overridden. Corresponds to `ClaimReview.url`
   --publish-date: string # The date when the fact check was published. Similar to the URL, semantically this is a page-level field, and each `ClaimReview` on this page will contain the same value. Corresponds to `ClaimReview.datePublished`
@@ -325,10 +334,10 @@ export def "v1alpha1 factchecktoolspagesupdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1alpha1/{name}") $qp)
-  let body = {"claimReviewAuthor": $claim_review_author, "claimReviewMarkups": $claim_review_markups, "name": $body_name, "pageUrl": $page_url, "publishDate": $publish_date, "versionId": $version_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1alpha1/{name}") $qp)
+  let req_body = {"claimReviewAuthor": $claim_review_author, "claimReviewMarkups": $claim_review_markups, "name": $body_name, "pageUrl": $page_url, "publishDate": $publish_date, "versionId": $version_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

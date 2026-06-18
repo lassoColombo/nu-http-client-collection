@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -69,7 +78,7 @@ def auth-scheme-completer [] { ["apikey"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "forms findForms" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "forms list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,7 +102,7 @@ export def commands []: nothing -> table {
 #
 # GET /forms
 # operationId: findForms
-export def "forms findForms" [
+export def "forms list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -117,7 +126,7 @@ export def "forms findForms" [
 #
 # GET /forms/{form_name}
 # operationId: findFormByFormName
-export def "forms findFormByFormName" [
+export def "forms find" [
   form_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -130,7 +139,7 @@ export def "forms findFormByFormName" [
 ]: nothing -> record<data: record<attributes: record<benefit_categories: list, created_at: string, deleted_at: string, first_issued_on: string, form_details_url: string, form_name: string, form_tool_intro: string, form_tool_url: string, form_type: string, form_usage: string, language: string, last_revision_on: string, pages: int, related_forms: list, sha256: string, title: string, url: string, va_form_administration: string, valid_pdf: bool, versions: list>, id: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({form_name: $form_name} | format pattern "/forms/{form_name}"))
+  let full_url = (build-url $base ({form_name: (encode-path-segment $form_name)} | format pattern "/forms/{form_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

@@ -12,6 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
   match $scheme {
     "basic" => { {headers: {Authorization: $"Basic ($token_val)"}, query: ""} }
+    "basic-credentials" => { {headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: ""} }
     "none" => { {headers: {}, query: ""} }
     _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
   }
@@ -33,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
     "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
     _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -63,7 +73,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 }
 
 def base-url-completer [] { ["https://voice.twilio.com"] }
-def auth-scheme-completer [] { ["basic"] }
+def auth-scheme-completer [] { ["basic" "basic-credentials"] }
 
 # Completers for enum parameters
 def status-callback-method-completer [] { ["DELETE" "GET" "HEAD" "PATCH" "POST" "PUT"] }
@@ -111,7 +121,7 @@ export def "archives-calls delete-archived" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://voice.twilio.com")
-  let full_url = (build-url $base ({date: $date, sid: $sid} | format pattern "/v1/Archives/{date}/Calls/{sid}"))
+  let full_url = (build-url $base ({date: (encode-path-segment $date), sid: (encode-path-segment $sid)} | format pattern "/v1/Archives/{date}/Calls/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -169,11 +179,12 @@ export def "byoc-trunks create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://voice.twilio.com")
   let full_url = (build-url $base "/v1/ByocTrunks")
-  let body = {"CnamLookupEnabled": $cnam_lookup_enabled, "ConnectionPolicySid": $connection_policy_sid, "FriendlyName": $friendly_name, "FromDomainSid": $from_domain_sid, "StatusCallbackMethod": $status_callback_method, "StatusCallbackUrl": $status_callback_url, "VoiceFallbackMethod": $voice_fallback_method, "VoiceFallbackUrl": $voice_fallback_url, "VoiceMethod": $voice_method, "VoiceUrl": $voice_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"CnamLookupEnabled": $cnam_lookup_enabled, "ConnectionPolicySid": $connection_policy_sid, "FriendlyName": $friendly_name, "FromDomainSid": $from_domain_sid, "StatusCallbackMethod": $status_callback_method, "StatusCallbackUrl": $status_callback_url, "VoiceFallbackMethod": $voice_fallback_method, "VoiceFallbackUrl": $voice_fallback_url, "VoiceMethod": $voice_method, "VoiceUrl": $voice_url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # DELETE /v1/ByocTrunks/{Sid}
@@ -192,7 +203,7 @@ export def "byoc-trunks delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://voice.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/ByocTrunks/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/ByocTrunks/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -214,7 +225,7 @@ export def "byoc-trunks get" [
 ]: nothing -> record<account_sid: string, cnam_lookup_enabled: bool, connection_policy_sid: string, date_created: string, date_updated: string, friendly_name: string, from_domain_sid: string, sid: string, status_callback_method: string, status_callback_url: string, url: string, voice_fallback_method: string, voice_fallback_url: string, voice_method: string, voice_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://voice.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/ByocTrunks/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/ByocTrunks/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -247,18 +258,19 @@ export def "byoc-trunks update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://voice.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/ByocTrunks/{sid}"))
-  let body = {"CnamLookupEnabled": $cnam_lookup_enabled, "ConnectionPolicySid": $connection_policy_sid, "FriendlyName": $friendly_name, "FromDomainSid": $from_domain_sid, "StatusCallbackMethod": $status_callback_method, "StatusCallbackUrl": $status_callback_url, "VoiceFallbackMethod": $voice_fallback_method, "VoiceFallbackUrl": $voice_fallback_url, "VoiceMethod": $voice_method, "VoiceUrl": $voice_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/ByocTrunks/{sid}"))
+  let req_body = {"CnamLookupEnabled": $cnam_lookup_enabled, "ConnectionPolicySid": $connection_policy_sid, "FriendlyName": $friendly_name, "FromDomainSid": $from_domain_sid, "StatusCallbackMethod": $status_callback_method, "StatusCallbackUrl": $status_callback_url, "VoiceFallbackMethod": $voice_fallback_method, "VoiceFallbackUrl": $voice_fallback_url, "VoiceMethod": $voice_method, "VoiceUrl": $voice_url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # GET /v1/ConnectionPolicies
 #
 # operationId: ListConnectionPolicy
-export def "connection-policies list-connection-policy" [
+export def "connection-policies list-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -283,7 +295,7 @@ export def "connection-policies list-connection-policy" [
 # POST /v1/ConnectionPolicies
 #
 # operationId: CreateConnectionPolicy
-export def "connection-policies create-connection-policy" [
+export def "connection-policies create-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -298,17 +310,18 @@ export def "connection-policies create-connection-policy" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://voice.twilio.com")
   let full_url = (build-url $base "/v1/ConnectionPolicies")
-  let body = {"FriendlyName": $friendly_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"FriendlyName": $friendly_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # GET /v1/ConnectionPolicies/{ConnectionPolicySid}/Targets
 #
 # operationId: ListConnectionPolicyTarget
-export def "connection-policies-targets list-connection-policy" [
+export def "connection-policies-targets list-policy" [
   connection_policy_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -325,7 +338,7 @@ export def "connection-policies-targets list-connection-policy" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://voice.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({connection_policy_sid: $connection_policy_sid} | format pattern "/v1/ConnectionPolicies/{connection_policy_sid}/Targets") $qp)
+  let full_url = (build-url $base ({connection_policy_sid: (encode-path-segment $connection_policy_sid)} | format pattern "/v1/ConnectionPolicies/{connection_policy_sid}/Targets") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -334,7 +347,7 @@ export def "connection-policies-targets list-connection-policy" [
 # POST /v1/ConnectionPolicies/{ConnectionPolicySid}/Targets
 #
 # operationId: CreateConnectionPolicyTarget
-export def "connection-policies-targets create-connection-policy" [
+export def "connection-policies-targets create-policy" [
   connection_policy_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -353,18 +366,19 @@ export def "connection-policies-targets create-connection-policy" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://voice.twilio.com")
-  let full_url = (build-url $base ({connection_policy_sid: $connection_policy_sid} | format pattern "/v1/ConnectionPolicies/{connection_policy_sid}/Targets"))
-  let body = {"Enabled": $enabled, "FriendlyName": $friendly_name, "Priority": $priority, "Target": $target, "Weight": $weight} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({connection_policy_sid: (encode-path-segment $connection_policy_sid)} | format pattern "/v1/ConnectionPolicies/{connection_policy_sid}/Targets"))
+  let req_body = {"Enabled": $enabled, "FriendlyName": $friendly_name, "Priority": $priority, "Target": $target, "Weight": $weight} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # DELETE /v1/ConnectionPolicies/{ConnectionPolicySid}/Targets/{Sid}
 #
 # operationId: DeleteConnectionPolicyTarget
-export def "connection-policies-targets delete-connection-policy" [
+export def "connection-policies-targets delete-policy" [
   connection_policy_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -378,7 +392,7 @@ export def "connection-policies-targets delete-connection-policy" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://voice.twilio.com")
-  let full_url = (build-url $base ({connection_policy_sid: $connection_policy_sid, sid: $sid} | format pattern "/v1/ConnectionPolicies/{connection_policy_sid}/Targets/{sid}"))
+  let full_url = (build-url $base ({connection_policy_sid: (encode-path-segment $connection_policy_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/ConnectionPolicies/{connection_policy_sid}/Targets/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -387,7 +401,7 @@ export def "connection-policies-targets delete-connection-policy" [
 # GET /v1/ConnectionPolicies/{ConnectionPolicySid}/Targets/{Sid}
 #
 # operationId: FetchConnectionPolicyTarget
-export def "connection-policies-targets get-connection-policy" [
+export def "connection-policies-targets get-policy" [
   connection_policy_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -401,7 +415,7 @@ export def "connection-policies-targets get-connection-policy" [
 ]: nothing -> record<account_sid: string, connection_policy_sid: string, date_created: string, date_updated: string, enabled: bool, friendly_name: string, priority: int, sid: string, target: string, url: string, weight: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://voice.twilio.com")
-  let full_url = (build-url $base ({connection_policy_sid: $connection_policy_sid, sid: $sid} | format pattern "/v1/ConnectionPolicies/{connection_policy_sid}/Targets/{sid}"))
+  let full_url = (build-url $base ({connection_policy_sid: (encode-path-segment $connection_policy_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/ConnectionPolicies/{connection_policy_sid}/Targets/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -410,7 +424,7 @@ export def "connection-policies-targets get-connection-policy" [
 # POST /v1/ConnectionPolicies/{ConnectionPolicySid}/Targets/{Sid}
 #
 # operationId: UpdateConnectionPolicyTarget
-export def "connection-policies-targets update-connection-policy" [
+export def "connection-policies-targets update-policy" [
   connection_policy_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -430,18 +444,19 @@ export def "connection-policies-targets update-connection-policy" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://voice.twilio.com")
-  let full_url = (build-url $base ({connection_policy_sid: $connection_policy_sid, sid: $sid} | format pattern "/v1/ConnectionPolicies/{connection_policy_sid}/Targets/{sid}"))
-  let body = {"Enabled": $enabled, "FriendlyName": $friendly_name, "Priority": $priority, "Target": $target, "Weight": $weight} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({connection_policy_sid: (encode-path-segment $connection_policy_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/ConnectionPolicies/{connection_policy_sid}/Targets/{sid}"))
+  let req_body = {"Enabled": $enabled, "FriendlyName": $friendly_name, "Priority": $priority, "Target": $target, "Weight": $weight} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # DELETE /v1/ConnectionPolicies/{Sid}
 #
 # operationId: DeleteConnectionPolicy
-export def "connection-policies delete-connection-policy" [
+export def "connection-policies delete-policy" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -454,7 +469,7 @@ export def "connection-policies delete-connection-policy" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://voice.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/ConnectionPolicies/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/ConnectionPolicies/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -463,7 +478,7 @@ export def "connection-policies delete-connection-policy" [
 # GET /v1/ConnectionPolicies/{Sid}
 #
 # operationId: FetchConnectionPolicy
-export def "connection-policies get-connection-policy" [
+export def "connection-policies get-policy" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -476,7 +491,7 @@ export def "connection-policies get-connection-policy" [
 ]: nothing -> record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, links: record, sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://voice.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/ConnectionPolicies/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/ConnectionPolicies/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -485,7 +500,7 @@ export def "connection-policies get-connection-policy" [
 # POST /v1/ConnectionPolicies/{Sid}
 #
 # operationId: UpdateConnectionPolicy
-export def "connection-policies update-connection-policy" [
+export def "connection-policies update-policy" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -500,12 +515,13 @@ export def "connection-policies update-connection-policy" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://voice.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/ConnectionPolicies/{sid}"))
-  let body = {"FriendlyName": $friendly_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/ConnectionPolicies/{sid}"))
+  let req_body = {"FriendlyName": $friendly_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Create a bulk update request to change voice dialing country permissions of one or more countries identified by the corresponding [ISO country code](https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2)
@@ -527,18 +543,19 @@ export def "dialing-permissions-bulk-country-updates create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://voice.twilio.com")
   let full_url = (build-url $base "/v1/DialingPermissions/BulkCountryUpdates")
-  let body = {"UpdateRequest": $update_request} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"UpdateRequest": $update_request} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Retrieve all voice dialing country permissions for this account
 #
 # GET /v1/DialingPermissions/Countries
 # operationId: ListDialingPermissionsCountry
-export def "dialing-permissions-countries list-dialing-permissions-country" [
+export def "dialing-permissions-countries list-country" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -570,7 +587,7 @@ export def "dialing-permissions-countries list-dialing-permissions-country" [
 #
 # GET /v1/DialingPermissions/Countries/{IsoCode}
 # operationId: FetchDialingPermissionsCountry
-export def "dialing-permissions-countries get-dialing-permissions-country" [
+export def "dialing-permissions-countries get-country" [
   iso_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -583,7 +600,7 @@ export def "dialing-permissions-countries get-dialing-permissions-country" [
 ]: nothing -> record<continent: string, country_codes: list<string>, high_risk_special_numbers_enabled: bool, high_risk_tollfraud_numbers_enabled: bool, iso_code: string, links: record, low_risk_numbers_enabled: bool, name: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://voice.twilio.com")
-  let full_url = (build-url $base ({iso_code: $iso_code} | format pattern "/v1/DialingPermissions/Countries/{iso_code}"))
+  let full_url = (build-url $base ({iso_code: (encode-path-segment $iso_code)} | format pattern "/v1/DialingPermissions/Countries/{iso_code}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -593,7 +610,7 @@ export def "dialing-permissions-countries get-dialing-permissions-country" [
 #
 # GET /v1/DialingPermissions/Countries/{IsoCode}/HighRiskSpecialPrefixes
 # operationId: ListDialingPermissionsHrsPrefixes
-export def "dialing-permissions-countries-high-risk-special-prefixes list-dialing-permissions-hrs" [
+export def "dialing-permissions-countries-high-risk-special-prefixes list-hrs" [
   iso_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -610,7 +627,7 @@ export def "dialing-permissions-countries-high-risk-special-prefixes list-dialin
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://voice.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({iso_code: $iso_code} | format pattern "/v1/DialingPermissions/Countries/{iso_code}/HighRiskSpecialPrefixes") $qp)
+  let full_url = (build-url $base ({iso_code: (encode-path-segment $iso_code)} | format pattern "/v1/DialingPermissions/Countries/{iso_code}/HighRiskSpecialPrefixes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -661,11 +678,12 @@ export def "ip-records create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://voice.twilio.com")
   let full_url = (build-url $base "/v1/IpRecords")
-  let body = {"CidrPrefixLength": $cidr_prefix_length, "FriendlyName": $friendly_name, "IpAddress": $ip_address} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"CidrPrefixLength": $cidr_prefix_length, "FriendlyName": $friendly_name, "IpAddress": $ip_address} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # DELETE /v1/IpRecords/{Sid}
@@ -684,7 +702,7 @@ export def "ip-records delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://voice.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/IpRecords/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/IpRecords/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -706,7 +724,7 @@ export def "ip-records get" [
 ]: nothing -> record<account_sid: string, cidr_prefix_length: int, date_created: string, date_updated: string, friendly_name: string, ip_address: string, sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://voice.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/IpRecords/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/IpRecords/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -730,12 +748,13 @@ export def "ip-records update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://voice.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/IpRecords/{sid}"))
-  let body = {"FriendlyName": $friendly_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/IpRecords/{sid}"))
+  let req_body = {"FriendlyName": $friendly_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Retrieve voice dialing permissions inheritance for the sub-account
@@ -779,11 +798,12 @@ export def "settings update-dialing-permissions" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://voice.twilio.com")
   let full_url = (build-url $base "/v1/Settings")
-  let body = {"DialingPermissionsInheritance": $dialing_permissions_inheritance} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"DialingPermissionsInheritance": $dialing_permissions_inheritance} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # GET /v1/SourceIpMappings
@@ -830,11 +850,12 @@ export def "source-ip-mappings create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://voice.twilio.com")
   let full_url = (build-url $base "/v1/SourceIpMappings")
-  let body = {"IpRecordSid": $ip_record_sid, "SipDomainSid": $sip_domain_sid} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"IpRecordSid": $ip_record_sid, "SipDomainSid": $sip_domain_sid} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # DELETE /v1/SourceIpMappings/{Sid}
@@ -853,7 +874,7 @@ export def "source-ip-mappings delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://voice.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/SourceIpMappings/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/SourceIpMappings/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -875,7 +896,7 @@ export def "source-ip-mappings get" [
 ]: nothing -> record<date_created: string, date_updated: string, ip_record_sid: string, sid: string, sip_domain_sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://voice.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/SourceIpMappings/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/SourceIpMappings/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -899,10 +920,11 @@ export def "source-ip-mappings update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://voice.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/SourceIpMappings/{sid}"))
-  let body = {"SipDomainSid": $sip_domain_sid} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/SourceIpMappings/{sid}"))
+  let req_body = {"SipDomainSid": $sip_domain_sid} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }

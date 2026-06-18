@@ -12,6 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
   match $scheme {
     "basic" => { {headers: {Authorization: $"Basic ($token_val)"}, query: ""} }
+    "basic-credentials" => { {headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: ""} }
     "none" => { {headers: {}, query: ""} }
     _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
   }
@@ -33,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
     "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
     _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -63,7 +73,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 }
 
 def base-url-completer [] { ["https://taskrouter.twilio.com"] }
-def auth-scheme-completer [] { ["basic"] }
+def auth-scheme-completer [] { ["basic" "basic-credentials"] }
 
 # Completers for enum parameters
 def prioritize-queue-order-completer [] { ["FIFO" "LIFO"] }
@@ -149,11 +159,12 @@ export def "workspaces create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
   let full_url = (build-url $base "/v1/Workspaces")
-  let body = {"EventCallbackUrl": $event_callback_url, "EventsFilter": $events_filter, "FriendlyName": $friendly_name, "MultiTaskEnabled": $multi_task_enabled, "PrioritizeQueueOrder": $prioritize_queue_order, "Template": $template} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"EventCallbackUrl": $event_callback_url, "EventsFilter": $events_filter, "FriendlyName": $friendly_name, "MultiTaskEnabled": $multi_task_enabled, "PrioritizeQueueOrder": $prioritize_queue_order, "Template": $template} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # DELETE /v1/Workspaces/{Sid}
@@ -172,7 +183,7 @@ export def "workspaces delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/Workspaces/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Workspaces/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -194,7 +205,7 @@ export def "workspaces get" [
 ]: nothing -> record<account_sid: string, date_created: string, date_updated: string, default_activity_name: string, default_activity_sid: string, event_callback_url: string, events_filter: string, friendly_name: string, links: record, multi_task_enabled: bool, prioritize_queue_order: string, sid: string, timeout_activity_name: string, timeout_activity_sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/Workspaces/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Workspaces/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -224,12 +235,13 @@ export def "workspaces update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/Workspaces/{sid}"))
-  let body = {"DefaultActivitySid": $default_activity_sid, "EventCallbackUrl": $event_callback_url, "EventsFilter": $events_filter, "FriendlyName": $friendly_name, "MultiTaskEnabled": $multi_task_enabled, "PrioritizeQueueOrder": $prioritize_queue_order, "TimeoutActivitySid": $timeout_activity_sid} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Workspaces/{sid}"))
+  let req_body = {"DefaultActivitySid": $default_activity_sid, "EventCallbackUrl": $event_callback_url, "EventsFilter": $events_filter, "FriendlyName": $friendly_name, "MultiTaskEnabled": $multi_task_enabled, "PrioritizeQueueOrder": $prioritize_queue_order, "TimeoutActivitySid": $timeout_activity_sid} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # GET /v1/Workspaces/{WorkspaceSid}/Activities
@@ -254,7 +266,7 @@ export def "workspaces-activities list-activity" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
   let qp = [(serialize-qp "FriendlyName" $friendly_name "scalar") (serialize-qp "Available" $available "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({workspace_sid: $workspace_sid} | format pattern "/v1/Workspaces/{workspace_sid}/Activities") $qp)
+  let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Activities") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -279,12 +291,13 @@ export def "workspaces-activities create-activity" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
-  let full_url = (build-url $base ({workspace_sid: $workspace_sid} | format pattern "/v1/Workspaces/{workspace_sid}/Activities"))
-  let body = {"Available": $available, "FriendlyName": $friendly_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Activities"))
+  let req_body = {"Available": $available, "FriendlyName": $friendly_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # DELETE /v1/Workspaces/{WorkspaceSid}/Activities/{Sid}
@@ -304,7 +317,7 @@ export def "workspaces-activities delete-activity" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
-  let full_url = (build-url $base ({workspace_sid: $workspace_sid, sid: $sid} | format pattern "/v1/Workspaces/{workspace_sid}/Activities/{sid}"))
+  let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Activities/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -327,7 +340,7 @@ export def "workspaces-activities get-activity" [
 ]: nothing -> record<account_sid: string, available: bool, date_created: string, date_updated: string, friendly_name: string, links: record, sid: string, url: string, workspace_sid: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
-  let full_url = (build-url $base ({workspace_sid: $workspace_sid, sid: $sid} | format pattern "/v1/Workspaces/{workspace_sid}/Activities/{sid}"))
+  let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Activities/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -352,12 +365,13 @@ export def "workspaces-activities update-activity" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
-  let full_url = (build-url $base ({workspace_sid: $workspace_sid, sid: $sid} | format pattern "/v1/Workspaces/{workspace_sid}/Activities/{sid}"))
-  let body = {"FriendlyName": $friendly_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Activities/{sid}"))
+  let req_body = {"FriendlyName": $friendly_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # GET /v1/Workspaces/{WorkspaceSid}/CumulativeStatistics
@@ -382,7 +396,7 @@ export def "workspaces-cumulative-statistics get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
   let qp = [(serialize-qp "EndDate" $end_date "scalar") (serialize-qp "Minutes" $minutes "scalar") (serialize-qp "StartDate" $start_date "scalar") (serialize-qp "TaskChannel" $task_channel "scalar") (serialize-qp "SplitByWaitTime" $split_by_wait_time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({workspace_sid: $workspace_sid} | format pattern "/v1/Workspaces/{workspace_sid}/CumulativeStatistics") $qp)
+  let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid)} | format pattern "/v1/Workspaces/{workspace_sid}/CumulativeStatistics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -419,7 +433,7 @@ export def "workspaces-events list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
   let qp = [(serialize-qp "EndDate" $end_date "scalar") (serialize-qp "EventType" $event_type "scalar") (serialize-qp "Minutes" $minutes "scalar") (serialize-qp "ReservationSid" $reservation_sid "scalar") (serialize-qp "StartDate" $start_date "scalar") (serialize-qp "TaskQueueSid" $task_queue_sid "scalar") (serialize-qp "TaskSid" $task_sid "scalar") (serialize-qp "WorkerSid" $worker_sid "scalar") (serialize-qp "WorkflowSid" $workflow_sid "scalar") (serialize-qp "TaskChannel" $task_channel "scalar") (serialize-qp "Sid" $sid "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({workspace_sid: $workspace_sid} | format pattern "/v1/Workspaces/{workspace_sid}/Events") $qp)
+  let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Events") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -442,7 +456,7 @@ export def "workspaces-events get" [
 ]: nothing -> record<account_sid: string, actor_sid: string, actor_type: string, actor_url: string, description: string, event_data: any, event_date: string, event_date_ms: int, event_type: string, resource_sid: string, resource_type: string, resource_url: string, sid: string, source: string, source_ip_address: string, url: string, workspace_sid: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
-  let full_url = (build-url $base ({workspace_sid: $workspace_sid, sid: $sid} | format pattern "/v1/Workspaces/{workspace_sid}/Events/{sid}"))
+  let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Events/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -466,7 +480,7 @@ export def "workspaces-real-time-statistics get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
   let qp = [(serialize-qp "TaskChannel" $task_channel "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({workspace_sid: $workspace_sid} | format pattern "/v1/Workspaces/{workspace_sid}/RealTimeStatistics") $qp)
+  let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid)} | format pattern "/v1/Workspaces/{workspace_sid}/RealTimeStatistics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -494,7 +508,7 @@ export def "workspaces-statistics get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
   let qp = [(serialize-qp "Minutes" $minutes "scalar") (serialize-qp "StartDate" $start_date "scalar") (serialize-qp "EndDate" $end_date "scalar") (serialize-qp "TaskChannel" $task_channel "scalar") (serialize-qp "SplitByWaitTime" $split_by_wait_time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({workspace_sid: $workspace_sid} | format pattern "/v1/Workspaces/{workspace_sid}/Statistics") $qp)
+  let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Statistics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -520,7 +534,7 @@ export def "workspaces-task-channels list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({workspace_sid: $workspace_sid} | format pattern "/v1/Workspaces/{workspace_sid}/TaskChannels") $qp)
+  let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid)} | format pattern "/v1/Workspaces/{workspace_sid}/TaskChannels") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -546,12 +560,13 @@ export def "workspaces-task-channels create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
-  let full_url = (build-url $base ({workspace_sid: $workspace_sid} | format pattern "/v1/Workspaces/{workspace_sid}/TaskChannels"))
-  let body = {"ChannelOptimizedRouting": $channel_optimized_routing, "FriendlyName": $friendly_name, "UniqueName": $unique_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid)} | format pattern "/v1/Workspaces/{workspace_sid}/TaskChannels"))
+  let req_body = {"ChannelOptimizedRouting": $channel_optimized_routing, "FriendlyName": $friendly_name, "UniqueName": $unique_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # DELETE /v1/Workspaces/{WorkspaceSid}/TaskChannels/{Sid}
@@ -571,7 +586,7 @@ export def "workspaces-task-channels delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
-  let full_url = (build-url $base ({workspace_sid: $workspace_sid, sid: $sid} | format pattern "/v1/Workspaces/{workspace_sid}/TaskChannels/{sid}"))
+  let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Workspaces/{workspace_sid}/TaskChannels/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -594,7 +609,7 @@ export def "workspaces-task-channels get" [
 ]: nothing -> record<account_sid: string, channel_optimized_routing: bool, date_created: string, date_updated: string, friendly_name: string, links: record, sid: string, unique_name: string, url: string, workspace_sid: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
-  let full_url = (build-url $base ({workspace_sid: $workspace_sid, sid: $sid} | format pattern "/v1/Workspaces/{workspace_sid}/TaskChannels/{sid}"))
+  let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Workspaces/{workspace_sid}/TaskChannels/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -620,12 +635,13 @@ export def "workspaces-task-channels update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
-  let full_url = (build-url $base ({workspace_sid: $workspace_sid, sid: $sid} | format pattern "/v1/Workspaces/{workspace_sid}/TaskChannels/{sid}"))
-  let body = {"ChannelOptimizedRouting": $channel_optimized_routing, "FriendlyName": $friendly_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Workspaces/{workspace_sid}/TaskChannels/{sid}"))
+  let req_body = {"ChannelOptimizedRouting": $channel_optimized_routing, "FriendlyName": $friendly_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # GET /v1/Workspaces/{WorkspaceSid}/TaskQueues
@@ -652,7 +668,7 @@ export def "workspaces-task-queues list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
   let qp = [(serialize-qp "FriendlyName" $friendly_name "scalar") (serialize-qp "EvaluateWorkerAttributes" $evaluate_worker_attributes "scalar") (serialize-qp "WorkerSid" $worker_sid "scalar") (serialize-qp "Ordering" $ordering "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({workspace_sid: $workspace_sid} | format pattern "/v1/Workspaces/{workspace_sid}/TaskQueues") $qp)
+  let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid)} | format pattern "/v1/Workspaces/{workspace_sid}/TaskQueues") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -681,12 +697,13 @@ export def "workspaces-task-queues create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
-  let full_url = (build-url $base ({workspace_sid: $workspace_sid} | format pattern "/v1/Workspaces/{workspace_sid}/TaskQueues"))
-  let body = {"AssignmentActivitySid": $assignment_activity_sid, "FriendlyName": $friendly_name, "MaxReservedWorkers": $max_reserved_workers, "ReservationActivitySid": $reservation_activity_sid, "TargetWorkers": $target_workers, "TaskOrder": $task_order} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid)} | format pattern "/v1/Workspaces/{workspace_sid}/TaskQueues"))
+  let req_body = {"AssignmentActivitySid": $assignment_activity_sid, "FriendlyName": $friendly_name, "MaxReservedWorkers": $max_reserved_workers, "ReservationActivitySid": $reservation_activity_sid, "TargetWorkers": $target_workers, "TaskOrder": $task_order} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # GET /v1/Workspaces/{WorkspaceSid}/TaskQueues/Statistics
@@ -715,7 +732,7 @@ export def "workspaces-task-queues-statistics list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
   let qp = [(serialize-qp "EndDate" $end_date "scalar") (serialize-qp "FriendlyName" $friendly_name "scalar") (serialize-qp "Minutes" $minutes "scalar") (serialize-qp "StartDate" $start_date "scalar") (serialize-qp "TaskChannel" $task_channel "scalar") (serialize-qp "SplitByWaitTime" $split_by_wait_time "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({workspace_sid: $workspace_sid} | format pattern "/v1/Workspaces/{workspace_sid}/TaskQueues/Statistics") $qp)
+  let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid)} | format pattern "/v1/Workspaces/{workspace_sid}/TaskQueues/Statistics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -738,7 +755,7 @@ export def "workspaces-task-queues delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
-  let full_url = (build-url $base ({workspace_sid: $workspace_sid, sid: $sid} | format pattern "/v1/Workspaces/{workspace_sid}/TaskQueues/{sid}"))
+  let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Workspaces/{workspace_sid}/TaskQueues/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -761,7 +778,7 @@ export def "workspaces-task-queues get" [
 ]: nothing -> record<account_sid: string, assignment_activity_name: string, assignment_activity_sid: string, date_created: string, date_updated: string, friendly_name: string, links: record, max_reserved_workers: int, reservation_activity_name: string, reservation_activity_sid: string, sid: string, target_workers: string, task_order: string, url: string, workspace_sid: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
-  let full_url = (build-url $base ({workspace_sid: $workspace_sid, sid: $sid} | format pattern "/v1/Workspaces/{workspace_sid}/TaskQueues/{sid}"))
+  let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Workspaces/{workspace_sid}/TaskQueues/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -791,12 +808,13 @@ export def "workspaces-task-queues update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
-  let full_url = (build-url $base ({workspace_sid: $workspace_sid, sid: $sid} | format pattern "/v1/Workspaces/{workspace_sid}/TaskQueues/{sid}"))
-  let body = {"AssignmentActivitySid": $assignment_activity_sid, "FriendlyName": $friendly_name, "MaxReservedWorkers": $max_reserved_workers, "ReservationActivitySid": $reservation_activity_sid, "TargetWorkers": $target_workers, "TaskOrder": $task_order} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Workspaces/{workspace_sid}/TaskQueues/{sid}"))
+  let req_body = {"AssignmentActivitySid": $assignment_activity_sid, "FriendlyName": $friendly_name, "MaxReservedWorkers": $max_reserved_workers, "ReservationActivitySid": $reservation_activity_sid, "TargetWorkers": $target_workers, "TaskOrder": $task_order} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # GET /v1/Workspaces/{WorkspaceSid}/TaskQueues/{TaskQueueSid}/CumulativeStatistics
@@ -822,7 +840,7 @@ export def "workspaces-task-queues-cumulative-statistics get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
   let qp = [(serialize-qp "EndDate" $end_date "scalar") (serialize-qp "Minutes" $minutes "scalar") (serialize-qp "StartDate" $start_date "scalar") (serialize-qp "TaskChannel" $task_channel "scalar") (serialize-qp "SplitByWaitTime" $split_by_wait_time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({workspace_sid: $workspace_sid, task_queue_sid: $task_queue_sid} | format pattern "/v1/Workspaces/{workspace_sid}/TaskQueues/{task_queue_sid}/CumulativeStatistics") $qp)
+  let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), task_queue_sid: (encode-path-segment $task_queue_sid)} | format pattern "/v1/Workspaces/{workspace_sid}/TaskQueues/{task_queue_sid}/CumulativeStatistics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -847,7 +865,7 @@ export def "workspaces-task-queues-real-time-statistics get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
   let qp = [(serialize-qp "TaskChannel" $task_channel "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({workspace_sid: $workspace_sid, task_queue_sid: $task_queue_sid} | format pattern "/v1/Workspaces/{workspace_sid}/TaskQueues/{task_queue_sid}/RealTimeStatistics") $qp)
+  let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), task_queue_sid: (encode-path-segment $task_queue_sid)} | format pattern "/v1/Workspaces/{workspace_sid}/TaskQueues/{task_queue_sid}/RealTimeStatistics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -876,7 +894,7 @@ export def "workspaces-task-queues-statistics get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
   let qp = [(serialize-qp "EndDate" $end_date "scalar") (serialize-qp "Minutes" $minutes "scalar") (serialize-qp "StartDate" $start_date "scalar") (serialize-qp "TaskChannel" $task_channel "scalar") (serialize-qp "SplitByWaitTime" $split_by_wait_time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({workspace_sid: $workspace_sid, task_queue_sid: $task_queue_sid} | format pattern "/v1/Workspaces/{workspace_sid}/TaskQueues/{task_queue_sid}/Statistics") $qp)
+  let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), task_queue_sid: (encode-path-segment $task_queue_sid)} | format pattern "/v1/Workspaces/{workspace_sid}/TaskQueues/{task_queue_sid}/Statistics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -896,7 +914,7 @@ export def "workspaces-tasks list" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --priority: int # The priority value of the Tasks to read. Returns the list of all Tasks in the Workspace with the specified priority.
-  --assignment-status: list # The `assignment_status` of the Tasks you want to read. Can be: `pending`, `reserved`, `assigned`, `canceled`, `wrapping`, or `completed`. Returns all Tasks in the Workspace with the specified `assignment_status`.
+  --assignment-status: list<string> # The `assignment_status` of the Tasks you want to read. Can be: `pending`, `reserved`, `assigned`, `canceled`, `wrapping`, or `completed`. Returns all Tasks in the Workspace with the specified `assignment_status`.
   --workflow-sid: string # The SID of the Workflow with the Tasks to read. Returns the Tasks controlled by the Workflow identified by this SID.
   --workflow-name: string # The friendly name of the Workflow with the Tasks to read. Returns the Tasks controlled by the Workflow identified by this friendly name.
   --task-queue-sid: string # The SID of the TaskQueue with the Tasks to read. Returns the Tasks waiting in the TaskQueue identified by this SID.
@@ -911,7 +929,7 @@ export def "workspaces-tasks list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
   let qp = [(serialize-qp "Priority" $priority "scalar") (serialize-qp "AssignmentStatus" $assignment_status "multi") (serialize-qp "WorkflowSid" $workflow_sid "scalar") (serialize-qp "WorkflowName" $workflow_name "scalar") (serialize-qp "TaskQueueSid" $task_queue_sid "scalar") (serialize-qp "TaskQueueName" $task_queue_name "scalar") (serialize-qp "EvaluateTaskAttributes" $evaluate_task_attributes "scalar") (serialize-qp "Ordering" $ordering "scalar") (serialize-qp "HasAddons" $has_addons "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({workspace_sid: $workspace_sid} | format pattern "/v1/Workspaces/{workspace_sid}/Tasks") $qp)
+  let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Tasks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -939,12 +957,13 @@ export def "workspaces-tasks create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
-  let full_url = (build-url $base ({workspace_sid: $workspace_sid} | format pattern "/v1/Workspaces/{workspace_sid}/Tasks"))
-  let body = {"Attributes": $attributes, "Priority": $priority, "TaskChannel": $task_channel, "Timeout": $timeout, "WorkflowSid": $workflow_sid} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Tasks"))
+  let req_body = {"Attributes": $attributes, "Priority": $priority, "TaskChannel": $task_channel, "Timeout": $timeout, "WorkflowSid": $workflow_sid} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # DELETE /v1/Workspaces/{WorkspaceSid}/Tasks/{Sid}
@@ -965,11 +984,11 @@ export def "workspaces-tasks delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
-  let full_url = (build-url $base ({workspace_sid: $workspace_sid, sid: $sid} | format pattern "/v1/Workspaces/{workspace_sid}/Tasks/{sid}"))
-  let extra_headers = {"If-Match": $if_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Tasks/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-Match": $if_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -990,7 +1009,7 @@ export def "workspaces-tasks get" [
 ]: nothing -> record<account_sid: string, addons: string, age: int, assignment_status: string, attributes: string, date_created: string, date_updated: string, links: record, priority: int, reason: string, sid: string, task_channel_sid: string, task_channel_unique_name: string, task_queue_entered_date: string, task_queue_friendly_name: string, task_queue_sid: string, timeout: int, url: string, workflow_friendly_name: string, workflow_sid: string, workspace_sid: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
-  let full_url = (build-url $base ({workspace_sid: $workspace_sid, sid: $sid} | format pattern "/v1/Workspaces/{workspace_sid}/Tasks/{sid}"))
+  let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Tasks/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1020,14 +1039,15 @@ export def "workspaces-tasks update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
-  let full_url = (build-url $base ({workspace_sid: $workspace_sid, sid: $sid} | format pattern "/v1/Workspaces/{workspace_sid}/Tasks/{sid}"))
-  let body = {"AssignmentStatus": $assignment_status, "Attributes": $attributes, "Priority": $priority, "Reason": $reason, "TaskChannel": $task_channel} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"If-Match": $if_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Tasks/{sid}"))
+  let req_body = {"AssignmentStatus": $assignment_status, "Attributes": $attributes, "Priority": $priority, "Reason": $reason, "TaskChannel": $task_channel} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"If-Match": $if_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # GET /v1/Workspaces/{WorkspaceSid}/Tasks/{TaskSid}/Reservations
@@ -1044,7 +1064,7 @@ export def "workspaces-tasks-reservations list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --reservation-status: string@reservation-status-completer # Returns the list of reservations for a task with a specified ReservationStatus.  Can be: `pending`, `accepted`, `rejected`, or `timeout`.
+  --reservation-status: string@reservation-status-completer # Returns the list of reservations for a task with a specified ReservationStatus. Can be: `pending`, `accepted`, `rejected`, or `timeout`.
   --worker-sid: string # The SID of the reserved Worker resource to read.
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
@@ -1053,7 +1073,7 @@ export def "workspaces-tasks-reservations list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
   let qp = [(serialize-qp "ReservationStatus" $reservation_status "scalar") (serialize-qp "WorkerSid" $worker_sid "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({workspace_sid: $workspace_sid, task_sid: $task_sid} | format pattern "/v1/Workspaces/{workspace_sid}/Tasks/{task_sid}/Reservations") $qp)
+  let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), task_sid: (encode-path-segment $task_sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Tasks/{task_sid}/Reservations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1077,7 +1097,7 @@ export def "workspaces-tasks-reservations get" [
 ]: nothing -> record<account_sid: string, date_created: string, date_updated: string, links: record, reservation_status: string, sid: string, task_sid: string, url: string, worker_name: string, worker_sid: string, workspace_sid: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
-  let full_url = (build-url $base ({workspace_sid: $workspace_sid, task_sid: $task_sid, sid: $sid} | format pattern "/v1/Workspaces/{workspace_sid}/Tasks/{task_sid}/Reservations/{sid}"))
+  let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), task_sid: (encode-path-segment $task_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Tasks/{task_sid}/Reservations/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1104,21 +1124,21 @@ export def "workspaces-tasks-reservations update" [
   --call-accept: oneof<nothing, bool> # Whether to accept a reservation when executing a Call instruction.
   --call-from: string # The Caller ID of the outbound call when executing a Call instruction.
   --call-record: string # Whether to record both legs of a call when executing a Call instruction or which leg to record.
-  --call-status-callback-url: string # The URL to call  for the completed call event when executing a Call instruction. (format: uri)
+  --call-status-callback-url: string # The URL to call for the completed call event when executing a Call instruction. (format: uri)
   --call-timeout: int # Timeout for call when executing a Call instruction.
-  --call-to: string # The Contact URI of the worker when executing a Call instruction.  Can be the URI of the Twilio Client, the SIP URI for Programmable SIP, or the [E.164](https://www.twilio.com/docs/glossary/what-e164) formatted phone number, depending on the destination.
+  --call-to: string # The Contact URI of the worker when executing a Call instruction. Can be the URI of the Twilio Client, the SIP URI for Programmable SIP, or the [E.164](https://www.twilio.com/docs/glossary/what-e164) formatted phone number, depending on the destination.
   --call-url: string # TwiML URI executed on answering the worker's leg as a result of the Call instruction. (format: uri)
   --conference-record: string # Whether to record the conference the participant is joining or when to record the conference. Can be: `true`, `false`, `record-from-start`, and `do-not-record`. The default value is `false`.
   --conference-recording-status-callback: string # The URL we should call using the `conference_recording_status_callback_method` when the conference recording is available. (format: uri)
   --conference-recording-status-callback-method: string@conference-recording-status-callback-method-completer # The HTTP method we should use to call `conference_recording_status_callback`. Can be: `GET` or `POST` and defaults to `POST`. (format: http-method)
   --conference-status-callback: string # The URL we should call using the `conference_status_callback_method` when the conference events in `conference_status_callback_event` occur. Only the value set by the first participant to join the conference is used. Subsequent `conference_status_callback` values are ignored. (format: uri)
-  --conference-status-callback-event: list # The conference status events that we will send to `conference_status_callback`. Can be: `start`, `end`, `join`, `leave`, `mute`, `hold`, `speaker`.
+  --conference-status-callback-event: list<string> # The conference status events that we will send to `conference_status_callback`. Can be: `start`, `end`, `join`, `leave`, `mute`, `hold`, `speaker`.
   --conference-status-callback-method: string@conference-status-callback-method-completer # The HTTP method we should use to call `conference_status_callback`. Can be: `GET` or `POST` and defaults to `POST`. (format: http-method)
   --conference-trim: string # How to trim the leading and trailing silence from your recorded conference audio files. Can be: `trim-silence` or `do-not-trim` and defaults to `trim-silence`.
   --dequeue-from: string # The Caller ID of the call to the worker when executing a Dequeue instruction.
   --dequeue-post-work-activity-sid: string # The SID of the Activity resource to start after executing a Dequeue instruction.
   --dequeue-record: string # Whether to record both legs of a call when executing a Dequeue instruction or which leg to record.
-  --dequeue-status-callback-event: list # The Call progress events sent via webhooks as a result of a Dequeue instruction.
+  --dequeue-status-callback-event: list<string> # The Call progress events sent via webhooks as a result of a Dequeue instruction.
   --dequeue-status-callback-url: string # The Callback URL for completed call event when executing a Dequeue instruction. (format: uri)
   --dequeue-timeout: int # Timeout for call when executing a Dequeue instruction.
   --dequeue-to: string # The Contact URI of the worker when executing a Dequeue instruction. Can be the URI of the Twilio Client, the SIP URI for Programmable SIP, or the [E.164](https://www.twilio.com/docs/glossary/what-e164) formatted phone number, depending on the destination.
@@ -1143,7 +1163,7 @@ export def "workspaces-tasks-reservations update" [
   --sip-auth-username: string # The SIP username used for authentication.
   --start-conference-on-enter: oneof<nothing, bool> # Whether to start the conference when the participant joins, if it has not already started. The default is `true`. If `false` and the conference has not started, the participant is muted and hears background music until another participant starts the conference.
   --status-callback: string # The URL we should call using the `status_callback_method` to send status information to your application. (format: uri)
-  --status-callback-event: list # The call progress events that we will send to `status_callback`. Can be: `initiated`, `ringing`, `answered`, or `completed`.
+  --status-callback-event: list<string> # The call progress events that we will send to `status_callback`. Can be: `initiated`, `ringing`, `answered`, or `completed`.
   --status-callback-method: string@status-callback-method-completer # The HTTP method we should use to call `status_callback`. Can be: `POST` or `GET` and the default is `POST`. (format: http-method)
   --supervisor: string # The Supervisor SID/URI when executing the Supervise instruction.
   --supervisor-mode: string@supervisor-mode-completer
@@ -1156,14 +1176,15 @@ export def "workspaces-tasks-reservations update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
-  let full_url = (build-url $base ({workspace_sid: $workspace_sid, task_sid: $task_sid, sid: $sid} | format pattern "/v1/Workspaces/{workspace_sid}/Tasks/{task_sid}/Reservations/{sid}"))
-  let body = {"Beep": $beep, "BeepOnCustomerEntrance": $beep_on_customer_entrance, "CallAccept": $call_accept, "CallFrom": $call_from, "CallRecord": $call_record, "CallStatusCallbackUrl": $call_status_callback_url, "CallTimeout": $call_timeout, "CallTo": $call_to, "CallUrl": $call_url, "ConferenceRecord": $conference_record, "ConferenceRecordingStatusCallback": $conference_recording_status_callback, "ConferenceRecordingStatusCallbackMethod": $conference_recording_status_callback_method, "ConferenceStatusCallback": $conference_status_callback, "ConferenceStatusCallbackEvent": $conference_status_callback_event, "ConferenceStatusCallbackMethod": $conference_status_callback_method, "ConferenceTrim": $conference_trim, "DequeueFrom": $dequeue_from, "DequeuePostWorkActivitySid": $dequeue_post_work_activity_sid, "DequeueRecord": $dequeue_record, "DequeueStatusCallbackEvent": $dequeue_status_callback_event, "DequeueStatusCallbackUrl": $dequeue_status_callback_url, "DequeueTimeout": $dequeue_timeout, "DequeueTo": $dequeue_to, "EarlyMedia": $early_media, "EndConferenceOnCustomerExit": $end_conference_on_customer_exit, "EndConferenceOnExit": $end_conference_on_exit, "From": $body_from, "Instruction": $instruction, "MaxParticipants": $max_participants, "Muted": $muted, "PostWorkActivitySid": $post_work_activity_sid, "Record": $record, "RecordingChannels": $recording_channels, "RecordingStatusCallback": $recording_status_callback, "RecordingStatusCallbackMethod": $recording_status_callback_method, "RedirectAccept": $redirect_accept, "RedirectCallSid": $redirect_call_sid, "RedirectUrl": $redirect_url, "Region": $region, "ReservationStatus": $reservation_status, "SipAuthPassword": $sip_auth_password, "SipAuthUsername": $sip_auth_username, "StartConferenceOnEnter": $start_conference_on_enter, "StatusCallback": $status_callback, "StatusCallbackEvent": $status_callback_event, "StatusCallbackMethod": $status_callback_method, "Supervisor": $supervisor, "SupervisorMode": $supervisor_mode, "Timeout": $timeout, "To": $body_to, "WaitMethod": $wait_method, "WaitUrl": $wait_url, "WorkerActivitySid": $worker_activity_sid} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"If-Match": $if_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), task_sid: (encode-path-segment $task_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Tasks/{task_sid}/Reservations/{sid}"))
+  let req_body = {"Beep": $beep, "BeepOnCustomerEntrance": $beep_on_customer_entrance, "CallAccept": $call_accept, "CallFrom": $call_from, "CallRecord": $call_record, "CallStatusCallbackUrl": $call_status_callback_url, "CallTimeout": $call_timeout, "CallTo": $call_to, "CallUrl": $call_url, "ConferenceRecord": $conference_record, "ConferenceRecordingStatusCallback": $conference_recording_status_callback, "ConferenceRecordingStatusCallbackMethod": $conference_recording_status_callback_method, "ConferenceStatusCallback": $conference_status_callback, "ConferenceStatusCallbackEvent": $conference_status_callback_event, "ConferenceStatusCallbackMethod": $conference_status_callback_method, "ConferenceTrim": $conference_trim, "DequeueFrom": $dequeue_from, "DequeuePostWorkActivitySid": $dequeue_post_work_activity_sid, "DequeueRecord": $dequeue_record, "DequeueStatusCallbackEvent": $dequeue_status_callback_event, "DequeueStatusCallbackUrl": $dequeue_status_callback_url, "DequeueTimeout": $dequeue_timeout, "DequeueTo": $dequeue_to, "EarlyMedia": $early_media, "EndConferenceOnCustomerExit": $end_conference_on_customer_exit, "EndConferenceOnExit": $end_conference_on_exit, "From": $body_from, "Instruction": $instruction, "MaxParticipants": $max_participants, "Muted": $muted, "PostWorkActivitySid": $post_work_activity_sid, "Record": $record, "RecordingChannels": $recording_channels, "RecordingStatusCallback": $recording_status_callback, "RecordingStatusCallbackMethod": $recording_status_callback_method, "RedirectAccept": $redirect_accept, "RedirectCallSid": $redirect_call_sid, "RedirectUrl": $redirect_url, "Region": $region, "ReservationStatus": $reservation_status, "SipAuthPassword": $sip_auth_password, "SipAuthUsername": $sip_auth_username, "StartConferenceOnEnter": $start_conference_on_enter, "StatusCallback": $status_callback, "StatusCallbackEvent": $status_callback_event, "StatusCallbackMethod": $status_callback_method, "Supervisor": $supervisor, "SupervisorMode": $supervisor_mode, "Timeout": $timeout, "To": $body_to, "WaitMethod": $wait_method, "WaitUrl": $wait_url, "WorkerActivitySid": $worker_activity_sid} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"If-Match": $if_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # GET /v1/Workspaces/{WorkspaceSid}/Workers
@@ -1194,7 +1215,7 @@ export def "workspaces-workers list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
   let qp = [(serialize-qp "ActivityName" $activity_name "scalar") (serialize-qp "ActivitySid" $activity_sid "scalar") (serialize-qp "Available" $available "scalar") (serialize-qp "FriendlyName" $friendly_name "scalar") (serialize-qp "TargetWorkersExpression" $target_workers_expression "scalar") (serialize-qp "TaskQueueName" $task_queue_name "scalar") (serialize-qp "TaskQueueSid" $task_queue_sid "scalar") (serialize-qp "Ordering" $ordering "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({workspace_sid: $workspace_sid} | format pattern "/v1/Workspaces/{workspace_sid}/Workers") $qp)
+  let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Workers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1220,12 +1241,13 @@ export def "workspaces-workers create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
-  let full_url = (build-url $base ({workspace_sid: $workspace_sid} | format pattern "/v1/Workspaces/{workspace_sid}/Workers"))
-  let body = {"ActivitySid": $activity_sid, "Attributes": $attributes, "FriendlyName": $friendly_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Workers"))
+  let req_body = {"ActivitySid": $activity_sid, "Attributes": $attributes, "FriendlyName": $friendly_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # GET /v1/Workspaces/{WorkspaceSid}/Workers/CumulativeStatistics
@@ -1249,7 +1271,7 @@ export def "workspaces-workers-cumulative-statistics get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
   let qp = [(serialize-qp "EndDate" $end_date "scalar") (serialize-qp "Minutes" $minutes "scalar") (serialize-qp "StartDate" $start_date "scalar") (serialize-qp "TaskChannel" $task_channel "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({workspace_sid: $workspace_sid} | format pattern "/v1/Workspaces/{workspace_sid}/Workers/CumulativeStatistics") $qp)
+  let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Workers/CumulativeStatistics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1273,7 +1295,7 @@ export def "workspaces-workers-real-time-statistics get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
   let qp = [(serialize-qp "TaskChannel" $task_channel "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({workspace_sid: $workspace_sid} | format pattern "/v1/Workspaces/{workspace_sid}/Workers/RealTimeStatistics") $qp)
+  let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Workers/RealTimeStatistics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1303,7 +1325,7 @@ export def "workspaces-workers-statistics get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
   let qp = [(serialize-qp "Minutes" $minutes "scalar") (serialize-qp "StartDate" $start_date "scalar") (serialize-qp "EndDate" $end_date "scalar") (serialize-qp "TaskQueueSid" $task_queue_sid "scalar") (serialize-qp "TaskQueueName" $task_queue_name "scalar") (serialize-qp "FriendlyName" $friendly_name "scalar") (serialize-qp "TaskChannel" $task_channel "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({workspace_sid: $workspace_sid} | format pattern "/v1/Workspaces/{workspace_sid}/Workers/Statistics") $qp)
+  let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Workers/Statistics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1327,11 +1349,11 @@ export def "workspaces-workers delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
-  let full_url = (build-url $base ({workspace_sid: $workspace_sid, sid: $sid} | format pattern "/v1/Workspaces/{workspace_sid}/Workers/{sid}"))
-  let extra_headers = {"If-Match": $if_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Workers/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-Match": $if_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1352,7 +1374,7 @@ export def "workspaces-workers get" [
 ]: nothing -> record<account_sid: string, activity_name: string, activity_sid: string, attributes: string, available: bool, date_created: string, date_status_changed: string, date_updated: string, friendly_name: string, links: record, sid: string, url: string, workspace_sid: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
-  let full_url = (build-url $base ({workspace_sid: $workspace_sid, sid: $sid} | format pattern "/v1/Workspaces/{workspace_sid}/Workers/{sid}"))
+  let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Workers/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1381,14 +1403,15 @@ export def "workspaces-workers update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
-  let full_url = (build-url $base ({workspace_sid: $workspace_sid, sid: $sid} | format pattern "/v1/Workspaces/{workspace_sid}/Workers/{sid}"))
-  let body = {"ActivitySid": $activity_sid, "Attributes": $attributes, "FriendlyName": $friendly_name, "RejectPendingReservations": $reject_pending_reservations} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"If-Match": $if_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Workers/{sid}"))
+  let req_body = {"ActivitySid": $activity_sid, "Attributes": $attributes, "FriendlyName": $friendly_name, "RejectPendingReservations": $reject_pending_reservations} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"If-Match": $if_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # GET /v1/Workspaces/{WorkspaceSid}/Workers/{WorkerSid}/Channels
@@ -1412,7 +1435,7 @@ export def "workspaces-workers-channels list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({workspace_sid: $workspace_sid, worker_sid: $worker_sid} | format pattern "/v1/Workspaces/{workspace_sid}/Workers/{worker_sid}/Channels") $qp)
+  let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), worker_sid: (encode-path-segment $worker_sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Workers/{worker_sid}/Channels") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1436,7 +1459,7 @@ export def "workspaces-workers-channels get" [
 ]: nothing -> record<account_sid: string, assigned_tasks: int, available: bool, available_capacity_percentage: int, configured_capacity: int, date_created: string, date_updated: string, sid: string, task_channel_sid: string, task_channel_unique_name: string, url: string, worker_sid: string, workspace_sid: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
-  let full_url = (build-url $base ({workspace_sid: $workspace_sid, worker_sid: $worker_sid, sid: $sid} | format pattern "/v1/Workspaces/{workspace_sid}/Workers/{worker_sid}/Channels/{sid}"))
+  let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), worker_sid: (encode-path-segment $worker_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Workers/{worker_sid}/Channels/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1463,12 +1486,13 @@ export def "workspaces-workers-channels update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
-  let full_url = (build-url $base ({workspace_sid: $workspace_sid, worker_sid: $worker_sid, sid: $sid} | format pattern "/v1/Workspaces/{workspace_sid}/Workers/{worker_sid}/Channels/{sid}"))
-  let body = {"Available": $available, "Capacity": $capacity} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), worker_sid: (encode-path-segment $worker_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Workers/{worker_sid}/Channels/{sid}"))
+  let req_body = {"Available": $available, "Capacity": $capacity} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # GET /v1/Workspaces/{WorkspaceSid}/Workers/{WorkerSid}/Reservations
@@ -1493,7 +1517,7 @@ export def "workspaces-workers-reservations list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
   let qp = [(serialize-qp "ReservationStatus" $reservation_status "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({workspace_sid: $workspace_sid, worker_sid: $worker_sid} | format pattern "/v1/Workspaces/{workspace_sid}/Workers/{worker_sid}/Reservations") $qp)
+  let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), worker_sid: (encode-path-segment $worker_sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Workers/{worker_sid}/Reservations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1517,7 +1541,7 @@ export def "workspaces-workers-reservations get" [
 ]: nothing -> record<account_sid: string, date_created: string, date_updated: string, links: record, reservation_status: string, sid: string, task_sid: string, url: string, worker_name: string, worker_sid: string, workspace_sid: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
-  let full_url = (build-url $base ({workspace_sid: $workspace_sid, worker_sid: $worker_sid, sid: $sid} | format pattern "/v1/Workspaces/{workspace_sid}/Workers/{worker_sid}/Reservations/{sid}"))
+  let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), worker_sid: (encode-path-segment $worker_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Workers/{worker_sid}/Reservations/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1552,13 +1576,13 @@ export def "workspaces-workers-reservations update" [
   --conference-recording-status-callback: string # The URL we should call using the `conference_recording_status_callback_method` when the conference recording is available. (format: uri)
   --conference-recording-status-callback-method: string@conference-recording-status-callback-method-completer # The HTTP method we should use to call `conference_recording_status_callback`. Can be: `GET` or `POST` and defaults to `POST`. (format: http-method)
   --conference-status-callback: string # The URL we should call using the `conference_status_callback_method` when the conference events in `conference_status_callback_event` occur. Only the value set by the first participant to join the conference is used. Subsequent `conference_status_callback` values are ignored. (format: uri)
-  --conference-status-callback-event: list # The conference status events that we will send to `conference_status_callback`. Can be: `start`, `end`, `join`, `leave`, `mute`, `hold`, `speaker`.
+  --conference-status-callback-event: list<string> # The conference status events that we will send to `conference_status_callback`. Can be: `start`, `end`, `join`, `leave`, `mute`, `hold`, `speaker`.
   --conference-status-callback-method: string@conference-status-callback-method-completer # The HTTP method we should use to call `conference_status_callback`. Can be: `GET` or `POST` and defaults to `POST`. (format: http-method)
   --conference-trim: string # Whether to trim leading and trailing silence from your recorded conference audio files. Can be: `trim-silence` or `do-not-trim` and defaults to `trim-silence`.
   --dequeue-from: string # The caller ID of the call to the worker when executing a Dequeue instruction.
   --dequeue-post-work-activity-sid: string # The SID of the Activity resource to start after executing a Dequeue instruction.
   --dequeue-record: string # Whether to record both legs of a call when executing a Dequeue instruction or which leg to record.
-  --dequeue-status-callback-event: list # The call progress events sent via webhooks as a result of a Dequeue instruction.
+  --dequeue-status-callback-event: list<string> # The call progress events sent via webhooks as a result of a Dequeue instruction.
   --dequeue-status-callback-url: string # The callback URL for completed call event when executing a Dequeue instruction. (format: uri)
   --dequeue-timeout: int # The timeout for call when executing a Dequeue instruction.
   --dequeue-to: string # The contact URI of the worker when executing a Dequeue instruction. Can be the URI of the Twilio Client, the SIP URI for Programmable SIP, or the [E.164](https://www.twilio.com/docs/glossary/what-e164) formatted phone number, depending on the destination.
@@ -1583,7 +1607,7 @@ export def "workspaces-workers-reservations update" [
   --sip-auth-username: string # The SIP username used for authentication.
   --start-conference-on-enter: oneof<nothing, bool> # Whether to start the conference when the participant joins, if it has not already started. Can be: `true` or `false` and the default is `true`. If `false` and the conference has not started, the participant is muted and hears background music until another participant starts the conference.
   --status-callback: string # The URL we should call using the `status_callback_method` to send status information to your application. (format: uri)
-  --status-callback-event: list # The call progress events that we will send to `status_callback`. Can be: `initiated`, `ringing`, `answered`, or `completed`.
+  --status-callback-event: list<string> # The call progress events that we will send to `status_callback`. Can be: `initiated`, `ringing`, `answered`, or `completed`.
   --status-callback-method: string@status-callback-method-completer # The HTTP method we should use to call `status_callback`. Can be: `POST` or `GET` and the default is `POST`. (format: http-method)
   --timeout: int # The timeout for a call when executing a Conference instruction.
   --body-to: string # The Contact URI of the worker when executing a Conference instruction. Can be the URI of the Twilio Client, the SIP URI for Programmable SIP, or the [E.164](https://www.twilio.com/docs/glossary/what-e164) formatted phone number, depending on the destination.
@@ -1594,20 +1618,21 @@ export def "workspaces-workers-reservations update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
-  let full_url = (build-url $base ({workspace_sid: $workspace_sid, worker_sid: $worker_sid, sid: $sid} | format pattern "/v1/Workspaces/{workspace_sid}/Workers/{worker_sid}/Reservations/{sid}"))
-  let body = {"Beep": $beep, "BeepOnCustomerEntrance": $beep_on_customer_entrance, "CallAccept": $call_accept, "CallFrom": $call_from, "CallRecord": $call_record, "CallStatusCallbackUrl": $call_status_callback_url, "CallTimeout": $call_timeout, "CallTo": $call_to, "CallUrl": $call_url, "ConferenceRecord": $conference_record, "ConferenceRecordingStatusCallback": $conference_recording_status_callback, "ConferenceRecordingStatusCallbackMethod": $conference_recording_status_callback_method, "ConferenceStatusCallback": $conference_status_callback, "ConferenceStatusCallbackEvent": $conference_status_callback_event, "ConferenceStatusCallbackMethod": $conference_status_callback_method, "ConferenceTrim": $conference_trim, "DequeueFrom": $dequeue_from, "DequeuePostWorkActivitySid": $dequeue_post_work_activity_sid, "DequeueRecord": $dequeue_record, "DequeueStatusCallbackEvent": $dequeue_status_callback_event, "DequeueStatusCallbackUrl": $dequeue_status_callback_url, "DequeueTimeout": $dequeue_timeout, "DequeueTo": $dequeue_to, "EarlyMedia": $early_media, "EndConferenceOnCustomerExit": $end_conference_on_customer_exit, "EndConferenceOnExit": $end_conference_on_exit, "From": $body_from, "Instruction": $instruction, "MaxParticipants": $max_participants, "Muted": $muted, "PostWorkActivitySid": $post_work_activity_sid, "Record": $record, "RecordingChannels": $recording_channels, "RecordingStatusCallback": $recording_status_callback, "RecordingStatusCallbackMethod": $recording_status_callback_method, "RedirectAccept": $redirect_accept, "RedirectCallSid": $redirect_call_sid, "RedirectUrl": $redirect_url, "Region": $region, "ReservationStatus": $reservation_status, "SipAuthPassword": $sip_auth_password, "SipAuthUsername": $sip_auth_username, "StartConferenceOnEnter": $start_conference_on_enter, "StatusCallback": $status_callback, "StatusCallbackEvent": $status_callback_event, "StatusCallbackMethod": $status_callback_method, "Timeout": $timeout, "To": $body_to, "WaitMethod": $wait_method, "WaitUrl": $wait_url, "WorkerActivitySid": $worker_activity_sid} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"If-Match": $if_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), worker_sid: (encode-path-segment $worker_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Workers/{worker_sid}/Reservations/{sid}"))
+  let req_body = {"Beep": $beep, "BeepOnCustomerEntrance": $beep_on_customer_entrance, "CallAccept": $call_accept, "CallFrom": $call_from, "CallRecord": $call_record, "CallStatusCallbackUrl": $call_status_callback_url, "CallTimeout": $call_timeout, "CallTo": $call_to, "CallUrl": $call_url, "ConferenceRecord": $conference_record, "ConferenceRecordingStatusCallback": $conference_recording_status_callback, "ConferenceRecordingStatusCallbackMethod": $conference_recording_status_callback_method, "ConferenceStatusCallback": $conference_status_callback, "ConferenceStatusCallbackEvent": $conference_status_callback_event, "ConferenceStatusCallbackMethod": $conference_status_callback_method, "ConferenceTrim": $conference_trim, "DequeueFrom": $dequeue_from, "DequeuePostWorkActivitySid": $dequeue_post_work_activity_sid, "DequeueRecord": $dequeue_record, "DequeueStatusCallbackEvent": $dequeue_status_callback_event, "DequeueStatusCallbackUrl": $dequeue_status_callback_url, "DequeueTimeout": $dequeue_timeout, "DequeueTo": $dequeue_to, "EarlyMedia": $early_media, "EndConferenceOnCustomerExit": $end_conference_on_customer_exit, "EndConferenceOnExit": $end_conference_on_exit, "From": $body_from, "Instruction": $instruction, "MaxParticipants": $max_participants, "Muted": $muted, "PostWorkActivitySid": $post_work_activity_sid, "Record": $record, "RecordingChannels": $recording_channels, "RecordingStatusCallback": $recording_status_callback, "RecordingStatusCallbackMethod": $recording_status_callback_method, "RedirectAccept": $redirect_accept, "RedirectCallSid": $redirect_call_sid, "RedirectUrl": $redirect_url, "Region": $region, "ReservationStatus": $reservation_status, "SipAuthPassword": $sip_auth_password, "SipAuthUsername": $sip_auth_username, "StartConferenceOnEnter": $start_conference_on_enter, "StatusCallback": $status_callback, "StatusCallbackEvent": $status_callback_event, "StatusCallbackMethod": $status_callback_method, "Timeout": $timeout, "To": $body_to, "WaitMethod": $wait_method, "WaitUrl": $wait_url, "WorkerActivitySid": $worker_activity_sid} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"If-Match": $if_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # GET /v1/Workspaces/{WorkspaceSid}/Workers/{WorkerSid}/Statistics
 #
 # operationId: FetchWorkerInstanceStatistics
-export def "workspaces-workers-statistics get-worker-instance" [
+export def "workspaces-workers-statistics get-instance" [
   workspace_sid: string
   worker_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1626,7 +1651,7 @@ export def "workspaces-workers-statistics get-worker-instance" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
   let qp = [(serialize-qp "Minutes" $minutes "scalar") (serialize-qp "StartDate" $start_date "scalar") (serialize-qp "EndDate" $end_date "scalar") (serialize-qp "TaskChannel" $task_channel "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({workspace_sid: $workspace_sid, worker_sid: $worker_sid} | format pattern "/v1/Workspaces/{workspace_sid}/Workers/{worker_sid}/Statistics") $qp)
+  let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), worker_sid: (encode-path-segment $worker_sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Workers/{worker_sid}/Statistics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1653,7 +1678,7 @@ export def "workspaces-workflows list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
   let qp = [(serialize-qp "FriendlyName" $friendly_name "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({workspace_sid: $workspace_sid} | format pattern "/v1/Workspaces/{workspace_sid}/Workflows") $qp)
+  let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Workflows") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1681,12 +1706,13 @@ export def "workspaces-workflows create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
-  let full_url = (build-url $base ({workspace_sid: $workspace_sid} | format pattern "/v1/Workspaces/{workspace_sid}/Workflows"))
-  let body = {"AssignmentCallbackUrl": $assignment_callback_url, "Configuration": $configuration, "FallbackAssignmentCallbackUrl": $fallback_assignment_callback_url, "FriendlyName": $friendly_name, "TaskReservationTimeout": $task_reservation_timeout} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Workflows"))
+  let req_body = {"AssignmentCallbackUrl": $assignment_callback_url, "Configuration": $configuration, "FallbackAssignmentCallbackUrl": $fallback_assignment_callback_url, "FriendlyName": $friendly_name, "TaskReservationTimeout": $task_reservation_timeout} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # DELETE /v1/Workspaces/{WorkspaceSid}/Workflows/{Sid}
@@ -1706,7 +1732,7 @@ export def "workspaces-workflows delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
-  let full_url = (build-url $base ({workspace_sid: $workspace_sid, sid: $sid} | format pattern "/v1/Workspaces/{workspace_sid}/Workflows/{sid}"))
+  let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Workflows/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1729,7 +1755,7 @@ export def "workspaces-workflows get" [
 ]: nothing -> record<account_sid: string, assignment_callback_url: string, configuration: string, date_created: string, date_updated: string, document_content_type: string, fallback_assignment_callback_url: string, friendly_name: string, links: record, sid: string, task_reservation_timeout: int, url: string, workspace_sid: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
-  let full_url = (build-url $base ({workspace_sid: $workspace_sid, sid: $sid} | format pattern "/v1/Workspaces/{workspace_sid}/Workflows/{sid}"))
+  let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Workflows/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1759,12 +1785,13 @@ export def "workspaces-workflows update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
-  let full_url = (build-url $base ({workspace_sid: $workspace_sid, sid: $sid} | format pattern "/v1/Workspaces/{workspace_sid}/Workflows/{sid}"))
-  let body = {"AssignmentCallbackUrl": $assignment_callback_url, "Configuration": $configuration, "FallbackAssignmentCallbackUrl": $fallback_assignment_callback_url, "FriendlyName": $friendly_name, "ReEvaluateTasks": $re_evaluate_tasks, "TaskReservationTimeout": $task_reservation_timeout} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Workflows/{sid}"))
+  let req_body = {"AssignmentCallbackUrl": $assignment_callback_url, "Configuration": $configuration, "FallbackAssignmentCallbackUrl": $fallback_assignment_callback_url, "FriendlyName": $friendly_name, "ReEvaluateTasks": $re_evaluate_tasks, "TaskReservationTimeout": $task_reservation_timeout} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # GET /v1/Workspaces/{WorkspaceSid}/Workflows/{WorkflowSid}/CumulativeStatistics
@@ -1790,7 +1817,7 @@ export def "workspaces-workflows-cumulative-statistics get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
   let qp = [(serialize-qp "EndDate" $end_date "scalar") (serialize-qp "Minutes" $minutes "scalar") (serialize-qp "StartDate" $start_date "scalar") (serialize-qp "TaskChannel" $task_channel "scalar") (serialize-qp "SplitByWaitTime" $split_by_wait_time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({workspace_sid: $workspace_sid, workflow_sid: $workflow_sid} | format pattern "/v1/Workspaces/{workspace_sid}/Workflows/{workflow_sid}/CumulativeStatistics") $qp)
+  let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), workflow_sid: (encode-path-segment $workflow_sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Workflows/{workflow_sid}/CumulativeStatistics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1815,7 +1842,7 @@ export def "workspaces-workflows-real-time-statistics get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
   let qp = [(serialize-qp "TaskChannel" $task_channel "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({workspace_sid: $workspace_sid, workflow_sid: $workflow_sid} | format pattern "/v1/Workspaces/{workspace_sid}/Workflows/{workflow_sid}/RealTimeStatistics") $qp)
+  let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), workflow_sid: (encode-path-segment $workflow_sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Workflows/{workflow_sid}/RealTimeStatistics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1844,7 +1871,7 @@ export def "workspaces-workflows-statistics get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
   let qp = [(serialize-qp "Minutes" $minutes "scalar") (serialize-qp "StartDate" $start_date "scalar") (serialize-qp "EndDate" $end_date "scalar") (serialize-qp "TaskChannel" $task_channel "scalar") (serialize-qp "SplitByWaitTime" $split_by_wait_time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({workspace_sid: $workspace_sid, workflow_sid: $workflow_sid} | format pattern "/v1/Workspaces/{workspace_sid}/Workflows/{workflow_sid}/Statistics") $qp)
+  let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), workflow_sid: (encode-path-segment $workflow_sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Workflows/{workflow_sid}/Statistics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

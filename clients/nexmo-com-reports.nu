@@ -12,6 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
   match $scheme {
     "basic" => { {headers: {Authorization: $"Basic ($token_val)"}, query: ""} }
+    "basic-credentials" => { {headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: ""} }
     "none" => { {headers: {}, query: ""} }
     _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
   }
@@ -33,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
     "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
     _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -63,7 +73,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 }
 
 def base-url-completer [] { ["https://api.nexmo.com"] }
-def auth-scheme-completer [] { ["basic"] }
+def auth-scheme-completer [] { ["basic" "basic-credentials"] }
 
 # Completers for enum parameters
 def product-completer [] { ["ASR" "CONVERSATIONS" "IN-APP-VOICE" "MESSAGES" "NUMBER-INSIGHT" "REPORTS-USAGE" "SMS" "VERIFY-API" "VOICE-CALL" "VOICE-FAILED" "WEBSOCKET-CALL"] }
@@ -75,7 +85,7 @@ def status-completer [] { ["accepted" "buffered" "deleted" "delivered" "expired"
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "reports list-reports" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "reports list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -99,7 +109,7 @@ export def commands []: nothing -> table {
 #
 # GET /v2/reports
 # operationId: list-reports
-export def "reports list-reports" [
+export def "reports list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -127,7 +137,7 @@ export def "reports list-reports" [
 # POST /v2/reports
 # Discriminator (request): product
 # operationId: create-async-report
-export def "reports create-async-report" [
+export def "reports create-async" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -142,17 +152,18 @@ export def "reports create-async-report" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/reports")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Load records synchronously
 #
 # GET /v2/reports/records
 # operationId: get-records
-export def "reports-records get-records" [
+export def "reports-records get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -164,9 +175,9 @@ export def "reports-records get-records" [
   --account-id: string # The account for which the list of reports will be queried. (e.g. abcd1234)
   --product: string@product-completer # The product to return records for (e.g. SMS)
   --direction: string@direction-completer # Direction of the communication, either `inbound` (received by our services), or `outbound` (originated from our services). Required for products `SMS` and `MESSAGES`. Optional for `VOICE-CALL`. Invalid for `IN-APP-VOICE`, `CONVERSATIONS`, `NUMBER-INSIGHT`, `VERIFY-API`. (e.g. inbound)
-  --id: string # The UUID of the message or call to be searched for. You can specify a comma-separated list of UUIDs. If UUIDs are not found they are listed in the response in the `ids_not_found` field.  If you specify `id`, you must not specify `status`, `date_start` or `date_end`.  (e.g. aaaaaaaa-bbbb-cccc-dddd-0123456789ab)
-  --date-start: string # ISO-8601 extended time zone offset or ISO-8601 UTC zone offset formatted date (format `yyyy-mm-ddThh:mm:ss[.sss]±hh:mm` or `yyyy-mm-ddThh:mm:ss[.sss]Z`) for when reports should begin.   It filters on the time the API call was received by Vonage and corresponds to the field `date_received` (`date_start` for Voice) in the report file. It is inclusive, i.e. the provided value is less than or equal to the value in the field `date_received` (`date_start` for Voice) in the CDR.  If you provide this, you must provide `date_end` and must not provide `id`.  (format: date, e.g. 2017-12-01T00:00:00+0000)
-  --date-end: string # **Must be no more than 24 hours later than `date_start`**  ISO-8601 extended time zone offset or ISO-8601 UTC zone offset formatted date (format `yyyy-mm-ddThh:mm:ss[.sss]±hh:mm` or `yyyy-mm-ddThh:mm:ss[.sss]Z`) for when report should end.  It is exclusive, i.e. the provided value is strictly greater than the value in the field `date_received` in the CDR.  If you provide this, you must provide `date_start` and must not provide `id`.  (format: date, e.g. 2018-01-01T00:00:00+0000)
+  --id: string # The UUID of the message or call to be searched for. You can specify a comma-separated list of UUIDs. If UUIDs are not found they are listed in the response in the `ids_not_found` field. If you specify `id`, you must not specify `status`, `date_start` or `date_end`. (e.g. aaaaaaaa-bbbb-cccc-dddd-0123456789ab)
+  --date-start: string # ISO-8601 extended time zone offset or ISO-8601 UTC zone offset formatted date (format `yyyy-mm-ddThh:mm:ss[.sss]±hh:mm` or `yyyy-mm-ddThh:mm:ss[.sss]Z`) for when reports should begin. It filters on the time the API call was received by Vonage and corresponds to the field `date_received` (`date_start` for Voice) in the report file. It is inclusive, i.e. the provided value is less than or equal to the value in the field `date_received` (`date_start` for Voice) in the CDR. If you provide this, you must provide `date_end` and must not provide `id`. (format: date, e.g. 2017-12-01T00:00:00+0000)
+  --date-end: string # **Must be no more than 24 hours later than `date_start`** ISO-8601 extended time zone offset or ISO-8601 UTC zone offset formatted date (format `yyyy-mm-ddThh:mm:ss[.sss]±hh:mm` or `yyyy-mm-ddThh:mm:ss[.sss]Z`) for when report should end. It is exclusive, i.e. the provided value is strictly greater than the value in the field `date_received` in the CDR. If you provide this, you must provide `date_start` and must not provide `id`. (format: date, e.g. 2018-01-01T00:00:00+0000)
   --include-message: oneof<nothing, bool> # Include the message contents in the records. Only applicable for use with products `SMS` and `MESSAGES`, where it is optional. (default: false, e.g. true)
   --show-concatenated: oneof<nothing, bool> # Indicates whether the SMS was split up into multiple parts (due to its length). (default: false, e.g. false)
   --status: string@status-completer # The SMS status to search for. Optional where product is `SMS`. (default: none, e.g. delivered)
@@ -184,7 +195,7 @@ export def "reports-records get-records" [
 #
 # DELETE /v2/reports/{report_id}
 # operationId: cancel-report
-export def "reports cancel-report" [
+export def "reports cancel" [
   report_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -197,7 +208,7 @@ export def "reports cancel-report" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({report_id: $report_id} | format pattern "/v2/reports/{report_id}"))
+  let full_url = (build-url $base ({report_id: (encode-path-segment $report_id)} | format pattern "/v2/reports/{report_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -207,7 +218,7 @@ export def "reports cancel-report" [
 #
 # GET /v2/reports/{report_id}
 # operationId: get-report
-export def "reports get-report" [
+export def "reports get" [
   report_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -220,7 +231,7 @@ export def "reports get-report" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({report_id: $report_id} | format pattern "/v2/reports/{report_id}"))
+  let full_url = (build-url $base ({report_id: (encode-path-segment $report_id)} | format pattern "/v2/reports/{report_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -243,7 +254,7 @@ export def "media download-report" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({file_id: $file_id} | format pattern "/v3/media/{file_id}"))
+  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/v3/media/{file_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

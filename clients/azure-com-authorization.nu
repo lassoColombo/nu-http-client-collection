@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -120,7 +129,7 @@ export def "providers-microsoft-authorization-elevate-access create" [
 #
 # GET /providers/Microsoft.Authorization/providerOperations
 # operationId: ProviderOperationsMetadata_List
-export def "providers-microsoft-authorization-provider-operations list" [
+export def "providers-microsoft-authorization-provider-operations list-metadata" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -146,7 +155,7 @@ export def "providers-microsoft-authorization-provider-operations list" [
 #
 # GET /providers/Microsoft.Authorization/providerOperations/{resourceProviderNamespace}
 # operationId: ProviderOperationsMetadata_Get
-export def "providers-microsoft-authorization-provider-operations get" [
+export def "providers-microsoft-authorization-provider-operations get-metadata" [
   resource_provider_namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -163,7 +172,7 @@ export def "providers-microsoft-authorization-provider-operations get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_provider_namespace: $resource_provider_namespace} | format pattern "/providers/Microsoft.Authorization/providerOperations/{resource_provider_namespace}") $qp)
+  let full_url = (build-url $base ({resource_provider_namespace: (encode-path-segment $resource_provider_namespace)} | format pattern "/providers/Microsoft.Authorization/providerOperations/{resource_provider_namespace}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -190,7 +199,7 @@ export def "subscriptions-providers-microsoft-authorization-role-assignments lis
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Authorization/roleAssignments") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Authorization/roleAssignments") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -200,7 +209,7 @@ export def "subscriptions-providers-microsoft-authorization-role-assignments lis
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Authorization/roleAssignments
 # operationId: RoleAssignments_ListForResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-authorization-role-assignments list-for" [
+export def "subscriptions-resource-groups-providers-microsoft-authorization-role-assignments list" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -218,7 +227,7 @@ export def "subscriptions-resource-groups-providers-microsoft-authorization-role
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Authorization/roleAssignments") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Authorization/roleAssignments") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -228,7 +237,7 @@ export def "subscriptions-resource-groups-providers-microsoft-authorization-role
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Authorization/permissions
 # operationId: Permissions_ListForResourceGroup
-export def "subscriptions-resourcegroups-providers-microsoft-authorization-permissions list-for" [
+export def "subscriptions-resourcegroups-providers-microsoft-authorization-permissions list-for-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -245,7 +254,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-authorization-permi
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.Authorization/permissions") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.Authorization/permissions") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -276,7 +285,7 @@ export def "subscriptions-resourcegroups-providers-providers-microsoft-authoriza
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_provider_namespace: $resource_provider_namespace, parent_resource_path: $parent_resource_path, resource_type: $resource_type, resource_name: $resource_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/{resource_provider_namespace}/{parent_resource_path}/{resource_type}/{resource_name}/providers/Microsoft.Authorization/permissions") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_provider_namespace: (encode-path-segment $resource_provider_namespace), parent_resource_path: (encode-path-segment $parent_resource_path), resource_type: (encode-path-segment $resource_type), resource_name: (encode-path-segment $resource_name)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/{resource_provider_namespace}/{parent_resource_path}/{resource_type}/{resource_name}/providers/Microsoft.Authorization/permissions") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -308,7 +317,7 @@ export def "subscriptions-resourcegroups-providers-providers-microsoft-authoriza
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_provider_namespace: $resource_provider_namespace, parent_resource_path: $parent_resource_path, resource_type: $resource_type, resource_name: $resource_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/{resource_provider_namespace}/{parent_resource_path}/{resource_type}/{resource_name}/providers/Microsoft.Authorization/roleAssignments") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_provider_namespace: (encode-path-segment $resource_provider_namespace), parent_resource_path: (encode-path-segment $parent_resource_path), resource_type: (encode-path-segment $resource_type), resource_name: (encode-path-segment $resource_name)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/{resource_provider_namespace}/{parent_resource_path}/{resource_type}/{resource_name}/providers/Microsoft.Authorization/roleAssignments") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -318,7 +327,7 @@ export def "subscriptions-resourcegroups-providers-providers-microsoft-authoriza
 #
 # DELETE /{roleAssignmentId}
 # operationId: RoleAssignments_DeleteById
-export def "role-assignments delete-by" [
+export def "role-assignments delete" [
   role_assignment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -334,7 +343,7 @@ export def "role-assignments delete-by" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({role_assignment_id: $role_assignment_id} | format pattern "/{role_assignment_id}") $qp)
+  let full_url = (build-url $base ({role_assignment_id: (encode-path-segment $role_assignment_id)} | format pattern "/{role_assignment_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -344,7 +353,7 @@ export def "role-assignments delete-by" [
 #
 # GET /{roleAssignmentId}
 # operationId: RoleAssignments_GetById
-export def "role-assignments get-by" [
+export def "role-assignments get" [
   role_assignment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -360,7 +369,7 @@ export def "role-assignments get-by" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({role_assignment_id: $role_assignment_id} | format pattern "/{role_assignment_id}") $qp)
+  let full_url = (build-url $base ({role_assignment_id: (encode-path-segment $role_assignment_id)} | format pattern "/{role_assignment_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -371,7 +380,7 @@ export def "role-assignments get-by" [
 # PUT /{roleAssignmentId}
 # operationId: RoleAssignments_CreateById
 # --properties shape: {principalId: string, roleDefinitionId: string}
-export def "role-assignments create-by" [
+export def "role-assignments create" [
   role_assignment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -389,19 +398,19 @@ export def "role-assignments create-by" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({role_assignment_id: $role_assignment_id} | format pattern "/{role_assignment_id}") $qp)
-  let body = {"properties": $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({role_assignment_id: (encode-path-segment $role_assignment_id)} | format pattern "/{role_assignment_id}") $qp)
+  let req_body = {"properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets role assignments for a scope.
 #
 # GET /{scope}/providers/Microsoft.Authorization/roleAssignments
 # operationId: RoleAssignments_ListForScope
-export def "providers-microsoft-authorization-role-assignments list-for" [
+export def "providers-microsoft-authorization-role-assignments list" [
   scope: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -418,7 +427,7 @@ export def "providers-microsoft-authorization-role-assignments list-for" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({scope: $scope} | format pattern "/{scope}/providers/Microsoft.Authorization/roleAssignments") $qp)
+  let full_url = (build-url $base ({scope: (encode-path-segment $scope)} | format pattern "/{scope}/providers/Microsoft.Authorization/roleAssignments") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -445,7 +454,7 @@ export def "providers-microsoft-authorization-role-assignments delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({scope: $scope, role_assignment_name: $role_assignment_name} | format pattern "/{scope}/providers/Microsoft.Authorization/roleAssignments/{role_assignment_name}") $qp)
+  let full_url = (build-url $base ({scope: (encode-path-segment $scope), role_assignment_name: (encode-path-segment $role_assignment_name)} | format pattern "/{scope}/providers/Microsoft.Authorization/roleAssignments/{role_assignment_name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -472,7 +481,7 @@ export def "providers-microsoft-authorization-role-assignments get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({scope: $scope, role_assignment_name: $role_assignment_name} | format pattern "/{scope}/providers/Microsoft.Authorization/roleAssignments/{role_assignment_name}") $qp)
+  let full_url = (build-url $base ({scope: (encode-path-segment $scope), role_assignment_name: (encode-path-segment $role_assignment_name)} | format pattern "/{scope}/providers/Microsoft.Authorization/roleAssignments/{role_assignment_name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -502,12 +511,12 @@ export def "providers-microsoft-authorization-role-assignments create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({scope: $scope, role_assignment_name: $role_assignment_name} | format pattern "/{scope}/providers/Microsoft.Authorization/roleAssignments/{role_assignment_name}") $qp)
-  let body = {"properties": $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({scope: (encode-path-segment $scope), role_assignment_name: (encode-path-segment $role_assignment_name)} | format pattern "/{scope}/providers/Microsoft.Authorization/roleAssignments/{role_assignment_name}") $qp)
+  let req_body = {"properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get all role definitions that are applicable at scope and above.
@@ -531,7 +540,7 @@ export def "providers-microsoft-authorization-role-definitions list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({scope: $scope} | format pattern "/{scope}/providers/Microsoft.Authorization/roleDefinitions") $qp)
+  let full_url = (build-url $base ({scope: (encode-path-segment $scope)} | format pattern "/{scope}/providers/Microsoft.Authorization/roleDefinitions") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -558,7 +567,7 @@ export def "providers-microsoft-authorization-role-definitions delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({scope: $scope, role_definition_id: $role_definition_id} | format pattern "/{scope}/providers/Microsoft.Authorization/roleDefinitions/{role_definition_id}") $qp)
+  let full_url = (build-url $base ({scope: (encode-path-segment $scope), role_definition_id: (encode-path-segment $role_definition_id)} | format pattern "/{scope}/providers/Microsoft.Authorization/roleDefinitions/{role_definition_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -585,7 +594,7 @@ export def "providers-microsoft-authorization-role-definitions get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({scope: $scope, role_definition_id: $role_definition_id} | format pattern "/{scope}/providers/Microsoft.Authorization/roleDefinitions/{role_definition_id}") $qp)
+  let full_url = (build-url $base ({scope: (encode-path-segment $scope), role_definition_id: (encode-path-segment $role_definition_id)} | format pattern "/{scope}/providers/Microsoft.Authorization/roleDefinitions/{role_definition_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -595,7 +604,7 @@ export def "providers-microsoft-authorization-role-definitions get" [
 #
 # PUT /{scope}/providers/Microsoft.Authorization/roleDefinitions/{roleDefinitionId}
 # operationId: RoleDefinitions_CreateOrUpdate
-# --properties shape: {assignableScopes?: list, description?: string, permissions?: list, roleName?: string, type?: string}
+# --properties shape: {assignableScopes?: list<string>, description?: string, permissions?: list, roleName?: string, type?: string}
 export def "providers-microsoft-authorization-role-definitions create-or-update" [
   scope: string
   role_definition_id: string
@@ -609,16 +618,16 @@ export def "providers-microsoft-authorization-role-definitions create-or-update"
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # The API version to use for this operation.
-  --properties: any # Role definition properties. — shape: {assignableScopes?: list, description?: string, permissions?: list, roleName?: string, type?: string}
+  --properties: any # Role definition properties. — shape: {assignableScopes?: list<string>, description?: string, permissions?: list, roleName?: string, type?: string}
 ]: any -> record<id: string, name: string, properties: record<assignableScopes: list<string>, description: string, permissions: list<record>, roleName: string, type: string>, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({scope: $scope, role_definition_id: $role_definition_id} | format pattern "/{scope}/providers/Microsoft.Authorization/roleDefinitions/{role_definition_id}") $qp)
-  let body = {"properties": $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({scope: (encode-path-segment $scope), role_definition_id: (encode-path-segment $role_definition_id)} | format pattern "/{scope}/providers/Microsoft.Authorization/roleDefinitions/{role_definition_id}") $qp)
+  let req_body = {"properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

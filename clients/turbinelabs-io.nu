@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -131,7 +140,7 @@ export def "admin-user-self-access-token delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "checksum" $checksum "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({access_token_key: $access_token_key} | format pattern "/admin/user/self/access_token/{access_token_key}") $qp)
+  let full_url = (build-url $base ({access_token_key: (encode-path-segment $access_token_key)} | format pattern "/admin/user/self/access_token/{access_token_key}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -161,7 +170,7 @@ export def "admin-user-self-access-tokens get" [
 # Creates a new Access Token and associates it with the authenticated user.
 #
 # POST /admin/user/self/access_tokens
-export def "admin-user-self-access-tokens post" [
+export def "admin-user-self-access-tokens create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -176,11 +185,11 @@ export def "admin-user-self-access-tokens post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin/user/self/access_tokens")
-  let body = {"description": $description} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"description": $description} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Allows an arbitrary filter to be specified and applied to the org\'s change log.
@@ -219,16 +228,16 @@ export def "changelog-cluster-graph get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --start: float # The beginning of the window we want to see changes for; measured in microseconds since Unix Epoch.  (format: int64)
-  --end: float # The end of the window we want to see changes for; measured in microseconds since Unix Epoch.  (format: int64)
-  --max-results: float # Determines how many ChangeDescription object should be returned to the calling code.  (format: int64)
+  --start: float # The beginning of the window we want to see changes for; measured in microseconds since Unix Epoch. (format: int64)
+  --end: float # The end of the window we want to see changes for; measured in microseconds since Unix Epoch. (format: int64)
+  --max-results: float # Determines how many ChangeDescription object should be returned to the calling code. (format: int64)
   --ref-id: string # When paginating a Changelog request start on the entry that comes immediately before or after this ID (as determined by the direction argument).
   --direction: string@direction-completer # If set to "before" then changes will be returned that occurred before reference ID. If "after" then changes will be returned that have occurred since the reference ID.
 ]: nothing -> record<details: record<pagination: record<direction: string, has_more: bool, ref_id: string, total_entries: int>>, result: table<actor_key: string, at: float, comment: string, diffs: list, txn: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "max_results" $max_results "scalar") (serialize-qp "ref_id" $ref_id "scalar") (serialize-qp "direction" $direction "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({cluster_key: $cluster_key} | format pattern "/changelog/cluster-graph/{cluster_key}") $qp)
+  let full_url = (build-url $base ({cluster_key: (encode-path-segment $cluster_key)} | format pattern "/changelog/cluster-graph/{cluster_key}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -247,16 +256,16 @@ export def "changelog-domain-graph get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --start: float # The beginning of the window we want to see changes for; measured in microseconds since Unix Epoch.  (format: int64)
-  --end: float # The end of the window we want to see changes for; measured in microseconds since Unix Epoch.  (format: int64)
-  --max-results: float # Determines how many ChangeDescription object should be returned to the calling code.  (format: int64)
+  --start: float # The beginning of the window we want to see changes for; measured in microseconds since Unix Epoch. (format: int64)
+  --end: float # The end of the window we want to see changes for; measured in microseconds since Unix Epoch. (format: int64)
+  --max-results: float # Determines how many ChangeDescription object should be returned to the calling code. (format: int64)
   --ref-id: string # When paginating a Changelog request start on the entry that comes immediately before or after this ID (as determined by the direction argument).
   --direction: string@direction-completer # If set to "before" then changes will be returned that occurred before reference ID. If "after" then changes will be returned that have occurred since the reference ID.
 ]: nothing -> record<details: record<pagination: record<direction: string, has_more: bool, ref_id: string, total_entries: int>>, result: table<actor_key: string, at: float, comment: string, diffs: list, txn: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "max_results" $max_results "scalar") (serialize-qp "ref_id" $ref_id "scalar") (serialize-qp "direction" $direction "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({domain_key: $domain_key} | format pattern "/changelog/domain-graph/{domain_key}") $qp)
+  let full_url = (build-url $base ({domain_key: (encode-path-segment $domain_key)} | format pattern "/changelog/domain-graph/{domain_key}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -275,16 +284,16 @@ export def "changelog-route-graph get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --start: float # The beginning of the window we want to see changes for; measured in microseconds since Unix Epoch.  (format: int64)
-  --end: float # The end of the window we want to see changes for; measured in microseconds since Unix Epoch.  (format: int64)
-  --max-results: float # Determines how many ChangeDescription object should be returned to the calling code.  (format: int64)
+  --start: float # The beginning of the window we want to see changes for; measured in microseconds since Unix Epoch. (format: int64)
+  --end: float # The end of the window we want to see changes for; measured in microseconds since Unix Epoch. (format: int64)
+  --max-results: float # Determines how many ChangeDescription object should be returned to the calling code. (format: int64)
   --ref-id: string # When paginating a Changelog request start on the entry that comes immediately before or after this ID (as determined by the direction argument).
   --direction: string@direction-completer # If set to "before" then changes will be returned that occurred before reference ID. If "after" then changes will be returned that have occurred since the reference ID.
 ]: nothing -> record<details: record<pagination: record<direction: string, has_more: bool, ref_id: string, total_entries: int>>, result: table<actor_key: string, at: float, comment: string, diffs: list, txn: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "max_results" $max_results "scalar") (serialize-qp "ref_id" $ref_id "scalar") (serialize-qp "direction" $direction "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({route_key: $route_key} | format pattern "/changelog/route-graph/{route_key}") $qp)
+  let full_url = (build-url $base ({route_key: (encode-path-segment $route_key)} | format pattern "/changelog/route-graph/{route_key}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -303,16 +312,16 @@ export def "changelog-shared-rules-graph get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --start: float # The beginning of the window we want to see changes for; measured in microseconds since Unix Epoch.  (format: int64)
-  --end: float # The end of the window we want to see changes for; measured in microseconds since Unix Epoch.  (format: int64)
-  --max-results: float # Determines how many ChangeDescription object should be returned to the calling code.  (format: int64)
+  --start: float # The beginning of the window we want to see changes for; measured in microseconds since Unix Epoch. (format: int64)
+  --end: float # The end of the window we want to see changes for; measured in microseconds since Unix Epoch. (format: int64)
+  --max-results: float # Determines how many ChangeDescription object should be returned to the calling code. (format: int64)
   --ref-id: string # When paginating a Changelog request start on the entry that comes immediately before or after this ID (as determined by the direction argument).
   --direction: string@direction-completer # If set to "before" then changes will be returned that occurred before reference ID. If "after" then changes will be returned that have occurred since the reference ID.
 ]: nothing -> record<details: record<pagination: record<direction: string, has_more: bool, ref_id: string, total_entries: int>>, result: table<actor_key: string, at: float, comment: string, diffs: list, txn: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "max_results" $max_results "scalar") (serialize-qp "ref_id" $ref_id "scalar") (serialize-qp "direction" $direction "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({shared_rules_key: $shared_rules_key} | format pattern "/changelog/shared-rules-graph/{shared_rules_key}") $qp)
+  let full_url = (build-url $base ({shared_rules_key: (encode-path-segment $shared_rules_key)} | format pattern "/changelog/shared-rules-graph/{shared_rules_key}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -331,16 +340,16 @@ export def "changelog-zone get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --start: float # The beginning of the window we want to see changes for; measured in microseconds since Unix Epoch.  (format: int64)
-  --end: float # The end of the window we want to see changes for; measured in microseconds since Unix Epoch.  (format: int64)
-  --max-results: float # Determines how many ChangeDescription object should be returned to the calling code.  (format: int64)
+  --start: float # The beginning of the window we want to see changes for; measured in microseconds since Unix Epoch. (format: int64)
+  --end: float # The end of the window we want to see changes for; measured in microseconds since Unix Epoch. (format: int64)
+  --max-results: float # Determines how many ChangeDescription object should be returned to the calling code. (format: int64)
   --ref-id: string # When paginating a Changelog request start on the entry that comes immediately before or after this ID (as determined by the direction argument).
   --direction: string@direction-completer # If set to "before" then changes will be returned that occurred before reference ID. If "after" then changes will be returned that have occurred since the reference ID.
 ]: nothing -> record<details: record<pagination: record<direction: string, has_more: bool, ref_id: string, total_entries: int>>, result: table<actor_key: string, at: float, comment: string, diffs: list, txn: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "max_results" $max_results "scalar") (serialize-qp "ref_id" $ref_id "scalar") (serialize-qp "direction" $direction "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({zone_key: $zone_key} | format pattern "/changelog/zone/{zone_key}") $qp)
+  let full_url = (build-url $base ({zone_key: (encode-path-segment $zone_key)} | format pattern "/changelog/zone/{zone_key}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -376,7 +385,7 @@ export def "cluster list" [
 # --health_checks item shape: {health_checker: record, healthy_edge_interval_msec?: int, healthy_threshold: int, interval_jitter_msec?: int, interval_msec: int, no_traffic_interval_msec?: int, reuse_connection?: bool, timeout_msec: int, unhealthy_edge_interval_msec?: int, unhealthy_interval_msec?: int, unhealthy_threshold: int}
 # --instances item shape: {host?: string, metadata?: list, port?: int}
 # --outlier_detection shape: {base_ejection_time_msec?: int, consecutive_5xx?: int, consecutive_gateway_failure?: int, enforcing_consecutive_5xx?: int, enforcing_consecutive_gateway_failure?: int, enforcing_success_rate?: int, interval_msec?: int, max_ejection_percent?: int, success_rate_minimum_hosts?: int, success_rate_request_volume?: int, success_rate_stdev_factor?: int}
-export def "cluster post" [
+export def "cluster create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -397,11 +406,11 @@ export def "cluster post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/cluster")
-  let body = {"circuit_breakers": $circuit_breakers, "health_checks": $health_checks, "instances": $instances, "name": $name, "outlier_detection": $outlier_detection, "require_tls": $require_tls, "zone_key": $zone_key} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"circuit_breakers": $circuit_breakers, "health_checks": $health_checks, "instances": $instances, "name": $name, "outlier_detection": $outlier_detection, "require_tls": $require_tls, "zone_key": $zone_key} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # delete cluster
@@ -422,7 +431,7 @@ export def "cluster delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "checksum" $checksum "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({cluster_key: $cluster_key} | format pattern "/cluster/{cluster_key}") $qp)
+  let full_url = (build-url $base ({cluster_key: (encode-path-segment $cluster_key)} | format pattern "/cluster/{cluster_key}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -444,7 +453,7 @@ export def "cluster get" [
 ]: nothing -> record<result: record<circuit_breakers: record<max_connections: int, max_pending_requests: int, max_requests: int, max_retries: int>, health_checks: list<record>, instances: list<record>, name: string, outlier_detection: record<base_ejection_time_msec: int, consecutive_5xx: int, consecutive_gateway_failure: int, enforcing_consecutive_5xx: int, enforcing_consecutive_gateway_failure: int, enforcing_success_rate: int, interval_msec: int, max_ejection_percent: int, success_rate_minimum_hosts: int, success_rate_request_volume: int, success_rate_stdev_factor: int>, require_tls: bool, zone_key: string, checksum: string, cluster_key: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({cluster_key: $cluster_key} | format pattern "/cluster/{cluster_key}"))
+  let full_url = (build-url $base ({cluster_key: (encode-path-segment $cluster_key)} | format pattern "/cluster/{cluster_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -457,7 +466,7 @@ export def "cluster get" [
 # --health_checks item shape: {health_checker: record, healthy_edge_interval_msec?: int, healthy_threshold: int, interval_jitter_msec?: int, interval_msec: int, no_traffic_interval_msec?: int, reuse_connection?: bool, timeout_msec: int, unhealthy_edge_interval_msec?: int, unhealthy_interval_msec?: int, unhealthy_threshold: int}
 # --instances item shape: {host?: string, metadata?: list, port?: int}
 # --outlier_detection shape: {base_ejection_time_msec?: int, consecutive_5xx?: int, consecutive_gateway_failure?: int, enforcing_consecutive_5xx?: int, enforcing_consecutive_gateway_failure?: int, enforcing_success_rate?: int, interval_msec?: int, max_ejection_percent?: int, success_rate_minimum_hosts?: int, success_rate_request_volume?: int, success_rate_stdev_factor?: int}
-export def "cluster put" [
+export def "cluster update" [
   cluster_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -480,19 +489,19 @@ export def "cluster put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({cluster_key: $cluster_key} | format pattern "/cluster/{cluster_key}"))
-  let body = {"circuit_breakers": $circuit_breakers, "health_checks": $health_checks, "instances": $instances, "name": $name, "outlier_detection": $outlier_detection, "require_tls": $require_tls, "zone_key": $zone_key, "checksum": $checksum, "cluster_key": $body_cluster_key} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({cluster_key: (encode-path-segment $cluster_key)} | format pattern "/cluster/{cluster_key}"))
+  let req_body = {"circuit_breakers": $circuit_breakers, "health_checks": $health_checks, "instances": $instances, "name": $name, "outlier_detection": $outlier_detection, "require_tls": $require_tls, "zone_key": $zone_key, "checksum": $checksum, "cluster_key": $body_cluster_key} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # add instance
 #
 # POST /cluster/{clusterKey}/instances
 # --metadata item shape: {key?: string, value?: string}
-export def "cluster-instances post" [
+export def "cluster-instances create" [
   cluster_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -509,12 +518,12 @@ export def "cluster-instances post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({cluster_key: $cluster_key} | format pattern "/cluster/{cluster_key}/instances"))
-  let body = {"host": $host, "metadata": $metadata, "port": $port} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({cluster_key: (encode-path-segment $cluster_key)} | format pattern "/cluster/{cluster_key}/instances"))
+  let req_body = {"host": $host, "metadata": $metadata, "port": $port} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # remove instance
@@ -536,7 +545,7 @@ export def "cluster-instances delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "checksum" $checksum "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({cluster_key: $cluster_key, instance_identifier: $instance_identifier} | format pattern "/cluster/{cluster_key}/instances/{instance_identifier}") $qp)
+  let full_url = (build-url $base ({cluster_key: (encode-path-segment $cluster_key), instance_identifier: (encode-path-segment $instance_identifier)} | format pattern "/cluster/{cluster_key}/instances/{instance_identifier}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -568,10 +577,10 @@ export def "domain list" [
 # create domain
 #
 # POST /domain
-# --cors_config shape: {allow_credentials?: bool, allowed_headers?: list, allowed_methods: list, allowed_origins: list, exposed_headers?: list, max_age?: int}
+# --cors_config shape: {allow_credentials?: bool, allowed_headers?: list<string>, allowed_methods: list<string>, allowed_origins: list<string>, exposed_headers?: list<string>, max_age?: int}
 # --redirects item shape: {from: string, header_constraints?: list, name: string, redirect_type: "permanent"|"temporary", to: string}
-# --ssl_config shape: {cert_key_pairs: list, cipher_filter?: string, protocols?: list}
-export def "domain post" [
+# --ssl_config shape: {cert_key_pairs: list, cipher_filter?: string, protocols?: list<string>}
+export def "domain create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -580,27 +589,27 @@ export def "domain post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --aliases: list # A set of alternate names that this Domain may be referenced by. May start ('*.') or end ('.*') with a wildcard.
+  --aliases: list<string> # A set of alternate names that this Domain may be referenced by. May start ('*.') or end ('.*') with a wildcard.
   --checksum: string
-  --cors-config: record # Experimental: Controls simple CORS responses for the associated domain. The configurable properties map closely to the CORS specification which should be referenced for a full discussion on their meaning: https://www.w3.org/TR/cors/ or https://developer.mozilla.org/docs/Web/HTTP/Access_control_CORS. — shape: {allow_credentials?: bool, allowed_headers?: list, allowed_methods: list, allowed_origins: list, exposed_headers?: list, max_age?: int}
+  --cors-config: record # Experimental: Controls simple CORS responses for the associated domain. The configurable properties map closely to the CORS specification which should be referenced for a full discussion on their meaning: https://www.w3.org/TR/cors/ or https://developer.mozilla.org/docs/Web/HTTP/Access_control_CORS. — shape: {allow_credentials?: bool, allowed_headers?: list<string>, allowed_methods: list<string>, allowed_origins: list<string>, exposed_headers?: list<string>, max_age?: int}
   --domain-key: string
   --force-https: oneof<nothing, bool> # If set to true, requests must use TLS. If a request is not using TLS, (as determined by the scheme or the presence of X-Forwarded-Proto header), a 301 redirect will be sent telling the client to use HTTPS.
   --gzip-enabled: oneof<nothing, bool> # Experimental: if set to true will enable gzip compression on data that passes trough this domain
   name: string
   port: int
   --redirects: list # item shape: {from: string, header_constraints?: list, name: string, redirect_type: "permanent"|"temporary", to: string}
-  --ssl-config: record # Experimental: Specifies whether a domain should support SSL/TLS connections from clients.  If not set the proxy will expect unencrypted HTTP traffic. — shape: {cert_key_pairs: list, cipher_filter?: string, protocols?: list}
+  --ssl-config: record # Experimental: Specifies whether a domain should support SSL/TLS connections from clients. If not set the proxy will expect unencrypted HTTP traffic. — shape: {cert_key_pairs: list, cipher_filter?: string, protocols?: list<string>}
   zone_key: string
 ]: any -> record<result: record<aliases: list<string>, checksum: string, cors_config: record<allow_credentials: bool, allowed_headers: list, allowed_methods: list, allowed_origins: list, exposed_headers: list, max_age: int>, domain_key: string, force_https: bool, gzip_enabled: bool, name: string, port: int, redirects: list<record>, ssl_config: record<cert_key_pairs: list, cipher_filter: string, protocols: list>, zone_key: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/domain")
-  let body = {"aliases": $aliases, "checksum": $checksum, "cors_config": $cors_config, "domain_key": $domain_key, "force_https": $force_https, "gzip_enabled": $gzip_enabled, "name": $name, "port": $port, "redirects": $redirects, "ssl_config": $ssl_config, "zone_key": $zone_key} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"aliases": $aliases, "checksum": $checksum, "cors_config": $cors_config, "domain_key": $domain_key, "force_https": $force_https, "gzip_enabled": $gzip_enabled, "name": $name, "port": $port, "redirects": $redirects, "ssl_config": $ssl_config, "zone_key": $zone_key} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # delete domain
@@ -621,7 +630,7 @@ export def "domain delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "checksum" $checksum "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({domain_key: $domain_key} | format pattern "/domain/{domain_key}") $qp)
+  let full_url = (build-url $base ({domain_key: (encode-path-segment $domain_key)} | format pattern "/domain/{domain_key}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -643,7 +652,7 @@ export def "domain get" [
 ]: nothing -> record<result: record<aliases: list<string>, checksum: string, cors_config: record<allow_credentials: bool, allowed_headers: list, allowed_methods: list, allowed_origins: list, exposed_headers: list, max_age: int>, domain_key: string, force_https: bool, gzip_enabled: bool, name: string, port: int, redirects: list<record>, ssl_config: record<cert_key_pairs: list, cipher_filter: string, protocols: list>, zone_key: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({domain_key: $domain_key} | format pattern "/domain/{domain_key}"))
+  let full_url = (build-url $base ({domain_key: (encode-path-segment $domain_key)} | format pattern "/domain/{domain_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -675,8 +684,8 @@ export def "listener list" [
 # create listener
 #
 # POST /listener
-# --tracing_config shape: {ingress?: bool, request_headers_for_tags?: list}
-export def "listener post" [
+# --tracing_config shape: {ingress?: bool, request_headers_for_tags?: list<string>}
+export def "listener create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -685,23 +694,23 @@ export def "listener post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain-keys: list
+  --domain-keys: list<string>
   --ip: string # the interface this listener should bind to.
   name: string
   port: int # the port this listener should bind to.
   protocol: string@protocol-completer # the protocol this listener will handle. http and http2 configure the listener to only process requests of that type. http_auto will adapt to HTTP/1.1 and HTTP/2 as needed. tcp configures the listener to be a tcp proxy
-  --tracing-config: record # Configures tracing operations to be performed on the given listener — shape: {ingress?: bool, request_headers_for_tags?: list}
+  --tracing-config: record # Configures tracing operations to be performed on the given listener — shape: {ingress?: bool, request_headers_for_tags?: list<string>}
   --zone-key: string
 ]: any -> record<result: record<domain_keys: list<string>, ip: string, name: string, port: int, protocol: string, tracing_config: record<ingress: bool, request_headers_for_tags: list>, zone_key: string, checksum: string, listener_key: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/listener")
-  let body = {"domain_keys": $domain_keys, "ip": $ip, "name": $name, "port": $port, "protocol": $protocol, "tracing_config": $tracing_config, "zone_key": $zone_key} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"domain_keys": $domain_keys, "ip": $ip, "name": $name, "port": $port, "protocol": $protocol, "tracing_config": $tracing_config, "zone_key": $zone_key} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # delete listener
@@ -722,7 +731,7 @@ export def "listener delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "checksum" $checksum "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({listener_key: $listener_key} | format pattern "/listener/{listener_key}") $qp)
+  let full_url = (build-url $base ({listener_key: (encode-path-segment $listener_key)} | format pattern "/listener/{listener_key}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -744,7 +753,7 @@ export def "listener get" [
 ]: nothing -> record<result: record<domain_keys: list<string>, ip: string, name: string, port: int, protocol: string, tracing_config: record<ingress: bool, request_headers_for_tags: list>, zone_key: string, checksum: string, listener_key: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({listener_key: $listener_key} | format pattern "/listener/{listener_key}"))
+  let full_url = (build-url $base ({listener_key: (encode-path-segment $listener_key)} | format pattern "/listener/{listener_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -753,8 +762,8 @@ export def "listener get" [
 # modify listener
 #
 # PUT /listener/{listenerKey}
-# --tracing_config shape: {ingress?: bool, request_headers_for_tags?: list}
-export def "listener put" [
+# --tracing_config shape: {ingress?: bool, request_headers_for_tags?: list<string>}
+export def "listener update" [
   listener_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -764,12 +773,12 @@ export def "listener put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain-keys: list
+  --domain-keys: list<string>
   --ip: string # the interface this listener should bind to.
   name: string
   port: int # the port this listener should bind to.
   protocol: string@protocol-completer # the protocol this listener will handle. http and http2 configure the listener to only process requests of that type. http_auto will adapt to HTTP/1.1 and HTTP/2 as needed. tcp configures the listener to be a tcp proxy
-  --tracing-config: record # Configures tracing operations to be performed on the given listener — shape: {ingress?: bool, request_headers_for_tags?: list}
+  --tracing-config: record # Configures tracing operations to be performed on the given listener — shape: {ingress?: bool, request_headers_for_tags?: list<string>}
   zone_key: string
   checksum: string
   --body-listener-key: string
@@ -777,12 +786,12 @@ export def "listener put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({listener_key: $listener_key} | format pattern "/listener/{listener_key}"))
-  let body = {"domain_keys": $domain_keys, "ip": $ip, "name": $name, "port": $port, "protocol": $protocol, "tracing_config": $tracing_config, "zone_key": $zone_key, "checksum": $checksum, "listener_key": $body_listener_key} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({listener_key: (encode-path-segment $listener_key)} | format pattern "/listener/{listener_key}"))
+  let req_body = {"domain_keys": $domain_keys, "ip": $ip, "name": $name, "port": $port, "protocol": $protocol, "tracing_config": $tracing_config, "zone_key": $zone_key, "checksum": $checksum, "listener_key": $body_listener_key} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # list proxies
@@ -811,7 +820,7 @@ export def "proxy list" [
 # create proxy
 #
 # POST /proxy
-export def "proxy post" [
+export def "proxy create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -820,8 +829,8 @@ export def "proxy post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain-keys: list
-  --listener-keys: list
+  --domain-keys: list<string>
+  --listener-keys: list<string>
   name: string
   zone_key: string
 ]: any -> record<result: record<domain_keys: list<string>, listener_keys: list<string>, name: string, zone_key: string, checksum: string, proxy_key: string>> {
@@ -829,11 +838,11 @@ export def "proxy post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/proxy")
-  let body = {"domain_keys": $domain_keys, "listener_keys": $listener_keys, "name": $name, "zone_key": $zone_key} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"domain_keys": $domain_keys, "listener_keys": $listener_keys, "name": $name, "zone_key": $zone_key} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # delete proxy
@@ -854,7 +863,7 @@ export def "proxy delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "checksum" $checksum "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({proxy_key: $proxy_key} | format pattern "/proxy/{proxy_key}") $qp)
+  let full_url = (build-url $base ({proxy_key: (encode-path-segment $proxy_key)} | format pattern "/proxy/{proxy_key}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -876,7 +885,7 @@ export def "proxy get" [
 ]: nothing -> record<result: record<domain_keys: list<string>, listener_keys: list<string>, name: string, zone_key: string, checksum: string, proxy_key: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({proxy_key: $proxy_key} | format pattern "/proxy/{proxy_key}"))
+  let full_url = (build-url $base ({proxy_key: (encode-path-segment $proxy_key)} | format pattern "/proxy/{proxy_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -910,8 +919,8 @@ export def "route list" [
 # POST /route
 # --cohort_seed shape: {name?: string, type?: "header"|"cookie"|"query", use_zero_value_seed?: bool}
 # --retry_policy shape: {num_retries?: int, per_try_timeout_msec?: int, timeout_msec?: int}
-# --rules item shape: {cohort_seed?: record, constraints?: record, matches?: list, methods?: list, rule_key?: string}
-export def "route post" [
+# --rules item shape: {cohort_seed?: record, constraints?: record, matches?: list, methods?: list<string>, rule_key?: string}
+export def "route create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -927,7 +936,7 @@ export def "route post" [
   --response-data: any # When a request is served by this Route annotate the response with the information specified within this ResponseData object. It's possible that multiple response data configurations will apply; if that's the case then the values from Route take precedence over those from a SharedRules object.
   --retry-policy: record # Number of times to retry a request and how long to wait before timing out. — shape: {num_retries?: int, per_try_timeout_msec?: int, timeout_msec?: int}
   --route-key: string
-  --rules: list # item shape: {cohort_seed?: record, constraints?: record, matches?: list, methods?: list, rule_key?: string}
+  --rules: list # item shape: {cohort_seed?: record, constraints?: record, matches?: list, methods?: list<string>, rule_key?: string}
   shared_rules_key: string
   zone_key: string
 ]: any -> record<result: record<checksum: string, cohort_seed: record<name: string, type: string, use_zero_value_seed: bool>, domain_key: string, path: string, response_data: record<cookies: list, headers: list>, retry_policy: record<num_retries: int, per_try_timeout_msec: int, timeout_msec: int>, route_key: string, rules: list<record>, shared_rules_key: string, zone_key: string>> {
@@ -935,11 +944,11 @@ export def "route post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/route")
-  let body = {"checksum": $checksum, "cohort_seed": $cohort_seed, "domain_key": $domain_key, "path": $path, "response_data": $response_data, "retry_policy": $retry_policy, "route_key": $route_key, "rules": $rules, "shared_rules_key": $shared_rules_key, "zone_key": $zone_key} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"checksum": $checksum, "cohort_seed": $cohort_seed, "domain_key": $domain_key, "path": $path, "response_data": $response_data, "retry_policy": $retry_policy, "route_key": $route_key, "rules": $rules, "shared_rules_key": $shared_rules_key, "zone_key": $zone_key} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # delete route
@@ -960,7 +969,7 @@ export def "route delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "checksum" $checksum "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({route_key: $route_key} | format pattern "/route/{route_key}") $qp)
+  let full_url = (build-url $base ({route_key: (encode-path-segment $route_key)} | format pattern "/route/{route_key}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -982,7 +991,7 @@ export def "route get" [
 ]: nothing -> record<result: record<checksum: string, cohort_seed: record<name: string, type: string, use_zero_value_seed: bool>, domain_key: string, path: string, response_data: record<cookies: list, headers: list>, retry_policy: record<num_retries: int, per_try_timeout_msec: int, timeout_msec: int>, route_key: string, rules: list<record>, shared_rules_key: string, zone_key: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({route_key: $route_key} | format pattern "/route/{route_key}"))
+  let full_url = (build-url $base ({route_key: (encode-path-segment $route_key)} | format pattern "/route/{route_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -993,8 +1002,8 @@ export def "route get" [
 # PUT /route/{routeKey}
 # --cohort_seed shape: {name?: string, type?: "header"|"cookie"|"query", use_zero_value_seed?: bool}
 # --retry_policy shape: {num_retries?: int, per_try_timeout_msec?: int, timeout_msec?: int}
-# --rules item shape: {cohort_seed?: record, constraints?: record, matches?: list, methods?: list, rule_key?: string}
-export def "route put" [
+# --rules item shape: {cohort_seed?: record, constraints?: record, matches?: list, methods?: list<string>, rule_key?: string}
+export def "route update" [
   route_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1011,19 +1020,19 @@ export def "route put" [
   --response-data: any # When a request is served by this Route annotate the response with the information specified within this ResponseData object. It's possible that multiple response data configurations will apply; if that's the case then the values from Route take precedence over those from a SharedRules object.
   --retry-policy: record # Number of times to retry a request and how long to wait before timing out. — shape: {num_retries?: int, per_try_timeout_msec?: int, timeout_msec?: int}
   --body-route-key: string
-  --rules: list # item shape: {cohort_seed?: record, constraints?: record, matches?: list, methods?: list, rule_key?: string}
+  --rules: list # item shape: {cohort_seed?: record, constraints?: record, matches?: list, methods?: list<string>, rule_key?: string}
   shared_rules_key: string
   zone_key: string
 ]: any -> record<result: record<checksum: string, cohort_seed: record<name: string, type: string, use_zero_value_seed: bool>, domain_key: string, path: string, response_data: record<cookies: list, headers: list>, retry_policy: record<num_retries: int, per_try_timeout_msec: int, timeout_msec: int>, route_key: string, rules: list<record>, shared_rules_key: string, zone_key: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({route_key: $route_key} | format pattern "/route/{route_key}"))
-  let body = {"checksum": $checksum, "cohort_seed": $cohort_seed, "domain_key": $domain_key, "path": $path, "response_data": $response_data, "retry_policy": $retry_policy, "route_key": $body_route_key, "rules": $rules, "shared_rules_key": $shared_rules_key, "zone_key": $zone_key} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({route_key: (encode-path-segment $route_key)} | format pattern "/route/{route_key}"))
+  let req_body = {"checksum": $checksum, "cohort_seed": $cohort_seed, "domain_key": $domain_key, "path": $path, "response_data": $response_data, "retry_policy": $retry_policy, "route_key": $body_route_key, "rules": $rules, "shared_rules_key": $shared_rules_key, "zone_key": $zone_key} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # get shared_rules
@@ -1056,8 +1065,8 @@ export def "shared-rules list" [
 # --default shape: {dark?: list, light: list, tap?: list}
 # --properties item shape: {key?: string, value?: string}
 # --retry_policy shape: {num_retries?: int, per_try_timeout_msec?: int, timeout_msec?: int}
-# --rules item shape: {cohort_seed?: record, constraints?: record, matches?: list, methods?: list, rule_key?: string}
-export def "shared-rules post" [
+# --rules item shape: {cohort_seed?: record, constraints?: record, matches?: list, methods?: list<string>, rule_key?: string}
+export def "shared-rules create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1072,7 +1081,7 @@ export def "shared-rules post" [
   --properties: list # item shape: {key?: string, value?: string}
   --response-data: any # When a request is served by a Route that is part of this SharedRules group the response is annotated with the information specified within this ResponseData object. It's possible that multiple response data configurations will apply; if that's the case then the values from the applicable Route and ClusterConstarint takes precedence over those specified here.
   --retry-policy: record # Number of times to retry a request and how long to wait before timing out. — shape: {num_retries?: int, per_try_timeout_msec?: int, timeout_msec?: int}
-  --rules: list # item shape: {cohort_seed?: record, constraints?: record, matches?: list, methods?: list, rule_key?: string}
+  --rules: list # item shape: {cohort_seed?: record, constraints?: record, matches?: list, methods?: list<string>, rule_key?: string}
   --shared-rules-key: string
   zone_key: string
 ]: any -> record<result: record<checksum: string, cohort_seed: record<name: string, type: string, use_zero_value_seed: bool>, default: record<dark: list, light: list, tap: list>, properties: list<record>, response_data: record<cookies: list, headers: list>, retry_policy: record<num_retries: int, per_try_timeout_msec: int, timeout_msec: int>, rules: list<record>, shared_rules_key: string, zone_key: string>> {
@@ -1080,11 +1089,11 @@ export def "shared-rules post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/shared_rules")
-  let body = {"checksum": $checksum, "cohort_seed": $cohort_seed, "default": $default, "properties": $properties, "response_data": $response_data, "retry_policy": $retry_policy, "rules": $rules, "shared_rules_key": $shared_rules_key, "zone_key": $zone_key} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"checksum": $checksum, "cohort_seed": $cohort_seed, "default": $default, "properties": $properties, "response_data": $response_data, "retry_policy": $retry_policy, "rules": $rules, "shared_rules_key": $shared_rules_key, "zone_key": $zone_key} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # delete shared_rules object
@@ -1105,7 +1114,7 @@ export def "shared-rules delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "checksum" $checksum "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({shared_rules_key: $shared_rules_key} | format pattern "/shared_rules/{shared_rules_key}") $qp)
+  let full_url = (build-url $base ({shared_rules_key: (encode-path-segment $shared_rules_key)} | format pattern "/shared_rules/{shared_rules_key}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1127,7 +1136,7 @@ export def "shared-rules get" [
 ]: nothing -> record<result: record<checksum: string, cohort_seed: record<name: string, type: string, use_zero_value_seed: bool>, default: record<dark: list, light: list, tap: list>, properties: list<record>, response_data: record<cookies: list, headers: list>, retry_policy: record<num_retries: int, per_try_timeout_msec: int, timeout_msec: int>, rules: list<record>, shared_rules_key: string, zone_key: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({shared_rules_key: $shared_rules_key} | format pattern "/shared_rules/{shared_rules_key}"))
+  let full_url = (build-url $base ({shared_rules_key: (encode-path-segment $shared_rules_key)} | format pattern "/shared_rules/{shared_rules_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1140,8 +1149,8 @@ export def "shared-rules get" [
 # --default shape: {dark?: list, light: list, tap?: list}
 # --properties item shape: {key?: string, value?: string}
 # --retry_policy shape: {num_retries?: int, per_try_timeout_msec?: int, timeout_msec?: int}
-# --rules item shape: {cohort_seed?: record, constraints?: record, matches?: list, methods?: list, rule_key?: string}
-export def "shared-rules put" [
+# --rules item shape: {cohort_seed?: record, constraints?: record, matches?: list, methods?: list<string>, rule_key?: string}
+export def "shared-rules update" [
   shared_rules_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1157,19 +1166,19 @@ export def "shared-rules put" [
   --properties: list # item shape: {key?: string, value?: string}
   --response-data: any # When a request is served by a Route that is part of this SharedRules group the response is annotated with the information specified within this ResponseData object. It's possible that multiple response data configurations will apply; if that's the case then the values from the applicable Route and ClusterConstarint takes precedence over those specified here.
   --retry-policy: record # Number of times to retry a request and how long to wait before timing out. — shape: {num_retries?: int, per_try_timeout_msec?: int, timeout_msec?: int}
-  --rules: list # item shape: {cohort_seed?: record, constraints?: record, matches?: list, methods?: list, rule_key?: string}
+  --rules: list # item shape: {cohort_seed?: record, constraints?: record, matches?: list, methods?: list<string>, rule_key?: string}
   --body-shared-rules-key: string
   zone_key: string
 ]: any -> record<result: record<checksum: string, cohort_seed: record<name: string, type: string, use_zero_value_seed: bool>, default: record<dark: list, light: list, tap: list>, properties: list<record>, response_data: record<cookies: list, headers: list>, retry_policy: record<num_retries: int, per_try_timeout_msec: int, timeout_msec: int>, rules: list<record>, shared_rules_key: string, zone_key: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({shared_rules_key: $shared_rules_key} | format pattern "/shared_rules/{shared_rules_key}"))
-  let body = {"checksum": $checksum, "cohort_seed": $cohort_seed, "default": $default, "properties": $properties, "response_data": $response_data, "retry_policy": $retry_policy, "rules": $rules, "shared_rules_key": $body_shared_rules_key, "zone_key": $zone_key} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({shared_rules_key: (encode-path-segment $shared_rules_key)} | format pattern "/shared_rules/{shared_rules_key}"))
+  let req_body = {"checksum": $checksum, "cohort_seed": $cohort_seed, "default": $default, "properties": $properties, "response_data": $response_data, "retry_policy": $retry_policy, "rules": $rules, "shared_rules_key": $body_shared_rules_key, "zone_key": $zone_key} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # get a list of zones
@@ -1198,7 +1207,7 @@ export def "zone list" [
 # create zone
 #
 # POST /zone
-export def "zone post" [
+export def "zone create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1213,11 +1222,11 @@ export def "zone post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/zone")
-  let body = {"name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # delete zone
@@ -1238,7 +1247,7 @@ export def "zone delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "checksum" $checksum "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({zone_key: $zone_key} | format pattern "/zone/{zone_key}") $qp)
+  let full_url = (build-url $base ({zone_key: (encode-path-segment $zone_key)} | format pattern "/zone/{zone_key}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1260,7 +1269,7 @@ export def "zone get" [
 ]: nothing -> record<result: record<checksum: string, name: string, zone_key: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({zone_key: $zone_key} | format pattern "/zone/{zone_key}"))
+  let full_url = (build-url $base ({zone_key: (encode-path-segment $zone_key)} | format pattern "/zone/{zone_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -134,24 +143,24 @@ export def "templates create" [
   --layout: record # Defines template layout (e.g page format, margins). — shape: {emptyLabels?: int, format?: "A4"|"letter"|"custom", height?: float, margins?: record, orientation?: "portrait"|"landscape", repeatLayout?: record, rotaion?: "0"|"90"|"180"|"270", unit?: "cm"|"in", width?: float}
   name: string # Template name (e.g. Invoice template)
   --pages: list # Defines page or label size, margins and components on page or label — item shape: {components?: list, height?: float, margins?: record, width?: float}
-  --tags: list # A list of tags assigned to a template (e.g. [invoice, orders])
+  --tags: list<string> # A list of tags assigned to a template (e.g. [invoice, orders])
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/templates")
-  let body = {"isDraft": $is_draft, "layout": $layout, "name": $name, "pages": $pages, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"isDraft": $is_draft, "layout": $layout, "name": $name, "pages": $pages, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Generate document (multiple templates)
 #
 # POST /templates/output
 # operationId: mergeTemplates
-export def "templates-output mergeTemplates" [
+export def "templates-output create-merge" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -170,10 +179,11 @@ export def "templates-output mergeTemplates" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "output" $output "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/templates/output" $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete template
@@ -244,18 +254,18 @@ export def "templates-template-id update" [
   --layout: record # Defines template layout (e.g page format, margins). — shape: {emptyLabels?: int, format?: "A4"|"letter"|"custom", height?: float, margins?: record, orientation?: "portrait"|"landscape", repeatLayout?: record, rotaion?: "0"|"90"|"180"|"270", unit?: "cm"|"in", width?: float}
   name: string # Template name (e.g. Invoice template)
   --pages: list # Defines page or label size, margins and components on page or label — item shape: {components?: list, height?: float, margins?: record, width?: float}
-  --tags: list # A list of tags assigned to a template (e.g. [invoice, orders])
+  --tags: list<string> # A list of tags assigned to a template (e.g. [invoice, orders])
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "templateId" $template_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/templates/templateId" $qp)
-  let body = {"isDraft": $is_draft, "layout": $layout, "name": $name, "pages": $pages, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"isDraft": $is_draft, "layout": $layout, "name": $name, "pages": $pages, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Copy template
@@ -287,7 +297,7 @@ export def "templates-template-id-copy copy" [
 #
 # POST /templates/templateId/editor
 # operationId: getEditorUrl
-export def "templates-template-id-editor get-editor-url" [
+export def "templates-template-id-editor get-url" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -305,17 +315,18 @@ export def "templates-template-id-editor get-editor-url" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "templateId" $template_id "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/templates/templateId/editor" $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Generate document
 #
 # POST /templates/templateId/output
 # operationId: mergeTemplate
-export def "templates-template-id-output mergeTemplate" [
+export def "templates-template-id-output create-merge" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -336,11 +347,11 @@ export def "templates-template-id-output mergeTemplate" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "templateId" $template_id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "output" $output "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/templates/templateId/output" $qp)
-  let body = {"id": $id, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"id": $id, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete workspace

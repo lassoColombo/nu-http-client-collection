@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -73,7 +82,7 @@ def annotation-completer [] { ["ANNOTATION_UNSPECIFIED" "FRAUDULENT" "LEGITIMATE
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "projects recaptchaenterpriseprojectskeysretrieveLegacySecretKey" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "projects get-legacy-secret" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -97,7 +106,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/{key}:retrieveLegacySecretKey
 # operationId: recaptchaenterprise.projects.keys.retrieveLegacySecretKey
-export def "projects recaptchaenterpriseprojectskeysretrieveLegacySecretKey" [
+export def "projects get-legacy-secret" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -122,7 +131,7 @@ export def "projects recaptchaenterpriseprojectskeysretrieveLegacySecretKey" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({key: $key} | format pattern "/v1/{key}:retrieveLegacySecretKey") $qp)
+  let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/v1/{key}:retrieveLegacySecretKey") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -132,7 +141,7 @@ export def "projects recaptchaenterpriseprojectskeysretrieveLegacySecretKey" [
 #
 # DELETE /v1/{name}
 # operationId: recaptchaenterprise.projects.keys.delete
-export def "projects recaptchaenterpriseprojectskeysdelete" [
+export def "projects delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -157,7 +166,7 @@ export def "projects recaptchaenterpriseprojectskeysdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -167,7 +176,7 @@ export def "projects recaptchaenterpriseprojectskeysdelete" [
 #
 # GET /v1/{name}
 # operationId: recaptchaenterprise.projects.keys.getMetrics
-export def "projects recaptchaenterpriseprojectskeysgetMetrics" [
+export def "projects get-metrics" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -192,7 +201,7 @@ export def "projects recaptchaenterpriseprojectskeysgetMetrics" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -202,12 +211,12 @@ export def "projects recaptchaenterpriseprojectskeysgetMetrics" [
 #
 # PATCH /v1/{name}
 # operationId: recaptchaenterprise.projects.keys.patch
-# --androidSettings shape: {allowAllPackageNames?: bool, allowedPackageNames?: list, supportNonGoogleAppStoreDistribution?: bool}
-# --iosSettings shape: {allowAllBundleIds?: bool, allowedBundleIds?: list}
+# --androidSettings shape: {allowAllPackageNames?: bool, allowedPackageNames?: list<string>, supportNonGoogleAppStoreDistribution?: bool}
+# --iosSettings shape: {allowAllBundleIds?: bool, allowedBundleIds?: list<string>}
 # --testingOptions shape: {testingChallenge?: "TESTING_CHALLENGE_UNSPECIFIED"|"NOCAPTCHA"|"UNSOLVABLE_CHALLENGE", testingScore?: float}
 # --wafSettings shape: {wafFeature?: "WAF_FEATURE_UNSPECIFIED"|"CHALLENGE_PAGE"|"SESSION_TOKEN"|"ACTION_TOKEN"|"EXPRESS", wafService?: "WAF_SERVICE_UNSPECIFIED"|"CA"|"FASTLY"}
-# --webSettings shape: {allowAllDomains?: bool, allowAmpTraffic?: bool, allowedDomains?: list, challengeSecurityPreference?: "CHALLENGE_SECURITY_PREFERENCE_UNSPECIFIED"|"USABILITY"|"BALANCE"|"SECURITY", integrationType?: "INTEGRATION_TYPE_UNSPECIFIED"|"SCORE"|"CHECKBOX"|"INVISIBLE"}
-export def "projects recaptchaenterpriseprojectskeyspatch" [
+# --webSettings shape: {allowAllDomains?: bool, allowAmpTraffic?: bool, allowedDomains?: list<string>, challengeSecurityPreference?: "CHALLENGE_SECURITY_PREFERENCE_UNSPECIFIED"|"USABILITY"|"BALANCE"|"SECURITY", integrationType?: "INTEGRATION_TYPE_UNSPECIFIED"|"SCORE"|"CHECKBOX"|"INVISIBLE"}
+export def "projects update" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -229,25 +238,25 @@ export def "projects recaptchaenterpriseprojectskeyspatch" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --update-mask: string # Optional. The mask to control which fields of the key get updated. If the mask is not present, all fields will be updated.
-  --android-settings: record # Settings specific to keys that can be used by Android apps. — shape: {allowAllPackageNames?: bool, allowedPackageNames?: list, supportNonGoogleAppStoreDistribution?: bool}
+  --android-settings: record # Settings specific to keys that can be used by Android apps. — shape: {allowAllPackageNames?: bool, allowedPackageNames?: list<string>, supportNonGoogleAppStoreDistribution?: bool}
   --display-name: string # Human-readable display name of this key. Modifiable by user.
-  --ios-settings: record # Settings specific to keys that can be used by iOS apps. — shape: {allowAllBundleIds?: bool, allowedBundleIds?: list}
+  --ios-settings: record # Settings specific to keys that can be used by iOS apps. — shape: {allowAllBundleIds?: bool, allowedBundleIds?: list<string>}
   --labels: record # See Creating and managing labels.
   --body-name: string # The resource name for the Key in the format "projects/{project}/keys/{key}".
   --testing-options: record # Options for user acceptance testing. — shape: {testingChallenge?: "TESTING_CHALLENGE_UNSPECIFIED"|"NOCAPTCHA"|"UNSOLVABLE_CHALLENGE", testingScore?: float}
   --waf-settings: record # Settings specific to keys that can be used for WAF (Web Application Firewall). — shape: {wafFeature?: "WAF_FEATURE_UNSPECIFIED"|"CHALLENGE_PAGE"|"SESSION_TOKEN"|"ACTION_TOKEN"|"EXPRESS", wafService?: "WAF_SERVICE_UNSPECIFIED"|"CA"|"FASTLY"}
-  --web-settings: record # Settings specific to keys that can be used by websites. — shape: {allowAllDomains?: bool, allowAmpTraffic?: bool, allowedDomains?: list, challengeSecurityPreference?: "CHALLENGE_SECURITY_PREFERENCE_UNSPECIFIED"|"USABILITY"|"BALANCE"|"SECURITY", integrationType?: "INTEGRATION_TYPE_UNSPECIFIED"|"SCORE"|"CHECKBOX"|"INVISIBLE"}
+  --web-settings: record # Settings specific to keys that can be used by websites. — shape: {allowAllDomains?: bool, allowAmpTraffic?: bool, allowedDomains?: list<string>, challengeSecurityPreference?: "CHALLENGE_SECURITY_PREFERENCE_UNSPECIFIED"|"USABILITY"|"BALANCE"|"SECURITY", integrationType?: "INTEGRATION_TYPE_UNSPECIFIED"|"SCORE"|"CHECKBOX"|"INVISIBLE"}
 ]: any -> record<androidSettings: record<allowAllPackageNames: bool, allowedPackageNames: list<string>, supportNonGoogleAppStoreDistribution: bool>, createTime: string, displayName: string, iosSettings: record<allowAllBundleIds: bool, allowedBundleIds: list<string>>, labels: record, name: string, testingOptions: record<testingChallenge: string, testingScore: float>, wafSettings: record<wafFeature: string, wafService: string>, webSettings: record<allowAllDomains: bool, allowAmpTraffic: bool, allowedDomains: list<string>, challengeSecurityPreference: string, integrationType: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}") $qp)
-  let body = {"androidSettings": $android_settings, "displayName": $display_name, "iosSettings": $ios_settings, "labels": $labels, "name": $body_name, "testingOptions": $testing_options, "wafSettings": $waf_settings, "webSettings": $web_settings} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}") $qp)
+  let req_body = {"androidSettings": $android_settings, "displayName": $display_name, "iosSettings": $ios_settings, "labels": $labels, "name": $body_name, "testingOptions": $testing_options, "wafSettings": $waf_settings, "webSettings": $web_settings} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Annotates a previously created Assessment to provide additional information on whether the event turned out to be authentic or fraudulent.
@@ -255,7 +264,7 @@ export def "projects recaptchaenterpriseprojectskeyspatch" [
 # POST /v1/{name}:annotate
 # operationId: recaptchaenterprise.projects.assessments.annotate
 # --transactionEvent shape: {eventTime?: string, eventType?: "TRANSACTION_EVENT_TYPE_UNSPECIFIED"|"MERCHANT_APPROVE"|"MERCHANT_DENY"|"MANUAL_REVIEW"|"AUTHORIZATION"|"AUTHORIZATION_DECLINE"|"PAYMENT_CAPTURE"|"PAYMENT_CAPTURE_DECLINE"|"CANCEL"|"CHARGEBACK_INQUIRY"|"CHARGEBACK_ALERT"|"FRAUD_NOTIFICATION"|"CHARGEBACK"|"CHARGEBACK_REPRESENTMENT"|"CHARGEBACK_REVERSE"|"REFUND_REQUEST"|"REFUND_DECLINE"|"REFUND"|"REFUND_REVERSE", reason?: string, value?: float}
-export def "projects recaptchaenterpriseprojectsassessmentsannotate" [
+export def "projects create-annotate" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -278,26 +287,26 @@ export def "projects recaptchaenterpriseprojectsassessmentsannotate" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --annotation: string@annotation-completer # Optional. The annotation that will be assigned to the Event. This field can be left empty to provide reasons that apply to an event without concluding whether the event is legitimate or fraudulent.
   --hashed-account-id: string # Optional. Unique stable hashed user identifier to apply to the assessment. This is an alternative to setting the hashed_account_id in CreateAssessment, for example when the account identifier is not yet known in the initial request. It is recommended that the identifier is hashed using hmac-sha256 with stable secret. (format: byte)
-  --reasons: list # Optional. Optional reasons for the annotation that will be assigned to the Event.
+  --reasons: list<string> # Optional. Optional reasons for the annotation that will be assigned to the Event.
   --transaction-event: record # Describes an event in the lifecycle of a payment transaction. — shape: {eventTime?: string, eventType?: "TRANSACTION_EVENT_TYPE_UNSPECIFIED"|"MERCHANT_APPROVE"|"MERCHANT_DENY"|"MANUAL_REVIEW"|"AUTHORIZATION"|"AUTHORIZATION_DECLINE"|"PAYMENT_CAPTURE"|"PAYMENT_CAPTURE_DECLINE"|"CANCEL"|"CHARGEBACK_INQUIRY"|"CHARGEBACK_ALERT"|"FRAUD_NOTIFICATION"|"CHARGEBACK"|"CHARGEBACK_REPRESENTMENT"|"CHARGEBACK_REVERSE"|"REFUND_REQUEST"|"REFUND_DECLINE"|"REFUND"|"REFUND_REVERSE", reason?: string, value?: float}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}:annotate") $qp)
-  let body = {"annotation": $annotation, "hashedAccountId": $hashed_account_id, "reasons": $reasons, "transactionEvent": $transaction_event} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}:annotate") $qp)
+  let req_body = {"annotation": $annotation, "hashedAccountId": $hashed_account_id, "reasons": $reasons, "transactionEvent": $transaction_event} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Migrates an existing key from reCAPTCHA to reCAPTCHA Enterprise. Once a key is migrated, it can be used from either product. SiteVerify requests are billed as CreateAssessment calls. You must be authenticated as one of the current owners of the reCAPTCHA Site Key, and your user must have the reCAPTCHA Enterprise Admin IAM role in the destination project.
 #
 # POST /v1/{name}:migrate
 # operationId: recaptchaenterprise.projects.keys.migrate
-export def "projects recaptchaenterpriseprojectskeysmigrate" [
+export def "projects create-migrate" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -324,27 +333,27 @@ export def "projects recaptchaenterpriseprojectskeysmigrate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}:migrate") $qp)
-  let body = {"skipBillingCheck": $skip_billing_check} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}:migrate") $qp)
+  let req_body = {"skipBillingCheck": $skip_billing_check} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Creates an Assessment of the likelihood an event is legitimate.
 #
 # POST /v1/{parent}/assessments
 # operationId: recaptchaenterprise.projects.assessments.create
-# --accountDefenderAssessment shape: {labels?: list}
+# --accountDefenderAssessment shape: {labels?: list<string>}
 # --accountVerification shape: {endpoints?: list, languageCode?: string, username?: string}
-# --event shape: {expectedAction?: string, express?: bool, firewallPolicyEvaluation?: bool, hashedAccountId?: string, headers?: list, ja3?: string, requestedUri?: string, siteKey?: string, token?: string, transactionData?: record, userAgent?: string, userIpAddress?: string, wafTokenAssessment?: bool}
+# --event shape: {expectedAction?: string, express?: bool, firewallPolicyEvaluation?: bool, hashedAccountId?: string, headers?: list<string>, ja3?: string, requestedUri?: string, siteKey?: string, token?: string, transactionData?: record, userAgent?: string, userIpAddress?: string, wafTokenAssessment?: bool}
 # --firewallPolicyAssessment shape: {error?: record, firewallPolicy?: record}
 # --fraudPreventionAssessment shape: {behavioralTrustVerdict?: record, cardTestingVerdict?: record, stolenInstrumentVerdict?: record, transactionRisk?: float}
 # --privatePasswordLeakVerification shape: {encryptedUserCredentialsHash?: string, lookupHashPrefix?: string}
-# --riskAnalysis shape: {extendedVerdictReasons?: list, reasons?: list, score?: float}
+# --riskAnalysis shape: {extendedVerdictReasons?: list<string>, reasons?: list<string>, score?: float}
 # --tokenProperties shape: {action?: string, androidPackageName?: string, createTime?: string, hostname?: string, invalidReason?: "INVALID_REASON_UNSPECIFIED"|"UNKNOWN_INVALID_REASON"|"MALFORMED"|"EXPIRED"|"DUPE"|"MISSING"|"BROWSER_ERROR", iosBundleId?: string, valid?: bool}
-export def "assessments recaptchaenterpriseprojectsassessmentscreate" [
+export def "assessments create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -365,32 +374,32 @@ export def "assessments recaptchaenterpriseprojectsassessmentscreate" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --account-defender-assessment: record # Account defender risk assessment. — shape: {labels?: list}
+  --account-defender-assessment: record # Account defender risk assessment. — shape: {labels?: list<string>}
   --account-verification: record # Information about account verification, used for identity verification. — shape: {endpoints?: list, languageCode?: string, username?: string}
-  --event: record # The event being assessed. — shape: {expectedAction?: string, express?: bool, firewallPolicyEvaluation?: bool, hashedAccountId?: string, headers?: list, ja3?: string, requestedUri?: string, siteKey?: string, token?: string, transactionData?: record, userAgent?: string, userIpAddress?: string, wafTokenAssessment?: bool}
+  --event: record # The event being assessed. — shape: {expectedAction?: string, express?: bool, firewallPolicyEvaluation?: bool, hashedAccountId?: string, headers?: list<string>, ja3?: string, requestedUri?: string, siteKey?: string, token?: string, transactionData?: record, userAgent?: string, userIpAddress?: string, wafTokenAssessment?: bool}
   --firewall-policy-assessment: record # Policy config assessment. — shape: {error?: record, firewallPolicy?: record}
   --fraud-prevention-assessment: record # Assessment for Fraud Prevention. — shape: {behavioralTrustVerdict?: record, cardTestingVerdict?: record, stolenInstrumentVerdict?: record, transactionRisk?: float}
   --private-password-leak-verification: record # Private password leak verification info. — shape: {encryptedUserCredentialsHash?: string, lookupHashPrefix?: string}
-  --risk-analysis: record # Risk analysis result for an event. — shape: {extendedVerdictReasons?: list, reasons?: list, score?: float}
+  --risk-analysis: record # Risk analysis result for an event. — shape: {extendedVerdictReasons?: list<string>, reasons?: list<string>, score?: float}
   --token-properties: record # Properties of the provided event token. — shape: {action?: string, androidPackageName?: string, createTime?: string, hostname?: string, invalidReason?: "INVALID_REASON_UNSPECIFIED"|"UNKNOWN_INVALID_REASON"|"MALFORMED"|"EXPIRED"|"DUPE"|"MISSING"|"BROWSER_ERROR", iosBundleId?: string, valid?: bool}
 ]: any -> record<accountDefenderAssessment: record<labels: list<string>>, accountVerification: record<endpoints: list<record>, languageCode: string, latestVerificationResult: string, username: string>, event: record<expectedAction: string, express: bool, firewallPolicyEvaluation: bool, hashedAccountId: string, headers: list<string>, ja3: string, requestedUri: string, siteKey: string, token: string, transactionData: record<billingAddress: record, cardBin: string, cardLastFour: string, currencyCode: string, gatewayInfo: record, items: list, merchants: list, paymentMethod: string, shippingAddress: record, shippingValue: float, transactionId: string, user: record, value: float>, userAgent: string, userIpAddress: string, wafTokenAssessment: bool>, firewallPolicyAssessment: record<error: record<code: int, details: list, message: string>, firewallPolicy: record<actions: list, condition: string, description: string, name: string, path: string>>, fraudPreventionAssessment: record<behavioralTrustVerdict: record<trust: float>, cardTestingVerdict: record<risk: float>, stolenInstrumentVerdict: record<risk: float>, transactionRisk: float>, name: string, privatePasswordLeakVerification: record<encryptedLeakMatchPrefixes: list<string>, encryptedUserCredentialsHash: string, lookupHashPrefix: string, reencryptedUserCredentialsHash: string>, riskAnalysis: record<extendedVerdictReasons: list<string>, reasons: list<string>, score: float>, tokenProperties: record<action: string, androidPackageName: string, createTime: string, hostname: string, invalidReason: string, iosBundleId: string, valid: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/assessments") $qp)
-  let body = {"accountDefenderAssessment": $account_defender_assessment, "accountVerification": $account_verification, "event": $event, "firewallPolicyAssessment": $firewall_policy_assessment, "fraudPreventionAssessment": $fraud_prevention_assessment, "privatePasswordLeakVerification": $private_password_leak_verification, "riskAnalysis": $risk_analysis, "tokenProperties": $token_properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/assessments") $qp)
+  let req_body = {"accountDefenderAssessment": $account_defender_assessment, "accountVerification": $account_verification, "event": $event, "firewallPolicyAssessment": $firewall_policy_assessment, "fraudPreventionAssessment": $fraud_prevention_assessment, "privatePasswordLeakVerification": $private_password_leak_verification, "riskAnalysis": $risk_analysis, "tokenProperties": $token_properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns the list of all firewall policies that belong to a project.
 #
 # GET /v1/{parent}/firewallpolicies
 # operationId: recaptchaenterprise.projects.firewallpolicies.list
-export def "firewallpolicies recaptchaenterpriseprojectsfirewallpolicieslist" [
+export def "firewallpolicies list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -417,7 +426,7 @@ export def "firewallpolicies recaptchaenterpriseprojectsfirewallpolicieslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/firewallpolicies") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/firewallpolicies") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -428,7 +437,7 @@ export def "firewallpolicies recaptchaenterpriseprojectsfirewallpolicieslist" [
 # POST /v1/{parent}/firewallpolicies
 # operationId: recaptchaenterprise.projects.firewallpolicies.create
 # --actions item shape: {allow?: record, block?: record, redirect?: record, setHeader?: record, substitute?: record}
-export def "firewallpolicies recaptchaenterpriseprojectsfirewallpoliciescreate" [
+export def "firewallpolicies create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -459,19 +468,19 @@ export def "firewallpolicies recaptchaenterpriseprojectsfirewallpoliciescreate" 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/firewallpolicies") $qp)
-  let body = {"actions": $actions, "condition": $condition, "description": $description, "name": $name, "path": $path} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/firewallpolicies") $qp)
+  let req_body = {"actions": $actions, "condition": $condition, "description": $description, "name": $name, "path": $path} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns the list of all keys that belong to a project.
 #
 # GET /v1/{parent}/keys
 # operationId: recaptchaenterprise.projects.keys.list
-export def "keys recaptchaenterpriseprojectskeyslist" [
+export def "keys list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -498,7 +507,7 @@ export def "keys recaptchaenterpriseprojectskeyslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/keys") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/keys") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -508,12 +517,12 @@ export def "keys recaptchaenterpriseprojectskeyslist" [
 #
 # POST /v1/{parent}/keys
 # operationId: recaptchaenterprise.projects.keys.create
-# --androidSettings shape: {allowAllPackageNames?: bool, allowedPackageNames?: list, supportNonGoogleAppStoreDistribution?: bool}
-# --iosSettings shape: {allowAllBundleIds?: bool, allowedBundleIds?: list}
+# --androidSettings shape: {allowAllPackageNames?: bool, allowedPackageNames?: list<string>, supportNonGoogleAppStoreDistribution?: bool}
+# --iosSettings shape: {allowAllBundleIds?: bool, allowedBundleIds?: list<string>}
 # --testingOptions shape: {testingChallenge?: "TESTING_CHALLENGE_UNSPECIFIED"|"NOCAPTCHA"|"UNSOLVABLE_CHALLENGE", testingScore?: float}
 # --wafSettings shape: {wafFeature?: "WAF_FEATURE_UNSPECIFIED"|"CHALLENGE_PAGE"|"SESSION_TOKEN"|"ACTION_TOKEN"|"EXPRESS", wafService?: "WAF_SERVICE_UNSPECIFIED"|"CA"|"FASTLY"}
-# --webSettings shape: {allowAllDomains?: bool, allowAmpTraffic?: bool, allowedDomains?: list, challengeSecurityPreference?: "CHALLENGE_SECURITY_PREFERENCE_UNSPECIFIED"|"USABILITY"|"BALANCE"|"SECURITY", integrationType?: "INTEGRATION_TYPE_UNSPECIFIED"|"SCORE"|"CHECKBOX"|"INVISIBLE"}
-export def "keys recaptchaenterpriseprojectskeyscreate" [
+# --webSettings shape: {allowAllDomains?: bool, allowAmpTraffic?: bool, allowedDomains?: list<string>, challengeSecurityPreference?: "CHALLENGE_SECURITY_PREFERENCE_UNSPECIFIED"|"USABILITY"|"BALANCE"|"SECURITY", integrationType?: "INTEGRATION_TYPE_UNSPECIFIED"|"SCORE"|"CHECKBOX"|"INVISIBLE"}
+export def "keys create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -534,32 +543,32 @@ export def "keys recaptchaenterpriseprojectskeyscreate" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --android-settings: record # Settings specific to keys that can be used by Android apps. — shape: {allowAllPackageNames?: bool, allowedPackageNames?: list, supportNonGoogleAppStoreDistribution?: bool}
+  --android-settings: record # Settings specific to keys that can be used by Android apps. — shape: {allowAllPackageNames?: bool, allowedPackageNames?: list<string>, supportNonGoogleAppStoreDistribution?: bool}
   --display-name: string # Human-readable display name of this key. Modifiable by user.
-  --ios-settings: record # Settings specific to keys that can be used by iOS apps. — shape: {allowAllBundleIds?: bool, allowedBundleIds?: list}
+  --ios-settings: record # Settings specific to keys that can be used by iOS apps. — shape: {allowAllBundleIds?: bool, allowedBundleIds?: list<string>}
   --labels: record # See Creating and managing labels.
   --name: string # The resource name for the Key in the format "projects/{project}/keys/{key}".
   --testing-options: record # Options for user acceptance testing. — shape: {testingChallenge?: "TESTING_CHALLENGE_UNSPECIFIED"|"NOCAPTCHA"|"UNSOLVABLE_CHALLENGE", testingScore?: float}
   --waf-settings: record # Settings specific to keys that can be used for WAF (Web Application Firewall). — shape: {wafFeature?: "WAF_FEATURE_UNSPECIFIED"|"CHALLENGE_PAGE"|"SESSION_TOKEN"|"ACTION_TOKEN"|"EXPRESS", wafService?: "WAF_SERVICE_UNSPECIFIED"|"CA"|"FASTLY"}
-  --web-settings: record # Settings specific to keys that can be used by websites. — shape: {allowAllDomains?: bool, allowAmpTraffic?: bool, allowedDomains?: list, challengeSecurityPreference?: "CHALLENGE_SECURITY_PREFERENCE_UNSPECIFIED"|"USABILITY"|"BALANCE"|"SECURITY", integrationType?: "INTEGRATION_TYPE_UNSPECIFIED"|"SCORE"|"CHECKBOX"|"INVISIBLE"}
+  --web-settings: record # Settings specific to keys that can be used by websites. — shape: {allowAllDomains?: bool, allowAmpTraffic?: bool, allowedDomains?: list<string>, challengeSecurityPreference?: "CHALLENGE_SECURITY_PREFERENCE_UNSPECIFIED"|"USABILITY"|"BALANCE"|"SECURITY", integrationType?: "INTEGRATION_TYPE_UNSPECIFIED"|"SCORE"|"CHECKBOX"|"INVISIBLE"}
 ]: any -> record<androidSettings: record<allowAllPackageNames: bool, allowedPackageNames: list<string>, supportNonGoogleAppStoreDistribution: bool>, createTime: string, displayName: string, iosSettings: record<allowAllBundleIds: bool, allowedBundleIds: list<string>>, labels: record, name: string, testingOptions: record<testingChallenge: string, testingScore: float>, wafSettings: record<wafFeature: string, wafService: string>, webSettings: record<allowAllDomains: bool, allowAmpTraffic: bool, allowedDomains: list<string>, challengeSecurityPreference: string, integrationType: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/keys") $qp)
-  let body = {"androidSettings": $android_settings, "displayName": $display_name, "iosSettings": $ios_settings, "labels": $labels, "name": $name, "testingOptions": $testing_options, "wafSettings": $waf_settings, "webSettings": $web_settings} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/keys") $qp)
+  let req_body = {"androidSettings": $android_settings, "displayName": $display_name, "iosSettings": $ios_settings, "labels": $labels, "name": $name, "testingOptions": $testing_options, "wafSettings": $waf_settings, "webSettings": $web_settings} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get memberships in a group of related accounts.
 #
 # GET /v1/{parent}/memberships
 # operationId: recaptchaenterprise.projects.relatedaccountgroups.memberships.list
-export def "memberships recaptchaenterpriseprojectsrelatedaccountgroupsmembershipslist" [
+export def "memberships list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -586,7 +595,7 @@ export def "memberships recaptchaenterpriseprojectsrelatedaccountgroupsmembershi
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/memberships") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/memberships") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -596,7 +605,7 @@ export def "memberships recaptchaenterpriseprojectsrelatedaccountgroupsmembershi
 #
 # GET /v1/{parent}/relatedaccountgroups
 # operationId: recaptchaenterprise.projects.relatedaccountgroups.list
-export def "relatedaccountgroups recaptchaenterpriseprojectsrelatedaccountgroupslist" [
+export def "relatedaccountgroups list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -623,7 +632,7 @@ export def "relatedaccountgroups recaptchaenterpriseprojectsrelatedaccountgroups
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/relatedaccountgroups") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/relatedaccountgroups") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -633,7 +642,7 @@ export def "relatedaccountgroups recaptchaenterpriseprojectsrelatedaccountgroups
 #
 # POST /v1/{project}/relatedaccountgroupmemberships:search
 # operationId: recaptchaenterprise.projects.relatedaccountgroupmemberships.search
-export def "relatedaccountgroupmemberships-search recaptchaenterpriseprojectsrelatedaccountgroupmembershipssearch" [
+export def "relatedaccountgroupmemberships-search list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -662,10 +671,10 @@ export def "relatedaccountgroupmemberships-search recaptchaenterpriseprojectsrel
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project: $project} | format pattern "/v1/{project}/relatedaccountgroupmemberships:search") $qp)
-  let body = {"hashedAccountId": $hashed_account_id, "pageSize": $page_size, "pageToken": $page_token} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({project: (encode-path-segment $project)} | format pattern "/v1/{project}/relatedaccountgroupmemberships:search") $qp)
+  let req_body = {"hashedAccountId": $hashed_account_id, "pageSize": $page_size, "pageToken": $page_token} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

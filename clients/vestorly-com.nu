@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -71,7 +80,7 @@ def type-completer [] { ["bounce" "click" "content_posted" "create_post" "delete
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "advisors findAdvisorByID" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "advisors find" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,7 +104,7 @@ export def commands []: nothing -> table {
 #
 # GET /advisors/{id}
 # operationId: findAdvisorByID
-export def "advisors findAdvisorByID" [
+export def "advisors find" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -111,7 +120,7 @@ export def "advisors findAdvisorByID" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "vestorly_auth" $vestorly_auth "scalar") (serialize-qp "access_token" $access_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/advisors/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/advisors/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -121,7 +130,7 @@ export def "advisors findAdvisorByID" [
 #
 # GET /article_phrases
 # operationId: findArticlePhrases
-export def "article-phrases findArticlePhrases" [
+export def "article-phrases find" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -149,7 +158,7 @@ export def "article-phrases findArticlePhrases" [
 #
 # GET /articles
 # operationId: findArticles
-export def "articles findArticles" [
+export def "articles list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -178,7 +187,7 @@ export def "articles findArticles" [
 #
 # GET /articles/{id}
 # operationId: findArticleByID
-export def "articles findArticleByID" [
+export def "articles find" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -194,7 +203,7 @@ export def "articles findArticleByID" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "vestorly_auth" $vestorly_auth "scalar") (serialize-qp "access_token" $access_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/articles/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/articles/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -204,7 +213,7 @@ export def "articles findArticleByID" [
 #
 # GET /custom_feed_filters
 # operationId: findCustomFeedFilters
-export def "custom-feed-filters findCustomFeedFilters" [
+export def "custom-feed-filters list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -241,18 +250,18 @@ export def "custom-feed-filters create" [
   --vestorly-auth: string # Vestorly Auth Token
   --access-token: string # OAuth Token
   custom_feed_id: string
-  --source-ids: list
+  --source-ids: list<string>
 ]: any -> record<custom_feed_filter: record<_id: string, custom_feed_id: string, source_ids: list<string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "vestorly_auth" $vestorly_auth "scalar") (serialize-qp "access_token" $access_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/custom_feed_filters" $qp)
-  let body = {"custom_feed_id": $custom_feed_id, "source_ids": $source_ids} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"custom_feed_id": $custom_feed_id, "source_ids": $source_ids} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes the Category's filter
@@ -275,7 +284,7 @@ export def "custom-feed-filters delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "vestorly_auth" $vestorly_auth "scalar") (serialize-qp "access_token" $access_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/custom_feed_filters/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/custom_feed_filters/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -285,7 +294,7 @@ export def "custom-feed-filters delete" [
 #
 # GET /custom_feed_filters/{id}
 # operationId: findCustomFeedFilterByID
-export def "custom-feed-filters findCustomFeedFilterByID" [
+export def "custom-feed-filters find" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -301,7 +310,7 @@ export def "custom-feed-filters findCustomFeedFilterByID" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "vestorly_auth" $vestorly_auth "scalar") (serialize-qp "access_token" $access_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/custom_feed_filters/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/custom_feed_filters/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -324,25 +333,25 @@ export def "custom-feed-filters update" [
   --vestorly-auth: string # Vestorly Auth Token
   --access-token: string # OAuth Token
   custom_feed_id: string
-  --source-ids: list
+  --source-ids: list<string>
 ]: any -> record<custom_feed_filter: record<_id: string, custom_feed_id: string, source_ids: list<string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "vestorly_auth" $vestorly_auth "scalar") (serialize-qp "access_token" $access_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/custom_feed_filters/{id}") $qp)
-  let body = {"custom_feed_id": $custom_feed_id, "source_ids": $source_ids} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/custom_feed_filters/{id}") $qp)
+  let req_body = {"custom_feed_id": $custom_feed_id, "source_ids": $source_ids} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns all Categories
 #
 # GET /custom_feeds
 # operationId: findCustomFeeds
-export def "custom-feeds findCustomFeeds" [
+export def "custom-feeds list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -395,11 +404,11 @@ export def "custom-feeds create" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "vestorly_auth" $vestorly_auth "scalar") (serialize-qp "access_token" $access_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/custom_feeds" $qp)
-  let body = {"custom_feed_filter_id": $custom_feed_filter_id, "custom_feed_permission_id": $custom_feed_permission_id, "custom_feed_visibility": $custom_feed_visibility, "default": $default, "is_auto_curated_newsletter_custom_feed": $is_auto_curated_newsletter_custom_feed, "label": $label, "popularity": $popularity, "premium_content": $premium_content, "seed_custom_feed_id": $seed_custom_feed_id, "social_posting_id": $social_posting_id, "third_party_articles_custom_feed_id": $third_party_articles_custom_feed_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"custom_feed_filter_id": $custom_feed_filter_id, "custom_feed_permission_id": $custom_feed_permission_id, "custom_feed_visibility": $custom_feed_visibility, "default": $default, "is_auto_curated_newsletter_custom_feed": $is_auto_curated_newsletter_custom_feed, "label": $label, "popularity": $popularity, "premium_content": $premium_content, "seed_custom_feed_id": $seed_custom_feed_id, "social_posting_id": $social_posting_id, "third_party_articles_custom_feed_id": $third_party_articles_custom_feed_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes a new Category
@@ -422,7 +431,7 @@ export def "custom-feeds delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "vestorly_auth" $vestorly_auth "scalar") (serialize-qp "access_token" $access_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/custom_feeds/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/custom_feeds/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -432,7 +441,7 @@ export def "custom-feeds delete" [
 #
 # GET /custom_feeds/{id}
 # operationId: findCustomFeedByID
-export def "custom-feeds findCustomFeedByID" [
+export def "custom-feeds find" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -448,7 +457,7 @@ export def "custom-feeds findCustomFeedByID" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "vestorly_auth" $vestorly_auth "scalar") (serialize-qp "access_token" $access_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/custom_feeds/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/custom_feeds/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -486,19 +495,19 @@ export def "custom-feeds update-category" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "vestorly_auth" $vestorly_auth "scalar") (serialize-qp "access_token" $access_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/custom_feeds/{id}") $qp)
-  let body = {"custom_feed_filter_id": $custom_feed_filter_id, "custom_feed_permission_id": $custom_feed_permission_id, "custom_feed_visibility": $custom_feed_visibility, "default": $default, "is_auto_curated_newsletter_custom_feed": $is_auto_curated_newsletter_custom_feed, "label": $label, "popularity": $popularity, "premium_content": $premium_content, "seed_custom_feed_id": $seed_custom_feed_id, "social_posting_id": $social_posting_id, "third_party_articles_custom_feed_id": $third_party_articles_custom_feed_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/custom_feeds/{id}") $qp)
+  let req_body = {"custom_feed_filter_id": $custom_feed_filter_id, "custom_feed_permission_id": $custom_feed_permission_id, "custom_feed_visibility": $custom_feed_visibility, "default": $default, "is_auto_curated_newsletter_custom_feed": $is_auto_curated_newsletter_custom_feed, "label": $label, "popularity": $popularity, "premium_content": $premium_content, "seed_custom_feed_id": $seed_custom_feed_id, "social_posting_id": $social_posting_id, "third_party_articles_custom_feed_id": $third_party_articles_custom_feed_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns Articles by Category
 #
 # GET /custom_feeds/{id}/articles
 # operationId: findCustomFeedArticles
-export def "custom-feeds-articles findCustomFeedArticles" [
+export def "custom-feeds-articles find" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -519,7 +528,7 @@ export def "custom-feeds-articles findCustomFeedArticles" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "vestorly_auth" $vestorly_auth "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "created_at_gte_days_ago" $created_at_gte_days_ago "scalar") (serialize-qp "text_query" $text_query "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/custom_feeds/{id}/articles") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/custom_feeds/{id}/articles") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -529,7 +538,7 @@ export def "custom-feeds-articles findCustomFeedArticles" [
 #
 # POST /custom_feeds/{id}/duplicates
 # operationId: duplicateCustomFeed
-export def "custom-feeds-duplicates duplicateCustomFeed" [
+export def "custom-feeds-duplicates create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -545,7 +554,7 @@ export def "custom-feeds-duplicates duplicateCustomFeed" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "vestorly_auth" $vestorly_auth "scalar") (serialize-qp "access_token" $access_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/custom_feeds/{id}/duplicates") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/custom_feeds/{id}/duplicates") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -555,7 +564,7 @@ export def "custom-feeds-duplicates duplicateCustomFeed" [
 #
 # GET /events
 # operationId: findEvents
-export def "events findEvents" [
+export def "events list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -609,18 +618,18 @@ export def "events create" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "vestorly_auth" $vestorly_auth "scalar") (serialize-qp "access_token" $access_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/events" $qp)
-  let body = {"advisor_id": $advisor_id, "created_at": $created_at, "event_content": $event_content, "original_url": $original_url, "originator_email": $originator_email, "originator_id": $originator_id, "parent_event_id": $parent_event_id, "referer": $referer, "subject_email": $subject_email, "subject_id": $subject_id, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"advisor_id": $advisor_id, "created_at": $created_at, "event_content": $event_content, "original_url": $original_url, "originator_email": $originator_email, "originator_id": $originator_id, "parent_event_id": $parent_event_id, "referer": $referer, "subject_email": $subject_email, "subject_id": $subject_id, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns a single event if the user has access
 #
 # GET /events/{id}
 # operationId: findEventByID
-export def "events findEventByID" [
+export def "events find" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -636,7 +645,7 @@ export def "events findEventByID" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "access_token" $access_token "scalar") (serialize-qp "vestorly_auth" $vestorly_auth "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/events/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/events/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -646,7 +655,7 @@ export def "events findEventByID" [
 #
 # GET /groups
 # operationId: findGroups
-export def "groups findGroups" [
+export def "groups list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -697,11 +706,11 @@ export def "groups create" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "vestorly_auth" $vestorly_auth "scalar") (serialize-qp "access_token" $access_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/groups" $qp)
-  let body = {"_id": $id, "autopublish": $autopublish, "is_default": $is_default, "is_hidden": $is_hidden, "name": $name, "new_weekly_mailer_content": $new_weekly_mailer_content, "newsletter_subject": $newsletter_subject, "number_articles_per_group": $number_articles_per_group, "number_articles_per_newsletter": $number_articles_per_newsletter} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"_id": $id, "autopublish": $autopublish, "is_default": $is_default, "is_hidden": $is_hidden, "name": $name, "new_weekly_mailer_content": $new_weekly_mailer_content, "newsletter_subject": $newsletter_subject, "number_articles_per_group": $number_articles_per_group, "number_articles_per_newsletter": $number_articles_per_newsletter} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes a Group
@@ -724,7 +733,7 @@ export def "groups delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "vestorly_auth" $vestorly_auth "scalar") (serialize-qp "access_token" $access_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/groups/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/groups/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -734,7 +743,7 @@ export def "groups delete" [
 #
 # GET /groups/{id}
 # operationId: findGroupByID
-export def "groups findGroupByID" [
+export def "groups find" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -750,7 +759,7 @@ export def "groups findGroupByID" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "vestorly_auth" $vestorly_auth "scalar") (serialize-qp "access_token" $access_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/groups/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/groups/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -786,19 +795,19 @@ export def "groups update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "vestorly_auth" $vestorly_auth "scalar") (serialize-qp "access_token" $access_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/groups/{id}") $qp)
-  let body = {"_id": $body_id, "autopublish": $autopublish, "is_default": $is_default, "is_hidden": $is_hidden, "name": $name, "new_weekly_mailer_content": $new_weekly_mailer_content, "newsletter_subject": $newsletter_subject, "number_articles_per_group": $number_articles_per_group, "number_articles_per_newsletter": $number_articles_per_newsletter} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/groups/{id}") $qp)
+  let req_body = {"_id": $body_id, "autopublish": $autopublish, "is_default": $is_default, "is_hidden": $is_hidden, "name": $name, "new_weekly_mailer_content": $new_weekly_mailer_content, "newsletter_subject": $newsletter_subject, "number_articles_per_group": $number_articles_per_group, "number_articles_per_newsletter": $number_articles_per_newsletter} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns all MemberEvents
 #
 # GET /member_events
 # operationId: findMemberEvents
-export def "member-events findMemberEvents" [
+export def "member-events find" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -823,7 +832,7 @@ export def "member-events findMemberEvents" [
 #
 # GET /member_reports
 # operationId: findMemberReports
-export def "member-reports findMemberReports" [
+export def "member-reports find" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -848,7 +857,7 @@ export def "member-reports findMemberReports" [
 #
 # GET /members
 # operationId: findMembers
-export def "members findMembers" [
+export def "members list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -924,8 +933,8 @@ export def "members create" [
   --register-ip-addr: string
   --signed-up-with: string
   --state: string
-  --subscribed-group-ids: list
-  --tags: list
+  --subscribed-group-ids: list<string>
+  --tags: list<string>
   --unsubscribed: oneof<nothing, bool>
   --unsubscribed-date: oneof<nothing, bool>
   --user-type: string
@@ -936,18 +945,18 @@ export def "members create" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "vestorly_auth" $vestorly_auth "scalar") (serialize-qp "access_token" $access_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/members" $qp)
-  let body = {"_id": $id, "address": $address, "age": $age, "assets": $assets, "city": $city, "data_estimated": $data_estimated, "education": $education, "email": $email, "estimated_location": $estimated_location, "estimated_zip": $estimated_zip, "family": $family, "first_name": $first_name, "gender": $gender, "genuine_email": $genuine_email, "high_net_worth": $high_net_worth, "home_market_value": $home_market_value, "home_owner_status": $home_owner_status, "hometown": $hometown, "household_income": $household_income, "interest_consultation": $interest_consultation, "interest_in_new_advisor": $interest_in_new_advisor, "invited_by": $invited_by, "invited_on": $invited_on, "is_client": $is_client, "is_hidden": $is_hidden, "last_active_date": $last_active_date, "last_name": $last_name, "location": $location, "marital_status": $marital_status, "message": $message, "occupation": $occupation, "phone": $phone, "picture_url": $picture_url, "portfolio_size": $portfolio_size, "profile_url": $profile_url, "register_ip_addr": $register_ip_addr, "signed_up_with": $signed_up_with, "state": $state, "subscribed_group_ids": $subscribed_group_ids, "tags": $tags, "unsubscribed": $unsubscribed, "unsubscribed_date": $unsubscribed_date, "user_type": $user_type, "zip": $zip} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"_id": $id, "address": $address, "age": $age, "assets": $assets, "city": $city, "data_estimated": $data_estimated, "education": $education, "email": $email, "estimated_location": $estimated_location, "estimated_zip": $estimated_zip, "family": $family, "first_name": $first_name, "gender": $gender, "genuine_email": $genuine_email, "high_net_worth": $high_net_worth, "home_market_value": $home_market_value, "home_owner_status": $home_owner_status, "hometown": $hometown, "household_income": $household_income, "interest_consultation": $interest_consultation, "interest_in_new_advisor": $interest_in_new_advisor, "invited_by": $invited_by, "invited_on": $invited_on, "is_client": $is_client, "is_hidden": $is_hidden, "last_active_date": $last_active_date, "last_name": $last_name, "location": $location, "marital_status": $marital_status, "message": $message, "occupation": $occupation, "phone": $phone, "picture_url": $picture_url, "portfolio_size": $portfolio_size, "profile_url": $profile_url, "register_ip_addr": $register_ip_addr, "signed_up_with": $signed_up_with, "state": $state, "subscribed_group_ids": $subscribed_group_ids, "tags": $tags, "unsubscribed": $unsubscribed, "unsubscribed_date": $unsubscribed_date, "user_type": $user_type, "zip": $zip} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns a single member
 #
 # GET /members/{id}
 # operationId: findMemberByID
-export def "members findMemberByID" [
+export def "members find" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -963,7 +972,7 @@ export def "members findMemberByID" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "vestorly_auth" $vestorly_auth "scalar") (serialize-qp "access_token" $access_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/members/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/members/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1023,8 +1032,8 @@ export def "members update" [
   --register-ip-addr: string
   --signed-up-with: string
   --state: string
-  --subscribed-group-ids: list
-  --tags: list
+  --subscribed-group-ids: list<string>
+  --tags: list<string>
   --unsubscribed: oneof<nothing, bool>
   --unsubscribed-date: oneof<nothing, bool>
   --user-type: string
@@ -1034,19 +1043,19 @@ export def "members update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "vestorly_auth" $vestorly_auth "scalar") (serialize-qp "access_token" $access_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/members/{id}") $qp)
-  let body = {"_id": $body_id, "address": $address, "age": $age, "assets": $assets, "city": $city, "data_estimated": $data_estimated, "education": $education, "email": $email, "estimated_location": $estimated_location, "estimated_zip": $estimated_zip, "family": $family, "first_name": $first_name, "gender": $gender, "genuine_email": $genuine_email, "high_net_worth": $high_net_worth, "home_market_value": $home_market_value, "home_owner_status": $home_owner_status, "hometown": $hometown, "household_income": $household_income, "interest_consultation": $interest_consultation, "interest_in_new_advisor": $interest_in_new_advisor, "invited_by": $invited_by, "invited_on": $invited_on, "is_client": $is_client, "is_hidden": $is_hidden, "last_active_date": $last_active_date, "last_name": $last_name, "location": $location, "marital_status": $marital_status, "message": $message, "occupation": $occupation, "phone": $phone, "picture_url": $picture_url, "portfolio_size": $portfolio_size, "profile_url": $profile_url, "register_ip_addr": $register_ip_addr, "signed_up_with": $signed_up_with, "state": $state, "subscribed_group_ids": $subscribed_group_ids, "tags": $tags, "unsubscribed": $unsubscribed, "unsubscribed_date": $unsubscribed_date, "user_type": $user_type, "zip": $zip} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/members/{id}") $qp)
+  let req_body = {"_id": $body_id, "address": $address, "age": $age, "assets": $assets, "city": $city, "data_estimated": $data_estimated, "education": $education, "email": $email, "estimated_location": $estimated_location, "estimated_zip": $estimated_zip, "family": $family, "first_name": $first_name, "gender": $gender, "genuine_email": $genuine_email, "high_net_worth": $high_net_worth, "home_market_value": $home_market_value, "home_owner_status": $home_owner_status, "hometown": $hometown, "household_income": $household_income, "interest_consultation": $interest_consultation, "interest_in_new_advisor": $interest_in_new_advisor, "invited_by": $invited_by, "invited_on": $invited_on, "is_client": $is_client, "is_hidden": $is_hidden, "last_active_date": $last_active_date, "last_name": $last_name, "location": $location, "marital_status": $marital_status, "message": $message, "occupation": $occupation, "phone": $phone, "picture_url": $picture_url, "portfolio_size": $portfolio_size, "profile_url": $profile_url, "register_ip_addr": $register_ip_addr, "signed_up_with": $signed_up_with, "state": $state, "subscribed_group_ids": $subscribed_group_ids, "tags": $tags, "unsubscribed": $unsubscribed, "unsubscribed_date": $unsubscribed_date, "user_type": $user_type, "zip": $zip} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns all newsletter settings
 #
 # GET /newsletter_settings
 # operationId: findNewsletterSettings
-export def "newsletter-settings findNewsletterSettings" [
+export def "newsletter-settings list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1071,7 +1080,7 @@ export def "newsletter-settings findNewsletterSettings" [
 #
 # GET /newsletter_settings/{id}
 # operationId: findNewsletterSettingsByID
-export def "newsletter-settings findNewsletterSettingsByID" [
+export def "newsletter-settings find" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1087,7 +1096,7 @@ export def "newsletter-settings findNewsletterSettingsByID" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "vestorly_auth" $vestorly_auth "scalar") (serialize-qp "access_token" $access_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/newsletter_settings/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/newsletter_settings/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1097,7 +1106,7 @@ export def "newsletter-settings findNewsletterSettingsByID" [
 #
 # PUT /newsletter_settings/{id}
 # operationId: updateNewsletterSettingsByID
-# --newsletter_setting shape: {_id: string, banner_color?: string, body_html?: string, email_accent_color?: string, email_day_of_week?: int, email_hour?: int, email_status?: string, facebook_active_wall?: string, footer_email_font?: string, footer_html?: string, footer_image_url?: string, group_id?: string, header_background_color?: string, header_image_url?: string, intro_text?: string, linkedin_active_wall?: string, montage_enabled?: bool, montage_facebook_image_url?: string, montage_linkedin_image_url?: string, montage_title?: string, montage_twitter_image_url?: string, newsletter_ids?: list, newsletter_type?: string, primary_email_font?: string, salutation_text?: string, social_day_of_week?: int, social_description?: string, social_posting_text?: string, social_title?: string, subject?: string, title_color?: string}
+# --newsletter_setting shape: {_id: string, banner_color?: string, body_html?: string, email_accent_color?: string, email_day_of_week?: int, email_hour?: int, email_status?: string, facebook_active_wall?: string, footer_email_font?: string, footer_html?: string, footer_image_url?: string, group_id?: string, header_background_color?: string, header_image_url?: string, intro_text?: string, linkedin_active_wall?: string, montage_enabled?: bool, montage_facebook_image_url?: string, montage_linkedin_image_url?: string, ... (12 more fields)}
 export def "newsletter-settings update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1110,25 +1119,25 @@ export def "newsletter-settings update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --vestorly-auth: string # Vestorly Auth Token
   --access-token: string # OAuth Token
-  --newsletter-setting: any # shape: {_id: string, banner_color?: string, body_html?: string, email_accent_color?: string, email_day_of_week?: int, email_hour?: int, email_status?: string, facebook_active_wall?: string, footer_email_font?: string, footer_html?: string, footer_image_url?: string, group_id?: string, header_background_color?: string, header_image_url?: string, intro_text?: string, linkedin_active_wall?: string, montage_enabled?: bool, montage_facebook_image_url?: string, montage_linkedin_image_url?: string, montage_title?: string, montage_twitter_image_url?: string, newsletter_ids?: list, newsletter_type?: string, primary_email_font?: string, salutation_text?: string, social_day_of_week?: int, social_description?: string, social_posting_text?: string, social_title?: string, subject?: string, title_color?: string}
+  --newsletter-setting: any # shape: {_id: string, banner_color?: string, body_html?: string, email_accent_color?: string, email_day_of_week?: int, email_hour?: int, email_status?: string, facebook_active_wall?: string, footer_email_font?: string, footer_html?: string, footer_image_url?: string, group_id?: string, header_background_color?: string, header_image_url?: string, intro_text?: string, linkedin_active_wall?: string, montage_enabled?: bool, montage_facebook_image_url?: string, montage_linkedin_image_url?: string, ... (12 more fields)}
 ]: any -> record<newsletter_setting: record<_id: string, banner_color: string, body_html: string, email_accent_color: string, email_day_of_week: int, email_hour: int, email_status: string, facebook_active_wall: string, footer_email_font: string, footer_html: string, footer_image_url: string, group_id: string, header_background_color: string, header_image_url: string, intro_text: string, linkedin_active_wall: string, montage_enabled: bool, montage_facebook_image_url: string, montage_linkedin_image_url: string, montage_title: string, montage_twitter_image_url: string, newsletter_ids: list<string>, newsletter_type: string, primary_email_font: string, salutation_text: string, social_day_of_week: int, social_description: string, social_posting_text: string, social_title: string, subject: string, title_color: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "vestorly_auth" $vestorly_auth "scalar") (serialize-qp "access_token" $access_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/newsletter_settings/{id}") $qp)
-  let body = {"newsletter_setting": $newsletter_setting} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/newsletter_settings/{id}") $qp)
+  let req_body = {"newsletter_setting": $newsletter_setting} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns all newsletters
 #
 # GET /newsletters
 # operationId: findNewsletters
-export def "newsletters findNewsletters" [
+export def "newsletters find" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1169,7 +1178,7 @@ export def "newsletters get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "vestorly_auth" $vestorly_auth "scalar") (serialize-qp "access_token" $access_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/newsletters/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/newsletters/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1201,19 +1210,19 @@ export def "newsletters update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "vestorly_auth" $vestorly_auth "scalar") (serialize-qp "access_token" $access_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/newsletters/{id}") $qp)
-  let body = {"click_count": $click_count, "is_default": $is_default, "is_sent": $is_sent, "total_click_count": $total_click_count, "unique_click_count": $unique_click_count} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/newsletters/{id}") $qp)
+  let req_body = {"click_count": $click_count, "is_default": $is_default, "is_sent": $is_sent, "total_click_count": $total_click_count, "unique_click_count": $unique_click_count} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Query all posts
 #
 # GET /posts
 # operationId: findPosts
-export def "posts findPosts" [
+export def "posts find" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1254,7 +1263,7 @@ export def "posts create" [
   --access-token: string # OAuth Token
   --advisor-id: string
   --approval-status: string
-  --approval-transactions: list
+  --approval-transactions: list<string>
   --article-id: string
   --comment: string
   --created-at: string
@@ -1264,7 +1273,7 @@ export def "posts create" [
   --external-url: string
   --external-url-source: string
   --external-url-type: string
-  --group-ids: list
+  --group-ids: list<string>
   --image-height: string
   --image-path: string
   --image-url: string
@@ -1276,7 +1285,7 @@ export def "posts create" [
   --is-responsive: oneof<nothing, bool>
   --logo-url: string
   --needs-sanitize: string
-  --newsletter-ids: list
+  --newsletter-ids: list<string>
   --post-date: string
   --proxy-url: string
   --slug: string
@@ -1295,11 +1304,11 @@ export def "posts create" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "vestorly_auth" $vestorly_auth "scalar") (serialize-qp "access_token" $access_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/posts" $qp)
-  let body = {"advisor_id": $advisor_id, "approval_status": $approval_status, "approval_transactions": $approval_transactions, "article_id": $article_id, "comment": $comment, "created_at": $created_at, "display_date": $display_date, "display_summary": $display_summary, "display_tag": $display_tag, "external_url": $external_url, "external_url_source": $external_url_source, "external_url_type": $external_url_type, "group_ids": $group_ids, "image_height": $image_height, "image_path": $image_path, "image_url": $image_url, "image_width": $image_width, "is_featured": $is_featured, "is_mobile_proxy_needed": $is_mobile_proxy_needed, "is_proxy_needed": $is_proxy_needed, "is_published": $is_published, "is_responsive": $is_responsive, "logo_url": $logo_url, "needs_sanitize": $needs_sanitize, "newsletter_ids": $newsletter_ids, "post_date": $post_date, "proxy_url": $proxy_url, "slug": $slug, "square_logo_url": $square_logo_url, "suitability_score": $suitability_score, "summary": $summary, "title": $title, "topic": $topic, "updated_at": $updated_at, "vestorly_url": $vestorly_url, "video": $video, "video_id": $video_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"advisor_id": $advisor_id, "approval_status": $approval_status, "approval_transactions": $approval_transactions, "article_id": $article_id, "comment": $comment, "created_at": $created_at, "display_date": $display_date, "display_summary": $display_summary, "display_tag": $display_tag, "external_url": $external_url, "external_url_source": $external_url_source, "external_url_type": $external_url_type, "group_ids": $group_ids, "image_height": $image_height, "image_path": $image_path, "image_url": $image_url, "image_width": $image_width, "is_featured": $is_featured, "is_mobile_proxy_needed": $is_mobile_proxy_needed, "is_proxy_needed": $is_proxy_needed, "is_published": $is_published, "is_responsive": $is_responsive, "logo_url": $logo_url, "needs_sanitize": $needs_sanitize, "newsletter_ids": $newsletter_ids, "post_date": $post_date, "proxy_url": $proxy_url, "slug": $slug, "square_logo_url": $square_logo_url, "suitability_score": $suitability_score, "summary": $summary, "title": $title, "topic": $topic, "updated_at": $updated_at, "vestorly_url": $vestorly_url, "video": $video, "video_id": $video_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Query all posts
@@ -1322,7 +1331,7 @@ export def "posts get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "vestorly_auth" $vestorly_auth "scalar") (serialize-qp "access_token" $access_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/posts/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/posts/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1347,7 +1356,7 @@ export def "posts update" [
   --body-id: string
   --advisor-id: string
   --approval-status: string
-  --approval-transactions: list
+  --approval-transactions: list<string>
   --article-id: string
   --comment: string
   --created-at: string
@@ -1357,7 +1366,7 @@ export def "posts update" [
   --external-url: string
   --external-url-source: string
   --external-url-type: string
-  --group-ids: list
+  --group-ids: list<string>
   --image-height: string
   --image-path: string
   --image-url: string
@@ -1369,7 +1378,7 @@ export def "posts update" [
   --is-responsive: oneof<nothing, bool>
   --logo-url: string
   --needs-sanitize: string
-  --newsletter-ids: list
+  --newsletter-ids: list<string>
   --post-date: string
   --proxy-url: string
   --redirector-link: string
@@ -1388,19 +1397,19 @@ export def "posts update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "vestorly_auth" $vestorly_auth "scalar") (serialize-qp "access_token" $access_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/posts/{id}") $qp)
-  let body = {"_id": $body_id, "advisor_id": $advisor_id, "approval_status": $approval_status, "approval_transactions": $approval_transactions, "article_id": $article_id, "comment": $comment, "created_at": $created_at, "display_date": $display_date, "display_summary": $display_summary, "display_tag": $display_tag, "external_url": $external_url, "external_url_source": $external_url_source, "external_url_type": $external_url_type, "group_ids": $group_ids, "image_height": $image_height, "image_path": $image_path, "image_url": $image_url, "image_width": $image_width, "is_featured": $is_featured, "is_mobile_proxy_needed": $is_mobile_proxy_needed, "is_proxy_needed": $is_proxy_needed, "is_published": $is_published, "is_responsive": $is_responsive, "logo_url": $logo_url, "needs_sanitize": $needs_sanitize, "newsletter_ids": $newsletter_ids, "post_date": $post_date, "proxy_url": $proxy_url, "redirector_link": $redirector_link, "slug": $slug, "square_logo_url": $square_logo_url, "suitability_score": $suitability_score, "summary": $summary, "title": $title, "topic": $topic, "updated_at": $updated_at, "vestorly_url": $vestorly_url, "video": $video, "video_id": $video_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/posts/{id}") $qp)
+  let req_body = {"_id": $body_id, "advisor_id": $advisor_id, "approval_status": $approval_status, "approval_transactions": $approval_transactions, "article_id": $article_id, "comment": $comment, "created_at": $created_at, "display_date": $display_date, "display_summary": $display_summary, "display_tag": $display_tag, "external_url": $external_url, "external_url_source": $external_url_source, "external_url_type": $external_url_type, "group_ids": $group_ids, "image_height": $image_height, "image_path": $image_path, "image_url": $image_url, "image_width": $image_width, "is_featured": $is_featured, "is_mobile_proxy_needed": $is_mobile_proxy_needed, "is_proxy_needed": $is_proxy_needed, "is_published": $is_published, "is_responsive": $is_responsive, "logo_url": $logo_url, "needs_sanitize": $needs_sanitize, "newsletter_ids": $newsletter_ids, "post_date": $post_date, "proxy_url": $proxy_url, "redirector_link": $redirector_link, "slug": $slug, "square_logo_url": $square_logo_url, "suitability_score": $suitability_score, "summary": $summary, "title": $title, "topic": $topic, "updated_at": $updated_at, "vestorly_url": $vestorly_url, "video": $video, "video_id": $video_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns all Categories keywords
 #
 # GET /seed_custom_feeds
 # operationId: findSeedCustomFeeds
-export def "seed-custom-feeds findSeedCustomFeeds" [
+export def "seed-custom-feeds list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1439,8 +1448,8 @@ export def "seed-custom-feeds create" [
   --article-id: string
   custom_feed_id: string
   --not-article-id: string
-  --not-seeds: list
-  --seeds: list
+  --not-seeds: list<string>
+  --seeds: list<string>
   --sort-by: string
 ]: any -> record<seed_custom_feed: record<_id: string, article_id: string, custom_feed_id: string, not_article_id: string, not_seeds: list<string>, seeds: list<string>, sort_by: string>> {
   let input = $in
@@ -1448,11 +1457,11 @@ export def "seed-custom-feeds create" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "vestorly_auth" $vestorly_auth "scalar") (serialize-qp "access_token" $access_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/seed_custom_feeds" $qp)
-  let body = {"article_id": $article_id, "custom_feed_id": $custom_feed_id, "not_article_id": $not_article_id, "not_seeds": $not_seeds, "seeds": $seeds, "sort_by": $sort_by} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"article_id": $article_id, "custom_feed_id": $custom_feed_id, "not_article_id": $not_article_id, "not_seeds": $not_seeds, "seeds": $seeds, "sort_by": $sort_by} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes a Category keywords
@@ -1475,7 +1484,7 @@ export def "seed-custom-feeds delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "vestorly_auth" $vestorly_auth "scalar") (serialize-qp "access_token" $access_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/seed_custom_feeds/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/seed_custom_feeds/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1485,7 +1494,7 @@ export def "seed-custom-feeds delete" [
 #
 # GET /seed_custom_feeds/{id}
 # operationId: findSeedCustomFeedByID
-export def "seed-custom-feeds findSeedCustomFeedByID" [
+export def "seed-custom-feeds find" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1501,7 +1510,7 @@ export def "seed-custom-feeds findSeedCustomFeedByID" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "vestorly_auth" $vestorly_auth "scalar") (serialize-qp "access_token" $access_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/seed_custom_feeds/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/seed_custom_feeds/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1526,27 +1535,27 @@ export def "seed-custom-feeds update" [
   --article-id: string
   custom_feed_id: string
   --not-article-id: string
-  --not-seeds: list
-  --seeds: list
+  --not-seeds: list<string>
+  --seeds: list<string>
   --sort-by: string
 ]: any -> record<seed_custom_feed: record<_id: string, article_id: string, custom_feed_id: string, not_article_id: string, not_seeds: list<string>, seeds: list<string>, sort_by: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "vestorly_auth" $vestorly_auth "scalar") (serialize-qp "access_token" $access_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/seed_custom_feeds/{id}") $qp)
-  let body = {"article_id": $article_id, "custom_feed_id": $custom_feed_id, "not_article_id": $not_article_id, "not_seeds": $not_seeds, "seeds": $seeds, "sort_by": $sort_by} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/seed_custom_feeds/{id}") $qp)
+  let req_body = {"article_id": $article_id, "custom_feed_id": $custom_feed_id, "not_article_id": $not_article_id, "not_seeds": $not_seeds, "seeds": $seeds, "sort_by": $sort_by} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Login To Vestorly Platform
 #
 # POST /sessions
 # operationId: login
-export def "sessions login" [
+export def "sessions create-login" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1571,7 +1580,7 @@ export def "sessions login" [
 #
 # DELETE /sessions/{id}
 # operationId: logout
-export def "sessions logout" [
+export def "sessions delete-logout" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1586,7 +1595,7 @@ export def "sessions logout" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "vestorly_auth" $vestorly_auth "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/sessions/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/sessions/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1596,7 +1605,7 @@ export def "sessions logout" [
 #
 # GET /sources
 # operationId: findSources
-export def "sources findSources" [
+export def "sources find" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1637,18 +1646,18 @@ export def "sources create" [
   --logo-url: string
   name: string
   rss_publisher: string
-  --body-url: string
+  url: string
 ]: any -> record<source: record<_id: string, custom_rss_feed: bool, enabled: bool, logo_url: string, name: string, rss_publisher: string, url: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "vestorly_auth" $vestorly_auth "scalar") (serialize-qp "access_token" $access_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/sources" $qp)
-  let body = {"custom_rss_feed": $custom_rss_feed, "enabled": $enabled, "logo_url": $logo_url, "name": $name, "rss_publisher": $rss_publisher, "url": $body_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"custom_rss_feed": $custom_rss_feed, "enabled": $enabled, "logo_url": $logo_url, "name": $name, "rss_publisher": $rss_publisher, "url": $url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get Source By ID
@@ -1671,7 +1680,7 @@ export def "sources get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "vestorly_auth" $vestorly_auth "scalar") (serialize-qp "access_token" $access_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/sources/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/sources/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1698,16 +1707,16 @@ export def "sources update" [
   --logo-url: string
   name: string
   rss_publisher: string
-  --body-url: string
+  url: string
 ]: any -> record<source: record<_id: string, custom_rss_feed: bool, enabled: bool, logo_url: string, name: string, rss_publisher: string, url: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "vestorly_auth" $vestorly_auth "scalar") (serialize-qp "access_token" $access_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/sources/{id}") $qp)
-  let body = {"custom_rss_feed": $custom_rss_feed, "enabled": $enabled, "logo_url": $logo_url, "name": $name, "rss_publisher": $rss_publisher, "url": $body_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/sources/{id}") $qp)
+  let req_body = {"custom_rss_feed": $custom_rss_feed, "enabled": $enabled, "logo_url": $logo_url, "name": $name, "rss_publisher": $rss_publisher, "url": $url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

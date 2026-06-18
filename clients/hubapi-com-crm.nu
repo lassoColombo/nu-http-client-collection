@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -69,7 +78,7 @@ def auth-scheme-completer [] { ["query-hapikey"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "crm-extensions-cards-sample-response get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "crm-extensions-cards-sample-response get-get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,7 +102,7 @@ export def commands []: nothing -> table {
 #
 # GET /crm/v3/extensions/cards/sample-response
 # operationId: get-/crm/v3/extensions/cards/sample-response_getCardsSampleResponse
-export def "crm-extensions-cards-sample-response get" [
+export def "crm-extensions-cards-sample-response get-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -115,7 +124,7 @@ export def "crm-extensions-cards-sample-response get" [
 #
 # GET /crm/v3/extensions/cards/{appId}
 # operationId: get-/crm/v3/extensions/cards/{appId}_getAll
-export def "crm-extensions-cards get-all" [
+export def "crm-extensions-cards get-{app-id}-get-list" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -128,7 +137,7 @@ export def "crm-extensions-cards get-all" [
 ]: nothing -> record<results: table<actions: record, createdAt: string, display: record, fetch: record, id: string, title: string, updatedAt: string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-hapikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/crm/v3/extensions/cards/{app_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/crm/v3/extensions/cards/{app_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -138,10 +147,10 @@ export def "crm-extensions-cards get-all" [
 #
 # POST /crm/v3/extensions/cards/{appId}
 # operationId: post-/crm/v3/extensions/cards/{appId}_create
-# --actions shape: {baseUrls: list}
+# --actions shape: {baseUrls: list<string>}
 # --display shape: {properties: list}
 # --fetch shape: {objectTypes: list, targetUrl: string}
-export def "crm-extensions-cards create" [
+export def "crm-extensions-cards create-{app-id}-create" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -151,7 +160,7 @@ export def "crm-extensions-cards create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  actions: record # Configuration for custom user actions on cards. (e.g. {baseUrls: [https://www.example.com/hubspot]}) — shape: {baseUrls: list}
+  actions: record # Configuration for custom user actions on cards. (e.g. {baseUrls: [https://www.example.com/hubspot]}) — shape: {baseUrls: list<string>}
   display: record # Configuration for displayed info on a card — shape: {properties: list}
   fetch: record # Configuration for this card's data fetch request. — shape: {objectTypes: list, targetUrl: string}
   title: string # The top-level title for this card. Displayed to users in the CRM UI.
@@ -159,19 +168,19 @@ export def "crm-extensions-cards create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-hapikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/crm/v3/extensions/cards/{app_id}"))
-  let body = {"actions": $actions, "display": $display, "fetch": $fetch, "title": $title} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/crm/v3/extensions/cards/{app_id}"))
+  let req_body = {"actions": $actions, "display": $display, "fetch": $fetch, "title": $title} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a card
 #
 # DELETE /crm/v3/extensions/cards/{appId}/{cardId}
 # operationId: delete-/crm/v3/extensions/cards/{appId}/{cardId}_archive
-export def "crm-extensions-cards archive" [
+export def "crm-extensions-cards delete-{app-id}-{card-id}-archive" [
   app_id: int
   card_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -185,7 +194,7 @@ export def "crm-extensions-cards archive" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-hapikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, card_id: $card_id} | format pattern "/crm/v3/extensions/cards/{app_id}/{card_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), card_id: (encode-path-segment $card_id)} | format pattern "/crm/v3/extensions/cards/{app_id}/{card_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -195,7 +204,7 @@ export def "crm-extensions-cards archive" [
 #
 # GET /crm/v3/extensions/cards/{appId}/{cardId}
 # operationId: get-/crm/v3/extensions/cards/{appId}/{cardId}_getById
-export def "crm-extensions-cards get-by" [
+export def "crm-extensions-cards get-{app-id}-{card-id}-get" [
   app_id: int
   card_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -209,7 +218,7 @@ export def "crm-extensions-cards get-by" [
 ]: nothing -> record<actions: record<baseUrls: list<string>>, createdAt: string, display: record<properties: list<record>>, fetch: record<objectTypes: list<record>, targetUrl: string>, id: string, title: string, updatedAt: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-hapikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, card_id: $card_id} | format pattern "/crm/v3/extensions/cards/{app_id}/{card_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), card_id: (encode-path-segment $card_id)} | format pattern "/crm/v3/extensions/cards/{app_id}/{card_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -219,10 +228,10 @@ export def "crm-extensions-cards get-by" [
 #
 # PATCH /crm/v3/extensions/cards/{appId}/{cardId}
 # operationId: patch-/crm/v3/extensions/cards/{appId}/{cardId}_update
-# --actions shape: {baseUrls: list}
+# --actions shape: {baseUrls: list<string>}
 # --display shape: {properties: list}
 # --fetch shape: {objectTypes: list, targetUrl?: string}
-export def "crm-extensions-cards update" [
+export def "crm-extensions-cards update-{app-id}-{card-id}-update" [
   app_id: int
   card_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -233,7 +242,7 @@ export def "crm-extensions-cards update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --actions: record # Configuration for custom user actions on cards. (e.g. {baseUrls: [https://www.example.com/hubspot]}) — shape: {baseUrls: list}
+  --actions: record # Configuration for custom user actions on cards. (e.g. {baseUrls: [https://www.example.com/hubspot]}) — shape: {baseUrls: list<string>}
   --display: record # Configuration for displayed info on a card — shape: {properties: list}
   --fetch: record # Variant of CardFetchBody with fields as optional for patches — shape: {objectTypes: list, targetUrl?: string}
   --title: string # The top-level title for this card. Displayed to users in the CRM UI.
@@ -241,10 +250,10 @@ export def "crm-extensions-cards update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-hapikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, card_id: $card_id} | format pattern "/crm/v3/extensions/cards/{app_id}/{card_id}"))
-  let body = {"actions": $actions, "display": $display, "fetch": $fetch, "title": $title} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), card_id: (encode-path-segment $card_id)} | format pattern "/crm/v3/extensions/cards/{app_id}/{card_id}"))
+  let req_body = {"actions": $actions, "display": $display, "fetch": $fetch, "title": $title} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

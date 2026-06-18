@@ -36,6 +36,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -72,7 +81,7 @@ def format-completer [] { ["pdf"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "cmcer-certificate cmcer" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "cmcer-certificate create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -98,7 +107,7 @@ export def commands []: nothing -> table {
 # operationId: cmcer
 # --certificateParameters shape: {aplno: string, certno: string, sccd: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "cmcer-certificate cmcer" [
+export def "cmcer-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -116,11 +125,11 @@ export def "cmcer-certificate cmcer" [
   let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/cmcer/certificate")
-  let body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Conversion Certificate
@@ -129,7 +138,7 @@ export def "cmcer-certificate cmcer" [
 # operationId: cncer
 # --certificateParameters shape: {aplno: string, certno: string, sccd: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "cncer-certificate cncer" [
+export def "cncer-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -147,11 +156,11 @@ export def "cncer-certificate cncer" [
   let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/cncer/certificate")
-  let body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Caste Certificate
@@ -160,7 +169,7 @@ export def "cncer-certificate cncer" [
 # operationId: ctcer
 # --certificateParameters shape: {aplno: string, certno: string, sccd: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "ctcer-certificate ctcer" [
+export def "ctcer-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -178,11 +187,11 @@ export def "ctcer-certificate ctcer" [
   let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ctcer/certificate")
-  let body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Domicile Certificate
@@ -191,7 +200,7 @@ export def "ctcer-certificate ctcer" [
 # operationId: dmcer
 # --certificateParameters shape: {aplno: string, certno: string, sccd: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "dmcer-certificate dmcer" [
+export def "dmcer-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -209,11 +218,11 @@ export def "dmcer-certificate dmcer" [
   let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dmcer/certificate")
-  let body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Dependency Certificate
@@ -222,7 +231,7 @@ export def "dmcer-certificate dmcer" [
 # operationId: dpcer
 # --certificateParameters shape: {aplno: string, certno: string, sccd: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "dpcer-certificate dpcer" [
+export def "dpcer-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -240,11 +249,11 @@ export def "dpcer-certificate dpcer" [
   let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dpcer/certificate")
-  let body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Destitute Certificate
@@ -253,7 +262,7 @@ export def "dpcer-certificate dpcer" [
 # operationId: dscer
 # --certificateParameters shape: {aplno: string, certno: string, sccd: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "dscer-certificate dscer" [
+export def "dscer-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -271,11 +280,11 @@ export def "dscer-certificate dscer" [
   let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dscer/certificate")
-  let body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Family Membership Certificate
@@ -284,7 +293,7 @@ export def "dscer-certificate dscer" [
 # operationId: fmcer
 # --certificateParameters shape: {aplno: string, certno: string, sccd: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "fmcer-certificate fmcer" [
+export def "fmcer-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -302,11 +311,11 @@ export def "fmcer-certificate fmcer" [
   let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/fmcer/certificate")
-  let body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Identification Certificate
@@ -315,7 +324,7 @@ export def "fmcer-certificate fmcer" [
 # operationId: idcer
 # --certificateParameters shape: {aplno: string, certno: string, sccd: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "idcer-certificate idcer" [
+export def "idcer-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -333,11 +342,11 @@ export def "idcer-certificate idcer" [
   let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/idcer/certificate")
-  let body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Inter-Caste Marriage Certificate
@@ -346,7 +355,7 @@ export def "idcer-certificate idcer" [
 # operationId: imcer
 # --certificateParameters shape: {aplno: string, certno: string, sccd: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "imcer-certificate imcer" [
+export def "imcer-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -364,11 +373,11 @@ export def "imcer-certificate imcer" [
   let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/imcer/certificate")
-  let body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Income Certificate
@@ -377,7 +386,7 @@ export def "imcer-certificate imcer" [
 # operationId: incer
 # --certificateParameters shape: {aplno: string, certno: string, sccd: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "incer-certificate incer" [
+export def "incer-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -395,11 +404,11 @@ export def "incer-certificate incer" [
   let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/incer/certificate")
-  let body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Life Certificate
@@ -408,7 +417,7 @@ export def "incer-certificate incer" [
 # operationId: lfcer
 # --certificateParameters shape: {aplno: string, certno: string, sccd: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "lfcer-certificate lfcer" [
+export def "lfcer-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -426,11 +435,11 @@ export def "lfcer-certificate lfcer" [
   let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/lfcer/certificate")
-  let body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Legal Heir Certificate
@@ -439,7 +448,7 @@ export def "lfcer-certificate lfcer" [
 # operationId: lhcer
 # --certificateParameters shape: {aplno: string, certno: string, sccd: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "lhcer-certificate lhcer" [
+export def "lhcer-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -457,11 +466,11 @@ export def "lhcer-certificate lhcer" [
   let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/lhcer/certificate")
-  let body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Location Certificate
@@ -470,7 +479,7 @@ export def "lhcer-certificate lhcer" [
 # operationId: locer
 # --certificateParameters shape: {aplno: string, certno: string, sccd: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "locer-certificate locer" [
+export def "locer-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -488,11 +497,11 @@ export def "locer-certificate locer" [
   let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/locer/certificate")
-  let body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Minority Certificate
@@ -501,7 +510,7 @@ export def "locer-certificate locer" [
 # operationId: mncer
 # --certificateParameters shape: {aplno: string, certno: string, sccd: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "mncer-certificate mncer" [
+export def "mncer-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -519,11 +528,11 @@ export def "mncer-certificate mncer" [
   let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mncer/certificate")
-  let body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Non-Remarriage Certificate
@@ -532,7 +541,7 @@ export def "mncer-certificate mncer" [
 # operationId: nrcer
 # --certificateParameters shape: {aplno: string, certno: string, sccd: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "nrcer-certificate nrcer" [
+export def "nrcer-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -550,11 +559,11 @@ export def "nrcer-certificate nrcer" [
   let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/nrcer/certificate")
-  let body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Nativity Certificate
@@ -563,7 +572,7 @@ export def "nrcer-certificate nrcer" [
 # operationId: ntcer
 # --certificateParameters shape: {aplno: string, certno: string, sccd: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "ntcer-certificate ntcer" [
+export def "ntcer-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -581,11 +590,11 @@ export def "ntcer-certificate ntcer" [
   let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ntcer/certificate")
-  let body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # One and the Same Certificate
@@ -594,7 +603,7 @@ export def "ntcer-certificate ntcer" [
 # operationId: oscer
 # --certificateParameters shape: {aplno: string, certno: string, sccd: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "oscer-certificate oscer" [
+export def "oscer-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -612,11 +621,11 @@ export def "oscer-certificate oscer" [
   let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/oscer/certificate")
-  let body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Possession and Non-Attachment Certificate
@@ -625,7 +634,7 @@ export def "oscer-certificate oscer" [
 # operationId: pncer
 # --certificateParameters shape: {aplno: string, certno: string, sccd: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "pncer-certificate pncer" [
+export def "pncer-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -643,11 +652,11 @@ export def "pncer-certificate pncer" [
   let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/pncer/certificate")
-  let body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Possession Certificate
@@ -656,7 +665,7 @@ export def "pncer-certificate pncer" [
 # operationId: pscer
 # --certificateParameters shape: {aplno: string, certno: string, sccd: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "pscer-certificate pscer" [
+export def "pscer-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -674,11 +683,11 @@ export def "pscer-certificate pscer" [
   let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/pscer/certificate")
-  let body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Relationship Certificate
@@ -687,7 +696,7 @@ export def "pscer-certificate pscer" [
 # operationId: rlcer
 # --certificateParameters shape: {aplno: string, certno: string, sccd: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "rlcer-certificate rlcer" [
+export def "rlcer-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -705,11 +714,11 @@ export def "rlcer-certificate rlcer" [
   let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rlcer/certificate")
-  let body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Residence Certificate
@@ -718,7 +727,7 @@ export def "rlcer-certificate rlcer" [
 # operationId: rscer
 # --certificateParameters shape: {aplno: string, certno: string, sccd: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "rscer-certificate rscer" [
+export def "rscer-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -736,11 +745,11 @@ export def "rscer-certificate rscer" [
   let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rscer/certificate")
-  let body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Solvency Certificate
@@ -749,7 +758,7 @@ export def "rscer-certificate rscer" [
 # operationId: slcer
 # --certificateParameters shape: {aplno: string, certno: string, sccd: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "slcer-certificate slcer" [
+export def "slcer-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -767,11 +776,11 @@ export def "slcer-certificate slcer" [
   let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/slcer/certificate")
-  let body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Valuation Certificate
@@ -780,7 +789,7 @@ export def "slcer-certificate slcer" [
 # operationId: vlcer
 # --certificateParameters shape: {aplno: string, certno: string, sccd: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "vlcer-certificate vlcer" [
+export def "vlcer-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -798,11 +807,11 @@ export def "vlcer-certificate vlcer" [
   let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/vlcer/certificate")
-  let body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Widow-Widower Certificate
@@ -811,7 +820,7 @@ export def "vlcer-certificate vlcer" [
 # operationId: wwcer
 # --certificateParameters shape: {aplno: string, certno: string, sccd: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "wwcer-certificate wwcer" [
+export def "wwcer-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -829,9 +838,9 @@ export def "wwcer-certificate wwcer" [
   let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/wwcer/certificate")
-  let body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

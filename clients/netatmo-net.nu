@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -73,7 +82,7 @@ def setpoint-mode-completer [] { ["away" "hg" "manual" "max" "off" "program"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "addwebhook create-webhook" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "addwebhook get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -97,7 +106,7 @@ export def commands []: nothing -> table {
 #
 # GET /addwebhook
 # operationId: addwebhook
-export def "addwebhook create-webhook" [
+export def "addwebhook get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -106,12 +115,12 @@ export def "addwebhook create-webhook" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-url: string # Your webhook callback url
+  --url: string # Your webhook callback url
   --app-type: string # Webhooks are only available for Welcome, enter app_camera.
 ]: nothing -> record<status: string, time_exec: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "url" $qp_url "scalar") (serialize-qp "app_type" $app_type "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "url" $url "scalar") (serialize-qp "app_type" $app_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/addwebhook" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -122,7 +131,7 @@ export def "addwebhook create-webhook" [
 #
 # POST /createnewschedule
 # operationId: createnewschedule
-export def "createnewschedule create-newschedule" [
+export def "createnewschedule create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -140,10 +149,11 @@ export def "createnewschedule create-newschedule" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "device_id" $device_id "scalar") (serialize-qp "module_id" $module_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/createnewschedule" $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "text/plain" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "text/plain" $req_body
 }
 
 # The method devicelist returns the list of devices owned by the user, and their modules. A device is identified by its _id (which is its mac address) and each device may have one, several or no modules, also identified by an _id.
@@ -202,7 +212,7 @@ export def "dropwebhook get" [
 #
 # GET /getcamerapicture
 # operationId: getcamerapicture
-export def "getcamerapicture get-camerapicture" [
+export def "getcamerapicture get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -227,7 +237,7 @@ export def "getcamerapicture get-camerapicture" [
 #
 # GET /geteventsuntil
 # operationId: geteventsuntil
-export def "geteventsuntil get-eventsuntil" [
+export def "geteventsuntil get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -252,7 +262,7 @@ export def "geteventsuntil get-eventsuntil" [
 #
 # GET /gethomecoachsdata
 # operationId: gethomecoachsdata
-export def "gethomecoachsdata get-homecoachsdata" [
+export def "gethomecoachsdata get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -276,7 +286,7 @@ export def "gethomecoachsdata get-homecoachsdata" [
 #
 # GET /gethomedata
 # operationId: gethomedata
-export def "gethomedata get-homedata" [
+export def "gethomedata get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -301,7 +311,7 @@ export def "gethomedata get-homedata" [
 #
 # GET /getlasteventof
 # operationId: getlasteventof
-export def "getlasteventof get-lasteventof" [
+export def "getlasteventof get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -327,7 +337,7 @@ export def "getlasteventof get-lasteventof" [
 #
 # GET /getmeasure
 # operationId: getmeasure
-export def "getmeasure get-measure" [
+export def "getmeasure get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -339,11 +349,11 @@ export def "getmeasure get-measure" [
   --device-id: string # Id of the device whose module's measurements you want to retrieve. This _id can be found in the user's devices field.
   --module-id: string # If you don't specify any module_id you will retrieve the device's measurements. If you specify a module_id you will retrieve the module's measurements.
   --scale: string@scale-completer # Defines the time interval between two measurements. Possible values : max -> every value stored will be returned 30min -> 1 value every 30 minutes 1hour -> 1 value every hour 3hours -> 1 value every 3 hours 1day -> 1 value per day 1week -> 1 value per week 1month -> 1 value per month
-  --type: list # Measures you are interested in. Data you can request depends on the scale. **For Weather Station:**   * max -> Temperature (°C), CO2 (ppm), Humidity (%), Pressure (mbar), Noise (db), Rain (mm), WindStrength (km/h), WindAngle (angles), Guststrength (km/h), GustAngle (angles)   * 30min, 1hour, 3hours -> Same as above + min_temp, max_temp, min_hum, max_hum, min_pressure, max_pressure, min_noise, max_noise, sum_rain, date_max_gust   * 1day, 1week, 1month -> Same as above + date_min_temp, date_max_temp, date_min_hum, date_max_hum, date_min_pressure, date_max_pressure, date_min_noise, date_max_noise, date_min_co2, date_max_co2  **For Thermostat:**   * max -> temperature (°C), sp_temperature (°C), boileron (sec), boileroff (sec)   * 30min, 1hour, 3hours -> temperature, sp_temperature, min_temp, max_temp, sum_boiler_on, sum_boiler_off   * 1day, 1week, 1month -> temperature, min_temp, date_min_temp, max_temp, sum_boiler_on, sum_boiler_off
-  --date-begin: int # Starting timestamp (utc) of the requested measurements. Please note measurement retrieving is limited to 1024 measurements.  (format: int32)
+  --type: list<string> # Measures you are interested in. Data you can request depends on the scale. **For Weather Station:** * max -> Temperature (°C), CO2 (ppm), Humidity (%), Pressure (mbar), Noise (db), Rain (mm), WindStrength (km/h), WindAngle (angles), Guststrength (km/h), GustAngle (angles) * 30min, 1hour, 3hours -> Same as above + min_temp, max_temp, min_hum, max_hum, min_pressure, max_pressure, min_noise, max_noise, sum_rain, date_max_gust * 1day, 1week, 1month -> Same as above + date_min_temp, date_max_temp, date_min_hum, date_max_hum, date_min_pressure, date_max_pressure, date_min_noise, date_max_noise, date_min_co2, date_max_co2 **For Thermostat:** * max -> temperature (°C), sp_temperature (°C), boileron (sec), boileroff (sec) * 30min, 1hour, 3hours -> temperature, sp_temperature, min_temp, max_temp, sum_boiler_on, sum_boiler_off * 1day, 1week, 1month -> temperature, min_temp, date_min_temp, max_temp, sum_boiler_on, sum_boiler_off
+  --date-begin: int # Starting timestamp (utc) of the requested measurements. Please note measurement retrieving is limited to 1024 measurements. (format: int32)
   --date-end: string # Ending timestamp (utc) of the request measurements. If you want only the last measurement, do not provide date_begin, and set date_end to `last`.
   --limit: int # Limits the number of measurements returned (default & max is 1024) (format: int32)
-  --optimize: oneof<nothing, bool> # Allows you to choose the format of the answer. If you build a mobile app and bandwith usage is an issue, use `optimize = true`. Use `optimize = false`, for an easier parse. In this case, values are indexed by sorted timestamp. Example of un-optimized response : ```json {"status": "ok",    "body": {     "1347575400": [18.3,39],     "1347586200": [20.6,48]   }, "time_exec": 0.012136936187744} ``` If optimize is set true, measurements are returned as an array of series of regularly spaced measurements. Each series is defined by a beginning time beg_time and a step between measurements, step_time: ```json {"status": "ok",   "body": [     {"beg_time": 1347575400,      "step_time": 10800,      "value":          [[18.3,39],         [ 20.6,48]]     }], "time_exec": 0.014238119125366} ``` Default value is `true`.
+  --optimize: oneof<nothing, bool> # Allows you to choose the format of the answer. If you build a mobile app and bandwith usage is an issue, use `optimize = true`. Use `optimize = false`, for an easier parse. In this case, values are indexed by sorted timestamp. Example of un-optimized response : ```json {"status": "ok", "body": { "1347575400": [18.3,39], "1347586200": [20.6,48] }, "time_exec": 0.012136936187744} ``` If optimize is set true, measurements are returned as an array of series of regularly spaced measurements. Each series is defined by a beginning time beg_time and a step between measurements, step_time: ```json {"status": "ok", "body": [ {"beg_time": 1347575400, "step_time": 10800, "value": [[18.3,39], [ 20.6,48]] }], "time_exec": 0.014238119125366} ``` Default value is `true`.
   --real-time: oneof<nothing, bool> # In scales higher than max, since the data is aggregated, the timestamps returned are by default offset by +(scale/2). For instance, if you ask for measurements at a daily scale, you will receive data timestamped at 12:00 if real_time is set to `false` (default case), and timestamped at 00:00 if real_time is set to `true`. NB : The servers always store data with real_time set to `true` and data are offset by this parameter AFTER having being time-filtered, thus you could have data after date_end if real_time is set to `false`.
 ]: nothing -> record<body: table<beg_time: int, step_time: int, value: list>, status: string, time_exec: float, time_server: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -359,7 +369,7 @@ export def "getmeasure get-measure" [
 #
 # GET /getnextevents
 # operationId: getnextevents
-export def "getnextevents get-nextevents" [
+export def "getnextevents get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -385,7 +395,7 @@ export def "getnextevents get-nextevents" [
 #
 # GET /getpublicdata
 # operationId: getpublicdata
-export def "getpublicdata get-publicdata" [
+export def "getpublicdata get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -398,7 +408,7 @@ export def "getpublicdata get-publicdata" [
   --lon-ne: int # Longitude of the north east corner of the requested area. -180 <= lon_ne <= 180 and lon_ne>lon_sw (format: int32)
   --lat-sw: int # Latitude of the south west corner of the requested area. -85 <= lat_sw <= 85 (format: int32)
   --lon-sw: int # Longitude of the south west corner of the requested area. -180 <= lon_sw <= 180 (format: int32)
-  --required-data: list # To filter stations based on relevant measurements you want (e.g. rain will only return stations with rain gauges). Default is no filter. You can find all measurements available on the Thermostat page.
+  --required-data: list<string> # To filter stations based on relevant measurements you want (e.g. rain will only return stations with rain gauges). Default is no filter. You can find all measurements available on the Thermostat page.
   --filter: oneof<nothing, bool> # True to exclude stations with abnormal temperature measures. Default is false.
 ]: nothing -> record<body: table<_id: string, mark: int, measures: record, module_types: record, modules: list, place: record>, status: string, time_exec: float, time_server: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -414,7 +424,7 @@ export def "getpublicdata get-publicdata" [
 #
 # GET /getstationsdata
 # operationId: getstationsdata
-export def "getstationsdata get-stationsdata" [
+export def "getstationsdata get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -439,7 +449,7 @@ export def "getstationsdata get-stationsdata" [
 #
 # GET /getthermostatsdata
 # operationId: getthermostatsdata
-export def "getthermostatsdata get-thermostatsdata" [
+export def "getthermostatsdata get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -465,7 +475,7 @@ export def "getthermostatsdata get-thermostatsdata" [
 # DEPRECATED
 # operationId: getthermstate
 @deprecated
-export def "getthermstate get-thermstate" [
+export def "getthermstate get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -492,7 +502,7 @@ export def "getthermstate get-thermstate" [
 # DEPRECATED
 # operationId: getuser
 @deprecated
-export def "getuser get-user" [
+export def "getuser get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -536,7 +546,7 @@ export def "partnerdevices get" [
 #
 # POST /setpersonsaway
 # operationId: setpersonsaway
-export def "setpersonsaway post" [
+export def "setpersonsaway create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -561,7 +571,7 @@ export def "setpersonsaway post" [
 #
 # POST /setpersonshome
 # operationId: setpersonshome
-export def "setpersonshome post" [
+export def "setpersonshome create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -586,7 +596,7 @@ export def "setpersonshome post" [
 #
 # POST /setthermpoint
 # operationId: setthermpoint
-export def "setthermpoint post" [
+export def "setthermpoint create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -614,7 +624,7 @@ export def "setthermpoint post" [
 #
 # POST /switchschedule
 # operationId: switchschedule
-export def "switchschedule post" [
+export def "switchschedule create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -640,7 +650,7 @@ export def "switchschedule post" [
 #
 # POST /syncschedule
 # operationId: syncschedule
-export def "syncschedule sync-schedule" [
+export def "syncschedule create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -658,8 +668,9 @@ export def "syncschedule sync-schedule" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "device_id" $device_id "scalar") (serialize-qp "module_id" $module_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/syncschedule" $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "text/plain" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "text/plain" $req_body
 }

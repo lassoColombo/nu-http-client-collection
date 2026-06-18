@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -80,7 +89,7 @@ def import-method-completer [] { ["IMPORT_METHOD_UNSPECIFIED" "RSA_OAEP_3072_SHA
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "projects cloudkmsprojectslocationsgenerateRandomBytes" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "projects generate-random-bytes" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -104,7 +113,7 @@ export def commands []: nothing -> table {
 #
 # POST /v1/{location}:generateRandomBytes
 # operationId: cloudkms.projects.locations.generateRandomBytes
-export def "projects cloudkmsprojectslocationsgenerateRandomBytes" [
+export def "projects generate-random-bytes" [
   location: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -132,19 +141,19 @@ export def "projects cloudkmsprojectslocationsgenerateRandomBytes" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({location: $location} | format pattern "/v1/{location}:generateRandomBytes") $qp)
-  let body = {"lengthBytes": $length_bytes, "protectionLevel": $protection_level} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({location: (encode-path-segment $location)} | format pattern "/v1/{location}:generateRandomBytes") $qp)
+  let req_body = {"lengthBytes": $length_bytes, "protectionLevel": $protection_level} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns metadata for a given ImportJob.
 #
 # GET /v1/{name}
 # operationId: cloudkms.projects.locations.keyRings.importJobs.get
-export def "projects cloudkmsprojectslocationskeyRingsimportJobsget" [
+export def "projects get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -169,7 +178,7 @@ export def "projects cloudkmsprojectslocationskeyRingsimportJobsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -181,7 +190,7 @@ export def "projects cloudkmsprojectslocationskeyRingsimportJobsget" [
 # operationId: cloudkms.projects.locations.keyRings.cryptoKeys.cryptoKeyVersions.patch
 # --attestation shape: {certChains?: record}
 # --externalProtectionLevelOptions shape: {ekmConnectionKeyPath?: string, externalKeyUri?: string}
-export def "projects cloudkmsprojectslocationskeyRingscryptoKeyscryptoKeyVersionspatch" [
+export def "projects update" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -211,19 +220,19 @@ export def "projects cloudkmsprojectslocationskeyRingscryptoKeyscryptoKeyVersion
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}") $qp)
-  let body = {"attestation": $attestation, "externalProtectionLevelOptions": $external_protection_level_options, "state": $state} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}") $qp)
+  let req_body = {"attestation": $attestation, "externalProtectionLevelOptions": $external_protection_level_options, "state": $state} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists information about the supported locations for this service.
 #
 # GET /v1/{name}/locations
 # operationId: cloudkms.projects.locations.list
-export def "locations cloudkmsprojectslocationslist" [
+export def "locations list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -251,7 +260,7 @@ export def "locations cloudkmsprojectslocationslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}/locations") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}/locations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -261,7 +270,7 @@ export def "locations cloudkmsprojectslocationslist" [
 #
 # GET /v1/{name}/publicKey
 # operationId: cloudkms.projects.locations.keyRings.cryptoKeys.cryptoKeyVersions.getPublicKey
-export def "public-key cloudkmsprojectslocationskeyRingscryptoKeyscryptoKeyVersionsgetPublicKey" [
+export def "public-key get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -286,7 +295,7 @@ export def "public-key cloudkmsprojectslocationskeyRingscryptoKeyscryptoKeyVersi
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}/publicKey") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}/publicKey") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -296,7 +305,7 @@ export def "public-key cloudkmsprojectslocationskeyRingscryptoKeyscryptoKeyVersi
 #
 # POST /v1/{name}:asymmetricDecrypt
 # operationId: cloudkms.projects.locations.keyRings.cryptoKeys.cryptoKeyVersions.asymmetricDecrypt
-export def "projects cloudkmsprojectslocationskeyRingscryptoKeyscryptoKeyVersionsasymmetricDecrypt" [
+export def "projects create-asymmetric-decrypt" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -324,12 +333,12 @@ export def "projects cloudkmsprojectslocationskeyRingscryptoKeyscryptoKeyVersion
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}:asymmetricDecrypt") $qp)
-  let body = {"ciphertext": $ciphertext, "ciphertextCrc32c": $ciphertext_crc32c} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}:asymmetricDecrypt") $qp)
+  let req_body = {"ciphertext": $ciphertext, "ciphertextCrc32c": $ciphertext_crc32c} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Signs data using a CryptoKeyVersion with CryptoKey.purpose ASYMMETRIC_SIGN, producing a signature that can be verified with the public key retrieved from GetPublicKey.
@@ -337,7 +346,7 @@ export def "projects cloudkmsprojectslocationskeyRingscryptoKeyscryptoKeyVersion
 # POST /v1/{name}:asymmetricSign
 # operationId: cloudkms.projects.locations.keyRings.cryptoKeys.cryptoKeyVersions.asymmetricSign
 # --digest shape: {sha256?: string, sha384?: string, sha512?: string}
-export def "projects cloudkmsprojectslocationskeyRingscryptoKeyscryptoKeyVersionsasymmetricSign" [
+export def "projects create-asymmetric-sign" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -367,19 +376,19 @@ export def "projects cloudkmsprojectslocationskeyRingscryptoKeyscryptoKeyVersion
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}:asymmetricSign") $qp)
-  let body = {"data": $data, "dataCrc32c": $data_crc32c, "digest": $digest, "digestCrc32c": $digest_crc32c} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}:asymmetricSign") $qp)
+  let req_body = {"data": $data, "dataCrc32c": $data_crc32c, "digest": $digest, "digestCrc32c": $digest_crc32c} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Decrypts data that was protected by Encrypt. The CryptoKey.purpose must be ENCRYPT_DECRYPT.
 #
 # POST /v1/{name}:decrypt
 # operationId: cloudkms.projects.locations.keyRings.cryptoKeys.decrypt
-export def "projects cloudkmsprojectslocationskeyRingscryptoKeysdecrypt" [
+export def "projects create-decrypt" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -409,19 +418,19 @@ export def "projects cloudkmsprojectslocationskeyRingscryptoKeysdecrypt" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}:decrypt") $qp)
-  let body = {"additionalAuthenticatedData": $additional_authenticated_data, "additionalAuthenticatedDataCrc32c": $additional_authenticated_data_crc32c, "ciphertext": $ciphertext, "ciphertextCrc32c": $ciphertext_crc32c} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}:decrypt") $qp)
+  let req_body = {"additionalAuthenticatedData": $additional_authenticated_data, "additionalAuthenticatedDataCrc32c": $additional_authenticated_data_crc32c, "ciphertext": $ciphertext, "ciphertextCrc32c": $ciphertext_crc32c} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Schedule a CryptoKeyVersion for destruction. Upon calling this method, CryptoKeyVersion.state will be set to DESTROY_SCHEDULED, and destroy_time will be set to the time destroy_scheduled_duration in the future. At that time, the state will automatically change to DESTROYED, and the key material will be irrevocably destroyed. Before the destroy_time is reached, RestoreCryptoKeyVersion may be called to reverse the process.
 #
 # POST /v1/{name}:destroy
 # operationId: cloudkms.projects.locations.keyRings.cryptoKeys.cryptoKeyVersions.destroy
-export def "projects cloudkmsprojectslocationskeyRingscryptoKeyscryptoKeyVersionsdestroy" [
+export def "projects delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -448,18 +457,19 @@ export def "projects cloudkmsprojectslocationskeyRingscryptoKeyscryptoKeyVersion
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}:destroy") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}:destroy") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Encrypts data, so that it can only be recovered by a call to Decrypt. The CryptoKey.purpose must be ENCRYPT_DECRYPT.
 #
 # POST /v1/{name}:encrypt
 # operationId: cloudkms.projects.locations.keyRings.cryptoKeys.encrypt
-export def "projects cloudkmsprojectslocationskeyRingscryptoKeysencrypt" [
+export def "projects create-encrypt" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -489,19 +499,19 @@ export def "projects cloudkmsprojectslocationskeyRingscryptoKeysencrypt" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}:encrypt") $qp)
-  let body = {"additionalAuthenticatedData": $additional_authenticated_data, "additionalAuthenticatedDataCrc32c": $additional_authenticated_data_crc32c, "plaintext": $plaintext, "plaintextCrc32c": $plaintext_crc32c} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}:encrypt") $qp)
+  let req_body = {"additionalAuthenticatedData": $additional_authenticated_data, "additionalAuthenticatedDataCrc32c": $additional_authenticated_data_crc32c, "plaintext": $plaintext, "plaintextCrc32c": $plaintext_crc32c} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Signs data using a CryptoKeyVersion with CryptoKey.purpose MAC, producing a tag that can be verified by another source with the same key.
 #
 # POST /v1/{name}:macSign
 # operationId: cloudkms.projects.locations.keyRings.cryptoKeys.cryptoKeyVersions.macSign
-export def "projects cloudkmsprojectslocationskeyRingscryptoKeyscryptoKeyVersionsmacSign" [
+export def "projects create-mac-sign" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -529,19 +539,19 @@ export def "projects cloudkmsprojectslocationskeyRingscryptoKeyscryptoKeyVersion
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}:macSign") $qp)
-  let body = {"data": $data, "dataCrc32c": $data_crc32c} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}:macSign") $qp)
+  let req_body = {"data": $data, "dataCrc32c": $data_crc32c} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Verifies MAC tag using a CryptoKeyVersion with CryptoKey.purpose MAC, and returns a response that indicates whether or not the verification was successful.
 #
 # POST /v1/{name}:macVerify
 # operationId: cloudkms.projects.locations.keyRings.cryptoKeys.cryptoKeyVersions.macVerify
-export def "projects cloudkmsprojectslocationskeyRingscryptoKeyscryptoKeyVersionsmacVerify" [
+export def "projects verify-mac" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -571,19 +581,19 @@ export def "projects cloudkmsprojectslocationskeyRingscryptoKeyscryptoKeyVersion
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}:macVerify") $qp)
-  let body = {"data": $data, "dataCrc32c": $data_crc32c, "mac": $mac, "macCrc32c": $mac_crc32c} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}:macVerify") $qp)
+  let req_body = {"data": $data, "dataCrc32c": $data_crc32c, "mac": $mac, "macCrc32c": $mac_crc32c} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Restore a CryptoKeyVersion in the DESTROY_SCHEDULED state. Upon restoration of the CryptoKeyVersion, state will be set to DISABLED, and destroy_time will be cleared.
 #
 # POST /v1/{name}:restore
 # operationId: cloudkms.projects.locations.keyRings.cryptoKeys.cryptoKeyVersions.restore
-export def "projects cloudkmsprojectslocationskeyRingscryptoKeyscryptoKeyVersionsrestore" [
+export def "projects create-restore" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -610,18 +620,19 @@ export def "projects cloudkmsprojectslocationskeyRingscryptoKeyscryptoKeyVersion
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}:restore") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}:restore") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update the version of a CryptoKey that will be used in Encrypt. Returns an error if called on a key whose purpose is not ENCRYPT_DECRYPT.
 #
 # POST /v1/{name}:updatePrimaryVersion
 # operationId: cloudkms.projects.locations.keyRings.cryptoKeys.updatePrimaryVersion
-export def "projects cloudkmsprojectslocationskeyRingscryptoKeysupdatePrimaryVersion" [
+export def "projects update-primary-version" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -648,19 +659,19 @@ export def "projects cloudkmsprojectslocationskeyRingscryptoKeysupdatePrimaryVer
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}:updatePrimaryVersion") $qp)
-  let body = {"cryptoKeyVersionId": $crypto_key_version_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}:updatePrimaryVersion") $qp)
+  let req_body = {"cryptoKeyVersionId": $crypto_key_version_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Verifies that Cloud KMS can successfully connect to the external key manager specified by an EkmConnection. If there is an error connecting to the EKM, this method returns a FAILED_PRECONDITION status containing structured information as described at https://cloud.google.com/kms/docs/reference/ekm_errors.
 #
 # GET /v1/{name}:verifyConnectivity
 # operationId: cloudkms.projects.locations.ekmConnections.verifyConnectivity
-export def "projects cloudkmsprojectslocationsekmConnectionsverifyConnectivity" [
+export def "projects verify-connectivity" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -685,7 +696,7 @@ export def "projects cloudkmsprojectslocationsekmConnectionsverifyConnectivity" 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}:verifyConnectivity") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}:verifyConnectivity") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -695,7 +706,7 @@ export def "projects cloudkmsprojectslocationsekmConnectionsverifyConnectivity" 
 #
 # GET /v1/{parent}/cryptoKeyVersions
 # operationId: cloudkms.projects.locations.keyRings.cryptoKeys.cryptoKeyVersions.list
-export def "crypto-key-versions cloudkmsprojectslocationskeyRingscryptoKeyscryptoKeyVersionslist" [
+export def "crypto-key-versions list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -725,7 +736,7 @@ export def "crypto-key-versions cloudkmsprojectslocationskeyRingscryptoKeyscrypt
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/cryptoKeyVersions") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/cryptoKeyVersions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -737,7 +748,7 @@ export def "crypto-key-versions cloudkmsprojectslocationskeyRingscryptoKeyscrypt
 # operationId: cloudkms.projects.locations.keyRings.cryptoKeys.cryptoKeyVersions.create
 # --attestation shape: {certChains?: record}
 # --externalProtectionLevelOptions shape: {ekmConnectionKeyPath?: string, externalKeyUri?: string}
-export def "crypto-key-versions cloudkmsprojectslocationskeyRingscryptoKeyscryptoKeyVersionscreate" [
+export def "crypto-key-versions create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -766,19 +777,19 @@ export def "crypto-key-versions cloudkmsprojectslocationskeyRingscryptoKeyscrypt
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/cryptoKeyVersions") $qp)
-  let body = {"attestation": $attestation, "externalProtectionLevelOptions": $external_protection_level_options, "state": $state} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/cryptoKeyVersions") $qp)
+  let req_body = {"attestation": $attestation, "externalProtectionLevelOptions": $external_protection_level_options, "state": $state} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Import wrapped key material into a CryptoKeyVersion. All requests must specify a CryptoKey. If a CryptoKeyVersion is additionally specified in the request, key material will be reimported into that version. Otherwise, a new version will be created, and will be assigned the next sequential id within the CryptoKey.
 #
 # POST /v1/{parent}/cryptoKeyVersions:import
 # operationId: cloudkms.projects.locations.keyRings.cryptoKeys.cryptoKeyVersions.import
-export def "crypto-key-versions-import cloudkmsprojectslocationskeyRingscryptoKeyscryptoKeyVersionsimport" [
+export def "crypto-key-versions-import import" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -809,19 +820,19 @@ export def "crypto-key-versions-import cloudkmsprojectslocationskeyRingscryptoKe
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/cryptoKeyVersions:import") $qp)
-  let body = {"algorithm": $algorithm, "cryptoKeyVersion": $crypto_key_version, "importJob": $import_job, "rsaAesWrappedKey": $rsa_aes_wrapped_key, "wrappedKey": $wrapped_key} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/cryptoKeyVersions:import") $qp)
+  let req_body = {"algorithm": $algorithm, "cryptoKeyVersion": $crypto_key_version, "importJob": $import_job, "rsaAesWrappedKey": $rsa_aes_wrapped_key, "wrappedKey": $wrapped_key} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists CryptoKeys.
 #
 # GET /v1/{parent}/cryptoKeys
 # operationId: cloudkms.projects.locations.keyRings.cryptoKeys.list
-export def "crypto-keys cloudkmsprojectslocationskeyRingscryptoKeyslist" [
+export def "crypto-keys list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -851,7 +862,7 @@ export def "crypto-keys cloudkmsprojectslocationskeyRingscryptoKeyslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "versionView" $version_view "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/cryptoKeys") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/cryptoKeys") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -862,8 +873,8 @@ export def "crypto-keys cloudkmsprojectslocationskeyRingscryptoKeyslist" [
 # POST /v1/{parent}/cryptoKeys
 # operationId: cloudkms.projects.locations.keyRings.cryptoKeys.create
 # --primary shape: {attestation?: record, externalProtectionLevelOptions?: record, state?: "CRYPTO_KEY_VERSION_STATE_UNSPECIFIED"|"PENDING_GENERATION"|"ENABLED"|"DISABLED"|"DESTROYED"|"DESTROY_SCHEDULED"|"PENDING_IMPORT"|"IMPORT_FAILED"|"GENERATION_FAILED"|"PENDING_EXTERNAL_DESTRUCTION"|"EXTERNAL_DESTRUCTION_FAILED"}
-# --versionTemplate shape: {algorithm?: "CRYPTO_KEY_VERSION_ALGORITHM_UNSPECIFIED"|"GOOGLE_SYMMETRIC_ENCRYPTION"|"RSA_SIGN_PSS_2048_SHA256"|"RSA_SIGN_PSS_3072_SHA256"|"RSA_SIGN_PSS_4096_SHA256"|"RSA_SIGN_PSS_4096_SHA512"|"RSA_SIGN_PKCS1_2048_SHA256"|"RSA_SIGN_PKCS1_3072_SHA256"|"RSA_SIGN_PKCS1_4096_SHA256"|"RSA_SIGN_PKCS1_4096_SHA512"|"RSA_SIGN_RAW_PKCS1_2048"|"RSA_SIGN_RAW_PKCS1_3072"|"RSA_SIGN_RAW_PKCS1_4096"|"RSA_DECRYPT_OAEP_2048_SHA256"|"RSA_DECRYPT_OAEP_3072_SHA256"|"RSA_DECRYPT_OAEP_4096_SHA256"|"RSA_DECRYPT_OAEP_4096_SHA512"|"RSA_DECRYPT_OAEP_2048_SHA1"|"RSA_DECRYPT_OAEP_3072_SHA1"|"RSA_DECRYPT_OAEP_4096_SHA1"|"EC_SIGN_P256_SHA256"|"EC_SIGN_P384_SHA384"|"EC_SIGN_SECP256K1_SHA256"|"HMAC_SHA256"|"HMAC_SHA1"|"HMAC_SHA384"|"HMAC_SHA512"|"HMAC_SHA224"|"EXTERNAL_SYMMETRIC_ENCRYPTION", protectionLevel?: "PROTECTION_LEVEL_UNSPECIFIED"|"SOFTWARE"|"HSM"|"EXTERNAL"|"EXTERNAL_VPC"}
-export def "crypto-keys cloudkmsprojectslocationskeyRingscryptoKeyscreate" [
+# --versionTemplate shape: {algorithm?: "CRYPTO_KEY_VERSION_ALGORITHM_UNSPECIFIED"|"GOOGLE_SYMMETRIC_ENCRYPTION"|"RSA_SIGN_PSS_2048_SHA256"|"RSA_SIGN_PSS_3072_SHA256"|"RSA_SIGN_PSS_4096_SHA256"|"RSA_SIGN_PSS_4096_SHA512"|"RSA_SIGN_PKCS1_2048_SHA256"|"RSA_SIGN_PKCS1_3072_SHA256"|"RSA_SIGN_PKCS1_4096_SHA256"|"RSA_SIGN_PKCS1_4096_SHA512"|"RSA_SIGN_RAW_PKCS1_2048"|"RSA_SIGN_RAW_PKCS1_3072"|"RSA_SIGN_RAW_PKCS1_4096"|"RSA_DECRYPT_OAEP_2048_SHA256"|"RSA_DECRYPT_OAEP_3072_SHA256"|"RSA_DECRYPT_OAEP_4096_SHA256"|"RSA_DECRYPT_OAEP_4096_SHA512"|"RSA_DECRYPT_OAEP_2048_SHA1"|"RSA_DECRYPT_OAEP_3072_SHA1"|"RSA_DECRYPT_OAEP_4096_SHA1"|"EC_SIGN_P256_SHA256"|"EC_SIGN_P384_SHA384"|"EC_SIGN_SECP256K1_SHA256"|"HMAC_SHA256"|"HMAC_SHA1"|"HMAC_SHA384"|"HMAC_SHA512"|"HMAC_SHA224"|"EXTERNAL_SYMMETRIC_ENCRYPTION", ... (1 more fields)}
+export def "crypto-keys create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -894,25 +905,25 @@ export def "crypto-keys cloudkmsprojectslocationskeyRingscryptoKeyscreate" [
   --primary: record # A CryptoKeyVersion represents an individual cryptographic key, and the associated key material. An ENABLED version can be used for cryptographic operations. For security reasons, the raw cryptographic key material represented by a CryptoKeyVersion can never be viewed or exported. It can only be used to encrypt, decrypt, or sign data when an authorized user or application invokes Cloud KMS. — shape: {attestation?: record, externalProtectionLevelOptions?: record, state?: "CRYPTO_KEY_VERSION_STATE_UNSPECIFIED"|"PENDING_GENERATION"|"ENABLED"|"DISABLED"|"DESTROYED"|"DESTROY_SCHEDULED"|"PENDING_IMPORT"|"IMPORT_FAILED"|"GENERATION_FAILED"|"PENDING_EXTERNAL_DESTRUCTION"|"EXTERNAL_DESTRUCTION_FAILED"}
   --purpose: string@purpose-completer # Immutable. The immutable purpose of this CryptoKey.
   --rotation-period: string # next_rotation_time will be advanced by this period when the service automatically rotates a key. Must be at least 24 hours and at most 876,000 hours. If rotation_period is set, next_rotation_time must also be set. Keys with purpose ENCRYPT_DECRYPT support automatic rotation. For other keys, this field must be omitted. (format: google-duration)
-  --version-template: record # A CryptoKeyVersionTemplate specifies the properties to use when creating a new CryptoKeyVersion, either manually with CreateCryptoKeyVersion or automatically as a result of auto-rotation. — shape: {algorithm?: "CRYPTO_KEY_VERSION_ALGORITHM_UNSPECIFIED"|"GOOGLE_SYMMETRIC_ENCRYPTION"|"RSA_SIGN_PSS_2048_SHA256"|"RSA_SIGN_PSS_3072_SHA256"|"RSA_SIGN_PSS_4096_SHA256"|"RSA_SIGN_PSS_4096_SHA512"|"RSA_SIGN_PKCS1_2048_SHA256"|"RSA_SIGN_PKCS1_3072_SHA256"|"RSA_SIGN_PKCS1_4096_SHA256"|"RSA_SIGN_PKCS1_4096_SHA512"|"RSA_SIGN_RAW_PKCS1_2048"|"RSA_SIGN_RAW_PKCS1_3072"|"RSA_SIGN_RAW_PKCS1_4096"|"RSA_DECRYPT_OAEP_2048_SHA256"|"RSA_DECRYPT_OAEP_3072_SHA256"|"RSA_DECRYPT_OAEP_4096_SHA256"|"RSA_DECRYPT_OAEP_4096_SHA512"|"RSA_DECRYPT_OAEP_2048_SHA1"|"RSA_DECRYPT_OAEP_3072_SHA1"|"RSA_DECRYPT_OAEP_4096_SHA1"|"EC_SIGN_P256_SHA256"|"EC_SIGN_P384_SHA384"|"EC_SIGN_SECP256K1_SHA256"|"HMAC_SHA256"|"HMAC_SHA1"|"HMAC_SHA384"|"HMAC_SHA512"|"HMAC_SHA224"|"EXTERNAL_SYMMETRIC_ENCRYPTION", protectionLevel?: "PROTECTION_LEVEL_UNSPECIFIED"|"SOFTWARE"|"HSM"|"EXTERNAL"|"EXTERNAL_VPC"}
+  --version-template: record # A CryptoKeyVersionTemplate specifies the properties to use when creating a new CryptoKeyVersion, either manually with CreateCryptoKeyVersion or automatically as a result of auto-rotation. — shape: {algorithm?: "CRYPTO_KEY_VERSION_ALGORITHM_UNSPECIFIED"|"GOOGLE_SYMMETRIC_ENCRYPTION"|"RSA_SIGN_PSS_2048_SHA256"|"RSA_SIGN_PSS_3072_SHA256"|"RSA_SIGN_PSS_4096_SHA256"|"RSA_SIGN_PSS_4096_SHA512"|"RSA_SIGN_PKCS1_2048_SHA256"|"RSA_SIGN_PKCS1_3072_SHA256"|"RSA_SIGN_PKCS1_4096_SHA256"|"RSA_SIGN_PKCS1_4096_SHA512"|"RSA_SIGN_RAW_PKCS1_2048"|"RSA_SIGN_RAW_PKCS1_3072"|"RSA_SIGN_RAW_PKCS1_4096"|"RSA_DECRYPT_OAEP_2048_SHA256"|"RSA_DECRYPT_OAEP_3072_SHA256"|"RSA_DECRYPT_OAEP_4096_SHA256"|"RSA_DECRYPT_OAEP_4096_SHA512"|"RSA_DECRYPT_OAEP_2048_SHA1"|"RSA_DECRYPT_OAEP_3072_SHA1"|"RSA_DECRYPT_OAEP_4096_SHA1"|"EC_SIGN_P256_SHA256"|"EC_SIGN_P384_SHA384"|"EC_SIGN_SECP256K1_SHA256"|"HMAC_SHA256"|"HMAC_SHA1"|"HMAC_SHA384"|"HMAC_SHA512"|"HMAC_SHA224"|"EXTERNAL_SYMMETRIC_ENCRYPTION", ... (1 more fields)}
 ]: any -> record<createTime: string, cryptoKeyBackend: string, destroyScheduledDuration: string, importOnly: bool, labels: record, name: string, nextRotationTime: string, primary: record<algorithm: string, attestation: record<certChains: record, content: string, format: string>, createTime: string, destroyEventTime: string, destroyTime: string, externalDestructionFailureReason: string, externalProtectionLevelOptions: record<ekmConnectionKeyPath: string, externalKeyUri: string>, generateTime: string, generationFailureReason: string, importFailureReason: string, importJob: string, importTime: string, name: string, protectionLevel: string, reimportEligible: bool, state: string>, purpose: string, rotationPeriod: string, versionTemplate: record<algorithm: string, protectionLevel: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "cryptoKeyId" $crypto_key_id "scalar") (serialize-qp "skipInitialVersionCreation" $skip_initial_version_creation "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/cryptoKeys") $qp)
-  let body = {"cryptoKeyBackend": $crypto_key_backend, "destroyScheduledDuration": $destroy_scheduled_duration, "importOnly": $import_only, "labels": $labels, "nextRotationTime": $next_rotation_time, "primary": $primary, "purpose": $purpose, "rotationPeriod": $rotation_period, "versionTemplate": $version_template} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/cryptoKeys") $qp)
+  let req_body = {"cryptoKeyBackend": $crypto_key_backend, "destroyScheduledDuration": $destroy_scheduled_duration, "importOnly": $import_only, "labels": $labels, "nextRotationTime": $next_rotation_time, "primary": $primary, "purpose": $purpose, "rotationPeriod": $rotation_period, "versionTemplate": $version_template} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists EkmConnections.
 #
 # GET /v1/{parent}/ekmConnections
 # operationId: cloudkms.projects.locations.ekmConnections.list
-export def "ekm-connections cloudkmsprojectslocationsekmConnectionslist" [
+export def "ekm-connections list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -941,7 +952,7 @@ export def "ekm-connections cloudkmsprojectslocationsekmConnectionslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/ekmConnections") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/ekmConnections") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -952,7 +963,7 @@ export def "ekm-connections cloudkmsprojectslocationsekmConnectionslist" [
 # POST /v1/{parent}/ekmConnections
 # operationId: cloudkms.projects.locations.ekmConnections.create
 # --serviceResolvers item shape: {endpointFilter?: string, hostname?: string, serverCertificates?: list, serviceDirectoryService?: string}
-export def "ekm-connections cloudkmsprojectslocationsekmConnectionscreate" [
+export def "ekm-connections create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -983,19 +994,19 @@ export def "ekm-connections cloudkmsprojectslocationsekmConnectionscreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "ekmConnectionId" $ekm_connection_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/ekmConnections") $qp)
-  let body = {"cryptoSpacePath": $crypto_space_path, "etag": $etag, "keyManagementMode": $key_management_mode, "serviceResolvers": $service_resolvers} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/ekmConnections") $qp)
+  let req_body = {"cryptoSpacePath": $crypto_space_path, "etag": $etag, "keyManagementMode": $key_management_mode, "serviceResolvers": $service_resolvers} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists ImportJobs.
 #
 # GET /v1/{parent}/importJobs
 # operationId: cloudkms.projects.locations.keyRings.importJobs.list
-export def "import-jobs cloudkmsprojectslocationskeyRingsimportJobslist" [
+export def "import-jobs list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1024,7 +1035,7 @@ export def "import-jobs cloudkmsprojectslocationskeyRingsimportJobslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/importJobs") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/importJobs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1036,7 +1047,7 @@ export def "import-jobs cloudkmsprojectslocationskeyRingsimportJobslist" [
 # operationId: cloudkms.projects.locations.keyRings.importJobs.create
 # --attestation shape: {certChains?: record}
 # --publicKey shape: {pem?: string}
-export def "import-jobs cloudkmsprojectslocationskeyRingsimportJobscreate" [
+export def "import-jobs create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1067,19 +1078,19 @@ export def "import-jobs cloudkmsprojectslocationskeyRingsimportJobscreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "importJobId" $import_job_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/importJobs") $qp)
-  let body = {"attestation": $attestation, "importMethod": $import_method, "protectionLevel": $protection_level, "publicKey": $public_key} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/importJobs") $qp)
+  let req_body = {"attestation": $attestation, "importMethod": $import_method, "protectionLevel": $protection_level, "publicKey": $public_key} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists KeyRings.
 #
 # GET /v1/{parent}/keyRings
 # operationId: cloudkms.projects.locations.keyRings.list
-export def "key-rings cloudkmsprojectslocationskeyRingslist" [
+export def "key-rings list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1108,7 +1119,7 @@ export def "key-rings cloudkmsprojectslocationskeyRingslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/keyRings") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/keyRings") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1118,7 +1129,7 @@ export def "key-rings cloudkmsprojectslocationskeyRingslist" [
 #
 # POST /v1/{parent}/keyRings
 # operationId: cloudkms.projects.locations.keyRings.create
-export def "key-rings cloudkmsprojectslocationskeyRingscreate" [
+export def "key-rings create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1146,18 +1157,19 @@ export def "key-rings cloudkmsprojectslocationskeyRingscreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "keyRingId" $key_ring_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/keyRings") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/keyRings") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets the access control policy for a resource. Returns an empty policy if the resource exists and does not have a policy set.
 #
 # GET /v1/{resource}:getIamPolicy
 # operationId: cloudkms.projects.locations.keyRings.importJobs.getIamPolicy
-export def "projects cloudkmsprojectslocationskeyRingsimportJobsgetIamPolicy" [
+export def "projects get-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1183,7 +1195,7 @@ export def "projects cloudkmsprojectslocationskeyRingsimportJobsgetIamPolicy" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "options.requestedPolicyVersion" $options_requested_policy_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource: $resource} | format pattern "/v1/{resource}:getIamPolicy") $qp)
+  let full_url = (build-url $base ({resource: (encode-path-segment $resource)} | format pattern "/v1/{resource}:getIamPolicy") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1194,7 +1206,7 @@ export def "projects cloudkmsprojectslocationskeyRingsimportJobsgetIamPolicy" [
 # POST /v1/{resource}:setIamPolicy
 # operationId: cloudkms.projects.locations.keyRings.importJobs.setIamPolicy
 # --policy shape: {auditConfigs?: list, bindings?: list, etag?: string, version?: int}
-export def "projects cloudkmsprojectslocationskeyRingsimportJobssetIamPolicy" [
+export def "projects update-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1222,19 +1234,19 @@ export def "projects cloudkmsprojectslocationskeyRingsimportJobssetIamPolicy" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource: $resource} | format pattern "/v1/{resource}:setIamPolicy") $qp)
-  let body = {"policy": $policy, "updateMask": $update_mask} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({resource: (encode-path-segment $resource)} | format pattern "/v1/{resource}:setIamPolicy") $qp)
+  let req_body = {"policy": $policy, "updateMask": $update_mask} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns permissions that a caller has on the specified resource. If the resource does not exist, this will return an empty set of permissions, not a `NOT_FOUND` error. Note: This operation is designed to be used for building permission-aware UIs and command-line tools, not for authorization checking. This operation may "fail open" without warning.
 #
 # POST /v1/{resource}:testIamPermissions
 # operationId: cloudkms.projects.locations.keyRings.importJobs.testIamPermissions
-export def "projects cloudkmsprojectslocationskeyRingsimportJobstestIamPermissions" [
+export def "projects test-iam-permissions" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1255,16 +1267,16 @@ export def "projects cloudkmsprojectslocationskeyRingsimportJobstestIamPermissio
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --permissions: list # The set of permissions to check for the `resource`. Permissions with wildcards (such as `*` or `storage.*`) are not allowed. For more information see [IAM Overview](https://cloud.google.com/iam/docs/overview#permissions).
+  --permissions: list<string> # The set of permissions to check for the `resource`. Permissions with wildcards (such as `*` or `storage.*`) are not allowed. For more information see [IAM Overview](https://cloud.google.com/iam/docs/overview#permissions).
 ]: any -> record<permissions: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource: $resource} | format pattern "/v1/{resource}:testIamPermissions") $qp)
-  let body = {"permissions": $permissions} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({resource: (encode-path-segment $resource)} | format pattern "/v1/{resource}:testIamPermissions") $qp)
+  let req_body = {"permissions": $permissions} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

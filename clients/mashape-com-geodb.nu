@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -69,7 +78,7 @@ def auth-scheme-completer [] { ["x-rapidapi-key"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "geo-admin-divisions findAdminDivisionsUsingGET" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "geo-admin-divisions find-using-get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,7 +102,7 @@ export def commands []: nothing -> table {
 #
 # GET /geo/adminDivisions
 # operationId: findAdminDivisionsUsingGET
-export def "geo-admin-divisions findAdminDivisionsUsingGET" [
+export def "geo-admin-divisions find-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -110,14 +119,14 @@ export def "geo-admin-divisions findAdminDivisionsUsingGET" [
   --min-population: int # Only places having at least this population (format: int32)
   --max-population: int # Only places having no more than this population (format: int32)
   --name-prefix: string # Only entities whose names start with this prefix. If languageCode is set, the prefix will be matched on the name as it appears in that language.
-  --name-prefix-default-lang-results: oneof<nothing, bool> # When name-prefix matching, whether or not to match on names in the default language if a non-default languageCode is set.  (default: true)
+  --name-prefix-default-lang-results: oneof<nothing, bool> # When name-prefix matching, whether or not to match on names in the default language if a non-default languageCode is set. (default: true)
   --time-zone-ids: string # Only places in these time-zones (comma-delimited)
   --ascii-mode: oneof<nothing, bool> # Display results using ASCII characters (default: false)
   --hateoas-mode: oneof<nothing, bool> # Include HATEOAS-style links in results (default: true)
   --language-code: string # Display results in this language
   --limit: int # The maximum number of results to retrieve (format: int32, default: 10)
   --offset: int # The zero-ary offset index into the results (format: int32, default: 0)
-  --qp-sort: string # How to sort places.  Format: ±SORT_FIELD,±SORT_FIELD  where SORT_FIELD = countryCode | elevation | name | population
+  --qp-sort: string # How to sort places. Format: ±SORT_FIELD,±SORT_FIELD where SORT_FIELD = countryCode | elevation | name | population
   --include-deleted: string # Whether to include any divisions marked deleted: ALL | SINCE_YESTERDAY | SINCE_LAST_WEEK | NONE (default: NONE)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-key"))
@@ -133,7 +142,7 @@ export def "geo-admin-divisions findAdminDivisionsUsingGET" [
 #
 # GET /geo/adminDivisions/{divisionId}
 # operationId: getAdminDivisionUsingGET
-export def "geo-admin-divisions get-admin-division-using-get" [
+export def "geo-admin-divisions get-using-get" [
   division_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -149,7 +158,7 @@ export def "geo-admin-divisions get-admin-division-using-get" [
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "asciiMode" $ascii_mode "scalar") (serialize-qp "languageCode" $language_code "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({division_id: $division_id} | format pattern "/geo/adminDivisions/{division_id}") $qp)
+  let full_url = (build-url $base ({division_id: (encode-path-segment $division_id)} | format pattern "/geo/adminDivisions/{division_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -159,7 +168,7 @@ export def "geo-admin-divisions get-admin-division-using-get" [
 #
 # GET /geo/adminDivisions/{divisionId}/nearbyCities
 # operationId: findCitiesNearAdminDivisionUsingGET
-export def "geo-admin-divisions-nearby-cities findCitiesNearAdminDivisionUsingGET" [
+export def "geo-admin-divisions-nearby-cities find-near-using-get" [
   division_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -176,7 +185,7 @@ export def "geo-admin-divisions-nearby-cities findCitiesNearAdminDivisionUsingGE
   --min-population: int # Only places having at least this population (format: int32)
   --max-population: int # Only places having no more than this population (format: int32)
   --name-prefix: string # Only entities whose names start with this prefix. If languageCode is set, the prefix will be matched on the name as it appears in that language.
-  --name-prefix-default-lang-results: oneof<nothing, bool> # When name-prefix matching, whether or not to match on names in the default language if a non-default languageCode is set.  (default: true)
+  --name-prefix-default-lang-results: oneof<nothing, bool> # When name-prefix matching, whether or not to match on names in the default language if a non-default languageCode is set. (default: true)
   --time-zone-ids: string # Only places in these time-zones (comma-delimited)
   --types: string # Only places for these types (comma-delimited): CITY | ADM2
   --ascii-mode: oneof<nothing, bool> # Display results using ASCII characters (default: false)
@@ -184,13 +193,13 @@ export def "geo-admin-divisions-nearby-cities findCitiesNearAdminDivisionUsingGE
   --language-code: string # Display results in this language
   --limit: int # The maximum number of results to retrieve (format: int32, default: 10)
   --offset: int # The zero-ary offset index into the results (format: int32, default: 0)
-  --qp-sort: string # How to sort places.  Format: ±SORT_FIELD,±SORT_FIELD  where SORT_FIELD = countryCode | elevation | name | population
+  --qp-sort: string # How to sort places. Format: ±SORT_FIELD,±SORT_FIELD where SORT_FIELD = countryCode | elevation | name | population
   --include-deleted: string # Whether to include any divisions marked deleted: ALL | SINCE_YESTERDAY | SINCE_LAST_WEEK | NONE (default: NONE)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "radius" $radius "scalar") (serialize-qp "distanceUnit" $distance_unit "scalar") (serialize-qp "countryIds" $country_ids "scalar") (serialize-qp "excludedCountryIds" $excluded_country_ids "scalar") (serialize-qp "minPopulation" $min_population "scalar") (serialize-qp "maxPopulation" $max_population "scalar") (serialize-qp "namePrefix" $name_prefix "scalar") (serialize-qp "namePrefixDefaultLangResults" $name_prefix_default_lang_results "scalar") (serialize-qp "timeZoneIds" $time_zone_ids "scalar") (serialize-qp "types" $types "scalar") (serialize-qp "asciiMode" $ascii_mode "scalar") (serialize-qp "hateoasMode" $hateoas_mode "scalar") (serialize-qp "languageCode" $language_code "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "includeDeleted" $include_deleted "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({division_id: $division_id} | format pattern "/geo/adminDivisions/{division_id}/nearbyCities") $qp)
+  let full_url = (build-url $base ({division_id: (encode-path-segment $division_id)} | format pattern "/geo/adminDivisions/{division_id}/nearbyCities") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -200,7 +209,7 @@ export def "geo-admin-divisions-nearby-cities findCitiesNearAdminDivisionUsingGE
 #
 # GET /geo/adminDivisions/{divisionId}/nearbyDivisions
 # operationId: findDivisionsNearAdminDivisionUsingGET
-export def "geo-admin-divisions-nearby-divisions findDivisionsNearAdminDivisionUsingGET" [
+export def "geo-admin-divisions-nearby-divisions find-near-using-get" [
   division_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -217,20 +226,20 @@ export def "geo-admin-divisions-nearby-divisions findDivisionsNearAdminDivisionU
   --min-population: int # Only places having at least this population (format: int32)
   --max-population: int # Only places having no more than this population (format: int32)
   --name-prefix: string # Only entities whose names start with this prefix. If languageCode is set, the prefix will be matched on the name as it appears in that language.
-  --name-prefix-default-lang-results: oneof<nothing, bool> # When name-prefix matching, whether or not to match on names in the default language if a non-default languageCode is set.  (default: true)
+  --name-prefix-default-lang-results: oneof<nothing, bool> # When name-prefix matching, whether or not to match on names in the default language if a non-default languageCode is set. (default: true)
   --time-zone-ids: string # Only places in these time-zones (comma-delimited)
   --ascii-mode: oneof<nothing, bool> # Display results using ASCII characters (default: false)
   --hateoas-mode: oneof<nothing, bool> # Include HATEOAS-style links in results (default: true)
   --language-code: string # Display results in this language
   --limit: int # The maximum number of results to retrieve (format: int32, default: 10)
   --offset: int # The zero-ary offset index into the results (format: int32, default: 0)
-  --qp-sort: string # How to sort places.  Format: ±SORT_FIELD,±SORT_FIELD  where SORT_FIELD = countryCode | elevation | name | population
+  --qp-sort: string # How to sort places. Format: ±SORT_FIELD,±SORT_FIELD where SORT_FIELD = countryCode | elevation | name | population
   --include-deleted: string # Whether to include any divisions marked deleted: ALL | SINCE_YESTERDAY | SINCE_LAST_WEEK | NONE (default: NONE)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "radius" $radius "scalar") (serialize-qp "distanceUnit" $distance_unit "scalar") (serialize-qp "countryIds" $country_ids "scalar") (serialize-qp "excludedCountryIds" $excluded_country_ids "scalar") (serialize-qp "minPopulation" $min_population "scalar") (serialize-qp "maxPopulation" $max_population "scalar") (serialize-qp "namePrefix" $name_prefix "scalar") (serialize-qp "namePrefixDefaultLangResults" $name_prefix_default_lang_results "scalar") (serialize-qp "timeZoneIds" $time_zone_ids "scalar") (serialize-qp "asciiMode" $ascii_mode "scalar") (serialize-qp "hateoasMode" $hateoas_mode "scalar") (serialize-qp "languageCode" $language_code "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "includeDeleted" $include_deleted "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({division_id: $division_id} | format pattern "/geo/adminDivisions/{division_id}/nearbyDivisions") $qp)
+  let full_url = (build-url $base ({division_id: (encode-path-segment $division_id)} | format pattern "/geo/adminDivisions/{division_id}/nearbyDivisions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -240,7 +249,7 @@ export def "geo-admin-divisions-nearby-divisions findDivisionsNearAdminDivisionU
 #
 # GET /geo/cities
 # operationId: findCitiesUsingGET
-export def "geo-cities findCitiesUsingGET" [
+export def "geo-cities find-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -257,7 +266,7 @@ export def "geo-cities findCitiesUsingGET" [
   --min-population: int # Only places having at least this population (format: int32)
   --max-population: int # Only places having no more than this population (format: int32)
   --name-prefix: string # Only entities whose names start with this prefix. If languageCode is set, the prefix will be matched on the name as it appears in that language.
-  --name-prefix-default-lang-results: oneof<nothing, bool> # When name-prefix matching, whether or not to match on names in the default language if a non-default languageCode is set.  (default: true)
+  --name-prefix-default-lang-results: oneof<nothing, bool> # When name-prefix matching, whether or not to match on names in the default language if a non-default languageCode is set. (default: true)
   --time-zone-ids: string # Only places in these time-zones (comma-delimited)
   --types: string # Only places for these types (comma-delimited): CITY | ADM2
   --ascii-mode: oneof<nothing, bool> # Display results using ASCII characters (default: false)
@@ -265,7 +274,7 @@ export def "geo-cities findCitiesUsingGET" [
   --language-code: string # Display results in this language
   --limit: int # The maximum number of results to retrieve (format: int32, default: 10)
   --offset: int # The zero-ary offset index into the results (format: int32, default: 0)
-  --qp-sort: string # How to sort places.  Format: ±SORT_FIELD,±SORT_FIELD  where SORT_FIELD = countryCode | elevation | name | population
+  --qp-sort: string # How to sort places. Format: ±SORT_FIELD,±SORT_FIELD where SORT_FIELD = countryCode | elevation | name | population
   --include-deleted: string # Whether to include any divisions marked deleted: ALL | SINCE_YESTERDAY | SINCE_LAST_WEEK | NONE (default: NONE)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-key"))
@@ -297,7 +306,7 @@ export def "geo-cities get-city-using-get" [
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "asciiMode" $ascii_mode "scalar") (serialize-qp "languageCode" $language_code "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({city_id: $city_id} | format pattern "/geo/cities/{city_id}") $qp)
+  let full_url = (build-url $base ({city_id: (encode-path-segment $city_id)} | format pattern "/geo/cities/{city_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -307,7 +316,7 @@ export def "geo-cities get-city-using-get" [
 #
 # GET /geo/cities/{cityId}/dateTime
 # operationId: getCityDateTimeUsingGET
-export def "geo-cities-date-time get-city-date-time-using-get" [
+export def "geo-cities-date-time get-city-using-get" [
   city_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -320,7 +329,7 @@ export def "geo-cities-date-time get-city-date-time-using-get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({city_id: $city_id} | format pattern "/geo/cities/{city_id}/dateTime"))
+  let full_url = (build-url $base ({city_id: (encode-path-segment $city_id)} | format pattern "/geo/cities/{city_id}/dateTime"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -330,7 +339,7 @@ export def "geo-cities-date-time get-city-date-time-using-get" [
 #
 # GET /geo/cities/{cityId}/distance
 # operationId: getCityDistanceUsingGET
-export def "geo-cities-distance get-city-distance-using-get" [
+export def "geo-cities-distance get-city-using-get" [
   city_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -346,7 +355,7 @@ export def "geo-cities-distance get-city-distance-using-get" [
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "toCityId" $to_city_id "scalar") (serialize-qp "distanceUnit" $distance_unit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({city_id: $city_id} | format pattern "/geo/cities/{city_id}/distance") $qp)
+  let full_url = (build-url $base ({city_id: (encode-path-segment $city_id)} | format pattern "/geo/cities/{city_id}/distance") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -356,7 +365,7 @@ export def "geo-cities-distance get-city-distance-using-get" [
 #
 # GET /geo/cities/{cityId}/locatedIn
 # operationId: getCityLocatedInUsingGET
-export def "geo-cities-located-in get-city-located-in-using-get" [
+export def "geo-cities-located-in get-city-using-get" [
   city_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -372,7 +381,7 @@ export def "geo-cities-located-in get-city-located-in-using-get" [
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "asciiMode" $ascii_mode "scalar") (serialize-qp "languageCode" $language_code "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({city_id: $city_id} | format pattern "/geo/cities/{city_id}/locatedIn") $qp)
+  let full_url = (build-url $base ({city_id: (encode-path-segment $city_id)} | format pattern "/geo/cities/{city_id}/locatedIn") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -382,7 +391,7 @@ export def "geo-cities-located-in get-city-located-in-using-get" [
 #
 # GET /geo/cities/{cityId}/nearbyCities
 # operationId: findCitiesNearCityUsingGET
-export def "geo-cities-nearby-cities findCitiesNearCityUsingGET" [
+export def "geo-cities-nearby-cities find-near-city-using-get" [
   city_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -399,7 +408,7 @@ export def "geo-cities-nearby-cities findCitiesNearCityUsingGET" [
   --min-population: int # Only places having at least this population (format: int32)
   --max-population: int # Only places having no more than this population (format: int32)
   --name-prefix: string # Only entities whose names start with this prefix. If languageCode is set, the prefix will be matched on the name as it appears in that language.
-  --name-prefix-default-lang-results: oneof<nothing, bool> # When name-prefix matching, whether or not to match on names in the default language if a non-default languageCode is set.  (default: true)
+  --name-prefix-default-lang-results: oneof<nothing, bool> # When name-prefix matching, whether or not to match on names in the default language if a non-default languageCode is set. (default: true)
   --time-zone-ids: string # Only places in these time-zones (comma-delimited)
   --types: string # Only places for these types (comma-delimited): CITY | ADM2
   --ascii-mode: oneof<nothing, bool> # Display results using ASCII characters (default: false)
@@ -407,13 +416,13 @@ export def "geo-cities-nearby-cities findCitiesNearCityUsingGET" [
   --language-code: string # Display results in this language
   --limit: int # The maximum number of results to retrieve (format: int32, default: 10)
   --offset: int # The zero-ary offset index into the results (format: int32, default: 0)
-  --qp-sort: string # How to sort places.  Format: ±SORT_FIELD,±SORT_FIELD  where SORT_FIELD = countryCode | elevation | name | population
+  --qp-sort: string # How to sort places. Format: ±SORT_FIELD,±SORT_FIELD where SORT_FIELD = countryCode | elevation | name | population
   --include-deleted: string # Whether to include any divisions marked deleted: ALL | SINCE_YESTERDAY | SINCE_LAST_WEEK | NONE (default: NONE)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "radius" $radius "scalar") (serialize-qp "distanceUnit" $distance_unit "scalar") (serialize-qp "countryIds" $country_ids "scalar") (serialize-qp "excludedCountryIds" $excluded_country_ids "scalar") (serialize-qp "minPopulation" $min_population "scalar") (serialize-qp "maxPopulation" $max_population "scalar") (serialize-qp "namePrefix" $name_prefix "scalar") (serialize-qp "namePrefixDefaultLangResults" $name_prefix_default_lang_results "scalar") (serialize-qp "timeZoneIds" $time_zone_ids "scalar") (serialize-qp "types" $types "scalar") (serialize-qp "asciiMode" $ascii_mode "scalar") (serialize-qp "hateoasMode" $hateoas_mode "scalar") (serialize-qp "languageCode" $language_code "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "includeDeleted" $include_deleted "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({city_id: $city_id} | format pattern "/geo/cities/{city_id}/nearbyCities") $qp)
+  let full_url = (build-url $base ({city_id: (encode-path-segment $city_id)} | format pattern "/geo/cities/{city_id}/nearbyCities") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -423,7 +432,7 @@ export def "geo-cities-nearby-cities findCitiesNearCityUsingGET" [
 #
 # GET /geo/cities/{cityId}/time
 # operationId: getCityTimeUsingGET
-export def "geo-cities-time get-city-time-using-get" [
+export def "geo-cities-time get-city-using-get" [
   city_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -436,7 +445,7 @@ export def "geo-cities-time get-city-time-using-get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({city_id: $city_id} | format pattern "/geo/cities/{city_id}/time"))
+  let full_url = (build-url $base ({city_id: (encode-path-segment $city_id)} | format pattern "/geo/cities/{city_id}/time"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -446,7 +455,7 @@ export def "geo-cities-time get-city-time-using-get" [
 #
 # GET /geo/countries
 # operationId: getCountriesUsingGET
-export def "geo-countries get-countries-using-get" [
+export def "geo-countries get-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -457,13 +466,13 @@ export def "geo-countries get-countries-using-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --currency-code: string # Only countries supporting this currency
   --name-prefix: string # Only entities whose names start with this prefix. If languageCode is set, the prefix will be matched on the name as it appears in that language.
-  --name-prefix-default-lang-results: oneof<nothing, bool> # When name-prefix matching, whether or not to match on names in the default language if a non-default languageCode is set.  (default: true)
+  --name-prefix-default-lang-results: oneof<nothing, bool> # When name-prefix matching, whether or not to match on names in the default language if a non-default languageCode is set. (default: true)
   --ascii-mode: oneof<nothing, bool> # Display results using ASCII characters (default: false)
   --hateoas-mode: oneof<nothing, bool> # Include HATEOAS-style links in results (default: true)
   --language-code: string # Display results in this language
   --limit: int # The maximum number of results to retrieve (format: int32, default: 10)
   --offset: int # The zero-ary offset index into the results (format: int32, default: 0)
-  --qp-sort: string # How to sort countries.  Format: ±SORT_FIELD  where SORT_FIELD = code | name
+  --qp-sort: string # How to sort countries. Format: ±SORT_FIELD where SORT_FIELD = code | name
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-key"))
   let base = ($base_url | default $BASE_URL)
@@ -494,7 +503,7 @@ export def "geo-countries get-country-using-get" [
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "asciiMode" $ascii_mode "scalar") (serialize-qp "languageCode" $language_code "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({country_id: $country_id} | format pattern "/geo/countries/{country_id}") $qp)
+  let full_url = (build-url $base ({country_id: (encode-path-segment $country_id)} | format pattern "/geo/countries/{country_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -504,7 +513,7 @@ export def "geo-countries get-country-using-get" [
 #
 # GET /geo/countries/{countryId}/regions
 # operationId: getRegionsUsingGET
-export def "geo-countries-regions get-regions-using-get" [
+export def "geo-countries-regions list" [
   country_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -515,18 +524,18 @@ export def "geo-countries-regions get-regions-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --name-prefix: string # Only entities whose names start with this prefix. If languageCode is set, the prefix will be matched on the name as it appears in that language.
-  --name-prefix-default-lang-results: oneof<nothing, bool> # When name-prefix matching, whether or not to match on names in the default language if a non-default languageCode is set.  (default: true)
+  --name-prefix-default-lang-results: oneof<nothing, bool> # When name-prefix matching, whether or not to match on names in the default language if a non-default languageCode is set. (default: true)
   --ascii-mode: oneof<nothing, bool> # Display results using ASCII characters (default: false)
   --hateoas-mode: oneof<nothing, bool> # Include HATEOAS-style links in results (default: true)
   --language-code: string # Display results in this language
   --limit: int # The maximum number of results to retrieve (format: int32, default: 10)
   --offset: int # The zero-ary offset index into the results (format: int32, default: 0)
-  --qp-sort: string # How to sort regions.  Format: ±SORT_FIELD  where SORT_FIELD = fipsCode | isoCode | name
+  --qp-sort: string # How to sort regions. Format: ±SORT_FIELD where SORT_FIELD = fipsCode | isoCode | name
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "namePrefix" $name_prefix "scalar") (serialize-qp "namePrefixDefaultLangResults" $name_prefix_default_lang_results "scalar") (serialize-qp "asciiMode" $ascii_mode "scalar") (serialize-qp "hateoasMode" $hateoas_mode "scalar") (serialize-qp "languageCode" $language_code "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({country_id: $country_id} | format pattern "/geo/countries/{country_id}/regions") $qp)
+  let full_url = (build-url $base ({country_id: (encode-path-segment $country_id)} | format pattern "/geo/countries/{country_id}/regions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -536,7 +545,7 @@ export def "geo-countries-regions get-regions-using-get" [
 #
 # GET /geo/countries/{countryId}/regions/{regionCode}
 # operationId: getRegionUsingGET
-export def "geo-countries-regions get-region-using-get" [
+export def "geo-countries-regions get-using-get" [
   country_id: string
   region_code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -553,7 +562,7 @@ export def "geo-countries-regions get-region-using-get" [
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "asciiMode" $ascii_mode "scalar") (serialize-qp "languageCode" $language_code "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({country_id: $country_id, region_code: $region_code} | format pattern "/geo/countries/{country_id}/regions/{region_code}") $qp)
+  let full_url = (build-url $base ({country_id: (encode-path-segment $country_id), region_code: (encode-path-segment $region_code)} | format pattern "/geo/countries/{country_id}/regions/{region_code}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -563,7 +572,7 @@ export def "geo-countries-regions get-region-using-get" [
 #
 # GET /geo/countries/{countryId}/regions/{regionCode}/adminDivisions
 # operationId: findRegionDivisionsUsingGET
-export def "geo-countries-regions-admin-divisions findRegionDivisionsUsingGET" [
+export def "geo-countries-regions-admin-divisions find-using-get" [
   country_id: string
   region_code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -577,20 +586,20 @@ export def "geo-countries-regions-admin-divisions findRegionDivisionsUsingGET" [
   --min-population: int # Only places having at least this population (format: int32)
   --max-population: int # Only places having no more than this population (format: int32)
   --name-prefix: string # Only entities whose names start with this prefix. If languageCode is set, the prefix will be matched on the name as it appears in that language.
-  --name-prefix-default-lang-results: oneof<nothing, bool> # When name-prefix matching, whether or not to match on names in the default language if a non-default languageCode is set.  (default: true)
+  --name-prefix-default-lang-results: oneof<nothing, bool> # When name-prefix matching, whether or not to match on names in the default language if a non-default languageCode is set. (default: true)
   --time-zone-ids: string # Only places in these time-zones (comma-delimited)
   --ascii-mode: oneof<nothing, bool> # Display results using ASCII characters (default: false)
   --hateoas-mode: oneof<nothing, bool> # Include HATEOAS-style links in results (default: true)
   --language-code: string # Display results in this language
   --limit: int # The maximum number of results to retrieve (format: int32, default: 10)
   --offset: int # The zero-ary offset index into the results (format: int32, default: 0)
-  --qp-sort: string # How to sort place results.  'Format: ±SORT_FIELD,±SORT_FIELD'  where SORT_FIELD = elevation | name | population
+  --qp-sort: string # How to sort place results. 'Format: ±SORT_FIELD,±SORT_FIELD' where SORT_FIELD = elevation | name | population
   --include-deleted: string # Whether to include any divisions marked deleted: ALL | SINCE_YESTERDAY | SINCE_LAST_WEEK | NONE (default: NONE)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "minPopulation" $min_population "scalar") (serialize-qp "maxPopulation" $max_population "scalar") (serialize-qp "namePrefix" $name_prefix "scalar") (serialize-qp "namePrefixDefaultLangResults" $name_prefix_default_lang_results "scalar") (serialize-qp "timeZoneIds" $time_zone_ids "scalar") (serialize-qp "asciiMode" $ascii_mode "scalar") (serialize-qp "hateoasMode" $hateoas_mode "scalar") (serialize-qp "languageCode" $language_code "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "includeDeleted" $include_deleted "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({country_id: $country_id, region_code: $region_code} | format pattern "/geo/countries/{country_id}/regions/{region_code}/adminDivisions") $qp)
+  let full_url = (build-url $base ({country_id: (encode-path-segment $country_id), region_code: (encode-path-segment $region_code)} | format pattern "/geo/countries/{country_id}/regions/{region_code}/adminDivisions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -600,7 +609,7 @@ export def "geo-countries-regions-admin-divisions findRegionDivisionsUsingGET" [
 #
 # GET /geo/countries/{countryId}/regions/{regionCode}/cities
 # operationId: findRegionCitiesUsingGET
-export def "geo-countries-regions-cities findRegionCitiesUsingGET" [
+export def "geo-countries-regions-cities find-using-get" [
   country_id: string
   region_code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -614,7 +623,7 @@ export def "geo-countries-regions-cities findRegionCitiesUsingGET" [
   --min-population: int # Only places having at least this population (format: int32)
   --max-population: int # Only places having no more than this population (format: int32)
   --name-prefix: string # Only entities whose names start with this prefix. If languageCode is set, the prefix will be matched on the name as it appears in that language.
-  --name-prefix-default-lang-results: oneof<nothing, bool> # When name-prefix matching, whether or not to match on names in the default language if a non-default languageCode is set.  (default: true)
+  --name-prefix-default-lang-results: oneof<nothing, bool> # When name-prefix matching, whether or not to match on names in the default language if a non-default languageCode is set. (default: true)
   --time-zone-ids: string # Only places in these time-zones (comma-delimited)
   --types: string # Only places for these types (comma-delimited): CITY | ADM2
   --ascii-mode: oneof<nothing, bool> # Display results using ASCII characters (default: false)
@@ -622,13 +631,13 @@ export def "geo-countries-regions-cities findRegionCitiesUsingGET" [
   --language-code: string # Display results in this language
   --limit: int # The maximum number of results to retrieve (format: int32, default: 10)
   --offset: int # The zero-ary offset index into the results (format: int32, default: 0)
-  --qp-sort: string # How to sort place results.  'Format: ±SORT_FIELD,±SORT_FIELD'  where SORT_FIELD = elevation | name | population
+  --qp-sort: string # How to sort place results. 'Format: ±SORT_FIELD,±SORT_FIELD' where SORT_FIELD = elevation | name | population
   --include-deleted: string # Whether to include any divisions marked deleted: ALL | SINCE_YESTERDAY | SINCE_LAST_WEEK | NONE (default: NONE)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "minPopulation" $min_population "scalar") (serialize-qp "maxPopulation" $max_population "scalar") (serialize-qp "namePrefix" $name_prefix "scalar") (serialize-qp "namePrefixDefaultLangResults" $name_prefix_default_lang_results "scalar") (serialize-qp "timeZoneIds" $time_zone_ids "scalar") (serialize-qp "types" $types "scalar") (serialize-qp "asciiMode" $ascii_mode "scalar") (serialize-qp "hateoasMode" $hateoas_mode "scalar") (serialize-qp "languageCode" $language_code "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "includeDeleted" $include_deleted "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({country_id: $country_id, region_code: $region_code} | format pattern "/geo/countries/{country_id}/regions/{region_code}/cities") $qp)
+  let full_url = (build-url $base ({country_id: (encode-path-segment $country_id), region_code: (encode-path-segment $region_code)} | format pattern "/geo/countries/{country_id}/regions/{region_code}/cities") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -638,7 +647,7 @@ export def "geo-countries-regions-cities findRegionCitiesUsingGET" [
 #
 # GET /geo/locations/{locationId}/nearbyCities
 # operationId: findCitiesNearLocationUsingGET
-export def "geo-locations-nearby-cities findCitiesNearLocationUsingGET" [
+export def "geo-locations-nearby-cities find-near-using-get" [
   location_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -655,7 +664,7 @@ export def "geo-locations-nearby-cities findCitiesNearLocationUsingGET" [
   --min-population: int # Only places having at least this population (format: int32)
   --max-population: int # Only places having no more than this population (format: int32)
   --name-prefix: string # Only entities whose names start with this prefix. If languageCode is set, the prefix will be matched on the name as it appears in that language.
-  --name-prefix-default-lang-results: oneof<nothing, bool> # When name-prefix matching, whether or not to match on names in the default language if a non-default languageCode is set.  (default: true)
+  --name-prefix-default-lang-results: oneof<nothing, bool> # When name-prefix matching, whether or not to match on names in the default language if a non-default languageCode is set. (default: true)
   --time-zone-ids: string # Only places in these time-zones (comma-delimited)
   --types: string # Only places for these types (comma-delimited): CITY | ADM2
   --ascii-mode: oneof<nothing, bool> # Display results using ASCII characters (default: false)
@@ -663,13 +672,13 @@ export def "geo-locations-nearby-cities findCitiesNearLocationUsingGET" [
   --language-code: string # Display results in this language
   --limit: int # The maximum number of results to retrieve (format: int32, default: 10)
   --offset: int # The zero-ary offset index into the results (format: int32, default: 0)
-  --qp-sort: string # How to sort places.  Format: ±SORT_FIELD,±SORT_FIELD  where SORT_FIELD = countryCode | elevation | name | population
+  --qp-sort: string # How to sort places. Format: ±SORT_FIELD,±SORT_FIELD where SORT_FIELD = countryCode | elevation | name | population
   --include-deleted: string # Whether to include any divisions marked deleted: ALL | SINCE_YESTERDAY | SINCE_LAST_WEEK | NONE (default: NONE)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "radius" $radius "scalar") (serialize-qp "distanceUnit" $distance_unit "scalar") (serialize-qp "countryIds" $country_ids "scalar") (serialize-qp "excludedCountryIds" $excluded_country_ids "scalar") (serialize-qp "minPopulation" $min_population "scalar") (serialize-qp "maxPopulation" $max_population "scalar") (serialize-qp "namePrefix" $name_prefix "scalar") (serialize-qp "namePrefixDefaultLangResults" $name_prefix_default_lang_results "scalar") (serialize-qp "timeZoneIds" $time_zone_ids "scalar") (serialize-qp "types" $types "scalar") (serialize-qp "asciiMode" $ascii_mode "scalar") (serialize-qp "hateoasMode" $hateoas_mode "scalar") (serialize-qp "languageCode" $language_code "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "includeDeleted" $include_deleted "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({location_id: $location_id} | format pattern "/geo/locations/{location_id}/nearbyCities") $qp)
+  let full_url = (build-url $base ({location_id: (encode-path-segment $location_id)} | format pattern "/geo/locations/{location_id}/nearbyCities") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -679,7 +688,7 @@ export def "geo-locations-nearby-cities findCitiesNearLocationUsingGET" [
 #
 # GET /geo/locations/{locationId}/nearbyDivisions
 # operationId: findDivisionsNearLocationUsingGET
-export def "geo-locations-nearby-divisions findDivisionsNearLocationUsingGET" [
+export def "geo-locations-nearby-divisions find-near-using-get" [
   location_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -696,20 +705,20 @@ export def "geo-locations-nearby-divisions findDivisionsNearLocationUsingGET" [
   --min-population: int # Only places having at least this population (format: int32)
   --max-population: int # Only places having no more than this population (format: int32)
   --name-prefix: string # Only entities whose names start with this prefix. If languageCode is set, the prefix will be matched on the name as it appears in that language.
-  --name-prefix-default-lang-results: oneof<nothing, bool> # When name-prefix matching, whether or not to match on names in the default language if a non-default languageCode is set.  (default: true)
+  --name-prefix-default-lang-results: oneof<nothing, bool> # When name-prefix matching, whether or not to match on names in the default language if a non-default languageCode is set. (default: true)
   --time-zone-ids: string # Only places in these time-zones (comma-delimited)
   --ascii-mode: oneof<nothing, bool> # Display results using ASCII characters (default: false)
   --hateoas-mode: oneof<nothing, bool> # Include HATEOAS-style links in results (default: true)
   --language-code: string # Display results in this language
   --limit: int # The maximum number of results to retrieve (format: int32, default: 10)
   --offset: int # The zero-ary offset index into the results (format: int32, default: 0)
-  --qp-sort: string # How to sort places.  Format: ±SORT_FIELD,±SORT_FIELD  where SORT_FIELD = countryCode | elevation | name | population
+  --qp-sort: string # How to sort places. Format: ±SORT_FIELD,±SORT_FIELD where SORT_FIELD = countryCode | elevation | name | population
   --include-deleted: string # Whether to include any divisions marked deleted: ALL | SINCE_YESTERDAY | SINCE_LAST_WEEK | NONE (default: NONE)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "radius" $radius "scalar") (serialize-qp "distanceUnit" $distance_unit "scalar") (serialize-qp "countryIds" $country_ids "scalar") (serialize-qp "excludedCountryIds" $excluded_country_ids "scalar") (serialize-qp "minPopulation" $min_population "scalar") (serialize-qp "maxPopulation" $max_population "scalar") (serialize-qp "namePrefix" $name_prefix "scalar") (serialize-qp "namePrefixDefaultLangResults" $name_prefix_default_lang_results "scalar") (serialize-qp "timeZoneIds" $time_zone_ids "scalar") (serialize-qp "asciiMode" $ascii_mode "scalar") (serialize-qp "hateoasMode" $hateoas_mode "scalar") (serialize-qp "languageCode" $language_code "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "includeDeleted" $include_deleted "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({location_id: $location_id} | format pattern "/geo/locations/{location_id}/nearbyDivisions") $qp)
+  let full_url = (build-url $base ({location_id: (encode-path-segment $location_id)} | format pattern "/geo/locations/{location_id}/nearbyDivisions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -719,7 +728,7 @@ export def "geo-locations-nearby-divisions findDivisionsNearLocationUsingGET" [
 #
 # GET /locale/currencies
 # operationId: getCurrenciesUsingGET
-export def "locale-currencies get-currencies-using-get" [
+export def "locale-currencies get-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -746,7 +755,7 @@ export def "locale-currencies get-currencies-using-get" [
 #
 # GET /locale/languages
 # operationId: getLanguagesUsingGET
-export def "locale-languages get-languages-using-get" [
+export def "locale-languages get-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -772,7 +781,7 @@ export def "locale-languages get-languages-using-get" [
 #
 # GET /locale/locales
 # operationId: getLocalesUsingGET
-export def "locale-locales get-locales-using-get" [
+export def "locale-locales get-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -798,7 +807,7 @@ export def "locale-locales get-locales-using-get" [
 #
 # GET /locale/timezones
 # operationId: getTimezonesUsingGET
-export def "locale-timezones get-timezones-using-get" [
+export def "locale-timezones get-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -837,7 +846,7 @@ export def "locale-timezones get-time-zone-using-get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({zone_id: $zone_id} | format pattern "/locale/timezones/{zone_id}"))
+  let full_url = (build-url $base ({zone_id: (encode-path-segment $zone_id)} | format pattern "/locale/timezones/{zone_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -847,7 +856,7 @@ export def "locale-timezones get-time-zone-using-get" [
 #
 # GET /locale/timezones/{zoneId}/dateTime
 # operationId: getTimeZoneDateTimeUsingGET
-export def "locale-timezones-date-time get-time-zone-date-time-using-get" [
+export def "locale-timezones-date-time get-zone-using-get" [
   zone_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -860,7 +869,7 @@ export def "locale-timezones-date-time get-time-zone-date-time-using-get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({zone_id: $zone_id} | format pattern "/locale/timezones/{zone_id}/dateTime"))
+  let full_url = (build-url $base ({zone_id: (encode-path-segment $zone_id)} | format pattern "/locale/timezones/{zone_id}/dateTime"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -870,7 +879,7 @@ export def "locale-timezones-date-time get-time-zone-date-time-using-get" [
 #
 # GET /locale/timezones/{zoneId}/time
 # operationId: getTimeZoneTimeUsingGET
-export def "locale-timezones-time get-time-zone-time-using-get" [
+export def "locale-timezones-time get-zone-using-get" [
   zone_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -883,7 +892,7 @@ export def "locale-timezones-time get-time-zone-time-using-get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({zone_id: $zone_id} | format pattern "/locale/timezones/{zone_id}/time"))
+  let full_url = (build-url $base ({zone_id: (encode-path-segment $zone_id)} | format pattern "/locale/timezones/{zone_id}/time"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

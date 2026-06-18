@@ -36,6 +36,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -70,7 +79,7 @@ def auth-scheme-completer [] { ["x-vtex-api-appkey" "x-vtex-api-apptoken"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "license-manager-site-pvt-logins-list-paged get-list-users" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "license-manager-site-pvt-logins-list-paged get-users" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -94,7 +103,7 @@ export def commands []: nothing -> table {
 #
 # GET /api/license-manager/site/pvt/logins/list/paged
 # operationId: GetListUsers
-export def "license-manager-site-pvt-logins-list-paged get-list-users" [
+export def "license-manager-site-pvt-logins-list-paged get-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -113,10 +122,10 @@ export def "license-manager-site-pvt-logins-list-paged get-list-users" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "numItems" $num_items "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "sortType" $sort_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/license-manager/site/pvt/logins/list/paged" $qp)
-  let extra_headers = {"Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -143,10 +152,10 @@ export def "license-manager-site-pvt-roles-list-paged get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "numItems" $num_items "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "sortType" $sort_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/license-manager/site/pvt/roles/list/paged" $qp)
-  let extra_headers = {"Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -170,11 +179,11 @@ export def "license-manager-users create" [
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/license-manager/users")
-  let body = {"email": $email, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"email": $email, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get User
@@ -195,11 +204,11 @@ export def "license-manager-users get" [
 ]: nothing -> record<email: string, id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/api/license-manager/users/{user_id}"))
-  let extra_headers = {"Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/api/license-manager/users/{user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -221,11 +230,11 @@ export def "license-manager-users-roles get-rolesby" [
 ]: nothing -> table<id: int, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/api/license-manager/users/{user_id}/roles"))
-  let extra_headers = {"Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/api/license-manager/users/{user_id}/roles"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -248,11 +257,12 @@ export def "license-manager-users-roles update-rolesin" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/api/license-manager/users/{user_id}/roles"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/api/license-manager/users/{user_id}/roles"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Remove Role from User/appKey
@@ -274,11 +284,11 @@ export def "license-manager-users-roles delete-rolefrom" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id, role_id: $role_id} | format pattern "/api/license-manager/users/{user_id}/roles/{role_id}"))
-  let extra_headers = {"Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), role_id: (encode-path-segment $role_id)} | format pattern "/api/license-manager/users/{user_id}/roles/{role_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -308,7 +318,7 @@ export def "vlm-account get" [
 #
 # GET /api/vlm/account/stores
 # operationId: GetByAccount
-export def "vlm-account-stores get-by" [
+export def "vlm-account-stores get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -330,7 +340,7 @@ export def "vlm-account-stores get-by" [
 #
 # GET /api/vlm/appkeys
 # operationId: Getappkeysfromaccount
-export def "vlm-appkeys get-appkeysfromaccount" [
+export def "vlm-appkeys get-getappkeysfromaccount" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -344,10 +354,10 @@ export def "vlm-appkeys get-appkeysfromaccount" [
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/vlm/appkeys")
-  let extra_headers = {"Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -355,7 +365,7 @@ export def "vlm-appkeys get-appkeysfromaccount" [
 #
 # POST /api/vlm/appkeys
 # operationId: Createnewappkey
-export def "vlm-appkeys create-newappkey" [
+export def "vlm-appkeys create-createnewappkey" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -370,18 +380,18 @@ export def "vlm-appkeys create-newappkey" [
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/vlm/appkeys")
-  let body = {"label": $label} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"label": $label} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update appkey
 #
 # PUT /api/vlm/appkeys/{id}
 # operationId: Updateappkey
-export def "vlm-appkeys update" [
+export def "vlm-appkeys update-updateappkey" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -396,10 +406,10 @@ export def "vlm-appkeys update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/vlm/appkeys/{id}"))
-  let body = {"isActive": $is_active} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/vlm/appkeys/{id}"))
+  let req_body = {"isActive": $is_active} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

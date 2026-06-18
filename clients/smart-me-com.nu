@@ -12,6 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
   match $scheme {
     "basic" => { {headers: {Authorization: $"Basic ($token_val)"}, query: ""} }
+    "basic-credentials" => { {headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: ""} }
     "none" => { {headers: {}, query: ""} }
     _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
   }
@@ -33,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
     "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
     _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -63,7 +73,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 }
 
 def base-url-completer [] { ["https://smart-me.com:443"] }
-def auth-scheme-completer [] { ["basic"] }
+def auth-scheme-completer [] { ["basic" "basic-credentials"] }
 
 # Completers for enum parameters
 def accept-completer [] { ["application/json" "application/xml" "text/json" "text/xml"] }
@@ -115,17 +125,17 @@ export def "access-token update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --card-id: int # The ID of the Card (format: int64)
-  --user-id: int # The ID of the User. The credentials provided must have permission to edit the user.             If no ID is provided, the user in the credentials is taken. (format: int64)
+  --user-id: int # The ID of the User. The credentials provided must have permission to edit the user. If no ID is provided, the user in the credentials is taken. (format: int64)
 ]: any -> string {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/AccessToken")
-  let body = {"CardId": $card_id, "UserId": $user_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"CardId": $card_id, "UserId": $user_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /api/Account/login
@@ -151,7 +161,7 @@ export def "account-login get" [
 }
 
 # POST /api/Account/login
-export def "account-login post" [
+export def "account-login create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -191,11 +201,11 @@ export def "actions create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/Actions")
-  let body = {"Actions": $actions, "DeviceID": $device_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"Actions": $actions, "DeviceID": $device_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets all available Actions of a Device
@@ -216,7 +226,7 @@ export def "actions get" [
 ]: nothing -> table<ActionType: string, MaxValue: float, MinValue: float, Name: string, ObisCode: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/Actions/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Actions/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -240,7 +250,7 @@ export def "additional-device-information get" [
 ]: nothing -> record<AdditionalMeterSerialNumber: string, FirmwareVersion: int, HardwareVersion: int, ID: string, NetworkConnection: string, NetworkConnectionRSSI: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/AdditionalDeviceInformation/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/AdditionalDeviceInformation/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -294,11 +304,11 @@ export def "custom-device create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/CustomDevice")
-  let body = {"Id": $id, "Name": $name, "Serial": $serial, "ValueDate": $value_date, "Values": $values} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"Id": $id, "Name": $name, "Serial": $serial, "ValueDate": $value_date, "Values": $values} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets a Custom Device by it's ID
@@ -318,7 +328,7 @@ export def "custom-device get" [
 ]: nothing -> record<Id: string, Name: string, Serial: int, ValueDate: string, Values: table<Name: string, Value: float>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/CustomDevice/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/CustomDevice/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -418,11 +428,11 @@ export def "devices create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/Devices")
-  let body = {"ActivePower": $active_power, "CounterReading": $counter_reading, "CounterReadingExport": $counter_reading_export, "CounterReadingExportT1": $counter_reading_export_t1, "CounterReadingExportT2": $counter_reading_export_t2, "CounterReadingT1": $counter_reading_t1, "CounterReadingT2": $counter_reading_t2, "Current": $current, "CurrentL1": $current_l1, "CurrentL2": $current_l2, "CurrentL3": $current_l3, "DeviceEnergyType": $device_energy_type, "DigitalInput1": $digital_input1, "Id": $id, "MeterSubType": $meter_sub_type, "Name": $name, "PowerFactor": $power_factor, "PowerFactorL1": $power_factor_l1, "PowerFactorL2": $power_factor_l2, "PowerFactorL3": $power_factor_l3, "Serial": $serial, "Temperature": $temperature, "ValueDate": $value_date, "Voltage": $voltage, "VoltageL1": $voltage_l1, "VoltageL2": $voltage_l2, "VoltageL3": $voltage_l3} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"ActivePower": $active_power, "CounterReading": $counter_reading, "CounterReadingExport": $counter_reading_export, "CounterReadingExportT1": $counter_reading_export_t1, "CounterReadingExportT2": $counter_reading_export_t2, "CounterReadingT1": $counter_reading_t1, "CounterReadingT2": $counter_reading_t2, "Current": $current, "CurrentL1": $current_l1, "CurrentL2": $current_l2, "CurrentL3": $current_l3, "DeviceEnergyType": $device_energy_type, "DigitalInput1": $digital_input1, "Id": $id, "MeterSubType": $meter_sub_type, "Name": $name, "PowerFactor": $power_factor, "PowerFactorL1": $power_factor_l1, "PowerFactorL2": $power_factor_l2, "PowerFactorL3": $power_factor_l3, "Serial": $serial, "Temperature": $temperature, "ValueDate": $value_date, "Voltage": $voltage, "VoltageL1": $voltage_l1, "VoltageL2": $voltage_l2, "VoltageL3": $voltage_l3} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets a Device by it's ID
@@ -442,13 +452,13 @@ export def "devices get" [
 ]: nothing -> record<ActivePower: float, ActivePowerL1: float, ActivePowerL2: float, ActivePowerL3: float, ActivePowerUnit: string, ActiveTariff: int, AdditionalMeterSerialNumber: string, AnalogOutput1: int, AnalogOutput2: int, ChargingStationState: string, CounterReading: float, CounterReadingExport: float, CounterReadingImport: float, CounterReadingT1: float, CounterReadingT2: float, CounterReadingT3: float, CounterReadingT4: float, CounterReadingUnit: string, Current: float, CurrentL1: float, CurrentL2: float, CurrentL3: float, DeviceEnergyType: string, DigitalInput1: bool, DigitalInput2: bool, DigitalOutput1: bool, DigitalOutput2: bool, FamilyType: string, FlowRate: float, Id: string, MeterSubType: string, Name: string, PowerFactor: float, PowerFactorL1: float, PowerFactorL2: float, PowerFactorL3: float, Serial: int, SwitchOn: bool, SwitchPhaseL1On: bool, SwitchPhaseL2On: bool, SwitchPhaseL3On: bool, Temperature: float, ValueDate: string, Voltage: float, VoltageL1: float, VoltageL2: float, VoltageL3: float> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/Devices/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Devices/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Updates the On/Off Switch on a device.              For new implementations please use the "actions" command
+# Updates the On/Off Switch on a device. For new implementations please use the "actions" command
 #
 # PUT /api/Devices/{id}
 # operationId: Devices_Put
@@ -469,7 +479,7 @@ export def "devices update" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "switchState" $switch_state "scalar") (serialize-qp "switchNumber" $switch_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/Devices/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Devices/{id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -525,7 +535,7 @@ export def "devices-by-sub-type get" [
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Force a device to send the data every second (if supported). This for about 30s.             Don't use this call to force a device to send the data every second for a longer time.
+# Force a device to send the data every second (if supported). This for about 30s. Don't use this call to force a device to send the data every second for a longer time.
 #
 # GET /api/FastSendDeviceValues/{id}
 # operationId: FastSendDeviceValues_Get
@@ -542,7 +552,7 @@ export def "fast-send-device-values get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/FastSendDeviceValues/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/FastSendDeviceValues/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -566,7 +576,7 @@ export def "folder get" [
 ]: nothing -> record<ElectricityCounterValue: float, ElectricityPower: float, GasCounterValue: float, GasFlowRate: float, HeatCounterValue: float, HeatPower: float, WaterCounterValue: float, WaterFlowRate: float> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/Folder/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Folder/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -586,7 +596,7 @@ export def "folder-menu get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --filter: string # (optional) Filter for the folders and meters:              all: load everything             assigned: load only folders and meters that are assigend to a folder             unassigend: load only meters that are not assigend to a folder             user: load only folder and all users assigned to this folders             subuserlist: load all subusers as a list
+  --filter: string # (optional) Filter for the folders and meters: all: load everything assigned: load only folders and meters that are assigend to a folder unassigend: load only meters that are not assigend to a folder user: load only folder and all users assigned to this folders subuserlist: load all subusers as a list
 ]: nothing -> record<BrowserTimeZoneName: string, BrowserUtcTime: string, Items: table<AutoExportSettings: record, Children: list, Description: string, FolderType: string, Icon: string, Id: string, MeterSerialNumber: string, Name: string, UserId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -619,14 +629,14 @@ export def "folder-menu create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/FolderMenu")
-  let body = {"BrowserTimeZoneName": $browser_time_zone_name, "BrowserUtcTime": $browser_utc_time, "Items": $items} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"BrowserTimeZoneName": $browser_time_zone_name, "BrowserUtcTime": $browser_utc_time, "Items": $items} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-# A method returning HTTP 200 OK when queried.             It is used by Kubernetes probes to determine whether the app is healthy.
+# A method returning HTTP 200 OK when queried. It is used by Kubernetes probes to determine whether the app is healthy.
 #
 # GET /api/Health
 # operationId: Health_Get
@@ -649,7 +659,7 @@ export def "health get" [
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# M-BUS API: Adds data of a M-BUS Meter to the smart-me Cloud.             Just send us the M-BUS Telegram (RSP_UD) and we will do the Rest.
+# M-BUS API: Adds data of a M-BUS Meter to the smart-me Cloud. Just send us the M-BUS Telegram (RSP_UD) and we will do the Rest.
 #
 # POST /api/MBus
 # operationId: MBus_Post
@@ -664,17 +674,17 @@ export def "m-bus create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --date: string # The Date of the M-BUS Telegram Readout (in UTC). If this is null the Server Time is used. (format: date-time)
-  --telegram: string # The M-BUS Telegram as Hex string.              Example: 68 1F 1F 68 08 02 72 78 56 34 12 24 40 01 07 55 00 00 00 03 13 15 31 00 DA 02 3B 13 01 8B 60 04 37 18 02 18 16
+  --telegram: string # The M-BUS Telegram as Hex string. Example: 68 1F 1F 68 08 02 72 78 56 34 12 24 40 01 07 55 00 00 00 03 13 15 31 00 DA 02 3B 13 01 8B 60 04 37 18 02 18 16
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/MBus")
-  let body = {"Date": $date, "Telegram": $telegram} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"Date": $date, "Telegram": $telegram} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Sets the Name of a Meter or a Folder
@@ -697,11 +707,11 @@ export def "meter-folder-information create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/MeterFolderInformation")
-  let body = {"Id": $id, "Name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"Id": $id, "Name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Beta: Gets the General Information for a Meter or a Folder
@@ -722,13 +732,13 @@ export def "meter-folder-information get" [
 ]: nothing -> record<CommunicationModuleFirmwareVersion: int, CommunicationModuleHardwareVersion: int, FirmwareVersion: int, HardwareVersion: int, InputInformations: table<Name: string, Number: int>, IsFolder: bool, Name: string, OutputInformations: table<ActionType: string, Name: string, Number: int, ObisCode: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/MeterFolderInformation/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/MeterFolderInformation/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Gets the Values for a Meter at a given Date.              The first Value found before the given Date is returned.
+# Gets the Values for a Meter at a given Date. The first Value found before the given Date is returned.
 #
 # GET /api/MeterValues/{id}
 # operationId: MeterValues_Get
@@ -748,7 +758,7 @@ export def "meter-values get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "date" $date "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/MeterValues/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/MeterValues/{id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -777,7 +787,7 @@ export def "register-for-realtime-api get" [
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Creates a new registration for the realtime API. The Realtime API sends you the data of the registred devices as soon as we have them on the cloud.              More Information about the realtime API: https://www.smart-me.com/Description/api/realtimeapi.aspx
+# Creates a new registration for the realtime API. The Realtime API sends you the data of the registred devices as soon as we have them on the cloud. More Information about the realtime API: https://www.smart-me.com/Description/api/realtimeapi.aspx
 #
 # POST /api/RegisterForRealtimeApi
 # operationId: RegisterForRealtimeApi_Post
@@ -796,17 +806,17 @@ export def "register-for-realtime-api create" [
   --id: string # The ID of the registration
   --meter-id: string # The ID of the Meter. Just used if the RegistrationType is "SingleMeterRegistration".
   --registration-type: string@registration-type-completer # The Type of this registration (per meter, per user, ...)
-  --serial-number: string # The serial number of the Meter. Just used if the RegistrationType is "SingleMeterRegistration" and the MeterId is null.              Example: 1 SME 01 63000000 or 6300000
+  --serial-number: string # The serial number of the Meter. Just used if the RegistrationType is "SingleMeterRegistration" and the MeterId is null. Example: 1 SME 01 63000000 or 6300000
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/RegisterForRealtimeApi")
-  let body = {"ApiUrl": $api_url, "BasicAuthPassword": $basic_auth_password, "BasicAuthUsername": $basic_auth_username, "Id": $id, "MeterId": $meter_id, "RegistrationType": $registration_type, "SerialNumber": $serial_number} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"ApiUrl": $api_url, "BasicAuthPassword": $basic_auth_password, "BasicAuthUsername": $basic_auth_username, "Id": $id, "MeterId": $meter_id, "RegistrationType": $registration_type, "SerialNumber": $serial_number} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes a realtime API registration.
@@ -826,7 +836,7 @@ export def "register-for-realtime-api delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/RegisterForRealtimeApi/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/RegisterForRealtimeApi/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -863,11 +873,11 @@ export def "smart-me-device-configuration create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/SmartMeDeviceConfiguration")
-  let body = {"DeviceEncryptionKey": $device_encryption_key, "DevicePinCode": $device_pin_code, "DnsUpdateState": $dns_update_state, "EnableModbusTcp": $enable_modbus_tcp, "Id": $id, "InputConfiguration": $input_configuration, "OutputConfiguration": $output_configuration, "ShowReactiveEnergy": $show_reactive_energy, "SwitchConfiguration": $switch_configuration, "UploadInterval": $upload_interval} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"DeviceEncryptionKey": $device_encryption_key, "DevicePinCode": $device_pin_code, "DnsUpdateState": $dns_update_state, "EnableModbusTcp": $enable_modbus_tcp, "Id": $id, "InputConfiguration": $input_configuration, "OutputConfiguration": $output_configuration, "ShowReactiveEnergy": $show_reactive_energy, "SwitchConfiguration": $switch_configuration, "UploadInterval": $upload_interval} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets the configuration of a smart-me device.
@@ -888,13 +898,13 @@ export def "smart-me-device-configuration get" [
 ]: nothing -> record<DeviceEncryptionKey: string, DevicePinCode: string, DnsUpdateState: string, EnableModbusTcp: bool, Id: string, InputConfiguration: table<Name: string, Number: int, OffText: string, OnText: string, Type: string>, OutputConfiguration: table<DigitalOutputNoConnectionAction: string, Name: string, Number: int, S0PulseValue: string, Type: string>, ShowReactiveEnergy: bool, SwitchConfiguration: table<CanSwitchOff: bool, Number: int>, UploadInterval: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/SmartMeDeviceConfiguration/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/SmartMeDeviceConfiguration/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Creates or updates a subuser.             To create a new user set no ID (empty)
+# Creates or updates a subuser. To create a new user set no ID (empty)
 #
 # POST /api/SubUser
 # operationId: SubUser_Post
@@ -919,11 +929,11 @@ export def "sub-user create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/SubUser")
-  let body = {"AccessEndDate": $access_end_date, "AccessTimeStartDate": $access_time_start_date, "Email": $email, "Id": $id, "NewPassword": $new_password, "PermissionLevel": $permission_level, "Username": $username} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"AccessEndDate": $access_end_date, "AccessTimeStartDate": $access_time_start_date, "Email": $email, "Id": $id, "NewPassword": $new_password, "PermissionLevel": $permission_level, "Username": $username} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a subuser
@@ -943,7 +953,7 @@ export def "sub-user delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/SubUser/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/SubUser/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -967,7 +977,7 @@ export def "sub-user get" [
 ]: nothing -> record<AccessEndDate: string, AccessTimeStartDate: string, Email: string, Id: string, NewPassword: string, PermissionLevel: string, Username: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/SubUser/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/SubUser/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1037,13 +1047,13 @@ export def "values get" [
 ]: nothing -> record<Date: string, DeviceId: string, Values: table<Obis: string, Value: float>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/Values/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Values/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Gets all (last) values of a device             The first Value found before the given Date is returned.
+# Gets all (last) values of a device The first Value found before the given Date is returned.
 #
 # GET /api/ValuesInPast/{id}
 # operationId: ValuesInPast_Get
@@ -1063,7 +1073,7 @@ export def "values-in-past get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "date" $date "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/ValuesInPast/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/ValuesInPast/{id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1091,7 +1101,7 @@ export def "values-in-past-multiple get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "interval" $interval "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/ValuesInPastMultiple/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/ValuesInPastMultiple/{id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1140,11 +1150,11 @@ export def "virtual-billing-meter-active create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/VirtualBillingMeterActive")
-  let body = {"SerialNumber": $serial_number} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"SerialNumber": $serial_number} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Beta: Virtual Meter API: Deactivates a Virtual Meter.
@@ -1167,11 +1177,11 @@ export def "virtual-billing-meter-deactivate create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/VirtualBillingMeterDeactivate")
-  let body = {"ID": $id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"ID": $id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Beta: Gets all Meters available to activate as a Virtual Meter.
@@ -1197,7 +1207,7 @@ export def "virtual-billing-meters get" [
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Calculates a virtual meter from a formula.              A meter is coded as ID("METERID")
+# Calculates a virtual meter from a formula. A meter is coded as ID("METERID")
 #
 # GET /api/VirtualMeterCalculateFormula
 # operationId: VirtualMeterCalculateFormula_Get
@@ -1262,7 +1272,7 @@ export def "virtual-tariff get" [
 ]: nothing -> record<Date: string, FolderId: string, Name: string, VirtualTariffs: table<Factor: float, Id: string, Name: string, Type: string, Unit: string, Value: float>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/VirtualTariff/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/VirtualTariff/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1313,7 +1323,7 @@ export def "virtual-tariffs-for-property get" [
 ]: nothing -> table<Date: string, FolderId: string, Name: string, VirtualTariffs: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/VirtualTariffsForProperty/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/VirtualTariffsForProperty/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1337,7 +1347,7 @@ export def "virtual-tariffs-status-for-property get" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/VirtualTariffsStatusForProperty/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/VirtualTariffsStatusForProperty/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1385,7 +1395,7 @@ export def "folder-settings delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/folder/settings/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/folder/settings/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1409,7 +1419,7 @@ export def "folder-settings get" [
 ]: nothing -> record<Description: string, Enable: bool, FolderType: string, Name: string, ParentFolderId: string, SerialNumber: int, UseableForVirtualBillingMeters: bool, ValueCorrection: float, ValueCorrectionParentFolder: float, VisualizationName: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/folder/settings/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/folder/settings/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1444,19 +1454,19 @@ export def "folder-settings create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/folder/settings/{id}"))
-  let body = {"Description": $description, "Enable": $enable, "FolderType": $folder_type, "Name": $name, "ParentFolderId": $parent_folder_id, "SerialNumber": $serial_number, "UseableForVirtualBillingMeters": $useable_for_virtual_billing_meters, "ValueCorrection": $value_correction, "ValueCorrectionParentFolder": $value_correction_parent_folder, "VisualizationName": $visualization_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/folder/settings/{id}"))
+  let req_body = {"Description": $description, "Enable": $enable, "FolderType": $folder_type, "Name": $name, "ParentFolderId": $parent_folder_id, "SerialNumber": $serial_number, "UseableForVirtualBillingMeters": $useable_for_virtual_billing_meters, "ValueCorrection": $value_correction, "ValueCorrectionParentFolder": $value_correction_parent_folder, "VisualizationName": $visualization_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes a user to folder assignement
 #
 # DELETE /api/folder/user/assign
 # operationId: UserToFolderAssign_Delete
-export def "folder-user-assign delete" [
+export def "folder-user-assign delete-to" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1481,7 +1491,7 @@ export def "folder-user-assign delete" [
 #
 # POST /api/folder/user/assign
 # operationId: UserToFolderAssign_Post
-export def "folder-user-assign create" [
+export def "folder-user-assign create-to" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1506,7 +1516,7 @@ export def "folder-user-assign create" [
 # GET /api/oauth/authorize
 #
 # operationId: OAuth_Authorize
-export def "oauth-authorize get" [
+export def "oauth-authorize get-o-auth" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1532,7 +1542,7 @@ export def "oauth-authorize get" [
 }
 
 # POST /api/oauth/authorize
-export def "oauth-authorize post" [
+export def "oauth-authorize create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1598,7 +1608,7 @@ export def "pico-charging get" [
 ]: nothing -> record<ActiveChargingEnergy: float, ActiveChargingPower: float, ConnectionMode: string, Duration: int, LastWarningOrError: string, LastWarningOrErrorMessage: string, LastWarningOrErrorTime: string, LoadSheddingState: string, LoadmanagementGroupName: string, MaxAllowedChargingCurrent: int, MaxDynamicCurrent: int, MaxLoadmanagementGroupCurrent: int, MaxStationCurrent: int, MinStationCurrent: int, State: string, ValueDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/pico/charging/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/pico/charging/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1608,7 +1618,7 @@ export def "pico-charging get" [
 #
 # GET /api/pico/history/{id}
 # operationId: PicoChargingHistory_Get
-export def "pico-history get" [
+export def "pico-history get-charging" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1622,16 +1632,16 @@ export def "pico-history get" [
 ]: nothing -> table<Duration: int, EnergyUsed: float, StartTime: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/pico/history/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/pico/history/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# GET: api/pico/loadmanagementgroup                          Returns all available load management groups
+# GET: api/pico/loadmanagementgroup Returns all available load management groups
 #
 # GET /api/pico/loadmanagementgroup
-export def "pico-loadmanagementgroup list" [
+export def "pico-loadmanagementgroup get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1654,7 +1664,7 @@ export def "pico-loadmanagementgroup list" [
 #
 # POST /api/pico/loadmanagementgroup/current/{serial}
 # operationId: PicoLoadmanagementSetDynamicCurrent_Post
-export def "pico-loadmanagementgroup-current create" [
+export def "pico-loadmanagementgroup-current update-loadmanagement-dynamic-create" [
   serial: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1670,17 +1680,17 @@ export def "pico-loadmanagementgroup-current create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "current" $current "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({serial: $serial} | format pattern "/api/pico/loadmanagementgroup/current/{serial}") $qp)
+  let full_url = (build-url $base ({serial: (encode-path-segment $serial)} | format pattern "/api/pico/loadmanagementgroup/current/{serial}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# GET: api/pico/loadmanagementgroup                          Returns a pico load management group by it's id
+# GET: api/pico/loadmanagementgroup Returns a pico load management group by it's id
 #
 # GET /api/pico/loadmanagementgroup/{id}
 # operationId: PicoLoadmanagementGroup_Get
-export def "pico-loadmanagementgroup get" [
+export def "pico-loadmanagementgroup get-loadmanagement-group" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1694,13 +1704,13 @@ export def "pico-loadmanagementgroup get" [
 ]: nothing -> record<Id: string, MaxCurrent: float, Name: string, NumberOfStations: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/pico/loadmanagementgroup/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/pico/loadmanagementgroup/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# GET: api/pico/settings                          Returns the settings of a pico charging station.
+# GET: api/pico/settings Returns the settings of a pico charging station.
 #
 # GET /api/pico/settings/{id}
 # operationId: PicoSettings_Get
@@ -1718,7 +1728,7 @@ export def "pico-settings get" [
 ]: nothing -> record<AuthenticationType: string, CarIdDetection: bool, DisplayBrightness: string, DnsName: string, FixCableLockEnable: bool, IdleImageUrl: string, InternalIp: string, LoadmanagementGroupId: string, MaxCurrent: int, MinCurrent: int, ModbusTcp: bool, Name: string, SerialNumber: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/pico/settings/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/pico/settings/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1728,7 +1738,7 @@ export def "pico-settings get" [
 #
 # POST /api/pico/tryenablecablelock/{id}
 # operationId: PicoEnableFixCableLock_Post
-export def "pico-tryenablecablelock create" [
+export def "pico-tryenablecablelock enable-fix-cable-lock-create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1742,7 +1752,7 @@ export def "pico-tryenablecablelock create" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/pico/tryenablecablelock/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/pico/tryenablecablelock/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

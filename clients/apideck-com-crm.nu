@@ -37,6 +37,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -77,7 +86,7 @@ def type-completer-1 [] { ["customer" "employee" "personal" "supplier"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "crm-activities activitiesAll" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "crm-activities list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -101,7 +110,7 @@ export def commands []: nothing -> table {
 #
 # GET /crm/activities
 # operationId: activitiesAll
-export def "crm-activities activitiesAll" [
+export def "crm-activities list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -114,7 +123,7 @@ export def "crm-activities activitiesAll" [
   --cursor: string # Cursor to start from. You can find cursors for next/previous pages in the meta.cursors property of the response. (nullable)
   --limit: int # Number of results to return. Minimum 1, Maximum 200, Default 20 (default: 20)
   --filter: record # Apply filters (e.g. {updated_since: 2020-09-30T07:43:32.000Z})
-  --fields: string # The 'fields' parameter allows API users to specify the fields they want to include in the API response. If this parameter is not present, the API will return all available fields. If this parameter is present, only the fields specified in the comma-separated string will be included in the response. Nested properties can also be requested by using a dot notation. <br /><br />Example: `fields=name,email,addresses.city`<br /><br />In the example above, the response will only include the fields "name", "email" and "addresses.city". If any other fields are available, they will be excluded. (nullable, e.g. id,updated_at)
+  --fields: string # The 'fields' parameter allows API users to specify the fields they want to include in the API response. If this parameter is not present, the API will return all available fields. If this parameter is present, only the fields specified in the comma-separated string will be included in the response. Nested properties can also be requested by using a dot notation. Example: `fields=name,email,addresses.city`In the example above, the response will only include the fields "name", "email" and "addresses.city". If any other fields are available, they will be excluded. (nullable, e.g. id,updated_at)
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
   --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
@@ -123,10 +132,10 @@ export def "crm-activities activitiesAll" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "filter" $filter "deepObject") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/crm/activities" $qp)
-  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -137,7 +146,7 @@ export def "crm-activities activitiesAll" [
 # --attendees item shape: {email_address?: string, first_name?: string, is_organizer?: bool, last_name?: string, middle_name?: string, name?: string, prefix?: string, status?: "accepted"|"tentative"|"declined", suffix?: string}
 # --custom_fields item shape: {description?: string, id: string, name?: string, value?: any}
 # --location_address shape: {city?: string, contact_name?: string, country?: string, county?: string, email?: string, fax?: string, id?: string, latitude?: string, line1?: string, line2?: string, line3?: string, line4?: string, longitude?: string, name?: string, phone_number?: string, postal_code?: string, row_version?: string, salutation?: string, state?: string, street_number?: string, string?: string, type?: "primary"|"secondary"|"home"|"office"|"shipping"|"billing"|"other", website?: string}
-export def "crm-activities activitiesAdd" [
+export def "crm-activities create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -199,20 +208,20 @@ export def "crm-activities activitiesAdd" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/crm/activities" $qp)
-  let body = {"account_id": $account_id, "activity_date": $activity_date, "activity_datetime": $activity_datetime, "all_day_event": $all_day_event, "archived": $archived, "asset_id": $asset_id, "attendees": $attendees, "campaign_id": $campaign_id, "case_id": $case_id, "child": $child, "company_id": $company_id, "contact_id": $contact_id, "contract_id": $contract_id, "custom_fields": $custom_fields, "custom_object_id": $custom_object_id, "deleted": $deleted, "description": $description, "done": $done, "duration_seconds": $duration_seconds, "end_date": $end_date, "end_datetime": $end_datetime, "event_sub_type": $event_sub_type, "group_event": $group_event, "group_event_type": $group_event_type, "lead_id": $lead_id, "location": $location, "location_address": $location_address, "note": $note, "opportunity_id": $opportunity_id, "owner_id": $owner_id, "private": $private, "product_id": $product_id, "recurrent": $recurrent, "reminder_datetime": $reminder_datetime, "reminder_set": $reminder_set, "show_as": $show_as, "solution_id": $solution_id, "start_datetime": $start_datetime, "title": $title, "type": $type, "user_id": $user_id, "video_conference_id": $video_conference_id, "video_conference_url": $video_conference_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"account_id": $account_id, "activity_date": $activity_date, "activity_datetime": $activity_datetime, "all_day_event": $all_day_event, "archived": $archived, "asset_id": $asset_id, "attendees": $attendees, "campaign_id": $campaign_id, "case_id": $case_id, "child": $child, "company_id": $company_id, "contact_id": $contact_id, "contract_id": $contract_id, "custom_fields": $custom_fields, "custom_object_id": $custom_object_id, "deleted": $deleted, "description": $description, "done": $done, "duration_seconds": $duration_seconds, "end_date": $end_date, "end_datetime": $end_datetime, "event_sub_type": $event_sub_type, "group_event": $group_event, "group_event_type": $group_event_type, "lead_id": $lead_id, "location": $location, "location_address": $location_address, "note": $note, "opportunity_id": $opportunity_id, "owner_id": $owner_id, "private": $private, "product_id": $product_id, "recurrent": $recurrent, "reminder_datetime": $reminder_datetime, "reminder_set": $reminder_set, "show_as": $show_as, "solution_id": $solution_id, "start_datetime": $start_datetime, "title": $title, "type": $type, "user_id": $user_id, "video_conference_id": $video_conference_id, "video_conference_url": $video_conference_url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete activity
 #
 # DELETE /crm/activities/{id}
 # operationId: activitiesDelete
-export def "crm-activities activitiesDelete" [
+export def "crm-activities delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -230,11 +239,11 @@ export def "crm-activities activitiesDelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/crm/activities/{id}") $qp)
-  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/crm/activities/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -242,7 +251,7 @@ export def "crm-activities activitiesDelete" [
 #
 # GET /crm/activities/{id}
 # operationId: activitiesOne
-export def "crm-activities activitiesOne" [
+export def "crm-activities get-one" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -253,7 +262,7 @@ export def "crm-activities activitiesOne" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
-  --fields: string # The 'fields' parameter allows API users to specify the fields they want to include in the API response. If this parameter is not present, the API will return all available fields. If this parameter is present, only the fields specified in the comma-separated string will be included in the response. Nested properties can also be requested by using a dot notation. <br /><br />Example: `fields=name,email,addresses.city`<br /><br />In the example above, the response will only include the fields "name", "email" and "addresses.city". If any other fields are available, they will be excluded. (nullable, e.g. id,updated_at)
+  --fields: string # The 'fields' parameter allows API users to specify the fields they want to include in the API response. If this parameter is not present, the API will return all available fields. If this parameter is present, only the fields specified in the comma-separated string will be included in the response. Nested properties can also be requested by using a dot notation. Example: `fields=name,email,addresses.city`In the example above, the response will only include the fields "name", "email" and "addresses.city". If any other fields are available, they will be excluded. (nullable, e.g. id,updated_at)
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
   --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
@@ -261,11 +270,11 @@ export def "crm-activities activitiesOne" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/crm/activities/{id}") $qp)
-  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/crm/activities/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -276,7 +285,7 @@ export def "crm-activities activitiesOne" [
 # --attendees item shape: {email_address?: string, first_name?: string, is_organizer?: bool, last_name?: string, middle_name?: string, name?: string, prefix?: string, status?: "accepted"|"tentative"|"declined", suffix?: string}
 # --custom_fields item shape: {description?: string, id: string, name?: string, value?: any}
 # --location_address shape: {city?: string, contact_name?: string, country?: string, county?: string, email?: string, fax?: string, id?: string, latitude?: string, line1?: string, line2?: string, line3?: string, line4?: string, longitude?: string, name?: string, phone_number?: string, postal_code?: string, row_version?: string, salutation?: string, state?: string, street_number?: string, string?: string, type?: "primary"|"secondary"|"home"|"office"|"shipping"|"billing"|"other", website?: string}
-export def "crm-activities activitiesUpdate" [
+export def "crm-activities update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -338,21 +347,21 @@ export def "crm-activities activitiesUpdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/crm/activities/{id}") $qp)
-  let body = {"account_id": $account_id, "activity_date": $activity_date, "activity_datetime": $activity_datetime, "all_day_event": $all_day_event, "archived": $archived, "asset_id": $asset_id, "attendees": $attendees, "campaign_id": $campaign_id, "case_id": $case_id, "child": $child, "company_id": $company_id, "contact_id": $contact_id, "contract_id": $contract_id, "custom_fields": $custom_fields, "custom_object_id": $custom_object_id, "deleted": $deleted, "description": $description, "done": $done, "duration_seconds": $duration_seconds, "end_date": $end_date, "end_datetime": $end_datetime, "event_sub_type": $event_sub_type, "group_event": $group_event, "group_event_type": $group_event_type, "lead_id": $lead_id, "location": $location, "location_address": $location_address, "note": $note, "opportunity_id": $opportunity_id, "owner_id": $owner_id, "private": $private, "product_id": $product_id, "recurrent": $recurrent, "reminder_datetime": $reminder_datetime, "reminder_set": $reminder_set, "show_as": $show_as, "solution_id": $solution_id, "start_datetime": $start_datetime, "title": $title, "type": $type, "user_id": $user_id, "video_conference_id": $video_conference_id, "video_conference_url": $video_conference_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/crm/activities/{id}") $qp)
+  let req_body = {"account_id": $account_id, "activity_date": $activity_date, "activity_datetime": $activity_datetime, "all_day_event": $all_day_event, "archived": $archived, "asset_id": $asset_id, "attendees": $attendees, "campaign_id": $campaign_id, "case_id": $case_id, "child": $child, "company_id": $company_id, "contact_id": $contact_id, "contract_id": $contract_id, "custom_fields": $custom_fields, "custom_object_id": $custom_object_id, "deleted": $deleted, "description": $description, "done": $done, "duration_seconds": $duration_seconds, "end_date": $end_date, "end_datetime": $end_datetime, "event_sub_type": $event_sub_type, "group_event": $group_event, "group_event_type": $group_event_type, "lead_id": $lead_id, "location": $location, "location_address": $location_address, "note": $note, "opportunity_id": $opportunity_id, "owner_id": $owner_id, "private": $private, "product_id": $product_id, "recurrent": $recurrent, "reminder_datetime": $reminder_datetime, "reminder_set": $reminder_set, "show_as": $show_as, "solution_id": $solution_id, "start_datetime": $start_datetime, "title": $title, "type": $type, "user_id": $user_id, "video_conference_id": $video_conference_id, "video_conference_url": $video_conference_url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List companies
 #
 # GET /crm/companies
 # operationId: companiesAll
-export def "crm-companies companiesAll" [
+export def "crm-companies list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -366,7 +375,7 @@ export def "crm-companies companiesAll" [
   --limit: int # Number of results to return. Minimum 1, Maximum 200, Default 20 (default: 20)
   --filter: record # Apply filters (e.g. {name: SpaceX})
   --qp-sort: record # Apply sorting (e.g. {by: created_at, direction: desc})
-  --fields: string # The 'fields' parameter allows API users to specify the fields they want to include in the API response. If this parameter is not present, the API will return all available fields. If this parameter is present, only the fields specified in the comma-separated string will be included in the response. Nested properties can also be requested by using a dot notation. <br /><br />Example: `fields=name,email,addresses.city`<br /><br />In the example above, the response will only include the fields "name", "email" and "addresses.city". If any other fields are available, they will be excluded. (nullable, e.g. id,updated_at)
+  --fields: string # The 'fields' parameter allows API users to specify the fields they want to include in the API response. If this parameter is not present, the API will return all available fields. If this parameter is present, only the fields specified in the comma-separated string will be included in the response. Nested properties can also be requested by using a dot notation. Example: `fields=name,email,addresses.city`In the example above, the response will only include the fields "name", "email" and "addresses.city". If any other fields are available, they will be excluded. (nullable, e.g. id,updated_at)
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
   --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
@@ -375,10 +384,10 @@ export def "crm-companies companiesAll" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "filter" $filter "deepObject") (serialize-qp "sort" $qp_sort "deepObject") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/crm/companies" $qp)
-  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -387,14 +396,14 @@ export def "crm-companies companiesAll" [
 # POST /crm/companies
 # operationId: companiesAdd
 # --addresses item shape: {city?: string, contact_name?: string, country?: string, county?: string, email?: string, fax?: string, id?: string, latitude?: string, line1?: string, line2?: string, line3?: string, line4?: string, longitude?: string, name?: string, phone_number?: string, postal_code?: string, row_version?: string, salutation?: string, state?: string, street_number?: string, string?: string, type?: "primary"|"secondary"|"home"|"office"|"shipping"|"billing"|"other", website?: string}
-# --bank_accounts item shape: {account_name?: string, account_number?: string, account_type?: "bank_account"|"credit_card"|"other", bank_code?: string, bic?: string, branch_identifier?: string, bsb_number?: string, currency?: "UNKNOWN_CURRENCY"|"AED"|"AFN"|"ALL"|"AMD"|"ANG"|"AOA"|"ARS"|"AUD"|"AWG"|"AZN"|"BAM"|"BBD"|"BDT"|"BGN"|"BHD"|"BIF"|"BMD"|"BND"|"BOB"|"BOV"|"BRL"|"BSD"|"BTN"|"BWP"|"BYR"|"BZD"|"CAD"|"CDF"|"CHE"|"CHF"|"CHW"|"CLF"|"CLP"|"CNY"|"COP"|"COU"|"CRC"|"CUC"|"CUP"|"CVE"|"CZK"|"DJF"|"DKK"|"DOP"|"DZD"|"EGP"|"ERN"|"ETB"|"EUR"|"FJD"|"FKP"|"GBP"|"GEL"|"GHS"|"GIP"|"GMD"|"GNF"|"GTQ"|"GYD"|"HKD"|"HNL"|"HRK"|"HTG"|"HUF"|"IDR"|"ILS"|"INR"|"IQD"|"IRR"|"ISK"|"JMD"|"JOD"|"JPY"|"KES"|"KGS"|"KHR"|"KMF"|"KPW"|"KRW"|"KWD"|"KYD"|"KZT"|"LAK"|"LBP"|"LKR"|"LRD"|"LSL"|"LTL"|"LVL"|"LYD"|"MAD"|"MDL"|"MGA"|"MKD"|"MMK"|"MNT"|"MOP"|"MRO"|"MUR"|"MVR"|"MWK"|"MXN"|"MXV"|"MYR"|"MZN"|"NAD"|"NGN"|"NIO"|"NOK"|"NPR"|"NZD"|"OMR"|"PAB"|"PEN"|"PGK"|"PHP"|"PKR"|"PLN"|"PYG"|"QAR"|"RON"|"RSD"|"RUB"|"RWF"|"SAR"|"SBD"|"SCR"|"SDG"|"SEK"|"SGD"|"SHP"|"SLL"|"SOS"|"SRD"|"SSP"|"STD"|"SVC"|"SYP"|"SZL"|"THB"|"TJS"|"TMT"|"TND"|"TOP"|"TRC"|"TRY"|"TTD"|"TWD"|"TZS"|"UAH"|"UGX"|"USD"|"USN"|"USS"|"UYI"|"UYU"|"UZS"|"VEF"|"VND"|"VUV"|"WST"|"XAF"|"XAG"|"XAU"|"XBA"|"XBB"|"XBC"|"XBD"|"XCD"|"XDR"|"XOF"|"XPD"|"XPF"|"XPT"|"XTS"|"XXX"|"YER"|"ZAR"|"ZMK"|"ZMW"|"BTC"|"ETH", iban?: string}
+# --bank_accounts item shape: {account_name?: string, account_number?: string, account_type?: "bank_account"|"credit_card"|"other", bank_code?: string, bic?: string, branch_identifier?: string, bsb_number?: string, ... (2 more fields)}
 # --custom_fields item shape: {description?: string, id: string, name?: string, value?: any}
 # --emails item shape: {email: string, id?: string, type?: "primary"|"secondary"|"work"|"personal"|"billing"|"other"}
 # --phone_numbers item shape: {area_code?: string, country_code?: string, extension?: string, id?: string, number: string, type?: "primary"|"secondary"|"home"|"work"|"office"|"mobile"|"assistant"|"fax"|"direct-dial-in"|"personal"|"other"}
 # --row_type shape: {id?: string, name?: string}
 # --social_links item shape: {id?: string, type?: string, url: string}
 # --websites item shape: {id?: string, type?: "primary"|"secondary"|"work"|"personal"|"other", url: string}
-export def "crm-companies companiesAdd" [
+export def "crm-companies create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -412,7 +421,7 @@ export def "crm-companies companiesAdd" [
   --acn: string # The Australian Company Number (ACN) is a nine digit number with the last digit being a check digit calculated using a modified modulus 10 calculation. ASIC has adopted a convention of always printing and displaying the ACN in the format XXX XXX XXX; three blocks of three characters, each block separated by a blank. (nullable, e.g. XXX XXX XXX)
   --addresses: list # item shape: {city?: string, contact_name?: string, country?: string, county?: string, email?: string, fax?: string, id?: string, latitude?: string, line1?: string, line2?: string, line3?: string, line4?: string, longitude?: string, name?: string, phone_number?: string, postal_code?: string, row_version?: string, salutation?: string, state?: string, street_number?: string, string?: string, type?: "primary"|"secondary"|"home"|"office"|"shipping"|"billing"|"other", website?: string}
   --annual-revenue: string # Annual revenue (nullable, e.g. +$35m)
-  --bank-accounts: list # item shape: {account_name?: string, account_number?: string, account_type?: "bank_account"|"credit_card"|"other", bank_code?: string, bic?: string, branch_identifier?: string, bsb_number?: string, currency?: "UNKNOWN_CURRENCY"|"AED"|"AFN"|"ALL"|"AMD"|"ANG"|"AOA"|"ARS"|"AUD"|"AWG"|"AZN"|"BAM"|"BBD"|"BDT"|"BGN"|"BHD"|"BIF"|"BMD"|"BND"|"BOB"|"BOV"|"BRL"|"BSD"|"BTN"|"BWP"|"BYR"|"BZD"|"CAD"|"CDF"|"CHE"|"CHF"|"CHW"|"CLF"|"CLP"|"CNY"|"COP"|"COU"|"CRC"|"CUC"|"CUP"|"CVE"|"CZK"|"DJF"|"DKK"|"DOP"|"DZD"|"EGP"|"ERN"|"ETB"|"EUR"|"FJD"|"FKP"|"GBP"|"GEL"|"GHS"|"GIP"|"GMD"|"GNF"|"GTQ"|"GYD"|"HKD"|"HNL"|"HRK"|"HTG"|"HUF"|"IDR"|"ILS"|"INR"|"IQD"|"IRR"|"ISK"|"JMD"|"JOD"|"JPY"|"KES"|"KGS"|"KHR"|"KMF"|"KPW"|"KRW"|"KWD"|"KYD"|"KZT"|"LAK"|"LBP"|"LKR"|"LRD"|"LSL"|"LTL"|"LVL"|"LYD"|"MAD"|"MDL"|"MGA"|"MKD"|"MMK"|"MNT"|"MOP"|"MRO"|"MUR"|"MVR"|"MWK"|"MXN"|"MXV"|"MYR"|"MZN"|"NAD"|"NGN"|"NIO"|"NOK"|"NPR"|"NZD"|"OMR"|"PAB"|"PEN"|"PGK"|"PHP"|"PKR"|"PLN"|"PYG"|"QAR"|"RON"|"RSD"|"RUB"|"RWF"|"SAR"|"SBD"|"SCR"|"SDG"|"SEK"|"SGD"|"SHP"|"SLL"|"SOS"|"SRD"|"SSP"|"STD"|"SVC"|"SYP"|"SZL"|"THB"|"TJS"|"TMT"|"TND"|"TOP"|"TRC"|"TRY"|"TTD"|"TWD"|"TZS"|"UAH"|"UGX"|"USD"|"USN"|"USS"|"UYI"|"UYU"|"UZS"|"VEF"|"VND"|"VUV"|"WST"|"XAF"|"XAG"|"XAU"|"XBA"|"XBB"|"XBC"|"XBD"|"XCD"|"XDR"|"XOF"|"XPD"|"XPF"|"XPT"|"XTS"|"XXX"|"YER"|"ZAR"|"ZMK"|"ZMW"|"BTC"|"ETH", iban?: string}
+  --bank-accounts: list # item shape: {account_name?: string, account_number?: string, account_type?: "bank_account"|"credit_card"|"other", bank_code?: string, bic?: string, branch_identifier?: string, bsb_number?: string, ... (2 more fields)}
   --birthday: string # The date of birth of the person. (nullable, format: date, e.g. 2000-08-12)
   --currency: string@currency-completer # Indicates the associated currency for an amount of money. Values correspond to [ISO 4217](https://en.wikipedia.org/wiki/ISO_4217). (nullable, e.g. USD)
   --custom-fields: list # item shape: {description?: string, id: string, name?: string, value?: any}
@@ -435,7 +444,7 @@ export def "crm-companies companiesAdd" [
   --salutation: string # A formal salutation for the person. For example, 'Mr', 'Mrs' (nullable, e.g. Mr)
   --social-links: list # item shape: {id?: string, type?: string, url: string}
   --status: string # nullable, e.g. Open
-  --tags: list # e.g. [New]
+  --tags: list<string> # e.g. [New]
   --vat-number: string # VAT number (nullable, e.g. BE0689615164)
   --websites: list # item shape: {id?: string, type?: "primary"|"secondary"|"work"|"personal"|"other", url: string}
 ]: any -> any {
@@ -444,20 +453,20 @@ export def "crm-companies companiesAdd" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/crm/companies" $qp)
-  let body = {"abn_branch": $abn_branch, "abn_or_tfn": $abn_or_tfn, "acn": $acn, "addresses": $addresses, "annual_revenue": $annual_revenue, "bank_accounts": $bank_accounts, "birthday": $birthday, "currency": $currency, "custom_fields": $custom_fields, "description": $description, "emails": $emails, "fax": $fax, "first_name": $first_name, "image": $image, "industry": $industry, "last_name": $last_name, "name": $name, "number_of_employees": $number_of_employees, "owner_id": $owner_id, "ownership": $ownership, "payee_number": $payee_number, "phone_numbers": $phone_numbers, "read_only": $read_only, "row_type": $row_type, "sales_tax_number": $sales_tax_number, "salutation": $salutation, "social_links": $social_links, "status": $status, "tags": $tags, "vat_number": $vat_number, "websites": $websites} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"abn_branch": $abn_branch, "abn_or_tfn": $abn_or_tfn, "acn": $acn, "addresses": $addresses, "annual_revenue": $annual_revenue, "bank_accounts": $bank_accounts, "birthday": $birthday, "currency": $currency, "custom_fields": $custom_fields, "description": $description, "emails": $emails, "fax": $fax, "first_name": $first_name, "image": $image, "industry": $industry, "last_name": $last_name, "name": $name, "number_of_employees": $number_of_employees, "owner_id": $owner_id, "ownership": $ownership, "payee_number": $payee_number, "phone_numbers": $phone_numbers, "read_only": $read_only, "row_type": $row_type, "sales_tax_number": $sales_tax_number, "salutation": $salutation, "social_links": $social_links, "status": $status, "tags": $tags, "vat_number": $vat_number, "websites": $websites} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete company
 #
 # DELETE /crm/companies/{id}
 # operationId: companiesDelete
-export def "crm-companies companiesDelete" [
+export def "crm-companies delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -475,11 +484,11 @@ export def "crm-companies companiesDelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/crm/companies/{id}") $qp)
-  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/crm/companies/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -487,7 +496,7 @@ export def "crm-companies companiesDelete" [
 #
 # GET /crm/companies/{id}
 # operationId: companiesOne
-export def "crm-companies companiesOne" [
+export def "crm-companies get-one" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -498,7 +507,7 @@ export def "crm-companies companiesOne" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
-  --fields: string # The 'fields' parameter allows API users to specify the fields they want to include in the API response. If this parameter is not present, the API will return all available fields. If this parameter is present, only the fields specified in the comma-separated string will be included in the response. Nested properties can also be requested by using a dot notation. <br /><br />Example: `fields=name,email,addresses.city`<br /><br />In the example above, the response will only include the fields "name", "email" and "addresses.city". If any other fields are available, they will be excluded. (nullable, e.g. id,updated_at)
+  --fields: string # The 'fields' parameter allows API users to specify the fields they want to include in the API response. If this parameter is not present, the API will return all available fields. If this parameter is present, only the fields specified in the comma-separated string will be included in the response. Nested properties can also be requested by using a dot notation. Example: `fields=name,email,addresses.city`In the example above, the response will only include the fields "name", "email" and "addresses.city". If any other fields are available, they will be excluded. (nullable, e.g. id,updated_at)
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
   --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
@@ -506,11 +515,11 @@ export def "crm-companies companiesOne" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/crm/companies/{id}") $qp)
-  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/crm/companies/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -519,14 +528,14 @@ export def "crm-companies companiesOne" [
 # PATCH /crm/companies/{id}
 # operationId: companiesUpdate
 # --addresses item shape: {city?: string, contact_name?: string, country?: string, county?: string, email?: string, fax?: string, id?: string, latitude?: string, line1?: string, line2?: string, line3?: string, line4?: string, longitude?: string, name?: string, phone_number?: string, postal_code?: string, row_version?: string, salutation?: string, state?: string, street_number?: string, string?: string, type?: "primary"|"secondary"|"home"|"office"|"shipping"|"billing"|"other", website?: string}
-# --bank_accounts item shape: {account_name?: string, account_number?: string, account_type?: "bank_account"|"credit_card"|"other", bank_code?: string, bic?: string, branch_identifier?: string, bsb_number?: string, currency?: "UNKNOWN_CURRENCY"|"AED"|"AFN"|"ALL"|"AMD"|"ANG"|"AOA"|"ARS"|"AUD"|"AWG"|"AZN"|"BAM"|"BBD"|"BDT"|"BGN"|"BHD"|"BIF"|"BMD"|"BND"|"BOB"|"BOV"|"BRL"|"BSD"|"BTN"|"BWP"|"BYR"|"BZD"|"CAD"|"CDF"|"CHE"|"CHF"|"CHW"|"CLF"|"CLP"|"CNY"|"COP"|"COU"|"CRC"|"CUC"|"CUP"|"CVE"|"CZK"|"DJF"|"DKK"|"DOP"|"DZD"|"EGP"|"ERN"|"ETB"|"EUR"|"FJD"|"FKP"|"GBP"|"GEL"|"GHS"|"GIP"|"GMD"|"GNF"|"GTQ"|"GYD"|"HKD"|"HNL"|"HRK"|"HTG"|"HUF"|"IDR"|"ILS"|"INR"|"IQD"|"IRR"|"ISK"|"JMD"|"JOD"|"JPY"|"KES"|"KGS"|"KHR"|"KMF"|"KPW"|"KRW"|"KWD"|"KYD"|"KZT"|"LAK"|"LBP"|"LKR"|"LRD"|"LSL"|"LTL"|"LVL"|"LYD"|"MAD"|"MDL"|"MGA"|"MKD"|"MMK"|"MNT"|"MOP"|"MRO"|"MUR"|"MVR"|"MWK"|"MXN"|"MXV"|"MYR"|"MZN"|"NAD"|"NGN"|"NIO"|"NOK"|"NPR"|"NZD"|"OMR"|"PAB"|"PEN"|"PGK"|"PHP"|"PKR"|"PLN"|"PYG"|"QAR"|"RON"|"RSD"|"RUB"|"RWF"|"SAR"|"SBD"|"SCR"|"SDG"|"SEK"|"SGD"|"SHP"|"SLL"|"SOS"|"SRD"|"SSP"|"STD"|"SVC"|"SYP"|"SZL"|"THB"|"TJS"|"TMT"|"TND"|"TOP"|"TRC"|"TRY"|"TTD"|"TWD"|"TZS"|"UAH"|"UGX"|"USD"|"USN"|"USS"|"UYI"|"UYU"|"UZS"|"VEF"|"VND"|"VUV"|"WST"|"XAF"|"XAG"|"XAU"|"XBA"|"XBB"|"XBC"|"XBD"|"XCD"|"XDR"|"XOF"|"XPD"|"XPF"|"XPT"|"XTS"|"XXX"|"YER"|"ZAR"|"ZMK"|"ZMW"|"BTC"|"ETH", iban?: string}
+# --bank_accounts item shape: {account_name?: string, account_number?: string, account_type?: "bank_account"|"credit_card"|"other", bank_code?: string, bic?: string, branch_identifier?: string, bsb_number?: string, ... (2 more fields)}
 # --custom_fields item shape: {description?: string, id: string, name?: string, value?: any}
 # --emails item shape: {email: string, id?: string, type?: "primary"|"secondary"|"work"|"personal"|"billing"|"other"}
 # --phone_numbers item shape: {area_code?: string, country_code?: string, extension?: string, id?: string, number: string, type?: "primary"|"secondary"|"home"|"work"|"office"|"mobile"|"assistant"|"fax"|"direct-dial-in"|"personal"|"other"}
 # --row_type shape: {id?: string, name?: string}
 # --social_links item shape: {id?: string, type?: string, url: string}
 # --websites item shape: {id?: string, type?: "primary"|"secondary"|"work"|"personal"|"other", url: string}
-export def "crm-companies companiesUpdate" [
+export def "crm-companies update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -545,7 +554,7 @@ export def "crm-companies companiesUpdate" [
   --acn: string # The Australian Company Number (ACN) is a nine digit number with the last digit being a check digit calculated using a modified modulus 10 calculation. ASIC has adopted a convention of always printing and displaying the ACN in the format XXX XXX XXX; three blocks of three characters, each block separated by a blank. (nullable, e.g. XXX XXX XXX)
   --addresses: list # item shape: {city?: string, contact_name?: string, country?: string, county?: string, email?: string, fax?: string, id?: string, latitude?: string, line1?: string, line2?: string, line3?: string, line4?: string, longitude?: string, name?: string, phone_number?: string, postal_code?: string, row_version?: string, salutation?: string, state?: string, street_number?: string, string?: string, type?: "primary"|"secondary"|"home"|"office"|"shipping"|"billing"|"other", website?: string}
   --annual-revenue: string # Annual revenue (nullable, e.g. +$35m)
-  --bank-accounts: list # item shape: {account_name?: string, account_number?: string, account_type?: "bank_account"|"credit_card"|"other", bank_code?: string, bic?: string, branch_identifier?: string, bsb_number?: string, currency?: "UNKNOWN_CURRENCY"|"AED"|"AFN"|"ALL"|"AMD"|"ANG"|"AOA"|"ARS"|"AUD"|"AWG"|"AZN"|"BAM"|"BBD"|"BDT"|"BGN"|"BHD"|"BIF"|"BMD"|"BND"|"BOB"|"BOV"|"BRL"|"BSD"|"BTN"|"BWP"|"BYR"|"BZD"|"CAD"|"CDF"|"CHE"|"CHF"|"CHW"|"CLF"|"CLP"|"CNY"|"COP"|"COU"|"CRC"|"CUC"|"CUP"|"CVE"|"CZK"|"DJF"|"DKK"|"DOP"|"DZD"|"EGP"|"ERN"|"ETB"|"EUR"|"FJD"|"FKP"|"GBP"|"GEL"|"GHS"|"GIP"|"GMD"|"GNF"|"GTQ"|"GYD"|"HKD"|"HNL"|"HRK"|"HTG"|"HUF"|"IDR"|"ILS"|"INR"|"IQD"|"IRR"|"ISK"|"JMD"|"JOD"|"JPY"|"KES"|"KGS"|"KHR"|"KMF"|"KPW"|"KRW"|"KWD"|"KYD"|"KZT"|"LAK"|"LBP"|"LKR"|"LRD"|"LSL"|"LTL"|"LVL"|"LYD"|"MAD"|"MDL"|"MGA"|"MKD"|"MMK"|"MNT"|"MOP"|"MRO"|"MUR"|"MVR"|"MWK"|"MXN"|"MXV"|"MYR"|"MZN"|"NAD"|"NGN"|"NIO"|"NOK"|"NPR"|"NZD"|"OMR"|"PAB"|"PEN"|"PGK"|"PHP"|"PKR"|"PLN"|"PYG"|"QAR"|"RON"|"RSD"|"RUB"|"RWF"|"SAR"|"SBD"|"SCR"|"SDG"|"SEK"|"SGD"|"SHP"|"SLL"|"SOS"|"SRD"|"SSP"|"STD"|"SVC"|"SYP"|"SZL"|"THB"|"TJS"|"TMT"|"TND"|"TOP"|"TRC"|"TRY"|"TTD"|"TWD"|"TZS"|"UAH"|"UGX"|"USD"|"USN"|"USS"|"UYI"|"UYU"|"UZS"|"VEF"|"VND"|"VUV"|"WST"|"XAF"|"XAG"|"XAU"|"XBA"|"XBB"|"XBC"|"XBD"|"XCD"|"XDR"|"XOF"|"XPD"|"XPF"|"XPT"|"XTS"|"XXX"|"YER"|"ZAR"|"ZMK"|"ZMW"|"BTC"|"ETH", iban?: string}
+  --bank-accounts: list # item shape: {account_name?: string, account_number?: string, account_type?: "bank_account"|"credit_card"|"other", bank_code?: string, bic?: string, branch_identifier?: string, bsb_number?: string, ... (2 more fields)}
   --birthday: string # The date of birth of the person. (nullable, format: date, e.g. 2000-08-12)
   --currency: string@currency-completer # Indicates the associated currency for an amount of money. Values correspond to [ISO 4217](https://en.wikipedia.org/wiki/ISO_4217). (nullable, e.g. USD)
   --custom-fields: list # item shape: {description?: string, id: string, name?: string, value?: any}
@@ -568,7 +577,7 @@ export def "crm-companies companiesUpdate" [
   --salutation: string # A formal salutation for the person. For example, 'Mr', 'Mrs' (nullable, e.g. Mr)
   --social-links: list # item shape: {id?: string, type?: string, url: string}
   --status: string # nullable, e.g. Open
-  --tags: list # e.g. [New]
+  --tags: list<string> # e.g. [New]
   --vat-number: string # VAT number (nullable, e.g. BE0689615164)
   --websites: list # item shape: {id?: string, type?: "primary"|"secondary"|"work"|"personal"|"other", url: string}
 ]: any -> any {
@@ -576,21 +585,21 @@ export def "crm-companies companiesUpdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/crm/companies/{id}") $qp)
-  let body = {"abn_branch": $abn_branch, "abn_or_tfn": $abn_or_tfn, "acn": $acn, "addresses": $addresses, "annual_revenue": $annual_revenue, "bank_accounts": $bank_accounts, "birthday": $birthday, "currency": $currency, "custom_fields": $custom_fields, "description": $description, "emails": $emails, "fax": $fax, "first_name": $first_name, "image": $image, "industry": $industry, "last_name": $last_name, "name": $name, "number_of_employees": $number_of_employees, "owner_id": $owner_id, "ownership": $ownership, "payee_number": $payee_number, "phone_numbers": $phone_numbers, "read_only": $read_only, "row_type": $row_type, "sales_tax_number": $sales_tax_number, "salutation": $salutation, "social_links": $social_links, "status": $status, "tags": $tags, "vat_number": $vat_number, "websites": $websites} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/crm/companies/{id}") $qp)
+  let req_body = {"abn_branch": $abn_branch, "abn_or_tfn": $abn_or_tfn, "acn": $acn, "addresses": $addresses, "annual_revenue": $annual_revenue, "bank_accounts": $bank_accounts, "birthday": $birthday, "currency": $currency, "custom_fields": $custom_fields, "description": $description, "emails": $emails, "fax": $fax, "first_name": $first_name, "image": $image, "industry": $industry, "last_name": $last_name, "name": $name, "number_of_employees": $number_of_employees, "owner_id": $owner_id, "ownership": $ownership, "payee_number": $payee_number, "phone_numbers": $phone_numbers, "read_only": $read_only, "row_type": $row_type, "sales_tax_number": $sales_tax_number, "salutation": $salutation, "social_links": $social_links, "status": $status, "tags": $tags, "vat_number": $vat_number, "websites": $websites} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List contacts
 #
 # GET /crm/contacts
 # operationId: contactsAll
-export def "crm-contacts contactsAll" [
+export def "crm-contacts list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -604,7 +613,7 @@ export def "crm-contacts contactsAll" [
   --limit: int # Number of results to return. Minimum 1, Maximum 200, Default 20 (default: 20)
   --filter: record # Apply filters (e.g. {company_id: 12345, email: elon@tesla.com, first_name: Elon, last_name: Musk})
   --qp-sort: record # Apply sorting (e.g. {by: created_at, direction: desc})
-  --fields: string # The 'fields' parameter allows API users to specify the fields they want to include in the API response. If this parameter is not present, the API will return all available fields. If this parameter is present, only the fields specified in the comma-separated string will be included in the response. Nested properties can also be requested by using a dot notation. <br /><br />Example: `fields=name,email,addresses.city`<br /><br />In the example above, the response will only include the fields "name", "email" and "addresses.city". If any other fields are available, they will be excluded. (nullable, e.g. id,updated_at)
+  --fields: string # The 'fields' parameter allows API users to specify the fields they want to include in the API response. If this parameter is not present, the API will return all available fields. If this parameter is present, only the fields specified in the comma-separated string will be included in the response. Nested properties can also be requested by using a dot notation. Example: `fields=name,email,addresses.city`In the example above, the response will only include the fields "name", "email" and "addresses.city". If any other fields are available, they will be excluded. (nullable, e.g. id,updated_at)
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
   --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
@@ -613,10 +622,10 @@ export def "crm-contacts contactsAll" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "filter" $filter "deepObject") (serialize-qp "sort" $qp_sort "deepObject") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/crm/contacts" $qp)
-  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -631,7 +640,7 @@ export def "crm-contacts contactsAll" [
 # --social_links item shape: {id?: string, type?: string, url: string}
 # --websites item shape: {id?: string, type?: "primary"|"secondary"|"work"|"personal"|"other", url: string}
 @deprecated --flag image
-export def "crm-contacts contactsAdd" [
+export def "crm-contacts create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -672,7 +681,7 @@ export def "crm-contacts contactsAdd" [
   --social-links: list # item shape: {id?: string, type?: string, url: string}
   --status: string # nullable, e.g. open
   --suffix: string # nullable, e.g. PhD
-  --tags: list # e.g. [New]
+  --tags: list<string> # e.g. [New]
   --title: string # nullable, e.g. CEO
   --type: string@type-completer-1 # nullable, e.g. personal
   --websites: list # item shape: {id?: string, type?: "primary"|"secondary"|"work"|"personal"|"other", url: string}
@@ -682,20 +691,20 @@ export def "crm-contacts contactsAdd" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/crm/contacts" $qp)
-  let body = {"active": $active, "addresses": $addresses, "birthday": $birthday, "company_id": $company_id, "company_name": $company_name, "current_balance": $current_balance, "custom_fields": $custom_fields, "department": $department, "description": $description, "email_domain": $email_domain, "emails": $emails, "fax": $fax, "first_name": $first_name, "gender": $gender, "image": $image, "language": $language, "last_name": $last_name, "lead_id": $lead_id, "lead_source": $lead_source, "middle_name": $middle_name, "name": $name, "owner_id": $owner_id, "phone_numbers": $phone_numbers, "photo_url": $photo_url, "prefix": $prefix, "social_links": $social_links, "status": $status, "suffix": $suffix, "tags": $tags, "title": $title, "type": $type, "websites": $websites} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"active": $active, "addresses": $addresses, "birthday": $birthday, "company_id": $company_id, "company_name": $company_name, "current_balance": $current_balance, "custom_fields": $custom_fields, "department": $department, "description": $description, "email_domain": $email_domain, "emails": $emails, "fax": $fax, "first_name": $first_name, "gender": $gender, "image": $image, "language": $language, "last_name": $last_name, "lead_id": $lead_id, "lead_source": $lead_source, "middle_name": $middle_name, "name": $name, "owner_id": $owner_id, "phone_numbers": $phone_numbers, "photo_url": $photo_url, "prefix": $prefix, "social_links": $social_links, "status": $status, "suffix": $suffix, "tags": $tags, "title": $title, "type": $type, "websites": $websites} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete contact
 #
 # DELETE /crm/contacts/{id}
 # operationId: contactsDelete
-export def "crm-contacts contactsDelete" [
+export def "crm-contacts delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -713,11 +722,11 @@ export def "crm-contacts contactsDelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/crm/contacts/{id}") $qp)
-  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/crm/contacts/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -725,7 +734,7 @@ export def "crm-contacts contactsDelete" [
 #
 # GET /crm/contacts/{id}
 # operationId: contactsOne
-export def "crm-contacts contactsOne" [
+export def "crm-contacts get-one" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -736,7 +745,7 @@ export def "crm-contacts contactsOne" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
-  --fields: string # The 'fields' parameter allows API users to specify the fields they want to include in the API response. If this parameter is not present, the API will return all available fields. If this parameter is present, only the fields specified in the comma-separated string will be included in the response. Nested properties can also be requested by using a dot notation. <br /><br />Example: `fields=name,email,addresses.city`<br /><br />In the example above, the response will only include the fields "name", "email" and "addresses.city". If any other fields are available, they will be excluded. (nullable, e.g. id,updated_at)
+  --fields: string # The 'fields' parameter allows API users to specify the fields they want to include in the API response. If this parameter is not present, the API will return all available fields. If this parameter is present, only the fields specified in the comma-separated string will be included in the response. Nested properties can also be requested by using a dot notation. Example: `fields=name,email,addresses.city`In the example above, the response will only include the fields "name", "email" and "addresses.city". If any other fields are available, they will be excluded. (nullable, e.g. id,updated_at)
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
   --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
@@ -744,11 +753,11 @@ export def "crm-contacts contactsOne" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/crm/contacts/{id}") $qp)
-  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/crm/contacts/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -763,7 +772,7 @@ export def "crm-contacts contactsOne" [
 # --social_links item shape: {id?: string, type?: string, url: string}
 # --websites item shape: {id?: string, type?: "primary"|"secondary"|"work"|"personal"|"other", url: string}
 @deprecated --flag image
-export def "crm-contacts contactsUpdate" [
+export def "crm-contacts update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -805,7 +814,7 @@ export def "crm-contacts contactsUpdate" [
   --social-links: list # item shape: {id?: string, type?: string, url: string}
   --status: string # nullable, e.g. open
   --suffix: string # nullable, e.g. PhD
-  --tags: list # e.g. [New]
+  --tags: list<string> # e.g. [New]
   --title: string # nullable, e.g. CEO
   --type: string@type-completer-1 # nullable, e.g. personal
   --websites: list # item shape: {id?: string, type?: "primary"|"secondary"|"work"|"personal"|"other", url: string}
@@ -814,21 +823,21 @@ export def "crm-contacts contactsUpdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/crm/contacts/{id}") $qp)
-  let body = {"active": $active, "addresses": $addresses, "birthday": $birthday, "company_id": $company_id, "company_name": $company_name, "current_balance": $current_balance, "custom_fields": $custom_fields, "department": $department, "description": $description, "email_domain": $email_domain, "emails": $emails, "fax": $fax, "first_name": $first_name, "gender": $gender, "image": $image, "language": $language, "last_name": $last_name, "lead_id": $lead_id, "lead_source": $lead_source, "middle_name": $middle_name, "name": $name, "owner_id": $owner_id, "phone_numbers": $phone_numbers, "photo_url": $photo_url, "prefix": $prefix, "social_links": $social_links, "status": $status, "suffix": $suffix, "tags": $tags, "title": $title, "type": $type, "websites": $websites} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/crm/contacts/{id}") $qp)
+  let req_body = {"active": $active, "addresses": $addresses, "birthday": $birthday, "company_id": $company_id, "company_name": $company_name, "current_balance": $current_balance, "custom_fields": $custom_fields, "department": $department, "description": $description, "email_domain": $email_domain, "emails": $emails, "fax": $fax, "first_name": $first_name, "gender": $gender, "image": $image, "language": $language, "last_name": $last_name, "lead_id": $lead_id, "lead_source": $lead_source, "middle_name": $middle_name, "name": $name, "owner_id": $owner_id, "phone_numbers": $phone_numbers, "photo_url": $photo_url, "prefix": $prefix, "social_links": $social_links, "status": $status, "suffix": $suffix, "tags": $tags, "title": $title, "type": $type, "websites": $websites} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List leads
 #
 # GET /crm/leads
 # operationId: leadsAll
-export def "crm-leads leadsAll" [
+export def "crm-leads list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -842,7 +851,7 @@ export def "crm-leads leadsAll" [
   --limit: int # Number of results to return. Minimum 1, Maximum 200, Default 20 (default: 20)
   --filter: record # Apply filters (e.g. {email: elon@tesla.com, first_name: Elon, last_name: Musk})
   --qp-sort: record # Apply sorting (e.g. {by: created_at, direction: desc})
-  --fields: string # The 'fields' parameter allows API users to specify the fields they want to include in the API response. If this parameter is not present, the API will return all available fields. If this parameter is present, only the fields specified in the comma-separated string will be included in the response. Nested properties can also be requested by using a dot notation. <br /><br />Example: `fields=name,email,addresses.city`<br /><br />In the example above, the response will only include the fields "name", "email" and "addresses.city". If any other fields are available, they will be excluded. (nullable, e.g. id,updated_at)
+  --fields: string # The 'fields' parameter allows API users to specify the fields they want to include in the API response. If this parameter is not present, the API will return all available fields. If this parameter is present, only the fields specified in the comma-separated string will be included in the response. Nested properties can also be requested by using a dot notation. Example: `fields=name,email,addresses.city`In the example above, the response will only include the fields "name", "email" and "addresses.city". If any other fields are available, they will be excluded. (nullable, e.g. id,updated_at)
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
   --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
@@ -851,10 +860,10 @@ export def "crm-leads leadsAll" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "filter" $filter "deepObject") (serialize-qp "sort" $qp_sort "deepObject") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/crm/leads" $qp)
-  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -868,7 +877,7 @@ export def "crm-leads leadsAll" [
 # --phone_numbers item shape: {area_code?: string, country_code?: string, extension?: string, id?: string, number: string, type?: "primary"|"secondary"|"home"|"work"|"office"|"mobile"|"assistant"|"fax"|"direct-dial-in"|"personal"|"other"}
 # --social_links item shape: {id?: string, type?: string, url: string}
 # --websites item shape: {id?: string, type?: "primary"|"secondary"|"work"|"personal"|"other", url: string}
-export def "crm-leads leadsAdd" [
+export def "crm-leads create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -901,7 +910,7 @@ export def "crm-leads leadsAdd" [
   --prefix: string # nullable, e.g. Sir
   --social-links: list # item shape: {id?: string, type?: string, url: string}
   --status: string # nullable, e.g. New
-  --tags: list # e.g. [New]
+  --tags: list<string> # e.g. [New]
   --title: string # nullable, e.g. CEO
   --websites: list # item shape: {id?: string, type?: "primary"|"secondary"|"work"|"personal"|"other", url: string}
 ]: any -> any {
@@ -910,20 +919,20 @@ export def "crm-leads leadsAdd" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/crm/leads" $qp)
-  let body = {"addresses": $addresses, "company_id": $company_id, "company_name": $company_name, "contact_id": $contact_id, "currency": $currency, "custom_fields": $custom_fields, "description": $description, "emails": $emails, "fax": $fax, "first_name": $first_name, "language": $language, "last_name": $last_name, "lead_source": $lead_source, "monetary_amount": $monetary_amount, "name": $name, "owner_id": $owner_id, "phone_numbers": $phone_numbers, "prefix": $prefix, "social_links": $social_links, "status": $status, "tags": $tags, "title": $title, "websites": $websites} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"addresses": $addresses, "company_id": $company_id, "company_name": $company_name, "contact_id": $contact_id, "currency": $currency, "custom_fields": $custom_fields, "description": $description, "emails": $emails, "fax": $fax, "first_name": $first_name, "language": $language, "last_name": $last_name, "lead_source": $lead_source, "monetary_amount": $monetary_amount, "name": $name, "owner_id": $owner_id, "phone_numbers": $phone_numbers, "prefix": $prefix, "social_links": $social_links, "status": $status, "tags": $tags, "title": $title, "websites": $websites} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete lead
 #
 # DELETE /crm/leads/{id}
 # operationId: leadsDelete
-export def "crm-leads leadsDelete" [
+export def "crm-leads delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -941,11 +950,11 @@ export def "crm-leads leadsDelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/crm/leads/{id}") $qp)
-  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/crm/leads/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -953,7 +962,7 @@ export def "crm-leads leadsDelete" [
 #
 # GET /crm/leads/{id}
 # operationId: leadsOne
-export def "crm-leads leadsOne" [
+export def "crm-leads get-one" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -964,7 +973,7 @@ export def "crm-leads leadsOne" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
-  --fields: string # The 'fields' parameter allows API users to specify the fields they want to include in the API response. If this parameter is not present, the API will return all available fields. If this parameter is present, only the fields specified in the comma-separated string will be included in the response. Nested properties can also be requested by using a dot notation. <br /><br />Example: `fields=name,email,addresses.city`<br /><br />In the example above, the response will only include the fields "name", "email" and "addresses.city". If any other fields are available, they will be excluded. (nullable, e.g. id,updated_at)
+  --fields: string # The 'fields' parameter allows API users to specify the fields they want to include in the API response. If this parameter is not present, the API will return all available fields. If this parameter is present, only the fields specified in the comma-separated string will be included in the response. Nested properties can also be requested by using a dot notation. Example: `fields=name,email,addresses.city`In the example above, the response will only include the fields "name", "email" and "addresses.city". If any other fields are available, they will be excluded. (nullable, e.g. id,updated_at)
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
   --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
@@ -972,11 +981,11 @@ export def "crm-leads leadsOne" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/crm/leads/{id}") $qp)
-  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/crm/leads/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -990,7 +999,7 @@ export def "crm-leads leadsOne" [
 # --phone_numbers item shape: {area_code?: string, country_code?: string, extension?: string, id?: string, number: string, type?: "primary"|"secondary"|"home"|"work"|"office"|"mobile"|"assistant"|"fax"|"direct-dial-in"|"personal"|"other"}
 # --social_links item shape: {id?: string, type?: string, url: string}
 # --websites item shape: {id?: string, type?: "primary"|"secondary"|"work"|"personal"|"other", url: string}
-export def "crm-leads leadsUpdate" [
+export def "crm-leads update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1024,7 +1033,7 @@ export def "crm-leads leadsUpdate" [
   --prefix: string # nullable, e.g. Sir
   --social-links: list # item shape: {id?: string, type?: string, url: string}
   --status: string # nullable, e.g. New
-  --tags: list # e.g. [New]
+  --tags: list<string> # e.g. [New]
   --title: string # nullable, e.g. CEO
   --websites: list # item shape: {id?: string, type?: "primary"|"secondary"|"work"|"personal"|"other", url: string}
 ]: any -> any {
@@ -1032,21 +1041,21 @@ export def "crm-leads leadsUpdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/crm/leads/{id}") $qp)
-  let body = {"addresses": $addresses, "company_id": $company_id, "company_name": $company_name, "contact_id": $contact_id, "currency": $currency, "custom_fields": $custom_fields, "description": $description, "emails": $emails, "fax": $fax, "first_name": $first_name, "language": $language, "last_name": $last_name, "lead_source": $lead_source, "monetary_amount": $monetary_amount, "name": $name, "owner_id": $owner_id, "phone_numbers": $phone_numbers, "prefix": $prefix, "social_links": $social_links, "status": $status, "tags": $tags, "title": $title, "websites": $websites} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/crm/leads/{id}") $qp)
+  let req_body = {"addresses": $addresses, "company_id": $company_id, "company_name": $company_name, "contact_id": $contact_id, "currency": $currency, "custom_fields": $custom_fields, "description": $description, "emails": $emails, "fax": $fax, "first_name": $first_name, "language": $language, "last_name": $last_name, "lead_source": $lead_source, "monetary_amount": $monetary_amount, "name": $name, "owner_id": $owner_id, "phone_numbers": $phone_numbers, "prefix": $prefix, "social_links": $social_links, "status": $status, "tags": $tags, "title": $title, "websites": $websites} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List notes
 #
 # GET /crm/notes
 # operationId: notesAll
-export def "crm-notes notesAll" [
+export def "crm-notes list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1058,7 +1067,7 @@ export def "crm-notes notesAll" [
   --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
   --cursor: string # Cursor to start from. You can find cursors for next/previous pages in the meta.cursors property of the response. (nullable)
   --limit: int # Number of results to return. Minimum 1, Maximum 200, Default 20 (default: 20)
-  --fields: string # The 'fields' parameter allows API users to specify the fields they want to include in the API response. If this parameter is not present, the API will return all available fields. If this parameter is present, only the fields specified in the comma-separated string will be included in the response. Nested properties can also be requested by using a dot notation. <br /><br />Example: `fields=name,email,addresses.city`<br /><br />In the example above, the response will only include the fields "name", "email" and "addresses.city". If any other fields are available, they will be excluded. (nullable, e.g. id,updated_at)
+  --fields: string # The 'fields' parameter allows API users to specify the fields they want to include in the API response. If this parameter is not present, the API will return all available fields. If this parameter is present, only the fields specified in the comma-separated string will be included in the response. Nested properties can also be requested by using a dot notation. Example: `fields=name,email,addresses.city`In the example above, the response will only include the fields "name", "email" and "addresses.city". If any other fields are available, they will be excluded. (nullable, e.g. id,updated_at)
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
   --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
@@ -1067,10 +1076,10 @@ export def "crm-notes notesAll" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/crm/notes" $qp)
-  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1078,7 +1087,7 @@ export def "crm-notes notesAll" [
 #
 # POST /crm/notes
 # operationId: notesAdd
-export def "crm-notes notesAdd" [
+export def "crm-notes create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1105,20 +1114,20 @@ export def "crm-notes notesAdd" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/crm/notes" $qp)
-  let body = {"active": $active, "company_id": $company_id, "contact_id": $contact_id, "content": $content, "lead_id": $lead_id, "opportunity_id": $opportunity_id, "owner_id": $owner_id, "title": $title} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"active": $active, "company_id": $company_id, "contact_id": $contact_id, "content": $content, "lead_id": $lead_id, "opportunity_id": $opportunity_id, "owner_id": $owner_id, "title": $title} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete note
 #
 # DELETE /crm/notes/{id}
 # operationId: notesDelete
-export def "crm-notes notesDelete" [
+export def "crm-notes delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1136,11 +1145,11 @@ export def "crm-notes notesDelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/crm/notes/{id}") $qp)
-  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/crm/notes/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1148,7 +1157,7 @@ export def "crm-notes notesDelete" [
 #
 # GET /crm/notes/{id}
 # operationId: notesOne
-export def "crm-notes notesOne" [
+export def "crm-notes get-one" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1159,7 +1168,7 @@ export def "crm-notes notesOne" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
-  --fields: string # The 'fields' parameter allows API users to specify the fields they want to include in the API response. If this parameter is not present, the API will return all available fields. If this parameter is present, only the fields specified in the comma-separated string will be included in the response. Nested properties can also be requested by using a dot notation. <br /><br />Example: `fields=name,email,addresses.city`<br /><br />In the example above, the response will only include the fields "name", "email" and "addresses.city". If any other fields are available, they will be excluded. (nullable, e.g. id,updated_at)
+  --fields: string # The 'fields' parameter allows API users to specify the fields they want to include in the API response. If this parameter is not present, the API will return all available fields. If this parameter is present, only the fields specified in the comma-separated string will be included in the response. Nested properties can also be requested by using a dot notation. Example: `fields=name,email,addresses.city`In the example above, the response will only include the fields "name", "email" and "addresses.city". If any other fields are available, they will be excluded. (nullable, e.g. id,updated_at)
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
   --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
@@ -1167,11 +1176,11 @@ export def "crm-notes notesOne" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/crm/notes/{id}") $qp)
-  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/crm/notes/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1179,7 +1188,7 @@ export def "crm-notes notesOne" [
 #
 # PATCH /crm/notes/{id}
 # operationId: notesUpdate
-export def "crm-notes notesUpdate" [
+export def "crm-notes update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1206,21 +1215,21 @@ export def "crm-notes notesUpdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/crm/notes/{id}") $qp)
-  let body = {"active": $active, "company_id": $company_id, "contact_id": $contact_id, "content": $content, "lead_id": $lead_id, "opportunity_id": $opportunity_id, "owner_id": $owner_id, "title": $title} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/crm/notes/{id}") $qp)
+  let req_body = {"active": $active, "company_id": $company_id, "contact_id": $contact_id, "content": $content, "lead_id": $lead_id, "opportunity_id": $opportunity_id, "owner_id": $owner_id, "title": $title} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List opportunities
 #
 # GET /crm/opportunities
 # operationId: opportunitiesAll
-export def "crm-opportunities opportunitiesAll" [
+export def "crm-opportunities list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1234,7 +1243,7 @@ export def "crm-opportunities opportunitiesAll" [
   --limit: int # Number of results to return. Minimum 1, Maximum 200, Default 20 (default: 20)
   --filter: record # Apply filters (e.g. {monetary_amount: 75000, status: Completed})
   --qp-sort: record # Apply sorting (e.g. {by: created_at, direction: desc})
-  --fields: string # The 'fields' parameter allows API users to specify the fields they want to include in the API response. If this parameter is not present, the API will return all available fields. If this parameter is present, only the fields specified in the comma-separated string will be included in the response. Nested properties can also be requested by using a dot notation. <br /><br />Example: `fields=name,email,addresses.city`<br /><br />In the example above, the response will only include the fields "name", "email" and "addresses.city". If any other fields are available, they will be excluded. (nullable, e.g. id,updated_at)
+  --fields: string # The 'fields' parameter allows API users to specify the fields they want to include in the API response. If this parameter is not present, the API will return all available fields. If this parameter is present, only the fields specified in the comma-separated string will be included in the response. Nested properties can also be requested by using a dot notation. Example: `fields=name,email,addresses.city`In the example above, the response will only include the fields "name", "email" and "addresses.city". If any other fields are available, they will be excluded. (nullable, e.g. id,updated_at)
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
   --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
@@ -1243,10 +1252,10 @@ export def "crm-opportunities opportunitiesAll" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "filter" $filter "deepObject") (serialize-qp "sort" $qp_sort "deepObject") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/crm/opportunities" $qp)
-  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1255,7 +1264,7 @@ export def "crm-opportunities opportunitiesAll" [
 # POST /crm/opportunities
 # operationId: opportunitiesAdd
 # --custom_fields item shape: {description?: string, id: string, name?: string, value?: any}
-export def "crm-opportunities opportunitiesAdd" [
+export def "crm-opportunities create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1272,7 +1281,7 @@ export def "crm-opportunities opportunitiesAdd" [
   --company-id: string # The unique identifier of the company associated with the opportunity. (nullable, e.g. 12345)
   --company-name: string # The name of the company associated with the opportunity. (nullable, e.g. Copper)
   --contact-id: string # The unique identifier of the contact associated with the opportunity. (nullable, e.g. 12345)
-  --contact-ids: list # An array of unique identifiers of all contacts associated with the opportunity.
+  --contact-ids: list<string> # An array of unique identifiers of all contacts associated with the opportunity.
   --currency: string@currency-completer # Indicates the associated currency for an amount of money. Values correspond to [ISO 4217](https://en.wikipedia.org/wiki/ISO_4217). (nullable, e.g. USD)
   --custom-fields: list # item shape: {description?: string, id: string, name?: string, value?: any}
   --description: string # A description of the opportunity. (nullable, e.g. Opportunities are created for People and Companies that are interested in buying your products or services. Create Opportunities for People and Companies to move them through one of your Pipelines.)
@@ -1290,7 +1299,7 @@ export def "crm-opportunities opportunitiesAdd" [
   --stage-last-changed-at: string # The date and time when the stage of the opportunity was last changed. (nullable, format: date-time, e.g. 2020-09-30T07:43:32.000Z)
   --status: string # The current status of the opportunity. (nullable, e.g. Open)
   --status-id: string # The unique identifier of the current status of the opportunity. (nullable, e.g. 12345)
-  --tags: list # e.g. [New]
+  --tags: list<string> # e.g. [New]
   title: string # The title or name of the opportunity. (e.g. New Rocket)
   --type: string # The type of the opportunity (nullable, e.g. Existing Customer - Upgrade)
   --win-probability: float # The probability of winning the opportunity, expressed as a percentage. (nullable, e.g. 40)
@@ -1302,20 +1311,20 @@ export def "crm-opportunities opportunitiesAdd" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/crm/opportunities" $qp)
-  let body = {"close_date": $close_date, "company_id": $company_id, "company_name": $company_name, "contact_id": $contact_id, "contact_ids": $contact_ids, "currency": $currency, "custom_fields": $custom_fields, "description": $description, "lead_id": $lead_id, "lead_source": $lead_source, "loss_reason": $loss_reason, "loss_reason_id": $loss_reason_id, "monetary_amount": $monetary_amount, "owner_id": $owner_id, "pipeline_id": $pipeline_id, "pipeline_stage_id": $pipeline_stage_id, "primary_contact_id": $primary_contact_id, "priority": $priority, "source_id": $source_id, "stage_last_changed_at": $stage_last_changed_at, "status": $status, "status_id": $status_id, "tags": $tags, "title": $title, "type": $type, "win_probability": $win_probability, "won_reason": $won_reason, "won_reason_id": $won_reason_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"close_date": $close_date, "company_id": $company_id, "company_name": $company_name, "contact_id": $contact_id, "contact_ids": $contact_ids, "currency": $currency, "custom_fields": $custom_fields, "description": $description, "lead_id": $lead_id, "lead_source": $lead_source, "loss_reason": $loss_reason, "loss_reason_id": $loss_reason_id, "monetary_amount": $monetary_amount, "owner_id": $owner_id, "pipeline_id": $pipeline_id, "pipeline_stage_id": $pipeline_stage_id, "primary_contact_id": $primary_contact_id, "priority": $priority, "source_id": $source_id, "stage_last_changed_at": $stage_last_changed_at, "status": $status, "status_id": $status_id, "tags": $tags, "title": $title, "type": $type, "win_probability": $win_probability, "won_reason": $won_reason, "won_reason_id": $won_reason_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete opportunity
 #
 # DELETE /crm/opportunities/{id}
 # operationId: opportunitiesDelete
-export def "crm-opportunities opportunitiesDelete" [
+export def "crm-opportunities delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1333,11 +1342,11 @@ export def "crm-opportunities opportunitiesDelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/crm/opportunities/{id}") $qp)
-  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/crm/opportunities/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1345,7 +1354,7 @@ export def "crm-opportunities opportunitiesDelete" [
 #
 # GET /crm/opportunities/{id}
 # operationId: opportunitiesOne
-export def "crm-opportunities opportunitiesOne" [
+export def "crm-opportunities get-one" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1356,7 +1365,7 @@ export def "crm-opportunities opportunitiesOne" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
-  --fields: string # The 'fields' parameter allows API users to specify the fields they want to include in the API response. If this parameter is not present, the API will return all available fields. If this parameter is present, only the fields specified in the comma-separated string will be included in the response. Nested properties can also be requested by using a dot notation. <br /><br />Example: `fields=name,email,addresses.city`<br /><br />In the example above, the response will only include the fields "name", "email" and "addresses.city". If any other fields are available, they will be excluded. (nullable, e.g. id,updated_at)
+  --fields: string # The 'fields' parameter allows API users to specify the fields they want to include in the API response. If this parameter is not present, the API will return all available fields. If this parameter is present, only the fields specified in the comma-separated string will be included in the response. Nested properties can also be requested by using a dot notation. Example: `fields=name,email,addresses.city`In the example above, the response will only include the fields "name", "email" and "addresses.city". If any other fields are available, they will be excluded. (nullable, e.g. id,updated_at)
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
   --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
@@ -1364,11 +1373,11 @@ export def "crm-opportunities opportunitiesOne" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/crm/opportunities/{id}") $qp)
-  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/crm/opportunities/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1377,7 +1386,7 @@ export def "crm-opportunities opportunitiesOne" [
 # PATCH /crm/opportunities/{id}
 # operationId: opportunitiesUpdate
 # --custom_fields item shape: {description?: string, id: string, name?: string, value?: any}
-export def "crm-opportunities opportunitiesUpdate" [
+export def "crm-opportunities update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1395,7 +1404,7 @@ export def "crm-opportunities opportunitiesUpdate" [
   --company-id: string # The unique identifier of the company associated with the opportunity. (nullable, e.g. 12345)
   --company-name: string # The name of the company associated with the opportunity. (nullable, e.g. Copper)
   --contact-id: string # The unique identifier of the contact associated with the opportunity. (nullable, e.g. 12345)
-  --contact-ids: list # An array of unique identifiers of all contacts associated with the opportunity.
+  --contact-ids: list<string> # An array of unique identifiers of all contacts associated with the opportunity.
   --currency: string@currency-completer # Indicates the associated currency for an amount of money. Values correspond to [ISO 4217](https://en.wikipedia.org/wiki/ISO_4217). (nullable, e.g. USD)
   --custom-fields: list # item shape: {description?: string, id: string, name?: string, value?: any}
   --description: string # A description of the opportunity. (nullable, e.g. Opportunities are created for People and Companies that are interested in buying your products or services. Create Opportunities for People and Companies to move them through one of your Pipelines.)
@@ -1413,7 +1422,7 @@ export def "crm-opportunities opportunitiesUpdate" [
   --stage-last-changed-at: string # The date and time when the stage of the opportunity was last changed. (nullable, format: date-time, e.g. 2020-09-30T07:43:32.000Z)
   --status: string # The current status of the opportunity. (nullable, e.g. Open)
   --status-id: string # The unique identifier of the current status of the opportunity. (nullable, e.g. 12345)
-  --tags: list # e.g. [New]
+  --tags: list<string> # e.g. [New]
   title: string # The title or name of the opportunity. (e.g. New Rocket)
   --type: string # The type of the opportunity (nullable, e.g. Existing Customer - Upgrade)
   --win-probability: float # The probability of winning the opportunity, expressed as a percentage. (nullable, e.g. 40)
@@ -1424,21 +1433,21 @@ export def "crm-opportunities opportunitiesUpdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/crm/opportunities/{id}") $qp)
-  let body = {"close_date": $close_date, "company_id": $company_id, "company_name": $company_name, "contact_id": $contact_id, "contact_ids": $contact_ids, "currency": $currency, "custom_fields": $custom_fields, "description": $description, "lead_id": $lead_id, "lead_source": $lead_source, "loss_reason": $loss_reason, "loss_reason_id": $loss_reason_id, "monetary_amount": $monetary_amount, "owner_id": $owner_id, "pipeline_id": $pipeline_id, "pipeline_stage_id": $pipeline_stage_id, "primary_contact_id": $primary_contact_id, "priority": $priority, "source_id": $source_id, "stage_last_changed_at": $stage_last_changed_at, "status": $status, "status_id": $status_id, "tags": $tags, "title": $title, "type": $type, "win_probability": $win_probability, "won_reason": $won_reason, "won_reason_id": $won_reason_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/crm/opportunities/{id}") $qp)
+  let req_body = {"close_date": $close_date, "company_id": $company_id, "company_name": $company_name, "contact_id": $contact_id, "contact_ids": $contact_ids, "currency": $currency, "custom_fields": $custom_fields, "description": $description, "lead_id": $lead_id, "lead_source": $lead_source, "loss_reason": $loss_reason, "loss_reason_id": $loss_reason_id, "monetary_amount": $monetary_amount, "owner_id": $owner_id, "pipeline_id": $pipeline_id, "pipeline_stage_id": $pipeline_stage_id, "primary_contact_id": $primary_contact_id, "priority": $priority, "source_id": $source_id, "stage_last_changed_at": $stage_last_changed_at, "status": $status, "status_id": $status_id, "tags": $tags, "title": $title, "type": $type, "win_probability": $win_probability, "won_reason": $won_reason, "won_reason_id": $won_reason_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List pipelines
 #
 # GET /crm/pipelines
 # operationId: pipelinesAll
-export def "crm-pipelines pipelinesAll" [
+export def "crm-pipelines list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1450,7 +1459,7 @@ export def "crm-pipelines pipelinesAll" [
   --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
   --cursor: string # Cursor to start from. You can find cursors for next/previous pages in the meta.cursors property of the response. (nullable)
   --limit: int # Number of results to return. Minimum 1, Maximum 200, Default 20 (default: 20)
-  --fields: string # The 'fields' parameter allows API users to specify the fields they want to include in the API response. If this parameter is not present, the API will return all available fields. If this parameter is present, only the fields specified in the comma-separated string will be included in the response. Nested properties can also be requested by using a dot notation. <br /><br />Example: `fields=name,email,addresses.city`<br /><br />In the example above, the response will only include the fields "name", "email" and "addresses.city". If any other fields are available, they will be excluded. (nullable, e.g. id,updated_at)
+  --fields: string # The 'fields' parameter allows API users to specify the fields they want to include in the API response. If this parameter is not present, the API will return all available fields. If this parameter is present, only the fields specified in the comma-separated string will be included in the response. Nested properties can also be requested by using a dot notation. Example: `fields=name,email,addresses.city`In the example above, the response will only include the fields "name", "email" and "addresses.city". If any other fields are available, they will be excluded. (nullable, e.g. id,updated_at)
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
   --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
@@ -1459,10 +1468,10 @@ export def "crm-pipelines pipelinesAll" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/crm/pipelines" $qp)
-  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1471,7 +1480,7 @@ export def "crm-pipelines pipelinesAll" [
 # POST /crm/pipelines
 # operationId: pipelinesAdd
 # --stages item shape: {display_order?: int, name?: string, value?: string, win_probability?: int}
-export def "crm-pipelines pipelinesAdd" [
+export def "crm-pipelines create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1498,20 +1507,20 @@ export def "crm-pipelines pipelinesAdd" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/crm/pipelines" $qp)
-  let body = {"active": $active, "archived": $archived, "currency": $currency, "display_order": $display_order, "id": $id, "name": $name, "stages": $stages, "win_probability_enabled": $win_probability_enabled} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"active": $active, "archived": $archived, "currency": $currency, "display_order": $display_order, "id": $id, "name": $name, "stages": $stages, "win_probability_enabled": $win_probability_enabled} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete pipeline
 #
 # DELETE /crm/pipelines/{id}
 # operationId: pipelinesDelete
-export def "crm-pipelines pipelinesDelete" [
+export def "crm-pipelines delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1529,11 +1538,11 @@ export def "crm-pipelines pipelinesDelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/crm/pipelines/{id}") $qp)
-  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/crm/pipelines/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1541,7 +1550,7 @@ export def "crm-pipelines pipelinesDelete" [
 #
 # GET /crm/pipelines/{id}
 # operationId: pipelinesOne
-export def "crm-pipelines pipelinesOne" [
+export def "crm-pipelines get-one" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1552,7 +1561,7 @@ export def "crm-pipelines pipelinesOne" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
-  --fields: string # The 'fields' parameter allows API users to specify the fields they want to include in the API response. If this parameter is not present, the API will return all available fields. If this parameter is present, only the fields specified in the comma-separated string will be included in the response. Nested properties can also be requested by using a dot notation. <br /><br />Example: `fields=name,email,addresses.city`<br /><br />In the example above, the response will only include the fields "name", "email" and "addresses.city". If any other fields are available, they will be excluded. (nullable, e.g. id,updated_at)
+  --fields: string # The 'fields' parameter allows API users to specify the fields they want to include in the API response. If this parameter is not present, the API will return all available fields. If this parameter is present, only the fields specified in the comma-separated string will be included in the response. Nested properties can also be requested by using a dot notation. Example: `fields=name,email,addresses.city`In the example above, the response will only include the fields "name", "email" and "addresses.city". If any other fields are available, they will be excluded. (nullable, e.g. id,updated_at)
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
   --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
@@ -1560,11 +1569,11 @@ export def "crm-pipelines pipelinesOne" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/crm/pipelines/{id}") $qp)
-  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/crm/pipelines/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1573,7 +1582,7 @@ export def "crm-pipelines pipelinesOne" [
 # PATCH /crm/pipelines/{id}
 # operationId: pipelinesUpdate
 # --stages item shape: {display_order?: int, name?: string, value?: string, win_probability?: int}
-export def "crm-pipelines pipelinesUpdate" [
+export def "crm-pipelines update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1600,21 +1609,21 @@ export def "crm-pipelines pipelinesUpdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/crm/pipelines/{id}") $qp)
-  let body = {"active": $active, "archived": $archived, "currency": $currency, "display_order": $display_order, "id": $body_id, "name": $name, "stages": $stages, "win_probability_enabled": $win_probability_enabled} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/crm/pipelines/{id}") $qp)
+  let req_body = {"active": $active, "archived": $archived, "currency": $currency, "display_order": $display_order, "id": $body_id, "name": $name, "stages": $stages, "win_probability_enabled": $win_probability_enabled} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List users
 #
 # GET /crm/users
 # operationId: usersAll
-export def "crm-users usersAll" [
+export def "crm-users list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1626,7 +1635,7 @@ export def "crm-users usersAll" [
   --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
   --cursor: string # Cursor to start from. You can find cursors for next/previous pages in the meta.cursors property of the response. (nullable)
   --limit: int # Number of results to return. Minimum 1, Maximum 200, Default 20 (default: 20)
-  --fields: string # The 'fields' parameter allows API users to specify the fields they want to include in the API response. If this parameter is not present, the API will return all available fields. If this parameter is present, only the fields specified in the comma-separated string will be included in the response. Nested properties can also be requested by using a dot notation. <br /><br />Example: `fields=name,email,addresses.city`<br /><br />In the example above, the response will only include the fields "name", "email" and "addresses.city". If any other fields are available, they will be excluded. (nullable, e.g. id,updated_at)
+  --fields: string # The 'fields' parameter allows API users to specify the fields they want to include in the API response. If this parameter is not present, the API will return all available fields. If this parameter is present, only the fields specified in the comma-separated string will be included in the response. Nested properties can also be requested by using a dot notation. Example: `fields=name,email,addresses.city`In the example above, the response will only include the fields "name", "email" and "addresses.city". If any other fields are available, they will be excluded. (nullable, e.g. id,updated_at)
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
   --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
@@ -1635,10 +1644,10 @@ export def "crm-users usersAll" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/crm/users" $qp)
-  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1650,7 +1659,7 @@ export def "crm-users usersAll" [
 # --emails item shape: {email: string, id?: string, type?: "primary"|"secondary"|"work"|"personal"|"billing"|"other"}
 # --phone_numbers item shape: {area_code?: string, country_code?: string, extension?: string, id?: string, number: string, type?: "primary"|"secondary"|"home"|"work"|"office"|"mobile"|"assistant"|"fax"|"direct-dial-in"|"personal"|"other"}
 @deprecated --flag department
-export def "crm-users usersAdd" [
+export def "crm-users create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1686,20 +1695,20 @@ export def "crm-users usersAdd" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/crm/users" $qp)
-  let body = {"addresses": $addresses, "company_name": $company_name, "department": $department, "description": $description, "division": $division, "emails": $emails, "employee_number": $employee_number, "first_name": $first_name, "image": $image, "language": $language, "last_name": $last_name, "parent_id": $parent_id, "password": $password, "phone_numbers": $phone_numbers, "status": $status, "title": $title, "username": $username} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"addresses": $addresses, "company_name": $company_name, "department": $department, "description": $description, "division": $division, "emails": $emails, "employee_number": $employee_number, "first_name": $first_name, "image": $image, "language": $language, "last_name": $last_name, "parent_id": $parent_id, "password": $password, "phone_numbers": $phone_numbers, "status": $status, "title": $title, "username": $username} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete user
 #
 # DELETE /crm/users/{id}
 # operationId: usersDelete
-export def "crm-users usersDelete" [
+export def "crm-users delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1717,11 +1726,11 @@ export def "crm-users usersDelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/crm/users/{id}") $qp)
-  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/crm/users/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1729,7 +1738,7 @@ export def "crm-users usersDelete" [
 #
 # GET /crm/users/{id}
 # operationId: usersOne
-export def "crm-users usersOne" [
+export def "crm-users get-one" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1740,7 +1749,7 @@ export def "crm-users usersOne" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
-  --fields: string # The 'fields' parameter allows API users to specify the fields they want to include in the API response. If this parameter is not present, the API will return all available fields. If this parameter is present, only the fields specified in the comma-separated string will be included in the response. Nested properties can also be requested by using a dot notation. <br /><br />Example: `fields=name,email,addresses.city`<br /><br />In the example above, the response will only include the fields "name", "email" and "addresses.city". If any other fields are available, they will be excluded. (nullable, e.g. id,updated_at)
+  --fields: string # The 'fields' parameter allows API users to specify the fields they want to include in the API response. If this parameter is not present, the API will return all available fields. If this parameter is present, only the fields specified in the comma-separated string will be included in the response. Nested properties can also be requested by using a dot notation. Example: `fields=name,email,addresses.city`In the example above, the response will only include the fields "name", "email" and "addresses.city". If any other fields are available, they will be excluded. (nullable, e.g. id,updated_at)
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
   --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
@@ -1748,11 +1757,11 @@ export def "crm-users usersOne" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/crm/users/{id}") $qp)
-  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/crm/users/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1764,7 +1773,7 @@ export def "crm-users usersOne" [
 # --emails item shape: {email: string, id?: string, type?: "primary"|"secondary"|"work"|"personal"|"billing"|"other"}
 # --phone_numbers item shape: {area_code?: string, country_code?: string, extension?: string, id?: string, number: string, type?: "primary"|"secondary"|"home"|"work"|"office"|"mobile"|"assistant"|"fax"|"direct-dial-in"|"personal"|"other"}
 @deprecated --flag department
-export def "crm-users usersUpdate" [
+export def "crm-users update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1800,12 +1809,12 @@ export def "crm-users usersUpdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/crm/users/{id}") $qp)
-  let body = {"addresses": $addresses, "company_name": $company_name, "department": $department, "description": $description, "division": $division, "emails": $emails, "employee_number": $employee_number, "first_name": $first_name, "image": $image, "language": $language, "last_name": $last_name, "parent_id": $parent_id, "password": $password, "phone_numbers": $phone_numbers, "status": $status, "title": $title, "username": $username} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/crm/users/{id}") $qp)
+  let req_body = {"addresses": $addresses, "company_name": $company_name, "department": $department, "description": $description, "division": $division, "emails": $emails, "employee_number": $employee_number, "first_name": $first_name, "image": $image, "language": $language, "last_name": $last_name, "parent_id": $parent_id, "password": $password, "phone_numbers": $phone_numbers, "status": $status, "title": $title, "username": $username} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

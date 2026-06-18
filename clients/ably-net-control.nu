@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -60,6 +69,33 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   }
   if ($method in ["head" "options"]) { return $resp }
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+}
+
+# Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
+# the field names whose value should be read from disk as bytes; every
+# other field is sent as a text part (records/lists JSON-stringified).
+# Returns {content_type, body} ready to pass to `do-request`.
+def build-multipart-body [parts: record, file_fields: list<string>]: nothing -> record {
+  let boundary = $"----nu-(random chars --length 24)"
+  let crlf = "\r\n"
+  let chunks = ($parts | transpose k v | where {|p| $p.v != null} | each {|p|
+    let name = $p.k
+    let val = $p.v
+    if $name in $file_fields {
+      let filename = ($val | path basename)
+      let bytes = (open --raw $val | into binary | collect)
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"; filename=\"($filename)\"($crlf)Content-Type: application/octet-stream($crlf)($crlf)" | into binary)
+      $head ++ $bytes ++ ($crlf | into binary)
+    } else {
+      let dt = ($val | describe)
+      let s = if (($dt | str starts-with "record") or ($dt | str starts-with "list") or ($dt | str starts-with "table")) { ($val | to json --raw) } else { ($val | into string) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"($crlf)($crlf)" | into binary)
+      $head ++ ($"($s)($crlf)" | into binary)
+    }
+  })
+  let trailer = ($"--($boundary)--($crlf)" | into binary)
+  let body = ($chunks | reduce --fold (0x[] | into binary) {|chunk, acc| $acc ++ $chunk }) ++ $trailer
+  {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
 }
 
 def base-url-completer [] { ["https://control.ably.net/v1"] }
@@ -110,7 +146,7 @@ export def "accounts-apps get" [
 ]: nothing -> table<_links: record, accountId: string, apnsUseSandboxEndpoint: bool, id: string, name: string, status: string, tlsOnly: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/accounts/{account_id}/apps"))
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/apps"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -119,7 +155,7 @@ export def "accounts-apps get" [
 # Creates an app
 #
 # POST /accounts/{account_id}/apps
-export def "accounts-apps post" [
+export def "accounts-apps create" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -140,12 +176,12 @@ export def "accounts-apps post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/accounts/{account_id}/apps"))
-  let body = {"apnsCertificate": $apns_certificate, "apnsPrivateKey": $apns_private_key, "apnsUseSandboxEndpoint": $apns_use_sandbox_endpoint, "fcmKey": $fcm_key, "name": $name, "status": $status, "tlsOnly": $tls_only} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/apps"))
+  let req_body = {"apnsCertificate": $apns_certificate, "apnsPrivateKey": $apns_private_key, "apnsUseSandboxEndpoint": $apns_use_sandbox_endpoint, "fcmKey": $fcm_key, "name": $name, "status": $status, "tlsOnly": $tls_only} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists app keys
@@ -164,7 +200,7 @@ export def "apps-keys get" [
 ]: nothing -> table<appId: string, capability: record, created: int, id: string, key: string, modified: int, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/keys"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/keys"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -173,7 +209,7 @@ export def "apps-keys get" [
 # Creates a key
 #
 # POST /apps/{app_id}/keys
-export def "apps-keys post" [
+export def "apps-keys create" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -183,25 +219,25 @@ export def "apps-keys post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  capabilities: list # The capabilities that this key has. More information on capabilities can be found in the <a href="https://ably.com/documentation/core-features/authentication#capabilities-explained">Ably documentation</a>.
+  capabilities: list<string> # The capabilities that this key has. More information on capabilities can be found in the Ably documentation (https://ably.com/documentation/core-features/authentication#capabilities-explained).
   channels: string # Specify the channels and queues that this key can be used with.
   name: string # The name for your API key. This is a friendly name for your reference.
 ]: any -> record<appId: string, capability: record, created: int, id: string, key: string, modified: int, name: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/keys"))
-  let body = {"capabilities": $capabilities, "channels": $channels, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/keys"))
+  let req_body = {"capabilities": $capabilities, "channels": $channels, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates a key
 #
 # PATCH /apps/{app_id}/keys/{key_id}
-export def "apps-keys patch" [
+export def "apps-keys update" [
   app_id: string
   key_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -212,25 +248,25 @@ export def "apps-keys patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --capabilities: list # The capabilities that this key has. More information on capabilities can be found in the <a href="https://ably.com/documentation/core-features/authentication#capabilities-explained">Ably documentation</a>.
+  --capabilities: list<string> # The capabilities that this key has. More information on capabilities can be found in the Ably documentation (https://ably.com/documentation/core-features/authentication#capabilities-explained).
   --channels: string # Specify the channels and queues that this key can be used with.
   --name: string # The name for your API key. This is a friendly name for your reference.
 ]: any -> record<appId: string, capability: record, created: int, id: string, key: string, modified: int, name: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, key_id: $key_id} | format pattern "/apps/{app_id}/keys/{key_id}"))
-  let body = {"capabilities": $capabilities, "channels": $channels, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), key_id: (encode-path-segment $key_id)} | format pattern "/apps/{app_id}/keys/{key_id}"))
+  let req_body = {"capabilities": $capabilities, "channels": $channels, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Revokes a key
 #
 # POST /apps/{app_id}/keys/{key_id}/revoke
-export def "apps-keys-revoke post" [
+export def "apps-keys-revoke create" [
   app_id: string
   key_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -244,7 +280,7 @@ export def "apps-keys-revoke post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, key_id: $key_id} | format pattern "/apps/{app_id}/keys/{key_id}/revoke"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), key_id: (encode-path-segment $key_id)} | format pattern "/apps/{app_id}/keys/{key_id}/revoke"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -266,7 +302,7 @@ export def "apps-namespaces get" [
 ]: nothing -> table<authenticated: bool, created: int, id: string, modified: int, persistLast: bool, persisted: bool, pushEnabled: bool, tlsOnly: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/namespaces"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/namespaces"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -275,7 +311,7 @@ export def "apps-namespaces get" [
 # Creates a namespace
 #
 # POST /apps/{app_id}/namespaces
-export def "apps-namespaces post" [
+export def "apps-namespaces create" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -285,7 +321,7 @@ export def "apps-namespaces post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authenticated: oneof<nothing, bool> # If `true`, clients will not be permitted to use (including to attach, publish, or subscribe) any channels within this namespace unless they are identified, that is, authenticated using a client ID. See the <a href="https://knowledge.ably.com/authenticated-and-identified-clients">Ably Knowledge base</a> for more details. (default: false, e.g. false)
+  --authenticated: oneof<nothing, bool> # If `true`, clients will not be permitted to use (including to attach, publish, or subscribe) any channels within this namespace unless they are identified, that is, authenticated using a client ID. See the Ably Knowledge base (https://knowledge.ably.com/authenticated-and-identified-clients) for more details. (default: false, e.g. false)
   id: string # The namespace or channel name that the channel rule will apply to. For example, if you specify `namespace` the namespace will be set to `namespace` and will match with channels `namespace:*` and `namespace`. (e.g. namespace)
   --persist-last: oneof<nothing, bool> # If `true`, the last message published on a channel will be stored for 365 days. You can access the stored message only by using the channel rewind mechanism and attaching with rewind=1. Please note that for each message stored, an additional message is deducted from your monthly allocation. (default: false, e.g. false)
   --persisted: oneof<nothing, bool> # If `true`, all messages on a channel will be stored for 24 hours. You can access stored messages via the History API. Please note that for each message stored, an additional message is deducted from your monthly allocation. (default: false, e.g. false)
@@ -295,12 +331,12 @@ export def "apps-namespaces post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/namespaces"))
-  let body = {"authenticated": $authenticated, "id": $id, "persistLast": $persist_last, "persisted": $persisted, "pushEnabled": $push_enabled, "tlsOnly": $tls_only} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/namespaces"))
+  let req_body = {"authenticated": $authenticated, "id": $id, "persistLast": $persist_last, "persisted": $persisted, "pushEnabled": $push_enabled, "tlsOnly": $tls_only} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes a namespace
@@ -320,7 +356,7 @@ export def "apps-namespaces delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, namespace_id: $namespace_id} | format pattern "/apps/{app_id}/namespaces/{namespace_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), namespace_id: (encode-path-segment $namespace_id)} | format pattern "/apps/{app_id}/namespaces/{namespace_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -329,7 +365,7 @@ export def "apps-namespaces delete" [
 # Updates a namespace
 #
 # PATCH /apps/{app_id}/namespaces/{namespace_id}
-export def "apps-namespaces patch" [
+export def "apps-namespaces update" [
   app_id: string
   namespace_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -340,7 +376,7 @@ export def "apps-namespaces patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authenticated: oneof<nothing, bool> # If `true`, clients will not be permitted to use (including to attach, publish, or subscribe) any channels within this namespace unless they are identified, that is, authenticated using a client ID. See the <a href="https://knowledge.ably.com/authenticated-and-identified-clients">Ably knowledge base/a> for more details. (default: false, e.g. false)
+  --authenticated: oneof<nothing, bool> # If `true`, clients will not be permitted to use (including to attach, publish, or subscribe) any channels within this namespace unless they are identified, that is, authenticated using a client ID. See the Ably knowledge base/a> for more details. (default: false, e.g. false)
   --persist-last: oneof<nothing, bool> # If `true`, the last message published on a channel will be stored for 365 days. You can access the stored message only by using the channel rewind mechanism and attaching with rewind=1. Please note that for each message stored, an additional message is deducted from your monthly allocation. (default: false, e.g. false)
   --persisted: oneof<nothing, bool> # If `true`, all messages on a channel will be stored for 24 hours. You can access stored messages via the History API. Please note that for each message stored, an additional message is deducted from your monthly allocation. (default: false, e.g. false)
   --push-enabled: oneof<nothing, bool> # If `true`, publishing messages with a push payload in the extras field is permitted and can trigger the delivery of a native push notification to registered devices for the channel. (default: false, e.g. false)
@@ -349,12 +385,12 @@ export def "apps-namespaces patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, namespace_id: $namespace_id} | format pattern "/apps/{app_id}/namespaces/{namespace_id}"))
-  let body = {"authenticated": $authenticated, "persistLast": $persist_last, "persisted": $persisted, "pushEnabled": $push_enabled, "tlsOnly": $tls_only} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), namespace_id: (encode-path-segment $namespace_id)} | format pattern "/apps/{app_id}/namespaces/{namespace_id}"))
+  let req_body = {"authenticated": $authenticated, "persistLast": $persist_last, "persisted": $persisted, "pushEnabled": $push_enabled, "tlsOnly": $tls_only} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists queues
@@ -373,7 +409,7 @@ export def "apps-queues get" [
 ]: nothing -> table<amqp: record<queueName: string, uri: string>, appId: string, deadletter: bool, deadletterId: string, id: string, maxLength: int, messages: record<ready: int, total: int, unacknowledged: int>, name: string, region: string, state: string, stats: record<acknowledgementRate: float, deliveryRate: float, publishRate: float>, stomp: record<destination: string, host: string, uri: string>, ttl: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/queues"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/queues"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -382,7 +418,7 @@ export def "apps-queues get" [
 # Creates a queue
 #
 # POST /apps/{app_id}/queues
-export def "apps-queues post" [
+export def "apps-queues create" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -400,12 +436,12 @@ export def "apps-queues post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/queues"))
-  let body = {"maxLength": $max_length, "name": $name, "region": $region, "ttl": $ttl} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/queues"))
+  let req_body = {"maxLength": $max_length, "name": $name, "region": $region, "ttl": $ttl} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes a queue
@@ -425,7 +461,7 @@ export def "apps-queues delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, queue_id: $queue_id} | format pattern "/apps/{app_id}/queues/{queue_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), queue_id: (encode-path-segment $queue_id)} | format pattern "/apps/{app_id}/queues/{queue_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -447,7 +483,7 @@ export def "apps-rules list" [
 ]: nothing -> list<any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/rules"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/rules"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -459,7 +495,7 @@ export def "apps-rules list" [
 # Discriminator (request): ruleType = amqp, amqp/external, aws/kinesis, aws/lambda, aws/sqs, http, http/azure-function, http/cloudflare-worker, http/google-cloud-function, http/ifttt, http/zapier, unsupported
 # --source shape: {channelFilter: string, type: "channel.message"|"channel.presence"|"channel.lifecycle"|"channel.occupancy"}
 # --target shape: {enveloped?: bool, format: "json"|"msgpack", headers?: list, signingKeyId?: string, url: string}
-export def "apps-rules post" [
+export def "apps-rules create" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -469,8 +505,8 @@ export def "apps-rules post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --request-mode: string@request-mode-completer # This is Single Request mode or Batch Request mode. Single Request mode sends each event separately to the endpoint specified by the rule. Batch Request mode rolls up multiple events into the same request. You can read more about the difference between single and batched events in the Ably <a href="https://ably.com/documentation/general/events#batching">documentation</a>. (e.g. single)
-  rule_type: string@rule-type-completer # The type of rule. See the <a href="https://ably.com/integrations">documentation</a> for further information.
+  --request-mode: string@request-mode-completer # This is Single Request mode or Batch Request mode. Single Request mode sends each event separately to the endpoint specified by the rule. Batch Request mode rolls up multiple events into the same request. You can read more about the difference between single and batched events in the Ably documentation (https://ably.com/documentation/general/events#batching). (e.g. single)
+  rule_type: string@rule-type-completer # The type of rule. See the documentation (https://ably.com/integrations) for further information.
   --body-source: record # shape: {channelFilter: string, type: "channel.message"|"channel.presence"|"channel.lifecycle"|"channel.occupancy"}
   --status: string@status-completer # The status of the rule. Rules can be enabled or disabled. (e.g. enabled)
   --target: record # shape: {enveloped?: bool, format: "json"|"msgpack", headers?: list, signingKeyId?: string, url: string}
@@ -479,17 +515,17 @@ export def "apps-rules post" [
   --created: float # Unix timestamp representing the date and time of creation of the rule. (e.g. 1602844091815)
   --id: string # The rule ID. (e.g. 83IzAB)
   --modified: float # Unix timestamp representing the date and time of last modification of the rule. (e.g. 1614679682091)
-  --version: string # API version. Events and the format of their payloads are versioned. Please see the <a href="https://ably.com/documentation/general/events">Events documentation</a>.
+  --version: string # API version. Events and the format of their payloads are versioned. Please see the Events documentation (https://ably.com/documentation/general/events).
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/rules"))
-  let body = {"requestMode": $request_mode, "ruleType": $rule_type, "source": $body_source, "status": $status, "target": $target, "_links": $links, "appId": $body_app_id, "created": $created, "id": $id, "modified": $modified, "version": $version} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/rules"))
+  let req_body = {"requestMode": $request_mode, "ruleType": $rule_type, "source": $body_source, "status": $status, "target": $target, "_links": $links, "appId": $body_app_id, "created": $created, "id": $id, "modified": $modified, "version": $version} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes a Reactor rule
@@ -509,7 +545,7 @@ export def "apps-rules delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, rule_id: $rule_id} | format pattern "/apps/{app_id}/rules/{rule_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), rule_id: (encode-path-segment $rule_id)} | format pattern "/apps/{app_id}/rules/{rule_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -533,7 +569,7 @@ export def "apps-rules get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, rule_id: $rule_id} | format pattern "/apps/{app_id}/rules/{rule_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), rule_id: (encode-path-segment $rule_id)} | format pattern "/apps/{app_id}/rules/{rule_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -545,7 +581,7 @@ export def "apps-rules get" [
 # Discriminator (request): ruleType = amqp, amqp/external, aws/kinesis, aws/lambda, aws/sqs, http, http/azure-function, http/cloudflare-worker, http/google-cloud-function, http/ifttt, http/zapier
 # --source shape: {channelFilter: string, type: "channel.message"|"channel.presence"|"channel.lifecycle"|"channel.occupancy"}
 # --target shape: {enveloped?: bool, format?: "json"|"msgpack", headers?: list, signingKeyId?: string, url?: string}
-export def "apps-rules patch" [
+export def "apps-rules update" [
   app_id: string
   rule_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -556,8 +592,8 @@ export def "apps-rules patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --request-mode: string@request-mode-completer # This is Single Request mode or Batch Request mode. Single Request mode sends each event separately to the endpoint specified by the rule. Batch Request mode rolls up multiple events into the same request. You can read more about the difference between single and batched events in the Ably <a href="https://ably.com/documentation/general/events#batching">documentation</a>. (e.g. single)
-  rule_type: string@rule-type-completer-1 # The type of rule. See the <a href="https://ably.com/integrations">documentation</a> for further information.
+  --request-mode: string@request-mode-completer # This is Single Request mode or Batch Request mode. Single Request mode sends each event separately to the endpoint specified by the rule. Batch Request mode rolls up multiple events into the same request. You can read more about the difference between single and batched events in the Ably documentation (https://ably.com/documentation/general/events#batching). (e.g. single)
+  rule_type: string@rule-type-completer-1 # The type of rule. See the documentation (https://ably.com/integrations) for further information.
   --body-source: record # shape: {channelFilter: string, type: "channel.message"|"channel.presence"|"channel.lifecycle"|"channel.occupancy"}
   --status: string@status-completer # The status of the rule. Rules can be enabled or disabled. (e.g. enabled)
   --target: record # shape: {enveloped?: bool, format?: "json"|"msgpack", headers?: list, signingKeyId?: string, url?: string}
@@ -565,12 +601,12 @@ export def "apps-rules patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, rule_id: $rule_id} | format pattern "/apps/{app_id}/rules/{rule_id}"))
-  let body = {"requestMode": $request_mode, "ruleType": $rule_type, "source": $body_source, "status": $status, "target": $target} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), rule_id: (encode-path-segment $rule_id)} | format pattern "/apps/{app_id}/rules/{rule_id}"))
+  let req_body = {"requestMode": $request_mode, "ruleType": $rule_type, "source": $body_source, "status": $status, "target": $target} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes an app
@@ -589,7 +625,7 @@ export def "apps delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/apps/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/apps/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -598,7 +634,7 @@ export def "apps delete" [
 # Updates an app
 #
 # PATCH /apps/{id}
-export def "apps patch" [
+export def "apps update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -619,18 +655,18 @@ export def "apps patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/apps/{id}"))
-  let body = {"apnsCertificate": $apns_certificate, "apnsPrivateKey": $apns_private_key, "apnsUseSandboxEndpoint": $apns_use_sandbox_endpoint, "fcmKey": $fcm_key, "name": $name, "status": $status, "tlsOnly": $tls_only} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/apps/{id}"))
+  let req_body = {"apnsCertificate": $apns_certificate, "apnsPrivateKey": $apns_private_key, "apnsUseSandboxEndpoint": $apns_use_sandbox_endpoint, "fcmKey": $fcm_key, "name": $name, "status": $status, "tlsOnly": $tls_only} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates app's APNs info from a `.p12` file
 #
 # POST /apps/{id}/pkcs12
-export def "apps-pkcs12 post" [
+export def "apps-pkcs12 create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -646,12 +682,13 @@ export def "apps-pkcs12 post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/apps/{id}/pkcs12"))
-  let body = {"p12File": $p12_file, "p12Pass": $p12_pass} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/apps/{id}/pkcs12"))
+  let req_body = {"p12File": $p12_file, "p12Pass": $p12_pass} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body ["p12File"])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # Get token details

@@ -36,6 +36,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -130,7 +139,7 @@ export def "categories get" [
 ]: nothing -> record<category: record<id: int, name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({category_id: $category_id} | format pattern "/categories/{category_id}"))
+  let full_url = (build-url $base ({category_id: (encode-path-segment $category_id)} | format pattern "/categories/{category_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -152,12 +161,12 @@ export def "categories-podcasts get" [
   --page: string # Provide the page number to fetch.
   --page-size: string # Provide the size of the page to fetch.
   --order: string # Order the items by 'newest' | 'random'
-  --filters: string # Takes filters like 'lang' in a url encoded json.  Example: 1)Single -> &nbsp;&nbsp;&nbsp;&nbsp; var filterJson = {"lang":["en"]}; &nbsp;&nbsp;&nbsp;&nbsp; var url = baseUrl+'?'+filters=enocdeURI(JSON.stringify(filterJson)); 2)Multiple -> &nbsp;&nbsp;&nbsp;&nbsp; var filterJson = {"lang":["en","hi"]}; &nbsp;&nbsp;&nbsp;&nbsp; var url = baseUrl+'?'+filters=enocdeURI(JSON.stringify(filterJson));
+  --filters: string # Takes filters like 'lang' in a url encoded json. Example: 1)Single -> var filterJson = {"lang":["en"]}; var url = baseUrl+'?'+filters=enocdeURI(JSON.stringify(filterJson)); 2)Multiple -> var filterJson = {"lang":["en","hi"]}; var url = baseUrl+'?'+filters=enocdeURI(JSON.stringify(filterJson));
 ]: nothing -> record<noOfPages: int, page: int, pageSize: int, podcasts: table<author: string, category: record, categoryId: int, description: string, episodes: int, featured: record, featuredId: int, image: string, keywords: string, latestEpisodeTime: string, podcastId: int, title: string, url: string>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "filters" $filters "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({category_id: $category_id} | format pattern "/categories/{category_id}/podcasts") $qp)
+  let full_url = (build-url $base ({category_id: (encode-path-segment $category_id)} | format pattern "/categories/{category_id}/podcasts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -178,7 +187,7 @@ export def "podcasts list" [
   --page: string # Provide the page number to fetch.
   --page-size: string # Provide the size of the page to fetch.
   --order: string # Order the items by 'newest' | 'random'
-  --filters: string # Takes filters like 'lang' in a url encoded json.  Example: 1)Single -> &nbsp;&nbsp;&nbsp;&nbsp; var filterJson = {"lang":["en"]}; &nbsp;&nbsp;&nbsp;&nbsp; var url = baseUrl+'?'+filters=enocdeURI(JSON.stringify(filterJson)); 2)Multiple -> &nbsp;&nbsp;&nbsp;&nbsp; var filterJson = {"lang":["en","hi"]}; &nbsp;&nbsp;&nbsp;&nbsp; var url = baseUrl+'?'+filters=enocdeURI(JSON.stringify(filterJson));
+  --filters: string # Takes filters like 'lang' in a url encoded json. Example: 1)Single -> var filterJson = {"lang":["en"]}; var url = baseUrl+'?'+filters=enocdeURI(JSON.stringify(filterJson)); 2)Multiple -> var filterJson = {"lang":["en","hi"]}; var url = baseUrl+'?'+filters=enocdeURI(JSON.stringify(filterJson));
 ]: nothing -> record<noOfPages: int, page: int, pageSize: int, podcasts: table<author: string, category: record, categoryId: int, description: string, episodes: int, featured: record, featuredId: int, image: string, keywords: string, latestEpisodeTime: string, podcastId: int, title: string, url: string>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -205,7 +214,7 @@ export def "podcasts get" [
 ]: nothing -> record<podcast: record<author: string, category: record<id: int, name: string>, categoryId: int, description: string, episodes: int, featured: record<id: int, name: string>, featuredId: int, image: string, keywords: string, latest_episode_time: string, podcastId: int, title: string, url: string, website: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({podcast_id: $podcast_id} | format pattern "/podcasts/{podcast_id}"))
+  let full_url = (build-url $base ({podcast_id: (encode-path-segment $podcast_id)} | format pattern "/podcasts/{podcast_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -227,12 +236,12 @@ export def "podcasts-episodes get" [
   --page: string # Provide the page number to fetch.
   --page-size: string # Provide the size of the page to fetch.
   --order: string # Order the items by 'newest' | 'random'
-  --filters: string # Takes filters like 'lang' in a url encoded json.  Example: 1)Single -> &nbsp;&nbsp;&nbsp;&nbsp; var filterJson = {"lang":["en"]}; &nbsp;&nbsp;&nbsp;&nbsp; var url = baseUrl+'?'+filters=enocdeURI(JSON.stringify(filterJson)); 2)Multiple -> &nbsp;&nbsp;&nbsp;&nbsp; var filterJson = {"lang":["en","hi"]}; &nbsp;&nbsp;&nbsp;&nbsp; var url = baseUrl+'?'+filters=enocdeURI(JSON.stringify(filterJson));
+  --filters: string # Takes filters like 'lang' in a url encoded json. Example: 1)Single -> var filterJson = {"lang":["en"]}; var url = baseUrl+'?'+filters=enocdeURI(JSON.stringify(filterJson)); 2)Multiple -> var filterJson = {"lang":["en","hi"]}; var url = baseUrl+'?'+filters=enocdeURI(JSON.stringify(filterJson));
 ]: nothing -> record<episodes: table<author: string, description: string, episodeId: int, episodeUrl: string, image: string, isNew: bool, play: record, podcastId: int, podcastUrl: string, publishTime: string, publishedOn: int, title: string>, noOfPages: int, page: int, pageSize: int, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "filters" $filters "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({podcast_id: $podcast_id} | format pattern "/podcasts/{podcast_id}/episodes") $qp)
+  let full_url = (build-url $base ({podcast_id: (encode-path-segment $podcast_id)} | format pattern "/podcasts/{podcast_id}/episodes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

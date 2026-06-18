@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -116,7 +125,7 @@ export def "pdf get" [
 # Concatenate multiple pdf files into single pdf file..
 #
 # POST /api/pdf/pdfconcat
-export def "pdf-pdfconcat post" [
+export def "pdf-pdfconcat create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -126,24 +135,24 @@ export def "pdf-pdfconcat post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --pdf-documents-as-base64-string: list # The list of Pdf documents encoded as Base64 strings. (nullable)
+  --pdf-documents-as-base64-string: list<string> # The list of Pdf documents encoded as Base64 strings. (nullable)
 ]: any -> record<ErrorMessage: string, PdfFileBase64String: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/pdf/pdfconcat")
-  let body = {"PdfDocumentsAsBase64String": $pdf_documents_as_base64_string} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"PdfDocumentsAsBase64String": $pdf_documents_as_base64_string} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Generate an image of to provided pdf file
 #
 # POST /api/pdf/pdftoimage
 # --Options shape: {Height?: int, HorizontalResolution?: float, ImageFormat?: string, JpegQuality?: int, PageNumber?: int, PngCompressionLevel?: int, Transparent?: bool, VerticalResolution?: float, Width?: int}
-export def "pdf-pdftoimage post" [
+export def "pdf-pdftoimage create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -160,18 +169,18 @@ export def "pdf-pdftoimage post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/pdf/pdftoimage")
-  let body = {"Options": $options, "PdfFileBase64String": $pdf_file_base64_string} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"Options": $options, "PdfFileBase64String": $pdf_file_base64_string} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Write text on a page in a pdf document.
 #
 # POST /api/pdf/pdfwritestring
 # --Options shape: {Font?: record, PageNumber?: int, Text?: string, TextColor?: record, XOrigin?: "0"|"1"|"2", XPosition?: float, YOrigin?: "0"|"1"|"2", YPosition?: float}
-export def "pdf-pdfwritestring post" [
+export def "pdf-pdfwritestring create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -189,17 +198,17 @@ export def "pdf-pdfwritestring post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/pdf/pdfwritestring")
-  let body = {"FontFileBase64String": $font_file_base64_string, "Options": $options, "PdfFileBase64String": $pdf_file_base64_string} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"FontFileBase64String": $font_file_base64_string, "Options": $options, "PdfFileBase64String": $pdf_file_base64_string} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Generate pdf file from url using the excellent tool wkhtmltopdf.
 #
 # POST /api/pdf/wkhtmltopdf
-export def "pdf-wkhtmltopdf post" [
+export def "pdf-wkhtmltopdf create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -211,25 +220,25 @@ export def "pdf-wkhtmltopdf post" [
   --accept: string@accept-completer # Response content type
   --html-base64-string: string # Base64 encoded string with html. If property Url is set, it will be used, not HtmlBase64String. (nullable)
   --resources: record # This is a set of key-value pairs of digital resources like images that is referenced in the HtmlBase64String document. It uses the filename including relative path as key and the data is provided as a Base64 encoded string. (nullable)
-  --body-url: string # The url to generate pdf from. Url has precedence over HtmlBase64String value if both are set. (nullable)
+  --url: string # The url to generate pdf from. Url has precedence over HtmlBase64String value if both are set. (nullable)
   --wk-html-to-pdf-arguments: record # Command line arguments passed to wkhtmltopdf. (nullable)
 ]: any -> record<ErrorMessage: string, PdfFileBase64String: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/pdf/wkhtmltopdf")
-  let body = {"HtmlBase64String": $html_base64_string, "Resources": $resources, "Url": $body_url, "WkHtmlToPdfArguments": $wk_html_to_pdf_arguments} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"HtmlBase64String": $html_base64_string, "Resources": $resources, "Url": $url, "WkHtmlToPdfArguments": $wk_html_to_pdf_arguments} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create pdf-file from complete XSL-FO document.
 #
 # POST /api/pdf/xslfo
-# --Metadata shape: {Author?: string, EnableAdd?: bool, EnableCopy?: bool, EnableModify?: bool, EnablePrinting?: bool, Keywords?: list, OwnerPassword?: string, Subject?: string, Title?: string, UserPassword?: string}
-export def "pdf-xslfo post" [
+# --Metadata shape: {Author?: string, EnableAdd?: bool, EnableCopy?: bool, EnableModify?: bool, EnablePrinting?: bool, Keywords?: list<string>, OwnerPassword?: string, Subject?: string, Title?: string, UserPassword?: string}
+export def "pdf-xslfo create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -240,25 +249,25 @@ export def "pdf-xslfo post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --fo-document-base64-string: string # This is the complete XSL-FO document provided using Base64 encoding. (nullable)
-  --metadata: record # Enter meta data for pdf document — shape: {Author?: string, EnableAdd?: bool, EnableCopy?: bool, EnableModify?: bool, EnablePrinting?: bool, Keywords?: list, OwnerPassword?: string, Subject?: string, Title?: string, UserPassword?: string}
+  --metadata: record # Enter meta data for pdf document — shape: {Author?: string, EnableAdd?: bool, EnableCopy?: bool, EnableModify?: bool, EnablePrinting?: bool, Keywords?: list<string>, OwnerPassword?: string, Subject?: string, Title?: string, UserPassword?: string}
   --resources: record # This is a set of key-value pairs of digital resources like images that is referenced in the XSL-FO document. It uses the filename as key and the data is provided as a Base64 encoded string. (nullable)
 ]: any -> record<ErrorMessage: string, PdfFileBase64String: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/pdf/xslfo")
-  let body = {"FoDocumentBase64String": $fo_document_base64_string, "Metadata": $metadata, "Resources": $resources} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"FoDocumentBase64String": $fo_document_base64_string, "Metadata": $metadata, "Resources": $resources} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create pdf-file from transforming xml document with Xsl-Fo transform document.
 #
 # POST /api/pdf/xslfowithtransform
-# --Metadata shape: {Author?: string, EnableAdd?: bool, EnableCopy?: bool, EnableModify?: bool, EnablePrinting?: bool, Keywords?: list, OwnerPassword?: string, Subject?: string, Title?: string, UserPassword?: string}
-export def "pdf-xslfowithtransform post" [
+# --Metadata shape: {Author?: string, EnableAdd?: bool, EnableCopy?: bool, EnableModify?: bool, EnablePrinting?: bool, Keywords?: list<string>, OwnerPassword?: string, Subject?: string, Title?: string, UserPassword?: string}
+export def "pdf-xslfowithtransform create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -269,7 +278,7 @@ export def "pdf-xslfowithtransform post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --fo-document-base64-string: string # This is the complete XSL-FO document provided using Base64 encoding. (nullable)
-  --metadata: record # Enter meta data for pdf document — shape: {Author?: string, EnableAdd?: bool, EnableCopy?: bool, EnableModify?: bool, EnablePrinting?: bool, Keywords?: list, OwnerPassword?: string, Subject?: string, Title?: string, UserPassword?: string}
+  --metadata: record # Enter meta data for pdf document — shape: {Author?: string, EnableAdd?: bool, EnableCopy?: bool, EnableModify?: bool, EnablePrinting?: bool, Keywords?: list<string>, OwnerPassword?: string, Subject?: string, Title?: string, UserPassword?: string}
   --resources: record # This is a set of key-value pairs of digital resources like images that is referenced in the XSL-FO document. It uses the filename as key and the data is provided as a Base64 encoded string. (nullable)
   --xml-data-document-base64-string: string # This is xml data document on which the XSL-FO transform document is applied. Provided using Base64 encoding. (nullable)
 ]: any -> record<ErrorMessage: string, PdfFileBase64String: string> {
@@ -277,9 +286,9 @@ export def "pdf-xslfowithtransform post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/pdf/xslfowithtransform")
-  let body = {"FoDocumentBase64String": $fo_document_base64_string, "Metadata": $metadata, "Resources": $resources, "XmlDataDocumentBase64String": $xml_data_document_base64_string} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"FoDocumentBase64String": $fo_document_base64_string, "Metadata": $metadata, "Resources": $resources, "XmlDataDocumentBase64String": $xml_data_document_base64_string} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

@@ -13,6 +13,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   match $scheme {
     "x-api-key" => { {headers: {X-API-Key: $token_val}, query: ""} }
     "basic" => { {headers: {Authorization: $"Basic ($token_val)"}, query: ""} }
+    "basic-credentials" => { {headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: ""} }
     "none" => { {headers: {}, query: ""} }
     _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
   }
@@ -34,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
     "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
     _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -64,7 +74,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 }
 
 def base-url-completer [] { ["https://cal-test.adyen.com/cal/services/Fund/v6"] }
-def auth-scheme-completer [] { ["x-api-key" "basic"] }
+def auth-scheme-completer [] { ["x-api-key" "basic" "basic-credentials"] }
 
 # Completers for enum parameters
 def payout-speed-completer [] { ["INSTANT" "SAME_DAY" "STANDARD"] }
@@ -72,7 +82,7 @@ def payout-speed-completer [] { ["INSTANT" "SAME_DAY" "STANDARD"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account-holder-balance post-accountHolderBalance" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account-holder-balance create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -96,7 +106,7 @@ export def commands []: nothing -> table {
 #
 # POST /accountHolderBalance
 # operationId: post-accountHolderBalance
-export def "account-holder-balance post-accountHolderBalance" [
+export def "account-holder-balance create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -111,11 +121,11 @@ export def "account-holder-balance post-accountHolderBalance" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/accountHolderBalance")
-  let body = {"accountHolderCode": $account_holder_code} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"accountHolderCode": $account_holder_code} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get a list of transactions
@@ -123,7 +133,7 @@ export def "account-holder-balance post-accountHolderBalance" [
 # POST /accountHolderTransactionList
 # operationId: post-accountHolderTransactionList
 # --transactionListsPerAccount item shape: {accountCode: string, page: int}
-export def "account-holder-transaction-list post-accountHolderTransactionList" [
+export def "account-holder-transaction-list create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -134,17 +144,17 @@ export def "account-holder-transaction-list post-accountHolderTransactionList" [
   --dry-run(-n) # Return the request that would be sent without executing it
   account_holder_code: string # The code of the account holder that owns the account(s) of which retrieve the transaction list.
   --transaction-lists-per-account: list # A list of accounts to include in the transaction list. If left blank, the last fifty (50) transactions for all accounts of the account holder will be included. — item shape: {accountCode: string, page: int}
-  --transaction-statuses: list # A list of statuses to include in the transaction list. If left blank, all transactions will be included. >Permitted values: >* `PendingCredit` - a pending balance credit. >* `CreditFailed` - a pending credit failure; the balance will not be credited. >* `Credited` - a credited balance. >* `PendingDebit` - a pending balance debit (e.g., a refund). >* `CreditClosed` - a pending credit closed; the balance will not be credited. >* `CreditSuspended` - a pending credit closed; the balance will not be credited. >* `DebitFailed` - a pending debit failure; the balance will not be debited. >* `Debited` - a debited balance (e.g., a refund). >* `DebitReversedReceived` - a pending refund reversal. >* `DebitedReversed` - a reversed refund. >* `ChargebackReceived` - a received chargeback request. >* `Chargeback` - a processed chargeback. >* `ChargebackReversedReceived` - a pending chargeback reversal. >* `ChargebackReversed` - a reversed chargeback. >* `Converted` - converted. >* `ManualCorrected` - manual booking/adjustment by Adyen. >* `Payout` - a payout. >* `PayoutReversed` - a reversed payout. >* `PendingFundTransfer` - a pending transfer of funds from one account to another. >* `FundTransfer` - a transfer of funds from one account to another.
+  --transaction-statuses: list<string> # A list of statuses to include in the transaction list. If left blank, all transactions will be included. >Permitted values: >* `PendingCredit` - a pending balance credit. >* `CreditFailed` - a pending credit failure; the balance will not be credited. >* `Credited` - a credited balance. >* `PendingDebit` - a pending balance debit (e.g., a refund). >* `CreditClosed` - a pending credit closed; the balance will not be credited. >* `CreditSuspended` - a pending credit closed; the balance will not be credited. >* `DebitFailed` - a pending debit failure; the balance will not be debited. >* `Debited` - a debited balance (e.g., a refund). >* `DebitReversedReceived` - a pending refund reversal. >* `DebitedReversed` - a reversed refund. >* `ChargebackReceived` - a received chargeback request. >* `Chargeback` - a processed chargeback. >* `ChargebackReversedReceived` - a pending chargeback reversal. >* `ChargebackReversed` - a reversed chargeback. >* `Converted` - converted. >* `ManualCorrected` - manual booking/adjustment by Adyen. >* `Payout` - a payout. >* `PayoutReversed` - a reversed payout. >* `PendingFundTransfer` - a pending transfer of funds from one account to another. >* `FundTransfer` - a transfer of funds from one account to another.
 ]: any -> record<accountTransactionLists: table<accountCode: string, hasNextPage: bool, transactions: list>, invalidFields: table<errorCode: int, errorDescription: string, fieldType: record>, pspReference: string, resultCode: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/accountHolderTransactionList")
-  let body = {"accountHolderCode": $account_holder_code, "transactionListsPerAccount": $transaction_lists_per_account, "transactionStatuses": $transaction_statuses} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"accountHolderCode": $account_holder_code, "transactionListsPerAccount": $transaction_lists_per_account, "transactionStatuses": $transaction_statuses} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Send a direct debit request
@@ -153,7 +163,7 @@ export def "account-holder-transaction-list post-accountHolderTransactionList" [
 # operationId: post-debitAccountHolder
 # --amount shape: {currency: string, value: int}
 # --splits item shape: {account?: string, amount: record, description?: string, reference?: string, type: "BalanceAccount"|"Commission"|"Default"|"MarketPlace"|"PaymentFee"|"Remainder"|"Surcharge"|"Tip"|"VAT"|"Verification"}
-export def "debit-account-holder post-debitAccountHolder" [
+export def "debit-account-holder create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -165,7 +175,7 @@ export def "debit-account-holder post-debitAccountHolder" [
   account_holder_code: string # The code of the account holder.
   amount: record # shape: {currency: string, value: int}
   bank_account_uuid: string # The Adyen-generated unique alphanumeric identifier (UUID) of the account holder's bank account.
-  --description: string # A description of the direct debit. Maximum length: 35 characters.  Allowed characters: **a-z**, **A-Z**, **0-9**, and special characters **/?:().,'+ ";**.
+  --description: string # A description of the direct debit. Maximum length: 35 characters. Allowed characters: **a-z**, **A-Z**, **0-9**, and special characters **/?:().,'+ ";**.
   merchant_account: string # Your merchant account.
   splits: list # Contains instructions on how to split the funds between the accounts in your platform. The request must have at least one split item. — item shape: {account?: string, amount: record, description?: string, reference?: string, type: "BalanceAccount"|"Commission"|"Default"|"MarketPlace"|"PaymentFee"|"Remainder"|"Surcharge"|"Tip"|"VAT"|"Verification"}
 ]: any -> record<accountHolderCode: string, bankAccountUUID: string, invalidFields: table<errorCode: int, errorDescription: string, fieldType: record>, merchantReferences: list<string>, pspReference: string, resultCode: string> {
@@ -173,11 +183,11 @@ export def "debit-account-holder post-debitAccountHolder" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/debitAccountHolder")
-  let body = {"accountHolderCode": $account_holder_code, "amount": $amount, "bankAccountUUID": $bank_account_uuid, "description": $description, "merchantAccount": $merchant_account, "splits": $splits} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"accountHolderCode": $account_holder_code, "amount": $amount, "bankAccountUUID": $bank_account_uuid, "description": $description, "merchantAccount": $merchant_account, "splits": $splits} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Pay out from an account to the account holder
@@ -185,7 +195,7 @@ export def "debit-account-holder post-debitAccountHolder" [
 # POST /payoutAccountHolder
 # operationId: post-payoutAccountHolder
 # --amount shape: {currency: string, value: int}
-export def "payout-account-holder post-payoutAccountHolder" [
+export def "payout-account-holder create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -207,11 +217,11 @@ export def "payout-account-holder post-payoutAccountHolder" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/payoutAccountHolder")
-  let body = {"accountCode": $account_code, "accountHolderCode": $account_holder_code, "amount": $amount, "bankAccountUUID": $bank_account_uuid, "description": $description, "merchantReference": $merchant_reference, "payoutMethodCode": $payout_method_code, "payoutSpeed": $payout_speed} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"accountCode": $account_code, "accountHolderCode": $account_holder_code, "amount": $amount, "bankAccountUUID": $bank_account_uuid, "description": $description, "merchantReference": $merchant_reference, "payoutMethodCode": $payout_method_code, "payoutSpeed": $payout_speed} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Refund a funds transfer
@@ -219,7 +229,7 @@ export def "payout-account-holder post-payoutAccountHolder" [
 # POST /refundFundsTransfer
 # operationId: post-refundFundsTransfer
 # --amount shape: {currency: string, value: int}
-export def "refund-funds-transfer post-refundFundsTransfer" [
+export def "refund-funds-transfer create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -236,18 +246,18 @@ export def "refund-funds-transfer post-refundFundsTransfer" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/refundFundsTransfer")
-  let body = {"amount": $amount, "merchantReference": $merchant_reference, "originalReference": $original_reference} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"amount": $amount, "merchantReference": $merchant_reference, "originalReference": $original_reference} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Refund all transactions of an account since the most recent payout
 #
 # POST /refundNotPaidOutTransfers
 # operationId: post-refundNotPaidOutTransfers
-export def "refund-not-paid-out-transfers post-refundNotPaidOutTransfers" [
+export def "refund-not-paid-out-transfers create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -263,18 +273,18 @@ export def "refund-not-paid-out-transfers post-refundNotPaidOutTransfers" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/refundNotPaidOutTransfers")
-  let body = {"accountCode": $account_code, "accountHolderCode": $account_holder_code} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"accountCode": $account_code, "accountHolderCode": $account_holder_code} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Designate a beneficiary account and transfer the benefactor's current balance
 #
 # POST /setupBeneficiary
 # operationId: post-setupBeneficiary
-export def "setup-beneficiary post-setupBeneficiary" [
+export def "setup-beneficiary create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -291,11 +301,11 @@ export def "setup-beneficiary post-setupBeneficiary" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/setupBeneficiary")
-  let body = {"destinationAccountCode": $destination_account_code, "merchantReference": $merchant_reference, "sourceAccountCode": $source_account_code} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"destinationAccountCode": $destination_account_code, "merchantReference": $merchant_reference, "sourceAccountCode": $source_account_code} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Transfer funds between platform accounts
@@ -303,7 +313,7 @@ export def "setup-beneficiary post-setupBeneficiary" [
 # POST /transferFunds
 # operationId: post-transferFunds
 # --amount shape: {currency: string, value: int}
-export def "transfer-funds post-transferFunds" [
+export def "transfer-funds create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -322,9 +332,9 @@ export def "transfer-funds post-transferFunds" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transferFunds")
-  let body = {"amount": $amount, "destinationAccountCode": $destination_account_code, "merchantReference": $merchant_reference, "sourceAccountCode": $source_account_code, "transferCode": $transfer_code} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"amount": $amount, "destinationAccountCode": $destination_account_code, "merchantReference": $merchant_reference, "sourceAccountCode": $source_account_code, "transferCode": $transfer_code} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

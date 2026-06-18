@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -184,7 +193,7 @@ export def "contacts get" [
 # POST /contacts
 #
 # operationId: ContactsPOST
-export def "contacts post" [
+export def "contacts create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -236,7 +245,7 @@ export def "hooks get" [
 # POST /hooks
 #
 # operationId: HooksPOST
-export def "hooks post" [
+export def "hooks create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -263,7 +272,7 @@ export def "hooks post" [
 # POST /lookup
 #
 # operationId: Lookup
-export def "lookup post" [
+export def "lookup create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -273,7 +282,7 @@ export def "lookup post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --type: string # Allowed values are "cnam", "format", "hlr" and "mnp".
-  --number: list # The phone number to look up.
+  --number: list<string> # The phone number to look up.
   --json: string # Determines whether the response shall be returned in JSON format. Does not work with type "format".
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -288,7 +297,7 @@ export def "lookup post" [
 # POST /lookup/cnam
 #
 # operationId: LookupCnam
-export def "lookup-cnam post" [
+export def "lookup-cnam create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -297,7 +306,7 @@ export def "lookup-cnam post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --number: list # The phone number to look up.
+  --number: list<string> # The phone number to look up.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -311,7 +320,7 @@ export def "lookup-cnam post" [
 # POST /lookup/format
 #
 # operationId: LookupFormat
-export def "lookup-format post" [
+export def "lookup-format create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -320,7 +329,7 @@ export def "lookup-format post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --number: list # The phone number to look up.
+  --number: list<string> # The phone number to look up.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -334,7 +343,7 @@ export def "lookup-format post" [
 # POST /lookup/hlr
 #
 # operationId: LookupHlr
-export def "lookup-hlr post" [
+export def "lookup-hlr create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -343,7 +352,7 @@ export def "lookup-hlr post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --number: list # The phone number to look up.
+  --number: list<string> # The phone number to look up.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -357,7 +366,7 @@ export def "lookup-hlr post" [
 # POST /lookup/mnp
 #
 # operationId: LookupMnp
-export def "lookup-mnp post" [
+export def "lookup-mnp create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -366,7 +375,7 @@ export def "lookup-mnp post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --number: list # The phone number to look up.
+  --number: list<string> # The phone number to look up.
   --json: string # Determines whether the response shall be returned in JSON format.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -406,7 +415,7 @@ export def "pricing get" [
 # POST /sms
 #
 # operationId: Sms
-export def "sms post" [
+export def "sms create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -492,7 +501,7 @@ export def "validate-for-voice validate" [
 # POST /voice
 #
 # operationId: Voice
-export def "voice post" [
+export def "voice create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

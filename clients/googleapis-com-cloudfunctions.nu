@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -73,7 +82,7 @@ def environment-completer [] { ["ENVIRONMENT_UNSPECIFIED" "GEN_1" "GEN_2"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "projects cloudfunctionsprojectslocationsfunctionsdelete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "projects delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -97,7 +106,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /v2/{name}
 # operationId: cloudfunctions.projects.locations.functions.delete
-export def "projects cloudfunctionsprojectslocationsfunctionsdelete" [
+export def "projects delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -122,7 +131,7 @@ export def "projects cloudfunctionsprojectslocationsfunctionsdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v2/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v2/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -132,7 +141,7 @@ export def "projects cloudfunctionsprojectslocationsfunctionsdelete" [
 #
 # GET /v2/{name}
 # operationId: cloudfunctions.projects.locations.operations.get
-export def "projects cloudfunctionsprojectslocationsoperationsget" [
+export def "projects get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -157,7 +166,7 @@ export def "projects cloudfunctionsprojectslocationsoperationsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v2/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v2/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -169,9 +178,9 @@ export def "projects cloudfunctionsprojectslocationsoperationsget" [
 # operationId: cloudfunctions.projects.locations.functions.patch
 # --buildConfig shape: {dockerRegistry?: "DOCKER_REGISTRY_UNSPECIFIED"|"CONTAINER_REGISTRY"|"ARTIFACT_REGISTRY", dockerRepository?: string, entryPoint?: string, environmentVariables?: record, runtime?: string, source?: record, sourceProvenance?: record, workerPool?: string}
 # --eventTrigger shape: {channel?: string, eventFilters?: list, eventType?: string, pubsubTopic?: string, retryPolicy?: "RETRY_POLICY_UNSPECIFIED"|"RETRY_POLICY_DO_NOT_RETRY"|"RETRY_POLICY_RETRY", serviceAccountEmail?: string, triggerRegion?: string}
-# --serviceConfig shape: {allTrafficOnLatestRevision?: bool, availableCpu?: string, availableMemory?: string, environmentVariables?: record, ingressSettings?: "INGRESS_SETTINGS_UNSPECIFIED"|"ALLOW_ALL"|"ALLOW_INTERNAL_ONLY"|"ALLOW_INTERNAL_AND_GCLB", maxInstanceCount?: int, maxInstanceRequestConcurrency?: int, minInstanceCount?: int, secretEnvironmentVariables?: list, secretVolumes?: list, securityLevel?: "SECURITY_LEVEL_UNSPECIFIED"|"SECURE_ALWAYS"|"SECURE_OPTIONAL", serviceAccountEmail?: string, timeoutSeconds?: int, vpcConnector?: string, vpcConnectorEgressSettings?: "VPC_CONNECTOR_EGRESS_SETTINGS_UNSPECIFIED"|"PRIVATE_RANGES_ONLY"|"ALL_TRAFFIC"}
+# --serviceConfig shape: {allTrafficOnLatestRevision?: bool, availableCpu?: string, availableMemory?: string, environmentVariables?: record, ingressSettings?: "INGRESS_SETTINGS_UNSPECIFIED"|"ALLOW_ALL"|"ALLOW_INTERNAL_ONLY"|"ALLOW_INTERNAL_AND_GCLB", maxInstanceCount?: int, maxInstanceRequestConcurrency?: int, minInstanceCount?: int, secretEnvironmentVariables?: list, secretVolumes?: list, securityLevel?: "SECURITY_LEVEL_UNSPECIFIED"|"SECURE_ALWAYS"|"SECURE_OPTIONAL", serviceAccountEmail?: string, timeoutSeconds?: int, ... (2 more fields)}
 # --stateMessages item shape: {message?: string, severity?: "SEVERITY_UNSPECIFIED"|"ERROR"|"WARNING"|"INFO", type?: string}
-export def "projects cloudfunctionsprojectslocationsfunctionspatch" [
+export def "projects update" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -200,25 +209,25 @@ export def "projects cloudfunctionsprojectslocationsfunctionspatch" [
   --kms-key-name: string # [Preview] Resource name of a KMS crypto key (managed by the user) used to encrypt/decrypt function resources. It must match the pattern `projects/{project}/locations/{location}/keyRings/{key_ring}/cryptoKeys/{crypto_key}`.
   --labels: record # Labels associated with this Cloud Function.
   --body-name: string # A user-defined name of the function. Function names must be unique globally and match pattern `projects/*/locations/*/functions/*`
-  --service-config: record # Describes the Service being deployed. Currently Supported : Cloud Run (fully managed). — shape: {allTrafficOnLatestRevision?: bool, availableCpu?: string, availableMemory?: string, environmentVariables?: record, ingressSettings?: "INGRESS_SETTINGS_UNSPECIFIED"|"ALLOW_ALL"|"ALLOW_INTERNAL_ONLY"|"ALLOW_INTERNAL_AND_GCLB", maxInstanceCount?: int, maxInstanceRequestConcurrency?: int, minInstanceCount?: int, secretEnvironmentVariables?: list, secretVolumes?: list, securityLevel?: "SECURITY_LEVEL_UNSPECIFIED"|"SECURE_ALWAYS"|"SECURE_OPTIONAL", serviceAccountEmail?: string, timeoutSeconds?: int, vpcConnector?: string, vpcConnectorEgressSettings?: "VPC_CONNECTOR_EGRESS_SETTINGS_UNSPECIFIED"|"PRIVATE_RANGES_ONLY"|"ALL_TRAFFIC"}
+  --service-config: record # Describes the Service being deployed. Currently Supported : Cloud Run (fully managed). — shape: {allTrafficOnLatestRevision?: bool, availableCpu?: string, availableMemory?: string, environmentVariables?: record, ingressSettings?: "INGRESS_SETTINGS_UNSPECIFIED"|"ALLOW_ALL"|"ALLOW_INTERNAL_ONLY"|"ALLOW_INTERNAL_AND_GCLB", maxInstanceCount?: int, maxInstanceRequestConcurrency?: int, minInstanceCount?: int, secretEnvironmentVariables?: list, secretVolumes?: list, securityLevel?: "SECURITY_LEVEL_UNSPECIFIED"|"SECURE_ALWAYS"|"SECURE_OPTIONAL", serviceAccountEmail?: string, timeoutSeconds?: int, ... (2 more fields)}
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v2/{name}") $qp)
-  let body = {"buildConfig": $build_config, "description": $description, "environment": $environment, "eventTrigger": $event_trigger, "kmsKeyName": $kms_key_name, "labels": $labels, "name": $body_name, "serviceConfig": $service_config} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v2/{name}") $qp)
+  let req_body = {"buildConfig": $build_config, "description": $description, "environment": $environment, "eventTrigger": $event_trigger, "kmsKeyName": $kms_key_name, "labels": $labels, "name": $body_name, "serviceConfig": $service_config} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists information about the supported locations for this service.
 #
 # GET /v2/{name}/locations
 # operationId: cloudfunctions.projects.locations.list
-export def "locations cloudfunctionsprojectslocationslist" [
+export def "locations list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -246,7 +255,7 @@ export def "locations cloudfunctionsprojectslocationslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v2/{name}/locations") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v2/{name}/locations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -256,7 +265,7 @@ export def "locations cloudfunctionsprojectslocationslist" [
 #
 # GET /v2/{name}/operations
 # operationId: cloudfunctions.projects.locations.operations.list
-export def "operations cloudfunctionsprojectslocationsoperationslist" [
+export def "operations list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -284,7 +293,7 @@ export def "operations cloudfunctionsprojectslocationsoperationslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v2/{name}/operations") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v2/{name}/operations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -294,7 +303,7 @@ export def "operations cloudfunctionsprojectslocationsoperationslist" [
 #
 # POST /v2/{name}:generateDownloadUrl
 # operationId: cloudfunctions.projects.locations.functions.generateDownloadUrl
-export def "projects cloudfunctionsprojectslocationsfunctionsgenerateDownloadUrl" [
+export def "projects generate-download-url" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -321,18 +330,19 @@ export def "projects cloudfunctionsprojectslocationsfunctionsgenerateDownloadUrl
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v2/{name}:generateDownloadUrl") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v2/{name}:generateDownloadUrl") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns a list of functions that belong to the requested project.
 #
 # GET /v2/{parent}/functions
 # operationId: cloudfunctions.projects.locations.functions.list
-export def "functions cloudfunctionsprojectslocationsfunctionslist" [
+export def "functions list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -361,7 +371,7 @@ export def "functions cloudfunctionsprojectslocationsfunctionslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v2/{parent}/functions") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v2/{parent}/functions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -373,9 +383,9 @@ export def "functions cloudfunctionsprojectslocationsfunctionslist" [
 # operationId: cloudfunctions.projects.locations.functions.create
 # --buildConfig shape: {dockerRegistry?: "DOCKER_REGISTRY_UNSPECIFIED"|"CONTAINER_REGISTRY"|"ARTIFACT_REGISTRY", dockerRepository?: string, entryPoint?: string, environmentVariables?: record, runtime?: string, source?: record, sourceProvenance?: record, workerPool?: string}
 # --eventTrigger shape: {channel?: string, eventFilters?: list, eventType?: string, pubsubTopic?: string, retryPolicy?: "RETRY_POLICY_UNSPECIFIED"|"RETRY_POLICY_DO_NOT_RETRY"|"RETRY_POLICY_RETRY", serviceAccountEmail?: string, triggerRegion?: string}
-# --serviceConfig shape: {allTrafficOnLatestRevision?: bool, availableCpu?: string, availableMemory?: string, environmentVariables?: record, ingressSettings?: "INGRESS_SETTINGS_UNSPECIFIED"|"ALLOW_ALL"|"ALLOW_INTERNAL_ONLY"|"ALLOW_INTERNAL_AND_GCLB", maxInstanceCount?: int, maxInstanceRequestConcurrency?: int, minInstanceCount?: int, secretEnvironmentVariables?: list, secretVolumes?: list, securityLevel?: "SECURITY_LEVEL_UNSPECIFIED"|"SECURE_ALWAYS"|"SECURE_OPTIONAL", serviceAccountEmail?: string, timeoutSeconds?: int, vpcConnector?: string, vpcConnectorEgressSettings?: "VPC_CONNECTOR_EGRESS_SETTINGS_UNSPECIFIED"|"PRIVATE_RANGES_ONLY"|"ALL_TRAFFIC"}
+# --serviceConfig shape: {allTrafficOnLatestRevision?: bool, availableCpu?: string, availableMemory?: string, environmentVariables?: record, ingressSettings?: "INGRESS_SETTINGS_UNSPECIFIED"|"ALLOW_ALL"|"ALLOW_INTERNAL_ONLY"|"ALLOW_INTERNAL_AND_GCLB", maxInstanceCount?: int, maxInstanceRequestConcurrency?: int, minInstanceCount?: int, secretEnvironmentVariables?: list, secretVolumes?: list, securityLevel?: "SECURITY_LEVEL_UNSPECIFIED"|"SECURE_ALWAYS"|"SECURE_OPTIONAL", serviceAccountEmail?: string, timeoutSeconds?: int, ... (2 more fields)}
 # --stateMessages item shape: {message?: string, severity?: "SEVERITY_UNSPECIFIED"|"ERROR"|"WARNING"|"INFO", type?: string}
-export def "functions cloudfunctionsprojectslocationsfunctionscreate" [
+export def "functions create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -404,25 +414,25 @@ export def "functions cloudfunctionsprojectslocationsfunctionscreate" [
   --kms-key-name: string # [Preview] Resource name of a KMS crypto key (managed by the user) used to encrypt/decrypt function resources. It must match the pattern `projects/{project}/locations/{location}/keyRings/{key_ring}/cryptoKeys/{crypto_key}`.
   --labels: record # Labels associated with this Cloud Function.
   --name: string # A user-defined name of the function. Function names must be unique globally and match pattern `projects/*/locations/*/functions/*`
-  --service-config: record # Describes the Service being deployed. Currently Supported : Cloud Run (fully managed). — shape: {allTrafficOnLatestRevision?: bool, availableCpu?: string, availableMemory?: string, environmentVariables?: record, ingressSettings?: "INGRESS_SETTINGS_UNSPECIFIED"|"ALLOW_ALL"|"ALLOW_INTERNAL_ONLY"|"ALLOW_INTERNAL_AND_GCLB", maxInstanceCount?: int, maxInstanceRequestConcurrency?: int, minInstanceCount?: int, secretEnvironmentVariables?: list, secretVolumes?: list, securityLevel?: "SECURITY_LEVEL_UNSPECIFIED"|"SECURE_ALWAYS"|"SECURE_OPTIONAL", serviceAccountEmail?: string, timeoutSeconds?: int, vpcConnector?: string, vpcConnectorEgressSettings?: "VPC_CONNECTOR_EGRESS_SETTINGS_UNSPECIFIED"|"PRIVATE_RANGES_ONLY"|"ALL_TRAFFIC"}
+  --service-config: record # Describes the Service being deployed. Currently Supported : Cloud Run (fully managed). — shape: {allTrafficOnLatestRevision?: bool, availableCpu?: string, availableMemory?: string, environmentVariables?: record, ingressSettings?: "INGRESS_SETTINGS_UNSPECIFIED"|"ALLOW_ALL"|"ALLOW_INTERNAL_ONLY"|"ALLOW_INTERNAL_AND_GCLB", maxInstanceCount?: int, maxInstanceRequestConcurrency?: int, minInstanceCount?: int, secretEnvironmentVariables?: list, secretVolumes?: list, securityLevel?: "SECURITY_LEVEL_UNSPECIFIED"|"SECURE_ALWAYS"|"SECURE_OPTIONAL", serviceAccountEmail?: string, timeoutSeconds?: int, ... (2 more fields)}
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "functionId" $function_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v2/{parent}/functions") $qp)
-  let body = {"buildConfig": $build_config, "description": $description, "environment": $environment, "eventTrigger": $event_trigger, "kmsKeyName": $kms_key_name, "labels": $labels, "name": $name, "serviceConfig": $service_config} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v2/{parent}/functions") $qp)
+  let req_body = {"buildConfig": $build_config, "description": $description, "environment": $environment, "eventTrigger": $event_trigger, "kmsKeyName": $kms_key_name, "labels": $labels, "name": $name, "serviceConfig": $service_config} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns a signed URL for uploading a function source code. For more information about the signed URL usage see: https://cloud.google.com/storage/docs/access-control/signed-urls. Once the function source code upload is complete, the used signed URL should be provided in CreateFunction or UpdateFunction request as a reference to the function source code. When uploading source code to the generated signed URL, please follow these restrictions: * Source file type should be a zip file. * No credentials should be attached - the signed URLs provide access to the target bucket using internal service identity; if credentials were attached, the identity from the credentials would be used, but that identity does not have permissions to upload files to the URL. When making a HTTP PUT request, these two headers need to be specified: * `content-type: application/zip` And this header SHOULD NOT be specified: * `Authorization: Bearer YOUR_TOKEN`
 #
 # POST /v2/{parent}/functions:generateUploadUrl
 # operationId: cloudfunctions.projects.locations.functions.generateUploadUrl
-export def "functions-generate-upload-url cloudfunctionsprojectslocationsfunctionsgenerateUploadUrl" [
+export def "functions-generate-upload-url generate" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -449,19 +459,19 @@ export def "functions-generate-upload-url cloudfunctionsprojectslocationsfunctio
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v2/{parent}/functions:generateUploadUrl") $qp)
-  let body = {"kmsKeyName": $kms_key_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v2/{parent}/functions:generateUploadUrl") $qp)
+  let req_body = {"kmsKeyName": $kms_key_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns a list of runtimes that are supported for the requested project.
 #
 # GET /v2/{parent}/runtimes
 # operationId: cloudfunctions.projects.locations.runtimes.list
-export def "runtimes cloudfunctionsprojectslocationsruntimeslist" [
+export def "runtimes list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -487,7 +497,7 @@ export def "runtimes cloudfunctionsprojectslocationsruntimeslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v2/{parent}/runtimes") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v2/{parent}/runtimes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -497,7 +507,7 @@ export def "runtimes cloudfunctionsprojectslocationsruntimeslist" [
 #
 # GET /v2/{resource}:getIamPolicy
 # operationId: cloudfunctions.projects.locations.functions.getIamPolicy
-export def "projects cloudfunctionsprojectslocationsfunctionsgetIamPolicy" [
+export def "projects get-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -523,7 +533,7 @@ export def "projects cloudfunctionsprojectslocationsfunctionsgetIamPolicy" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "options.requestedPolicyVersion" $options_requested_policy_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource: $resource} | format pattern "/v2/{resource}:getIamPolicy") $qp)
+  let full_url = (build-url $base ({resource: (encode-path-segment $resource)} | format pattern "/v2/{resource}:getIamPolicy") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -534,7 +544,7 @@ export def "projects cloudfunctionsprojectslocationsfunctionsgetIamPolicy" [
 # POST /v2/{resource}:setIamPolicy
 # operationId: cloudfunctions.projects.locations.functions.setIamPolicy
 # --policy shape: {auditConfigs?: list, bindings?: list, etag?: string, version?: int}
-export def "projects cloudfunctionsprojectslocationsfunctionssetIamPolicy" [
+export def "projects update-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -562,19 +572,19 @@ export def "projects cloudfunctionsprojectslocationsfunctionssetIamPolicy" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource: $resource} | format pattern "/v2/{resource}:setIamPolicy") $qp)
-  let body = {"policy": $policy, "updateMask": $update_mask} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({resource: (encode-path-segment $resource)} | format pattern "/v2/{resource}:setIamPolicy") $qp)
+  let req_body = {"policy": $policy, "updateMask": $update_mask} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns permissions that a caller has on the specified resource. If the resource does not exist, this will return an empty set of permissions, not a `NOT_FOUND` error. Note: This operation is designed to be used for building permission-aware UIs and command-line tools, not for authorization checking. This operation may "fail open" without warning.
 #
 # POST /v2/{resource}:testIamPermissions
 # operationId: cloudfunctions.projects.locations.functions.testIamPermissions
-export def "projects cloudfunctionsprojectslocationsfunctionstestIamPermissions" [
+export def "projects test-iam-permissions" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -595,16 +605,16 @@ export def "projects cloudfunctionsprojectslocationsfunctionstestIamPermissions"
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --permissions: list # The set of permissions to check for the `resource`. Permissions with wildcards (such as `*` or `storage.*`) are not allowed. For more information see [IAM Overview](https://cloud.google.com/iam/docs/overview#permissions).
+  --permissions: list<string> # The set of permissions to check for the `resource`. Permissions with wildcards (such as `*` or `storage.*`) are not allowed. For more information see [IAM Overview](https://cloud.google.com/iam/docs/overview#permissions).
 ]: any -> record<permissions: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource: $resource} | format pattern "/v2/{resource}:testIamPermissions") $qp)
-  let body = {"permissions": $permissions} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({resource: (encode-path-segment $resource)} | format pattern "/v2/{resource}:testIamPermissions") $qp)
+  let req_body = {"permissions": $permissions} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -106,7 +115,7 @@ export def "reference-data-locations-pois get-points-of-interest" [
   --radius: int # radius of the search in Kilometer. Can be from 0 to 20, default value is 1 Km. (default: 1)
   --page-limit: int # maximum items in one page (default: 10)
   --page-offset: int # start index of the requested page (default: 0)
-  --categories: list # category of the location.   Multiple value can be selected using a comma i.e. SIGHTS, SHOPPING
+  --categories: list<string> # category of the location. Multiple value can be selected using a comma i.e. SIGHTS, SHOPPING
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -136,7 +145,7 @@ export def "reference-data-locations-pois-by-square get-points-of-interest" [
   --east: float # Longitude east of bounding box (decimal coordinates) (format: double, e.g. 2.177181)
   --page-limit: int # maximum items in one page (default: 10)
   --page-offset: int # start index of the requested page (default: 0)
-  --categories: list # category of the location.   Multiple value can be selected using a comma i.e. SIGHTS, SHOPPING
+  --categories: list<string> # category of the location. Multiple value can be selected using a comma i.e. SIGHTS, SHOPPING
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -164,7 +173,7 @@ export def "reference-data-locations-pois get-point-of-interest" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({pois_id: $pois_id} | format pattern "/reference-data/locations/pois/{pois_id}"))
+  let full_url = (build-url $base ({pois_id: (encode-path-segment $pois_id)} | format pattern "/reference-data/locations/pois/{pois_id}"))
   let accept_val = "application/vnd.amadeus+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

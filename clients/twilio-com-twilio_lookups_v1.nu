@@ -12,6 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
   match $scheme {
     "basic" => { {headers: {Authorization: $"Basic ($token_val)"}, query: ""} }
+    "basic-credentials" => { {headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: ""} }
     "none" => { {headers: {}, query: ""} }
     _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
   }
@@ -33,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
     "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
     _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -63,7 +73,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 }
 
 def base-url-completer [] { ["https://lookups.twilio.com"] }
-def auth-scheme-completer [] { ["basic"] }
+def auth-scheme-completer [] { ["basic" "basic-credentials"] }
 
 
 # List all available API commands with their parameters
@@ -103,14 +113,14 @@ export def "phone-numbers get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --country-code: string # The [ISO country code](https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2) of the phone number to fetch. This is used to specify the country when the phone number is provided in a national format.
-  --type: list # The type of information to return. Can be: `carrier` or `caller-name`. The default is null.  Carrier information costs $0.005 per phone number looked up.  Caller Name information is currently available only in the US and costs $0.01 per phone number looked up.  To retrieve both types on information, specify this parameter twice; once with `carrier` and once with `caller-name` as the value.
-  --add-ons: list # The `unique_name` of an Add-on you would like to invoke. Can be the `unique_name` of an Add-on that is installed on your account. You can specify multiple instances of this parameter to invoke multiple Add-ons. For more information about  Add-ons, see the [Add-ons documentation](https://www.twilio.com/docs/add-ons).
+  --type: list<string> # The type of information to return. Can be: `carrier` or `caller-name`. The default is null. Carrier information costs $0.005 per phone number looked up. Caller Name information is currently available only in the US and costs $0.01 per phone number looked up. To retrieve both types on information, specify this parameter twice; once with `carrier` and once with `caller-name` as the value.
+  --add-ons: list<string> # The `unique_name` of an Add-on you would like to invoke. Can be the `unique_name` of an Add-on that is installed on your account. You can specify multiple instances of this parameter to invoke multiple Add-ons. For more information about Add-ons, see the [Add-ons documentation](https://www.twilio.com/docs/add-ons).
   --add-ons-data: record # Data specific to the add-on you would like to invoke. The content and format of this value depends on the add-on. (format: prefixed-collapsible-map-AddOns)
 ]: nothing -> record<add_ons: any, caller_name: any, carrier: any, country_code: string, national_format: string, phone_number: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://lookups.twilio.com")
   let qp = [(serialize-qp "CountryCode" $country_code "scalar") (serialize-qp "Type" $type "multi") (serialize-qp "AddOns" $add_ons "multi") (serialize-qp "AddOnsData" $add_ons_data "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({phone_number: $phone_number} | format pattern "/v1/PhoneNumbers/{phone_number}") $qp)
+  let full_url = (build-url $base ({phone_number: (encode-path-segment $phone_number)} | format pattern "/v1/PhoneNumbers/{phone_number}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

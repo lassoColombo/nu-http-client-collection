@@ -12,6 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
   match $scheme {
     "basic" => { {headers: {Authorization: $"Basic ($token_val)"}, query: ""} }
+    "basic-credentials" => { {headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: ""} }
     "none" => { {headers: {}, query: ""} }
     _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
   }
@@ -33,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
     "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
     _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -63,7 +73,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 }
 
 def base-url-completer [] { ["http://localhost/api/v2" ""] }
-def auth-scheme-completer [] { ["basic"] }
+def auth-scheme-completer [] { ["basic" "basic-credentials"] }
 
 # Completers for enum parameters
 def status-completer [] { ["active" "inactive"] }
@@ -125,10 +135,10 @@ export def "routes get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/")
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -155,10 +165,10 @@ export def "authorizations list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "userID" $user_id "scalar") (serialize-qp "user" $user "scalar") (serialize-qp "orgID" $org_id "scalar") (serialize-qp "org" $org "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/authorizations" $qp)
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -180,20 +190,20 @@ export def "authorizations create" [
   --description: string # A description of the token.
   --status: string@status-completer # If inactive the token is inactive and requests using the token will be rejected. (default: active)
   org_id: string # ID of org that authorization is scoped to.
-  permissions: list # List of permissions for an auth.  An auth must have at least one Permission. — item shape: {action: "read"|"write", resource: record}
+  permissions: list # List of permissions for an auth. An auth must have at least one Permission. — item shape: {action: "read"|"write", resource: record}
   --user-id: string # ID of user that authorization is scoped to.
 ]: any -> record<description: string, status: string, createdAt: string, id: string, links: record<self: string, user: string>, org: string, orgID: string, permissions: table<action: string, resource: record>, token: string, updatedAt: string, user: string, userID: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/authorizations")
-  let body = {"description": $description, "status": $status, "orgID": $org_id, "permissions": $permissions, "userID": $user_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"description": $description, "status": $status, "orgID": $org_id, "permissions": $permissions, "userID": $user_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete an authorization
@@ -214,11 +224,11 @@ export def "authorizations delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({auth_id: $auth_id} | format pattern "/authorizations/{auth_id}"))
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({auth_id: (encode-path-segment $auth_id)} | format pattern "/authorizations/{auth_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -240,11 +250,11 @@ export def "authorizations get" [
 ]: nothing -> record<description: string, status: string, createdAt: string, id: string, links: record<self: string, user: string>, org: string, orgID: string, permissions: table<action: string, resource: record>, token: string, updatedAt: string, user: string, userID: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({auth_id: $auth_id} | format pattern "/authorizations/{auth_id}"))
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({auth_id: (encode-path-segment $auth_id)} | format pattern "/authorizations/{auth_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -269,14 +279,14 @@ export def "authorizations update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({auth_id: $auth_id} | format pattern "/authorizations/{auth_id}"))
-  let body = {"description": $description, "status": $status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({auth_id: (encode-path-segment $auth_id)} | format pattern "/authorizations/{auth_id}"))
+  let req_body = {"description": $description, "status": $status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List all buckets
@@ -305,10 +315,10 @@ export def "buckets list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "after" $after "scalar") (serialize-qp "org" $org "scalar") (serialize-qp "orgID" $org_id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/buckets" $qp)
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -330,7 +340,7 @@ export def "buckets create" [
   --description: string
   name: string
   org_id: string
-  retention_rules: list # Rules to expire or retain data.  No rules means data never expires. — item shape: {everySeconds: int, shardGroupDurationSeconds?: int, type: "expire"}
+  retention_rules: list # Rules to expire or retain data. No rules means data never expires. — item shape: {everySeconds: int, shardGroupDurationSeconds?: int, type: "expire"}
   --rp: string
   --schema-type: string@schema-type-completer
 ]: any -> record<createdAt: string, description: string, id: string, labels: table<id: string, name: string, orgID: string, properties: record>, links: record<labels: string, members: string, org: string, owners: string, self: string, write: string>, name: string, orgID: string, retentionRules: table<everySeconds: int, shardGroupDurationSeconds: int, type: string>, rp: string, schemaType: string, type: string, updatedAt: string> {
@@ -338,13 +348,13 @@ export def "buckets create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/buckets")
-  let body = {"description": $description, "name": $name, "orgID": $org_id, "retentionRules": $retention_rules, "rp": $rp, "schemaType": $schema_type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"description": $description, "name": $name, "orgID": $org_id, "retentionRules": $retention_rules, "rp": $rp, "schemaType": $schema_type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a bucket
@@ -365,11 +375,11 @@ export def "buckets delete" [
 ]: nothing -> record<code: string, err: string, message: string, op: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({bucket_id: $bucket_id} | format pattern "/buckets/{bucket_id}"))
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({bucket_id: (encode-path-segment $bucket_id)} | format pattern "/buckets/{bucket_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -391,11 +401,11 @@ export def "buckets get" [
 ]: nothing -> record<createdAt: string, description: string, id: string, labels: table<id: string, name: string, orgID: string, properties: record>, links: record<labels: string, members: string, org: string, owners: string, self: string, write: string>, name: string, orgID: string, retentionRules: table<everySeconds: int, shardGroupDurationSeconds: int, type: string>, rp: string, schemaType: string, type: string, updatedAt: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({bucket_id: $bucket_id} | format pattern "/buckets/{bucket_id}"))
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({bucket_id: (encode-path-segment $bucket_id)} | format pattern "/buckets/{bucket_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -422,14 +432,14 @@ export def "buckets update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({bucket_id: $bucket_id} | format pattern "/buckets/{bucket_id}"))
-  let body = {"description": $description, "name": $name, "retentionRules": $retention_rules} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({bucket_id: (encode-path-segment $bucket_id)} | format pattern "/buckets/{bucket_id}"))
+  let req_body = {"description": $description, "name": $name, "retentionRules": $retention_rules} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List all labels for a bucket
@@ -450,11 +460,11 @@ export def "buckets-labels get" [
 ]: nothing -> record<labels: table<id: string, name: string, orgID: string, properties: record>, links: record<next: string, prev: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({bucket_id: $bucket_id} | format pattern "/buckets/{bucket_id}/labels"))
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({bucket_id: (encode-path-segment $bucket_id)} | format pattern "/buckets/{bucket_id}/labels"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -478,14 +488,14 @@ export def "buckets-labels create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({bucket_id: $bucket_id} | format pattern "/buckets/{bucket_id}/labels"))
-  let body = {"labelID": $label_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({bucket_id: (encode-path-segment $bucket_id)} | format pattern "/buckets/{bucket_id}/labels"))
+  let req_body = {"labelID": $label_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a label from a bucket
@@ -507,11 +517,11 @@ export def "buckets-labels delete" [
 ]: nothing -> record<code: string, err: string, message: string, op: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({bucket_id: $bucket_id, label_id: $label_id} | format pattern "/buckets/{bucket_id}/labels/{label_id}"))
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({bucket_id: (encode-path-segment $bucket_id), label_id: (encode-path-segment $label_id)} | format pattern "/buckets/{bucket_id}/labels/{label_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -533,11 +543,11 @@ export def "buckets-members get" [
 ]: nothing -> record<links: record<self: string>, users: table<id: string, links: record, name: string, oauthID: string, status: string, role: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({bucket_id: $bucket_id} | format pattern "/buckets/{bucket_id}/members"))
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({bucket_id: (encode-path-segment $bucket_id)} | format pattern "/buckets/{bucket_id}/members"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -562,14 +572,14 @@ export def "buckets-members create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({bucket_id: $bucket_id} | format pattern "/buckets/{bucket_id}/members"))
-  let body = {"id": $id, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({bucket_id: (encode-path-segment $bucket_id)} | format pattern "/buckets/{bucket_id}/members"))
+  let req_body = {"id": $id, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Remove a member from a bucket
@@ -591,11 +601,11 @@ export def "buckets-members delete" [
 ]: nothing -> record<code: string, err: string, message: string, op: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({bucket_id: $bucket_id, user_id: $user_id} | format pattern "/buckets/{bucket_id}/members/{user_id}"))
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({bucket_id: (encode-path-segment $bucket_id), user_id: (encode-path-segment $user_id)} | format pattern "/buckets/{bucket_id}/members/{user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -617,11 +627,11 @@ export def "buckets-owners get" [
 ]: nothing -> record<links: record<self: string>, users: table<id: string, links: record, name: string, oauthID: string, status: string, role: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({bucket_id: $bucket_id} | format pattern "/buckets/{bucket_id}/owners"))
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({bucket_id: (encode-path-segment $bucket_id)} | format pattern "/buckets/{bucket_id}/owners"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -646,14 +656,14 @@ export def "buckets-owners create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({bucket_id: $bucket_id} | format pattern "/buckets/{bucket_id}/owners"))
-  let body = {"id": $id, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({bucket_id: (encode-path-segment $bucket_id)} | format pattern "/buckets/{bucket_id}/owners"))
+  let req_body = {"id": $id, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Remove an owner from a bucket
@@ -675,11 +685,11 @@ export def "buckets-owners delete" [
 ]: nothing -> record<code: string, err: string, message: string, op: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({bucket_id: $bucket_id, user_id: $user_id} | format pattern "/buckets/{bucket_id}/owners/{user_id}"))
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({bucket_id: (encode-path-segment $bucket_id), user_id: (encode-path-segment $user_id)} | format pattern "/buckets/{bucket_id}/owners/{user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -705,10 +715,10 @@ export def "checks list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "orgID" $org_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/checks" $qp)
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -731,10 +741,11 @@ export def "checks create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/checks")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a check
@@ -755,11 +766,11 @@ export def "checks delete" [
 ]: nothing -> record<code: string, err: string, message: string, op: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({check_id: $check_id} | format pattern "/checks/{check_id}"))
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({check_id: (encode-path-segment $check_id)} | format pattern "/checks/{check_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -781,11 +792,11 @@ export def "checks get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({check_id: $check_id} | format pattern "/checks/{check_id}"))
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({check_id: (encode-path-segment $check_id)} | format pattern "/checks/{check_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -811,14 +822,14 @@ export def "checks update-by-checkID" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({check_id: $check_id} | format pattern "/checks/{check_id}"))
-  let body = {"description": $description, "name": $name, "status": $status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({check_id: (encode-path-segment $check_id)} | format pattern "/checks/{check_id}"))
+  let req_body = {"description": $description, "name": $name, "status": $status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update a check
@@ -841,13 +852,14 @@ export def "checks update-by-checkID-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({check_id: $check_id} | format pattern "/checks/{check_id}"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({check_id: (encode-path-segment $check_id)} | format pattern "/checks/{check_id}"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List all labels for a check
@@ -868,11 +880,11 @@ export def "checks-labels get" [
 ]: nothing -> record<labels: table<id: string, name: string, orgID: string, properties: record>, links: record<next: string, prev: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({check_id: $check_id} | format pattern "/checks/{check_id}/labels"))
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({check_id: (encode-path-segment $check_id)} | format pattern "/checks/{check_id}/labels"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -896,14 +908,14 @@ export def "checks-labels create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({check_id: $check_id} | format pattern "/checks/{check_id}/labels"))
-  let body = {"labelID": $label_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({check_id: (encode-path-segment $check_id)} | format pattern "/checks/{check_id}/labels"))
+  let req_body = {"labelID": $label_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete label from a check
@@ -925,11 +937,11 @@ export def "checks-labels delete" [
 ]: nothing -> record<code: string, err: string, message: string, op: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({check_id: $check_id, label_id: $label_id} | format pattern "/checks/{check_id}/labels/{label_id}"))
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({check_id: (encode-path-segment $check_id), label_id: (encode-path-segment $label_id)} | format pattern "/checks/{check_id}/labels/{label_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -951,11 +963,11 @@ export def "checks-query get" [
 ]: nothing -> record<flux: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({check_id: $check_id} | format pattern "/checks/{check_id}/query"))
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({check_id: (encode-path-segment $check_id)} | format pattern "/checks/{check_id}/query"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -977,7 +989,7 @@ export def "dashboards list" [
   --descending: oneof<nothing, bool> # default: false
   --owner: string # A user identifier. Returns only dashboards where this user has the `owner` role.
   --sort-by: string@sort-by-completer # The column to sort by.
-  --id: list # A list of dashboard identifiers. Returns only the listed dashboards. If both `id` and `owner` are specified, only `id` is used.
+  --id: list<string> # A list of dashboard identifiers. Returns only the listed dashboards. If both `id` and `owner` are specified, only `id` is used.
   --org-id: string # The identifier of the organization.
   --org: string # The name of the organization.
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
@@ -986,10 +998,10 @@ export def "dashboards list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "descending" $descending "scalar") (serialize-qp "owner" $owner "scalar") (serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "id" $id "multi") (serialize-qp "orgID" $org_id "scalar") (serialize-qp "org" $org "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dashboards" $qp)
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1015,13 +1027,13 @@ export def "dashboards create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dashboards")
-  let body = {"description": $description, "name": $name, "orgID": $org_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"description": $description, "name": $name, "orgID": $org_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a dashboard
@@ -1042,11 +1054,11 @@ export def "dashboards delete" [
 ]: nothing -> record<code: string, err: string, message: string, op: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({dashboard_id: $dashboard_id} | format pattern "/dashboards/{dashboard_id}"))
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({dashboard_id: (encode-path-segment $dashboard_id)} | format pattern "/dashboards/{dashboard_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1070,11 +1082,11 @@ export def "dashboards get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "include" $include "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({dashboard_id: $dashboard_id} | format pattern "/dashboards/{dashboard_id}") $qp)
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({dashboard_id: (encode-path-segment $dashboard_id)} | format pattern "/dashboards/{dashboard_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1101,14 +1113,14 @@ export def "dashboards update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({dashboard_id: $dashboard_id} | format pattern "/dashboards/{dashboard_id}"))
-  let body = {"cells": $cells, "description": $description, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({dashboard_id: (encode-path-segment $dashboard_id)} | format pattern "/dashboards/{dashboard_id}"))
+  let req_body = {"cells": $cells, "description": $description, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create a dashboard cell
@@ -1136,14 +1148,14 @@ export def "dashboards-cells create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({dashboard_id: $dashboard_id} | format pattern "/dashboards/{dashboard_id}/cells"))
-  let body = {"h": $h, "name": $name, "usingView": $using_view, "w": $w, "x": $x, "y": $y} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({dashboard_id: (encode-path-segment $dashboard_id)} | format pattern "/dashboards/{dashboard_id}/cells"))
+  let req_body = {"h": $h, "name": $name, "usingView": $using_view, "w": $w, "x": $x, "y": $y} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Replace cells in a dashboard
@@ -1166,13 +1178,14 @@ export def "dashboards-cells update-by-dashboardID" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({dashboard_id: $dashboard_id} | format pattern "/dashboards/{dashboard_id}/cells"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({dashboard_id: (encode-path-segment $dashboard_id)} | format pattern "/dashboards/{dashboard_id}/cells"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a dashboard cell
@@ -1194,11 +1207,11 @@ export def "dashboards-cells delete" [
 ]: nothing -> record<code: string, err: string, message: string, op: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({dashboard_id: $dashboard_id, cell_id: $cell_id} | format pattern "/dashboards/{dashboard_id}/cells/{cell_id}"))
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({dashboard_id: (encode-path-segment $dashboard_id), cell_id: (encode-path-segment $cell_id)} | format pattern "/dashboards/{dashboard_id}/cells/{cell_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1226,14 +1239,14 @@ export def "dashboards-cells update-by-dashboardID-cellID" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({dashboard_id: $dashboard_id, cell_id: $cell_id} | format pattern "/dashboards/{dashboard_id}/cells/{cell_id}"))
-  let body = {"h": $h, "w": $w, "x": $x, "y": $y} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({dashboard_id: (encode-path-segment $dashboard_id), cell_id: (encode-path-segment $cell_id)} | format pattern "/dashboards/{dashboard_id}/cells/{cell_id}"))
+  let req_body = {"h": $h, "w": $w, "x": $x, "y": $y} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve the view for a cell
@@ -1255,11 +1268,11 @@ export def "dashboards-cells-view get" [
 ]: nothing -> record<id: string, links: record<self: string>, name: string, properties: any> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({dashboard_id: $dashboard_id, cell_id: $cell_id} | format pattern "/dashboards/{dashboard_id}/cells/{cell_id}/view"))
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({dashboard_id: (encode-path-segment $dashboard_id), cell_id: (encode-path-segment $cell_id)} | format pattern "/dashboards/{dashboard_id}/cells/{cell_id}/view"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1286,14 +1299,14 @@ export def "dashboards-cells-view update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({dashboard_id: $dashboard_id, cell_id: $cell_id} | format pattern "/dashboards/{dashboard_id}/cells/{cell_id}/view"))
-  let body = {"name": $name, "properties": $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({dashboard_id: (encode-path-segment $dashboard_id), cell_id: (encode-path-segment $cell_id)} | format pattern "/dashboards/{dashboard_id}/cells/{cell_id}/view"))
+  let req_body = {"name": $name, "properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List all labels for a dashboard
@@ -1314,11 +1327,11 @@ export def "dashboards-labels get" [
 ]: nothing -> record<labels: table<id: string, name: string, orgID: string, properties: record>, links: record<next: string, prev: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({dashboard_id: $dashboard_id} | format pattern "/dashboards/{dashboard_id}/labels"))
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({dashboard_id: (encode-path-segment $dashboard_id)} | format pattern "/dashboards/{dashboard_id}/labels"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1342,14 +1355,14 @@ export def "dashboards-labels create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({dashboard_id: $dashboard_id} | format pattern "/dashboards/{dashboard_id}/labels"))
-  let body = {"labelID": $label_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({dashboard_id: (encode-path-segment $dashboard_id)} | format pattern "/dashboards/{dashboard_id}/labels"))
+  let req_body = {"labelID": $label_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a label from a dashboard
@@ -1371,11 +1384,11 @@ export def "dashboards-labels delete" [
 ]: nothing -> record<code: string, err: string, message: string, op: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({dashboard_id: $dashboard_id, label_id: $label_id} | format pattern "/dashboards/{dashboard_id}/labels/{label_id}"))
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({dashboard_id: (encode-path-segment $dashboard_id), label_id: (encode-path-segment $label_id)} | format pattern "/dashboards/{dashboard_id}/labels/{label_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1397,11 +1410,11 @@ export def "dashboards-members get" [
 ]: nothing -> record<links: record<self: string>, users: table<id: string, links: record, name: string, oauthID: string, status: string, role: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({dashboard_id: $dashboard_id} | format pattern "/dashboards/{dashboard_id}/members"))
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({dashboard_id: (encode-path-segment $dashboard_id)} | format pattern "/dashboards/{dashboard_id}/members"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1426,14 +1439,14 @@ export def "dashboards-members create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({dashboard_id: $dashboard_id} | format pattern "/dashboards/{dashboard_id}/members"))
-  let body = {"id": $id, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({dashboard_id: (encode-path-segment $dashboard_id)} | format pattern "/dashboards/{dashboard_id}/members"))
+  let req_body = {"id": $id, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Remove a member from a dashboard
@@ -1455,11 +1468,11 @@ export def "dashboards-members delete" [
 ]: nothing -> record<code: string, err: string, message: string, op: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({dashboard_id: $dashboard_id, user_id: $user_id} | format pattern "/dashboards/{dashboard_id}/members/{user_id}"))
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({dashboard_id: (encode-path-segment $dashboard_id), user_id: (encode-path-segment $user_id)} | format pattern "/dashboards/{dashboard_id}/members/{user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1481,11 +1494,11 @@ export def "dashboards-owners get" [
 ]: nothing -> record<links: record<self: string>, users: table<id: string, links: record, name: string, oauthID: string, status: string, role: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({dashboard_id: $dashboard_id} | format pattern "/dashboards/{dashboard_id}/owners"))
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({dashboard_id: (encode-path-segment $dashboard_id)} | format pattern "/dashboards/{dashboard_id}/owners"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1510,14 +1523,14 @@ export def "dashboards-owners create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({dashboard_id: $dashboard_id} | format pattern "/dashboards/{dashboard_id}/owners"))
-  let body = {"id": $id, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({dashboard_id: (encode-path-segment $dashboard_id)} | format pattern "/dashboards/{dashboard_id}/owners"))
+  let req_body = {"id": $id, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Remove an owner from a dashboard
@@ -1539,11 +1552,11 @@ export def "dashboards-owners delete" [
 ]: nothing -> record<code: string, err: string, message: string, op: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({dashboard_id: $dashboard_id, user_id: $user_id} | format pattern "/dashboards/{dashboard_id}/owners/{user_id}"))
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({dashboard_id: (encode-path-segment $dashboard_id), user_id: (encode-path-segment $user_id)} | format pattern "/dashboards/{dashboard_id}/owners/{user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1572,10 +1585,10 @@ export def "dbrps list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "orgID" $org_id "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "bucketID" $bucket_id "scalar") (serialize-qp "default" $default "scalar") (serialize-qp "db" $db "scalar") (serialize-qp "rp" $rp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dbrps" $qp)
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1605,13 +1618,13 @@ export def "dbrps create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dbrps")
-  let body = {"bucketID": $bucket_id, "database": $database, "default": $default, "links": $links, "org": $org, "orgID": $org_id, "retention_policy": $retention_policy} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"bucketID": $bucket_id, "database": $database, "default": $default, "links": $links, "org": $org, "orgID": $org_id, "retention_policy": $retention_policy} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a database retention policy
@@ -1634,11 +1647,11 @@ export def "dbrps delete" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "orgID" $org_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({dbrp_id: $dbrp_id} | format pattern "/dbrps/{dbrp_id}") $qp)
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({dbrp_id: (encode-path-segment $dbrp_id)} | format pattern "/dbrps/{dbrp_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1646,7 +1659,7 @@ export def "dbrps delete" [
 #
 # GET /dbrps/{dbrpID}
 # operationId: GetDBRPsID
-export def "dbrps get" [
+export def "dbrps get-dbr-ps" [
   dbrp_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1662,11 +1675,11 @@ export def "dbrps get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "orgID" $org_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({dbrp_id: $dbrp_id} | format pattern "/dbrps/{dbrp_id}") $qp)
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({dbrp_id: (encode-path-segment $dbrp_id)} | format pattern "/dbrps/{dbrp_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1695,14 +1708,14 @@ export def "dbrps update" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "orgID" $org_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({dbrp_id: $dbrp_id} | format pattern "/dbrps/{dbrp_id}") $qp)
-  let body = {"database": $database, "default": $default, "links": $links, "retention_policy": $retention_policy} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({dbrp_id: (encode-path-segment $dbrp_id)} | format pattern "/dbrps/{dbrp_id}") $qp)
+  let req_body = {"database": $database, "default": $default, "links": $links, "retention_policy": $retention_policy} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete time series data from InfluxDB
@@ -1732,13 +1745,13 @@ export def "delete create" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "org" $org "scalar") (serialize-qp "bucket" $bucket "scalar") (serialize-qp "orgID" $org_id "scalar") (serialize-qp "bucketID" $bucket_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/delete" $qp)
-  let body = {"predicate": $predicate, "start": $start, "stop": $stop} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"predicate": $predicate, "start": $start, "stop": $stop} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List all templates
@@ -1762,10 +1775,10 @@ export def "documents-templates list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "org" $org "scalar") (serialize-qp "orgID" $org_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/documents/templates" $qp)
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1785,7 +1798,7 @@ export def "documents-templates create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   content: record
-  --labels: list # An array of label IDs to be added as labels to the document.
+  --labels: list<string> # An array of label IDs to be added as labels to the document.
   meta: record # shape: {description?: string, name: string, templateID?: string, type?: string, version: string}
   --org: string # The organization Name. Specify either `orgID` or `org`.
   --org-id: string # The organization Name. Specify either `orgID` or `org`.
@@ -1794,13 +1807,13 @@ export def "documents-templates create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/documents/templates")
-  let body = {"content": $content, "labels": $labels, "meta": $meta, "org": $org, "orgID": $org_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"content": $content, "labels": $labels, "meta": $meta, "org": $org, "orgID": $org_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a template
@@ -1821,11 +1834,11 @@ export def "documents-templates delete" [
 ]: nothing -> record<code: string, err: string, message: string, op: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({template_id: $template_id} | format pattern "/documents/templates/{template_id}"))
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({template_id: (encode-path-segment $template_id)} | format pattern "/documents/templates/{template_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1847,11 +1860,11 @@ export def "documents-templates get" [
 ]: nothing -> record<content: record, id: string, labels: table<id: string, name: string, orgID: string, properties: record>, links: record<self: string>, meta: record<createdAt: string, description: string, name: string, templateID: string, type: string, updatedAt: string, version: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({template_id: $template_id} | format pattern "/documents/templates/{template_id}"))
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({template_id: (encode-path-segment $template_id)} | format pattern "/documents/templates/{template_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1877,14 +1890,14 @@ export def "documents-templates update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({template_id: $template_id} | format pattern "/documents/templates/{template_id}"))
-  let body = {"content": $content, "meta": $meta} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({template_id: (encode-path-segment $template_id)} | format pattern "/documents/templates/{template_id}"))
+  let req_body = {"content": $content, "meta": $meta} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List all labels for a template
@@ -1905,11 +1918,11 @@ export def "documents-templates-labels get" [
 ]: nothing -> record<labels: table<id: string, name: string, orgID: string, properties: record>, links: record<next: string, prev: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({template_id: $template_id} | format pattern "/documents/templates/{template_id}/labels"))
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({template_id: (encode-path-segment $template_id)} | format pattern "/documents/templates/{template_id}/labels"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1933,14 +1946,14 @@ export def "documents-templates-labels create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({template_id: $template_id} | format pattern "/documents/templates/{template_id}/labels"))
-  let body = {"labelID": $label_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({template_id: (encode-path-segment $template_id)} | format pattern "/documents/templates/{template_id}/labels"))
+  let req_body = {"labelID": $label_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a label from a template
@@ -1962,11 +1975,11 @@ export def "documents-templates-labels delete" [
 ]: nothing -> record<code: string, err: string, message: string, op: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({template_id: $template_id, label_id: $label_id} | format pattern "/documents/templates/{template_id}/labels/{label_id}"))
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({template_id: (encode-path-segment $template_id), label_id: (encode-path-segment $label_id)} | format pattern "/documents/templates/{template_id}/labels/{label_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1988,10 +2001,10 @@ export def "flags get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/flags")
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2013,10 +2026,10 @@ export def "health get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/health")
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2040,10 +2053,10 @@ export def "labels list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "orgID" $org_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/labels" $qp)
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2068,11 +2081,11 @@ export def "labels create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/labels")
-  let body = {"name": $name, "orgID": $org_id, "properties": $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"name": $name, "orgID": $org_id, "properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a label
@@ -2093,11 +2106,11 @@ export def "labels delete" [
 ]: nothing -> record<code: string, err: string, message: string, op: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({label_id: $label_id} | format pattern "/labels/{label_id}"))
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({label_id: (encode-path-segment $label_id)} | format pattern "/labels/{label_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2119,11 +2132,11 @@ export def "labels get" [
 ]: nothing -> record<label: record<id: string, name: string, orgID: string, properties: record>, links: record<next: string, prev: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({label_id: $label_id} | format pattern "/labels/{label_id}"))
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({label_id: (encode-path-segment $label_id)} | format pattern "/labels/{label_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2148,14 +2161,14 @@ export def "labels update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({label_id: $label_id} | format pattern "/labels/{label_id}"))
-  let body = {"name": $name, "properties": $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({label_id: (encode-path-segment $label_id)} | format pattern "/labels/{label_id}"))
+  let req_body = {"name": $name, "properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve the currently authenticated user
@@ -2176,10 +2189,10 @@ export def "me get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/me")
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2203,13 +2216,13 @@ export def "me-password update" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/me/password")
-  let body = {"password": $password} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"password": $password} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List all notification endpoints
@@ -2234,10 +2247,10 @@ export def "notification-endpoints list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "orgID" $org_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/notificationEndpoints" $qp)
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2260,10 +2273,11 @@ export def "notification-endpoints create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/notificationEndpoints")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a notification endpoint
@@ -2284,11 +2298,11 @@ export def "notification-endpoints delete" [
 ]: nothing -> record<code: string, err: string, message: string, op: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({endpoint_id: $endpoint_id} | format pattern "/notificationEndpoints/{endpoint_id}"))
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({endpoint_id: (encode-path-segment $endpoint_id)} | format pattern "/notificationEndpoints/{endpoint_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2310,11 +2324,11 @@ export def "notification-endpoints get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({endpoint_id: $endpoint_id} | format pattern "/notificationEndpoints/{endpoint_id}"))
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({endpoint_id: (encode-path-segment $endpoint_id)} | format pattern "/notificationEndpoints/{endpoint_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2340,14 +2354,14 @@ export def "notification-endpoints update-by-endpointID" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({endpoint_id: $endpoint_id} | format pattern "/notificationEndpoints/{endpoint_id}"))
-  let body = {"description": $description, "name": $name, "status": $status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({endpoint_id: (encode-path-segment $endpoint_id)} | format pattern "/notificationEndpoints/{endpoint_id}"))
+  let req_body = {"description": $description, "name": $name, "status": $status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update a notification endpoint
@@ -2370,13 +2384,14 @@ export def "notification-endpoints update-by-endpointID-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({endpoint_id: $endpoint_id} | format pattern "/notificationEndpoints/{endpoint_id}"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({endpoint_id: (encode-path-segment $endpoint_id)} | format pattern "/notificationEndpoints/{endpoint_id}"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List all labels for a notification endpoint
@@ -2397,11 +2412,11 @@ export def "notification-endpoints-labels get" [
 ]: nothing -> record<labels: table<id: string, name: string, orgID: string, properties: record>, links: record<next: string, prev: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({endpoint_id: $endpoint_id} | format pattern "/notificationEndpoints/{endpoint_id}/labels"))
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({endpoint_id: (encode-path-segment $endpoint_id)} | format pattern "/notificationEndpoints/{endpoint_id}/labels"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2425,14 +2440,14 @@ export def "notification-endpoints-labels create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({endpoint_id: $endpoint_id} | format pattern "/notificationEndpoints/{endpoint_id}/labels"))
-  let body = {"labelID": $label_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({endpoint_id: (encode-path-segment $endpoint_id)} | format pattern "/notificationEndpoints/{endpoint_id}/labels"))
+  let req_body = {"labelID": $label_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a label from a notification endpoint
@@ -2454,11 +2469,11 @@ export def "notification-endpoints-labels delete" [
 ]: nothing -> record<code: string, err: string, message: string, op: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({endpoint_id: $endpoint_id, label_id: $label_id} | format pattern "/notificationEndpoints/{endpoint_id}/labels/{label_id}"))
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({endpoint_id: (encode-path-segment $endpoint_id), label_id: (encode-path-segment $label_id)} | format pattern "/notificationEndpoints/{endpoint_id}/labels/{label_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2486,10 +2501,10 @@ export def "notification-rules list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "orgID" $org_id "scalar") (serialize-qp "checkID" $check_id "scalar") (serialize-qp "tag" $tag "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/notificationRules" $qp)
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2512,10 +2527,11 @@ export def "notification-rules create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/notificationRules")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a notification rule
@@ -2536,11 +2552,11 @@ export def "notification-rules delete" [
 ]: nothing -> record<code: string, err: string, message: string, op: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({rule_id: $rule_id} | format pattern "/notificationRules/{rule_id}"))
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({rule_id: (encode-path-segment $rule_id)} | format pattern "/notificationRules/{rule_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2562,11 +2578,11 @@ export def "notification-rules get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({rule_id: $rule_id} | format pattern "/notificationRules/{rule_id}"))
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({rule_id: (encode-path-segment $rule_id)} | format pattern "/notificationRules/{rule_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2592,14 +2608,14 @@ export def "notification-rules update-by-ruleID" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({rule_id: $rule_id} | format pattern "/notificationRules/{rule_id}"))
-  let body = {"description": $description, "name": $name, "status": $status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({rule_id: (encode-path-segment $rule_id)} | format pattern "/notificationRules/{rule_id}"))
+  let req_body = {"description": $description, "name": $name, "status": $status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update a notification rule
@@ -2622,13 +2638,14 @@ export def "notification-rules update-by-ruleID-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({rule_id: $rule_id} | format pattern "/notificationRules/{rule_id}"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({rule_id: (encode-path-segment $rule_id)} | format pattern "/notificationRules/{rule_id}"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List all labels for a notification rule
@@ -2649,11 +2666,11 @@ export def "notification-rules-labels get" [
 ]: nothing -> record<labels: table<id: string, name: string, orgID: string, properties: record>, links: record<next: string, prev: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({rule_id: $rule_id} | format pattern "/notificationRules/{rule_id}/labels"))
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({rule_id: (encode-path-segment $rule_id)} | format pattern "/notificationRules/{rule_id}/labels"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2677,14 +2694,14 @@ export def "notification-rules-labels create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({rule_id: $rule_id} | format pattern "/notificationRules/{rule_id}/labels"))
-  let body = {"labelID": $label_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({rule_id: (encode-path-segment $rule_id)} | format pattern "/notificationRules/{rule_id}/labels"))
+  let req_body = {"labelID": $label_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete label from a notification rule
@@ -2706,11 +2723,11 @@ export def "notification-rules-labels delete" [
 ]: nothing -> record<code: string, err: string, message: string, op: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({rule_id: $rule_id, label_id: $label_id} | format pattern "/notificationRules/{rule_id}/labels/{label_id}"))
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({rule_id: (encode-path-segment $rule_id), label_id: (encode-path-segment $label_id)} | format pattern "/notificationRules/{rule_id}/labels/{label_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2732,11 +2749,11 @@ export def "notification-rules-query get" [
 ]: nothing -> record<flux: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({rule_id: $rule_id} | format pattern "/notificationRules/{rule_id}/query"))
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({rule_id: (encode-path-segment $rule_id)} | format pattern "/notificationRules/{rule_id}/query"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2765,10 +2782,10 @@ export def "orgs list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "descending" $descending "scalar") (serialize-qp "org" $org "scalar") (serialize-qp "orgID" $org_id "scalar") (serialize-qp "userID" $user_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/orgs" $qp)
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2793,13 +2810,13 @@ export def "orgs create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/orgs")
-  let body = {"description": $description, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"description": $description, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete an organization
@@ -2820,11 +2837,11 @@ export def "orgs delete" [
 ]: nothing -> record<code: string, err: string, message: string, op: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/orgs/{org_id}"))
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({org_id: (encode-path-segment $org_id)} | format pattern "/orgs/{org_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2846,11 +2863,11 @@ export def "orgs get" [
 ]: nothing -> record<createdAt: string, description: string, id: string, links: record<buckets: string, dashboards: string, labels: string, members: string, owners: string, secrets: string, self: string, tasks: string>, name: string, status: string, updatedAt: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/orgs/{org_id}"))
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({org_id: (encode-path-segment $org_id)} | format pattern "/orgs/{org_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2875,14 +2892,14 @@ export def "orgs update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/orgs/{org_id}"))
-  let body = {"description": $description, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({org_id: (encode-path-segment $org_id)} | format pattern "/orgs/{org_id}"))
+  let req_body = {"description": $description, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List all members of an organization
@@ -2903,11 +2920,11 @@ export def "orgs-members get" [
 ]: nothing -> record<links: record<self: string>, users: table<id: string, links: record, name: string, oauthID: string, status: string, role: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/orgs/{org_id}/members"))
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({org_id: (encode-path-segment $org_id)} | format pattern "/orgs/{org_id}/members"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2932,14 +2949,14 @@ export def "orgs-members create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/orgs/{org_id}/members"))
-  let body = {"id": $id, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({org_id: (encode-path-segment $org_id)} | format pattern "/orgs/{org_id}/members"))
+  let req_body = {"id": $id, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Remove a member from an organization
@@ -2961,11 +2978,11 @@ export def "orgs-members delete" [
 ]: nothing -> record<code: string, err: string, message: string, op: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org_id: $org_id, user_id: $user_id} | format pattern "/orgs/{org_id}/members/{user_id}"))
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({org_id: (encode-path-segment $org_id), user_id: (encode-path-segment $user_id)} | format pattern "/orgs/{org_id}/members/{user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2987,11 +3004,11 @@ export def "orgs-owners get" [
 ]: nothing -> record<links: record<self: string>, users: table<id: string, links: record, name: string, oauthID: string, status: string, role: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/orgs/{org_id}/owners"))
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({org_id: (encode-path-segment $org_id)} | format pattern "/orgs/{org_id}/owners"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3016,14 +3033,14 @@ export def "orgs-owners create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/orgs/{org_id}/owners"))
-  let body = {"id": $id, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({org_id: (encode-path-segment $org_id)} | format pattern "/orgs/{org_id}/owners"))
+  let req_body = {"id": $id, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Remove an owner from an organization
@@ -3045,11 +3062,11 @@ export def "orgs-owners delete" [
 ]: nothing -> record<code: string, err: string, message: string, op: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org_id: $org_id, user_id: $user_id} | format pattern "/orgs/{org_id}/owners/{user_id}"))
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({org_id: (encode-path-segment $org_id), user_id: (encode-path-segment $user_id)} | format pattern "/orgs/{org_id}/owners/{user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3071,11 +3088,11 @@ export def "orgs-secrets get" [
 ]: nothing -> record<secrets: list<string>, links: record<org: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/orgs/{org_id}/secrets"))
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({org_id: (encode-path-segment $org_id)} | format pattern "/orgs/{org_id}/secrets"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3099,13 +3116,14 @@ export def "orgs-secrets update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/orgs/{org_id}/secrets"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({org_id: (encode-path-segment $org_id)} | format pattern "/orgs/{org_id}/secrets"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete secrets from an organization
@@ -3123,26 +3141,26 @@ export def "orgs-secrets-delete create" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-  --secrets: list
+  --secrets: list<string>
 ]: any -> record<code: string, err: string, message: string, op: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/orgs/{org_id}/secrets/delete"))
-  let body = {"secrets": $secrets} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({org_id: (encode-path-segment $org_id)} | format pattern "/orgs/{org_id}/secrets/delete"))
+  let req_body = {"secrets": $secrets} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Query InfluxDB
 #
 # POST /query
 # operationId: PostQuery
-# --dialect shape: {annotations?: list, commentPrefix?: string, dateTimeFormat?: "RFC3339"|"RFC3339Nano", delimiter?: string, header?: bool}
+# --dialect shape: {annotations?: list<string>, commentPrefix?: string, dateTimeFormat?: "RFC3339"|"RFC3339Nano", delimiter?: string, header?: bool}
 # --extern shape: {body?: list, imports?: list, name?: string, package?: record, type?: string}
 export def "query create" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -3159,7 +3177,7 @@ export def "query create" [
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   --accept-encoding: string@accept-encoding-completer # The Accept-Encoding request HTTP header advertises which content encoding, usually a compression algorithm, the client is able to understand.
   --content-type: string@content-type-completer
-  --dialect: record # Dialect are options to change the default CSV output format; https://www.w3.org/TR/2015/REC-tabular-metadata-20151217/#dialect-descriptions — shape: {annotations?: list, commentPrefix?: string, dateTimeFormat?: "RFC3339"|"RFC3339Nano", delimiter?: string, header?: bool}
+  --dialect: record # Dialect are options to change the default CSV output format; https://www.w3.org/TR/2015/REC-tabular-metadata-20151217/#dialect-descriptions — shape: {annotations?: list<string>, commentPrefix?: string, dateTimeFormat?: "RFC3339"|"RFC3339Nano", delimiter?: string, header?: bool}
   --extern: record # Represents a source from a single file — shape: {body?: list, imports?: list, name?: string, package?: record, type?: string}
   --now: string # Specifies the time that should be reported as "now" in the query. Default is the server's now time. (format: date-time)
   --params: record # Enumeration of key/value pairs that respresent parameters to be injected into query (can only specify either this field or extern and not both)
@@ -3172,20 +3190,22 @@ export def "query create" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "org" $org "scalar") (serialize-qp "orgID" $org_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/query" $qp)
-  let body = {"dialect": $dialect, "extern": $extern, "now": $now, "params": $params, "query": $query, "type": $type, "bucket": $bucket} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span, "Accept-Encoding": $accept_encoding, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"dialect": $dialect, "extern": $extern, "now": $now, "params": $params, "query": $query, "type": $type, "bucket": $bucket} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/vnd.influx.arrow")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span, "Accept-Encoding": $accept_encoding, "Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Analyze an InfluxQL or Flux query
 #
 # POST /query/analyze
 # operationId: PostQueryAnalyze
-# --dialect shape: {annotations?: list, commentPrefix?: string, dateTimeFormat?: "RFC3339"|"RFC3339Nano", delimiter?: string, header?: bool}
+# --dialect shape: {annotations?: list<string>, commentPrefix?: string, dateTimeFormat?: "RFC3339"|"RFC3339Nano", delimiter?: string, header?: bool}
 # --extern shape: {body?: list, imports?: list, name?: string, package?: record, type?: string}
 export def "query-analyze create" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -3198,7 +3218,7 @@ export def "query-analyze create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   --content-type: string@content-type-completer-1
-  --dialect: record # Dialect are options to change the default CSV output format; https://www.w3.org/TR/2015/REC-tabular-metadata-20151217/#dialect-descriptions — shape: {annotations?: list, commentPrefix?: string, dateTimeFormat?: "RFC3339"|"RFC3339Nano", delimiter?: string, header?: bool}
+  --dialect: record # Dialect are options to change the default CSV output format; https://www.w3.org/TR/2015/REC-tabular-metadata-20151217/#dialect-descriptions — shape: {annotations?: list<string>, commentPrefix?: string, dateTimeFormat?: "RFC3339"|"RFC3339Nano", delimiter?: string, header?: bool}
   --extern: record # Represents a source from a single file — shape: {body?: list, imports?: list, name?: string, package?: record, type?: string}
   --now: string # Specifies the time that should be reported as "now" in the query. Default is the server's now time. (format: date-time)
   --params: record # Enumeration of key/value pairs that respresent parameters to be injected into query (can only specify either this field or extern and not both)
@@ -3209,13 +3229,15 @@ export def "query-analyze create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/query/analyze")
-  let body = {"dialect": $dialect, "extern": $extern, "now": $now, "params": $params, "query": $query, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"dialect": $dialect, "extern": $extern, "now": $now, "params": $params, "query": $query, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span, "Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Generate an Abstract Syntax Tree (AST) from a query
@@ -3239,13 +3261,15 @@ export def "query-ast create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/query/ast")
-  let body = {"query": $query} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"query": $query} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span, "Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Retrieve query suggestions
@@ -3266,10 +3290,10 @@ export def "query-suggestions list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/query/suggestions")
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3291,11 +3315,11 @@ export def "query-suggestions get" [
 ]: nothing -> record<name: string, params: record> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({name: $name} | format pattern "/query/suggestions/{name}"))
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/query/suggestions/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3317,10 +3341,10 @@ export def "ready get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ready")
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3338,7 +3362,7 @@ export def "scrapers list" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Specifies the name of the scraper target.
-  --id: list # List of scraper target IDs to return. If both `id` and `owner` are specified, only `id` is used.
+  --id: list<string> # List of scraper target IDs to return. If both `id` and `owner` are specified, only `id` is used.
   --org-id: string # Specifies the organization ID of the scraper target.
   --org: string # Specifies the organization name of the scraper target.
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
@@ -3347,10 +3371,10 @@ export def "scrapers list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "id" $id "multi") (serialize-qp "orgID" $org_id "scalar") (serialize-qp "org" $org "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/scrapers" $qp)
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3373,19 +3397,19 @@ export def "scrapers create" [
   --name: string # The name of the scraper target.
   --org-id: string # The organization ID.
   --type: string@type-completer-1 # The type of the metrics to be parsed.
-  --body-url: string # The URL of the metrics endpoint. (e.g. http://localhost:9090/metrics)
+  --url: string # The URL of the metrics endpoint. (e.g. http://localhost:9090/metrics)
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/scrapers")
-  let body = {"allowInsecure": $allow_insecure, "bucketID": $bucket_id, "name": $name, "orgID": $org_id, "type": $type, "url": $body_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"allowInsecure": $allow_insecure, "bucketID": $bucket_id, "name": $name, "orgID": $org_id, "type": $type, "url": $url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a scraper target
@@ -3406,11 +3430,11 @@ export def "scrapers delete" [
 ]: nothing -> record<code: string, err: string, message: string, op: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({scraper_target_id: $scraper_target_id} | format pattern "/scrapers/{scraper_target_id}"))
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({scraper_target_id: (encode-path-segment $scraper_target_id)} | format pattern "/scrapers/{scraper_target_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3432,11 +3456,11 @@ export def "scrapers get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({scraper_target_id: $scraper_target_id} | format pattern "/scrapers/{scraper_target_id}"))
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({scraper_target_id: (encode-path-segment $scraper_target_id)} | format pattern "/scrapers/{scraper_target_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3460,19 +3484,19 @@ export def "scrapers update" [
   --name: string # The name of the scraper target.
   --org-id: string # The organization ID.
   --type: string@type-completer-1 # The type of the metrics to be parsed.
-  --body-url: string # The URL of the metrics endpoint. (e.g. http://localhost:9090/metrics)
+  --url: string # The URL of the metrics endpoint. (e.g. http://localhost:9090/metrics)
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({scraper_target_id: $scraper_target_id} | format pattern "/scrapers/{scraper_target_id}"))
-  let body = {"allowInsecure": $allow_insecure, "bucketID": $bucket_id, "name": $name, "orgID": $org_id, "type": $type, "url": $body_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({scraper_target_id: (encode-path-segment $scraper_target_id)} | format pattern "/scrapers/{scraper_target_id}"))
+  let req_body = {"allowInsecure": $allow_insecure, "bucketID": $bucket_id, "name": $name, "orgID": $org_id, "type": $type, "url": $url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List all labels for a scraper target
@@ -3493,11 +3517,11 @@ export def "scrapers-labels get" [
 ]: nothing -> record<labels: table<id: string, name: string, orgID: string, properties: record>, links: record<next: string, prev: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({scraper_target_id: $scraper_target_id} | format pattern "/scrapers/{scraper_target_id}/labels"))
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({scraper_target_id: (encode-path-segment $scraper_target_id)} | format pattern "/scrapers/{scraper_target_id}/labels"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3521,14 +3545,14 @@ export def "scrapers-labels create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({scraper_target_id: $scraper_target_id} | format pattern "/scrapers/{scraper_target_id}/labels"))
-  let body = {"labelID": $label_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({scraper_target_id: (encode-path-segment $scraper_target_id)} | format pattern "/scrapers/{scraper_target_id}/labels"))
+  let req_body = {"labelID": $label_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a label from a scraper target
@@ -3550,11 +3574,11 @@ export def "scrapers-labels delete" [
 ]: nothing -> record<code: string, err: string, message: string, op: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({scraper_target_id: $scraper_target_id, label_id: $label_id} | format pattern "/scrapers/{scraper_target_id}/labels/{label_id}"))
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({scraper_target_id: (encode-path-segment $scraper_target_id), label_id: (encode-path-segment $label_id)} | format pattern "/scrapers/{scraper_target_id}/labels/{label_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3576,11 +3600,11 @@ export def "scrapers-members get" [
 ]: nothing -> record<links: record<self: string>, users: table<id: string, links: record, name: string, oauthID: string, status: string, role: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({scraper_target_id: $scraper_target_id} | format pattern "/scrapers/{scraper_target_id}/members"))
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({scraper_target_id: (encode-path-segment $scraper_target_id)} | format pattern "/scrapers/{scraper_target_id}/members"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3605,14 +3629,14 @@ export def "scrapers-members create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({scraper_target_id: $scraper_target_id} | format pattern "/scrapers/{scraper_target_id}/members"))
-  let body = {"id": $id, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({scraper_target_id: (encode-path-segment $scraper_target_id)} | format pattern "/scrapers/{scraper_target_id}/members"))
+  let req_body = {"id": $id, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Remove a member from a scraper target
@@ -3634,11 +3658,11 @@ export def "scrapers-members delete" [
 ]: nothing -> record<code: string, err: string, message: string, op: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({scraper_target_id: $scraper_target_id, user_id: $user_id} | format pattern "/scrapers/{scraper_target_id}/members/{user_id}"))
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({scraper_target_id: (encode-path-segment $scraper_target_id), user_id: (encode-path-segment $user_id)} | format pattern "/scrapers/{scraper_target_id}/members/{user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3660,11 +3684,11 @@ export def "scrapers-owners get" [
 ]: nothing -> record<links: record<self: string>, users: table<id: string, links: record, name: string, oauthID: string, status: string, role: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({scraper_target_id: $scraper_target_id} | format pattern "/scrapers/{scraper_target_id}/owners"))
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({scraper_target_id: (encode-path-segment $scraper_target_id)} | format pattern "/scrapers/{scraper_target_id}/owners"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3689,14 +3713,14 @@ export def "scrapers-owners create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({scraper_target_id: $scraper_target_id} | format pattern "/scrapers/{scraper_target_id}/owners"))
-  let body = {"id": $id, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({scraper_target_id: (encode-path-segment $scraper_target_id)} | format pattern "/scrapers/{scraper_target_id}/owners"))
+  let req_body = {"id": $id, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Remove an owner from a scraper target
@@ -3718,11 +3742,11 @@ export def "scrapers-owners delete" [
 ]: nothing -> record<code: string, err: string, message: string, op: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({scraper_target_id: $scraper_target_id, user_id: $user_id} | format pattern "/scrapers/{scraper_target_id}/owners/{user_id}"))
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({scraper_target_id: (encode-path-segment $scraper_target_id), user_id: (encode-path-segment $user_id)} | format pattern "/scrapers/{scraper_target_id}/owners/{user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3744,10 +3768,10 @@ export def "setup get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/setup")
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3769,7 +3793,7 @@ export def "setup create" [
   bucket: string
   org: string
   --password: string
-  --retention-period-hrs: int # Retention period *in nanoseconds* for the new bucket. This key's name has been misleading since OSS 2.0 GA, please transition to use `retentionPeriodSeconds`  (DEPRECATED)
+  --retention-period-hrs: int # Retention period *in nanoseconds* for the new bucket. This key's name has been misleading since OSS 2.0 GA, please transition to use `retentionPeriodSeconds` (DEPRECATED)
   --retention-period-seconds: int # format: int64
   --body-token: string # Authentication token to set on the initial user. If not specified, the server will generate a token.
   username: string
@@ -3778,13 +3802,13 @@ export def "setup create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/setup")
-  let body = {"bucket": $bucket, "org": $org, "password": $password, "retentionPeriodHrs": $retention_period_hrs, "retentionPeriodSeconds": $retention_period_seconds, "token": $body_token, "username": $username} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"bucket": $bucket, "org": $org, "password": $password, "retentionPeriodHrs": $retention_period_hrs, "retentionPeriodSeconds": $retention_period_seconds, "token": $body_token, "username": $username} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Exchange basic auth credentials for session
@@ -3805,10 +3829,10 @@ export def "signin create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/signin")
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3830,10 +3854,10 @@ export def "signout create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/signout")
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3857,10 +3881,10 @@ export def "sources list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "org" $org "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/sources" $qp)
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3892,20 +3916,20 @@ export def "sources create" [
   --telegraf: string
   --body-token: string
   --type: string@type-completer-2
-  --body-url: string # format: uri
+  --url: string # format: uri
   --username: string
 ]: any -> record<default: bool, defaultRP: string, id: string, insecureSkipVerify: bool, languages: list<string>, links: record<buckets: string, health: string, query: string, self: string>, metaUrl: string, name: string, orgID: string, password: string, sharedSecret: string, telegraf: string, token: string, type: string, url: string, username: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sources")
-  let body = {"default": $default, "defaultRP": $default_rp, "id": $id, "insecureSkipVerify": $insecure_skip_verify, "links": $links, "metaUrl": $meta_url, "name": $name, "orgID": $org_id, "password": $password, "sharedSecret": $shared_secret, "telegraf": $telegraf, "token": $body_token, "type": $type, "url": $body_url, "username": $username} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"default": $default, "defaultRP": $default_rp, "id": $id, "insecureSkipVerify": $insecure_skip_verify, "links": $links, "metaUrl": $meta_url, "name": $name, "orgID": $org_id, "password": $password, "sharedSecret": $shared_secret, "telegraf": $telegraf, "token": $body_token, "type": $type, "url": $url, "username": $username} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a source
@@ -3926,11 +3950,11 @@ export def "sources delete" [
 ]: nothing -> record<code: string, err: string, message: string, op: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({source_id: $source_id} | format pattern "/sources/{source_id}"))
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({source_id: (encode-path-segment $source_id)} | format pattern "/sources/{source_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3952,11 +3976,11 @@ export def "sources get" [
 ]: nothing -> record<default: bool, defaultRP: string, id: string, insecureSkipVerify: bool, languages: list<string>, links: record<buckets: string, health: string, query: string, self: string>, metaUrl: string, name: string, orgID: string, password: string, sharedSecret: string, telegraf: string, token: string, type: string, url: string, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({source_id: $source_id} | format pattern "/sources/{source_id}"))
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({source_id: (encode-path-segment $source_id)} | format pattern "/sources/{source_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3989,20 +4013,20 @@ export def "sources update" [
   --telegraf: string
   --body-token: string
   --type: string@type-completer-2
-  --body-url: string # format: uri
+  --url: string # format: uri
   --username: string
 ]: any -> record<default: bool, defaultRP: string, id: string, insecureSkipVerify: bool, languages: list<string>, links: record<buckets: string, health: string, query: string, self: string>, metaUrl: string, name: string, orgID: string, password: string, sharedSecret: string, telegraf: string, token: string, type: string, url: string, username: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({source_id: $source_id} | format pattern "/sources/{source_id}"))
-  let body = {"default": $default, "defaultRP": $default_rp, "id": $id, "insecureSkipVerify": $insecure_skip_verify, "links": $links, "metaUrl": $meta_url, "name": $name, "orgID": $org_id, "password": $password, "sharedSecret": $shared_secret, "telegraf": $telegraf, "token": $body_token, "type": $type, "url": $body_url, "username": $username} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({source_id: (encode-path-segment $source_id)} | format pattern "/sources/{source_id}"))
+  let req_body = {"default": $default, "defaultRP": $default_rp, "id": $id, "insecureSkipVerify": $insecure_skip_verify, "links": $links, "metaUrl": $meta_url, "name": $name, "orgID": $org_id, "password": $password, "sharedSecret": $shared_secret, "telegraf": $telegraf, "token": $body_token, "type": $type, "url": $url, "username": $username} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get buckets in a source
@@ -4025,11 +4049,11 @@ export def "sources-buckets get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "org" $org "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({source_id: $source_id} | format pattern "/sources/{source_id}/buckets") $qp)
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({source_id: (encode-path-segment $source_id)} | format pattern "/sources/{source_id}/buckets") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4051,11 +4075,11 @@ export def "sources-health get" [
 ]: nothing -> record<checks: list<any>, commit: string, message: string, name: string, status: string, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({source_id: $source_id} | format pattern "/sources/{source_id}/health"))
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({source_id: (encode-path-segment $source_id)} | format pattern "/sources/{source_id}/health"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4101,17 +4125,17 @@ export def "stacks create" [
   --description: string
   --name: string
   --org-id: string
-  --urls: list
+  --urls: list<string>
 ]: any -> record<createdAt: string, events: table<description: string, eventType: string, name: string, resources: list, sources: list, updatedAt: string, urls: list>, id: string, orgID: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/stacks")
-  let body = {"description": $description, "name": $name, "orgID": $org_id, "urls": $urls} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"description": $description, "name": $name, "orgID": $org_id, "urls": $urls} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a stack and associated resources
@@ -4133,7 +4157,7 @@ export def "stacks delete" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "orgID" $org_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({stack_id: $stack_id} | format pattern "/stacks/{stack_id}") $qp)
+  let full_url = (build-url $base ({stack_id: (encode-path-segment $stack_id)} | format pattern "/stacks/{stack_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4156,7 +4180,7 @@ export def "stacks get" [
 ]: nothing -> record<createdAt: string, events: table<description: string, eventType: string, name: string, resources: list, sources: list, updatedAt: string, urls: list>, id: string, orgID: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({stack_id: $stack_id} | format pattern "/stacks/{stack_id}"))
+  let full_url = (build-url $base ({stack_id: (encode-path-segment $stack_id)} | format pattern "/stacks/{stack_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4180,24 +4204,24 @@ export def "stacks update" [
   --additional-resources: list # item shape: {kind: string, resourceID: string, templateMetaName?: string}
   --description: string # nullable
   --name: string # nullable
-  --template-ur-ls: list # nullable
+  --template-ur-ls: list<string> # nullable
 ]: any -> record<createdAt: string, events: table<description: string, eventType: string, name: string, resources: list, sources: list, updatedAt: string, urls: list>, id: string, orgID: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({stack_id: $stack_id} | format pattern "/stacks/{stack_id}"))
-  let body = {"additionalResources": $additional_resources, "description": $description, "name": $name, "templateURLs": $template_ur_ls} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({stack_id: (encode-path-segment $stack_id)} | format pattern "/stacks/{stack_id}"))
+  let req_body = {"additionalResources": $additional_resources, "description": $description, "name": $name, "templateURLs": $template_ur_ls} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Uninstall an InfluxDB Stack
 #
 # POST /stacks/{stack_id}/uninstall
 # operationId: UninstallStack
-export def "stacks-uninstall post" [
+export def "stacks-uninstall create" [
   stack_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4210,7 +4234,7 @@ export def "stacks-uninstall post" [
 ]: nothing -> record<createdAt: string, events: table<description: string, eventType: string, name: string, resources: list, sources: list, updatedAt: string, urls: list>, id: string, orgID: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({stack_id: $stack_id} | format pattern "/stacks/{stack_id}/uninstall"))
+  let full_url = (build-url $base ({stack_id: (encode-path-segment $stack_id)} | format pattern "/stacks/{stack_id}/uninstall"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4242,10 +4266,10 @@ export def "tasks list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "after" $after "scalar") (serialize-qp "user" $user "scalar") (serialize-qp "org" $org "scalar") (serialize-qp "orgID" $org_id "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/tasks" $qp)
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4273,13 +4297,13 @@ export def "tasks create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tasks")
-  let body = {"description": $description, "flux": $flux, "org": $org, "orgID": $org_id, "status": $status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"description": $description, "flux": $flux, "org": $org, "orgID": $org_id, "status": $status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a task
@@ -4300,11 +4324,11 @@ export def "tasks delete" [
 ]: nothing -> record<code: string, err: string, message: string, op: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({task_id: $task_id} | format pattern "/tasks/{task_id}"))
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({task_id: (encode-path-segment $task_id)} | format pattern "/tasks/{task_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4326,11 +4350,11 @@ export def "tasks get" [
 ]: nothing -> record<authorizationID: string, createdAt: string, cron: string, description: string, every: string, flux: string, id: string, labels: table<id: string, name: string, orgID: string, properties: record>, lastRunError: string, lastRunStatus: string, latestCompleted: string, links: record<labels: string, logs: string, members: string, owners: string, runs: string, self: string>, name: string, offset: string, org: string, orgID: string, status: string, type: string, updatedAt: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({task_id: $task_id} | format pattern "/tasks/{task_id}"))
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({task_id: (encode-path-segment $task_id)} | format pattern "/tasks/{task_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4360,14 +4384,14 @@ export def "tasks update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({task_id: $task_id} | format pattern "/tasks/{task_id}"))
-  let body = {"cron": $cron, "description": $description, "every": $every, "flux": $flux, "name": $name, "offset": $offset, "status": $status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({task_id: (encode-path-segment $task_id)} | format pattern "/tasks/{task_id}"))
+  let req_body = {"cron": $cron, "description": $description, "every": $every, "flux": $flux, "name": $name, "offset": $offset, "status": $status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List all labels for a task
@@ -4388,11 +4412,11 @@ export def "tasks-labels get" [
 ]: nothing -> record<labels: table<id: string, name: string, orgID: string, properties: record>, links: record<next: string, prev: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({task_id: $task_id} | format pattern "/tasks/{task_id}/labels"))
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({task_id: (encode-path-segment $task_id)} | format pattern "/tasks/{task_id}/labels"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4416,14 +4440,14 @@ export def "tasks-labels create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({task_id: $task_id} | format pattern "/tasks/{task_id}/labels"))
-  let body = {"labelID": $label_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({task_id: (encode-path-segment $task_id)} | format pattern "/tasks/{task_id}/labels"))
+  let req_body = {"labelID": $label_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a label from a task
@@ -4445,11 +4469,11 @@ export def "tasks-labels delete" [
 ]: nothing -> record<code: string, err: string, message: string, op: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({task_id: $task_id, label_id: $label_id} | format pattern "/tasks/{task_id}/labels/{label_id}"))
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({task_id: (encode-path-segment $task_id), label_id: (encode-path-segment $label_id)} | format pattern "/tasks/{task_id}/labels/{label_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4471,11 +4495,11 @@ export def "tasks-logs get" [
 ]: nothing -> record<events: table<message: string, runID: string, time: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({task_id: $task_id} | format pattern "/tasks/{task_id}/logs"))
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({task_id: (encode-path-segment $task_id)} | format pattern "/tasks/{task_id}/logs"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4497,11 +4521,11 @@ export def "tasks-members get" [
 ]: nothing -> record<links: record<self: string>, users: table<id: string, links: record, name: string, oauthID: string, status: string, role: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({task_id: $task_id} | format pattern "/tasks/{task_id}/members"))
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({task_id: (encode-path-segment $task_id)} | format pattern "/tasks/{task_id}/members"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4526,14 +4550,14 @@ export def "tasks-members create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({task_id: $task_id} | format pattern "/tasks/{task_id}/members"))
-  let body = {"id": $id, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({task_id: (encode-path-segment $task_id)} | format pattern "/tasks/{task_id}/members"))
+  let req_body = {"id": $id, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Remove a member from a task
@@ -4555,11 +4579,11 @@ export def "tasks-members delete" [
 ]: nothing -> record<code: string, err: string, message: string, op: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({task_id: $task_id, user_id: $user_id} | format pattern "/tasks/{task_id}/members/{user_id}"))
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({task_id: (encode-path-segment $task_id), user_id: (encode-path-segment $user_id)} | format pattern "/tasks/{task_id}/members/{user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4581,11 +4605,11 @@ export def "tasks-owners get" [
 ]: nothing -> record<links: record<self: string>, users: table<id: string, links: record, name: string, oauthID: string, status: string, role: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({task_id: $task_id} | format pattern "/tasks/{task_id}/owners"))
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({task_id: (encode-path-segment $task_id)} | format pattern "/tasks/{task_id}/owners"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4610,14 +4634,14 @@ export def "tasks-owners create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({task_id: $task_id} | format pattern "/tasks/{task_id}/owners"))
-  let body = {"id": $id, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({task_id: (encode-path-segment $task_id)} | format pattern "/tasks/{task_id}/owners"))
+  let req_body = {"id": $id, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Remove an owner from a task
@@ -4639,11 +4663,11 @@ export def "tasks-owners delete" [
 ]: nothing -> record<code: string, err: string, message: string, op: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({task_id: $task_id, user_id: $user_id} | format pattern "/tasks/{task_id}/owners/{user_id}"))
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({task_id: (encode-path-segment $task_id), user_id: (encode-path-segment $user_id)} | format pattern "/tasks/{task_id}/owners/{user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4670,11 +4694,11 @@ export def "tasks-runs list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "after" $after "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "afterTime" $after_time "scalar") (serialize-qp "beforeTime" $before_time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({task_id: $task_id} | format pattern "/tasks/{task_id}/runs") $qp)
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({task_id: (encode-path-segment $task_id)} | format pattern "/tasks/{task_id}/runs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4693,19 +4717,19 @@ export def "tasks-runs create" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-  --scheduled-for: string # Time used for run's "now" option, RFC3339.  Default is the server's now time. (nullable, format: date-time)
+  --scheduled-for: string # Time used for run's "now" option, RFC3339. Default is the server's now time. (nullable, format: date-time)
 ]: any -> record<finishedAt: string, id: string, links: record<retry: string, self: string, task: string>, log: table<message: string, runID: string, time: string>, requestedAt: string, scheduledFor: string, startedAt: string, status: string, taskID: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({task_id: $task_id} | format pattern "/tasks/{task_id}/runs"))
-  let body = {"scheduledFor": $scheduled_for} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({task_id: (encode-path-segment $task_id)} | format pattern "/tasks/{task_id}/runs"))
+  let req_body = {"scheduledFor": $scheduled_for} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Cancel a running task
@@ -4727,11 +4751,11 @@ export def "tasks-runs delete" [
 ]: nothing -> record<code: string, err: string, message: string, op: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({task_id: $task_id, run_id: $run_id} | format pattern "/tasks/{task_id}/runs/{run_id}"))
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({task_id: (encode-path-segment $task_id), run_id: (encode-path-segment $run_id)} | format pattern "/tasks/{task_id}/runs/{run_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4754,11 +4778,11 @@ export def "tasks-runs get" [
 ]: nothing -> record<finishedAt: string, id: string, links: record<retry: string, self: string, task: string>, log: table<message: string, runID: string, time: string>, requestedAt: string, scheduledFor: string, startedAt: string, status: string, taskID: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({task_id: $task_id, run_id: $run_id} | format pattern "/tasks/{task_id}/runs/{run_id}"))
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({task_id: (encode-path-segment $task_id), run_id: (encode-path-segment $run_id)} | format pattern "/tasks/{task_id}/runs/{run_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4781,11 +4805,11 @@ export def "tasks-runs-logs get" [
 ]: nothing -> record<events: table<message: string, runID: string, time: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({task_id: $task_id, run_id: $run_id} | format pattern "/tasks/{task_id}/runs/{run_id}/logs"))
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({task_id: (encode-path-segment $task_id), run_id: (encode-path-segment $run_id)} | format pattern "/tasks/{task_id}/runs/{run_id}/logs"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4810,13 +4834,14 @@ export def "tasks-runs-retry create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({task_id: $task_id, run_id: $run_id} | format pattern "/tasks/{task_id}/runs/{run_id}/retry"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({task_id: (encode-path-segment $task_id), run_id: (encode-path-segment $run_id)} | format pattern "/tasks/{task_id}/runs/{run_id}/retry"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json; charset=utf-8" $body
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json; charset=utf-8" $req_body
 }
 
 # List all Telegraf plugins
@@ -4839,10 +4864,10 @@ export def "telegraf-plugins get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "type" $type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/telegraf/plugins" $qp)
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4866,10 +4891,10 @@ export def "telegrafs list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "orgID" $org_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/telegrafs" $qp)
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4877,7 +4902,7 @@ export def "telegrafs list" [
 #
 # POST /telegrafs
 # operationId: PostTelegrafs
-# --metadata shape: {buckets?: list}
+# --metadata shape: {buckets?: list<string>}
 export def "telegrafs create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4890,7 +4915,7 @@ export def "telegrafs create" [
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   --config: string
   --description: string
-  --metadata: record # shape: {buckets?: list}
+  --metadata: record # shape: {buckets?: list<string>}
   --name: string
   --org-id: string
 ]: any -> record {
@@ -4898,13 +4923,13 @@ export def "telegrafs create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/telegrafs")
-  let body = {"config": $config, "description": $description, "metadata": $metadata, "name": $name, "orgID": $org_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"config": $config, "description": $description, "metadata": $metadata, "name": $name, "orgID": $org_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a Telegraf configuration
@@ -4925,11 +4950,11 @@ export def "telegrafs delete" [
 ]: nothing -> record<code: string, err: string, message: string, op: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({telegraf_id: $telegraf_id} | format pattern "/telegrafs/{telegraf_id}"))
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({telegraf_id: (encode-path-segment $telegraf_id)} | format pattern "/telegrafs/{telegraf_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4953,11 +4978,11 @@ export def "telegrafs get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({telegraf_id: $telegraf_id} | format pattern "/telegrafs/{telegraf_id}"))
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({telegraf_id: (encode-path-segment $telegraf_id)} | format pattern "/telegrafs/{telegraf_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4965,7 +4990,7 @@ export def "telegrafs get" [
 #
 # PUT /telegrafs/{telegrafID}
 # operationId: PutTelegrafsID
-# --metadata shape: {buckets?: list}
+# --metadata shape: {buckets?: list<string>}
 export def "telegrafs update" [
   telegraf_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4979,21 +5004,21 @@ export def "telegrafs update" [
   --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   --config: string
   --description: string
-  --metadata: record # shape: {buckets?: list}
+  --metadata: record # shape: {buckets?: list<string>}
   --name: string
   --org-id: string
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({telegraf_id: $telegraf_id} | format pattern "/telegrafs/{telegraf_id}"))
-  let body = {"config": $config, "description": $description, "metadata": $metadata, "name": $name, "orgID": $org_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({telegraf_id: (encode-path-segment $telegraf_id)} | format pattern "/telegrafs/{telegraf_id}"))
+  let req_body = {"config": $config, "description": $description, "metadata": $metadata, "name": $name, "orgID": $org_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List all labels for a Telegraf config
@@ -5014,11 +5039,11 @@ export def "telegrafs-labels get" [
 ]: nothing -> record<labels: table<id: string, name: string, orgID: string, properties: record>, links: record<next: string, prev: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({telegraf_id: $telegraf_id} | format pattern "/telegrafs/{telegraf_id}/labels"))
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({telegraf_id: (encode-path-segment $telegraf_id)} | format pattern "/telegrafs/{telegraf_id}/labels"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5042,14 +5067,14 @@ export def "telegrafs-labels create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({telegraf_id: $telegraf_id} | format pattern "/telegrafs/{telegraf_id}/labels"))
-  let body = {"labelID": $label_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({telegraf_id: (encode-path-segment $telegraf_id)} | format pattern "/telegrafs/{telegraf_id}/labels"))
+  let req_body = {"labelID": $label_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a label from a Telegraf config
@@ -5071,11 +5096,11 @@ export def "telegrafs-labels delete" [
 ]: nothing -> record<code: string, err: string, message: string, op: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({telegraf_id: $telegraf_id, label_id: $label_id} | format pattern "/telegrafs/{telegraf_id}/labels/{label_id}"))
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({telegraf_id: (encode-path-segment $telegraf_id), label_id: (encode-path-segment $label_id)} | format pattern "/telegrafs/{telegraf_id}/labels/{label_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5097,11 +5122,11 @@ export def "telegrafs-members get" [
 ]: nothing -> record<links: record<self: string>, users: table<id: string, links: record, name: string, oauthID: string, status: string, role: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({telegraf_id: $telegraf_id} | format pattern "/telegrafs/{telegraf_id}/members"))
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({telegraf_id: (encode-path-segment $telegraf_id)} | format pattern "/telegrafs/{telegraf_id}/members"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5126,14 +5151,14 @@ export def "telegrafs-members create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({telegraf_id: $telegraf_id} | format pattern "/telegrafs/{telegraf_id}/members"))
-  let body = {"id": $id, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({telegraf_id: (encode-path-segment $telegraf_id)} | format pattern "/telegrafs/{telegraf_id}/members"))
+  let req_body = {"id": $id, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Remove a member from a Telegraf config
@@ -5155,11 +5180,11 @@ export def "telegrafs-members delete" [
 ]: nothing -> record<code: string, err: string, message: string, op: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({telegraf_id: $telegraf_id, user_id: $user_id} | format pattern "/telegrafs/{telegraf_id}/members/{user_id}"))
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({telegraf_id: (encode-path-segment $telegraf_id), user_id: (encode-path-segment $user_id)} | format pattern "/telegrafs/{telegraf_id}/members/{user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5181,11 +5206,11 @@ export def "telegrafs-owners get" [
 ]: nothing -> record<links: record<self: string>, users: table<id: string, links: record, name: string, oauthID: string, status: string, role: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({telegraf_id: $telegraf_id} | format pattern "/telegrafs/{telegraf_id}/owners"))
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({telegraf_id: (encode-path-segment $telegraf_id)} | format pattern "/telegrafs/{telegraf_id}/owners"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5210,14 +5235,14 @@ export def "telegrafs-owners create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({telegraf_id: $telegraf_id} | format pattern "/telegrafs/{telegraf_id}/owners"))
-  let body = {"id": $id, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({telegraf_id: (encode-path-segment $telegraf_id)} | format pattern "/telegrafs/{telegraf_id}/owners"))
+  let req_body = {"id": $id, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Remove an owner from a Telegraf config
@@ -5239,11 +5264,11 @@ export def "telegrafs-owners delete" [
 ]: nothing -> record<code: string, err: string, message: string, op: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({telegraf_id: $telegraf_id, user_id: $user_id} | format pattern "/telegrafs/{telegraf_id}/owners/{user_id}"))
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({telegraf_id: (encode-path-segment $telegraf_id), user_id: (encode-path-segment $user_id)} | format pattern "/telegrafs/{telegraf_id}/owners/{user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5252,9 +5277,9 @@ export def "telegrafs-owners delete" [
 # POST /templates/apply
 # operationId: ApplyTemplate
 # --remotes item shape: {contentType?: string, url: string}
-# --template shape: {contentType?: string, contents?: list, sources?: list}
-# --templates item shape: {contentType?: string, contents?: list, sources?: list}
-export def "templates-apply post" [
+# --template shape: {contentType?: string, contents?: list, sources?: list<string>}
+# --templates item shape: {contentType?: string, contents?: list, sources?: list<string>}
+export def "templates-apply create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5270,18 +5295,18 @@ export def "templates-apply post" [
   --remotes: list # item shape: {contentType?: string, url: string}
   --secrets: record
   --stack-id: string
-  --template: record # shape: {contentType?: string, contents?: list, sources?: list}
-  --templates: list # item shape: {contentType?: string, contents?: list, sources?: list}
+  --template: record # shape: {contentType?: string, contents?: list, sources?: list<string>}
+  --templates: list # item shape: {contentType?: string, contents?: list, sources?: list<string>}
 ]: any -> record<diff: record<buckets: list<record>, checks: list<record>, dashboards: list<record>, labelMappings: list<record>, labels: list<record>, notificationEndpoints: list<record>, notificationRules: list<record>, tasks: list<record>, telegrafConfigs: list<record>, variables: list<record>>, errors: table<fields: list, indexes: list, kind: string, reason: string>, sources: list<string>, stackID: string, summary: record<buckets: list<record>, checks: list<record>, dashboards: list<record>, labelMappings: list<record>, labels: list<record>, missingEnvRefs: list<string>, missingSecrets: list<string>, notificationEndpoints: list<record>, notificationRules: list<record>, tasks: list<record>, telegrafConfigs: list<record>, variables: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/templates/apply")
-  let body = {"actions": $actions, "dryRun": $body_dry_run, "envRefs": $env_refs, "orgID": $org_id, "remotes": $remotes, "secrets": $secrets, "stackID": $stack_id, "template": $template, "templates": $templates} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"actions": $actions, "dryRun": $body_dry_run, "envRefs": $env_refs, "orgID": $org_id, "remotes": $remotes, "secrets": $secrets, "stackID": $stack_id, "template": $template, "templates": $templates} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Export a new Influx Template
@@ -5308,11 +5333,11 @@ export def "templates-export export" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/templates/export")
-  let body = {"orgIDs": $org_i_ds, "resources": $resources, "stackID": $stack_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"orgIDs": $org_i_ds, "resources": $resources, "stackID": $stack_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List all users
@@ -5339,10 +5364,10 @@ export def "users list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "after" $after "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/users" $qp)
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5368,13 +5393,13 @@ export def "users create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/users")
-  let body = {"name": $name, "oauthID": $oauth_id, "status": $status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"name": $name, "oauthID": $oauth_id, "status": $status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a user
@@ -5395,11 +5420,11 @@ export def "users delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}"))
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5421,11 +5446,11 @@ export def "users get" [
 ]: nothing -> record<id: string, links: record<self: string>, name: string, oauthID: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}"))
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5451,14 +5476,14 @@ export def "users update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}"))
-  let body = {"name": $name, "oauthID": $oauth_id, "status": $status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}"))
+  let req_body = {"name": $name, "oauthID": $oauth_id, "status": $status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update a password
@@ -5481,14 +5506,14 @@ export def "users-password create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}/password"))
-  let body = {"password": $password} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/password"))
+  let req_body = {"password": $password} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List all variables
@@ -5512,10 +5537,10 @@ export def "variables list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "org" $org "scalar") (serialize-qp "orgID" $org_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/variables" $qp)
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5542,20 +5567,20 @@ export def "variables create" [
   --labels: list # item shape: {name?: string, properties?: record}
   name: string
   org_id: string
-  --selected: list
+  --selected: list<string>
   --updated-at: string # format: date-time
 ]: any -> record<arguments: record, createdAt: string, description: string, id: string, labels: table<id: string, name: string, orgID: string, properties: record>, links: record<labels: string, org: string, self: string>, name: string, orgID: string, selected: list<string>, updatedAt: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/variables")
-  let body = {"arguments": $arguments, "createdAt": $created_at, "description": $description, "labels": $labels, "name": $name, "orgID": $org_id, "selected": $selected, "updatedAt": $updated_at} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"arguments": $arguments, "createdAt": $created_at, "description": $description, "labels": $labels, "name": $name, "orgID": $org_id, "selected": $selected, "updatedAt": $updated_at} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a variable
@@ -5576,11 +5601,11 @@ export def "variables delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({variable_id: $variable_id} | format pattern "/variables/{variable_id}"))
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({variable_id: (encode-path-segment $variable_id)} | format pattern "/variables/{variable_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5602,11 +5627,11 @@ export def "variables get" [
 ]: nothing -> record<arguments: record, createdAt: string, description: string, id: string, labels: table<id: string, name: string, orgID: string, properties: record>, links: record<labels: string, org: string, self: string>, name: string, orgID: string, selected: list<string>, updatedAt: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({variable_id: $variable_id} | format pattern "/variables/{variable_id}"))
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({variable_id: (encode-path-segment $variable_id)} | format pattern "/variables/{variable_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5634,20 +5659,20 @@ export def "variables update-by-variableID" [
   --labels: list # item shape: {name?: string, properties?: record}
   name: string
   org_id: string
-  --selected: list
+  --selected: list<string>
   --updated-at: string # format: date-time
 ]: any -> record<arguments: record, createdAt: string, description: string, id: string, labels: table<id: string, name: string, orgID: string, properties: record>, links: record<labels: string, org: string, self: string>, name: string, orgID: string, selected: list<string>, updatedAt: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({variable_id: $variable_id} | format pattern "/variables/{variable_id}"))
-  let body = {"arguments": $arguments, "createdAt": $created_at, "description": $description, "labels": $labels, "name": $name, "orgID": $org_id, "selected": $selected, "updatedAt": $updated_at} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({variable_id: (encode-path-segment $variable_id)} | format pattern "/variables/{variable_id}"))
+  let req_body = {"arguments": $arguments, "createdAt": $created_at, "description": $description, "labels": $labels, "name": $name, "orgID": $org_id, "selected": $selected, "updatedAt": $updated_at} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Replace a variable
@@ -5674,20 +5699,20 @@ export def "variables update-by-variableID-1" [
   --labels: list # item shape: {name?: string, properties?: record}
   name: string
   org_id: string
-  --selected: list
+  --selected: list<string>
   --updated-at: string # format: date-time
 ]: any -> record<arguments: record, createdAt: string, description: string, id: string, labels: table<id: string, name: string, orgID: string, properties: record>, links: record<labels: string, org: string, self: string>, name: string, orgID: string, selected: list<string>, updatedAt: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({variable_id: $variable_id} | format pattern "/variables/{variable_id}"))
-  let body = {"arguments": $arguments, "createdAt": $created_at, "description": $description, "labels": $labels, "name": $name, "orgID": $org_id, "selected": $selected, "updatedAt": $updated_at} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({variable_id: (encode-path-segment $variable_id)} | format pattern "/variables/{variable_id}"))
+  let req_body = {"arguments": $arguments, "createdAt": $created_at, "description": $description, "labels": $labels, "name": $name, "orgID": $org_id, "selected": $selected, "updatedAt": $updated_at} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List all labels for a variable
@@ -5708,11 +5733,11 @@ export def "variables-labels get" [
 ]: nothing -> record<labels: table<id: string, name: string, orgID: string, properties: record>, links: record<next: string, prev: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({variable_id: $variable_id} | format pattern "/variables/{variable_id}/labels"))
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({variable_id: (encode-path-segment $variable_id)} | format pattern "/variables/{variable_id}/labels"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5736,14 +5761,14 @@ export def "variables-labels create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({variable_id: $variable_id} | format pattern "/variables/{variable_id}/labels"))
-  let body = {"labelID": $label_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({variable_id: (encode-path-segment $variable_id)} | format pattern "/variables/{variable_id}/labels"))
+  let req_body = {"labelID": $label_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a label from a variable
@@ -5765,11 +5790,11 @@ export def "variables-labels delete" [
 ]: nothing -> record<code: string, err: string, message: string, op: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({variable_id: $variable_id, label_id: $label_id} | format pattern "/variables/{variable_id}/labels/{label_id}"))
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({variable_id: (encode-path-segment $variable_id), label_id: (encode-path-segment $label_id)} | format pattern "/variables/{variable_id}/labels/{label_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5802,10 +5827,13 @@ export def "write create" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "org" $org "scalar") (serialize-qp "orgID" $org_id "scalar") (serialize-qp "bucket" $bucket "scalar") (serialize-qp "precision" $precision "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/write" $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $zap_trace_span, "Content-Encoding": $content_encoding, "Content-Type": $content_type, "Content-Length": $content_length, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "text/plain" $body
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span, "Content-Encoding": $content_encoding, "Content-Type": $content_type, "Content-Length": $content_length, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "text/plain")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }

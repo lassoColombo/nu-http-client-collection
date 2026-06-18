@@ -12,6 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
   match $scheme {
     "basic" => { {headers: {Authorization: $"Basic ($token_val)"}, query: ""} }
+    "basic-credentials" => { {headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: ""} }
     "none" => { {headers: {}, query: ""} }
     _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
   }
@@ -33,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
     "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
     _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -63,7 +73,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 }
 
 def base-url-completer [] { ["https://studio.twilio.com"] }
-def auth-scheme-completer [] { ["basic"] }
+def auth-scheme-completer [] { ["basic" "basic-credentials"] }
 
 # Completers for enum parameters
 def status-completer [] { ["active" "ended"] }
@@ -138,7 +148,7 @@ export def "flows-engagements list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://studio.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({flow_sid: $flow_sid} | format pattern "/v1/Flows/{flow_sid}/Engagements") $qp)
+  let full_url = (build-url $base ({flow_sid: (encode-path-segment $flow_sid)} | format pattern "/v1/Flows/{flow_sid}/Engagements") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -165,12 +175,13 @@ export def "flows-engagements create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://studio.twilio.com")
-  let full_url = (build-url $base ({flow_sid: $flow_sid} | format pattern "/v1/Flows/{flow_sid}/Engagements"))
-  let body = {"From": $body_from, "Parameters": $parameters, "To": $body_to} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({flow_sid: (encode-path-segment $flow_sid)} | format pattern "/v1/Flows/{flow_sid}/Engagements"))
+  let req_body = {"From": $body_from, "Parameters": $parameters, "To": $body_to} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Retrieve the most recent context for an Engagement.
@@ -191,7 +202,7 @@ export def "flows-engagements-context get" [
 ]: nothing -> record<account_sid: string, context: any, engagement_sid: string, flow_sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://studio.twilio.com")
-  let full_url = (build-url $base ({flow_sid: $flow_sid, engagement_sid: $engagement_sid} | format pattern "/v1/Flows/{flow_sid}/Engagements/{engagement_sid}/Context"))
+  let full_url = (build-url $base ({flow_sid: (encode-path-segment $flow_sid), engagement_sid: (encode-path-segment $engagement_sid)} | format pattern "/v1/Flows/{flow_sid}/Engagements/{engagement_sid}/Context"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -219,7 +230,7 @@ export def "flows-engagements-steps list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://studio.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({flow_sid: $flow_sid, engagement_sid: $engagement_sid} | format pattern "/v1/Flows/{flow_sid}/Engagements/{engagement_sid}/Steps") $qp)
+  let full_url = (build-url $base ({flow_sid: (encode-path-segment $flow_sid), engagement_sid: (encode-path-segment $engagement_sid)} | format pattern "/v1/Flows/{flow_sid}/Engagements/{engagement_sid}/Steps") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -244,7 +255,7 @@ export def "flows-engagements-steps get" [
 ]: nothing -> record<account_sid: string, context: any, date_created: string, date_updated: string, engagement_sid: string, flow_sid: string, links: record, name: string, sid: string, transitioned_from: string, transitioned_to: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://studio.twilio.com")
-  let full_url = (build-url $base ({flow_sid: $flow_sid, engagement_sid: $engagement_sid, sid: $sid} | format pattern "/v1/Flows/{flow_sid}/Engagements/{engagement_sid}/Steps/{sid}"))
+  let full_url = (build-url $base ({flow_sid: (encode-path-segment $flow_sid), engagement_sid: (encode-path-segment $engagement_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Flows/{flow_sid}/Engagements/{engagement_sid}/Steps/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -269,7 +280,7 @@ export def "flows-engagements-steps-context get" [
 ]: nothing -> record<account_sid: string, context: any, engagement_sid: string, flow_sid: string, step_sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://studio.twilio.com")
-  let full_url = (build-url $base ({flow_sid: $flow_sid, engagement_sid: $engagement_sid, step_sid: $step_sid} | format pattern "/v1/Flows/{flow_sid}/Engagements/{engagement_sid}/Steps/{step_sid}/Context"))
+  let full_url = (build-url $base ({flow_sid: (encode-path-segment $flow_sid), engagement_sid: (encode-path-segment $engagement_sid), step_sid: (encode-path-segment $step_sid)} | format pattern "/v1/Flows/{flow_sid}/Engagements/{engagement_sid}/Steps/{step_sid}/Context"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -293,7 +304,7 @@ export def "flows-engagements delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://studio.twilio.com")
-  let full_url = (build-url $base ({flow_sid: $flow_sid, sid: $sid} | format pattern "/v1/Flows/{flow_sid}/Engagements/{sid}"))
+  let full_url = (build-url $base ({flow_sid: (encode-path-segment $flow_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Flows/{flow_sid}/Engagements/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -317,7 +328,7 @@ export def "flows-engagements get" [
 ]: nothing -> record<account_sid: string, contact_channel_address: string, contact_sid: string, context: any, date_created: string, date_updated: string, flow_sid: string, links: record, sid: string, status: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://studio.twilio.com")
-  let full_url = (build-url $base ({flow_sid: $flow_sid, sid: $sid} | format pattern "/v1/Flows/{flow_sid}/Engagements/{sid}"))
+  let full_url = (build-url $base ({flow_sid: (encode-path-segment $flow_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Flows/{flow_sid}/Engagements/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -346,7 +357,7 @@ export def "flows-executions list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://studio.twilio.com")
   let qp = [(serialize-qp "DateCreatedFrom" $date_created_from "scalar") (serialize-qp "DateCreatedTo" $date_created_to "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({flow_sid: $flow_sid} | format pattern "/v1/Flows/{flow_sid}/Executions") $qp)
+  let full_url = (build-url $base ({flow_sid: (encode-path-segment $flow_sid)} | format pattern "/v1/Flows/{flow_sid}/Executions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -373,12 +384,13 @@ export def "flows-executions create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://studio.twilio.com")
-  let full_url = (build-url $base ({flow_sid: $flow_sid} | format pattern "/v1/Flows/{flow_sid}/Executions"))
-  let body = {"From": $body_from, "Parameters": $parameters, "To": $body_to} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({flow_sid: (encode-path-segment $flow_sid)} | format pattern "/v1/Flows/{flow_sid}/Executions"))
+  let req_body = {"From": $body_from, "Parameters": $parameters, "To": $body_to} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Retrieve the most recent context for an Execution.
@@ -399,7 +411,7 @@ export def "flows-executions-context get" [
 ]: nothing -> record<account_sid: string, context: any, execution_sid: string, flow_sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://studio.twilio.com")
-  let full_url = (build-url $base ({flow_sid: $flow_sid, execution_sid: $execution_sid} | format pattern "/v1/Flows/{flow_sid}/Executions/{execution_sid}/Context"))
+  let full_url = (build-url $base ({flow_sid: (encode-path-segment $flow_sid), execution_sid: (encode-path-segment $execution_sid)} | format pattern "/v1/Flows/{flow_sid}/Executions/{execution_sid}/Context"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -427,7 +439,7 @@ export def "flows-executions-steps list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://studio.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({flow_sid: $flow_sid, execution_sid: $execution_sid} | format pattern "/v1/Flows/{flow_sid}/Executions/{execution_sid}/Steps") $qp)
+  let full_url = (build-url $base ({flow_sid: (encode-path-segment $flow_sid), execution_sid: (encode-path-segment $execution_sid)} | format pattern "/v1/Flows/{flow_sid}/Executions/{execution_sid}/Steps") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -452,7 +464,7 @@ export def "flows-executions-steps get" [
 ]: nothing -> record<account_sid: string, context: any, date_created: string, date_updated: string, execution_sid: string, flow_sid: string, links: record, name: string, sid: string, transitioned_from: string, transitioned_to: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://studio.twilio.com")
-  let full_url = (build-url $base ({flow_sid: $flow_sid, execution_sid: $execution_sid, sid: $sid} | format pattern "/v1/Flows/{flow_sid}/Executions/{execution_sid}/Steps/{sid}"))
+  let full_url = (build-url $base ({flow_sid: (encode-path-segment $flow_sid), execution_sid: (encode-path-segment $execution_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Flows/{flow_sid}/Executions/{execution_sid}/Steps/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -477,7 +489,7 @@ export def "flows-executions-steps-context get" [
 ]: nothing -> record<account_sid: string, context: any, execution_sid: string, flow_sid: string, step_sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://studio.twilio.com")
-  let full_url = (build-url $base ({flow_sid: $flow_sid, execution_sid: $execution_sid, step_sid: $step_sid} | format pattern "/v1/Flows/{flow_sid}/Executions/{execution_sid}/Steps/{step_sid}/Context"))
+  let full_url = (build-url $base ({flow_sid: (encode-path-segment $flow_sid), execution_sid: (encode-path-segment $execution_sid), step_sid: (encode-path-segment $step_sid)} | format pattern "/v1/Flows/{flow_sid}/Executions/{execution_sid}/Steps/{step_sid}/Context"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -501,7 +513,7 @@ export def "flows-executions delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://studio.twilio.com")
-  let full_url = (build-url $base ({flow_sid: $flow_sid, sid: $sid} | format pattern "/v1/Flows/{flow_sid}/Executions/{sid}"))
+  let full_url = (build-url $base ({flow_sid: (encode-path-segment $flow_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Flows/{flow_sid}/Executions/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -525,7 +537,7 @@ export def "flows-executions get" [
 ]: nothing -> record<account_sid: string, contact_channel_address: string, contact_sid: string, context: any, date_created: string, date_updated: string, flow_sid: string, links: record, sid: string, status: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://studio.twilio.com")
-  let full_url = (build-url $base ({flow_sid: $flow_sid, sid: $sid} | format pattern "/v1/Flows/{flow_sid}/Executions/{sid}"))
+  let full_url = (build-url $base ({flow_sid: (encode-path-segment $flow_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Flows/{flow_sid}/Executions/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -551,12 +563,13 @@ export def "flows-executions update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://studio.twilio.com")
-  let full_url = (build-url $base ({flow_sid: $flow_sid, sid: $sid} | format pattern "/v1/Flows/{flow_sid}/Executions/{sid}"))
-  let body = {"Status": $status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({flow_sid: (encode-path-segment $flow_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Flows/{flow_sid}/Executions/{sid}"))
+  let req_body = {"Status": $status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Delete a specific Flow.
@@ -576,7 +589,7 @@ export def "flows delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://studio.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/Flows/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Flows/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -599,7 +612,7 @@ export def "flows get" [
 ]: nothing -> record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, links: record, sid: string, status: string, url: string, version: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://studio.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/Flows/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Flows/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

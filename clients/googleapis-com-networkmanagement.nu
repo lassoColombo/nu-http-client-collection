@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -72,7 +81,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1beta1 networkmanagementprojectslocationsglobaloperationsdelete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1beta1 delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -96,7 +105,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /v1beta1/{name}
 # operationId: networkmanagement.projects.locations.global.operations.delete
-export def "v1beta1 networkmanagementprojectslocationsglobaloperationsdelete" [
+export def "v1beta1 delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -121,7 +130,7 @@ export def "v1beta1 networkmanagementprojectslocationsglobaloperationsdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1beta1/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta1/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -131,7 +140,7 @@ export def "v1beta1 networkmanagementprojectslocationsglobaloperationsdelete" [
 #
 # GET /v1beta1/{name}
 # operationId: networkmanagement.projects.locations.global.operations.get
-export def "v1beta1 networkmanagementprojectslocationsglobaloperationsget" [
+export def "v1beta1 get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -156,7 +165,7 @@ export def "v1beta1 networkmanagementprojectslocationsglobaloperationsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1beta1/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta1/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -170,7 +179,7 @@ export def "v1beta1 networkmanagementprojectslocationsglobaloperationsget" [
 # --probingDetails shape: {abortCause?: "PROBING_ABORT_CAUSE_UNSPECIFIED"|"PERMISSION_DENIED"|"NO_SOURCE_LOCATION", destinationEgressLocation?: record, endpointInfo?: record, error?: record, probingLatency?: record, result?: "PROBING_RESULT_UNSPECIFIED"|"REACHABLE"|"UNREACHABLE"|"REACHABILITY_INCONSISTENT"|"UNDETERMINED", sentProbeCount?: int, successfulProbeCount?: int, verifyTime?: string}
 # --reachabilityDetails shape: {error?: record, result?: "RESULT_UNSPECIFIED"|"REACHABLE"|"UNREACHABLE"|"AMBIGUOUS"|"UNDETERMINED", traces?: list, verifyTime?: string}
 # --source shape: {appEngineVersion?: record, cloudFunction?: record, cloudRunRevision?: record, cloudSqlInstance?: string, forwardingRule?: string, gkeMasterCluster?: string, instance?: string, ipAddress?: string, network?: string, networkType?: "NETWORK_TYPE_UNSPECIFIED"|"GCP_NETWORK"|"NON_GCP_NETWORK", port?: int, projectId?: string}
-export def "v1beta1 networkmanagementprojectslocationsglobalconnectivityTestspatch" [
+export def "v1beta1 update" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -199,26 +208,26 @@ export def "v1beta1 networkmanagementprojectslocationsglobalconnectivityTestspat
   --probing-details: record # Results of active probing from the last run of the test. — shape: {abortCause?: "PROBING_ABORT_CAUSE_UNSPECIFIED"|"PERMISSION_DENIED"|"NO_SOURCE_LOCATION", destinationEgressLocation?: record, endpointInfo?: record, error?: record, probingLatency?: record, result?: "PROBING_RESULT_UNSPECIFIED"|"REACHABLE"|"UNREACHABLE"|"REACHABILITY_INCONSISTENT"|"UNDETERMINED", sentProbeCount?: int, successfulProbeCount?: int, verifyTime?: string}
   --protocol: string # IP Protocol of the test. When not provided, "TCP" is assumed.
   --reachability-details: record # Results of the configuration analysis from the last run of the test. — shape: {error?: record, result?: "RESULT_UNSPECIFIED"|"REACHABLE"|"UNREACHABLE"|"AMBIGUOUS"|"UNDETERMINED", traces?: list, verifyTime?: string}
-  --related-projects: list # Other projects that may be relevant for reachability analysis. This is applicable to scenarios where a test can cross project boundaries.
+  --related-projects: list<string> # Other projects that may be relevant for reachability analysis. This is applicable to scenarios where a test can cross project boundaries.
   --body-source: record # Source or destination of the Connectivity Test. — shape: {appEngineVersion?: record, cloudFunction?: record, cloudRunRevision?: record, cloudSqlInstance?: string, forwardingRule?: string, gkeMasterCluster?: string, instance?: string, ipAddress?: string, network?: string, networkType?: "NETWORK_TYPE_UNSPECIFIED"|"GCP_NETWORK"|"NON_GCP_NETWORK", port?: int, projectId?: string}
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1beta1/{name}") $qp)
-  let body = {"description": $description, "destination": $destination, "labels": $labels, "name": $body_name, "probingDetails": $probing_details, "protocol": $protocol, "reachabilityDetails": $reachability_details, "relatedProjects": $related_projects, "source": $body_source} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta1/{name}") $qp)
+  let req_body = {"description": $description, "destination": $destination, "labels": $labels, "name": $body_name, "probingDetails": $probing_details, "protocol": $protocol, "reachabilityDetails": $reachability_details, "relatedProjects": $related_projects, "source": $body_source} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists information about the supported locations for this service.
 #
 # GET /v1beta1/{name}/locations
 # operationId: networkmanagement.projects.locations.list
-export def "v1beta1-locations networkmanagementprojectslocationslist" [
+export def "v1beta1-locations list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -246,7 +255,7 @@ export def "v1beta1-locations networkmanagementprojectslocationslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1beta1/{name}/locations") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta1/{name}/locations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -256,7 +265,7 @@ export def "v1beta1-locations networkmanagementprojectslocationslist" [
 #
 # GET /v1beta1/{name}/operations
 # operationId: networkmanagement.projects.locations.global.operations.list
-export def "v1beta1-operations networkmanagementprojectslocationsglobaloperationslist" [
+export def "v1beta1-operations list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -284,7 +293,7 @@ export def "v1beta1-operations networkmanagementprojectslocationsglobaloperation
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1beta1/{name}/operations") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta1/{name}/operations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -294,7 +303,7 @@ export def "v1beta1-operations networkmanagementprojectslocationsglobaloperation
 #
 # POST /v1beta1/{name}:cancel
 # operationId: networkmanagement.projects.locations.global.operations.cancel
-export def "v1beta1 networkmanagementprojectslocationsglobaloperationscancel" [
+export def "v1beta1 cancel" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -321,18 +330,19 @@ export def "v1beta1 networkmanagementprojectslocationsglobaloperationscancel" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1beta1/{name}:cancel") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta1/{name}:cancel") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Rerun an existing `ConnectivityTest`. After the user triggers the rerun, the reachability analysis is performed as part of the long running operation, which completes when the analysis completes. Even though the test configuration remains the same, the reachability result may change due to underlying network configuration changes. If the endpoint specifications in `ConnectivityTest` become invalid (for example, specified resources are deleted in the network, or you lost read permissions to the network configurations of listed projects), then the reachability result returns a value of `UNKNOWN`.
 #
 # POST /v1beta1/{name}:rerun
 # operationId: networkmanagement.projects.locations.global.connectivityTests.rerun
-export def "v1beta1 networkmanagementprojectslocationsglobalconnectivityTestsrerun" [
+export def "v1beta1 create-rerun" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -359,18 +369,19 @@ export def "v1beta1 networkmanagementprojectslocationsglobalconnectivityTestsrer
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1beta1/{name}:rerun") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta1/{name}:rerun") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists all Connectivity Tests owned by a project.
 #
 # GET /v1beta1/{parent}/connectivityTests
 # operationId: networkmanagement.projects.locations.global.connectivityTests.list
-export def "v1beta1-connectivity-tests networkmanagementprojectslocationsglobalconnectivityTestslist" [
+export def "v1beta1-connectivity-tests list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -399,7 +410,7 @@ export def "v1beta1-connectivity-tests networkmanagementprojectslocationsglobalc
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta1/{parent}/connectivityTests") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta1/{parent}/connectivityTests") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -413,7 +424,7 @@ export def "v1beta1-connectivity-tests networkmanagementprojectslocationsglobalc
 # --probingDetails shape: {abortCause?: "PROBING_ABORT_CAUSE_UNSPECIFIED"|"PERMISSION_DENIED"|"NO_SOURCE_LOCATION", destinationEgressLocation?: record, endpointInfo?: record, error?: record, probingLatency?: record, result?: "PROBING_RESULT_UNSPECIFIED"|"REACHABLE"|"UNREACHABLE"|"REACHABILITY_INCONSISTENT"|"UNDETERMINED", sentProbeCount?: int, successfulProbeCount?: int, verifyTime?: string}
 # --reachabilityDetails shape: {error?: record, result?: "RESULT_UNSPECIFIED"|"REACHABLE"|"UNREACHABLE"|"AMBIGUOUS"|"UNDETERMINED", traces?: list, verifyTime?: string}
 # --source shape: {appEngineVersion?: record, cloudFunction?: record, cloudRunRevision?: record, cloudSqlInstance?: string, forwardingRule?: string, gkeMasterCluster?: string, instance?: string, ipAddress?: string, network?: string, networkType?: "NETWORK_TYPE_UNSPECIFIED"|"GCP_NETWORK"|"NON_GCP_NETWORK", port?: int, projectId?: string}
-export def "v1beta1-connectivity-tests networkmanagementprojectslocationsglobalconnectivityTestscreate" [
+export def "v1beta1-connectivity-tests create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -442,26 +453,26 @@ export def "v1beta1-connectivity-tests networkmanagementprojectslocationsglobalc
   --probing-details: record # Results of active probing from the last run of the test. — shape: {abortCause?: "PROBING_ABORT_CAUSE_UNSPECIFIED"|"PERMISSION_DENIED"|"NO_SOURCE_LOCATION", destinationEgressLocation?: record, endpointInfo?: record, error?: record, probingLatency?: record, result?: "PROBING_RESULT_UNSPECIFIED"|"REACHABLE"|"UNREACHABLE"|"REACHABILITY_INCONSISTENT"|"UNDETERMINED", sentProbeCount?: int, successfulProbeCount?: int, verifyTime?: string}
   --protocol: string # IP Protocol of the test. When not provided, "TCP" is assumed.
   --reachability-details: record # Results of the configuration analysis from the last run of the test. — shape: {error?: record, result?: "RESULT_UNSPECIFIED"|"REACHABLE"|"UNREACHABLE"|"AMBIGUOUS"|"UNDETERMINED", traces?: list, verifyTime?: string}
-  --related-projects: list # Other projects that may be relevant for reachability analysis. This is applicable to scenarios where a test can cross project boundaries.
+  --related-projects: list<string> # Other projects that may be relevant for reachability analysis. This is applicable to scenarios where a test can cross project boundaries.
   --body-source: record # Source or destination of the Connectivity Test. — shape: {appEngineVersion?: record, cloudFunction?: record, cloudRunRevision?: record, cloudSqlInstance?: string, forwardingRule?: string, gkeMasterCluster?: string, instance?: string, ipAddress?: string, network?: string, networkType?: "NETWORK_TYPE_UNSPECIFIED"|"GCP_NETWORK"|"NON_GCP_NETWORK", port?: int, projectId?: string}
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "testId" $test_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta1/{parent}/connectivityTests") $qp)
-  let body = {"description": $description, "destination": $destination, "labels": $labels, "name": $name, "probingDetails": $probing_details, "protocol": $protocol, "reachabilityDetails": $reachability_details, "relatedProjects": $related_projects, "source": $body_source} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta1/{parent}/connectivityTests") $qp)
+  let req_body = {"description": $description, "destination": $destination, "labels": $labels, "name": $name, "probingDetails": $probing_details, "protocol": $protocol, "reachabilityDetails": $reachability_details, "relatedProjects": $related_projects, "source": $body_source} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets the access control policy for a resource. Returns an empty policy if the resource exists and does not have a policy set.
 #
 # GET /v1beta1/{resource}:getIamPolicy
 # operationId: networkmanagement.projects.locations.global.connectivityTests.getIamPolicy
-export def "v1beta1 networkmanagementprojectslocationsglobalconnectivityTestsgetIamPolicy" [
+export def "v1beta1 get-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -487,7 +498,7 @@ export def "v1beta1 networkmanagementprojectslocationsglobalconnectivityTestsget
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "options.requestedPolicyVersion" $options_requested_policy_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource: $resource} | format pattern "/v1beta1/{resource}:getIamPolicy") $qp)
+  let full_url = (build-url $base ({resource: (encode-path-segment $resource)} | format pattern "/v1beta1/{resource}:getIamPolicy") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -498,7 +509,7 @@ export def "v1beta1 networkmanagementprojectslocationsglobalconnectivityTestsget
 # POST /v1beta1/{resource}:setIamPolicy
 # operationId: networkmanagement.projects.locations.global.connectivityTests.setIamPolicy
 # --policy shape: {auditConfigs?: list, bindings?: list, etag?: string, version?: int}
-export def "v1beta1 networkmanagementprojectslocationsglobalconnectivityTestssetIamPolicy" [
+export def "v1beta1 update-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -526,19 +537,19 @@ export def "v1beta1 networkmanagementprojectslocationsglobalconnectivityTestsset
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource: $resource} | format pattern "/v1beta1/{resource}:setIamPolicy") $qp)
-  let body = {"policy": $policy, "updateMask": $update_mask} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({resource: (encode-path-segment $resource)} | format pattern "/v1beta1/{resource}:setIamPolicy") $qp)
+  let req_body = {"policy": $policy, "updateMask": $update_mask} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns permissions that a caller has on the specified resource. If the resource does not exist, this will return an empty set of permissions, not a `NOT_FOUND` error. Note: This operation is designed to be used for building permission-aware UIs and command-line tools, not for authorization checking. This operation may "fail open" without warning.
 #
 # POST /v1beta1/{resource}:testIamPermissions
 # operationId: networkmanagement.projects.locations.global.connectivityTests.testIamPermissions
-export def "v1beta1 networkmanagementprojectslocationsglobalconnectivityTeststestIamPermissions" [
+export def "v1beta1 test-iam-permissions" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -559,16 +570,16 @@ export def "v1beta1 networkmanagementprojectslocationsglobalconnectivityTeststes
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --permissions: list # The set of permissions to check for the `resource`. Permissions with wildcards (such as `*` or `storage.*`) are not allowed. For more information see [IAM Overview](https://cloud.google.com/iam/docs/overview#permissions).
+  --permissions: list<string> # The set of permissions to check for the `resource`. Permissions with wildcards (such as `*` or `storage.*`) are not allowed. For more information see [IAM Overview](https://cloud.google.com/iam/docs/overview#permissions).
 ]: any -> record<permissions: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource: $resource} | format pattern "/v1beta1/{resource}:testIamPermissions") $qp)
-  let body = {"permissions": $permissions} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({resource: (encode-path-segment $resource)} | format pattern "/v1beta1/{resource}:testIamPermissions") $qp)
+  let req_body = {"permissions": $permissions} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

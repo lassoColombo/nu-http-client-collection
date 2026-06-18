@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -60,6 +69,33 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   }
   if ($method in ["head" "options"]) { return $resp }
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+}
+
+# Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
+# the field names whose value should be read from disk as bytes; every
+# other field is sent as a text part (records/lists JSON-stringified).
+# Returns {content_type, body} ready to pass to `do-request`.
+def build-multipart-body [parts: record, file_fields: list<string>]: nothing -> record {
+  let boundary = $"----nu-(random chars --length 24)"
+  let crlf = "\r\n"
+  let chunks = ($parts | transpose k v | where {|p| $p.v != null} | each {|p|
+    let name = $p.k
+    let val = $p.v
+    if $name in $file_fields {
+      let filename = ($val | path basename)
+      let bytes = (open --raw $val | into binary | collect)
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"; filename=\"($filename)\"($crlf)Content-Type: application/octet-stream($crlf)($crlf)" | into binary)
+      $head ++ $bytes ++ ($crlf | into binary)
+    } else {
+      let dt = ($val | describe)
+      let s = if (($dt | str starts-with "record") or ($dt | str starts-with "list") or ($dt | str starts-with "table")) { ($val | to json --raw) } else { ($val | into string) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"($crlf)($crlf)" | into binary)
+      $head ++ ($"($s)($crlf)" | into binary)
+    }
+  })
+  let trailer = ($"--($boundary)--($crlf)" | into binary)
+  let body = ($chunks | reduce --fold (0x[] | into binary) {|chunk, acc| $acc ++ $chunk }) ++ $trailer
+  {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
 }
 
 def base-url-completer [] { ["https://quotes.rest" "http://quotes.rest" "http://api01.quotes.rest"] }
@@ -140,7 +176,7 @@ export def "qod-categories get" [
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Gets a list of supported languages for `Quote of the Day`. 
+# Gets a list of supported languages for `Quote of the Day`.
 #
 # GET /qod/languages
 export def "qod-languages get" [
@@ -211,7 +247,7 @@ export def "qshow get" [
 # Update an existing qshow.
 #
 # PATCH /qshow
-export def "qshow patch" [
+export def "qshow update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -223,7 +259,7 @@ export def "qshow patch" [
   --id: string # Qshow ID (format: string)
   --title: string # Qshow title (format: string)
   --description: string # Qshow description (format: string)
-  --tags: list # Tags for the qshow
+  --tags: list<string> # Tags for the qshow
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-theysaidso-api-secret"))
   let base = ($base_url | default $BASE_URL)
@@ -237,7 +273,7 @@ export def "qshow patch" [
 # Create and add a new qshow to your private collection.
 #
 # PUT /qshow
-export def "qshow put" [
+export def "qshow update-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -248,7 +284,7 @@ export def "qshow put" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --title: string # Qshow title (format: string)
   --description: string # Qshow description (format: string)
-  --tags: list # Tags for the qshow
+  --tags: list<string> # Tags for the qshow
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-theysaidso-api-secret"))
   let base = ($base_url | default $BASE_URL)
@@ -309,7 +345,7 @@ export def "qshow-quotes get" [
 # Add a quote to a given Qshow.
 #
 # POST /qshow/quotes/add
-export def "qshow-quotes-add post" [
+export def "qshow-quotes-add create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -333,7 +369,7 @@ export def "qshow-quotes-add post" [
 # Remove a quote to a given Qshow.
 #
 # POST /qshow/quotes/remove
-export def "qshow-quotes-remove post" [
+export def "qshow-quotes-remove create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -404,7 +440,7 @@ export def "quote get" [
 # Update a quote
 #
 # PATCH /quote
-export def "quote patch" [
+export def "quote update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -431,7 +467,7 @@ export def "quote patch" [
 # Add a new quote to your private collection. Same as 'PUT' but added since some clients don't handle PUT well.
 #
 # POST /quote
-export def "quote post" [
+export def "quote create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -457,7 +493,7 @@ export def "quote post" [
 # Add a new quote to your private collection.
 #
 # PUT /quote
-export def "quote put" [
+export def "quote update-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -480,7 +516,7 @@ export def "quote put" [
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Gets a list of popular author names in the system. 
+# Gets a list of popular author names in the system.
 #
 # GET /quote/authors/popular
 export def "quote-authors-popular get" [
@@ -506,7 +542,7 @@ export def "quote-authors-popular get" [
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Gets a list of author names in the system. 
+# Gets a list of author names in the system.
 #
 # GET /quote/authors/search
 export def "quote-authors-search get" [
@@ -608,7 +644,7 @@ export def "quote-dislike delete" [
 # Dislike the given Quote as a user of the API Key. Same as `put` but a convenient alias for those clients that don't support `put` cleanly.
 #
 # POST /quote/dislike
-export def "quote-dislike post" [
+export def "quote-dislike create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -631,7 +667,7 @@ export def "quote-dislike post" [
 # Dislike the given Quote as a user of the API Key. Some clients don't cleanly support `PUT`, in such scenarios use the `POST` version of this.
 #
 # PUT /quote/dislike
-export def "quote-dislike put" [
+export def "quote-dislike update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -701,7 +737,7 @@ export def "quote-image get" [
 # Create a new quote image for a given quote. Choose background colors/images , choose different font styles and generate a beautiful quote image. Did you just had a feeling of being a god or what?!
 #
 # PUT /quote/image
-export def "quote-image put" [
+export def "quote-image update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -758,7 +794,7 @@ export def "quote-image-background delete" [
 # Add an image for use later as a quote background image.
 #
 # POST /quote/image/background
-export def "quote-image-background post" [
+export def "quote-image-background create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -774,14 +810,15 @@ export def "quote-image-background post" [
   let auth = (build-auth $token ($auth_scheme | default "x-theysaidso-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/quote/image/background")
-  let body = {"image": $image, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"image": $image, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body ["image"])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
-# Lists background images in your private collection. 
+# Lists background images in your private collection.
 #
 # GET /quote/image/background/list
 export def "quote-image-background-list get" [
@@ -804,7 +841,7 @@ export def "quote-image-background-list get" [
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Searches for a background image with a given tag. 
+# Searches for a background image with a given tag.
 #
 # GET /quote/image/background/search
 export def "quote-image-background-search get" [
@@ -830,7 +867,7 @@ export def "quote-image-background-search get" [
 # Add a tag to a given Image.
 #
 # POST /quote/image/background/tags/add
-export def "quote-image-background-tags-add post" [
+export def "quote-image-background-tags-add create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -854,7 +891,7 @@ export def "quote-image-background-tags-add post" [
 # Remove a tag from a given Image.
 #
 # POST /quote/image/background/tags/remove
-export def "quote-image-background-tags-remove post" [
+export def "quote-image-background-tags-remove create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -901,7 +938,7 @@ export def "quote-image-font delete" [
 # Add a font file for use later in creating a quote image. This is essentially a `PUT` but not many clients handle PUT with binary stream i.e. a file, gracefully.
 #
 # POST /quote/image/font
-export def "quote-image-font post" [
+export def "quote-image-font create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -917,14 +954,15 @@ export def "quote-image-font post" [
   let auth = (build-auth $token ($auth_scheme | default "x-theysaidso-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/quote/image/font")
-  let body = {"font": $font, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"font": $font, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body ["font"])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
-# Lists background images in your private collection. 
+# Lists background images in your private collection.
 #
 # GET /quote/image/font/list
 export def "quote-image-font-list get" [
@@ -947,7 +985,7 @@ export def "quote-image-font-list get" [
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Searches for a font with a given tag. 
+# Searches for a font with a given tag.
 #
 # GET /quote/image/font/search
 export def "quote-image-font-search get" [
@@ -973,7 +1011,7 @@ export def "quote-image-font-search get" [
 # Add a tag to a given font.
 #
 # POST /quote/image/font/tags/add
-export def "quote-image-font-tags-add post" [
+export def "quote-image-font-tags-add create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -997,7 +1035,7 @@ export def "quote-image-font-tags-add post" [
 # Remove a tag from a given Font.
 #
 # POST /quote/image/font/tags/remove
-export def "quote-image-font-tags-remove post" [
+export def "quote-image-font-tags-remove create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1018,7 +1056,7 @@ export def "quote-image-font-tags-remove post" [
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Gets a Random Quote image. Optional `category` param determines the category of quote used in the image. Optional `author` param gets the quote image of a given author. 
+# Gets a Random Quote image. Optional `category` param determines the category of quote used in the image. Optional `author` param gets the quote image of a given author.
 #
 # GET /quote/image/search
 export def "quote-image-search get" [
@@ -1069,7 +1107,7 @@ export def "quote-like delete" [
 # Like the given Quote as a user of the API Key. Same as `PUT` but a convenient alias for those clients that don't support `PUT` cleanly.
 #
 # POST /quote/like
-export def "quote-like post" [
+export def "quote-like create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1092,7 +1130,7 @@ export def "quote-like post" [
 # Like the given Quote as a user of the API Key. Some clients don't cleanly support `PUT`, in such scenarios use the `POST` version of this.
 #
 # PUT /quote/like
-export def "quote-like put" [
+export def "quote-like update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1161,7 +1199,7 @@ export def "quote-random get" [
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Search for a `Quote` in They Said So platform. Optional `category` , `author`, `minlength`, `maxlength` params determines the filters applied while searching for the quote. 
+# Search for a `Quote` in They Said So platform. Optional `category` , `author`, `minlength`, `maxlength` params determines the filters applied while searching for the quote.
 #
 # GET /quote/search
 export def "quote-search get" [
@@ -1196,7 +1234,7 @@ export def "quote-search get" [
 # Add a tag to a given Quote.
 #
 # POST /quote/tags/add
-export def "quote-tags-add post" [
+export def "quote-tags-add create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1220,7 +1258,7 @@ export def "quote-tags-add post" [
 # Remove a tag from a given quote.
 #
 # POST /quote/tags/remove
-export def "quote-tags-remove post" [
+export def "quote-tags-remove create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

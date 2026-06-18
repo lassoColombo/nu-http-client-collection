@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -112,12 +121,12 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-component
   --favorite-type: string@favorite-type-completer # The type of favorite. Value can be either shared or user. (default: shared)
   --source-type: string@source-type-completer # Source type of favorite to return. When left out, the source type defaults to 'other' (not present in this enum). (allows empty value)
   --can-fetch-content: oneof<nothing, bool> # Flag indicating whether or not to return the full content for each applicable favorite. If false, only return summary content for favorites.
-  --tags: list # Tags that must be present on each favorite returned.
+  --tags: list<string> # Tags that must be present on each favorite returned.
 ]: nothing -> table<Category: string, Config: string, FavoriteId: string, FavoriteType: string, IsGeneratedFromTemplate: bool, Name: string, SourceType: string, Tags: list<string>, TimeModified: string, UserId: string, Version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "favoriteType" $favorite_type "scalar") (serialize-qp "sourceType" $source_type "scalar") (serialize-qp "canFetchContent" $can_fetch_content "scalar") (serialize-qp "tags" $tags "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Insights/components/{resource_name}/favorites") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Insights/components/{resource_name}/favorites") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -145,7 +154,7 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-component
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, favorite_id: $favorite_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Insights/components/{resource_name}/favorites/{favorite_id}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), favorite_id: (encode-path-segment $favorite_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Insights/components/{resource_name}/favorites/{favorite_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -173,7 +182,7 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-component
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, favorite_id: $favorite_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Insights/components/{resource_name}/favorites/{favorite_id}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), favorite_id: (encode-path-segment $favorite_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Insights/components/{resource_name}/favorites/{favorite_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -203,19 +212,19 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-component
   --is-generated-from-template: oneof<nothing, bool> # Flag denoting wether or not this favorite was generated from a template.
   --name: string # The user-defined name of the favorite.
   --source-type: string # The source of the favorite definition.
-  --tags: list # A list of 0 or more tags that are associated with this favorite definition
+  --tags: list<string> # A list of 0 or more tags that are associated with this favorite definition
   --version: string # This instance's version of the data model. This can change as new features are added that can be marked favorite. Current examples include MetricsExplorer (ME) and Search.
 ]: any -> record<Category: string, Config: string, FavoriteId: string, FavoriteType: string, IsGeneratedFromTemplate: bool, Name: string, SourceType: string, Tags: list<string>, TimeModified: string, UserId: string, Version: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, favorite_id: $favorite_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Insights/components/{resource_name}/favorites/{favorite_id}") $qp)
-  let body = {"Category": $category, "Config": $config, "FavoriteType": $favorite_type, "IsGeneratedFromTemplate": $is_generated_from_template, "Name": $name, "SourceType": $source_type, "Tags": $tags, "Version": $version} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), favorite_id: (encode-path-segment $favorite_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Insights/components/{resource_name}/favorites/{favorite_id}") $qp)
+  let req_body = {"Category": $category, "Config": $config, "FavoriteType": $favorite_type, "IsGeneratedFromTemplate": $is_generated_from_template, "Name": $name, "SourceType": $source_type, "Tags": $tags, "Version": $version} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Adds a new favorites to an Application Insights component.
@@ -242,17 +251,17 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-component
   --is-generated-from-template: oneof<nothing, bool> # Flag denoting wether or not this favorite was generated from a template.
   --name: string # The user-defined name of the favorite.
   --source-type: string # The source of the favorite definition.
-  --tags: list # A list of 0 or more tags that are associated with this favorite definition
+  --tags: list<string> # A list of 0 or more tags that are associated with this favorite definition
   --version: string # This instance's version of the data model. This can change as new features are added that can be marked favorite. Current examples include MetricsExplorer (ME) and Search.
 ]: any -> record<Category: string, Config: string, FavoriteId: string, FavoriteType: string, IsGeneratedFromTemplate: bool, Name: string, SourceType: string, Tags: list<string>, TimeModified: string, UserId: string, Version: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, favorite_id: $favorite_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Insights/components/{resource_name}/favorites/{favorite_id}") $qp)
-  let body = {"Category": $category, "Config": $config, "FavoriteType": $favorite_type, "IsGeneratedFromTemplate": $is_generated_from_template, "Name": $name, "SourceType": $source_type, "Tags": $tags, "Version": $version} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), favorite_id: (encode-path-segment $favorite_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Insights/components/{resource_name}/favorites/{favorite_id}") $qp)
+  let req_body = {"Category": $category, "Config": $config, "FavoriteType": $favorite_type, "IsGeneratedFromTemplate": $is_generated_from_template, "Name": $name, "SourceType": $source_type, "Tags": $tags, "Version": $version} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

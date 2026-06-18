@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -73,7 +82,7 @@ def limit-completer-1 [] { ["1" "2" "3"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "food-branded-barcodephp get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "food-branded-barcode-php get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -96,7 +105,7 @@ export def commands []: nothing -> table {
 # Get a branded food item using a barcode
 #
 # GET /food/branded/barcode.php
-export def "food-branded-barcodephp get" [
+export def "food-branded-barcode-php get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -105,7 +114,7 @@ export def "food-branded-barcodephp get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --code: string # #### UPC/EAN barcode  **Example** > ```&code=0842234000988```
+  --code: string # #### UPC/EAN barcode **Example** > ```&code=0842234000988```
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
@@ -119,7 +128,7 @@ export def "food-branded-barcodephp get" [
 # Get a branded food item by name
 #
 # GET /food/branded/name.php
-export def "food-branded-namephp get" [
+export def "food-branded-name-php get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -128,9 +137,9 @@ export def "food-branded-namephp get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --name: string # #### Search for branded food items using a general food name keyword. This does not have to exactly match the "official" name for the food.  **Example** > ```&name=Starburst```
-  --limit: int@limit-completer # #### Set maximum number of records you want the API to return. The default value is "**10**."  **Example** > ```&limit=10```
-  --page: int # #### This is how you paginate the search result. By default, you will see the first 10 records. You must increment the page number to access the next 10 records, and so on. The default value is "**1**."  **Example** > ```&page=1```
+  --name: string # #### Search for branded food items using a general food name keyword. This does not have to exactly match the "official" name for the food. **Example** > ```&name=Starburst```
+  --limit: int@limit-completer # #### Set maximum number of records you want the API to return. The default value is "**10**." **Example** > ```&limit=10```
+  --page: int # #### This is how you paginate the search result. By default, you will see the first 10 records. You must increment the page number to access the next 10 records, and so on. The default value is "**1**." **Example** > ```&page=1```
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
@@ -144,7 +153,7 @@ export def "food-branded-namephp get" [
 # Get data for branded food items using various search parameters
 #
 # GET /food/branded/search.php
-export def "food-branded-searchphp get" [
+export def "food-branded-search-php get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -153,20 +162,20 @@ export def "food-branded-searchphp get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --allergen: string # #### Filter the search to only include branded foods that contain a specific allergen.  **Example** > ```&allergen=Peanuts```  **Important Note**: This parameter cannot be used alone. It must be paired with at least 1 additional parameter.
-  --brand: string # #### Filter the search to only include branded foods that are owned by a specific brand.  **Example** > ```&brand=Starbucks```
-  --category: string # #### Filter the search to only include branded foods from a specific category.  **Example** > ```&category=Plant Based Foods```
-  --country: string # #### Filter the search to only include branded foods that are sold in a specific country.  **Example** > ```&country=United States```  **Important Note**: This parameter cannot be used alone. It must be paired with at least 1 additional parameter.
-  --diet: string@diet-completer # #### Filter the search to only include branded foods that are considered compatible with a specific diet.  **Important Note**: This parameter cannot be used alone. It must be paired with at least 1 additional parameter.
-  --ingredient: string # #### Filter the search to only include branded foods that contain a specific ingredient.  **Example** > ```&ingredient=Salt```
-  --keyword: string # #### Filter the search to only include branded foods that are associated with a specific keyword.  **Example** > ```&keyword=Organic```  **Important Note**: This parameter cannot be used alone. It must be paired with at least 1 additional parameter.
-  --mineral: string # #### Filter the search to only include branded foods that contain a specific mineral.  **Example** > ```&mineral=Potassium```
-  --nutrient: string # #### Filter the search to only include branded foods that contain a specific nutrient.  **Example** > ```&nutrient=Caffeine```  **Important Note**: This parameter cannot be used alone. It must be paired with at least 1 additional parameter.
-  --palm-oil: string # #### Filter the search to only include branded foods that contain a specific ingredient made using palm oil.  **Example** > ```&palm_oil=E160a Beta Carotene```
-  --trace: string # ### Filter the search to only include branded foods that contain a specific trace ingredient.  **Example** > ```&trace=Tree Nuts```  **Important Note**: This parameter cannot be used alone. It must be paired with at least 1 additional parameter.
-  --vitamin: string # #### Filter the search to only include branded foods that contain a specific vitamin.  **Example** > ```&vitamin=Biotin```
-  --limit: int@limit-completer # #### Set maximum number of records you want the API to return. The default value is "**10**."  **Example** > ```&limit=10```
-  --page: int # #### This is how you paginate the search result. By default, you will see the first 10 records. You must increment the page number to access the next 10 records, and so on. The default value is "**1**."  **Example** > ```&page=1```
+  --allergen: string # #### Filter the search to only include branded foods that contain a specific allergen. **Example** > ```&allergen=Peanuts``` **Important Note**: This parameter cannot be used alone. It must be paired with at least 1 additional parameter.
+  --brand: string # #### Filter the search to only include branded foods that are owned by a specific brand. **Example** > ```&brand=Starbucks```
+  --category: string # #### Filter the search to only include branded foods from a specific category. **Example** > ```&category=Plant Based Foods```
+  --country: string # #### Filter the search to only include branded foods that are sold in a specific country. **Example** > ```&country=United States``` **Important Note**: This parameter cannot be used alone. It must be paired with at least 1 additional parameter.
+  --diet: string@diet-completer # #### Filter the search to only include branded foods that are considered compatible with a specific diet. **Important Note**: This parameter cannot be used alone. It must be paired with at least 1 additional parameter.
+  --ingredient: string # #### Filter the search to only include branded foods that contain a specific ingredient. **Example** > ```&ingredient=Salt```
+  --keyword: string # #### Filter the search to only include branded foods that are associated with a specific keyword. **Example** > ```&keyword=Organic``` **Important Note**: This parameter cannot be used alone. It must be paired with at least 1 additional parameter.
+  --mineral: string # #### Filter the search to only include branded foods that contain a specific mineral. **Example** > ```&mineral=Potassium```
+  --nutrient: string # #### Filter the search to only include branded foods that contain a specific nutrient. **Example** > ```&nutrient=Caffeine``` **Important Note**: This parameter cannot be used alone. It must be paired with at least 1 additional parameter.
+  --palm-oil: string # #### Filter the search to only include branded foods that contain a specific ingredient made using palm oil. **Example** > ```&palm_oil=E160a Beta Carotene```
+  --trace: string # ### Filter the search to only include branded foods that contain a specific trace ingredient. **Example** > ```&trace=Tree Nuts``` **Important Note**: This parameter cannot be used alone. It must be paired with at least 1 additional parameter.
+  --vitamin: string # #### Filter the search to only include branded foods that contain a specific vitamin. **Example** > ```&vitamin=Biotin```
+  --limit: int@limit-completer # #### Set maximum number of records you want the API to return. The default value is "**10**." **Example** > ```&limit=10```
+  --page: int # #### This is how you paginate the search result. By default, you will see the first 10 records. You must increment the page number to access the next 10 records, and so on. The default value is "**1**." **Example** > ```&page=1```
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
@@ -180,7 +189,7 @@ export def "food-branded-searchphp get" [
 # Get raw/generic food ingredient item(s)
 #
 # GET /food/ingredient/search.php
-export def "food-ingredient-searchphp get" [
+export def "food-ingredient-search-php get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -189,8 +198,8 @@ export def "food-ingredient-searchphp get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --find: string # Search our database for a single ingredient or a specific set of ingredients.  **Example #1: Single Ingredient** > ```&find=raw broccoli```  **Example #2: Set of Ingredients** > ```&find=raw broccoli,buttermilk waffle,mashed potatoes```  **Important Notes**    * Comma-separated lists cannot contain more than **10 ingredients**. You must perform additional API calls if you are looking up more than 10 ingredients.
-  --limit: int@limit-completer-1 # #### Set maximum number of records you want the API to return, per search term. The default value is "**1**."  **Example** > ```&limit=3```
+  --find: string # Search our database for a single ingredient or a specific set of ingredients. **Example #1: Single Ingredient** > ```&find=raw broccoli``` **Example #2: Set of Ingredients** > ```&find=raw broccoli,buttermilk waffle,mashed potatoes``` **Important Notes** * Comma-separated lists cannot contain more than **10 ingredients**. You must perform additional API calls if you are looking up more than 10 ingredients.
+  --limit: int@limit-completer-1 # #### Set maximum number of records you want the API to return, per search term. The default value is "**1**." **Example** > ```&limit=3```
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)

@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -62,6 +71,33 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
+# Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
+# the field names whose value should be read from disk as bytes; every
+# other field is sent as a text part (records/lists JSON-stringified).
+# Returns {content_type, body} ready to pass to `do-request`.
+def build-multipart-body [parts: record, file_fields: list<string>]: nothing -> record {
+  let boundary = $"----nu-(random chars --length 24)"
+  let crlf = "\r\n"
+  let chunks = ($parts | transpose k v | where {|p| $p.v != null} | each {|p|
+    let name = $p.k
+    let val = $p.v
+    if $name in $file_fields {
+      let filename = ($val | path basename)
+      let bytes = (open --raw $val | into binary | collect)
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"; filename=\"($filename)\"($crlf)Content-Type: application/octet-stream($crlf)($crlf)" | into binary)
+      $head ++ $bytes ++ ($crlf | into binary)
+    } else {
+      let dt = ($val | describe)
+      let s = if (($dt | str starts-with "record") or ($dt | str starts-with "list") or ($dt | str starts-with "table")) { ($val | to json --raw) } else { ($val | into string) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"($crlf)($crlf)" | into binary)
+      $head ++ ($"($s)($crlf)" | into binary)
+    }
+  })
+  let trailer = ($"--($boundary)--($crlf)" | into binary)
+  let body = ($chunks | reduce --fold (0x[] | into binary) {|chunk, acc| $acc ++ $chunk }) ++ $trailer
+  {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
+}
+
 def base-url-completer [] { ["https://api.lumminary.com/v1"] }
 def auth-scheme-completer [] { ["jwt"] }
 
@@ -69,7 +105,7 @@ def auth-scheme-completer [] { ["jwt"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "auth-jwt auth" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "auth-jwt create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,7 +129,7 @@ export def commands []: nothing -> table {
 #
 # POST /auth/jwt
 # operationId: post_jwt_auth
-export def "auth-jwt auth" [
+export def "auth-jwt create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -111,20 +147,21 @@ export def "auth-jwt auth" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/auth/jwt")
-  let body = {"username": $username, "password": $password, "role": $role} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Fields": $x_fields} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"username": $username, "password": $password, "role": $role} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"X-Fields": $x_fields} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Get gene by symbol
 #
 # GET /clients/{clientId}/datasets/{datasetId}/genes/{geneSymbol}
 # operationId: get_client_gene
-export def "clients-datasets-genes gene" [
+export def "clients-datasets-genes get" [
   client_id: string
   dataset_id: string
   gene_symbol: string
@@ -140,18 +177,18 @@ export def "clients-datasets-genes gene" [
 ]: nothing -> record<molecular_location: record<chromosome_accession: string, start: int, stop: int>, snps: table<chromosome_accession: string, genotyped_alleles: list, location: int, phased: bool, reference_genome: string, snp_id: string>, symbol: string> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({client_id: $client_id, dataset_id: $dataset_id, gene_symbol: $gene_symbol} | format pattern "/clients/{client_id}/datasets/{dataset_id}/genes/{gene_symbol}"))
-  let extra_headers = {"X-Fields": $x_fields} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({client_id: (encode-path-segment $client_id), dataset_id: (encode-path-segment $dataset_id), gene_symbol: (encode-path-segment $gene_symbol)} | format pattern "/clients/{client_id}/datasets/{dataset_id}/genes/{gene_symbol}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Fields": $x_fields} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /clients/{clientId}/datasets/{datasetId}/snps/
 #
 # operationId: get_client_snp_group
-export def "clients-datasets-snps group-by-clientId-datasetId" [
+export def "clients-datasets-snps get-group" [
   client_id: string
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -166,11 +203,11 @@ export def "clients-datasets-snps group-by-clientId-datasetId" [
 ]: nothing -> table<chromosome_accession: string, genotyped_alleles: list<string>, location: int, phased: bool, reference_genome: string, snp_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({client_id: $client_id, dataset_id: $dataset_id} | format pattern "/clients/{client_id}/datasets/{dataset_id}/snps/"))
-  let extra_headers = {"X-Fields": $x_fields} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({client_id: (encode-path-segment $client_id), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/clients/{client_id}/datasets/{dataset_id}/snps/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Fields": $x_fields} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -178,7 +215,7 @@ export def "clients-datasets-snps group-by-clientId-datasetId" [
 #
 # POST /clients/{clientId}/datasets/{datasetId}/snps/
 # operationId: post_client_snp_group
-export def "clients-datasets-snps group-by-clientId-datasetId-1" [
+export def "clients-datasets-snps create-group" [
   client_id: string
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -195,21 +232,22 @@ export def "clients-datasets-snps group-by-clientId-datasetId-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({client_id: $client_id, dataset_id: $dataset_id} | format pattern "/clients/{client_id}/datasets/{dataset_id}/snps/"))
-  let body = {"snps": $snps} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Fields": $x_fields} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({client_id: (encode-path-segment $client_id), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/clients/{client_id}/datasets/{dataset_id}/snps/"))
+  let req_body = {"snps": $snps} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"X-Fields": $x_fields} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Get SNP information
 #
 # GET /clients/{clientId}/datasets/{datasetId}/snps/{snpId}
 # operationId: get_client_snp
-export def "clients-datasets-snps snp" [
+export def "clients-datasets-snps get" [
   client_id: string
   dataset_id: string
   snp_id: string
@@ -225,11 +263,11 @@ export def "clients-datasets-snps snp" [
 ]: nothing -> record<chromosome_accession: string, genotyped_alleles: list<string>, location: int, phased: bool, reference_genome: string, snp_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({client_id: $client_id, dataset_id: $dataset_id, snp_id: $snp_id} | format pattern "/clients/{client_id}/datasets/{dataset_id}/snps/{snp_id}"))
-  let extra_headers = {"X-Fields": $x_fields} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({client_id: (encode-path-segment $client_id), dataset_id: (encode-path-segment $dataset_id), snp_id: (encode-path-segment $snp_id)} | format pattern "/clients/{client_id}/datasets/{dataset_id}/snps/{snp_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Fields": $x_fields} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -237,7 +275,7 @@ export def "clients-datasets-snps snp" [
 #
 # GET /products/{productId}
 # operationId: get_product
-export def "products product" [
+export def "products get" [
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -251,18 +289,18 @@ export def "products product" [
 ]: nothing -> record<authorized_scopes: list<string>, email: string, product_uuid: string, redirect_uri: string, snps_authorized: list<string>, snps_authorized_any: bool, snps_min_required: record<min_pct: int, snps: list<string>>, snps_min_required_any: bool> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({product_id: $product_id} | format pattern "/products/{product_id}"))
-  let extra_headers = {"X-Fields": $x_fields} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({product_id: (encode-path-segment $product_id)} | format pattern "/products/{product_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Fields": $x_fields} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /products/{productId}/authorizations
 #
 # operationId: get_authorizations_queue
-export def "products-authorizations queue" [
+export def "products-authorizations get-queue" [
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -278,18 +316,18 @@ export def "products-authorizations queue" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "seq_num_start" $seq_num_start "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({product_id: $product_id} | format pattern "/products/{product_id}/authorizations") $qp)
-  let extra_headers = {"X-Fields": $x_fields} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({product_id: (encode-path-segment $product_id)} | format pattern "/products/{product_id}/authorizations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Fields": $x_fields} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /products/{productId}/authorizations/{authorizationId}
 #
 # operationId: get_product_authorization
-export def "products-authorizations authorization-by-productId-authorizationId" [
+export def "products-authorizations get" [
   product_id: string
   authorization_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -304,11 +342,11 @@ export def "products-authorizations authorization-by-productId-authorizationId" 
 ]: nothing -> record<authorization_uuid: string, client_uuid: string, create_timestamp: int, is_active: bool, order: string, product_uuid: string, report_credentials: table<authorization_uuid: string, client_password: string, client_username: string, create_timestamp: int, report_credentials_uuid: string, report_url: string>, report_files: table<authorization_uuid: string, create_timestamp: int, file_location: record, report_file_uuid: string>, scopes: record<address: record<address1: string, address2: string, city: string, country: string, phone: string, state: string, zipcode: string>, dataset: string, email: string, login: string, name: record<first_name: string, last_name: string>, sex: string>, sequence_number: int, state: string> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({product_id: $product_id, authorization_id: $authorization_id} | format pattern "/products/{product_id}/authorizations/{authorization_id}"))
-  let extra_headers = {"X-Fields": $x_fields} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({product_id: (encode-path-segment $product_id), authorization_id: (encode-path-segment $authorization_id)} | format pattern "/products/{product_id}/authorizations/{authorization_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Fields": $x_fields} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -316,7 +354,7 @@ export def "products-authorizations authorization-by-productId-authorizationId" 
 #
 # POST /products/{productId}/authorizations/{authorizationId}
 # operationId: post_product_authorization
-export def "products-authorizations authorization-by-productId-authorizationId-1" [
+export def "products-authorizations create" [
   product_id: string
   authorization_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -330,7 +368,7 @@ export def "products-authorizations authorization-by-productId-authorizationId-1
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({product_id: $product_id, authorization_id: $authorization_id} | format pattern "/products/{product_id}/authorizations/{authorization_id}"))
+  let full_url = (build-url $base ({product_id: (encode-path-segment $product_id), authorization_id: (encode-path-segment $authorization_id)} | format pattern "/products/{product_id}/authorizations/{authorization_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -340,7 +378,7 @@ export def "products-authorizations authorization-by-productId-authorizationId-1
 #
 # POST /products/{productId}/authorizations/{authorizationId}/credentials
 # operationId: post_authorization_result_credentials
-export def "products-authorizations-credentials credentials" [
+export def "products-authorizations-credentials create-result" [
   product_id: string
   authorization_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -359,21 +397,22 @@ export def "products-authorizations-credentials credentials" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({product_id: $product_id, authorization_id: $authorization_id} | format pattern "/products/{product_id}/authorizations/{authorization_id}/credentials"))
-  let body = {"credentials_username": $credentials_username, "credentials_password": $credentials_password, "report_url": $report_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Fields": $x_fields} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({product_id: (encode-path-segment $product_id), authorization_id: (encode-path-segment $authorization_id)} | format pattern "/products/{product_id}/authorizations/{authorization_id}/credentials"))
+  let req_body = {"credentials_username": $credentials_username, "credentials_password": $credentials_password, "report_url": $report_url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"X-Fields": $x_fields} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Provide a file result to the authorization, e
 #
 # POST /products/{productId}/authorizations/{authorizationId}/file
 # operationId: post_authorization_result_file
-export def "products-authorizations-file file" [
+export def "products-authorizations-file create-result" [
   product_id: string
   authorization_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -392,22 +431,22 @@ export def "products-authorizations-file file" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "original_filename" $original_filename "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({product_id: $product_id, authorization_id: $authorization_id} | format pattern "/products/{product_id}/authorizations/{authorization_id}/file") $qp)
-  let body = {"file_report": $file_report} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Fields": $x_fields} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({product_id: (encode-path-segment $product_id), authorization_id: (encode-path-segment $authorization_id)} | format pattern "/products/{product_id}/authorizations/{authorization_id}/file") $qp)
+  let req_body = {"file_report": $file_report} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let body = if ($file_report | is-not-empty) { $body | upsert file_report (open -r $file_report) } else { $body }
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let extra_headers = {"X-Fields": $x_fields} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let mp = (build-multipart-body $req_body ["file_report"])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # Catch-all Authorization state, for authorizations that passed all verifications and should reach the partner Product, but cannot be fulfilled for various reasons
 #
 # POST /products/{productId}/authorizations/{authorizationId}/unfulfillable
 # operationId: post_product_authorization_unfulfillable
-export def "products-authorizations-unfulfillable unfulfillable" [
+export def "products-authorizations-unfulfillable create" [
   product_id: string
   authorization_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -421,7 +460,7 @@ export def "products-authorizations-unfulfillable unfulfillable" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({product_id: $product_id, authorization_id: $authorization_id} | format pattern "/products/{product_id}/authorizations/{authorization_id}/unfulfillable"))
+  let full_url = (build-url $base ({product_id: (encode-path-segment $product_id), authorization_id: (encode-path-segment $authorization_id)} | format pattern "/products/{product_id}/authorizations/{authorization_id}/unfulfillable"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -431,7 +470,7 @@ export def "products-authorizations-unfulfillable unfulfillable" [
 #
 # GET /reference/genes/databases/{databaseName}/accessions/{accession}
 # operationId: get_gene
-export def "reference-genes-databases-accessions gene" [
+export def "reference-genes-databases-accessions get" [
   database_name: string
   accession: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -449,11 +488,11 @@ export def "reference-genes-databases-accessions gene" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "dbsnp_build" $dbsnp_build "scalar") (serialize-qp "reference_genome" $reference_genome "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({database_name: $database_name, accession: $accession} | format pattern "/reference/genes/databases/{database_name}/accessions/{accession}") $qp)
-  let extra_headers = {"X-Fields": $x_fields} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({database_name: (encode-path-segment $database_name), accession: (encode-path-segment $accession)} | format pattern "/reference/genes/databases/{database_name}/accessions/{accession}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Fields": $x_fields} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -461,7 +500,7 @@ export def "reference-genes-databases-accessions gene" [
 #
 # GET /reference/genomes/
 # operationId: get_reference_genomes_group
-export def "reference-genomes group" [
+export def "reference-genomes get-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -475,10 +514,10 @@ export def "reference-genomes group" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/reference/genomes/")
-  let extra_headers = {"X-Fields": $x_fields} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Fields": $x_fields} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -486,7 +525,7 @@ export def "reference-genomes group" [
 #
 # GET /reference/genomes/{genomeBuildAccession}/chromosomes
 # operationId: get_reference_genome
-export def "reference-genomes-chromosomes genome" [
+export def "reference-genomes-chromosomes list" [
   genome_build_accession: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -500,11 +539,11 @@ export def "reference-genomes-chromosomes genome" [
 ]: nothing -> table<reference_accession: string> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({genome_build_accession: $genome_build_accession} | format pattern "/reference/genomes/{genome_build_accession}/chromosomes"))
-  let extra_headers = {"X-Fields": $x_fields} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({genome_build_accession: (encode-path-segment $genome_build_accession)} | format pattern "/reference/genomes/{genome_build_accession}/chromosomes"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Fields": $x_fields} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -512,7 +551,7 @@ export def "reference-genomes-chromosomes genome" [
 #
 # GET /reference/genomes/{genomeBuildAccession}/chromosomes/{chromosomeAccession}
 # operationId: get_reference_chromosome
-export def "reference-genomes-chromosomes chromosome" [
+export def "reference-genomes-chromosomes get" [
   genome_build_accession: string
   chromosome_accession: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -530,11 +569,11 @@ export def "reference-genomes-chromosomes chromosome" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "range_start" $range_start "scalar") (serialize-qp "range_stop" $range_stop "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({genome_build_accession: $genome_build_accession, chromosome_accession: $chromosome_accession} | format pattern "/reference/genomes/{genome_build_accession}/chromosomes/{chromosome_accession}") $qp)
-  let extra_headers = {"X-Fields": $x_fields} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({genome_build_accession: (encode-path-segment $genome_build_accession), chromosome_accession: (encode-path-segment $chromosome_accession)} | format pattern "/reference/genomes/{genome_build_accession}/chromosomes/{chromosome_accession}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Fields": $x_fields} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -542,7 +581,7 @@ export def "reference-genomes-chromosomes chromosome" [
 #
 # GET /reference/snps/{snpAccession}
 # operationId: get_reference_snp
-export def "reference-snps snp" [
+export def "reference-snps get" [
   snp_accession: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -559,10 +598,10 @@ export def "reference-snps snp" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "dbsnp_version" $dbsnp_version "scalar") (serialize-qp "grch_version" $grch_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({snp_accession: $snp_accession} | format pattern "/reference/snps/{snp_accession}") $qp)
-  let extra_headers = {"X-Fields": $x_fields} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({snp_accession: (encode-path-segment $snp_accession)} | format pattern "/reference/snps/{snp_accession}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Fields": $x_fields} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -120,11 +129,11 @@ export def "routing-calculate-reachable-range get" [
   --time-budget-in-sec: float # Time budget in seconds. Determines the maximum vehicle range using the specified driving time. The consumption parameters in the request will only affect eco-routes, and thereby indirectly the driving time. (format: float)
   --callback: string # Specifies the jsonp callback method. (default: callback)
   --report: string@report-completer # Specifies which data should be reported for diagnosis purposes.
-  --depart-at: string # The date and time of departure from the origin point. Departure times apart from <i>now</i> must be specified as a dateTime. (default: now)
+  --depart-at: string # The date and time of departure from the origin point. Departure times apart from now must be specified as a dateTime. (default: now)
   --arrive-at: string # The date and time of arrival at the destination point. It must be specified as a dateTime. (format: dateTime)
   --route-type: string@route-type-completer # The type of route requested. (default: fastest)
   --traffic: oneof<nothing, bool> # Determines whether current traffic is used in route calculations. Note that information on historic road speeds is always used. (default: true)
-  --avoid: string # Specifies whether the routing engine should try to avoid specific types of road segment when calculating the route. Can be specified multiple times. Possible values:   - tollRoads   - motorways   - ferries   - unpavedRoads   - carpools (e.g. unpavedRoads)
+  --avoid: string # Specifies whether the routing engine should try to avoid specific types of road segment when calculating the route. Can be specified multiple times. Possible values: - tollRoads - motorways - ferries - unpavedRoads - carpools (e.g. unpavedRoads)
   --travel-mode: string@travel-mode-completer # The mode of travel for the requested route. (default: car)
   --hilliness: string@hilliness-completer # Degree of hilliness for calculating a thrilling route. (default: normal)
   --windingness: string@windingness-completer # Amount that a thrilling route should wind. (default: normal)
@@ -135,7 +144,7 @@ export def "routing-calculate-reachable-range get" [
   --vehicle-width: float # Width of the vehicle in meters. (format: float, default: 0)
   --vehicle-height: float # Height of the vehicle in meters. (format: float, default: 0)
   --vehicle-commercial: oneof<nothing, bool> # Indicates that the vehicle is used for commercial purposes. This means it may not be allowed on certain roads. (default: false)
-  --vehicle-load-type: string # Indicates what kinds of hazardous materials the vehicle is carrying (if any). This means it may not be allowed on certain roads. Use these for routing in the US:    - <i>USHazmatClass1</i> Explosives   - <i>USHazmatClass2</i> Compressed gas   - <i>USHazmatClass3</i> Flammable liquids   - <i>USHazmatClass4</i> Flammable solids   - <i>USHazmatClass5</i> Oxidizers   - <i>USHazmatClass6</i> Poisons   - <i>USHazmatClass7</i> Radioactive   - <i>USHazmatClass8</i> Corrosives   - <i>USHazmatClass9</i> Miscellaneous  Use these for routing in all other countries:    - <i>otherHazmatExplosive</i> Explosives   - <i>otherHazmatGeneral</i> Miscellaneous   - <i>otherHazmatHarmfulToWater</i> Harmful to water  vehicleLoadType can be specified multiple times. This parameter is currently only considered for <b>travelMode</b>=<i>truck</i>.
+  --vehicle-load-type: string # Indicates what kinds of hazardous materials the vehicle is carrying (if any). This means it may not be allowed on certain roads. Use these for routing in the US: - USHazmatClass1 Explosives - USHazmatClass2 Compressed gas - USHazmatClass3 Flammable liquids - USHazmatClass4 Flammable solids - USHazmatClass5 Oxidizers - USHazmatClass6 Poisons - USHazmatClass7 Radioactive - USHazmatClass8 Corrosives - USHazmatClass9 Miscellaneous Use these for routing in all other countries: - otherHazmatExplosive Explosives - otherHazmatGeneral Miscellaneous - otherHazmatHarmfulToWater Harmful to water vehicleLoadType can be specified multiple times. This parameter is currently only considered for travelMode=truck.
   --constant-speed-consumption-in-liters-per-hundredkm: string # Specifies the speed-dependent component of consumption. Provided as an unordered list of speed/consumption-rate pairs.
   --current-fuel-in-liters: float # Specifies the current supply of fuel in liters. (format: float)
   --auxiliary-power-in-liters-per-hour: float # Specifies the amount of fuel consumed for sustaining auxiliary systems of the vehicle, in liters per hour. (format: float)
@@ -150,7 +159,7 @@ export def "routing-calculate-reachable-range get" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fuelBudgetInLiters" $fuel_budget_in_liters "scalar") (serialize-qp "energyBudgetInkWh" $energy_budget_ink_wh "scalar") (serialize-qp "timeBudgetInSec" $time_budget_in_sec "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "report" $report "scalar") (serialize-qp "departAt" $depart_at "scalar") (serialize-qp "arriveAt" $arrive_at "scalar") (serialize-qp "routeType" $route_type "scalar") (serialize-qp "traffic" $traffic "scalar") (serialize-qp "avoid" $avoid "scalar") (serialize-qp "travelMode" $travel_mode "scalar") (serialize-qp "hilliness" $hilliness "scalar") (serialize-qp "windingness" $windingness "scalar") (serialize-qp "vehicleMaxSpeed" $vehicle_max_speed "scalar") (serialize-qp "vehicleWeight" $vehicle_weight "scalar") (serialize-qp "vehicleAxleWeight" $vehicle_axle_weight "scalar") (serialize-qp "vehicleLength" $vehicle_length "scalar") (serialize-qp "vehicleWidth" $vehicle_width "scalar") (serialize-qp "vehicleHeight" $vehicle_height "scalar") (serialize-qp "vehicleCommercial" $vehicle_commercial "scalar") (serialize-qp "vehicleLoadType" $vehicle_load_type "scalar") (serialize-qp "constantSpeedConsumptionInLitersPerHundredkm" $constant_speed_consumption_in_liters_per_hundredkm "scalar") (serialize-qp "currentFuelInLiters" $current_fuel_in_liters "scalar") (serialize-qp "auxiliaryPowerInLitersPerHour" $auxiliary_power_in_liters_per_hour "scalar") (serialize-qp "fuelEnergyDensityInMJoulesPerLiter" $fuel_energy_density_in_m_joules_per_liter "scalar") (serialize-qp "accelerationEfficiency" $acceleration_efficiency "scalar") (serialize-qp "decelerationEfficiency" $deceleration_efficiency "scalar") (serialize-qp "uphillEfficiency" $uphill_efficiency "scalar") (serialize-qp "downhillEfficiency" $downhill_efficiency "scalar") (serialize-qp "vehicleEngineType" $vehicle_engine_type "scalar") (serialize-qp "constantSpeedConsumptionInkWhPerHundredkm" $constant_speed_consumption_ink_wh_per_hundredkm "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({version_number: $version_number, origin: $origin, content_type: $content_type} | format pattern "/routing/{version_number}/calculateReachableRange/{origin}/{content_type}") $qp)
+  let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), origin: (encode-path-segment $origin), content_type: (encode-path-segment $content_type)} | format pattern "/routing/{version_number}/calculateReachableRange/{origin}/{content_type}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -160,7 +169,7 @@ export def "routing-calculate-reachable-range get" [
 #
 # POST /routing/{versionNumber}/calculateReachableRange/{origin}/{contentType}
 # --avoidAreas shape: {rectangles?: list}
-export def "routing-calculate-reachable-range post" [
+export def "routing-calculate-reachable-range create" [
   version_number: int
   origin: string
   content_type: string
@@ -177,11 +186,11 @@ export def "routing-calculate-reachable-range post" [
   --time-budget-in-sec: float # Time budget in seconds. Determines the maximum vehicle range using the specified driving time. The consumption parameters in the request will only affect eco-routes, and thereby indirectly the driving time. (format: float)
   --callback: string # Specifies the jsonp callback method. (default: callback)
   --report: string@report-completer # Specifies which data should be reported for diagnosis purposes.
-  --depart-at: string # The date and time of departure from the origin point. Departure times apart from <i>now</i> must be specified as a dateTime. (default: now)
+  --depart-at: string # The date and time of departure from the origin point. Departure times apart from now must be specified as a dateTime. (default: now)
   --arrive-at: string # The date and time of arrival at the destination point. It must be specified as a dateTime. (format: dateTime)
   --route-type: string@route-type-completer # The type of route requested. (default: fastest)
   --traffic: oneof<nothing, bool> # Determines whether current traffic is used in route calculations. Note that information on historic road speeds is always used. (default: true)
-  --avoid: string # Specifies whether the routing engine should try to avoid specific types of road segment when calculating the route. Can be specified multiple times. Possible values:   - tollRoads   - motorways   - ferries   - unpavedRoads   - carpools (e.g. unpavedRoads)
+  --avoid: string # Specifies whether the routing engine should try to avoid specific types of road segment when calculating the route. Can be specified multiple times. Possible values: - tollRoads - motorways - ferries - unpavedRoads - carpools (e.g. unpavedRoads)
   --travel-mode: string@travel-mode-completer # The mode of travel for the requested route. (default: car)
   --hilliness: string@hilliness-completer # Degree of hilliness for calculating a thrilling route. (default: normal)
   --windingness: string@windingness-completer # Amount that a thrilling route should wind. (default: normal)
@@ -192,7 +201,7 @@ export def "routing-calculate-reachable-range post" [
   --vehicle-width: float # Width of the vehicle in meters. (format: float, default: 0)
   --vehicle-height: float # Height of the vehicle in meters. (format: float, default: 0)
   --vehicle-commercial: oneof<nothing, bool> # Indicates that the vehicle is used for commercial purposes. This means it may not be allowed on certain roads. (default: false)
-  --vehicle-load-type: string # Indicates what kinds of hazardous materials the vehicle is carrying (if any). This means it may not be allowed on certain roads. Use these for routing in the US:    - <i>USHazmatClass1</i> Explosives   - <i>USHazmatClass2</i> Compressed gas   - <i>USHazmatClass3</i> Flammable liquids   - <i>USHazmatClass4</i> Flammable solids   - <i>USHazmatClass5</i> Oxidizers   - <i>USHazmatClass6</i> Poisons   - <i>USHazmatClass7</i> Radioactive   - <i>USHazmatClass8</i> Corrosives   - <i>USHazmatClass9</i> Miscellaneous  Use these for routing in all other countries:    - <i>otherHazmatExplosive</i> Explosives   - <i>otherHazmatGeneral</i> Miscellaneous   - <i>otherHazmatHarmfulToWater</i> Harmful to water  vehicleLoadType can be specified multiple times. This parameter is currently only considered for <b>travelMode</b>=<i>truck</i>.
+  --vehicle-load-type: string # Indicates what kinds of hazardous materials the vehicle is carrying (if any). This means it may not be allowed on certain roads. Use these for routing in the US: - USHazmatClass1 Explosives - USHazmatClass2 Compressed gas - USHazmatClass3 Flammable liquids - USHazmatClass4 Flammable solids - USHazmatClass5 Oxidizers - USHazmatClass6 Poisons - USHazmatClass7 Radioactive - USHazmatClass8 Corrosives - USHazmatClass9 Miscellaneous Use these for routing in all other countries: - otherHazmatExplosive Explosives - otherHazmatGeneral Miscellaneous - otherHazmatHarmfulToWater Harmful to water vehicleLoadType can be specified multiple times. This parameter is currently only considered for travelMode=truck.
   --constant-speed-consumption-in-liters-per-hundredkm: string # Specifies the speed-dependent component of consumption. Provided as an unordered list of speed/consumption-rate pairs.
   --current-fuel-in-liters: float # Specifies the current supply of fuel in liters. (format: float)
   --auxiliary-power-in-liters-per-hour: float # Specifies the amount of fuel consumed for sustaining auxiliary systems of the vehicle, in liters per hour. (format: float)
@@ -203,20 +212,20 @@ export def "routing-calculate-reachable-range post" [
   --downhill-efficiency: float # Specifies the efficiency of converting potential energy to saved (not consumed) fuel when the vehicle loses elevation (i.e. ChemicalEnergySaved/PotentialEnergyLost). (format: float)
   --vehicle-engine-type: string@vehicle-engine-type-completer # Engine type of the vehicle. (default: combustion, e.g. electric)
   --constant-speed-consumption-ink-wh-per-hundredkm: string # Specifies the speed-dependent component of consumption. Provided as an unordered list of speed/consumption-rate pairs. (e.g. 50,8.2:130,21.3)
-  --allow-vignette: list
+  --allow-vignette: list<string>
   --avoid-areas: record # shape: {rectangles?: list}
-  --avoid-vignette: list
+  --avoid-vignette: list<string>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fuelBudgetInLiters" $fuel_budget_in_liters "scalar") (serialize-qp "energyBudgetInkWh" $energy_budget_ink_wh "scalar") (serialize-qp "timeBudgetInSec" $time_budget_in_sec "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "report" $report "scalar") (serialize-qp "departAt" $depart_at "scalar") (serialize-qp "arriveAt" $arrive_at "scalar") (serialize-qp "routeType" $route_type "scalar") (serialize-qp "traffic" $traffic "scalar") (serialize-qp "avoid" $avoid "scalar") (serialize-qp "travelMode" $travel_mode "scalar") (serialize-qp "hilliness" $hilliness "scalar") (serialize-qp "windingness" $windingness "scalar") (serialize-qp "vehicleMaxSpeed" $vehicle_max_speed "scalar") (serialize-qp "vehicleWeight" $vehicle_weight "scalar") (serialize-qp "vehicleAxleWeight" $vehicle_axle_weight "scalar") (serialize-qp "vehicleLength" $vehicle_length "scalar") (serialize-qp "vehicleWidth" $vehicle_width "scalar") (serialize-qp "vehicleHeight" $vehicle_height "scalar") (serialize-qp "vehicleCommercial" $vehicle_commercial "scalar") (serialize-qp "vehicleLoadType" $vehicle_load_type "scalar") (serialize-qp "constantSpeedConsumptionInLitersPerHundredkm" $constant_speed_consumption_in_liters_per_hundredkm "scalar") (serialize-qp "currentFuelInLiters" $current_fuel_in_liters "scalar") (serialize-qp "auxiliaryPowerInLitersPerHour" $auxiliary_power_in_liters_per_hour "scalar") (serialize-qp "fuelEnergyDensityInMJoulesPerLiter" $fuel_energy_density_in_m_joules_per_liter "scalar") (serialize-qp "accelerationEfficiency" $acceleration_efficiency "scalar") (serialize-qp "decelerationEfficiency" $deceleration_efficiency "scalar") (serialize-qp "uphillEfficiency" $uphill_efficiency "scalar") (serialize-qp "downhillEfficiency" $downhill_efficiency "scalar") (serialize-qp "vehicleEngineType" $vehicle_engine_type "scalar") (serialize-qp "constantSpeedConsumptionInkWhPerHundredkm" $constant_speed_consumption_ink_wh_per_hundredkm "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({version_number: $version_number, origin: $origin, content_type: $content_type} | format pattern "/routing/{version_number}/calculateReachableRange/{origin}/{content_type}") $qp)
-  let body = {"allowVignette": $allow_vignette, "avoidAreas": $avoid_areas, "avoidVignette": $avoid_vignette} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), origin: (encode-path-segment $origin), content_type: (encode-path-segment $content_type)} | format pattern "/routing/{version_number}/calculateReachableRange/{origin}/{content_type}") $qp)
+  let req_body = {"allowVignette": $allow_vignette, "avoidAreas": $avoid_areas, "avoidVignette": $avoid_vignette} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Calculate Route
@@ -244,14 +253,14 @@ export def "routing-calculate-route get" [
   --route-representation: string@route-representation-completer # Specifies the representation of the set of routes provided as a response. (default: polyline)
   --compute-travel-time-for: string@compute-travel-time-for-completer # Specifies whether to return additional travel times using different types of traffic information (none, historic, live) as well as the default best-estimate travel time. (default: none)
   --vehicle-heading: int # The directional heading of the vehicle in degrees. Entered in degrees, measured clockwise from north (so north is 0, east is 90, etc.).
-  --section-type: string # Specifies which section types are explicitly reported in the route response. Can be specified multiple times.   - carTrain, ferry, tunnel or motorway   - pedestrian   - tollRoad   - tollVignette   - country   - travelMode   - traffic (default: travelMode)
+  --section-type: string # Specifies which section types are explicitly reported in the route response. Can be specified multiple times. - carTrain, ferry, tunnel or motorway - pedestrian - tollRoad - tollVignette - country - travelMode - traffic (default: travelMode)
   --callback: string # Specifies the jsonp callback method. (default: callback)
   --report: string@report-completer # Specifies which data should be reported for diagnosis purposes.
-  --depart-at: string # The date and time of departure from the origin point. Departure times apart from <i>now</i> must be specified as a dateTime. (default: now)
+  --depart-at: string # The date and time of departure from the origin point. Departure times apart from now must be specified as a dateTime. (default: now)
   --arrive-at: string # The date and time of arrival at the destination point. It must be specified as a dateTime. (format: dateTime)
   --route-type: string@route-type-completer # The type of route requested. (default: fastest)
   --traffic: oneof<nothing, bool> # Determines whether current traffic is used in route calculations. Note that information on historic road speeds is always used. (default: true)
-  --avoid: string # Specifies whether the routing engine should try to avoid specific types of road segment when calculating the route. Can be specified multiple times. Possible values:   - tollRoads   - motorways   - ferries   - unpavedRoads   - carpools   - alreadyUsedRoads (e.g. unpavedRoads)
+  --avoid: string # Specifies whether the routing engine should try to avoid specific types of road segment when calculating the route. Can be specified multiple times. Possible values: - tollRoads - motorways - ferries - unpavedRoads - carpools - alreadyUsedRoads (e.g. unpavedRoads)
   --travel-mode: string@travel-mode-completer # The mode of travel for the requested route. (default: car)
   --hilliness: string@hilliness-completer # Degree of hilliness for calculating a thrilling route. (default: normal)
   --windingness: string@windingness-completer # Amount that a thrilling route should wind. (default: normal)
@@ -262,7 +271,7 @@ export def "routing-calculate-route get" [
   --vehicle-width: float # Width of the vehicle in meters. (format: float, default: 0)
   --vehicle-height: float # Height of the vehicle in meters. (format: float, default: 0)
   --vehicle-commercial: oneof<nothing, bool> # Indicates that the vehicle is used for commercial purposes. This means it may not be allowed on certain roads. (default: false)
-  --vehicle-load-type: string # Indicates what kinds of hazardous materials the vehicle is carrying (if any). This means it may not be allowed on certain roads. Use these for routing in the US:    - <i>USHazmatClass1</i> Explosives   - <i>USHazmatClass2</i> Compressed gas   - <i>USHazmatClass3</i> Flammable liquids   - <i>USHazmatClass4</i> Flammable solids   - <i>USHazmatClass5</i> Oxidizers   - <i>USHazmatClass6</i> Poisons   - <i>USHazmatClass7</i> Radioactive   - <i>USHazmatClass8</i> Corrosives   - <i>USHazmatClass9</i> Miscellaneous  Use these for routing in all other countries:    - <i>otherHazmatExplosive</i> Explosives   - <i>otherHazmatGeneral</i> Miscellaneous   - <i>otherHazmatHarmfulToWater</i> Harmful to water  vehicleLoadType can be specified multiple times. This parameter is currently only considered for <b>travelMode</b>=<i>truck</i>.
+  --vehicle-load-type: string # Indicates what kinds of hazardous materials the vehicle is carrying (if any). This means it may not be allowed on certain roads. Use these for routing in the US: - USHazmatClass1 Explosives - USHazmatClass2 Compressed gas - USHazmatClass3 Flammable liquids - USHazmatClass4 Flammable solids - USHazmatClass5 Oxidizers - USHazmatClass6 Poisons - USHazmatClass7 Radioactive - USHazmatClass8 Corrosives - USHazmatClass9 Miscellaneous Use these for routing in all other countries: - otherHazmatExplosive Explosives - otherHazmatGeneral Miscellaneous - otherHazmatHarmfulToWater Harmful to water vehicleLoadType can be specified multiple times. This parameter is currently only considered for travelMode=truck.
   --vehicle-engine-type: string@vehicle-engine-type-completer # Engine type of the vehicle. (default: combustion)
   --constant-speed-consumption-in-liters-per-hundredkm: string # Specifies the speed-dependent component of consumption. Provided as an unordered list of speed/consumption-rate pairs.
   --current-fuel-in-liters: float # Specifies the current supply of fuel in liters. (format: float)
@@ -277,7 +286,7 @@ export def "routing-calculate-route get" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxAlternatives" $max_alternatives "scalar") (serialize-qp "alternativeType" $alternative_type "scalar") (serialize-qp "minDeviationDistance" $min_deviation_distance "scalar") (serialize-qp "minDeviationTime" $min_deviation_time "scalar") (serialize-qp "instructionsType" $instructions_type "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "computeBestOrder" $compute_best_order "scalar") (serialize-qp "routeRepresentation" $route_representation "scalar") (serialize-qp "computeTravelTimeFor" $compute_travel_time_for "scalar") (serialize-qp "vehicleHeading" $vehicle_heading "scalar") (serialize-qp "sectionType" $section_type "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "report" $report "scalar") (serialize-qp "departAt" $depart_at "scalar") (serialize-qp "arriveAt" $arrive_at "scalar") (serialize-qp "routeType" $route_type "scalar") (serialize-qp "traffic" $traffic "scalar") (serialize-qp "avoid" $avoid "scalar") (serialize-qp "travelMode" $travel_mode "scalar") (serialize-qp "hilliness" $hilliness "scalar") (serialize-qp "windingness" $windingness "scalar") (serialize-qp "vehicleMaxSpeed" $vehicle_max_speed "scalar") (serialize-qp "vehicleWeight" $vehicle_weight "scalar") (serialize-qp "vehicleAxleWeight" $vehicle_axle_weight "scalar") (serialize-qp "vehicleLength" $vehicle_length "scalar") (serialize-qp "vehicleWidth" $vehicle_width "scalar") (serialize-qp "vehicleHeight" $vehicle_height "scalar") (serialize-qp "vehicleCommercial" $vehicle_commercial "scalar") (serialize-qp "vehicleLoadType" $vehicle_load_type "scalar") (serialize-qp "vehicleEngineType" $vehicle_engine_type "scalar") (serialize-qp "constantSpeedConsumptionInLitersPerHundredkm" $constant_speed_consumption_in_liters_per_hundredkm "scalar") (serialize-qp "currentFuelInLiters" $current_fuel_in_liters "scalar") (serialize-qp "auxiliaryPowerInLitersPerHour" $auxiliary_power_in_liters_per_hour "scalar") (serialize-qp "fuelEnergyDensityInMJoulesPerLiter" $fuel_energy_density_in_m_joules_per_liter "scalar") (serialize-qp "accelerationEfficiency" $acceleration_efficiency "scalar") (serialize-qp "decelerationEfficiency" $deceleration_efficiency "scalar") (serialize-qp "uphillEfficiency" $uphill_efficiency "scalar") (serialize-qp "downhillEfficiency" $downhill_efficiency "scalar") (serialize-qp "constantSpeedConsumptionInkWhPerHundredkm" $constant_speed_consumption_ink_wh_per_hundredkm "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({version_number: $version_number, locations: $locations, content_type: $content_type} | format pattern "/routing/{version_number}/calculateRoute/{locations}/{content_type}") $qp)
+  let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), locations: (encode-path-segment $locations), content_type: (encode-path-segment $content_type)} | format pattern "/routing/{version_number}/calculateRoute/{locations}/{content_type}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -288,7 +297,7 @@ export def "routing-calculate-route get" [
 # POST /routing/{versionNumber}/calculateRoute/{locations}/{contentType}
 # --avoidAreas shape: {rectangles?: list}
 # --supportingPoints item shape: {latitude?: string, longitude?: string}
-export def "routing-calculate-route post" [
+export def "routing-calculate-route create" [
   version_number: int
   locations: string
   content_type: string
@@ -310,14 +319,14 @@ export def "routing-calculate-route post" [
   --route-representation: string@route-representation-completer # Specifies the representation of the set of routes provided as a response. (default: polyline)
   --compute-travel-time-for: string@compute-travel-time-for-completer # Specifies whether to return additional travel times using different types of traffic information (none, historic, live) as well as the default best-estimate travel time. (default: none)
   --vehicle-heading: int # The directional heading of the vehicle in degrees. Entered in degrees, measured clockwise from north (so north is 0, east is 90, etc.).
-  --section-type: string # Specifies which section types are explicitly reported in the route response. Can be specified multiple times.   - carTrain, ferry, tunnel or motorway   - pedestrian   - tollRoad   - tollVignette   - country   - travelMode   - traffic (default: travelMode)
+  --section-type: string # Specifies which section types are explicitly reported in the route response. Can be specified multiple times. - carTrain, ferry, tunnel or motorway - pedestrian - tollRoad - tollVignette - country - travelMode - traffic (default: travelMode)
   --callback: string # Specifies the jsonp callback method. (default: callback)
   --report: string@report-completer # Specifies which data should be reported for diagnosis purposes.
-  --depart-at: string # The date and time of departure from the origin point. Departure times apart from <i>now</i> must be specified as a dateTime. (default: now)
+  --depart-at: string # The date and time of departure from the origin point. Departure times apart from now must be specified as a dateTime. (default: now)
   --arrive-at: string # The date and time of arrival at the destination point. It must be specified as a dateTime. (format: dateTime)
   --route-type: string@route-type-completer # The type of route requested. (default: fastest)
   --traffic: oneof<nothing, bool> # Determines whether current traffic is used in route calculations. Note that information on historic road speeds is always used. (default: true)
-  --avoid: string # Specifies whether the routing engine should try to avoid specific types of road segment when calculating the route. Can be specified multiple times. Possible values:   - tollRoads   - motorways   - ferries   - unpavedRoads   - carpools   - alreadyUsedRoads (e.g. unpavedRoads)
+  --avoid: string # Specifies whether the routing engine should try to avoid specific types of road segment when calculating the route. Can be specified multiple times. Possible values: - tollRoads - motorways - ferries - unpavedRoads - carpools - alreadyUsedRoads (e.g. unpavedRoads)
   --travel-mode: string@travel-mode-completer # The mode of travel for the requested route. (default: car)
   --hilliness: string@hilliness-completer # Degree of hilliness for calculating a thrilling route. (default: normal)
   --windingness: string@windingness-completer # Amount that a thrilling route should wind. (default: normal)
@@ -328,7 +337,7 @@ export def "routing-calculate-route post" [
   --vehicle-width: float # Width of the vehicle in meters. (format: float, default: 0)
   --vehicle-height: float # Height of the vehicle in meters. (format: float, default: 0)
   --vehicle-commercial: oneof<nothing, bool> # Indicates that the vehicle is used for commercial purposes. This means it may not be allowed on certain roads. (default: false)
-  --vehicle-load-type: string # Indicates what kinds of hazardous materials the vehicle is carrying (if any). This means it may not be allowed on certain roads. Use these for routing in the US:    - <i>USHazmatClass1</i> Explosives   - <i>USHazmatClass2</i> Compressed gas   - <i>USHazmatClass3</i> Flammable liquids   - <i>USHazmatClass4</i> Flammable solids   - <i>USHazmatClass5</i> Oxidizers   - <i>USHazmatClass6</i> Poisons   - <i>USHazmatClass7</i> Radioactive   - <i>USHazmatClass8</i> Corrosives   - <i>USHazmatClass9</i> Miscellaneous  Use these for routing in all other countries:    - <i>otherHazmatExplosive</i> Explosives   - <i>otherHazmatGeneral</i> Miscellaneous   - <i>otherHazmatHarmfulToWater</i> Harmful to water  vehicleLoadType can be specified multiple times. This parameter is currently only considered for <b>travelMode</b>=<i>truck</i>.
+  --vehicle-load-type: string # Indicates what kinds of hazardous materials the vehicle is carrying (if any). This means it may not be allowed on certain roads. Use these for routing in the US: - USHazmatClass1 Explosives - USHazmatClass2 Compressed gas - USHazmatClass3 Flammable liquids - USHazmatClass4 Flammable solids - USHazmatClass5 Oxidizers - USHazmatClass6 Poisons - USHazmatClass7 Radioactive - USHazmatClass8 Corrosives - USHazmatClass9 Miscellaneous Use these for routing in all other countries: - otherHazmatExplosive Explosives - otherHazmatGeneral Miscellaneous - otherHazmatHarmfulToWater Harmful to water vehicleLoadType can be specified multiple times. This parameter is currently only considered for travelMode=truck.
   --vehicle-engine-type: string@vehicle-engine-type-completer # Engine type of the vehicle. (default: combustion)
   --constant-speed-consumption-in-liters-per-hundredkm: string # Specifies the speed-dependent component of consumption. Provided as an unordered list of speed/consumption-rate pairs.
   --current-fuel-in-liters: float # Specifies the current supply of fuel in liters. (format: float)
@@ -339,19 +348,19 @@ export def "routing-calculate-route post" [
   --uphill-efficiency: float # Specifies the efficiency of converting chemical energy stored in fuel to potential energy when the vehicle gains elevation (i.e. PotentialEnergyGained/ChemicalEnergyConsumed). (format: float)
   --downhill-efficiency: float # Specifies the efficiency of converting potential energy to saved (not consumed) fuel when the vehicle loses elevation (i.e. ChemicalEnergySaved/PotentialEnergyLost). (format: float)
   --constant-speed-consumption-ink-wh-per-hundredkm: string # Specifies the speed-dependent component of consumption. Provided as an unordered list of speed/consumption-rate pairs.
-  --allow-vignette: list
+  --allow-vignette: list<string>
   --avoid-areas: record # shape: {rectangles?: list}
-  --avoid-vignette: list
+  --avoid-vignette: list<string>
   --supporting-points: list # item shape: {latitude?: string, longitude?: string}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxAlternatives" $max_alternatives "scalar") (serialize-qp "alternativeType" $alternative_type "scalar") (serialize-qp "minDeviationDistance" $min_deviation_distance "scalar") (serialize-qp "minDeviationTime" $min_deviation_time "scalar") (serialize-qp "instructionsType" $instructions_type "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "computeBestOrder" $compute_best_order "scalar") (serialize-qp "routeRepresentation" $route_representation "scalar") (serialize-qp "computeTravelTimeFor" $compute_travel_time_for "scalar") (serialize-qp "vehicleHeading" $vehicle_heading "scalar") (serialize-qp "sectionType" $section_type "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "report" $report "scalar") (serialize-qp "departAt" $depart_at "scalar") (serialize-qp "arriveAt" $arrive_at "scalar") (serialize-qp "routeType" $route_type "scalar") (serialize-qp "traffic" $traffic "scalar") (serialize-qp "avoid" $avoid "scalar") (serialize-qp "travelMode" $travel_mode "scalar") (serialize-qp "hilliness" $hilliness "scalar") (serialize-qp "windingness" $windingness "scalar") (serialize-qp "vehicleMaxSpeed" $vehicle_max_speed "scalar") (serialize-qp "vehicleWeight" $vehicle_weight "scalar") (serialize-qp "vehicleAxleWeight" $vehicle_axle_weight "scalar") (serialize-qp "vehicleLength" $vehicle_length "scalar") (serialize-qp "vehicleWidth" $vehicle_width "scalar") (serialize-qp "vehicleHeight" $vehicle_height "scalar") (serialize-qp "vehicleCommercial" $vehicle_commercial "scalar") (serialize-qp "vehicleLoadType" $vehicle_load_type "scalar") (serialize-qp "vehicleEngineType" $vehicle_engine_type "scalar") (serialize-qp "constantSpeedConsumptionInLitersPerHundredkm" $constant_speed_consumption_in_liters_per_hundredkm "scalar") (serialize-qp "currentFuelInLiters" $current_fuel_in_liters "scalar") (serialize-qp "auxiliaryPowerInLitersPerHour" $auxiliary_power_in_liters_per_hour "scalar") (serialize-qp "fuelEnergyDensityInMJoulesPerLiter" $fuel_energy_density_in_m_joules_per_liter "scalar") (serialize-qp "accelerationEfficiency" $acceleration_efficiency "scalar") (serialize-qp "decelerationEfficiency" $deceleration_efficiency "scalar") (serialize-qp "uphillEfficiency" $uphill_efficiency "scalar") (serialize-qp "downhillEfficiency" $downhill_efficiency "scalar") (serialize-qp "constantSpeedConsumptionInkWhPerHundredkm" $constant_speed_consumption_ink_wh_per_hundredkm "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({version_number: $version_number, locations: $locations, content_type: $content_type} | format pattern "/routing/{version_number}/calculateRoute/{locations}/{content_type}") $qp)
-  let body = {"allowVignette": $allow_vignette, "avoidAreas": $avoid_areas, "avoidVignette": $avoid_vignette, "supportingPoints": $supporting_points} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), locations: (encode-path-segment $locations), content_type: (encode-path-segment $content_type)} | format pattern "/routing/{version_number}/calculateRoute/{locations}/{content_type}") $qp)
+  let req_body = {"allowVignette": $allow_vignette, "avoidAreas": $avoid_areas, "avoidVignette": $avoid_vignette, "supportingPoints": $supporting_points} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

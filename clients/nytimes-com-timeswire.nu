@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -69,7 +78,7 @@ def auth-scheme-completer [] { ["query-api-key"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "contentjson get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "content-json get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -90,7 +99,7 @@ export def commands []: nothing -> table {
 }
 
 # GET /content.json
-export def "contentjson get" [
+export def "content-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -99,11 +108,11 @@ export def "contentjson get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-url: string # The complete URL of a specific news item, URL-encoded or backslash-escaped
+  --url: string # The complete URL of a specific news item, URL-encoded or backslash-escaped
 ]: nothing -> record<copyright: string, num_results: int, results: table<abstract: string, blog_name: string, byline: string, created_date: string, des_facet: list, geo_facet: list, headline: string, item_type: string, kicker: string, material_type_facet: string, multimedia: list, org_facet: string, per_facet: list, published_date: string, related_urls: list, section: string, short_url: string, source: string, subsection: string, thumbnail_standard: string, title: string, updated_date: string, url: string>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "url" $qp_url "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "url" $url "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/content.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -128,7 +137,7 @@ export def "content list" [
   let auth = (build-auth $token ($auth_scheme | default "query-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({source: $source, section: $section} | format pattern "/content/{source}/{section}.json") $qp)
+  let full_url = (build-url $base ({source: (encode-path-segment $source), section: (encode-path-segment $section)} | format pattern "/content/{source}/{section}.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -153,7 +162,7 @@ export def "content get" [
   let auth = (build-auth $token ($auth_scheme | default "query-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({source: $source, section: $section, time_period: $time_period} | format pattern "/content/{source}/{section}/{time_period}.json") $qp)
+  let full_url = (build-url $base ({source: (encode-path-segment $source), section: (encode-path-segment $section), time_period: (encode-path-segment $time_period)} | format pattern "/content/{source}/{section}/{time_period}.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

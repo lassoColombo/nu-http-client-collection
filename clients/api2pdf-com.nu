@@ -36,6 +36,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -72,7 +81,7 @@ def accept-completer [] { ["application/json" "application/pdf"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "chrome-html chromeFromHtmlPost" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "chrome-html create-from" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -97,7 +106,7 @@ export def commands []: nothing -> table {
 # POST /chrome/html
 # operationId: chromeFromHtmlPost
 # --options shape: {landscape?: string, printBackground?: bool}
-export def "chrome-html chromeFromHtmlPost" [
+export def "chrome-html create-from" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -115,18 +124,18 @@ export def "chrome-html chromeFromHtmlPost" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/chrome/html")
-  let body = {"fileName": $file_name, "html": $html, "inlinePdf": $inline_pdf, "options": $options} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"fileName": $file_name, "html": $html, "inlinePdf": $inline_pdf, "options": $options} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Convert URL to PDF
 #
 # GET /chrome/url
 # operationId: chromeFromUrlGET
-export def "chrome-url chromeFromUrlGET" [
+export def "chrome-url get-from" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -136,12 +145,12 @@ export def "chrome-url chromeFromUrlGET" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-url: string # Url of the page to convert to PDF. Must start with http:// or https://.
+  --url: string # Url of the page to convert to PDF. Must start with http:// or https://.
   --output: string # Specify output=json to receive a JSON output. Defaults to PDF file.
 ]: nothing -> record<cost: float, mbIn: float, mbOut: float, pdf: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "url" $qp_url "scalar") (serialize-qp "output" $output "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "url" $url "scalar") (serialize-qp "output" $output "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/chrome/url" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -153,7 +162,7 @@ export def "chrome-url chromeFromUrlGET" [
 # POST /chrome/url
 # operationId: chromeFromUrlPost
 # --options shape: {landscape?: string, printBackground?: bool}
-export def "chrome-url chromeFromUrlPost" [
+export def "chrome-url create-from" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -165,24 +174,24 @@ export def "chrome-url chromeFromUrlPost" [
   --file-name: string # e.g. test.pdf
   --inline-pdf: oneof<nothing, bool> # e.g. true
   --options: record # shape: {landscape?: string, printBackground?: bool}
-  --body-url: string # format: url, e.g. https://www.github.com
+  url: string # format: url, e.g. https://www.github.com
 ]: any -> record<cost: float, mbIn: float, mbOut: float, pdf: string, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/chrome/url")
-  let body = {"fileName": $file_name, "inlinePdf": $inline_pdf, "options": $options, "url": $body_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"fileName": $file_name, "inlinePdf": $inline_pdf, "options": $options, "url": $url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Convert office document or image to PDF
 #
 # POST /libreoffice/convert
 # operationId: libreConvertPost
-export def "libreoffice-convert libreConvertPost" [
+export def "libreoffice-convert create-libre" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -193,24 +202,24 @@ export def "libreoffice-convert libreConvertPost" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --file-name: string # e.g. test.pdf
   --inline-pdf: oneof<nothing, bool> # e.g. true
-  --body-url: string # format: url, e.g. https://www.api2pdf.com/wp-content/themes/api2pdf/assets/samples/sample-word-doc.docx
+  url: string # format: url, e.g. https://www.api2pdf.com/wp-content/themes/api2pdf/assets/samples/sample-word-doc.docx
 ]: any -> record<cost: float, mbIn: float, mbOut: float, pdf: string, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/libreoffice/convert")
-  let body = {"fileName": $file_name, "inlinePdf": $inline_pdf, "url": $body_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"fileName": $file_name, "inlinePdf": $inline_pdf, "url": $url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Merge multiple PDFs together
 #
 # POST /merge
 # operationId: mergePost
-export def "merge mergePost" [
+export def "merge create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -221,17 +230,17 @@ export def "merge mergePost" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --file-name: string # e.g. test.pdf
   --inline-pdf: oneof<nothing, bool> # e.g. true
-  urls: list # format: list of urls to pdfs, e.g. [link-to-pdf1, link-to-pdf2, link-to-pdf3]
+  urls: list<string> # format: list of urls to pdfs, e.g. [link-to-pdf1, link-to-pdf2, link-to-pdf3]
 ]: any -> record<cost: float, mbIn: float, mbOut: float, pdf: string, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/merge")
-  let body = {"fileName": $file_name, "inlinePdf": $inline_pdf, "urls": $urls} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"fileName": $file_name, "inlinePdf": $inline_pdf, "urls": $urls} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Convert raw HTML to PDF
@@ -239,7 +248,7 @@ export def "merge mergePost" [
 # POST /wkhtmltopdf/html
 # operationId: wkhtmltopdfFromHtmlPost
 # --options shape: {orientation?: string, pageSize?: string}
-export def "wkhtmltopdf-html wkhtmltopdfFromHtmlPost" [
+export def "wkhtmltopdf-html create-from" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -257,18 +266,18 @@ export def "wkhtmltopdf-html wkhtmltopdfFromHtmlPost" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/wkhtmltopdf/html")
-  let body = {"fileName": $file_name, "html": $html, "inlinePdf": $inline_pdf, "options": $options} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"fileName": $file_name, "html": $html, "inlinePdf": $inline_pdf, "options": $options} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Convert URL to PDF
 #
 # GET /wkhtmltopdf/url
 # operationId: wkhtmltopdfFromUrlGET
-export def "wkhtmltopdf-url wkhtmltopdfFromUrlGET" [
+export def "wkhtmltopdf-url get-from" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -278,12 +287,12 @@ export def "wkhtmltopdf-url wkhtmltopdfFromUrlGET" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-url: string # Url of the page to convert to PDF. Must start with http:// or https://.
+  --url: string # Url of the page to convert to PDF. Must start with http:// or https://.
   --output: string # Specify output=json to receive a JSON output. Defaults to PDF file.
 ]: nothing -> record<cost: float, mbIn: float, mbOut: float, pdf: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "url" $qp_url "scalar") (serialize-qp "output" $output "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "url" $url "scalar") (serialize-qp "output" $output "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/wkhtmltopdf/url" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -295,7 +304,7 @@ export def "wkhtmltopdf-url wkhtmltopdfFromUrlGET" [
 # POST /wkhtmltopdf/url
 # operationId: wkhtmltopdfFromUrlPost
 # --options shape: {orientation?: string, pageSize?: string}
-export def "wkhtmltopdf-url wkhtmltopdfFromUrlPost" [
+export def "wkhtmltopdf-url create-from" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -307,24 +316,24 @@ export def "wkhtmltopdf-url wkhtmltopdfFromUrlPost" [
   --file-name: string # e.g. test.pdf
   --inline-pdf: oneof<nothing, bool> # e.g. true
   --options: record # shape: {orientation?: string, pageSize?: string}
-  --body-url: string # format: url, e.g. https://www.github.com
+  url: string # format: url, e.g. https://www.github.com
 ]: any -> record<cost: float, mbIn: float, mbOut: float, pdf: string, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/wkhtmltopdf/url")
-  let body = {"fileName": $file_name, "inlinePdf": $inline_pdf, "options": $options, "url": $body_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"fileName": $file_name, "inlinePdf": $inline_pdf, "options": $options, "url": $url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Generate bar codes and QR codes with ZXING.
 #
 # GET /zebra
 # operationId: zebraGET
-export def "zebra zebraGET" [
+export def "zebra get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

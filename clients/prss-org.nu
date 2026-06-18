@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -60,6 +69,33 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   }
   if ($method in ["head" "options"]) { return $resp }
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+}
+
+# Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
+# the field names whose value should be read from disk as bytes; every
+# other field is sent as a text part (records/lists JSON-stringified).
+# Returns {content_type, body} ready to pass to `do-request`.
+def build-multipart-body [parts: record, file_fields: list<string>]: nothing -> record {
+  let boundary = $"----nu-(random chars --length 24)"
+  let crlf = "\r\n"
+  let chunks = ($parts | transpose k v | where {|p| $p.v != null} | each {|p|
+    let name = $p.k
+    let val = $p.v
+    if $name in $file_fields {
+      let filename = ($val | path basename)
+      let bytes = (open --raw $val | into binary | collect)
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"; filename=\"($filename)\"($crlf)Content-Type: application/octet-stream($crlf)($crlf)" | into binary)
+      $head ++ $bytes ++ ($crlf | into binary)
+    } else {
+      let dt = ($val | describe)
+      let s = if (($dt | str starts-with "record") or ($dt | str starts-with "list") or ($dt | str starts-with "table")) { ($val | to json --raw) } else { ($val | into string) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"($crlf)($crlf)" | into binary)
+      $head ++ ($"($s)($crlf)" | into binary)
+    }
+  })
+  let trailer = ($"--($boundary)--($crlf)" | into binary)
+  let body = ($chunks | reduce --fold (0x[] | into binary) {|chunk, acc| $acc ++ $chunk }) ++ $trailer
+  {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
 }
 
 def base-url-completer [] { ["http://localhost" "https://radiodns.prss.org" "https://radiodnsstage.prss.org" "https://radiodnsdev.mgmt.prss.org" "/"] }
@@ -133,7 +169,7 @@ export def "broadcastservices get" [
 ]: nothing -> record<createdDate: string, description: string, id: int, lastModifiedDate: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v2/broadcastservices/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v2/broadcastservices/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -142,7 +178,7 @@ export def "broadcastservices get" [
 # Upload a file.
 #
 # POST /api/v2/cddrive/files/content
-export def "cddrive-files-content post" [
+export def "cddrive-files-content create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -160,13 +196,14 @@ export def "cddrive-files-content post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v2/cddrive/files/content")
-  let body = {"file": $file, "name": $name, "parent-id": $parent_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-MD5": $content_md5} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"file": $file, "name": $name, "parent-id": $parent_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let extra_headers = {"Content-MD5": $content_md5} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let mp = (build-multipart-body $req_body ["file"])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # Delete a file.
@@ -185,7 +222,7 @@ export def "cddrive-files delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({file_id: $file_id} | format pattern "/api/v2/cddrive/files/{file_id}"))
+  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/api/v2/cddrive/files/{file_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -207,7 +244,7 @@ export def "cddrive-files get" [
 ]: nothing -> record<createdDate: string, id: int, lastModifiedDate: string, name: string, parentId: int, size: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({file_id: $file_id} | format pattern "/api/v2/cddrive/files/{file_id}"))
+  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/api/v2/cddrive/files/{file_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -230,18 +267,18 @@ export def "cddrive-files-content get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({file_id: $file_id} | format pattern "/api/v2/cddrive/files/{file_id}/content"))
-  let extra_headers = {"Range": $range} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/api/v2/cddrive/files/{file_id}/content"))
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Range": $range} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a folder.
 #
 # POST /api/v2/cddrive/folders
-export def "cddrive-folders post" [
+export def "cddrive-folders create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -257,11 +294,12 @@ export def "cddrive-folders post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v2/cddrive/folders")
-  let body = {"name": $name, "parent-id": $parent_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"name": $name, "parent-id": $parent_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # UNDER DEVELOPMENT - Delete a folder.
@@ -282,7 +320,7 @@ export def "cddrive-folders delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "recursive" $recursive "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({folder_id: $folder_id} | format pattern "/api/v2/cddrive/folders/{folder_id}") $qp)
+  let full_url = (build-url $base ({folder_id: (encode-path-segment $folder_id)} | format pattern "/api/v2/cddrive/folders/{folder_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -304,7 +342,7 @@ export def "cddrive-folders get" [
 ]: nothing -> record<createdDate: string, id: int, lastModifiedDate: string, name: string, parentId: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({folder_id: $folder_id} | format pattern "/api/v2/cddrive/folders/{folder_id}"))
+  let full_url = (build-url $base ({folder_id: (encode-path-segment $folder_id)} | format pattern "/api/v2/cddrive/folders/{folder_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -329,7 +367,7 @@ export def "cddrive-folders-items get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({folder_id: $folder_id} | format pattern "/api/v2/cddrive/folders/{folder_id}/items") $qp)
+  let full_url = (build-url $base ({folder_id: (encode-path-segment $folder_id)} | format pattern "/api/v2/cddrive/folders/{folder_id}/items") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -380,7 +418,7 @@ export def "episodes get" [
 ]: nothing -> record<beginAirDate: string, beginTransmissionDate: string, createdDate: string, customerId: int, endAirDate: string, endTransmissionDate: string, id: int, lastModifiedDate: string, programId: int, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v2/episodes/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v2/episodes/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -393,7 +431,7 @@ export def "episodes get" [
 # Docs: /api/epg-cd-mapping.html — Find RadioDns to ContentDepot Mapping here
 # --program shape: {airDate: string, title: string}
 @deprecated
-export def "metapub-program-information-batch post" [
+export def "metapub-program-information-batch create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -402,7 +440,7 @@ export def "metapub-program-information-batch post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  format: string@format-completer # The format of the metadata file defining the create or update actions to be performed on one or more EPG programs. For more information on how RadioDNS EPG maps to ContentDepot <a href="/api/epg-cd-mapping.html">click here </a>
+  format: string@format-completer # The format of the metadata file defining the create or update actions to be performed on one or more EPG programs. For more information on how RadioDNS EPG maps to ContentDepot click here (/api/epg-cd-mapping.html)
   --name: string # An optional human readable name for the batch.
   --program: record # The program information to associate the ingested metadata with. This is only required if the metadata format doesn't provide the program title and air date information directly. — shape: {airDate: string, title: string}
   uri: string # The URI to the metadata file. Currently only the ```cddrive``` scheme is supported. (format: uri)
@@ -411,11 +449,11 @@ export def "metapub-program-information-batch post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v2/metapub/program-information/batch")
-  let body = {"format": $format, "name": $name, "program": $program, "uri": $uri} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"format": $format, "name": $name, "program": $program, "uri": $uri} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get an EPG batch operation.
@@ -436,7 +474,7 @@ export def "metapub-program-information-batch get" [
 ]: nothing -> record<createdDate: string, finishedDate: string, format: string, id: int, message: string, name: string, program: record<airDate: string, title: string>, status: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({batch_id: $batch_id} | format pattern "/api/v2/metapub/program-information/batch/{batch_id}"))
+  let full_url = (build-url $base ({batch_id: (encode-path-segment $batch_id)} | format pattern "/api/v2/metapub/program-information/batch/{batch_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -468,7 +506,7 @@ export def "pieces list" [
 # Create a new piece.
 #
 # POST /api/v2/pieces
-export def "pieces post" [
+export def "pieces create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -494,11 +532,11 @@ export def "pieces post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v2/pieces")
-  let body = {"contributor": $contributor, "description": $description, "episodeId": $episode_id, "fullDescription": $full_description, "imageCdDriveUri": $image_cd_drive_uri, "imageFileName": $image_file_name, "imageFileSize": $image_file_size, "imageOriginalFileName": $image_original_file_name, "relativeEndTime": $relative_end_time, "relativeStartTime": $relative_start_time, "segmentNumber": $segment_number, "title": $title} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"contributor": $contributor, "description": $description, "episodeId": $episode_id, "fullDescription": $full_description, "imageCdDriveUri": $image_cd_drive_uri, "imageFileName": $image_file_name, "imageFileSize": $image_file_size, "imageOriginalFileName": $image_original_file_name, "relativeEndTime": $relative_end_time, "relativeStartTime": $relative_start_time, "segmentNumber": $segment_number, "title": $title} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes the piece with the given ID.
@@ -517,7 +555,7 @@ export def "pieces delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v2/pieces/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v2/pieces/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -539,7 +577,7 @@ export def "pieces get" [
 ]: nothing -> record<contributor: string, createdDate: string, description: string, episodeId: int, fullDescription: string, id: int, imageCdDriveUri: string, imageFileName: string, imageFileSize: int, imageOriginalFileName: string, lastModifiedDate: string, relativeEndTime: int, relativeStartTime: int, segmentNumber: int, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v2/pieces/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v2/pieces/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -586,7 +624,7 @@ export def "programs get" [
 ]: nothing -> record<createdDate: string, customerId: int, id: int, lastModifiedDate: string, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v2/programs/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v2/programs/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -622,7 +660,7 @@ export def "segments list" [
 # Creates a new segment.
 #
 # POST /api/v2/segments
-export def "segments post" [
+export def "segments create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -641,11 +679,12 @@ export def "segments post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v2/segments")
-  let body = {"cdDriveUri": $cd_drive_uri, "episodeId": $episode_id, "inCue": $in_cue, "outCue": $out_cue, "segmentNumber": $segment_number} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"cdDriveUri": $cd_drive_uri, "episodeId": $episode_id, "inCue": $in_cue, "outCue": $out_cue, "segmentNumber": $segment_number} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Deletes the segment with the given ID.
@@ -664,7 +703,7 @@ export def "segments delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v2/segments/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v2/segments/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -686,7 +725,7 @@ export def "segments get" [
 ]: nothing -> record<channels: int, createdDate: string, episodeId: int, fileName: string, fileSize: int, id: int, inCue: string, lastModifiedDate: string, length: int, originalFileName: string, outCue: string, segmentNumber: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v2/segments/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v2/segments/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -708,7 +747,7 @@ export def "segments-content get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v2/segments/{id}/content"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v2/segments/{id}/content"))
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -742,7 +781,7 @@ export def "spotinsertions list" [
 # Creates a new spot insertion.
 #
 # POST /api/v2/spotinsertions
-export def "spotinsertions post" [
+export def "spotinsertions create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -756,18 +795,18 @@ export def "spotinsertions post" [
   duration: int # The duration of the spot insertion. (format: int32)
   end_date: string # The date the spot insertion ends. The time will be set to midnight Eastern Time. (format: date, e.g. 2020-01-31)
   program_id: int # The ID of the program for the spot insertion. (format: int64)
-  spots: list # The ordered list of spot IDs to play.
+  spots: list<int> # The ordered list of spot IDs to play.
   start_date: string # The date the spot insertion can start. The time will be set to midnight Eastern Time. (format: date, e.g. 2020-01-31)
 ]: any -> record<broadcastServiceId: int, createdDate: string, cue: string, customerId: int, duration: int, endDate: string, id: int, programId: int, spots: list<int>, startDate: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v2/spotinsertions")
-  let body = {"broadcastServiceId": $broadcast_service_id, "cue": $cue, "duration": $duration, "endDate": $end_date, "programId": $program_id, "spots": $spots, "startDate": $start_date} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"broadcastServiceId": $broadcast_service_id, "cue": $cue, "duration": $duration, "endDate": $end_date, "programId": $program_id, "spots": $spots, "startDate": $start_date} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes the spot insertion with the given ID.
@@ -786,7 +825,7 @@ export def "spotinsertions delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v2/spotinsertions/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v2/spotinsertions/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -808,7 +847,7 @@ export def "spotinsertions get" [
 ]: nothing -> record<broadcastServiceId: int, createdDate: string, cue: string, customerId: int, duration: int, endDate: string, id: int, programId: int, spots: list<int>, startDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v2/spotinsertions/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v2/spotinsertions/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -842,7 +881,7 @@ export def "spots list" [
 # Creates a new spot.
 #
 # POST /api/v2/spots
-export def "spots post" [
+export def "spots create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -859,11 +898,12 @@ export def "spots post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v2/spots")
-  let body = {"cdDriveUri": $cd_drive_uri, "name": $name, "notes": $notes} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"cdDriveUri": $cd_drive_uri, "name": $name, "notes": $notes} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Deletes the spot with the given ID.
@@ -882,7 +922,7 @@ export def "spots delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v2/spots/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v2/spots/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -904,7 +944,7 @@ export def "spots get" [
 ]: nothing -> record<createdDate: string, duration: int, fileName: string, fileSize: int, id: int, lastModifiedDate: string, lastUploadedDate: string, name: string, notes: string, originalFileName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v2/spots/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v2/spots/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -913,7 +953,7 @@ export def "spots get" [
 # Get the group information document.
 #
 # GET /radiodns/spi/3.1/GI.xml
-export def "radiodns-spi-31-g-ixml get" [
+export def "radiodns-spi-3-1-gi-xml get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -934,7 +974,7 @@ export def "radiodns-spi-31-g-ixml get" [
 # Get the service information document.
 #
 # GET /radiodns/spi/3.1/SI.xml
-export def "radiodns-spi-31-s-ixml get" [
+export def "radiodns-spi-3-1-si-xml get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -955,7 +995,7 @@ export def "radiodns-spi-31-s-ixml get" [
 # Get the program information document.
 #
 # GET /radiodns/spi/3.1/id/{fqdn}/{sid}/{date}_PI.xml
-export def "radiodns-spi-31-id get" [
+export def "radiodns-spi-3-1-id get" [
   fqdn: string
   sid: string
   date: string
@@ -971,10 +1011,10 @@ export def "radiodns-spi-31-id get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "/")
-  let full_url = (build-url $base ({fqdn: $fqdn, sid: $sid, date: $date} | format pattern "/radiodns/spi/3.1/id/{fqdn}/{sid}/{date}_PI.xml"))
-  let extra_headers = {"x-radiodnsspi-api-key": $x_radiodnsspi_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({fqdn: (encode-path-segment $fqdn), sid: (encode-path-segment $sid), date: (encode-path-segment $date)} | format pattern "/radiodns/spi/3.1/id/{fqdn}/{sid}/{date}_PI.xml"))
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-radiodnsspi-api-key": $x_radiodnsspi_api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -111,10 +120,10 @@ export def "domains list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "count" $count "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/domains" $qp)
-  let extra_headers = {"X-Postmark-Account-Token": $x_postmark_account_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Postmark-Account-Token": $x_postmark_account_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -139,13 +148,13 @@ export def "domains create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/domains")
-  let body = {"Name": $name, "ReturnPathDomain": $return_path_domain} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Postmark-Account-Token": $x_postmark_account_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"Name": $name, "ReturnPathDomain": $return_path_domain} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Postmark-Account-Token": $x_postmark_account_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a Domain
@@ -166,11 +175,11 @@ export def "domains delete" [
 ]: nothing -> record<ErrorCode: int, Message: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({domainid: $domainid} | format pattern "/domains/{domainid}"))
-  let extra_headers = {"X-Postmark-Account-Token": $x_postmark_account_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({domainid: (encode-path-segment $domainid)} | format pattern "/domains/{domainid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Postmark-Account-Token": $x_postmark_account_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -192,11 +201,11 @@ export def "domains get" [
 ]: nothing -> record<DKIMHost: string, DKIMPendingHost: string, DKIMPendingTextValue: string, DKIMRevokedHost: string, DKIMRevokedTextValue: string, DKIMTestValue: string, DKIMUpdateStatus: string, DKIMVerified: bool, ID: int, Name: string, ReturnPathDomain: string, ReturnPathDomainCNAMEValue: string, ReturnPathDomainVerified: bool, SPFHost: string, SPFTextValue: string, SPFVerified: bool, SafeToRemoveRevokedKeyFromDNS: bool, WeakDKIM: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({domainid: $domainid} | format pattern "/domains/{domainid}"))
-  let extra_headers = {"X-Postmark-Account-Token": $x_postmark_account_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({domainid: (encode-path-segment $domainid)} | format pattern "/domains/{domainid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Postmark-Account-Token": $x_postmark_account_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -204,7 +213,7 @@ export def "domains get" [
 #
 # PUT /domains/{domainid}
 # operationId: editDomain
-export def "domains editDomain" [
+export def "domains update-edit" [
   domainid: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -220,21 +229,21 @@ export def "domains editDomain" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({domainid: $domainid} | format pattern "/domains/{domainid}"))
-  let body = {"ReturnPathDomain": $return_path_domain} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Postmark-Account-Token": $x_postmark_account_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({domainid: (encode-path-segment $domainid)} | format pattern "/domains/{domainid}"))
+  let req_body = {"ReturnPathDomain": $return_path_domain} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Postmark-Account-Token": $x_postmark_account_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Rotate DKIM Key
 #
 # POST /domains/{domainid}/rotatedkim
 # operationId: rotateDKIMKeyForDomain
-export def "domains-rotatedkim rotateDKIMKeyForDomain" [
+export def "domains-rotatedkim create-rotate-dkim-key" [
   domainid: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -248,11 +257,11 @@ export def "domains-rotatedkim rotateDKIMKeyForDomain" [
 ]: nothing -> record<DKIMHost: string, DKIMPendingHost: string, DKIMPendingTextValue: string, DKIMRevokedHost: string, DKIMRevokedTextValue: string, DKIMTestValue: string, DKIMUpdateStatus: string, DKIMVerified: bool, ID: int, Name: string, SafeToRemoveRevokedKeyFromDNS: bool, WeakDKIM: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({domainid: $domainid} | format pattern "/domains/{domainid}/rotatedkim"))
-  let extra_headers = {"X-Postmark-Account-Token": $x_postmark_account_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({domainid: (encode-path-segment $domainid)} | format pattern "/domains/{domainid}/rotatedkim"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Postmark-Account-Token": $x_postmark_account_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -260,7 +269,7 @@ export def "domains-rotatedkim rotateDKIMKeyForDomain" [
 #
 # PUT /domains/{domainid}/verifydkim
 # operationId: requestDkimVerificationForDomain
-export def "domains-verifydkim request-dkim-verification-for" [
+export def "domains-verifydkim request-dkim-verification" [
   domainid: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -274,11 +283,11 @@ export def "domains-verifydkim request-dkim-verification-for" [
 ]: nothing -> record<DKIMHost: string, DKIMPendingHost: string, DKIMPendingTextValue: string, DKIMRevokedHost: string, DKIMRevokedTextValue: string, DKIMTestValue: string, DKIMUpdateStatus: string, DKIMVerified: bool, ID: int, Name: string, ReturnPathDomain: string, ReturnPathDomainCNAMEValue: string, ReturnPathDomainVerified: bool, SPFHost: string, SPFTextValue: string, SPFVerified: bool, SafeToRemoveRevokedKeyFromDNS: bool, WeakDKIM: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({domainid: $domainid} | format pattern "/domains/{domainid}/verifydkim"))
-  let extra_headers = {"X-Postmark-Account-Token": $x_postmark_account_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({domainid: (encode-path-segment $domainid)} | format pattern "/domains/{domainid}/verifydkim"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Postmark-Account-Token": $x_postmark_account_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -286,7 +295,7 @@ export def "domains-verifydkim request-dkim-verification-for" [
 #
 # PUT /domains/{domainid}/verifyreturnpath
 # operationId: requestReturnPathVerificationForDomain
-export def "domains-verifyreturnpath request-return-path-verification-for" [
+export def "domains-verifyreturnpath request-return-path-verification" [
   domainid: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -300,11 +309,11 @@ export def "domains-verifyreturnpath request-return-path-verification-for" [
 ]: nothing -> record<DKIMHost: string, DKIMPendingHost: string, DKIMPendingTextValue: string, DKIMRevokedHost: string, DKIMRevokedTextValue: string, DKIMTestValue: string, DKIMUpdateStatus: string, DKIMVerified: bool, ID: int, Name: string, ReturnPathDomain: string, ReturnPathDomainCNAMEValue: string, ReturnPathDomainVerified: bool, SPFHost: string, SPFTextValue: string, SPFVerified: bool, SafeToRemoveRevokedKeyFromDNS: bool, WeakDKIM: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({domainid: $domainid} | format pattern "/domains/{domainid}/verifyreturnpath"))
-  let extra_headers = {"X-Postmark-Account-Token": $x_postmark_account_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({domainid: (encode-path-segment $domainid)} | format pattern "/domains/{domainid}/verifyreturnpath"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Postmark-Account-Token": $x_postmark_account_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -312,7 +321,7 @@ export def "domains-verifyreturnpath request-return-path-verification-for" [
 #
 # POST /domains/{domainid}/verifyspf
 # operationId: requestSPFVerificationForDomain
-export def "domains-verifyspf request-spf-verification-for" [
+export def "domains-verifyspf request-spf-verification" [
   domainid: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -326,11 +335,11 @@ export def "domains-verifyspf request-spf-verification-for" [
 ]: nothing -> record<SPFHost: string, SPFTextValue: string, SPFVerified: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({domainid: $domainid} | format pattern "/domains/{domainid}/verifyspf"))
-  let extra_headers = {"X-Postmark-Account-Token": $x_postmark_account_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({domainid: (encode-path-segment $domainid)} | format pattern "/domains/{domainid}/verifyspf"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Postmark-Account-Token": $x_postmark_account_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -338,7 +347,7 @@ export def "domains-verifyspf request-spf-verification-for" [
 #
 # GET /senders
 # operationId: listSenderSignatures
-export def "senders list-sender-signatures" [
+export def "senders list-signatures" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -355,10 +364,10 @@ export def "senders list-sender-signatures" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "count" $count "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/senders" $qp)
-  let extra_headers = {"X-Postmark-Account-Token": $x_postmark_account_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Postmark-Account-Token": $x_postmark_account_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -366,7 +375,7 @@ export def "senders list-sender-signatures" [
 #
 # POST /senders
 # operationId: createSenderSignature
-export def "senders create-sender-signature" [
+export def "senders create-signature" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -385,20 +394,20 @@ export def "senders create-sender-signature" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/senders")
-  let body = {"FromEmail": $from_email, "Name": $name, "ReplyToEmail": $reply_to_email, "ReturnPathDomain": $return_path_domain} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Postmark-Account-Token": $x_postmark_account_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"FromEmail": $from_email, "Name": $name, "ReplyToEmail": $reply_to_email, "ReturnPathDomain": $return_path_domain} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Postmark-Account-Token": $x_postmark_account_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a Sender Signature
 #
 # DELETE /senders/{signatureid}
 # operationId: deleteSenderSignature
-export def "senders delete-sender-signature" [
+export def "senders delete-signature" [
   signatureid: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -412,11 +421,11 @@ export def "senders delete-sender-signature" [
 ]: nothing -> record<ErrorCode: int, Message: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({signatureid: $signatureid} | format pattern "/senders/{signatureid}"))
-  let extra_headers = {"X-Postmark-Account-Token": $x_postmark_account_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({signatureid: (encode-path-segment $signatureid)} | format pattern "/senders/{signatureid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Postmark-Account-Token": $x_postmark_account_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -424,7 +433,7 @@ export def "senders delete-sender-signature" [
 #
 # GET /senders/{signatureid}
 # operationId: getSenderSignature
-export def "senders get-sender-signature" [
+export def "senders get-signature" [
   signatureid: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -438,11 +447,11 @@ export def "senders get-sender-signature" [
 ]: nothing -> record<Confirmed: bool, DKIMHost: string, DKIMPendingHost: string, DKIMPendingTextValue: string, DKIMRevokedHost: string, DKIMRevokedTextValue: string, DKIMTestValue: string, DKIMUpdateStatus: string, DKIMVerified: bool, Domain: string, EmailAddress: string, ID: int, Name: string, ReplyToEmailAddress: string, ReturnPathDomain: string, ReturnPathDomainCNAMEValue: string, ReturnPathDomainVerified: bool, SPFHost: string, SPFTextValue: string, SPFVerified: bool, SafeToRemoveRevokedKeyFromDNS: bool, WeakDKIM: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({signatureid: $signatureid} | format pattern "/senders/{signatureid}"))
-  let extra_headers = {"X-Postmark-Account-Token": $x_postmark_account_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({signatureid: (encode-path-segment $signatureid)} | format pattern "/senders/{signatureid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Postmark-Account-Token": $x_postmark_account_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -450,7 +459,7 @@ export def "senders get-sender-signature" [
 #
 # PUT /senders/{signatureid}
 # operationId: editSenderSignature
-export def "senders editSenderSignature" [
+export def "senders update-edit-signature" [
   signatureid: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -468,21 +477,21 @@ export def "senders editSenderSignature" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({signatureid: $signatureid} | format pattern "/senders/{signatureid}"))
-  let body = {"Name": $name, "ReplyToEmail": $reply_to_email, "ReturnPathDomain": $return_path_domain} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Postmark-Account-Token": $x_postmark_account_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({signatureid: (encode-path-segment $signatureid)} | format pattern "/senders/{signatureid}"))
+  let req_body = {"Name": $name, "ReplyToEmail": $reply_to_email, "ReturnPathDomain": $return_path_domain} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Postmark-Account-Token": $x_postmark_account_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Request a new DKIM Key
 #
 # POST /senders/{signatureid}/requestnewdkim
 # operationId: requestNewDKIMKeyForSenderSignature
-export def "senders-requestnewdkim request-new-dkim-key-for-sender-signature" [
+export def "senders-requestnewdkim request-new-dkim-key-for-signature" [
   signatureid: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -496,11 +505,11 @@ export def "senders-requestnewdkim request-new-dkim-key-for-sender-signature" [
 ]: nothing -> record<ErrorCode: int, Message: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({signatureid: $signatureid} | format pattern "/senders/{signatureid}/requestnewdkim"))
-  let extra_headers = {"X-Postmark-Account-Token": $x_postmark_account_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({signatureid: (encode-path-segment $signatureid)} | format pattern "/senders/{signatureid}/requestnewdkim"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Postmark-Account-Token": $x_postmark_account_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -508,7 +517,7 @@ export def "senders-requestnewdkim request-new-dkim-key-for-sender-signature" [
 #
 # POST /senders/{signatureid}/resend
 # operationId: resendSenderSignatureConfirmationEmail
-export def "senders-resend resendSenderSignatureConfirmationEmail" [
+export def "senders-resend resend-signature-confirmation-email" [
   signatureid: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -522,11 +531,11 @@ export def "senders-resend resendSenderSignatureConfirmationEmail" [
 ]: nothing -> record<ErrorCode: int, Message: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({signatureid: $signatureid} | format pattern "/senders/{signatureid}/resend"))
-  let extra_headers = {"X-Postmark-Account-Token": $x_postmark_account_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({signatureid: (encode-path-segment $signatureid)} | format pattern "/senders/{signatureid}/resend"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Postmark-Account-Token": $x_postmark_account_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -534,7 +543,7 @@ export def "senders-resend resendSenderSignatureConfirmationEmail" [
 #
 # POST /senders/{signatureid}/verifyspf
 # operationId: requestSPFVerificationForSenderSignature
-export def "senders-verifyspf request-spf-verification-for-sender-signature" [
+export def "senders-verifyspf request-spf-verification-for-signature" [
   signatureid: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -548,11 +557,11 @@ export def "senders-verifyspf request-spf-verification-for-sender-signature" [
 ]: nothing -> record<Confirmed: bool, DKIMHost: string, DKIMPendingHost: string, DKIMPendingTextValue: string, DKIMRevokedHost: string, DKIMRevokedTextValue: string, DKIMTestValue: string, DKIMUpdateStatus: string, DKIMVerified: bool, Domain: string, EmailAddress: string, ID: int, Name: string, ReplyToEmailAddress: string, ReturnPathDomain: string, ReturnPathDomainCNAMEValue: string, ReturnPathDomainVerified: bool, SPFHost: string, SPFTextValue: string, SPFVerified: bool, SafeToRemoveRevokedKeyFromDNS: bool, WeakDKIM: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({signatureid: $signatureid} | format pattern "/senders/{signatureid}/verifyspf"))
-  let extra_headers = {"X-Postmark-Account-Token": $x_postmark_account_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({signatureid: (encode-path-segment $signatureid)} | format pattern "/senders/{signatureid}/verifyspf"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Postmark-Account-Token": $x_postmark_account_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -578,10 +587,10 @@ export def "servers list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "count" $count "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "name" $name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/servers" $qp)
-  let extra_headers = {"X-Postmark-Account-Token": $x_postmark_account_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Postmark-Account-Token": $x_postmark_account_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -618,13 +627,13 @@ export def "servers create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/servers")
-  let body = {"BounceHookUrl": $bounce_hook_url, "ClickHookUrl": $click_hook_url, "Color": $color, "DeliveryHookUrl": $delivery_hook_url, "InboundDomain": $inbound_domain, "InboundHookUrl": $inbound_hook_url, "InboundSpamThreshold": $inbound_spam_threshold, "Name": $name, "OpenHookUrl": $open_hook_url, "PostFirstOpenOnly": $post_first_open_only, "RawEmailEnabled": $raw_email_enabled, "SmtpApiActivated": $smtp_api_activated, "TrackLinks": $track_links, "TrackOpens": $track_opens} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Postmark-Account-Token": $x_postmark_account_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"BounceHookUrl": $bounce_hook_url, "ClickHookUrl": $click_hook_url, "Color": $color, "DeliveryHookUrl": $delivery_hook_url, "InboundDomain": $inbound_domain, "InboundHookUrl": $inbound_hook_url, "InboundSpamThreshold": $inbound_spam_threshold, "Name": $name, "OpenHookUrl": $open_hook_url, "PostFirstOpenOnly": $post_first_open_only, "RawEmailEnabled": $raw_email_enabled, "SmtpApiActivated": $smtp_api_activated, "TrackLinks": $track_links, "TrackOpens": $track_opens} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Postmark-Account-Token": $x_postmark_account_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a Server
@@ -645,11 +654,11 @@ export def "servers delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({serverid: $serverid} | format pattern "/servers/{serverid}"))
-  let extra_headers = {"X-Postmark-Account-Token": $x_postmark_account_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Postmark-Account-Token": $x_postmark_account_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -657,7 +666,7 @@ export def "servers delete" [
 #
 # GET /servers/{serverid}
 # operationId: getServerInformation
-export def "servers get-server-information" [
+export def "servers get-information" [
   serverid: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -671,11 +680,11 @@ export def "servers get-server-information" [
 ]: nothing -> record<ApiTokens: list<string>, BounceHookUrl: string, ClickHookUrl: string, Color: string, DeliveryHookUrl: string, ID: int, InboundAddress: string, InboundDomain: string, InboundHash: string, InboundHookUrl: string, InboundSpamThreshold: int, Name: string, OpenHookUrl: string, PostFirstOpenOnly: bool, RawEmailEnabled: bool, ServerLink: string, SmtpApiActivated: bool, TrackLinks: string, TrackOpens: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({serverid: $serverid} | format pattern "/servers/{serverid}"))
-  let extra_headers = {"X-Postmark-Account-Token": $x_postmark_account_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Postmark-Account-Token": $x_postmark_account_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -683,7 +692,7 @@ export def "servers get-server-information" [
 #
 # PUT /servers/{serverid}
 # operationId: editServerInformation
-export def "servers editServerInformation" [
+export def "servers update-edit-information" [
   serverid: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -712,14 +721,14 @@ export def "servers editServerInformation" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({serverid: $serverid} | format pattern "/servers/{serverid}"))
-  let body = {"BounceHookUrl": $bounce_hook_url, "ClickHookUrl": $click_hook_url, "Color": $color, "DeliveryHookUrl": $delivery_hook_url, "InboundDomain": $inbound_domain, "InboundHookUrl": $inbound_hook_url, "InboundSpamThreshold": $inbound_spam_threshold, "Name": $name, "OpenHookUrl": $open_hook_url, "PostFirstOpenOnly": $post_first_open_only, "RawEmailEnabled": $raw_email_enabled, "SmtpApiActivated": $smtp_api_activated, "TrackLinks": $track_links, "TrackOpens": $track_opens} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Postmark-Account-Token": $x_postmark_account_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}"))
+  let req_body = {"BounceHookUrl": $bounce_hook_url, "ClickHookUrl": $click_hook_url, "Color": $color, "DeliveryHookUrl": $delivery_hook_url, "InboundDomain": $inbound_domain, "InboundHookUrl": $inbound_hook_url, "InboundSpamThreshold": $inbound_spam_threshold, "Name": $name, "OpenHookUrl": $open_hook_url, "PostFirstOpenOnly": $post_first_open_only, "RawEmailEnabled": $raw_email_enabled, "SmtpApiActivated": $smtp_api_activated, "TrackLinks": $track_links, "TrackOpens": $track_opens} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Postmark-Account-Token": $x_postmark_account_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Push templates from one server to another
@@ -744,11 +753,11 @@ export def "templates-push push" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/templates/push")
-  let body = {"DestinationServerId": $destination_server_id, "PerformChanges": $perform_changes, "SourceServerId": $source_server_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Postmark-Account-Token": $x_postmark_account_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"DestinationServerId": $destination_server_id, "PerformChanges": $perform_changes, "SourceServerId": $source_server_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Postmark-Account-Token": $x_postmark_account_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

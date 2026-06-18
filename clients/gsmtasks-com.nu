@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -239,7 +248,7 @@ export def "account-roles create" [
   --route-start-address: any # nullable
   --show-unassigned: oneof<nothing, bool>
   --user: string # format: uri
-  --vehicle-capacity: list # nullable
+  --vehicle-capacity: list<int> # nullable
   --vehicle-profile: string@vehicle-profile-completer
   --vehicle-registration-number: string
   --vehicle-service-time-factor: string # format: decimal
@@ -250,11 +259,11 @@ export def "account-roles create" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/account_roles/" $qp)
-  let body = {"account": $account, "display_name": $display_name, "is_integration": $is_integration, "is_manager": $is_manager, "is_worker": $is_worker, "phone": $phone, "route_end_address": $route_end_address, "route_start_address": $route_start_address, "show_unassigned": $show_unassigned, "user": $user, "vehicle_capacity": $vehicle_capacity, "vehicle_profile": $vehicle_profile, "vehicle_registration_number": $vehicle_registration_number, "vehicle_service_time_factor": $vehicle_service_time_factor, "vehicle_speed_factor": $vehicle_speed_factor} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"account": $account, "display_name": $display_name, "is_integration": $is_integration, "is_manager": $is_manager, "is_worker": $is_worker, "phone": $phone, "route_end_address": $route_end_address, "route_start_address": $route_start_address, "show_unassigned": $show_unassigned, "user": $user, "vehicle_capacity": $vehicle_capacity, "vehicle_profile": $vehicle_profile, "vehicle_registration_number": $vehicle_registration_number, "vehicle_service_time_factor": $vehicle_service_time_factor, "vehicle_speed_factor": $vehicle_speed_factor} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DELETE /account_roles/{id}/
@@ -275,7 +284,7 @@ export def "account-roles delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/account_roles/{id}/") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/account_roles/{id}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -300,7 +309,7 @@ export def "account-roles get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/account_roles/{id}/") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/account_roles/{id}/") $qp)
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -309,7 +318,7 @@ export def "account-roles get" [
 # PATCH /account_roles/{id}/
 #
 # operationId: account_roles_partial_update
-export def "account-roles patch" [
+export def "account-roles update-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -331,7 +340,7 @@ export def "account-roles patch" [
   --route-start-address: any # nullable
   --show-unassigned: oneof<nothing, bool>
   --user: string # format: uri
-  --vehicle-capacity: list # nullable
+  --vehicle-capacity: list<int> # nullable
   --vehicle-profile: string@vehicle-profile-completer
   --vehicle-registration-number: string
   --vehicle-service-time-factor: string # format: decimal
@@ -341,18 +350,18 @@ export def "account-roles patch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/account_roles/{id}/") $qp)
-  let body = {"account": $account, "display_name": $display_name, "is_integration": $is_integration, "is_manager": $is_manager, "is_worker": $is_worker, "phone": $phone, "route_end_address": $route_end_address, "route_start_address": $route_start_address, "show_unassigned": $show_unassigned, "user": $user, "vehicle_capacity": $vehicle_capacity, "vehicle_profile": $vehicle_profile, "vehicle_registration_number": $vehicle_registration_number, "vehicle_service_time_factor": $vehicle_service_time_factor, "vehicle_speed_factor": $vehicle_speed_factor} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/account_roles/{id}/") $qp)
+  let req_body = {"account": $account, "display_name": $display_name, "is_integration": $is_integration, "is_manager": $is_manager, "is_worker": $is_worker, "phone": $phone, "route_end_address": $route_end_address, "route_start_address": $route_start_address, "show_unassigned": $show_unassigned, "user": $user, "vehicle_capacity": $vehicle_capacity, "vehicle_profile": $vehicle_profile, "vehicle_registration_number": $vehicle_registration_number, "vehicle_service_time_factor": $vehicle_service_time_factor, "vehicle_speed_factor": $vehicle_speed_factor} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # PUT /account_roles/{id}/
 #
 # operationId: account_roles_update
-export def "account-roles update" [
+export def "account-roles update-by-id-1" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -374,7 +383,7 @@ export def "account-roles update" [
   --route-start-address: any # nullable
   --show-unassigned: oneof<nothing, bool>
   --user: string # format: uri
-  --vehicle-capacity: list # nullable
+  --vehicle-capacity: list<int> # nullable
   --vehicle-profile: string@vehicle-profile-completer
   --vehicle-registration-number: string
   --vehicle-service-time-factor: string # format: decimal
@@ -384,12 +393,12 @@ export def "account-roles update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/account_roles/{id}/") $qp)
-  let body = {"account": $account, "display_name": $display_name, "is_integration": $is_integration, "is_manager": $is_manager, "is_worker": $is_worker, "phone": $phone, "route_end_address": $route_end_address, "route_start_address": $route_start_address, "show_unassigned": $show_unassigned, "user": $user, "vehicle_capacity": $vehicle_capacity, "vehicle_profile": $vehicle_profile, "vehicle_registration_number": $vehicle_registration_number, "vehicle_service_time_factor": $vehicle_service_time_factor, "vehicle_speed_factor": $vehicle_speed_factor} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/account_roles/{id}/") $qp)
+  let req_body = {"account": $account, "display_name": $display_name, "is_integration": $is_integration, "is_manager": $is_manager, "is_worker": $is_worker, "phone": $phone, "route_end_address": $route_end_address, "route_start_address": $route_start_address, "show_unassigned": $show_unassigned, "user": $user, "vehicle_capacity": $vehicle_capacity, "vehicle_profile": $vehicle_profile, "vehicle_registration_number": $vehicle_registration_number, "vehicle_service_time_factor": $vehicle_service_time_factor, "vehicle_speed_factor": $vehicle_speed_factor} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /account_roles/{id}/activate/
@@ -413,12 +422,12 @@ export def "account-roles-activate create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/account_roles/{id}/activate/") $qp)
-  let body = {"token": $body_token} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/account_roles/{id}/activate/") $qp)
+  let req_body = {"token": $body_token} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /account_roles/{id}/notify/
@@ -440,7 +449,7 @@ export def "account-roles-notify create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/account_roles/{id}/notify/") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/account_roles/{id}/notify/") $qp)
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -465,7 +474,7 @@ export def "account-roles-token get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/account_roles/{id}/token/") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/account_roles/{id}/token/") $qp)
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -537,7 +546,7 @@ export def "accounts get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/accounts/{id}/") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/accounts/{id}/") $qp)
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -546,7 +555,7 @@ export def "accounts get" [
 # PATCH /accounts/{id}/
 #
 # operationId: accounts_partial_update
-export def "accounts patch" [
+export def "accounts update-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -590,7 +599,7 @@ export def "accounts patch" [
   --feature-tracker-reviews-allowed: oneof<nothing, bool>
   --language: any
   --name: string
-  --notification-emails: list
+  --notification-emails: list<string>
   --optimization-objective: any # Specify the default objective for your optimizationions
   --optimize-after-create: oneof<nothing, bool>
   --reference-autogenerate: oneof<nothing, bool>
@@ -598,7 +607,7 @@ export def "accounts patch" [
   --reference-offset: int
   --reference-prefix: string
   --registry-code: string
-  --review-emails: list
+  --review-emails: list<string>
   --route-end-address: any # nullable
   --route-start-address: any # nullable
   --task-duration: record # default: 4 10:55:34.12
@@ -615,18 +624,18 @@ export def "accounts patch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/accounts/{id}/") $qp)
-  let body = {"address": $address, "assignee_proximity_radius": $assignee_proximity_radius, "auto_assign_max_distance": $auto_assign_max_distance, "auto_assign_max_tasks": $auto_assign_max_tasks, "auto_assign_optimize": $auto_assign_optimize, "auto_assign_orders": $auto_assign_orders, "auto_assign_rotate": $auto_assign_rotate, "auto_assign_time_before": $auto_assign_time_before, "billing_address": $billing_address, "billing_company": $billing_company, "billing_country": $billing_country, "billing_email": $billing_email, "billing_name": $billing_name, "billing_phone": $billing_phone, "billing_vatin": $billing_vatin, "country_code": $country_code, "date_format": $date_format, "distance_units": $distance_units, "email": $email, "feature_address_autosuggest_provider": $feature_address_autosuggest_provider, "feature_app_task_search": $feature_app_task_search, "feature_document_signing": $feature_document_signing, "feature_navigation_app_selection": $feature_navigation_app_selection, "feature_navigation_use_address": $feature_navigation_use_address, "feature_show_tutorial": $feature_show_tutorial, "feature_show_unassigned_to_workers": $feature_show_unassigned_to_workers, "feature_task_accept": $feature_task_accept, "feature_task_created_sound": $feature_task_created_sound, "feature_task_reject": $feature_task_reject, "feature_tracker_reviews_allowed": $feature_tracker_reviews_allowed, "language": $language, "name": $name, "notification_emails": $notification_emails, "optimization_objective": $optimization_objective, "optimize_after_create": $optimize_after_create, "reference_autogenerate": $reference_autogenerate, "reference_length": $reference_length, "reference_offset": $reference_offset, "reference_prefix": $reference_prefix, "registry_code": $registry_code, "review_emails": $review_emails, "route_end_address": $route_end_address, "route_start_address": $route_start_address, "task_duration": $task_duration, "task_expiry_duration_from_complete_after": $task_expiry_duration_from_complete_after, "task_expiry_duration_from_complete_before": $task_expiry_duration_from_complete_before, "task_expiry_state": $task_expiry_state, "time_format": $time_format, "timezone": $timezone, "type": $type, "vatin": $vatin, "website": $website} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/accounts/{id}/") $qp)
+  let req_body = {"address": $address, "assignee_proximity_radius": $assignee_proximity_radius, "auto_assign_max_distance": $auto_assign_max_distance, "auto_assign_max_tasks": $auto_assign_max_tasks, "auto_assign_optimize": $auto_assign_optimize, "auto_assign_orders": $auto_assign_orders, "auto_assign_rotate": $auto_assign_rotate, "auto_assign_time_before": $auto_assign_time_before, "billing_address": $billing_address, "billing_company": $billing_company, "billing_country": $billing_country, "billing_email": $billing_email, "billing_name": $billing_name, "billing_phone": $billing_phone, "billing_vatin": $billing_vatin, "country_code": $country_code, "date_format": $date_format, "distance_units": $distance_units, "email": $email, "feature_address_autosuggest_provider": $feature_address_autosuggest_provider, "feature_app_task_search": $feature_app_task_search, "feature_document_signing": $feature_document_signing, "feature_navigation_app_selection": $feature_navigation_app_selection, "feature_navigation_use_address": $feature_navigation_use_address, "feature_show_tutorial": $feature_show_tutorial, "feature_show_unassigned_to_workers": $feature_show_unassigned_to_workers, "feature_task_accept": $feature_task_accept, "feature_task_created_sound": $feature_task_created_sound, "feature_task_reject": $feature_task_reject, "feature_tracker_reviews_allowed": $feature_tracker_reviews_allowed, "language": $language, "name": $name, "notification_emails": $notification_emails, "optimization_objective": $optimization_objective, "optimize_after_create": $optimize_after_create, "reference_autogenerate": $reference_autogenerate, "reference_length": $reference_length, "reference_offset": $reference_offset, "reference_prefix": $reference_prefix, "registry_code": $registry_code, "review_emails": $review_emails, "route_end_address": $route_end_address, "route_start_address": $route_start_address, "task_duration": $task_duration, "task_expiry_duration_from_complete_after": $task_expiry_duration_from_complete_after, "task_expiry_duration_from_complete_before": $task_expiry_duration_from_complete_before, "task_expiry_state": $task_expiry_state, "time_format": $time_format, "timezone": $timezone, "type": $type, "vatin": $vatin, "website": $website} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # PUT /accounts/{id}/
 #
 # operationId: accounts_update
-export def "accounts update" [
+export def "accounts update-by-id-1" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -670,7 +679,7 @@ export def "accounts update" [
   --feature-tracker-reviews-allowed: oneof<nothing, bool>
   --language: any
   name: string
-  --notification-emails: list
+  --notification-emails: list<string>
   --optimization-objective: any # Specify the default objective for your optimizationions
   --optimize-after-create: oneof<nothing, bool>
   --reference-autogenerate: oneof<nothing, bool>
@@ -678,7 +687,7 @@ export def "accounts update" [
   --reference-offset: int
   --reference-prefix: string
   --registry-code: string
-  --review-emails: list
+  --review-emails: list<string>
   --route-end-address: any # nullable
   --route-start-address: any # nullable
   --task-duration: record # default: 4 10:55:34.12
@@ -695,12 +704,12 @@ export def "accounts update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/accounts/{id}/") $qp)
-  let body = {"address": $address, "assignee_proximity_radius": $assignee_proximity_radius, "auto_assign_max_distance": $auto_assign_max_distance, "auto_assign_max_tasks": $auto_assign_max_tasks, "auto_assign_optimize": $auto_assign_optimize, "auto_assign_orders": $auto_assign_orders, "auto_assign_rotate": $auto_assign_rotate, "auto_assign_time_before": $auto_assign_time_before, "billing_address": $billing_address, "billing_company": $billing_company, "billing_country": $billing_country, "billing_email": $billing_email, "billing_name": $billing_name, "billing_phone": $billing_phone, "billing_vatin": $billing_vatin, "country_code": $country_code, "date_format": $date_format, "distance_units": $distance_units, "email": $email, "feature_address_autosuggest_provider": $feature_address_autosuggest_provider, "feature_app_task_search": $feature_app_task_search, "feature_document_signing": $feature_document_signing, "feature_navigation_app_selection": $feature_navigation_app_selection, "feature_navigation_use_address": $feature_navigation_use_address, "feature_show_tutorial": $feature_show_tutorial, "feature_show_unassigned_to_workers": $feature_show_unassigned_to_workers, "feature_task_accept": $feature_task_accept, "feature_task_created_sound": $feature_task_created_sound, "feature_task_reject": $feature_task_reject, "feature_tracker_reviews_allowed": $feature_tracker_reviews_allowed, "language": $language, "name": $name, "notification_emails": $notification_emails, "optimization_objective": $optimization_objective, "optimize_after_create": $optimize_after_create, "reference_autogenerate": $reference_autogenerate, "reference_length": $reference_length, "reference_offset": $reference_offset, "reference_prefix": $reference_prefix, "registry_code": $registry_code, "review_emails": $review_emails, "route_end_address": $route_end_address, "route_start_address": $route_start_address, "task_duration": $task_duration, "task_expiry_duration_from_complete_after": $task_expiry_duration_from_complete_after, "task_expiry_duration_from_complete_before": $task_expiry_duration_from_complete_before, "task_expiry_state": $task_expiry_state, "time_format": $time_format, "timezone": $timezone, "type": $type, "vatin": $vatin, "website": $website} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/accounts/{id}/") $qp)
+  let req_body = {"address": $address, "assignee_proximity_radius": $assignee_proximity_radius, "auto_assign_max_distance": $auto_assign_max_distance, "auto_assign_max_tasks": $auto_assign_max_tasks, "auto_assign_optimize": $auto_assign_optimize, "auto_assign_orders": $auto_assign_orders, "auto_assign_rotate": $auto_assign_rotate, "auto_assign_time_before": $auto_assign_time_before, "billing_address": $billing_address, "billing_company": $billing_company, "billing_country": $billing_country, "billing_email": $billing_email, "billing_name": $billing_name, "billing_phone": $billing_phone, "billing_vatin": $billing_vatin, "country_code": $country_code, "date_format": $date_format, "distance_units": $distance_units, "email": $email, "feature_address_autosuggest_provider": $feature_address_autosuggest_provider, "feature_app_task_search": $feature_app_task_search, "feature_document_signing": $feature_document_signing, "feature_navigation_app_selection": $feature_navigation_app_selection, "feature_navigation_use_address": $feature_navigation_use_address, "feature_show_tutorial": $feature_show_tutorial, "feature_show_unassigned_to_workers": $feature_show_unassigned_to_workers, "feature_task_accept": $feature_task_accept, "feature_task_created_sound": $feature_task_created_sound, "feature_task_reject": $feature_task_reject, "feature_tracker_reviews_allowed": $feature_tracker_reviews_allowed, "language": $language, "name": $name, "notification_emails": $notification_emails, "optimization_objective": $optimization_objective, "optimize_after_create": $optimize_after_create, "reference_autogenerate": $reference_autogenerate, "reference_length": $reference_length, "reference_offset": $reference_offset, "reference_prefix": $reference_prefix, "registry_code": $registry_code, "review_emails": $review_emails, "route_end_address": $route_end_address, "route_start_address": $route_start_address, "task_duration": $task_duration, "task_expiry_duration_from_complete_after": $task_expiry_duration_from_complete_after, "task_expiry_duration_from_complete_before": $task_expiry_duration_from_complete_before, "task_expiry_state": $task_expiry_state, "time_format": $time_format, "timezone": $timezone, "type": $type, "vatin": $vatin, "website": $website} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /accounts/{id}/braintree_customer/
@@ -722,7 +731,7 @@ export def "accounts-braintree-customer get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/accounts/{id}/braintree_customer/") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/accounts/{id}/braintree_customer/") $qp)
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -749,12 +758,12 @@ export def "accounts-change-owner create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/accounts/{id}/change_owner/") $qp)
-  let body = {"owner": $owner} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/accounts/{id}/change_owner/") $qp)
+  let req_body = {"owner": $owner} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DELETE /accounts/{id}/managers/
@@ -775,7 +784,7 @@ export def "accounts-managers delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/accounts/{id}/managers/") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/accounts/{id}/managers/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -800,7 +809,7 @@ export def "accounts-managers get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/accounts/{id}/managers/") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/accounts/{id}/managers/") $qp)
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -827,15 +836,15 @@ export def "accounts-managers create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/accounts/{id}/managers/") $qp)
-  let body = {"email": $email} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/accounts/{id}/managers/") $qp)
+  let req_body = {"email": $email} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-# Action to (re)set the account stripe customer and payment method to new values. By default the attached method will also be set as default. If this is not desired, you can send      'set_default': False
+# Action to (re)set the account stripe customer and payment method to new values. By default the attached method will also be set as default. If this is not desired, you can send 'set_default': False
 #
 # PUT /accounts/{id}/stripe_attach_payment_method/
 # operationId: accounts_stripe_attach_payment_method_update
@@ -853,18 +862,18 @@ export def "accounts-stripe-attach-payment-method update" [
   --format: string@format-completer-1
   --set-default: oneof<nothing, bool> # default: true
   --stripe-customer-id: string
-  stripe_payment_method_id: string # Reflects current default payment method. For reference only. 
+  stripe_payment_method_id: string # Reflects current default payment method. For reference only.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/accounts/{id}/stripe_attach_payment_method/") $qp)
-  let body = {"set_default": $set_default, "stripe_customer_id": $stripe_customer_id, "stripe_payment_method_id": $stripe_payment_method_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/accounts/{id}/stripe_attach_payment_method/") $qp)
+  let req_body = {"set_default": $set_default, "stripe_customer_id": $stripe_customer_id, "stripe_payment_method_id": $stripe_payment_method_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Action to start a new setup intent.
@@ -889,12 +898,12 @@ export def "accounts-stripe-create-setup-intent create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/accounts/{id}/stripe_create_setup_intent/") $qp)
-  let body = {"payment_method_id": $payment_method_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/accounts/{id}/stripe_create_setup_intent/") $qp)
+  let req_body = {"payment_method_id": $payment_method_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Action to start a new setup intent.
@@ -919,12 +928,12 @@ export def "accounts-stripe-create-setup-intent update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/accounts/{id}/stripe_create_setup_intent/") $qp)
-  let body = {"payment_method_id": $payment_method_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/accounts/{id}/stripe_create_setup_intent/") $qp)
+  let req_body = {"payment_method_id": $payment_method_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Detached payment method from the customer. The payment method itself will remain somewhere in stripe, but as its no longer linked to the customer, it might as well be deleted for us
@@ -943,18 +952,18 @@ export def "accounts-stripe-detach-payment-method update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --format: string@format-completer-1
-  stripe_payment_method_id: string # Reflects current default payment method. For reference only. 
+  stripe_payment_method_id: string # Reflects current default payment method. For reference only.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/accounts/{id}/stripe_detach_payment_method/") $qp)
-  let body = {"stripe_payment_method_id": $stripe_payment_method_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/accounts/{id}/stripe_detach_payment_method/") $qp)
+  let req_body = {"stripe_payment_method_id": $stripe_payment_method_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Fetch a single payment method from stripe. This will also return non-attached payment methods (from setup intents for example)
@@ -977,7 +986,7 @@ export def "accounts-stripe-get-payment-method get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/accounts/{id}/stripe_get_payment_method/") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/accounts/{id}/stripe_get_payment_method/") $qp)
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1003,7 +1012,7 @@ export def "accounts-stripe-get-setup-attempt get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/accounts/{id}/stripe_get_setup_attempt/") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/accounts/{id}/stripe_get_setup_attempt/") $qp)
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1029,7 +1038,7 @@ export def "accounts-stripe-get-setup-intent get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/accounts/{id}/stripe_get_setup_intent/") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/accounts/{id}/stripe_get_setup_intent/") $qp)
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1055,7 +1064,7 @@ export def "accounts-stripe-payment-methods get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/accounts/{id}/stripe_payment_methods/") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/accounts/{id}/stripe_payment_methods/") $qp)
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1077,18 +1086,18 @@ export def "accounts-stripe-set-default-payment-method update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --format: string@format-completer-1
-  stripe_payment_method_id: string # Reflects current default payment method. For reference only. 
+  stripe_payment_method_id: string # Reflects current default payment method. For reference only.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/accounts/{id}/stripe_set_default_payment_method/") $qp)
-  let body = {"stripe_payment_method_id": $stripe_payment_method_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/accounts/{id}/stripe_set_default_payment_method/") $qp)
+  let req_body = {"stripe_payment_method_id": $stripe_payment_method_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Fetch existing setup intents
@@ -1111,7 +1120,7 @@ export def "accounts-stripe-setup-intents get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/accounts/{id}/stripe_setup_intents/") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/accounts/{id}/stripe_setup_intents/") $qp)
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1135,7 +1144,7 @@ export def "accounts-workers delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/accounts/{id}/workers/") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/accounts/{id}/workers/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1160,7 +1169,7 @@ export def "accounts-workers get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/accounts/{id}/workers/") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/accounts/{id}/workers/") $qp)
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1187,12 +1196,12 @@ export def "accounts-workers create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/accounts/{id}/workers/") $qp)
-  let body = {"email": $email} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/accounts/{id}/workers/") $qp)
+  let req_body = {"email": $email} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /addons/
@@ -1240,7 +1249,7 @@ export def "addons get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/addons/{id}/") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/addons/{id}/") $qp)
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1265,11 +1274,11 @@ export def "authenticate create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/authenticate/")
-  let body = {"password": $password, "username": $username} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"password": $password, "username": $username} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /billing/customers/
@@ -1329,11 +1338,11 @@ export def "billing-customers create" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/billing/customers/" $qp)
-  let body = {"account": $account, "braintree_id": $braintree_id, "company": $company, "email": $email, "first_name": $first_name, "last_name": $last_name, "payment_method_nonce": $payment_method_nonce, "phone": $phone, "vat": $vat, "website": $website} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"account": $account, "braintree_id": $braintree_id, "company": $company, "email": $email, "first_name": $first_name, "last_name": $last_name, "payment_method_nonce": $payment_method_nonce, "phone": $phone, "vat": $vat, "website": $website} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /billing/customers/{id}/
@@ -1355,7 +1364,7 @@ export def "billing-customers get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/billing/customers/{id}/") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/billing/customers/{id}/") $qp)
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1364,7 +1373,7 @@ export def "billing-customers get" [
 # PATCH /billing/customers/{id}/
 #
 # operationId: billing_customers_partial_update
-export def "billing-customers patch" [
+export def "billing-customers update-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1391,18 +1400,18 @@ export def "billing-customers patch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/billing/customers/{id}/") $qp)
-  let body = {"account": $account, "braintree_id": $braintree_id, "company": $company, "email": $email, "first_name": $first_name, "last_name": $last_name, "payment_method_nonce": $payment_method_nonce, "phone": $phone, "vat": $vat, "website": $website} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/billing/customers/{id}/") $qp)
+  let req_body = {"account": $account, "braintree_id": $braintree_id, "company": $company, "email": $email, "first_name": $first_name, "last_name": $last_name, "payment_method_nonce": $payment_method_nonce, "phone": $phone, "vat": $vat, "website": $website} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # PUT /billing/customers/{id}/
 #
 # operationId: billing_customers_update
-export def "billing-customers update" [
+export def "billing-customers update-by-id-1" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1429,12 +1438,12 @@ export def "billing-customers update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/billing/customers/{id}/") $qp)
-  let body = {"account": $account, "braintree_id": $braintree_id, "company": $company, "email": $email, "first_name": $first_name, "last_name": $last_name, "payment_method_nonce": $payment_method_nonce, "phone": $phone, "vat": $vat, "website": $website} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/billing/customers/{id}/") $qp)
+  let req_body = {"account": $account, "braintree_id": $braintree_id, "company": $company, "email": $email, "first_name": $first_name, "last_name": $last_name, "payment_method_nonce": $payment_method_nonce, "phone": $phone, "vat": $vat, "website": $website} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /billing/customers/{id}/client_token/
@@ -1456,7 +1465,7 @@ export def "billing-customers-client-token get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/billing/customers/{id}/client_token/") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/billing/customers/{id}/client_token/") $qp)
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1532,7 +1541,7 @@ export def "billing-invoices get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/billing/invoices/{id}/") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/billing/invoices/{id}/") $qp)
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1542,7 +1551,7 @@ export def "billing-invoices get" [
 #
 # operationId: billing_invoices_partial_update
 # --items item shape: {invoice: string, name: string, quantity: string, unit?: string, unit_price: string}
-export def "billing-invoices patch" [
+export def "billing-invoices update-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1560,19 +1569,19 @@ export def "billing-invoices patch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/billing/invoices/{id}/") $qp)
-  let body = {"due_date": $due_date} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/billing/invoices/{id}/") $qp)
+  let req_body = {"due_date": $due_date} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # PUT /billing/invoices/{id}/
 #
 # operationId: billing_invoices_update
 # --items item shape: {invoice: string, name: string, quantity: string, unit?: string, unit_price: string}
-export def "billing-invoices update" [
+export def "billing-invoices update-by-id-1" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1590,12 +1599,12 @@ export def "billing-invoices update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/billing/invoices/{id}/") $qp)
-  let body = {"due_date": $due_date} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/billing/invoices/{id}/") $qp)
+  let req_body = {"due_date": $due_date} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /billing/invoices/{id}/mark_as_paid/
@@ -1620,12 +1629,12 @@ export def "billing-invoices-mark-as-paid create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/billing/invoices/{id}/mark_as_paid/") $qp)
-  let body = {"due_date": $due_date} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/billing/invoices/{id}/mark_as_paid/") $qp)
+  let req_body = {"due_date": $due_date} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /billing/stripe_payments/
@@ -1678,7 +1687,7 @@ export def "billing-stripe-payments get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/billing/stripe_payments/{id}/") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/billing/stripe_payments/{id}/") $qp)
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1733,7 +1742,7 @@ export def "billing-transactions get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/billing/transactions/{id}/") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/billing/transactions/{id}/") $qp)
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1817,11 +1826,11 @@ export def "client-roles create" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/client_roles/" $qp)
-  let body = {"account": $account, "client": $client, "is_active": $is_active, "is_manager": $is_manager, "phone": $phone, "user": $user} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"account": $account, "client": $client, "is_active": $is_active, "is_manager": $is_manager, "phone": $phone, "user": $user} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /client_roles/{id}/
@@ -1843,7 +1852,7 @@ export def "client-roles get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/client_roles/{id}/") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/client_roles/{id}/") $qp)
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1852,7 +1861,7 @@ export def "client-roles get" [
 # PATCH /client_roles/{id}/
 #
 # operationId: client_roles_partial_update
-export def "client-roles patch" [
+export def "client-roles update-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1875,18 +1884,18 @@ export def "client-roles patch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/client_roles/{id}/") $qp)
-  let body = {"account": $account, "client": $client, "is_active": $is_active, "is_manager": $is_manager, "phone": $phone, "user": $user} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/client_roles/{id}/") $qp)
+  let req_body = {"account": $account, "client": $client, "is_active": $is_active, "is_manager": $is_manager, "phone": $phone, "user": $user} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # PUT /client_roles/{id}/
 #
 # operationId: client_roles_update
-export def "client-roles update" [
+export def "client-roles update-by-id-1" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1909,12 +1918,12 @@ export def "client-roles update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/client_roles/{id}/") $qp)
-  let body = {"account": $account, "client": $client, "is_active": $is_active, "is_manager": $is_manager, "phone": $phone, "user": $user} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/client_roles/{id}/") $qp)
+  let req_body = {"account": $account, "client": $client, "is_active": $is_active, "is_manager": $is_manager, "phone": $phone, "user": $user} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /client_roles/{id}/notify/
@@ -1943,12 +1952,12 @@ export def "client-roles-notify create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/client_roles/{id}/notify/") $qp)
-  let body = {"account": $account, "client": $client, "is_active": $is_active, "is_manager": $is_manager, "phone": $phone, "user": $user} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/client_roles/{id}/notify/") $qp)
+  let req_body = {"account": $account, "client": $client, "is_active": $is_active, "is_manager": $is_manager, "phone": $phone, "user": $user} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /clients/
@@ -2023,11 +2032,11 @@ export def "clients create" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/clients/" $qp)
-  let body = {"account": $account, "archived": $archived, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"account": $account, "archived": $archived, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /clients/{id}/
@@ -2049,7 +2058,7 @@ export def "clients get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/clients/{id}/") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/clients/{id}/") $qp)
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2058,7 +2067,7 @@ export def "clients get" [
 # PATCH /clients/{id}/
 #
 # operationId: clients_partial_update
-export def "clients patch" [
+export def "clients update-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2078,18 +2087,18 @@ export def "clients patch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/clients/{id}/") $qp)
-  let body = {"account": $account, "archived": $archived, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/clients/{id}/") $qp)
+  let req_body = {"account": $account, "archived": $archived, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # PUT /clients/{id}/
 #
 # operationId: clients_update
-export def "clients update" [
+export def "clients update-by-id-1" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2109,12 +2118,12 @@ export def "clients update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/clients/{id}/") $qp)
-  let body = {"account": $account, "archived": $archived, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/clients/{id}/") $qp)
+  let req_body = {"account": $account, "archived": $archived, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /configurations/
@@ -2143,7 +2152,7 @@ export def "configurations list" [
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# This view has multiple renderer classes available: `json` and `xlsx`. In order to export the data as an excel file, just set query argument `format` to `xlsx`.When downloading `xlsx` format, use Accept header `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet; version=...`  The user can request what fields and in what order will be rendered using query argument `fields`. This is a comma separated list of field names used in the API.  When exporting to **excel**, the column names may be changed based on pre-defined field names and width mapping.  Available since version 2.2.1
+# This view has multiple renderer classes available: `json` and `xlsx`. In order to export the data as an excel file, just set query argument `format` to `xlsx`.When downloading `xlsx` format, use Accept header `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet; version=...` The user can request what fields and in what order will be rendered using query argument `fields`. This is a comma separated list of field names used in the API. When exporting to **excel**, the column names may be changed based on pre-defined field names and width mapping. Available since version 2.2.1
 #
 # GET /contact_address_exports/
 # operationId: contact_address_exports_list
@@ -2371,11 +2380,11 @@ export def "contact-address-import create" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/contact_address_import/" $qp)
-  let body = {"account": $account, "contact_addresses_data": $contact_addresses_data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"account": $account, "contact_addresses_data": $contact_addresses_data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /contact_address_import/{id}/
@@ -2397,7 +2406,7 @@ export def "contact-address-import get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/contact_address_import/{id}/") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/contact_address_import/{id}/") $qp)
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2549,7 +2558,7 @@ export def "contact-addresses list" [
 #
 # operationId: contact_addresses_create
 # --address shape: {apartment_number?: string, city?: string, country?: string, country_code?: string, formatted_address?: string, google_place_id?: string, house_number?: string, location?: any, point_of_interest?: string, postal_code?: string, raw_address?: string, state?: string, street?: string}
-# --contact shape: {company?: string, emails?: list, name?: string, notes?: string, phones?: list}
+# --contact shape: {company?: string, emails?: list<string>, name?: string, notes?: string, phones?: list<string>}
 export def "contact-addresses create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2564,7 +2573,7 @@ export def "contact-addresses create" [
   account: string # format: uri
   address: record # shape: {apartment_number?: string, city?: string, country?: string, country_code?: string, formatted_address?: string, google_place_id?: string, house_number?: string, location?: any, point_of_interest?: string, postal_code?: string, raw_address?: string, state?: string, street?: string}
   --client: string # format: uri
-  contact: record # shape: {company?: string, emails?: list, name?: string, notes?: string, phones?: list}
+  contact: record # shape: {company?: string, emails?: list<string>, name?: string, notes?: string, phones?: list<string>}
   --external-id: string # nullable
   --is-orderer: oneof<nothing, bool>
   --is-receiver: oneof<nothing, bool>
@@ -2575,11 +2584,11 @@ export def "contact-addresses create" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/contact_addresses/" $qp)
-  let body = {"account": $account, "address": $address, "client": $client, "contact": $contact, "external_id": $external_id, "is_orderer": $is_orderer, "is_receiver": $is_receiver, "source": $body_source} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"account": $account, "address": $address, "client": $client, "contact": $contact, "external_id": $external_id, "is_orderer": $is_orderer, "is_receiver": $is_receiver, "source": $body_source} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /contact_addresses/{id}/
@@ -2601,7 +2610,7 @@ export def "contact-addresses get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/contact_addresses/{id}/") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/contact_addresses/{id}/") $qp)
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2611,8 +2620,8 @@ export def "contact-addresses get" [
 #
 # operationId: contact_addresses_partial_update
 # --address shape: {apartment_number?: string, city?: string, country?: string, country_code?: string, formatted_address?: string, google_place_id?: string, house_number?: string, location?: any, point_of_interest?: string, postal_code?: string, raw_address?: string, state?: string, street?: string}
-# --contact shape: {company?: string, emails?: list, name?: string, notes?: string, phones?: list}
-export def "contact-addresses patch" [
+# --contact shape: {company?: string, emails?: list<string>, name?: string, notes?: string, phones?: list<string>}
+export def "contact-addresses update-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2627,7 +2636,7 @@ export def "contact-addresses patch" [
   --account: string # format: uri
   --address: record # shape: {apartment_number?: string, city?: string, country?: string, country_code?: string, formatted_address?: string, google_place_id?: string, house_number?: string, location?: any, point_of_interest?: string, postal_code?: string, raw_address?: string, state?: string, street?: string}
   --client: string # format: uri
-  --contact: record # shape: {company?: string, emails?: list, name?: string, notes?: string, phones?: list}
+  --contact: record # shape: {company?: string, emails?: list<string>, name?: string, notes?: string, phones?: list<string>}
   --external-id: string # nullable
   --is-orderer: oneof<nothing, bool>
   --is-receiver: oneof<nothing, bool>
@@ -2637,20 +2646,20 @@ export def "contact-addresses patch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/contact_addresses/{id}/") $qp)
-  let body = {"account": $account, "address": $address, "client": $client, "contact": $contact, "external_id": $external_id, "is_orderer": $is_orderer, "is_receiver": $is_receiver, "source": $body_source} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/contact_addresses/{id}/") $qp)
+  let req_body = {"account": $account, "address": $address, "client": $client, "contact": $contact, "external_id": $external_id, "is_orderer": $is_orderer, "is_receiver": $is_receiver, "source": $body_source} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # PUT /contact_addresses/{id}/
 #
 # operationId: contact_addresses_update
 # --address shape: {apartment_number?: string, city?: string, country?: string, country_code?: string, formatted_address?: string, google_place_id?: string, house_number?: string, location?: any, point_of_interest?: string, postal_code?: string, raw_address?: string, state?: string, street?: string}
-# --contact shape: {company?: string, emails?: list, name?: string, notes?: string, phones?: list}
-export def "contact-addresses update" [
+# --contact shape: {company?: string, emails?: list<string>, name?: string, notes?: string, phones?: list<string>}
+export def "contact-addresses update-by-id-1" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2665,7 +2674,7 @@ export def "contact-addresses update" [
   account: string # format: uri
   address: record # shape: {apartment_number?: string, city?: string, country?: string, country_code?: string, formatted_address?: string, google_place_id?: string, house_number?: string, location?: any, point_of_interest?: string, postal_code?: string, raw_address?: string, state?: string, street?: string}
   --client: string # format: uri
-  contact: record # shape: {company?: string, emails?: list, name?: string, notes?: string, phones?: list}
+  contact: record # shape: {company?: string, emails?: list<string>, name?: string, notes?: string, phones?: list<string>}
   --external-id: string # nullable
   --is-orderer: oneof<nothing, bool>
   --is-receiver: oneof<nothing, bool>
@@ -2675,12 +2684,12 @@ export def "contact-addresses update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/contact_addresses/{id}/") $qp)
-  let body = {"account": $account, "address": $address, "client": $client, "contact": $contact, "external_id": $external_id, "is_orderer": $is_orderer, "is_receiver": $is_receiver, "source": $body_source} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/contact_addresses/{id}/") $qp)
+  let req_body = {"account": $account, "address": $address, "client": $client, "contact": $contact, "external_id": $external_id, "is_orderer": $is_orderer, "is_receiver": $is_receiver, "source": $body_source} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /devices/
@@ -2762,11 +2771,11 @@ export def "devices create" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/devices/" $qp)
-  let body = {"battery_level": $battery_level, "brand": $brand, "build_number": $build_number, "device_country": $device_country, "device_id": $device_id, "device_locale": $device_locale, "free_disk_storage": $free_disk_storage, "ios_app_tracking_permission": $ios_app_tracking_permission, "is_charging": $is_charging, "location_permission": $location_permission, "manufacturer": $manufacturer, "model": $model, "motion_permission": $motion_permission, "notification_permission": $notification_permission, "readable_version": $readable_version, "system_name": $system_name, "system_version": $system_version, "timezone": $timezone, "user": $user, "version": $version} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"battery_level": $battery_level, "brand": $brand, "build_number": $build_number, "device_country": $device_country, "device_id": $device_id, "device_locale": $device_locale, "free_disk_storage": $free_disk_storage, "ios_app_tracking_permission": $ios_app_tracking_permission, "is_charging": $is_charging, "location_permission": $location_permission, "manufacturer": $manufacturer, "model": $model, "motion_permission": $motion_permission, "notification_permission": $notification_permission, "readable_version": $readable_version, "system_name": $system_name, "system_version": $system_version, "timezone": $timezone, "user": $user, "version": $version} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /devices/{id}/
@@ -2788,13 +2797,13 @@ export def "devices get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/devices/{id}/") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/devices/{id}/") $qp)
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# OpenApi3 schema for this API. Format can be selected via content negotiation.  - YAML: application/vnd.oai.openapi - JSON: application/vnd.oai.openapi+json
+# OpenApi3 schema for this API. Format can be selected via content negotiation. - YAML: application/vnd.oai.openapi - JSON: application/vnd.oai.openapi+json
 #
 # GET /docs/schema/
 # operationId: docs_schema_retrieve
@@ -2909,11 +2918,11 @@ export def "documents create" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/documents/" $qp)
-  let body = {"account": $account, "description": $description, "external_id": $external_id, "file_upload": $file_upload, "order": $order, "source": $body_source, "task": $task, "visible_to_client": $visible_to_client, "visible_to_worker": $visible_to_worker} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"account": $account, "description": $description, "external_id": $external_id, "file_upload": $file_upload, "order": $order, "source": $body_source, "task": $task, "visible_to_client": $visible_to_client, "visible_to_worker": $visible_to_worker} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Available from version 2.4.2
@@ -2931,18 +2940,18 @@ export def "documents-batch-delete create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --format: string@format-completer-1
   account: string # format: uri
-  documents: list
+  documents: list<string>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/documents/batch_delete/" $qp)
-  let body = {"account": $account, "documents": $documents} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"account": $account, "documents": $documents} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DELETE /documents/{id}/
@@ -2963,7 +2972,7 @@ export def "documents delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/documents/{id}/") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/documents/{id}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2988,7 +2997,7 @@ export def "documents get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/documents/{id}/") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/documents/{id}/") $qp)
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3106,18 +3115,18 @@ export def "emails create" [
   message: string
   --reply-to-email: string # format: email
   subject: string
-  --to-emails: list
+  --to-emails: list<string>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/emails/" $qp)
-  let body = {"account": $account, "external_id": $external_id, "from_email": $from_email, "message": $message, "reply_to_email": $reply_to_email, "subject": $subject, "to_emails": $to_emails} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"account": $account, "external_id": $external_id, "from_email": $from_email, "message": $message, "reply_to_email": $reply_to_email, "subject": $subject, "to_emails": $to_emails} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DELETE /emails/{id}/
@@ -3138,7 +3147,7 @@ export def "emails delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/emails/{id}/") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/emails/{id}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3163,7 +3172,7 @@ export def "emails get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/emails/{id}/") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/emails/{id}/") $qp)
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3172,7 +3181,7 @@ export def "emails get" [
 # PATCH /emails/{id}/
 #
 # operationId: emails_partial_update
-export def "emails patch" [
+export def "emails update-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3190,24 +3199,24 @@ export def "emails patch" [
   --message: string
   --reply-to-email: string # format: email
   --subject: string
-  --to-emails: list
+  --to-emails: list<string>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/emails/{id}/") $qp)
-  let body = {"account": $account, "external_id": $external_id, "from_email": $from_email, "message": $message, "reply_to_email": $reply_to_email, "subject": $subject, "to_emails": $to_emails} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/emails/{id}/") $qp)
+  let req_body = {"account": $account, "external_id": $external_id, "from_email": $from_email, "message": $message, "reply_to_email": $reply_to_email, "subject": $subject, "to_emails": $to_emails} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # PUT /emails/{id}/
 #
 # operationId: emails_update
-export def "emails update" [
+export def "emails update-by-id-1" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3225,18 +3234,18 @@ export def "emails update" [
   message: string
   --reply-to-email: string # format: email
   subject: string
-  --to-emails: list
+  --to-emails: list<string>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/emails/{id}/") $qp)
-  let body = {"account": $account, "external_id": $external_id, "from_email": $from_email, "message": $message, "reply_to_email": $reply_to_email, "subject": $subject, "to_emails": $to_emails} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/emails/{id}/") $qp)
+  let req_body = {"account": $account, "external_id": $external_id, "from_email": $from_email, "message": $message, "reply_to_email": $reply_to_email, "subject": $subject, "to_emails": $to_emails} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /emails/{id}/resend/
@@ -3260,18 +3269,18 @@ export def "emails-resend create" [
   message: string
   --reply-to-email: string # format: email
   subject: string
-  --to-emails: list
+  --to-emails: list<string>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/emails/{id}/resend/") $qp)
-  let body = {"account": $account, "external_id": $external_id, "from_email": $from_email, "message": $message, "reply_to_email": $reply_to_email, "subject": $subject, "to_emails": $to_emails} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/emails/{id}/resend/") $qp)
+  let req_body = {"account": $account, "external_id": $external_id, "from_email": $from_email, "message": $message, "reply_to_email": $reply_to_email, "subject": $subject, "to_emails": $to_emails} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /exports/
@@ -3337,7 +3346,7 @@ export def "exports create" [
   --format: string@format-completer-1
   account: string # format: uri
   export_model: string@export-model-completer
-  --field-names: list # nullable
+  --field-names: list<string> # nullable
   format: string@format-completer-1
 ]: any -> any {
   let input = $in
@@ -3345,11 +3354,11 @@ export def "exports create" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/exports/" $qp)
-  let body = {"account": $account, "export_model": $export_model, "field_names": $field_names, "format": $format} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"account": $account, "export_model": $export_model, "field_names": $field_names, "format": $format} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DELETE /exports/{id}/
@@ -3370,7 +3379,7 @@ export def "exports delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/exports/{id}/") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/exports/{id}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3395,7 +3404,7 @@ export def "exports get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/exports/{id}/") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/exports/{id}/") $qp)
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3404,7 +3413,7 @@ export def "exports get" [
 # PATCH /exports/{id}/
 #
 # operationId: exports_partial_update
-export def "exports patch" [
+export def "exports update-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3418,25 +3427,25 @@ export def "exports patch" [
   --format: string@format-completer-1
   --account: string # format: uri
   --export-model: string@export-model-completer
-  --field-names: list # nullable
+  --field-names: list<string> # nullable
   --format: string@format-completer-1
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/exports/{id}/") $qp)
-  let body = {"account": $account, "export_model": $export_model, "field_names": $field_names, "format": $format} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/exports/{id}/") $qp)
+  let req_body = {"account": $account, "export_model": $export_model, "field_names": $field_names, "format": $format} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # PUT /exports/{id}/
 #
 # operationId: exports_update
-export def "exports update" [
+export def "exports update-by-id-1" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3450,19 +3459,19 @@ export def "exports update" [
   --format: string@format-completer-1
   account: string # format: uri
   export_model: string@export-model-completer
-  --field-names: list # nullable
+  --field-names: list<string> # nullable
   format: string@format-completer-1
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/exports/{id}/") $qp)
-  let body = {"account": $account, "export_model": $export_model, "field_names": $field_names, "format": $format} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/exports/{id}/") $qp)
+  let req_body = {"account": $account, "export_model": $export_model, "field_names": $field_names, "format": $format} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /file_uploads/
@@ -3544,11 +3553,11 @@ export def "file-uploads create" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/file_uploads/" $qp)
-  let body = {"file_name": $file_name, "file_type": $file_type, "source": $body_source} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"file_name": $file_name, "file_type": $file_type, "source": $body_source} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /file_uploads/{id}/
@@ -3570,7 +3579,7 @@ export def "file-uploads get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/file_uploads/{id}/") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/file_uploads/{id}/") $qp)
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3631,11 +3640,11 @@ export def "formrules create" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/formrules/" $qp)
-  let body = {"account": $account, "edit_url": $edit_url, "is_active": $is_active, "name": $name, "pdf_url": $pdf_url, "rules": $rules, "view_url": $view_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"account": $account, "edit_url": $edit_url, "is_active": $is_active, "name": $name, "pdf_url": $pdf_url, "rules": $rules, "view_url": $view_url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DELETE /formrules/{id}/
@@ -3656,7 +3665,7 @@ export def "formrules delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/formrules/{id}/") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/formrules/{id}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3681,7 +3690,7 @@ export def "formrules get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/formrules/{id}/") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/formrules/{id}/") $qp)
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3690,7 +3699,7 @@ export def "formrules get" [
 # PATCH /formrules/{id}/
 #
 # operationId: formrules_partial_update
-export def "formrules patch" [
+export def "formrules update-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3714,18 +3723,18 @@ export def "formrules patch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/formrules/{id}/") $qp)
-  let body = {"account": $account, "edit_url": $edit_url, "is_active": $is_active, "name": $name, "pdf_url": $pdf_url, "rules": $rules, "view_url": $view_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/formrules/{id}/") $qp)
+  let req_body = {"account": $account, "edit_url": $edit_url, "is_active": $is_active, "name": $name, "pdf_url": $pdf_url, "rules": $rules, "view_url": $view_url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # PUT /formrules/{id}/
 #
 # operationId: formrules_update
-export def "formrules update" [
+export def "formrules update-by-id-1" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3749,12 +3758,12 @@ export def "formrules update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/formrules/{id}/") $qp)
-  let body = {"account": $account, "edit_url": $edit_url, "is_active": $is_active, "name": $name, "pdf_url": $pdf_url, "rules": $rules, "view_url": $view_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/formrules/{id}/") $qp)
+  let req_body = {"account": $account, "edit_url": $edit_url, "is_active": $is_active, "name": $name, "pdf_url": $pdf_url, "rules": $rules, "view_url": $view_url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /integrations/
@@ -3780,11 +3789,11 @@ export def "integrations create" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/integrations/" $qp)
-  let body = {"account": $account, "name": $name, "notes": $notes} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"account": $account, "name": $name, "notes": $notes} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /metafields/
@@ -3867,7 +3876,7 @@ export def "metafields create" [
   --accept: string@accept-completer-1 # Response content type
   --format: string@format-completer-1
   account: string # format: uri
-  --choices: list # nullable
+  --choices: list<string> # nullable
   --choices-url: string # nullable, format: uri
   --is-editable: oneof<nothing, bool> # Editable by manager
   --is-editable-assignee: oneof<nothing, bool> # Editable by assignee
@@ -3892,11 +3901,11 @@ export def "metafields create" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/metafields/" $qp)
-  let body = {"account": $account, "choices": $choices, "choices_url": $choices_url, "is_editable": $is_editable, "is_editable_assignee": $is_editable_assignee, "is_persistent": $is_persistent, "is_required": $is_required, "is_searchable": $is_searchable, "key": $key, "label": $label, "namespace": $namespace, "ordering": $ordering, "show_in_detail_view": $show_in_detail_view, "show_in_list_view": $show_in_list_view, "show_in_mobile_app": $show_in_mobile_app, "show_in_pod": $show_in_pod, "show_when_task_type_assignment": $show_when_task_type_assignment, "show_when_task_type_drop_off": $show_when_task_type_drop_off, "show_when_task_type_pick_up": $show_when_task_type_pick_up, "value_type": $value_type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"account": $account, "choices": $choices, "choices_url": $choices_url, "is_editable": $is_editable, "is_editable_assignee": $is_editable_assignee, "is_persistent": $is_persistent, "is_required": $is_required, "is_searchable": $is_searchable, "key": $key, "label": $label, "namespace": $namespace, "ordering": $ordering, "show_in_detail_view": $show_in_detail_view, "show_in_list_view": $show_in_list_view, "show_in_mobile_app": $show_in_mobile_app, "show_in_pod": $show_in_pod, "show_when_task_type_assignment": $show_when_task_type_assignment, "show_when_task_type_drop_off": $show_when_task_type_drop_off, "show_when_task_type_pick_up": $show_when_task_type_pick_up, "value_type": $value_type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DELETE /metafields/{id}/
@@ -3917,7 +3926,7 @@ export def "metafields delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/metafields/{id}/") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/metafields/{id}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3942,7 +3951,7 @@ export def "metafields get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/metafields/{id}/") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/metafields/{id}/") $qp)
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3951,7 +3960,7 @@ export def "metafields get" [
 # PATCH /metafields/{id}/
 #
 # operationId: metafields_partial_update
-export def "metafields patch" [
+export def "metafields update-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3964,7 +3973,7 @@ export def "metafields patch" [
   --accept: string@accept-completer-1 # Response content type
   --format: string@format-completer-1
   --account: string # format: uri
-  --choices: list # nullable
+  --choices: list<string> # nullable
   --choices-url: string # nullable, format: uri
   --is-editable: oneof<nothing, bool> # Editable by manager
   --is-editable-assignee: oneof<nothing, bool> # Editable by assignee
@@ -3988,18 +3997,18 @@ export def "metafields patch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/metafields/{id}/") $qp)
-  let body = {"account": $account, "choices": $choices, "choices_url": $choices_url, "is_editable": $is_editable, "is_editable_assignee": $is_editable_assignee, "is_persistent": $is_persistent, "is_required": $is_required, "is_searchable": $is_searchable, "key": $key, "label": $label, "namespace": $namespace, "ordering": $ordering, "show_in_detail_view": $show_in_detail_view, "show_in_list_view": $show_in_list_view, "show_in_mobile_app": $show_in_mobile_app, "show_in_pod": $show_in_pod, "show_when_task_type_assignment": $show_when_task_type_assignment, "show_when_task_type_drop_off": $show_when_task_type_drop_off, "show_when_task_type_pick_up": $show_when_task_type_pick_up, "value_type": $value_type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/metafields/{id}/") $qp)
+  let req_body = {"account": $account, "choices": $choices, "choices_url": $choices_url, "is_editable": $is_editable, "is_editable_assignee": $is_editable_assignee, "is_persistent": $is_persistent, "is_required": $is_required, "is_searchable": $is_searchable, "key": $key, "label": $label, "namespace": $namespace, "ordering": $ordering, "show_in_detail_view": $show_in_detail_view, "show_in_list_view": $show_in_list_view, "show_in_mobile_app": $show_in_mobile_app, "show_in_pod": $show_in_pod, "show_when_task_type_assignment": $show_when_task_type_assignment, "show_when_task_type_drop_off": $show_when_task_type_drop_off, "show_when_task_type_pick_up": $show_when_task_type_pick_up, "value_type": $value_type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # PUT /metafields/{id}/
 #
 # operationId: metafields_update
-export def "metafields update" [
+export def "metafields update-by-id-1" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4012,7 +4021,7 @@ export def "metafields update" [
   --accept: string@accept-completer-1 # Response content type
   --format: string@format-completer-1
   account: string # format: uri
-  --choices: list # nullable
+  --choices: list<string> # nullable
   --choices-url: string # nullable, format: uri
   --is-editable: oneof<nothing, bool> # Editable by manager
   --is-editable-assignee: oneof<nothing, bool> # Editable by assignee
@@ -4036,12 +4045,12 @@ export def "metafields update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/metafields/{id}/") $qp)
-  let body = {"account": $account, "choices": $choices, "choices_url": $choices_url, "is_editable": $is_editable, "is_editable_assignee": $is_editable_assignee, "is_persistent": $is_persistent, "is_required": $is_required, "is_searchable": $is_searchable, "key": $key, "label": $label, "namespace": $namespace, "ordering": $ordering, "show_in_detail_view": $show_in_detail_view, "show_in_list_view": $show_in_list_view, "show_in_mobile_app": $show_in_mobile_app, "show_in_pod": $show_in_pod, "show_when_task_type_assignment": $show_when_task_type_assignment, "show_when_task_type_drop_off": $show_when_task_type_drop_off, "show_when_task_type_pick_up": $show_when_task_type_pick_up, "value_type": $value_type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/metafields/{id}/") $qp)
+  let req_body = {"account": $account, "choices": $choices, "choices_url": $choices_url, "is_editable": $is_editable, "is_editable_assignee": $is_editable_assignee, "is_persistent": $is_persistent, "is_required": $is_required, "is_searchable": $is_searchable, "key": $key, "label": $label, "namespace": $namespace, "ordering": $ordering, "show_in_detail_view": $show_in_detail_view, "show_in_list_view": $show_in_list_view, "show_in_mobile_app": $show_in_mobile_app, "show_in_pod": $show_in_pod, "show_when_task_type_assignment": $show_when_task_type_assignment, "show_when_task_type_drop_off": $show_when_task_type_drop_off, "show_when_task_type_pick_up": $show_when_task_type_pick_up, "value_type": $value_type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /notification_templates/
@@ -4116,12 +4125,12 @@ export def "notification-templates create" [
   --format: string@format-completer-1
   account: string # format: uri
   --email-reply-to: string # format: email
-  --emails: list
+  --emails: list<string>
   --event: any
   --is-active: oneof<nothing, bool>
   message: string
   name: string
-  --phones: list
+  --phones: list<string>
   --recipient: any # nullable
   --scheduled-time-change: oneof<nothing, bool>
   --state: any
@@ -4135,11 +4144,11 @@ export def "notification-templates create" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/notification_templates/" $qp)
-  let body = {"account": $account, "email_reply_to": $email_reply_to, "emails": $emails, "event": $event, "is_active": $is_active, "message": $message, "name": $name, "phones": $phones, "recipient": $recipient, "scheduled_time_change": $scheduled_time_change, "state": $state, "task_category": $task_category, "via_app": $via_app, "via_email": $via_email, "via_sms": $via_sms} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"account": $account, "email_reply_to": $email_reply_to, "emails": $emails, "event": $event, "is_active": $is_active, "message": $message, "name": $name, "phones": $phones, "recipient": $recipient, "scheduled_time_change": $scheduled_time_change, "state": $state, "task_category": $task_category, "via_app": $via_app, "via_email": $via_email, "via_sms": $via_sms} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DELETE /notification_templates/{id}/
@@ -4160,7 +4169,7 @@ export def "notification-templates delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/notification_templates/{id}/") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/notification_templates/{id}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4185,7 +4194,7 @@ export def "notification-templates get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/notification_templates/{id}/") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/notification_templates/{id}/") $qp)
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4194,7 +4203,7 @@ export def "notification-templates get" [
 # PATCH /notification_templates/{id}/
 #
 # operationId: notification_templates_partial_update
-export def "notification-templates patch" [
+export def "notification-templates update-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4208,12 +4217,12 @@ export def "notification-templates patch" [
   --format: string@format-completer-1
   --account: string # format: uri
   --email-reply-to: string # format: email
-  --emails: list
+  --emails: list<string>
   --event: any
   --is-active: oneof<nothing, bool>
   --message: string
   --name: string
-  --phones: list
+  --phones: list<string>
   --recipient: any # nullable
   --scheduled-time-change: oneof<nothing, bool>
   --state: any
@@ -4226,18 +4235,18 @@ export def "notification-templates patch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/notification_templates/{id}/") $qp)
-  let body = {"account": $account, "email_reply_to": $email_reply_to, "emails": $emails, "event": $event, "is_active": $is_active, "message": $message, "name": $name, "phones": $phones, "recipient": $recipient, "scheduled_time_change": $scheduled_time_change, "state": $state, "task_category": $task_category, "via_app": $via_app, "via_email": $via_email, "via_sms": $via_sms} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/notification_templates/{id}/") $qp)
+  let req_body = {"account": $account, "email_reply_to": $email_reply_to, "emails": $emails, "event": $event, "is_active": $is_active, "message": $message, "name": $name, "phones": $phones, "recipient": $recipient, "scheduled_time_change": $scheduled_time_change, "state": $state, "task_category": $task_category, "via_app": $via_app, "via_email": $via_email, "via_sms": $via_sms} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # PUT /notification_templates/{id}/
 #
 # operationId: notification_templates_update
-export def "notification-templates update" [
+export def "notification-templates update-by-id-1" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4251,12 +4260,12 @@ export def "notification-templates update" [
   --format: string@format-completer-1
   account: string # format: uri
   --email-reply-to: string # format: email
-  --emails: list
+  --emails: list<string>
   --event: any
   --is-active: oneof<nothing, bool>
   message: string
   name: string
-  --phones: list
+  --phones: list<string>
   --recipient: any # nullable
   --scheduled-time-change: oneof<nothing, bool>
   --state: any
@@ -4269,12 +4278,12 @@ export def "notification-templates update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/notification_templates/{id}/") $qp)
-  let body = {"account": $account, "email_reply_to": $email_reply_to, "emails": $emails, "event": $event, "is_active": $is_active, "message": $message, "name": $name, "phones": $phones, "recipient": $recipient, "scheduled_time_change": $scheduled_time_change, "state": $state, "task_category": $task_category, "via_app": $via_app, "via_email": $via_email, "via_sms": $via_sms} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/notification_templates/{id}/") $qp)
+  let req_body = {"account": $account, "email_reply_to": $email_reply_to, "emails": $emails, "event": $event, "is_active": $is_active, "message": $message, "name": $name, "phones": $phones, "recipient": $recipient, "scheduled_time_change": $scheduled_time_change, "state": $state, "task_category": $task_category, "via_app": $via_app, "via_email": $via_email, "via_sms": $via_sms} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /notification_templates/{id}/render/
@@ -4298,12 +4307,12 @@ export def "notification-templates-render create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/notification_templates/{id}/render/") $qp)
-  let body = {"task": $task} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/notification_templates/{id}/render/") $qp)
+  let req_body = {"task": $task} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /notifications/
@@ -4387,10 +4396,10 @@ export def "notifications create" [
   --format: string@format-completer-1
   --add-tracking-link: oneof<nothing, bool>
   --assignee-proximity: any # nullable
-  --emails: list # nullable
+  --emails: list<string> # nullable
   --event: any # nullable
   --message: string
-  --phones: list
+  --phones: list<string>
   --recipient: any # nullable
   --sent-at: string # nullable, format: date-time
   --state: any # nullable
@@ -4402,11 +4411,11 @@ export def "notifications create" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/notifications/" $qp)
-  let body = {"add_tracking_link": $add_tracking_link, "assignee_proximity": $assignee_proximity, "emails": $emails, "event": $event, "message": $message, "phones": $phones, "recipient": $recipient, "sent_at": $sent_at, "state": $state, "task": $task, "template": $template} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"add_tracking_link": $add_tracking_link, "assignee_proximity": $assignee_proximity, "emails": $emails, "event": $event, "message": $message, "phones": $phones, "recipient": $recipient, "sent_at": $sent_at, "state": $state, "task": $task, "template": $template} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /notifications/{id}/
@@ -4428,7 +4437,7 @@ export def "notifications get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/notifications/{id}/") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/notifications/{id}/") $qp)
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4487,8 +4496,8 @@ export def "orders list" [
 # POST /orders/
 #
 # operationId: orders_create
-# --orderer shape: {company?: string, emails?: list, name?: string, notes?: string, phones?: list}
-# --tasks_data item shape: {account: string, address?: record, assignee?: string, auto_assign?: bool, barcodes?: list, category?: "assignment"|"pick_up"|"drop_off"|"warehouse", complete_after?: string, complete_before?: string, contact?: record, contact_address?: string, contact_address_external_id?: string, description?: string, documents?: list, duration?: record, external_id?: string, id?: string, metafields?: record, order?: string, orderer?: string, position?: float, priority?: int, reference?: string, route?: string, scheduled_time?: string, signatures?: list, size?: list}
+# --orderer shape: {company?: string, emails?: list<string>, name?: string, notes?: string, phones?: list<string>}
+# --tasks_data item shape: {account: string, address?: record, assignee?: string, auto_assign?: bool, barcodes?: list<string>, category?: "assignment"|"pick_up"|"drop_off"|"warehouse", complete_after?: string, complete_before?: string, contact?: record, contact_address?: string, contact_address_external_id?: string, description?: string, documents?: list<string>, duration?: record, external_id?: string, id?: string, metafields?: record, order?: string, orderer?: string, position?: float, priority?: int, reference?: string, ... (4 more fields)}
 export def "orders create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4504,20 +4513,20 @@ export def "orders create" [
   --description: string
   --external-id: string # nullable
   --id: string # nullable, format: uuid
-  --orderer: record # shape: {company?: string, emails?: list, name?: string, notes?: string, phones?: list}
+  --orderer: record # shape: {company?: string, emails?: list<string>, name?: string, notes?: string, phones?: list<string>}
   --reference: string
-  --tasks: list
-  --tasks-data: list # item shape: {account: string, address?: record, assignee?: string, auto_assign?: bool, barcodes?: list, category?: "assignment"|"pick_up"|"drop_off"|"warehouse", complete_after?: string, complete_before?: string, contact?: record, contact_address?: string, contact_address_external_id?: string, description?: string, documents?: list, duration?: record, external_id?: string, id?: string, metafields?: record, order?: string, orderer?: string, position?: float, priority?: int, reference?: string, route?: string, scheduled_time?: string, signatures?: list, size?: list}
+  --tasks: list<string>
+  --tasks-data: list # item shape: {account: string, address?: record, assignee?: string, auto_assign?: bool, barcodes?: list<string>, category?: "assignment"|"pick_up"|"drop_off"|"warehouse", complete_after?: string, complete_before?: string, contact?: record, contact_address?: string, contact_address_external_id?: string, description?: string, documents?: list<string>, duration?: record, external_id?: string, id?: string, metafields?: record, order?: string, orderer?: string, position?: float, priority?: int, reference?: string, ... (4 more fields)}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/orders/")
-  let body = {"account": $account, "auto_assign": $auto_assign, "client": $client, "description": $description, "external_id": $external_id, "id": $id, "orderer": $orderer, "reference": $reference, "tasks": $tasks, "tasks_data": $tasks_data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"account": $account, "auto_assign": $auto_assign, "client": $client, "description": $description, "external_id": $external_id, "id": $id, "orderer": $orderer, "reference": $reference, "tasks": $tasks, "tasks_data": $tasks_data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json; version=2.4.13"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /orders/{id}/
@@ -4536,7 +4545,7 @@ export def "orders get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/orders/{id}/"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/orders/{id}/"))
   let accept_val = "application/json; version=2.4.13"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4545,9 +4554,9 @@ export def "orders get" [
 # PATCH /orders/{id}/
 #
 # operationId: orders_partial_update
-# --orderer shape: {company?: string, emails?: list, name?: string, notes?: string, phones?: list}
-# --tasks_data item shape: {account: string, address?: record, assignee?: string, auto_assign?: bool, barcodes?: list, category?: "assignment"|"pick_up"|"drop_off"|"warehouse", complete_after?: string, complete_before?: string, contact?: record, contact_address?: string, contact_address_external_id?: string, description?: string, documents?: list, duration?: record, external_id?: string, id?: string, metafields?: record, order?: string, orderer?: string, position?: float, priority?: int, reference?: string, route?: string, scheduled_time?: string, signatures?: list, size?: list}
-export def "orders patch" [
+# --orderer shape: {company?: string, emails?: list<string>, name?: string, notes?: string, phones?: list<string>}
+# --tasks_data item shape: {account: string, address?: record, assignee?: string, auto_assign?: bool, barcodes?: list<string>, category?: "assignment"|"pick_up"|"drop_off"|"warehouse", complete_after?: string, complete_before?: string, contact?: record, contact_address?: string, contact_address_external_id?: string, description?: string, documents?: list<string>, duration?: record, external_id?: string, id?: string, metafields?: record, order?: string, orderer?: string, position?: float, priority?: int, reference?: string, ... (4 more fields)}
+export def "orders update-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4563,28 +4572,28 @@ export def "orders patch" [
   --description: string
   --external-id: string # nullable
   --body-id: string # nullable, format: uuid
-  --orderer: record # shape: {company?: string, emails?: list, name?: string, notes?: string, phones?: list}
+  --orderer: record # shape: {company?: string, emails?: list<string>, name?: string, notes?: string, phones?: list<string>}
   --reference: string
-  --tasks: list
-  --tasks-data: list # item shape: {account: string, address?: record, assignee?: string, auto_assign?: bool, barcodes?: list, category?: "assignment"|"pick_up"|"drop_off"|"warehouse", complete_after?: string, complete_before?: string, contact?: record, contact_address?: string, contact_address_external_id?: string, description?: string, documents?: list, duration?: record, external_id?: string, id?: string, metafields?: record, order?: string, orderer?: string, position?: float, priority?: int, reference?: string, route?: string, scheduled_time?: string, signatures?: list, size?: list}
+  --tasks: list<string>
+  --tasks-data: list # item shape: {account: string, address?: record, assignee?: string, auto_assign?: bool, barcodes?: list<string>, category?: "assignment"|"pick_up"|"drop_off"|"warehouse", complete_after?: string, complete_before?: string, contact?: record, contact_address?: string, contact_address_external_id?: string, description?: string, documents?: list<string>, duration?: record, external_id?: string, id?: string, metafields?: record, order?: string, orderer?: string, position?: float, priority?: int, reference?: string, ... (4 more fields)}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/orders/{id}/"))
-  let body = {"account": $account, "auto_assign": $auto_assign, "client": $client, "description": $description, "external_id": $external_id, "id": $body_id, "orderer": $orderer, "reference": $reference, "tasks": $tasks, "tasks_data": $tasks_data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/orders/{id}/"))
+  let req_body = {"account": $account, "auto_assign": $auto_assign, "client": $client, "description": $description, "external_id": $external_id, "id": $body_id, "orderer": $orderer, "reference": $reference, "tasks": $tasks, "tasks_data": $tasks_data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json; version=2.4.13"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # PUT /orders/{id}/
 #
 # operationId: orders_update
-# --orderer shape: {company?: string, emails?: list, name?: string, notes?: string, phones?: list}
-# --tasks_data item shape: {account: string, address?: record, assignee?: string, auto_assign?: bool, barcodes?: list, category?: "assignment"|"pick_up"|"drop_off"|"warehouse", complete_after?: string, complete_before?: string, contact?: record, contact_address?: string, contact_address_external_id?: string, description?: string, documents?: list, duration?: record, external_id?: string, id?: string, metafields?: record, order?: string, orderer?: string, position?: float, priority?: int, reference?: string, route?: string, scheduled_time?: string, signatures?: list, size?: list}
-export def "orders update" [
+# --orderer shape: {company?: string, emails?: list<string>, name?: string, notes?: string, phones?: list<string>}
+# --tasks_data item shape: {account: string, address?: record, assignee?: string, auto_assign?: bool, barcodes?: list<string>, category?: "assignment"|"pick_up"|"drop_off"|"warehouse", complete_after?: string, complete_before?: string, contact?: record, contact_address?: string, contact_address_external_id?: string, description?: string, documents?: list<string>, duration?: record, external_id?: string, id?: string, metafields?: record, order?: string, orderer?: string, position?: float, priority?: int, reference?: string, ... (4 more fields)}
+export def "orders update-by-id-1" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4600,20 +4609,20 @@ export def "orders update" [
   --description: string
   --external-id: string # nullable
   --body-id: string # nullable, format: uuid
-  --orderer: record # shape: {company?: string, emails?: list, name?: string, notes?: string, phones?: list}
+  --orderer: record # shape: {company?: string, emails?: list<string>, name?: string, notes?: string, phones?: list<string>}
   --reference: string
-  --tasks: list
-  --tasks-data: list # item shape: {account: string, address?: record, assignee?: string, auto_assign?: bool, barcodes?: list, category?: "assignment"|"pick_up"|"drop_off"|"warehouse", complete_after?: string, complete_before?: string, contact?: record, contact_address?: string, contact_address_external_id?: string, description?: string, documents?: list, duration?: record, external_id?: string, id?: string, metafields?: record, order?: string, orderer?: string, position?: float, priority?: int, reference?: string, route?: string, scheduled_time?: string, signatures?: list, size?: list}
+  --tasks: list<string>
+  --tasks-data: list # item shape: {account: string, address?: record, assignee?: string, auto_assign?: bool, barcodes?: list<string>, category?: "assignment"|"pick_up"|"drop_off"|"warehouse", complete_after?: string, complete_before?: string, contact?: record, contact_address?: string, contact_address_external_id?: string, description?: string, documents?: list<string>, duration?: record, external_id?: string, id?: string, metafields?: record, order?: string, orderer?: string, position?: float, priority?: int, reference?: string, ... (4 more fields)}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/orders/{id}/"))
-  let body = {"account": $account, "auto_assign": $auto_assign, "client": $client, "description": $description, "external_id": $external_id, "id": $body_id, "orderer": $orderer, "reference": $reference, "tasks": $tasks, "tasks_data": $tasks_data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/orders/{id}/"))
+  let req_body = {"account": $account, "auto_assign": $auto_assign, "client": $client, "description": $description, "external_id": $external_id, "id": $body_id, "orderer": $orderer, "reference": $reference, "tasks": $tasks, "tasks_data": $tasks_data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json; version=2.4.13"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /password_change/
@@ -4639,11 +4648,11 @@ export def "password-change create" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/password_change/" $qp)
-  let body = {"new_password1": $new_password1, "new_password2": $new_password2, "old_password": $old_password} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"new_password1": $new_password1, "new_password2": $new_password2, "old_password": $old_password} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /password_reset/
@@ -4667,11 +4676,11 @@ export def "password-reset create" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/password_reset/" $qp)
-  let body = {"email": $email} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"email": $email} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /password_reset_confirm/
@@ -4698,11 +4707,11 @@ export def "password-reset-confirm create" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/password_reset_confirm/" $qp)
-  let body = {"new_password1": $new_password1, "new_password2": $new_password2, "token": $body_token, "uidb64": $uidb64} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"new_password1": $new_password1, "new_password2": $new_password2, "token": $body_token, "uidb64": $uidb64} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /push_notifications/
@@ -4811,11 +4820,11 @@ export def "push-notifications create" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/push_notifications/" $qp)
-  let body = {"account": $account, "error": $body_error, "event": $event, "external_id": $external_id, "message": $message, "subject": $subject} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"account": $account, "error": $body_error, "event": $event, "external_id": $external_id, "message": $message, "subject": $subject} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DELETE /push_notifications/{id}/
@@ -4836,7 +4845,7 @@ export def "push-notifications delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/push_notifications/{id}/") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/push_notifications/{id}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4861,7 +4870,7 @@ export def "push-notifications get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/push_notifications/{id}/") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/push_notifications/{id}/") $qp)
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4870,7 +4879,7 @@ export def "push-notifications get" [
 # PATCH /push_notifications/{id}/
 #
 # operationId: push_notifications_partial_update
-export def "push-notifications patch" [
+export def "push-notifications update-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4893,18 +4902,18 @@ export def "push-notifications patch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/push_notifications/{id}/") $qp)
-  let body = {"account": $account, "error": $body_error, "event": $event, "external_id": $external_id, "message": $message, "subject": $subject} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/push_notifications/{id}/") $qp)
+  let req_body = {"account": $account, "error": $body_error, "event": $event, "external_id": $external_id, "message": $message, "subject": $subject} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # PUT /push_notifications/{id}/
 #
 # operationId: push_notifications_update
-export def "push-notifications update" [
+export def "push-notifications update-by-id-1" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4927,12 +4936,12 @@ export def "push-notifications update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/push_notifications/{id}/") $qp)
-  let body = {"account": $account, "error": $body_error, "event": $event, "external_id": $external_id, "message": $message, "subject": $subject} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/push_notifications/{id}/") $qp)
+  let req_body = {"account": $account, "error": $body_error, "event": $event, "external_id": $external_id, "message": $message, "subject": $subject} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /push_notifications/{id}/resend/
@@ -4961,12 +4970,12 @@ export def "push-notifications-resend create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/push_notifications/{id}/resend/") $qp)
-  let body = {"account": $account, "error": $body_error, "event": $event, "external_id": $external_id, "message": $message, "subject": $subject} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/push_notifications/{id}/resend/") $qp)
+  let req_body = {"account": $account, "error": $body_error, "event": $event, "external_id": $external_id, "message": $message, "subject": $subject} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /recurrences/
@@ -5108,11 +5117,11 @@ export def "recurrences create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/recurrences/")
-  let body = {"account": $account, "assignee": $assignee, "is_active": $is_active, "order": $order, "rrule": $rrule, "tasks_data": $tasks_data, "timezone": $timezone} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"account": $account, "assignee": $assignee, "is_active": $is_active, "order": $order, "rrule": $rrule, "tasks_data": $tasks_data, "timezone": $timezone} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json; version=2.4.13"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /recurrences/{id}/
@@ -5131,7 +5140,7 @@ export def "recurrences get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/recurrences/{id}/"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/recurrences/{id}/"))
   let accept_val = "application/json; version=2.4.13"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5140,7 +5149,7 @@ export def "recurrences get" [
 # PATCH /recurrences/{id}/
 #
 # operationId: recurrences_partial_update
-export def "recurrences patch" [
+export def "recurrences update-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5161,18 +5170,18 @@ export def "recurrences patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/recurrences/{id}/"))
-  let body = {"account": $account, "assignee": $assignee, "is_active": $is_active, "order": $order, "rrule": $rrule, "tasks_data": $tasks_data, "timezone": $timezone} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/recurrences/{id}/"))
+  let req_body = {"account": $account, "assignee": $assignee, "is_active": $is_active, "order": $order, "rrule": $rrule, "tasks_data": $tasks_data, "timezone": $timezone} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json; version=2.4.13"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # PUT /recurrences/{id}/
 #
 # operationId: recurrences_update
-export def "recurrences update" [
+export def "recurrences update-by-id-1" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5193,12 +5202,12 @@ export def "recurrences update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/recurrences/{id}/"))
-  let body = {"account": $account, "assignee": $assignee, "is_active": $is_active, "order": $order, "rrule": $rrule, "tasks_data": $tasks_data, "timezone": $timezone} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/recurrences/{id}/"))
+  let req_body = {"account": $account, "assignee": $assignee, "is_active": $is_active, "order": $order, "rrule": $rrule, "tasks_data": $tasks_data, "timezone": $timezone} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json; version=2.4.13"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /register/
@@ -5225,11 +5234,11 @@ export def "register create" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/register/" $qp)
-  let body = {"account": $account, "user": $user} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"account": $account, "user": $user} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /reports/tasks/states_count/
@@ -5323,11 +5332,11 @@ export def "reviews create" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/reviews/" $qp)
-  let body = {"comment": $comment, "rating": $rating, "tracker": $tracker} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"comment": $comment, "rating": $rating, "tracker": $tracker} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /reviews/{id}/
@@ -5349,7 +5358,7 @@ export def "reviews get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/reviews/{id}/") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/reviews/{id}/") $qp)
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5492,14 +5501,14 @@ export def "route-optimizations create" [
   --accept: string@accept-completer # Response content type
   --format: string@format-completer
   account: string # format: uri
-  assignees: list
+  assignees: list<string>
   --commit: oneof<nothing, bool>
   --created-by: string # format: uri
   --end-location: any # nullable
   --objective: any # nullable
   --start-location: any # nullable
   --start-time: string # nullable, format: date-time
-  tasks: list
+  tasks: list<string>
   --unassign-not-optimal: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
@@ -5507,11 +5516,11 @@ export def "route-optimizations create" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/route_optimizations/" $qp)
-  let body = {"account": $account, "assignees": $assignees, "commit": $commit, "created_by": $created_by, "end_location": $end_location, "objective": $objective, "start_location": $start_location, "start_time": $start_time, "tasks": $tasks, "unassign_not_optimal": $unassign_not_optimal} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"account": $account, "assignees": $assignees, "commit": $commit, "created_by": $created_by, "end_location": $end_location, "objective": $objective, "start_location": $start_location, "start_time": $start_time, "tasks": $tasks, "unassign_not_optimal": $unassign_not_optimal} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /route_optimizations/{id}/
@@ -5533,7 +5542,7 @@ export def "route-optimizations get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/route_optimizations/{id}/") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/route_optimizations/{id}/") $qp)
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5555,26 +5564,26 @@ export def "route-optimizations-commit create" [
   --accept: string@accept-completer # Response content type
   --format: string@format-completer
   account: string # format: uri
-  assignees: list
+  assignees: list<string>
   --commit: oneof<nothing, bool>
   --created-by: string # format: uri
   --end-location: any # nullable
   --objective: any # nullable
   --start-location: any # nullable
   --start-time: string # nullable, format: date-time
-  tasks: list
+  tasks: list<string>
   --unassign-not-optimal: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/route_optimizations/{id}/commit/") $qp)
-  let body = {"account": $account, "assignees": $assignees, "commit": $commit, "created_by": $created_by, "end_location": $end_location, "objective": $objective, "start_location": $start_location, "start_time": $start_time, "tasks": $tasks, "unassign_not_optimal": $unassign_not_optimal} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/route_optimizations/{id}/commit/") $qp)
+  let req_body = {"account": $account, "assignees": $assignees, "commit": $commit, "created_by": $created_by, "end_location": $end_location, "objective": $objective, "start_location": $start_location, "start_time": $start_time, "tasks": $tasks, "unassign_not_optimal": $unassign_not_optimal} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /route_optimizations/{id}/results/
@@ -5596,7 +5605,7 @@ export def "route-optimizations-results get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/route_optimizations/{id}/results/") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/route_optimizations/{id}/results/") $qp)
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5621,7 +5630,7 @@ export def "route-optimizations-routes get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/route_optimizations/{id}/routes/") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/route_optimizations/{id}/routes/") $qp)
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5643,26 +5652,26 @@ export def "route-optimizations-routes create" [
   --accept: string@accept-completer # Response content type
   --format: string@format-completer
   account: string # format: uri
-  assignees: list
+  assignees: list<string>
   --commit: oneof<nothing, bool>
   --created-by: string # format: uri
   --end-location: any # nullable
   --objective: any # nullable
   --start-location: any # nullable
   --start-time: string # nullable, format: date-time
-  tasks: list
+  tasks: list<string>
   --unassign-not-optimal: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/route_optimizations/{id}/routes/") $qp)
-  let body = {"account": $account, "assignees": $assignees, "commit": $commit, "created_by": $created_by, "end_location": $end_location, "objective": $objective, "start_location": $start_location, "start_time": $start_time, "tasks": $tasks, "unassign_not_optimal": $unassign_not_optimal} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/route_optimizations/{id}/routes/") $qp)
+  let req_body = {"account": $account, "assignees": $assignees, "commit": $commit, "created_by": $created_by, "end_location": $end_location, "objective": $objective, "start_location": $start_location, "start_time": $start_time, "tasks": $tasks, "unassign_not_optimal": $unassign_not_optimal} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /route_optimizations/{id}/schedule/
@@ -5681,26 +5690,26 @@ export def "route-optimizations-schedule create" [
   --accept: string@accept-completer # Response content type
   --format: string@format-completer
   account: string # format: uri
-  assignees: list
+  assignees: list<string>
   --commit: oneof<nothing, bool>
   --created-by: string # format: uri
   --end-location: any # nullable
   --objective: any # nullable
   --start-location: any # nullable
   --start-time: string # nullable, format: date-time
-  tasks: list
+  tasks: list<string>
   --unassign-not-optimal: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/route_optimizations/{id}/schedule/") $qp)
-  let body = {"account": $account, "assignees": $assignees, "commit": $commit, "created_by": $created_by, "end_location": $end_location, "objective": $objective, "start_location": $start_location, "start_time": $start_time, "tasks": $tasks, "unassign_not_optimal": $unassign_not_optimal} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/route_optimizations/{id}/schedule/") $qp)
+  let req_body = {"account": $account, "assignees": $assignees, "commit": $commit, "created_by": $created_by, "end_location": $end_location, "objective": $objective, "start_location": $start_location, "start_time": $start_time, "tasks": $tasks, "unassign_not_optimal": $unassign_not_optimal} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /routes/
@@ -5777,11 +5786,11 @@ export def "routes create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/routes/")
-  let body = {"account": $account, "assignee": $assignee, "code": $code, "description": $description, "end_location": $end_location, "end_time": $end_time, "external_id": $external_id, "start_location": $start_location, "start_time": $start_time} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"account": $account, "assignee": $assignee, "code": $code, "description": $description, "end_location": $end_location, "end_time": $end_time, "external_id": $external_id, "start_location": $start_location, "start_time": $start_time} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json; version=2.4.13"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DELETE /routes/{id}/
@@ -5800,7 +5809,7 @@ export def "routes delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/routes/{id}/"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/routes/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5822,7 +5831,7 @@ export def "routes get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/routes/{id}/"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/routes/{id}/"))
   let accept_val = "application/json; version=2.4.13"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5831,7 +5840,7 @@ export def "routes get" [
 # PATCH /routes/{id}/
 #
 # operationId: routes_partial_update
-export def "routes patch" [
+export def "routes update-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5854,18 +5863,18 @@ export def "routes patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/routes/{id}/"))
-  let body = {"account": $account, "assignee": $assignee, "code": $code, "description": $description, "end_location": $end_location, "end_time": $end_time, "external_id": $external_id, "start_location": $start_location, "start_time": $start_time} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/routes/{id}/"))
+  let req_body = {"account": $account, "assignee": $assignee, "code": $code, "description": $description, "end_location": $end_location, "end_time": $end_time, "external_id": $external_id, "start_location": $start_location, "start_time": $start_time} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json; version=2.4.13"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # PUT /routes/{id}/
 #
 # operationId: routes_update
-export def "routes update" [
+export def "routes update-by-id-1" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5888,12 +5897,12 @@ export def "routes update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/routes/{id}/"))
-  let body = {"account": $account, "assignee": $assignee, "code": $code, "description": $description, "end_location": $end_location, "end_time": $end_time, "external_id": $external_id, "start_location": $start_location, "start_time": $start_time} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/routes/{id}/"))
+  let req_body = {"account": $account, "assignee": $assignee, "code": $code, "description": $description, "end_location": $end_location, "end_time": $end_time, "external_id": $external_id, "start_location": $start_location, "start_time": $start_time} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json; version=2.4.13"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /scenes/dashboard/
@@ -7331,7 +7340,7 @@ export def "signatures list" [
 # POST /signatures/
 #
 # operationId: signatures_create
-# --signer shape: {company?: string, emails?: list, name?: string, notes?: string, phones?: list}
+# --signer shape: {company?: string, emails?: list<string>, name?: string, notes?: string, phones?: list<string>}
 export def "signatures create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7344,10 +7353,10 @@ export def "signatures create" [
   --accept: string@accept-completer-1 # Response content type
   --format: string@format-completer-1
   --account: string # format: uri
-  --documents: list
+  --documents: list<string>
   file_upload: string # format: uri
   --location: any # nullable
-  signer: record # shape: {company?: string, emails?: list, name?: string, notes?: string, phones?: list}
+  signer: record # shape: {company?: string, emails?: list<string>, name?: string, notes?: string, phones?: list<string>}
   --body-source: any # nullable
   task: string # format: uri
 ]: any -> any {
@@ -7356,11 +7365,11 @@ export def "signatures create" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/signatures/" $qp)
-  let body = {"account": $account, "documents": $documents, "file_upload": $file_upload, "location": $location, "signer": $signer, "source": $body_source, "task": $task} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"account": $account, "documents": $documents, "file_upload": $file_upload, "location": $location, "signer": $signer, "source": $body_source, "task": $task} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Available from version 2.4.2
@@ -7378,18 +7387,18 @@ export def "signatures-batch-delete create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --format: string@format-completer-1
   account: string # format: uri
-  signatures: list
+  signatures: list<string>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/signatures/batch_delete/" $qp)
-  let body = {"account": $account, "signatures": $signatures} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"account": $account, "signatures": $signatures} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DELETE /signatures/{id}/
@@ -7410,7 +7419,7 @@ export def "signatures delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/signatures/{id}/") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/signatures/{id}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7435,7 +7444,7 @@ export def "signatures get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/signatures/{id}/") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/signatures/{id}/") $qp)
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7568,11 +7577,11 @@ export def "sms create" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/sms/" $qp)
-  let body = {"account": $account, "alphanumeric_sender_id": $alphanumeric_sender_id, "error": $body_error, "external_id": $external_id, "message": $message, "phone": $phone, "segments_count": $segments_count} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"account": $account, "alphanumeric_sender_id": $alphanumeric_sender_id, "error": $body_error, "external_id": $external_id, "message": $message, "phone": $phone, "segments_count": $segments_count} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DELETE /sms/{id}/
@@ -7593,7 +7602,7 @@ export def "sms delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/sms/{id}/") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/sms/{id}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7618,7 +7627,7 @@ export def "sms get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/sms/{id}/") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/sms/{id}/") $qp)
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7627,7 +7636,7 @@ export def "sms get" [
 # PATCH /sms/{id}/
 #
 # operationId: sms_partial_update
-export def "sms patch" [
+export def "sms update-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7651,18 +7660,18 @@ export def "sms patch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/sms/{id}/") $qp)
-  let body = {"account": $account, "alphanumeric_sender_id": $alphanumeric_sender_id, "error": $body_error, "external_id": $external_id, "message": $message, "phone": $phone, "segments_count": $segments_count} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/sms/{id}/") $qp)
+  let req_body = {"account": $account, "alphanumeric_sender_id": $alphanumeric_sender_id, "error": $body_error, "external_id": $external_id, "message": $message, "phone": $phone, "segments_count": $segments_count} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # PUT /sms/{id}/
 #
 # operationId: sms_update
-export def "sms update" [
+export def "sms update-by-id-1" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7686,12 +7695,12 @@ export def "sms update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/sms/{id}/") $qp)
-  let body = {"account": $account, "alphanumeric_sender_id": $alphanumeric_sender_id, "error": $body_error, "external_id": $external_id, "message": $message, "phone": $phone, "segments_count": $segments_count} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/sms/{id}/") $qp)
+  let req_body = {"account": $account, "alphanumeric_sender_id": $alphanumeric_sender_id, "error": $body_error, "external_id": $external_id, "message": $message, "phone": $phone, "segments_count": $segments_count} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /sms/{id}/resend/
@@ -7721,12 +7730,12 @@ export def "sms-resend create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/sms/{id}/resend/") $qp)
-  let body = {"account": $account, "alphanumeric_sender_id": $alphanumeric_sender_id, "error": $body_error, "external_id": $external_id, "message": $message, "phone": $phone, "segments_count": $segments_count} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/sms/{id}/resend/") $qp)
+  let req_body = {"account": $account, "alphanumeric_sender_id": $alphanumeric_sender_id, "error": $body_error, "external_id": $external_id, "message": $message, "phone": $phone, "segments_count": $segments_count} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /task_address_features/
@@ -7828,7 +7837,7 @@ export def "task-address-features get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/task_address_features/{id}/") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/task_address_features/{id}/") $qp)
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7940,11 +7949,11 @@ export def "task-commands create" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/task_commands/" $qp)
-  let body = {"accepted_at": $accepted_at, "action": $action, "assignee": $assignee, "error_message": $error_message, "external_id": $external_id, "location": $location, "notes": $notes, "rejected_at": $rejected_at, "state": $state, "task": $task, "task_data": $task_data, "time": $time} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"accepted_at": $accepted_at, "action": $action, "assignee": $assignee, "error_message": $error_message, "external_id": $external_id, "location": $location, "notes": $notes, "rejected_at": $rejected_at, "state": $state, "task": $task, "task_data": $task_data, "time": $time} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /task_commands/{id}/
@@ -7966,7 +7975,7 @@ export def "task-commands get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/task_commands/{id}/") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/task_commands/{id}/") $qp)
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8005,12 +8014,12 @@ export def "task-commands update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/task_commands/{id}/") $qp)
-  let body = {"accepted_at": $accepted_at, "action": $action, "assignee": $assignee, "error_message": $error_message, "external_id": $external_id, "location": $location, "notes": $notes, "rejected_at": $rejected_at, "state": $state, "task": $task, "task_data": $task_data, "time": $time} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/task_commands/{id}/") $qp)
+  let req_body = {"accepted_at": $accepted_at, "action": $action, "assignee": $assignee, "error_message": $error_message, "external_id": $external_id, "location": $location, "notes": $notes, "rejected_at": $rejected_at, "state": $state, "task": $task, "task_data": $task_data, "time": $time} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /task_event_tracks/
@@ -8088,7 +8097,7 @@ export def "task-event-tracks get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/task_event_tracks/{id}/") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/task_event_tracks/{id}/") $qp)
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8173,13 +8182,13 @@ export def "task-events get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/task_events/{id}/") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/task_events/{id}/") $qp)
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# This view has multiple renderer classes available: `json` and `xlsx`. In order to export the data as an excel file, just set query argument `format` to `xlsx`.When downloading `xlsx` format, use Accept header `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet; version=...`  The user can request what fields and in what order will be rendered using query argument `fields`. This is a comma separated list of field names used in the API. Available fields are visible in the example. Also metafields can be added to the response. For this just add them as fields, using structure `metafields__{metafield.namespace}:{metafield.key}`.   When exporting to **excel**, the column names may be changed based on account metafield names or pre-defined field name and width mapping.  Changes in version 2.2.1:  * field names have been updated to reflect the Task fields schema and filters.  * Invalid fields in fields request will return a ValidationError.  * Account filter is required.  * AccountRole display name is annotated to user objects.  * 'task_event_notes' is dropped.  * 'contact_phone' and 'contact_email' is replaced with 'contact_phones' and 'contact_emails'.
+# This view has multiple renderer classes available: `json` and `xlsx`. In order to export the data as an excel file, just set query argument `format` to `xlsx`.When downloading `xlsx` format, use Accept header `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet; version=...` The user can request what fields and in what order will be rendered using query argument `fields`. This is a comma separated list of field names used in the API. Available fields are visible in the example. Also metafields can be added to the response. For this just add them as fields, using structure `metafields__{metafield.namespace}:{metafield.key}`. When exporting to **excel**, the column names may be changed based on account metafield names or pre-defined field name and width mapping. Changes in version 2.2.1: * field names have been updated to reflect the Task fields schema and filters. * Invalid fields in fields request will return a ValidationError. * Account filter is required. * AccountRole display name is annotated to user objects. * 'task_event_notes' is dropped. * 'contact_phone' and 'contact_email' is replaced with 'contact_phones' and 'contact_emails'.
 #
 # GET /task_exports/
 # operationId: task_exports_list
@@ -8859,11 +8868,11 @@ export def "task-forms create" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/task_forms/" $qp)
-  let body = {"completed": $completed, "edit_url": $edit_url, "name": $name, "pdf_url": $pdf_url, "task": $task, "view_url": $view_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"completed": $completed, "edit_url": $edit_url, "name": $name, "pdf_url": $pdf_url, "task": $task, "view_url": $view_url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DELETE /task_forms/{id}/
@@ -8884,7 +8893,7 @@ export def "task-forms delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/task_forms/{id}/") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/task_forms/{id}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8909,7 +8918,7 @@ export def "task-forms get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/task_forms/{id}/") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/task_forms/{id}/") $qp)
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8918,7 +8927,7 @@ export def "task-forms get" [
 # PATCH /task_forms/{id}/
 #
 # operationId: task_forms_partial_update
-export def "task-forms patch" [
+export def "task-forms update-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8941,18 +8950,18 @@ export def "task-forms patch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/task_forms/{id}/") $qp)
-  let body = {"completed": $completed, "edit_url": $edit_url, "name": $name, "pdf_url": $pdf_url, "task": $task, "view_url": $view_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/task_forms/{id}/") $qp)
+  let req_body = {"completed": $completed, "edit_url": $edit_url, "name": $name, "pdf_url": $pdf_url, "task": $task, "view_url": $view_url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # PUT /task_forms/{id}/
 #
 # operationId: task_forms_update
-export def "task-forms update" [
+export def "task-forms update-by-id-1" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8975,12 +8984,12 @@ export def "task-forms update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/task_forms/{id}/") $qp)
-  let body = {"completed": $completed, "edit_url": $edit_url, "name": $name, "pdf_url": $pdf_url, "task": $task, "view_url": $view_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/task_forms/{id}/") $qp)
+  let req_body = {"completed": $completed, "edit_url": $edit_url, "name": $name, "pdf_url": $pdf_url, "task": $task, "view_url": $view_url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /task_import/
@@ -9086,11 +9095,11 @@ export def "task-import create" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/task_import/" $qp)
-  let body = {"account": $account, "celery_task_id": $celery_task_id, "errors": $errors, "mapping": $mapping, "tasks_data": $tasks_data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"account": $account, "celery_task_id": $celery_task_id, "errors": $errors, "mapping": $mapping, "tasks_data": $tasks_data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /task_import/{id}/
@@ -9112,7 +9121,7 @@ export def "task-import get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/task_import/{id}/") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/task_import/{id}/") $qp)
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9186,7 +9195,7 @@ export def "task-import-mapping create" [
   --accept: string@accept-completer-1 # Response content type
   --format: string@format-completer-1
   account: string # format: uri
-  field_names: list
+  field_names: list<string>
   lines: list # item shape: {format?: string, from_field: string, to_field?: string}
 ]: any -> any {
   let input = $in
@@ -9194,11 +9203,11 @@ export def "task-import-mapping create" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/task_import_mapping/" $qp)
-  let body = {"account": $account, "field_names": $field_names, "lines": $lines} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"account": $account, "field_names": $field_names, "lines": $lines} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /task_import_mapping/{id}/
@@ -9220,7 +9229,7 @@ export def "task-import-mapping get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/task_import_mapping/{id}/") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/task_import_mapping/{id}/") $qp)
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9292,7 +9301,7 @@ export def "task-metadatas get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/task_metadatas/{id}/") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/task_metadatas/{id}/") $qp)
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9906,7 +9915,7 @@ export def "tasks list" [
 #
 # operationId: tasks_create
 # --address shape: {apartment_number?: string, city?: string, country?: string, country_code?: string, formatted_address?: string, google_place_id?: string, house_number?: string, location?: any, point_of_interest?: string, postal_code?: string, raw_address?: string, state?: string, street?: string}
-# --contact shape: {company?: string, emails?: list, name?: string, notes?: string, phones?: list}
+# --contact shape: {company?: string, emails?: list<string>, name?: string, notes?: string, phones?: list<string>}
 export def "tasks create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9940,15 +9949,15 @@ export def "tasks create" [
   --address: record # shape: {apartment_number?: string, city?: string, country?: string, country_code?: string, formatted_address?: string, google_place_id?: string, house_number?: string, location?: any, point_of_interest?: string, postal_code?: string, raw_address?: string, state?: string, street?: string}
   --assignee: string # nullable, format: uri
   --auto-assign: oneof<nothing, bool>
-  --barcodes: list
+  --barcodes: list<string>
   --category: string@category-completer
   --complete-after: string # nullable, format: date-time
   --complete-before: string # nullable, format: date-time
-  --contact: record # shape: {company?: string, emails?: list, name?: string, notes?: string, phones?: list}
+  --contact: record # shape: {company?: string, emails?: list<string>, name?: string, notes?: string, phones?: list<string>}
   --contact-address: string # nullable, format: uri
   --contact-address-external-id: string # nullable
   --description: string
-  --documents: list
+  --documents: list<string>
   --duration: record # nullable, default: 4 10:55:34.12
   --external-id: string # nullable
   --id: string # nullable, format: uuid
@@ -9960,19 +9969,19 @@ export def "tasks create" [
   --reference: string
   --route: string # nullable, format: uri
   --scheduled-time: string # nullable, format: date-time
-  --signatures: list
-  --size: list # nullable
+  --signatures: list<string>
+  --size: list<int> # nullable
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "order__orderer__company" $order_orderer_company "scalar") (serialize-qp "order__orderer__company__icontains" $order_orderer_company_icontains "scalar") (serialize-qp "order__orderer__company__iexact" $order_orderer_company_iexact "scalar") (serialize-qp "order__orderer__company__istartswith" $order_orderer_company_istartswith "scalar") (serialize-qp "order__orderer__emails__contained_by" $order_orderer_emails_contained_by "scalar") (serialize-qp "order__orderer__emails__contains" $order_orderer_emails_contains "scalar") (serialize-qp "order__orderer__emails__overlap" $order_orderer_emails_overlap "scalar") (serialize-qp "order__orderer__name" $order_orderer_name "scalar") (serialize-qp "order__orderer__name__icontains" $order_orderer_name_icontains "scalar") (serialize-qp "order__orderer__name__iexact" $order_orderer_name_iexact "scalar") (serialize-qp "order__orderer__name__istartswith" $order_orderer_name_istartswith "scalar") (serialize-qp "order__orderer__notes" $order_orderer_notes "scalar") (serialize-qp "order__orderer__notes__icontains" $order_orderer_notes_icontains "scalar") (serialize-qp "order__orderer__notes__iexact" $order_orderer_notes_iexact "scalar") (serialize-qp "order__orderer__notes__istartswith" $order_orderer_notes_istartswith "scalar") (serialize-qp "order__orderer__phones__contained_by" $order_orderer_phones_contained_by "scalar") (serialize-qp "order__orderer__phones__contains" $order_orderer_phones_contains "scalar") (serialize-qp "order__orderer__phones__overlap" $order_orderer_phones_overlap "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/tasks/" $qp)
-  let body = {"account": $account, "address": $address, "assignee": $assignee, "auto_assign": $auto_assign, "barcodes": $barcodes, "category": $category, "complete_after": $complete_after, "complete_before": $complete_before, "contact": $contact, "contact_address": $contact_address, "contact_address_external_id": $contact_address_external_id, "description": $description, "documents": $documents, "duration": $duration, "external_id": $external_id, "id": $id, "metafields": $metafields, "order": $order, "orderer": $orderer, "position": $position, "priority": $priority, "reference": $reference, "route": $route, "scheduled_time": $scheduled_time, "signatures": $signatures, "size": $size} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"account": $account, "address": $address, "assignee": $assignee, "auto_assign": $auto_assign, "barcodes": $barcodes, "category": $category, "complete_after": $complete_after, "complete_before": $complete_before, "contact": $contact, "contact_address": $contact_address, "contact_address_external_id": $contact_address_external_id, "description": $description, "documents": $documents, "duration": $duration, "external_id": $external_id, "id": $id, "metafields": $metafields, "order": $order, "orderer": $orderer, "position": $position, "priority": $priority, "reference": $reference, "route": $route, "scheduled_time": $scheduled_time, "signatures": $signatures, "size": $size} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /tasks/reorder/
@@ -10008,27 +10017,27 @@ export def "tasks-reorder create" [
   --order-orderer-phones-contains: string # Filter the returned list where all filter_values are present. Comma separated values supported
   --order-orderer-phones-overlap: string # Filter the returned list where at least one filter value in target array. Comma separated values supported
   account: string # format: uri
-  assign_tasks: list
+  assign_tasks: list<string>
   --assignee: string # nullable, format: uri
-  reorder_tasks: list
+  reorder_tasks: list<string>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "order__orderer__company" $order_orderer_company "scalar") (serialize-qp "order__orderer__company__icontains" $order_orderer_company_icontains "scalar") (serialize-qp "order__orderer__company__iexact" $order_orderer_company_iexact "scalar") (serialize-qp "order__orderer__company__istartswith" $order_orderer_company_istartswith "scalar") (serialize-qp "order__orderer__emails__contained_by" $order_orderer_emails_contained_by "scalar") (serialize-qp "order__orderer__emails__contains" $order_orderer_emails_contains "scalar") (serialize-qp "order__orderer__emails__overlap" $order_orderer_emails_overlap "scalar") (serialize-qp "order__orderer__name" $order_orderer_name "scalar") (serialize-qp "order__orderer__name__icontains" $order_orderer_name_icontains "scalar") (serialize-qp "order__orderer__name__iexact" $order_orderer_name_iexact "scalar") (serialize-qp "order__orderer__name__istartswith" $order_orderer_name_istartswith "scalar") (serialize-qp "order__orderer__notes" $order_orderer_notes "scalar") (serialize-qp "order__orderer__notes__icontains" $order_orderer_notes_icontains "scalar") (serialize-qp "order__orderer__notes__iexact" $order_orderer_notes_iexact "scalar") (serialize-qp "order__orderer__notes__istartswith" $order_orderer_notes_istartswith "scalar") (serialize-qp "order__orderer__phones__contained_by" $order_orderer_phones_contained_by "scalar") (serialize-qp "order__orderer__phones__contains" $order_orderer_phones_contains "scalar") (serialize-qp "order__orderer__phones__overlap" $order_orderer_phones_overlap "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/tasks/reorder/" $qp)
-  let body = {"account": $account, "assign_tasks": $assign_tasks, "assignee": $assignee, "reorder_tasks": $reorder_tasks} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"account": $account, "assign_tasks": $assign_tasks, "assignee": $assignee, "reorder_tasks": $reorder_tasks} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /tasks/reposition/
 #
 # operationId: tasks_reposition_create
 # --address shape: {apartment_number?: string, city?: string, country?: string, country_code?: string, formatted_address?: string, google_place_id?: string, house_number?: string, location?: any, point_of_interest?: string, postal_code?: string, raw_address?: string, state?: string, street?: string}
-# --contact shape: {company?: string, emails?: list, name?: string, notes?: string, phones?: list}
+# --contact shape: {company?: string, emails?: list<string>, name?: string, notes?: string, phones?: list<string>}
 export def "tasks-reposition create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10062,15 +10071,15 @@ export def "tasks-reposition create" [
   --address: record # shape: {apartment_number?: string, city?: string, country?: string, country_code?: string, formatted_address?: string, google_place_id?: string, house_number?: string, location?: any, point_of_interest?: string, postal_code?: string, raw_address?: string, state?: string, street?: string}
   --assignee: string # nullable, format: uri
   --auto-assign: oneof<nothing, bool>
-  --barcodes: list
+  --barcodes: list<string>
   --category: string@category-completer
   --complete-after: string # nullable, format: date-time
   --complete-before: string # nullable, format: date-time
-  --contact: record # shape: {company?: string, emails?: list, name?: string, notes?: string, phones?: list}
+  --contact: record # shape: {company?: string, emails?: list<string>, name?: string, notes?: string, phones?: list<string>}
   --contact-address: string # nullable, format: uri
   --contact-address-external-id: string # nullable
   --description: string
-  --documents: list
+  --documents: list<string>
   --duration: record # nullable, default: 4 10:55:34.12
   --external-id: string # nullable
   --id: string # nullable, format: uuid
@@ -10082,19 +10091,19 @@ export def "tasks-reposition create" [
   --reference: string
   --route: string # nullable, format: uri
   --scheduled-time: string # nullable, format: date-time
-  --signatures: list
-  --size: list # nullable
+  --signatures: list<string>
+  --size: list<int> # nullable
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "order__orderer__company" $order_orderer_company "scalar") (serialize-qp "order__orderer__company__icontains" $order_orderer_company_icontains "scalar") (serialize-qp "order__orderer__company__iexact" $order_orderer_company_iexact "scalar") (serialize-qp "order__orderer__company__istartswith" $order_orderer_company_istartswith "scalar") (serialize-qp "order__orderer__emails__contained_by" $order_orderer_emails_contained_by "scalar") (serialize-qp "order__orderer__emails__contains" $order_orderer_emails_contains "scalar") (serialize-qp "order__orderer__emails__overlap" $order_orderer_emails_overlap "scalar") (serialize-qp "order__orderer__name" $order_orderer_name "scalar") (serialize-qp "order__orderer__name__icontains" $order_orderer_name_icontains "scalar") (serialize-qp "order__orderer__name__iexact" $order_orderer_name_iexact "scalar") (serialize-qp "order__orderer__name__istartswith" $order_orderer_name_istartswith "scalar") (serialize-qp "order__orderer__notes" $order_orderer_notes "scalar") (serialize-qp "order__orderer__notes__icontains" $order_orderer_notes_icontains "scalar") (serialize-qp "order__orderer__notes__iexact" $order_orderer_notes_iexact "scalar") (serialize-qp "order__orderer__notes__istartswith" $order_orderer_notes_istartswith "scalar") (serialize-qp "order__orderer__phones__contained_by" $order_orderer_phones_contained_by "scalar") (serialize-qp "order__orderer__phones__contains" $order_orderer_phones_contains "scalar") (serialize-qp "order__orderer__phones__overlap" $order_orderer_phones_overlap "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/tasks/reposition/" $qp)
-  let body = {"account": $account, "address": $address, "assignee": $assignee, "auto_assign": $auto_assign, "barcodes": $barcodes, "category": $category, "complete_after": $complete_after, "complete_before": $complete_before, "contact": $contact, "contact_address": $contact_address, "contact_address_external_id": $contact_address_external_id, "description": $description, "documents": $documents, "duration": $duration, "external_id": $external_id, "id": $id, "metafields": $metafields, "order": $order, "orderer": $orderer, "position": $position, "priority": $priority, "reference": $reference, "route": $route, "scheduled_time": $scheduled_time, "signatures": $signatures, "size": $size} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"account": $account, "address": $address, "assignee": $assignee, "auto_assign": $auto_assign, "barcodes": $barcodes, "category": $category, "complete_after": $complete_after, "complete_before": $complete_before, "contact": $contact, "contact_address": $contact_address, "contact_address_external_id": $contact_address_external_id, "description": $description, "documents": $documents, "duration": $duration, "external_id": $external_id, "id": $id, "metafields": $metafields, "order": $order, "orderer": $orderer, "position": $position, "priority": $priority, "reference": $reference, "route": $route, "scheduled_time": $scheduled_time, "signatures": $signatures, "size": $size} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /tasks/{id}/
@@ -10134,7 +10143,7 @@ export def "tasks get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "order__orderer__company" $order_orderer_company "scalar") (serialize-qp "order__orderer__company__icontains" $order_orderer_company_icontains "scalar") (serialize-qp "order__orderer__company__iexact" $order_orderer_company_iexact "scalar") (serialize-qp "order__orderer__company__istartswith" $order_orderer_company_istartswith "scalar") (serialize-qp "order__orderer__emails__contained_by" $order_orderer_emails_contained_by "scalar") (serialize-qp "order__orderer__emails__contains" $order_orderer_emails_contains "scalar") (serialize-qp "order__orderer__emails__overlap" $order_orderer_emails_overlap "scalar") (serialize-qp "order__orderer__name" $order_orderer_name "scalar") (serialize-qp "order__orderer__name__icontains" $order_orderer_name_icontains "scalar") (serialize-qp "order__orderer__name__iexact" $order_orderer_name_iexact "scalar") (serialize-qp "order__orderer__name__istartswith" $order_orderer_name_istartswith "scalar") (serialize-qp "order__orderer__notes" $order_orderer_notes "scalar") (serialize-qp "order__orderer__notes__icontains" $order_orderer_notes_icontains "scalar") (serialize-qp "order__orderer__notes__iexact" $order_orderer_notes_iexact "scalar") (serialize-qp "order__orderer__notes__istartswith" $order_orderer_notes_istartswith "scalar") (serialize-qp "order__orderer__phones__contained_by" $order_orderer_phones_contained_by "scalar") (serialize-qp "order__orderer__phones__contains" $order_orderer_phones_contains "scalar") (serialize-qp "order__orderer__phones__overlap" $order_orderer_phones_overlap "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/tasks/{id}/") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/tasks/{id}/") $qp)
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10144,8 +10153,8 @@ export def "tasks get" [
 #
 # operationId: tasks_partial_update
 # --address shape: {apartment_number?: string, city?: string, country?: string, country_code?: string, formatted_address?: string, google_place_id?: string, house_number?: string, location?: any, point_of_interest?: string, postal_code?: string, raw_address?: string, state?: string, street?: string}
-# --contact shape: {company?: string, emails?: list, name?: string, notes?: string, phones?: list}
-export def "tasks patch" [
+# --contact shape: {company?: string, emails?: list<string>, name?: string, notes?: string, phones?: list<string>}
+export def "tasks update-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10179,15 +10188,15 @@ export def "tasks patch" [
   --address: record # shape: {apartment_number?: string, city?: string, country?: string, country_code?: string, formatted_address?: string, google_place_id?: string, house_number?: string, location?: any, point_of_interest?: string, postal_code?: string, raw_address?: string, state?: string, street?: string}
   --assignee: string # nullable, format: uri
   --auto-assign: oneof<nothing, bool>
-  --barcodes: list
+  --barcodes: list<string>
   --category: string@category-completer
   --complete-after: string # nullable, format: date-time
   --complete-before: string # nullable, format: date-time
-  --contact: record # shape: {company?: string, emails?: list, name?: string, notes?: string, phones?: list}
+  --contact: record # shape: {company?: string, emails?: list<string>, name?: string, notes?: string, phones?: list<string>}
   --contact-address: string # nullable, format: uri
   --contact-address-external-id: string # nullable
   --description: string
-  --documents: list
+  --documents: list<string>
   --duration: record # nullable, default: 4 10:55:34.12
   --external-id: string # nullable
   --body-id: string # nullable, format: uuid
@@ -10199,27 +10208,27 @@ export def "tasks patch" [
   --reference: string
   --route: string # nullable, format: uri
   --scheduled-time: string # nullable, format: date-time
-  --signatures: list
-  --size: list # nullable
+  --signatures: list<string>
+  --size: list<int> # nullable
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "order__orderer__company" $order_orderer_company "scalar") (serialize-qp "order__orderer__company__icontains" $order_orderer_company_icontains "scalar") (serialize-qp "order__orderer__company__iexact" $order_orderer_company_iexact "scalar") (serialize-qp "order__orderer__company__istartswith" $order_orderer_company_istartswith "scalar") (serialize-qp "order__orderer__emails__contained_by" $order_orderer_emails_contained_by "scalar") (serialize-qp "order__orderer__emails__contains" $order_orderer_emails_contains "scalar") (serialize-qp "order__orderer__emails__overlap" $order_orderer_emails_overlap "scalar") (serialize-qp "order__orderer__name" $order_orderer_name "scalar") (serialize-qp "order__orderer__name__icontains" $order_orderer_name_icontains "scalar") (serialize-qp "order__orderer__name__iexact" $order_orderer_name_iexact "scalar") (serialize-qp "order__orderer__name__istartswith" $order_orderer_name_istartswith "scalar") (serialize-qp "order__orderer__notes" $order_orderer_notes "scalar") (serialize-qp "order__orderer__notes__icontains" $order_orderer_notes_icontains "scalar") (serialize-qp "order__orderer__notes__iexact" $order_orderer_notes_iexact "scalar") (serialize-qp "order__orderer__notes__istartswith" $order_orderer_notes_istartswith "scalar") (serialize-qp "order__orderer__phones__contained_by" $order_orderer_phones_contained_by "scalar") (serialize-qp "order__orderer__phones__contains" $order_orderer_phones_contains "scalar") (serialize-qp "order__orderer__phones__overlap" $order_orderer_phones_overlap "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/tasks/{id}/") $qp)
-  let body = {"account": $account, "address": $address, "assignee": $assignee, "auto_assign": $auto_assign, "barcodes": $barcodes, "category": $category, "complete_after": $complete_after, "complete_before": $complete_before, "contact": $contact, "contact_address": $contact_address, "contact_address_external_id": $contact_address_external_id, "description": $description, "documents": $documents, "duration": $duration, "external_id": $external_id, "id": $body_id, "metafields": $metafields, "order": $order, "orderer": $orderer, "position": $position, "priority": $priority, "reference": $reference, "route": $route, "scheduled_time": $scheduled_time, "signatures": $signatures, "size": $size} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/tasks/{id}/") $qp)
+  let req_body = {"account": $account, "address": $address, "assignee": $assignee, "auto_assign": $auto_assign, "barcodes": $barcodes, "category": $category, "complete_after": $complete_after, "complete_before": $complete_before, "contact": $contact, "contact_address": $contact_address, "contact_address_external_id": $contact_address_external_id, "description": $description, "documents": $documents, "duration": $duration, "external_id": $external_id, "id": $body_id, "metafields": $metafields, "order": $order, "orderer": $orderer, "position": $position, "priority": $priority, "reference": $reference, "route": $route, "scheduled_time": $scheduled_time, "signatures": $signatures, "size": $size} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # PUT /tasks/{id}/
 #
 # operationId: tasks_update
 # --address shape: {apartment_number?: string, city?: string, country?: string, country_code?: string, formatted_address?: string, google_place_id?: string, house_number?: string, location?: any, point_of_interest?: string, postal_code?: string, raw_address?: string, state?: string, street?: string}
-# --contact shape: {company?: string, emails?: list, name?: string, notes?: string, phones?: list}
-export def "tasks update" [
+# --contact shape: {company?: string, emails?: list<string>, name?: string, notes?: string, phones?: list<string>}
+export def "tasks update-by-id-1" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10253,15 +10262,15 @@ export def "tasks update" [
   --address: record # shape: {apartment_number?: string, city?: string, country?: string, country_code?: string, formatted_address?: string, google_place_id?: string, house_number?: string, location?: any, point_of_interest?: string, postal_code?: string, raw_address?: string, state?: string, street?: string}
   --assignee: string # nullable, format: uri
   --auto-assign: oneof<nothing, bool>
-  --barcodes: list
+  --barcodes: list<string>
   --category: string@category-completer
   --complete-after: string # nullable, format: date-time
   --complete-before: string # nullable, format: date-time
-  --contact: record # shape: {company?: string, emails?: list, name?: string, notes?: string, phones?: list}
+  --contact: record # shape: {company?: string, emails?: list<string>, name?: string, notes?: string, phones?: list<string>}
   --contact-address: string # nullable, format: uri
   --contact-address-external-id: string # nullable
   --description: string
-  --documents: list
+  --documents: list<string>
   --duration: record # nullable, default: 4 10:55:34.12
   --external-id: string # nullable
   --body-id: string # nullable, format: uuid
@@ -10273,19 +10282,19 @@ export def "tasks update" [
   --reference: string
   --route: string # nullable, format: uri
   --scheduled-time: string # nullable, format: date-time
-  --signatures: list
-  --size: list # nullable
+  --signatures: list<string>
+  --size: list<int> # nullable
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "order__orderer__company" $order_orderer_company "scalar") (serialize-qp "order__orderer__company__icontains" $order_orderer_company_icontains "scalar") (serialize-qp "order__orderer__company__iexact" $order_orderer_company_iexact "scalar") (serialize-qp "order__orderer__company__istartswith" $order_orderer_company_istartswith "scalar") (serialize-qp "order__orderer__emails__contained_by" $order_orderer_emails_contained_by "scalar") (serialize-qp "order__orderer__emails__contains" $order_orderer_emails_contains "scalar") (serialize-qp "order__orderer__emails__overlap" $order_orderer_emails_overlap "scalar") (serialize-qp "order__orderer__name" $order_orderer_name "scalar") (serialize-qp "order__orderer__name__icontains" $order_orderer_name_icontains "scalar") (serialize-qp "order__orderer__name__iexact" $order_orderer_name_iexact "scalar") (serialize-qp "order__orderer__name__istartswith" $order_orderer_name_istartswith "scalar") (serialize-qp "order__orderer__notes" $order_orderer_notes "scalar") (serialize-qp "order__orderer__notes__icontains" $order_orderer_notes_icontains "scalar") (serialize-qp "order__orderer__notes__iexact" $order_orderer_notes_iexact "scalar") (serialize-qp "order__orderer__notes__istartswith" $order_orderer_notes_istartswith "scalar") (serialize-qp "order__orderer__phones__contained_by" $order_orderer_phones_contained_by "scalar") (serialize-qp "order__orderer__phones__contains" $order_orderer_phones_contains "scalar") (serialize-qp "order__orderer__phones__overlap" $order_orderer_phones_overlap "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/tasks/{id}/") $qp)
-  let body = {"account": $account, "address": $address, "assignee": $assignee, "auto_assign": $auto_assign, "barcodes": $barcodes, "category": $category, "complete_after": $complete_after, "complete_before": $complete_before, "contact": $contact, "contact_address": $contact_address, "contact_address_external_id": $contact_address_external_id, "description": $description, "documents": $documents, "duration": $duration, "external_id": $external_id, "id": $body_id, "metafields": $metafields, "order": $order, "orderer": $orderer, "position": $position, "priority": $priority, "reference": $reference, "route": $route, "scheduled_time": $scheduled_time, "signatures": $signatures, "size": $size} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/tasks/{id}/") $qp)
+  let req_body = {"account": $account, "address": $address, "assignee": $assignee, "auto_assign": $auto_assign, "barcodes": $barcodes, "category": $category, "complete_after": $complete_after, "complete_before": $complete_before, "contact": $contact, "contact_address": $contact_address, "contact_address_external_id": $contact_address_external_id, "description": $description, "documents": $documents, "duration": $duration, "external_id": $external_id, "id": $body_id, "metafields": $metafields, "order": $order, "orderer": $orderer, "position": $position, "priority": $priority, "reference": $reference, "route": $route, "scheduled_time": $scheduled_time, "signatures": $signatures, "size": $size} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /tasks/{id}/accept/
@@ -10328,12 +10337,12 @@ export def "tasks-accept create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "order__orderer__company" $order_orderer_company "scalar") (serialize-qp "order__orderer__company__icontains" $order_orderer_company_icontains "scalar") (serialize-qp "order__orderer__company__iexact" $order_orderer_company_iexact "scalar") (serialize-qp "order__orderer__company__istartswith" $order_orderer_company_istartswith "scalar") (serialize-qp "order__orderer__emails__contained_by" $order_orderer_emails_contained_by "scalar") (serialize-qp "order__orderer__emails__contains" $order_orderer_emails_contains "scalar") (serialize-qp "order__orderer__emails__overlap" $order_orderer_emails_overlap "scalar") (serialize-qp "order__orderer__name" $order_orderer_name "scalar") (serialize-qp "order__orderer__name__icontains" $order_orderer_name_icontains "scalar") (serialize-qp "order__orderer__name__iexact" $order_orderer_name_iexact "scalar") (serialize-qp "order__orderer__name__istartswith" $order_orderer_name_istartswith "scalar") (serialize-qp "order__orderer__notes" $order_orderer_notes "scalar") (serialize-qp "order__orderer__notes__icontains" $order_orderer_notes_icontains "scalar") (serialize-qp "order__orderer__notes__iexact" $order_orderer_notes_iexact "scalar") (serialize-qp "order__orderer__notes__istartswith" $order_orderer_notes_istartswith "scalar") (serialize-qp "order__orderer__phones__contained_by" $order_orderer_phones_contained_by "scalar") (serialize-qp "order__orderer__phones__contains" $order_orderer_phones_contains "scalar") (serialize-qp "order__orderer__phones__overlap" $order_orderer_phones_overlap "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/tasks/{id}/accept/") $qp)
-  let body = {"location": $location, "notes": $notes} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/tasks/{id}/accept/") $qp)
+  let req_body = {"location": $location, "notes": $notes} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /tasks/{id}/account_change/
@@ -10375,12 +10384,12 @@ export def "tasks-account-change create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "order__orderer__company" $order_orderer_company "scalar") (serialize-qp "order__orderer__company__icontains" $order_orderer_company_icontains "scalar") (serialize-qp "order__orderer__company__iexact" $order_orderer_company_iexact "scalar") (serialize-qp "order__orderer__company__istartswith" $order_orderer_company_istartswith "scalar") (serialize-qp "order__orderer__emails__contained_by" $order_orderer_emails_contained_by "scalar") (serialize-qp "order__orderer__emails__contains" $order_orderer_emails_contains "scalar") (serialize-qp "order__orderer__emails__overlap" $order_orderer_emails_overlap "scalar") (serialize-qp "order__orderer__name" $order_orderer_name "scalar") (serialize-qp "order__orderer__name__icontains" $order_orderer_name_icontains "scalar") (serialize-qp "order__orderer__name__iexact" $order_orderer_name_iexact "scalar") (serialize-qp "order__orderer__name__istartswith" $order_orderer_name_istartswith "scalar") (serialize-qp "order__orderer__notes" $order_orderer_notes "scalar") (serialize-qp "order__orderer__notes__icontains" $order_orderer_notes_icontains "scalar") (serialize-qp "order__orderer__notes__iexact" $order_orderer_notes_iexact "scalar") (serialize-qp "order__orderer__notes__istartswith" $order_orderer_notes_istartswith "scalar") (serialize-qp "order__orderer__phones__contained_by" $order_orderer_phones_contained_by "scalar") (serialize-qp "order__orderer__phones__contains" $order_orderer_phones_contains "scalar") (serialize-qp "order__orderer__phones__overlap" $order_orderer_phones_overlap "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/tasks/{id}/account_change/") $qp)
-  let body = {"account": $account} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/tasks/{id}/account_change/") $qp)
+  let req_body = {"account": $account} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /tasks/{id}/activate/
@@ -10423,12 +10432,12 @@ export def "tasks-activate create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "order__orderer__company" $order_orderer_company "scalar") (serialize-qp "order__orderer__company__icontains" $order_orderer_company_icontains "scalar") (serialize-qp "order__orderer__company__iexact" $order_orderer_company_iexact "scalar") (serialize-qp "order__orderer__company__istartswith" $order_orderer_company_istartswith "scalar") (serialize-qp "order__orderer__emails__contained_by" $order_orderer_emails_contained_by "scalar") (serialize-qp "order__orderer__emails__contains" $order_orderer_emails_contains "scalar") (serialize-qp "order__orderer__emails__overlap" $order_orderer_emails_overlap "scalar") (serialize-qp "order__orderer__name" $order_orderer_name "scalar") (serialize-qp "order__orderer__name__icontains" $order_orderer_name_icontains "scalar") (serialize-qp "order__orderer__name__iexact" $order_orderer_name_iexact "scalar") (serialize-qp "order__orderer__name__istartswith" $order_orderer_name_istartswith "scalar") (serialize-qp "order__orderer__notes" $order_orderer_notes "scalar") (serialize-qp "order__orderer__notes__icontains" $order_orderer_notes_icontains "scalar") (serialize-qp "order__orderer__notes__iexact" $order_orderer_notes_iexact "scalar") (serialize-qp "order__orderer__notes__istartswith" $order_orderer_notes_istartswith "scalar") (serialize-qp "order__orderer__phones__contained_by" $order_orderer_phones_contained_by "scalar") (serialize-qp "order__orderer__phones__contains" $order_orderer_phones_contains "scalar") (serialize-qp "order__orderer__phones__overlap" $order_orderer_phones_overlap "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/tasks/{id}/activate/") $qp)
-  let body = {"location": $location, "notes": $notes} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/tasks/{id}/activate/") $qp)
+  let req_body = {"location": $location, "notes": $notes} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /tasks/{id}/assign/
@@ -10472,12 +10481,12 @@ export def "tasks-assign create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "order__orderer__company" $order_orderer_company "scalar") (serialize-qp "order__orderer__company__icontains" $order_orderer_company_icontains "scalar") (serialize-qp "order__orderer__company__iexact" $order_orderer_company_iexact "scalar") (serialize-qp "order__orderer__company__istartswith" $order_orderer_company_istartswith "scalar") (serialize-qp "order__orderer__emails__contained_by" $order_orderer_emails_contained_by "scalar") (serialize-qp "order__orderer__emails__contains" $order_orderer_emails_contains "scalar") (serialize-qp "order__orderer__emails__overlap" $order_orderer_emails_overlap "scalar") (serialize-qp "order__orderer__name" $order_orderer_name "scalar") (serialize-qp "order__orderer__name__icontains" $order_orderer_name_icontains "scalar") (serialize-qp "order__orderer__name__iexact" $order_orderer_name_iexact "scalar") (serialize-qp "order__orderer__name__istartswith" $order_orderer_name_istartswith "scalar") (serialize-qp "order__orderer__notes" $order_orderer_notes "scalar") (serialize-qp "order__orderer__notes__icontains" $order_orderer_notes_icontains "scalar") (serialize-qp "order__orderer__notes__iexact" $order_orderer_notes_iexact "scalar") (serialize-qp "order__orderer__notes__istartswith" $order_orderer_notes_istartswith "scalar") (serialize-qp "order__orderer__phones__contained_by" $order_orderer_phones_contained_by "scalar") (serialize-qp "order__orderer__phones__contains" $order_orderer_phones_contains "scalar") (serialize-qp "order__orderer__phones__overlap" $order_orderer_phones_overlap "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/tasks/{id}/assign/") $qp)
-  let body = {"assignee": $assignee, "location": $location, "notes": $notes} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/tasks/{id}/assign/") $qp)
+  let req_body = {"assignee": $assignee, "location": $location, "notes": $notes} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /tasks/{id}/cancel/
@@ -10520,12 +10529,12 @@ export def "tasks-cancel create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "order__orderer__company" $order_orderer_company "scalar") (serialize-qp "order__orderer__company__icontains" $order_orderer_company_icontains "scalar") (serialize-qp "order__orderer__company__iexact" $order_orderer_company_iexact "scalar") (serialize-qp "order__orderer__company__istartswith" $order_orderer_company_istartswith "scalar") (serialize-qp "order__orderer__emails__contained_by" $order_orderer_emails_contained_by "scalar") (serialize-qp "order__orderer__emails__contains" $order_orderer_emails_contains "scalar") (serialize-qp "order__orderer__emails__overlap" $order_orderer_emails_overlap "scalar") (serialize-qp "order__orderer__name" $order_orderer_name "scalar") (serialize-qp "order__orderer__name__icontains" $order_orderer_name_icontains "scalar") (serialize-qp "order__orderer__name__iexact" $order_orderer_name_iexact "scalar") (serialize-qp "order__orderer__name__istartswith" $order_orderer_name_istartswith "scalar") (serialize-qp "order__orderer__notes" $order_orderer_notes "scalar") (serialize-qp "order__orderer__notes__icontains" $order_orderer_notes_icontains "scalar") (serialize-qp "order__orderer__notes__iexact" $order_orderer_notes_iexact "scalar") (serialize-qp "order__orderer__notes__istartswith" $order_orderer_notes_istartswith "scalar") (serialize-qp "order__orderer__phones__contained_by" $order_orderer_phones_contained_by "scalar") (serialize-qp "order__orderer__phones__contains" $order_orderer_phones_contains "scalar") (serialize-qp "order__orderer__phones__overlap" $order_orderer_phones_overlap "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/tasks/{id}/cancel/") $qp)
-  let body = {"location": $location, "notes": $notes} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/tasks/{id}/cancel/") $qp)
+  let req_body = {"location": $location, "notes": $notes} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /tasks/{id}/complete/
@@ -10568,12 +10577,12 @@ export def "tasks-complete create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "order__orderer__company" $order_orderer_company "scalar") (serialize-qp "order__orderer__company__icontains" $order_orderer_company_icontains "scalar") (serialize-qp "order__orderer__company__iexact" $order_orderer_company_iexact "scalar") (serialize-qp "order__orderer__company__istartswith" $order_orderer_company_istartswith "scalar") (serialize-qp "order__orderer__emails__contained_by" $order_orderer_emails_contained_by "scalar") (serialize-qp "order__orderer__emails__contains" $order_orderer_emails_contains "scalar") (serialize-qp "order__orderer__emails__overlap" $order_orderer_emails_overlap "scalar") (serialize-qp "order__orderer__name" $order_orderer_name "scalar") (serialize-qp "order__orderer__name__icontains" $order_orderer_name_icontains "scalar") (serialize-qp "order__orderer__name__iexact" $order_orderer_name_iexact "scalar") (serialize-qp "order__orderer__name__istartswith" $order_orderer_name_istartswith "scalar") (serialize-qp "order__orderer__notes" $order_orderer_notes "scalar") (serialize-qp "order__orderer__notes__icontains" $order_orderer_notes_icontains "scalar") (serialize-qp "order__orderer__notes__iexact" $order_orderer_notes_iexact "scalar") (serialize-qp "order__orderer__notes__istartswith" $order_orderer_notes_istartswith "scalar") (serialize-qp "order__orderer__phones__contained_by" $order_orderer_phones_contained_by "scalar") (serialize-qp "order__orderer__phones__contains" $order_orderer_phones_contains "scalar") (serialize-qp "order__orderer__phones__overlap" $order_orderer_phones_overlap "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/tasks/{id}/complete/") $qp)
-  let body = {"location": $location, "notes": $notes} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/tasks/{id}/complete/") $qp)
+  let req_body = {"location": $location, "notes": $notes} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /tasks/{id}/documents/
@@ -10613,7 +10622,7 @@ export def "tasks-documents get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "order__orderer__company" $order_orderer_company "scalar") (serialize-qp "order__orderer__company__icontains" $order_orderer_company_icontains "scalar") (serialize-qp "order__orderer__company__iexact" $order_orderer_company_iexact "scalar") (serialize-qp "order__orderer__company__istartswith" $order_orderer_company_istartswith "scalar") (serialize-qp "order__orderer__emails__contained_by" $order_orderer_emails_contained_by "scalar") (serialize-qp "order__orderer__emails__contains" $order_orderer_emails_contains "scalar") (serialize-qp "order__orderer__emails__overlap" $order_orderer_emails_overlap "scalar") (serialize-qp "order__orderer__name" $order_orderer_name "scalar") (serialize-qp "order__orderer__name__icontains" $order_orderer_name_icontains "scalar") (serialize-qp "order__orderer__name__iexact" $order_orderer_name_iexact "scalar") (serialize-qp "order__orderer__name__istartswith" $order_orderer_name_istartswith "scalar") (serialize-qp "order__orderer__notes" $order_orderer_notes "scalar") (serialize-qp "order__orderer__notes__icontains" $order_orderer_notes_icontains "scalar") (serialize-qp "order__orderer__notes__iexact" $order_orderer_notes_iexact "scalar") (serialize-qp "order__orderer__notes__istartswith" $order_orderer_notes_istartswith "scalar") (serialize-qp "order__orderer__phones__contained_by" $order_orderer_phones_contained_by "scalar") (serialize-qp "order__orderer__phones__contains" $order_orderer_phones_contains "scalar") (serialize-qp "order__orderer__phones__overlap" $order_orderer_phones_overlap "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/tasks/{id}/documents/") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/tasks/{id}/documents/") $qp)
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10656,7 +10665,7 @@ export def "tasks-events get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "order__orderer__company" $order_orderer_company "scalar") (serialize-qp "order__orderer__company__icontains" $order_orderer_company_icontains "scalar") (serialize-qp "order__orderer__company__iexact" $order_orderer_company_iexact "scalar") (serialize-qp "order__orderer__company__istartswith" $order_orderer_company_istartswith "scalar") (serialize-qp "order__orderer__emails__contained_by" $order_orderer_emails_contained_by "scalar") (serialize-qp "order__orderer__emails__contains" $order_orderer_emails_contains "scalar") (serialize-qp "order__orderer__emails__overlap" $order_orderer_emails_overlap "scalar") (serialize-qp "order__orderer__name" $order_orderer_name "scalar") (serialize-qp "order__orderer__name__icontains" $order_orderer_name_icontains "scalar") (serialize-qp "order__orderer__name__iexact" $order_orderer_name_iexact "scalar") (serialize-qp "order__orderer__name__istartswith" $order_orderer_name_istartswith "scalar") (serialize-qp "order__orderer__notes" $order_orderer_notes "scalar") (serialize-qp "order__orderer__notes__icontains" $order_orderer_notes_icontains "scalar") (serialize-qp "order__orderer__notes__iexact" $order_orderer_notes_iexact "scalar") (serialize-qp "order__orderer__notes__istartswith" $order_orderer_notes_istartswith "scalar") (serialize-qp "order__orderer__phones__contained_by" $order_orderer_phones_contained_by "scalar") (serialize-qp "order__orderer__phones__contains" $order_orderer_phones_contains "scalar") (serialize-qp "order__orderer__phones__overlap" $order_orderer_phones_overlap "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/tasks/{id}/events/") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/tasks/{id}/events/") $qp)
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10702,12 +10711,12 @@ export def "tasks-fail create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "order__orderer__company" $order_orderer_company "scalar") (serialize-qp "order__orderer__company__icontains" $order_orderer_company_icontains "scalar") (serialize-qp "order__orderer__company__iexact" $order_orderer_company_iexact "scalar") (serialize-qp "order__orderer__company__istartswith" $order_orderer_company_istartswith "scalar") (serialize-qp "order__orderer__emails__contained_by" $order_orderer_emails_contained_by "scalar") (serialize-qp "order__orderer__emails__contains" $order_orderer_emails_contains "scalar") (serialize-qp "order__orderer__emails__overlap" $order_orderer_emails_overlap "scalar") (serialize-qp "order__orderer__name" $order_orderer_name "scalar") (serialize-qp "order__orderer__name__icontains" $order_orderer_name_icontains "scalar") (serialize-qp "order__orderer__name__iexact" $order_orderer_name_iexact "scalar") (serialize-qp "order__orderer__name__istartswith" $order_orderer_name_istartswith "scalar") (serialize-qp "order__orderer__notes" $order_orderer_notes "scalar") (serialize-qp "order__orderer__notes__icontains" $order_orderer_notes_icontains "scalar") (serialize-qp "order__orderer__notes__iexact" $order_orderer_notes_iexact "scalar") (serialize-qp "order__orderer__notes__istartswith" $order_orderer_notes_istartswith "scalar") (serialize-qp "order__orderer__phones__contained_by" $order_orderer_phones_contained_by "scalar") (serialize-qp "order__orderer__phones__contains" $order_orderer_phones_contains "scalar") (serialize-qp "order__orderer__phones__overlap" $order_orderer_phones_overlap "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/tasks/{id}/fail/") $qp)
-  let body = {"location": $location, "notes": $notes} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/tasks/{id}/fail/") $qp)
+  let req_body = {"location": $location, "notes": $notes} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /tasks/{id}/reject/
@@ -10750,12 +10759,12 @@ export def "tasks-reject create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "order__orderer__company" $order_orderer_company "scalar") (serialize-qp "order__orderer__company__icontains" $order_orderer_company_icontains "scalar") (serialize-qp "order__orderer__company__iexact" $order_orderer_company_iexact "scalar") (serialize-qp "order__orderer__company__istartswith" $order_orderer_company_istartswith "scalar") (serialize-qp "order__orderer__emails__contained_by" $order_orderer_emails_contained_by "scalar") (serialize-qp "order__orderer__emails__contains" $order_orderer_emails_contains "scalar") (serialize-qp "order__orderer__emails__overlap" $order_orderer_emails_overlap "scalar") (serialize-qp "order__orderer__name" $order_orderer_name "scalar") (serialize-qp "order__orderer__name__icontains" $order_orderer_name_icontains "scalar") (serialize-qp "order__orderer__name__iexact" $order_orderer_name_iexact "scalar") (serialize-qp "order__orderer__name__istartswith" $order_orderer_name_istartswith "scalar") (serialize-qp "order__orderer__notes" $order_orderer_notes "scalar") (serialize-qp "order__orderer__notes__icontains" $order_orderer_notes_icontains "scalar") (serialize-qp "order__orderer__notes__iexact" $order_orderer_notes_iexact "scalar") (serialize-qp "order__orderer__notes__istartswith" $order_orderer_notes_istartswith "scalar") (serialize-qp "order__orderer__phones__contained_by" $order_orderer_phones_contained_by "scalar") (serialize-qp "order__orderer__phones__contains" $order_orderer_phones_contains "scalar") (serialize-qp "order__orderer__phones__overlap" $order_orderer_phones_overlap "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/tasks/{id}/reject/") $qp)
-  let body = {"location": $location, "notes": $notes} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/tasks/{id}/reject/") $qp)
+  let req_body = {"location": $location, "notes": $notes} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /tasks/{id}/signatures/
@@ -10795,7 +10804,7 @@ export def "tasks-signatures get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "order__orderer__company" $order_orderer_company "scalar") (serialize-qp "order__orderer__company__icontains" $order_orderer_company_icontains "scalar") (serialize-qp "order__orderer__company__iexact" $order_orderer_company_iexact "scalar") (serialize-qp "order__orderer__company__istartswith" $order_orderer_company_istartswith "scalar") (serialize-qp "order__orderer__emails__contained_by" $order_orderer_emails_contained_by "scalar") (serialize-qp "order__orderer__emails__contains" $order_orderer_emails_contains "scalar") (serialize-qp "order__orderer__emails__overlap" $order_orderer_emails_overlap "scalar") (serialize-qp "order__orderer__name" $order_orderer_name "scalar") (serialize-qp "order__orderer__name__icontains" $order_orderer_name_icontains "scalar") (serialize-qp "order__orderer__name__iexact" $order_orderer_name_iexact "scalar") (serialize-qp "order__orderer__name__istartswith" $order_orderer_name_istartswith "scalar") (serialize-qp "order__orderer__notes" $order_orderer_notes "scalar") (serialize-qp "order__orderer__notes__icontains" $order_orderer_notes_icontains "scalar") (serialize-qp "order__orderer__notes__iexact" $order_orderer_notes_iexact "scalar") (serialize-qp "order__orderer__notes__istartswith" $order_orderer_notes_istartswith "scalar") (serialize-qp "order__orderer__phones__contained_by" $order_orderer_phones_contained_by "scalar") (serialize-qp "order__orderer__phones__contains" $order_orderer_phones_contains "scalar") (serialize-qp "order__orderer__phones__overlap" $order_orderer_phones_overlap "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/tasks/{id}/signatures/") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/tasks/{id}/signatures/") $qp)
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10841,12 +10850,12 @@ export def "tasks-transit create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "order__orderer__company" $order_orderer_company "scalar") (serialize-qp "order__orderer__company__icontains" $order_orderer_company_icontains "scalar") (serialize-qp "order__orderer__company__iexact" $order_orderer_company_iexact "scalar") (serialize-qp "order__orderer__company__istartswith" $order_orderer_company_istartswith "scalar") (serialize-qp "order__orderer__emails__contained_by" $order_orderer_emails_contained_by "scalar") (serialize-qp "order__orderer__emails__contains" $order_orderer_emails_contains "scalar") (serialize-qp "order__orderer__emails__overlap" $order_orderer_emails_overlap "scalar") (serialize-qp "order__orderer__name" $order_orderer_name "scalar") (serialize-qp "order__orderer__name__icontains" $order_orderer_name_icontains "scalar") (serialize-qp "order__orderer__name__iexact" $order_orderer_name_iexact "scalar") (serialize-qp "order__orderer__name__istartswith" $order_orderer_name_istartswith "scalar") (serialize-qp "order__orderer__notes" $order_orderer_notes "scalar") (serialize-qp "order__orderer__notes__icontains" $order_orderer_notes_icontains "scalar") (serialize-qp "order__orderer__notes__iexact" $order_orderer_notes_iexact "scalar") (serialize-qp "order__orderer__notes__istartswith" $order_orderer_notes_istartswith "scalar") (serialize-qp "order__orderer__phones__contained_by" $order_orderer_phones_contained_by "scalar") (serialize-qp "order__orderer__phones__contains" $order_orderer_phones_contains "scalar") (serialize-qp "order__orderer__phones__overlap" $order_orderer_phones_overlap "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/tasks/{id}/transit/") $qp)
-  let body = {"location": $location, "notes": $notes} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/tasks/{id}/transit/") $qp)
+  let req_body = {"location": $location, "notes": $notes} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /tasks/{id}/unaccept/
@@ -10889,12 +10898,12 @@ export def "tasks-unaccept create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "order__orderer__company" $order_orderer_company "scalar") (serialize-qp "order__orderer__company__icontains" $order_orderer_company_icontains "scalar") (serialize-qp "order__orderer__company__iexact" $order_orderer_company_iexact "scalar") (serialize-qp "order__orderer__company__istartswith" $order_orderer_company_istartswith "scalar") (serialize-qp "order__orderer__emails__contained_by" $order_orderer_emails_contained_by "scalar") (serialize-qp "order__orderer__emails__contains" $order_orderer_emails_contains "scalar") (serialize-qp "order__orderer__emails__overlap" $order_orderer_emails_overlap "scalar") (serialize-qp "order__orderer__name" $order_orderer_name "scalar") (serialize-qp "order__orderer__name__icontains" $order_orderer_name_icontains "scalar") (serialize-qp "order__orderer__name__iexact" $order_orderer_name_iexact "scalar") (serialize-qp "order__orderer__name__istartswith" $order_orderer_name_istartswith "scalar") (serialize-qp "order__orderer__notes" $order_orderer_notes "scalar") (serialize-qp "order__orderer__notes__icontains" $order_orderer_notes_icontains "scalar") (serialize-qp "order__orderer__notes__iexact" $order_orderer_notes_iexact "scalar") (serialize-qp "order__orderer__notes__istartswith" $order_orderer_notes_istartswith "scalar") (serialize-qp "order__orderer__phones__contained_by" $order_orderer_phones_contained_by "scalar") (serialize-qp "order__orderer__phones__contains" $order_orderer_phones_contains "scalar") (serialize-qp "order__orderer__phones__overlap" $order_orderer_phones_overlap "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/tasks/{id}/unaccept/") $qp)
-  let body = {"location": $location, "notes": $notes} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/tasks/{id}/unaccept/") $qp)
+  let req_body = {"location": $location, "notes": $notes} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /tasks/{id}/unassign/
@@ -10937,12 +10946,12 @@ export def "tasks-unassign create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "order__orderer__company" $order_orderer_company "scalar") (serialize-qp "order__orderer__company__icontains" $order_orderer_company_icontains "scalar") (serialize-qp "order__orderer__company__iexact" $order_orderer_company_iexact "scalar") (serialize-qp "order__orderer__company__istartswith" $order_orderer_company_istartswith "scalar") (serialize-qp "order__orderer__emails__contained_by" $order_orderer_emails_contained_by "scalar") (serialize-qp "order__orderer__emails__contains" $order_orderer_emails_contains "scalar") (serialize-qp "order__orderer__emails__overlap" $order_orderer_emails_overlap "scalar") (serialize-qp "order__orderer__name" $order_orderer_name "scalar") (serialize-qp "order__orderer__name__icontains" $order_orderer_name_icontains "scalar") (serialize-qp "order__orderer__name__iexact" $order_orderer_name_iexact "scalar") (serialize-qp "order__orderer__name__istartswith" $order_orderer_name_istartswith "scalar") (serialize-qp "order__orderer__notes" $order_orderer_notes "scalar") (serialize-qp "order__orderer__notes__icontains" $order_orderer_notes_icontains "scalar") (serialize-qp "order__orderer__notes__iexact" $order_orderer_notes_iexact "scalar") (serialize-qp "order__orderer__notes__istartswith" $order_orderer_notes_istartswith "scalar") (serialize-qp "order__orderer__phones__contained_by" $order_orderer_phones_contained_by "scalar") (serialize-qp "order__orderer__phones__contains" $order_orderer_phones_contains "scalar") (serialize-qp "order__orderer__phones__overlap" $order_orderer_phones_overlap "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/tasks/{id}/unassign/") $qp)
-  let body = {"location": $location, "notes": $notes} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/tasks/{id}/unassign/") $qp)
+  let req_body = {"location": $location, "notes": $notes} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /time_location_features/
@@ -11006,7 +11015,7 @@ export def "time-location-features list" [
 # POST /time_location_features/
 #
 # operationId: time_location_features_create
-# --location shape: {coordinates: list, type: "Point"}
+# --location shape: {coordinates: list<float>, type: "Point"}
 export def "time-location-features create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11022,7 +11031,7 @@ export def "time-location-features create" [
   --altitude: int # nullable
   --battery-level: string # nullable, format: decimal
   --heading: int # nullable
-  location: record # shape: {coordinates: list, type: "Point"}
+  location: record # shape: {coordinates: list<float>, type: "Point"}
   --speed: int # nullable
   --state: string@state-completer-10
   time: string # format: date-time
@@ -11032,11 +11041,11 @@ export def "time-location-features create" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/time_location_features/" $qp)
-  let body = {"accuracy": $accuracy, "altitude": $altitude, "battery_level": $battery_level, "heading": $heading, "location": $location, "speed": $speed, "state": $state, "time": $time} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"accuracy": $accuracy, "altitude": $altitude, "battery_level": $battery_level, "heading": $heading, "location": $location, "speed": $speed, "state": $state, "time": $time} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DELETE /time_location_features/{id}/
@@ -11057,7 +11066,7 @@ export def "time-location-features delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/time_location_features/{id}/") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/time_location_features/{id}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -11082,7 +11091,7 @@ export def "time-location-features get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/time_location_features/{id}/") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/time_location_features/{id}/") $qp)
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -11091,8 +11100,8 @@ export def "time-location-features get" [
 # PATCH /time_location_features/{id}/
 #
 # operationId: time_location_features_partial_update
-# --location shape: {coordinates: list, type: "Point"}
-export def "time-location-features patch" [
+# --location shape: {coordinates: list<float>, type: "Point"}
+export def "time-location-features update-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11108,7 +11117,7 @@ export def "time-location-features patch" [
   --altitude: int # nullable
   --battery-level: string # nullable, format: decimal
   --heading: int # nullable
-  --location: record # shape: {coordinates: list, type: "Point"}
+  --location: record # shape: {coordinates: list<float>, type: "Point"}
   --speed: int # nullable
   --state: string@state-completer-10
   --time: string # format: date-time
@@ -11117,19 +11126,19 @@ export def "time-location-features patch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/time_location_features/{id}/") $qp)
-  let body = {"accuracy": $accuracy, "altitude": $altitude, "battery_level": $battery_level, "heading": $heading, "location": $location, "speed": $speed, "state": $state, "time": $time} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/time_location_features/{id}/") $qp)
+  let req_body = {"accuracy": $accuracy, "altitude": $altitude, "battery_level": $battery_level, "heading": $heading, "location": $location, "speed": $speed, "state": $state, "time": $time} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # PUT /time_location_features/{id}/
 #
 # operationId: time_location_features_update
-# --location shape: {coordinates: list, type: "Point"}
-export def "time-location-features update" [
+# --location shape: {coordinates: list<float>, type: "Point"}
+export def "time-location-features update-by-id-1" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11145,7 +11154,7 @@ export def "time-location-features update" [
   --altitude: int # nullable
   --battery-level: string # nullable, format: decimal
   --heading: int # nullable
-  location: record # shape: {coordinates: list, type: "Point"}
+  location: record # shape: {coordinates: list<float>, type: "Point"}
   --speed: int # nullable
   --state: string@state-completer-10
   time: string # format: date-time
@@ -11154,12 +11163,12 @@ export def "time-location-features update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/time_location_features/{id}/") $qp)
-  let body = {"accuracy": $accuracy, "altitude": $altitude, "battery_level": $battery_level, "heading": $heading, "location": $location, "speed": $speed, "state": $state, "time": $time} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/time_location_features/{id}/") $qp)
+  let req_body = {"accuracy": $accuracy, "altitude": $altitude, "battery_level": $battery_level, "heading": $heading, "location": $location, "speed": $speed, "state": $state, "time": $time} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /time_locations/
@@ -11223,7 +11232,7 @@ export def "time-locations list" [
 # POST /time_locations/
 #
 # operationId: time_locations_create
-# --location shape: {coordinates: list, type: "Point"}
+# --location shape: {coordinates: list<float>, type: "Point"}
 export def "time-locations create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11239,7 +11248,7 @@ export def "time-locations create" [
   --altitude: int # nullable
   --battery-level: string # nullable, format: decimal
   --heading: int # nullable
-  location: record # shape: {coordinates: list, type: "Point"}
+  location: record # shape: {coordinates: list<float>, type: "Point"}
   --speed: int # nullable
   --state: string@state-completer-10
   time: string # format: date-time
@@ -11249,11 +11258,11 @@ export def "time-locations create" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/time_locations/" $qp)
-  let body = {"accuracy": $accuracy, "altitude": $altitude, "battery_level": $battery_level, "heading": $heading, "location": $location, "speed": $speed, "state": $state, "time": $time} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"accuracy": $accuracy, "altitude": $altitude, "battery_level": $battery_level, "heading": $heading, "location": $location, "speed": $speed, "state": $state, "time": $time} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /time_locations/{id}/
@@ -11275,7 +11284,7 @@ export def "time-locations get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/time_locations/{id}/") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/time_locations/{id}/") $qp)
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -11345,11 +11354,11 @@ export def "trackers create" [
   --format: string@format-completer-1
   account: string # format: uri
   --active-from: string # nullable, format: date-time
-  --active-states: list
+  --active-states: list<string>
   --active-until: string # nullable, format: date-time
   --autozoom: oneof<nothing, bool>
   --max-zoom-level: int # nullable
-  --queued-states: list
+  --queued-states: list<string>
   --reviews-allowed: oneof<nothing, bool>
   --show-call-action: oneof<nothing, bool>
   --show-destination: oneof<nothing, bool>
@@ -11359,18 +11368,18 @@ export def "trackers create" [
   --show-path: oneof<nothing, bool>
   --show-predicted-delivery: oneof<nothing, bool>
   --show-sms-action: oneof<nothing, bool>
-  tasks: list
+  tasks: list<string>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/trackers/" $qp)
-  let body = {"account": $account, "active_from": $active_from, "active_states": $active_states, "active_until": $active_until, "autozoom": $autozoom, "max_zoom_level": $max_zoom_level, "queued_states": $queued_states, "reviews_allowed": $reviews_allowed, "show_call_action": $show_call_action, "show_destination": $show_destination, "show_driver_info": $show_driver_info, "show_eta": $show_eta, "show_logo": $show_logo, "show_path": $show_path, "show_predicted_delivery": $show_predicted_delivery, "show_sms_action": $show_sms_action, "tasks": $tasks} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"account": $account, "active_from": $active_from, "active_states": $active_states, "active_until": $active_until, "autozoom": $autozoom, "max_zoom_level": $max_zoom_level, "queued_states": $queued_states, "reviews_allowed": $reviews_allowed, "show_call_action": $show_call_action, "show_destination": $show_destination, "show_driver_info": $show_driver_info, "show_eta": $show_eta, "show_logo": $show_logo, "show_path": $show_path, "show_predicted_delivery": $show_predicted_delivery, "show_sms_action": $show_sms_action, "tasks": $tasks} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /trackers/{id}/
@@ -11392,7 +11401,7 @@ export def "trackers get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/trackers/{id}/") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/trackers/{id}/") $qp)
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -11401,7 +11410,7 @@ export def "trackers get" [
 # PATCH /trackers/{id}/
 #
 # operationId: trackers_partial_update
-export def "trackers patch" [
+export def "trackers update-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11415,11 +11424,11 @@ export def "trackers patch" [
   --format: string@format-completer-1
   --account: string # format: uri
   --active-from: string # nullable, format: date-time
-  --active-states: list
+  --active-states: list<string>
   --active-until: string # nullable, format: date-time
   --autozoom: oneof<nothing, bool>
   --max-zoom-level: int # nullable
-  --queued-states: list
+  --queued-states: list<string>
   --reviews-allowed: oneof<nothing, bool>
   --show-call-action: oneof<nothing, bool>
   --show-destination: oneof<nothing, bool>
@@ -11429,24 +11438,24 @@ export def "trackers patch" [
   --show-path: oneof<nothing, bool>
   --show-predicted-delivery: oneof<nothing, bool>
   --show-sms-action: oneof<nothing, bool>
-  --tasks: list
+  --tasks: list<string>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/trackers/{id}/") $qp)
-  let body = {"account": $account, "active_from": $active_from, "active_states": $active_states, "active_until": $active_until, "autozoom": $autozoom, "max_zoom_level": $max_zoom_level, "queued_states": $queued_states, "reviews_allowed": $reviews_allowed, "show_call_action": $show_call_action, "show_destination": $show_destination, "show_driver_info": $show_driver_info, "show_eta": $show_eta, "show_logo": $show_logo, "show_path": $show_path, "show_predicted_delivery": $show_predicted_delivery, "show_sms_action": $show_sms_action, "tasks": $tasks} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/trackers/{id}/") $qp)
+  let req_body = {"account": $account, "active_from": $active_from, "active_states": $active_states, "active_until": $active_until, "autozoom": $autozoom, "max_zoom_level": $max_zoom_level, "queued_states": $queued_states, "reviews_allowed": $reviews_allowed, "show_call_action": $show_call_action, "show_destination": $show_destination, "show_driver_info": $show_driver_info, "show_eta": $show_eta, "show_logo": $show_logo, "show_path": $show_path, "show_predicted_delivery": $show_predicted_delivery, "show_sms_action": $show_sms_action, "tasks": $tasks} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # PUT /trackers/{id}/
 #
 # operationId: trackers_update
-export def "trackers update" [
+export def "trackers update-by-id-1" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11460,11 +11469,11 @@ export def "trackers update" [
   --format: string@format-completer-1
   account: string # format: uri
   --active-from: string # nullable, format: date-time
-  --active-states: list
+  --active-states: list<string>
   --active-until: string # nullable, format: date-time
   --autozoom: oneof<nothing, bool>
   --max-zoom-level: int # nullable
-  --queued-states: list
+  --queued-states: list<string>
   --reviews-allowed: oneof<nothing, bool>
   --show-call-action: oneof<nothing, bool>
   --show-destination: oneof<nothing, bool>
@@ -11474,18 +11483,18 @@ export def "trackers update" [
   --show-path: oneof<nothing, bool>
   --show-predicted-delivery: oneof<nothing, bool>
   --show-sms-action: oneof<nothing, bool>
-  tasks: list
+  tasks: list<string>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/trackers/{id}/") $qp)
-  let body = {"account": $account, "active_from": $active_from, "active_states": $active_states, "active_until": $active_until, "autozoom": $autozoom, "max_zoom_level": $max_zoom_level, "queued_states": $queued_states, "reviews_allowed": $reviews_allowed, "show_call_action": $show_call_action, "show_destination": $show_destination, "show_driver_info": $show_driver_info, "show_eta": $show_eta, "show_logo": $show_logo, "show_path": $show_path, "show_predicted_delivery": $show_predicted_delivery, "show_sms_action": $show_sms_action, "tasks": $tasks} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/trackers/{id}/") $qp)
+  let req_body = {"account": $account, "active_from": $active_from, "active_states": $active_states, "active_until": $active_until, "autozoom": $autozoom, "max_zoom_level": $max_zoom_level, "queued_states": $queued_states, "reviews_allowed": $reviews_allowed, "show_call_action": $show_call_action, "show_destination": $show_destination, "show_driver_info": $show_driver_info, "show_eta": $show_eta, "show_logo": $show_logo, "show_path": $show_path, "show_predicted_delivery": $show_predicted_delivery, "show_sms_action": $show_sms_action, "tasks": $tasks} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /trackers/{id}/public/
@@ -11507,7 +11516,7 @@ export def "trackers-public get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/trackers/{id}/public/") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/trackers/{id}/public/") $qp)
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -11567,11 +11576,11 @@ export def "users create" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/users/" $qp)
-  let body = {"address": $address, "email": $email, "first_name": $first_name, "last_name": $last_name, "password": $password, "phone": $phone} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"address": $address, "email": $email, "first_name": $first_name, "last_name": $last_name, "password": $password, "phone": $phone} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DELETE /users/{id}/
@@ -11593,7 +11602,7 @@ export def "users delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/users/{id}/") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}/") $qp)
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -11618,7 +11627,7 @@ export def "users get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/users/{id}/") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}/") $qp)
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -11628,7 +11637,7 @@ export def "users get" [
 #
 # operationId: users_partial_update
 # --address shape: {apartment_number?: string, city?: string, country?: string, country_code?: string, formatted_address?: string, google_place_id?: string, house_number?: string, location?: any, point_of_interest?: string, postal_code?: string, raw_address?: string, state?: string, street?: string}
-export def "users patch" [
+export def "users update-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11650,19 +11659,19 @@ export def "users patch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/users/{id}/") $qp)
-  let body = {"address": $address, "email": $email, "first_name": $first_name, "last_name": $last_name, "phone": $phone} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}/") $qp)
+  let req_body = {"address": $address, "email": $email, "first_name": $first_name, "last_name": $last_name, "phone": $phone} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # PUT /users/{id}/
 #
 # operationId: users_update
 # --address shape: {apartment_number?: string, city?: string, country?: string, country_code?: string, formatted_address?: string, google_place_id?: string, house_number?: string, location?: any, point_of_interest?: string, postal_code?: string, raw_address?: string, state?: string, street?: string}
-export def "users update" [
+export def "users update-by-id-1" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11684,12 +11693,12 @@ export def "users update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/users/{id}/") $qp)
-  let body = {"address": $address, "email": $email, "first_name": $first_name, "last_name": $last_name, "phone": $phone} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}/") $qp)
+  let req_body = {"address": $address, "email": $email, "first_name": $first_name, "last_name": $last_name, "phone": $phone} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /users/{id}/activate/
@@ -11714,12 +11723,12 @@ export def "users-activate create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/users/{id}/activate/") $qp)
-  let body = {"password": $password, "token": $body_token} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}/activate/") $qp)
+  let req_body = {"password": $password, "token": $body_token} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DELETE /users/{id}/on_duty/
@@ -11741,7 +11750,7 @@ export def "users-on-duty delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/users/{id}/on_duty/") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}/on_duty/") $qp)
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -11766,7 +11775,7 @@ export def "users-on-duty get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/users/{id}/on_duty/") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}/on_duty/") $qp)
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -11793,12 +11802,12 @@ export def "users-on-duty update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/users/{id}/on_duty/") $qp)
-  let body = {"account": $account} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}/on_duty/") $qp)
+  let req_body = {"account": $account} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /users_on_duty_log/
@@ -11879,11 +11888,11 @@ export def "users-on-duty-log create" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/users_on_duty_log/" $qp)
-  let body = {"account": $account, "account_role": $account_role, "mode": $mode, "status": $status, "timestamp": $timestamp, "user": $user} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"account": $account, "account_role": $account_role, "mode": $mode, "status": $status, "timestamp": $timestamp, "user": $user} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /users_on_duty_log/{id}/
@@ -11905,7 +11914,7 @@ export def "users-on-duty-log get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/users_on_duty_log/{id}/") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users_on_duty_log/{id}/") $qp)
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -11964,7 +11973,7 @@ export def "webhooks create" [
   --document-events: oneof<nothing, bool>
   --headers: record
   name: string
-  --notification-emails: list
+  --notification-emails: list<string>
   --review-events: oneof<nothing, bool>
   --shared-secret: string
   --signature-events: oneof<nothing, bool>
@@ -11977,11 +11986,11 @@ export def "webhooks create" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/webhooks/" $qp)
-  let body = {"account": $account, "document_events": $document_events, "headers": $headers, "name": $name, "notification_emails": $notification_emails, "review_events": $review_events, "shared_secret": $shared_secret, "signature_events": $signature_events, "target": $target, "task_events": $task_events, "version": $version} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"account": $account, "document_events": $document_events, "headers": $headers, "name": $name, "notification_emails": $notification_emails, "review_events": $review_events, "shared_secret": $shared_secret, "signature_events": $signature_events, "target": $target, "task_events": $task_events, "version": $version} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DELETE /webhooks/{id}/
@@ -12002,7 +12011,7 @@ export def "webhooks delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/webhooks/{id}/") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/webhooks/{id}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -12027,7 +12036,7 @@ export def "webhooks get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/webhooks/{id}/") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/webhooks/{id}/") $qp)
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -12036,7 +12045,7 @@ export def "webhooks get" [
 # PATCH /webhooks/{id}/
 #
 # operationId: webhooks_partial_update
-export def "webhooks patch" [
+export def "webhooks update-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12052,7 +12061,7 @@ export def "webhooks patch" [
   --document-events: oneof<nothing, bool>
   --headers: record
   --name: string
-  --notification-emails: list
+  --notification-emails: list<string>
   --review-events: oneof<nothing, bool>
   --shared-secret: string
   --signature-events: oneof<nothing, bool>
@@ -12064,18 +12073,18 @@ export def "webhooks patch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/webhooks/{id}/") $qp)
-  let body = {"account": $account, "document_events": $document_events, "headers": $headers, "name": $name, "notification_emails": $notification_emails, "review_events": $review_events, "shared_secret": $shared_secret, "signature_events": $signature_events, "target": $target, "task_events": $task_events, "version": $version} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/webhooks/{id}/") $qp)
+  let req_body = {"account": $account, "document_events": $document_events, "headers": $headers, "name": $name, "notification_emails": $notification_emails, "review_events": $review_events, "shared_secret": $shared_secret, "signature_events": $signature_events, "target": $target, "task_events": $task_events, "version": $version} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # PUT /webhooks/{id}/
 #
 # operationId: webhooks_update
-export def "webhooks update" [
+export def "webhooks update-by-id-1" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12091,7 +12100,7 @@ export def "webhooks update" [
   --document-events: oneof<nothing, bool>
   --headers: record
   name: string
-  --notification-emails: list
+  --notification-emails: list<string>
   --review-events: oneof<nothing, bool>
   --shared-secret: string
   --signature-events: oneof<nothing, bool>
@@ -12103,12 +12112,12 @@ export def "webhooks update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/webhooks/{id}/") $qp)
-  let body = {"account": $account, "document_events": $document_events, "headers": $headers, "name": $name, "notification_emails": $notification_emails, "review_events": $review_events, "shared_secret": $shared_secret, "signature_events": $signature_events, "target": $target, "task_events": $task_events, "version": $version} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/webhooks/{id}/") $qp)
+  let req_body = {"account": $account, "document_events": $document_events, "headers": $headers, "name": $name, "notification_emails": $notification_emails, "review_events": $review_events, "shared_secret": $shared_secret, "signature_events": $signature_events, "target": $target, "task_events": $task_events, "version": $version} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /webhooks/{id}/active/
@@ -12130,7 +12139,7 @@ export def "webhooks-active create" [
   --document-events: oneof<nothing, bool>
   --headers: record
   name: string
-  --notification-emails: list
+  --notification-emails: list<string>
   --review-events: oneof<nothing, bool>
   --shared-secret: string
   --signature-events: oneof<nothing, bool>
@@ -12142,12 +12151,12 @@ export def "webhooks-active create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/webhooks/{id}/active/") $qp)
-  let body = {"account": $account, "document_events": $document_events, "headers": $headers, "name": $name, "notification_emails": $notification_emails, "review_events": $review_events, "shared_secret": $shared_secret, "signature_events": $signature_events, "target": $target, "task_events": $task_events, "version": $version} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/webhooks/{id}/active/") $qp)
+  let req_body = {"account": $account, "document_events": $document_events, "headers": $headers, "name": $name, "notification_emails": $notification_emails, "review_events": $review_events, "shared_secret": $shared_secret, "signature_events": $signature_events, "target": $target, "task_events": $task_events, "version": $version} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /webhooks/{id}/inactive/
@@ -12169,7 +12178,7 @@ export def "webhooks-inactive create" [
   --document-events: oneof<nothing, bool>
   --headers: record
   name: string
-  --notification-emails: list
+  --notification-emails: list<string>
   --review-events: oneof<nothing, bool>
   --shared-secret: string
   --signature-events: oneof<nothing, bool>
@@ -12181,12 +12190,12 @@ export def "webhooks-inactive create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/webhooks/{id}/inactive/") $qp)
-  let body = {"account": $account, "document_events": $document_events, "headers": $headers, "name": $name, "notification_emails": $notification_emails, "review_events": $review_events, "shared_secret": $shared_secret, "signature_events": $signature_events, "target": $target, "task_events": $task_events, "version": $version} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/webhooks/{id}/inactive/") $qp)
+  let req_body = {"account": $account, "document_events": $document_events, "headers": $headers, "name": $name, "notification_emails": $notification_emails, "review_events": $review_events, "shared_secret": $shared_secret, "signature_events": $signature_events, "target": $target, "task_events": $task_events, "version": $version} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /worker_features/
@@ -12269,7 +12278,7 @@ export def "worker-features get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/worker_features/{user_id}/") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/worker_features/{user_id}/") $qp)
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -12417,11 +12426,11 @@ export def "working-state create" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/working_state/" $qp)
-  let body = {"account": $account, "account_role": $account_role, "mode": $mode, "status": $status, "timestamp": $timestamp, "user": $user} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"account": $account, "account_role": $account_role, "mode": $mode, "status": $status, "timestamp": $timestamp, "user": $user} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /working_state/{id}/
@@ -12443,7 +12452,7 @@ export def "working-state get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/working_state/{id}/") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/working_state/{id}/") $qp)
   let accept_val = ($accept | default "application/json; version=2.4.13")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

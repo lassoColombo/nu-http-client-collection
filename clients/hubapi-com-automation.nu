@@ -37,6 +37,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -71,7 +80,7 @@ def auth-scheme-completer [] { ["query-hapikey" "bearer" "private-app-legacy"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "automation-actions-callbacks-complete completeBatch" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "automation-actions-callbacks-complete create-batch" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -96,7 +105,7 @@ export def commands []: nothing -> table {
 # POST /automation/v4/actions/callbacks/complete
 # operationId: post-/automation/v4/actions/callbacks/complete_completeBatch
 # --inputs item shape: {callbackId: string, outputFields: record}
-export def "automation-actions-callbacks-complete completeBatch" [
+export def "automation-actions-callbacks-complete create-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -111,18 +120,18 @@ export def "automation-actions-callbacks-complete completeBatch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/automation/v4/actions/callbacks/complete")
-  let body = {"inputs": $inputs} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"inputs": $inputs} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Complete a callback
 #
 # POST /automation/v4/actions/callbacks/{callbackId}/complete
 # operationId: post-/automation/v4/actions/callbacks/{callbackId}/complete_complete
-export def "automation-actions-callbacks-complete complete" [
+export def "automation-actions-callbacks-complete create-{callback-id}" [
   callback_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -137,19 +146,19 @@ export def "automation-actions-callbacks-complete complete" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({callback_id: $callback_id} | format pattern "/automation/v4/actions/callbacks/{callback_id}/complete"))
-  let body = {"outputFields": $output_fields} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({callback_id: (encode-path-segment $callback_id)} | format pattern "/automation/v4/actions/callbacks/{callback_id}/complete"))
+  let req_body = {"outputFields": $output_fields} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get all custom actions
 #
 # GET /automation/v4/actions/{appId}
 # operationId: get-/automation/v4/actions/{appId}_getPage
-export def "automation-actions get-page" [
+export def "automation-actions get-{app-id}-get-page" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -166,7 +175,7 @@ export def "automation-actions get-page" [
   let auth = (build-auth $token ($auth_scheme | default "query-hapikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "after" $after "scalar") (serialize-qp "archived" $archived "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/automation/v4/actions/{app_id}") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/automation/v4/actions/{app_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -177,9 +186,9 @@ export def "automation-actions get-page" [
 # POST /automation/v4/actions/{appId}
 # operationId: post-/automation/v4/actions/{appId}_create
 # --functions item shape: {functionSource: string, functionType: "PRE_ACTION_EXECUTION"|"PRE_FETCH_OPTIONS"|"POST_FETCH_OPTIONS", id?: string}
-# --inputFields item shape: {isRequired: bool, supportedValueTypes?: list, typeDefinition: record}
-# --objectRequestOptions shape: {properties: list}
-export def "automation-actions create" [
+# --inputFields item shape: {isRequired: bool, supportedValueTypes?: list<string>, typeDefinition: record}
+# --objectRequestOptions shape: {properties: list<string>}
+export def "automation-actions create-{app-id}-create" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -193,28 +202,28 @@ export def "automation-actions create" [
   --archived-at: int # The date that this custom action was archived, if the custom action is archived. (format: int64)
   functions: list # A list of functions associated with the custom workflow action. — item shape: {functionSource: string, functionType: "PRE_ACTION_EXECUTION"|"PRE_FETCH_OPTIONS"|"POST_FETCH_OPTIONS", id?: string}
   --input-field-dependencies: list # A list of dependencies between the input fields. These configure when the input fields should be visible.
-  input_fields: list # The list of input fields to display in this custom action. — item shape: {isRequired: bool, supportedValueTypes?: list, typeDefinition: record}
+  input_fields: list # The list of input fields to display in this custom action. — item shape: {isRequired: bool, supportedValueTypes?: list<string>, typeDefinition: record}
   labels: record # The user-facing labels for the custom action.
-  --object-request-options: record # Configures what properties of the enrolled CRM object are included in the action execution request — shape: {properties: list}
-  object_types: list # The object types that this custom action supports.
+  --object-request-options: record # Configures what properties of the enrolled CRM object are included in the action execution request — shape: {properties: list<string>}
+  object_types: list<string> # The object types that this custom action supports.
   --published: oneof<nothing, bool> # Whether this custom action is published to customers.
 ]: any -> record<actionUrl: string, archivedAt: int, functions: table<functionType: string, id: string>, id: string, inputFieldDependencies: list<any>, inputFields: table<isRequired: bool, supportedValueTypes: list, typeDefinition: record>, labels: record, objectRequestOptions: record<properties: list<string>>, objectTypes: list<string>, published: bool, revisionId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-hapikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/automation/v4/actions/{app_id}"))
-  let body = {"actionUrl": $action_url, "archivedAt": $archived_at, "functions": $functions, "inputFieldDependencies": $input_field_dependencies, "inputFields": $input_fields, "labels": $labels, "objectRequestOptions": $object_request_options, "objectTypes": $object_types, "published": $published} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/automation/v4/actions/{app_id}"))
+  let req_body = {"actionUrl": $action_url, "archivedAt": $archived_at, "functions": $functions, "inputFieldDependencies": $input_field_dependencies, "inputFields": $input_fields, "labels": $labels, "objectRequestOptions": $object_request_options, "objectTypes": $object_types, "published": $published} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Archive a custom action
 #
 # DELETE /automation/v4/actions/{appId}/{definitionId}
 # operationId: delete-/automation/v4/actions/{appId}/{definitionId}_archive
-export def "automation-actions archive" [
+export def "automation-actions delete-{app-id}-{definition-id}-archive" [
   app_id: int
   definition_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -228,7 +237,7 @@ export def "automation-actions archive" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-hapikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, definition_id: $definition_id} | format pattern "/automation/v4/actions/{app_id}/{definition_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), definition_id: (encode-path-segment $definition_id)} | format pattern "/automation/v4/actions/{app_id}/{definition_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -238,7 +247,7 @@ export def "automation-actions archive" [
 #
 # GET /automation/v4/actions/{appId}/{definitionId}
 # operationId: get-/automation/v4/actions/{appId}/{definitionId}_getById
-export def "automation-actions get-by" [
+export def "automation-actions get-{app-id}-{definition-id}-get" [
   app_id: int
   definition_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -254,7 +263,7 @@ export def "automation-actions get-by" [
   let auth = (build-auth $token ($auth_scheme | default "query-hapikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "archived" $archived "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id, definition_id: $definition_id} | format pattern "/automation/v4/actions/{app_id}/{definition_id}") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), definition_id: (encode-path-segment $definition_id)} | format pattern "/automation/v4/actions/{app_id}/{definition_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -264,9 +273,9 @@ export def "automation-actions get-by" [
 #
 # PATCH /automation/v4/actions/{appId}/{definitionId}
 # operationId: patch-/automation/v4/actions/{appId}/{definitionId}_update
-# --inputFields item shape: {isRequired: bool, supportedValueTypes?: list, typeDefinition: record}
-# --objectRequestOptions shape: {properties: list}
-export def "automation-actions update" [
+# --inputFields item shape: {isRequired: bool, supportedValueTypes?: list<string>, typeDefinition: record}
+# --objectRequestOptions shape: {properties: list<string>}
+export def "automation-actions update-{app-id}-{definition-id}-update" [
   app_id: int
   definition_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -279,28 +288,28 @@ export def "automation-actions update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --action-url: string # The URL that will accept an HTTPS request each time workflows executes the custom action.
   --input-field-dependencies: list # A list of dependencies between the input fields. These configure when the input fields should be visible.
-  --input-fields: list # The list of input fields to display in this custom action. — item shape: {isRequired: bool, supportedValueTypes?: list, typeDefinition: record}
+  --input-fields: list # The list of input fields to display in this custom action. — item shape: {isRequired: bool, supportedValueTypes?: list<string>, typeDefinition: record}
   --labels: record # The user-facing labels for the custom action.
-  --object-request-options: record # Configures what properties of the enrolled CRM object are included in the action execution request — shape: {properties: list}
-  --object-types: list # The object types that this custom action supports.
+  --object-request-options: record # Configures what properties of the enrolled CRM object are included in the action execution request — shape: {properties: list<string>}
+  --object-types: list<string> # The object types that this custom action supports.
   --published: oneof<nothing, bool> # Whether this custom action is published to customers.
 ]: any -> record<actionUrl: string, archivedAt: int, functions: table<functionType: string, id: string>, id: string, inputFieldDependencies: list<any>, inputFields: table<isRequired: bool, supportedValueTypes: list, typeDefinition: record>, labels: record, objectRequestOptions: record<properties: list<string>>, objectTypes: list<string>, published: bool, revisionId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-hapikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, definition_id: $definition_id} | format pattern "/automation/v4/actions/{app_id}/{definition_id}"))
-  let body = {"actionUrl": $action_url, "inputFieldDependencies": $input_field_dependencies, "inputFields": $input_fields, "labels": $labels, "objectRequestOptions": $object_request_options, "objectTypes": $object_types, "published": $published} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), definition_id: (encode-path-segment $definition_id)} | format pattern "/automation/v4/actions/{app_id}/{definition_id}"))
+  let req_body = {"actionUrl": $action_url, "inputFieldDependencies": $input_field_dependencies, "inputFields": $input_fields, "labels": $labels, "objectRequestOptions": $object_request_options, "objectTypes": $object_types, "published": $published} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get all custom action functions
 #
 # GET /automation/v4/actions/{appId}/{definitionId}/functions
 # operationId: get-/automation/v4/actions/{appId}/{definitionId}/functions_getPage
-export def "automation-actions-functions get-page" [
+export def "automation-actions-functions get-{app-id}-{definition-id}-get-page" [
   app_id: int
   definition_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -314,7 +323,7 @@ export def "automation-actions-functions get-page" [
 ]: nothing -> record<results: table<functionType: string, id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-hapikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, definition_id: $definition_id} | format pattern "/automation/v4/actions/{app_id}/{definition_id}/functions"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), definition_id: (encode-path-segment $definition_id)} | format pattern "/automation/v4/actions/{app_id}/{definition_id}/functions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -324,7 +333,7 @@ export def "automation-actions-functions get-page" [
 #
 # DELETE /automation/v4/actions/{appId}/{definitionId}/functions/{functionType}
 # operationId: delete-/automation/v4/actions/{appId}/{definitionId}/functions/{functionType}_archiveByFunctionType
-export def "automation-actions-functions archive-by-function-type" [
+export def "automation-actions-functions delete-{app-id}-{definition-id}-{function-type}-archive-by-type" [
   app_id: int
   definition_id: string
   function_type: string
@@ -339,7 +348,7 @@ export def "automation-actions-functions archive-by-function-type" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-hapikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, definition_id: $definition_id, function_type: $function_type} | format pattern "/automation/v4/actions/{app_id}/{definition_id}/functions/{function_type}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), definition_id: (encode-path-segment $definition_id), function_type: (encode-path-segment $function_type)} | format pattern "/automation/v4/actions/{app_id}/{definition_id}/functions/{function_type}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -349,7 +358,7 @@ export def "automation-actions-functions archive-by-function-type" [
 #
 # GET /automation/v4/actions/{appId}/{definitionId}/functions/{functionType}
 # operationId: get-/automation/v4/actions/{appId}/{definitionId}/functions/{functionType}_getByFunctionType
-export def "automation-actions-functions get-by-function-type" [
+export def "automation-actions-functions get-{app-id}-{definition-id}-{function-type}-get-by-type" [
   app_id: int
   definition_id: string
   function_type: string
@@ -364,7 +373,7 @@ export def "automation-actions-functions get-by-function-type" [
 ]: nothing -> record<functionSource: string, functionType: string, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-hapikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, definition_id: $definition_id, function_type: $function_type} | format pattern "/automation/v4/actions/{app_id}/{definition_id}/functions/{function_type}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), definition_id: (encode-path-segment $definition_id), function_type: (encode-path-segment $function_type)} | format pattern "/automation/v4/actions/{app_id}/{definition_id}/functions/{function_type}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -374,7 +383,7 @@ export def "automation-actions-functions get-by-function-type" [
 #
 # PUT /automation/v4/actions/{appId}/{definitionId}/functions/{functionType}
 # operationId: put-/automation/v4/actions/{appId}/{definitionId}/functions/{functionType}_createOrReplaceByFunctionType
-export def "automation-actions-functions create-or-replace-by-appId-definitionId-functionType" [
+export def "automation-actions-functions update-{app-id}-{definition-id}-{function-type}-create-or-update-by-type" [
   app_id: int
   definition_id: string
   function_type: string
@@ -391,18 +400,19 @@ export def "automation-actions-functions create-or-replace-by-appId-definitionId
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-hapikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, definition_id: $definition_id, function_type: $function_type} | format pattern "/automation/v4/actions/{app_id}/{definition_id}/functions/{function_type}"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), definition_id: (encode-path-segment $definition_id), function_type: (encode-path-segment $function_type)} | format pattern "/automation/v4/actions/{app_id}/{definition_id}/functions/{function_type}"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "text/plain" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "text/plain" $req_body
 }
 
 # Delete a custom action function
 #
 # DELETE /automation/v4/actions/{appId}/{definitionId}/functions/{functionType}/{functionId}
 # operationId: delete-/automation/v4/actions/{appId}/{definitionId}/functions/{functionType}/{functionId}_archive
-export def "automation-actions-functions archive" [
+export def "automation-actions-functions delete-{app-id}-{definition-id}-{function-type}-{function-id}-archive" [
   app_id: int
   definition_id: string
   function_type: string
@@ -418,7 +428,7 @@ export def "automation-actions-functions archive" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-hapikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, definition_id: $definition_id, function_type: $function_type, function_id: $function_id} | format pattern "/automation/v4/actions/{app_id}/{definition_id}/functions/{function_type}/{function_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), definition_id: (encode-path-segment $definition_id), function_type: (encode-path-segment $function_type), function_id: (encode-path-segment $function_id)} | format pattern "/automation/v4/actions/{app_id}/{definition_id}/functions/{function_type}/{function_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -428,7 +438,7 @@ export def "automation-actions-functions archive" [
 #
 # GET /automation/v4/actions/{appId}/{definitionId}/functions/{functionType}/{functionId}
 # operationId: get-/automation/v4/actions/{appId}/{definitionId}/functions/{functionType}/{functionId}_getById
-export def "automation-actions-functions get-by" [
+export def "automation-actions-functions get-{app-id}-{definition-id}-{function-type}-{function-id}-get" [
   app_id: int
   definition_id: string
   function_type: string
@@ -444,7 +454,7 @@ export def "automation-actions-functions get-by" [
 ]: nothing -> record<functionSource: string, functionType: string, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-hapikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, definition_id: $definition_id, function_type: $function_type, function_id: $function_id} | format pattern "/automation/v4/actions/{app_id}/{definition_id}/functions/{function_type}/{function_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), definition_id: (encode-path-segment $definition_id), function_type: (encode-path-segment $function_type), function_id: (encode-path-segment $function_id)} | format pattern "/automation/v4/actions/{app_id}/{definition_id}/functions/{function_type}/{function_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -454,7 +464,7 @@ export def "automation-actions-functions get-by" [
 #
 # PUT /automation/v4/actions/{appId}/{definitionId}/functions/{functionType}/{functionId}
 # operationId: put-/automation/v4/actions/{appId}/{definitionId}/functions/{functionType}/{functionId}_createOrReplace
-export def "automation-actions-functions create-or-replace-by-appId-definitionId-functionType-functionId" [
+export def "automation-actions-functions update-{app-id}-{definition-id}-{function-type}-{function-id}-create-or-update" [
   app_id: int
   definition_id: string
   function_type: string
@@ -472,18 +482,19 @@ export def "automation-actions-functions create-or-replace-by-appId-definitionId
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-hapikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, definition_id: $definition_id, function_type: $function_type, function_id: $function_id} | format pattern "/automation/v4/actions/{app_id}/{definition_id}/functions/{function_type}/{function_id}"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), definition_id: (encode-path-segment $definition_id), function_type: (encode-path-segment $function_type), function_id: (encode-path-segment $function_id)} | format pattern "/automation/v4/actions/{app_id}/{definition_id}/functions/{function_type}/{function_id}"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "text/plain" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "text/plain" $req_body
 }
 
 # Get all revisions for a custom action
 #
 # GET /automation/v4/actions/{appId}/{definitionId}/revisions
 # operationId: get-/automation/v4/actions/{appId}/{definitionId}/revisions_getPage
-export def "automation-actions-revisions get-page" [
+export def "automation-actions-revisions get-{app-id}-{definition-id}-get-page" [
   app_id: int
   definition_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -500,7 +511,7 @@ export def "automation-actions-revisions get-page" [
   let auth = (build-auth $token ($auth_scheme | default "query-hapikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "after" $after "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id, definition_id: $definition_id} | format pattern "/automation/v4/actions/{app_id}/{definition_id}/revisions") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), definition_id: (encode-path-segment $definition_id)} | format pattern "/automation/v4/actions/{app_id}/{definition_id}/revisions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -510,7 +521,7 @@ export def "automation-actions-revisions get-page" [
 #
 # GET /automation/v4/actions/{appId}/{definitionId}/revisions/{revisionId}
 # operationId: get-/automation/v4/actions/{appId}/{definitionId}/revisions/{revisionId}_getById
-export def "automation-actions-revisions get-by" [
+export def "automation-actions-revisions get-{app-id}-{definition-id}-{revision-id}-get" [
   app_id: int
   definition_id: string
   revision_id: string
@@ -525,7 +536,7 @@ export def "automation-actions-revisions get-by" [
 ]: nothing -> record<createdAt: string, definition: record<actionUrl: string, archivedAt: int, functions: list<record>, id: string, inputFieldDependencies: list<any>, inputFields: list<record>, labels: record, objectRequestOptions: record<properties: list>, objectTypes: list<string>, published: bool, revisionId: string>, id: string, revisionId: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-hapikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, definition_id: $definition_id, revision_id: $revision_id} | format pattern "/automation/v4/actions/{app_id}/{definition_id}/revisions/{revision_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), definition_id: (encode-path-segment $definition_id), revision_id: (encode-path-segment $revision_id)} | format pattern "/automation/v4/actions/{app_id}/{definition_id}/revisions/{revision_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

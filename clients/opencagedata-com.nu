@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -126,7 +135,7 @@ export def "v-version get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "abbrv" $abbrv "scalar") (serialize-qp "address_only" $address_only "scalar") (serialize-qp "add_request" $add_request "scalar") (serialize-qp "bounds" $bounds "scalar") (serialize-qp "countrycode" $countrycode "scalar") (serialize-qp "jsonp" $jsonp "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "min_confidence" $min_confidence "scalar") (serialize-qp "no_annotations" $no_annotations "scalar") (serialize-qp "no_dedupe" $no_dedupe "scalar") (serialize-qp "no_record" $no_record "scalar") (serialize-qp "pretty" $pretty "scalar") (serialize-qp "proximity" $proximity "scalar") (serialize-qp "roadinfo" $roadinfo "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({version: $version, format: $format} | format pattern "/v{version}/{format}") $qp)
+  let full_url = (build-url $base ({version: (encode-path-segment $version), format: (encode-path-segment $format)} | format pattern "/v{version}/{format}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

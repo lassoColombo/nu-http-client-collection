@@ -36,6 +36,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -70,7 +79,7 @@ def auth-scheme-completer [] { ["bearer" "query-token"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "additions create-itions" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "additions get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -94,7 +103,7 @@ export def commands []: nothing -> table {
 #
 # GET /additions
 # operationId: get_additions
-export def "additions create-itions" [
+export def "additions get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -103,7 +112,7 @@ export def "additions create-itions" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --page: string # Pagination in the form of `page=2` or `page[size]=30&amp;page[number]=2`
+  --page: string # Pagination in the form of `page=2` or `page[size]=30&page[number]=2`
   --per-page: int # Equivalent to `page[size]` (default: 50, e.g. 5)
   --type: list # Filter by result type(s)
   --since: string # Filter out older results (format: date-time)
@@ -131,7 +140,7 @@ export def "changes get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --page: string # Pagination in the form of `page=2` or `page[size]=30&amp;page[number]=2`
+  --page: string # Pagination in the form of `page=2` or `page[size]=30&page[number]=2`
   --per-page: int # Equivalent to `page[size]` (default: 50, e.g. 5)
   --type: list # Filter by result type(s)
   --since: string # Filter out older results (format: date-time)
@@ -159,7 +168,7 @@ export def "deletions get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --page: string # Pagination in the form of `page=2` or `page[size]=30&amp;page[number]=2`
+  --page: string # Pagination in the form of `page=2` or `page[size]=30&page[number]=2`
   --per-page: int # Equivalent to `page[size]` (default: 50, e.g. 5)
   --type: list # Filter by result type(s)
   --since: string # Filter out older results (format: date-time)
@@ -187,7 +196,7 @@ export def "incidents get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --page: string # Pagination in the form of `page=2` or `page[size]=30&amp;page[number]=2`
+  --page: string # Pagination in the form of `page=2` or `page[size]=30&page[number]=2`
   --per-page: int # Equivalent to `page[size]` (default: 50, e.g. 5)
   --type: list # Filter by result type(s)
   --since: string # Filter out older results (format: date-time)
@@ -206,7 +215,7 @@ export def "incidents get" [
 #
 # GET /leagues
 # operationId: get_leagues
-export def "leagues get" [
+export def "leagues list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -219,7 +228,7 @@ export def "leagues get" [
   --qp-sort: list # Options to sort results (e.g. [name, -modified_at])
   --range: record # Options to select results within ranges (e.g. {modified_at: [2019-04-08T17:00:00Z, 2019-10-08T22:00:00Z]})
   --filter: record # Options to filter results. String fields are case sensitive
-  --page: string # Pagination in the form of `page=2` or `page[size]=30&amp;page[number]=2`
+  --page: string # Pagination in the form of `page=2` or `page[size]=30&page[number]=2`
   --per-page: int # Equivalent to `page[size]` (default: 50, e.g. 5)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -235,7 +244,7 @@ export def "leagues get" [
 #
 # GET /leagues/{league_id_or_slug}
 # operationId: get_leagues_leagueIdOrSlug
-export def "leagues leagueIdOrSlug" [
+export def "leagues get" [
   league_id_or_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -248,7 +257,7 @@ export def "leagues leagueIdOrSlug" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({league_id_or_slug: $league_id_or_slug} | format pattern "/leagues/{league_id_or_slug}"))
+  let full_url = (build-url $base ({league_id_or_slug: (encode-path-segment $league_id_or_slug)} | format pattern "/leagues/{league_id_or_slug}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -258,7 +267,7 @@ export def "leagues leagueIdOrSlug" [
 #
 # GET /leagues/{league_id_or_slug}/matches
 # operationId: get_leagues_leagueIdOrSlug_matches
-export def "leagues-matches matches" [
+export def "leagues-matches get" [
   league_id_or_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -272,13 +281,13 @@ export def "leagues-matches matches" [
   --search: record # Options to search results (e.g. {name: Finals})
   --qp-sort: list # Options to sort results (e.g. [tournament_id, scheduled_at])
   --range: record # Options to select results within ranges (e.g. {begin_at: [2019-04-08T17:00:00Z, 2019-10-08T22:00:00Z]})
-  --page: string # Pagination in the form of `page=2` or `page[size]=30&amp;page[number]=2`
+  --page: string # Pagination in the form of `page=2` or `page[size]=30&page[number]=2`
   --per-page: int # Equivalent to `page[size]` (default: 50, e.g. 5)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "search" $search "deepObject") (serialize-qp "sort" $qp_sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({league_id_or_slug: $league_id_or_slug} | format pattern "/leagues/{league_id_or_slug}/matches") $qp)
+  let full_url = (build-url $base ({league_id_or_slug: (encode-path-segment $league_id_or_slug)} | format pattern "/leagues/{league_id_or_slug}/matches") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -288,7 +297,7 @@ export def "leagues-matches matches" [
 #
 # GET /leagues/{league_id_or_slug}/matches/past
 # operationId: get_leagues_leagueIdOrSlug_matches_past
-export def "leagues-matches-past past" [
+export def "leagues-matches-past get" [
   league_id_or_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -302,13 +311,13 @@ export def "leagues-matches-past past" [
   --search: record # Options to search results (e.g. {name: Finals})
   --qp-sort: list # Options to sort results (e.g. [tournament_id, scheduled_at])
   --range: record # Options to select results within ranges (e.g. {begin_at: [2019-04-08T17:00:00Z, 2019-10-08T22:00:00Z]})
-  --page: string # Pagination in the form of `page=2` or `page[size]=30&amp;page[number]=2`
+  --page: string # Pagination in the form of `page=2` or `page[size]=30&page[number]=2`
   --per-page: int # Equivalent to `page[size]` (default: 50, e.g. 5)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "search" $search "deepObject") (serialize-qp "sort" $qp_sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({league_id_or_slug: $league_id_or_slug} | format pattern "/leagues/{league_id_or_slug}/matches/past") $qp)
+  let full_url = (build-url $base ({league_id_or_slug: (encode-path-segment $league_id_or_slug)} | format pattern "/leagues/{league_id_or_slug}/matches/past") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -318,7 +327,7 @@ export def "leagues-matches-past past" [
 #
 # GET /leagues/{league_id_or_slug}/matches/running
 # operationId: get_leagues_leagueIdOrSlug_matches_running
-export def "leagues-matches-running running" [
+export def "leagues-matches-running get" [
   league_id_or_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -332,13 +341,13 @@ export def "leagues-matches-running running" [
   --search: record # Options to search results (e.g. {name: Finals})
   --qp-sort: list # Options to sort results (e.g. [tournament_id, scheduled_at])
   --range: record # Options to select results within ranges (e.g. {begin_at: [2019-04-08T17:00:00Z, 2019-10-08T22:00:00Z]})
-  --page: string # Pagination in the form of `page=2` or `page[size]=30&amp;page[number]=2`
+  --page: string # Pagination in the form of `page=2` or `page[size]=30&page[number]=2`
   --per-page: int # Equivalent to `page[size]` (default: 50, e.g. 5)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "search" $search "deepObject") (serialize-qp "sort" $qp_sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({league_id_or_slug: $league_id_or_slug} | format pattern "/leagues/{league_id_or_slug}/matches/running") $qp)
+  let full_url = (build-url $base ({league_id_or_slug: (encode-path-segment $league_id_or_slug)} | format pattern "/leagues/{league_id_or_slug}/matches/running") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -348,7 +357,7 @@ export def "leagues-matches-running running" [
 #
 # GET /leagues/{league_id_or_slug}/matches/upcoming
 # operationId: get_leagues_leagueIdOrSlug_matches_upcoming
-export def "leagues-matches-upcoming upcoming" [
+export def "leagues-matches-upcoming get" [
   league_id_or_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -362,13 +371,13 @@ export def "leagues-matches-upcoming upcoming" [
   --search: record # Options to search results (e.g. {name: Finals})
   --qp-sort: list # Options to sort results (e.g. [tournament_id, scheduled_at])
   --range: record # Options to select results within ranges (e.g. {begin_at: [2019-04-08T17:00:00Z, 2019-10-08T22:00:00Z]})
-  --page: string # Pagination in the form of `page=2` or `page[size]=30&amp;page[number]=2`
+  --page: string # Pagination in the form of `page=2` or `page[size]=30&page[number]=2`
   --per-page: int # Equivalent to `page[size]` (default: 50, e.g. 5)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "search" $search "deepObject") (serialize-qp "sort" $qp_sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({league_id_or_slug: $league_id_or_slug} | format pattern "/leagues/{league_id_or_slug}/matches/upcoming") $qp)
+  let full_url = (build-url $base ({league_id_or_slug: (encode-path-segment $league_id_or_slug)} | format pattern "/leagues/{league_id_or_slug}/matches/upcoming") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -378,7 +387,7 @@ export def "leagues-matches-upcoming upcoming" [
 #
 # GET /leagues/{league_id_or_slug}/series
 # operationId: get_leagues_leagueIdOrSlug_series
-export def "leagues-series series" [
+export def "leagues-series get" [
   league_id_or_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -392,13 +401,13 @@ export def "leagues-series series" [
   --search: record # Options to search results (e.g. {slug: lck})
   --qp-sort: list # Options to sort results (e.g. [year, -modified_at])
   --range: record # Options to select results within ranges (e.g. {begin_at: [2019-04-08T17:00:00Z, 2019-10-08T22:00:00Z]})
-  --page: string # Pagination in the form of `page=2` or `page[size]=30&amp;page[number]=2`
+  --page: string # Pagination in the form of `page=2` or `page[size]=30&page[number]=2`
   --per-page: int # Equivalent to `page[size]` (default: 50, e.g. 5)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "search" $search "deepObject") (serialize-qp "sort" $qp_sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({league_id_or_slug: $league_id_or_slug} | format pattern "/leagues/{league_id_or_slug}/series") $qp)
+  let full_url = (build-url $base ({league_id_or_slug: (encode-path-segment $league_id_or_slug)} | format pattern "/leagues/{league_id_or_slug}/series") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -408,7 +417,7 @@ export def "leagues-series series" [
 #
 # GET /leagues/{league_id_or_slug}/tournaments
 # operationId: get_leagues_leagueIdOrSlug_tournaments
-export def "leagues-tournaments tournaments" [
+export def "leagues-tournaments get" [
   league_id_or_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -422,13 +431,13 @@ export def "leagues-tournaments tournaments" [
   --search: record # Options to search results (e.g. {name: group})
   --qp-sort: list # Options to sort results (e.g. [serie_id, -begin_at])
   --range: record # Options to select results within ranges (e.g. {begin_at: [2019-04-08T17:00:00Z, 2019-10-08T22:00:00Z]})
-  --page: string # Pagination in the form of `page=2` or `page[size]=30&amp;page[number]=2`
+  --page: string # Pagination in the form of `page=2` or `page[size]=30&page[number]=2`
   --per-page: int # Equivalent to `page[size]` (default: 50, e.g. 5)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "search" $search "deepObject") (serialize-qp "sort" $qp_sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({league_id_or_slug: $league_id_or_slug} | format pattern "/leagues/{league_id_or_slug}/tournaments") $qp)
+  let full_url = (build-url $base ({league_id_or_slug: (encode-path-segment $league_id_or_slug)} | format pattern "/leagues/{league_id_or_slug}/tournaments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -447,7 +456,7 @@ export def "lives get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --page: string # Pagination in the form of `page=2` or `page[size]=30&amp;page[number]=2`
+  --page: string # Pagination in the form of `page=2` or `page[size]=30&page[number]=2`
   --per-page: int # Equivalent to `page[size]` (default: 50, e.g. 5)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -463,7 +472,7 @@ export def "lives get" [
 #
 # GET /matches
 # operationId: get_matches
-export def "matches get" [
+export def "matches list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -476,7 +485,7 @@ export def "matches get" [
   --search: record # Options to search results (e.g. {name: Finals})
   --qp-sort: list # Options to sort results (e.g. [tournament_id, scheduled_at])
   --range: record # Options to select results within ranges (e.g. {begin_at: [2019-04-08T17:00:00Z, 2019-10-08T22:00:00Z]})
-  --page: string # Pagination in the form of `page=2` or `page[size]=30&amp;page[number]=2`
+  --page: string # Pagination in the form of `page=2` or `page[size]=30&page[number]=2`
   --per-page: int # Equivalent to `page[size]` (default: 50, e.g. 5)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -492,7 +501,7 @@ export def "matches get" [
 #
 # GET /matches/past
 # operationId: get_matches_past
-export def "matches-past past" [
+export def "matches-past get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -505,7 +514,7 @@ export def "matches-past past" [
   --search: record # Options to search results (e.g. {name: Finals})
   --qp-sort: list # Options to sort results (e.g. [tournament_id, scheduled_at])
   --range: record # Options to select results within ranges (e.g. {begin_at: [2019-04-08T17:00:00Z, 2019-10-08T22:00:00Z]})
-  --page: string # Pagination in the form of `page=2` or `page[size]=30&amp;page[number]=2`
+  --page: string # Pagination in the form of `page=2` or `page[size]=30&page[number]=2`
   --per-page: int # Equivalent to `page[size]` (default: 50, e.g. 5)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -521,7 +530,7 @@ export def "matches-past past" [
 #
 # GET /matches/running
 # operationId: get_matches_running
-export def "matches-running running" [
+export def "matches-running get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -534,7 +543,7 @@ export def "matches-running running" [
   --search: record # Options to search results (e.g. {name: Finals})
   --qp-sort: list # Options to sort results (e.g. [tournament_id, scheduled_at])
   --range: record # Options to select results within ranges (e.g. {begin_at: [2019-04-08T17:00:00Z, 2019-10-08T22:00:00Z]})
-  --page: string # Pagination in the form of `page=2` or `page[size]=30&amp;page[number]=2`
+  --page: string # Pagination in the form of `page=2` or `page[size]=30&page[number]=2`
   --per-page: int # Equivalent to `page[size]` (default: 50, e.g. 5)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -550,7 +559,7 @@ export def "matches-running running" [
 #
 # GET /matches/upcoming
 # operationId: get_matches_upcoming
-export def "matches-upcoming upcoming" [
+export def "matches-upcoming get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -563,7 +572,7 @@ export def "matches-upcoming upcoming" [
   --search: record # Options to search results (e.g. {name: Finals})
   --qp-sort: list # Options to sort results (e.g. [tournament_id, scheduled_at])
   --range: record # Options to select results within ranges (e.g. {begin_at: [2019-04-08T17:00:00Z, 2019-10-08T22:00:00Z]})
-  --page: string # Pagination in the form of `page=2` or `page[size]=30&amp;page[number]=2`
+  --page: string # Pagination in the form of `page=2` or `page[size]=30&page[number]=2`
   --per-page: int # Equivalent to `page[size]` (default: 50, e.g. 5)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -579,7 +588,7 @@ export def "matches-upcoming upcoming" [
 #
 # GET /matches/{match_id_or_slug}
 # operationId: get_matches_matchIdOrSlug
-export def "matches matchIdOrSlug" [
+export def "matches get" [
   match_id_or_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -592,7 +601,7 @@ export def "matches matchIdOrSlug" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({match_id_or_slug: $match_id_or_slug} | format pattern "/matches/{match_id_or_slug}"))
+  let full_url = (build-url $base ({match_id_or_slug: (encode-path-segment $match_id_or_slug)} | format pattern "/matches/{match_id_or_slug}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -602,7 +611,7 @@ export def "matches matchIdOrSlug" [
 #
 # GET /matches/{match_id_or_slug}/opponents
 # operationId: get_matches_matchIdOrSlug_opponents
-export def "matches-opponents opponents" [
+export def "matches-opponents get" [
   match_id_or_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -615,7 +624,7 @@ export def "matches-opponents opponents" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({match_id_or_slug: $match_id_or_slug} | format pattern "/matches/{match_id_or_slug}/opponents"))
+  let full_url = (build-url $base ({match_id_or_slug: (encode-path-segment $match_id_or_slug)} | format pattern "/matches/{match_id_or_slug}/opponents"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -625,7 +634,7 @@ export def "matches-opponents opponents" [
 #
 # GET /players
 # operationId: get_players
-export def "players get" [
+export def "players list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -638,7 +647,7 @@ export def "players get" [
   --search: record # Options to search results (e.g. {role: tank})
   --qp-sort: list # Options to sort results (e.g. [last_name])
   --range: record # Options to select results within ranges (e.g. {name: [f, i]})
-  --page: string # Pagination in the form of `page=2` or `page[size]=30&amp;page[number]=2`
+  --page: string # Pagination in the form of `page=2` or `page[size]=30&page[number]=2`
   --per-page: int # Equivalent to `page[size]` (default: 50, e.g. 5)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -654,7 +663,7 @@ export def "players get" [
 #
 # GET /players/{player_id_or_slug}
 # operationId: get_players_playerIdOrSlug
-export def "players playerIdOrSlug" [
+export def "players get" [
   player_id_or_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -667,7 +676,7 @@ export def "players playerIdOrSlug" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({player_id_or_slug: $player_id_or_slug} | format pattern "/players/{player_id_or_slug}"))
+  let full_url = (build-url $base ({player_id_or_slug: (encode-path-segment $player_id_or_slug)} | format pattern "/players/{player_id_or_slug}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -677,7 +686,7 @@ export def "players playerIdOrSlug" [
 #
 # GET /players/{player_id_or_slug}/matches
 # operationId: get_players_playerIdOrSlug_matches
-export def "players-matches matches" [
+export def "players-matches get" [
   player_id_or_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -691,13 +700,13 @@ export def "players-matches matches" [
   --search: record # Options to search results (e.g. {name: Finals})
   --qp-sort: list # Options to sort results (e.g. [tournament_id, scheduled_at])
   --range: record # Options to select results within ranges (e.g. {begin_at: [2019-04-08T17:00:00Z, 2019-10-08T22:00:00Z]})
-  --page: string # Pagination in the form of `page=2` or `page[size]=30&amp;page[number]=2`
+  --page: string # Pagination in the form of `page=2` or `page[size]=30&page[number]=2`
   --per-page: int # Equivalent to `page[size]` (default: 50, e.g. 5)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "search" $search "deepObject") (serialize-qp "sort" $qp_sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({player_id_or_slug: $player_id_or_slug} | format pattern "/players/{player_id_or_slug}/matches") $qp)
+  let full_url = (build-url $base ({player_id_or_slug: (encode-path-segment $player_id_or_slug)} | format pattern "/players/{player_id_or_slug}/matches") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -707,7 +716,7 @@ export def "players-matches matches" [
 #
 # GET /series
 # operationId: get_series
-export def "series get" [
+export def "series list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -720,7 +729,7 @@ export def "series get" [
   --search: record # Options to search results (e.g. {slug: lck})
   --qp-sort: list # Options to sort results (e.g. [year, -modified_at])
   --range: record # Options to select results within ranges (e.g. {begin_at: [2019-04-08T17:00:00Z, 2019-10-08T22:00:00Z]})
-  --page: string # Pagination in the form of `page=2` or `page[size]=30&amp;page[number]=2`
+  --page: string # Pagination in the form of `page=2` or `page[size]=30&page[number]=2`
   --per-page: int # Equivalent to `page[size]` (default: 50, e.g. 5)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -736,7 +745,7 @@ export def "series get" [
 #
 # GET /series/past
 # operationId: get_series_past
-export def "series-past past" [
+export def "series-past get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -749,7 +758,7 @@ export def "series-past past" [
   --search: record # Options to search results (e.g. {slug: lck})
   --qp-sort: list # Options to sort results (e.g. [year, -modified_at])
   --range: record # Options to select results within ranges (e.g. {begin_at: [2019-04-08T17:00:00Z, 2019-10-08T22:00:00Z]})
-  --page: string # Pagination in the form of `page=2` or `page[size]=30&amp;page[number]=2`
+  --page: string # Pagination in the form of `page=2` or `page[size]=30&page[number]=2`
   --per-page: int # Equivalent to `page[size]` (default: 50, e.g. 5)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -765,7 +774,7 @@ export def "series-past past" [
 #
 # GET /series/running
 # operationId: get_series_running
-export def "series-running running" [
+export def "series-running get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -778,7 +787,7 @@ export def "series-running running" [
   --search: record # Options to search results (e.g. {slug: lck})
   --qp-sort: list # Options to sort results (e.g. [year, -modified_at])
   --range: record # Options to select results within ranges (e.g. {begin_at: [2019-04-08T17:00:00Z, 2019-10-08T22:00:00Z]})
-  --page: string # Pagination in the form of `page=2` or `page[size]=30&amp;page[number]=2`
+  --page: string # Pagination in the form of `page=2` or `page[size]=30&page[number]=2`
   --per-page: int # Equivalent to `page[size]` (default: 50, e.g. 5)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -794,7 +803,7 @@ export def "series-running running" [
 #
 # GET /series/upcoming
 # operationId: get_series_upcoming
-export def "series-upcoming upcoming" [
+export def "series-upcoming get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -807,7 +816,7 @@ export def "series-upcoming upcoming" [
   --search: record # Options to search results (e.g. {slug: lck})
   --qp-sort: list # Options to sort results (e.g. [year, -modified_at])
   --range: record # Options to select results within ranges (e.g. {begin_at: [2019-04-08T17:00:00Z, 2019-10-08T22:00:00Z]})
-  --page: string # Pagination in the form of `page=2` or `page[size]=30&amp;page[number]=2`
+  --page: string # Pagination in the form of `page=2` or `page[size]=30&page[number]=2`
   --per-page: int # Equivalent to `page[size]` (default: 50, e.g. 5)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -823,7 +832,7 @@ export def "series-upcoming upcoming" [
 #
 # GET /series/{serie_id_or_slug}
 # operationId: get_series_serieIdOrSlug
-export def "series serieIdOrSlug" [
+export def "series get" [
   serie_id_or_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -836,7 +845,7 @@ export def "series serieIdOrSlug" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({serie_id_or_slug: $serie_id_or_slug} | format pattern "/series/{serie_id_or_slug}"))
+  let full_url = (build-url $base ({serie_id_or_slug: (encode-path-segment $serie_id_or_slug)} | format pattern "/series/{serie_id_or_slug}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -846,7 +855,7 @@ export def "series serieIdOrSlug" [
 #
 # GET /series/{serie_id_or_slug}/matches
 # operationId: get_series_serieIdOrSlug_matches
-export def "series-matches matches" [
+export def "series-matches get" [
   serie_id_or_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -860,13 +869,13 @@ export def "series-matches matches" [
   --search: record # Options to search results (e.g. {name: Finals})
   --qp-sort: list # Options to sort results (e.g. [tournament_id, scheduled_at])
   --range: record # Options to select results within ranges (e.g. {begin_at: [2019-04-08T17:00:00Z, 2019-10-08T22:00:00Z]})
-  --page: string # Pagination in the form of `page=2` or `page[size]=30&amp;page[number]=2`
+  --page: string # Pagination in the form of `page=2` or `page[size]=30&page[number]=2`
   --per-page: int # Equivalent to `page[size]` (default: 50, e.g. 5)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "search" $search "deepObject") (serialize-qp "sort" $qp_sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({serie_id_or_slug: $serie_id_or_slug} | format pattern "/series/{serie_id_or_slug}/matches") $qp)
+  let full_url = (build-url $base ({serie_id_or_slug: (encode-path-segment $serie_id_or_slug)} | format pattern "/series/{serie_id_or_slug}/matches") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -876,7 +885,7 @@ export def "series-matches matches" [
 #
 # GET /series/{serie_id_or_slug}/matches/past
 # operationId: get_series_serieIdOrSlug_matches_past
-export def "series-matches-past past" [
+export def "series-matches-past get" [
   serie_id_or_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -890,13 +899,13 @@ export def "series-matches-past past" [
   --search: record # Options to search results (e.g. {name: Finals})
   --qp-sort: list # Options to sort results (e.g. [tournament_id, scheduled_at])
   --range: record # Options to select results within ranges (e.g. {begin_at: [2019-04-08T17:00:00Z, 2019-10-08T22:00:00Z]})
-  --page: string # Pagination in the form of `page=2` or `page[size]=30&amp;page[number]=2`
+  --page: string # Pagination in the form of `page=2` or `page[size]=30&page[number]=2`
   --per-page: int # Equivalent to `page[size]` (default: 50, e.g. 5)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "search" $search "deepObject") (serialize-qp "sort" $qp_sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({serie_id_or_slug: $serie_id_or_slug} | format pattern "/series/{serie_id_or_slug}/matches/past") $qp)
+  let full_url = (build-url $base ({serie_id_or_slug: (encode-path-segment $serie_id_or_slug)} | format pattern "/series/{serie_id_or_slug}/matches/past") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -906,7 +915,7 @@ export def "series-matches-past past" [
 #
 # GET /series/{serie_id_or_slug}/matches/running
 # operationId: get_series_serieIdOrSlug_matches_running
-export def "series-matches-running running" [
+export def "series-matches-running get" [
   serie_id_or_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -920,13 +929,13 @@ export def "series-matches-running running" [
   --search: record # Options to search results (e.g. {name: Finals})
   --qp-sort: list # Options to sort results (e.g. [tournament_id, scheduled_at])
   --range: record # Options to select results within ranges (e.g. {begin_at: [2019-04-08T17:00:00Z, 2019-10-08T22:00:00Z]})
-  --page: string # Pagination in the form of `page=2` or `page[size]=30&amp;page[number]=2`
+  --page: string # Pagination in the form of `page=2` or `page[size]=30&page[number]=2`
   --per-page: int # Equivalent to `page[size]` (default: 50, e.g. 5)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "search" $search "deepObject") (serialize-qp "sort" $qp_sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({serie_id_or_slug: $serie_id_or_slug} | format pattern "/series/{serie_id_or_slug}/matches/running") $qp)
+  let full_url = (build-url $base ({serie_id_or_slug: (encode-path-segment $serie_id_or_slug)} | format pattern "/series/{serie_id_or_slug}/matches/running") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -936,7 +945,7 @@ export def "series-matches-running running" [
 #
 # GET /series/{serie_id_or_slug}/matches/upcoming
 # operationId: get_series_serieIdOrSlug_matches_upcoming
-export def "series-matches-upcoming upcoming" [
+export def "series-matches-upcoming get" [
   serie_id_or_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -950,13 +959,13 @@ export def "series-matches-upcoming upcoming" [
   --search: record # Options to search results (e.g. {name: Finals})
   --qp-sort: list # Options to sort results (e.g. [tournament_id, scheduled_at])
   --range: record # Options to select results within ranges (e.g. {begin_at: [2019-04-08T17:00:00Z, 2019-10-08T22:00:00Z]})
-  --page: string # Pagination in the form of `page=2` or `page[size]=30&amp;page[number]=2`
+  --page: string # Pagination in the form of `page=2` or `page[size]=30&page[number]=2`
   --per-page: int # Equivalent to `page[size]` (default: 50, e.g. 5)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "search" $search "deepObject") (serialize-qp "sort" $qp_sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({serie_id_or_slug: $serie_id_or_slug} | format pattern "/series/{serie_id_or_slug}/matches/upcoming") $qp)
+  let full_url = (build-url $base ({serie_id_or_slug: (encode-path-segment $serie_id_or_slug)} | format pattern "/series/{serie_id_or_slug}/matches/upcoming") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -966,7 +975,7 @@ export def "series-matches-upcoming upcoming" [
 #
 # GET /series/{serie_id_or_slug}/players
 # operationId: get_series_serieIdOrSlug_players
-export def "series-players players" [
+export def "series-players get" [
   serie_id_or_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -980,13 +989,13 @@ export def "series-players players" [
   --search: record # Options to search results (e.g. {role: tank})
   --qp-sort: list # Options to sort results (e.g. [last_name])
   --range: record # Options to select results within ranges (e.g. {name: [f, i]})
-  --page: string # Pagination in the form of `page=2` or `page[size]=30&amp;page[number]=2`
+  --page: string # Pagination in the form of `page=2` or `page[size]=30&page[number]=2`
   --per-page: int # Equivalent to `page[size]` (default: 50, e.g. 5)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "search" $search "deepObject") (serialize-qp "sort" $qp_sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({serie_id_or_slug: $serie_id_or_slug} | format pattern "/series/{serie_id_or_slug}/players") $qp)
+  let full_url = (build-url $base ({serie_id_or_slug: (encode-path-segment $serie_id_or_slug)} | format pattern "/series/{serie_id_or_slug}/players") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -996,7 +1005,7 @@ export def "series-players players" [
 #
 # GET /series/{serie_id_or_slug}/tournaments
 # operationId: get_series_serieIdOrSlug_tournaments
-export def "series-tournaments tournaments" [
+export def "series-tournaments get" [
   serie_id_or_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1010,13 +1019,13 @@ export def "series-tournaments tournaments" [
   --search: record # Options to search results (e.g. {name: group})
   --qp-sort: list # Options to sort results (e.g. [serie_id, -begin_at])
   --range: record # Options to select results within ranges (e.g. {begin_at: [2019-04-08T17:00:00Z, 2019-10-08T22:00:00Z]})
-  --page: string # Pagination in the form of `page=2` or `page[size]=30&amp;page[number]=2`
+  --page: string # Pagination in the form of `page=2` or `page[size]=30&page[number]=2`
   --per-page: int # Equivalent to `page[size]` (default: 50, e.g. 5)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "search" $search "deepObject") (serialize-qp "sort" $qp_sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({serie_id_or_slug: $serie_id_or_slug} | format pattern "/series/{serie_id_or_slug}/tournaments") $qp)
+  let full_url = (build-url $base ({serie_id_or_slug: (encode-path-segment $serie_id_or_slug)} | format pattern "/series/{serie_id_or_slug}/tournaments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1026,7 +1035,7 @@ export def "series-tournaments tournaments" [
 #
 # GET /teams
 # operationId: get_teams
-export def "teams get" [
+export def "teams list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1039,7 +1048,7 @@ export def "teams get" [
   --search: record # Options to search results (e.g. {name: vitality})
   --qp-sort: list # Options to sort results (e.g. [name])
   --range: record # Options to select results within ranges (e.g. {name: [vitality, vultur]})
-  --page: string # Pagination in the form of `page=2` or `page[size]=30&amp;page[number]=2`
+  --page: string # Pagination in the form of `page=2` or `page[size]=30&page[number]=2`
   --per-page: int # Equivalent to `page[size]` (default: 50, e.g. 5)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1055,7 +1064,7 @@ export def "teams get" [
 #
 # GET /teams/{team_id_or_slug}
 # operationId: get_teams_teamIdOrSlug
-export def "teams teamIdOrSlug" [
+export def "teams get" [
   team_id_or_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1068,7 +1077,7 @@ export def "teams teamIdOrSlug" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({team_id_or_slug: $team_id_or_slug} | format pattern "/teams/{team_id_or_slug}"))
+  let full_url = (build-url $base ({team_id_or_slug: (encode-path-segment $team_id_or_slug)} | format pattern "/teams/{team_id_or_slug}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1078,7 +1087,7 @@ export def "teams teamIdOrSlug" [
 #
 # GET /teams/{team_id_or_slug}/leagues
 # operationId: get_teams_teamIdOrSlug_leagues
-export def "teams-leagues leagues" [
+export def "teams-leagues get" [
   team_id_or_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1092,13 +1101,13 @@ export def "teams-leagues leagues" [
   --qp-sort: list # Options to sort results (e.g. [name, -modified_at])
   --range: record # Options to select results within ranges (e.g. {modified_at: [2019-04-08T17:00:00Z, 2019-10-08T22:00:00Z]})
   --filter: record # Options to filter results. String fields are case sensitive
-  --page: string # Pagination in the form of `page=2` or `page[size]=30&amp;page[number]=2`
+  --page: string # Pagination in the form of `page=2` or `page[size]=30&page[number]=2`
   --per-page: int # Equivalent to `page[size]` (default: 50, e.g. 5)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "search" $search "deepObject") (serialize-qp "sort" $qp_sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "filter" $filter "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({team_id_or_slug: $team_id_or_slug} | format pattern "/teams/{team_id_or_slug}/leagues") $qp)
+  let full_url = (build-url $base ({team_id_or_slug: (encode-path-segment $team_id_or_slug)} | format pattern "/teams/{team_id_or_slug}/leagues") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1108,7 +1117,7 @@ export def "teams-leagues leagues" [
 #
 # GET /teams/{team_id_or_slug}/matches
 # operationId: get_teams_teamIdOrSlug_matches
-export def "teams-matches matches" [
+export def "teams-matches get" [
   team_id_or_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1122,13 +1131,13 @@ export def "teams-matches matches" [
   --search: record # Options to search results (e.g. {name: Finals})
   --qp-sort: list # Options to sort results (e.g. [tournament_id, scheduled_at])
   --range: record # Options to select results within ranges (e.g. {begin_at: [2019-04-08T17:00:00Z, 2019-10-08T22:00:00Z]})
-  --page: string # Pagination in the form of `page=2` or `page[size]=30&amp;page[number]=2`
+  --page: string # Pagination in the form of `page=2` or `page[size]=30&page[number]=2`
   --per-page: int # Equivalent to `page[size]` (default: 50, e.g. 5)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "search" $search "deepObject") (serialize-qp "sort" $qp_sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({team_id_or_slug: $team_id_or_slug} | format pattern "/teams/{team_id_or_slug}/matches") $qp)
+  let full_url = (build-url $base ({team_id_or_slug: (encode-path-segment $team_id_or_slug)} | format pattern "/teams/{team_id_or_slug}/matches") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1138,7 +1147,7 @@ export def "teams-matches matches" [
 #
 # GET /teams/{team_id_or_slug}/series
 # operationId: get_teams_teamIdOrSlug_series
-export def "teams-series series" [
+export def "teams-series get" [
   team_id_or_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1152,13 +1161,13 @@ export def "teams-series series" [
   --search: record # Options to search results (e.g. {slug: lck})
   --qp-sort: list # Options to sort results (e.g. [year, -modified_at])
   --range: record # Options to select results within ranges (e.g. {begin_at: [2019-04-08T17:00:00Z, 2019-10-08T22:00:00Z]})
-  --page: string # Pagination in the form of `page=2` or `page[size]=30&amp;page[number]=2`
+  --page: string # Pagination in the form of `page=2` or `page[size]=30&page[number]=2`
   --per-page: int # Equivalent to `page[size]` (default: 50, e.g. 5)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "search" $search "deepObject") (serialize-qp "sort" $qp_sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({team_id_or_slug: $team_id_or_slug} | format pattern "/teams/{team_id_or_slug}/series") $qp)
+  let full_url = (build-url $base ({team_id_or_slug: (encode-path-segment $team_id_or_slug)} | format pattern "/teams/{team_id_or_slug}/series") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1168,7 +1177,7 @@ export def "teams-series series" [
 #
 # GET /teams/{team_id_or_slug}/tournaments
 # operationId: get_teams_teamIdOrSlug_tournaments
-export def "teams-tournaments tournaments" [
+export def "teams-tournaments get" [
   team_id_or_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1182,13 +1191,13 @@ export def "teams-tournaments tournaments" [
   --search: record # Options to search results (e.g. {name: group})
   --qp-sort: list # Options to sort results (e.g. [serie_id, -begin_at])
   --range: record # Options to select results within ranges (e.g. {begin_at: [2019-04-08T17:00:00Z, 2019-10-08T22:00:00Z]})
-  --page: string # Pagination in the form of `page=2` or `page[size]=30&amp;page[number]=2`
+  --page: string # Pagination in the form of `page=2` or `page[size]=30&page[number]=2`
   --per-page: int # Equivalent to `page[size]` (default: 50, e.g. 5)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "search" $search "deepObject") (serialize-qp "sort" $qp_sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({team_id_or_slug: $team_id_or_slug} | format pattern "/teams/{team_id_or_slug}/tournaments") $qp)
+  let full_url = (build-url $base ({team_id_or_slug: (encode-path-segment $team_id_or_slug)} | format pattern "/teams/{team_id_or_slug}/tournaments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1198,7 +1207,7 @@ export def "teams-tournaments tournaments" [
 #
 # GET /tournaments
 # operationId: get_tournaments
-export def "tournaments get" [
+export def "tournaments list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1211,7 +1220,7 @@ export def "tournaments get" [
   --search: record # Options to search results (e.g. {name: group})
   --qp-sort: list # Options to sort results (e.g. [serie_id, -begin_at])
   --range: record # Options to select results within ranges (e.g. {begin_at: [2019-04-08T17:00:00Z, 2019-10-08T22:00:00Z]})
-  --page: string # Pagination in the form of `page=2` or `page[size]=30&amp;page[number]=2`
+  --page: string # Pagination in the form of `page=2` or `page[size]=30&page[number]=2`
   --per-page: int # Equivalent to `page[size]` (default: 50, e.g. 5)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1227,7 +1236,7 @@ export def "tournaments get" [
 #
 # GET /tournaments/past
 # operationId: get_tournaments_past
-export def "tournaments-past past" [
+export def "tournaments-past get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1240,7 +1249,7 @@ export def "tournaments-past past" [
   --search: record # Options to search results (e.g. {name: group})
   --qp-sort: list # Options to sort results (e.g. [serie_id, -begin_at])
   --range: record # Options to select results within ranges (e.g. {begin_at: [2019-04-08T17:00:00Z, 2019-10-08T22:00:00Z]})
-  --page: string # Pagination in the form of `page=2` or `page[size]=30&amp;page[number]=2`
+  --page: string # Pagination in the form of `page=2` or `page[size]=30&page[number]=2`
   --per-page: int # Equivalent to `page[size]` (default: 50, e.g. 5)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1256,7 +1265,7 @@ export def "tournaments-past past" [
 #
 # GET /tournaments/running
 # operationId: get_tournaments_running
-export def "tournaments-running running" [
+export def "tournaments-running get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1269,7 +1278,7 @@ export def "tournaments-running running" [
   --search: record # Options to search results (e.g. {name: group})
   --qp-sort: list # Options to sort results (e.g. [serie_id, -begin_at])
   --range: record # Options to select results within ranges (e.g. {begin_at: [2019-04-08T17:00:00Z, 2019-10-08T22:00:00Z]})
-  --page: string # Pagination in the form of `page=2` or `page[size]=30&amp;page[number]=2`
+  --page: string # Pagination in the form of `page=2` or `page[size]=30&page[number]=2`
   --per-page: int # Equivalent to `page[size]` (default: 50, e.g. 5)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1285,7 +1294,7 @@ export def "tournaments-running running" [
 #
 # GET /tournaments/upcoming
 # operationId: get_tournaments_upcoming
-export def "tournaments-upcoming upcoming" [
+export def "tournaments-upcoming get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1298,7 +1307,7 @@ export def "tournaments-upcoming upcoming" [
   --search: record # Options to search results (e.g. {name: group})
   --qp-sort: list # Options to sort results (e.g. [serie_id, -begin_at])
   --range: record # Options to select results within ranges (e.g. {begin_at: [2019-04-08T17:00:00Z, 2019-10-08T22:00:00Z]})
-  --page: string # Pagination in the form of `page=2` or `page[size]=30&amp;page[number]=2`
+  --page: string # Pagination in the form of `page=2` or `page[size]=30&page[number]=2`
   --per-page: int # Equivalent to `page[size]` (default: 50, e.g. 5)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1314,7 +1323,7 @@ export def "tournaments-upcoming upcoming" [
 #
 # GET /tournaments/{tournament_id_or_slug}
 # operationId: get_tournaments_tournamentIdOrSlug
-export def "tournaments tournamentIdOrSlug" [
+export def "tournaments get" [
   tournament_id_or_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1327,7 +1336,7 @@ export def "tournaments tournamentIdOrSlug" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({tournament_id_or_slug: $tournament_id_or_slug} | format pattern "/tournaments/{tournament_id_or_slug}"))
+  let full_url = (build-url $base ({tournament_id_or_slug: (encode-path-segment $tournament_id_or_slug)} | format pattern "/tournaments/{tournament_id_or_slug}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1337,7 +1346,7 @@ export def "tournaments tournamentIdOrSlug" [
 #
 # GET /tournaments/{tournament_id_or_slug}/brackets
 # operationId: get_tournaments_tournamentIdOrSlug_brackets
-export def "tournaments-brackets brackets" [
+export def "tournaments-brackets get" [
   tournament_id_or_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1351,13 +1360,13 @@ export def "tournaments-brackets brackets" [
   --range: record # Options to select results within ranges
   --qp-sort: list # Options to sort results
   --search: record # Options to search results
-  --page: string # Pagination in the form of `page=2` or `page[size]=30&amp;page[number]=2`
+  --page: string # Pagination in the form of `page=2` or `page[size]=30&page[number]=2`
   --per-page: int # Equivalent to `page[size]` (default: 50, e.g. 5)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "range" $range "deepObject") (serialize-qp "sort" $qp_sort "multi") (serialize-qp "search" $search "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tournament_id_or_slug: $tournament_id_or_slug} | format pattern "/tournaments/{tournament_id_or_slug}/brackets") $qp)
+  let full_url = (build-url $base ({tournament_id_or_slug: (encode-path-segment $tournament_id_or_slug)} | format pattern "/tournaments/{tournament_id_or_slug}/brackets") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1367,7 +1376,7 @@ export def "tournaments-brackets brackets" [
 #
 # GET /tournaments/{tournament_id_or_slug}/matches
 # operationId: get_tournaments_tournamentIdOrSlug_matches
-export def "tournaments-matches matches" [
+export def "tournaments-matches get" [
   tournament_id_or_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1381,13 +1390,13 @@ export def "tournaments-matches matches" [
   --search: record # Options to search results (e.g. {name: Finals})
   --qp-sort: list # Options to sort results (e.g. [tournament_id, scheduled_at])
   --range: record # Options to select results within ranges (e.g. {begin_at: [2019-04-08T17:00:00Z, 2019-10-08T22:00:00Z]})
-  --page: string # Pagination in the form of `page=2` or `page[size]=30&amp;page[number]=2`
+  --page: string # Pagination in the form of `page=2` or `page[size]=30&page[number]=2`
   --per-page: int # Equivalent to `page[size]` (default: 50, e.g. 5)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "search" $search "deepObject") (serialize-qp "sort" $qp_sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tournament_id_or_slug: $tournament_id_or_slug} | format pattern "/tournaments/{tournament_id_or_slug}/matches") $qp)
+  let full_url = (build-url $base ({tournament_id_or_slug: (encode-path-segment $tournament_id_or_slug)} | format pattern "/tournaments/{tournament_id_or_slug}/matches") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1397,7 +1406,7 @@ export def "tournaments-matches matches" [
 #
 # GET /tournaments/{tournament_id_or_slug}/players
 # operationId: get_tournaments_tournamentIdOrSlug_players
-export def "tournaments-players players" [
+export def "tournaments-players get" [
   tournament_id_or_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1411,13 +1420,13 @@ export def "tournaments-players players" [
   --search: record # Options to search results (e.g. {role: tank})
   --qp-sort: list # Options to sort results (e.g. [last_name])
   --range: record # Options to select results within ranges (e.g. {name: [f, i]})
-  --page: string # Pagination in the form of `page=2` or `page[size]=30&amp;page[number]=2`
+  --page: string # Pagination in the form of `page=2` or `page[size]=30&page[number]=2`
   --per-page: int # Equivalent to `page[size]` (default: 50, e.g. 5)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "search" $search "deepObject") (serialize-qp "sort" $qp_sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tournament_id_or_slug: $tournament_id_or_slug} | format pattern "/tournaments/{tournament_id_or_slug}/players") $qp)
+  let full_url = (build-url $base ({tournament_id_or_slug: (encode-path-segment $tournament_id_or_slug)} | format pattern "/tournaments/{tournament_id_or_slug}/players") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1427,7 +1436,7 @@ export def "tournaments-players players" [
 #
 # GET /tournaments/{tournament_id_or_slug}/rosters
 # operationId: get_tournaments_tournamentIdOrSlug_rosters
-export def "tournaments-rosters rosters" [
+export def "tournaments-rosters get" [
   tournament_id_or_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1440,7 +1449,7 @@ export def "tournaments-rosters rosters" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({tournament_id_or_slug: $tournament_id_or_slug} | format pattern "/tournaments/{tournament_id_or_slug}/rosters"))
+  let full_url = (build-url $base ({tournament_id_or_slug: (encode-path-segment $tournament_id_or_slug)} | format pattern "/tournaments/{tournament_id_or_slug}/rosters"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1450,7 +1459,7 @@ export def "tournaments-rosters rosters" [
 #
 # GET /tournaments/{tournament_id_or_slug}/standings
 # operationId: get_tournaments_tournamentIdOrSlug_standings
-export def "tournaments-standings standings" [
+export def "tournaments-standings get" [
   tournament_id_or_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1460,13 +1469,13 @@ export def "tournaments-standings standings" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --page: string # Pagination in the form of `page=2` or `page[size]=30&amp;page[number]=2`
+  --page: string # Pagination in the form of `page=2` or `page[size]=30&page[number]=2`
   --per-page: int # Equivalent to `page[size]` (default: 50, e.g. 5)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tournament_id_or_slug: $tournament_id_or_slug} | format pattern "/tournaments/{tournament_id_or_slug}/standings") $qp)
+  let full_url = (build-url $base ({tournament_id_or_slug: (encode-path-segment $tournament_id_or_slug)} | format pattern "/tournaments/{tournament_id_or_slug}/standings") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1476,7 +1485,7 @@ export def "tournaments-standings standings" [
 #
 # GET /tournaments/{tournament_id_or_slug}/teams
 # operationId: get_tournaments_tournamentIdOrSlug_teams
-export def "tournaments-teams teams" [
+export def "tournaments-teams get" [
   tournament_id_or_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1490,13 +1499,13 @@ export def "tournaments-teams teams" [
   --search: record # Options to search results (e.g. {name: vitality})
   --qp-sort: list # Options to sort results (e.g. [name])
   --range: record # Options to select results within ranges (e.g. {name: [vitality, vultur]})
-  --page: string # Pagination in the form of `page=2` or `page[size]=30&amp;page[number]=2`
+  --page: string # Pagination in the form of `page=2` or `page[size]=30&page[number]=2`
   --per-page: int # Equivalent to `page[size]` (default: 50, e.g. 5)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "search" $search "deepObject") (serialize-qp "sort" $qp_sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tournament_id_or_slug: $tournament_id_or_slug} | format pattern "/tournaments/{tournament_id_or_slug}/teams") $qp)
+  let full_url = (build-url $base ({tournament_id_or_slug: (encode-path-segment $tournament_id_or_slug)} | format pattern "/tournaments/{tournament_id_or_slug}/teams") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1506,7 +1515,7 @@ export def "tournaments-teams teams" [
 #
 # GET /videogames
 # operationId: get_videogames
-export def "videogames get" [
+export def "videogames list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1515,7 +1524,7 @@ export def "videogames get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --page: string # Pagination in the form of `page=2` or `page[size]=30&amp;page[number]=2`
+  --page: string # Pagination in the form of `page=2` or `page[size]=30&page[number]=2`
   --per-page: int # Equivalent to `page[size]` (default: 50, e.g. 5)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1531,7 +1540,7 @@ export def "videogames get" [
 #
 # GET /videogames/{videogame_id_or_slug}
 # operationId: get_videogames_videogameIdOrSlug
-export def "videogames videogameIdOrSlug" [
+export def "videogames get" [
   videogame_id_or_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1544,7 +1553,7 @@ export def "videogames videogameIdOrSlug" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({videogame_id_or_slug: $videogame_id_or_slug} | format pattern "/videogames/{videogame_id_or_slug}"))
+  let full_url = (build-url $base ({videogame_id_or_slug: (encode-path-segment $videogame_id_or_slug)} | format pattern "/videogames/{videogame_id_or_slug}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1553,7 +1562,7 @@ export def "videogames videogameIdOrSlug" [
 # GET /videogames/{videogame_id_or_slug}/leagues
 #
 # operationId: get_videogames_videogameIdOrSlug_leagues
-export def "videogames-leagues leagues" [
+export def "videogames-leagues get" [
   videogame_id_or_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1567,13 +1576,13 @@ export def "videogames-leagues leagues" [
   --qp-sort: list # Options to sort results (e.g. [name, -modified_at])
   --range: record # Options to select results within ranges (e.g. {modified_at: [2019-04-08T17:00:00Z, 2019-10-08T22:00:00Z]})
   --filter: record # Options to filter results. String fields are case sensitive
-  --page: string # Pagination in the form of `page=2` or `page[size]=30&amp;page[number]=2`
+  --page: string # Pagination in the form of `page=2` or `page[size]=30&page[number]=2`
   --per-page: int # Equivalent to `page[size]` (default: 50, e.g. 5)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "search" $search "deepObject") (serialize-qp "sort" $qp_sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "filter" $filter "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({videogame_id_or_slug: $videogame_id_or_slug} | format pattern "/videogames/{videogame_id_or_slug}/leagues") $qp)
+  let full_url = (build-url $base ({videogame_id_or_slug: (encode-path-segment $videogame_id_or_slug)} | format pattern "/videogames/{videogame_id_or_slug}/leagues") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1583,7 +1592,7 @@ export def "videogames-leagues leagues" [
 #
 # GET /videogames/{videogame_id_or_slug}/series
 # operationId: get_videogames_videogameIdOrSlug_series
-export def "videogames-series series" [
+export def "videogames-series get" [
   videogame_id_or_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1597,13 +1606,13 @@ export def "videogames-series series" [
   --search: record # Options to search results (e.g. {slug: lck})
   --qp-sort: list # Options to sort results (e.g. [year, -modified_at])
   --range: record # Options to select results within ranges (e.g. {begin_at: [2019-04-08T17:00:00Z, 2019-10-08T22:00:00Z]})
-  --page: string # Pagination in the form of `page=2` or `page[size]=30&amp;page[number]=2`
+  --page: string # Pagination in the form of `page=2` or `page[size]=30&page[number]=2`
   --per-page: int # Equivalent to `page[size]` (default: 50, e.g. 5)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "search" $search "deepObject") (serialize-qp "sort" $qp_sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({videogame_id_or_slug: $videogame_id_or_slug} | format pattern "/videogames/{videogame_id_or_slug}/series") $qp)
+  let full_url = (build-url $base ({videogame_id_or_slug: (encode-path-segment $videogame_id_or_slug)} | format pattern "/videogames/{videogame_id_or_slug}/series") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1613,7 +1622,7 @@ export def "videogames-series series" [
 #
 # GET /videogames/{videogame_id_or_slug}/tournaments
 # operationId: get_videogames_videogameIdOrSlug_tournaments
-export def "videogames-tournaments tournaments" [
+export def "videogames-tournaments get" [
   videogame_id_or_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1627,13 +1636,13 @@ export def "videogames-tournaments tournaments" [
   --range: record # Options to select results within ranges
   --qp-sort: list # Options to sort results
   --search: record # Options to search results
-  --page: string # Pagination in the form of `page=2` or `page[size]=30&amp;page[number]=2`
+  --page: string # Pagination in the form of `page=2` or `page[size]=30&page[number]=2`
   --per-page: int # Equivalent to `page[size]` (default: 50, e.g. 5)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "range" $range "deepObject") (serialize-qp "sort" $qp_sort "multi") (serialize-qp "search" $search "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({videogame_id_or_slug: $videogame_id_or_slug} | format pattern "/videogames/{videogame_id_or_slug}/tournaments") $qp)
+  let full_url = (build-url $base ({videogame_id_or_slug: (encode-path-segment $videogame_id_or_slug)} | format pattern "/videogames/{videogame_id_or_slug}/tournaments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1643,7 +1652,7 @@ export def "videogames-tournaments tournaments" [
 #
 # GET /videogames/{videogame_id_or_slug}/versions
 # operationId: get_videogames_videogameIdOrSlug_versions
-export def "videogames-versions version-s" [
+export def "videogames-versions get" [
   videogame_id_or_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1657,13 +1666,13 @@ export def "videogames-versions version-s" [
   --range: record # Options to select results within ranges
   --qp-sort: list # Options to sort results
   --search: record # Options to search results
-  --page: string # Pagination in the form of `page=2` or `page[size]=30&amp;page[number]=2`
+  --page: string # Pagination in the form of `page=2` or `page[size]=30&page[number]=2`
   --per-page: int # Equivalent to `page[size]` (default: 50, e.g. 5)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "range" $range "deepObject") (serialize-qp "sort" $qp_sort "multi") (serialize-qp "search" $search "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({videogame_id_or_slug: $videogame_id_or_slug} | format pattern "/videogames/{videogame_id_or_slug}/versions") $qp)
+  let full_url = (build-url $base ({videogame_id_or_slug: (encode-path-segment $videogame_id_or_slug)} | format pattern "/videogames/{videogame_id_or_slug}/versions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

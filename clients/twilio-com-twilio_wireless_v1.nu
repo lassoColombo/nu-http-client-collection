@@ -12,6 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
   match $scheme {
     "basic" => { {headers: {Authorization: $"Basic ($token_val)"}, query: ""} }
+    "basic-credentials" => { {headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: ""} }
     "none" => { {headers: {}, query: ""} }
     _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
   }
@@ -33,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
     "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
     _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -63,7 +73,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 }
 
 def base-url-completer [] { ["https://wireless.twilio.com"] }
-def auth-scheme-completer [] { ["basic"] }
+def auth-scheme-completer [] { ["basic" "basic-credentials"] }
 
 # Completers for enum parameters
 def status-completer [] { ["delivered" "failed" "queued" "received" "sent"] }
@@ -151,18 +161,19 @@ export def "commands create" [
   command: string # The message body of the Command. Can be plain text in text mode or a Base64 encoded byte string in binary mode.
   --command-mode: string@command-mode-completer
   --delivery-receipt-requested: oneof<nothing, bool> # Whether to request delivery receipt from the recipient. For Commands that request delivery receipt, the Command state transitions to 'delivered' once the server has received a delivery receipt from the device. The default value is `true`.
-  --include-sid: string # Whether to include the SID of the command in the message body. Can be: `none`, `start`, or `end`, and the default behavior is `none`. When sending a Command to a SIM in text mode, we can automatically include the SID of the Command in the message body, which could be used to ensure that the device does not process the same Command more than once.  A value of `start` will prepend the message with the Command SID, and `end` will append it to the end, separating the Command SID from the message body with a space. The length of the Command SID is included in the 160 character limit so the SMS body must be 128 characters or less before the Command SID is included.
+  --include-sid: string # Whether to include the SID of the command in the message body. Can be: `none`, `start`, or `end`, and the default behavior is `none`. When sending a Command to a SIM in text mode, we can automatically include the SID of the Command in the message body, which could be used to ensure that the device does not process the same Command more than once. A value of `start` will prepend the message with the Command SID, and `end` will append it to the end, separating the Command SID from the message body with a space. The length of the Command SID is included in the 160 character limit so the SMS body must be 128 characters or less before the Command SID is included.
   --sim: string # The `sid` or `unique_name` of the [SIM](https://www.twilio.com/docs/wireless/api/sim-resource) to send the Command to.
 ]: any -> record<account_sid: string, command: string, command_mode: string, date_created: string, date_updated: string, delivery_receipt_requested: bool, direction: string, sid: string, sim_sid: string, status: string, transport: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://wireless.twilio.com")
   let full_url = (build-url $base "/v1/Commands")
-  let body = {"CallbackMethod": $callback_method, "CallbackUrl": $callback_url, "Command": $command, "CommandMode": $command_mode, "DeliveryReceiptRequested": $delivery_receipt_requested, "IncludeSid": $include_sid, "Sim": $sim} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"CallbackMethod": $callback_method, "CallbackUrl": $callback_url, "Command": $command, "CommandMode": $command_mode, "DeliveryReceiptRequested": $delivery_receipt_requested, "IncludeSid": $include_sid, "Sim": $sim} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Delete a Command instance from your account.
@@ -182,7 +193,7 @@ export def "commands delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://wireless.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/Commands/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Commands/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -205,7 +216,7 @@ export def "commands get" [
 ]: nothing -> record<account_sid: string, command: string, command_mode: string, date_created: string, date_updated: string, delivery_receipt_requested: bool, direction: string, sid: string, sim_sid: string, status: string, transport: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://wireless.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/Commands/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Commands/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -252,7 +263,7 @@ export def "rate-plans create" [
   --data-limit: int # The total data usage (download and upload combined) in Megabytes that the Network allows during one month on the home network (T-Mobile USA). The metering period begins the day of activation and ends on the same day in the following month. Can be up to 2TB and the default value is `1000`.
   --data-metering: string # The model used to meter data usage. Can be: `payg` and `quota-1`, `quota-10`, and `quota-50`. Learn more about the available [data metering models](https://www.twilio.com/docs/wireless/api/rateplan-resource#payg-vs-quota-data-plans).
   --friendly-name: string # A descriptive string that you create to describe the resource. It does not have to be unique.
-  --international-roaming: list # The list of services that SIMs capable of using GPRS/3G/4G/LTE data connectivity can use outside of the United States. Can contain: `data` and `messaging`.
+  --international-roaming: list<string> # The list of services that SIMs capable of using GPRS/3G/4G/LTE data connectivity can use outside of the United States. Can contain: `data` and `messaging`.
   --international-roaming-data-limit: int # The total data usage (download and upload combined) in Megabytes that the Network allows during one month when roaming outside the United States. Can be up to 2TB.
   --messaging-enabled: oneof<nothing, bool> # Whether SIMs can make, send, and receive SMS using [Commands](https://www.twilio.com/docs/wireless/api/command-resource).
   --national-roaming-data-limit: int # The total data usage (download and upload combined) in Megabytes that the Network allows during one month on non-home networks in the United States. The metering period begins the day of activation and ends on the same day in the following month. Can be up to 2TB. See [national roaming](https://www.twilio.com/docs/wireless/api/rateplan-resource#national-roaming) for more info.
@@ -264,11 +275,12 @@ export def "rate-plans create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://wireless.twilio.com")
   let full_url = (build-url $base "/v1/RatePlans")
-  let body = {"DataEnabled": $data_enabled, "DataLimit": $data_limit, "DataMetering": $data_metering, "FriendlyName": $friendly_name, "InternationalRoaming": $international_roaming, "InternationalRoamingDataLimit": $international_roaming_data_limit, "MessagingEnabled": $messaging_enabled, "NationalRoamingDataLimit": $national_roaming_data_limit, "NationalRoamingEnabled": $national_roaming_enabled, "UniqueName": $unique_name, "VoiceEnabled": $voice_enabled} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"DataEnabled": $data_enabled, "DataLimit": $data_limit, "DataMetering": $data_metering, "FriendlyName": $friendly_name, "InternationalRoaming": $international_roaming, "InternationalRoamingDataLimit": $international_roaming_data_limit, "MessagingEnabled": $messaging_enabled, "NationalRoamingDataLimit": $national_roaming_data_limit, "NationalRoamingEnabled": $national_roaming_enabled, "UniqueName": $unique_name, "VoiceEnabled": $voice_enabled} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # DELETE /v1/RatePlans/{Sid}
@@ -287,7 +299,7 @@ export def "rate-plans delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://wireless.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/RatePlans/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/RatePlans/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -309,7 +321,7 @@ export def "rate-plans get" [
 ]: nothing -> record<account_sid: string, data_enabled: bool, data_limit: int, data_metering: string, date_created: string, date_updated: string, friendly_name: string, international_roaming: list<string>, international_roaming_data_limit: int, messaging_enabled: bool, national_roaming_data_limit: int, national_roaming_enabled: bool, sid: string, unique_name: string, url: string, voice_enabled: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://wireless.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/RatePlans/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/RatePlans/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -334,12 +346,13 @@ export def "rate-plans update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://wireless.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/RatePlans/{sid}"))
-  let body = {"FriendlyName": $friendly_name, "UniqueName": $unique_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/RatePlans/{sid}"))
+  let req_body = {"FriendlyName": $friendly_name, "UniqueName": $unique_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Retrieve a list of Sim resources on your Account.
@@ -390,7 +403,7 @@ export def "sims delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://wireless.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/Sims/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Sims/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -413,7 +426,7 @@ export def "sims get" [
 ]: nothing -> record<account_sid: string, commands_callback_method: string, commands_callback_url: string, date_created: string, date_updated: string, e_id: string, friendly_name: string, iccid: string, ip_address: string, links: record, rate_plan_sid: string, reset_status: string, sid: string, sms_fallback_method: string, sms_fallback_url: string, sms_method: string, sms_url: string, status: string, unique_name: string, url: string, voice_fallback_method: string, voice_fallback_url: string, voice_method: string, voice_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://wireless.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/Sims/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Sims/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -455,12 +468,13 @@ export def "sims update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://wireless.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/Sims/{sid}"))
-  let body = {"AccountSid": $account_sid, "CallbackMethod": $callback_method, "CallbackUrl": $callback_url, "CommandsCallbackMethod": $commands_callback_method, "CommandsCallbackUrl": $commands_callback_url, "FriendlyName": $friendly_name, "RatePlan": $rate_plan, "ResetStatus": $reset_status, "SmsFallbackMethod": $sms_fallback_method, "SmsFallbackUrl": $sms_fallback_url, "SmsMethod": $sms_method, "SmsUrl": $sms_url, "Status": $status, "UniqueName": $unique_name, "VoiceFallbackMethod": $voice_fallback_method, "VoiceFallbackUrl": $voice_fallback_url, "VoiceMethod": $voice_method, "VoiceUrl": $voice_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Sims/{sid}"))
+  let req_body = {"AccountSid": $account_sid, "CallbackMethod": $callback_method, "CallbackUrl": $callback_url, "CommandsCallbackMethod": $commands_callback_method, "CommandsCallbackUrl": $commands_callback_url, "FriendlyName": $friendly_name, "RatePlan": $rate_plan, "ResetStatus": $reset_status, "SmsFallbackMethod": $sms_fallback_method, "SmsFallbackUrl": $sms_fallback_url, "SmsMethod": $sms_method, "SmsUrl": $sms_url, "Status": $status, "UniqueName": $unique_name, "VoiceFallbackMethod": $voice_fallback_method, "VoiceFallbackUrl": $voice_fallback_url, "VoiceMethod": $voice_method, "VoiceUrl": $voice_url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # GET /v1/Sims/{SimSid}/DataSessions
@@ -483,7 +497,7 @@ export def "sims-data-sessions list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://wireless.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({sim_sid: $sim_sid} | format pattern "/v1/Sims/{sim_sid}/DataSessions") $qp)
+  let full_url = (build-url $base ({sim_sid: (encode-path-segment $sim_sid)} | format pattern "/v1/Sims/{sim_sid}/DataSessions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -512,7 +526,7 @@ export def "sims-usage-records list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://wireless.twilio.com")
   let qp = [(serialize-qp "End" $end "scalar") (serialize-qp "Start" $start "scalar") (serialize-qp "Granularity" $granularity "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({sim_sid: $sim_sid} | format pattern "/v1/Sims/{sim_sid}/UsageRecords") $qp)
+  let full_url = (build-url $base ({sim_sid: (encode-path-segment $sim_sid)} | format pattern "/v1/Sims/{sim_sid}/UsageRecords") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

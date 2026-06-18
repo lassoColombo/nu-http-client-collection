@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -110,7 +119,7 @@ export def "company-announcement get" [
 ]: nothing -> table<countryCode: string, id: string, registrationNumber: string, structured: string, text: string, time: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/company/announcement/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/company/announcement/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -120,7 +129,7 @@ export def "company-announcement get" [
 #
 # POST /api/v1/company/deepsearch/isin
 # operationId: CompanyDeepsearchISIN
-export def "company-deepsearch-isin post" [
+export def "company-deepsearch-isin create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -135,11 +144,12 @@ export def "company-deepsearch-isin post" [
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/company/deepsearch/isin")
-  let body = {"isin": $isin} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"isin": $isin} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Retrieves a list of companies
@@ -161,7 +171,7 @@ export def "company-deepsearch-lei get" [
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({number: $number} | format pattern "/api/v1/company/deepsearch/lei/{number}") $qp)
+  let full_url = (build-url $base ({number: (encode-path-segment $number)} | format pattern "/api/v1/company/deepsearch/lei/{number}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -185,7 +195,7 @@ export def "company-deepsearch-name get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({country: $country, name: $name} | format pattern "/api/v1/company/deepsearch/name/{country}/{name}"))
+  let full_url = (build-url $base ({country: (encode-path-segment $country), name: (encode-path-segment $name)} | format pattern "/api/v1/company/deepsearch/name/{country}/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -209,7 +219,7 @@ export def "company-deepsearch-number get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({country: $country, number: $number} | format pattern "/api/v1/company/deepsearch/number/{country}/{number}"))
+  let full_url = (build-url $base ({country: (encode-path-segment $country), number: (encode-path-segment $number)} | format pattern "/api/v1/company/deepsearch/number/{country}/{number}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -219,7 +229,7 @@ export def "company-deepsearch-number get" [
 #
 # GET /api/v1/company/monitoring/changeTypes
 # operationId: CompanyMonitorChangeTypesList
-export def "company-monitoring-change-types list" [
+export def "company-monitoring-change-types list-monitor" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -241,7 +251,7 @@ export def "company-monitoring-change-types list" [
 #
 # GET /api/v1/company/monitoring/list
 # operationId: CompanyMonitorList
-export def "company-monitoring-list list" [
+export def "company-monitoring-list list-monitor" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -263,7 +273,7 @@ export def "company-monitoring-list list" [
 #
 # GET /api/v1/company/monitoring/list/{id}
 # operationId: CompanyMonitorId
-export def "company-monitoring-list get" [
+export def "company-monitoring-list get-monitor" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -276,7 +286,7 @@ export def "company-monitoring-list get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/company/monitoring/list/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/company/monitoring/list/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -286,7 +296,7 @@ export def "company-monitoring-list get" [
 #
 # POST /api/v1/company/monitoring/register/{id}
 # operationId: CompanyMonitorRegister
-export def "company-monitoring-register create" [
+export def "company-monitoring-register create-monitor" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -302,19 +312,20 @@ export def "company-monitoring-register create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/company/monitoring/register/{id}"))
-  let body = {"callbackUrl": $callback_url, "changeType": $change_type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/company/monitoring/register/{id}"))
+  let req_body = {"callbackUrl": $callback_url, "changeType": $change_type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Deactivates an active notification
 #
 # POST /api/v1/company/monitoring/unregister/{id}
 # operationId: CompanyMonitorUnregister
-export def "company-monitoring-unregister delete" [
+export def "company-monitoring-unregister delete-monitor" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -327,7 +338,7 @@ export def "company-monitoring-unregister delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/company/monitoring/unregister/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/company/monitoring/unregister/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -372,7 +383,7 @@ export def "company-notification-list get" [
 ]: nothing -> table<callbackCount: int, callbackUrl: string, created: any, monitorStatus: string, notificationId: string, subjectId: string> {
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/company/notification/list/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/company/notification/list/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -397,12 +408,13 @@ export def "company-notification-register create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/company/notification/register/{id}"))
-  let body = {"callbackUrl": $callback_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/company/notification/register/{id}"))
+  let req_body = {"callbackUrl": $callback_url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Unregister a company from Monitoring
@@ -422,7 +434,7 @@ export def "company-notification-unregister delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/company/notification/unregister/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/company/notification/unregister/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -432,7 +444,7 @@ export def "company-notification-unregister delete" [
 #
 # GET /api/v1/company/search/name/{country}/{name}
 # operationId: CompanySearchName
-export def "company-search-name get" [
+export def "company-search-name list" [
   country: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -448,7 +460,7 @@ export def "company-search-name get" [
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({country: $country, name: $name} | format pattern "/api/v1/company/search/name/{country}/{name}") $qp)
+  let full_url = (build-url $base ({country: (encode-path-segment $country), name: (encode-path-segment $name)} | format pattern "/api/v1/company/search/name/{country}/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -458,7 +470,7 @@ export def "company-search-name get" [
 #
 # GET /api/v1/company/search/number/{country}/{number}
 # operationId: CompanySearchNumber
-export def "company-search-number get" [
+export def "company-search-number list" [
   country: string
   number: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -474,7 +486,7 @@ export def "company-search-number get" [
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({country: $country, number: $number} | format pattern "/api/v1/company/search/number/{country}/{number}") $qp)
+  let full_url = (build-url $base ({country: (encode-path-segment $country), number: (encode-path-segment $number)} | format pattern "/api/v1/company/search/number/{country}/{number}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -484,7 +496,7 @@ export def "company-search-number get" [
 #
 # POST /api/v1/company/search/{country}
 # operationId: CompanyAlternativeSearch
-export def "company-search list" [
+export def "company-search list-alternative" [
   country: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -498,18 +510,19 @@ export def "company-search list" [
   --name: string # Company name
   --number: string # Company registration number
   --phone: string # Company contact phone number
-  --body-url: string # Company url
+  --url: string # Company url
   --vat: string # Company VAT number
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({country: $country} | format pattern "/api/v1/company/search/{country}"))
-  let body = {"address": $address, "name": $name, "number": $number, "phone": $phone, "url": $body_url, "vat": $vat} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({country: (encode-path-segment $country)} | format pattern "/api/v1/company/search/{country}"))
+  let req_body = {"address": $address, "name": $name, "number": $number, "phone": $phone, "url": $url, "vat": $vat} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Retrieves company announcements
@@ -533,7 +546,7 @@ export def "company-announcements get" [
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "data" $data "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/company/{id}/announcements") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/company/{id}/announcements") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -559,7 +572,7 @@ export def "company-super get" [
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id, country: $country} | format pattern "/api/v1/company/{id}/super/{country}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id), country: (encode-path-segment $country)} | format pattern "/api/v1/company/{id}/super/{country}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -586,7 +599,7 @@ export def "company get" [
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "check_stock_listing" $check_stock_listing "scalar") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id, dataset: $dataset} | format pattern "/api/v1/company/{id}/{dataset}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id), dataset: (encode-path-segment $dataset)} | format pattern "/api/v1/company/{id}/{dataset}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -630,7 +643,7 @@ export def "ein-verification-comprehensive-check get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --ein: string # Nine letter EIN number with or without hyphens (format: string)
-]: nothing -> record<ein: string, matched_ein_companies: any, timestamp: float, validationStatus: bool> {
+]: nothing -> record<ein: string, matched_ein_companies: table<address: list, company_score: float, company_score_explanation: string, confidence_score: float, confidence_score_explanation: string, dba_score: string, dba_score_explanation: string, ein: string, formattedAddress: list, irs_score: string, irs_score_explanation: string, name: string, provided_status: string, provided_status_explanation: string>, timestamp: float, validationStatus: bool> {
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ein" $ein "scalar")] | flatten | str join "&"
@@ -671,7 +684,7 @@ export def "ein-verification-lookup get" [
 #
 # POST /api/v1/iban-verification/check-iban
 # operationId: IbanBasic
-export def "iban-verification-check-iban post" [
+export def "iban-verification-check-iban create-basic" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -686,18 +699,19 @@ export def "iban-verification-check-iban post" [
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/iban-verification/check-iban")
-  let body = {"ibanNumber": $iban_number} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"ibanNumber": $iban_number} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Checks validity of an IBAN number
 #
 # POST /api/v1/iban-verification/comprehensive-check-iban
 # operationId: IbanComprehensive
-export def "iban-verification-comprehensive-check-iban post" [
+export def "iban-verification-comprehensive-check-iban create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -707,23 +721,24 @@ export def "iban-verification-comprehensive-check-iban post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   iban_number: string # IBAN number to validate (e.g. AT483200000012345864)
-]: any -> any {
+]: any -> record<valid: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/iban-verification/comprehensive-check-iban")
-  let body = {"ibanNumber": $iban_number} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"ibanNumber": $iban_number} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Verifies a NIF number
 #
 # POST /api/v1/nif-verification/basic-check/{country}
 # operationId: NifBasic
-export def "nif-verification-basic-check post" [
+export def "nif-verification-basic-check create" [
   country: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -740,19 +755,20 @@ export def "nif-verification-basic-check post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({country: $country} | format pattern "/api/v1/nif-verification/basic-check/{country}"))
-  let body = {"companyAddress": $company_address, "companyName": $company_name, "nifNumber": $nif_number} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({country: (encode-path-segment $country)} | format pattern "/api/v1/nif-verification/basic-check/{country}"))
+  let req_body = {"companyAddress": $company_address, "companyName": $company_name, "nifNumber": $nif_number} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Verifies a NIF number and retrieves company data
 #
 # POST /api/v1/nif-verification/comprehensive-check/{country}
 # operationId: NifComprehensive
-export def "nif-verification-comprehensive-check post" [
+export def "nif-verification-comprehensive-check create" [
   country: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -769,19 +785,20 @@ export def "nif-verification-comprehensive-check post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({country: $country} | format pattern "/api/v1/nif-verification/comprehensive-check/{country}"))
-  let body = {"companyAddress": $company_address, "companyName": $company_name, "nifNumber": $nif_number} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({country: (encode-path-segment $country)} | format pattern "/api/v1/nif-verification/comprehensive-check/{country}"))
+  let req_body = {"companyAddress": $company_address, "companyName": $company_name, "nifNumber": $nif_number} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Retrieves a list of monitor entries
 #
 # GET /api/v1/pepsanction/monitor/list
 # operationId: PepMonitorList
-export def "pepsanction-monitor-list list" [
+export def "pepsanction-monitor-list list-pep" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -803,7 +820,7 @@ export def "pepsanction-monitor-list list" [
 #
 # POST /api/v1/pepsanction/monitor/unregister/{id}
 # operationId: PepMonitorUnregister
-export def "pepsanction-monitor-unregister delete" [
+export def "pepsanction-monitor-unregister delete-pep" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -816,7 +833,7 @@ export def "pepsanction-monitor-unregister delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/pepsanction/monitor/unregister/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/pepsanction/monitor/unregister/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -826,7 +843,7 @@ export def "pepsanction-monitor-unregister delete" [
 #
 # POST /api/v1/pepsanction/monitor/update/{id}
 # operationId: PepMonitorUpdate
-export def "pepsanction-monitor-update update" [
+export def "pepsanction-monitor-update update-pep" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -841,19 +858,20 @@ export def "pepsanction-monitor-update update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/pepsanction/monitor/update/{id}"))
-  let body = {"Webhook": $webhook} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/pepsanction/monitor/update/{id}"))
+  let req_body = {"Webhook": $webhook} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Orders a new Pep Sanction Check Report
 #
 # POST /api/v1/pepsanction/order/{type}/{search}
 # operationId: PepOrder
-export def "pepsanction-order post" [
+export def "pepsanction-order create-pep" [
   type: string
   search: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -884,19 +902,20 @@ export def "pepsanction-order post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({type: $type, search: $search} | format pattern "/api/v1/pepsanction/order/{type}/{search}"))
-  let body = {"Aliases": $aliases, "Country": $country, "DOB": $dob, "FamilyName": $family_name, "Filters": $filters, "GivenName": $given_name, "LEI": $lei, "Locale": $locale, "Medialists": $medialists, "MiddleName": $middle_name, "Monitoring": $monitoring, "Peplists": $peplists, "Region": $region, "SmartMatch": $smart_match, "Watchlists": $watchlists, "Webhook": $webhook} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({type: (encode-path-segment $type), search: (encode-path-segment $search)} | format pattern "/api/v1/pepsanction/order/{type}/{search}"))
+  let req_body = {"Aliases": $aliases, "Country": $country, "DOB": $dob, "FamilyName": $family_name, "Filters": $filters, "GivenName": $given_name, "LEI": $lei, "Locale": $locale, "Medialists": $medialists, "MiddleName": $middle_name, "Monitoring": $monitoring, "Peplists": $peplists, "Region": $region, "SmartMatch": $smart_match, "Watchlists": $watchlists, "Webhook": $webhook} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Returns a json or pdf report
 #
 # GET /api/v1/pepsanction/retrieve/{id}
 # operationId: PepRetrieve
-export def "pepsanction-retrieve get" [
+export def "pepsanction-retrieve get-pep" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -910,11 +929,11 @@ export def "pepsanction-retrieve get" [
 ]: nothing -> record<listsChecked: string, results: record<Excerpts: string, ResultsURL: string, SearchType: string, SourceAgency: string, SourceEntity: string, SourceID: int, SourceName: string, SourceType: string>, search: string, status: string, timestamp: any, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/pepsanction/retrieve/{id}"))
-  let extra_headers = {"accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/pepsanction/retrieve/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -936,7 +955,7 @@ export def "product-availability get" [
 ]: nothing -> record<availability: string, category: string, countryCode: string, description: string, hasOptions: bool, options: list<string>, price: float, provider: string, sku: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({sku: $sku, subject_id: $subject_id} | format pattern "/api/v1/product/availability/{sku}/{subject_id}"))
+  let full_url = (build-url $base ({sku: (encode-path-segment $sku), subject_id: (encode-path-segment $subject_id)} | format pattern "/api/v1/product/availability/{sku}/{subject_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -959,7 +978,7 @@ export def "product-catalog get" [
 ]: nothing -> record<countryCode: string, description: string, form: string, method: string, name: string, price: float, sku: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({country: $country} | format pattern "/api/v1/product/catalog/{country}"))
+  let full_url = (build-url $base ({country: (encode-path-segment $country)} | format pattern "/api/v1/product/catalog/{country}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -982,7 +1001,7 @@ export def "product-notifier get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({notifier_id: $notifier_id} | format pattern "/api/v1/product/notifier/{notifier_id}"))
+  let full_url = (build-url $base ({notifier_id: (encode-path-segment $notifier_id)} | format pattern "/api/v1/product/notifier/{notifier_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1007,7 +1026,7 @@ export def "product-notifier create" [
 ]: nothing -> record<callback: string, identity: string, lastCallTime: any, lastResponseCode: int, notifierType: string, productOrderIdentity: string> {
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({order_id: $order_id, type: $type, uri: $uri} | format pattern "/api/v1/product/notifier/{order_id}/{type}/{uri}"))
+  let full_url = (build-url $base ({order_id: (encode-path-segment $order_id), type: (encode-path-segment $type), uri: (encode-path-segment $uri)} | format pattern "/api/v1/product/notifier/{order_id}/{type}/{uri}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1017,7 +1036,7 @@ export def "product-notifier create" [
 #
 # POST /api/v1/product/order/concierge
 # operationId: ProductOrderConcierge
-export def "product-order-concierge post" [
+export def "product-order-concierge create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1044,18 +1063,19 @@ export def "product-order-concierge post" [
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/product/order/concierge")
-  let body = {"companyName": $company_name, "contactEmail": $contact_email, "contactPhone": $contact_phone, "costConfirmation": $cost_confirmation, "country": $country, "financialData": $financial_data, "historicInformation": $historic_information, "informationRequirements": $information_requirements, "locationInvestigation": $location_investigation, "priority": $priority, "registerData": $register_data, "registerNumber": $register_number, "subjectId": $subject_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"companyName": $company_name, "contactEmail": $contact_email, "contactPhone": $contact_phone, "costConfirmation": $cost_confirmation, "country": $country, "financialData": $financial_data, "historicInformation": $historic_information, "informationRequirements": $information_requirements, "locationInvestigation": $location_investigation, "priority": $priority, "registerData": $register_data, "registerNumber": $register_number, "subjectId": $subject_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Places a UBO order
 #
 # POST /api/v1/product/order/ubo
 # operationId: ProductOrderUbo
-export def "product-order-ubo post" [
+export def "product-order-ubo create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1075,18 +1095,19 @@ export def "product-order-ubo post" [
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/product/order/ubo")
-  let body = {"callbackUrl": $callback_url, "credits": $credits, "includeDocs": $include_docs, "levels": $levels, "strategy": $strategy, "subjectId": $subject_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"callbackUrl": $callback_url, "credits": $credits, "includeDocs": $include_docs, "levels": $levels, "strategy": $strategy, "subjectId": $subject_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Places a product order
 #
 # POST /api/v1/product/order/{sku}/{option}/{subjectId}
 # operationId: ProductOrderWithOption
-export def "product-order post-by-sku-option-subjectId" [
+export def "product-order create-by-sku-option-subjectId" [
   sku: string
   option: string
   subject_id: string
@@ -1101,7 +1122,7 @@ export def "product-order post-by-sku-option-subjectId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({sku: $sku, option: $option, subject_id: $subject_id} | format pattern "/api/v1/product/order/{sku}/{option}/{subject_id}"))
+  let full_url = (build-url $base ({sku: (encode-path-segment $sku), option: (encode-path-segment $option), subject_id: (encode-path-segment $subject_id)} | format pattern "/api/v1/product/order/{sku}/{option}/{subject_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1111,7 +1132,7 @@ export def "product-order post-by-sku-option-subjectId" [
 #
 # POST /api/v1/product/order/{sku}/{subjectId}
 # operationId: ProductOrder
-export def "product-order post-by-sku-subjectId" [
+export def "product-order create-by-sku-subjectId" [
   sku: string
   subject_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1125,7 +1146,7 @@ export def "product-order post-by-sku-subjectId" [
 ]: nothing -> record<identity: string, option: string, ordered: any, owner: string, price: float, sku: string, status: string, subjectId: string, subjectValue: string> {
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({sku: $sku, subject_id: $subject_id} | format pattern "/api/v1/product/order/{sku}/{subject_id}"))
+  let full_url = (build-url $base ({sku: (encode-path-segment $sku), subject_id: (encode-path-segment $subject_id)} | format pattern "/api/v1/product/order/{sku}/{subject_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1148,7 +1169,7 @@ export def "product-search list" [
 ]: nothing -> table<availability: string, category: string, countryCode: string, description: string, hasOptions: bool, options: list<string>, price: float, provider: string, sku: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({subject_id: $subject_id} | format pattern "/api/v1/product/search/{subject_id}"))
+  let full_url = (build-url $base ({subject_id: (encode-path-segment $subject_id)} | format pattern "/api/v1/product/search/{subject_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1171,7 +1192,7 @@ export def "product-status get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({order_id: $order_id} | format pattern "/api/v1/product/status/{order_id}"))
+  let full_url = (build-url $base ({order_id: (encode-path-segment $order_id)} | format pattern "/api/v1/product/status/{order_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1181,7 +1202,7 @@ export def "product-status get" [
 #
 # POST /api/v1/product/update/{action}/{orderId}
 # operationId: ProductUpdateAction
-export def "product-update post" [
+export def "product-update update" [
   action: string
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1197,19 +1218,20 @@ export def "product-update post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({action: $action, order_id: $order_id} | format pattern "/api/v1/product/update/{action}/{order_id}"))
-  let body = {"credits": $credits} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({action: (encode-path-segment $action), order_id: (encode-path-segment $order_id)} | format pattern "/api/v1/product/update/{action}/{order_id}"))
+  let req_body = {"credits": $credits} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Retrieves the result of an order
 #
 # GET /api/v1/product/{orderId}
 # operationId: ProductRetrieve
-export def "product retrieve" [
+export def "product get" [
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1222,7 +1244,7 @@ export def "product retrieve" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({order_id: $order_id} | format pattern "/api/v1/product/{order_id}"))
+  let full_url = (build-url $base ({order_id: (encode-path-segment $order_id)} | format pattern "/api/v1/product/{order_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1373,7 +1395,7 @@ export def "tin-verification-name-lookup get" [
 #
 # POST /api/v1/vat-verification/basic-check/{country}
 # operationId: VatBasic
-export def "vat-verification-basic-check post" [
+export def "vat-verification-basic-check create" [
   country: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1391,19 +1413,20 @@ export def "vat-verification-basic-check post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({country: $country} | format pattern "/api/v1/vat-verification/basic-check/{country}"))
-  let body = {"companyAddress": $company_address, "companyName": $company_name, "companyNumber": $company_number, "vatNumber": $vat_number} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({country: (encode-path-segment $country)} | format pattern "/api/v1/vat-verification/basic-check/{country}"))
+  let req_body = {"companyAddress": $company_address, "companyName": $company_name, "companyNumber": $company_number, "vatNumber": $vat_number} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Returns a verification result and company data
 #
 # POST /api/v1/vat-verification/comprehensive-check/{country}
 # operationId: VatComprehensive
-export def "vat-verification-comprehensive-check post" [
+export def "vat-verification-comprehensive-check create" [
   country: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1421,19 +1444,20 @@ export def "vat-verification-comprehensive-check post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({country: $country} | format pattern "/api/v1/vat-verification/comprehensive-check/{country}"))
-  let body = {"companyAddress": $company_address, "companyName": $company_name, "companyNumber": $company_number, "vatNumber": $vat_number} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({country: (encode-path-segment $country)} | format pattern "/api/v1/vat-verification/comprehensive-check/{country}"))
+  let req_body = {"companyAddress": $company_address, "companyName": $company_name, "companyNumber": $company_number, "vatNumber": $vat_number} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Returns a level two verification result
 #
 # POST /api/v1/vat-verification/leveltwo-check/{country}
 # operationId: VatLevelTwo
-export def "vat-verification-leveltwo-check post" [
+export def "vat-verification-leveltwo-check create-level-two" [
   country: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1449,19 +1473,20 @@ export def "vat-verification-leveltwo-check post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({country: $country} | format pattern "/api/v1/vat-verification/leveltwo-check/{country}"))
-  let body = {"confirmation": $confirmation, "vatNumber": $vat_number} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({country: (encode-path-segment $country)} | format pattern "/api/v1/vat-verification/leveltwo-check/{country}"))
+  let req_body = {"confirmation": $confirmation, "vatNumber": $vat_number} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Returns a list of vat numbers with additional data
 #
 # POST /api/v1/vat-verification/lookup/{country}
 # operationId: VatLookup
-export def "vat-verification-lookup post" [
+export def "vat-verification-lookup create" [
   country: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1477,10 +1502,11 @@ export def "vat-verification-lookup post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({country: $country} | format pattern "/api/v1/vat-verification/lookup/{country}"))
-  let body = {"address": $address, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({country: (encode-path-segment $country)} | format pattern "/api/v1/vat-verification/lookup/{country}"))
+  let req_body = {"address": $address, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }

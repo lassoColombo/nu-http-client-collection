@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -72,7 +81,7 @@ def accept-completer [] { ["application/json" "application/xml"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "company-basicsearch basicCompanySearch" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "company-basicsearch list-basic" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -96,7 +105,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/company/basicsearch
 # operationId: basicCompanySearch
-export def "company-basicsearch basicCompanySearch" [
+export def "company-basicsearch list-basic" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -107,7 +116,7 @@ export def "company-basicsearch basicCompanySearch" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --q: string # Search term
-  --fields: list # Fields to be searched - name, website, ticker, permid. If not specfied, will be searched against all fields
+  --fields: list<string> # Fields to be searched - name, website, ticker, permid. If not specfied, will be searched against all fields
   --limit: string # Number of results to be displayed - 10 (by default, if not specified) to 30
   --format: string@format-completer # Format of the response content - json (by default if not specified), xml (default: json)
 ]: nothing -> record<company: table<company_id: int, hq_address: record, name: string, perm_id: string, profile_url: string, short_name: string, website: string>> {
@@ -139,7 +148,7 @@ export def "company-competitor-id get" [
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: $company_id} | format pattern "/v1/company/competitor/id/{company_id}") $qp)
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/v1/company/competitor/id/{company_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -164,7 +173,7 @@ export def "company-competitor-url get" [
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({website: $website} | format pattern "/v1/company/competitor/url/{website}") $qp)
+  let full_url = (build-url $base ({website: (encode-path-segment $website)} | format pattern "/v1/company/competitor/url/{website}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -190,7 +199,7 @@ export def "company-competitorpremium-id get" [
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pagination_id" $pagination_id "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: $company_id} | format pattern "/v1/company/competitorpremium/id/{company_id}") $qp)
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/v1/company/competitorpremium/id/{company_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -216,7 +225,7 @@ export def "company-competitorpremium-url get" [
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pagination_id" $pagination_id "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({website: $website} | format pattern "/v1/company/competitorpremium/url/{website}") $qp)
+  let full_url = (build-url $base ({website: (encode-path-segment $website)} | format pattern "/v1/company/competitorpremium/url/{website}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -226,7 +235,7 @@ export def "company-competitorpremium-url get" [
 #
 # GET /v1/company/fuzzysearch
 # operationId: fuzzyCompanySearch
-export def "company-fuzzysearch fuzzyCompanySearch" [
+export def "company-fuzzysearch list-fuzzy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -237,7 +246,7 @@ export def "company-fuzzysearch fuzzyCompanySearch" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --q: string # Search term
-  --fields: list # Fields to be searched - name, website, ticker, permid, address, phone. Each field and its corresponding value has to be specified
+  --fields: list<string> # Fields to be searched - name, website, ticker, permid, address, phone. Each field and its corresponding value has to be specified
   --limit: string # Number of results to be displayed - 10 (by default, if not specified) to 30
   --format: string@format-completer # Format of the response content - json (by default if not specified), xml (default: json)
 ]: nothing -> any {
@@ -269,7 +278,7 @@ export def "company-id get" [
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: $company_id} | format pattern "/v1/company/id/{company_id}") $qp)
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/v1/company/id/{company_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -290,7 +299,7 @@ export def "company-search list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --q: string # Search term
-  --fields: list # Fields to be searched - name, website, ticker. If not specified, will be searched against all fields
+  --fields: list<string> # Fields to be searched - name, website, ticker. If not specified, will be searched against all fields
   --limit: string # Number of results to be displayed - 10 (by default, if not specified) to 30
   --format: string@format-completer # Format of the response content - json (by default if not specified), xml (default: json)
 ]: nothing -> record<feeds: table<category: string, company: record, enclosure_image: string, feed_date: string, id: string, owler_feed_url: string, publisher_logo: string, publisher_name: string, source_url: string, title: string>, pagination_id: string> {
@@ -322,7 +331,7 @@ export def "company-url get" [
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({website: $website} | format pattern "/v1/company/url/{website}") $qp)
+  let full_url = (build-url $base ({website: (encode-path-segment $website)} | format pattern "/v1/company/url/{website}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -347,7 +356,7 @@ export def "companypremium-id get" [
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: $company_id} | format pattern "/v1/companypremium/id/{company_id}") $qp)
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/v1/companypremium/id/{company_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -372,7 +381,7 @@ export def "companypremium-url get" [
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({website: $website} | format pattern "/v1/companypremium/url/{website}") $qp)
+  let full_url = (build-url $base ({website: (encode-path-segment $website)} | format pattern "/v1/companypremium/url/{website}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -392,10 +401,10 @@ export def "feed get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --format: string@format-completer # Format of the response content - json (by default if not specified), xml (default: json)
-  --company-id: list # Company Ids separated by comma (Maximum of 150 Company Ids)
+  --company-id: list<string> # Company Ids separated by comma (Maximum of 150 Company Ids)
   --limit: string # Number of results to be displayed - 10 (by default, if not specified) to 100 (default: 10)
   --pagination-id: string # Pass pagination_id as blank in the first API request. The API response will return the latest feeds along with the next pagination_id which can be passed in the subsequent API request to get the next set of feeds. Repeat this process until needed or till the pagination_id returned is blank (default: *)
-  --category: list # Categories separated by comma. If not specified, will search against all categories
+  --category: list<string> # Categories separated by comma. If not specified, will search against all categories
 ]: nothing -> record<feeds: table<category: string, company: record, enclosure_image: string, feed_date: string, id: string, owler_feed_url: string, publisher_logo: string, publisher_name: string, source_url: string, title: string>, pagination_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
@@ -420,10 +429,10 @@ export def "feed-url get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --format: string@format-completer # Format of the response content - json (by default if not specified), xml (default: json)
-  --domain: list # Company Websites separated by comma (Maximum of 10 Company Websites)
+  --domain: list<string> # Company Websites separated by comma (Maximum of 10 Company Websites)
   --limit: string # Number of results to be displayed - 10 (by default, if not specified) to 100 (default: 10)
   --pagination-id: string # Pass pagination_id as blank in the first API request. The API response will return the latest feeds along with the next pagination_id which can be passed in the subsequent API request to get the next set of feeds. Repeat this process until needed or till the pagination_id returned is blank (default: *)
-  --category: list # Categories separated by comma. If not specified, will search against all categories
+  --category: list<string> # Categories separated by comma. If not specified, will search against all categories
 ]: nothing -> record<feeds: table<category: string, company: record, enclosure_image: string, feed_date: string, id: string, owler_feed_url: string, publisher_logo: string, publisher_name: string, source_url: string, title: string>, pagination_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)

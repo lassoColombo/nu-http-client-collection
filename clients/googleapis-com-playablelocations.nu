@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -71,7 +80,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v3-log-impressions playablelocationslogImpressions" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v3-log-impressions create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -97,7 +106,7 @@ export def commands []: nothing -> table {
 # operationId: playablelocations.logImpressions
 # --clientInfo shape: {apiClient?: string, applicationId?: string, applicationVersion?: string, deviceModel?: string, languageCode?: string, operatingSystem?: string, operatingSystemBuild?: string, platform?: "PLATFORM_UNSPECIFIED"|"EDITOR"|"MAC_OS"|"WINDOWS"|"LINUX"|"ANDROID"|"IOS"|"WEB_GL"}
 # --impressions item shape: {gameObjectType?: int, impressionType?: "IMPRESSION_TYPE_UNSPECIFIED"|"PRESENTED"|"INTERACTED", locationName?: string}
-export def "v3-log-impressions playablelocationslogImpressions" [
+export def "v3-log-impressions create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -126,11 +135,11 @@ export def "v3-log-impressions playablelocationslogImpressions" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3:logImpressions" $qp)
-  let body = {"clientInfo": $client_info, "impressions": $impressions, "requestId": $request_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"clientInfo": $client_info, "impressions": $impressions, "requestId": $request_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Logs bad playable location reports submitted by players. Reports are not partially saved; either all reports are saved and this request succeeds, or no reports are saved, and this request fails.
@@ -138,8 +147,8 @@ export def "v3-log-impressions playablelocationslogImpressions" [
 # POST /v3:logPlayerReports
 # operationId: playablelocations.logPlayerReports
 # --clientInfo shape: {apiClient?: string, applicationId?: string, applicationVersion?: string, deviceModel?: string, languageCode?: string, operatingSystem?: string, operatingSystemBuild?: string, platform?: "PLATFORM_UNSPECIFIED"|"EDITOR"|"MAC_OS"|"WINDOWS"|"LINUX"|"ANDROID"|"IOS"|"WEB_GL"}
-# --playerReports item shape: {languageCode?: string, locationName?: string, reasonDetails?: string, reasons?: list}
-export def "v3-log-player-reports playablelocationslogPlayerReports" [
+# --playerReports item shape: {languageCode?: string, locationName?: string, reasonDetails?: string, reasons?: list<string>}
+export def "v3-log-player-reports create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -160,7 +169,7 @@ export def "v3-log-player-reports playablelocationslogPlayerReports" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --client-info: record # Client information. — shape: {apiClient?: string, applicationId?: string, applicationVersion?: string, deviceModel?: string, languageCode?: string, operatingSystem?: string, operatingSystemBuild?: string, platform?: "PLATFORM_UNSPECIFIED"|"EDITOR"|"MAC_OS"|"WINDOWS"|"LINUX"|"ANDROID"|"IOS"|"WEB_GL"}
-  --player-reports: list # Required. Player reports. The maximum number of player reports that you can log at once is 50. — item shape: {languageCode?: string, locationName?: string, reasonDetails?: string, reasons?: list}
+  --player-reports: list # Required. Player reports. The maximum number of player reports that you can log at once is 50. — item shape: {languageCode?: string, locationName?: string, reasonDetails?: string, reasons?: list<string>}
   --request-id: string # Required. A string that uniquely identifies the log player reports request. This allows you to detect duplicate requests. We recommend that you use UUIDs for this value. The value must not exceed 50 characters. You should reuse the `request_id` only when retrying a request in the case of a failure. In that case, the request must be identical to the one that failed.
 ]: any -> record {
   let input = $in
@@ -168,11 +177,11 @@ export def "v3-log-player-reports playablelocationslogPlayerReports" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3:logPlayerReports" $qp)
-  let body = {"clientInfo": $client_info, "playerReports": $player_reports, "requestId": $request_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"clientInfo": $client_info, "playerReports": $player_reports, "requestId": $request_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns a set of playable locations that lie within a specified area, that satisfy optional filter criteria. Note: Identical `SamplePlayableLocations` requests can return different results as the state of the world changes over time.
@@ -181,7 +190,7 @@ export def "v3-log-player-reports playablelocationslogPlayerReports" [
 # operationId: playablelocations.samplePlayableLocations
 # --areaFilter shape: {s2CellId?: string}
 # --criteria item shape: {fieldsToReturn?: string, filter?: record, gameObjectType?: int}
-export def "v3-sample-playable-locations playablelocationssamplePlayableLocations" [
+export def "v3-sample-playable-locations create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -209,9 +218,9 @@ export def "v3-sample-playable-locations playablelocationssamplePlayableLocation
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3:samplePlayableLocations" $qp)
-  let body = {"areaFilter": $area_filter, "criteria": $criteria} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"areaFilter": $area_filter, "criteria": $criteria} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

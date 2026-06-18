@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -102,12 +111,12 @@ export def "extractor get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-url: string # url
+  --url: string # url
 ]: nothing -> record<error: string, exceptionType: string, extractorData: record, pageData: record, runtimeConfigId: string, sequenceNumber: int, timestamp: int, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-_apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "url" $qp_url "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({extractor_id: $extractor_id} | format pattern "/extractor/{extractor_id}") $qp)
+  let qp = [(serialize-qp "url" $url "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({extractor_id: (encode-path-segment $extractor_id)} | format pattern "/extractor/{extractor_id}") $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -106,13 +115,13 @@ export def "oembed get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-url: string # URL of a status
+  --url: string # URL of a status
   --maxwidth: int # width of the iframe. Defaults to 400 (default: 400)
   --maxheight: int # height of the iframe. Defaults to null
 ]: nothing -> record<author_name: string, author_url: string, blurhash: string, description: string, height: int, html: string, image: string, provider_name: string, provider_url: string, title: string, type: string, url: string, width: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "url" $qp_url "scalar") (serialize-qp "maxwidth" $maxwidth "scalar") (serialize-qp "maxheight" $maxheight "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "url" $url "scalar") (serialize-qp "maxwidth" $maxwidth "scalar") (serialize-qp "maxheight" $maxheight "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/oembed" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -146,7 +155,7 @@ export def "proofs get" [
 # Creates a user and account records. Returns an account access token for the app that initiated the request. The app should save this token for later, and should wait for the user to confirm their account by clicking a link in their email inbox.
 #
 # POST /api/v1/accounts
-export def "accounts post" [
+export def "accounts create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -161,10 +170,11 @@ export def "accounts post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/accounts")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/form-data" $req_body
 }
 
 # Sets a private note on a user.
@@ -179,7 +189,7 @@ export def "accounts-relationships get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: list # Array of account IDs to check
+  --id: list<string> # Array of account IDs to check
 ]: nothing -> table<blocked_by: bool, blocking: bool, domain_blocking: bool, endorsed: bool, followed_by: bool, following: bool, id: string, muting: bool, muting_notifications: bool, note: string, notifying: bool, requested: bool, showing_reblogs: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -219,7 +229,7 @@ export def "accounts-search get" [
 # Update the user's display and preferences.
 #
 # PATCH /api/v1/accounts/update_credentials
-export def "accounts-update-credentials patch" [
+export def "accounts-update-credentials update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -234,10 +244,11 @@ export def "accounts-update-credentials patch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/accounts/update_credentials")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/form-data" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/form-data" $req_body
 }
 
 # Test to make sure that the user token works.
@@ -275,7 +286,7 @@ export def "accounts get" [
 ]: nothing -> record<acct: string, avatar: string, avatar_static: string, bot: bool, created_at: string, discoverable: bool, display_name: string, emojis: table<category: string, shortcode: string, static_url: string, url: string, visible_in_picker: bool>, fields: table<name: string, value: string, verified_at: string>, followers_count: int, following_count: int, header: string, header_static: string, id: string, last_status_at: string, locked: bool, moved: any, mute_expires_at: string, note: string, source: record<fields: list<record>, follow_requests_count: int, language: string, note: string, privacy: string, sensitive: bool>, statuses_count: int, suspended: bool, url: string, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/accounts/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/accounts/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -284,7 +295,7 @@ export def "accounts get" [
 # Block the given account. Clients should filter statuses from this account if received (e.g. due to a boost in the Home timeline).
 #
 # POST /api/v1/accounts/{id}/block
-export def "accounts-block post" [
+export def "accounts-block create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -297,7 +308,7 @@ export def "accounts-block post" [
 ]: nothing -> record<blocked_by: bool, blocking: bool, domain_blocking: bool, endorsed: bool, followed_by: bool, following: bool, id: string, muting: bool, muting_notifications: bool, note: string, notifying: bool, requested: bool, showing_reblogs: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/accounts/{id}/block"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/accounts/{id}/block"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -319,7 +330,7 @@ export def "accounts-featured-tags get" [
 ]: nothing -> table<id: string, last_status_at: string, name: string, statuses_count: int, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/accounts/{id}/featured_tags"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/accounts/{id}/featured_tags"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -328,7 +339,7 @@ export def "accounts-featured-tags get" [
 # Follow the given account. Can also be used to update whether to show reblogs or enable notifications.
 #
 # POST /api/v1/accounts/{id}/follow
-export def "accounts-follow post" [
+export def "accounts-follow create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -343,11 +354,12 @@ export def "accounts-follow post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/accounts/{id}/follow"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/accounts/{id}/follow"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/form-data" $req_body
 }
 
 # Accounts which follow the given account, if network is not hidden by the account owner.
@@ -370,7 +382,7 @@ export def "accounts-followers get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "max_id" $max_id "scalar") (serialize-qp "since_id" $since_id "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/accounts/{id}/followers") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/accounts/{id}/followers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -396,7 +408,7 @@ export def "accounts-following get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "max_id" $max_id "scalar") (serialize-qp "since_id" $since_id "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/accounts/{id}/following") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/accounts/{id}/following") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -418,7 +430,7 @@ export def "accounts-identity-proofs get" [
 ]: nothing -> table<profile_url: string, proof_url: string, provider: string, provider_username: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/accounts/{id}/identity_proofs"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/accounts/{id}/identity_proofs"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -440,7 +452,7 @@ export def "accounts-lists get" [
 ]: nothing -> table<id: string, replies_policy: string, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/accounts/{id}/lists"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/accounts/{id}/lists"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -449,7 +461,7 @@ export def "accounts-lists get" [
 # Mute the given account. Clients should filter statuses and notifications from this account, if received (e.g. due to a boost in the Home timeline).
 #
 # POST /api/v1/accounts/{id}/mute
-export def "accounts-mute post" [
+export def "accounts-mute create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -464,17 +476,18 @@ export def "accounts-mute post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/accounts/{id}/mute"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/accounts/{id}/mute"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/form-data" $req_body
 }
 
 # Sets a private note on a user.
 #
 # POST /api/v1/accounts/{id}/note
-export def "accounts-note post" [
+export def "accounts-note create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -489,17 +502,18 @@ export def "accounts-note post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/accounts/{id}/note"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/accounts/{id}/note"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/form-data" $req_body
 }
 
 # Add the given account to the user's featured profiles. (Featured profiles are currently shown on the user's own public profile.)
 #
 # POST /api/v1/accounts/{id}/pin
-export def "accounts-pin post" [
+export def "accounts-pin create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -512,7 +526,7 @@ export def "accounts-pin post" [
 ]: nothing -> record<blocked_by: bool, blocking: bool, domain_blocking: bool, endorsed: bool, followed_by: bool, following: bool, id: string, muting: bool, muting_notifications: bool, note: string, notifying: bool, requested: bool, showing_reblogs: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/accounts/{id}/pin"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/accounts/{id}/pin"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -534,7 +548,7 @@ export def "accounts-statuses get" [
 ]: nothing -> table<account: record<acct: string, avatar: string, avatar_static: string, bot: bool, created_at: string, discoverable: bool, display_name: string, emojis: list, fields: list, followers_count: int, following_count: int, header: string, header_static: string, id: string, last_status_at: string, locked: bool, moved: any, mute_expires_at: string, note: string, source: record, statuses_count: int, suspended: bool, url: string, username: string>, application: record<client_id: string, client_secret: string, name: string, vapid_key: string, website: string>, bookmarked: bool, card: record<author_name: string, author_url: string, blurhash: string, description: string, height: int, html: string, image: string, provider_name: string, provider_url: string, title: string, type: string, url: string, width: int>, content: string, created_at: string, emojis: list<record>, favourited: bool, favourites_count: int, id: string, in_reply_to_account_id: string, in_reply_to_id: string, language: string, media_attachments: list<record>, mentions: list<record>, muted: bool, pinned: bool, poll: record<emojis: list, expired: bool, expires_at: string, id: string, multiple: bool, options: list, own_votes: list, voted: bool, voters_count: int, votes_count: int>, reblog: any, reblogged: bool, reblogs_count: int, replies_count: int, sensitive: bool, spoiler_text: string, tags: list<record>, text: string, uri: string, url: string, visibility: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/accounts/{id}/statuses"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/accounts/{id}/statuses"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -543,7 +557,7 @@ export def "accounts-statuses get" [
 # Block the given account. Clients should filter statuses from this account if received (e.g. due to a boost in the Home timeline).
 #
 # POST /api/v1/accounts/{id}/unblock
-export def "accounts-unblock post" [
+export def "accounts-unblock create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -556,7 +570,7 @@ export def "accounts-unblock post" [
 ]: nothing -> record<blocked_by: bool, blocking: bool, domain_blocking: bool, endorsed: bool, followed_by: bool, following: bool, id: string, muting: bool, muting_notifications: bool, note: string, notifying: bool, requested: bool, showing_reblogs: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/accounts/{id}/unblock"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/accounts/{id}/unblock"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -565,7 +579,7 @@ export def "accounts-unblock post" [
 # Unfollow the given account.
 #
 # POST /api/v1/accounts/{id}/unfollow
-export def "accounts-unfollow post" [
+export def "accounts-unfollow create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -578,7 +592,7 @@ export def "accounts-unfollow post" [
 ]: nothing -> record<blocked_by: bool, blocking: bool, domain_blocking: bool, endorsed: bool, followed_by: bool, following: bool, id: string, muting: bool, muting_notifications: bool, note: string, notifying: bool, requested: bool, showing_reblogs: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/accounts/{id}/unfollow"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/accounts/{id}/unfollow"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -587,7 +601,7 @@ export def "accounts-unfollow post" [
 # Unmute the given account.
 #
 # POST /api/v1/accounts/{id}/unmute
-export def "accounts-unmute post" [
+export def "accounts-unmute create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -600,7 +614,7 @@ export def "accounts-unmute post" [
 ]: nothing -> record<blocked_by: bool, blocking: bool, domain_blocking: bool, endorsed: bool, followed_by: bool, following: bool, id: string, muting: bool, muting_notifications: bool, note: string, notifying: bool, requested: bool, showing_reblogs: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/accounts/{id}/unmute"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/accounts/{id}/unmute"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -609,7 +623,7 @@ export def "accounts-unmute post" [
 # Remove the given account from the user's featured profiles.
 #
 # POST /api/v1/accounts/{id}/unpin
-export def "accounts-unpin post" [
+export def "accounts-unpin create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -622,7 +636,7 @@ export def "accounts-unpin post" [
 ]: nothing -> record<blocked_by: bool, blocking: bool, domain_blocking: bool, endorsed: bool, followed_by: bool, following: bool, id: string, muting: bool, muting_notifications: bool, note: string, notifying: bool, requested: bool, showing_reblogs: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/accounts/{id}/unpin"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/accounts/{id}/unpin"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -679,7 +693,7 @@ export def "admin-accounts get" [
 ]: nothing -> record<account: record<acct: string, avatar: string, avatar_static: string, bot: bool, created_at: string, discoverable: bool, display_name: string, emojis: list<record>, fields: list<record>, followers_count: int, following_count: int, header: string, header_static: string, id: string, last_status_at: string, locked: bool, moved: any, mute_expires_at: string, note: string, source: record<fields: list, follow_requests_count: int, language: string, note: string, privacy: string, sensitive: bool>, statuses_count: int, suspended: bool, url: string, username: string>, approved: bool, confirmed: bool, created_at: string, created_by_application_id: string, disabled: bool, email: string, id: string, invite_request: string, invited_by_account_id: string, ip: string, locale: string, role: string, silenced: bool, suspended: bool, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/admin/accounts/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/admin/accounts/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -688,7 +702,7 @@ export def "admin-accounts get" [
 # Perform an action against an account and log this action in the moderation history.
 #
 # POST /api/v1/admin/accounts/{id}/action
-export def "admin-accounts-action post" [
+export def "admin-accounts-action create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -707,18 +721,18 @@ export def "admin-accounts-action post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/admin/accounts/{id}/action"))
-  let body = {"report_id": $report_id, "send_email_notification": $send_email_notification, "text": $text, "type": $type, "warning_preset_id": $warning_preset_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/admin/accounts/{id}/action"))
+  let req_body = {"report_id": $report_id, "send_email_notification": $send_email_notification, "text": $text, "type": $type, "warning_preset_id": $warning_preset_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Approve the given local account if it is currently pending approval.
 #
 # POST /api/v1/admin/accounts/{id}/approve
-export def "admin-accounts-approve post" [
+export def "admin-accounts-approve create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -731,7 +745,7 @@ export def "admin-accounts-approve post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/admin/accounts/{id}/approve"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/admin/accounts/{id}/approve"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -740,7 +754,7 @@ export def "admin-accounts-approve post" [
 # Re-enable a local account whose login is currently disabled.
 #
 # POST /api/v1/admin/accounts/{id}/enable
-export def "admin-accounts-enable post" [
+export def "admin-accounts-enable create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -753,7 +767,7 @@ export def "admin-accounts-enable post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/admin/accounts/{id}/enable"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/admin/accounts/{id}/enable"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -762,7 +776,7 @@ export def "admin-accounts-enable post" [
 # Reject the given local account if it is currently pending approval.
 #
 # POST /api/v1/admin/accounts/{id}/reject
-export def "admin-accounts-reject post" [
+export def "admin-accounts-reject create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -775,7 +789,7 @@ export def "admin-accounts-reject post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/admin/accounts/{id}/reject"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/admin/accounts/{id}/reject"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -784,7 +798,7 @@ export def "admin-accounts-reject post" [
 # Unsilence a currently silenced account.
 #
 # POST /api/v1/admin/accounts/{id}/unsilence
-export def "admin-accounts-unsilence post" [
+export def "admin-accounts-unsilence create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -797,7 +811,7 @@ export def "admin-accounts-unsilence post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/admin/accounts/{id}/unsilence"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/admin/accounts/{id}/unsilence"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -806,7 +820,7 @@ export def "admin-accounts-unsilence post" [
 # Unsuspend a currently suspended account.
 #
 # POST /api/v1/admin/accounts/{id}/unsuspend
-export def "admin-accounts-unsuspend post" [
+export def "admin-accounts-unsuspend create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -819,7 +833,7 @@ export def "admin-accounts-unsuspend post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/admin/accounts/{id}/unsuspend"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/admin/accounts/{id}/unsuspend"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -866,7 +880,7 @@ export def "admin-reports get" [
 ]: nothing -> record<account: record<acct: string, avatar: string, avatar_static: string, bot: bool, created_at: string, discoverable: bool, display_name: string, emojis: list<record>, fields: list<record>, followers_count: int, following_count: int, header: string, header_static: string, id: string, last_status_at: string, locked: bool, moved: any, mute_expires_at: string, note: string, source: record<fields: list, follow_requests_count: int, language: string, note: string, privacy: string, sensitive: bool>, statuses_count: int, suspended: bool, url: string, username: string>, action_taken: string, assigned_account: record<acct: string, avatar: string, avatar_static: string, bot: bool, created_at: string, discoverable: bool, display_name: string, emojis: list<record>, fields: list<record>, followers_count: int, following_count: int, header: string, header_static: string, id: string, last_status_at: string, locked: bool, moved: any, mute_expires_at: string, note: string, source: record<fields: list, follow_requests_count: int, language: string, note: string, privacy: string, sensitive: bool>, statuses_count: int, suspended: bool, url: string, username: string>, comment: string, created_at: string, id: string, statuses: table<account: record, application: record, bookmarked: bool, card: record, content: string, created_at: string, emojis: list, favourited: bool, favourites_count: int, id: string, in_reply_to_account_id: string, in_reply_to_id: string, language: string, media_attachments: list, mentions: list, muted: bool, pinned: bool, poll: record, reblog: any, reblogged: bool, reblogs_count: int, replies_count: int, sensitive: bool, spoiler_text: string, tags: list, text: string, uri: string, url: string, visibility: string>, target_account: record<acct: string, avatar: string, avatar_static: string, bot: bool, created_at: string, discoverable: bool, display_name: string, emojis: list<record>, fields: list<record>, followers_count: int, following_count: int, header: string, header_static: string, id: string, last_status_at: string, locked: bool, moved: any, mute_expires_at: string, note: string, source: record<fields: list, follow_requests_count: int, language: string, note: string, privacy: string, sensitive: bool>, statuses_count: int, suspended: bool, url: string, username: string>, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/admin/reports/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/admin/reports/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -875,7 +889,7 @@ export def "admin-reports get" [
 # Claim the handling of this report to yourself.
 #
 # POST /api/v1/admin/reports/{id}/assign_to_self
-export def "admin-reports-assign-to-self post" [
+export def "admin-reports-assign-to-self create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -888,7 +902,7 @@ export def "admin-reports-assign-to-self post" [
 ]: nothing -> record<account: record<acct: string, avatar: string, avatar_static: string, bot: bool, created_at: string, discoverable: bool, display_name: string, emojis: list<record>, fields: list<record>, followers_count: int, following_count: int, header: string, header_static: string, id: string, last_status_at: string, locked: bool, moved: any, mute_expires_at: string, note: string, source: record<fields: list, follow_requests_count: int, language: string, note: string, privacy: string, sensitive: bool>, statuses_count: int, suspended: bool, url: string, username: string>, action_taken: string, assigned_account: record<acct: string, avatar: string, avatar_static: string, bot: bool, created_at: string, discoverable: bool, display_name: string, emojis: list<record>, fields: list<record>, followers_count: int, following_count: int, header: string, header_static: string, id: string, last_status_at: string, locked: bool, moved: any, mute_expires_at: string, note: string, source: record<fields: list, follow_requests_count: int, language: string, note: string, privacy: string, sensitive: bool>, statuses_count: int, suspended: bool, url: string, username: string>, comment: string, created_at: string, id: string, statuses: table<account: record, application: record, bookmarked: bool, card: record, content: string, created_at: string, emojis: list, favourited: bool, favourites_count: int, id: string, in_reply_to_account_id: string, in_reply_to_id: string, language: string, media_attachments: list, mentions: list, muted: bool, pinned: bool, poll: record, reblog: any, reblogged: bool, reblogs_count: int, replies_count: int, sensitive: bool, spoiler_text: string, tags: list, text: string, uri: string, url: string, visibility: string>, target_account: record<acct: string, avatar: string, avatar_static: string, bot: bool, created_at: string, discoverable: bool, display_name: string, emojis: list<record>, fields: list<record>, followers_count: int, following_count: int, header: string, header_static: string, id: string, last_status_at: string, locked: bool, moved: any, mute_expires_at: string, note: string, source: record<fields: list, follow_requests_count: int, language: string, note: string, privacy: string, sensitive: bool>, statuses_count: int, suspended: bool, url: string, username: string>, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/admin/reports/{id}/assign_to_self"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/admin/reports/{id}/assign_to_self"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -897,7 +911,7 @@ export def "admin-reports-assign-to-self post" [
 # Mark a report as resolved with no further action taken.
 #
 # POST /api/v1/admin/reports/{id}/reopen
-export def "admin-reports-reopen post" [
+export def "admin-reports-reopen create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -910,7 +924,7 @@ export def "admin-reports-reopen post" [
 ]: nothing -> record<account: record<acct: string, avatar: string, avatar_static: string, bot: bool, created_at: string, discoverable: bool, display_name: string, emojis: list<record>, fields: list<record>, followers_count: int, following_count: int, header: string, header_static: string, id: string, last_status_at: string, locked: bool, moved: any, mute_expires_at: string, note: string, source: record<fields: list, follow_requests_count: int, language: string, note: string, privacy: string, sensitive: bool>, statuses_count: int, suspended: bool, url: string, username: string>, action_taken: string, assigned_account: record<acct: string, avatar: string, avatar_static: string, bot: bool, created_at: string, discoverable: bool, display_name: string, emojis: list<record>, fields: list<record>, followers_count: int, following_count: int, header: string, header_static: string, id: string, last_status_at: string, locked: bool, moved: any, mute_expires_at: string, note: string, source: record<fields: list, follow_requests_count: int, language: string, note: string, privacy: string, sensitive: bool>, statuses_count: int, suspended: bool, url: string, username: string>, comment: string, created_at: string, id: string, statuses: table<account: record, application: record, bookmarked: bool, card: record, content: string, created_at: string, emojis: list, favourited: bool, favourites_count: int, id: string, in_reply_to_account_id: string, in_reply_to_id: string, language: string, media_attachments: list, mentions: list, muted: bool, pinned: bool, poll: record, reblog: any, reblogged: bool, reblogs_count: int, replies_count: int, sensitive: bool, spoiler_text: string, tags: list, text: string, uri: string, url: string, visibility: string>, target_account: record<acct: string, avatar: string, avatar_static: string, bot: bool, created_at: string, discoverable: bool, display_name: string, emojis: list<record>, fields: list<record>, followers_count: int, following_count: int, header: string, header_static: string, id: string, last_status_at: string, locked: bool, moved: any, mute_expires_at: string, note: string, source: record<fields: list, follow_requests_count: int, language: string, note: string, privacy: string, sensitive: bool>, statuses_count: int, suspended: bool, url: string, username: string>, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/admin/reports/{id}/reopen"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/admin/reports/{id}/reopen"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -919,7 +933,7 @@ export def "admin-reports-reopen post" [
 # Mark a report as resolved with no further action taken.
 #
 # POST /api/v1/admin/reports/{id}/resolve
-export def "admin-reports-resolve post" [
+export def "admin-reports-resolve create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -932,7 +946,7 @@ export def "admin-reports-resolve post" [
 ]: nothing -> record<account: record<acct: string, avatar: string, avatar_static: string, bot: bool, created_at: string, discoverable: bool, display_name: string, emojis: list<record>, fields: list<record>, followers_count: int, following_count: int, header: string, header_static: string, id: string, last_status_at: string, locked: bool, moved: any, mute_expires_at: string, note: string, source: record<fields: list, follow_requests_count: int, language: string, note: string, privacy: string, sensitive: bool>, statuses_count: int, suspended: bool, url: string, username: string>, action_taken: string, assigned_account: record<acct: string, avatar: string, avatar_static: string, bot: bool, created_at: string, discoverable: bool, display_name: string, emojis: list<record>, fields: list<record>, followers_count: int, following_count: int, header: string, header_static: string, id: string, last_status_at: string, locked: bool, moved: any, mute_expires_at: string, note: string, source: record<fields: list, follow_requests_count: int, language: string, note: string, privacy: string, sensitive: bool>, statuses_count: int, suspended: bool, url: string, username: string>, comment: string, created_at: string, id: string, statuses: table<account: record, application: record, bookmarked: bool, card: record, content: string, created_at: string, emojis: list, favourited: bool, favourites_count: int, id: string, in_reply_to_account_id: string, in_reply_to_id: string, language: string, media_attachments: list, mentions: list, muted: bool, pinned: bool, poll: record, reblog: any, reblogged: bool, reblogs_count: int, replies_count: int, sensitive: bool, spoiler_text: string, tags: list, text: string, uri: string, url: string, visibility: string>, target_account: record<acct: string, avatar: string, avatar_static: string, bot: bool, created_at: string, discoverable: bool, display_name: string, emojis: list<record>, fields: list<record>, followers_count: int, following_count: int, header: string, header_static: string, id: string, last_status_at: string, locked: bool, moved: any, mute_expires_at: string, note: string, source: record<fields: list, follow_requests_count: int, language: string, note: string, privacy: string, sensitive: bool>, statuses_count: int, suspended: bool, url: string, username: string>, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/admin/reports/{id}/resolve"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/admin/reports/{id}/resolve"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -941,7 +955,7 @@ export def "admin-reports-resolve post" [
 # Unassign a report so that someone else can claim it.
 #
 # POST /api/v1/admin/reports/{id}/unassign
-export def "admin-reports-unassign post" [
+export def "admin-reports-unassign create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -954,7 +968,7 @@ export def "admin-reports-unassign post" [
 ]: nothing -> record<account: record<acct: string, avatar: string, avatar_static: string, bot: bool, created_at: string, discoverable: bool, display_name: string, emojis: list<record>, fields: list<record>, followers_count: int, following_count: int, header: string, header_static: string, id: string, last_status_at: string, locked: bool, moved: any, mute_expires_at: string, note: string, source: record<fields: list, follow_requests_count: int, language: string, note: string, privacy: string, sensitive: bool>, statuses_count: int, suspended: bool, url: string, username: string>, action_taken: string, assigned_account: record<acct: string, avatar: string, avatar_static: string, bot: bool, created_at: string, discoverable: bool, display_name: string, emojis: list<record>, fields: list<record>, followers_count: int, following_count: int, header: string, header_static: string, id: string, last_status_at: string, locked: bool, moved: any, mute_expires_at: string, note: string, source: record<fields: list, follow_requests_count: int, language: string, note: string, privacy: string, sensitive: bool>, statuses_count: int, suspended: bool, url: string, username: string>, comment: string, created_at: string, id: string, statuses: table<account: record, application: record, bookmarked: bool, card: record, content: string, created_at: string, emojis: list, favourited: bool, favourites_count: int, id: string, in_reply_to_account_id: string, in_reply_to_id: string, language: string, media_attachments: list, mentions: list, muted: bool, pinned: bool, poll: record, reblog: any, reblogged: bool, reblogs_count: int, replies_count: int, sensitive: bool, spoiler_text: string, tags: list, text: string, uri: string, url: string, visibility: string>, target_account: record<acct: string, avatar: string, avatar_static: string, bot: bool, created_at: string, discoverable: bool, display_name: string, emojis: list<record>, fields: list<record>, followers_count: int, following_count: int, header: string, header_static: string, id: string, last_status_at: string, locked: bool, moved: any, mute_expires_at: string, note: string, source: record<fields: list, follow_requests_count: int, language: string, note: string, privacy: string, sensitive: bool>, statuses_count: int, suspended: bool, url: string, username: string>, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/admin/reports/{id}/unassign"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/admin/reports/{id}/unassign"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -986,7 +1000,7 @@ export def "announcements get" [
 # Allows a user to mark the announcement as read.
 #
 # POST /api/v1/announcements/{id}/dismiss
-export def "announcements-dismiss post" [
+export def "announcements-dismiss create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -999,7 +1013,7 @@ export def "announcements-dismiss post" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/announcements/{id}/dismiss"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/announcements/{id}/dismiss"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1022,7 +1036,7 @@ export def "announcements-reactions delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/api/v1/announcements/{id}/reactions/{name}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/api/v1/announcements/{id}/reactions/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1031,7 +1045,7 @@ export def "announcements-reactions delete" [
 # Allows a user to mark the announcement as read.
 #
 # PUT /api/v1/announcements/{id}/reactions/{name}
-export def "announcements-reactions put" [
+export def "announcements-reactions update" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1045,7 +1059,7 @@ export def "announcements-reactions put" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/api/v1/announcements/{id}/reactions/{name}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/api/v1/announcements/{id}/reactions/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1054,7 +1068,7 @@ export def "announcements-reactions put" [
 # Create a new application to obtain OAuth2 credentials.
 #
 # POST /api/v1/apps
-export def "apps post" [
+export def "apps create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1069,10 +1083,11 @@ export def "apps post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/apps")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/form-data" $req_body
 }
 
 # Confirm that the app's OAuth2 credentials work.
@@ -1189,7 +1204,7 @@ export def "conversations delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/conversations/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/conversations/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1198,7 +1213,7 @@ export def "conversations delete" [
 # Remove converstation
 #
 # POST /api/v1/conversations/{id}/read
-export def "conversations-read post" [
+export def "conversations-read create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1211,7 +1226,7 @@ export def "conversations-read post" [
 ]: nothing -> record<accounts: table<acct: string, avatar: string, avatar_static: string, bot: bool, created_at: string, discoverable: bool, display_name: string, emojis: list, fields: list, followers_count: int, following_count: int, header: string, header_static: string, id: string, last_status_at: string, locked: bool, moved: any, mute_expires_at: string, note: string, source: record, statuses_count: int, suspended: bool, url: string, username: string>, id: string, last_status: record<account: record<acct: string, avatar: string, avatar_static: string, bot: bool, created_at: string, discoverable: bool, display_name: string, emojis: list, fields: list, followers_count: int, following_count: int, header: string, header_static: string, id: string, last_status_at: string, locked: bool, moved: any, mute_expires_at: string, note: string, source: record, statuses_count: int, suspended: bool, url: string, username: string>, application: record<client_id: string, client_secret: string, name: string, vapid_key: string, website: string>, bookmarked: bool, card: record<author_name: string, author_url: string, blurhash: string, description: string, height: int, html: string, image: string, provider_name: string, provider_url: string, title: string, type: string, url: string, width: int>, content: string, created_at: string, emojis: list<record>, favourited: bool, favourites_count: int, id: string, in_reply_to_account_id: string, in_reply_to_id: string, language: string, media_attachments: list<record>, mentions: list<record>, muted: bool, pinned: bool, poll: record<emojis: list, expired: bool, expires_at: string, id: string, multiple: bool, options: list, own_votes: list, voted: bool, voters_count: int, votes_count: int>, reblog: any, reblogged: bool, reblogs_count: int, replies_count: int, sensitive: bool, spoiler_text: string, tags: list<record>, text: string, uri: string, url: string, visibility: string>, unread: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/conversations/{id}/read"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/conversations/{id}/read"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1315,7 +1330,7 @@ export def "domain-blocks get" [
 # "Block a domain to: - hide all public posts from it - hide all notifications from it - remove all followers from it - prevent following new users from it (but does not remove existing follows)"
 #
 # POST /api/v1/domain_blocks
-export def "domain-blocks post" [
+export def "domain-blocks create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1330,10 +1345,11 @@ export def "domain-blocks post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/domain_blocks")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/form-data" $req_body
 }
 
 # Accounts that the user is currently featuring on their profile.
@@ -1410,7 +1426,7 @@ export def "featured-tags get" [
 # Create a feature a tag.
 #
 # POST /api/v1/featured_tags
-export def "featured-tags post" [
+export def "featured-tags create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1425,11 +1441,11 @@ export def "featured-tags post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/featured_tags")
-  let body = {"name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Shows your 10 most-used tags, with usage history for the past week.
@@ -1469,7 +1485,7 @@ export def "featured-tags delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/featured_tags/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/featured_tags/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1495,7 +1511,7 @@ export def "filters list" [
 }
 
 # POST /api/v1/filters
-export def "filters post" [
+export def "filters create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1510,10 +1526,11 @@ export def "filters post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/filters")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/form-data" $req_body
 }
 
 # Delete a filter.
@@ -1532,7 +1549,7 @@ export def "filters delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/filters/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/filters/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1554,7 +1571,7 @@ export def "filters get" [
 ]: nothing -> record<context: list<string>, expires_at: string, id: string, irreversible: bool, phrase: string, whole_word: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/filters/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/filters/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1563,7 +1580,7 @@ export def "filters get" [
 # Update a filter.
 #
 # PUT /api/v1/filters/{id}
-export def "filters put" [
+export def "filters update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1578,11 +1595,12 @@ export def "filters put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/filters/{id}"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/filters/{id}"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/form-data" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/form-data" $req_body
 }
 
 # Pending Follows
@@ -1611,7 +1629,7 @@ export def "follow-requests get" [
 # Accept Follow
 #
 # POST /api/v1/follow_requests/{id}/authorize
-export def "follow-requests-authorize post" [
+export def "follow-requests-authorize create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1624,7 +1642,7 @@ export def "follow-requests-authorize post" [
 ]: nothing -> record<blocked_by: bool, blocking: bool, domain_blocking: bool, endorsed: bool, followed_by: bool, following: bool, id: string, muting: bool, muting_notifications: bool, note: string, notifying: bool, requested: bool, showing_reblogs: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/follow_requests/{id}/authorize"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/follow_requests/{id}/authorize"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1633,7 +1651,7 @@ export def "follow-requests-authorize post" [
 # Accept Follow
 #
 # POST /api/v1/follow_requests/{id}/reject
-export def "follow-requests-reject post" [
+export def "follow-requests-reject create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1646,7 +1664,7 @@ export def "follow-requests-reject post" [
 ]: nothing -> record<blocked_by: bool, blocking: bool, domain_blocking: bool, endorsed: bool, followed_by: bool, following: bool, id: string, muting: bool, muting_notifications: bool, note: string, notifying: bool, requested: bool, showing_reblogs: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/follow_requests/{id}/reject"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/follow_requests/{id}/reject"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1760,7 +1778,7 @@ export def "lists list" [
 # Create a new list.
 #
 # POST /api/v1/lists
-export def "lists post" [
+export def "lists create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1776,17 +1794,17 @@ export def "lists post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/lists")
-  let body = {"replies_policy": $replies_policy, "title": $title} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"replies_policy": $replies_policy, "title": $title} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Change the title of a list, or which replies to show.
 #
 # PUT /api/v1/lists
-export def "lists put" [
+export def "lists update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1802,11 +1820,11 @@ export def "lists put" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/lists")
-  let body = {"replies_policy": $replies_policy, "title": $title} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"replies_policy": $replies_policy, "title": $title} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Remove converstation
@@ -1825,7 +1843,7 @@ export def "lists get" [
 ]: nothing -> record<id: string, replies_policy: string, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/lists/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/lists/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1844,12 +1862,12 @@ export def "lists-accounts delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --account-ids: list # Array of account IDs to add to the list.
+  --account-ids: list<string> # Array of account IDs to add to the list.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "account_ids" $account_ids "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/lists/{id}/accounts") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/lists/{id}/accounts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1875,7 +1893,7 @@ export def "lists-accounts get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "max_id" $max_id "scalar") (serialize-qp "since_id" $since_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/lists/{id}/accounts") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/lists/{id}/accounts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1884,7 +1902,7 @@ export def "lists-accounts get" [
 # Add accounts to the given list. Note that the user must be following these accounts.
 #
 # POST /api/v1/lists/{id}/accounts
-export def "lists-accounts post" [
+export def "lists-accounts create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1894,17 +1912,17 @@ export def "lists-accounts post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  account_ids: list # Array of account IDs to add to the list.
+  account_ids: list<string> # Array of account IDs to add to the list.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/lists/{id}/accounts"))
-  let body = {"account_ids": $account_ids} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/lists/{id}/accounts"))
+  let req_body = {"account_ids": $account_ids} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get saved timeline position
@@ -1933,7 +1951,7 @@ export def "markers get" [
 # Get saved timeline position
 #
 # POST /api/v1/markers
-export def "markers post" [
+export def "markers create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1948,16 +1966,17 @@ export def "markers post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/markers")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Creates an attachment to be used with a new status.
 #
 # POST /api/v1/media
-export def "media post" [
+export def "media create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1972,10 +1991,11 @@ export def "media post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/media")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/form-data" $req_body
 }
 
 # Get an attachement.
@@ -1994,7 +2014,7 @@ export def "media get" [
 ]: nothing -> record<blurhash: string, description: string, id: string, meta: record, preview_url: string, remote_url: string, text_url: string, type: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/media/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/media/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2003,7 +2023,7 @@ export def "media get" [
 # Update an Attachment, before it is attached to a status and posted.
 #
 # POST /api/v1/media/{id}
-export def "media post-by-id" [
+export def "media create-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2018,11 +2038,12 @@ export def "media post-by-id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/media/{id}"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/media/{id}"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/form-data" $req_body
 }
 
 # Accounts the user has muted.
@@ -2066,7 +2087,7 @@ export def "notifications list" [
   --max-id: string # Return results older than ID
   --since-id: string # Return results newer than ID
   --min-id: string # Return results immediately newer than ID
-  --exclude-types: list # Array of types to exclude (follow, favourite, reblog, mention, poll, follow_request)
+  --exclude-types: list<string> # Array of types to exclude (follow, favourite, reblog, mention, poll, follow_request)
   --account-id: string # Return only notifications received from this account
 ]: nothing -> table<account: record<acct: string, avatar: string, avatar_static: string, bot: bool, created_at: string, discoverable: bool, display_name: string, emojis: list, fields: list, followers_count: int, following_count: int, header: string, header_static: string, id: string, last_status_at: string, locked: bool, moved: any, mute_expires_at: string, note: string, source: record, statuses_count: int, suspended: bool, url: string, username: string>, created_at: string, id: string, status: record<account: record, application: record, bookmarked: bool, card: record, content: string, created_at: string, emojis: list, favourited: bool, favourites_count: int, id: string, in_reply_to_account_id: string, in_reply_to_id: string, language: string, media_attachments: list, mentions: list, muted: bool, pinned: bool, poll: record, reblog: any, reblogged: bool, reblogs_count: int, replies_count: int, sensitive: bool, spoiler_text: string, tags: list, text: string, uri: string, url: string, visibility: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2081,7 +2102,7 @@ export def "notifications list" [
 # Clear all notifications from the server.
 #
 # POST /api/v1/notifications/clear
-export def "notifications-clear post" [
+export def "notifications-clear create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2115,7 +2136,7 @@ export def "notifications get" [
 ]: nothing -> record<account: record<acct: string, avatar: string, avatar_static: string, bot: bool, created_at: string, discoverable: bool, display_name: string, emojis: list<record>, fields: list<record>, followers_count: int, following_count: int, header: string, header_static: string, id: string, last_status_at: string, locked: bool, moved: any, mute_expires_at: string, note: string, source: record<fields: list, follow_requests_count: int, language: string, note: string, privacy: string, sensitive: bool>, statuses_count: int, suspended: bool, url: string, username: string>, created_at: string, id: string, status: record<account: record<acct: string, avatar: string, avatar_static: string, bot: bool, created_at: string, discoverable: bool, display_name: string, emojis: list, fields: list, followers_count: int, following_count: int, header: string, header_static: string, id: string, last_status_at: string, locked: bool, moved: any, mute_expires_at: string, note: string, source: record, statuses_count: int, suspended: bool, url: string, username: string>, application: record<client_id: string, client_secret: string, name: string, vapid_key: string, website: string>, bookmarked: bool, card: record<author_name: string, author_url: string, blurhash: string, description: string, height: int, html: string, image: string, provider_name: string, provider_url: string, title: string, type: string, url: string, width: int>, content: string, created_at: string, emojis: list<record>, favourited: bool, favourites_count: int, id: string, in_reply_to_account_id: string, in_reply_to_id: string, language: string, media_attachments: list<record>, mentions: list<record>, muted: bool, pinned: bool, poll: record<emojis: list, expired: bool, expires_at: string, id: string, multiple: bool, options: list, own_votes: list, voted: bool, voters_count: int, votes_count: int>, reblog: any, reblogged: bool, reblogs_count: int, replies_count: int, sensitive: bool, spoiler_text: string, tags: list<record>, text: string, uri: string, url: string, visibility: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/notifications/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/notifications/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2124,7 +2145,7 @@ export def "notifications get" [
 # Clear a single notification from the server.
 #
 # POST /api/v1/notifications/{id}/dismiss
-export def "notifications-dismiss post" [
+export def "notifications-dismiss create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2137,7 +2158,7 @@ export def "notifications-dismiss post" [
 ]: nothing -> record<account: record<acct: string, avatar: string, avatar_static: string, bot: bool, created_at: string, discoverable: bool, display_name: string, emojis: list<record>, fields: list<record>, followers_count: int, following_count: int, header: string, header_static: string, id: string, last_status_at: string, locked: bool, moved: any, mute_expires_at: string, note: string, source: record<fields: list, follow_requests_count: int, language: string, note: string, privacy: string, sensitive: bool>, statuses_count: int, suspended: bool, url: string, username: string>, created_at: string, id: string, status: record<account: record<acct: string, avatar: string, avatar_static: string, bot: bool, created_at: string, discoverable: bool, display_name: string, emojis: list, fields: list, followers_count: int, following_count: int, header: string, header_static: string, id: string, last_status_at: string, locked: bool, moved: any, mute_expires_at: string, note: string, source: record, statuses_count: int, suspended: bool, url: string, username: string>, application: record<client_id: string, client_secret: string, name: string, vapid_key: string, website: string>, bookmarked: bool, card: record<author_name: string, author_url: string, blurhash: string, description: string, height: int, html: string, image: string, provider_name: string, provider_url: string, title: string, type: string, url: string, width: int>, content: string, created_at: string, emojis: list<record>, favourited: bool, favourites_count: int, id: string, in_reply_to_account_id: string, in_reply_to_id: string, language: string, media_attachments: list<record>, mentions: list<record>, muted: bool, pinned: bool, poll: record<emojis: list, expired: bool, expires_at: string, id: string, multiple: bool, options: list, own_votes: list, voted: bool, voters_count: int, votes_count: int>, reblog: any, reblogged: bool, reblogs_count: int, replies_count: int, sensitive: bool, spoiler_text: string, tags: list<record>, text: string, uri: string, url: string, visibility: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/notifications/{id}/dismiss"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/notifications/{id}/dismiss"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2159,7 +2180,7 @@ export def "polls get" [
 ]: nothing -> record<emojis: table<category: string, shortcode: string, static_url: string, url: string, visible_in_picker: bool>, expired: bool, expires_at: string, id: string, multiple: bool, options: list<any>, own_votes: list<int>, voted: bool, voters_count: int, votes_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/polls/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/polls/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2168,7 +2189,7 @@ export def "polls get" [
 # Vote on a poll.
 #
 # POST /api/v1/polls/{id}
-export def "polls post" [
+export def "polls create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2178,17 +2199,17 @@ export def "polls post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  choices: list
+  choices: list<string>
 ]: any -> record<emojis: table<category: string, shortcode: string, static_url: string, url: string, visible_in_picker: bool>, expired: bool, expires_at: string, id: string, multiple: bool, options: list<any>, own_votes: list<int>, voted: bool, voters_count: int, votes_count: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/polls/{id}"))
-  let body = {"choices": $choices} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/polls/{id}"))
+  let req_body = {"choices": $choices} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Shows your 10 most-used tags, with usage history for the past week.
@@ -2257,7 +2278,7 @@ export def "push-subscription get" [
 # Add a Web Push API subscription to receive notifications. Each access token can have one push subscription. If you create a new subscription, the old subscription is deleted.
 #
 # POST /api/v1/push/subscription
-export def "push-subscription post" [
+export def "push-subscription create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2273,17 +2294,17 @@ export def "push-subscription post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/push/subscription")
-  let body = {"data": $data, "subscription": $subscription} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"data": $data, "subscription": $subscription} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates the current push subscription. Only the data part can be updated. To change fundamentals, a new subscription must be created instead.
 #
 # PUT /api/v1/push/subscription
-export def "push-subscription put" [
+export def "push-subscription update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2298,17 +2319,17 @@ export def "push-subscription put" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/push/subscription")
-  let body = {"data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # File a report.
 #
 # POST /api/v1/reports
-export def "reports post" [
+export def "reports create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2320,17 +2341,17 @@ export def "reports post" [
   account_id: string # ID of the account to report
   --comment: string # Reason for the report (default max 1000 characters)
   --forward: oneof<nothing, bool> # If the account is remote, should the report be forwarded to the remote admin?
-  --status-ids: list # Array of Statuses to attach to the report, for context
+  --status-ids: list<string> # Array of Statuses to attach to the report, for context
 ]: any -> record<action_taken: bool, action_taken_at: string, category: string, comment: string, created_at: string, forwarded: bool, id: string, rule_ids: list<int>, status_ids: list<int>, target_account: record<acct: string, avatar: string, avatar_static: string, bot: bool, created_at: string, discoverable: bool, display_name: string, emojis: list<record>, fields: list<record>, followers_count: int, following_count: int, header: string, header_static: string, id: string, last_status_at: string, locked: bool, moved: any, mute_expires_at: string, note: string, source: record<fields: list, follow_requests_count: int, language: string, note: string, privacy: string, sensitive: bool>, statuses_count: int, suspended: bool, url: string, username: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/reports")
-  let body = {"account_id": $account_id, "comment": $comment, "forward": $forward, "status_ids": $status_ids} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"account_id": $account_id, "comment": $comment, "forward": $forward, "status_ids": $status_ids} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # View scheduled statuses
@@ -2375,7 +2396,7 @@ export def "scheduled-statuses delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/scheduled_statuses/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/scheduled_statuses/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2397,7 +2418,7 @@ export def "scheduled-statuses get" [
 ]: nothing -> record<id: string, media_attachments: table<blurhash: string, description: string, id: string, meta: record, preview_url: string, remote_url: string, text_url: string, type: string, url: string>, params: record<application_id: string, in_reply_to_id: string, media_ids: list<string>, scheduled_at: string, sensitive: bool, spoiler_text: string, text: string, visibility: string>, scheduled_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/scheduled_statuses/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/scheduled_statuses/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2406,7 +2427,7 @@ export def "scheduled-statuses get" [
 # View a single scheduled status
 #
 # PUT /api/v1/scheduled_statuses/{id}
-export def "scheduled-statuses put" [
+export def "scheduled-statuses update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2421,16 +2442,16 @@ export def "scheduled-statuses put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/scheduled_statuses/{id}"))
-  let body = {"scheduled_at": $scheduled_at} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/scheduled_statuses/{id}"))
+  let req_body = {"scheduled_at": $scheduled_at} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /api/v1/statuses
-export def "statuses post" [
+export def "statuses create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2446,12 +2467,13 @@ export def "statuses post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/statuses")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Idempotency-Key": $idempotency_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Idempotency-Key": $idempotency_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DELETE /api/v1/statuses/{id}
@@ -2468,7 +2490,7 @@ export def "statuses delete" [
 ]: nothing -> record<account: record<acct: string, avatar: string, avatar_static: string, bot: bool, created_at: string, discoverable: bool, display_name: string, emojis: list<record>, fields: list<record>, followers_count: int, following_count: int, header: string, header_static: string, id: string, last_status_at: string, locked: bool, moved: any, mute_expires_at: string, note: string, source: record<fields: list, follow_requests_count: int, language: string, note: string, privacy: string, sensitive: bool>, statuses_count: int, suspended: bool, url: string, username: string>, application: record<client_id: string, client_secret: string, name: string, vapid_key: string, website: string>, bookmarked: bool, card: record<author_name: string, author_url: string, blurhash: string, description: string, height: int, html: string, image: string, provider_name: string, provider_url: string, title: string, type: string, url: string, width: int>, content: string, created_at: string, emojis: table<category: string, shortcode: string, static_url: string, url: string, visible_in_picker: bool>, favourited: bool, favourites_count: int, id: string, in_reply_to_account_id: string, in_reply_to_id: string, language: string, media_attachments: table<blurhash: string, description: string, id: string, meta: record, preview_url: string, remote_url: string, text_url: string, type: string, url: string>, mentions: table<acct: string, id: string, url: string, username: string>, muted: bool, pinned: bool, poll: record<emojis: list<record>, expired: bool, expires_at: string, id: string, multiple: bool, options: list<any>, own_votes: list<int>, voted: bool, voters_count: int, votes_count: int>, reblog: any, reblogged: bool, reblogs_count: int, replies_count: int, sensitive: bool, spoiler_text: string, tags: table<history: list, name: string, url: string>, text: string, uri: string, url: string, visibility: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/statuses/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/statuses/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2488,7 +2510,7 @@ export def "statuses get" [
 ]: nothing -> record<account: record<acct: string, avatar: string, avatar_static: string, bot: bool, created_at: string, discoverable: bool, display_name: string, emojis: list<record>, fields: list<record>, followers_count: int, following_count: int, header: string, header_static: string, id: string, last_status_at: string, locked: bool, moved: any, mute_expires_at: string, note: string, source: record<fields: list, follow_requests_count: int, language: string, note: string, privacy: string, sensitive: bool>, statuses_count: int, suspended: bool, url: string, username: string>, application: record<client_id: string, client_secret: string, name: string, vapid_key: string, website: string>, bookmarked: bool, card: record<author_name: string, author_url: string, blurhash: string, description: string, height: int, html: string, image: string, provider_name: string, provider_url: string, title: string, type: string, url: string, width: int>, content: string, created_at: string, emojis: table<category: string, shortcode: string, static_url: string, url: string, visible_in_picker: bool>, favourited: bool, favourites_count: int, id: string, in_reply_to_account_id: string, in_reply_to_id: string, language: string, media_attachments: table<blurhash: string, description: string, id: string, meta: record, preview_url: string, remote_url: string, text_url: string, type: string, url: string>, mentions: table<acct: string, id: string, url: string, username: string>, muted: bool, pinned: bool, poll: record<emojis: list<record>, expired: bool, expires_at: string, id: string, multiple: bool, options: list<any>, own_votes: list<int>, voted: bool, voters_count: int, votes_count: int>, reblog: any, reblogged: bool, reblogs_count: int, replies_count: int, sensitive: bool, spoiler_text: string, tags: table<history: list, name: string, url: string>, text: string, uri: string, url: string, visibility: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/statuses/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/statuses/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2497,7 +2519,7 @@ export def "statuses get" [
 # Privately bookmark a status.
 #
 # POST /api/v1/statuses/{id}/bookmark
-export def "statuses-bookmark post" [
+export def "statuses-bookmark create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2510,7 +2532,7 @@ export def "statuses-bookmark post" [
 ]: nothing -> record<account: record<acct: string, avatar: string, avatar_static: string, bot: bool, created_at: string, discoverable: bool, display_name: string, emojis: list<record>, fields: list<record>, followers_count: int, following_count: int, header: string, header_static: string, id: string, last_status_at: string, locked: bool, moved: any, mute_expires_at: string, note: string, source: record<fields: list, follow_requests_count: int, language: string, note: string, privacy: string, sensitive: bool>, statuses_count: int, suspended: bool, url: string, username: string>, application: record<client_id: string, client_secret: string, name: string, vapid_key: string, website: string>, bookmarked: bool, card: record<author_name: string, author_url: string, blurhash: string, description: string, height: int, html: string, image: string, provider_name: string, provider_url: string, title: string, type: string, url: string, width: int>, content: string, created_at: string, emojis: table<category: string, shortcode: string, static_url: string, url: string, visible_in_picker: bool>, favourited: bool, favourites_count: int, id: string, in_reply_to_account_id: string, in_reply_to_id: string, language: string, media_attachments: table<blurhash: string, description: string, id: string, meta: record, preview_url: string, remote_url: string, text_url: string, type: string, url: string>, mentions: table<acct: string, id: string, url: string, username: string>, muted: bool, pinned: bool, poll: record<emojis: list<record>, expired: bool, expires_at: string, id: string, multiple: bool, options: list<any>, own_votes: list<int>, voted: bool, voters_count: int, votes_count: int>, reblog: any, reblogged: bool, reblogs_count: int, replies_count: int, sensitive: bool, spoiler_text: string, tags: table<history: list, name: string, url: string>, text: string, uri: string, url: string, visibility: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/statuses/{id}/bookmark"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/statuses/{id}/bookmark"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2530,7 +2552,7 @@ export def "statuses-context get" [
 ]: nothing -> record<ancestors: table<account: record, application: record, bookmarked: bool, card: record, content: string, created_at: string, emojis: list, favourited: bool, favourites_count: int, id: string, in_reply_to_account_id: string, in_reply_to_id: string, language: string, media_attachments: list, mentions: list, muted: bool, pinned: bool, poll: record, reblog: any, reblogged: bool, reblogs_count: int, replies_count: int, sensitive: bool, spoiler_text: string, tags: list, text: string, uri: string, url: string, visibility: string>, descendants: table<account: record, application: record, bookmarked: bool, card: record, content: string, created_at: string, emojis: list, favourited: bool, favourites_count: int, id: string, in_reply_to_account_id: string, in_reply_to_id: string, language: string, media_attachments: list, mentions: list, muted: bool, pinned: bool, poll: record, reblog: any, reblogged: bool, reblogs_count: int, replies_count: int, sensitive: bool, spoiler_text: string, tags: list, text: string, uri: string, url: string, visibility: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/statuses/{id}/context"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/statuses/{id}/context"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2539,7 +2561,7 @@ export def "statuses-context get" [
 # Add a status to your favourites list.
 #
 # POST /api/v1/statuses/{id}/favourite
-export def "statuses-favourite post" [
+export def "statuses-favourite create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2552,7 +2574,7 @@ export def "statuses-favourite post" [
 ]: nothing -> record<account: record<acct: string, avatar: string, avatar_static: string, bot: bool, created_at: string, discoverable: bool, display_name: string, emojis: list<record>, fields: list<record>, followers_count: int, following_count: int, header: string, header_static: string, id: string, last_status_at: string, locked: bool, moved: any, mute_expires_at: string, note: string, source: record<fields: list, follow_requests_count: int, language: string, note: string, privacy: string, sensitive: bool>, statuses_count: int, suspended: bool, url: string, username: string>, application: record<client_id: string, client_secret: string, name: string, vapid_key: string, website: string>, bookmarked: bool, card: record<author_name: string, author_url: string, blurhash: string, description: string, height: int, html: string, image: string, provider_name: string, provider_url: string, title: string, type: string, url: string, width: int>, content: string, created_at: string, emojis: table<category: string, shortcode: string, static_url: string, url: string, visible_in_picker: bool>, favourited: bool, favourites_count: int, id: string, in_reply_to_account_id: string, in_reply_to_id: string, language: string, media_attachments: table<blurhash: string, description: string, id: string, meta: record, preview_url: string, remote_url: string, text_url: string, type: string, url: string>, mentions: table<acct: string, id: string, url: string, username: string>, muted: bool, pinned: bool, poll: record<emojis: list<record>, expired: bool, expires_at: string, id: string, multiple: bool, options: list<any>, own_votes: list<int>, voted: bool, voters_count: int, votes_count: int>, reblog: any, reblogged: bool, reblogs_count: int, replies_count: int, sensitive: bool, spoiler_text: string, tags: table<history: list, name: string, url: string>, text: string, uri: string, url: string, visibility: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/statuses/{id}/favourite"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/statuses/{id}/favourite"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2574,7 +2596,7 @@ export def "statuses-favourited-by get" [
 ]: nothing -> record<acct: string, avatar: string, avatar_static: string, bot: bool, created_at: string, discoverable: bool, display_name: string, emojis: table<category: string, shortcode: string, static_url: string, url: string, visible_in_picker: bool>, fields: table<name: string, value: string, verified_at: string>, followers_count: int, following_count: int, header: string, header_static: string, id: string, last_status_at: string, locked: bool, moved: any, mute_expires_at: string, note: string, source: record<fields: list<record>, follow_requests_count: int, language: string, note: string, privacy: string, sensitive: bool>, statuses_count: int, suspended: bool, url: string, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/statuses/{id}/favourited_by"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/statuses/{id}/favourited_by"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2583,7 +2605,7 @@ export def "statuses-favourited-by get" [
 # Do not receive notifications for the thread that this status is part of. Must be a thread in which you are a participant.
 #
 # POST /api/v1/statuses/{id}/mute
-export def "statuses-mute post" [
+export def "statuses-mute create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2596,7 +2618,7 @@ export def "statuses-mute post" [
 ]: nothing -> record<account: record<acct: string, avatar: string, avatar_static: string, bot: bool, created_at: string, discoverable: bool, display_name: string, emojis: list<record>, fields: list<record>, followers_count: int, following_count: int, header: string, header_static: string, id: string, last_status_at: string, locked: bool, moved: any, mute_expires_at: string, note: string, source: record<fields: list, follow_requests_count: int, language: string, note: string, privacy: string, sensitive: bool>, statuses_count: int, suspended: bool, url: string, username: string>, application: record<client_id: string, client_secret: string, name: string, vapid_key: string, website: string>, bookmarked: bool, card: record<author_name: string, author_url: string, blurhash: string, description: string, height: int, html: string, image: string, provider_name: string, provider_url: string, title: string, type: string, url: string, width: int>, content: string, created_at: string, emojis: table<category: string, shortcode: string, static_url: string, url: string, visible_in_picker: bool>, favourited: bool, favourites_count: int, id: string, in_reply_to_account_id: string, in_reply_to_id: string, language: string, media_attachments: table<blurhash: string, description: string, id: string, meta: record, preview_url: string, remote_url: string, text_url: string, type: string, url: string>, mentions: table<acct: string, id: string, url: string, username: string>, muted: bool, pinned: bool, poll: record<emojis: list<record>, expired: bool, expires_at: string, id: string, multiple: bool, options: list<any>, own_votes: list<int>, voted: bool, voters_count: int, votes_count: int>, reblog: any, reblogged: bool, reblogs_count: int, replies_count: int, sensitive: bool, spoiler_text: string, tags: table<history: list, name: string, url: string>, text: string, uri: string, url: string, visibility: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/statuses/{id}/mute"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/statuses/{id}/mute"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2605,7 +2627,7 @@ export def "statuses-mute post" [
 # Feature one of your own public statuses at the top of your profile.
 #
 # POST /api/v1/statuses/{id}/pin
-export def "statuses-pin post" [
+export def "statuses-pin create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2618,7 +2640,7 @@ export def "statuses-pin post" [
 ]: nothing -> record<account: record<acct: string, avatar: string, avatar_static: string, bot: bool, created_at: string, discoverable: bool, display_name: string, emojis: list<record>, fields: list<record>, followers_count: int, following_count: int, header: string, header_static: string, id: string, last_status_at: string, locked: bool, moved: any, mute_expires_at: string, note: string, source: record<fields: list, follow_requests_count: int, language: string, note: string, privacy: string, sensitive: bool>, statuses_count: int, suspended: bool, url: string, username: string>, application: record<client_id: string, client_secret: string, name: string, vapid_key: string, website: string>, bookmarked: bool, card: record<author_name: string, author_url: string, blurhash: string, description: string, height: int, html: string, image: string, provider_name: string, provider_url: string, title: string, type: string, url: string, width: int>, content: string, created_at: string, emojis: table<category: string, shortcode: string, static_url: string, url: string, visible_in_picker: bool>, favourited: bool, favourites_count: int, id: string, in_reply_to_account_id: string, in_reply_to_id: string, language: string, media_attachments: table<blurhash: string, description: string, id: string, meta: record, preview_url: string, remote_url: string, text_url: string, type: string, url: string>, mentions: table<acct: string, id: string, url: string, username: string>, muted: bool, pinned: bool, poll: record<emojis: list<record>, expired: bool, expires_at: string, id: string, multiple: bool, options: list<any>, own_votes: list<int>, voted: bool, voters_count: int, votes_count: int>, reblog: any, reblogged: bool, reblogs_count: int, replies_count: int, sensitive: bool, spoiler_text: string, tags: table<history: list, name: string, url: string>, text: string, uri: string, url: string, visibility: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/statuses/{id}/pin"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/statuses/{id}/pin"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2627,7 +2649,7 @@ export def "statuses-pin post" [
 # Reshare a status.
 #
 # POST /api/v1/statuses/{id}/reblog
-export def "statuses-reblog post" [
+export def "statuses-reblog create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2642,12 +2664,12 @@ export def "statuses-reblog post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/statuses/{id}/reblog"))
-  let body = {"visibility": $visibility} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/statuses/{id}/reblog"))
+  let req_body = {"visibility": $visibility} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # View who boosted a given status.
@@ -2666,7 +2688,7 @@ export def "statuses-reblogged-by get" [
 ]: nothing -> record<acct: string, avatar: string, avatar_static: string, bot: bool, created_at: string, discoverable: bool, display_name: string, emojis: table<category: string, shortcode: string, static_url: string, url: string, visible_in_picker: bool>, fields: table<name: string, value: string, verified_at: string>, followers_count: int, following_count: int, header: string, header_static: string, id: string, last_status_at: string, locked: bool, moved: any, mute_expires_at: string, note: string, source: record<fields: list<record>, follow_requests_count: int, language: string, note: string, privacy: string, sensitive: bool>, statuses_count: int, suspended: bool, url: string, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/statuses/{id}/reblogged_by"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/statuses/{id}/reblogged_by"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2675,7 +2697,7 @@ export def "statuses-reblogged-by get" [
 # Remove a status from your private bookmarks.
 #
 # POST /api/v1/statuses/{id}/unbookmark
-export def "statuses-unbookmark post" [
+export def "statuses-unbookmark create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2688,7 +2710,7 @@ export def "statuses-unbookmark post" [
 ]: nothing -> record<account: record<acct: string, avatar: string, avatar_static: string, bot: bool, created_at: string, discoverable: bool, display_name: string, emojis: list<record>, fields: list<record>, followers_count: int, following_count: int, header: string, header_static: string, id: string, last_status_at: string, locked: bool, moved: any, mute_expires_at: string, note: string, source: record<fields: list, follow_requests_count: int, language: string, note: string, privacy: string, sensitive: bool>, statuses_count: int, suspended: bool, url: string, username: string>, application: record<client_id: string, client_secret: string, name: string, vapid_key: string, website: string>, bookmarked: bool, card: record<author_name: string, author_url: string, blurhash: string, description: string, height: int, html: string, image: string, provider_name: string, provider_url: string, title: string, type: string, url: string, width: int>, content: string, created_at: string, emojis: table<category: string, shortcode: string, static_url: string, url: string, visible_in_picker: bool>, favourited: bool, favourites_count: int, id: string, in_reply_to_account_id: string, in_reply_to_id: string, language: string, media_attachments: table<blurhash: string, description: string, id: string, meta: record, preview_url: string, remote_url: string, text_url: string, type: string, url: string>, mentions: table<acct: string, id: string, url: string, username: string>, muted: bool, pinned: bool, poll: record<emojis: list<record>, expired: bool, expires_at: string, id: string, multiple: bool, options: list<any>, own_votes: list<int>, voted: bool, voters_count: int, votes_count: int>, reblog: any, reblogged: bool, reblogs_count: int, replies_count: int, sensitive: bool, spoiler_text: string, tags: table<history: list, name: string, url: string>, text: string, uri: string, url: string, visibility: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/statuses/{id}/unbookmark"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/statuses/{id}/unbookmark"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2697,7 +2719,7 @@ export def "statuses-unbookmark post" [
 # Remove a status from your favourites list.
 #
 # POST /api/v1/statuses/{id}/unfavourite
-export def "statuses-unfavourite post" [
+export def "statuses-unfavourite create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2710,7 +2732,7 @@ export def "statuses-unfavourite post" [
 ]: nothing -> record<account: record<acct: string, avatar: string, avatar_static: string, bot: bool, created_at: string, discoverable: bool, display_name: string, emojis: list<record>, fields: list<record>, followers_count: int, following_count: int, header: string, header_static: string, id: string, last_status_at: string, locked: bool, moved: any, mute_expires_at: string, note: string, source: record<fields: list, follow_requests_count: int, language: string, note: string, privacy: string, sensitive: bool>, statuses_count: int, suspended: bool, url: string, username: string>, application: record<client_id: string, client_secret: string, name: string, vapid_key: string, website: string>, bookmarked: bool, card: record<author_name: string, author_url: string, blurhash: string, description: string, height: int, html: string, image: string, provider_name: string, provider_url: string, title: string, type: string, url: string, width: int>, content: string, created_at: string, emojis: table<category: string, shortcode: string, static_url: string, url: string, visible_in_picker: bool>, favourited: bool, favourites_count: int, id: string, in_reply_to_account_id: string, in_reply_to_id: string, language: string, media_attachments: table<blurhash: string, description: string, id: string, meta: record, preview_url: string, remote_url: string, text_url: string, type: string, url: string>, mentions: table<acct: string, id: string, url: string, username: string>, muted: bool, pinned: bool, poll: record<emojis: list<record>, expired: bool, expires_at: string, id: string, multiple: bool, options: list<any>, own_votes: list<int>, voted: bool, voters_count: int, votes_count: int>, reblog: any, reblogged: bool, reblogs_count: int, replies_count: int, sensitive: bool, spoiler_text: string, tags: table<history: list, name: string, url: string>, text: string, uri: string, url: string, visibility: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/statuses/{id}/unfavourite"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/statuses/{id}/unfavourite"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2719,7 +2741,7 @@ export def "statuses-unfavourite post" [
 # Status's conversation unmuted, or was already unmuted
 #
 # POST /api/v1/statuses/{id}/unmute
-export def "statuses-unmute post" [
+export def "statuses-unmute create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2732,7 +2754,7 @@ export def "statuses-unmute post" [
 ]: nothing -> record<account: record<acct: string, avatar: string, avatar_static: string, bot: bool, created_at: string, discoverable: bool, display_name: string, emojis: list<record>, fields: list<record>, followers_count: int, following_count: int, header: string, header_static: string, id: string, last_status_at: string, locked: bool, moved: any, mute_expires_at: string, note: string, source: record<fields: list, follow_requests_count: int, language: string, note: string, privacy: string, sensitive: bool>, statuses_count: int, suspended: bool, url: string, username: string>, application: record<client_id: string, client_secret: string, name: string, vapid_key: string, website: string>, bookmarked: bool, card: record<author_name: string, author_url: string, blurhash: string, description: string, height: int, html: string, image: string, provider_name: string, provider_url: string, title: string, type: string, url: string, width: int>, content: string, created_at: string, emojis: table<category: string, shortcode: string, static_url: string, url: string, visible_in_picker: bool>, favourited: bool, favourites_count: int, id: string, in_reply_to_account_id: string, in_reply_to_id: string, language: string, media_attachments: table<blurhash: string, description: string, id: string, meta: record, preview_url: string, remote_url: string, text_url: string, type: string, url: string>, mentions: table<acct: string, id: string, url: string, username: string>, muted: bool, pinned: bool, poll: record<emojis: list<record>, expired: bool, expires_at: string, id: string, multiple: bool, options: list<any>, own_votes: list<int>, voted: bool, voters_count: int, votes_count: int>, reblog: any, reblogged: bool, reblogs_count: int, replies_count: int, sensitive: bool, spoiler_text: string, tags: table<history: list, name: string, url: string>, text: string, uri: string, url: string, visibility: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/statuses/{id}/unmute"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/statuses/{id}/unmute"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2741,7 +2763,7 @@ export def "statuses-unmute post" [
 # Unfeature a status from the top of your profile.
 #
 # POST /api/v1/statuses/{id}/unpin
-export def "statuses-unpin post" [
+export def "statuses-unpin create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2754,7 +2776,7 @@ export def "statuses-unpin post" [
 ]: nothing -> record<account: record<acct: string, avatar: string, avatar_static: string, bot: bool, created_at: string, discoverable: bool, display_name: string, emojis: list<record>, fields: list<record>, followers_count: int, following_count: int, header: string, header_static: string, id: string, last_status_at: string, locked: bool, moved: any, mute_expires_at: string, note: string, source: record<fields: list, follow_requests_count: int, language: string, note: string, privacy: string, sensitive: bool>, statuses_count: int, suspended: bool, url: string, username: string>, application: record<client_id: string, client_secret: string, name: string, vapid_key: string, website: string>, bookmarked: bool, card: record<author_name: string, author_url: string, blurhash: string, description: string, height: int, html: string, image: string, provider_name: string, provider_url: string, title: string, type: string, url: string, width: int>, content: string, created_at: string, emojis: table<category: string, shortcode: string, static_url: string, url: string, visible_in_picker: bool>, favourited: bool, favourites_count: int, id: string, in_reply_to_account_id: string, in_reply_to_id: string, language: string, media_attachments: table<blurhash: string, description: string, id: string, meta: record, preview_url: string, remote_url: string, text_url: string, type: string, url: string>, mentions: table<acct: string, id: string, url: string, username: string>, muted: bool, pinned: bool, poll: record<emojis: list<record>, expired: bool, expires_at: string, id: string, multiple: bool, options: list<any>, own_votes: list<int>, voted: bool, voters_count: int, votes_count: int>, reblog: any, reblogged: bool, reblogs_count: int, replies_count: int, sensitive: bool, spoiler_text: string, tags: table<history: list, name: string, url: string>, text: string, uri: string, url: string, visibility: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/statuses/{id}/unpin"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/statuses/{id}/unpin"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2763,7 +2785,7 @@ export def "statuses-unpin post" [
 # Undo a reshare of a status.
 #
 # POST /api/v1/statuses/{id}/unreblog
-export def "statuses-unreblog post" [
+export def "statuses-unreblog create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2776,7 +2798,7 @@ export def "statuses-unreblog post" [
 ]: nothing -> record<account: record<acct: string, avatar: string, avatar_static: string, bot: bool, created_at: string, discoverable: bool, display_name: string, emojis: list<record>, fields: list<record>, followers_count: int, following_count: int, header: string, header_static: string, id: string, last_status_at: string, locked: bool, moved: any, mute_expires_at: string, note: string, source: record<fields: list, follow_requests_count: int, language: string, note: string, privacy: string, sensitive: bool>, statuses_count: int, suspended: bool, url: string, username: string>, application: record<client_id: string, client_secret: string, name: string, vapid_key: string, website: string>, bookmarked: bool, card: record<author_name: string, author_url: string, blurhash: string, description: string, height: int, html: string, image: string, provider_name: string, provider_url: string, title: string, type: string, url: string, width: int>, content: string, created_at: string, emojis: table<category: string, shortcode: string, static_url: string, url: string, visible_in_picker: bool>, favourited: bool, favourites_count: int, id: string, in_reply_to_account_id: string, in_reply_to_id: string, language: string, media_attachments: table<blurhash: string, description: string, id: string, meta: record, preview_url: string, remote_url: string, text_url: string, type: string, url: string>, mentions: table<acct: string, id: string, url: string, username: string>, muted: bool, pinned: bool, poll: record<emojis: list<record>, expired: bool, expires_at: string, id: string, multiple: bool, options: list<any>, own_votes: list<int>, voted: bool, voters_count: int, votes_count: int>, reblog: any, reblogged: bool, reblogs_count: int, replies_count: int, sensitive: bool, spoiler_text: string, tags: table<history: list, name: string, url: string>, text: string, uri: string, url: string, visibility: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/statuses/{id}/unreblog"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/statuses/{id}/unreblog"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2821,7 +2843,7 @@ export def "suggestions delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/suggestions/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/suggestions/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2875,7 +2897,7 @@ export def "timelines-list get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "max_id" $max_id "scalar") (serialize-qp "since_id" $since_id "scalar") (serialize-qp "min_id" $min_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({list_id: $list_id} | format pattern "/api/v1/timelines/list/{list_id}") $qp)
+  let full_url = (build-url $base ({list_id: (encode-path-segment $list_id)} | format pattern "/api/v1/timelines/list/{list_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2934,7 +2956,7 @@ export def "timelines-tag get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "local" $local "scalar") (serialize-qp "remote" $remote "scalar") (serialize-qp "only_media" $only_media "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "max_id" $max_id "scalar") (serialize-qp "since_id" $since_id "scalar") (serialize-qp "min_id" $min_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({hashtag: $hashtag} | format pattern "/api/v1/timelines/tag/{hashtag}") $qp)
+  let full_url = (build-url $base ({hashtag: (encode-path-segment $hashtag)} | format pattern "/api/v1/timelines/tag/{hashtag}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3025,7 +3047,7 @@ export def "oauth-authorize get" [
 # Revoke an access token to make it no longer valid for use.
 #
 # POST /oauth/revoke
-export def "oauth-revoke post" [
+export def "oauth-revoke create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3040,16 +3062,17 @@ export def "oauth-revoke post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/oauth/revoke")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/form-data" $req_body
 }
 
 # Returns an access token, to be used during API calls that are not public.
 #
 # POST /oauth/token
-export def "oauth-token post" [
+export def "oauth-token create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3064,8 +3087,9 @@ export def "oauth-token post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/oauth/token")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/form-data" $req_body
 }

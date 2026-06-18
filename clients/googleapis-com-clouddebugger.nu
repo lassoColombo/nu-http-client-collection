@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -77,7 +86,7 @@ def state-completer [] { ["STATE_CANARY_ACTIVE" "STATE_CANARY_PENDING_AGENTS" "S
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "controller-debuggees-register clouddebuggercontrollerdebuggeesregister" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "controller-debuggees-register create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -102,7 +111,7 @@ export def commands []: nothing -> table {
 # POST /v2/controller/debuggees/register
 # operationId: clouddebugger.controller.debuggees.register
 # --debuggee shape: {agentVersion?: string, canaryMode?: "CANARY_MODE_UNSPECIFIED"|"CANARY_MODE_ALWAYS_ENABLED"|"CANARY_MODE_ALWAYS_DISABLED"|"CANARY_MODE_DEFAULT_ENABLED"|"CANARY_MODE_DEFAULT_DISABLED", description?: string, extSourceContexts?: list, id?: string, isDisabled?: bool, isInactive?: bool, labels?: record, project?: string, sourceContexts?: list, status?: record, uniquifier?: string}
-export def "controller-debuggees-register clouddebuggercontrollerdebuggeesregister" [
+export def "controller-debuggees-register create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -129,18 +138,18 @@ export def "controller-debuggees-register clouddebuggercontrollerdebuggeesregist
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/controller/debuggees/register" $qp)
-  let body = {"debuggee": $debuggee} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"debuggee": $debuggee} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns the list of all active breakpoints for the debuggee. The breakpoint specification (`location`, `condition`, and `expressions` fields) is semantically immutable, although the field values may change. For example, an agent may update the location line number to reflect the actual line where the breakpoint was set, but this doesn't change the breakpoint semantics. This means that an agent does not need to check if a breakpoint has changed when it encounters the same breakpoint on a successive call. Moreover, an agent should remember the breakpoints that are completed until the controller removes them from the active list to avoid setting those breakpoints again.
 #
 # GET /v2/controller/debuggees/{debuggeeId}/breakpoints
 # operationId: clouddebugger.controller.debuggees.breakpoints.list
-export def "controller-debuggees-breakpoints clouddebuggercontrollerdebuggeesbreakpointslist" [
+export def "controller-debuggees-breakpoints list" [
   debuggee_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -168,7 +177,7 @@ export def "controller-debuggees-breakpoints clouddebuggercontrollerdebuggeesbre
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "agentId" $agent_id "scalar") (serialize-qp "successOnTimeout" $success_on_timeout "scalar") (serialize-qp "waitToken" $wait_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({debuggee_id: $debuggee_id} | format pattern "/v2/controller/debuggees/{debuggee_id}/breakpoints") $qp)
+  let full_url = (build-url $base ({debuggee_id: (encode-path-segment $debuggee_id)} | format pattern "/v2/controller/debuggees/{debuggee_id}/breakpoints") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -178,8 +187,8 @@ export def "controller-debuggees-breakpoints clouddebuggercontrollerdebuggeesbre
 #
 # PUT /v2/controller/debuggees/{debuggeeId}/breakpoints/{id}
 # operationId: clouddebugger.controller.debuggees.breakpoints.update
-# --breakpoint shape: {action?: "CAPTURE"|"LOG", canaryExpireTime?: string, condition?: string, createTime?: string, evaluatedExpressions?: list, expressions?: list, finalTime?: string, id?: string, isFinalState?: bool, labels?: record, location?: record, logLevel?: "INFO"|"WARNING"|"ERROR", logMessageFormat?: string, stackFrames?: list, state?: "STATE_UNSPECIFIED"|"STATE_CANARY_PENDING_AGENTS"|"STATE_CANARY_ACTIVE"|"STATE_ROLLING_TO_ALL"|"STATE_IS_FINAL", status?: record, userEmail?: string, variableTable?: list}
-export def "controller-debuggees-breakpoints clouddebuggercontrollerdebuggeesbreakpointsupdate" [
+# --breakpoint shape: {action?: "CAPTURE"|"LOG", canaryExpireTime?: string, condition?: string, createTime?: string, evaluatedExpressions?: list, expressions?: list<string>, finalTime?: string, id?: string, isFinalState?: bool, labels?: record, location?: record, logLevel?: "INFO"|"WARNING"|"ERROR", logMessageFormat?: string, stackFrames?: list, state?: "STATE_UNSPECIFIED"|"STATE_CANARY_PENDING_AGENTS"|"STATE_CANARY_ACTIVE"|"STATE_ROLLING_TO_ALL"|"STATE_IS_FINAL", status?: record, userEmail?: string, ... (1 more fields)}
+export def "controller-debuggees-breakpoints update" [
   debuggee_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -201,25 +210,25 @@ export def "controller-debuggees-breakpoints clouddebuggercontrollerdebuggeesbre
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --breakpoint: record # ------------------------------------------------------------------------------ ## Breakpoint (the resource) Represents the breakpoint specification, status and results. — shape: {action?: "CAPTURE"|"LOG", canaryExpireTime?: string, condition?: string, createTime?: string, evaluatedExpressions?: list, expressions?: list, finalTime?: string, id?: string, isFinalState?: bool, labels?: record, location?: record, logLevel?: "INFO"|"WARNING"|"ERROR", logMessageFormat?: string, stackFrames?: list, state?: "STATE_UNSPECIFIED"|"STATE_CANARY_PENDING_AGENTS"|"STATE_CANARY_ACTIVE"|"STATE_ROLLING_TO_ALL"|"STATE_IS_FINAL", status?: record, userEmail?: string, variableTable?: list}
+  --breakpoint: record # ------------------------------------------------------------------------------ ## Breakpoint (the resource) Represents the breakpoint specification, status and results. — shape: {action?: "CAPTURE"|"LOG", canaryExpireTime?: string, condition?: string, createTime?: string, evaluatedExpressions?: list, expressions?: list<string>, finalTime?: string, id?: string, isFinalState?: bool, labels?: record, location?: record, logLevel?: "INFO"|"WARNING"|"ERROR", logMessageFormat?: string, stackFrames?: list, state?: "STATE_UNSPECIFIED"|"STATE_CANARY_PENDING_AGENTS"|"STATE_CANARY_ACTIVE"|"STATE_ROLLING_TO_ALL"|"STATE_IS_FINAL", status?: record, userEmail?: string, ... (1 more fields)}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({debuggee_id: $debuggee_id, id: $id} | format pattern "/v2/controller/debuggees/{debuggee_id}/breakpoints/{id}") $qp)
-  let body = {"breakpoint": $breakpoint} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({debuggee_id: (encode-path-segment $debuggee_id), id: (encode-path-segment $id)} | format pattern "/v2/controller/debuggees/{debuggee_id}/breakpoints/{id}") $qp)
+  let req_body = {"breakpoint": $breakpoint} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists all the debuggees that the user has access to.
 #
 # GET /v2/debugger/debuggees
 # operationId: clouddebugger.debugger.debuggees.list
-export def "debugger-debuggees clouddebuggerdebuggerdebuggeeslist" [
+export def "debugger-debuggees list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -256,7 +265,7 @@ export def "debugger-debuggees clouddebuggerdebuggerdebuggeeslist" [
 #
 # GET /v2/debugger/debuggees/{debuggeeId}/breakpoints
 # operationId: clouddebugger.debugger.debuggees.breakpoints.list
-export def "debugger-debuggees-breakpoints clouddebuggerdebuggerdebuggeesbreakpointslist" [
+export def "debugger-debuggees-breakpoints list" [
   debuggee_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -287,7 +296,7 @@ export def "debugger-debuggees-breakpoints clouddebuggerdebuggerdebuggeesbreakpo
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "action.value" $action_value "scalar") (serialize-qp "clientVersion" $client_version "scalar") (serialize-qp "includeAllUsers" $include_all_users "scalar") (serialize-qp "includeInactive" $include_inactive "scalar") (serialize-qp "stripResults" $strip_results "scalar") (serialize-qp "waitToken" $wait_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({debuggee_id: $debuggee_id} | format pattern "/v2/debugger/debuggees/{debuggee_id}/breakpoints") $qp)
+  let full_url = (build-url $base ({debuggee_id: (encode-path-segment $debuggee_id)} | format pattern "/v2/debugger/debuggees/{debuggee_id}/breakpoints") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -302,7 +311,7 @@ export def "debugger-debuggees-breakpoints clouddebuggerdebuggerdebuggeesbreakpo
 # --stackFrames item shape: {arguments?: list, function?: string, locals?: list, location?: record}
 # --status shape: {description?: record, isError?: bool, refersTo?: "UNSPECIFIED"|"BREAKPOINT_SOURCE_LOCATION"|"BREAKPOINT_CONDITION"|"BREAKPOINT_EXPRESSION"|"BREAKPOINT_AGE"|"BREAKPOINT_CANARY_FAILED"|"VARIABLE_NAME"|"VARIABLE_VALUE"}
 # --variableTable item shape: {members?: list, name?: string, status?: record, type?: string, value?: string, varTableIndex?: int}
-export def "debugger-debuggees-breakpoints-set clouddebuggerdebuggerdebuggeesbreakpointsset" [
+export def "debugger-debuggees-breakpoints-set update" [
   debuggee_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -330,7 +339,7 @@ export def "debugger-debuggees-breakpoints-set clouddebuggerdebuggerdebuggeesbre
   --condition: string # Condition that triggers the breakpoint. The condition is a compound boolean expression composed using expressions in a programming language at the source location.
   --create-time: string # Time this breakpoint was created by the server in seconds resolution. (format: google-datetime)
   --evaluated-expressions: list # Values of evaluated expressions at breakpoint time. The evaluated expressions appear in exactly the same order they are listed in the `expressions` field. The `name` field holds the original expression text, the `value` or `members` field holds the result of the evaluated expression. If the expression cannot be evaluated, the `status` inside the `Variable` will indicate an error and contain the error text. — item shape: {members?: list, name?: string, status?: record, type?: string, value?: string, varTableIndex?: int}
-  --expressions: list # List of read-only expressions to evaluate at the breakpoint location. The expressions are composed using expressions in the programming language at the source location. If the breakpoint action is `LOG`, the evaluated expressions are included in log statements.
+  --expressions: list<string> # List of read-only expressions to evaluate at the breakpoint location. The expressions are composed using expressions in the programming language at the source location. If the breakpoint action is `LOG`, the evaluated expressions are included in log statements.
   --final-time: string # Time this breakpoint was finalized as seen by the server in seconds resolution. (format: google-datetime)
   --id: string # Breakpoint identifier, unique in the scope of the debuggee.
   --is-final-state: oneof<nothing, bool> # When true, indicates that this is a final result and the breakpoint state will not change from here on.
@@ -348,19 +357,19 @@ export def "debugger-debuggees-breakpoints-set clouddebuggerdebuggerdebuggeesbre
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "canaryOption" $canary_option "scalar") (serialize-qp "clientVersion" $client_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({debuggee_id: $debuggee_id} | format pattern "/v2/debugger/debuggees/{debuggee_id}/breakpoints/set") $qp)
-  let body = {"action": $action, "canaryExpireTime": $canary_expire_time, "condition": $condition, "createTime": $create_time, "evaluatedExpressions": $evaluated_expressions, "expressions": $expressions, "finalTime": $final_time, "id": $id, "isFinalState": $is_final_state, "labels": $labels, "location": $location, "logLevel": $log_level, "logMessageFormat": $log_message_format, "stackFrames": $stack_frames, "state": $state, "status": $status, "userEmail": $user_email, "variableTable": $variable_table} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({debuggee_id: (encode-path-segment $debuggee_id)} | format pattern "/v2/debugger/debuggees/{debuggee_id}/breakpoints/set") $qp)
+  let req_body = {"action": $action, "canaryExpireTime": $canary_expire_time, "condition": $condition, "createTime": $create_time, "evaluatedExpressions": $evaluated_expressions, "expressions": $expressions, "finalTime": $final_time, "id": $id, "isFinalState": $is_final_state, "labels": $labels, "location": $location, "logLevel": $log_level, "logMessageFormat": $log_message_format, "stackFrames": $stack_frames, "state": $state, "status": $status, "userEmail": $user_email, "variableTable": $variable_table} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes the breakpoint from the debuggee.
 #
 # DELETE /v2/debugger/debuggees/{debuggeeId}/breakpoints/{breakpointId}
 # operationId: clouddebugger.debugger.debuggees.breakpoints.delete
-export def "debugger-debuggees-breakpoints clouddebuggerdebuggerdebuggeesbreakpointsdelete" [
+export def "debugger-debuggees-breakpoints delete" [
   debuggee_id: string
   breakpoint_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -387,7 +396,7 @@ export def "debugger-debuggees-breakpoints clouddebuggerdebuggerdebuggeesbreakpo
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "clientVersion" $client_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({debuggee_id: $debuggee_id, breakpoint_id: $breakpoint_id} | format pattern "/v2/debugger/debuggees/{debuggee_id}/breakpoints/{breakpoint_id}") $qp)
+  let full_url = (build-url $base ({debuggee_id: (encode-path-segment $debuggee_id), breakpoint_id: (encode-path-segment $breakpoint_id)} | format pattern "/v2/debugger/debuggees/{debuggee_id}/breakpoints/{breakpoint_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -397,7 +406,7 @@ export def "debugger-debuggees-breakpoints clouddebuggerdebuggerdebuggeesbreakpo
 #
 # GET /v2/debugger/debuggees/{debuggeeId}/breakpoints/{breakpointId}
 # operationId: clouddebugger.debugger.debuggees.breakpoints.get
-export def "debugger-debuggees-breakpoints clouddebuggerdebuggerdebuggeesbreakpointsget" [
+export def "debugger-debuggees-breakpoints get" [
   debuggee_id: string
   breakpoint_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -424,7 +433,7 @@ export def "debugger-debuggees-breakpoints clouddebuggerdebuggerdebuggeesbreakpo
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "clientVersion" $client_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({debuggee_id: $debuggee_id, breakpoint_id: $breakpoint_id} | format pattern "/v2/debugger/debuggees/{debuggee_id}/breakpoints/{breakpoint_id}") $qp)
+  let full_url = (build-url $base ({debuggee_id: (encode-path-segment $debuggee_id), breakpoint_id: (encode-path-segment $breakpoint_id)} | format pattern "/v2/debugger/debuggees/{debuggee_id}/breakpoints/{breakpoint_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

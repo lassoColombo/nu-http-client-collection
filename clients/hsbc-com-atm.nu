@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -68,7 +77,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "open-banking-v22-atms get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "open-banking-v2-2-atms get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -91,7 +100,7 @@ export def commands []: nothing -> table {
 # This API will return data about all our ATMs and is prepared to the Open Banking standards as defined by the Open Banking Implementation Entity (OBIE) in data dictionary version 2.2. It is regulated by the UK Competition and Markets Authority (CMA). Data is only available for the United Kingdom.
 #
 # GET /open-banking/v2.2/atms
-export def "open-banking-v22-atms get" [
+export def "open-banking-v2-2-atms get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -112,7 +121,7 @@ export def "open-banking-v22-atms get" [
 # This extended API will return data about all ATMs in the specified country. It is based-on the Open Banking standards as defined by the Open Banking Implementation Entity (OBIE) in data dictionary version 2.2. The extended functionality may not fully adhere to the non-functional requirements of the regulator. Data is only available for the United Kingdom.
 #
 # GET /x-open-banking/v2.2/atms/country/{country}
-export def "x-open-banking-v22-atms-country get" [
+export def "x-open-banking-v2-2-atms-country get" [
   country: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -125,7 +134,7 @@ export def "x-open-banking-v22-atms-country get" [
 ]: nothing -> record<data: table<Brand: list>, meta: record<Agreement: string, LastUpdated: string, License: string, TermsOfUse: string, TotalResults: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({country: $country} | format pattern "/x-open-banking/v2.2/atms/country/{country}"))
+  let full_url = (build-url $base ({country: (encode-path-segment $country)} | format pattern "/x-open-banking/v2.2/atms/country/{country}"))
   let accept_val = "application/prs.openbanking.opendata.v2.2+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -134,7 +143,7 @@ export def "x-open-banking-v22-atms-country get" [
 # This extended API will return data about all ATMs in the specified town. It is based-on the Open Banking standards as defined by the Open Banking Implementation Entity (OBIE) in data dictionary version 2.2. The extended functionality may not fully adhere to the non-functional requirements of the regulator. Data is only available for the United Kingdom.
 #
 # GET /x-open-banking/v2.2/atms/country/{country}/town/{town}
-export def "x-open-banking-v22-atms-country-town get" [
+export def "x-open-banking-v2-2-atms-country-town get" [
   country: string
   town: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -148,7 +157,7 @@ export def "x-open-banking-v22-atms-country-town get" [
 ]: nothing -> record<data: table<Brand: list>, meta: record<Agreement: string, LastUpdated: string, License: string, TermsOfUse: string, TotalResults: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({country: $country, town: $town} | format pattern "/x-open-banking/v2.2/atms/country/{country}/town/{town}"))
+  let full_url = (build-url $base ({country: (encode-path-segment $country), town: (encode-path-segment $town)} | format pattern "/x-open-banking/v2.2/atms/country/{country}/town/{town}"))
   let accept_val = "application/prs.openbanking.opendata.v2.2+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -157,7 +166,7 @@ export def "x-open-banking-v22-atms-country-town get" [
 # This extended API will data about all ATMs within a specified radius (1 to 10 miles) of the specified latitude and longitude. It is based-on the Open Banking standards as defined by the Open Banking Implementation Entity (OBIE) in data dictionary version 2.2. The extended functionality may not fully adhere to the non-functional requirements of the regulator. Data is only available for the United Kingdom.
 #
 # GET /x-open-banking/v2.2/atms/geo-location/lat/{latitude}/long/{longitude}
-export def "x-open-banking-v22-atms-geo-location-lat-long get" [
+export def "x-open-banking-v2-2-atms-geo-location-lat-long get" [
   latitude: string
   longitude: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -173,7 +182,7 @@ export def "x-open-banking-v22-atms-geo-location-lat-long get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "radius" $radius "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({latitude: $latitude, longitude: $longitude} | format pattern "/x-open-banking/v2.2/atms/geo-location/lat/{latitude}/long/{longitude}") $qp)
+  let full_url = (build-url $base ({latitude: (encode-path-segment $latitude), longitude: (encode-path-segment $longitude)} | format pattern "/x-open-banking/v2.2/atms/geo-location/lat/{latitude}/long/{longitude}") $qp)
   let accept_val = "application/prs.openbanking.opendata.v2.2+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -182,7 +191,7 @@ export def "x-open-banking-v22-atms-geo-location-lat-long get" [
 # This extended API will return data about all ATMs within a 5 mile radius of the specified postcode. It is based-on the Open Banking standards as defined by the Open Banking Implementation Entity (OBIE) in data dictionary version 2.2. The extended functionality may not fully adhere to the non-functional requirements of the regulator. Data is only available for the United Kingdom.
 #
 # GET /x-open-banking/v2.2/atms/postcode/{postcode}
-export def "x-open-banking-v22-atms-postcode get" [
+export def "x-open-banking-v2-2-atms-postcode get" [
   postcode: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -195,7 +204,7 @@ export def "x-open-banking-v22-atms-postcode get" [
 ]: nothing -> record<data: table<Brand: list>, meta: record<Agreement: string, LastUpdated: string, License: string, TermsOfUse: string, TotalResults: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({postcode: $postcode} | format pattern "/x-open-banking/v2.2/atms/postcode/{postcode}"))
+  let full_url = (build-url $base ({postcode: (encode-path-segment $postcode)} | format pattern "/x-open-banking/v2.2/atms/postcode/{postcode}"))
   let accept_val = "application/prs.openbanking.opendata.v2.2+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

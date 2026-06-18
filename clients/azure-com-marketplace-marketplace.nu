@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -158,7 +167,7 @@ export def "providers-microsoft-marketplace-private-stores delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({private_store_id: $private_store_id} | format pattern "/providers/Microsoft.Marketplace/privateStores/{private_store_id}") $qp)
+  let full_url = (build-url $base ({private_store_id: (encode-path-segment $private_store_id)} | format pattern "/providers/Microsoft.Marketplace/privateStores/{private_store_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -183,7 +192,7 @@ export def "providers-microsoft-marketplace-private-stores get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({private_store_id: $private_store_id} | format pattern "/providers/Microsoft.Marketplace/privateStores/{private_store_id}") $qp)
+  let full_url = (build-url $base ({private_store_id: (encode-path-segment $private_store_id)} | format pattern "/providers/Microsoft.Marketplace/privateStores/{private_store_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -211,12 +220,12 @@ export def "providers-microsoft-marketplace-private-stores create-or-update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({private_store_id: $private_store_id} | format pattern "/providers/Microsoft.Marketplace/privateStores/{private_store_id}") $qp)
-  let body = {"availability": $availability, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({private_store_id: (encode-path-segment $private_store_id)} | format pattern "/providers/Microsoft.Marketplace/privateStores/{private_store_id}") $qp)
+  let req_body = {"availability": $availability, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get a list of all private offers in the given private store
@@ -238,7 +247,7 @@ export def "providers-microsoft-marketplace-private-stores-offers list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({private_store_id: $private_store_id} | format pattern "/providers/Microsoft.Marketplace/privateStores/{private_store_id}/offers") $qp)
+  let full_url = (build-url $base ({private_store_id: (encode-path-segment $private_store_id)} | format pattern "/providers/Microsoft.Marketplace/privateStores/{private_store_id}/offers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -264,7 +273,7 @@ export def "providers-microsoft-marketplace-private-stores-offers delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({private_store_id: $private_store_id, offer_id: $offer_id} | format pattern "/providers/Microsoft.Marketplace/privateStores/{private_store_id}/offers/{offer_id}") $qp)
+  let full_url = (build-url $base ({private_store_id: (encode-path-segment $private_store_id), offer_id: (encode-path-segment $offer_id)} | format pattern "/providers/Microsoft.Marketplace/privateStores/{private_store_id}/offers/{offer_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -290,7 +299,7 @@ export def "providers-microsoft-marketplace-private-stores-offers get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({private_store_id: $private_store_id, offer_id: $offer_id} | format pattern "/providers/Microsoft.Marketplace/privateStores/{private_store_id}/offers/{offer_id}") $qp)
+  let full_url = (build-url $base ({private_store_id: (encode-path-segment $private_store_id), offer_id: (encode-path-segment $offer_id)} | format pattern "/providers/Microsoft.Marketplace/privateStores/{private_store_id}/offers/{offer_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -318,10 +327,10 @@ export def "providers-microsoft-marketplace-private-stores-offers create-or-upda
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({private_store_id: $private_store_id, offer_id: $offer_id} | format pattern "/providers/Microsoft.Marketplace/privateStores/{private_store_id}/offers/{offer_id}") $qp)
-  let body = {"eTag": $e_tag} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({private_store_id: (encode-path-segment $private_store_id), offer_id: (encode-path-segment $offer_id)} | format pattern "/providers/Microsoft.Marketplace/privateStores/{private_store_id}/offers/{offer_id}") $qp)
+  let req_body = {"eTag": $e_tag} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

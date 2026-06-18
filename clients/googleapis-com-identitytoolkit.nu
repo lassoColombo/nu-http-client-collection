@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -75,7 +84,7 @@ def version-completer [] { ["RECAPTCHA_ENTERPRISE" "RECAPTCHA_VERSION_UNSPECIFIE
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accounts-mfa-enrollment-finalize identitytoolkitaccountsmfaEnrollmentfinalize" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accounts-mfa-enrollment-finalize finalize" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -101,7 +110,7 @@ export def commands []: nothing -> table {
 # operationId: identitytoolkit.accounts.mfaEnrollment.finalize
 # --phoneVerificationInfo shape: {androidVerificationProof?: string, code?: string, phoneNumber?: string, sessionInfo?: string}
 # --totpVerificationInfo shape: {sessionInfo?: string, verificationCode?: string}
-export def "accounts-mfa-enrollment-finalize identitytoolkitaccountsmfaEnrollmentfinalize" [
+export def "accounts-mfa-enrollment-finalize finalize" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -132,11 +141,11 @@ export def "accounts-mfa-enrollment-finalize identitytoolkitaccountsmfaEnrollmen
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/accounts/mfaEnrollment:finalize" $qp)
-  let body = {"displayName": $display_name, "idToken": $id_token, "phoneVerificationInfo": $phone_verification_info, "tenantId": $tenant_id, "totpVerificationInfo": $totp_verification_info} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"displayName": $display_name, "idToken": $id_token, "phoneVerificationInfo": $phone_verification_info, "tenantId": $tenant_id, "totpVerificationInfo": $totp_verification_info} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Step one of the MFA enrollment process. In SMS case, this sends an SMS verification code to the user.
@@ -144,7 +153,7 @@ export def "accounts-mfa-enrollment-finalize identitytoolkitaccountsmfaEnrollmen
 # POST /v2/accounts/mfaEnrollment:start
 # operationId: identitytoolkit.accounts.mfaEnrollment.start
 # --phoneEnrollmentInfo shape: {autoRetrievalInfo?: record, iosReceipt?: string, iosSecret?: string, phoneNumber?: string, playIntegrityToken?: string, recaptchaToken?: string, safetyNetToken?: string}
-export def "accounts-mfa-enrollment-start identitytoolkitaccountsmfaEnrollmentstart" [
+export def "accounts-mfa-enrollment-start start" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -174,18 +183,18 @@ export def "accounts-mfa-enrollment-start identitytoolkitaccountsmfaEnrollmentst
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/accounts/mfaEnrollment:start" $qp)
-  let body = {"idToken": $id_token, "phoneEnrollmentInfo": $phone_enrollment_info, "tenantId": $tenant_id, "totpEnrollmentInfo": $totp_enrollment_info} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"idToken": $id_token, "phoneEnrollmentInfo": $phone_enrollment_info, "tenantId": $tenant_id, "totpEnrollmentInfo": $totp_enrollment_info} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Revokes one second factor from the enrolled second factors for an account.
 #
 # POST /v2/accounts/mfaEnrollment:withdraw
 # operationId: identitytoolkit.accounts.mfaEnrollment.withdraw
-export def "accounts-mfa-enrollment-withdraw identitytoolkitaccountsmfaEnrollmentwithdraw" [
+export def "accounts-mfa-enrollment-withdraw create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -214,11 +223,11 @@ export def "accounts-mfa-enrollment-withdraw identitytoolkitaccountsmfaEnrollmen
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/accounts/mfaEnrollment:withdraw" $qp)
-  let body = {"idToken": $id_token, "mfaEnrollmentId": $mfa_enrollment_id, "tenantId": $tenant_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"idToken": $id_token, "mfaEnrollmentId": $mfa_enrollment_id, "tenantId": $tenant_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Verifies the MFA challenge and performs sign-in
@@ -227,7 +236,7 @@ export def "accounts-mfa-enrollment-withdraw identitytoolkitaccountsmfaEnrollmen
 # operationId: identitytoolkit.accounts.mfaSignIn.finalize
 # --phoneVerificationInfo shape: {androidVerificationProof?: string, code?: string, phoneNumber?: string, sessionInfo?: string}
 # --totpVerificationInfo shape: {verificationCode?: string}
-export def "accounts-mfa-sign-in-finalize identitytoolkitaccountsmfaSignInfinalize" [
+export def "accounts-mfa-sign-in-finalize finalize" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -258,11 +267,11 @@ export def "accounts-mfa-sign-in-finalize identitytoolkitaccountsmfaSignInfinali
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/accounts/mfaSignIn:finalize" $qp)
-  let body = {"mfaEnrollmentId": $mfa_enrollment_id, "mfaPendingCredential": $mfa_pending_credential, "phoneVerificationInfo": $phone_verification_info, "tenantId": $tenant_id, "totpVerificationInfo": $totp_verification_info} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"mfaEnrollmentId": $mfa_enrollment_id, "mfaPendingCredential": $mfa_pending_credential, "phoneVerificationInfo": $phone_verification_info, "tenantId": $tenant_id, "totpVerificationInfo": $totp_verification_info} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Sends the MFA challenge
@@ -270,7 +279,7 @@ export def "accounts-mfa-sign-in-finalize identitytoolkitaccountsmfaSignInfinali
 # POST /v2/accounts/mfaSignIn:start
 # operationId: identitytoolkit.accounts.mfaSignIn.start
 # --phoneSignInInfo shape: {autoRetrievalInfo?: record, iosReceipt?: string, iosSecret?: string, phoneNumber?: string, playIntegrityToken?: string, recaptchaToken?: string, safetyNetToken?: string}
-export def "accounts-mfa-sign-in-start identitytoolkitaccountsmfaSignInstart" [
+export def "accounts-mfa-sign-in-start start" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -300,11 +309,11 @@ export def "accounts-mfa-sign-in-start identitytoolkitaccountsmfaSignInstart" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/accounts/mfaSignIn:start" $qp)
-  let body = {"mfaEnrollmentId": $mfa_enrollment_id, "mfaPendingCredential": $mfa_pending_credential, "phoneSignInInfo": $phone_sign_in_info, "tenantId": $tenant_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"mfaEnrollmentId": $mfa_enrollment_id, "mfaPendingCredential": $mfa_pending_credential, "phoneSignInInfo": $phone_sign_in_info, "tenantId": $tenant_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Finishes enrolling a passkey credential for the user.
@@ -312,7 +321,7 @@ export def "accounts-mfa-sign-in-start identitytoolkitaccountsmfaSignInstart" [
 # POST /v2/accounts/passkeyEnrollment:finalize
 # operationId: identitytoolkit.accounts.passkeyEnrollment.finalize
 # --authenticatorRegistrationResponse shape: {authenticatorAttestationResponse?: record, credentialId?: string, credentialType?: string}
-export def "accounts-passkey-enrollment-finalize identitytoolkitaccountspasskeyEnrollmentfinalize" [
+export def "accounts-passkey-enrollment-finalize finalize" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -341,18 +350,18 @@ export def "accounts-passkey-enrollment-finalize identitytoolkitaccountspasskeyE
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/accounts/passkeyEnrollment:finalize" $qp)
-  let body = {"authenticatorRegistrationResponse": $authenticator_registration_response, "idToken": $id_token, "tenantId": $tenant_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"authenticatorRegistrationResponse": $authenticator_registration_response, "idToken": $id_token, "tenantId": $tenant_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Step one of the passkey enrollment process. Returns a challenge and parameters for creation of the passkey credential.
 #
 # POST /v2/accounts/passkeyEnrollment:start
 # operationId: identitytoolkit.accounts.passkeyEnrollment.start
-export def "accounts-passkey-enrollment-start identitytoolkitaccountspasskeyEnrollmentstart" [
+export def "accounts-passkey-enrollment-start start" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -380,11 +389,11 @@ export def "accounts-passkey-enrollment-start identitytoolkitaccountspasskeyEnro
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/accounts/passkeyEnrollment:start" $qp)
-  let body = {"idToken": $id_token, "tenantId": $tenant_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"idToken": $id_token, "tenantId": $tenant_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Verifies the passkey assertion and signs the user in.
@@ -392,7 +401,7 @@ export def "accounts-passkey-enrollment-start identitytoolkitaccountspasskeyEnro
 # POST /v2/accounts/passkeySignIn:finalize
 # operationId: identitytoolkit.accounts.passkeySignIn.finalize
 # --authenticatorAuthenticationResponse shape: {authenticatorAssertionResponse?: record, credentialId?: string, credentialType?: string}
-export def "accounts-passkey-sign-in-finalize identitytoolkitaccountspasskeySignInfinalize" [
+export def "accounts-passkey-sign-in-finalize finalize" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -421,18 +430,18 @@ export def "accounts-passkey-sign-in-finalize identitytoolkitaccountspasskeySign
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/accounts/passkeySignIn:finalize" $qp)
-  let body = {"authenticatorAuthenticationResponse": $authenticator_authentication_response, "sessionId": $session_id, "tenantId": $tenant_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"authenticatorAuthenticationResponse": $authenticator_authentication_response, "sessionId": $session_id, "tenantId": $tenant_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Creates and returns the passkey challenge
 #
 # POST /v2/accounts/passkeySignIn:start
 # operationId: identitytoolkit.accounts.passkeySignIn.start
-export def "accounts-passkey-sign-in-start identitytoolkitaccountspasskeySignInstart" [
+export def "accounts-passkey-sign-in-start start" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -460,18 +469,18 @@ export def "accounts-passkey-sign-in-start identitytoolkitaccountspasskeySignIns
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/accounts/passkeySignIn:start" $qp)
-  let body = {"sessionId": $session_id, "tenantId": $tenant_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"sessionId": $session_id, "tenantId": $tenant_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Revokes a user's token from an Identity Provider (IdP). This is done by manually providing an IdP credential, and the token types for revocation. An [API key](https://cloud.google.com/docs/authentication/api-keys) is required in the request in order to identify the Google Cloud project.
 #
 # POST /v2/accounts:revokeToken
 # operationId: identitytoolkit.accounts.revokeToken
-export def "accounts-revoke-token identitytoolkitaccountsrevokeToken" [
+export def "accounts-revoke-token delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -503,18 +512,18 @@ export def "accounts-revoke-token identitytoolkitaccountsrevokeToken" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/accounts:revokeToken" $qp)
-  let body = {"idToken": $id_token, "providerId": $provider_id, "redirectUri": $redirect_uri, "tenantId": $tenant_id, "token": $body_token, "tokenType": $token_type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"idToken": $id_token, "providerId": $provider_id, "redirectUri": $redirect_uri, "tenantId": $tenant_id, "token": $body_token, "tokenType": $token_type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List all default supported Idps.
 #
 # GET /v2/defaultSupportedIdps
 # operationId: identitytoolkit.defaultSupportedIdps.list
-export def "default-supported-idps identitytoolkitdefaultSupportedIdpslist" [
+export def "default-supported-idps list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -550,7 +559,7 @@ export def "default-supported-idps identitytoolkitdefaultSupportedIdpslist" [
 #
 # GET /v2/recaptchaConfig
 # operationId: identitytoolkit.getRecaptchaConfig
-export def "recaptcha-config identitytoolkitgetRecaptchaConfig" [
+export def "recaptcha-config get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -587,7 +596,7 @@ export def "recaptcha-config identitytoolkitgetRecaptchaConfig" [
 #
 # DELETE /v2/{name}
 # operationId: identitytoolkit.projects.tenants.oauthIdpConfigs.delete
-export def "projects identitytoolkitprojectstenantsoauthIdpConfigsdelete" [
+export def "projects delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -612,7 +621,7 @@ export def "projects identitytoolkitprojectstenantsoauthIdpConfigsdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v2/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v2/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -622,7 +631,7 @@ export def "projects identitytoolkitprojectstenantsoauthIdpConfigsdelete" [
 #
 # GET /v2/{name}
 # operationId: identitytoolkit.projects.tenants.oauthIdpConfigs.get
-export def "projects identitytoolkitprojectstenantsoauthIdpConfigsget" [
+export def "projects get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -647,7 +656,7 @@ export def "projects identitytoolkitprojectstenantsoauthIdpConfigsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v2/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v2/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -658,7 +667,7 @@ export def "projects identitytoolkitprojectstenantsoauthIdpConfigsget" [
 # PATCH /v2/{name}
 # operationId: identitytoolkit.projects.tenants.oauthIdpConfigs.patch
 # --responseType shape: {code?: bool, idToken?: bool, token?: bool}
-export def "projects identitytoolkitprojectstenantsoauthIdpConfigspatch" [
+export def "projects update" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -692,19 +701,19 @@ export def "projects identitytoolkitprojectstenantsoauthIdpConfigspatch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v2/{name}") $qp)
-  let body = {"clientId": $client_id, "clientSecret": $client_secret, "displayName": $display_name, "enabled": $enabled, "issuer": $issuer, "name": $body_name, "responseType": $response_type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v2/{name}") $qp)
+  let req_body = {"clientId": $client_id, "clientSecret": $client_secret, "displayName": $display_name, "enabled": $enabled, "issuer": $issuer, "name": $body_name, "responseType": $response_type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List all default supported Idp configurations for an Identity Toolkit project.
 #
 # GET /v2/{parent}/defaultSupportedIdpConfigs
 # operationId: identitytoolkit.projects.tenants.defaultSupportedIdpConfigs.list
-export def "default-supported-idp-configs identitytoolkitprojectstenantsdefaultSupportedIdpConfigslist" [
+export def "default-supported-idp-configs list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -731,7 +740,7 @@ export def "default-supported-idp-configs identitytoolkitprojectstenantsdefaultS
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v2/{parent}/defaultSupportedIdpConfigs") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v2/{parent}/defaultSupportedIdpConfigs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -741,8 +750,8 @@ export def "default-supported-idp-configs identitytoolkitprojectstenantsdefaultS
 #
 # POST /v2/{parent}/defaultSupportedIdpConfigs
 # operationId: identitytoolkit.projects.tenants.defaultSupportedIdpConfigs.create
-# --appleSignInConfig shape: {bundleIds?: list, codeFlowConfig?: record}
-export def "default-supported-idp-configs identitytoolkitprojectstenantsdefaultSupportedIdpConfigscreate" [
+# --appleSignInConfig shape: {bundleIds?: list<string>, codeFlowConfig?: record}
+export def "default-supported-idp-configs create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -764,7 +773,7 @@ export def "default-supported-idp-configs identitytoolkitprojectstenantsdefaultS
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --idp-id: string # The id of the Idp to create a config for. Call ListDefaultSupportedIdps for list of all default supported Idps.
-  --apple-sign-in-config: record # Additional config for SignInWithApple. — shape: {bundleIds?: list, codeFlowConfig?: record}
+  --apple-sign-in-config: record # Additional config for SignInWithApple. — shape: {bundleIds?: list<string>, codeFlowConfig?: record}
   --client-id: string # OAuth client ID.
   --client-secret: string # OAuth client secret.
   --enabled: oneof<nothing, bool> # True if allows the user to sign in with the provider.
@@ -774,19 +783,19 @@ export def "default-supported-idp-configs identitytoolkitprojectstenantsdefaultS
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "idpId" $idp_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v2/{parent}/defaultSupportedIdpConfigs") $qp)
-  let body = {"appleSignInConfig": $apple_sign_in_config, "clientId": $client_id, "clientSecret": $client_secret, "enabled": $enabled, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v2/{parent}/defaultSupportedIdpConfigs") $qp)
+  let req_body = {"appleSignInConfig": $apple_sign_in_config, "clientId": $client_id, "clientSecret": $client_secret, "enabled": $enabled, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List all inbound SAML configurations for an Identity Toolkit project.
 #
 # GET /v2/{parent}/inboundSamlConfigs
 # operationId: identitytoolkit.projects.tenants.inboundSamlConfigs.list
-export def "inbound-saml-configs identitytoolkitprojectstenantsinboundSamlConfigslist" [
+export def "inbound-saml-configs list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -813,7 +822,7 @@ export def "inbound-saml-configs identitytoolkitprojectstenantsinboundSamlConfig
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v2/{parent}/inboundSamlConfigs") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v2/{parent}/inboundSamlConfigs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -825,7 +834,7 @@ export def "inbound-saml-configs identitytoolkitprojectstenantsinboundSamlConfig
 # operationId: identitytoolkit.projects.tenants.inboundSamlConfigs.create
 # --idpConfig shape: {idpCertificates?: list, idpEntityId?: string, signRequest?: bool, ssoUrl?: string}
 # --spConfig shape: {callbackUri?: string, spEntityId?: string}
-export def "inbound-saml-configs identitytoolkitprojectstenantsinboundSamlConfigscreate" [
+export def "inbound-saml-configs create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -857,19 +866,19 @@ export def "inbound-saml-configs identitytoolkitprojectstenantsinboundSamlConfig
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "inboundSamlConfigId" $inbound_saml_config_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v2/{parent}/inboundSamlConfigs") $qp)
-  let body = {"displayName": $display_name, "enabled": $enabled, "idpConfig": $idp_config, "name": $name, "spConfig": $sp_config} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v2/{parent}/inboundSamlConfigs") $qp)
+  let req_body = {"displayName": $display_name, "enabled": $enabled, "idpConfig": $idp_config, "name": $name, "spConfig": $sp_config} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List all Oidc Idp configurations for an Identity Toolkit project.
 #
 # GET /v2/{parent}/oauthIdpConfigs
 # operationId: identitytoolkit.projects.tenants.oauthIdpConfigs.list
-export def "oauth-idp-configs identitytoolkitprojectstenantsoauthIdpConfigslist" [
+export def "oauth-idp-configs list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -896,7 +905,7 @@ export def "oauth-idp-configs identitytoolkitprojectstenantsoauthIdpConfigslist"
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v2/{parent}/oauthIdpConfigs") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v2/{parent}/oauthIdpConfigs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -907,7 +916,7 @@ export def "oauth-idp-configs identitytoolkitprojectstenantsoauthIdpConfigslist"
 # POST /v2/{parent}/oauthIdpConfigs
 # operationId: identitytoolkit.projects.tenants.oauthIdpConfigs.create
 # --responseType shape: {code?: bool, idToken?: bool, token?: bool}
-export def "oauth-idp-configs identitytoolkitprojectstenantsoauthIdpConfigscreate" [
+export def "oauth-idp-configs create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -941,19 +950,19 @@ export def "oauth-idp-configs identitytoolkitprojectstenantsoauthIdpConfigscreat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "oauthIdpConfigId" $oauth_idp_config_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v2/{parent}/oauthIdpConfigs") $qp)
-  let body = {"clientId": $client_id, "clientSecret": $client_secret, "displayName": $display_name, "enabled": $enabled, "issuer": $issuer, "name": $name, "responseType": $response_type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v2/{parent}/oauthIdpConfigs") $qp)
+  let req_body = {"clientId": $client_id, "clientSecret": $client_secret, "displayName": $display_name, "enabled": $enabled, "issuer": $issuer, "name": $name, "responseType": $response_type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List tenants under the given agent project. Requires read permission on the Agent project.
 #
 # GET /v2/{parent}/tenants
 # operationId: identitytoolkit.projects.tenants.list
-export def "tenants identitytoolkitprojectstenantslist" [
+export def "tenants list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -980,7 +989,7 @@ export def "tenants identitytoolkitprojectstenantslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v2/{parent}/tenants") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v2/{parent}/tenants") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -993,11 +1002,11 @@ export def "tenants identitytoolkitprojectstenantslist" [
 # --client shape: {permissions?: record}
 # --emailPrivacyConfig shape: {enableImprovedEmailPrivacy?: bool}
 # --inheritance shape: {emailSendingConfig?: bool}
-# --mfaConfig shape: {enabledProviders?: list, providerConfigs?: list, state?: "STATE_UNSPECIFIED"|"DISABLED"|"ENABLED"|"MANDATORY"}
+# --mfaConfig shape: {enabledProviders?: list<string>, providerConfigs?: list, state?: "STATE_UNSPECIFIED"|"DISABLED"|"ENABLED"|"MANDATORY"}
 # --monitoring shape: {requestLogging?: record}
 # --recaptchaConfig shape: {emailPasswordEnforcementState?: "RECAPTCHA_PROVIDER_ENFORCEMENT_STATE_UNSPECIFIED"|"OFF"|"AUDIT"|"ENFORCE", managedRules?: list, useAccountDefender?: bool}
 # --smsRegionConfig shape: {allowByDefault?: record, allowlistOnly?: record}
-export def "tenants identitytoolkitprojectstenantscreate" [
+export def "tenants create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1028,7 +1037,7 @@ export def "tenants identitytoolkitprojectstenantscreate" [
   --enable-email-link-signin: oneof<nothing, bool> # Whether to enable email link user authentication.
   --hash-config: record # History information of the hash algorithm and key. Different accounts' passwords may be generated by different version.
   --inheritance: record # Settings that the tenants will inherit from project level. — shape: {emailSendingConfig?: bool}
-  --mfa-config: record # Options related to MultiFactor Authentication for the project. — shape: {enabledProviders?: list, providerConfigs?: list, state?: "STATE_UNSPECIFIED"|"DISABLED"|"ENABLED"|"MANDATORY"}
+  --mfa-config: record # Options related to MultiFactor Authentication for the project. — shape: {enabledProviders?: list<string>, providerConfigs?: list, state?: "STATE_UNSPECIFIED"|"DISABLED"|"ENABLED"|"MANDATORY"}
   --monitoring: record # Configuration related to monitoring project activity. — shape: {requestLogging?: record}
   --recaptcha-config: record # The reCAPTCHA Enterprise integration config. — shape: {emailPasswordEnforcementState?: "RECAPTCHA_PROVIDER_ENFORCEMENT_STATE_UNSPECIFIED"|"OFF"|"AUDIT"|"ENFORCE", managedRules?: list, useAccountDefender?: bool}
   --sms-region-config: record # Configures the regions where users are allowed to send verification SMS for the project or tenant. This is based on the calling code of the destination phone number. — shape: {allowByDefault?: record, allowlistOnly?: record}
@@ -1038,19 +1047,19 @@ export def "tenants identitytoolkitprojectstenantscreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v2/{parent}/tenants") $qp)
-  let body = {"allowPasswordSignup": $allow_password_signup, "autodeleteAnonymousUsers": $autodelete_anonymous_users, "client": $client, "disableAuth": $disable_auth, "displayName": $display_name, "emailPrivacyConfig": $email_privacy_config, "enableAnonymousUser": $enable_anonymous_user, "enableEmailLinkSignin": $enable_email_link_signin, "hashConfig": $hash_config, "inheritance": $inheritance, "mfaConfig": $mfa_config, "monitoring": $monitoring, "recaptchaConfig": $recaptcha_config, "smsRegionConfig": $sms_region_config, "testPhoneNumbers": $test_phone_numbers} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v2/{parent}/tenants") $qp)
+  let req_body = {"allowPasswordSignup": $allow_password_signup, "autodeleteAnonymousUsers": $autodelete_anonymous_users, "client": $client, "disableAuth": $disable_auth, "displayName": $display_name, "emailPrivacyConfig": $email_privacy_config, "enableAnonymousUser": $enable_anonymous_user, "enableEmailLinkSignin": $enable_email_link_signin, "hashConfig": $hash_config, "inheritance": $inheritance, "mfaConfig": $mfa_config, "monitoring": $monitoring, "recaptchaConfig": $recaptcha_config, "smsRegionConfig": $sms_region_config, "testPhoneNumbers": $test_phone_numbers} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Initialize Identity Platform for a Cloud project. Identity Platform is an end-to-end authentication system for third-party users to access your apps and services. These could include mobile/web apps, games, APIs and beyond. This is the publicly available variant of EnableIdentityPlatform that is only available to billing-enabled projects.
 #
 # POST /v2/{project}/identityPlatform:initializeAuth
 # operationId: identitytoolkit.projects.identityPlatform.initializeAuth
-export def "identity-platform-initialize-auth identitytoolkitprojectsidentityPlatforminitializeAuth" [
+export def "identity-platform-initialize-auth create" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1077,11 +1086,12 @@ export def "identity-platform-initialize-auth identitytoolkitprojectsidentityPla
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project: $project} | format pattern "/v2/{project}/identityPlatform:initializeAuth") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({project: (encode-path-segment $project)} | format pattern "/v2/{project}/identityPlatform:initializeAuth") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets the access control policy for a resource. An error is returned if the resource does not exist. An empty policy is returned if the resource exists but does not have a policy set on it. Caller must have the right Google IAM permission on the resource.
@@ -1089,7 +1099,7 @@ export def "identity-platform-initialize-auth identitytoolkitprojectsidentityPla
 # POST /v2/{resource}:getIamPolicy
 # operationId: identitytoolkit.projects.tenants.getIamPolicy
 # --options shape: {requestedPolicyVersion?: int}
-export def "projects identitytoolkitprojectstenantsgetIamPolicy" [
+export def "projects get-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1116,12 +1126,12 @@ export def "projects identitytoolkitprojectstenantsgetIamPolicy" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource: $resource} | format pattern "/v2/{resource}:getIamPolicy") $qp)
-  let body = {"options": $options} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({resource: (encode-path-segment $resource)} | format pattern "/v2/{resource}:getIamPolicy") $qp)
+  let req_body = {"options": $options} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Sets the access control policy for a resource. If the policy exists, it is replaced. Caller must have the right Google IAM permission on the resource.
@@ -1129,7 +1139,7 @@ export def "projects identitytoolkitprojectstenantsgetIamPolicy" [
 # POST /v2/{resource}:setIamPolicy
 # operationId: identitytoolkit.projects.tenants.setIamPolicy
 # --policy shape: {auditConfigs?: list, bindings?: list, etag?: string, version?: int}
-export def "projects identitytoolkitprojectstenantssetIamPolicy" [
+export def "projects update-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1157,19 +1167,19 @@ export def "projects identitytoolkitprojectstenantssetIamPolicy" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource: $resource} | format pattern "/v2/{resource}:setIamPolicy") $qp)
-  let body = {"policy": $policy, "updateMask": $update_mask} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({resource: (encode-path-segment $resource)} | format pattern "/v2/{resource}:setIamPolicy") $qp)
+  let req_body = {"policy": $policy, "updateMask": $update_mask} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns the caller's permissions on a resource. An error is returned if the resource does not exist. A caller is not required to have Google IAM permission to make this request.
 #
 # POST /v2/{resource}:testIamPermissions
 # operationId: identitytoolkit.projects.tenants.testIamPermissions
-export def "projects identitytoolkitprojectstenantstestIamPermissions" [
+export def "projects test-iam-permissions" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1190,16 +1200,16 @@ export def "projects identitytoolkitprojectstenantstestIamPermissions" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --permissions: list # The set of permissions to check for the `resource`. Permissions with wildcards (such as `*` or `storage.*`) are not allowed. For more information see [IAM Overview](https://cloud.google.com/iam/docs/overview#permissions).
+  --permissions: list<string> # The set of permissions to check for the `resource`. Permissions with wildcards (such as `*` or `storage.*`) are not allowed. For more information see [IAM Overview](https://cloud.google.com/iam/docs/overview#permissions).
 ]: any -> record<permissions: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource: $resource} | format pattern "/v2/{resource}:testIamPermissions") $qp)
-  let body = {"permissions": $permissions} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({resource: (encode-path-segment $resource)} | format pattern "/v2/{resource}:testIamPermissions") $qp)
+  let req_body = {"permissions": $permissions} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

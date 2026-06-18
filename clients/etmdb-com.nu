@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -69,7 +78,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "cinema-detail-search read" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "cinema-detail-search get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,7 +102,7 @@ export def commands []: nothing -> table {
 #
 # GET /api/v1/cinema-detail/search/{cinema_name}
 # operationId: cinema-detail_search_read
-export def "cinema-detail-search read" [
+export def "cinema-detail-search get" [
   cinema_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -106,7 +115,7 @@ export def "cinema-detail-search read" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({cinema_name: $cinema_name} | format pattern "/api/v1/cinema-detail/search/{cinema_name}"))
+  let full_url = (build-url $base ({cinema_name: (encode-path-segment $cinema_name)} | format pattern "/api/v1/cinema-detail/search/{cinema_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -116,7 +125,7 @@ export def "cinema-detail-search read" [
 #
 # GET /api/v1/cinema-schedule/search/{movie_title}
 # operationId: cinema-schedule_search_read
-export def "cinema-schedule-search read" [
+export def "cinema-schedule-search get" [
   movie_title: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -129,7 +138,7 @@ export def "cinema-schedule-search read" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({movie_title: $movie_title} | format pattern "/api/v1/cinema-schedule/search/{movie_title}"))
+  let full_url = (build-url $base ({movie_title: (encode-path-segment $movie_title)} | format pattern "/api/v1/cinema-schedule/search/{movie_title}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -139,7 +148,7 @@ export def "cinema-schedule-search read" [
 #
 # GET /api/v1/cinema-schedule/searchall/{param}
 # operationId: cinema-schedule_searchall_read
-export def "cinema-schedule-searchall read" [
+export def "cinema-schedule-searchall get" [
   param: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -152,7 +161,7 @@ export def "cinema-schedule-searchall read" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({param: $param} | format pattern "/api/v1/cinema-schedule/searchall/{param}"))
+  let full_url = (build-url $base ({param: (encode-path-segment $param)} | format pattern "/api/v1/cinema-schedule/searchall/{param}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -162,7 +171,7 @@ export def "cinema-schedule-searchall read" [
 #
 # GET /api/v1/cinema-shedule-showtime/search/{movie_title}
 # operationId: cinema-shedule-showtime_search_read
-export def "cinema-shedule-showtime-search read" [
+export def "cinema-shedule-showtime-search get" [
   movie_title: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -175,7 +184,7 @@ export def "cinema-shedule-showtime-search read" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({movie_title: $movie_title} | format pattern "/api/v1/cinema-shedule-showtime/search/{movie_title}"))
+  let full_url = (build-url $base ({movie_title: (encode-path-segment $movie_title)} | format pattern "/api/v1/cinema-shedule-showtime/search/{movie_title}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -185,7 +194,7 @@ export def "cinema-shedule-showtime-search read" [
 #
 # GET /api/v1/cinema-shedule-showtime/searchall/{param}
 # operationId: cinema-shedule-showtime_searchall_read
-export def "cinema-shedule-showtime-searchall read" [
+export def "cinema-shedule-showtime-searchall get" [
   param: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -198,7 +207,7 @@ export def "cinema-shedule-showtime-searchall read" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({param: $param} | format pattern "/api/v1/cinema-shedule-showtime/searchall/{param}"))
+  let full_url = (build-url $base ({param: (encode-path-segment $param)} | format pattern "/api/v1/cinema-shedule-showtime/searchall/{param}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -208,7 +217,7 @@ export def "cinema-shedule-showtime-searchall read" [
 #
 # GET /api/v1/cinema/search/{id}
 # operationId: cinema_search_read
-export def "cinema-search read" [
+export def "cinema-search get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -221,7 +230,7 @@ export def "cinema-search read" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/cinema/search/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/cinema/search/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -231,7 +240,7 @@ export def "cinema-search read" [
 #
 # GET /api/v1/company-credits/search/{movie_title}
 # operationId: company-credits_search_read
-export def "company-credits-search read" [
+export def "company-credits-search get" [
   movie_title: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -244,7 +253,7 @@ export def "company-credits-search read" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({movie_title: $movie_title} | format pattern "/api/v1/company-credits/search/{movie_title}"))
+  let full_url = (build-url $base ({movie_title: (encode-path-segment $movie_title)} | format pattern "/api/v1/company-credits/search/{movie_title}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -254,7 +263,7 @@ export def "company-credits-search read" [
 #
 # GET /api/v1/company-credits/searchall/{param}
 # operationId: company-credits_searchall_read
-export def "company-credits-searchall read" [
+export def "company-credits-searchall get" [
   param: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -267,7 +276,7 @@ export def "company-credits-searchall read" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({param: $param} | format pattern "/api/v1/company-credits/searchall/{param}"))
+  let full_url = (build-url $base ({param: (encode-path-segment $param)} | format pattern "/api/v1/company-credits/searchall/{param}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -277,7 +286,7 @@ export def "company-credits-searchall read" [
 #
 # GET /api/v1/company/search/{company_name}
 # operationId: company_search_read
-export def "company-search read" [
+export def "company-search get" [
   company_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -290,7 +299,7 @@ export def "company-search read" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({company_name: $company_name} | format pattern "/api/v1/company/search/{company_name}"))
+  let full_url = (build-url $base ({company_name: (encode-path-segment $company_name)} | format pattern "/api/v1/company/search/{company_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -300,7 +309,7 @@ export def "company-search read" [
 #
 # GET /api/v1/filmography-type/search/{filmography_description}
 # operationId: filmography-type_search_read
-export def "filmography-type-search read" [
+export def "filmography-type-search get" [
   filmography_description: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -313,7 +322,7 @@ export def "filmography-type-search read" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({filmography_description: $filmography_description} | format pattern "/api/v1/filmography-type/search/{filmography_description}"))
+  let full_url = (build-url $base ({filmography_description: (encode-path-segment $filmography_description)} | format pattern "/api/v1/filmography-type/search/{filmography_description}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -323,7 +332,7 @@ export def "filmography-type-search read" [
 #
 # GET /api/v1/filmography/search/{movie_title}
 # operationId: filmography_search_read
-export def "filmography-search read" [
+export def "filmography-search get" [
   movie_title: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -336,7 +345,7 @@ export def "filmography-search read" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({movie_title: $movie_title} | format pattern "/api/v1/filmography/search/{movie_title}"))
+  let full_url = (build-url $base ({movie_title: (encode-path-segment $movie_title)} | format pattern "/api/v1/filmography/search/{movie_title}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -346,7 +355,7 @@ export def "filmography-search read" [
 #
 # GET /api/v1/filmography/searchall/{param}
 # operationId: filmography_searchall_read
-export def "filmography-searchall read" [
+export def "filmography-searchall get" [
   param: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -359,7 +368,7 @@ export def "filmography-searchall read" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({param: $param} | format pattern "/api/v1/filmography/searchall/{param}"))
+  let full_url = (build-url $base ({param: (encode-path-segment $param)} | format pattern "/api/v1/filmography/searchall/{param}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -369,7 +378,7 @@ export def "filmography-searchall read" [
 #
 # GET /api/v1/genre-type/search/{genre_description}
 # operationId: genre-type_search_read
-export def "genre-type-search read" [
+export def "genre-type-search get" [
   genre_description: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -382,7 +391,7 @@ export def "genre-type-search read" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({genre_description: $genre_description} | format pattern "/api/v1/genre-type/search/{genre_description}"))
+  let full_url = (build-url $base ({genre_description: (encode-path-segment $genre_description)} | format pattern "/api/v1/genre-type/search/{genre_description}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -392,7 +401,7 @@ export def "genre-type-search read" [
 #
 # GET /api/v1/genre/search/{movie_title}
 # operationId: genre_search_read
-export def "genre-search read" [
+export def "genre-search get" [
   movie_title: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -405,7 +414,7 @@ export def "genre-search read" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({movie_title: $movie_title} | format pattern "/api/v1/genre/search/{movie_title}"))
+  let full_url = (build-url $base ({movie_title: (encode-path-segment $movie_title)} | format pattern "/api/v1/genre/search/{movie_title}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -415,7 +424,7 @@ export def "genre-search read" [
 #
 # GET /api/v1/genre/searchall/{movie_genre_type}
 # operationId: genre_searchall_read
-export def "genre-searchall read" [
+export def "genre-searchall get" [
   movie_genre_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -428,7 +437,7 @@ export def "genre-searchall read" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({movie_genre_type: $movie_genre_type} | format pattern "/api/v1/genre/searchall/{movie_genre_type}"))
+  let full_url = (build-url $base ({movie_genre_type: (encode-path-segment $movie_genre_type)} | format pattern "/api/v1/genre/searchall/{movie_genre_type}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -438,7 +447,7 @@ export def "genre-searchall read" [
 #
 # GET /api/v1/job/search/{job_title}
 # operationId: job_search_read
-export def "job-search read" [
+export def "job-search get" [
   job_title: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -451,7 +460,7 @@ export def "job-search read" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({job_title: $job_title} | format pattern "/api/v1/job/search/{job_title}"))
+  let full_url = (build-url $base ({job_title: (encode-path-segment $job_title)} | format pattern "/api/v1/job/search/{job_title}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -461,7 +470,7 @@ export def "job-search read" [
 #
 # GET /api/v1/job/searchall/{company_name}
 # operationId: job_searchall_read
-export def "job-searchall read" [
+export def "job-searchall get" [
   company_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -474,7 +483,7 @@ export def "job-searchall read" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({company_name: $company_name} | format pattern "/api/v1/job/searchall/{company_name}"))
+  let full_url = (build-url $base ({company_name: (encode-path-segment $company_name)} | format pattern "/api/v1/job/searchall/{company_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -484,7 +493,7 @@ export def "job-searchall read" [
 #
 # GET /api/v1/media/search/{movie_title}
 # operationId: media_search_read
-export def "media-search read" [
+export def "media-search get" [
   movie_title: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -497,7 +506,7 @@ export def "media-search read" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({movie_title: $movie_title} | format pattern "/api/v1/media/search/{movie_title}"))
+  let full_url = (build-url $base ({movie_title: (encode-path-segment $movie_title)} | format pattern "/api/v1/media/search/{movie_title}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -507,7 +516,7 @@ export def "media-search read" [
 #
 # GET /api/v1/media/searchall/{user}
 # operationId: media_searchall_read
-export def "media-searchall read" [
+export def "media-searchall get" [
   user: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -520,7 +529,7 @@ export def "media-searchall read" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user: $user} | format pattern "/api/v1/media/searchall/{user}"))
+  let full_url = (build-url $base ({user: (encode-path-segment $user)} | format pattern "/api/v1/media/searchall/{user}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -530,7 +539,7 @@ export def "media-searchall read" [
 #
 # GET /api/v1/movie-cast/search/{movie_title}
 # operationId: movie-cast_search_read
-export def "movie-cast-search read" [
+export def "movie-cast-search get" [
   movie_title: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -543,7 +552,7 @@ export def "movie-cast-search read" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({movie_title: $movie_title} | format pattern "/api/v1/movie-cast/search/{movie_title}"))
+  let full_url = (build-url $base ({movie_title: (encode-path-segment $movie_title)} | format pattern "/api/v1/movie-cast/search/{movie_title}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -553,7 +562,7 @@ export def "movie-cast-search read" [
 #
 # GET /api/v1/movie-cast/searchall/{param}
 # operationId: movie-cast_searchall_read
-export def "movie-cast-searchall read" [
+export def "movie-cast-searchall get" [
   param: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -566,7 +575,7 @@ export def "movie-cast-searchall read" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({param: $param} | format pattern "/api/v1/movie-cast/searchall/{param}"))
+  let full_url = (build-url $base ({param: (encode-path-segment $param)} | format pattern "/api/v1/movie-cast/searchall/{param}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -576,7 +585,7 @@ export def "movie-cast-searchall read" [
 #
 # GET /api/v1/movie/search/{movie_title}
 # operationId: movie_search_read
-export def "movie-search read" [
+export def "movie-search get" [
   movie_title: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -589,7 +598,7 @@ export def "movie-search read" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({movie_title: $movie_title} | format pattern "/api/v1/movie/search/{movie_title}"))
+  let full_url = (build-url $base ({movie_title: (encode-path-segment $movie_title)} | format pattern "/api/v1/movie/search/{movie_title}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -599,7 +608,7 @@ export def "movie-search read" [
 #
 # GET /api/v1/news/search/{title}
 # operationId: news_search_read
-export def "news-search read" [
+export def "news-search get" [
   title: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -612,7 +621,7 @@ export def "news-search read" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({title: $title} | format pattern "/api/v1/news/search/{title}"))
+  let full_url = (build-url $base ({title: (encode-path-segment $title)} | format pattern "/api/v1/news/search/{title}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -622,7 +631,7 @@ export def "news-search read" [
 #
 # GET /api/v1/people/search/{user}
 # operationId: people_search_read
-export def "people-search read" [
+export def "people-search get" [
   user: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -635,7 +644,7 @@ export def "people-search read" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user: $user} | format pattern "/api/v1/people/search/{user}"))
+  let full_url = (build-url $base ({user: (encode-path-segment $user)} | format pattern "/api/v1/people/search/{user}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -645,7 +654,7 @@ export def "people-search read" [
 #
 # GET /api/v1/showtime/searchall/{param}
 # operationId: showtime_searchall_read
-export def "showtime-searchall read" [
+export def "showtime-searchall get" [
   param: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -658,7 +667,7 @@ export def "showtime-searchall read" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({param: $param} | format pattern "/api/v1/showtime/searchall/{param}"))
+  let full_url = (build-url $base ({param: (encode-path-segment $param)} | format pattern "/api/v1/showtime/searchall/{param}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -668,7 +677,7 @@ export def "showtime-searchall read" [
 #
 # GET /api/v1/watchlist/search/{movie_title}
 # operationId: watchlist_search_read
-export def "watchlist-search read" [
+export def "watchlist-search get" [
   movie_title: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -681,7 +690,7 @@ export def "watchlist-search read" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({movie_title: $movie_title} | format pattern "/api/v1/watchlist/search/{movie_title}"))
+  let full_url = (build-url $base ({movie_title: (encode-path-segment $movie_title)} | format pattern "/api/v1/watchlist/search/{movie_title}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -691,7 +700,7 @@ export def "watchlist-search read" [
 #
 # GET /api/v1/watchlist/searchall/{param}
 # operationId: watchlist_searchall_read
-export def "watchlist-searchall read" [
+export def "watchlist-searchall get" [
   param: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -704,7 +713,7 @@ export def "watchlist-searchall read" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({param: $param} | format pattern "/api/v1/watchlist/searchall/{param}"))
+  let full_url = (build-url $base ({param: (encode-path-segment $param)} | format pattern "/api/v1/watchlist/searchall/{param}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

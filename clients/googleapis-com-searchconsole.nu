@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -76,7 +85,7 @@ def type-completer [] { ["DISCOVER" "GOOGLE_NEWS" "IMAGE" "NEWS" "VIDEO" "WEB"] 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "url-inspection-index-inspect list-console" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "url-inspection-index-inspect get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -100,7 +109,7 @@ export def commands []: nothing -> table {
 #
 # POST /v1/urlInspection/index:inspect
 # operationId: searchconsole.urlInspection.index.inspect
-export def "url-inspection-index-inspect list-console" [
+export def "url-inspection-index-inspect get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -129,18 +138,18 @@ export def "url-inspection-index-inspect list-console" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/urlInspection/index:inspect" $qp)
-  let body = {"inspectionUrl": $inspection_url, "languageCode": $language_code, "siteUrl": $site_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"inspectionUrl": $inspection_url, "languageCode": $language_code, "siteUrl": $site_url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Runs Mobile-Friendly Test for a given URL.
 #
 # POST /v1/urlTestingTools/mobileFriendlyTest:run
 # operationId: searchconsole.urlTestingTools.mobileFriendlyTest.run
-export def "url-testing-tools-mobile-friendly-test-run list-console" [
+export def "url-testing-tools-mobile-friendly-test-run create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -161,25 +170,25 @@ export def "url-testing-tools-mobile-friendly-test-run list-console" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --request-screenshot: oneof<nothing, bool> # Whether or not screenshot is requested. Default is false.
-  --body-url: string # URL for inspection.
+  --url: string # URL for inspection.
 ]: any -> record<mobileFriendliness: string, mobileFriendlyIssues: table<rule: string>, resourceIssues: table<blockedResource: record>, screenshot: record<data: string, mimeType: string>, testStatus: record<details: string, status: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/urlTestingTools/mobileFriendlyTest:run" $qp)
-  let body = {"requestScreenshot": $request_screenshot, "url": $body_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"requestScreenshot": $request_screenshot, "url": $url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-#  Lists the user's Search Console sites.
+# Lists the user's Search Console sites.
 #
 # GET /webmasters/v3/sites
 # operationId: webmasters.sites.list
-export def "webmasters-sites webmasterssiteslist" [
+export def "webmasters-sites list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -209,11 +218,11 @@ export def "webmasters-sites webmasterssiteslist" [
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-#  Removes a site from the set of the user's Search Console sites.
+# Removes a site from the set of the user's Search Console sites.
 #
 # DELETE /webmasters/v3/sites/{siteUrl}
 # operationId: webmasters.sites.delete
-export def "webmasters-sites webmasterssitesdelete" [
+export def "webmasters-sites delete" [
   site_url: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -238,17 +247,17 @@ export def "webmasters-sites webmasterssitesdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({site_url: $site_url} | format pattern "/webmasters/v3/sites/{site_url}") $qp)
+  let full_url = (build-url $base ({site_url: (encode-path-segment $site_url)} | format pattern "/webmasters/v3/sites/{site_url}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-#  Retrieves information about specific site.
+# Retrieves information about specific site.
 #
 # GET /webmasters/v3/sites/{siteUrl}
 # operationId: webmasters.sites.get
-export def "webmasters-sites webmasterssitesget" [
+export def "webmasters-sites get" [
   site_url: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -273,17 +282,17 @@ export def "webmasters-sites webmasterssitesget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({site_url: $site_url} | format pattern "/webmasters/v3/sites/{site_url}") $qp)
+  let full_url = (build-url $base ({site_url: (encode-path-segment $site_url)} | format pattern "/webmasters/v3/sites/{site_url}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-#  Adds a site to the set of the user's sites in Search Console.
+# Adds a site to the set of the user's sites in Search Console.
 #
 # PUT /webmasters/v3/sites/{siteUrl}
 # operationId: webmasters.sites.add
-export def "webmasters-sites webmasterssitesadd" [
+export def "webmasters-sites create" [
   site_url: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -308,7 +317,7 @@ export def "webmasters-sites webmasterssitesadd" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({site_url: $site_url} | format pattern "/webmasters/v3/sites/{site_url}") $qp)
+  let full_url = (build-url $base ({site_url: (encode-path-segment $site_url)} | format pattern "/webmasters/v3/sites/{site_url}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -319,7 +328,7 @@ export def "webmasters-sites webmasterssitesadd" [
 # POST /webmasters/v3/sites/{siteUrl}/searchAnalytics/query
 # operationId: webmasters.searchanalytics.query
 # --dimensionFilterGroups item shape: {filters?: list, groupType?: "AND"}
-export def "webmasters-sites-search-analytics-query webmasterssearchanalyticsquery" [
+export def "webmasters-sites-search-analytics-query list" [
   site_url: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -343,11 +352,11 @@ export def "webmasters-sites-search-analytics-query webmasterssearchanalyticsque
   --aggregation-type: string@aggregation-type-completer # [Optional; Default is \"auto\"] How data is aggregated. If aggregated by property, all data for the same property is aggregated; if aggregated by page, all data is aggregated by canonical URI. If you filter or group by page, choose AUTO; otherwise you can aggregate either by property or by page, depending on how you want your data calculated; see the help documentation to learn how data is calculated differently by site versus by page. **Note:** If you group or filter by page, you cannot aggregate by property. If you specify any value other than AUTO, the aggregation type in the result will match the requested type, or if you request an invalid type, you will get an error. The API will never change your aggregation type if the requested type is invalid.
   --data-state: string@data-state-completer # The data state to be fetched, can be full or all, the latter including full and partial data.
   --dimension-filter-groups: list # [Optional] Zero or more filters to apply to the dimension grouping values; for example, 'query contains \"buy\"' to see only data where the query string contains the substring \"buy\" (not case-sensitive). You can filter by a dimension without grouping by it. — item shape: {filters?: list, groupType?: "AND"}
-  --dimensions: list # [Optional] Zero or more dimensions to group results by. Dimensions are the group-by values in the Search Analytics page. Dimensions are combined to create a unique row key for each row. Results are grouped in the order that you supply these dimensions.
+  --dimensions: list<string> # [Optional] Zero or more dimensions to group results by. Dimensions are the group-by values in the Search Analytics page. Dimensions are combined to create a unique row key for each row. Results are grouped in the order that you supply these dimensions.
   --end-date: string # [Required] End date of the requested date range, in YYYY-MM-DD format, in PST (UTC - 8:00). Must be greater than or equal to the start date. This value is included in the range.
   --row-limit: int # [Optional; Default is 1000] The maximum number of rows to return. Must be a number from 1 to 25,000 (inclusive). (format: int32)
   --search-type: string@search-type-completer # [Optional; Default is \"web\"] The search type to filter for.
-  --start-date: string #  [Required] Start date of the requested date range, in YYYY-MM-DD format, in PST time (UTC - 8:00). Must be less than or equal to the end date. This value is included in the range.
+  --start-date: string # [Required] Start date of the requested date range, in YYYY-MM-DD format, in PST time (UTC - 8:00). Must be less than or equal to the end date. This value is included in the range.
   --start-row: int # [Optional; Default is 0] Zero-based index of the first row in the response. Must be a non-negative number. (format: int32)
   --type: string@type-completer # Optional. [Optional; Default is \"web\"] Type of report: search type, or either Discover or Gnews.
 ]: any -> record<responseAggregationType: string, rows: table<clicks: float, ctr: float, impressions: float, keys: list, position: float>> {
@@ -355,19 +364,19 @@ export def "webmasters-sites-search-analytics-query webmasterssearchanalyticsque
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({site_url: $site_url} | format pattern "/webmasters/v3/sites/{site_url}/searchAnalytics/query") $qp)
-  let body = {"aggregationType": $aggregation_type, "dataState": $data_state, "dimensionFilterGroups": $dimension_filter_groups, "dimensions": $dimensions, "endDate": $end_date, "rowLimit": $row_limit, "searchType": $search_type, "startDate": $start_date, "startRow": $start_row, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({site_url: (encode-path-segment $site_url)} | format pattern "/webmasters/v3/sites/{site_url}/searchAnalytics/query") $qp)
+  let req_body = {"aggregationType": $aggregation_type, "dataState": $data_state, "dimensionFilterGroups": $dimension_filter_groups, "dimensions": $dimensions, "endDate": $end_date, "rowLimit": $row_limit, "searchType": $search_type, "startDate": $start_date, "startRow": $start_row, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-#  Lists the [sitemaps-entries](/webmaster-tools/v3/sitemaps) submitted for this site, or included in the sitemap index file (if `sitemapIndex` is specified in the request).
+# Lists the [sitemaps-entries](/webmaster-tools/v3/sitemaps) submitted for this site, or included in the sitemap index file (if `sitemapIndex` is specified in the request).
 #
 # GET /webmasters/v3/sites/{siteUrl}/sitemaps
 # operationId: webmasters.sitemaps.list
-export def "webmasters-sites-sitemaps webmasterssitemapslist" [
+export def "webmasters-sites-sitemaps list" [
   site_url: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -388,12 +397,12 @@ export def "webmasters-sites-sitemaps webmasterssitemapslist" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --sitemap-index: string #  A URL of a site's sitemap index. For example: `http://www.example.com/sitemapindex.xml`.
+  --sitemap-index: string # A URL of a site's sitemap index. For example: `http://www.example.com/sitemapindex.xml`.
 ]: nothing -> record<sitemap: table<contents: list, errors: string, isPending: bool, isSitemapsIndex: bool, lastDownloaded: string, lastSubmitted: string, path: string, type: string, warnings: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "sitemapIndex" $sitemap_index "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({site_url: $site_url} | format pattern "/webmasters/v3/sites/{site_url}/sitemaps") $qp)
+  let full_url = (build-url $base ({site_url: (encode-path-segment $site_url)} | format pattern "/webmasters/v3/sites/{site_url}/sitemaps") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -403,7 +412,7 @@ export def "webmasters-sites-sitemaps webmasterssitemapslist" [
 #
 # DELETE /webmasters/v3/sites/{siteUrl}/sitemaps/{feedpath}
 # operationId: webmasters.sitemaps.delete
-export def "webmasters-sites-sitemaps webmasterssitemapsdelete" [
+export def "webmasters-sites-sitemaps delete" [
   site_url: string
   feedpath: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -429,7 +438,7 @@ export def "webmasters-sites-sitemaps webmasterssitemapsdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({site_url: $site_url, feedpath: $feedpath} | format pattern "/webmasters/v3/sites/{site_url}/sitemaps/{feedpath}") $qp)
+  let full_url = (build-url $base ({site_url: (encode-path-segment $site_url), feedpath: (encode-path-segment $feedpath)} | format pattern "/webmasters/v3/sites/{site_url}/sitemaps/{feedpath}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -439,7 +448,7 @@ export def "webmasters-sites-sitemaps webmasterssitemapsdelete" [
 #
 # GET /webmasters/v3/sites/{siteUrl}/sitemaps/{feedpath}
 # operationId: webmasters.sitemaps.get
-export def "webmasters-sites-sitemaps webmasterssitemapsget" [
+export def "webmasters-sites-sitemaps get" [
   site_url: string
   feedpath: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -465,7 +474,7 @@ export def "webmasters-sites-sitemaps webmasterssitemapsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({site_url: $site_url, feedpath: $feedpath} | format pattern "/webmasters/v3/sites/{site_url}/sitemaps/{feedpath}") $qp)
+  let full_url = (build-url $base ({site_url: (encode-path-segment $site_url), feedpath: (encode-path-segment $feedpath)} | format pattern "/webmasters/v3/sites/{site_url}/sitemaps/{feedpath}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -475,7 +484,7 @@ export def "webmasters-sites-sitemaps webmasterssitemapsget" [
 #
 # PUT /webmasters/v3/sites/{siteUrl}/sitemaps/{feedpath}
 # operationId: webmasters.sitemaps.submit
-export def "webmasters-sites-sitemaps webmasterssitemapssubmit" [
+export def "webmasters-sites-sitemaps submit" [
   site_url: string
   feedpath: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -501,7 +510,7 @@ export def "webmasters-sites-sitemaps webmasterssitemapssubmit" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({site_url: $site_url, feedpath: $feedpath} | format pattern "/webmasters/v3/sites/{site_url}/sitemaps/{feedpath}") $qp)
+  let full_url = (build-url $base ({site_url: (encode-path-segment $site_url), feedpath: (encode-path-segment $feedpath)} | format pattern "/webmasters/v3/sites/{site_url}/sitemaps/{feedpath}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

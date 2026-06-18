@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -106,8 +115,8 @@ export def "subscriptions list" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --product-group-keys: list # Only return Subscriptions with the specified product groups
-  --includes: list@includes-completer # Optional details to be included in the response
+  --product-group-keys: list<string> # Only return Subscriptions with the specified product groups
+  --includes: list<string>@includes-completer # Optional details to be included in the response
   --offset: int # Number of Subscriptions to skip before starting to return paged results (must be a multiple of the limit) (default: 0)
   --limit: int # Number of Subscriptions to retrieve in this page, starting after offset (default: 25)
   --qp-sort: string@sort-completer # Property name that will be used to sort results. "-" indicates descending (default: -expiresAt)
@@ -118,10 +127,10 @@ export def "subscriptions list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "productGroupKeys" $product_group_keys "csv") (serialize-qp "includes" $includes "csv") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/subscriptions" $qp)
-  let extra_headers = {"X-Shopper-Id": $x_shopper_id, "X-Market-Id": $x_market_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/javascript")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Shopper-Id": $x_shopper_id, "X-Market-Id": $x_market_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -129,7 +138,7 @@ export def "subscriptions list" [
 #
 # GET /v1/subscriptions/productGroups
 # operationId: productGroups
-export def "subscriptions-product-groups productGroups" [
+export def "subscriptions-product-groups get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -145,10 +154,10 @@ export def "subscriptions-product-groups productGroups" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/subscriptions/productGroups")
-  let extra_headers = {"X-Shopper-Id": $x_shopper_id, "X-Market-Id": $x_market_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/javascript")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Shopper-Id": $x_shopper_id, "X-Market-Id": $x_market_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -170,11 +179,11 @@ export def "subscriptions cancel" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/v1/subscriptions/{subscription_id}"))
-  let extra_headers = {"X-Shopper-Id": $x_shopper_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/v1/subscriptions/{subscription_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Shopper-Id": $x_shopper_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -198,11 +207,11 @@ export def "subscriptions get" [
 ]: nothing -> record<addons: table<commitment: string, pfid: int, quantity: int>, billing: record<commitment: string, pastDueTypes: list<string>, renewAt: string, status: string>, cancelable: bool, createdAt: string, expiresAt: string, label: string, launchUrl: string, paymentProfileId: int, priceLocked: bool, product: record<label: string, namespace: string, pfid: int, productGroupKey: string, renewalPeriod: int, renewalPeriodUnit: string, renewalPfid: int, supportBillOn: bool>, relations: record<children: list<string>, parent: string>, renewAuto: bool, renewable: bool, status: string, subscriptionId: string, upgradeable: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/v1/subscriptions/{subscription_id}"))
-  let extra_headers = {"X-Shopper-Id": $x_shopper_id, "X-Market-Id": $x_market_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/v1/subscriptions/{subscription_id}"))
   let accept_val = ($accept | default "application/javascript")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Shopper-Id": $x_shopper_id, "X-Market-Id": $x_market_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -226,10 +235,10 @@ export def "subscriptions update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/v1/subscriptions/{subscription_id}"))
-  let body = {"paymentProfileId": $payment_profile_id, "renewAuto": $renew_auto} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/v1/subscriptions/{subscription_id}"))
+  let req_body = {"paymentProfileId": $payment_profile_id, "renewAuto": $renew_auto} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

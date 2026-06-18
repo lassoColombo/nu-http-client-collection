@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -74,7 +83,7 @@ def launch-stage-completer [] { ["ALPHA" "BETA" "DEPRECATED" "EARLY_ACCESS" "GA"
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "projects runprojectslocationsservicesrevisionsdelete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "projects delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -98,7 +107,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /v2/{name}
 # operationId: run.projects.locations.services.revisions.delete
-export def "projects runprojectslocationsservicesrevisionsdelete" [
+export def "projects delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -125,7 +134,7 @@ export def "projects runprojectslocationsservicesrevisionsdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "etag" $etag "scalar") (serialize-qp "validateOnly" $validate_only "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v2/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v2/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -135,7 +144,7 @@ export def "projects runprojectslocationsservicesrevisionsdelete" [
 #
 # GET /v2/{name}
 # operationId: run.projects.locations.services.revisions.get
-export def "projects runprojectslocationsservicesrevisionsget" [
+export def "projects get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -160,7 +169,7 @@ export def "projects runprojectslocationsservicesrevisionsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v2/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v2/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -171,12 +180,12 @@ export def "projects runprojectslocationsservicesrevisionsget" [
 # PATCH /v2/{name}
 # operationId: run.projects.locations.services.patch
 # --binaryAuthorization shape: {breakglassJustification?: string, useDefault?: bool}
-# --conditions item shape: {executionReason?: "EXECUTION_REASON_UNDEFINED"|"JOB_STATUS_SERVICE_POLLING_ERROR"|"NON_ZERO_EXIT_CODE"|"CANCELLED"|"CANCELLING", lastTransitionTime?: string, message?: string, reason?: "COMMON_REASON_UNDEFINED"|"UNKNOWN"|"REVISION_FAILED"|"PROGRESS_DEADLINE_EXCEEDED"|"CONTAINER_MISSING"|"CONTAINER_PERMISSION_DENIED"|"CONTAINER_IMAGE_UNAUTHORIZED"|"CONTAINER_IMAGE_AUTHORIZATION_CHECK_FAILED"|"ENCRYPTION_KEY_PERMISSION_DENIED"|"ENCRYPTION_KEY_CHECK_FAILED"|"SECRETS_ACCESS_CHECK_FAILED"|"WAITING_FOR_OPERATION"|"IMMEDIATE_RETRY"|"POSTPONED_RETRY"|"INTERNAL", revisionReason?: "REVISION_REASON_UNDEFINED"|"PENDING"|"RESERVE"|"RETIRED"|"RETIRING"|"RECREATING"|"HEALTH_CHECK_CONTAINER_ERROR"|"CUSTOMIZED_PATH_RESPONSE_PENDING"|"MIN_INSTANCES_NOT_PROVISIONED"|"ACTIVE_REVISION_LIMIT_REACHED"|"NO_DEPLOYMENT"|"HEALTH_CHECK_SKIPPED"|"MIN_INSTANCES_WARMING", severity?: "SEVERITY_UNSPECIFIED"|"ERROR"|"WARNING"|"INFO", state?: "STATE_UNSPECIFIED"|"CONDITION_PENDING"|"CONDITION_RECONCILING"|"CONDITION_FAILED"|"CONDITION_SUCCEEDED", type?: string}
+# --conditions item shape: {executionReason?: "EXECUTION_REASON_UNDEFINED"|"JOB_STATUS_SERVICE_POLLING_ERROR"|"NON_ZERO_EXIT_CODE"|"CANCELLED"|"CANCELLING", lastTransitionTime?: string, message?: string, ... (5 more fields)}
 # --template shape: {annotations?: record, containers?: list, encryptionKey?: string, executionEnvironment?: "EXECUTION_ENVIRONMENT_UNSPECIFIED"|"EXECUTION_ENVIRONMENT_GEN1"|"EXECUTION_ENVIRONMENT_GEN2", labels?: record, maxInstanceRequestConcurrency?: int, revision?: string, scaling?: record, serviceAccount?: string, timeout?: string, volumes?: list, vpcAccess?: record}
-# --terminalCondition shape: {executionReason?: "EXECUTION_REASON_UNDEFINED"|"JOB_STATUS_SERVICE_POLLING_ERROR"|"NON_ZERO_EXIT_CODE"|"CANCELLED"|"CANCELLING", lastTransitionTime?: string, message?: string, reason?: "COMMON_REASON_UNDEFINED"|"UNKNOWN"|"REVISION_FAILED"|"PROGRESS_DEADLINE_EXCEEDED"|"CONTAINER_MISSING"|"CONTAINER_PERMISSION_DENIED"|"CONTAINER_IMAGE_UNAUTHORIZED"|"CONTAINER_IMAGE_AUTHORIZATION_CHECK_FAILED"|"ENCRYPTION_KEY_PERMISSION_DENIED"|"ENCRYPTION_KEY_CHECK_FAILED"|"SECRETS_ACCESS_CHECK_FAILED"|"WAITING_FOR_OPERATION"|"IMMEDIATE_RETRY"|"POSTPONED_RETRY"|"INTERNAL", revisionReason?: "REVISION_REASON_UNDEFINED"|"PENDING"|"RESERVE"|"RETIRED"|"RETIRING"|"RECREATING"|"HEALTH_CHECK_CONTAINER_ERROR"|"CUSTOMIZED_PATH_RESPONSE_PENDING"|"MIN_INSTANCES_NOT_PROVISIONED"|"ACTIVE_REVISION_LIMIT_REACHED"|"NO_DEPLOYMENT"|"HEALTH_CHECK_SKIPPED"|"MIN_INSTANCES_WARMING", severity?: "SEVERITY_UNSPECIFIED"|"ERROR"|"WARNING"|"INFO", state?: "STATE_UNSPECIFIED"|"CONDITION_PENDING"|"CONDITION_RECONCILING"|"CONDITION_FAILED"|"CONDITION_SUCCEEDED", type?: string}
+# --terminalCondition shape: {executionReason?: "EXECUTION_REASON_UNDEFINED"|"JOB_STATUS_SERVICE_POLLING_ERROR"|"NON_ZERO_EXIT_CODE"|"CANCELLED"|"CANCELLING", lastTransitionTime?: string, message?: string, ... (5 more fields)}
 # --traffic item shape: {percent?: int, revision?: string, tag?: string, type?: "TRAFFIC_TARGET_ALLOCATION_TYPE_UNSPECIFIED"|"TRAFFIC_TARGET_ALLOCATION_TYPE_LATEST"|"TRAFFIC_TARGET_ALLOCATION_TYPE_REVISION"}
 # --trafficStatuses item shape: {percent?: int, revision?: string, tag?: string, type?: "TRAFFIC_TARGET_ALLOCATION_TYPE_UNSPECIFIED"|"TRAFFIC_TARGET_ALLOCATION_TYPE_LATEST"|"TRAFFIC_TARGET_ALLOCATION_TYPE_REVISION", uri?: string}
-export def "projects runprojectslocationsservicespatch" [
+export def "projects update" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -209,26 +218,26 @@ export def "projects runprojectslocationsservicespatch" [
   --launch-stage: string@launch-stage-completer # The launch stage as defined by [Google Cloud Platform Launch Stages](https://cloud.google.com/terms/launch-stages). Cloud Run supports `ALPHA`, `BETA`, and `GA`. If no value is specified, GA is assumed. Set the launch stage to a preview stage on input to allow use of preview features in that stage. On read (or output), describes whether the resource uses preview features. For example, if ALPHA is provided as input, but only BETA and GA-level features are used, this field will be BETA on output.
   --body-name: string # The fully qualified name of this Service. In CreateServiceRequest, this field is ignored, and instead composed from CreateServiceRequest.parent and CreateServiceRequest.service_id. Format: projects/{project}/locations/{location}/services/{service_id}
   --template: record # RevisionTemplate describes the data a revision should have when created from a template. — shape: {annotations?: record, containers?: list, encryptionKey?: string, executionEnvironment?: "EXECUTION_ENVIRONMENT_UNSPECIFIED"|"EXECUTION_ENVIRONMENT_GEN1"|"EXECUTION_ENVIRONMENT_GEN2", labels?: record, maxInstanceRequestConcurrency?: int, revision?: string, scaling?: record, serviceAccount?: string, timeout?: string, volumes?: list, vpcAccess?: record}
-  --terminal-condition: record # Defines a status condition for a resource. — shape: {executionReason?: "EXECUTION_REASON_UNDEFINED"|"JOB_STATUS_SERVICE_POLLING_ERROR"|"NON_ZERO_EXIT_CODE"|"CANCELLED"|"CANCELLING", lastTransitionTime?: string, message?: string, reason?: "COMMON_REASON_UNDEFINED"|"UNKNOWN"|"REVISION_FAILED"|"PROGRESS_DEADLINE_EXCEEDED"|"CONTAINER_MISSING"|"CONTAINER_PERMISSION_DENIED"|"CONTAINER_IMAGE_UNAUTHORIZED"|"CONTAINER_IMAGE_AUTHORIZATION_CHECK_FAILED"|"ENCRYPTION_KEY_PERMISSION_DENIED"|"ENCRYPTION_KEY_CHECK_FAILED"|"SECRETS_ACCESS_CHECK_FAILED"|"WAITING_FOR_OPERATION"|"IMMEDIATE_RETRY"|"POSTPONED_RETRY"|"INTERNAL", revisionReason?: "REVISION_REASON_UNDEFINED"|"PENDING"|"RESERVE"|"RETIRED"|"RETIRING"|"RECREATING"|"HEALTH_CHECK_CONTAINER_ERROR"|"CUSTOMIZED_PATH_RESPONSE_PENDING"|"MIN_INSTANCES_NOT_PROVISIONED"|"ACTIVE_REVISION_LIMIT_REACHED"|"NO_DEPLOYMENT"|"HEALTH_CHECK_SKIPPED"|"MIN_INSTANCES_WARMING", severity?: "SEVERITY_UNSPECIFIED"|"ERROR"|"WARNING"|"INFO", state?: "STATE_UNSPECIFIED"|"CONDITION_PENDING"|"CONDITION_RECONCILING"|"CONDITION_FAILED"|"CONDITION_SUCCEEDED", type?: string}
+  --terminal-condition: record # Defines a status condition for a resource. — shape: {executionReason?: "EXECUTION_REASON_UNDEFINED"|"JOB_STATUS_SERVICE_POLLING_ERROR"|"NON_ZERO_EXIT_CODE"|"CANCELLED"|"CANCELLING", lastTransitionTime?: string, message?: string, ... (5 more fields)}
   --traffic: list # Specifies how to distribute traffic over a collection of Revisions belonging to the Service. If traffic is empty or not provided, defaults to 100% traffic to the latest `Ready` Revision. — item shape: {percent?: int, revision?: string, tag?: string, type?: "TRAFFIC_TARGET_ALLOCATION_TYPE_UNSPECIFIED"|"TRAFFIC_TARGET_ALLOCATION_TYPE_LATEST"|"TRAFFIC_TARGET_ALLOCATION_TYPE_REVISION"}
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "allowMissing" $allow_missing "scalar") (serialize-qp "validateOnly" $validate_only "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v2/{name}") $qp)
-  let body = {"annotations": $annotations, "binaryAuthorization": $binary_authorization, "client": $client, "clientVersion": $client_version, "description": $description, "ingress": $ingress, "labels": $labels, "launchStage": $launch_stage, "name": $body_name, "template": $template, "terminalCondition": $terminal_condition, "traffic": $traffic} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v2/{name}") $qp)
+  let req_body = {"annotations": $annotations, "binaryAuthorization": $binary_authorization, "client": $client, "clientVersion": $client_version, "description": $description, "ingress": $ingress, "labels": $labels, "launchStage": $launch_stage, "name": $body_name, "template": $template, "terminalCondition": $terminal_condition, "traffic": $traffic} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists operations that match the specified filter in the request. If the server doesn't support this method, it returns `UNIMPLEMENTED`.
 #
 # GET /v2/{name}/operations
 # operationId: run.projects.locations.operations.list
-export def "operations runprojectslocationsoperationslist" [
+export def "operations list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -256,7 +265,7 @@ export def "operations runprojectslocationsoperationslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v2/{name}/operations") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v2/{name}/operations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -266,7 +275,7 @@ export def "operations runprojectslocationsoperationslist" [
 #
 # POST /v2/{name}:run
 # operationId: run.projects.locations.jobs.run
-export def "projects runprojectslocationsjobsrun" [
+export def "projects create-run" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -294,19 +303,19 @@ export def "projects runprojectslocationsjobsrun" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v2/{name}:run") $qp)
-  let body = {"etag": $etag, "validateOnly": $validate_only} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v2/{name}:run") $qp)
+  let req_body = {"etag": $etag, "validateOnly": $validate_only} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Waits until the specified long-running operation is done or reaches at most a specified timeout, returning the latest state. If the operation is already done, the latest state is immediately returned. If the timeout specified is greater than the default HTTP/RPC timeout, the HTTP/RPC timeout is used. If the server does not support this method, it returns `google.rpc.Code.UNIMPLEMENTED`. Note that this method is on a best-effort basis. It may return the latest state before the specified timeout (including immediately), meaning even an immediate response is no guarantee that the operation is done.
 #
 # POST /v2/{name}:wait
 # operationId: run.projects.locations.operations.wait
-export def "projects runprojectslocationsoperationswait" [
+export def "projects wait" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -333,19 +342,19 @@ export def "projects runprojectslocationsoperationswait" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v2/{name}:wait") $qp)
-  let body = {"timeout": $timeout} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v2/{name}:wait") $qp)
+  let req_body = {"timeout": $timeout} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists Executions from a Job.
 #
 # GET /v2/{parent}/executions
 # operationId: run.projects.locations.jobs.executions.list
-export def "executions runprojectslocationsjobsexecutionslist" [
+export def "executions list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -373,7 +382,7 @@ export def "executions runprojectslocationsjobsexecutionslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "showDeleted" $show_deleted "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v2/{parent}/executions") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v2/{parent}/executions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -383,7 +392,7 @@ export def "executions runprojectslocationsjobsexecutionslist" [
 #
 # GET /v2/{parent}/jobs
 # operationId: run.projects.locations.jobs.list
-export def "jobs runprojectslocationsjobslist" [
+export def "jobs list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -411,7 +420,7 @@ export def "jobs runprojectslocationsjobslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "showDeleted" $show_deleted "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v2/{parent}/jobs") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v2/{parent}/jobs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -422,11 +431,11 @@ export def "jobs runprojectslocationsjobslist" [
 # POST /v2/{parent}/jobs
 # operationId: run.projects.locations.jobs.create
 # --binaryAuthorization shape: {breakglassJustification?: string, useDefault?: bool}
-# --conditions item shape: {executionReason?: "EXECUTION_REASON_UNDEFINED"|"JOB_STATUS_SERVICE_POLLING_ERROR"|"NON_ZERO_EXIT_CODE"|"CANCELLED"|"CANCELLING", lastTransitionTime?: string, message?: string, reason?: "COMMON_REASON_UNDEFINED"|"UNKNOWN"|"REVISION_FAILED"|"PROGRESS_DEADLINE_EXCEEDED"|"CONTAINER_MISSING"|"CONTAINER_PERMISSION_DENIED"|"CONTAINER_IMAGE_UNAUTHORIZED"|"CONTAINER_IMAGE_AUTHORIZATION_CHECK_FAILED"|"ENCRYPTION_KEY_PERMISSION_DENIED"|"ENCRYPTION_KEY_CHECK_FAILED"|"SECRETS_ACCESS_CHECK_FAILED"|"WAITING_FOR_OPERATION"|"IMMEDIATE_RETRY"|"POSTPONED_RETRY"|"INTERNAL", revisionReason?: "REVISION_REASON_UNDEFINED"|"PENDING"|"RESERVE"|"RETIRED"|"RETIRING"|"RECREATING"|"HEALTH_CHECK_CONTAINER_ERROR"|"CUSTOMIZED_PATH_RESPONSE_PENDING"|"MIN_INSTANCES_NOT_PROVISIONED"|"ACTIVE_REVISION_LIMIT_REACHED"|"NO_DEPLOYMENT"|"HEALTH_CHECK_SKIPPED"|"MIN_INSTANCES_WARMING", severity?: "SEVERITY_UNSPECIFIED"|"ERROR"|"WARNING"|"INFO", state?: "STATE_UNSPECIFIED"|"CONDITION_PENDING"|"CONDITION_RECONCILING"|"CONDITION_FAILED"|"CONDITION_SUCCEEDED", type?: string}
+# --conditions item shape: {executionReason?: "EXECUTION_REASON_UNDEFINED"|"JOB_STATUS_SERVICE_POLLING_ERROR"|"NON_ZERO_EXIT_CODE"|"CANCELLED"|"CANCELLING", lastTransitionTime?: string, message?: string, ... (5 more fields)}
 # --latestCreatedExecution shape: {completionTime?: string, createTime?: string, name?: string}
 # --template shape: {annotations?: record, labels?: record, parallelism?: int, taskCount?: int, template?: record}
-# --terminalCondition shape: {executionReason?: "EXECUTION_REASON_UNDEFINED"|"JOB_STATUS_SERVICE_POLLING_ERROR"|"NON_ZERO_EXIT_CODE"|"CANCELLED"|"CANCELLING", lastTransitionTime?: string, message?: string, reason?: "COMMON_REASON_UNDEFINED"|"UNKNOWN"|"REVISION_FAILED"|"PROGRESS_DEADLINE_EXCEEDED"|"CONTAINER_MISSING"|"CONTAINER_PERMISSION_DENIED"|"CONTAINER_IMAGE_UNAUTHORIZED"|"CONTAINER_IMAGE_AUTHORIZATION_CHECK_FAILED"|"ENCRYPTION_KEY_PERMISSION_DENIED"|"ENCRYPTION_KEY_CHECK_FAILED"|"SECRETS_ACCESS_CHECK_FAILED"|"WAITING_FOR_OPERATION"|"IMMEDIATE_RETRY"|"POSTPONED_RETRY"|"INTERNAL", revisionReason?: "REVISION_REASON_UNDEFINED"|"PENDING"|"RESERVE"|"RETIRED"|"RETIRING"|"RECREATING"|"HEALTH_CHECK_CONTAINER_ERROR"|"CUSTOMIZED_PATH_RESPONSE_PENDING"|"MIN_INSTANCES_NOT_PROVISIONED"|"ACTIVE_REVISION_LIMIT_REACHED"|"NO_DEPLOYMENT"|"HEALTH_CHECK_SKIPPED"|"MIN_INSTANCES_WARMING", severity?: "SEVERITY_UNSPECIFIED"|"ERROR"|"WARNING"|"INFO", state?: "STATE_UNSPECIFIED"|"CONDITION_PENDING"|"CONDITION_RECONCILING"|"CONDITION_FAILED"|"CONDITION_SUCCEEDED", type?: string}
-export def "jobs runprojectslocationsjobscreate" [
+# --terminalCondition shape: {executionReason?: "EXECUTION_REASON_UNDEFINED"|"JOB_STATUS_SERVICE_POLLING_ERROR"|"NON_ZERO_EXIT_CODE"|"CANCELLED"|"CANCELLING", lastTransitionTime?: string, message?: string, ... (5 more fields)}
+export def "jobs create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -458,25 +467,25 @@ export def "jobs runprojectslocationsjobscreate" [
   --launch-stage: string@launch-stage-completer # The launch stage as defined by [Google Cloud Platform Launch Stages](https://cloud.google.com/terms/launch-stages). Cloud Run supports `ALPHA`, `BETA`, and `GA`. If no value is specified, GA is assumed. Set the launch stage to a preview stage on input to allow use of preview features in that stage. On read (or output), describes whether the resource uses preview features. For example, if ALPHA is provided as input, but only BETA and GA-level features are used, this field will be BETA on output.
   --name: string # The fully qualified name of this Job. Format: projects/{project}/locations/{location}/jobs/{job}
   --template: record # ExecutionTemplate describes the data an execution should have when created from a template. — shape: {annotations?: record, labels?: record, parallelism?: int, taskCount?: int, template?: record}
-  --terminal-condition: record # Defines a status condition for a resource. — shape: {executionReason?: "EXECUTION_REASON_UNDEFINED"|"JOB_STATUS_SERVICE_POLLING_ERROR"|"NON_ZERO_EXIT_CODE"|"CANCELLED"|"CANCELLING", lastTransitionTime?: string, message?: string, reason?: "COMMON_REASON_UNDEFINED"|"UNKNOWN"|"REVISION_FAILED"|"PROGRESS_DEADLINE_EXCEEDED"|"CONTAINER_MISSING"|"CONTAINER_PERMISSION_DENIED"|"CONTAINER_IMAGE_UNAUTHORIZED"|"CONTAINER_IMAGE_AUTHORIZATION_CHECK_FAILED"|"ENCRYPTION_KEY_PERMISSION_DENIED"|"ENCRYPTION_KEY_CHECK_FAILED"|"SECRETS_ACCESS_CHECK_FAILED"|"WAITING_FOR_OPERATION"|"IMMEDIATE_RETRY"|"POSTPONED_RETRY"|"INTERNAL", revisionReason?: "REVISION_REASON_UNDEFINED"|"PENDING"|"RESERVE"|"RETIRED"|"RETIRING"|"RECREATING"|"HEALTH_CHECK_CONTAINER_ERROR"|"CUSTOMIZED_PATH_RESPONSE_PENDING"|"MIN_INSTANCES_NOT_PROVISIONED"|"ACTIVE_REVISION_LIMIT_REACHED"|"NO_DEPLOYMENT"|"HEALTH_CHECK_SKIPPED"|"MIN_INSTANCES_WARMING", severity?: "SEVERITY_UNSPECIFIED"|"ERROR"|"WARNING"|"INFO", state?: "STATE_UNSPECIFIED"|"CONDITION_PENDING"|"CONDITION_RECONCILING"|"CONDITION_FAILED"|"CONDITION_SUCCEEDED", type?: string}
+  --terminal-condition: record # Defines a status condition for a resource. — shape: {executionReason?: "EXECUTION_REASON_UNDEFINED"|"JOB_STATUS_SERVICE_POLLING_ERROR"|"NON_ZERO_EXIT_CODE"|"CANCELLED"|"CANCELLING", lastTransitionTime?: string, message?: string, ... (5 more fields)}
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "jobId" $job_id "scalar") (serialize-qp "validateOnly" $validate_only "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v2/{parent}/jobs") $qp)
-  let body = {"annotations": $annotations, "binaryAuthorization": $binary_authorization, "client": $client, "clientVersion": $client_version, "labels": $labels, "latestCreatedExecution": $latest_created_execution, "launchStage": $launch_stage, "name": $name, "template": $template, "terminalCondition": $terminal_condition} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v2/{parent}/jobs") $qp)
+  let req_body = {"annotations": $annotations, "binaryAuthorization": $binary_authorization, "client": $client, "clientVersion": $client_version, "labels": $labels, "latestCreatedExecution": $latest_created_execution, "launchStage": $launch_stage, "name": $name, "template": $template, "terminalCondition": $terminal_condition} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists Revisions from a given Service, or from a given location.
 #
 # GET /v2/{parent}/revisions
 # operationId: run.projects.locations.services.revisions.list
-export def "revisions runprojectslocationsservicesrevisionslist" [
+export def "revisions list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -504,7 +513,7 @@ export def "revisions runprojectslocationsservicesrevisionslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "showDeleted" $show_deleted "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v2/{parent}/revisions") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v2/{parent}/revisions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -514,7 +523,7 @@ export def "revisions runprojectslocationsservicesrevisionslist" [
 #
 # GET /v2/{parent}/services
 # operationId: run.projects.locations.services.list
-export def "services runprojectslocationsserviceslist" [
+export def "services list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -542,7 +551,7 @@ export def "services runprojectslocationsserviceslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "showDeleted" $show_deleted "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v2/{parent}/services") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v2/{parent}/services") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -553,12 +562,12 @@ export def "services runprojectslocationsserviceslist" [
 # POST /v2/{parent}/services
 # operationId: run.projects.locations.services.create
 # --binaryAuthorization shape: {breakglassJustification?: string, useDefault?: bool}
-# --conditions item shape: {executionReason?: "EXECUTION_REASON_UNDEFINED"|"JOB_STATUS_SERVICE_POLLING_ERROR"|"NON_ZERO_EXIT_CODE"|"CANCELLED"|"CANCELLING", lastTransitionTime?: string, message?: string, reason?: "COMMON_REASON_UNDEFINED"|"UNKNOWN"|"REVISION_FAILED"|"PROGRESS_DEADLINE_EXCEEDED"|"CONTAINER_MISSING"|"CONTAINER_PERMISSION_DENIED"|"CONTAINER_IMAGE_UNAUTHORIZED"|"CONTAINER_IMAGE_AUTHORIZATION_CHECK_FAILED"|"ENCRYPTION_KEY_PERMISSION_DENIED"|"ENCRYPTION_KEY_CHECK_FAILED"|"SECRETS_ACCESS_CHECK_FAILED"|"WAITING_FOR_OPERATION"|"IMMEDIATE_RETRY"|"POSTPONED_RETRY"|"INTERNAL", revisionReason?: "REVISION_REASON_UNDEFINED"|"PENDING"|"RESERVE"|"RETIRED"|"RETIRING"|"RECREATING"|"HEALTH_CHECK_CONTAINER_ERROR"|"CUSTOMIZED_PATH_RESPONSE_PENDING"|"MIN_INSTANCES_NOT_PROVISIONED"|"ACTIVE_REVISION_LIMIT_REACHED"|"NO_DEPLOYMENT"|"HEALTH_CHECK_SKIPPED"|"MIN_INSTANCES_WARMING", severity?: "SEVERITY_UNSPECIFIED"|"ERROR"|"WARNING"|"INFO", state?: "STATE_UNSPECIFIED"|"CONDITION_PENDING"|"CONDITION_RECONCILING"|"CONDITION_FAILED"|"CONDITION_SUCCEEDED", type?: string}
+# --conditions item shape: {executionReason?: "EXECUTION_REASON_UNDEFINED"|"JOB_STATUS_SERVICE_POLLING_ERROR"|"NON_ZERO_EXIT_CODE"|"CANCELLED"|"CANCELLING", lastTransitionTime?: string, message?: string, ... (5 more fields)}
 # --template shape: {annotations?: record, containers?: list, encryptionKey?: string, executionEnvironment?: "EXECUTION_ENVIRONMENT_UNSPECIFIED"|"EXECUTION_ENVIRONMENT_GEN1"|"EXECUTION_ENVIRONMENT_GEN2", labels?: record, maxInstanceRequestConcurrency?: int, revision?: string, scaling?: record, serviceAccount?: string, timeout?: string, volumes?: list, vpcAccess?: record}
-# --terminalCondition shape: {executionReason?: "EXECUTION_REASON_UNDEFINED"|"JOB_STATUS_SERVICE_POLLING_ERROR"|"NON_ZERO_EXIT_CODE"|"CANCELLED"|"CANCELLING", lastTransitionTime?: string, message?: string, reason?: "COMMON_REASON_UNDEFINED"|"UNKNOWN"|"REVISION_FAILED"|"PROGRESS_DEADLINE_EXCEEDED"|"CONTAINER_MISSING"|"CONTAINER_PERMISSION_DENIED"|"CONTAINER_IMAGE_UNAUTHORIZED"|"CONTAINER_IMAGE_AUTHORIZATION_CHECK_FAILED"|"ENCRYPTION_KEY_PERMISSION_DENIED"|"ENCRYPTION_KEY_CHECK_FAILED"|"SECRETS_ACCESS_CHECK_FAILED"|"WAITING_FOR_OPERATION"|"IMMEDIATE_RETRY"|"POSTPONED_RETRY"|"INTERNAL", revisionReason?: "REVISION_REASON_UNDEFINED"|"PENDING"|"RESERVE"|"RETIRED"|"RETIRING"|"RECREATING"|"HEALTH_CHECK_CONTAINER_ERROR"|"CUSTOMIZED_PATH_RESPONSE_PENDING"|"MIN_INSTANCES_NOT_PROVISIONED"|"ACTIVE_REVISION_LIMIT_REACHED"|"NO_DEPLOYMENT"|"HEALTH_CHECK_SKIPPED"|"MIN_INSTANCES_WARMING", severity?: "SEVERITY_UNSPECIFIED"|"ERROR"|"WARNING"|"INFO", state?: "STATE_UNSPECIFIED"|"CONDITION_PENDING"|"CONDITION_RECONCILING"|"CONDITION_FAILED"|"CONDITION_SUCCEEDED", type?: string}
+# --terminalCondition shape: {executionReason?: "EXECUTION_REASON_UNDEFINED"|"JOB_STATUS_SERVICE_POLLING_ERROR"|"NON_ZERO_EXIT_CODE"|"CANCELLED"|"CANCELLING", lastTransitionTime?: string, message?: string, ... (5 more fields)}
 # --traffic item shape: {percent?: int, revision?: string, tag?: string, type?: "TRAFFIC_TARGET_ALLOCATION_TYPE_UNSPECIFIED"|"TRAFFIC_TARGET_ALLOCATION_TYPE_LATEST"|"TRAFFIC_TARGET_ALLOCATION_TYPE_REVISION"}
 # --trafficStatuses item shape: {percent?: int, revision?: string, tag?: string, type?: "TRAFFIC_TARGET_ALLOCATION_TYPE_UNSPECIFIED"|"TRAFFIC_TARGET_ALLOCATION_TYPE_LATEST"|"TRAFFIC_TARGET_ALLOCATION_TYPE_REVISION", uri?: string}
-export def "services runprojectslocationsservicescreate" [
+export def "services create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -591,26 +600,26 @@ export def "services runprojectslocationsservicescreate" [
   --launch-stage: string@launch-stage-completer # The launch stage as defined by [Google Cloud Platform Launch Stages](https://cloud.google.com/terms/launch-stages). Cloud Run supports `ALPHA`, `BETA`, and `GA`. If no value is specified, GA is assumed. Set the launch stage to a preview stage on input to allow use of preview features in that stage. On read (or output), describes whether the resource uses preview features. For example, if ALPHA is provided as input, but only BETA and GA-level features are used, this field will be BETA on output.
   --name: string # The fully qualified name of this Service. In CreateServiceRequest, this field is ignored, and instead composed from CreateServiceRequest.parent and CreateServiceRequest.service_id. Format: projects/{project}/locations/{location}/services/{service_id}
   --template: record # RevisionTemplate describes the data a revision should have when created from a template. — shape: {annotations?: record, containers?: list, encryptionKey?: string, executionEnvironment?: "EXECUTION_ENVIRONMENT_UNSPECIFIED"|"EXECUTION_ENVIRONMENT_GEN1"|"EXECUTION_ENVIRONMENT_GEN2", labels?: record, maxInstanceRequestConcurrency?: int, revision?: string, scaling?: record, serviceAccount?: string, timeout?: string, volumes?: list, vpcAccess?: record}
-  --terminal-condition: record # Defines a status condition for a resource. — shape: {executionReason?: "EXECUTION_REASON_UNDEFINED"|"JOB_STATUS_SERVICE_POLLING_ERROR"|"NON_ZERO_EXIT_CODE"|"CANCELLED"|"CANCELLING", lastTransitionTime?: string, message?: string, reason?: "COMMON_REASON_UNDEFINED"|"UNKNOWN"|"REVISION_FAILED"|"PROGRESS_DEADLINE_EXCEEDED"|"CONTAINER_MISSING"|"CONTAINER_PERMISSION_DENIED"|"CONTAINER_IMAGE_UNAUTHORIZED"|"CONTAINER_IMAGE_AUTHORIZATION_CHECK_FAILED"|"ENCRYPTION_KEY_PERMISSION_DENIED"|"ENCRYPTION_KEY_CHECK_FAILED"|"SECRETS_ACCESS_CHECK_FAILED"|"WAITING_FOR_OPERATION"|"IMMEDIATE_RETRY"|"POSTPONED_RETRY"|"INTERNAL", revisionReason?: "REVISION_REASON_UNDEFINED"|"PENDING"|"RESERVE"|"RETIRED"|"RETIRING"|"RECREATING"|"HEALTH_CHECK_CONTAINER_ERROR"|"CUSTOMIZED_PATH_RESPONSE_PENDING"|"MIN_INSTANCES_NOT_PROVISIONED"|"ACTIVE_REVISION_LIMIT_REACHED"|"NO_DEPLOYMENT"|"HEALTH_CHECK_SKIPPED"|"MIN_INSTANCES_WARMING", severity?: "SEVERITY_UNSPECIFIED"|"ERROR"|"WARNING"|"INFO", state?: "STATE_UNSPECIFIED"|"CONDITION_PENDING"|"CONDITION_RECONCILING"|"CONDITION_FAILED"|"CONDITION_SUCCEEDED", type?: string}
+  --terminal-condition: record # Defines a status condition for a resource. — shape: {executionReason?: "EXECUTION_REASON_UNDEFINED"|"JOB_STATUS_SERVICE_POLLING_ERROR"|"NON_ZERO_EXIT_CODE"|"CANCELLED"|"CANCELLING", lastTransitionTime?: string, message?: string, ... (5 more fields)}
   --traffic: list # Specifies how to distribute traffic over a collection of Revisions belonging to the Service. If traffic is empty or not provided, defaults to 100% traffic to the latest `Ready` Revision. — item shape: {percent?: int, revision?: string, tag?: string, type?: "TRAFFIC_TARGET_ALLOCATION_TYPE_UNSPECIFIED"|"TRAFFIC_TARGET_ALLOCATION_TYPE_LATEST"|"TRAFFIC_TARGET_ALLOCATION_TYPE_REVISION"}
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "serviceId" $service_id "scalar") (serialize-qp "validateOnly" $validate_only "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v2/{parent}/services") $qp)
-  let body = {"annotations": $annotations, "binaryAuthorization": $binary_authorization, "client": $client, "clientVersion": $client_version, "description": $description, "ingress": $ingress, "labels": $labels, "launchStage": $launch_stage, "name": $name, "template": $template, "terminalCondition": $terminal_condition, "traffic": $traffic} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v2/{parent}/services") $qp)
+  let req_body = {"annotations": $annotations, "binaryAuthorization": $binary_authorization, "client": $client, "clientVersion": $client_version, "description": $description, "ingress": $ingress, "labels": $labels, "launchStage": $launch_stage, "name": $name, "template": $template, "terminalCondition": $terminal_condition, "traffic": $traffic} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists Tasks from an Execution of a Job.
 #
 # GET /v2/{parent}/tasks
 # operationId: run.projects.locations.jobs.executions.tasks.list
-export def "tasks runprojectslocationsjobsexecutionstaskslist" [
+export def "tasks list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -638,7 +647,7 @@ export def "tasks runprojectslocationsjobsexecutionstaskslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "showDeleted" $show_deleted "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v2/{parent}/tasks") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v2/{parent}/tasks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -648,7 +657,7 @@ export def "tasks runprojectslocationsjobsexecutionstaskslist" [
 #
 # GET /v2/{resource}:getIamPolicy
 # operationId: run.projects.locations.services.getIamPolicy
-export def "projects runprojectslocationsservicesgetIamPolicy" [
+export def "projects get-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -674,7 +683,7 @@ export def "projects runprojectslocationsservicesgetIamPolicy" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "options.requestedPolicyVersion" $options_requested_policy_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource: $resource} | format pattern "/v2/{resource}:getIamPolicy") $qp)
+  let full_url = (build-url $base ({resource: (encode-path-segment $resource)} | format pattern "/v2/{resource}:getIamPolicy") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -685,7 +694,7 @@ export def "projects runprojectslocationsservicesgetIamPolicy" [
 # POST /v2/{resource}:setIamPolicy
 # operationId: run.projects.locations.services.setIamPolicy
 # --policy shape: {auditConfigs?: list, bindings?: list, etag?: string, version?: int}
-export def "projects runprojectslocationsservicessetIamPolicy" [
+export def "projects update-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -713,19 +722,19 @@ export def "projects runprojectslocationsservicessetIamPolicy" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource: $resource} | format pattern "/v2/{resource}:setIamPolicy") $qp)
-  let body = {"policy": $policy, "updateMask": $update_mask} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({resource: (encode-path-segment $resource)} | format pattern "/v2/{resource}:setIamPolicy") $qp)
+  let req_body = {"policy": $policy, "updateMask": $update_mask} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns permissions that a caller has on the specified Project. There are no permissions required for making this API call.
 #
 # POST /v2/{resource}:testIamPermissions
 # operationId: run.projects.locations.services.testIamPermissions
-export def "projects runprojectslocationsservicestestIamPermissions" [
+export def "projects test-iam-permissions" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -746,16 +755,16 @@ export def "projects runprojectslocationsservicestestIamPermissions" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --permissions: list # The set of permissions to check for the `resource`. Permissions with wildcards (such as `*` or `storage.*`) are not allowed. For more information see [IAM Overview](https://cloud.google.com/iam/docs/overview#permissions).
+  --permissions: list<string> # The set of permissions to check for the `resource`. Permissions with wildcards (such as `*` or `storage.*`) are not allowed. For more information see [IAM Overview](https://cloud.google.com/iam/docs/overview#permissions).
 ]: any -> record<permissions: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource: $resource} | format pattern "/v2/{resource}:testIamPermissions") $qp)
-  let body = {"permissions": $permissions} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({resource: (encode-path-segment $resource)} | format pattern "/v2/{resource}:testIamPermissions") $qp)
+  let req_body = {"permissions": $permissions} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

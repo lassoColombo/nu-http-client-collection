@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -173,7 +182,7 @@ export def "certificates-contacts get" [
 # PUT /certificates/contacts
 # operationId: SetCertificateContacts
 # --contacts item shape: {email?: string, name?: string, phone?: string}
-export def "certificates-contacts put" [
+export def "certificates-contacts update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -190,11 +199,11 @@ export def "certificates-contacts put" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/certificates/contacts" $qp)
-  let body = {"contacts": $contacts} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"contacts": $contacts} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List certificate issuers for a specified key vault.
@@ -241,7 +250,7 @@ export def "certificates-issuers delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({issuer_name: $issuer_name} | format pattern "/certificates/issuers/{issuer_name}") $qp)
+  let full_url = (build-url $base ({issuer_name: (encode-path-segment $issuer_name)} | format pattern "/certificates/issuers/{issuer_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -266,7 +275,7 @@ export def "certificates-issuers get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({issuer_name: $issuer_name} | format pattern "/certificates/issuers/{issuer_name}") $qp)
+  let full_url = (build-url $base ({issuer_name: (encode-path-segment $issuer_name)} | format pattern "/certificates/issuers/{issuer_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -279,7 +288,7 @@ export def "certificates-issuers get" [
 # --attributes shape: {enabled?: bool}
 # --credentials shape: {account_id?: string, pwd?: string}
 # --org_details shape: {admin_details?: list, id?: string}
-export def "certificates-issuers update" [
+export def "certificates-issuers update-by-issuer_name" [
   issuer_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -299,12 +308,12 @@ export def "certificates-issuers update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({issuer_name: $issuer_name} | format pattern "/certificates/issuers/{issuer_name}") $qp)
-  let body = {"attributes": $attributes, "credentials": $credentials, "org_details": $org_details, "provider": $provider} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({issuer_name: (encode-path-segment $issuer_name)} | format pattern "/certificates/issuers/{issuer_name}") $qp)
+  let req_body = {"attributes": $attributes, "credentials": $credentials, "org_details": $org_details, "provider": $provider} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Sets the specified certificate issuer.
@@ -314,7 +323,7 @@ export def "certificates-issuers update" [
 # --attributes shape: {enabled?: bool}
 # --credentials shape: {account_id?: string, pwd?: string}
 # --org_details shape: {admin_details?: list, id?: string}
-export def "certificates-issuers put" [
+export def "certificates-issuers update-by-issuer_name-1" [
   issuer_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -334,19 +343,19 @@ export def "certificates-issuers put" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({issuer_name: $issuer_name} | format pattern "/certificates/issuers/{issuer_name}") $qp)
-  let body = {"attributes": $attributes, "credentials": $credentials, "org_details": $org_details, "provider": $provider} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({issuer_name: (encode-path-segment $issuer_name)} | format pattern "/certificates/issuers/{issuer_name}") $qp)
+  let req_body = {"attributes": $attributes, "credentials": $credentials, "org_details": $org_details, "provider": $provider} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Restores a backed up certificate to a vault.
 #
 # POST /certificates/restore
 # operationId: RestoreCertificate
-export def "certificates-restore post" [
+export def "certificates-restore create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -363,11 +372,11 @@ export def "certificates-restore post" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/certificates/restore" $qp)
-  let body = {"value": $value} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"value": $value} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes a certificate from a specified key vault.
@@ -389,7 +398,7 @@ export def "certificates delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({certificate_name: $certificate_name} | format pattern "/certificates/{certificate_name}") $qp)
+  let full_url = (build-url $base ({certificate_name: (encode-path-segment $certificate_name)} | format pattern "/certificates/{certificate_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -399,7 +408,7 @@ export def "certificates delete" [
 #
 # POST /certificates/{certificate-name}/backup
 # operationId: BackupCertificate
-export def "certificates-backup post" [
+export def "certificates-backup create" [
   certificate_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -414,7 +423,7 @@ export def "certificates-backup post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({certificate_name: $certificate_name} | format pattern "/certificates/{certificate_name}/backup") $qp)
+  let full_url = (build-url $base ({certificate_name: (encode-path-segment $certificate_name)} | format pattern "/certificates/{certificate_name}/backup") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -445,12 +454,12 @@ export def "certificates-create create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({certificate_name: $certificate_name} | format pattern "/certificates/{certificate_name}/create") $qp)
-  let body = {"attributes": $attributes, "policy": $policy, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({certificate_name: (encode-path-segment $certificate_name)} | format pattern "/certificates/{certificate_name}/create") $qp)
+  let req_body = {"attributes": $attributes, "policy": $policy, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Imports a certificate into a specified key vault.
@@ -480,19 +489,19 @@ export def "certificates-import import" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({certificate_name: $certificate_name} | format pattern "/certificates/{certificate_name}/import") $qp)
-  let body = {"attributes": $attributes, "policy": $policy, "pwd": $pwd, "tags": $tags, "value": $value} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({certificate_name: (encode-path-segment $certificate_name)} | format pattern "/certificates/{certificate_name}/import") $qp)
+  let req_body = {"attributes": $attributes, "policy": $policy, "pwd": $pwd, "tags": $tags, "value": $value} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes the creation operation for a specific certificate.
 #
 # DELETE /certificates/{certificate-name}/pending
 # operationId: DeleteCertificateOperation
-export def "certificates-pending delete-certificate-operation" [
+export def "certificates-pending delete-operation" [
   certificate_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -507,7 +516,7 @@ export def "certificates-pending delete-certificate-operation" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({certificate_name: $certificate_name} | format pattern "/certificates/{certificate_name}/pending") $qp)
+  let full_url = (build-url $base ({certificate_name: (encode-path-segment $certificate_name)} | format pattern "/certificates/{certificate_name}/pending") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -517,7 +526,7 @@ export def "certificates-pending delete-certificate-operation" [
 #
 # GET /certificates/{certificate-name}/pending
 # operationId: GetCertificateOperation
-export def "certificates-pending get-certificate-operation" [
+export def "certificates-pending get-operation" [
   certificate_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -532,7 +541,7 @@ export def "certificates-pending get-certificate-operation" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({certificate_name: $certificate_name} | format pattern "/certificates/{certificate_name}/pending") $qp)
+  let full_url = (build-url $base ({certificate_name: (encode-path-segment $certificate_name)} | format pattern "/certificates/{certificate_name}/pending") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -542,7 +551,7 @@ export def "certificates-pending get-certificate-operation" [
 #
 # PATCH /certificates/{certificate-name}/pending
 # operationId: UpdateCertificateOperation
-export def "certificates-pending update-certificate-operation" [
+export def "certificates-pending update-operation" [
   certificate_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -559,12 +568,12 @@ export def "certificates-pending update-certificate-operation" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({certificate_name: $certificate_name} | format pattern "/certificates/{certificate_name}/pending") $qp)
-  let body = {"cancellation_requested": $cancellation_requested} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({certificate_name: (encode-path-segment $certificate_name)} | format pattern "/certificates/{certificate_name}/pending") $qp)
+  let req_body = {"cancellation_requested": $cancellation_requested} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Merges a certificate or a certificate chain with a key pair existing on the server.
@@ -572,7 +581,7 @@ export def "certificates-pending update-certificate-operation" [
 # POST /certificates/{certificate-name}/pending/merge
 # operationId: MergeCertificate
 # --attributes shape: {enabled?: bool, exp?: int, nbf?: int}
-export def "certificates-pending-merge post" [
+export def "certificates-pending-merge create" [
   certificate_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -585,18 +594,18 @@ export def "certificates-pending-merge post" [
   --api-version: string # Client API version.
   --attributes: any # The certificate management attributes. — shape: {enabled?: bool, exp?: int, nbf?: int}
   --tags: record # Application specific metadata in the form of key-value pairs.
-  x5c: list # The certificate or the certificate chain to merge.
+  x5c: list<string> # The certificate or the certificate chain to merge.
 ]: any -> record<attributes: record<recoveryLevel: string, created: int, enabled: bool, exp: int, nbf: int, updated: int>, cer: string, contentType: string, id: string, kid: string, policy: record<attributes: record<recoveryLevel: string, created: int, enabled: bool, exp: int, nbf: int, updated: int>, id: string, issuer: record<cert_transparency: bool, cty: string, name: string>, key_props: record<crv: string, exportable: bool, key_size: int, kty: string, reuse_key: bool>, lifetime_actions: list<record>, secret_props: record<contentType: string>, x509_props: record<ekus: list, key_usage: list, sans: record, subject: string, validity_months: int>>, sid: string, tags: record, x5t: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({certificate_name: $certificate_name} | format pattern "/certificates/{certificate_name}/pending/merge") $qp)
-  let body = {"attributes": $attributes, "tags": $tags, "x5c": $x5c} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({certificate_name: (encode-path-segment $certificate_name)} | format pattern "/certificates/{certificate_name}/pending/merge") $qp)
+  let req_body = {"attributes": $attributes, "tags": $tags, "x5c": $x5c} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists the policy for a certificate.
@@ -618,7 +627,7 @@ export def "certificates-policy get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({certificate_name: $certificate_name} | format pattern "/certificates/{certificate_name}/policy") $qp)
+  let full_url = (build-url $base ({certificate_name: (encode-path-segment $certificate_name)} | format pattern "/certificates/{certificate_name}/policy") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -633,7 +642,7 @@ export def "certificates-policy get" [
 # --key_props shape: {crv?: "P-256"|"P-384"|"P-521"|"P-256K", exportable?: bool, key_size?: int, kty?: "EC"|"EC-HSM"|"RSA"|"RSA-HSM"|"oct", reuse_key?: bool}
 # --lifetime_actions item shape: {action?: any, trigger?: any}
 # --secret_props shape: {contentType?: string}
-# --x509_props shape: {ekus?: list, key_usage?: list, sans?: any, subject?: string, validity_months?: int}
+# --x509_props shape: {ekus?: list<string>, key_usage?: list<string>, sans?: any, subject?: string, validity_months?: int}
 export def "certificates-policy update" [
   certificate_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -650,18 +659,18 @@ export def "certificates-policy update" [
   --key-props: any # Properties of the key pair backing a certificate. — shape: {crv?: "P-256"|"P-384"|"P-521"|"P-256K", exportable?: bool, key_size?: int, kty?: "EC"|"EC-HSM"|"RSA"|"RSA-HSM"|"oct", reuse_key?: bool}
   --lifetime-actions: list # Actions that will be performed by Key Vault over the lifetime of a certificate. — item shape: {action?: any, trigger?: any}
   --secret-props: any # Properties of the key backing a certificate. — shape: {contentType?: string}
-  --x509-props: any # Properties of the X509 component of a certificate. — shape: {ekus?: list, key_usage?: list, sans?: any, subject?: string, validity_months?: int}
+  --x509-props: any # Properties of the X509 component of a certificate. — shape: {ekus?: list<string>, key_usage?: list<string>, sans?: any, subject?: string, validity_months?: int}
 ]: any -> record<attributes: record<recoveryLevel: string, created: int, enabled: bool, exp: int, nbf: int, updated: int>, id: string, issuer: record<cert_transparency: bool, cty: string, name: string>, key_props: record<crv: string, exportable: bool, key_size: int, kty: string, reuse_key: bool>, lifetime_actions: table<action: record, trigger: record>, secret_props: record<contentType: string>, x509_props: record<ekus: list<string>, key_usage: list<string>, sans: record<dns_names: list, emails: list, upns: list>, subject: string, validity_months: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({certificate_name: $certificate_name} | format pattern "/certificates/{certificate_name}/policy") $qp)
-  let body = {"attributes": $attributes, "issuer": $issuer, "key_props": $key_props, "lifetime_actions": $lifetime_actions, "secret_props": $secret_props, "x509_props": $x509_props} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({certificate_name: (encode-path-segment $certificate_name)} | format pattern "/certificates/{certificate_name}/policy") $qp)
+  let req_body = {"attributes": $attributes, "issuer": $issuer, "key_props": $key_props, "lifetime_actions": $lifetime_actions, "secret_props": $secret_props, "x509_props": $x509_props} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List the versions of a certificate.
@@ -684,7 +693,7 @@ export def "certificates-versions get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxresults" $maxresults "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({certificate_name: $certificate_name} | format pattern "/certificates/{certificate_name}/versions") $qp)
+  let full_url = (build-url $base ({certificate_name: (encode-path-segment $certificate_name)} | format pattern "/certificates/{certificate_name}/versions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -710,7 +719,7 @@ export def "certificates get-by-certificate_name-certificate_version" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({certificate_name: $certificate_name, certificate_version: $certificate_version} | format pattern "/certificates/{certificate_name}/{certificate_version}") $qp)
+  let full_url = (build-url $base ({certificate_name: (encode-path-segment $certificate_name), certificate_version: (encode-path-segment $certificate_version)} | format pattern "/certificates/{certificate_name}/{certificate_version}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -742,19 +751,19 @@ export def "certificates update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({certificate_name: $certificate_name, certificate_version: $certificate_version} | format pattern "/certificates/{certificate_name}/{certificate_version}") $qp)
-  let body = {"attributes": $attributes, "policy": $policy, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({certificate_name: (encode-path-segment $certificate_name), certificate_version: (encode-path-segment $certificate_version)} | format pattern "/certificates/{certificate_name}/{certificate_version}") $qp)
+  let req_body = {"attributes": $attributes, "policy": $policy, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists the deleted certificates in the specified vault currently available for recovery.
 #
 # GET /deletedcertificates
 # operationId: GetDeletedCertificates
-export def "deletedcertificates list" [
+export def "deletedcertificates get-deleted-certificates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -780,7 +789,7 @@ export def "deletedcertificates list" [
 #
 # DELETE /deletedcertificates/{certificate-name}
 # operationId: PurgeDeletedCertificate
-export def "deletedcertificates delete" [
+export def "deletedcertificates delete-purge-deleted" [
   certificate_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -795,7 +804,7 @@ export def "deletedcertificates delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({certificate_name: $certificate_name} | format pattern "/deletedcertificates/{certificate_name}") $qp)
+  let full_url = (build-url $base ({certificate_name: (encode-path-segment $certificate_name)} | format pattern "/deletedcertificates/{certificate_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -805,7 +814,7 @@ export def "deletedcertificates delete" [
 #
 # GET /deletedcertificates/{certificate-name}
 # operationId: GetDeletedCertificate
-export def "deletedcertificates get" [
+export def "deletedcertificates get-deleted" [
   certificate_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -820,7 +829,7 @@ export def "deletedcertificates get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({certificate_name: $certificate_name} | format pattern "/deletedcertificates/{certificate_name}") $qp)
+  let full_url = (build-url $base ({certificate_name: (encode-path-segment $certificate_name)} | format pattern "/deletedcertificates/{certificate_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -830,7 +839,7 @@ export def "deletedcertificates get" [
 #
 # POST /deletedcertificates/{certificate-name}/recover
 # operationId: RecoverDeletedCertificate
-export def "deletedcertificates-recover post" [
+export def "deletedcertificates-recover create-deleted" [
   certificate_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -845,7 +854,7 @@ export def "deletedcertificates-recover post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({certificate_name: $certificate_name} | format pattern "/deletedcertificates/{certificate_name}/recover") $qp)
+  let full_url = (build-url $base ({certificate_name: (encode-path-segment $certificate_name)} | format pattern "/deletedcertificates/{certificate_name}/recover") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -855,7 +864,7 @@ export def "deletedcertificates-recover post" [
 #
 # GET /deletedkeys
 # operationId: GetDeletedKeys
-export def "deletedkeys list" [
+export def "deletedkeys get-deleted-keys" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -880,7 +889,7 @@ export def "deletedkeys list" [
 #
 # DELETE /deletedkeys/{key-name}
 # operationId: PurgeDeletedKey
-export def "deletedkeys delete" [
+export def "deletedkeys delete-purge-deleted" [
   key_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -895,7 +904,7 @@ export def "deletedkeys delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({key_name: $key_name} | format pattern "/deletedkeys/{key_name}") $qp)
+  let full_url = (build-url $base ({key_name: (encode-path-segment $key_name)} | format pattern "/deletedkeys/{key_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -905,7 +914,7 @@ export def "deletedkeys delete" [
 #
 # GET /deletedkeys/{key-name}
 # operationId: GetDeletedKey
-export def "deletedkeys get" [
+export def "deletedkeys get-deleted" [
   key_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -920,7 +929,7 @@ export def "deletedkeys get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({key_name: $key_name} | format pattern "/deletedkeys/{key_name}") $qp)
+  let full_url = (build-url $base ({key_name: (encode-path-segment $key_name)} | format pattern "/deletedkeys/{key_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -930,7 +939,7 @@ export def "deletedkeys get" [
 #
 # POST /deletedkeys/{key-name}/recover
 # operationId: RecoverDeletedKey
-export def "deletedkeys-recover post" [
+export def "deletedkeys-recover create-deleted" [
   key_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -945,7 +954,7 @@ export def "deletedkeys-recover post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({key_name: $key_name} | format pattern "/deletedkeys/{key_name}/recover") $qp)
+  let full_url = (build-url $base ({key_name: (encode-path-segment $key_name)} | format pattern "/deletedkeys/{key_name}/recover") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -955,7 +964,7 @@ export def "deletedkeys-recover post" [
 #
 # GET /deletedsecrets
 # operationId: GetDeletedSecrets
-export def "deletedsecrets list" [
+export def "deletedsecrets get-deleted-secrets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -980,7 +989,7 @@ export def "deletedsecrets list" [
 #
 # DELETE /deletedsecrets/{secret-name}
 # operationId: PurgeDeletedSecret
-export def "deletedsecrets delete" [
+export def "deletedsecrets delete-purge-deleted" [
   secret_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -995,7 +1004,7 @@ export def "deletedsecrets delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({secret_name: $secret_name} | format pattern "/deletedsecrets/{secret_name}") $qp)
+  let full_url = (build-url $base ({secret_name: (encode-path-segment $secret_name)} | format pattern "/deletedsecrets/{secret_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1005,7 +1014,7 @@ export def "deletedsecrets delete" [
 #
 # GET /deletedsecrets/{secret-name}
 # operationId: GetDeletedSecret
-export def "deletedsecrets get" [
+export def "deletedsecrets get-deleted" [
   secret_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1020,7 +1029,7 @@ export def "deletedsecrets get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({secret_name: $secret_name} | format pattern "/deletedsecrets/{secret_name}") $qp)
+  let full_url = (build-url $base ({secret_name: (encode-path-segment $secret_name)} | format pattern "/deletedsecrets/{secret_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1030,7 +1039,7 @@ export def "deletedsecrets get" [
 #
 # POST /deletedsecrets/{secret-name}/recover
 # operationId: RecoverDeletedSecret
-export def "deletedsecrets-recover post" [
+export def "deletedsecrets-recover create-deleted" [
   secret_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1045,7 +1054,7 @@ export def "deletedsecrets-recover post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({secret_name: $secret_name} | format pattern "/deletedsecrets/{secret_name}/recover") $qp)
+  let full_url = (build-url $base ({secret_name: (encode-path-segment $secret_name)} | format pattern "/deletedsecrets/{secret_name}/recover") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1080,7 +1089,7 @@ export def "deletedstorage get-deleted-storage-accounts" [
 #
 # DELETE /deletedstorage/{storage-account-name}
 # operationId: PurgeDeletedStorageAccount
-export def "deletedstorage delete" [
+export def "deletedstorage delete-purge-deleted" [
   storage_account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1095,7 +1104,7 @@ export def "deletedstorage delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({storage_account_name: $storage_account_name} | format pattern "/deletedstorage/{storage_account_name}") $qp)
+  let full_url = (build-url $base ({storage_account_name: (encode-path-segment $storage_account_name)} | format pattern "/deletedstorage/{storage_account_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1105,7 +1114,7 @@ export def "deletedstorage delete" [
 #
 # GET /deletedstorage/{storage-account-name}
 # operationId: GetDeletedStorageAccount
-export def "deletedstorage get-deleted-storage-account" [
+export def "deletedstorage get-deleted" [
   storage_account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1120,7 +1129,7 @@ export def "deletedstorage get-deleted-storage-account" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({storage_account_name: $storage_account_name} | format pattern "/deletedstorage/{storage_account_name}") $qp)
+  let full_url = (build-url $base ({storage_account_name: (encode-path-segment $storage_account_name)} | format pattern "/deletedstorage/{storage_account_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1130,7 +1139,7 @@ export def "deletedstorage get-deleted-storage-account" [
 #
 # POST /deletedstorage/{storage-account-name}/recover
 # operationId: RecoverDeletedStorageAccount
-export def "deletedstorage-recover post" [
+export def "deletedstorage-recover create-deleted" [
   storage_account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1145,7 +1154,7 @@ export def "deletedstorage-recover post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({storage_account_name: $storage_account_name} | format pattern "/deletedstorage/{storage_account_name}/recover") $qp)
+  let full_url = (build-url $base ({storage_account_name: (encode-path-segment $storage_account_name)} | format pattern "/deletedstorage/{storage_account_name}/recover") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1155,7 +1164,7 @@ export def "deletedstorage-recover post" [
 #
 # GET /deletedstorage/{storage-account-name}/sas
 # operationId: GetDeletedSasDefinitions
-export def "deletedstorage-sas get-deleted-sas-definitions" [
+export def "deletedstorage-sas get-deleted-definitions" [
   storage_account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1171,7 +1180,7 @@ export def "deletedstorage-sas get-deleted-sas-definitions" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxresults" $maxresults "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({storage_account_name: $storage_account_name} | format pattern "/deletedstorage/{storage_account_name}/sas") $qp)
+  let full_url = (build-url $base ({storage_account_name: (encode-path-segment $storage_account_name)} | format pattern "/deletedstorage/{storage_account_name}/sas") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1181,7 +1190,7 @@ export def "deletedstorage-sas get-deleted-sas-definitions" [
 #
 # GET /deletedstorage/{storage-account-name}/sas/{sas-definition-name}
 # operationId: GetDeletedSasDefinition
-export def "deletedstorage-sas get-deleted-sas-definition" [
+export def "deletedstorage-sas get-deleted" [
   storage_account_name: string
   sas_definition_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1197,7 +1206,7 @@ export def "deletedstorage-sas get-deleted-sas-definition" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({storage_account_name: $storage_account_name, sas_definition_name: $sas_definition_name} | format pattern "/deletedstorage/{storage_account_name}/sas/{sas_definition_name}") $qp)
+  let full_url = (build-url $base ({storage_account_name: (encode-path-segment $storage_account_name), sas_definition_name: (encode-path-segment $sas_definition_name)} | format pattern "/deletedstorage/{storage_account_name}/sas/{sas_definition_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1207,7 +1216,7 @@ export def "deletedstorage-sas get-deleted-sas-definition" [
 #
 # POST /deletedstorage/{storage-account-name}/sas/{sas-definition-name}/recover
 # operationId: RecoverDeletedSasDefinition
-export def "deletedstorage-sas-recover post" [
+export def "deletedstorage-sas-recover create-deleted" [
   storage_account_name: string
   sas_definition_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1223,7 +1232,7 @@ export def "deletedstorage-sas-recover post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({storage_account_name: $storage_account_name, sas_definition_name: $sas_definition_name} | format pattern "/deletedstorage/{storage_account_name}/sas/{sas_definition_name}/recover") $qp)
+  let full_url = (build-url $base ({storage_account_name: (encode-path-segment $storage_account_name), sas_definition_name: (encode-path-segment $sas_definition_name)} | format pattern "/deletedstorage/{storage_account_name}/sas/{sas_definition_name}/recover") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1258,7 +1267,7 @@ export def "keys get" [
 #
 # POST /keys/restore
 # operationId: RestoreKey
-export def "keys-restore post" [
+export def "keys-restore create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1275,11 +1284,11 @@ export def "keys-restore post" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/keys/restore" $qp)
-  let body = {"value": $value} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"value": $value} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes a key of any type from storage in Azure Key Vault.
@@ -1301,7 +1310,7 @@ export def "keys delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({key_name: $key_name} | format pattern "/keys/{key_name}") $qp)
+  let full_url = (build-url $base ({key_name: (encode-path-segment $key_name)} | format pattern "/keys/{key_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1312,7 +1321,7 @@ export def "keys delete" [
 # PUT /keys/{key-name}
 # operationId: ImportKey
 # --attributes shape: {enabled?: bool, exp?: int, nbf?: int}
-# --key shape: {crv?: "P-256"|"P-384"|"P-521"|"P-256K", d?: string, dp?: string, dq?: string, e?: string, k?: string, key_hsm?: string, key_ops?: list, kid?: string, kty?: "EC"|"EC-HSM"|"RSA"|"RSA-HSM"|"oct", n?: string, p?: string, q?: string, qi?: string, x?: string, y?: string}
+# --key shape: {crv?: "P-256"|"P-384"|"P-521"|"P-256K", d?: string, dp?: string, dq?: string, e?: string, k?: string, key_hsm?: string, key_ops?: list<string>, kid?: string, kty?: "EC"|"EC-HSM"|"RSA"|"RSA-HSM"|"oct", n?: string, p?: string, q?: string, qi?: string, x?: string, y?: string}
 export def "keys import" [
   key_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1326,26 +1335,26 @@ export def "keys import" [
   --api-version: string # Client API version.
   --hsm: oneof<nothing, bool> # Whether to import as a hardware key (HSM) or software key.
   --attributes: any # The attributes of a key managed by the key vault service. — shape: {enabled?: bool, exp?: int, nbf?: int}
-  key: any # As of http://tools.ietf.org/html/draft-ietf-jose-json-web-key-18 — shape: {crv?: "P-256"|"P-384"|"P-521"|"P-256K", d?: string, dp?: string, dq?: string, e?: string, k?: string, key_hsm?: string, key_ops?: list, kid?: string, kty?: "EC"|"EC-HSM"|"RSA"|"RSA-HSM"|"oct", n?: string, p?: string, q?: string, qi?: string, x?: string, y?: string}
+  key: any # As of http://tools.ietf.org/html/draft-ietf-jose-json-web-key-18 — shape: {crv?: "P-256"|"P-384"|"P-521"|"P-256K", d?: string, dp?: string, dq?: string, e?: string, k?: string, key_hsm?: string, key_ops?: list<string>, kid?: string, kty?: "EC"|"EC-HSM"|"RSA"|"RSA-HSM"|"oct", n?: string, p?: string, q?: string, qi?: string, x?: string, y?: string}
   --tags: record # Application specific metadata in the form of key-value pairs.
 ]: any -> record<attributes: record<recoveryLevel: string, created: int, enabled: bool, exp: int, nbf: int, updated: int>, key: record<crv: string, d: string, dp: string, dq: string, e: string, k: string, key_hsm: string, key_ops: list<string>, kid: string, kty: string, n: string, p: string, q: string, qi: string, x: string, y: string>, managed: bool, tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({key_name: $key_name} | format pattern "/keys/{key_name}") $qp)
-  let body = {"Hsm": $hsm, "attributes": $attributes, "key": $key, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({key_name: (encode-path-segment $key_name)} | format pattern "/keys/{key_name}") $qp)
+  let req_body = {"Hsm": $hsm, "attributes": $attributes, "key": $key, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Requests that a backup of the specified key be downloaded to the client.
 #
 # POST /keys/{key-name}/backup
 # operationId: BackupKey
-export def "keys-backup post" [
+export def "keys-backup create" [
   key_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1360,7 +1369,7 @@ export def "keys-backup post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({key_name: $key_name} | format pattern "/keys/{key_name}/backup") $qp)
+  let full_url = (build-url $base ({key_name: (encode-path-segment $key_name)} | format pattern "/keys/{key_name}/backup") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1384,7 +1393,7 @@ export def "keys-create create" [
   --api-version: string # Client API version.
   --attributes: any # The attributes of a key managed by the key vault service. — shape: {enabled?: bool, exp?: int, nbf?: int}
   --crv: string@crv-completer # Elliptic curve name. For valid values, see JsonWebKeyCurveName.
-  --key-ops: list
+  --key-ops: list<string>
   --key-size: int # The key size in bits. For example: 2048, 3072, or 4096 for RSA. (format: int32)
   kty: string@kty-completer # The type of key to create. For valid values, see JsonWebKeyType.
   --tags: record # Application specific metadata in the form of key-value pairs.
@@ -1393,12 +1402,12 @@ export def "keys-create create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({key_name: $key_name} | format pattern "/keys/{key_name}/create") $qp)
-  let body = {"attributes": $attributes, "crv": $crv, "key_ops": $key_ops, "key_size": $key_size, "kty": $kty, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({key_name: (encode-path-segment $key_name)} | format pattern "/keys/{key_name}/create") $qp)
+  let req_body = {"attributes": $attributes, "crv": $crv, "key_ops": $key_ops, "key_size": $key_size, "kty": $kty, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieves a list of individual key versions with the same key name.
@@ -1421,7 +1430,7 @@ export def "keys-versions get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxresults" $maxresults "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({key_name: $key_name} | format pattern "/keys/{key_name}/versions") $qp)
+  let full_url = (build-url $base ({key_name: (encode-path-segment $key_name)} | format pattern "/keys/{key_name}/versions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1447,7 +1456,7 @@ export def "keys get-by-key_name-key_version" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({key_name: $key_name, key_version: $key_version} | format pattern "/keys/{key_name}/{key_version}") $qp)
+  let full_url = (build-url $base ({key_name: (encode-path-segment $key_name), key_version: (encode-path-segment $key_version)} | format pattern "/keys/{key_name}/{key_version}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1471,26 +1480,26 @@ export def "keys update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version.
   --attributes: any # The attributes of a key managed by the key vault service. — shape: {enabled?: bool, exp?: int, nbf?: int}
-  --key-ops: list # Json web key operations. For more information on possible key operations, see JsonWebKeyOperation.
+  --key-ops: list<string> # Json web key operations. For more information on possible key operations, see JsonWebKeyOperation.
   --tags: record # Application specific metadata in the form of key-value pairs.
 ]: any -> record<attributes: record<recoveryLevel: string, created: int, enabled: bool, exp: int, nbf: int, updated: int>, key: record<crv: string, d: string, dp: string, dq: string, e: string, k: string, key_hsm: string, key_ops: list<string>, kid: string, kty: string, n: string, p: string, q: string, qi: string, x: string, y: string>, managed: bool, tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({key_name: $key_name, key_version: $key_version} | format pattern "/keys/{key_name}/{key_version}") $qp)
-  let body = {"attributes": $attributes, "key_ops": $key_ops, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({key_name: (encode-path-segment $key_name), key_version: (encode-path-segment $key_version)} | format pattern "/keys/{key_name}/{key_version}") $qp)
+  let req_body = {"attributes": $attributes, "key_ops": $key_ops, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Decrypts a single block of encrypted data.
 #
 # POST /keys/{key-name}/{key-version}/decrypt
 # operationId: decrypt
-export def "keys-decrypt decrypt" [
+export def "keys-decrypt create" [
   key_name: string
   key_version: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1509,19 +1518,19 @@ export def "keys-decrypt decrypt" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({key_name: $key_name, key_version: $key_version} | format pattern "/keys/{key_name}/{key_version}/decrypt") $qp)
-  let body = {"alg": $alg, "value": $value} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({key_name: (encode-path-segment $key_name), key_version: (encode-path-segment $key_version)} | format pattern "/keys/{key_name}/{key_version}/decrypt") $qp)
+  let req_body = {"alg": $alg, "value": $value} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Encrypts an arbitrary sequence of bytes using an encryption key that is stored in a key vault.
 #
 # POST /keys/{key-name}/{key-version}/encrypt
 # operationId: encrypt
-export def "keys-encrypt encrypt" [
+export def "keys-encrypt create" [
   key_name: string
   key_version: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1540,19 +1549,19 @@ export def "keys-encrypt encrypt" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({key_name: $key_name, key_version: $key_version} | format pattern "/keys/{key_name}/{key_version}/encrypt") $qp)
-  let body = {"alg": $alg, "value": $value} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({key_name: (encode-path-segment $key_name), key_version: (encode-path-segment $key_version)} | format pattern "/keys/{key_name}/{key_version}/encrypt") $qp)
+  let req_body = {"alg": $alg, "value": $value} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Creates a signature from a digest using the specified key.
 #
 # POST /keys/{key-name}/{key-version}/sign
 # operationId: sign
-export def "keys-sign sign" [
+export def "keys-sign create" [
   key_name: string
   key_version: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1571,19 +1580,19 @@ export def "keys-sign sign" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({key_name: $key_name, key_version: $key_version} | format pattern "/keys/{key_name}/{key_version}/sign") $qp)
-  let body = {"alg": $alg, "value": $value} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({key_name: (encode-path-segment $key_name), key_version: (encode-path-segment $key_version)} | format pattern "/keys/{key_name}/{key_version}/sign") $qp)
+  let req_body = {"alg": $alg, "value": $value} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Unwraps a symmetric key using the specified key that was initially used for wrapping that key.
 #
 # POST /keys/{key-name}/{key-version}/unwrapkey
 # operationId: unwrapKey
-export def "keys-unwrapkey unwrapKey" [
+export def "keys-unwrapkey create-unwrap" [
   key_name: string
   key_version: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1602,12 +1611,12 @@ export def "keys-unwrapkey unwrapKey" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({key_name: $key_name, key_version: $key_version} | format pattern "/keys/{key_name}/{key_version}/unwrapkey") $qp)
-  let body = {"alg": $alg, "value": $value} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({key_name: (encode-path-segment $key_name), key_version: (encode-path-segment $key_version)} | format pattern "/keys/{key_name}/{key_version}/unwrapkey") $qp)
+  let req_body = {"alg": $alg, "value": $value} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Verifies a signature using a specified key.
@@ -1634,19 +1643,19 @@ export def "keys-verify verify" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({key_name: $key_name, key_version: $key_version} | format pattern "/keys/{key_name}/{key_version}/verify") $qp)
-  let body = {"alg": $alg, "digest": $digest, "value": $value} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({key_name: (encode-path-segment $key_name), key_version: (encode-path-segment $key_version)} | format pattern "/keys/{key_name}/{key_version}/verify") $qp)
+  let req_body = {"alg": $alg, "digest": $digest, "value": $value} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Wraps a symmetric key using a specified key.
 #
 # POST /keys/{key-name}/{key-version}/wrapkey
 # operationId: wrapKey
-export def "keys-wrapkey wrapKey" [
+export def "keys-wrapkey create-wrap" [
   key_name: string
   key_version: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1665,12 +1674,12 @@ export def "keys-wrapkey wrapKey" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({key_name: $key_name, key_version: $key_version} | format pattern "/keys/{key_name}/{key_version}/wrapkey") $qp)
-  let body = {"alg": $alg, "value": $value} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({key_name: (encode-path-segment $key_name), key_version: (encode-path-segment $key_version)} | format pattern "/keys/{key_name}/{key_version}/wrapkey") $qp)
+  let req_body = {"alg": $alg, "value": $value} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List secrets in a specified key vault.
@@ -1702,7 +1711,7 @@ export def "secrets get" [
 #
 # POST /secrets/restore
 # operationId: RestoreSecret
-export def "secrets-restore post" [
+export def "secrets-restore create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1719,11 +1728,11 @@ export def "secrets-restore post" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/secrets/restore" $qp)
-  let body = {"value": $value} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"value": $value} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes a secret from a specified key vault.
@@ -1745,7 +1754,7 @@ export def "secrets delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({secret_name: $secret_name} | format pattern "/secrets/{secret_name}") $qp)
+  let full_url = (build-url $base ({secret_name: (encode-path-segment $secret_name)} | format pattern "/secrets/{secret_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1756,7 +1765,7 @@ export def "secrets delete" [
 # PUT /secrets/{secret-name}
 # operationId: SetSecret
 # --attributes shape: {enabled?: bool, exp?: int, nbf?: int}
-export def "secrets put" [
+export def "secrets update-by-secret_name" [
   secret_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1776,19 +1785,19 @@ export def "secrets put" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({secret_name: $secret_name} | format pattern "/secrets/{secret_name}") $qp)
-  let body = {"attributes": $attributes, "contentType": $content_type, "tags": $tags, "value": $value} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({secret_name: (encode-path-segment $secret_name)} | format pattern "/secrets/{secret_name}") $qp)
+  let req_body = {"attributes": $attributes, "contentType": $content_type, "tags": $tags, "value": $value} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Backs up the specified secret.
 #
 # POST /secrets/{secret-name}/backup
 # operationId: BackupSecret
-export def "secrets-backup post" [
+export def "secrets-backup create" [
   secret_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1803,7 +1812,7 @@ export def "secrets-backup post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({secret_name: $secret_name} | format pattern "/secrets/{secret_name}/backup") $qp)
+  let full_url = (build-url $base ({secret_name: (encode-path-segment $secret_name)} | format pattern "/secrets/{secret_name}/backup") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1829,7 +1838,7 @@ export def "secrets-versions get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxresults" $maxresults "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({secret_name: $secret_name} | format pattern "/secrets/{secret_name}/versions") $qp)
+  let full_url = (build-url $base ({secret_name: (encode-path-segment $secret_name)} | format pattern "/secrets/{secret_name}/versions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1855,7 +1864,7 @@ export def "secrets get-by-secret_name-secret_version" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({secret_name: $secret_name, secret_version: $secret_version} | format pattern "/secrets/{secret_name}/{secret_version}") $qp)
+  let full_url = (build-url $base ({secret_name: (encode-path-segment $secret_name), secret_version: (encode-path-segment $secret_version)} | format pattern "/secrets/{secret_name}/{secret_version}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1866,7 +1875,7 @@ export def "secrets get-by-secret_name-secret_version" [
 # PATCH /secrets/{secret-name}/{secret-version}
 # operationId: UpdateSecret
 # --attributes shape: {enabled?: bool, exp?: int, nbf?: int}
-export def "secrets update" [
+export def "secrets update-by-secret_name-secret_version" [
   secret_name: string
   secret_version: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1886,19 +1895,19 @@ export def "secrets update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({secret_name: $secret_name, secret_version: $secret_version} | format pattern "/secrets/{secret_name}/{secret_version}") $qp)
-  let body = {"attributes": $attributes, "contentType": $content_type, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({secret_name: (encode-path-segment $secret_name), secret_version: (encode-path-segment $secret_version)} | format pattern "/secrets/{secret_name}/{secret_version}") $qp)
+  let req_body = {"attributes": $attributes, "contentType": $content_type, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List storage accounts managed by the specified key vault. This operation requires the storage/list permission.
 #
 # GET /storage
 # operationId: GetStorageAccounts
-export def "storage get-storage-accounts" [
+export def "storage get-accounts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1923,7 +1932,7 @@ export def "storage get-storage-accounts" [
 #
 # POST /storage/restore
 # operationId: RestoreStorageAccount
-export def "storage-restore post" [
+export def "storage-restore create-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1940,18 +1949,18 @@ export def "storage-restore post" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/storage/restore" $qp)
-  let body = {"value": $value} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"value": $value} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes a storage account. This operation requires the storage/delete permission.
 #
 # DELETE /storage/{storage-account-name}
 # operationId: DeleteStorageAccount
-export def "storage delete-storage-account" [
+export def "storage delete" [
   storage_account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1966,7 +1975,7 @@ export def "storage delete-storage-account" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({storage_account_name: $storage_account_name} | format pattern "/storage/{storage_account_name}") $qp)
+  let full_url = (build-url $base ({storage_account_name: (encode-path-segment $storage_account_name)} | format pattern "/storage/{storage_account_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1976,7 +1985,7 @@ export def "storage delete-storage-account" [
 #
 # GET /storage/{storage-account-name}
 # operationId: GetStorageAccount
-export def "storage get-storage-account" [
+export def "storage get" [
   storage_account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1991,7 +2000,7 @@ export def "storage get-storage-account" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({storage_account_name: $storage_account_name} | format pattern "/storage/{storage_account_name}") $qp)
+  let full_url = (build-url $base ({storage_account_name: (encode-path-segment $storage_account_name)} | format pattern "/storage/{storage_account_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2002,7 +2011,7 @@ export def "storage get-storage-account" [
 # PATCH /storage/{storage-account-name}
 # operationId: UpdateStorageAccount
 # --attributes shape: {enabled?: bool}
-export def "storage update-storage-account" [
+export def "storage update-by-storage_account_name" [
   storage_account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2023,12 +2032,12 @@ export def "storage update-storage-account" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({storage_account_name: $storage_account_name} | format pattern "/storage/{storage_account_name}") $qp)
-  let body = {"activeKeyName": $active_key_name, "attributes": $attributes, "autoRegenerateKey": $auto_regenerate_key, "regenerationPeriod": $regeneration_period, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({storage_account_name: (encode-path-segment $storage_account_name)} | format pattern "/storage/{storage_account_name}") $qp)
+  let req_body = {"activeKeyName": $active_key_name, "attributes": $attributes, "autoRegenerateKey": $auto_regenerate_key, "regenerationPeriod": $regeneration_period, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Creates or updates a new storage account. This operation requires the storage/set permission.
@@ -2036,7 +2045,7 @@ export def "storage update-storage-account" [
 # PUT /storage/{storage-account-name}
 # operationId: SetStorageAccount
 # --attributes shape: {enabled?: bool}
-export def "storage put" [
+export def "storage update-by-storage_account_name-1" [
   storage_account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2058,19 +2067,19 @@ export def "storage put" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({storage_account_name: $storage_account_name} | format pattern "/storage/{storage_account_name}") $qp)
-  let body = {"activeKeyName": $active_key_name, "attributes": $attributes, "autoRegenerateKey": $auto_regenerate_key, "regenerationPeriod": $regeneration_period, "resourceId": $resource_id, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({storage_account_name: (encode-path-segment $storage_account_name)} | format pattern "/storage/{storage_account_name}") $qp)
+  let req_body = {"activeKeyName": $active_key_name, "attributes": $attributes, "autoRegenerateKey": $auto_regenerate_key, "regenerationPeriod": $regeneration_period, "resourceId": $resource_id, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Backs up the specified storage account.
 #
 # POST /storage/{storage-account-name}/backup
 # operationId: BackupStorageAccount
-export def "storage-backup post" [
+export def "storage-backup create" [
   storage_account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2085,7 +2094,7 @@ export def "storage-backup post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({storage_account_name: $storage_account_name} | format pattern "/storage/{storage_account_name}/backup") $qp)
+  let full_url = (build-url $base ({storage_account_name: (encode-path-segment $storage_account_name)} | format pattern "/storage/{storage_account_name}/backup") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2095,7 +2104,7 @@ export def "storage-backup post" [
 #
 # POST /storage/{storage-account-name}/regeneratekey
 # operationId: RegenerateStorageAccountKey
-export def "storage-regeneratekey post" [
+export def "storage-regeneratekey create-regenerate-key" [
   storage_account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2112,19 +2121,19 @@ export def "storage-regeneratekey post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({storage_account_name: $storage_account_name} | format pattern "/storage/{storage_account_name}/regeneratekey") $qp)
-  let body = {"keyName": $key_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({storage_account_name: (encode-path-segment $storage_account_name)} | format pattern "/storage/{storage_account_name}/regeneratekey") $qp)
+  let req_body = {"keyName": $key_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List storage SAS definitions for the given storage account. This operation requires the storage/listsas permission.
 #
 # GET /storage/{storage-account-name}/sas
 # operationId: GetSasDefinitions
-export def "storage-sas get-sas-definitions" [
+export def "storage-sas get-definitions" [
   storage_account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2140,7 +2149,7 @@ export def "storage-sas get-sas-definitions" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxresults" $maxresults "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({storage_account_name: $storage_account_name} | format pattern "/storage/{storage_account_name}/sas") $qp)
+  let full_url = (build-url $base ({storage_account_name: (encode-path-segment $storage_account_name)} | format pattern "/storage/{storage_account_name}/sas") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2150,7 +2159,7 @@ export def "storage-sas get-sas-definitions" [
 #
 # DELETE /storage/{storage-account-name}/sas/{sas-definition-name}
 # operationId: DeleteSasDefinition
-export def "storage-sas delete-sas-definition" [
+export def "storage-sas delete" [
   storage_account_name: string
   sas_definition_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2166,7 +2175,7 @@ export def "storage-sas delete-sas-definition" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({storage_account_name: $storage_account_name, sas_definition_name: $sas_definition_name} | format pattern "/storage/{storage_account_name}/sas/{sas_definition_name}") $qp)
+  let full_url = (build-url $base ({storage_account_name: (encode-path-segment $storage_account_name), sas_definition_name: (encode-path-segment $sas_definition_name)} | format pattern "/storage/{storage_account_name}/sas/{sas_definition_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2176,7 +2185,7 @@ export def "storage-sas delete-sas-definition" [
 #
 # GET /storage/{storage-account-name}/sas/{sas-definition-name}
 # operationId: GetSasDefinition
-export def "storage-sas get-sas-definition" [
+export def "storage-sas get" [
   storage_account_name: string
   sas_definition_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2192,7 +2201,7 @@ export def "storage-sas get-sas-definition" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({storage_account_name: $storage_account_name, sas_definition_name: $sas_definition_name} | format pattern "/storage/{storage_account_name}/sas/{sas_definition_name}") $qp)
+  let full_url = (build-url $base ({storage_account_name: (encode-path-segment $storage_account_name), sas_definition_name: (encode-path-segment $sas_definition_name)} | format pattern "/storage/{storage_account_name}/sas/{sas_definition_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2203,7 +2212,7 @@ export def "storage-sas get-sas-definition" [
 # PATCH /storage/{storage-account-name}/sas/{sas-definition-name}
 # operationId: UpdateSasDefinition
 # --attributes shape: {enabled?: bool}
-export def "storage-sas update-sas-definition" [
+export def "storage-sas update-by-storage_account_name-sas_definition_name" [
   storage_account_name: string
   sas_definition_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2218,19 +2227,19 @@ export def "storage-sas update-sas-definition" [
   --attributes: any # The SAS definition management attributes. — shape: {enabled?: bool}
   --sas-type: string@sas-type-completer # The type of SAS token the SAS definition will create.
   --tags: record # Application specific metadata in the form of key-value pairs.
-  --template-uri: string # The SAS definition token template signed with an arbitrary key.  Tokens created according to the SAS definition will have the same properties as the template.
+  --template-uri: string # The SAS definition token template signed with an arbitrary key. Tokens created according to the SAS definition will have the same properties as the template.
   --validity-period: string # The validity period of SAS tokens created according to the SAS definition.
 ]: any -> record<attributes: record<created: int, enabled: bool, recoveryLevel: string, updated: int>, id: string, sasType: string, sid: string, tags: record, templateUri: string, validityPeriod: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({storage_account_name: $storage_account_name, sas_definition_name: $sas_definition_name} | format pattern "/storage/{storage_account_name}/sas/{sas_definition_name}") $qp)
-  let body = {"attributes": $attributes, "sasType": $sas_type, "tags": $tags, "templateUri": $template_uri, "validityPeriod": $validity_period} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({storage_account_name: (encode-path-segment $storage_account_name), sas_definition_name: (encode-path-segment $sas_definition_name)} | format pattern "/storage/{storage_account_name}/sas/{sas_definition_name}") $qp)
+  let req_body = {"attributes": $attributes, "sasType": $sas_type, "tags": $tags, "templateUri": $template_uri, "validityPeriod": $validity_period} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Creates or updates a new SAS definition for the specified storage account. This operation requires the storage/setsas permission.
@@ -2238,7 +2247,7 @@ export def "storage-sas update-sas-definition" [
 # PUT /storage/{storage-account-name}/sas/{sas-definition-name}
 # operationId: SetSasDefinition
 # --attributes shape: {enabled?: bool}
-export def "storage-sas put" [
+export def "storage-sas update-by-storage_account_name-sas_definition_name-1" [
   storage_account_name: string
   sas_definition_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2253,17 +2262,17 @@ export def "storage-sas put" [
   --attributes: any # The SAS definition management attributes. — shape: {enabled?: bool}
   sas_type: string@sas-type-completer # The type of SAS token the SAS definition will create.
   --tags: record # Application specific metadata in the form of key-value pairs.
-  template_uri: string # The SAS definition token template signed with an arbitrary key.  Tokens created according to the SAS definition will have the same properties as the template.
+  template_uri: string # The SAS definition token template signed with an arbitrary key. Tokens created according to the SAS definition will have the same properties as the template.
   validity_period: string # The validity period of SAS tokens created according to the SAS definition.
 ]: any -> record<attributes: record<created: int, enabled: bool, recoveryLevel: string, updated: int>, id: string, sasType: string, sid: string, tags: record, templateUri: string, validityPeriod: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({storage_account_name: $storage_account_name, sas_definition_name: $sas_definition_name} | format pattern "/storage/{storage_account_name}/sas/{sas_definition_name}") $qp)
-  let body = {"attributes": $attributes, "sasType": $sas_type, "tags": $tags, "templateUri": $template_uri, "validityPeriod": $validity_period} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({storage_account_name: (encode-path-segment $storage_account_name), sas_definition_name: (encode-path-segment $sas_definition_name)} | format pattern "/storage/{storage_account_name}/sas/{sas_definition_name}") $qp)
+  let req_body = {"attributes": $attributes, "sasType": $sas_type, "tags": $tags, "templateUri": $template_uri, "validityPeriod": $validity_period} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

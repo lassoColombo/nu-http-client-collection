@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -142,7 +151,7 @@ export def "creators list" [
 #
 # GET /creators/{id}
 # operationId: creators_read
-export def "creators read" [
+export def "creators get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -155,7 +164,7 @@ export def "creators read" [
 ]: nothing -> record<description: string, games_count: int, id: int, image: string, image_background: string, name: string, rating: string, rating_top: int, reviews_count: int, slug: string, updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/creators/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/creators/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -190,7 +199,7 @@ export def "developers list" [
 #
 # GET /developers/{id}
 # operationId: developers_read
-export def "developers read" [
+export def "developers get" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -203,7 +212,7 @@ export def "developers read" [
 ]: nothing -> record<description: string, games_count: int, id: int, image_background: string, name: string, slug: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/developers/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/developers/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -275,7 +284,7 @@ export def "games-additions list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({game_pk: $game_pk} | format pattern "/games/{game_pk}/additions") $qp)
+  let full_url = (build-url $base ({game_pk: (encode-path-segment $game_pk)} | format pattern "/games/{game_pk}/additions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -302,7 +311,7 @@ export def "games-development-team list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ordering" $ordering "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({game_pk: $game_pk} | format pattern "/games/{game_pk}/development-team") $qp)
+  let full_url = (build-url $base ({game_pk: (encode-path-segment $game_pk)} | format pattern "/games/{game_pk}/development-team") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -328,7 +337,7 @@ export def "games-game-series list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({game_pk: $game_pk} | format pattern "/games/{game_pk}/game-series") $qp)
+  let full_url = (build-url $base ({game_pk: (encode-path-segment $game_pk)} | format pattern "/games/{game_pk}/game-series") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -354,7 +363,7 @@ export def "games-parent-games list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({game_pk: $game_pk} | format pattern "/games/{game_pk}/parent-games") $qp)
+  let full_url = (build-url $base ({game_pk: (encode-path-segment $game_pk)} | format pattern "/games/{game_pk}/parent-games") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -381,7 +390,7 @@ export def "games-screenshots list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ordering" $ordering "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({game_pk: $game_pk} | format pattern "/games/{game_pk}/screenshots") $qp)
+  let full_url = (build-url $base ({game_pk: (encode-path-segment $game_pk)} | format pattern "/games/{game_pk}/screenshots") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -408,7 +417,7 @@ export def "games-stores list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ordering" $ordering "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({game_pk: $game_pk} | format pattern "/games/{game_pk}/stores") $qp)
+  let full_url = (build-url $base ({game_pk: (encode-path-segment $game_pk)} | format pattern "/games/{game_pk}/stores") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -418,7 +427,7 @@ export def "games-stores list" [
 #
 # GET /games/{id}
 # operationId: games_read
-export def "games read" [
+export def "games get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -431,7 +440,7 @@ export def "games read" [
 ]: nothing -> record<achievements_count: int, added: int, added_by_status: record, additions_count: int, alternative_names: list<string>, background_image: string, background_image_additional: string, creators_count: int, description: string, esrb_rating: record<id: int, name: string, slug: string>, game_series_count: int, id: int, metacritic: int, metacritic_platforms: table<metascore: int, url: string>, metacritic_url: string, movies_count: int, name: string, name_original: string, parent_achievements_count: string, parents_count: int, platforms: table<platform: record, released_at: string, requirements: record>, playtime: int, rating: float, rating_top: int, ratings: record, ratings_count: int, reactions: record, reddit_count: int, reddit_description: string, reddit_logo: string, reddit_name: string, reddit_url: string, released: string, reviews_text_count: string, screenshots_count: int, slug: string, suggestions_count: int, tba: bool, twitch_count: string, updated: string, website: string, youtube_count: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/games/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/games/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -441,7 +450,7 @@ export def "games read" [
 #
 # GET /games/{id}/achievements
 # operationId: games_achievements_read
-export def "games-achievements read" [
+export def "games-achievements get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -454,7 +463,7 @@ export def "games-achievements read" [
 ]: nothing -> record<description: string, id: int, image: string, name: string, percent: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/games/{id}/achievements"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/games/{id}/achievements"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -464,7 +473,7 @@ export def "games-achievements read" [
 #
 # GET /games/{id}/movies
 # operationId: games_movies_read
-export def "games-movies read" [
+export def "games-movies get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -477,7 +486,7 @@ export def "games-movies read" [
 ]: nothing -> record<data: record, id: int, name: string, preview: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/games/{id}/movies"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/games/{id}/movies"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -487,7 +496,7 @@ export def "games-movies read" [
 #
 # GET /games/{id}/reddit
 # operationId: games_reddit_read
-export def "games-reddit read" [
+export def "games-reddit get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -500,7 +509,7 @@ export def "games-reddit read" [
 ]: nothing -> record<created: string, id: int, image: string, name: string, text: string, url: string, username: string, username_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/games/{id}/reddit"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/games/{id}/reddit"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -510,7 +519,7 @@ export def "games-reddit read" [
 #
 # GET /games/{id}/suggested
 # operationId: games_suggested_read
-export def "games-suggested read" [
+export def "games-suggested get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -523,7 +532,7 @@ export def "games-suggested read" [
 ]: nothing -> record<achievements_count: int, added: int, added_by_status: record, additions_count: int, alternative_names: list<string>, background_image: string, background_image_additional: string, creators_count: int, description: string, esrb_rating: record<id: int, name: string, slug: string>, game_series_count: int, id: int, metacritic: int, metacritic_platforms: table<metascore: int, url: string>, metacritic_url: string, movies_count: int, name: string, name_original: string, parent_achievements_count: string, parents_count: int, platforms: table<platform: record, released_at: string, requirements: record>, playtime: int, rating: float, rating_top: int, ratings: record, ratings_count: int, reactions: record, reddit_count: int, reddit_description: string, reddit_logo: string, reddit_name: string, reddit_url: string, released: string, reviews_text_count: string, screenshots_count: int, slug: string, suggestions_count: int, tba: bool, twitch_count: string, updated: string, website: string, youtube_count: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/games/{id}/suggested"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/games/{id}/suggested"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -533,7 +542,7 @@ export def "games-suggested read" [
 #
 # GET /games/{id}/twitch
 # operationId: games_twitch_read
-export def "games-twitch read" [
+export def "games-twitch get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -546,7 +555,7 @@ export def "games-twitch read" [
 ]: nothing -> record<created: string, description: string, external_id: int, id: int, language: string, name: string, published: string, thumbnail: string, view_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/games/{id}/twitch"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/games/{id}/twitch"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -556,7 +565,7 @@ export def "games-twitch read" [
 #
 # GET /games/{id}/youtube
 # operationId: games_youtube_read
-export def "games-youtube read" [
+export def "games-youtube get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -569,7 +578,7 @@ export def "games-youtube read" [
 ]: nothing -> record<channel_id: string, channel_title: string, comments_count: int, created: string, description: string, dislike_count: int, external_id: string, favorite_count: int, id: int, like_count: int, name: string, thumbnails: record, view_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/games/{id}/youtube"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/games/{id}/youtube"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -605,7 +614,7 @@ export def "genres list" [
 #
 # GET /genres/{id}
 # operationId: genres_read
-export def "genres read" [
+export def "genres get" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -618,7 +627,7 @@ export def "genres read" [
 ]: nothing -> record<description: string, games_count: int, id: int, image_background: string, name: string, slug: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/genres/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/genres/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -680,7 +689,7 @@ export def "platforms-lists-parents list" [
 #
 # GET /platforms/{id}
 # operationId: platforms_read
-export def "platforms read" [
+export def "platforms get" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -693,7 +702,7 @@ export def "platforms read" [
 ]: nothing -> record<description: string, games_count: int, id: int, image: string, image_background: string, name: string, slug: string, year_end: int, year_start: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/platforms/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/platforms/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -728,7 +737,7 @@ export def "publishers list" [
 #
 # GET /publishers/{id}
 # operationId: publishers_read
-export def "publishers read" [
+export def "publishers get" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -741,7 +750,7 @@ export def "publishers read" [
 ]: nothing -> record<description: string, games_count: int, id: int, image_background: string, name: string, slug: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/publishers/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/publishers/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -777,7 +786,7 @@ export def "stores list" [
 #
 # GET /stores/{id}
 # operationId: stores_read
-export def "stores read" [
+export def "stores get" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -790,7 +799,7 @@ export def "stores read" [
 ]: nothing -> record<description: string, domain: string, games_count: int, id: int, image_background: string, name: string, slug: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/stores/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/stores/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -825,7 +834,7 @@ export def "tags list" [
 #
 # GET /tags/{id}
 # operationId: tags_read
-export def "tags read" [
+export def "tags get" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -838,7 +847,7 @@ export def "tags read" [
 ]: nothing -> record<description: string, games_count: int, id: int, image_background: string, name: string, slug: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/tags/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/tags/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

@@ -36,6 +36,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -125,13 +134,15 @@ export def "dataentities-address-documents create-new-customer" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "_schema" $schema "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/dataentities/Address/documents" $qp)
-  let body = {"addressName": $address_name, "addressType": $address_type, "city": $city, "complement": $complement, "country": $country, "neighborhood": $neighborhood, "number": $number, "postalCode": $postal_code, "receiverName": $receiver_name, "reference": $reference, "state": $state, "street": $street, "userId": $user_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"addressName": $address_name, "addressType": $address_type, "city": $city, "complement": $complement, "country": $country, "neighborhood": $neighborhood, "number": $number, "postalCode": $postal_code, "receiverName": $receiver_name, "reference": $reference, "state": $state, "street": $street, "userId": $user_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Delete customer address
@@ -153,11 +164,11 @@ export def "dataentities-address-documents delete-customer" [
 ]: nothing -> record<Href: string, Id: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/dataentities/Address/documents/{id}"))
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/dataentities/Address/documents/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -196,14 +207,16 @@ export def "dataentities-address-documents update-customer" [
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "_schema" $schema "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/dataentities/Address/documents/{id}") $qp)
-  let body = {"addressName": $address_name, "addressType": $address_type, "city": $city, "complement": $complement, "country": $country, "neighborhood": $neighborhood, "number": $number, "postalCode": $postal_code, "receiverName": $receiver_name, "reference": $reference, "state": $state, "street": $street, "userId": $user_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/dataentities/Address/documents/{id}") $qp)
+  let req_body = {"addressName": $address_name, "addressType": $address_type, "city": $city, "complement": $complement, "country": $country, "neighborhood": $neighborhood, "number": $number, "postalCode": $postal_code, "receiverName": $receiver_name, "reference": $reference, "state": $state, "street": $street, "userId": $user_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Create new customer profile
@@ -237,13 +250,15 @@ export def "dataentities-client-documents create-new-customer-profilev2" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "_schema" $schema "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/dataentities/Client/documents" $qp)
-  let body = {"document": $document, "documentType": $document_type, "email": $email, "firstName": $first_name, "isCorporate": $is_corporate, "isNewsletterOptIn": $is_newsletter_opt_in, "lastName": $last_name, "localeDefault": $locale_default, "phone": $phone} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"document": $document, "documentType": $document_type, "email": $email, "firstName": $first_name, "isCorporate": $is_corporate, "isNewsletterOptIn": $is_newsletter_opt_in, "lastName": $last_name, "localeDefault": $locale_default, "phone": $phone} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Delete customer profile
@@ -265,11 +280,11 @@ export def "dataentities-client-documents delete-customer-profile" [
 ]: nothing -> record<Href: string, Id: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/dataentities/Client/documents/{id}"))
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/dataentities/Client/documents/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -304,21 +319,23 @@ export def "dataentities-client-documents update-customer-profile" [
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "_schema" $schema "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/dataentities/Client/documents/{id}") $qp)
-  let body = {"document": $document, "documentType": $document_type, "email": $email, "firstName": $first_name, "isCorporate": $is_corporate, "isNewsletterOptIn": $is_newsletter_opt_in, "lastName": $last_name, "localeDefault": $locale_default, "phone": $phone} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/dataentities/Client/documents/{id}") $qp)
+  let req_body = {"document": $document, "documentType": $document_type, "email": $email, "firstName": $first_name, "isCorporate": $is_corporate, "isNewsletterOptIn": $is_newsletter_opt_in, "lastName": $last_name, "localeDefault": $locale_default, "phone": $phone} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Create partial document
 #
 # PATCH /api/dataentities/{dataEntityName}/documents
 # operationId: Createorupdatepartialdocument
-export def "dataentities-documents create-orupdatepartialdocument" [
+export def "dataentities-documents update-createorupdatepartialdocument" [
   data_entity_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -337,20 +354,23 @@ export def "dataentities-documents create-orupdatepartialdocument" [
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "_schema" $schema "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({data_entity_name: $data_entity_name} | format pattern "/api/dataentities/{data_entity_name}/documents") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({data_entity_name: (encode-path-segment $data_entity_name)} | format pattern "/api/dataentities/{data_entity_name}/documents") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Create new document
 #
 # POST /api/dataentities/{dataEntityName}/documents
 # operationId: Createnewdocument
-export def "dataentities-documents create-newdocument" [
+export def "dataentities-documents create-createnewdocument" [
   data_entity_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -369,20 +389,23 @@ export def "dataentities-documents create-newdocument" [
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "_schema" $schema "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({data_entity_name: $data_entity_name} | format pattern "/api/dataentities/{data_entity_name}/documents") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({data_entity_name: (encode-path-segment $data_entity_name)} | format pattern "/api/dataentities/{data_entity_name}/documents") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Delete document
 #
 # DELETE /api/dataentities/{dataEntityName}/documents/{id}
 # operationId: Deletedocument
-export def "dataentities-documents delete" [
+export def "dataentities-documents delete-deletedocument" [
   data_entity_name: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -398,11 +421,11 @@ export def "dataentities-documents delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({data_entity_name: $data_entity_name, id: $id} | format pattern "/api/dataentities/{data_entity_name}/documents/{id}"))
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({data_entity_name: (encode-path-segment $data_entity_name), id: (encode-path-segment $id)} | format pattern "/api/dataentities/{data_entity_name}/documents/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -410,7 +433,7 @@ export def "dataentities-documents delete" [
 #
 # GET /api/dataentities/{dataEntityName}/documents/{id}
 # operationId: Getdocument
-export def "dataentities-documents get" [
+export def "dataentities-documents get-getdocument" [
   data_entity_name: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -426,11 +449,11 @@ export def "dataentities-documents get" [
 ]: nothing -> record<accountId: string, accountName: string, dataEntityId: string, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({data_entity_name: $data_entity_name, id: $id} | format pattern "/api/dataentities/{data_entity_name}/documents/{id}"))
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({data_entity_name: (encode-path-segment $data_entity_name), id: (encode-path-segment $id)} | format pattern "/api/dataentities/{data_entity_name}/documents/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -438,7 +461,7 @@ export def "dataentities-documents get" [
 #
 # PATCH /api/dataentities/{dataEntityName}/documents/{id}
 # operationId: Updatepartialdocument
-export def "dataentities-documents update-partialdocument" [
+export def "dataentities-documents update-updatepartialdocument" [
   data_entity_name: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -458,20 +481,21 @@ export def "dataentities-documents update-partialdocument" [
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "_where" $qp_where "scalar") (serialize-qp "_schema" $schema "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({data_entity_name: $data_entity_name, id: $id} | format pattern "/api/dataentities/{data_entity_name}/documents/{id}") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({data_entity_name: (encode-path-segment $data_entity_name), id: (encode-path-segment $id)} | format pattern "/api/dataentities/{data_entity_name}/documents/{id}") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update entire document
 #
 # PUT /api/dataentities/{dataEntityName}/documents/{id}
 # operationId: Updateentiredocument
-export def "dataentities-documents update-entiredocument" [
+export def "dataentities-documents update-updateentiredocument" [
   data_entity_name: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -491,20 +515,21 @@ export def "dataentities-documents update-entiredocument" [
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "_where" $qp_where "scalar") (serialize-qp "_schema" $schema "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({data_entity_name: $data_entity_name, id: $id} | format pattern "/api/dataentities/{data_entity_name}/documents/{id}") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({data_entity_name: (encode-path-segment $data_entity_name), id: (encode-path-segment $id)} | format pattern "/api/dataentities/{data_entity_name}/documents/{id}") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Validate document by clusters
 #
 # POST /api/dataentities/{dataEntityName}/documents/{id}/clusters
 # operationId: Validatedocumentbyclusters
-export def "dataentities-documents-clusters validate-documentbyclusters" [
+export def "dataentities-documents-clusters create-validatedocumentbyclusters" [
   data_entity_name: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -521,20 +546,21 @@ export def "dataentities-documents-clusters validate-documentbyclusters" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({data_entity_name: $data_entity_name, id: $id} | format pattern "/api/dataentities/{data_entity_name}/documents/{id}/clusters"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({data_entity_name: (encode-path-segment $data_entity_name), id: (encode-path-segment $id)} | format pattern "/api/dataentities/{data_entity_name}/documents/{id}/clusters"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List versions
 #
 # GET /api/dataentities/{dataEntityName}/documents/{id}/versions
 # operationId: Listversions
-export def "dataentities-documents-versions list" [
+export def "dataentities-documents-versions get-listversions" [
   data_entity_name: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -553,11 +579,11 @@ export def "dataentities-documents-versions list" [
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "load" $load "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({data_entity_name: $data_entity_name, id: $id} | format pattern "/api/dataentities/{data_entity_name}/documents/{id}/versions") $qp)
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({data_entity_name: (encode-path-segment $data_entity_name), id: (encode-path-segment $id)} | format pattern "/api/dataentities/{data_entity_name}/documents/{id}/versions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -565,7 +591,7 @@ export def "dataentities-documents-versions list" [
 #
 # GET /api/dataentities/{dataEntityName}/documents/{id}/versions/{versionId}
 # operationId: Getversion
-export def "dataentities-documents-versions get" [
+export def "dataentities-documents-versions get-getversion" [
   data_entity_name: string
   id: string
   version_id: string
@@ -582,11 +608,11 @@ export def "dataentities-documents-versions get" [
 ]: nothing -> record<author: string, document: record<accountId: string, accountName: string, carttag: string, checkouttag: string, dataEntityId: string, departmentVisitedTag: record<DisplayValue: string, Scores: record>, email: string, followers: list<string>, id: string, rclastsession: string, rclastsessiondate: string>, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({data_entity_name: $data_entity_name, id: $id, version_id: $version_id} | format pattern "/api/dataentities/{data_entity_name}/documents/{id}/versions/{version_id}"))
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({data_entity_name: (encode-path-segment $data_entity_name), id: (encode-path-segment $id), version_id: (encode-path-segment $version_id)} | format pattern "/api/dataentities/{data_entity_name}/documents/{id}/versions/{version_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -594,7 +620,7 @@ export def "dataentities-documents-versions get" [
 #
 # PUT /api/dataentities/{dataEntityName}/documents/{id}/versions/{versionId}
 # operationId: Putversion
-export def "dataentities-documents-versions update" [
+export def "dataentities-documents-versions update-putversion" [
   data_entity_name: string
   id: string
   version_id: string
@@ -611,11 +637,11 @@ export def "dataentities-documents-versions update" [
 ]: nothing -> record<Href: string, Id: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({data_entity_name: $data_entity_name, id: $id, version_id: $version_id} | format pattern "/api/dataentities/{data_entity_name}/documents/{id}/versions/{version_id}"))
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({data_entity_name: (encode-path-segment $data_entity_name), id: (encode-path-segment $id), version_id: (encode-path-segment $version_id)} | format pattern "/api/dataentities/{data_entity_name}/documents/{id}/versions/{version_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -623,7 +649,7 @@ export def "dataentities-documents-versions update" [
 #
 # GET /api/dataentities/{dataEntityName}/indices
 # operationId: Getindices
-export def "dataentities-indices get" [
+export def "dataentities-indices get-getindices" [
   data_entity_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -637,11 +663,11 @@ export def "dataentities-indices get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({data_entity_name: $data_entity_name} | format pattern "/api/dataentities/{data_entity_name}/indices"))
-  let extra_headers = {"Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({data_entity_name: (encode-path-segment $data_entity_name)} | format pattern "/api/dataentities/{data_entity_name}/indices"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -649,7 +675,7 @@ export def "dataentities-indices get" [
 #
 # PUT /api/dataentities/{dataEntityName}/indices
 # operationId: Putindices
-export def "dataentities-indices update" [
+export def "dataentities-indices update-putindices" [
   data_entity_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -666,19 +692,19 @@ export def "dataentities-indices update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({data_entity_name: $data_entity_name} | format pattern "/api/dataentities/{data_entity_name}/indices"))
-  let body = {"fields": $fields, "multiple": $multiple, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({data_entity_name: (encode-path-segment $data_entity_name)} | format pattern "/api/dataentities/{data_entity_name}/indices"))
+  let req_body = {"fields": $fields, "multiple": $multiple, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete index by name
 #
 # DELETE /api/dataentities/{dataEntityName}/indices/{index_name}
 # operationId: Deleteindexbyname
-export def "dataentities-indices delete-indexbyname" [
+export def "dataentities-indices delete-deleteindexbyname" [
   data_entity_name: string
   index_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -693,11 +719,11 @@ export def "dataentities-indices delete-indexbyname" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({data_entity_name: $data_entity_name, index_name: $index_name} | format pattern "/api/dataentities/{data_entity_name}/indices/{index_name}"))
-  let extra_headers = {"Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({data_entity_name: (encode-path-segment $data_entity_name), index_name: (encode-path-segment $index_name)} | format pattern "/api/dataentities/{data_entity_name}/indices/{index_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -705,7 +731,7 @@ export def "dataentities-indices delete-indexbyname" [
 #
 # GET /api/dataentities/{dataEntityName}/indices/{index_name}
 # operationId: Getindexbyname
-export def "dataentities-indices get-indexbyname" [
+export def "dataentities-indices get-getindexbyname" [
   data_entity_name: string
   index_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -720,11 +746,11 @@ export def "dataentities-indices get-indexbyname" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({data_entity_name: $data_entity_name, index_name: $index_name} | format pattern "/api/dataentities/{data_entity_name}/indices/{index_name}"))
-  let extra_headers = {"Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({data_entity_name: (encode-path-segment $data_entity_name), index_name: (encode-path-segment $index_name)} | format pattern "/api/dataentities/{data_entity_name}/indices/{index_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -732,7 +758,7 @@ export def "dataentities-indices get-indexbyname" [
 #
 # GET /api/dataentities/{dataEntityName}/schemas
 # operationId: Getschemas
-export def "dataentities-schemas get" [
+export def "dataentities-schemas get-getschemas" [
   data_entity_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -746,11 +772,11 @@ export def "dataentities-schemas get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({data_entity_name: $data_entity_name} | format pattern "/api/dataentities/{data_entity_name}/schemas"))
-  let extra_headers = {"Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({data_entity_name: (encode-path-segment $data_entity_name)} | format pattern "/api/dataentities/{data_entity_name}/schemas"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -758,7 +784,7 @@ export def "dataentities-schemas get" [
 #
 # DELETE /api/dataentities/{dataEntityName}/schemas/{schemaName}
 # operationId: Deleteschemabyname
-export def "dataentities-schemas delete-schemabyname" [
+export def "dataentities-schemas delete-deleteschemabyname" [
   data_entity_name: string
   schema_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -773,11 +799,11 @@ export def "dataentities-schemas delete-schemabyname" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({data_entity_name: $data_entity_name, schema_name: $schema_name} | format pattern "/api/dataentities/{data_entity_name}/schemas/{schema_name}"))
-  let extra_headers = {"Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({data_entity_name: (encode-path-segment $data_entity_name), schema_name: (encode-path-segment $schema_name)} | format pattern "/api/dataentities/{data_entity_name}/schemas/{schema_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -785,7 +811,7 @@ export def "dataentities-schemas delete-schemabyname" [
 #
 # GET /api/dataentities/{dataEntityName}/schemas/{schemaName}
 # operationId: Getschemabyname
-export def "dataentities-schemas get-schemabyname" [
+export def "dataentities-schemas get-getschemabyname" [
   data_entity_name: string
   schema_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -800,11 +826,11 @@ export def "dataentities-schemas get-schemabyname" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({data_entity_name: $data_entity_name, schema_name: $schema_name} | format pattern "/api/dataentities/{data_entity_name}/schemas/{schema_name}"))
-  let extra_headers = {"Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({data_entity_name: (encode-path-segment $data_entity_name), schema_name: (encode-path-segment $schema_name)} | format pattern "/api/dataentities/{data_entity_name}/schemas/{schema_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -813,7 +839,7 @@ export def "dataentities-schemas get-schemabyname" [
 # PUT /api/dataentities/{dataEntityName}/schemas/{schemaName}
 # operationId: Saveschemabyname
 # --properties shape: {name: record}
-export def "dataentities-schemas put" [
+export def "dataentities-schemas update-saveschemabyname" [
   data_entity_name: string
   schema_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -829,19 +855,19 @@ export def "dataentities-schemas put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({data_entity_name: $data_entity_name, schema_name: $schema_name} | format pattern "/api/dataentities/{data_entity_name}/schemas/{schema_name}"))
-  let body = {"properties": $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({data_entity_name: (encode-path-segment $data_entity_name), schema_name: (encode-path-segment $schema_name)} | format pattern "/api/dataentities/{data_entity_name}/schemas/{schema_name}"))
+  let req_body = {"properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Scroll documents
 #
 # GET /api/dataentities/{dataEntityName}/scroll
 # operationId: Scrolldocuments
-export def "dataentities-scroll get" [
+export def "dataentities-scroll get-scrolldocuments" [
   data_entity_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -864,11 +890,11 @@ export def "dataentities-scroll get" [
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "_token" $qp_token "scalar") (serialize-qp "_fields" $fields "scalar") (serialize-qp "_where" $qp_where "scalar") (serialize-qp "_schema" $schema "scalar") (serialize-qp "_keyword" $keyword "scalar") (serialize-qp "_sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({data_entity_name: $data_entity_name} | format pattern "/api/dataentities/{data_entity_name}/scroll") $qp)
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept, "REST-Range": $rest_range} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({data_entity_name: (encode-path-segment $data_entity_name)} | format pattern "/api/dataentities/{data_entity_name}/scroll") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept, "REST-Range": $rest_range} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -876,7 +902,7 @@ export def "dataentities-scroll get" [
 #
 # GET /api/dataentities/{dataEntityName}/search
 # operationId: Searchdocuments
-export def "dataentities-search list-documents" [
+export def "dataentities-search get-searchdocuments" [
   data_entity_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -898,10 +924,10 @@ export def "dataentities-search list-documents" [
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "_fields" $fields "scalar") (serialize-qp "_where" $qp_where "scalar") (serialize-qp "_schema" $schema "scalar") (serialize-qp "_keyword" $keyword "scalar") (serialize-qp "_sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({data_entity_name: $data_entity_name} | format pattern "/api/dataentities/{data_entity_name}/search") $qp)
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept, "REST-Range": $rest_range} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({data_entity_name: (encode-path-segment $data_entity_name)} | format pattern "/api/dataentities/{data_entity_name}/search") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept, "REST-Range": $rest_range} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

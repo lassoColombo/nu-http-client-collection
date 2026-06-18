@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -104,24 +113,24 @@ export def "article-reviews list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --article-id: list # Article IDs. A list of config SKUs for which the article reviews will be returned. Required if articleModelId is empty.
-  --article-model-id: list # Article model IDs. A list of model SKUs for which the article reviews will be returned. Required if articleId is empty.
+  --article-id: list<string> # Article IDs. A list of config SKUs for which the article reviews will be returned. Required if articleModelId is empty.
+  --article-model-id: list<string> # Article model IDs. A list of model SKUs for which the article reviews will be returned. Required if articleId is empty.
   --min-star-rating: string # To get reviews with minimum star rating.
   --max-star-rating: string # To get reviews with maximum star rating.
   --qp-sort: string@sort-completer # articles are sorted on reviews provided by customers (eg: best) (default: newest)
   --page: string # to request with required page number or pagination
   --page-size: string # to request with required page size in a page
-  --fields: list # Comma separated list of fields that should be returned. Fields of subobjects are specified with dots as separator. Fields of objects within lists are specified in the same way.  Example: id,name,brand.key,brand.name, units.id,units.size,units.price.formatted
-  --accept-language: string@accept-language-completer # Specify which Shop to use.  A standard `Accept-Language` header which specifies the shop that should be used. E.g. `de-DE` will use the German shop (as does [https://www.zalando.de](https://www/zalando.de) and `de-AT` will use the Austrian one.  The shop choosen will e.g. define the currency used for prices as well as the language for product names and descriptions. Furthermore it will impact which articles are available as they might differ between countries.
+  --fields: list<string> # Comma separated list of fields that should be returned. Fields of subobjects are specified with dots as separator. Fields of objects within lists are specified in the same way. Example: id,name,brand.key,brand.name, units.id,units.size,units.price.formatted
+  --accept-language: string@accept-language-completer # Specify which Shop to use. A standard `Accept-Language` header which specifies the shop that should be used. E.g. `de-DE` will use the German shop (as does [https://www.zalando.de](https://www/zalando.de) and `de-AT` will use the Austrian one. The shop choosen will e.g. define the currency used for prices as well as the language for product names and descriptions. Furthermore it will impact which articles are available as they might differ between countries.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "articleId" $article_id "multi") (serialize-qp "articleModelId" $article_model_id "multi") (serialize-qp "minStarRating" $min_star_rating "scalar") (serialize-qp "maxStarRating" $max_star_rating "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "fields" $fields "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/article-reviews" $qp)
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -137,20 +146,20 @@ export def "article-reviews-summaries list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --article-model-id: list # Article model IDs. A list of model SKUs for which the article review summaries will be returned.
+  --article-model-id: list<string> # Article model IDs. A list of model SKUs for which the article review summaries will be returned.
   --page: string # to request with required page number or pagination
   --page-size: string # to request with required page size in a page
-  --fields: list # Comma separated list of fields that should be returned. Fields of subobjects are specified with dots as separator. Fields of objects within lists are specified in the same way.  Example: id,name,brand.key,brand.name, units.id,units.size,units.price.formatted
-  --accept-language: string@accept-language-completer # Specify which Shop to use.  A standard `Accept-Language` header which specifies the shop that should be used. E.g. `de-DE` will use the German shop (as does [https://www.zalando.de](https://www/zalando.de) and `de-AT` will use the Austrian one.  The shop choosen will e.g. define the currency used for prices as well as the language for product names and descriptions. Furthermore it will impact which articles are available as they might differ between countries.
+  --fields: list<string> # Comma separated list of fields that should be returned. Fields of subobjects are specified with dots as separator. Fields of objects within lists are specified in the same way. Example: id,name,brand.key,brand.name, units.id,units.size,units.price.formatted
+  --accept-language: string@accept-language-completer # Specify which Shop to use. A standard `Accept-Language` header which specifies the shop that should be used. E.g. `de-DE` will use the German shop (as does [https://www.zalando.de](https://www/zalando.de) and `de-AT` will use the Austrian one. The shop choosen will e.g. define the currency used for prices as well as the language for product names and descriptions. Furthermore it will impact which articles are available as they might differ between countries.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "articleModelId" $article_model_id "multi") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "fields" $fields "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/article-reviews-summaries" $qp)
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -167,17 +176,17 @@ export def "article-reviews-summaries get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields: list # Comma separated list of fields that should be returned. Fields of subobjects are specified with dots as separator. Fields of objects within lists are specified in the same way.  Example: id,name,brand.key,brand.name, units.id,units.size,units.price.formatted
-  --accept-language: string@accept-language-completer # Specify which Shop to use.  A standard `Accept-Language` header which specifies the shop that should be used. E.g. `de-DE` will use the German shop (as does [https://www.zalando.de](https://www/zalando.de) and `de-AT` will use the Austrian one.  The shop choosen will e.g. define the currency used for prices as well as the language for product names and descriptions. Furthermore it will impact which articles are available as they might differ between countries.
+  --fields: list<string> # Comma separated list of fields that should be returned. Fields of subobjects are specified with dots as separator. Fields of objects within lists are specified in the same way. Example: id,name,brand.key,brand.name, units.id,units.size,units.price.formatted
+  --accept-language: string@accept-language-completer # Specify which Shop to use. A standard `Accept-Language` header which specifies the shop that should be used. E.g. `de-DE` will use the German shop (as does [https://www.zalando.de](https://www/zalando.de) and `de-AT` will use the Austrian one. The shop choosen will e.g. define the currency used for prices as well as the language for product names and descriptions. Furthermore it will impact which articles are available as they might differ between countries.
 ]: nothing -> record<articleModelId: string, articleSizeRatings: record<BOOTLEG_WIDTH: float, CHEST: float, CHEST_GIRTH: float, COLLAR_SIZE: float, CUP_SIZE: float, HIPS_OR_REAR: float, LEG_FIT: float, LENGTH: float, OVERALL: float, SHOE_WIDTH: float, SHOULDERS: float, SLEEVES: float>, averageStarRating: float, numberOfUserPositiveRecommendations: int, numberOfUserRecommendations: int, numberOfUserReviews: int, starRatingDistribution: record<1: int, 2: int, 3: int, 4: int, 5: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({article_model_id: $article_model_id} | format pattern "/article-reviews-summaries/{article_model_id}") $qp)
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({article_model_id: (encode-path-segment $article_model_id)} | format pattern "/article-reviews-summaries/{article_model_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -194,17 +203,17 @@ export def "article-reviews get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields: list # Comma separated list of fields that should be returned. Fields of subobjects are specified with dots as separator. Fields of objects within lists are specified in the same way.  Example: id,name,brand.key,brand.name, units.id,units.size,units.price.formatted
-  --accept-language: string@accept-language-completer # Specify which Shop to use.  A standard `Accept-Language` header which specifies the shop that should be used. E.g. `de-DE` will use the German shop (as does [https://www.zalando.de](https://www/zalando.de) and `de-AT` will use the Austrian one.  The shop choosen will e.g. define the currency used for prices as well as the language for product names and descriptions. Furthermore it will impact which articles are available as they might differ between countries.
+  --fields: list<string> # Comma separated list of fields that should be returned. Fields of subobjects are specified with dots as separator. Fields of objects within lists are specified in the same way. Example: id,name,brand.key,brand.name, units.id,units.size,units.price.formatted
+  --accept-language: string@accept-language-completer # Specify which Shop to use. A standard `Accept-Language` header which specifies the shop that should be used. E.g. `de-DE` will use the German shop (as does [https://www.zalando.de](https://www/zalando.de) and `de-AT` will use the Austrian one. The shop choosen will e.g. define the currency used for prices as well as the language for product names and descriptions. Furthermore it will impact which articles are available as they might differ between countries.
 ]: nothing -> record<articleId: string, articleModelId: string, articleSizeRatings: record<BOOTLEG_WIDTH: int, CHEST: int, CHEST_GIRTH: int, COLLAR_SIZE: int, CUP_SIZE: int, HIPS_OR_REAR: int, LEG_FIT: int, LENGTH: int, OVERALL: int, SHOE_WIDTH: int, SHOULDERS: int, SLEEVES: int>, created: string, customerCity: string, customerCountry: string, customerNickname: string, description: string, helpfulCount: int, language: string, rating: int, recommend: bool, reviewId: string, title: string, unhelpfulCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({review_id: $review_id} | format pattern "/article-reviews/{review_id}") $qp)
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({review_id: (encode-path-segment $review_id)} | format pattern "/article-reviews/{review_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -220,54 +229,54 @@ export def "articles list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --article-id: list # The `articleIds` to use use for filtering.  One or more `articleIds` might be used as a filter criteria. Submit multiple `articleId` request parameters for more than one to be used. They will be treated as `OR` criteria.
-  --article-model-id: list # filters by article ModelId
-  --article-unit-id: list # filters by article's unit id
-  --activation-date: list # period or time the articles are activated for selling in the shop
-  --age-group: list # filters by age group (eg: kids)
-  --assortment-area: list # filters by classification of articles (eg: maternity) 
-  --brand: list # filters by brand key given by user (eg: SA5)
-  --brandfamily: list # filters by brand family key (eg: nike) 
-  --category: list # filters by category (eg: Socks, Rain Coats)
-  --color: list # filters by color (eg: red, blue)
-  --den: list # filters by den 
-  --filling: list # filters by different kinds of garment filling materials (eg: satin, wolle)
+  --article-id: list<string> # The `articleIds` to use use for filtering. One or more `articleIds` might be used as a filter criteria. Submit multiple `articleId` request parameters for more than one to be used. They will be treated as `OR` criteria.
+  --article-model-id: list<string> # filters by article ModelId
+  --article-unit-id: list<string> # filters by article's unit id
+  --activation-date: list<string> # period or time the articles are activated for selling in the shop
+  --age-group: list<string> # filters by age group (eg: kids)
+  --assortment-area: list<string> # filters by classification of articles (eg: maternity)
+  --brand: list<string> # filters by brand key given by user (eg: SA5)
+  --brandfamily: list<string> # filters by brand family key (eg: nike)
+  --category: list<string> # filters by category (eg: Socks, Rain Coats)
+  --color: list<string> # filters by color (eg: red, blue)
+  --den: list<string> # filters by den
+  --filling: list<string> # filters by different kinds of garment filling materials (eg: satin, wolle)
   --full-text: string # filters by text (eg: search by 'as' gives result with articles of brand Sass)
-  --gender: list # filters by gender
-  --heel-form: list # filters by heel form (eg: flat)
-  --heel-height: list # filters by height of the heel size or length (eg: xs)
+  --gender: list<string> # filters by gender
+  --heel-form: list<string> # filters by heel form (eg: flat)
+  --heel-height: list<string> # filters by height of the heel size or length (eg: xs)
   --length: string # filters by garments length (eg: 3/4 length, knee-length)
-  --occasion: list # filters by type of occasion (eg: party, business)
-  --pattern: list # filters by pattern on the garments (eg: animal print, plain)
+  --occasion: list<string> # filters by type of occasion (eg: party, business)
+  --pattern: list<string> # filters by pattern on the garments (eg: animal print, plain)
   --price: string # filters all articles in price range (eg: 9-90)
-  --sale: list # filters discounted articles marked as sale
-  --season: list # filters by season (Autumn/Winter or Spring/Summer)
-  --shaft-height: list # filters by shaft height (eg: s, xs)
-  --shaft-width: list # filters by shaft width (eg: s, l)
-  --shirt-collar: list # filters by shirt collar styles (eg: low V neck, lined collar)
-  --shoe-fastener: list # filters by shoe fastener types (eg: buckle, lacing)
-  --shoe-toecap: list # filters by shoe toe cap variants (eg: pointed, square)
-  --shop-area: list # filters by classification of articles
+  --sale: list<string> # filters discounted articles marked as sale
+  --season: list<string> # filters by season (Autumn/Winter or Spring/Summer)
+  --shaft-height: list<string> # filters by shaft height (eg: s, xs)
+  --shaft-width: list<string> # filters by shaft width (eg: s, l)
+  --shirt-collar: list<string> # filters by shirt collar styles (eg: low V neck, lined collar)
+  --shoe-fastener: list<string> # filters by shoe fastener types (eg: buckle, lacing)
+  --shoe-toecap: list<string> # filters by shoe toe cap variants (eg: pointed, square)
+  --shop-area: list<string> # filters by classification of articles
   --size: string # filters by size
-  --sports: list # filters by different sport activities (eg: football)
-  --technology: list # filters by technology used to produce the articles
-  --trouser-rise: list # filters by trouser rise
-  --upper-material: list # filters by different type of upper material used on garments (eg: lace)
-  --volume: list # filters by volume
+  --sports: list<string> # filters by different sport activities (eg: football)
+  --technology: list<string> # filters by technology used to produce the articles
+  --trouser-rise: list<string> # filters by trouser rise
+  --upper-material: list<string> # filters by different type of upper material used on garments (eg: lace)
+  --volume: list<string> # filters by volume
   --page: string # to request with required page number or pagination
   --page-size: string # to request with required page size in a page
   --qp-sort: string@sort-completer-1 # sorting order (eg: popularity)
-  --fields: list # Comma separated list of fields that should be returned. Fields of subobjects are specified with dots as separator. Fields of objects within lists are specified in the same way.  Example: id,name,brand.key,brand.name, units.id,units.size,units.price.formatted
-  --accept-language: string@accept-language-completer # Specify which Shop to use.  A standard `Accept-Language` header which specifies the shop that should be used. E.g. `de-DE` will use the German shop (as does [https://www.zalando.de](https://www/zalando.de) and `de-AT` will use the Austrian one.  The shop choosen will e.g. define the currency used for prices as well as the language for product names and descriptions. Furthermore it will impact which articles are available as they might differ between countries.
+  --fields: list<string> # Comma separated list of fields that should be returned. Fields of subobjects are specified with dots as separator. Fields of objects within lists are specified in the same way. Example: id,name,brand.key,brand.name, units.id,units.size,units.price.formatted
+  --accept-language: string@accept-language-completer # Specify which Shop to use. A standard `Accept-Language` header which specifies the shop that should be used. E.g. `de-DE` will use the German shop (as does [https://www.zalando.de](https://www/zalando.de) and `de-AT` will use the Austrian one. The shop choosen will e.g. define the currency used for prices as well as the language for product names and descriptions. Furthermore it will impact which articles are available as they might differ between countries.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "articleId" $article_id "multi") (serialize-qp "articleModelId" $article_model_id "multi") (serialize-qp "articleUnitId" $article_unit_id "multi") (serialize-qp "activationDate" $activation_date "multi") (serialize-qp "ageGroup" $age_group "multi") (serialize-qp "assortmentArea" $assortment_area "multi") (serialize-qp "brand" $brand "multi") (serialize-qp "brandfamily" $brandfamily "multi") (serialize-qp "category" $category "multi") (serialize-qp "color" $color "multi") (serialize-qp "den" $den "multi") (serialize-qp "filling" $filling "multi") (serialize-qp "fullText" $full_text "scalar") (serialize-qp "gender" $gender "multi") (serialize-qp "heelForm" $heel_form "multi") (serialize-qp "heelHeight" $heel_height "multi") (serialize-qp "length" $length "scalar") (serialize-qp "occasion" $occasion "multi") (serialize-qp "pattern" $pattern "multi") (serialize-qp "price" $price "scalar") (serialize-qp "sale" $sale "csv") (serialize-qp "season" $season "multi") (serialize-qp "shaftHeight" $shaft_height "multi") (serialize-qp "shaftWidth" $shaft_width "multi") (serialize-qp "shirtCollar" $shirt_collar "multi") (serialize-qp "shoeFastener" $shoe_fastener "multi") (serialize-qp "shoeToecap" $shoe_toecap "multi") (serialize-qp "shopArea" $shop_area "multi") (serialize-qp "size" $size "scalar") (serialize-qp "sports" $sports "multi") (serialize-qp "technology" $technology "multi") (serialize-qp "trouserRise" $trouser_rise "multi") (serialize-qp "upperMaterial" $upper_material "multi") (serialize-qp "volume" $volume "multi") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "fields" $fields "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/articles" $qp)
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -284,17 +293,17 @@ export def "articles get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields: list # Comma separated list of fields that should be returned. Fields of subobjects are specified with dots as separator. Fields of objects within lists are specified in the same way.  Example: id,name,brand.key,brand.name, units.id,units.size,units.price.formatted
-  --accept-language: string@accept-language-completer # Specify which Shop to use.  A standard `Accept-Language` header which specifies the shop that should be used. E.g. `de-DE` will use the German shop (as does [https://www.zalando.de](https://www/zalando.de) and `de-AT` will use the Austrian one.  The shop choosen will e.g. define the currency used for prices as well as the language for product names and descriptions. Furthermore it will impact which articles are available as they might differ between countries.
+  --fields: list<string> # Comma separated list of fields that should be returned. Fields of subobjects are specified with dots as separator. Fields of objects within lists are specified in the same way. Example: id,name,brand.key,brand.name, units.id,units.size,units.price.formatted
+  --accept-language: string@accept-language-completer # Specify which Shop to use. A standard `Accept-Language` header which specifies the shop that should be used. E.g. `de-DE` will use the German shop (as does [https://www.zalando.de](https://www/zalando.de) and `de-AT` will use the Austrian one. The shop choosen will e.g. define the currency used for prices as well as the language for product names and descriptions. Furthermore it will impact which articles are available as they might differ between countries.
 ]: nothing -> record<activationDate: string, additionalInfos: list<string>, ageGroups: list<string>, attributes: table<name: string, values: list>, available: bool, brand: record<brandFamily: record<key: string, name: string, shopUrl: string>, key: string, logoLargeUrl: string, logoUrl: string, name: string, shopUrl: string>, categoryKeys: list<string>, color: string, genders: list<string>, id: string, media: record<images: list<record>>, modelId: string, name: string, season: string, seasonYear: string, shopUrl: string, tags: list<string>, units: table<available: bool, id: string, originalPrice: record, partnerId: string, price: record, size: string, stock: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({article_id: $article_id} | format pattern "/articles/{article_id}") $qp)
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id)} | format pattern "/articles/{article_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -311,17 +320,17 @@ export def "articles-media get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields: list # Comma separated list of fields that should be returned. Fields of subobjects are specified with dots as separator. Fields of objects within lists are specified in the same way.  Example: id,name,brand.key,brand.name, units.id,units.size,units.price.formatted
-  --accept-language: string@accept-language-completer # Specify which Shop to use.  A standard `Accept-Language` header which specifies the shop that should be used. E.g. `de-DE` will use the German shop (as does [https://www.zalando.de](https://www/zalando.de) and `de-AT` will use the Austrian one.  The shop choosen will e.g. define the currency used for prices as well as the language for product names and descriptions. Furthermore it will impact which articles are available as they might differ between countries.
+  --fields: list<string> # Comma separated list of fields that should be returned. Fields of subobjects are specified with dots as separator. Fields of objects within lists are specified in the same way. Example: id,name,brand.key,brand.name, units.id,units.size,units.price.formatted
+  --accept-language: string@accept-language-completer # Specify which Shop to use. A standard `Accept-Language` header which specifies the shop that should be used. E.g. `de-DE` will use the German shop (as does [https://www.zalando.de](https://www/zalando.de) and `de-AT` will use the Austrian one. The shop choosen will e.g. define the currency used for prices as well as the language for product names and descriptions. Furthermore it will impact which articles are available as they might differ between countries.
 ]: nothing -> record<images: table<largeHdUrl: string, largeUrl: string, mediumHdUrl: string, mediumUrl: string, orderNumber: int, smallHdUrl: string, smallUrl: string, thumbnailHdUrl: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({article_id: $article_id} | format pattern "/articles/{article_id}/media") $qp)
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id)} | format pattern "/articles/{article_id}/media") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -343,17 +352,17 @@ export def "articles-reviews get" [
   --qp-sort: string@sort-completer # articles are sorted on reviews provided by customers (eg: best) (default: newest)
   --page: string # to request with required page number or pagination
   --page-size: string # to request with required page size in a page
-  --fields: list # Comma separated list of fields that should be returned. Fields of subobjects are specified with dots as separator. Fields of objects within lists are specified in the same way.  Example: id,name,brand.key,brand.name, units.id,units.size,units.price.formatted
-  --accept-language: string@accept-language-completer # Specify which Shop to use.  A standard `Accept-Language` header which specifies the shop that should be used. E.g. `de-DE` will use the German shop (as does [https://www.zalando.de](https://www/zalando.de) and `de-AT` will use the Austrian one.  The shop choosen will e.g. define the currency used for prices as well as the language for product names and descriptions. Furthermore it will impact which articles are available as they might differ between countries.
+  --fields: list<string> # Comma separated list of fields that should be returned. Fields of subobjects are specified with dots as separator. Fields of objects within lists are specified in the same way. Example: id,name,brand.key,brand.name, units.id,units.size,units.price.formatted
+  --accept-language: string@accept-language-completer # Specify which Shop to use. A standard `Accept-Language` header which specifies the shop that should be used. E.g. `de-DE` will use the German shop (as does [https://www.zalando.de](https://www/zalando.de) and `de-AT` will use the Austrian one. The shop choosen will e.g. define the currency used for prices as well as the language for product names and descriptions. Furthermore it will impact which articles are available as they might differ between countries.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "minStarRating" $min_star_rating "scalar") (serialize-qp "maxStarRating" $max_star_rating "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "fields" $fields "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({article_id: $article_id} | format pattern "/articles/{article_id}/reviews") $qp)
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id)} | format pattern "/articles/{article_id}/reviews") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -370,17 +379,17 @@ export def "articles-reviews-summary get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields: list # Comma separated list of fields that should be returned. Fields of subobjects are specified with dots as separator. Fields of objects within lists are specified in the same way.  Example: id,name,brand.key,brand.name, units.id,units.size,units.price.formatted
-  --accept-language: string@accept-language-completer # Specify which Shop to use.  A standard `Accept-Language` header which specifies the shop that should be used. E.g. `de-DE` will use the German shop (as does [https://www.zalando.de](https://www/zalando.de) and `de-AT` will use the Austrian one.  The shop choosen will e.g. define the currency used for prices as well as the language for product names and descriptions. Furthermore it will impact which articles are available as they might differ between countries.
+  --fields: list<string> # Comma separated list of fields that should be returned. Fields of subobjects are specified with dots as separator. Fields of objects within lists are specified in the same way. Example: id,name,brand.key,brand.name, units.id,units.size,units.price.formatted
+  --accept-language: string@accept-language-completer # Specify which Shop to use. A standard `Accept-Language` header which specifies the shop that should be used. E.g. `de-DE` will use the German shop (as does [https://www.zalando.de](https://www/zalando.de) and `de-AT` will use the Austrian one. The shop choosen will e.g. define the currency used for prices as well as the language for product names and descriptions. Furthermore it will impact which articles are available as they might differ between countries.
 ]: nothing -> record<articleModelId: string, articleSizeRatings: record<BOOTLEG_WIDTH: float, CHEST: float, CHEST_GIRTH: float, COLLAR_SIZE: float, CUP_SIZE: float, HIPS_OR_REAR: float, LEG_FIT: float, LENGTH: float, OVERALL: float, SHOE_WIDTH: float, SHOULDERS: float, SLEEVES: float>, averageStarRating: float, numberOfUserPositiveRecommendations: int, numberOfUserRecommendations: int, numberOfUserReviews: int, starRatingDistribution: record<1: int, 2: int, 3: int, 4: int, 5: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({article_id: $article_id} | format pattern "/articles/{article_id}/reviews-summary") $qp)
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id)} | format pattern "/articles/{article_id}/reviews-summary") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -397,17 +406,17 @@ export def "articles-units list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields: list # Comma separated list of fields that should be returned. Fields of subobjects are specified with dots as separator. Fields of objects within lists are specified in the same way.  Example: id,name,brand.key,brand.name, units.id,units.size,units.price.formatted
-  --accept-language: string@accept-language-completer # Specify which Shop to use.  A standard `Accept-Language` header which specifies the shop that should be used. E.g. `de-DE` will use the German shop (as does [https://www.zalando.de](https://www/zalando.de) and `de-AT` will use the Austrian one.  The shop choosen will e.g. define the currency used for prices as well as the language for product names and descriptions. Furthermore it will impact which articles are available as they might differ between countries.
+  --fields: list<string> # Comma separated list of fields that should be returned. Fields of subobjects are specified with dots as separator. Fields of objects within lists are specified in the same way. Example: id,name,brand.key,brand.name, units.id,units.size,units.price.formatted
+  --accept-language: string@accept-language-completer # Specify which Shop to use. A standard `Accept-Language` header which specifies the shop that should be used. E.g. `de-DE` will use the German shop (as does [https://www.zalando.de](https://www/zalando.de) and `de-AT` will use the Austrian one. The shop choosen will e.g. define the currency used for prices as well as the language for product names and descriptions. Furthermore it will impact which articles are available as they might differ between countries.
 ]: nothing -> table<available: bool, id: string, originalPrice: record<currency: string, formatted: string, value: float>, partnerId: string, price: record<currency: string, formatted: string, value: float>, size: string, stock: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({article_id: $article_id} | format pattern "/articles/{article_id}/units") $qp)
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id)} | format pattern "/articles/{article_id}/units") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -425,17 +434,17 @@ export def "articles-units get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields: list # Comma separated list of fields that should be returned. Fields of subobjects are specified with dots as separator. Fields of objects within lists are specified in the same way.  Example: id,name,brand.key,brand.name, units.id,units.size,units.price.formatted
-  --accept-language: string@accept-language-completer # Specify which Shop to use.  A standard `Accept-Language` header which specifies the shop that should be used. E.g. `de-DE` will use the German shop (as does [https://www.zalando.de](https://www/zalando.de) and `de-AT` will use the Austrian one.  The shop choosen will e.g. define the currency used for prices as well as the language for product names and descriptions. Furthermore it will impact which articles are available as they might differ between countries.
+  --fields: list<string> # Comma separated list of fields that should be returned. Fields of subobjects are specified with dots as separator. Fields of objects within lists are specified in the same way. Example: id,name,brand.key,brand.name, units.id,units.size,units.price.formatted
+  --accept-language: string@accept-language-completer # Specify which Shop to use. A standard `Accept-Language` header which specifies the shop that should be used. E.g. `de-DE` will use the German shop (as does [https://www.zalando.de](https://www/zalando.de) and `de-AT` will use the Austrian one. The shop choosen will e.g. define the currency used for prices as well as the language for product names and descriptions. Furthermore it will impact which articles are available as they might differ between countries.
 ]: nothing -> record<available: bool, id: string, originalPrice: record<currency: string, formatted: string, value: float>, partnerId: string, price: record<currency: string, formatted: string, value: float>, size: string, stock: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({article_id: $article_id, unit_id: $unit_id} | format pattern "/articles/{article_id}/units/{unit_id}") $qp)
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({article_id: (encode-path-segment $article_id), unit_id: (encode-path-segment $unit_id)} | format pattern "/articles/{article_id}/units/{unit_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -451,23 +460,23 @@ export def "brands list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --key: list # Request Brand by key
-  --name: list # Request Brand by name
-  --brand-family-name: list # Request Brand by brandFamilyName
-  --brand-family-key: list # Request Brand by brandFamilyKey
+  --key: list<string> # Request Brand by key
+  --name: list<string> # Request Brand by name
+  --brand-family-name: list<string> # Request Brand by brandFamilyName
+  --brand-family-key: list<string> # Request Brand by brandFamilyKey
   --page: string # to request with required page number or pagination
   --page-size: string # to request with required page size in a page
-  --fields: list # Comma separated list of fields that should be returned. Fields of subobjects are specified with dots as separator. Fields of objects within lists are specified in the same way.  Example: id,name,brand.key,brand.name, units.id,units.size,units.price.formatted
-  --accept-language: string@accept-language-completer # Specify which Shop to use.  A standard `Accept-Language` header which specifies the shop that should be used. E.g. `de-DE` will use the German shop (as does [https://www.zalando.de](https://www/zalando.de) and `de-AT` will use the Austrian one.  The shop choosen will e.g. define the currency used for prices as well as the language for product names and descriptions. Furthermore it will impact which articles are available as they might differ between countries.
+  --fields: list<string> # Comma separated list of fields that should be returned. Fields of subobjects are specified with dots as separator. Fields of objects within lists are specified in the same way. Example: id,name,brand.key,brand.name, units.id,units.size,units.price.formatted
+  --accept-language: string@accept-language-completer # Specify which Shop to use. A standard `Accept-Language` header which specifies the shop that should be used. E.g. `de-DE` will use the German shop (as does [https://www.zalando.de](https://www/zalando.de) and `de-AT` will use the Austrian one. The shop choosen will e.g. define the currency used for prices as well as the language for product names and descriptions. Furthermore it will impact which articles are available as they might differ between countries.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "multi") (serialize-qp "name" $name "multi") (serialize-qp "brandFamilyName" $brand_family_name "multi") (serialize-qp "brandFamilyKey" $brand_family_key "multi") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "fields" $fields "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/brands" $qp)
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -484,17 +493,17 @@ export def "brands get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields: list # Comma separated list of fields that should be returned. Fields of subobjects are specified with dots as separator. Fields of objects within lists are specified in the same way.  Example: id,name,brand.key,brand.name, units.id,units.size,units.price.formatted
-  --accept-language: string@accept-language-completer # Specify which Shop to use.  A standard `Accept-Language` header which specifies the shop that should be used. E.g. `de-DE` will use the German shop (as does [https://www.zalando.de](https://www/zalando.de) and `de-AT` will use the Austrian one.  The shop choosen will e.g. define the currency used for prices as well as the language for product names and descriptions. Furthermore it will impact which articles are available as they might differ between countries.
+  --fields: list<string> # Comma separated list of fields that should be returned. Fields of subobjects are specified with dots as separator. Fields of objects within lists are specified in the same way. Example: id,name,brand.key,brand.name, units.id,units.size,units.price.formatted
+  --accept-language: string@accept-language-completer # Specify which Shop to use. A standard `Accept-Language` header which specifies the shop that should be used. E.g. `de-DE` will use the German shop (as does [https://www.zalando.de](https://www/zalando.de) and `de-AT` will use the Austrian one. The shop choosen will e.g. define the currency used for prices as well as the language for product names and descriptions. Furthermore it will impact which articles are available as they might differ between countries.
 ]: nothing -> record<brandFamily: record<key: string, name: string, shopUrl: string>, key: string, logoLargeUrl: string, logoUrl: string, name: string, shopUrl: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({key: $key} | format pattern "/brands/{key}") $qp)
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/brands/{key}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -510,28 +519,28 @@ export def "categories list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --name: list # Request Categories by names
+  --name: list<string> # Request Categories by names
   --type: string # Request Categories by type
   --outlet: string # Request Categories by outlet
   --hidden: string # Request Categories by hidden
   --target-group: string # Request Categories by target group
-  --key: list # Request Categories by keys
-  --parent-key: list # Request Categories by parent keys
-  --child-key: list # Request Categories by child keys
-  --suggested-filter: list # Request Categories by suggested filters
+  --key: list<string> # Request Categories by keys
+  --parent-key: list<string> # Request Categories by parent keys
+  --child-key: list<string> # Request Categories by child keys
+  --suggested-filter: list<string> # Request Categories by suggested filters
   --page: string # to request with required page number or pagination
   --page-size: string # to request with required page size in a page
-  --fields: list # Comma separated list of fields that should be returned. Fields of subobjects are specified with dots as separator. Fields of objects within lists are specified in the same way.  Example: id,name,brand.key,brand.name, units.id,units.size,units.price.formatted
-  --accept-language: string@accept-language-completer # Specify which Shop to use.  A standard `Accept-Language` header which specifies the shop that should be used. E.g. `de-DE` will use the German shop (as does [https://www.zalando.de](https://www/zalando.de) and `de-AT` will use the Austrian one.  The shop choosen will e.g. define the currency used for prices as well as the language for product names and descriptions. Furthermore it will impact which articles are available as they might differ between countries.
+  --fields: list<string> # Comma separated list of fields that should be returned. Fields of subobjects are specified with dots as separator. Fields of objects within lists are specified in the same way. Example: id,name,brand.key,brand.name, units.id,units.size,units.price.formatted
+  --accept-language: string@accept-language-completer # Specify which Shop to use. A standard `Accept-Language` header which specifies the shop that should be used. E.g. `de-DE` will use the German shop (as does [https://www.zalando.de](https://www/zalando.de) and `de-AT` will use the Austrian one. The shop choosen will e.g. define the currency used for prices as well as the language for product names and descriptions. Furthermore it will impact which articles are available as they might differ between countries.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "multi") (serialize-qp "type" $type "scalar") (serialize-qp "outlet" $outlet "scalar") (serialize-qp "hidden" $hidden "scalar") (serialize-qp "targetGroup" $target_group "scalar") (serialize-qp "key" $key "multi") (serialize-qp "parentKey" $parent_key "multi") (serialize-qp "childKey" $child_key "multi") (serialize-qp "suggestedFilter" $suggested_filter "multi") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "fields" $fields "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/categories" $qp)
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -548,17 +557,17 @@ export def "categories get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields: list # Comma separated list of fields that should be returned. Fields of subobjects are specified with dots as separator. Fields of objects within lists are specified in the same way.  Example: id,name,brand.key,brand.name, units.id,units.size,units.price.formatted
-  --accept-language: string@accept-language-completer # Specify which Shop to use.  A standard `Accept-Language` header which specifies the shop that should be used. E.g. `de-DE` will use the German shop (as does [https://www.zalando.de](https://www/zalando.de) and `de-AT` will use the Austrian one.  The shop choosen will e.g. define the currency used for prices as well as the language for product names and descriptions. Furthermore it will impact which articles are available as they might differ between countries.
+  --fields: list<string> # Comma separated list of fields that should be returned. Fields of subobjects are specified with dots as separator. Fields of objects within lists are specified in the same way. Example: id,name,brand.key,brand.name, units.id,units.size,units.price.formatted
+  --accept-language: string@accept-language-completer # Specify which Shop to use. A standard `Accept-Language` header which specifies the shop that should be used. E.g. `de-DE` will use the German shop (as does [https://www.zalando.de](https://www/zalando.de) and `de-AT` will use the Austrian one. The shop choosen will e.g. define the currency used for prices as well as the language for product names and descriptions. Furthermore it will impact which articles are available as they might differ between countries.
 ]: nothing -> record<childKeys: list<string>, cid: int, hidden: bool, key: string, name: string, outlet: bool, parentKey: string, suggestedFilters: list<string>, targetGroup: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({key: $key} | format pattern "/categories/{key}") $qp)
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/categories/{key}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -595,49 +604,49 @@ export def "facets get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --age-group: list # filters by age group (eg: kids)
-  --article-id: list # The `articleIds` to use use for filtering.  One or more `articleIds` might be used as a filter criteria. Submit multiple `articleId` request parameters for more than one to be used. They will be treated as `OR` criteria.
-  --activation-date: list # period or time the articles are activated for selling in the shop
-  --article-model-id: list # filters by article ModelId
-  --assortment-area: list # filters by classification of articles (eg: maternity) 
-  --brand: list # filters by brand key given by user (eg: SA5)
-  --brandfamily: list # filters by brand family key (eg: nike) 
-  --category: list # filters by category (eg: Socks, Rain Coats)
-  --color: list # filters by color (eg: red, blue)
-  --den: list # filters by den 
-  --filling: list # filters by different kinds of garment filling materials (eg: satin, wolle)
-  --gender: list # filters by gender
-  --heel-form: list # filters by heel form (eg: flat)
-  --heel-height: list # filters by height of the heel size or length (eg: xs)
+  --age-group: list<string> # filters by age group (eg: kids)
+  --article-id: list<string> # The `articleIds` to use use for filtering. One or more `articleIds` might be used as a filter criteria. Submit multiple `articleId` request parameters for more than one to be used. They will be treated as `OR` criteria.
+  --activation-date: list<string> # period or time the articles are activated for selling in the shop
+  --article-model-id: list<string> # filters by article ModelId
+  --assortment-area: list<string> # filters by classification of articles (eg: maternity)
+  --brand: list<string> # filters by brand key given by user (eg: SA5)
+  --brandfamily: list<string> # filters by brand family key (eg: nike)
+  --category: list<string> # filters by category (eg: Socks, Rain Coats)
+  --color: list<string> # filters by color (eg: red, blue)
+  --den: list<string> # filters by den
+  --filling: list<string> # filters by different kinds of garment filling materials (eg: satin, wolle)
+  --gender: list<string> # filters by gender
+  --heel-form: list<string> # filters by heel form (eg: flat)
+  --heel-height: list<string> # filters by height of the heel size or length (eg: xs)
   --length: string # filters by garments length (eg: 3/4 length, knee-length)
-  --occasion: list # filters by type of occasion (eg: party, business)
-  --pattern: list # filters by pattern on the garments (eg: animal print, plain)
+  --occasion: list<string> # filters by type of occasion (eg: party, business)
+  --pattern: list<string> # filters by pattern on the garments (eg: animal print, plain)
   --price: string # filters all articles in price range (eg: 9-90)
-  --sale: list # filters discounted articles marked as sale
-  --season: list # filters by season (Autumn/Winter or Spring/Summer)
-  --shaft-height: list # filters by shaft height (eg: s, xs)
-  --shaft-width: list # filters by shaft width (eg: s, l)
-  --shirt-collar: list # filters by shirt collar styles (eg: low V neck, lined collar)
-  --shoe-fastener: list # filters by shoe fastener types (eg: buckle, lacing)
-  --shoe-toecap: list # filters by shoe toe cap variants (eg: pointed, square)
-  --shop-area: list # filters by classification of articles
+  --sale: list<string> # filters discounted articles marked as sale
+  --season: list<string> # filters by season (Autumn/Winter or Spring/Summer)
+  --shaft-height: list<string> # filters by shaft height (eg: s, xs)
+  --shaft-width: list<string> # filters by shaft width (eg: s, l)
+  --shirt-collar: list<string> # filters by shirt collar styles (eg: low V neck, lined collar)
+  --shoe-fastener: list<string> # filters by shoe fastener types (eg: buckle, lacing)
+  --shoe-toecap: list<string> # filters by shoe toe cap variants (eg: pointed, square)
+  --shop-area: list<string> # filters by classification of articles
   --size: string # filters by size
-  --sports: list # filters by different sport activities (eg: football)
-  --technology: list # filters by technology used to produce the articles
-  --trouser-rise: list # filters by trouser rise
-  --upper-material: list # filters by different type of upper material used on garments (eg: lace)
-  --volume: list # filters by volume
-  --fields: list # Comma separated list of fields that should be returned. Fields of subobjects are specified with dots as separator. Fields of objects within lists are specified in the same way.  Example: id,name,brand.key,brand.name, units.id,units.size,units.price.formatted
-  --accept-language: string@accept-language-completer # Specify which Shop to use.  A standard `Accept-Language` header which specifies the shop that should be used. E.g. `de-DE` will use the German shop (as does [https://www.zalando.de](https://www/zalando.de) and `de-AT` will use the Austrian one.  The shop choosen will e.g. define the currency used for prices as well as the language for product names and descriptions. Furthermore it will impact which articles are available as they might differ between countries.
+  --sports: list<string> # filters by different sport activities (eg: football)
+  --technology: list<string> # filters by technology used to produce the articles
+  --trouser-rise: list<string> # filters by trouser rise
+  --upper-material: list<string> # filters by different type of upper material used on garments (eg: lace)
+  --volume: list<string> # filters by volume
+  --fields: list<string> # Comma separated list of fields that should be returned. Fields of subobjects are specified with dots as separator. Fields of objects within lists are specified in the same way. Example: id,name,brand.key,brand.name, units.id,units.size,units.price.formatted
+  --accept-language: string@accept-language-completer # Specify which Shop to use. A standard `Accept-Language` header which specifies the shop that should be used. E.g. `de-DE` will use the German shop (as does [https://www.zalando.de](https://www/zalando.de) and `de-AT` will use the Austrian one. The shop choosen will e.g. define the currency used for prices as well as the language for product names and descriptions. Furthermore it will impact which articles are available as they might differ between countries.
 ]: nothing -> table<facets: list<record>, filter: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ageGroup" $age_group "multi") (serialize-qp "articleId" $article_id "multi") (serialize-qp "activationDate" $activation_date "multi") (serialize-qp "articleModelId" $article_model_id "multi") (serialize-qp "assortmentArea" $assortment_area "multi") (serialize-qp "brand" $brand "multi") (serialize-qp "brandfamily" $brandfamily "multi") (serialize-qp "category" $category "multi") (serialize-qp "color" $color "multi") (serialize-qp "den" $den "multi") (serialize-qp "filling" $filling "multi") (serialize-qp "gender" $gender "multi") (serialize-qp "heelForm" $heel_form "multi") (serialize-qp "heelHeight" $heel_height "multi") (serialize-qp "length" $length "scalar") (serialize-qp "occasion" $occasion "multi") (serialize-qp "pattern" $pattern "multi") (serialize-qp "price" $price "scalar") (serialize-qp "sale" $sale "csv") (serialize-qp "season" $season "multi") (serialize-qp "shaftHeight" $shaft_height "multi") (serialize-qp "shaftWidth" $shaft_width "multi") (serialize-qp "shirtCollar" $shirt_collar "multi") (serialize-qp "shoeFastener" $shoe_fastener "multi") (serialize-qp "shoeToecap" $shoe_toecap "multi") (serialize-qp "shopArea" $shop_area "multi") (serialize-qp "size" $size "scalar") (serialize-qp "sports" $sports "multi") (serialize-qp "technology" $technology "multi") (serialize-qp "trouserRise" $trouser_rise "multi") (serialize-qp "upperMaterial" $upper_material "multi") (serialize-qp "volume" $volume "multi") (serialize-qp "fields" $fields "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/facets" $qp)
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -653,17 +662,17 @@ export def "filters list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields: list # Comma separated list of fields that should be returned. Fields of subobjects are specified with dots as separator. Fields of objects within lists are specified in the same way.  Example: id,name,brand.key,brand.name, units.id,units.size,units.price.formatted
-  --accept-language: string@accept-language-completer # Specify which Shop to use.  A standard `Accept-Language` header which specifies the shop that should be used. E.g. `de-DE` will use the German shop (as does [https://www.zalando.de](https://www/zalando.de) and `de-AT` will use the Austrian one.  The shop choosen will e.g. define the currency used for prices as well as the language for product names and descriptions. Furthermore it will impact which articles are available as they might differ between countries.
+  --fields: list<string> # Comma separated list of fields that should be returned. Fields of subobjects are specified with dots as separator. Fields of objects within lists are specified in the same way. Example: id,name,brand.key,brand.name, units.id,units.size,units.price.formatted
+  --accept-language: string@accept-language-completer # Specify which Shop to use. A standard `Accept-Language` header which specifies the shop that should be used. E.g. `de-DE` will use the German shop (as does [https://www.zalando.de](https://www/zalando.de) and `de-AT` will use the Austrian one. The shop choosen will e.g. define the currency used for prices as well as the language for product names and descriptions. Furthermore it will impact which articles are available as they might differ between countries.
 ]: nothing -> table<multiValue: bool, name: string, type: string, values: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/filters" $qp)
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -680,17 +689,17 @@ export def "filters get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields: list # Comma separated list of fields that should be returned. Fields of subobjects are specified with dots as separator. Fields of objects within lists are specified in the same way.  Example: id,name,brand.key,brand.name, units.id,units.size,units.price.formatted
-  --accept-language: string@accept-language-completer # Specify which Shop to use.  A standard `Accept-Language` header which specifies the shop that should be used. E.g. `de-DE` will use the German shop (as does [https://www.zalando.de](https://www/zalando.de) and `de-AT` will use the Austrian one.  The shop choosen will e.g. define the currency used for prices as well as the language for product names and descriptions. Furthermore it will impact which articles are available as they might differ between countries.
+  --fields: list<string> # Comma separated list of fields that should be returned. Fields of subobjects are specified with dots as separator. Fields of objects within lists are specified in the same way. Example: id,name,brand.key,brand.name, units.id,units.size,units.price.formatted
+  --accept-language: string@accept-language-completer # Specify which Shop to use. A standard `Accept-Language` header which specifies the shop that should be used. E.g. `de-DE` will use the German shop (as does [https://www.zalando.de](https://www/zalando.de) and `de-AT` will use the Austrian one. The shop choosen will e.g. define the currency used for prices as well as the language for product names and descriptions. Furthermore it will impact which articles are available as they might differ between countries.
 ]: nothing -> record<multiValue: bool, name: string, type: string, values: table<displayName: string, key: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({filter_name: $filter_name} | format pattern "/filters/{filter_name}") $qp)
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({filter_name: (encode-path-segment $filter_name)} | format pattern "/filters/{filter_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -708,16 +717,16 @@ export def "recommendations get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --max-results: string # To get maximum results of Recommendations by articleId.
-  --fields: list # Comma separated list of fields that should be returned. Fields of subobjects are specified with dots as separator. Fields of objects within lists are specified in the same way.  Example: id,name,brand.key,brand.name, units.id,units.size,units.price.formatted
-  --accept-language: string@accept-language-completer # Specify which Shop to use.  A standard `Accept-Language` header which specifies the shop that should be used. E.g. `de-DE` will use the German shop (as does [https://www.zalando.de](https://www/zalando.de) and `de-AT` will use the Austrian one.  The shop choosen will e.g. define the currency used for prices as well as the language for product names and descriptions. Furthermore it will impact which articles are available as they might differ between countries.
+  --fields: list<string> # Comma separated list of fields that should be returned. Fields of subobjects are specified with dots as separator. Fields of objects within lists are specified in the same way. Example: id,name,brand.key,brand.name, units.id,units.size,units.price.formatted
+  --accept-language: string@accept-language-completer # Specify which Shop to use. A standard `Accept-Language` header which specifies the shop that should be used. E.g. `de-DE` will use the German shop (as does [https://www.zalando.de](https://www/zalando.de) and `de-AT` will use the Austrian one. The shop choosen will e.g. define the currency used for prices as well as the language for product names and descriptions. Furthermore it will impact which articles are available as they might differ between countries.
 ]: nothing -> table<id: string, media: record<images: list>, modelId: string, name: string, shopUrl: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "fields" $fields "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({article_ids: $article_ids} | format pattern "/recommendations/{article_ids}") $qp)
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({article_ids: (encode-path-segment $article_ids)} | format pattern "/recommendations/{article_ids}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

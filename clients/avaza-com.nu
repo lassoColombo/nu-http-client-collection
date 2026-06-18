@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -60,6 +69,33 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   }
   if ($method in ["head" "options"]) { return $resp }
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+}
+
+# Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
+# the field names whose value should be read from disk as bytes; every
+# other field is sent as a text part (records/lists JSON-stringified).
+# Returns {content_type, body} ready to pass to `do-request`.
+def build-multipart-body [parts: record, file_fields: list<string>]: nothing -> record {
+  let boundary = $"----nu-(random chars --length 24)"
+  let crlf = "\r\n"
+  let chunks = ($parts | transpose k v | where {|p| $p.v != null} | each {|p|
+    let name = $p.k
+    let val = $p.v
+    if $name in $file_fields {
+      let filename = ($val | path basename)
+      let bytes = (open --raw $val | into binary | collect)
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"; filename=\"($filename)\"($crlf)Content-Type: application/octet-stream($crlf)($crlf)" | into binary)
+      $head ++ $bytes ++ ($crlf | into binary)
+    } else {
+      let dt = ($val | describe)
+      let s = if (($dt | str starts-with "record") or ($dt | str starts-with "list") or ($dt | str starts-with "table")) { ($val | to json --raw) } else { ($val | into string) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"($crlf)($crlf)" | into binary)
+      $head ++ ($"($s)($crlf)" | into binary)
+    }
+  })
+  let trailer = ($"--($boundary)--($crlf)" | into binary)
+  let body = ($chunks | reduce --fold (0x[] | into binary) {|chunk, acc| $acc ++ $chunk }) ++ $trailer
+  {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
 }
 
 def base-url-completer [] { ["https://api.avaza.com"] }
@@ -121,11 +157,11 @@ export def "schedule-series-add-booking create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ScheduleSeries/AddBooking")
-  let body = {"CategoryIDFK": $category_idfk, "DurationType": $duration_type, "EndDate": $end_date, "HoursPerDay": $hours_per_day, "Notes": $notes, "ProjectIDFK": $project_idfk, "ScheduleOnDaysOff": $schedule_on_days_off, "StartDate": $start_date, "TaskIDFK": $task_idfk, "TotalDuration": $total_duration, "UserIDFK": $user_idfk} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"CategoryIDFK": $category_idfk, "DurationType": $duration_type, "EndDate": $end_date, "HoursPerDay": $hours_per_day, "Notes": $notes, "ProjectIDFK": $project_idfk, "ScheduleOnDaysOff": $schedule_on_days_off, "StartDate": $start_date, "TaskIDFK": $task_idfk, "TotalDuration": $total_duration, "UserIDFK": $user_idfk} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create new Leave Booking
@@ -154,18 +190,18 @@ export def "schedule-series-add-leave create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ScheduleSeries/AddLeave")
-  let body = {"LeaveEndDate": $leave_end_date, "LeaveHoursPerDay": $leave_hours_per_day, "LeaveNotes": $leave_notes, "LeaveNotify": $leave_notify, "LeaveStartDate": $leave_start_date, "LeaveTypeIDFK": $leave_type_idfk, "LeaveUserIDFK": $leave_user_idfk} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"LeaveEndDate": $leave_end_date, "LeaveHoursPerDay": $leave_hours_per_day, "LeaveNotes": $leave_notes, "LeaveNotify": $leave_notify, "LeaveStartDate": $leave_start_date, "LeaveTypeIDFK": $leave_type_idfk, "LeaveUserIDFK": $leave_user_idfk} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Edit Booking
 #
 # PUT /ScheduleSeries/EditBooking
 # operationId: ScheduleSeries_EditBooking
-export def "schedule-series-edit-booking put" [
+export def "schedule-series-edit-booking update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -192,18 +228,18 @@ export def "schedule-series-edit-booking put" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ScheduleSeries/EditBooking")
-  let body = {"CategoryIDFK": $category_idfk, "DurationType": $duration_type, "EndDate": $end_date, "HoursPerDay": $hours_per_day, "Notes": $notes, "ProjectIDFK": $project_idfk, "ScheduleOnDaysOff": $schedule_on_days_off, "ScheduleSeriesID": $schedule_series_id, "StartDate": $start_date, "TaskIDFK": $task_idfk, "TotalDuration": $total_duration, "UserIDFK": $user_idfk} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"CategoryIDFK": $category_idfk, "DurationType": $duration_type, "EndDate": $end_date, "HoursPerDay": $hours_per_day, "Notes": $notes, "ProjectIDFK": $project_idfk, "ScheduleOnDaysOff": $schedule_on_days_off, "ScheduleSeriesID": $schedule_series_id, "StartDate": $start_date, "TaskIDFK": $task_idfk, "TotalDuration": $total_duration, "UserIDFK": $user_idfk} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Edit Leave Booking
 #
 # PUT /ScheduleSeries/EditLeave
 # operationId: ScheduleSeries_EditLeave
-export def "schedule-series-edit-leave put" [
+export def "schedule-series-edit-leave update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -225,11 +261,11 @@ export def "schedule-series-edit-leave put" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ScheduleSeries/EditLeave")
-  let body = {"EndDate": $end_date, "HoursPerDay": $hours_per_day, "LeaveTypeIDFK": $leave_type_idfk, "Notes": $notes, "ScheduleSeriesID": $schedule_series_id, "StartDate": $start_date, "UserIDFK": $user_idfk} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"EndDate": $end_date, "HoursPerDay": $hours_per_day, "LeaveTypeIDFK": $leave_type_idfk, "Notes": $notes, "ScheduleSeriesID": $schedule_series_id, "StartDate": $start_date, "UserIDFK": $user_idfk} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Account Details
@@ -259,7 +295,7 @@ export def "account get" [
 #
 # GET /api/Bill
 # operationId: Bill_Get
-export def "bill get" [
+export def "bill list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -312,7 +348,7 @@ export def "bill create" [
   --lastname: string # Specified value will be used to create a new customer contact only if a new customer is being created.
   --line-items: list # item shape: {Description?: string, Discount?: float, InventoryItemIDFK?: int, InventoryItemName?: string, ProjectIDFK?: int, Quantity: float, TaxIDFK?: int, TaxName?: string, TaxPercent?: float, UnitPrice: float}
   --notes: string # Plain UTF8 text. (no HTML). Max 2000 characters
-  --payment-terms: int #  "If left blank we will set it to customer default. If specified then it must match one of your existing pre configured payment term periods. Your account starts with: (-1 --- Custom, 0 --- Upon Receipt, 7 --- 7 Days, 15 --- 15 Days, 30 --- 30 Days, 45 --- 45 Days, 60 --- 60 Days) (format: int32)
+  --payment-terms: int # "If left blank we will set it to customer default. If specified then it must match one of your existing pre configured payment term periods. Your account starts with: (-1 --- Custom, 0 --- Upon Receipt, 7 --- 7 Days, 15 --- 15 Days, 30 --- 30 Days, 45 --- 45 Days, 60 --- 60 Days) (format: int32)
   --subject: string # Plain UTF8 text. (no HTML). 255 characters max
   --supplier-po-number: string # Plain UTF8 text. 100 characters max
   --transaction-prefix: string # A prefix for the Invoice number. e.g. 'INV'. If left blank it will be set to the account default. Max length 20 characters.
@@ -322,18 +358,18 @@ export def "bill create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/Bill")
-  let body = {"BillNumber": $bill_number, "BillTemplateIDFK": $bill_template_idfk, "CompanyIDFK": $company_idfk, "CompanyName": $company_name, "CurrencyCode": $currency_code, "DateIssued": $date_issued, "DueDate": $due_date, "Email": $email, "ExchangeRate": $exchange_rate, "Firstname": $firstname, "Lastname": $lastname, "LineItems": $line_items, "Notes": $notes, "PaymentTerms": $payment_terms, "Subject": $subject, "SupplierPONumber": $supplier_po_number, "TransactionPrefix": $transaction_prefix, "TransactionTaxConfigCode": $transaction_tax_config_code} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"BillNumber": $bill_number, "BillTemplateIDFK": $bill_template_idfk, "CompanyIDFK": $company_idfk, "CompanyName": $company_name, "CurrencyCode": $currency_code, "DateIssued": $date_issued, "DueDate": $due_date, "Email": $email, "ExchangeRate": $exchange_rate, "Firstname": $firstname, "Lastname": $lastname, "LineItems": $line_items, "Notes": $notes, "PaymentTerms": $payment_terms, "Subject": $subject, "SupplierPONumber": $supplier_po_number, "TransactionPrefix": $transaction_prefix, "TransactionTaxConfigCode": $transaction_tax_config_code} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets a Bill by Bill ID
 #
 # GET /api/Bill/{id}
 # operationId: Bill_GetByID
-export def "bill get-by" [
+export def "bill get" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -347,7 +383,7 @@ export def "bill get-by" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/Bill/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Bill/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -357,7 +393,7 @@ export def "bill get-by" [
 #
 # GET /api/BillPayment
 # operationId: BillPayment_Get
-export def "bill-payment get" [
+export def "bill-payment list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -411,18 +447,18 @@ export def "bill-payment create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/BillPayment")
-  let body = {"Amount": $amount, "CompanyIDFK": $company_idfk, "CurrencyCode": $currency_code, "DateIssued": $date_issued, "ExchangeRate": $exchange_rate, "Notes": $notes, "PaymentAllocations": $payment_allocations, "PaymentNumber": $payment_number, "PaymentProviderCode": $payment_provider_code, "TransactionPrefix": $transaction_prefix, "TransactionReference": $transaction_reference} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"Amount": $amount, "CompanyIDFK": $company_idfk, "CurrencyCode": $currency_code, "DateIssued": $date_issued, "ExchangeRate": $exchange_rate, "Notes": $notes, "PaymentAllocations": $payment_allocations, "PaymentNumber": $payment_number, "PaymentProviderCode": $payment_provider_code, "TransactionPrefix": $transaction_prefix, "TransactionReference": $transaction_reference} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets a Bill Payment by Payment Transaction ID
 #
 # GET /api/BillPayment/{id}
 # operationId: BillPayment_GetByID
-export def "bill-payment get-by" [
+export def "bill-payment get" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -436,7 +472,7 @@ export def "bill-payment get-by" [
 ]: nothing -> record<AccountIDFK: int, Balance: float, CurrencyCode: string, DateCreated: string, DateIssued: string, DateUpdated: string, ExchangeRate: float, Notes: string, PaymentAllocations: table<AllocationAmount: float, AllocationDate: string, BillTransactionIDFK: int, PaymentTransactionIDFK: int, TransactionAllocationID: int>, PaymentNumber: string, PaymentProviderCode: string, SupplierIDFK: int, TotalAmount: float, TransactionID: int, TransactionPrefix: string, TransactionReference: string, TransactionStatusCode: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/BillPayment/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/BillPayment/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -446,7 +482,7 @@ export def "bill-payment get-by" [
 #
 # GET /api/Company
 # operationId: Company_Get
-export def "company get" [
+export def "company list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -502,11 +538,11 @@ export def "company create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/Company")
-  let body = {"BillingAddress": $billing_address, "BillingAddressCity": $billing_address_city, "BillingAddressLine": $billing_address_line, "BillingAddressPostCode": $billing_address_post_code, "BillingAddressState": $billing_address_state, "BillingCountryCode": $billing_country_code, "Comments": $comments, "CompanyName": $company_name, "CurrencyCode": $currency_code, "Fax": $fax, "Phone": $phone, "TaxNumber": $tax_number, "website": $website} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"BillingAddress": $billing_address, "BillingAddressCity": $billing_address_city, "BillingAddressLine": $billing_address_line, "BillingAddressPostCode": $billing_address_post_code, "BillingAddressState": $billing_address_state, "BillingCountryCode": $billing_country_code, "Comments": $comments, "CompanyName": $company_name, "CurrencyCode": $currency_code, "Fax": $fax, "Phone": $phone, "TaxNumber": $tax_number, "website": $website} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update a Company record.
@@ -533,7 +569,7 @@ export def "company update" [
   --company-id: int # format: int32
   --company-name: string
   --fax: string
-  --fields-to-update: list
+  --fields-to-update: list<string>
   --phone: string
   --tax-number: string
   --website: string
@@ -542,11 +578,11 @@ export def "company update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/Company")
-  let body = {"BillingAddress": $billing_address, "BillingAddressCity": $billing_address_city, "BillingAddressLine": $billing_address_line, "BillingAddressPostCode": $billing_address_post_code, "BillingAddressState": $billing_address_state, "BillingCountryCode": $billing_country_code, "Comments": $comments, "CompanyID": $company_id, "CompanyName": $company_name, "Fax": $fax, "FieldsToUpdate": $fields_to_update, "Phone": $phone, "TaxNumber": $tax_number, "website": $website} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"BillingAddress": $billing_address, "BillingAddressCity": $billing_address_city, "BillingAddressLine": $billing_address_line, "BillingAddressPostCode": $billing_address_post_code, "BillingAddressState": $billing_address_state, "BillingCountryCode": $billing_country_code, "Comments": $comments, "CompanyID": $company_id, "CompanyName": $company_name, "Fax": $fax, "FieldsToUpdate": $fields_to_update, "Phone": $phone, "TaxNumber": $tax_number, "website": $website} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets minimal list of Companies.
@@ -580,7 +616,7 @@ export def "company-lookup get" [
 #
 # GET /api/Company/{id}
 # operationId: Company_GetByID
-export def "company get-by" [
+export def "company get" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -594,7 +630,7 @@ export def "company get-by" [
 ]: nothing -> record<BillingAddress: string, BillingAddressCity: string, BillingAddressLine: string, BillingAddressPostCode: string, BillingAddressState: string, BillingCountryCode: string, Comments: string, CompanyID: int, CompanyName: string, Contacts: table<CompanyIDFK: int, CompanyName: string, ContactID: int, DateCreated: string, DateUpdated: string, Email: string, Firstname: string, Lastname: string, Mobile: string, Phone: string, PositionTitle: string, TimeZone: string>, CurrencyCode: string, DateCreated: string, DateUpdated: string, DefaultTradingTermIDFK: int, Fax: string, Phone: string, TaxNumber: string, website: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/Company/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Company/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -604,7 +640,7 @@ export def "company get-by" [
 #
 # GET /api/Contact
 # operationId: Contact_Get
-export def "contact get" [
+export def "contact list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -664,18 +700,18 @@ export def "contact create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/Contact")
-  let body = {"CompanyBillingAddress": $company_billing_address, "CompanyBillingAddressCity": $company_billing_address_city, "CompanyBillingAddressCountryCode": $company_billing_address_country_code, "CompanyBillingAddressLine": $company_billing_address_line, "CompanyBillingAddressPostCode": $company_billing_address_post_code, "CompanyBillingAddressState": $company_billing_address_state, "CompanyIDFK": $company_idfk, "CompanyName": $company_name, "ContactEmail": $contact_email, "CurrencyCode": $currency_code, "Firstname": $firstname, "Lastname": $lastname, "Mobile": $mobile, "Phone": $phone, "PositionTitle": $position_title, "UpdateExisting": $update_existing} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"CompanyBillingAddress": $company_billing_address, "CompanyBillingAddressCity": $company_billing_address_city, "CompanyBillingAddressCountryCode": $company_billing_address_country_code, "CompanyBillingAddressLine": $company_billing_address_line, "CompanyBillingAddressPostCode": $company_billing_address_post_code, "CompanyBillingAddressState": $company_billing_address_state, "CompanyIDFK": $company_idfk, "CompanyName": $company_name, "ContactEmail": $contact_email, "CurrencyCode": $currency_code, "Firstname": $firstname, "Lastname": $lastname, "Mobile": $mobile, "Phone": $phone, "PositionTitle": $position_title, "UpdateExisting": $update_existing} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets Contact by Contact ID
 #
 # GET /api/Contact/{id}
 # operationId: Contact_GetByID
-export def "contact get-by" [
+export def "contact get" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -689,7 +725,7 @@ export def "contact get-by" [
 ]: nothing -> record<CompanyIDFK: int, CompanyName: string, ContactID: int, DateCreated: string, DateUpdated: string, Email: string, Firstname: string, Lastname: string, Mobile: string, Phone: string, PositionTitle: string, TimeZone: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/Contact/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Contact/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -699,7 +735,7 @@ export def "contact get-by" [
 #
 # GET /api/CreditNote
 # operationId: CreditNote_Get
-export def "credit-note get" [
+export def "credit-note list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -726,7 +762,7 @@ export def "credit-note get" [
 #
 # GET /api/CreditNote/{id}
 # operationId: CreditNote_GetByID
-export def "credit-note get-by" [
+export def "credit-note get" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -740,7 +776,7 @@ export def "credit-note get-by" [
 ]: nothing -> record<Balance: float, CreditNoteAllocations: table<AllocationAmount: float, AllocationDate: string, CreditNoteTransactionIDFK: int, InvoiceTransactionIDFK: int, TransactionAllocationID: int>, CreditNoteLineItems: table<Amount: float, Description: string, Discount: float, Quantity: float, TaxAmount: float, TaxIDFK: int, TransactionLineItemID: int, UnitPrice: float>, CreditNoteNumber: string, CurrencyCode: string, CustomerIDFK: int, DateCreated: string, DateIssued: string, DateUpdated: string, Notes: string, TotalAmount: float, TransactionID: int, TransactionPrefix: string, TransactionStatusCode: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/CreditNote/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/CreditNote/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -773,7 +809,7 @@ export def "currency get" [
 #
 # GET /api/Estimate
 # operationId: Estimate_Get
-export def "estimate get" [
+export def "estimate list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -835,18 +871,18 @@ export def "estimate create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/Estimate")
-  let body = {"CompanyIDFK": $company_idfk, "CompanyName": $company_name, "CurrencyCode": $currency_code, "CustomerPONumber": $customer_po_number, "DateIssued": $date_issued, "DueDate": $due_date, "Email": $email, "EstimateNumber": $estimate_number, "EstimatePrefix": $estimate_prefix, "EstimateTaxConfigCode": $estimate_tax_config_code, "ExchangeRate": $exchange_rate, "Firstname": $firstname, "InvoiceTemplateIDFK": $invoice_template_idfk, "Lastname": $lastname, "LineItems": $line_items, "Notes": $notes, "Subject": $subject} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"CompanyIDFK": $company_idfk, "CompanyName": $company_name, "CurrencyCode": $currency_code, "CustomerPONumber": $customer_po_number, "DateIssued": $date_issued, "DueDate": $due_date, "Email": $email, "EstimateNumber": $estimate_number, "EstimatePrefix": $estimate_prefix, "EstimateTaxConfigCode": $estimate_tax_config_code, "ExchangeRate": $exchange_rate, "Firstname": $firstname, "InvoiceTemplateIDFK": $invoice_template_idfk, "Lastname": $lastname, "LineItems": $line_items, "Notes": $notes, "Subject": $subject} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets Estimate by Estimate ID
 #
 # GET /api/Estimate/{id}
 # operationId: Estimate_GetByID
-export def "estimate get-by" [
+export def "estimate get" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -860,7 +896,7 @@ export def "estimate get-by" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/Estimate/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Estimate/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -886,17 +922,18 @@ export def "expense delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/Expense")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets list of Expenses
 #
 # GET /api/Expense
 # operationId: Expense_Get
-export def "expense get" [
+export def "expense list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -947,7 +984,7 @@ export def "expense create" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --amount: float # Expense Amount (Required). Must be &gt;= 0 (format: double)
+  --amount: float # Expense Amount (Required). Must be >= 0 (format: double)
   --currency-code: string # A 3-letter ISO CurrencyCode for the expense currency. (e.g. USD). If not provided, defaults to the Account base currency.
   --customer-idfk: int # The Avaza Customer ID to associate the Expense with. Either this field or CustomerName can be provided. (format: int32)
   --customer-name: string # The name of an existing customer in Avaza. Must be an exact (case insensitive) match.
@@ -956,7 +993,7 @@ export def "expense create" [
   --expense-category-name: string # Must match an existing expense category name otherwise a new category will be created. If left blank Expense Category ID must be provided.
   --expense-date: string # The date of the expense entry (Required) (format: date-time)
   --expense-payment-method-idfk: int # (Optional) ID of Expense Payment Method. (format: int32)
-  --file-attachment-i-ds: list # Array of File Attachment IDs to associate with this expense. The files need to have already been uploaded. Currently only accepts a single file.
+  --file-attachment-i-ds: list<int> # Array of File Attachment IDs to associate with this expense. The files need to have already been uploaded. Currently only accepts a single file.
   --group-trip-name: string # Links the expense to a Grouping/Trip report. If no matching name found, creates a new Group/Trip Report name.
   --merchant: string # The name of the merchant.
   --merchant-tax-number: string # A Tax number identifier for the merchant.
@@ -978,11 +1015,11 @@ export def "expense create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/Expense")
-  let body = {"Amount": $amount, "CurrencyCode": $currency_code, "CustomerIDFK": $customer_idfk, "CustomerName": $customer_name, "ExchangeRate": $exchange_rate, "ExpenseCategoryIDFK": $expense_category_idfk, "ExpenseCategoryName": $expense_category_name, "ExpenseDate": $expense_date, "ExpensePaymentMethodIDFK": $expense_payment_method_idfk, "FileAttachmentIDs": $file_attachment_i_ds, "GroupTripName": $group_trip_name, "Merchant": $merchant, "MerchantTaxNumber": $merchant_tax_number, "Notes": $notes, "ProjectIDFK": $project_idfk, "ProjectName": $project_name, "Quantity": $quantity, "TaskIDFK": $task_idfk, "TaxIDFK": $tax_idfk, "TaxName": $tax_name, "TransactionTaxConfigCode": $transaction_tax_config_code, "UserEmail": $user_email, "UserIDFK": $user_idfk, "VerifyAndSave": $verify_and_save, "isChargeable": $is_chargeable, "isReimbursable": $is_reimbursable} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"Amount": $amount, "CurrencyCode": $currency_code, "CustomerIDFK": $customer_idfk, "CustomerName": $customer_name, "ExchangeRate": $exchange_rate, "ExpenseCategoryIDFK": $expense_category_idfk, "ExpenseCategoryName": $expense_category_name, "ExpenseDate": $expense_date, "ExpensePaymentMethodIDFK": $expense_payment_method_idfk, "FileAttachmentIDs": $file_attachment_i_ds, "GroupTripName": $group_trip_name, "Merchant": $merchant, "MerchantTaxNumber": $merchant_tax_number, "Notes": $notes, "ProjectIDFK": $project_idfk, "ProjectName": $project_name, "Quantity": $quantity, "TaskIDFK": $task_idfk, "TaxIDFK": $tax_idfk, "TaxName": $tax_name, "TransactionTaxConfigCode": $transaction_tax_config_code, "UserEmail": $user_email, "UserIDFK": $user_idfk, "VerifyAndSave": $verify_and_save, "isChargeable": $is_chargeable, "isReimbursable": $is_reimbursable} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update an Expense
@@ -999,7 +1036,7 @@ export def "expense update" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --amount: float # Expense Amount (Required). Must be &gt;= 0 (format: double)
+  --amount: float # Expense Amount (Required). Must be >= 0 (format: double)
   --currency-code: string # A 3-letter ISO CurrencyCode for the expense currency. (e.g. USD). If not provided, defaults to the Account base currency.
   --customer-idfk: int # The Avaza Customer ID to associate the Expense with. (format: int32)
   --exchange-rate: float # Optional (Only relevant if the expense currency is different to your account currency. If not provided we will look up the market exchange rate for you based on the expense date.) Exchange Rate = Expense Currency Amount / Base Currency Amount (e.g. if Expense currency is in AUD, and Base Currency is in USD, Exchange Rate = AUD $140 / USD $100 = 1.4) (format: double)
@@ -1007,8 +1044,8 @@ export def "expense update" [
   --expense-date: string # The date of the expense entry (format: date-time)
   expense_id: int # format: int64
   --expense-payment-method-idfk: int # (Optional) ID of Expense Payment Method. (format: int32)
-  fields_to_update: list
-  --file-attachment-i-ds: list # Array of File Attachment IDs to associate with this expense. The files need to have already been uploaded. Currently only accepts a single file.
+  fields_to_update: list<string>
+  --file-attachment-i-ds: list<int> # Array of File Attachment IDs to associate with this expense. The files need to have already been uploaded. Currently only accepts a single file.
   --group-trip-name: string # Links the expense to a Grouping/Trip report. If no matching name found, creates a new Group/Trip Report name.
   --merchant: string # The name of the merchant.
   --merchant-tax-number: string # A Tax number identifier for the merchant.
@@ -1026,17 +1063,17 @@ export def "expense update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/Expense")
-  let body = {"Amount": $amount, "CurrencyCode": $currency_code, "CustomerIDFK": $customer_idfk, "ExchangeRate": $exchange_rate, "ExpenseCategoryIDFK": $expense_category_idfk, "ExpenseDate": $expense_date, "ExpenseID": $expense_id, "ExpensePaymentMethodIDFK": $expense_payment_method_idfk, "FieldsToUpdate": $fields_to_update, "FileAttachmentIDs": $file_attachment_i_ds, "GroupTripName": $group_trip_name, "Merchant": $merchant, "MerchantTaxNumber": $merchant_tax_number, "Notes": $notes, "ProjectIDFK": $project_idfk, "Quantity": $quantity, "TaskIDFK": $task_idfk, "TaxIDFK": $tax_idfk, "TransactionTaxConfigCode": $transaction_tax_config_code, "VerifyAndSave": $verify_and_save, "isChargeable": $is_chargeable, "isReimbursable": $is_reimbursable} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"Amount": $amount, "CurrencyCode": $currency_code, "CustomerIDFK": $customer_idfk, "ExchangeRate": $exchange_rate, "ExpenseCategoryIDFK": $expense_category_idfk, "ExpenseDate": $expense_date, "ExpenseID": $expense_id, "ExpensePaymentMethodIDFK": $expense_payment_method_idfk, "FieldsToUpdate": $fields_to_update, "FileAttachmentIDs": $file_attachment_i_ds, "GroupTripName": $group_trip_name, "Merchant": $merchant, "MerchantTaxNumber": $merchant_tax_number, "Notes": $notes, "ProjectIDFK": $project_idfk, "Quantity": $quantity, "TaskIDFK": $task_idfk, "TaxIDFK": $tax_idfk, "TransactionTaxConfigCode": $transaction_tax_config_code, "VerifyAndSave": $verify_and_save, "isChargeable": $is_chargeable, "isReimbursable": $is_reimbursable} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /api/Expense/Attachment
 #
 # operationId: ExpenseAttachment
-export def "expense-attachment post" [
+export def "expense-attachment create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1052,19 +1089,19 @@ export def "expense-attachment post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/Expense/Attachment")
-  let body = {"File": $file} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"File": $file} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let body = if ($file | is-not-empty) { $body | upsert File (open -r $file) } else { $body }
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body ["File"])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # Gets an Expense Entry by Expense ID
 #
 # GET /api/Expense/{id}
 # operationId: Expense_GetByID
-export def "expense get-by" [
+export def "expense get" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1078,7 +1115,7 @@ export def "expense get-by" [
 ]: nothing -> record<Amount: float, AttachmentPreviewURL: string, AttachmentURL: string, ChargeableStatusCode: string, CurrencyCode: string, CustomerIDFK: int, CustomerName: string, DateCreated: string, DateUpdated: string, Email: string, ExchangeRate: float, ExpenseApprovalStatusCode: string, ExpenseCategoryHasUnitPrice: bool, ExpenseCategoryIDFK: int, ExpenseCategoryName: string, ExpenseCategoryUnitName: string, ExpenseCategoryUnitPrice: float, ExpenseDate: string, ExpenseID: int, ExpensePaymentMethodIDFK: int, ExpensePaymentMethodName: string, ExpenseReimbursementIDFK: int, ExpenseReimbursementStatusCode: string, ExpenseReportIDFK: int, ExpenseReportName: string, FileAttachmentIDFK: int, Firstname: string, Lastname: string, Merchant: string, MerchantTaxNumber: string, Notes: string, ProjectCode: string, ProjectIDFK: int, ProjectTitle: string, Quantity: float, TaskIDFK: int, TaskTitle: string, TaxAmount: float, TaxIDFK: int, TaxName: string, TransactionTaxConfigCode: string, TransactionTaxConfigName: string, UserIDFK: int, isChargeable: bool, isOfficialExchangeRate: bool, isReimbursable: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/Expense/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Expense/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1088,7 +1125,7 @@ export def "expense get-by" [
 #
 # POST /api/ExpenseApproval/Submit
 # operationId: ExpenseApproval
-export def "expense-approval-submit post" [
+export def "expense-approval-submit create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1107,10 +1144,11 @@ export def "expense-approval-submit post" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "UserID" $user_id "scalar") (serialize-qp "SendNotifications" $send_notifications "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/ExpenseApproval/Submit" $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets list of Expense Categories
@@ -1169,7 +1207,7 @@ export def "expense-group-lookup get" [
 #
 # GET /api/ExpenseMerchant/Lookup
 # operationId: ExpenseMerchangeLookup
-export def "expense-merchant-lookup get" [
+export def "expense-merchant-lookup get-merchange" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1229,10 +1267,10 @@ export def "expense-summary get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --model-group-by: list # (Optional) Combine one, two or three levels of Grouping. Combine these possible grouping values: "Category", "ChargeableStatus", "Merchant", "ApprovalStatus", "ReimbursementStatus", "Customer", "Project", "User", "Task", "Year", "Month", "Day", "Week".
+  --model-group-by: list<string> # (Optional) Combine one, two or three levels of Grouping. Combine these possible grouping values: "Category", "ChargeableStatus", "Merchant", "ApprovalStatus", "ReimbursementStatus", "Customer", "Project", "User", "Task", "Year", "Month", "Day", "Week".
   --model-expense-date-from: string # (Required) Filter for expenses with expense dates greater or equal to the specified date. e.g. 2019-01-25. (format: date-time)
-  --model-expense-date-to: string # (Required) Filter for expenses with an expense date smaller or equal to the specified  date. e.g. 2019-01-25. (format: date-time)
-  --model-user-id: list # (Optional) Defaults to the current user. Provide one or more UserIDs of Users whose expenses should be retrieved. If the current user doesn't have impersonation rights, then they will only see their own data.
+  --model-expense-date-to: string # (Required) Filter for expenses with an expense date smaller or equal to the specified date. e.g. 2019-01-25. (format: date-time)
+  --model-user-id: list<int> # (Optional) Defaults to the current user. Provide one or more UserIDs of Users whose expenses should be retrieved. If the current user doesn't have impersonation rights, then they will only see their own data.
   --model-project-id: int # (Optional) Filter by Project (format: int32)
 ]: nothing -> record<ExpenseDateFrom: string, ExpenseDateTo: string, GroupData: table<GroupData: list, GroupID: string, GroupName: string, TotalAmount: float>, GroupingLevels: list<string>, TotalAmount: float, UserID: list<int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1281,7 +1319,7 @@ export def "fixed-amount get" [
 #
 # GET /api/Inventory
 # operationId: Inventory_Get
-export def "inventory get" [
+export def "inventory list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1308,7 +1346,7 @@ export def "inventory get" [
 #
 # GET /api/Inventory/{id}
 # operationId: Inventory_GetByID
-export def "inventory get-by" [
+export def "inventory get" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1322,7 +1360,7 @@ export def "inventory get-by" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/Inventory/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Inventory/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1332,7 +1370,7 @@ export def "inventory get-by" [
 #
 # GET /api/Invoice
 # operationId: Invoice_Get
-export def "invoice get" [
+export def "invoice list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1386,7 +1424,7 @@ export def "invoice create" [
   --lastname: string # Specified value will be used to create a new customer contact only if a new customer is being created.
   --line-items: list # item shape: {Description?: string, Discount?: float, InventoryItemIDFK?: int, InventoryItemName?: string, ProjectIDFK?: int, Quantity: float, TaxIDFK?: int, TaxName?: string, TaxPercent?: float, UnitPrice: float}
   --notes: string # Plain UTF8 text. (no HTML). Max 2000 characters
-  --payment-terms: int #  "If left blank we will set it to customer default. If specified then it must match one of your existing pre configured payment term periods. Your account starts with: (-1 --- Custom, 0 --- Upon Receipt, 7 --- 7 Days, 15 --- 15 Days, 30 --- 30 Days, 45 --- 45 Days, 60 --- 60 Days) (format: int32)
+  --payment-terms: int # "If left blank we will set it to customer default. If specified then it must match one of your existing pre configured payment term periods. Your account starts with: (-1 --- Custom, 0 --- Upon Receipt, 7 --- 7 Days, 15 --- 15 Days, 30 --- 30 Days, 45 --- 45 Days, 60 --- 60 Days) (format: int32)
   --subject: string # Plain UTF8 text. (no HTML). 255 characters max
   --transaction-prefix: string # A prefix for the Invoice number. e.g. 'INV'. If left blank it will be set to the account default. Max length 20 characters.
   --transaction-tax-config-code: string # Possible values are (EX --- Tax Exclusive, INC --- Tax Inclusive). If left empty it will use the account default.
@@ -1395,18 +1433,18 @@ export def "invoice create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/Invoice")
-  let body = {"CompanyIDFK": $company_idfk, "CompanyName": $company_name, "CurrencyCode": $currency_code, "CustomerPONumber": $customer_po_number, "DateIssued": $date_issued, "DueDate": $due_date, "Email": $email, "ExchangeRate": $exchange_rate, "Firstname": $firstname, "InvoiceNumber": $invoice_number, "InvoiceTemplateIDFK": $invoice_template_idfk, "Lastname": $lastname, "LineItems": $line_items, "Notes": $notes, "PaymentTerms": $payment_terms, "Subject": $subject, "TransactionPrefix": $transaction_prefix, "TransactionTaxConfigCode": $transaction_tax_config_code} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"CompanyIDFK": $company_idfk, "CompanyName": $company_name, "CurrencyCode": $currency_code, "CustomerPONumber": $customer_po_number, "DateIssued": $date_issued, "DueDate": $due_date, "Email": $email, "ExchangeRate": $exchange_rate, "Firstname": $firstname, "InvoiceNumber": $invoice_number, "InvoiceTemplateIDFK": $invoice_template_idfk, "Lastname": $lastname, "LineItems": $line_items, "Notes": $notes, "PaymentTerms": $payment_terms, "Subject": $subject, "TransactionPrefix": $transaction_prefix, "TransactionTaxConfigCode": $transaction_tax_config_code} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets Invoice by Invoice ID
 #
 # GET /api/Invoice/{id}
 # operationId: Invoice_GetByID
-export def "invoice get-by" [
+export def "invoice get" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1420,7 +1458,7 @@ export def "invoice get-by" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/Invoice/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Invoice/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1430,7 +1468,7 @@ export def "invoice get-by" [
 #
 # GET /api/Payment
 # operationId: Payment_Get
-export def "payment get" [
+export def "payment list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1483,18 +1521,18 @@ export def "payment create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/Payment")
-  let body = {"Amount": $amount, "CustomerIDFK": $customer_idfk, "DateIssued": $date_issued, "ExchangeRate": $exchange_rate, "Notes": $notes, "PaymentAllocations": $payment_allocations, "PaymentNumber": $payment_number, "PaymentProviderCode": $payment_provider_code, "TransactionPrefix": $transaction_prefix, "TransactionReference": $transaction_reference} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"Amount": $amount, "CustomerIDFK": $customer_idfk, "DateIssued": $date_issued, "ExchangeRate": $exchange_rate, "Notes": $notes, "PaymentAllocations": $payment_allocations, "PaymentNumber": $payment_number, "PaymentProviderCode": $payment_provider_code, "TransactionPrefix": $transaction_prefix, "TransactionReference": $transaction_reference} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets Payment by Payment Transaction ID
 #
 # GET /api/Payment/{id}
 # operationId: Payment_GetByID
-export def "payment get-by" [
+export def "payment get" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1508,7 +1546,7 @@ export def "payment get-by" [
 ]: nothing -> record<AccountIDFK: int, Balance: float, CurrencyCode: string, CustomerIDFK: int, DateCreated: string, DateIssued: string, DateUpdated: string, ExchangeRate: float, Notes: string, PaymentAllocations: table<AllocationAmount: float, AllocationDate: string, InvoiceTransactionIDFK: int, PaymentTransactionIDFK: int, TransactionAllocationID: int>, PaymentNumber: string, PaymentProviderCode: string, TotalAmount: float, TransactionID: int, TransactionPrefix: string, TransactionReference: string, TransactionStatusCode: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/Payment/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Payment/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1518,7 +1556,7 @@ export def "payment get-by" [
 #
 # GET /api/Project
 # operationId: Project_Get
-export def "project get" [
+export def "project list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1578,11 +1616,11 @@ export def "project create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/Project")
-  let body = {"BudgetAmount": $budget_amount, "BudgetHours": $budget_hours, "CompanyIDFK": $company_idfk, "CompanyName": $company_name, "CurrencyCode": $currency_code, "EndDate": $end_date, "PopulateDefaultProjectMembers": $populate_default_project_members, "ProjectCategoryIDFK": $project_category_idfk, "ProjectCode": $project_code, "ProjectNotes": $project_notes, "ProjectStatusCode": $project_status_code, "ProjectTitle": $project_title, "StartDate": $start_date, "TimesheetApprovalRequiredbyDefault": $timesheet_approval_requiredby_default, "isTaskRequiredOnTimesheet": $is_task_required_on_timesheet} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"BudgetAmount": $budget_amount, "BudgetHours": $budget_hours, "CompanyIDFK": $company_idfk, "CompanyName": $company_name, "CurrencyCode": $currency_code, "EndDate": $end_date, "PopulateDefaultProjectMembers": $populate_default_project_members, "ProjectCategoryIDFK": $project_category_idfk, "ProjectCode": $project_code, "ProjectNotes": $project_notes, "ProjectStatusCode": $project_status_code, "ProjectTitle": $project_title, "StartDate": $start_date, "TimesheetApprovalRequiredbyDefault": $timesheet_approval_requiredby_default, "isTaskRequiredOnTimesheet": $is_task_required_on_timesheet} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update an Project
@@ -1602,7 +1640,7 @@ export def "project update" [
   --budget-amount: float # format: double
   --budget-hours: float # format: double
   --end-date: string # format: date-time
-  --fields-to-update: list
+  --fields-to-update: list<string>
   --project-billable-type-code: string # The billing method of the project. (string, optional) Possible values: CategoryHourly, NoRate, NotBillable, PersonHourly, ProjectHourly
   --project-budget-type-code: string # The project budgeting type. (string, optional) Possible values: NoBudget, PersonHours, ProjectFees, ProjectHours, CategoryHours
   --project-category-idfk: int # format: int32
@@ -1618,11 +1656,11 @@ export def "project update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/Project")
-  let body = {"BudgetAmount": $budget_amount, "BudgetHours": $budget_hours, "EndDate": $end_date, "FieldsToUpdate": $fields_to_update, "ProjectBillableTypeCode": $project_billable_type_code, "ProjectBudgetTypeCode": $project_budget_type_code, "ProjectCategoryIDFK": $project_category_idfk, "ProjectID": $project_id, "ProjectNotes": $project_notes, "ProjectStatusCode": $project_status_code, "ProjectTitle": $project_title, "StartDate": $start_date, "TimesheetApprovalRequiredbyDefault": $timesheet_approval_requiredby_default, "isTaskRequiredOnTimesheet": $is_task_required_on_timesheet} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"BudgetAmount": $budget_amount, "BudgetHours": $budget_hours, "EndDate": $end_date, "FieldsToUpdate": $fields_to_update, "ProjectBillableTypeCode": $project_billable_type_code, "ProjectBudgetTypeCode": $project_budget_type_code, "ProjectCategoryIDFK": $project_category_idfk, "ProjectID": $project_id, "ProjectNotes": $project_notes, "ProjectStatusCode": $project_status_code, "ProjectTitle": $project_title, "StartDate": $start_date, "TimesheetApprovalRequiredbyDefault": $timesheet_approval_requiredby_default, "isTaskRequiredOnTimesheet": $is_task_required_on_timesheet} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets minimal list of active Projects for the current user
@@ -1658,7 +1696,7 @@ export def "project-lookup get" [
 #
 # GET /api/Project/{id}
 # operationId: Project_GetByID
-export def "project get-by" [
+export def "project get" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1672,7 +1710,7 @@ export def "project get-by" [
 ]: nothing -> record<BudgetAmount: float, BudgetHours: float, CompanyIDFK: int, CompanyName: string, DateCreated: string, DateUpdated: string, DefaultAccountTaskTypeIDFK: int, DefaultAccountTaskTypeName: string, EndDate: string, Members: table<BudgetAmount: float, CostAmount: float, Email: string, Firstname: string, Fullname: string, Lastname: string, ProjectIDFK: int, RateAmount: float, UserIDFK: int, canCommentOnTasks: bool, canCreateTasks: bool, canDeleteTasks: bool, canUpdateTasks: bool, isMemberDisabled: bool, isProjectManager: bool, isTimesheetAllowed: bool, isTimesheetApprovalRequired: bool, isTimesheetApprover: bool>, Notes: string, ProjectBillableTypeCode: string, ProjectBudgetTypeCode: string, ProjectCategoryColor: string, ProjectCategoryIDFK: int, ProjectCategoryName: string, ProjectCode: string, ProjectHourlyRate: float, ProjectID: int, ProjectOwnerUserIDFK: int, ProjectStatusCode: string, ProjectTags: table<Name: string, ProjectTagID: int>, Sections: table<DisplayOrder: int, EndDate: string, SectionID: int, StartDate: string, Title: string>, StartDate: string, Title: string, isArchived: bool, isTaskRequiredOnTimesheet: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/Project/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Project/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1736,11 +1774,11 @@ export def "project-member create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/ProjectMember")
-  let body = {"BudgetAmount": $budget_amount, "CostAmount": $cost_amount, "ProjectIDFK": $project_idfk, "RateAmount": $rate_amount, "UserIDFK": $user_idfk, "canCommentOnTasks": $can_comment_on_tasks, "canCreateTasks": $can_create_tasks, "canDeleteTasks": $can_delete_tasks, "canUpdateTasks": $can_update_tasks, "isProjectManager": $is_project_manager, "isTimesheetAllowed": $is_timesheet_allowed, "isTimesheetApprovalRequired": $is_timesheet_approval_required, "isTimesheetApprover": $is_timesheet_approver} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"BudgetAmount": $budget_amount, "CostAmount": $cost_amount, "ProjectIDFK": $project_idfk, "RateAmount": $rate_amount, "UserIDFK": $user_idfk, "canCommentOnTasks": $can_comment_on_tasks, "canCreateTasks": $can_create_tasks, "canDeleteTasks": $can_delete_tasks, "canUpdateTasks": $can_update_tasks, "isProjectManager": $is_project_manager, "isTimesheetAllowed": $is_timesheet_allowed, "isTimesheetApprovalRequired": $is_timesheet_approval_required, "isTimesheetApprover": $is_timesheet_approver} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update a Member of a Project
@@ -1759,7 +1797,7 @@ export def "project-member update" [
   --accept: string@accept-completer # Response content type
   --budget-amount: float # A new Budget Amount. Defaults to null. (format: double)
   --cost-amount: float # A new Cost Amount. Defaults to null. (format: double)
-  fields_to_update: list # A string array of field names to be updated.
+  fields_to_update: list<string> # A string array of field names to be updated.
   project_idfk: int # Required. The ProjectID (format: int32)
   --rate-amount: float # A new Rate Amount. Defaults to null. (format: double)
   user_idfk: int # Required. The UserID (format: int32)
@@ -1776,11 +1814,11 @@ export def "project-member update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/ProjectMember")
-  let body = {"BudgetAmount": $budget_amount, "CostAmount": $cost_amount, "FieldsToUpdate": $fields_to_update, "ProjectIDFK": $project_idfk, "RateAmount": $rate_amount, "UserIDFK": $user_idfk, "canCommentOnTasks": $can_comment_on_tasks, "canCreateTasks": $can_create_tasks, "canDeleteTasks": $can_delete_tasks, "canUpdateTasks": $can_update_tasks, "isProjectManager": $is_project_manager, "isTimesheetAllowed": $is_timesheet_allowed, "isTimesheetApprovalRequired": $is_timesheet_approval_required, "isTimesheetApprover": $is_timesheet_approver} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"BudgetAmount": $budget_amount, "CostAmount": $cost_amount, "FieldsToUpdate": $fields_to_update, "ProjectIDFK": $project_idfk, "RateAmount": $rate_amount, "UserIDFK": $user_idfk, "canCommentOnTasks": $can_comment_on_tasks, "canCreateTasks": $can_create_tasks, "canDeleteTasks": $can_delete_tasks, "canUpdateTasks": $can_update_tasks, "isProjectManager": $is_project_manager, "isTimesheetAllowed": $is_timesheet_allowed, "isTimesheetApprovalRequired": $is_timesheet_approval_required, "isTimesheetApprover": $is_timesheet_approver} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets list of Project Timesheet Categories
@@ -1834,11 +1872,11 @@ export def "project-timesheet-category create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/ProjectTimesheetCategory")
-  let body = {"BudgetHours": $budget_hours, "CostAmount": $cost_amount, "ProjectIDFK": $project_idfk, "RateAmount": $rate_amount, "TimesheetCategoryIDFK": $timesheet_category_idfk, "isBillable": $is_billable, "isPayable": $is_payable} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"BudgetHours": $budget_hours, "CostAmount": $cost_amount, "ProjectIDFK": $project_idfk, "RateAmount": $rate_amount, "TimesheetCategoryIDFK": $timesheet_category_idfk, "isBillable": $is_billable, "isPayable": $is_payable} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets list of Schedule Assignments.
@@ -1856,7 +1894,7 @@ export def "schedule-assignment get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --updated-after: string # Limit results to records updated after the specified date (format: date-time)
-  --schedule-date-from: string # Filter for schedule assignement  that are  on or after a specific date (format: date-time)
+  --schedule-date-from: string # Filter for schedule assignement that are on or after a specific date (format: date-time)
   --schedule-date-to: string # Filter for schedules that are on or before a specific date (format: date-time)
   --schedule-series-id: int # Filter to records for a particular Schedule Series (format: int64)
   --user-id: int # The UserID of a schedule user to filter assignments for. Only api users with Admin role can see all schedules across all users. Users with ScheduleUser role can access their own ScheduleSeries. (format: int32)
@@ -1986,11 +2024,11 @@ export def "section create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/Section")
-  let body = {"EndDateUTC": $end_date_utc, "ProjectIDFK": $project_idfk, "StartDateUTC": $start_date_utc, "Title": $title} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"EndDateUTC": $end_date_utc, "ProjectIDFK": $project_idfk, "StartDateUTC": $start_date_utc, "Title": $title} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a Task
@@ -2022,7 +2060,7 @@ export def "task delete" [
 #
 # GET /api/Task
 # operationId: Task_Get
-export def "task get" [
+export def "task list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2064,7 +2102,7 @@ export def "task create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --account-task-type-idfk: int # format: int32
-  --assigned-to-user-idf-ks: list
+  --assigned-to-user-idf-ks: list<int>
   --date-due: string # format: date-time
   --date-start: string # format: date-time
   --description: string
@@ -2079,11 +2117,11 @@ export def "task create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/Task")
-  let body = {"AccountTaskTypeIDFK": $account_task_type_idfk, "AssignedToUserIDFKs": $assigned_to_user_idf_ks, "DateDue": $date_due, "DateStart": $date_start, "Description": $description, "EstimatedEffort": $estimated_effort, "ProjectIDFK": $project_idfk, "SectionIDFK": $section_idfk, "Tags": $tags, "TaskPriorityCode": $task_priority_code, "Title": $title} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"AccountTaskTypeIDFK": $account_task_type_idfk, "AssignedToUserIDFKs": $assigned_to_user_idf_ks, "DateDue": $date_due, "DateStart": $date_start, "Description": $description, "EstimatedEffort": $estimated_effort, "ProjectIDFK": $project_idfk, "SectionIDFK": $section_idfk, "Tags": $tags, "TaskPriorityCode": $task_priority_code, "Title": $title} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update a Task.
@@ -2101,12 +2139,12 @@ export def "task update" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --assigned-to-user-idfk: list
+  --assigned-to-user-idfk: list<int>
   --date-due: string # format: date-time
   --date-start: string # format: date-time
   --description: string
   --estimated-effort: float # Decimal hours (format: double)
-  fields_to_update: list
+  fields_to_update: list<string>
   --percent-complete: int # format: int32
   --section-idfk: int # format: int32
   --tags: list # item shape: {Color?: string, Name?: string}
@@ -2119,11 +2157,11 @@ export def "task update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/Task")
-  let body = {"AssignedToUserIDFK": $assigned_to_user_idfk, "DateDue": $date_due, "DateStart": $date_start, "Description": $description, "EstimatedEffort": $estimated_effort, "FieldsToUpdate": $fields_to_update, "PercentComplete": $percent_complete, "SectionIDFK": $section_idfk, "Tags": $tags, "TaskID": $task_id, "TaskPriorityCode": $task_priority_code, "TaskStatusCode": $task_status_code, "Title": $title} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"AssignedToUserIDFK": $assigned_to_user_idfk, "DateDue": $date_due, "DateStart": $date_start, "Description": $description, "EstimatedEffort": $estimated_effort, "FieldsToUpdate": $fields_to_update, "PercentComplete": $percent_complete, "SectionIDFK": $section_idfk, "Tags": $tags, "TaskID": $task_id, "TaskPriorityCode": $task_priority_code, "TaskStatusCode": $task_status_code, "Title": $title} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets minimal list of Tasks for the current user
@@ -2159,7 +2197,7 @@ export def "task-lookup get" [
 #
 # GET /api/Task/{id}
 # operationId: Task_GetByID
-export def "task get-by" [
+export def "task get" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2173,7 +2211,7 @@ export def "task get-by" [
 ]: nothing -> record<AccountTaskTypeIDFK: int, ActualTime: float, AssignedToUsers: table<AssignedToEmail: string, AssignedToFirstname: string, AssignedToLastname: string, AssignedToUserIDFK: int>, DateCompleted: string, DateCreated: string, DateDue: string, DateStart: string, DateUpdated: string, Description: string, DescriptionNoHTML: string, EstimatedEffort: float, PercentComplete: float, ProjectCode: string, ProjectIDFK: int, ProjectTitle: string, SectionIDFK: int, SectionTitle: string, Tags: table<Color: string, Name: string, TagID: int>, TaskID: int, TaskPriorityCode: string, TaskPriorityName: string, TaskStatusCode: string, TaskStatusName: string, Title: string, isCompleteStatus: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/Task/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Task/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2252,7 +2290,7 @@ export def "tax get" [
 #
 # GET /api/Timesheet
 # operationId: Timesheet_Get
-export def "timesheet get" [
+export def "timesheet list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2315,11 +2353,11 @@ export def "timesheet create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/Timesheet")
-  let body = {"CustomMetadata": $custom_metadata, "Duration": $duration, "EntryDate": $entry_date, "Notes": $notes, "ProjectIDFK": $project_idfk, "TaskIDFK": $task_idfk, "TimesheetCategoryIDFK": $timesheet_category_idfk, "UserIDFK": $user_idfk, "hasStartEndTime": $has_start_end_time, "isInvoiced": $is_invoiced} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"CustomMetadata": $custom_metadata, "Duration": $duration, "EntryDate": $entry_date, "Notes": $notes, "ProjectIDFK": $project_idfk, "TaskIDFK": $task_idfk, "TimesheetCategoryIDFK": $timesheet_category_idfk, "UserIDFK": $user_idfk, "hasStartEndTime": $has_start_end_time, "isInvoiced": $is_invoiced} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update a Timesheet
@@ -2339,7 +2377,7 @@ export def "timesheet update" [
   --custom-metadata: string # Optional. free nvarchar field available via Api to store any additional metadata against a timesheet. We suggest you use Json or your preferred serialisation format. 1000 characters max.
   --duration: float # format: double
   --entry-date: string # format: date-time
-  fields_to_update: list
+  fields_to_update: list<string>
   --notes: string
   project_idfk: int # format: int32
   --task-idfk: int # format: int32
@@ -2351,11 +2389,11 @@ export def "timesheet update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/Timesheet")
-  let body = {"CustomMetadata": $custom_metadata, "Duration": $duration, "EntryDate": $entry_date, "FieldsToUpdate": $fields_to_update, "Notes": $notes, "ProjectIDFK": $project_idfk, "TaskIDFK": $task_idfk, "TimeSheetEntryID": $time_sheet_entry_id, "TimesheetCategoryIDFK": $timesheet_category_idfk, "hasStartEndTime": $has_start_end_time} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"CustomMetadata": $custom_metadata, "Duration": $duration, "EntryDate": $entry_date, "FieldsToUpdate": $fields_to_update, "Notes": $notes, "ProjectIDFK": $project_idfk, "TaskIDFK": $task_idfk, "TimeSheetEntryID": $time_sheet_entry_id, "TimesheetCategoryIDFK": $timesheet_category_idfk, "hasStartEndTime": $has_start_end_time} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a Timesheet Entry
@@ -2376,7 +2414,7 @@ export def "timesheet delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/Timesheet/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Timesheet/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2386,7 +2424,7 @@ export def "timesheet delete" [
 #
 # GET /api/Timesheet/{id}
 # operationId: Timesheet_GetByID
-export def "timesheet get-by" [
+export def "timesheet get" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2400,7 +2438,7 @@ export def "timesheet get-by" [
 ]: nothing -> record<ApprovedBy: string, CategoryName: string, CustomMetadata: string, CustomerIDFK: int, CustomerName: string, DateApproved: string, DateCreated: string, DateUpdated: string, Duration: float, Email: string, EndTimeLocal: string, EndTimeUTC: string, EntryDate: string, Firstname: string, HasTimer: bool, InvoiceIDFK: int, InvoiceLineItemIDFK: int, Lastname: string, Notes: string, ProjectCode: string, ProjectIDFK: int, ProjectTitle: string, StartTimeLocal: string, StartTimeUTC: string, TaskIDFK: int, TaskTitle: string, TimerStartedAtUTC: string, TimesheetCategoryIDFK: int, TimesheetEntryApprovalStatusCode: string, TimesheetEntryID: int, TimesheetUserTimeZone: string, UserIDFK: int, isBillable: bool, isInvoiced: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/Timesheet/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Timesheet/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2421,7 +2459,7 @@ export def "timesheet-submission create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --send-notifications: oneof<nothing, bool> # Send email alerts to timesheet approvers. Defaults to true
-  --whole-week-of: string # A date (yyyy-MM-dd) that falls within  a Week to have all timesheets in that week submitted. Respects the First Day of Week setting in your account Timesheet Settings to determine the week range. (format: date-time)
+  --whole-week-of: string # A date (yyyy-MM-dd) that falls within a Week to have all timesheets in that week submitted. Respects the First Day of Week setting in your account Timesheet Settings to determine the week range. (format: date-time)
   --whole-day-of: string # A date (yyyy-MM-dd) to submit all timesheets on this day (format: date-time)
   --user-id: int # The user to submit timesheets for. Defaults to current user. Only allowed to be different from the current user when the current user has rights to Impersonate other users. (format: int32)
 ]: nothing -> record {
@@ -2448,10 +2486,10 @@ export def "timesheet-summary get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --model-group-by: list # (Optional) Combine one, two or three levels of Grouping. Combine these possible grouping values: "Customer", "Project", "Category", "User", "Task", "Year", "Month", "Day", "Week".
+  --model-group-by: list<string> # (Optional) Combine one, two or three levels of Grouping. Combine these possible grouping values: "Customer", "Project", "Category", "User", "Task", "Year", "Month", "Day", "Week".
   --model-entry-date-from: string # (Required) Filter for timesheets greater or equal to the specified date. e.g. 2019-01-25. You can optionally include a time component, otherwise it assumes 00:00 (format: date-time)
-  --model-entry-date-to: string # (Required) Filter for timesheets with an entry date smaller or equal to the specified  date. e.g. 2019-01-25. You can optionally include a time component, otherwise it assumes 00:00 (format: date-time)
-  --model-user-id: list # (Optional) Defaults to the current user. Provide one or more UserIDs of Users whose timesheets should be retrieved. If the current user doesn't have impersonation rights, then they will only see their own data.
+  --model-entry-date-to: string # (Required) Filter for timesheets with an entry date smaller or equal to the specified date. e.g. 2019-01-25. You can optionally include a time component, otherwise it assumes 00:00 (format: date-time)
+  --model-user-id: list<int> # (Optional) Defaults to the current user. Provide one or more UserIDs of Users whose timesheets should be retrieved. If the current user doesn't have impersonation rights, then they will only see their own data.
   --model-project-id: int # (Optional) Filter by Project (format: int32)
   --model-is-billable: oneof<nothing, bool> # (Optional) Filter by the billable status of Timesheets.
   --model-is-invoiced: oneof<nothing, bool> # (Optional) Filter for timesheets by whether they have been Invoiced or not.
@@ -2465,7 +2503,7 @@ export def "timesheet-summary get" [
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Gets the  Running Timer if there is one for a user.
+# Gets the Running Timer if there is one for a user.
 #
 # GET /api/TimesheetTimer
 # operationId: TimesheetTimer_GetRunningTimer
@@ -2510,7 +2548,7 @@ export def "timesheet-timer stop" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "UserID" $user_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/TimesheetTimer/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/TimesheetTimer/{id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2536,7 +2574,7 @@ export def "timesheet-timer start" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "UserID" $user_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/TimesheetTimer/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/TimesheetTimer/{id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2599,7 +2637,7 @@ export def "webhook delete-by-url" [
 #
 # GET /api/Webhook
 # operationId: Webhook_Get
-export def "webhook get" [
+export def "webhook list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2640,11 +2678,11 @@ export def "webhook create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/Webhook")
-  let body = {"event": $event, "secret": $secret, "target_url": $target_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"event": $event, "secret": $secret, "target_url": $target_url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete Webhook Subscription by ID
@@ -2665,7 +2703,7 @@ export def "webhook delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/Webhook/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Webhook/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2675,7 +2713,7 @@ export def "webhook delete" [
 #
 # GET /api/Webhook/{id}
 # operationId: Webhook_GetByID
-export def "webhook get-by" [
+export def "webhook get" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2689,7 +2727,7 @@ export def "webhook get-by" [
 ]: nothing -> record<Webhooks: table<EventCode: string, NotificationURL: string, SubscriptionID: int, UserIDFK: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/Webhook/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Webhook/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -111,7 +120,7 @@ export def "location-browse get" [
 ]: nothing -> record<links: table<href: string, method: string, rel: string>, value: record<childContexts: list<record>, context: record<id: int, name: string, type: int, typeName: string>, parentContext: record<id: int, name: string, type: int, typeName: string>, stateOfTheParties: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({location_type: $location_type, location_name: $location_name} | format pattern "/api/Location/Browse/{location_type}/{location_name}"))
+  let full_url = (build-url $base ({location_type: (encode-path-segment $location_type), location_name: (encode-path-segment $location_name)} | format pattern "/api/Location/Browse/{location_type}/{location_name}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -160,7 +169,7 @@ export def "location-constituency get" [
 ]: nothing -> record<links: table<href: string, method: string, rel: string>, value: record<currentRepresentation: record<member: record, representation: record>, endDate: string, id: int, name: string, startDate: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/Location/Constituency/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Location/Constituency/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -183,7 +192,7 @@ export def "location-constituency-election-result-latest get" [
 ]: nothing -> record<links: table<href: string, method: string, rel: string>, value: record<candidates: list<record>, constituencyName: string, electionDate: string, electionId: int, electionTitle: string, electorate: int, isGeneralElection: bool, isNotional: bool, majority: int, result: string, turnout: int, winningParty: record<abbreviation: string, backgroundColour: string, foregroundColour: string, governmentType: int, id: int, isIndependentParty: bool, isLordsMainParty: bool, isLordsSpiritualParty: bool, name: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/Location/Constituency/{id}/ElectionResult/Latest"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Location/Constituency/{id}/ElectionResult/Latest"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -207,7 +216,7 @@ export def "location-constituency-election-result get" [
 ]: nothing -> record<links: table<href: string, method: string, rel: string>, value: record<candidates: list<record>, constituencyName: string, electionDate: string, electionId: int, electionTitle: string, electorate: int, isGeneralElection: bool, isNotional: bool, majority: int, result: string, turnout: int, winningParty: record<abbreviation: string, backgroundColour: string, foregroundColour: string, governmentType: int, id: int, isIndependentParty: bool, isLordsMainParty: bool, isLordsSpiritualParty: bool, name: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, election_id: $election_id} | format pattern "/api/Location/Constituency/{id}/ElectionResult/{election_id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), election_id: (encode-path-segment $election_id)} | format pattern "/api/Location/Constituency/{id}/ElectionResult/{election_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -230,7 +239,7 @@ export def "location-constituency-election-results get" [
 ]: nothing -> record<links: table<href: string, method: string, rel: string>, value: table<candidates: list, constituencyName: string, electionDate: string, electionId: int, electionTitle: string, electorate: int, isGeneralElection: bool, isNotional: bool, majority: int, result: string, turnout: int, winningParty: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/Location/Constituency/{id}/ElectionResults"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Location/Constituency/{id}/ElectionResults"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -253,7 +262,7 @@ export def "location-constituency-geometry get" [
 ]: nothing -> record<links: table<href: string, method: string, rel: string>, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/Location/Constituency/{id}/Geometry"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Location/Constituency/{id}/Geometry"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -276,7 +285,7 @@ export def "location-constituency-representations get" [
 ]: nothing -> record<links: table<href: string, method: string, rel: string>, value: table<member: record, representation: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/Location/Constituency/{id}/Representations"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Location/Constituency/{id}/Representations"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -299,7 +308,7 @@ export def "location-constituency-synopsis get" [
 ]: nothing -> record<links: table<href: string, method: string, rel: string>, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/Location/Constituency/{id}/Synopsis"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Location/Constituency/{id}/Synopsis"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -369,7 +378,7 @@ export def "members-history get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --ids: list # List of MemberIds to find
+  --ids: list<int> # List of MemberIds to find
 ]: nothing -> table<links: list<record>, value: record<houseMembershipHistory: list, id: int, nameHistory: list, partyHistory: list, thumbnailUrl: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -403,7 +412,7 @@ export def "members-search get" [
   --gender: string # Members with the gender specified
   --membership-started-since: string # Members who started on or after the date given (format: date-time)
   --membership-ended-membership-ended-since: string # Members who left the House on or after the date given (format: date-time)
-  --membership-ended-membership-end-reason-ids: list
+  --membership-ended-membership-end-reason-ids: list<int>
   --membership-in-date-range-was-member-on-or-after: string # Members who were active on or after the date specified (format: date-time)
   --membership-in-date-range-was-member-on-or-before: string # Members who were active on or before the date specified (format: date-time)
   --membership-in-date-range-was-member-of-house: int@membership-in-date-range-was-member-of-house-completer # Members who were active in the house specifid (format: int32)
@@ -469,7 +478,7 @@ export def "members get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "detailsForDate" $details_for_date "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/Members/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Members/{id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -492,7 +501,7 @@ export def "members-biography get" [
 ]: nothing -> record<links: table<href: string, method: string, rel: string>, value: record<committeeMemberships: list<record>, electionsContested: list<record>, governmentPosts: list<record>, houseMemberships: list<record>, oppositionPosts: list<record>, otherPosts: list<record>, partyAffiliations: list<record>, representations: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/Members/{id}/Biography"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Members/{id}/Biography"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -515,7 +524,7 @@ export def "members-contact get" [
 ]: nothing -> record<links: table<href: string, method: string, rel: string>, value: table<email: string, fax: string, isPreferred: bool, isWebAddress: bool, line1: string, line2: string, line3: string, line4: string, line5: string, notes: string, phone: string, postcode: string, type: string, typeDescription: string, typeId: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/Members/{id}/Contact"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Members/{id}/Contact"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -540,7 +549,7 @@ export def "members-contribution-summary get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/Members/{id}/ContributionSummary") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Members/{id}/ContributionSummary") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -565,7 +574,7 @@ export def "members-edms get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/Members/{id}/Edms") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Members/{id}/Edms") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -588,7 +597,7 @@ export def "members-experience get" [
 ]: nothing -> record<links: table<href: string, method: string, rel: string>, value: table<endMonth: int, endYear: int, id: int, organisation: string, startMonth: int, startYear: int, title: string, type: string, typeId: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/Members/{id}/Experience"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Members/{id}/Experience"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -611,7 +620,7 @@ export def "members-focus get" [
 ]: nothing -> record<links: table<href: string, method: string, rel: string>, value: table<category: string, focus: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/Members/{id}/Focus"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Members/{id}/Focus"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -634,7 +643,7 @@ export def "members-latest-election-result get" [
 ]: nothing -> record<links: table<href: string, method: string, rel: string>, value: record<candidates: list<record>, constituencyName: string, electionDate: string, electionId: int, electionTitle: string, electorate: int, isGeneralElection: bool, isNotional: bool, majority: int, result: string, turnout: int, winningParty: record<abbreviation: string, backgroundColour: string, foregroundColour: string, governmentType: int, id: int, isIndependentParty: bool, isLordsMainParty: bool, isLordsSpiritualParty: bool, name: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/Members/{id}/LatestElectionResult"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Members/{id}/LatestElectionResult"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -659,7 +668,7 @@ export def "members-portrait get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cropType" $crop_type "scalar") (serialize-qp "webVersion" $web_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/Members/{id}/Portrait") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Members/{id}/Portrait") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -682,7 +691,7 @@ export def "members-portrait-url get" [
 ]: nothing -> record<links: table<href: string, method: string, rel: string>, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/Members/{id}/PortraitUrl"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Members/{id}/PortraitUrl"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -707,7 +716,7 @@ export def "members-registered-interests get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "house" $house "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/Members/{id}/RegisteredInterests") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Members/{id}/RegisteredInterests") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -730,7 +739,7 @@ export def "members-staff get" [
 ]: nothing -> record<links: table<href: string, method: string, rel: string>, value: table<details: string, forename: string, surname: string, title: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/Members/{id}/Staff"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Members/{id}/Staff"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -753,7 +762,7 @@ export def "members-synopsis get" [
 ]: nothing -> record<links: table<href: string, method: string, rel: string>, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/Members/{id}/Synopsis"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Members/{id}/Synopsis"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -775,7 +784,7 @@ export def "members-thumbnail get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/Members/{id}/Thumbnail"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Members/{id}/Thumbnail"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -798,7 +807,7 @@ export def "members-thumbnail-url get" [
 ]: nothing -> record<links: table<href: string, method: string, rel: string>, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/Members/{id}/ThumbnailUrl"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Members/{id}/ThumbnailUrl"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -824,7 +833,7 @@ export def "members-voting get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "house" $house "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/Members/{id}/Voting") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Members/{id}/Voting") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -849,7 +858,7 @@ export def "members-written-questions get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/Members/{id}/WrittenQuestions") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Members/{id}/WrittenQuestions") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -872,7 +881,7 @@ export def "parties-get-active get" [
 ]: nothing -> record<items: table<links: list, value: record>, links: table<href: string, method: string, rel: string>, resultContext: string, skip: int, take: int, totalResults: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({house: $house} | format pattern "/api/Parties/GetActive/{house}"))
+  let full_url = (build-url $base ({house: (encode-path-segment $house)} | format pattern "/api/Parties/GetActive/{house}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -895,7 +904,7 @@ export def "parties-lords-by-type get" [
 ]: nothing -> record<items: table<links: list, value: record>, links: table<href: string, method: string, rel: string>, resultContext: string, skip: int, take: int, totalResults: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({for_date: $for_date} | format pattern "/api/Parties/LordsByType/{for_date}"))
+  let full_url = (build-url $base ({for_date: (encode-path-segment $for_date)} | format pattern "/api/Parties/LordsByType/{for_date}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -919,7 +928,7 @@ export def "parties-state-of-the-parties get" [
 ]: nothing -> record<items: table<links: list, value: record>, links: table<href: string, method: string, rel: string>, resultContext: string, skip: int, take: int, totalResults: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({house: $house, for_date: $for_date} | format pattern "/api/Parties/StateOfTheParties/{house}/{for_date}"))
+  let full_url = (build-url $base ({house: (encode-path-segment $house), for_date: (encode-path-segment $for_date)} | format pattern "/api/Parties/StateOfTheParties/{house}/{for_date}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -942,7 +951,7 @@ export def "posts-departments get" [
 ]: nothing -> table<id: int, imageUrl: string, name: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({type: $type} | format pattern "/api/Posts/Departments/{type}"))
+  let full_url = (build-url $base ({type: (encode-path-segment $type)} | format pattern "/api/Posts/Departments/{type}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1013,7 +1022,7 @@ export def "posts-speaker-and-deputies get" [
 ]: nothing -> table<links: list<record>, value: record<gender: string, id: int, latestHouseMembership: record, latestParty: record, nameAddressAs: string, nameDisplayAs: string, nameFullTitle: string, nameListAs: string, thumbnailUrl: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({for_date: $for_date} | format pattern "/api/Posts/SpeakerAndDeputies/{for_date}"))
+  let full_url = (build-url $base ({for_date: (encode-path-segment $for_date)} | format pattern "/api/Posts/SpeakerAndDeputies/{for_date}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1109,7 +1118,7 @@ export def "reference-departments-logo get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/Reference/Departments/{id}/Logo"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Reference/Departments/{id}/Logo"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

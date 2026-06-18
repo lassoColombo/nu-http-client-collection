@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -73,7 +82,7 @@ def object-type-completer [] { ["AccPayCredit" "AccPayPayment" "AccRec" "AccRecC
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "associations get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "associations get-by-object" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -97,7 +106,7 @@ export def commands []: nothing -> table {
 #
 # GET /Associations/{ObjectId}
 # operationId: getAssociationsByObject
-export def "associations get" [
+export def "associations get-by-object" [
   object_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -111,11 +120,11 @@ export def "associations get" [
 ]: nothing -> table<FileId: string, ObjectGroup: string, ObjectId: string, ObjectType: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({object_id: $object_id} | format pattern "/Associations/{object_id}"))
-  let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({object_id: (encode-path-segment $object_id)} | format pattern "/Associations/{object_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -141,10 +150,10 @@ export def "files list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Files" $qp)
-  let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -163,7 +172,7 @@ export def "files upload" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --folder-id: string # pass an optional folder id to save file to specific folder (format: uuid, e.g. 4ff1e5cc-9835-40d5-bb18-09fdb118db9c)
   --xero-tenant-id: string # Xero identifier for Tenant (e.g. YOUR_XERO_TENANT_ID)
-  --body-body: string # format: byte
+  --body: string # format: byte
   --filename: string
   --mime-type: string
   --name: string # exact name of the file you are uploading
@@ -173,13 +182,14 @@ export def "files upload" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "FolderId" $folder_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Files" $qp)
-  let body = {"body": $body_body, "filename": $filename, "mimeType": $mime_type, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"body": $body, "filename": $filename, "mimeType": $mime_type, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let mp = (build-multipart-body $req_body [])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # Deletes a specific file
@@ -200,11 +210,11 @@ export def "files delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({file_id: $file_id} | format pattern "/Files/{file_id}"))
-  let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/Files/{file_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -226,11 +236,11 @@ export def "files get" [
 ]: nothing -> record<CreatedDateUtc: string, FolderId: string, Id: string, MimeType: string, Name: string, Size: int, UpdatedDateUtc: string, User: record<FirstName: string, FullName: string, Id: string, LastName: string, Name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({file_id: $file_id} | format pattern "/Files/{file_id}"))
-  let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/Files/{file_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -262,14 +272,14 @@ export def "files update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({file_id: $file_id} | format pattern "/Files/{file_id}"))
-  let body = {"CreatedDateUtc": $created_date_utc, "FolderId": $folder_id, "Id": $id, "MimeType": $mime_type, "Name": $name, "Size": $size, "UpdatedDateUtc": $updated_date_utc, "User": $user} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/Files/{file_id}"))
+  let req_body = {"CreatedDateUtc": $created_date_utc, "FolderId": $folder_id, "Id": $id, "MimeType": $mime_type, "Name": $name, "Size": $size, "UpdatedDateUtc": $updated_date_utc, "User": $user} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieves a specific file associations
@@ -290,11 +300,11 @@ export def "files-associations get" [
 ]: nothing -> table<FileId: string, ObjectGroup: string, ObjectId: string, ObjectType: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({file_id: $file_id} | format pattern "/Files/{file_id}/Associations"))
-  let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/Files/{file_id}/Associations"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -321,14 +331,14 @@ export def "files-associations create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({file_id: $file_id} | format pattern "/Files/{file_id}/Associations"))
-  let body = {"FileId": $body_file_id, "ObjectGroup": $object_group, "ObjectId": $object_id, "ObjectType": $object_type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/Files/{file_id}/Associations"))
+  let req_body = {"FileId": $body_file_id, "ObjectGroup": $object_group, "ObjectId": $object_id, "ObjectType": $object_type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes an existing file association
@@ -350,11 +360,11 @@ export def "files-associations delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({file_id: $file_id, object_id: $object_id} | format pattern "/Files/{file_id}/Associations/{object_id}"))
-  let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id), object_id: (encode-path-segment $object_id)} | format pattern "/Files/{file_id}/Associations/{object_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -376,11 +386,11 @@ export def "files-content get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({file_id: $file_id} | format pattern "/Files/{file_id}/Content"))
-  let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/Files/{file_id}/Content"))
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -404,10 +414,10 @@ export def "folders list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Folders" $qp)
-  let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -427,7 +437,7 @@ export def "folders create" [
   --xero-tenant-id: string # Xero identifier for Tenant (e.g. YOUR_XERO_TENANT_ID)
   --email: string # The email address used to email files to the inbox. Only the inbox will have this element. (e.g. foo@bar.com)
   --file-count: int # The number of files in the folder (e.g. 5)
-  --id: string # Xero unique identifier for a folder  Files (format: uuid, e.g. 4ff1e5cc-9835-40d5-bb18-09fdb118db9c)
+  --id: string # Xero unique identifier for a folder Files (format: uuid, e.g. 4ff1e5cc-9835-40d5-bb18-09fdb118db9c)
   --is-inbox: oneof<nothing, bool> # to indicate if the folder is the Inbox. The Inbox cannot be renamed or deleted. (e.g. true)
   --name: string # The name of the folder (e.g. assets)
 ]: any -> record<Email: string, FileCount: int, Id: string, IsInbox: bool, Name: string> {
@@ -435,13 +445,13 @@ export def "folders create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Folders")
-  let body = {"Email": $email, "FileCount": $file_count, "Id": $id, "IsInbox": $is_inbox, "Name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"Email": $email, "FileCount": $file_count, "Id": $id, "IsInbox": $is_inbox, "Name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes a folder
@@ -462,11 +472,11 @@ export def "folders delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({folder_id: $folder_id} | format pattern "/Folders/{folder_id}"))
-  let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({folder_id: (encode-path-segment $folder_id)} | format pattern "/Folders/{folder_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -488,11 +498,11 @@ export def "folders get" [
 ]: nothing -> record<Email: string, FileCount: int, Id: string, IsInbox: bool, Name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({folder_id: $folder_id} | format pattern "/Folders/{folder_id}"))
-  let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({folder_id: (encode-path-segment $folder_id)} | format pattern "/Folders/{folder_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -513,21 +523,21 @@ export def "folders update" [
   --xero-tenant-id: string # Xero identifier for Tenant (e.g. YOUR_XERO_TENANT_ID)
   --email: string # The email address used to email files to the inbox. Only the inbox will have this element. (e.g. foo@bar.com)
   --file-count: int # The number of files in the folder (e.g. 5)
-  --id: string # Xero unique identifier for a folder  Files (format: uuid, e.g. 4ff1e5cc-9835-40d5-bb18-09fdb118db9c)
+  --id: string # Xero unique identifier for a folder Files (format: uuid, e.g. 4ff1e5cc-9835-40d5-bb18-09fdb118db9c)
   --is-inbox: oneof<nothing, bool> # to indicate if the folder is the Inbox. The Inbox cannot be renamed or deleted. (e.g. true)
   --name: string # The name of the folder (e.g. assets)
 ]: any -> record<Email: string, FileCount: int, Id: string, IsInbox: bool, Name: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({folder_id: $folder_id} | format pattern "/Folders/{folder_id}"))
-  let body = {"Email": $email, "FileCount": $file_count, "Id": $id, "IsInbox": $is_inbox, "Name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({folder_id: (encode-path-segment $folder_id)} | format pattern "/Folders/{folder_id}"))
+  let req_body = {"Email": $email, "FileCount": $file_count, "Id": $id, "IsInbox": $is_inbox, "Name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieves inbox folder
@@ -548,9 +558,9 @@ export def "inbox get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Inbox")
-  let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

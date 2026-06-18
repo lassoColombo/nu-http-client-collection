@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -72,7 +81,7 @@ def storage-mode-completer [] { ["LOCAL" "TIERED"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "clusters-scram-secrets post" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "clusters-scram-secrets create-batch-associate" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -92,11 +101,11 @@ export def commands []: nothing -> table {
   }
 }
 
-#              <p>Associates one or more Scram Secrets with an Amazon MSK cluster.</p>
+# Associates one or more Scram Secrets with an Amazon MSK cluster.
 #
 # POST /v1/clusters/{clusterArn}/scram-secrets
 # operationId: BatchAssociateScramSecret
-export def "clusters-scram-secrets post" [
+export def "clusters-scram-secrets create-batch-associate" [
   cluster_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -113,26 +122,26 @@ export def "clusters-scram-secrets post" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  secret_arn_list: list #              <p>List of AWS Secrets Manager secret ARNs.</p>
+  secret_arn_list: list<string> # List of AWS Secrets Manager secret ARNs.
 ]: any -> record<ClusterArn: record, UnprocessedScramSecrets: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({cluster_arn: $cluster_arn} | format pattern "/v1/clusters/{cluster_arn}/scram-secrets"))
-  let body = {"secretArnList": $secret_arn_list} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({cluster_arn: (encode-path-segment $cluster_arn)} | format pattern "/v1/clusters/{cluster_arn}/scram-secrets"))
+  let req_body = {"secretArnList": $secret_arn_list} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-#              <p>Disassociates one or more Scram Secrets from an Amazon MSK cluster.</p>
+# Disassociates one or more Scram Secrets from an Amazon MSK cluster.
 #
 # PATCH /v1/clusters/{clusterArn}/scram-secrets
 # operationId: BatchDisassociateScramSecret
-export def "clusters-scram-secrets patch" [
+export def "clusters-scram-secrets update-batch-disassociate" [
   cluster_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -149,22 +158,22 @@ export def "clusters-scram-secrets patch" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  secret_arn_list: list #              <p>List of AWS Secrets Manager secret ARNs.</p>
+  secret_arn_list: list<string> # List of AWS Secrets Manager secret ARNs.
 ]: any -> record<ClusterArn: record, UnprocessedScramSecrets: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({cluster_arn: $cluster_arn} | format pattern "/v1/clusters/{cluster_arn}/scram-secrets"))
-  let body = {"secretArnList": $secret_arn_list} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({cluster_arn: (encode-path-segment $cluster_arn)} | format pattern "/v1/clusters/{cluster_arn}/scram-secrets"))
+  let req_body = {"secretArnList": $secret_arn_list} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-#              <p>Returns a list of the Scram Secrets associated with an Amazon MSK cluster.</p>
+# Returns a list of the Scram Secrets associated with an Amazon MSK cluster.
 #
 # GET /v1/clusters/{clusterArn}/scram-secrets
 # operationId: ListScramSecrets
@@ -178,8 +187,8 @@ export def "clusters-scram-secrets list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --max-results: int #              <p>The maxResults of the query.</p>
-  --next-token: string #              <p>The nextToken of the query.</p>
+  --max-results: int # The maxResults of the query.
+  --next-token: string # The nextToken of the query.
   --max-results: string # Pagination limit
   --next-token: string # Pagination token
   --x-amz-content-sha256: string
@@ -193,15 +202,15 @@ export def "clusters-scram-secrets list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({cluster_arn: $cluster_arn} | format pattern "/v1/clusters/{cluster_arn}/scram-secrets") $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({cluster_arn: (encode-path-segment $cluster_arn)} | format pattern "/v1/clusters/{cluster_arn}/scram-secrets") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-#              <p>Creates a new MSK cluster.</p>
+# Creates a new MSK cluster.
 #
 # POST /v1/clusters
 # operationId: CreateCluster
@@ -227,33 +236,33 @@ export def "clusters create" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  broker_node_group_info: record #              <p>Describes the setup to be used for Apache Kafka broker nodes in the cluster.</p> — shape: {BrokerAZDistribution?: any, ClientSubnets?: any, InstanceType?: any, SecurityGroups?: any, StorageInfo?: any, ConnectivityInfo?: any}
-  --client-authentication: record #              <p>Includes all client authentication information.</p> — shape: {Sasl?: any, Tls?: any, Unauthenticated?: any}
-  cluster_name: string #              <p>The name of the cluster.</p>
-  --configuration-info: record #              <p>Specifies the configuration to use for the brokers.</p> — shape: {Arn?: any, Revision?: any}
-  --encryption-info: record #              <p>Includes encryption-related information, such as the AWS KMS key used for encrypting data at rest and whether you want MSK to encrypt your data in transit.</p> — shape: {EncryptionAtRest?: any, EncryptionInTransit?: any}
-  --enhanced-monitoring: string@enhanced-monitoring-completer #              <p>Specifies which metrics are gathered for the MSK cluster. This property has the following possible values: DEFAULT, PER_BROKER, PER_TOPIC_PER_BROKER, and PER_TOPIC_PER_PARTITION. For a list of the metrics associated with each of these levels of monitoring, see <a href="https://docs.aws.amazon.com/msk/latest/developerguide/monitoring.html">Monitoring</a>.</p>
-  --open-monitoring: record #              <p>JMX and Node monitoring for the MSK cluster.</p> — shape: {Prometheus?: any}
-  kafka_version: string #              <p>The version of Apache Kafka.</p>
+  broker_node_group_info: record # Describes the setup to be used for Apache Kafka broker nodes in the cluster. — shape: {BrokerAZDistribution?: any, ClientSubnets?: any, InstanceType?: any, SecurityGroups?: any, StorageInfo?: any, ConnectivityInfo?: any}
+  --client-authentication: record # Includes all client authentication information. — shape: {Sasl?: any, Tls?: any, Unauthenticated?: any}
+  cluster_name: string # The name of the cluster.
+  --configuration-info: record # Specifies the configuration to use for the brokers. — shape: {Arn?: any, Revision?: any}
+  --encryption-info: record # Includes encryption-related information, such as the AWS KMS key used for encrypting data at rest and whether you want MSK to encrypt your data in transit. — shape: {EncryptionAtRest?: any, EncryptionInTransit?: any}
+  --enhanced-monitoring: string@enhanced-monitoring-completer # Specifies which metrics are gathered for the MSK cluster. This property has the following possible values: DEFAULT, PER_BROKER, PER_TOPIC_PER_BROKER, and PER_TOPIC_PER_PARTITION. For a list of the metrics associated with each of these levels of monitoring, see Monitoring (https://docs.aws.amazon.com/msk/latest/developerguide/monitoring.html).
+  --open-monitoring: record # JMX and Node monitoring for the MSK cluster. — shape: {Prometheus?: any}
+  kafka_version: string # The version of Apache Kafka.
   --logging-info: record # shape: {BrokerLogs?: any}
-  number_of_broker_nodes: int #              <p>The number of broker nodes in the cluster.</p>
-  --tags: record #              <p>Create tags when creating the cluster.</p>
+  number_of_broker_nodes: int # The number of broker nodes in the cluster.
+  --tags: record # Create tags when creating the cluster.
   --storage-mode: string@storage-mode-completer # Controls storage mode for various supported storage tiers.
 ]: any -> record<ClusterArn: record, ClusterName: record, State: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/clusters")
-  let body = {"brokerNodeGroupInfo": $broker_node_group_info, "clientAuthentication": $client_authentication, "clusterName": $cluster_name, "configurationInfo": $configuration_info, "encryptionInfo": $encryption_info, "enhancedMonitoring": $enhanced_monitoring, "openMonitoring": $open_monitoring, "kafkaVersion": $kafka_version, "loggingInfo": $logging_info, "numberOfBrokerNodes": $number_of_broker_nodes, "tags": $tags, "storageMode": $storage_mode} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"brokerNodeGroupInfo": $broker_node_group_info, "clientAuthentication": $client_authentication, "clusterName": $cluster_name, "configurationInfo": $configuration_info, "encryptionInfo": $encryption_info, "enhancedMonitoring": $enhanced_monitoring, "openMonitoring": $open_monitoring, "kafkaVersion": $kafka_version, "loggingInfo": $logging_info, "numberOfBrokerNodes": $number_of_broker_nodes, "tags": $tags, "storageMode": $storage_mode} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-#              <p>Returns a list of all the MSK clusters in the current Region.</p>
+# Returns a list of all the MSK clusters in the current Region.
 #
 # GET /v1/clusters
 # operationId: ListClusters
@@ -266,9 +275,9 @@ export def "clusters list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --cluster-name-filter: string #              <p>Specify a prefix of the name of the clusters that you want to list. The service lists all the clusters whose names start with this prefix.</p>
-  --max-results: int #              <p>The maximum number of results to return in the response. If there are more results, the response includes a NextToken parameter.</p>
-  --next-token: string #              <p>The paginated results marker. When the result of the operation is truncated, the call returns NextToken in the response.              To get the next batch, provide this token in your next request.</p>
+  --cluster-name-filter: string # Specify a prefix of the name of the clusters that you want to list. The service lists all the clusters whose names start with this prefix.
+  --max-results: int # The maximum number of results to return in the response. If there are more results, the response includes a NextToken parameter.
+  --next-token: string # The paginated results marker. When the result of the operation is truncated, the call returns NextToken in the response. To get the next batch, provide this token in your next request.
   --max-results: string # Pagination limit
   --next-token: string # Pagination token
   --x-amz-content-sha256: string
@@ -283,20 +292,20 @@ export def "clusters list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "clusterNameFilter" $cluster_name_filter "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/clusters" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-#              <p>Creates a new MSK cluster.</p>
+# Creates a new MSK cluster.
 #
 # POST /api/v2/clusters
 # operationId: CreateClusterV2
 # --provisioned shape: {BrokerNodeGroupInfo?: any, ClientAuthentication?: any, ConfigurationInfo?: any, EncryptionInfo?: any, EnhancedMonitoring?: any, OpenMonitoring?: any, KafkaVersion?: any, LoggingInfo?: any, NumberOfBrokerNodes?: any, StorageMode?: any}
 # --serverless shape: {VpcConfigs?: any, ClientAuthentication?: any}
-export def "clusters create-cluster-v2" [
+export def "clusters create-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -312,29 +321,29 @@ export def "clusters create-cluster-v2" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  cluster_name: string #              <p>The name of the cluster.</p>
-  --tags: record #              <p>A map of tags that you want the cluster to have.</p>
-  --provisioned: record #              <p>Provisioned cluster request.</p> — shape: {BrokerNodeGroupInfo?: any, ClientAuthentication?: any, ConfigurationInfo?: any, EncryptionInfo?: any, EnhancedMonitoring?: any, OpenMonitoring?: any, KafkaVersion?: any, LoggingInfo?: any, NumberOfBrokerNodes?: any, StorageMode?: any}
-  --serverless: record #              <p>Serverless cluster request.</p> — shape: {VpcConfigs?: any, ClientAuthentication?: any}
+  cluster_name: string # The name of the cluster.
+  --tags: record # A map of tags that you want the cluster to have.
+  --provisioned: record # Provisioned cluster request. — shape: {BrokerNodeGroupInfo?: any, ClientAuthentication?: any, ConfigurationInfo?: any, EncryptionInfo?: any, EnhancedMonitoring?: any, OpenMonitoring?: any, KafkaVersion?: any, LoggingInfo?: any, NumberOfBrokerNodes?: any, StorageMode?: any}
+  --serverless: record # Serverless cluster request. — shape: {VpcConfigs?: any, ClientAuthentication?: any}
 ]: any -> record<ClusterArn: record, ClusterName: record, State: record, ClusterType: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v2/clusters")
-  let body = {"clusterName": $cluster_name, "tags": $tags, "provisioned": $provisioned, "serverless": $serverless} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"clusterName": $cluster_name, "tags": $tags, "provisioned": $provisioned, "serverless": $serverless} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-#              <p>Returns a list of all the MSK clusters in the current Region.</p>
+# Returns a list of all the MSK clusters in the current Region.
 #
 # GET /api/v2/clusters
 # operationId: ListClustersV2
-export def "clusters list-clusters-v2" [
+export def "clusters list-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -343,10 +352,10 @@ export def "clusters list-clusters-v2" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --cluster-name-filter: string #              <p>Specify a prefix of the names of the clusters that you want to list. The service lists all the clusters whose names start with this prefix.</p>
-  --cluster-type-filter: string #              <p>Specify either PROVISIONED or SERVERLESS.</p>
-  --max-results: int #              <p>The maximum number of results to return in the response. If there are more results, the response includes a NextToken parameter.</p>
-  --next-token: string #              <p>The paginated results marker. When the result of the operation is truncated, the call returns NextToken in the response.              To get the next batch, provide this token in your next request.</p>
+  --cluster-name-filter: string # Specify a prefix of the names of the clusters that you want to list. The service lists all the clusters whose names start with this prefix.
+  --cluster-type-filter: string # Specify either PROVISIONED or SERVERLESS.
+  --max-results: int # The maximum number of results to return in the response. If there are more results, the response includes a NextToken parameter.
+  --next-token: string # The paginated results marker. When the result of the operation is truncated, the call returns NextToken in the response. To get the next batch, provide this token in your next request.
   --max-results: string # Pagination limit
   --next-token: string # Pagination token
   --x-amz-content-sha256: string
@@ -361,14 +370,14 @@ export def "clusters list-clusters-v2" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "clusterNameFilter" $cluster_name_filter "scalar") (serialize-qp "clusterTypeFilter" $cluster_type_filter "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v2/clusters" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-#              <p>Creates a new MSK configuration.</p>
+# Creates a new MSK configuration.
 #
 # POST /v1/configurations
 # operationId: CreateConfiguration
@@ -388,25 +397,25 @@ export def "configurations create" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --description: string #              <p>The description of the configuration.</p>
-  --kafka-versions: list #              <p>The versions of Apache Kafka with which you can use this MSK configuration.</p>
-  name: string #              <p>The name of the configuration.</p>
-  server_properties: string #              <p>Contents of the <filename>server.properties</filename> file. When using the API, you must ensure that the contents of the file are base64 encoded.                 When using the AWS Management Console, the SDK, or the AWS CLI, the contents of <filename>server.properties</filename> can be in plaintext.</p>
+  --description: string # The description of the configuration.
+  --kafka-versions: list<string> # The versions of Apache Kafka with which you can use this MSK configuration.
+  name: string # The name of the configuration.
+  server_properties: string # Contents of the server.properties file. When using the API, you must ensure that the contents of the file are base64 encoded. When using the AWS Management Console, the SDK, or the AWS CLI, the contents of server.properties can be in plaintext.
 ]: any -> record<Arn: record, CreationTime: record, LatestRevision: record<CreationTime: record, Description: record, Revision: record>, Name: record, State: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/configurations")
-  let body = {"description": $description, "kafkaVersions": $kafka_versions, "name": $name, "serverProperties": $server_properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"description": $description, "kafkaVersions": $kafka_versions, "name": $name, "serverProperties": $server_properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-#              <p>Returns a list of all the MSK configurations in this Region.</p>
+# Returns a list of all the MSK configurations in this Region.
 #
 # GET /v1/configurations
 # operationId: ListConfigurations
@@ -419,8 +428,8 @@ export def "configurations list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --max-results: int #              <p>The maximum number of results to return in the response. If there are more results, the response includes a NextToken parameter.</p>
-  --next-token: string #              <p>The paginated results marker. When the result of the operation is truncated, the call returns NextToken in the response.              To get the next batch, provide this token in your next request.</p>
+  --max-results: int # The maximum number of results to return in the response. If there are more results, the response includes a NextToken parameter.
+  --next-token: string # The paginated results marker. When the result of the operation is truncated, the call returns NextToken in the response. To get the next batch, provide this token in your next request.
   --max-results: string # Pagination limit
   --next-token: string # Pagination token
   --x-amz-content-sha256: string
@@ -435,14 +444,14 @@ export def "configurations list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/configurations" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-#              <p>Deletes the MSK cluster specified by the Amazon Resource Name (ARN) in the request.</p>
+# Deletes the MSK cluster specified by the Amazon Resource Name (ARN) in the request.
 #
 # DELETE /v1/clusters/{clusterArn}
 # operationId: DeleteCluster
@@ -456,7 +465,7 @@ export def "clusters delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --current-version: string #              <p>The current version of the MSK cluster.</p>
+  --current-version: string # The current version of the MSK cluster.
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -468,15 +477,15 @@ export def "clusters delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "currentVersion" $current_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({cluster_arn: $cluster_arn} | format pattern "/v1/clusters/{cluster_arn}") $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({cluster_arn: (encode-path-segment $cluster_arn)} | format pattern "/v1/clusters/{cluster_arn}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-#              <p>Returns a description of the MSK cluster whose Amazon Resource Name (ARN) is specified in the request.</p>
+# Returns a description of the MSK cluster whose Amazon Resource Name (ARN) is specified in the request.
 #
 # GET /v1/clusters/{clusterArn}
 # operationId: DescribeCluster
@@ -500,15 +509,15 @@ export def "clusters get-by-clusterArn" [
 ]: nothing -> record<ClusterInfo: record<ActiveOperationArn: record, BrokerNodeGroupInfo: record<BrokerAZDistribution: record, ClientSubnets: record, InstanceType: record, SecurityGroups: record, StorageInfo: record, ConnectivityInfo: record>, ClientAuthentication: record<Sasl: record, Tls: record, Unauthenticated: record>, ClusterArn: record, ClusterName: record, CreationTime: record, CurrentBrokerSoftwareInfo: record<ConfigurationArn: record, ConfigurationRevision: record, KafkaVersion: record>, CurrentVersion: record, EncryptionInfo: record<EncryptionAtRest: record, EncryptionInTransit: record>, EnhancedMonitoring: record, OpenMonitoring: record<Prometheus: record>, LoggingInfo: record<BrokerLogs: record>, NumberOfBrokerNodes: record, State: record, StateInfo: record<Code: record, Message: record>, Tags: record, ZookeeperConnectString: record, ZookeeperConnectStringTls: record, StorageMode: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({cluster_arn: $cluster_arn} | format pattern "/v1/clusters/{cluster_arn}"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({cluster_arn: (encode-path-segment $cluster_arn)} | format pattern "/v1/clusters/{cluster_arn}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-#              <p>Deletes an MSK Configuration.</p>
+# Deletes an MSK Configuration.
 #
 # DELETE /v1/configurations/{arn}
 # operationId: DeleteConfiguration
@@ -532,15 +541,15 @@ export def "configurations delete" [
 ]: nothing -> record<Arn: record, State: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({arn: $arn} | format pattern "/v1/configurations/{arn}"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({arn: (encode-path-segment $arn)} | format pattern "/v1/configurations/{arn}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-#              <p>Returns a description of this MSK configuration.</p>
+# Returns a description of this MSK configuration.
 #
 # GET /v1/configurations/{arn}
 # operationId: DescribeConfiguration
@@ -564,15 +573,15 @@ export def "configurations get" [
 ]: nothing -> record<Arn: record, CreationTime: record, Description: record, KafkaVersions: record, LatestRevision: record<CreationTime: record, Description: record, Revision: record>, Name: record, State: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({arn: $arn} | format pattern "/v1/configurations/{arn}"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({arn: (encode-path-segment $arn)} | format pattern "/v1/configurations/{arn}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-#              <p>Updates an MSK configuration.</p>
+# Updates an MSK configuration.
 #
 # PUT /v1/configurations/{arn}
 # operationId: UpdateConfiguration
@@ -593,23 +602,23 @@ export def "configurations update" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --description: string #              <p>The description of the configuration revision.</p>
-  server_properties: string #              <p>Contents of the <filename>server.properties</filename> file. When using the API, you must ensure that the contents of the file are base64 encoded.                 When using the AWS Management Console, the SDK, or the AWS CLI, the contents of <filename>server.properties</filename> can be in plaintext.</p>
+  --description: string # The description of the configuration revision.
+  server_properties: string # Contents of the server.properties file. When using the API, you must ensure that the contents of the file are base64 encoded. When using the AWS Management Console, the SDK, or the AWS CLI, the contents of server.properties can be in plaintext.
 ]: any -> record<Arn: record, LatestRevision: record<CreationTime: record, Description: record, Revision: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({arn: $arn} | format pattern "/v1/configurations/{arn}"))
-  let body = {"description": $description, "serverProperties": $server_properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({arn: (encode-path-segment $arn)} | format pattern "/v1/configurations/{arn}"))
+  let req_body = {"description": $description, "serverProperties": $server_properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-#              <p>Returns a description of the MSK cluster whose Amazon Resource Name (ARN) is specified in the request.</p>
+# Returns a description of the MSK cluster whose Amazon Resource Name (ARN) is specified in the request.
 #
 # GET /api/v2/clusters/{clusterArn}
 # operationId: DescribeClusterV2
@@ -633,15 +642,15 @@ export def "clusters get-by-clusterArn-1" [
 ]: nothing -> record<ClusterInfo: record<ActiveOperationArn: record, ClusterType: record, ClusterArn: record, ClusterName: record, CreationTime: record, CurrentVersion: record, State: record, StateInfo: record<Code: record, Message: record>, Tags: record, Provisioned: record<BrokerNodeGroupInfo: record, CurrentBrokerSoftwareInfo: record, ClientAuthentication: record, EncryptionInfo: record, EnhancedMonitoring: record, OpenMonitoring: record, LoggingInfo: record, NumberOfBrokerNodes: record, ZookeeperConnectString: record, ZookeeperConnectStringTls: record, StorageMode: record>, Serverless: record<VpcConfigs: record, ClientAuthentication: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({cluster_arn: $cluster_arn} | format pattern "/api/v2/clusters/{cluster_arn}"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({cluster_arn: (encode-path-segment $cluster_arn)} | format pattern "/api/v2/clusters/{cluster_arn}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-#              <p>Returns a description of the cluster operation specified by the ARN.</p>
+# Returns a description of the cluster operation specified by the ARN.
 #
 # GET /v1/operations/{clusterOperationArn}
 # operationId: DescribeClusterOperation
@@ -665,15 +674,15 @@ export def "operations get" [
 ]: nothing -> record<ClusterOperationInfo: record<ClientRequestId: record, ClusterArn: record, CreationTime: record, EndTime: record, ErrorInfo: record<ErrorCode: record, ErrorString: record>, OperationArn: record, OperationState: record, OperationSteps: record, OperationType: record, SourceClusterInfo: record<BrokerEBSVolumeInfo: record, ConfigurationInfo: record, NumberOfBrokerNodes: record, EnhancedMonitoring: record, OpenMonitoring: record, KafkaVersion: record, LoggingInfo: record, InstanceType: record, ClientAuthentication: record, EncryptionInfo: record, ConnectivityInfo: record, StorageMode: record>, TargetClusterInfo: record<BrokerEBSVolumeInfo: record, ConfigurationInfo: record, NumberOfBrokerNodes: record, EnhancedMonitoring: record, OpenMonitoring: record, KafkaVersion: record, LoggingInfo: record, InstanceType: record, ClientAuthentication: record, EncryptionInfo: record, ConnectivityInfo: record, StorageMode: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({cluster_operation_arn: $cluster_operation_arn} | format pattern "/v1/operations/{cluster_operation_arn}"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({cluster_operation_arn: (encode-path-segment $cluster_operation_arn)} | format pattern "/v1/operations/{cluster_operation_arn}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-#              <p>Returns a description of this revision of the configuration.</p>
+# Returns a description of this revision of the configuration.
 #
 # GET /v1/configurations/{arn}/revisions/{revision}
 # operationId: DescribeConfigurationRevision
@@ -698,15 +707,15 @@ export def "configurations-revisions get" [
 ]: nothing -> record<Arn: record, CreationTime: record, Description: record, Revision: record, ServerProperties: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({arn: $arn, revision: $revision} | format pattern "/v1/configurations/{arn}/revisions/{revision}"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({arn: (encode-path-segment $arn), revision: (encode-path-segment $revision)} | format pattern "/v1/configurations/{arn}/revisions/{revision}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-#              <p>A list of brokers that a client application can use to bootstrap.</p>
+# A list of brokers that a client application can use to bootstrap.
 #
 # GET /v1/clusters/{clusterArn}/bootstrap-brokers
 # operationId: GetBootstrapBrokers
@@ -730,15 +739,15 @@ export def "clusters-bootstrap-brokers get" [
 ]: nothing -> record<BootstrapBrokerString: record, BootstrapBrokerStringTls: record, BootstrapBrokerStringSaslScram: record, BootstrapBrokerStringSaslIam: record, BootstrapBrokerStringPublicTls: record, BootstrapBrokerStringPublicSaslScram: record, BootstrapBrokerStringPublicSaslIam: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({cluster_arn: $cluster_arn} | format pattern "/v1/clusters/{cluster_arn}/bootstrap-brokers"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({cluster_arn: (encode-path-segment $cluster_arn)} | format pattern "/v1/clusters/{cluster_arn}/bootstrap-brokers"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-#              <p>Gets the Apache Kafka versions to which you can update the MSK cluster.</p>
+# Gets the Apache Kafka versions to which you can update the MSK cluster.
 #
 # GET /v1/compatible-kafka-versions
 # operationId: GetCompatibleKafkaVersions
@@ -751,7 +760,7 @@ export def "compatible-kafka-versions get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --cluster-arn: string #              <p>The Amazon Resource Name (ARN) of the cluster check.</p>
+  --cluster-arn: string # The Amazon Resource Name (ARN) of the cluster check.
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -764,14 +773,14 @@ export def "compatible-kafka-versions get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "clusterArn" $cluster_arn "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/compatible-kafka-versions" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-#              <p>Returns a list of all the operations that have been performed on the specified MSK cluster.</p>
+# Returns a list of all the operations that have been performed on the specified MSK cluster.
 #
 # GET /v1/clusters/{clusterArn}/operations
 # operationId: ListClusterOperations
@@ -785,8 +794,8 @@ export def "clusters-operations list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --max-results: int #              <p>The maximum number of results to return in the response. If there are more results, the response includes a NextToken parameter.</p>
-  --next-token: string #              <p>The paginated results marker. When the result of the operation is truncated, the call returns NextToken in the response.              To get the next batch, provide this token in your next request.</p>
+  --max-results: int # The maximum number of results to return in the response. If there are more results, the response includes a NextToken parameter.
+  --next-token: string # The paginated results marker. When the result of the operation is truncated, the call returns NextToken in the response. To get the next batch, provide this token in your next request.
   --max-results: string # Pagination limit
   --next-token: string # Pagination token
   --x-amz-content-sha256: string
@@ -800,15 +809,15 @@ export def "clusters-operations list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({cluster_arn: $cluster_arn} | format pattern "/v1/clusters/{cluster_arn}/operations") $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({cluster_arn: (encode-path-segment $cluster_arn)} | format pattern "/v1/clusters/{cluster_arn}/operations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-#              <p>Returns a list of all the MSK configurations in this Region.</p>
+# Returns a list of all the MSK configurations in this Region.
 #
 # GET /v1/configurations/{arn}/revisions
 # operationId: ListConfigurationRevisions
@@ -822,8 +831,8 @@ export def "configurations-revisions list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --max-results: int #              <p>The maximum number of results to return in the response. If there are more results, the response includes a NextToken parameter.</p>
-  --next-token: string #              <p>The paginated results marker. When the result of the operation is truncated, the call returns NextToken in the response.              To get the next batch, provide this token in your next request.</p>
+  --max-results: int # The maximum number of results to return in the response. If there are more results, the response includes a NextToken parameter.
+  --next-token: string # The paginated results marker. When the result of the operation is truncated, the call returns NextToken in the response. To get the next batch, provide this token in your next request.
   --max-results: string # Pagination limit
   --next-token: string # Pagination token
   --x-amz-content-sha256: string
@@ -837,15 +846,15 @@ export def "configurations-revisions list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({arn: $arn} | format pattern "/v1/configurations/{arn}/revisions") $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({arn: (encode-path-segment $arn)} | format pattern "/v1/configurations/{arn}/revisions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-#              <p>Returns a list of Apache Kafka versions.</p>
+# Returns a list of Apache Kafka versions.
 #
 # GET /v1/kafka-versions
 # operationId: ListKafkaVersions
@@ -858,8 +867,8 @@ export def "kafka-versions list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --max-results: int #              <p>The maximum number of results to return in the response. If there are more results, the response includes a NextToken parameter.</p>
-  --next-token: string #              <p>The paginated results marker. When the result of the operation is truncated, the call returns NextToken in the response. To get the next batch, provide this token in your next request.</p>
+  --max-results: int # The maximum number of results to return in the response. If there are more results, the response includes a NextToken parameter.
+  --next-token: string # The paginated results marker. When the result of the operation is truncated, the call returns NextToken in the response. To get the next batch, provide this token in your next request.
   --max-results: string # Pagination limit
   --next-token: string # Pagination token
   --x-amz-content-sha256: string
@@ -874,14 +883,14 @@ export def "kafka-versions list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/kafka-versions" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-#              <p>Returns a list of the broker nodes in the cluster.</p>
+# Returns a list of the broker nodes in the cluster.
 #
 # GET /v1/clusters/{clusterArn}/nodes
 # operationId: ListNodes
@@ -895,8 +904,8 @@ export def "clusters-nodes list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --max-results: int #              <p>The maximum number of results to return in the response. If there are more results, the response includes a NextToken parameter.</p>
-  --next-token: string #              <p>The paginated results marker. When the result of the operation is truncated, the call returns NextToken in the response.              To get the next batch, provide this token in your next request.</p>
+  --max-results: int # The maximum number of results to return in the response. If there are more results, the response includes a NextToken parameter.
+  --next-token: string # The paginated results marker. When the result of the operation is truncated, the call returns NextToken in the response. To get the next batch, provide this token in your next request.
   --max-results: string # Pagination limit
   --next-token: string # Pagination token
   --x-amz-content-sha256: string
@@ -910,19 +919,19 @@ export def "clusters-nodes list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({cluster_arn: $cluster_arn} | format pattern "/v1/clusters/{cluster_arn}/nodes") $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({cluster_arn: (encode-path-segment $cluster_arn)} | format pattern "/v1/clusters/{cluster_arn}/nodes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-#              <p>Returns a list of the tags associated with the specified resource.</p>
+# Returns a list of the tags associated with the specified resource.
 #
 # GET /v1/tags/{resourceArn}
 # operationId: ListTagsForResource
-export def "tags list-tags-for-resource" [
+export def "tags list-for-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -942,15 +951,15 @@ export def "tags list-tags-for-resource" [
 ]: nothing -> record<Tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({resource_arn: $resource_arn} | format pattern "/v1/tags/{resource_arn}"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/v1/tags/{resource_arn}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-#              <p>Adds tags to the specified MSK resource.</p>
+# Adds tags to the specified MSK resource.
 #
 # POST /v1/tags/{resourceArn}
 # operationId: TagResource
@@ -971,26 +980,26 @@ export def "tags tag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  tags: record #              <p>The key-value pair for the resource tag.</p>
+  tags: record # The key-value pair for the resource tag.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({resource_arn: $resource_arn} | format pattern "/v1/tags/{resource_arn}"))
-  let body = {"tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/v1/tags/{resource_arn}"))
+  let req_body = {"tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Reboots brokers.
 #
 # PUT /v1/clusters/{clusterArn}/reboot-broker
 # operationId: RebootBroker
-export def "clusters-reboot-broker put" [
+export def "clusters-reboot-broker update" [
   cluster_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1007,22 +1016,22 @@ export def "clusters-reboot-broker put" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  broker_ids: list #              <p>The list of broker IDs to be rebooted. The reboot-broker operation supports rebooting one broker at a time.</p>
+  broker_ids: list<string> # The list of broker IDs to be rebooted. The reboot-broker operation supports rebooting one broker at a time.
 ]: any -> record<ClusterArn: record, ClusterOperationArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({cluster_arn: $cluster_arn} | format pattern "/v1/clusters/{cluster_arn}/reboot-broker"))
-  let body = {"brokerIds": $broker_ids} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({cluster_arn: (encode-path-segment $cluster_arn)} | format pattern "/v1/clusters/{cluster_arn}/reboot-broker"))
+  let req_body = {"brokerIds": $broker_ids} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-#              <p>Removes the tags associated with the keys that are provided in the query.</p>
+# Removes the tags associated with the keys that are provided in the query.
 #
 # DELETE /v1/tags/{resourceArn}#tagKeys
 # operationId: UntagResource
@@ -1036,7 +1045,7 @@ export def "tags untag-resource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tag-keys: list #              <p>Tag keys must be unique for a given cluster. In addition, the following restrictions apply:</p>             <ul>                <li>                   <p>Each tag key must be unique. If you add a tag with a key that's already in                   use, your new tag overwrites the existing key-value pair. </p>                </li>                <li>                   <p>You can't start a tag key with aws: because this prefix is reserved for use                   by  AWS.  AWS creates tags that begin with this prefix on your behalf, but                   you can't edit or delete them.</p>                </li>                <li>                   <p>Tag keys must be between 1 and 128 Unicode characters in length.</p>                </li>                <li>                   <p>Tag keys must consist of the following characters: Unicode letters, digits,                   white space, and the following special characters: _ . / = + -                      @.</p>                </li>             </ul>
+  --tag-keys: list # Tag keys must be unique for a given cluster. In addition, the following restrictions apply: Each tag key must be unique. If you add a tag with a key that's already in use, your new tag overwrites the existing key-value pair. You can't start a tag key with aws: because this prefix is reserved for use by AWS. AWS creates tags that begin with this prefix on your behalf, but you can't edit or delete them. Tag keys must be between 1 and 128 Unicode characters in length. Tag keys must consist of the following characters: Unicode letters, digits, white space, and the following special characters: _ . / = + - @.
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1048,15 +1057,15 @@ export def "tags untag-resource" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "tagKeys" $tag_keys "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_arn: $resource_arn} | format pattern "/v1/tags/{resource_arn}#tagKeys") $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/v1/tags/{resource_arn}#tagKeys") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-#              <p>Updates the number of broker nodes in the cluster.</p>
+# Updates the number of broker nodes in the cluster.
 #
 # PUT /v1/clusters/{clusterArn}/nodes/count
 # operationId: UpdateBrokerCount
@@ -1077,23 +1086,23 @@ export def "clusters-nodes-count update-broker" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  current_version: string #              <p>The version of cluster to update from. A successful operation will then generate a new version.</p>
-  target_number_of_broker_nodes: int #              <p>The number of broker nodes that you want the cluster to have after this operation completes successfully.</p>
+  current_version: string # The version of cluster to update from. A successful operation will then generate a new version.
+  target_number_of_broker_nodes: int # The number of broker nodes that you want the cluster to have after this operation completes successfully.
 ]: any -> record<ClusterArn: record, ClusterOperationArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({cluster_arn: $cluster_arn} | format pattern "/v1/clusters/{cluster_arn}/nodes/count"))
-  let body = {"currentVersion": $current_version, "targetNumberOfBrokerNodes": $target_number_of_broker_nodes} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({cluster_arn: (encode-path-segment $cluster_arn)} | format pattern "/v1/clusters/{cluster_arn}/nodes/count"))
+  let req_body = {"currentVersion": $current_version, "targetNumberOfBrokerNodes": $target_number_of_broker_nodes} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-#              <p>Updates EC2 instance type.</p>
+# Updates EC2 instance type.
 #
 # PUT /v1/clusters/{clusterArn}/nodes/type
 # operationId: UpdateBrokerType
@@ -1114,23 +1123,23 @@ export def "clusters-nodes-type update-broker" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  current_version: string #              <p>The cluster version that you want to change. After this operation completes successfully, the cluster will have a new version.</p>
-  target_instance_type: string #              <p>The Amazon MSK broker type that you want all of the brokers in this cluster to be.</p>
+  current_version: string # The cluster version that you want to change. After this operation completes successfully, the cluster will have a new version.
+  target_instance_type: string # The Amazon MSK broker type that you want all of the brokers in this cluster to be.
 ]: any -> record<ClusterArn: record, ClusterOperationArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({cluster_arn: $cluster_arn} | format pattern "/v1/clusters/{cluster_arn}/nodes/type"))
-  let body = {"currentVersion": $current_version, "targetInstanceType": $target_instance_type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({cluster_arn: (encode-path-segment $cluster_arn)} | format pattern "/v1/clusters/{cluster_arn}/nodes/type"))
+  let req_body = {"currentVersion": $current_version, "targetInstanceType": $target_instance_type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-#              <p>Updates the EBS storage associated with MSK brokers.</p>
+# Updates the EBS storage associated with MSK brokers.
 #
 # PUT /v1/clusters/{clusterArn}/nodes/storage
 # operationId: UpdateBrokerStorage
@@ -1152,23 +1161,23 @@ export def "clusters-nodes-storage update-broker" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  current_version: string #              <p>The version of cluster to update from. A successful operation will then generate a new version.</p>
-  target_broker_ebs_volume_info: list #              <p>Describes the target volume size and the ID of the broker to apply the update to.</p> — item shape: {KafkaBrokerNodeId: any, ProvisionedThroughput?: any, VolumeSizeGB?: any}
+  current_version: string # The version of cluster to update from. A successful operation will then generate a new version.
+  target_broker_ebs_volume_info: list # Describes the target volume size and the ID of the broker to apply the update to. — item shape: {KafkaBrokerNodeId: any, ProvisionedThroughput?: any, VolumeSizeGB?: any}
 ]: any -> record<ClusterArn: record, ClusterOperationArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({cluster_arn: $cluster_arn} | format pattern "/v1/clusters/{cluster_arn}/nodes/storage"))
-  let body = {"currentVersion": $current_version, "targetBrokerEBSVolumeInfo": $target_broker_ebs_volume_info} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({cluster_arn: (encode-path-segment $cluster_arn)} | format pattern "/v1/clusters/{cluster_arn}/nodes/storage"))
+  let req_body = {"currentVersion": $current_version, "targetBrokerEBSVolumeInfo": $target_broker_ebs_volume_info} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-#              <p>Updates the cluster's connectivity configuration.</p>
+# Updates the cluster's connectivity configuration.
 #
 # PUT /v1/clusters/{clusterArn}/connectivity
 # operationId: UpdateConnectivity
@@ -1190,23 +1199,23 @@ export def "clusters-connectivity update" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  connectivity_info: record #              <p>Information about the broker access configuration.</p> — shape: {PublicAccess?: any}
-  current_version: string #              <p>The version of the MSK cluster to update. Cluster versions aren't simple numbers. You can describe an MSK cluster to find its version. When this update operation is successful, it generates a new cluster version.</p>
+  connectivity_info: record # Information about the broker access configuration. — shape: {PublicAccess?: any}
+  current_version: string # The version of the MSK cluster to update. Cluster versions aren't simple numbers. You can describe an MSK cluster to find its version. When this update operation is successful, it generates a new cluster version.
 ]: any -> record<ClusterArn: record, ClusterOperationArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({cluster_arn: $cluster_arn} | format pattern "/v1/clusters/{cluster_arn}/connectivity"))
-  let body = {"connectivityInfo": $connectivity_info, "currentVersion": $current_version} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({cluster_arn: (encode-path-segment $cluster_arn)} | format pattern "/v1/clusters/{cluster_arn}/connectivity"))
+  let req_body = {"connectivityInfo": $connectivity_info, "currentVersion": $current_version} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-#              <p>Updates the cluster with the configuration that is specified in the request body.</p>
+# Updates the cluster with the configuration that is specified in the request body.
 #
 # PUT /v1/clusters/{clusterArn}/configuration
 # operationId: UpdateClusterConfiguration
@@ -1228,28 +1237,28 @@ export def "clusters-configuration update" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  configuration_info: record #              <p>Specifies the configuration to use for the brokers.</p> — shape: {Arn?: any, Revision?: any}
-  current_version: string #              <p>The version of the cluster that needs to be updated.</p>
+  configuration_info: record # Specifies the configuration to use for the brokers. — shape: {Arn?: any, Revision?: any}
+  current_version: string # The version of the cluster that needs to be updated.
 ]: any -> record<ClusterArn: record, ClusterOperationArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({cluster_arn: $cluster_arn} | format pattern "/v1/clusters/{cluster_arn}/configuration"))
-  let body = {"configurationInfo": $configuration_info, "currentVersion": $current_version} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({cluster_arn: (encode-path-segment $cluster_arn)} | format pattern "/v1/clusters/{cluster_arn}/configuration"))
+  let req_body = {"configurationInfo": $configuration_info, "currentVersion": $current_version} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-#              <p>Updates the Apache Kafka version for the cluster.</p>
+# Updates the Apache Kafka version for the cluster.
 #
 # PUT /v1/clusters/{clusterArn}/version
 # operationId: UpdateClusterKafkaVersion
 # --configurationInfo shape: {Arn?: any, Revision?: any}
-export def "clusters-version update-cluster-kafka" [
+export def "clusters-version update-kafka" [
   cluster_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1266,24 +1275,24 @@ export def "clusters-version update-cluster-kafka" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --configuration-info: record #              <p>Specifies the configuration to use for the brokers.</p> — shape: {Arn?: any, Revision?: any}
-  current_version: string #              <p>Current cluster version.</p>
-  target_kafka_version: string #              <p>Target Kafka version.</p>
+  --configuration-info: record # Specifies the configuration to use for the brokers. — shape: {Arn?: any, Revision?: any}
+  current_version: string # Current cluster version.
+  target_kafka_version: string # Target Kafka version.
 ]: any -> record<ClusterArn: record, ClusterOperationArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({cluster_arn: $cluster_arn} | format pattern "/v1/clusters/{cluster_arn}/version"))
-  let body = {"configurationInfo": $configuration_info, "currentVersion": $current_version, "targetKafkaVersion": $target_kafka_version} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({cluster_arn: (encode-path-segment $cluster_arn)} | format pattern "/v1/clusters/{cluster_arn}/version"))
+  let req_body = {"configurationInfo": $configuration_info, "currentVersion": $current_version, "targetKafkaVersion": $target_kafka_version} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-#              <p>Updates the monitoring settings for the cluster. You can use this operation to specify which Apache Kafka metrics you want Amazon MSK to send to Amazon CloudWatch. You can also specify settings for open monitoring with Prometheus.</p>
+# Updates the monitoring settings for the cluster. You can use this operation to specify which Apache Kafka metrics you want Amazon MSK to send to Amazon CloudWatch. You can also specify settings for open monitoring with Prometheus.
 #
 # PUT /v1/clusters/{clusterArn}/monitoring
 # operationId: UpdateMonitoring
@@ -1306,25 +1315,25 @@ export def "clusters-monitoring update" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  current_version: string #              <p>The version of the MSK cluster to update. Cluster versions aren't simple numbers. You can describe an MSK cluster to find its version. When this update operation is successful, it generates a new cluster version.</p>
-  --enhanced-monitoring: string@enhanced-monitoring-completer #              <p>Specifies which metrics are gathered for the MSK cluster. This property has the following possible values: DEFAULT, PER_BROKER, PER_TOPIC_PER_BROKER, and PER_TOPIC_PER_PARTITION. For a list of the metrics associated with each of these levels of monitoring, see <a href="https://docs.aws.amazon.com/msk/latest/developerguide/monitoring.html">Monitoring</a>.</p>
-  --open-monitoring: record #              <p>JMX and Node monitoring for the MSK cluster.</p> — shape: {Prometheus?: any}
+  current_version: string # The version of the MSK cluster to update. Cluster versions aren't simple numbers. You can describe an MSK cluster to find its version. When this update operation is successful, it generates a new cluster version.
+  --enhanced-monitoring: string@enhanced-monitoring-completer # Specifies which metrics are gathered for the MSK cluster. This property has the following possible values: DEFAULT, PER_BROKER, PER_TOPIC_PER_BROKER, and PER_TOPIC_PER_PARTITION. For a list of the metrics associated with each of these levels of monitoring, see Monitoring (https://docs.aws.amazon.com/msk/latest/developerguide/monitoring.html).
+  --open-monitoring: record # JMX and Node monitoring for the MSK cluster. — shape: {Prometheus?: any}
   --logging-info: record # shape: {BrokerLogs?: any}
 ]: any -> record<ClusterArn: record, ClusterOperationArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({cluster_arn: $cluster_arn} | format pattern "/v1/clusters/{cluster_arn}/monitoring"))
-  let body = {"currentVersion": $current_version, "enhancedMonitoring": $enhanced_monitoring, "openMonitoring": $open_monitoring, "loggingInfo": $logging_info} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({cluster_arn: (encode-path-segment $cluster_arn)} | format pattern "/v1/clusters/{cluster_arn}/monitoring"))
+  let req_body = {"currentVersion": $current_version, "enhancedMonitoring": $enhanced_monitoring, "openMonitoring": $open_monitoring, "loggingInfo": $logging_info} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-#              <p>Updates the security settings for the cluster. You can use this operation to specify encryption and authentication on existing clusters.</p>
+# Updates the security settings for the cluster. You can use this operation to specify encryption and authentication on existing clusters.
 #
 # PATCH /v1/clusters/{clusterArn}/security
 # operationId: UpdateSecurity
@@ -1347,21 +1356,21 @@ export def "clusters-security update" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --client-authentication: record #              <p>Includes all client authentication information.</p> — shape: {Sasl?: any, Tls?: any, Unauthenticated?: any}
-  current_version: string #              <p>The version of the MSK cluster to update. Cluster versions aren't simple numbers. You can describe an MSK cluster to find its version. When this update operation is successful, it generates a new cluster version.</p>
-  --encryption-info: record #              <p>Includes encryption-related information, such as the AWS KMS key used for encrypting data at rest and whether you want MSK to encrypt your data in transit.</p> — shape: {EncryptionAtRest?: any, EncryptionInTransit?: any}
+  --client-authentication: record # Includes all client authentication information. — shape: {Sasl?: any, Tls?: any, Unauthenticated?: any}
+  current_version: string # The version of the MSK cluster to update. Cluster versions aren't simple numbers. You can describe an MSK cluster to find its version. When this update operation is successful, it generates a new cluster version.
+  --encryption-info: record # Includes encryption-related information, such as the AWS KMS key used for encrypting data at rest and whether you want MSK to encrypt your data in transit. — shape: {EncryptionAtRest?: any, EncryptionInTransit?: any}
 ]: any -> record<ClusterArn: record, ClusterOperationArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({cluster_arn: $cluster_arn} | format pattern "/v1/clusters/{cluster_arn}/security"))
-  let body = {"clientAuthentication": $client_authentication, "currentVersion": $current_version, "encryptionInfo": $encryption_info} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({cluster_arn: (encode-path-segment $cluster_arn)} | format pattern "/v1/clusters/{cluster_arn}/security"))
+  let req_body = {"clientAuthentication": $client_authentication, "currentVersion": $current_version, "encryptionInfo": $encryption_info} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates cluster broker volume size (or) sets cluster storage mode to TIERED.
@@ -1386,20 +1395,20 @@ export def "clusters-storage update" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  current_version: string #              <p>The version of cluster to update from. A successful operation will then generate a new version.</p>
-  --provisioned-throughput: record #              <p>Contains information about provisioned throughput for EBS storage volumes attached to kafka broker nodes.</p> — shape: {Enabled?: any, VolumeThroughput?: any}
+  current_version: string # The version of cluster to update from. A successful operation will then generate a new version.
+  --provisioned-throughput: record # Contains information about provisioned throughput for EBS storage volumes attached to kafka broker nodes. — shape: {Enabled?: any, VolumeThroughput?: any}
   --storage-mode: string@storage-mode-completer # Controls storage mode for various supported storage tiers.
-  --volume-size-gb: int #              <p>size of the EBS volume to update.</p>
+  --volume-size-gb: int # size of the EBS volume to update.
 ]: any -> record<ClusterArn: record, ClusterOperationArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({cluster_arn: $cluster_arn} | format pattern "/v1/clusters/{cluster_arn}/storage"))
-  let body = {"currentVersion": $current_version, "provisionedThroughput": $provisioned_throughput, "storageMode": $storage_mode, "volumeSizeGB": $volume_size_gb} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({cluster_arn: (encode-path-segment $cluster_arn)} | format pattern "/v1/clusters/{cluster_arn}/storage"))
+  let req_body = {"currentVersion": $current_version, "provisionedThroughput": $provisioned_throughput, "storageMode": $storage_mode, "volumeSizeGB": $volume_size_gb} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

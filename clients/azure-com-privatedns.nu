@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -109,7 +118,7 @@ export def "subscriptions-providers-microsoft-network-private-dns-zones list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$top" $top "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Network/privateDnsZones") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Network/privateDnsZones") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -119,7 +128,7 @@ export def "subscriptions-providers-microsoft-network-private-dns-zones list" [
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/privateDnsZones
 # operationId: PrivateZones_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-network-private-dns-zones list-by" [
+export def "subscriptions-resource-groups-providers-microsoft-network-private-dns-zones list" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -136,7 +145,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-private-dn
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$top" $top "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/privateDnsZones") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/privateDnsZones") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -146,7 +155,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-private-dn
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/privateDnsZones/{privateZoneName}
 # operationId: PrivateZones_Delete
-export def "subscriptions-resource-groups-providers-microsoft-network-private-dns-zones delete-by-subscriptionId-resourceGroupName-privateZoneName" [
+export def "subscriptions-resource-groups-providers-microsoft-network-private-dns-zones delete" [
   subscription_id: string
   resource_group_name: string
   private_zone_name: string
@@ -164,11 +173,11 @@ export def "subscriptions-resource-groups-providers-microsoft-network-private-dn
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, private_zone_name: $private_zone_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/privateDnsZones/{private_zone_name}") $qp)
-  let extra_headers = {"If-Match": $if_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), private_zone_name: (encode-path-segment $private_zone_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/privateDnsZones/{private_zone_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-Match": $if_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -176,7 +185,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-private-dn
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/privateDnsZones/{privateZoneName}
 # operationId: PrivateZones_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-private-dns-zones get-by-subscriptionId-resourceGroupName-privateZoneName" [
+export def "subscriptions-resource-groups-providers-microsoft-network-private-dns-zones get" [
   subscription_id: string
   resource_group_name: string
   private_zone_name: string
@@ -193,7 +202,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-private-dn
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, private_zone_name: $private_zone_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/privateDnsZones/{private_zone_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), private_zone_name: (encode-path-segment $private_zone_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/privateDnsZones/{private_zone_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -203,7 +212,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-private-dn
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/privateDnsZones/{privateZoneName}
 # operationId: PrivateZones_Update
-export def "subscriptions-resource-groups-providers-microsoft-network-private-dns-zones update-by-subscriptionId-resourceGroupName-privateZoneName" [
+export def "subscriptions-resource-groups-providers-microsoft-network-private-dns-zones update" [
   subscription_id: string
   resource_group_name: string
   private_zone_name: string
@@ -226,21 +235,21 @@ export def "subscriptions-resource-groups-providers-microsoft-network-private-dn
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, private_zone_name: $private_zone_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/privateDnsZones/{private_zone_name}") $qp)
-  let body = {"etag": $etag, "properties": $properties, "location": $location, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"If-Match": $if_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), private_zone_name: (encode-path-segment $private_zone_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/privateDnsZones/{private_zone_name}") $qp)
+  let req_body = {"etag": $etag, "properties": $properties, "location": $location, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"If-Match": $if_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Creates or updates a Private DNS zone. Does not modify Links to virtual networks or DNS records within the zone.
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/privateDnsZones/{privateZoneName}
 # operationId: PrivateZones_CreateOrUpdate
-export def "subscriptions-resource-groups-providers-microsoft-network-private-dns-zones create-or-update-by-subscriptionId-resourceGroupName-privateZoneName" [
+export def "subscriptions-resource-groups-providers-microsoft-network-private-dns-zones create-or-update" [
   subscription_id: string
   resource_group_name: string
   private_zone_name: string
@@ -264,21 +273,21 @@ export def "subscriptions-resource-groups-providers-microsoft-network-private-dn
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, private_zone_name: $private_zone_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/privateDnsZones/{private_zone_name}") $qp)
-  let body = {"etag": $etag, "properties": $properties, "location": $location, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"If-Match": $if_match, "If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), private_zone_name: (encode-path-segment $private_zone_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/privateDnsZones/{private_zone_name}") $qp)
+  let req_body = {"etag": $etag, "properties": $properties, "location": $location, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"If-Match": $if_match, "If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists all record sets in a Private DNS zone.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/privateDnsZones/{privateZoneName}/ALL
 # operationId: RecordSets_List
-export def "subscriptions-resource-groups-providers-microsoft-network-private-dns-zones-all list" [
+export def "subscriptions-resource-groups-providers-microsoft-network-private-dns-zones-all list-record-sets" [
   subscription_id: string
   resource_group_name: string
   private_zone_name: string
@@ -291,13 +300,13 @@ export def "subscriptions-resource-groups-providers-microsoft-network-private-dn
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # The maximum number of record sets to return. If not specified, returns up to 100 record sets. (format: int32)
-  --recordsetnamesuffix: string # The suffix label of the record set name to be used to filter the record set enumeration. If this parameter is specified, the returned enumeration will only contain records that end with ".<recordsetnamesuffix>".
+  --recordsetnamesuffix: string # The suffix label of the record set name to be used to filter the record set enumeration. If this parameter is specified, the returned enumeration will only contain records that end with ".".
   --api-version: string # Client Api Version.
 ]: nothing -> record<nextLink: string, value: table<etag: string, id: string, name: string, properties: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$top" $top "scalar") (serialize-qp "$recordsetnamesuffix" $recordsetnamesuffix "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, private_zone_name: $private_zone_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/privateDnsZones/{private_zone_name}/ALL") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), private_zone_name: (encode-path-segment $private_zone_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/privateDnsZones/{private_zone_name}/ALL") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -325,7 +334,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-private-dn
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$top" $top "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, private_zone_name: $private_zone_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/privateDnsZones/{private_zone_name}/virtualNetworkLinks") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), private_zone_name: (encode-path-segment $private_zone_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/privateDnsZones/{private_zone_name}/virtualNetworkLinks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -354,11 +363,11 @@ export def "subscriptions-resource-groups-providers-microsoft-network-private-dn
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, private_zone_name: $private_zone_name, virtual_network_link_name: $virtual_network_link_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/privateDnsZones/{private_zone_name}/virtualNetworkLinks/{virtual_network_link_name}") $qp)
-  let extra_headers = {"If-Match": $if_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), private_zone_name: (encode-path-segment $private_zone_name), virtual_network_link_name: (encode-path-segment $virtual_network_link_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/privateDnsZones/{private_zone_name}/virtualNetworkLinks/{virtual_network_link_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-Match": $if_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -384,7 +393,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-private-dn
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, private_zone_name: $private_zone_name, virtual_network_link_name: $virtual_network_link_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/privateDnsZones/{private_zone_name}/virtualNetworkLinks/{virtual_network_link_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), private_zone_name: (encode-path-segment $private_zone_name), virtual_network_link_name: (encode-path-segment $virtual_network_link_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/privateDnsZones/{private_zone_name}/virtualNetworkLinks/{virtual_network_link_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -419,14 +428,14 @@ export def "subscriptions-resource-groups-providers-microsoft-network-private-dn
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, private_zone_name: $private_zone_name, virtual_network_link_name: $virtual_network_link_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/privateDnsZones/{private_zone_name}/virtualNetworkLinks/{virtual_network_link_name}") $qp)
-  let body = {"etag": $etag, "properties": $properties, "location": $location, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"If-Match": $if_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), private_zone_name: (encode-path-segment $private_zone_name), virtual_network_link_name: (encode-path-segment $virtual_network_link_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/privateDnsZones/{private_zone_name}/virtualNetworkLinks/{virtual_network_link_name}") $qp)
+  let req_body = {"etag": $etag, "properties": $properties, "location": $location, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"If-Match": $if_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Creates or updates a virtual network link to the specified Private DNS zone.
@@ -459,21 +468,21 @@ export def "subscriptions-resource-groups-providers-microsoft-network-private-dn
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, private_zone_name: $private_zone_name, virtual_network_link_name: $virtual_network_link_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/privateDnsZones/{private_zone_name}/virtualNetworkLinks/{virtual_network_link_name}") $qp)
-  let body = {"etag": $etag, "properties": $properties, "location": $location, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"If-Match": $if_match, "If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), private_zone_name: (encode-path-segment $private_zone_name), virtual_network_link_name: (encode-path-segment $virtual_network_link_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/privateDnsZones/{private_zone_name}/virtualNetworkLinks/{virtual_network_link_name}") $qp)
+  let req_body = {"etag": $etag, "properties": $properties, "location": $location, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"If-Match": $if_match, "If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists the record sets of a specified type in a Private DNS zone.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/privateDnsZones/{privateZoneName}/{recordType}
 # operationId: RecordSets_ListByType
-export def "subscriptions-resource-groups-providers-microsoft-network-private-dns-zones list-by-type" [
+export def "subscriptions-resource-groups-providers-microsoft-network-private-dns-zones list-record-sets-by-type" [
   subscription_id: string
   resource_group_name: string
   private_zone_name: string
@@ -487,13 +496,13 @@ export def "subscriptions-resource-groups-providers-microsoft-network-private-dn
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # The maximum number of record sets to return. If not specified, returns up to 100 record sets. (format: int32)
-  --recordsetnamesuffix: string # The suffix label of the record set name to be used to filter the record set enumeration. If this parameter is specified, the returned enumeration will only contain records that end with ".<recordsetnamesuffix>".
+  --recordsetnamesuffix: string # The suffix label of the record set name to be used to filter the record set enumeration. If this parameter is specified, the returned enumeration will only contain records that end with ".".
   --api-version: string # Client Api Version.
 ]: nothing -> record<nextLink: string, value: table<etag: string, id: string, name: string, properties: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$top" $top "scalar") (serialize-qp "$recordsetnamesuffix" $recordsetnamesuffix "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, private_zone_name: $private_zone_name, record_type: $record_type} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/privateDnsZones/{private_zone_name}/{record_type}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), private_zone_name: (encode-path-segment $private_zone_name), record_type: (encode-path-segment $record_type)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/privateDnsZones/{private_zone_name}/{record_type}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -503,7 +512,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-private-dn
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/privateDnsZones/{privateZoneName}/{recordType}/{relativeRecordSetName}
 # operationId: RecordSets_Delete
-export def "subscriptions-resource-groups-providers-microsoft-network-private-dns-zones delete-by-subscriptionId-resourceGroupName-privateZoneName-recordType-relativeRecordSetName" [
+export def "subscriptions-resource-groups-providers-microsoft-network-private-dns-zones delete-record-sets" [
   subscription_id: string
   resource_group_name: string
   private_zone_name: string
@@ -523,11 +532,11 @@ export def "subscriptions-resource-groups-providers-microsoft-network-private-dn
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, private_zone_name: $private_zone_name, record_type: $record_type, relative_record_set_name: $relative_record_set_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/privateDnsZones/{private_zone_name}/{record_type}/{relative_record_set_name}") $qp)
-  let extra_headers = {"If-Match": $if_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), private_zone_name: (encode-path-segment $private_zone_name), record_type: (encode-path-segment $record_type), relative_record_set_name: (encode-path-segment $relative_record_set_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/privateDnsZones/{private_zone_name}/{record_type}/{relative_record_set_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-Match": $if_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -535,7 +544,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-private-dn
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/privateDnsZones/{privateZoneName}/{recordType}/{relativeRecordSetName}
 # operationId: RecordSets_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-private-dns-zones get-by-subscriptionId-resourceGroupName-privateZoneName-recordType-relativeRecordSetName" [
+export def "subscriptions-resource-groups-providers-microsoft-network-private-dns-zones get-record-sets" [
   subscription_id: string
   resource_group_name: string
   private_zone_name: string
@@ -554,7 +563,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-private-dn
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, private_zone_name: $private_zone_name, record_type: $record_type, relative_record_set_name: $relative_record_set_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/privateDnsZones/{private_zone_name}/{record_type}/{relative_record_set_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), private_zone_name: (encode-path-segment $private_zone_name), record_type: (encode-path-segment $record_type), relative_record_set_name: (encode-path-segment $relative_record_set_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/privateDnsZones/{private_zone_name}/{record_type}/{relative_record_set_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -565,7 +574,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-private-dn
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/privateDnsZones/{privateZoneName}/{recordType}/{relativeRecordSetName}
 # operationId: RecordSets_Update
 # --properties shape: {aRecords?: list, aaaaRecords?: list, cnameRecord?: any, metadata?: record, mxRecords?: list, ptrRecords?: list, soaRecord?: any, srvRecords?: list, ttl?: int, txtRecords?: list}
-export def "subscriptions-resource-groups-providers-microsoft-network-private-dns-zones update-by-subscriptionId-resourceGroupName-privateZoneName-recordType-relativeRecordSetName" [
+export def "subscriptions-resource-groups-providers-microsoft-network-private-dns-zones update-record-sets" [
   subscription_id: string
   resource_group_name: string
   private_zone_name: string
@@ -588,14 +597,14 @@ export def "subscriptions-resource-groups-providers-microsoft-network-private-dn
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, private_zone_name: $private_zone_name, record_type: $record_type, relative_record_set_name: $relative_record_set_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/privateDnsZones/{private_zone_name}/{record_type}/{relative_record_set_name}") $qp)
-  let body = {"etag": $etag, "properties": $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"If-Match": $if_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), private_zone_name: (encode-path-segment $private_zone_name), record_type: (encode-path-segment $record_type), relative_record_set_name: (encode-path-segment $relative_record_set_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/privateDnsZones/{private_zone_name}/{record_type}/{relative_record_set_name}") $qp)
+  let req_body = {"etag": $etag, "properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"If-Match": $if_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Creates or updates a record set within a Private DNS zone.
@@ -603,7 +612,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-private-dn
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/privateDnsZones/{privateZoneName}/{recordType}/{relativeRecordSetName}
 # operationId: RecordSets_CreateOrUpdate
 # --properties shape: {aRecords?: list, aaaaRecords?: list, cnameRecord?: any, metadata?: record, mxRecords?: list, ptrRecords?: list, soaRecord?: any, srvRecords?: list, ttl?: int, txtRecords?: list}
-export def "subscriptions-resource-groups-providers-microsoft-network-private-dns-zones create-or-update-by-subscriptionId-resourceGroupName-privateZoneName-recordType-relativeRecordSetName" [
+export def "subscriptions-resource-groups-providers-microsoft-network-private-dns-zones create-record-sets-or-update" [
   subscription_id: string
   resource_group_name: string
   private_zone_name: string
@@ -627,12 +636,12 @@ export def "subscriptions-resource-groups-providers-microsoft-network-private-dn
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, private_zone_name: $private_zone_name, record_type: $record_type, relative_record_set_name: $relative_record_set_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/privateDnsZones/{private_zone_name}/{record_type}/{relative_record_set_name}") $qp)
-  let body = {"etag": $etag, "properties": $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"If-Match": $if_match, "If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), private_zone_name: (encode-path-segment $private_zone_name), record_type: (encode-path-segment $record_type), relative_record_set_name: (encode-path-segment $relative_record_set_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/privateDnsZones/{private_zone_name}/{record_type}/{relative_record_set_name}") $qp)
+  let req_body = {"etag": $etag, "properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"If-Match": $if_match, "If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

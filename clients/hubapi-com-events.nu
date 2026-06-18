@@ -37,6 +37,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -71,7 +80,7 @@ def auth-scheme-completer [] { ["query-hapikey" "bearer" "private-app-legacy"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "events-events get-page" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "events-events get-get-page" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,7 +104,7 @@ export def commands []: nothing -> table {
 #
 # GET /events/v3/events
 # operationId: get-/events/v3/events_getPage
-export def "events-events get-page" [
+export def "events-events get-get-page" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -108,11 +117,11 @@ export def "events-events get-page" [
   --occurred-before: string # The ending time as an ISO 8601 timestamp. (format: date-time)
   --object-type: string # The type of object being selected. Valid values are hubspot named object types (e.g. `contact`).
   --object-id: int # The id of the selected object. If not present, then the `objectProperty` parameter is required. (format: int64)
-  --event-type: string # Limits the response to the specified event type.  For example `&eventType=e_visited_page` returns only `e_visited_page` events.  If not present all event types are returned.
+  --event-type: string # Limits the response to the specified event type. For example `&eventType=e_visited_page` returns only `e_visited_page` events. If not present all event types are returned.
   --after: string # An additional parameter that may be used to get the next `limit` set of results.
   --before: string
   --limit: int # The maximum number of events to return, defaults to 20. (format: int32)
-  --qp-sort: list # Selects the sort field and order. Defaults to ascending, prefix with `-` for descending order. `occurredAt` is the only field supported for sorting.
+  --qp-sort: list<string> # Selects the sort field and order. Defaults to ascending, prefix with `-` for descending order. `occurredAt` is the only field supported for sorting.
 ]: nothing -> record<paging: record<next: record<after: string, link: string>>, results: table<eventType: string, id: string, objectId: string, objectType: string, occurredAt: string, properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "query-hapikey"))
   let base = ($base_url | default $BASE_URL)

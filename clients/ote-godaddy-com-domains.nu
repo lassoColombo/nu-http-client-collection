@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -109,11 +118,11 @@ export def "domains list" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --statuses: list # Only include results with `status` value in the specified set
-  --status-groups: list # Only include results with `status` value in any of the specified groups
+  --statuses: list<string> # Only include results with `status` value in the specified set
+  --status-groups: list<string> # Only include results with `status` value in any of the specified groups
   --limit: int # Maximum number of domains to return
   --marker: string # Marker Domain to use as the offset in results
-  --includes: list # Optional details to be included in the response
+  --includes: list<string> # Optional details to be included in the response
   --modified-date: string # Only include results that have been modified since the specified date (format: iso-datetime)
   --x-shopper-id: string # Shopper ID whose domains are to be retrieved
 ]: nothing -> table<authCode: string, contactAdmin: record<addressMailing: record, email: string, fax: string, jobTitle: string, nameFirst: string, nameLast: string, nameMiddle: string, organization: string, phone: string>, contactBilling: record<addressMailing: record, email: string, fax: string, jobTitle: string, nameFirst: string, nameLast: string, nameMiddle: string, organization: string, phone: string>, contactRegistrant: record<addressMailing: record, email: string, fax: string, jobTitle: string, nameFirst: string, nameLast: string, nameMiddle: string, organization: string, phone: string>, contactTech: record<addressMailing: record, email: string, fax: string, jobTitle: string, nameFirst: string, nameLast: string, nameMiddle: string, organization: string, phone: string>, createdAt: string, deletedAt: string, domain: string, domainId: float, expirationProtected: bool, expires: string, exposeWhois: bool, holdRegistrar: bool, locked: bool, nameServers: list<string>, privacy: bool, registrarCreatedAt: string, renewAuto: bool, renewDeadline: string, renewable: bool, status: string, transferAwayEligibleAt: string, transferProtected: bool> {
@@ -121,10 +130,10 @@ export def "domains list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "statuses" $statuses "csv") (serialize-qp "statusGroups" $status_groups "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "marker" $marker "scalar") (serialize-qp "includes" $includes "csv") (serialize-qp "modifiedDate" $modified_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/domains" $qp)
-  let extra_headers = {"X-Shopper-Id": $x_shopper_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/javascript")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Shopper-Id": $x_shopper_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -142,7 +151,7 @@ export def "domains-agreements get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --tlds: list # list of TLDs whose legal agreements are to be retrieved
+  --tlds: list<string> # list of TLDs whose legal agreements are to be retrieved
   --privacy: oneof<nothing, bool> # Whether or not privacy has been requested
   --for-transfer: oneof<nothing, bool> # Whether or not domain tranfer has been requested
   --x-market-id: string # Unique identifier of the Market used to retrieve/translate Legal Agreements
@@ -151,10 +160,10 @@ export def "domains-agreements get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "tlds" $tlds "csv") (serialize-qp "privacy" $privacy "scalar") (serialize-qp "forTransfer" $for_transfer "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/domains/agreements" $qp)
-  let extra_headers = {"X-Market-Id": $x_market_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/javascript")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Market-Id": $x_market_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -162,7 +171,7 @@ export def "domains-agreements get" [
 #
 # GET /v1/domains/available
 # operationId: available
-export def "domains-available available" [
+export def "domains-available get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -189,7 +198,7 @@ export def "domains-available available" [
 #
 # POST /v1/domains/available
 # operationId: availableBulk
-export def "domains-available availableBulk" [
+export def "domains-available create-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -207,10 +216,11 @@ export def "domains-available availableBulk" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "checkType" $check_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/domains/available" $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/javascript")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Validate the request body using the Domain Contact Validation Schema for specified domains.
@@ -238,7 +248,7 @@ export def "domains-contacts-validate validate" [
   --contact-presence: any # shape: {addressMailing: any, email: string, fax?: string, jobTitle?: string, nameFirst: string, nameLast: string, nameMiddle?: string, organization?: string, phone: string}
   --contact-registrant: any # shape: {addressMailing: any, email: string, fax?: string, jobTitle?: string, nameFirst: string, nameLast: string, nameMiddle?: string, organization?: string, phone: string}
   --contact-tech: any # shape: {addressMailing: any, email: string, fax?: string, jobTitle?: string, nameFirst: string, nameLast: string, nameMiddle?: string, organization?: string, phone: string}
-  domains: list # An array of domain names to be validated against. Alternatively, you can specify the extracted tlds. However, full domain names are required if the tld is `uk`
+  domains: list<string> # An array of domain names to be validated against. Alternatively, you can specify the extracted tlds. However, full domain names are required if the tld is `uk`
   --entity-type: string@entity-type-completer # Canadian Presence Requirement (CA)
 ]: any -> any {
   let input = $in
@@ -246,25 +256,25 @@ export def "domains-contacts-validate validate" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "marketId" $market_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/domains/contacts/validate" $qp)
-  let body = {"contactAdmin": $contact_admin, "contactBilling": $contact_billing, "contactPresence": $contact_presence, "contactRegistrant": $contact_registrant, "contactTech": $contact_tech, "domains": $domains, "entityType": $entity_type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Private-Label-Id": $x_private_label_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"contactAdmin": $contact_admin, "contactBilling": $contact_billing, "contactPresence": $contact_presence, "contactRegistrant": $contact_registrant, "contactTech": $contact_tech, "domains": $domains, "entityType": $entity_type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Private-Label-Id": $x_private_label_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Purchase and register the specified Domain
 #
 # POST /v1/domains/purchase
 # operationId: purchase
-# --consent shape: {agreedAt: string, agreedBy: string, agreementKeys: list}
+# --consent shape: {agreedAt: string, agreedBy: string, agreementKeys: list<string>}
 # --contactAdmin shape: {addressMailing: any, email: string, fax?: string, jobTitle?: string, nameFirst: string, nameLast: string, nameMiddle?: string, organization?: string, phone: string}
 # --contactBilling shape: {addressMailing: any, email: string, fax?: string, jobTitle?: string, nameFirst: string, nameLast: string, nameMiddle?: string, organization?: string, phone: string}
 # --contactRegistrant shape: {addressMailing: any, email: string, fax?: string, jobTitle?: string, nameFirst: string, nameLast: string, nameMiddle?: string, organization?: string, phone: string}
 # --contactTech shape: {addressMailing: any, email: string, fax?: string, jobTitle?: string, nameFirst: string, nameLast: string, nameMiddle?: string, organization?: string, phone: string}
-export def "domains-purchase purchase" [
+export def "domains-purchase create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -275,13 +285,13 @@ export def "domains-purchase purchase" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --x-shopper-id: string # The Shopper for whom the domain should be purchased
-  consent: any # shape: {agreedAt: string, agreedBy: string, agreementKeys: list}
+  consent: any # shape: {agreedAt: string, agreedBy: string, agreementKeys: list<string>}
   --contact-admin: any # shape: {addressMailing: any, email: string, fax?: string, jobTitle?: string, nameFirst: string, nameLast: string, nameMiddle?: string, organization?: string, phone: string}
   --contact-billing: any # shape: {addressMailing: any, email: string, fax?: string, jobTitle?: string, nameFirst: string, nameLast: string, nameMiddle?: string, organization?: string, phone: string}
   --contact-registrant: any # shape: {addressMailing: any, email: string, fax?: string, jobTitle?: string, nameFirst: string, nameLast: string, nameMiddle?: string, organization?: string, phone: string}
   --contact-tech: any # shape: {addressMailing: any, email: string, fax?: string, jobTitle?: string, nameFirst: string, nameLast: string, nameMiddle?: string, organization?: string, phone: string}
   domain: string # For internationalized domain names with non-ascii characters, the domain name is converted to punycode before format and pattern validation rules are checked (format: domain)
-  --name-servers: list
+  --name-servers: list<string>
   --period: int # format: integer-positive, default: 1
   --privacy: oneof<nothing, bool> # default: false
   --renew-auto: oneof<nothing, bool> # default: true
@@ -290,20 +300,20 @@ export def "domains-purchase purchase" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/domains/purchase")
-  let body = {"consent": $consent, "contactAdmin": $contact_admin, "contactBilling": $contact_billing, "contactRegistrant": $contact_registrant, "contactTech": $contact_tech, "domain": $domain, "nameServers": $name_servers, "period": $period, "privacy": $privacy, "renewAuto": $renew_auto} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Shopper-Id": $x_shopper_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"consent": $consent, "contactAdmin": $contact_admin, "contactBilling": $contact_billing, "contactRegistrant": $contact_registrant, "contactTech": $contact_tech, "domain": $domain, "nameServers": $name_servers, "period": $period, "privacy": $privacy, "renewAuto": $renew_auto} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/javascript")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Shopper-Id": $x_shopper_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve the schema to be submitted when registering a Domain for the specified TLD
 #
 # GET /v1/domains/purchase/schema/{tld}
 # operationId: schema
-export def "domains-purchase-schema schema" [
+export def "domains-purchase-schema get" [
   tld: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -317,7 +327,7 @@ export def "domains-purchase-schema schema" [
 ]: nothing -> record<id: string, models: record, properties: record, required: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({tld: $tld} | format pattern "/v1/domains/purchase/schema/{tld}"))
+  let full_url = (build-url $base ({tld: (encode-path-segment $tld)} | format pattern "/v1/domains/purchase/schema/{tld}"))
   let accept_val = ($accept | default "application/javascript")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -327,7 +337,7 @@ export def "domains-purchase-schema schema" [
 #
 # POST /v1/domains/purchase/validate
 # operationId: validate
-# --consent shape: {agreedAt: string, agreedBy: string, agreementKeys: list}
+# --consent shape: {agreedAt: string, agreedBy: string, agreementKeys: list<string>}
 # --contactAdmin shape: {addressMailing: any, email: string, fax?: string, jobTitle?: string, nameFirst: string, nameLast: string, nameMiddle?: string, organization?: string, phone: string}
 # --contactBilling shape: {addressMailing: any, email: string, fax?: string, jobTitle?: string, nameFirst: string, nameLast: string, nameMiddle?: string, organization?: string, phone: string}
 # --contactRegistrant shape: {addressMailing: any, email: string, fax?: string, jobTitle?: string, nameFirst: string, nameLast: string, nameMiddle?: string, organization?: string, phone: string}
@@ -341,13 +351,13 @@ export def "domains-purchase-validate validate" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  consent: any # shape: {agreedAt: string, agreedBy: string, agreementKeys: list}
+  consent: any # shape: {agreedAt: string, agreedBy: string, agreementKeys: list<string>}
   --contact-admin: any # shape: {addressMailing: any, email: string, fax?: string, jobTitle?: string, nameFirst: string, nameLast: string, nameMiddle?: string, organization?: string, phone: string}
   --contact-billing: any # shape: {addressMailing: any, email: string, fax?: string, jobTitle?: string, nameFirst: string, nameLast: string, nameMiddle?: string, organization?: string, phone: string}
   --contact-registrant: any # shape: {addressMailing: any, email: string, fax?: string, jobTitle?: string, nameFirst: string, nameLast: string, nameMiddle?: string, organization?: string, phone: string}
   --contact-tech: any # shape: {addressMailing: any, email: string, fax?: string, jobTitle?: string, nameFirst: string, nameLast: string, nameMiddle?: string, organization?: string, phone: string}
   domain: string # For internationalized domain names with non-ascii characters, the domain name is converted to punycode before format and pattern validation rules are checked (format: domain)
-  --name-servers: list
+  --name-servers: list<string>
   --period: int # format: integer-positive, default: 1
   --privacy: oneof<nothing, bool> # default: false
   --renew-auto: oneof<nothing, bool> # default: true
@@ -356,18 +366,18 @@ export def "domains-purchase-validate validate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/domains/purchase/validate")
-  let body = {"consent": $consent, "contactAdmin": $contact_admin, "contactBilling": $contact_billing, "contactRegistrant": $contact_registrant, "contactTech": $contact_tech, "domain": $domain, "nameServers": $name_servers, "period": $period, "privacy": $privacy, "renewAuto": $renew_auto} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"consent": $consent, "contactAdmin": $contact_admin, "contactBilling": $contact_billing, "contactRegistrant": $contact_registrant, "contactTech": $contact_tech, "domain": $domain, "nameServers": $name_servers, "period": $period, "privacy": $privacy, "renewAuto": $renew_auto} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Suggest alternate Domain names based on a seed Domain, a set of keywords, or the shopper's purchase history
 #
 # GET /v1/domains/suggest
 # operationId: suggest
-export def "domains-suggest suggest" [
+export def "domains-suggest get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -378,10 +388,10 @@ export def "domains-suggest suggest" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --query: string # Domain name or set of keywords for which alternative domain names will be suggested
-  --country: string@country-completer # Two-letter ISO country code to be used as a hint for target region<br/><br/> NOTE: These are sample values, there are many <a href="http://www.iso.org/iso/country_codes.htm">more</a> (format: iso-country-code)
+  --country: string@country-completer # Two-letter ISO country code to be used as a hint for target region NOTE: These are sample values, there are many more (http://www.iso.org/iso/country_codes.htm) (format: iso-country-code)
   --city: string # Name of city to be used as a hint for target region (format: city-name)
-  --sources: list # Sources to be queried<br/><br/><ul> <li><strong>CC_TLD</strong> - Varies the TLD using Country Codes</li> <li><strong>EXTENSION</strong> - Varies the TLD</li> <li><strong>KEYWORD_SPIN</strong> - Identifies keywords and then rotates each one</li> <li><strong>PREMIUM</strong> - Includes variations with premium prices</li></ul>
-  --tlds: list # Top-level domains to be included in suggestions<br/><br/> NOTE: These are sample values, there are many <a href="http://www.godaddy.com/tlds/gtld.aspx#domain_search_form">more</a>
+  --sources: list<string> # Sources to be queried CC_TLD - Varies the TLD using Country Codes EXTENSION - Varies the TLD KEYWORD_SPIN - Identifies keywords and then rotates each one PREMIUM - Includes variations with premium prices
+  --tlds: list<string> # Top-level domains to be included in suggestions NOTE: These are sample values, there are many more (http://www.godaddy.com/tlds/gtld.aspx#domain_search_form)
   --length-max: int # Maximum length of second-level domain
   --length-min: int # Minimum length of second-level domain
   --limit: int # Maximum number of suggestions to return
@@ -392,10 +402,10 @@ export def "domains-suggest suggest" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "sources" $sources "csv") (serialize-qp "tlds" $tlds "csv") (serialize-qp "lengthMax" $length_max "scalar") (serialize-qp "lengthMin" $length_min "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "waitMs" $wait_ms "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/domains/suggest" $qp)
-  let extra_headers = {"X-Shopper-Id": $x_shopper_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/javascript")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Shopper-Id": $x_shopper_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -403,7 +413,7 @@ export def "domains-suggest suggest" [
 #
 # GET /v1/domains/tlds
 # operationId: tlds
-export def "domains-tlds tlds" [
+export def "domains-tlds get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -439,7 +449,7 @@ export def "domains cancel" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({domain: $domain} | format pattern "/v1/domains/{domain}"))
+  let full_url = (build-url $base ({domain: (encode-path-segment $domain)} | format pattern "/v1/domains/{domain}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -464,11 +474,11 @@ export def "domains get" [
 ]: nothing -> record<authCode: string, contactAdmin: record<addressMailing: record<address1: string, address2: string, city: string, country: string, postalCode: string, state: string>, email: string, fax: string, jobTitle: string, nameFirst: string, nameLast: string, nameMiddle: string, organization: string, phone: string>, contactBilling: record<addressMailing: record<address1: string, address2: string, city: string, country: string, postalCode: string, state: string>, email: string, fax: string, jobTitle: string, nameFirst: string, nameLast: string, nameMiddle: string, organization: string, phone: string>, contactRegistrant: record<addressMailing: record<address1: string, address2: string, city: string, country: string, postalCode: string, state: string>, email: string, fax: string, jobTitle: string, nameFirst: string, nameLast: string, nameMiddle: string, organization: string, phone: string>, contactTech: record<addressMailing: record<address1: string, address2: string, city: string, country: string, postalCode: string, state: string>, email: string, fax: string, jobTitle: string, nameFirst: string, nameLast: string, nameMiddle: string, organization: string, phone: string>, createdAt: string, deletedAt: string, domain: string, domainId: float, expirationProtected: bool, expires: string, exposeWhois: bool, holdRegistrar: bool, locked: bool, nameServers: list<string>, privacy: bool, registrarCreatedAt: string, renewAuto: bool, renewDeadline: string, status: string, subaccountId: string, transferAwayEligibleAt: string, transferProtected: bool, verifications: record<domainName: record<status: string>, realName: record<status: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({domain: $domain} | format pattern "/v1/domains/{domain}"))
-  let extra_headers = {"X-Shopper-Id": $x_shopper_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({domain: (encode-path-segment $domain)} | format pattern "/v1/domains/{domain}"))
   let accept_val = ($accept | default "application/javascript")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Shopper-Id": $x_shopper_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -476,7 +486,7 @@ export def "domains get" [
 #
 # PATCH /v1/domains/{domain}
 # operationId: update
-# --consent shape: {agreedAt: string, agreedBy: string, agreementKeys: list}
+# --consent shape: {agreedAt: string, agreedBy: string, agreementKeys: list<string>}
 export def "domains update" [
   domain: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -488,7 +498,7 @@ export def "domains update" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-shopper-id: string # Shopper for whom Domain is to be updated. NOTE: This is only required if you are a Reseller managing a domain purchased outside the scope of your reseller account. For instance, if you're a Reseller, but purchased a Domain via http://www.godaddy.com
-  --consent: any # shape: {agreedAt: string, agreedBy: string, agreementKeys: list}
+  --consent: any # shape: {agreedAt: string, agreedBy: string, agreementKeys: list<string>}
   --expose-whois: oneof<nothing, bool> # Whether or not the domain contact details should be shown in the WHOIS
   --locked: oneof<nothing, bool> # Whether or not the domain should be locked to prevent transfers
   --name-servers: list # Fully-qualified domain names for Name Servers to associate with the domain
@@ -498,14 +508,14 @@ export def "domains update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({domain: $domain} | format pattern "/v1/domains/{domain}"))
-  let body = {"consent": $consent, "exposeWhois": $expose_whois, "locked": $locked, "nameServers": $name_servers, "renewAuto": $renew_auto, "subaccountId": $subaccount_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Shopper-Id": $x_shopper_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({domain: (encode-path-segment $domain)} | format pattern "/v1/domains/{domain}"))
+  let req_body = {"consent": $consent, "exposeWhois": $expose_whois, "locked": $locked, "nameServers": $name_servers, "renewAuto": $renew_auto, "subaccountId": $subaccount_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Shopper-Id": $x_shopper_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update domain
@@ -535,14 +545,14 @@ export def "domains-contacts update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({domain: $domain} | format pattern "/v1/domains/{domain}/contacts"))
-  let body = {"contactAdmin": $contact_admin, "contactBilling": $contact_billing, "contactRegistrant": $contact_registrant, "contactTech": $contact_tech} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Shopper-Id": $x_shopper_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({domain: (encode-path-segment $domain)} | format pattern "/v1/domains/{domain}/contacts"))
+  let req_body = {"contactAdmin": $contact_admin, "contactBilling": $contact_billing, "contactRegistrant": $contact_registrant, "contactTech": $contact_tech} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Shopper-Id": $x_shopper_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Submit a privacy cancellation request for the given domain
@@ -563,11 +573,11 @@ export def "domains-privacy cancel" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({domain: $domain} | format pattern "/v1/domains/{domain}/privacy"))
-  let extra_headers = {"X-Shopper-Id": $x_shopper_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({domain: (encode-path-segment $domain)} | format pattern "/v1/domains/{domain}/privacy"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Shopper-Id": $x_shopper_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -575,8 +585,8 @@ export def "domains-privacy cancel" [
 #
 # POST /v1/domains/{domain}/privacy/purchase
 # operationId: purchasePrivacy
-# --consent shape: {agreedAt: string, agreedBy: string, agreementKeys: list}
-export def "domains-privacy-purchase purchasePrivacy" [
+# --consent shape: {agreedAt: string, agreedBy: string, agreementKeys: list<string>}
+export def "domains-privacy-purchase create" [
   domain: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -588,26 +598,26 @@ export def "domains-privacy-purchase purchasePrivacy" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --x-shopper-id: string # Shopper ID of the owner of the domain
-  consent: any # shape: {agreedAt: string, agreedBy: string, agreementKeys: list}
+  consent: any # shape: {agreedAt: string, agreedBy: string, agreementKeys: list<string>}
 ]: any -> record<currency: string, itemCount: int, orderId: int, total: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({domain: $domain} | format pattern "/v1/domains/{domain}/privacy/purchase"))
-  let body = {"consent": $consent} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Shopper-Id": $x_shopper_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({domain: (encode-path-segment $domain)} | format pattern "/v1/domains/{domain}/privacy/purchase"))
+  let req_body = {"consent": $consent} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/javascript")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Shopper-Id": $x_shopper_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Add the specified DNS Records to the specified Domain
 #
 # PATCH /v1/domains/{domain}/records
 # operationId: recordAdd
-export def "domains-records recordAdd" [
+export def "domains-records create" [
   domain: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -623,20 +633,21 @@ export def "domains-records recordAdd" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({domain: $domain} | format pattern "/v1/domains/{domain}/records"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Shopper-Id": $x_shopper_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({domain: (encode-path-segment $domain)} | format pattern "/v1/domains/{domain}/records"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Shopper-Id": $x_shopper_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Replace all DNS Records for the specified Domain
 #
 # PUT /v1/domains/{domain}/records
 # operationId: recordReplace
-export def "domains-records recordReplace" [
+export def "domains-records update-by-domain" [
   domain: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -652,20 +663,21 @@ export def "domains-records recordReplace" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({domain: $domain} | format pattern "/v1/domains/{domain}/records"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Shopper-Id": $x_shopper_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({domain: (encode-path-segment $domain)} | format pattern "/v1/domains/{domain}/records"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Shopper-Id": $x_shopper_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Replace all DNS Records for the specified Domain with the specified Type
 #
 # PUT /v1/domains/{domain}/records/{type}
 # operationId: recordReplaceType
-export def "domains-records recordReplaceType" [
+export def "domains-records update-by-domain-type" [
   domain: string
   type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -682,20 +694,21 @@ export def "domains-records recordReplaceType" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({domain: $domain, type: $type} | format pattern "/v1/domains/{domain}/records/{type}"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Shopper-Id": $x_shopper_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({domain: (encode-path-segment $domain), type: (encode-path-segment $type)} | format pattern "/v1/domains/{domain}/records/{type}"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Shopper-Id": $x_shopper_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete all DNS Records for the specified Domain with the specified Type and Name
 #
 # DELETE /v1/domains/{domain}/records/{type}/{name}
 # operationId: recordDeleteTypeName
-export def "domains-records recordDeleteTypeName" [
+export def "domains-records delete" [
   domain: string
   type: string
   name: string
@@ -711,11 +724,11 @@ export def "domains-records recordDeleteTypeName" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({domain: $domain, type: $type, name: $name} | format pattern "/v1/domains/{domain}/records/{type}/{name}"))
-  let extra_headers = {"X-Shopper-Id": $x_shopper_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({domain: (encode-path-segment $domain), type: (encode-path-segment $type), name: (encode-path-segment $name)} | format pattern "/v1/domains/{domain}/records/{type}/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Shopper-Id": $x_shopper_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -723,7 +736,7 @@ export def "domains-records recordDeleteTypeName" [
 #
 # GET /v1/domains/{domain}/records/{type}/{name}
 # operationId: recordGet
-export def "domains-records recordGet" [
+export def "domains-records get" [
   domain: string
   type: string
   name: string
@@ -743,11 +756,11 @@ export def "domains-records recordGet" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({domain: $domain, type: $type, name: $name} | format pattern "/v1/domains/{domain}/records/{type}/{name}") $qp)
-  let extra_headers = {"X-Shopper-Id": $x_shopper_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({domain: (encode-path-segment $domain), type: (encode-path-segment $type), name: (encode-path-segment $name)} | format pattern "/v1/domains/{domain}/records/{type}/{name}") $qp)
   let accept_val = ($accept | default "application/javascript")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Shopper-Id": $x_shopper_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -755,7 +768,7 @@ export def "domains-records recordGet" [
 #
 # PUT /v1/domains/{domain}/records/{type}/{name}
 # operationId: recordReplaceTypeName
-export def "domains-records recordReplaceTypeName" [
+export def "domains-records update-by-domain-type-name" [
   domain: string
   type: string
   name: string
@@ -773,20 +786,21 @@ export def "domains-records recordReplaceTypeName" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({domain: $domain, type: $type, name: $name} | format pattern "/v1/domains/{domain}/records/{type}/{name}"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Shopper-Id": $x_shopper_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({domain: (encode-path-segment $domain), type: (encode-path-segment $type), name: (encode-path-segment $name)} | format pattern "/v1/domains/{domain}/records/{type}/{name}"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Shopper-Id": $x_shopper_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Renew the specified Domain
 #
 # POST /v1/domains/{domain}/renew
 # operationId: renew
-export def "domains-renew renew" [
+export def "domains-renew create" [
   domain: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -803,26 +817,26 @@ export def "domains-renew renew" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({domain: $domain} | format pattern "/v1/domains/{domain}/renew"))
-  let body = {"period": $period} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Shopper-Id": $x_shopper_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({domain: (encode-path-segment $domain)} | format pattern "/v1/domains/{domain}/renew"))
+  let req_body = {"period": $period} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/javascript")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Shopper-Id": $x_shopper_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Purchase and start or restart transfer process
 #
 # POST /v1/domains/{domain}/transfer
 # operationId: transferIn
-# --consent shape: {agreedAt: string, agreedBy: string, agreementKeys: list}
+# --consent shape: {agreedAt: string, agreedBy: string, agreementKeys: list<string>}
 # --contactAdmin shape: {addressMailing: any, email: string, fax?: string, jobTitle?: string, nameFirst: string, nameLast: string, nameMiddle?: string, organization?: string, phone: string}
 # --contactBilling shape: {addressMailing: any, email: string, fax?: string, jobTitle?: string, nameFirst: string, nameLast: string, nameMiddle?: string, organization?: string, phone: string}
 # --contactRegistrant shape: {addressMailing: any, email: string, fax?: string, jobTitle?: string, nameFirst: string, nameLast: string, nameMiddle?: string, organization?: string, phone: string}
 # --contactTech shape: {addressMailing: any, email: string, fax?: string, jobTitle?: string, nameFirst: string, nameLast: string, nameMiddle?: string, organization?: string, phone: string}
-export def "domains-transfer transferIn" [
+export def "domains-transfer create" [
   domain: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -835,7 +849,7 @@ export def "domains-transfer transferIn" [
   --accept: string@accept-completer # Response content type
   --x-shopper-id: string # The Shopper to whom the domain should be transfered
   auth_code: string # Authorization code from registrar for transferring a domain
-  consent: any # shape: {agreedAt: string, agreedBy: string, agreementKeys: list}
+  consent: any # shape: {agreedAt: string, agreedBy: string, agreementKeys: list<string>}
   --contact-admin: any # shape: {addressMailing: any, email: string, fax?: string, jobTitle?: string, nameFirst: string, nameLast: string, nameMiddle?: string, organization?: string, phone: string}
   --contact-billing: any # shape: {addressMailing: any, email: string, fax?: string, jobTitle?: string, nameFirst: string, nameLast: string, nameMiddle?: string, organization?: string, phone: string}
   --contact-registrant: any # shape: {addressMailing: any, email: string, fax?: string, jobTitle?: string, nameFirst: string, nameLast: string, nameMiddle?: string, organization?: string, phone: string}
@@ -847,14 +861,14 @@ export def "domains-transfer transferIn" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({domain: $domain} | format pattern "/v1/domains/{domain}/transfer"))
-  let body = {"authCode": $auth_code, "consent": $consent, "contactAdmin": $contact_admin, "contactBilling": $contact_billing, "contactRegistrant": $contact_registrant, "contactTech": $contact_tech, "period": $period, "privacy": $privacy, "renewAuto": $renew_auto} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Shopper-Id": $x_shopper_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({domain: (encode-path-segment $domain)} | format pattern "/v1/domains/{domain}/transfer"))
+  let req_body = {"authCode": $auth_code, "consent": $consent, "contactAdmin": $contact_admin, "contactBilling": $contact_billing, "contactRegistrant": $contact_registrant, "contactTech": $contact_tech, "period": $period, "privacy": $privacy, "renewAuto": $renew_auto} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/javascript")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Shopper-Id": $x_shopper_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Re-send Contact E-mail Verification for specified Domain
@@ -875,11 +889,11 @@ export def "domains-verify-registrant-email verify" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({domain: $domain} | format pattern "/v1/domains/{domain}/verifyRegistrantEmail"))
-  let extra_headers = {"X-Shopper-Id": $x_shopper_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({domain: (encode-path-segment $domain)} | format pattern "/v1/domains/{domain}/verifyRegistrantEmail"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Shopper-Id": $x_shopper_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -887,7 +901,7 @@ export def "domains-verify-registrant-email verify" [
 #
 # DELETE /v2/customers/{customerId}/domains/forwards/{fqdn}
 # operationId: domainsForwardsDelete
-export def "customers-domains-forwards domainsForwardsDelete" [
+export def "customers-domains-forwards delete" [
   customer_id: string
   fqdn: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -901,7 +915,7 @@ export def "customers-domains-forwards domainsForwardsDelete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({customer_id: $customer_id, fqdn: $fqdn} | format pattern "/v2/customers/{customer_id}/domains/forwards/{fqdn}"))
+  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id), fqdn: (encode-path-segment $fqdn)} | format pattern "/v2/customers/{customer_id}/domains/forwards/{fqdn}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -911,7 +925,7 @@ export def "customers-domains-forwards domainsForwardsDelete" [
 #
 # GET /v2/customers/{customerId}/domains/forwards/{fqdn}
 # operationId: domainsForwardsGet
-export def "customers-domains-forwards domainsForwardsGet" [
+export def "customers-domains-forwards get" [
   customer_id: string
   fqdn: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -927,7 +941,7 @@ export def "customers-domains-forwards domainsForwardsGet" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "includeSubs" $include_subs "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer_id: $customer_id, fqdn: $fqdn} | format pattern "/v2/customers/{customer_id}/domains/forwards/{fqdn}") $qp)
+  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id), fqdn: (encode-path-segment $fqdn)} | format pattern "/v2/customers/{customer_id}/domains/forwards/{fqdn}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -938,7 +952,7 @@ export def "customers-domains-forwards domainsForwardsGet" [
 # POST /v2/customers/{customerId}/domains/forwards/{fqdn}
 # operationId: domainsForwardsPost
 # --mask shape: {description?: string, keywords?: string, title?: string}
-export def "customers-domains-forwards domainsForwardsPost" [
+export def "customers-domains-forwards create" [
   customer_id: string
   fqdn: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -950,18 +964,18 @@ export def "customers-domains-forwards domainsForwardsPost" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --mask: any # shape: {description?: string, keywords?: string, title?: string}
-  type: string@type-completer # The type of fowarding to implement<br/><ul><li><strong style='margin-left: 12px;'>MASKED</strong> - Prevents the forwarded domain or subdomain URL from displaying in the browser's address bar.</li><li><strong style='margin-left: 12px;'>REDIRECT_PERMANENT*</strong> - Redirects to the url you specified in the forwardTo field using a `301 Moved Permanently` HTTP response. The HTTP 301 response code tells user-agents (including search engines) that the location has permanently moved.</li><li><strong style='margin-left: 12px;'>REDIRECT_TEMPORARY</strong> - Redirects to the url you specified in the forwardTo field using a `302 Found` HTTP response. The HTTP 302 response code tells user-agents (including search engines) that the location has temporarily moved.</li></ul> (default: REDIRECT_PERMANENT)
-  --body-url: string # Forwards http(s) traffic to this destination url (ex. http://www.somedomain.com/) (format: url)
+  type: string@type-completer # The type of fowarding to implementMASKED - Prevents the forwarded domain or subdomain URL from displaying in the browser's address bar.REDIRECT_PERMANENT* - Redirects to the url you specified in the forwardTo field using a `301 Moved Permanently` HTTP response. The HTTP 301 response code tells user-agents (including search engines) that the location has permanently moved.REDIRECT_TEMPORARY - Redirects to the url you specified in the forwardTo field using a `302 Found` HTTP response. The HTTP 302 response code tells user-agents (including search engines) that the location has temporarily moved. (default: REDIRECT_PERMANENT)
+  url: string # Forwards http(s) traffic to this destination url (ex. http://www.somedomain.com/) (format: url)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({customer_id: $customer_id, fqdn: $fqdn} | format pattern "/v2/customers/{customer_id}/domains/forwards/{fqdn}"))
-  let body = {"mask": $mask, "type": $type, "url": $body_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id), fqdn: (encode-path-segment $fqdn)} | format pattern "/v2/customers/{customer_id}/domains/forwards/{fqdn}"))
+  let req_body = {"mask": $mask, "type": $type, "url": $url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Modify the forwarding information for the given fqdn
@@ -969,7 +983,7 @@ export def "customers-domains-forwards domainsForwardsPost" [
 # PUT /v2/customers/{customerId}/domains/forwards/{fqdn}
 # operationId: domainsForwardsPut
 # --mask shape: {description?: string, keywords?: string, title?: string}
-export def "customers-domains-forwards domainsForwardsPut" [
+export def "customers-domains-forwards update" [
   customer_id: string
   fqdn: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -981,18 +995,18 @@ export def "customers-domains-forwards domainsForwardsPut" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --mask: any # shape: {description?: string, keywords?: string, title?: string}
-  type: string@type-completer # The type of fowarding to implement<br/><ul><li><strong style='margin-left: 12px;'>MASKED</strong> - Prevents the forwarded domain or subdomain URL from displaying in the browser's address bar.</li><li><strong style='margin-left: 12px;'>REDIRECT_PERMANENT*</strong> - Redirects to the url you specified in the forwardTo field using a `301 Moved Permanently` HTTP response. The HTTP 301 response code tells user-agents (including search engines) that the location has permanently moved.</li><li><strong style='margin-left: 12px;'>REDIRECT_TEMPORARY</strong> - Redirects to the url you specified in the forwardTo field using a `302 Found` HTTP response. The HTTP 302 response code tells user-agents (including search engines) that the location has temporarily moved.</li></ul> (default: REDIRECT_PERMANENT)
-  --body-url: string # Forwards http(s) traffic to this destination url (ex. http://www.somedomain.com/) (format: url)
+  type: string@type-completer # The type of fowarding to implementMASKED - Prevents the forwarded domain or subdomain URL from displaying in the browser's address bar.REDIRECT_PERMANENT* - Redirects to the url you specified in the forwardTo field using a `301 Moved Permanently` HTTP response. The HTTP 301 response code tells user-agents (including search engines) that the location has permanently moved.REDIRECT_TEMPORARY - Redirects to the url you specified in the forwardTo field using a `302 Found` HTTP response. The HTTP 302 response code tells user-agents (including search engines) that the location has temporarily moved. (default: REDIRECT_PERMANENT)
+  url: string # Forwards http(s) traffic to this destination url (ex. http://www.somedomain.com/) (format: url)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({customer_id: $customer_id, fqdn: $fqdn} | format pattern "/v2/customers/{customer_id}/domains/forwards/{fqdn}"))
-  let body = {"mask": $mask, "type": $type, "url": $body_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id), fqdn: (encode-path-segment $fqdn)} | format pattern "/v2/customers/{customer_id}/domains/forwards/{fqdn}"))
+  let req_body = {"mask": $mask, "type": $type, "url": $url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve the next domain notification
@@ -1012,11 +1026,11 @@ export def "customers-domains-notifications get" [
 ]: nothing -> record<addedAt: string, metadata: record, notificationId: string, requestId: string, resource: string, resourceType: string, status: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({customer_id: $customer_id} | format pattern "/v2/customers/{customer_id}/domains/notifications"))
-  let extra_headers = {"X-Request-Id": $x_request_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id)} | format pattern "/v2/customers/{customer_id}/domains/notifications"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Request-Id": $x_request_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1037,18 +1051,18 @@ export def "customers-domains-notifications-opt-in get" [
 ]: nothing -> table<addedAt: string, metadata: record, notificationId: string, requestId: string, resource: string, resourceType: string, status: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({customer_id: $customer_id} | format pattern "/v2/customers/{customer_id}/domains/notifications/optIn"))
-  let extra_headers = {"X-Request-Id": $x_request_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id)} | format pattern "/v2/customers/{customer_id}/domains/notifications/optIn"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Request-Id": $x_request_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Opt in to recieve notifications for the submitted notification types
 #
 # PUT /v2/customers/{customerId}/domains/notifications/optIn
-export def "customers-domains-notifications-opt-in put" [
+export def "customers-domains-notifications-opt-in update" [
   customer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1058,17 +1072,17 @@ export def "customers-domains-notifications-opt-in put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --types: list # The notification types that should be opted in
+  --types: list<string> # The notification types that should be opted in
   --x-request-id: string # A client provided identifier for tracking this request.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "types" $types "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer_id: $customer_id} | format pattern "/v2/customers/{customer_id}/domains/notifications/optIn") $qp)
-  let extra_headers = {"X-Request-Id": $x_request_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id)} | format pattern "/v2/customers/{customer_id}/domains/notifications/optIn") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Request-Id": $x_request_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1090,18 +1104,18 @@ export def "customers-domains-notifications-schemas get" [
 ]: nothing -> record<id: string, models: record, properties: record, required: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({customer_id: $customer_id, type: $type} | format pattern "/v2/customers/{customer_id}/domains/notifications/schemas/{type}"))
-  let extra_headers = {"X-Request-Id": $x_request_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id), type: (encode-path-segment $type)} | format pattern "/v2/customers/{customer_id}/domains/notifications/schemas/{type}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Request-Id": $x_request_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Acknowledge a domain notification
 #
 # POST /v2/customers/{customerId}/domains/notifications/{notificationId}/acknowledge
-export def "customers-domains-notifications-acknowledge post" [
+export def "customers-domains-notifications-acknowledge create" [
   customer_id: string
   notification_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1116,11 +1130,11 @@ export def "customers-domains-notifications-acknowledge post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({customer_id: $customer_id, notification_id: $notification_id} | format pattern "/v2/customers/{customer_id}/domains/notifications/{notification_id}/acknowledge"))
-  let extra_headers = {"X-Request-Id": $x_request_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id), notification_id: (encode-path-segment $notification_id)} | format pattern "/v2/customers/{customer_id}/domains/notifications/{notification_id}/acknowledge"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Request-Id": $x_request_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1138,17 +1152,17 @@ export def "customers-domains get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --includes: list # Optional details to be included in the response
+  --includes: list<string> # Optional details to be included in the response
   --x-request-id: string # A client provided identifier for tracking this request.
 ]: nothing -> record<actions: table<completedAt: string, createdAt: string, modifiedAt: string, origination: string, reason: record, requestId: string, startedAt: string, status: string, type: string>, authCode: string, contacts: record<admin: record<_createdAt: string, _deleted: bool, _modifiedAt: string, _revision: int, addressMailing: record, contactId: string, email: string, encoding: string, exposeWhois: bool, fax: string, jobTitle: string, metadata: record, nameFirst: string, nameLast: string, nameMiddle: string, organization: string, phone: string, tlds: list>, billing: record<_createdAt: string, _deleted: bool, _modifiedAt: string, _revision: int, addressMailing: record, contactId: string, email: string, encoding: string, exposeWhois: bool, fax: string, jobTitle: string, metadata: record, nameFirst: string, nameLast: string, nameMiddle: string, organization: string, phone: string, tlds: list>, registrant: record<_createdAt: string, _deleted: bool, _modifiedAt: string, _revision: int, addressMailing: record, contactId: string, email: string, encoding: string, exposeWhois: bool, fax: string, jobTitle: string, metadata: record, nameFirst: string, nameLast: string, nameMiddle: string, organization: string, phone: string, tlds: list>, tech: record<_createdAt: string, _deleted: bool, _modifiedAt: string, _revision: int, addressMailing: record, contactId: string, email: string, encoding: string, exposeWhois: bool, fax: string, jobTitle: string, metadata: record, nameFirst: string, nameLast: string, nameMiddle: string, organization: string, phone: string, tlds: list>>, createdAt: string, deletedAt: string, dnssecRecords: table<algorithm: string, digest: string, digestType: string, flags: string, keyTag: int, maxSignatureLife: int, publicKey: string>, domain: string, domainId: string, expirationProtected: bool, expiresAt: string, holdRegistrar: bool, hostnames: list<string>, locked: bool, modifiedAt: string, nameServers: list<string>, privacy: bool, registrarCreatedAt: string, registryStatusCodes: list<string>, renewAuto: bool, renewDeadline: string, renewal: record<currency: string, price: int, renewable: bool>, status: string, subaccountId: string, transferAwayEligibleAt: string, transferProtected: bool, verifications: record<domainName: string, icann: string, realName: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "includes" $includes "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer_id: $customer_id, domain: $domain} | format pattern "/v2/customers/{customer_id}/domains/{domain}") $qp)
-  let extra_headers = {"X-Request-Id": $x_request_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id), domain: (encode-path-segment $domain)} | format pattern "/v2/customers/{customer_id}/domains/{domain}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Request-Id": $x_request_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1170,11 +1184,11 @@ export def "customers-domains-actions list" [
 ]: nothing -> table<completedAt: string, createdAt: string, modifiedAt: string, origination: string, reason: record<code: string, fields: list, message: string>, requestId: string, startedAt: string, status: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({customer_id: $customer_id, domain: $domain} | format pattern "/v2/customers/{customer_id}/domains/{domain}/actions"))
-  let extra_headers = {"X-Request-Id": $x_request_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id), domain: (encode-path-segment $domain)} | format pattern "/v2/customers/{customer_id}/domains/{domain}/actions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Request-Id": $x_request_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1197,11 +1211,11 @@ export def "customers-domains-actions delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({customer_id: $customer_id, domain: $domain, type: $type} | format pattern "/v2/customers/{customer_id}/domains/{domain}/actions/{type}"))
-  let extra_headers = {"X-Request-Id": $x_request_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id), domain: (encode-path-segment $domain), type: (encode-path-segment $type)} | format pattern "/v2/customers/{customer_id}/domains/{domain}/actions/{type}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Request-Id": $x_request_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1224,11 +1238,11 @@ export def "customers-domains-actions get" [
 ]: nothing -> record<completedAt: string, createdAt: string, modifiedAt: string, origination: string, reason: record<code: string, fields: list<record>, message: string>, requestId: string, startedAt: string, status: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({customer_id: $customer_id, domain: $domain, type: $type} | format pattern "/v2/customers/{customer_id}/domains/{domain}/actions/{type}"))
-  let extra_headers = {"X-Request-Id": $x_request_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id), domain: (encode-path-segment $domain), type: (encode-path-segment $type)} | format pattern "/v2/customers/{customer_id}/domains/{domain}/actions/{type}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Request-Id": $x_request_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1236,7 +1250,7 @@ export def "customers-domains-actions get" [
 #
 # POST /v2/customers/{customerId}/domains/{domain}/redeem
 # --consent shape: {agreedAt: string, agreedBy: string, currency: string, fee: int, price: int}
-export def "customers-domains-redeem post" [
+export def "customers-domains-redeem create" [
   customer_id: string
   domain: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1253,20 +1267,20 @@ export def "customers-domains-redeem post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({customer_id: $customer_id, domain: $domain} | format pattern "/v2/customers/{customer_id}/domains/{domain}/redeem"))
-  let body = {"consent": $consent} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Request-Id": $x_request_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id), domain: (encode-path-segment $domain)} | format pattern "/v2/customers/{customer_id}/domains/{domain}/redeem"))
+  let req_body = {"consent": $consent} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Request-Id": $x_request_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Initiate transfer out to another registrar for a .uk domain.
 #
 # POST /v2/customers/{customerId}/domains/{domain}/transferOut
-export def "customers-domains-transfer-out post" [
+export def "customers-domains-transfer-out create" [
   customer_id: string
   domain: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1283,11 +1297,11 @@ export def "customers-domains-transfer-out post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "registrar" $registrar "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer_id: $customer_id, domain: $domain} | format pattern "/v2/customers/{customer_id}/domains/{domain}/transferOut") $qp)
-  let extra_headers = {"X-Request-Id": $x_request_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id), domain: (encode-path-segment $domain)} | format pattern "/v2/customers/{customer_id}/domains/{domain}/transferOut") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Request-Id": $x_request_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1303,7 +1317,7 @@ export def "domains-maintenances list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --status: string@status-completer # Only include results with the selected `status` value.  Returns all results if omitted<br/><ul><li><strong style='margin-left: 12px;'>ACTIVE</strong> - The upcoming maintenance is active.</li><li><strong style='margin-left: 12px;'>CANCELLED</strong> - The upcoming maintenance has been cancelled.</li></ul>
+  --status: string@status-completer # Only include results with the selected `status` value. Returns all results if omittedACTIVE - The upcoming maintenance is active.CANCELLED - The upcoming maintenance has been cancelled.
   --modified-at-after: string # Only include results with `modifiedAt` after the supplied date (format: iso-datetime)
   --starts-at-after: string # Only include results with `startsAt` after the supplied date (format: iso-datetime)
   --limit: int # Maximum number of results to return (default: 100)
@@ -1313,10 +1327,10 @@ export def "domains-maintenances list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "status" $status "scalar") (serialize-qp "modifiedAtAfter" $modified_at_after "scalar") (serialize-qp "startsAtAfter" $starts_at_after "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/domains/maintenances" $qp)
-  let extra_headers = {"X-Request-Id": $x_request_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Request-Id": $x_request_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1337,10 +1351,10 @@ export def "domains-maintenances get" [
 ]: nothing -> record<createdAt: string, endsAt: string, environment: string, maintenanceId: string, modifiedAt: string, reason: string, startsAt: string, status: string, summary: string, systems: table<impact: list, name: string>, tlds: list<string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({maintenance_id: $maintenance_id} | format pattern "/v2/domains/maintenances/{maintenance_id}"))
-  let extra_headers = {"X-Request-Id": $x_request_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({maintenance_id: (encode-path-segment $maintenance_id)} | format pattern "/v2/domains/maintenances/{maintenance_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Request-Id": $x_request_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

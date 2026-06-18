@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -71,7 +80,7 @@ def template-completer [] { ["boat.tmpl" "demo.tmpl" "shipapp.tmpl"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api post" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -96,8 +105,8 @@ export def commands []: nothing -> table {
 # POST /
 # --boxTypes item shape: {dimensions: any, name?: string, price?: int, rateTable?: any, weightMax: float, weightTare?: float}
 # --itemSets item shape: {color?: string, dimensions: any, name?: string, refId?: int, sequence?: string, weight: float, quantity?: int}
-# --rules item shape: {itemRefId?: int, operation: "exclude"|"exclude-all"|"pack-as-is"|"irregular"|"lock-orientation", options?: record, parameters?: list, targetItemRefIds?: list}
-export def "api post" [
+# --rules item shape: {itemRefId?: int, operation: "exclude"|"exclude-all"|"pack-as-is"|"irregular"|"lock-orientation", options?: record, parameters?: list<string>, targetItemRefIds?: list<int>}
+export def "api create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -107,11 +116,11 @@ export def "api post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --allowable-overhang: float # The amount an item can overhang lower items that it is placed upon. The units are whatever units the box and item dimensions are given in. By convention, inches. (default: -1)
-  --box-type-sets: list # predefined box types to be used, separated by commas. Will be overridden by boxTypes. Acceptable values are <ul><li>"fedex"--FedEx OneRate</li><li>"usps"--USPS Priority Flat Rate</li><li>"pallet"--full-, half-, and quarter-sized 48"x40" pallets.
+  --box-type-sets: list<string> # predefined box types to be used, separated by commas. Will be overridden by boxTypes. Acceptable values are "fedex"--FedEx OneRate"usps"--USPS Priority Flat Rate"pallet"--full-, half-, and quarter-sized 48"x40" pallets.
   --box-types: list # box type definitions for packing, will override boxTypeSets defined. — item shape: {dimensions: any, name?: string, price?: int, rateTable?: any, weightMax: float, weightTare?: float}
   --cohort-max: int # the maximum number of contiguous cohorts for a given item type within a single container. E.g., if you pack 40 chairs in a single container, a cohortMax of 2 could yield one (all 40 chairs in a single block if space is availabe) or two (say, 25 chairs in one corner and 15 in the other) contiguous cohorts. (default: 2)
   --cohort-packing: oneof<nothing, bool> # if selected, will ensure that all like items will be packed together, in no more than [cohortMax] different groups within a single container. (default: false)
-  --coord-order: list # If placementStyle is set to "default", coordOrder sets the placement priority of axes ascendingly. "0,1,2" would search for placement points along the Z(length,"2"), then Y(width,"1"), and finally X(height"0"). Keep in mind that in the default rendering the "up" direction is X and the other axes follow the right-hand rule. This is useful for different packing methods. E.g., Utilizing "2,0,1" would pack a shipping container first in the Y(width) direction, then in the X(height) direction, and finally in the Z(length) direction, replication a floor-to-ceiling, front-to-back loading method.
+  --coord-order: list<int> # If placementStyle is set to "default", coordOrder sets the placement priority of axes ascendingly. "0,1,2" would search for placement points along the Z(length,"2"), then Y(width,"1"), and finally X(height"0"). Keep in mind that in the default rendering the "up" direction is X and the other axes follow the right-hand rule. This is useful for different packing methods. E.g., Utilizing "2,0,1" would pack a shipping container first in the Y(width) direction, then in the X(height) direction, and finally in the Z(length) direction, replication a floor-to-ceiling, front-to-back loading method.
   --corners: oneof<nothing, bool> # only pack items at valid corner points of other items (optimal) (default: true)
   --eye: any # The x,y,z coordinates of the virtual eye looking at the package for visualization purposes. Default is isometric, "1,1,1". To generate a side view, one could use "0.001,1.0,0.001".
   --img-size: int # width of rendered SVGs in pixels. (default: 400)
@@ -128,21 +137,21 @@ export def "api post" [
   --random: oneof<nothing, bool> # create random items (default: false)
   --random-max-dimension: int # maximum item dimension along a single axis for randomly generated items. (default: 10)
   --random-max-weight: int # maximum item weight for randomly generated items. (default: 10)
-  --rules: list # Array of packing rules. — item shape: {itemRefId?: int, operation: "exclude"|"exclude-all"|"pack-as-is"|"irregular"|"lock-orientation", options?: record, parameters?: list, targetItemRefIds?: list}
+  --rules: list # Array of packing rules. — item shape: {itemRefId?: int, operation: "exclude"|"exclude-all"|"pack-as-is"|"irregular"|"lock-orientation", options?: record, parameters?: list<string>, targetItemRefIds?: list<int>}
   --seed: oneof<nothing, bool> # if random is selected, seed the random number generator to deterministically generate random items to pack. (default: true)
   --sequence-heat-map: oneof<nothing, bool> # Colorize items solely by their sequence value, light when sequence is high, dark when it is low. Useful for indicating item bin location, weight, or other sequence property that may not be apparent from the default visualization. (default: false)
   --sequence-sort: oneof<nothing, bool> # Whether or not the items should be initially sorted by their sequence value instead of their volume. This is not always useful, as the default "biggest-first" volume sort is very effective for items, and constraining by maxSequenceDistance is applied regardless of this field. That said, for doing custom pre-sorts such as weight-based instead of volume based, this value should be set to true. (default: false)
   --template: string@template-completer # template name for markup generation.
   --usable-space: float # estimate of percentage space in boxes that is usable, i.e., not packing material. (default: 0.5)
-  --zone: int # <b>[experimental]</b> the shipping zone in order to use basic zone-based price optimization.
+  --zone: int # [experimental] the shipping zone in order to use basic zone-based price optimization.
 ]: any -> record<boxes: table<dimensions: record, name: string, price: int, rateTable: record, weightMax: float, weightTare: float, dimensionalWeight: float, dimensionalWeightUsed: bool, id: int, items: list, svg: string, volumeMax: float, volumeRemaining: float, volumeUsed: float, volumeUtilization: float, weightNet: float, weightRemaining: float, weightUsed: float, weightUtilization: float>, built: string, leftovers: table<color: string, dimensions: record, name: string, refId: int, sequence: string, weight: float, index: int, message: string, origin: record>, lenBoxes: int, lenItems: int, lenLeftovers: int, packTime: float, renderTime: float, scripts: string, styles: string, svgs: string, title: string, totalCost: int, totalTime: float, version: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/")
-  let body = {"allowableOverhang": $allowable_overhang, "boxTypeSets": $box_type_sets, "boxTypes": $box_types, "cohortMax": $cohort_max, "cohortPacking": $cohort_packing, "coordOrder": $coord_order, "corners": $corners, "eye": $eye, "imgSize": $img_size, "includeImages": $include_images, "includeScripts": $include_scripts, "interlock": $interlock, "itemSets": $item_sets, "key": $key, "layFlat": $lay_flat, "maxSequenceDistance": $max_sequence_distance, "n": $n, "packOrigin": $pack_origin, "placementStyle": $placement_style, "random": $random, "randomMaxDimension": $random_max_dimension, "randomMaxWeight": $random_max_weight, "rules": $rules, "seed": $seed, "sequenceHeatMap": $sequence_heat_map, "sequenceSort": $sequence_sort, "template": $template, "usableSpace": $usable_space, "zone": $zone} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"allowableOverhang": $allowable_overhang, "boxTypeSets": $box_type_sets, "boxTypes": $box_types, "cohortMax": $cohort_max, "cohortPacking": $cohort_packing, "coordOrder": $coord_order, "corners": $corners, "eye": $eye, "imgSize": $img_size, "includeImages": $include_images, "includeScripts": $include_scripts, "interlock": $interlock, "itemSets": $item_sets, "key": $key, "layFlat": $lay_flat, "maxSequenceDistance": $max_sequence_distance, "n": $n, "packOrigin": $pack_origin, "placementStyle": $placement_style, "random": $random, "randomMaxDimension": $random_max_dimension, "randomMaxWeight": $random_max_weight, "rules": $rules, "seed": $seed, "sequenceHeatMap": $sequence_heat_map, "sequenceSort": $sequence_sort, "template": $template, "usableSpace": $usable_space, "zone": $zone} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

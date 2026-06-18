@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -146,7 +155,7 @@ export def "indices get" [
 #
 # GET /v1/investor-grades
 # operationId: investorGrades
-export def "investor-grades investorGrades" [
+export def "investor-grades get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -173,7 +182,7 @@ export def "investor-grades investorGrades" [
 #
 # GET /v1/market-indicator
 # operationId: marketIndicator
-export def "market-indicator marketIndicator" [
+export def "market-indicator get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -227,7 +236,7 @@ export def "price get" [
 #
 # GET /v1/price-prediction
 # operationId: pricePrediction
-export def "price-prediction pricePrediction" [
+export def "price-prediction get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -253,7 +262,7 @@ export def "price-prediction pricePrediction" [
 #
 # GET /v1/quantmetrics-tier-1
 # operationId: quantmetricsTier1
-export def "quantmetrics-tier-1 quantmetricsTier1" [
+export def "quantmetrics-tier-1 get-tier1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -279,7 +288,7 @@ export def "quantmetrics-tier-1 quantmetricsTier1" [
 #
 # GET /v1/quantmetrics-tier-2
 # operationId: quantmetricsTier2
-export def "quantmetrics-tier-2 quantmetricsTier2" [
+export def "quantmetrics-tier-2 get-tier2" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -305,7 +314,7 @@ export def "quantmetrics-tier-2 quantmetricsTier2" [
 #
 # GET /v1/resistance-support
 # operationId: resistanceSupport
-export def "resistance-support resistanceSupport" [
+export def "resistance-support get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -332,7 +341,7 @@ export def "resistance-support resistanceSupport" [
 #
 # GET /v1/scenario-analysis
 # operationId: scenarioAnalysis
-export def "scenario-analysis scenarioAnalysis" [
+export def "scenario-analysis get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -410,7 +419,7 @@ export def "tokens get" [
 #
 # GET /v1/trader-grades
 # operationId: traderGrades
-export def "trader-grades traderGrades" [
+export def "trader-grades get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -437,7 +446,7 @@ export def "trader-grades traderGrades" [
 #
 # GET /v1/trading-indicator
 # operationId: tradingIndicator
-export def "trading-indicator tradingIndicator" [
+export def "trading-indicator get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -79,7 +88,7 @@ def redirect-completer [] { ["shipengine-dashboard"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "addresses-recognize create-ress" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "addresses-recognize update-parse-address" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -103,7 +112,7 @@ export def commands []: nothing -> table {
 #
 # PUT /v1/addresses/recognize
 # operationId: parse_address
-export def "addresses-recognize create-ress" [
+export def "addresses-recognize update-parse-address" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -119,18 +128,18 @@ export def "addresses-recognize create-ress" [
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/addresses/recognize")
-  let body = {"address": $address, "text": $text} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"address": $address, "text": $text} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Validate An Address
 #
 # POST /v1/addresses/validate
 # operationId: validate_address
-export def "addresses-validate create-ress" [
+export def "addresses-validate validate-address" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -145,17 +154,18 @@ export def "addresses-validate create-ress" [
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/addresses/validate")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List Batches
 #
 # GET /v1/batches
 # operationId: list_batches
-export def "batches get" [
+export def "batches list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -165,7 +175,7 @@ export def "batches get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --status: string@status-completer
-  --page: int # Return a specific page of results. Defaults to the first page. If set to a number that's greater than the number of pages of results, an empty page is returned.  (format: int32, default: 1, e.g. 2)
+  --page: int # Return a specific page of results. Defaults to the first page. If set to a number that's greater than the number of pages of results, an empty page is returned. (format: int32, default: 1, e.g. 2)
   --page-size: int # The number of results to return per response. (format: int32, default: 25, e.g. 50)
   --sort-dir: string # Controls the sort order of the query. (default: desc)
   --batch-number: string # Batch Number
@@ -184,7 +194,7 @@ export def "batches get" [
 #
 # POST /v1/batches
 # operationId: create_batch
-export def "batches batch" [
+export def "batches create-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -195,25 +205,25 @@ export def "batches batch" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --batch-notes: string # Add custom messages for a particular batch (e.g. This is my batch)
   --external-batch-id: any # A string that uniquely identifies the external batch
-  --rate-ids: list # Array of rate IDs used in the batch
+  --rate-ids: list<string> # Array of rate IDs used in the batch
   --shipment-ids: list # Array of shipment IDs used in the batch
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/batches")
-  let body = {"batch_notes": $batch_notes, "external_batch_id": $external_batch_id, "rate_ids": $rate_ids, "shipment_ids": $shipment_ids} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"batch_notes": $batch_notes, "external_batch_id": $external_batch_id, "rate_ids": $rate_ids, "shipment_ids": $shipment_ids} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get Batch By External ID
 #
 # GET /v1/batches/external_batch_id/{external_batch_id}
 # operationId: get_batch_by_external_id
-export def "batches-external-batch-id id" [
+export def "batches-external-batch-id get" [
   external_batch_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -226,7 +236,7 @@ export def "batches-external-batch-id id" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({external_batch_id: $external_batch_id} | format pattern "/v1/batches/external_batch_id/{external_batch_id}"))
+  let full_url = (build-url $base ({external_batch_id: (encode-path-segment $external_batch_id)} | format pattern "/v1/batches/external_batch_id/{external_batch_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -236,7 +246,7 @@ export def "batches-external-batch-id id" [
 #
 # DELETE /v1/batches/{batch_id}
 # operationId: delete_batch
-export def "batches batch-by-batch_id" [
+export def "batches delete" [
   batch_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -250,7 +260,7 @@ export def "batches batch-by-batch_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({batch_id: $batch_id} | format pattern "/v1/batches/{batch_id}"))
+  let full_url = (build-url $base ({batch_id: (encode-path-segment $batch_id)} | format pattern "/v1/batches/{batch_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -260,7 +270,7 @@ export def "batches batch-by-batch_id" [
 #
 # GET /v1/batches/{batch_id}
 # operationId: get_batch_by_id
-export def "batches id" [
+export def "batches get" [
   batch_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -273,7 +283,7 @@ export def "batches id" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({batch_id: $batch_id} | format pattern "/v1/batches/{batch_id}"))
+  let full_url = (build-url $base ({batch_id: (encode-path-segment $batch_id)} | format pattern "/v1/batches/{batch_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -283,7 +293,7 @@ export def "batches id" [
 #
 # PUT /v1/batches/{batch_id}
 # operationId: update_batch
-export def "batches batch-by-batch_id-1" [
+export def "batches update" [
   batch_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -297,7 +307,7 @@ export def "batches batch-by-batch_id-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({batch_id: $batch_id} | format pattern "/v1/batches/{batch_id}"))
+  let full_url = (build-url $base ({batch_id: (encode-path-segment $batch_id)} | format pattern "/v1/batches/{batch_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -307,7 +317,7 @@ export def "batches batch-by-batch_id-1" [
 #
 # POST /v1/batches/{batch_id}/add
 # operationId: add_to_batch
-export def "batches-add batch" [
+export def "batches-add create" [
   batch_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -324,19 +334,19 @@ export def "batches-add batch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({batch_id: $batch_id} | format pattern "/v1/batches/{batch_id}/add"))
-  let body = {"rate_ids": $rate_ids, "shipment_ids": $shipment_ids} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({batch_id: (encode-path-segment $batch_id)} | format pattern "/v1/batches/{batch_id}/add"))
+  let req_body = {"rate_ids": $rate_ids, "shipment_ids": $shipment_ids} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get Batch Errors
 #
 # GET /v1/batches/{batch_id}/errors
 # operationId: list_batch_errors
-export def "batches-errors errors" [
+export def "batches-errors list" [
   batch_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -346,13 +356,13 @@ export def "batches-errors errors" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --page: int # Return a specific page of results. Defaults to the first page. If set to a number that's greater than the number of pages of results, an empty page is returned.  (format: int32, default: 1, e.g. 2)
+  --page: int # Return a specific page of results. Defaults to the first page. If set to a number that's greater than the number of pages of results, an empty page is returned. (format: int32, default: 1, e.g. 2)
   --pagesize: int # format: int32
 ]: nothing -> record<errors: table<error: string, external_shipment_id: string, shipment_id: record>, links: record<first: record, last: record, next: record<href: record, type: string>, prev: record<href: record, type: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pagesize" $pagesize "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({batch_id: $batch_id} | format pattern "/v1/batches/{batch_id}/errors") $qp)
+  let full_url = (build-url $base ({batch_id: (encode-path-segment $batch_id)} | format pattern "/v1/batches/{batch_id}/errors") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -362,7 +372,7 @@ export def "batches-errors errors" [
 #
 # POST /v1/batches/{batch_id}/process/labels
 # operationId: process_batch
-export def "batches-process-labels batch" [
+export def "batches-process-labels create" [
   batch_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -381,19 +391,19 @@ export def "batches-process-labels batch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({batch_id: $batch_id} | format pattern "/v1/batches/{batch_id}/process/labels"))
-  let body = {"display_scheme": $display_scheme, "label_format": $label_format, "label_layout": $label_layout, "ship_date": $ship_date} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({batch_id: (encode-path-segment $batch_id)} | format pattern "/v1/batches/{batch_id}/process/labels"))
+  let req_body = {"display_scheme": $display_scheme, "label_format": $label_format, "label_layout": $label_layout, "ship_date": $ship_date} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Remove From Batch
 #
 # POST /v1/batches/{batch_id}/remove
 # operationId: remove_from_batch
-export def "batches-remove batch" [
+export def "batches-remove delete" [
   batch_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -410,19 +420,19 @@ export def "batches-remove batch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({batch_id: $batch_id} | format pattern "/v1/batches/{batch_id}/remove"))
-  let body = {"rate_ids": $rate_ids, "shipment_ids": $shipment_ids} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({batch_id: (encode-path-segment $batch_id)} | format pattern "/v1/batches/{batch_id}/remove"))
+  let req_body = {"rate_ids": $rate_ids, "shipment_ids": $shipment_ids} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List Carriers
 #
 # GET /v1/carriers
 # operationId: list_carriers
-export def "carriers get" [
+export def "carriers list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -444,7 +454,7 @@ export def "carriers get" [
 #
 # GET /v1/carriers/{carrier_id}
 # operationId: get_carrier_by_id
-export def "carriers id" [
+export def "carriers get" [
   carrier_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -457,7 +467,7 @@ export def "carriers id" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({carrier_id: $carrier_id} | format pattern "/v1/carriers/{carrier_id}"))
+  let full_url = (build-url $base ({carrier_id: (encode-path-segment $carrier_id)} | format pattern "/v1/carriers/{carrier_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -467,7 +477,7 @@ export def "carriers id" [
 #
 # PUT /v1/carriers/{carrier_id}/add_funds
 # operationId: add_funds_to_carrier
-export def "carriers-add-funds carrier" [
+export def "carriers-add-funds create" [
   carrier_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -483,19 +493,19 @@ export def "carriers-add-funds carrier" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({carrier_id: $carrier_id} | format pattern "/v1/carriers/{carrier_id}/add_funds"))
-  let body = {"amount": $amount, "currency": $currency} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({carrier_id: (encode-path-segment $carrier_id)} | format pattern "/v1/carriers/{carrier_id}/add_funds"))
+  let req_body = {"amount": $amount, "currency": $currency} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get Carrier Options
 #
 # GET /v1/carriers/{carrier_id}/options
 # operationId: get_carrier_options
-export def "carriers-options options" [
+export def "carriers-options get" [
   carrier_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -508,7 +518,7 @@ export def "carriers-options options" [
 ]: nothing -> record<options: table<default_value: string, description: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({carrier_id: $carrier_id} | format pattern "/v1/carriers/{carrier_id}/options"))
+  let full_url = (build-url $base ({carrier_id: (encode-path-segment $carrier_id)} | format pattern "/v1/carriers/{carrier_id}/options"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -518,7 +528,7 @@ export def "carriers-options options" [
 #
 # GET /v1/carriers/{carrier_id}/packages
 # operationId: list_carrier_package_types
-export def "carriers-packages types" [
+export def "carriers-packages list-types" [
   carrier_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -531,7 +541,7 @@ export def "carriers-packages types" [
 ]: nothing -> record<packages: table<description: string, dimensions: record, name: string, package_code: record, package_id: record>> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({carrier_id: $carrier_id} | format pattern "/v1/carriers/{carrier_id}/packages"))
+  let full_url = (build-url $base ({carrier_id: (encode-path-segment $carrier_id)} | format pattern "/v1/carriers/{carrier_id}/packages"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -541,7 +551,7 @@ export def "carriers-packages types" [
 #
 # GET /v1/carriers/{carrier_id}/services
 # operationId: list_carrier_services
-export def "carriers-services services" [
+export def "carriers-services list" [
   carrier_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -554,7 +564,7 @@ export def "carriers-services services" [
 ]: nothing -> record<services: table<carrier_code: record, carrier_id: record, domestic: bool, international: bool, is_multi_package_supported: bool, name: string, service_code: string>> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({carrier_id: $carrier_id} | format pattern "/v1/carriers/{carrier_id}/services"))
+  let full_url = (build-url $base ({carrier_id: (encode-path-segment $carrier_id)} | format pattern "/v1/carriers/{carrier_id}/services"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -564,7 +574,7 @@ export def "carriers-services services" [
 #
 # POST /v1/connections/carriers/{carrier_name}
 # operationId: connect_carrier
-export def "connections-carriers carrier-by-carrier_name" [
+export def "connections-carriers create-connect" [
   carrier_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -633,19 +643,19 @@ export def "connections-carriers carrier-by-carrier_name" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({carrier_name: $carrier_name} | format pattern "/v1/connections/carriers/{carrier_name}"))
-  let body = {"nickname": $nickname, "password": $password, "username": $username, "email": $email, "merchant_seller_id": $merchant_seller_id, "mws_auth_token": $mws_auth_token, "auth_code": $auth_code, "account_number": $account_number, "ftp_password": $ftp_password, "ftp_username": $ftp_username, "api_key": $api_key, "api_secret": $api_secret, "contract_id": $contract_id, "ancillary_endorsement": $ancillary_endorsement, "client_id": $client_id, "distribution_center": $distribution_center, "pickup_number": $pickup_number, "registration_id": $registration_id, "software_name": $software_name, "sold_to": $sold_to, "country_code": $country_code, "site_id": $site_id, "account": $account, "passphrase": $passphrase, "address1": $address1, "address2": $address2, "agree_to_eula": $agree_to_eula, "city": $city, "company": $company, "first_name": $first_name, "last_name": $last_name, "meter_number": $meter_number, "phone": $phone, "postal_code": $postal_code, "state": $state, "mailer_id": $mailer_id, "profile_name": $profile_name, "induction_site": $induction_site, "merchant_id": $merchant_id, "activation_key": $activation_key, "company_name": $company_name, "contact_name": $contact_name, "oba_email": $oba_email, "street_line1": $street_line1, "street_line2": $street_line2, "street_line3": $street_line3, "access_key": $access_key, "sendle_id": $sendle_id, "account_country_code": $account_country_code, "account_postal_code": $account_postal_code, "agree_to_technology_agreement": $agree_to_technology_agreement, "invoice": $invoice, "invoice_amount": $invoice_amount, "invoice_currency_code": $invoice_currency_code, "title": $title} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({carrier_name: (encode-path-segment $carrier_name)} | format pattern "/v1/connections/carriers/{carrier_name}"))
+  let req_body = {"nickname": $nickname, "password": $password, "username": $username, "email": $email, "merchant_seller_id": $merchant_seller_id, "mws_auth_token": $mws_auth_token, "auth_code": $auth_code, "account_number": $account_number, "ftp_password": $ftp_password, "ftp_username": $ftp_username, "api_key": $api_key, "api_secret": $api_secret, "contract_id": $contract_id, "ancillary_endorsement": $ancillary_endorsement, "client_id": $client_id, "distribution_center": $distribution_center, "pickup_number": $pickup_number, "registration_id": $registration_id, "software_name": $software_name, "sold_to": $sold_to, "country_code": $country_code, "site_id": $site_id, "account": $account, "passphrase": $passphrase, "address1": $address1, "address2": $address2, "agree_to_eula": $agree_to_eula, "city": $city, "company": $company, "first_name": $first_name, "last_name": $last_name, "meter_number": $meter_number, "phone": $phone, "postal_code": $postal_code, "state": $state, "mailer_id": $mailer_id, "profile_name": $profile_name, "induction_site": $induction_site, "merchant_id": $merchant_id, "activation_key": $activation_key, "company_name": $company_name, "contact_name": $contact_name, "oba_email": $oba_email, "street_line1": $street_line1, "street_line2": $street_line2, "street_line3": $street_line3, "access_key": $access_key, "sendle_id": $sendle_id, "account_country_code": $account_country_code, "account_postal_code": $account_postal_code, "agree_to_technology_agreement": $agree_to_technology_agreement, "invoice": $invoice, "invoice_amount": $invoice_amount, "invoice_currency_code": $invoice_currency_code, "title": $title} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Disconnect a carrier
 #
 # DELETE /v1/connections/carriers/{carrier_name}/{carrier_id}
 # operationId: disconnect_carrier
-export def "connections-carriers carrier-by-carrier_name-carrier_id" [
+export def "connections-carriers delete-disconnect" [
   carrier_name: string
   carrier_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -660,7 +670,7 @@ export def "connections-carriers carrier-by-carrier_name-carrier_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({carrier_name: $carrier_name, carrier_id: $carrier_id} | format pattern "/v1/connections/carriers/{carrier_name}/{carrier_id}"))
+  let full_url = (build-url $base ({carrier_name: (encode-path-segment $carrier_name), carrier_id: (encode-path-segment $carrier_id)} | format pattern "/v1/connections/carriers/{carrier_name}/{carrier_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -670,7 +680,7 @@ export def "connections-carriers carrier-by-carrier_name-carrier_id" [
 #
 # GET /v1/connections/carriers/{carrier_name}/{carrier_id}/settings
 # operationId: get_carrier_settings
-export def "connections-carriers-settings settings-by-carrier_name-carrier_id" [
+export def "connections-carriers-settings get" [
   carrier_name: string
   carrier_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -684,7 +694,7 @@ export def "connections-carriers-settings settings-by-carrier_name-carrier_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({carrier_name: $carrier_name, carrier_id: $carrier_id} | format pattern "/v1/connections/carriers/{carrier_name}/{carrier_id}/settings"))
+  let full_url = (build-url $base ({carrier_name: (encode-path-segment $carrier_name), carrier_id: (encode-path-segment $carrier_id)} | format pattern "/v1/connections/carriers/{carrier_name}/{carrier_id}/settings"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -694,7 +704,7 @@ export def "connections-carriers-settings settings-by-carrier_name-carrier_id" [
 #
 # PUT /v1/connections/carriers/{carrier_name}/{carrier_id}/settings
 # operationId: update_carrier_settings
-export def "connections-carriers-settings settings-by-carrier_name-carrier_id-1" [
+export def "connections-carriers-settings update" [
   carrier_name: string
   carrier_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -713,19 +723,19 @@ export def "connections-carriers-settings settings-by-carrier_name-carrier_id-1"
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({carrier_name: $carrier_name, carrier_id: $carrier_id} | format pattern "/v1/connections/carriers/{carrier_name}/{carrier_id}/settings"))
-  let body = {"include_barcode_with_order_number": $include_barcode_with_order_number, "receive_email_on_manifest_processing": $receive_email_on_manifest_processing, "email": $email} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({carrier_name: (encode-path-segment $carrier_name), carrier_id: (encode-path-segment $carrier_id)} | format pattern "/v1/connections/carriers/{carrier_name}/{carrier_id}/settings"))
+  let req_body = {"include_barcode_with_order_number": $include_barcode_with_order_number, "receive_email_on_manifest_processing": $receive_email_on_manifest_processing, "email": $email} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Disconnect a Shipsurance Account
 #
 # DELETE /v1/connections/insurance/shipsurance
 # operationId: disconnect_insurer
-export def "connections-insurance-shipsurance insurer" [
+export def "connections-insurance-shipsurance delete-disconnect-insurer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -747,7 +757,7 @@ export def "connections-insurance-shipsurance insurer" [
 #
 # POST /v1/connections/insurance/shipsurance
 # operationId: connect_insurer
-export def "connections-insurance-shipsurance insurer-1" [
+export def "connections-insurance-shipsurance create-connect-insurer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -763,18 +773,18 @@ export def "connections-insurance-shipsurance insurer-1" [
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/connections/insurance/shipsurance")
-  let body = {"email": $email, "policy_id": $policy_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"email": $email, "policy_id": $policy_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Download File
 #
 # GET /v1/downloads/{dir}/{subdir}/{filename}
 # operationId: download_file
-export def "downloads file" [
+export def "downloads download-file" [
   dir: string
   subdir: string
   filename: string
@@ -793,7 +803,7 @@ export def "downloads file" [
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "download" $download "scalar") (serialize-qp "rotation" $rotation "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({dir: $dir, subdir: $subdir, filename: $filename} | format pattern "/v1/downloads/{dir}/{subdir}/{filename}") $qp)
+  let full_url = (build-url $base ({dir: (encode-path-segment $dir), subdir: (encode-path-segment $subdir), filename: (encode-path-segment $filename)} | format pattern "/v1/downloads/{dir}/{subdir}/{filename}") $qp)
   let accept_val = ($accept | default "application/pdf")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -803,7 +813,7 @@ export def "downloads file" [
 #
 # GET /v1/environment/webhooks
 # operationId: list_webhooks
-export def "environment-webhooks webhooks" [
+export def "environment-webhooks list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -825,7 +835,7 @@ export def "environment-webhooks webhooks" [
 #
 # POST /v1/environment/webhooks
 # operationId: create_webhook
-export def "environment-webhooks webhook" [
+export def "environment-webhooks create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -835,24 +845,24 @@ export def "environment-webhooks webhook" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   event: any
-  --body-url: any # The url that the webhook sends the request to (e.g. https://[YOUR ENDPOINT ID].x.requestbin.com)
+  url: any # The url that the webhook sends the request to (e.g. https://[YOUR ENDPOINT ID].x.requestbin.com)
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/environment/webhooks")
-  let body = {"event": $event, "url": $body_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"event": $event, "url": $url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete Webhook By ID
 #
 # DELETE /v1/environment/webhooks/{webhook_id}
 # operationId: delete_webhook
-export def "environment-webhooks webhook-by-webhook_id" [
+export def "environment-webhooks delete" [
   webhook_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -866,7 +876,7 @@ export def "environment-webhooks webhook-by-webhook_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({webhook_id: $webhook_id} | format pattern "/v1/environment/webhooks/{webhook_id}"))
+  let full_url = (build-url $base ({webhook_id: (encode-path-segment $webhook_id)} | format pattern "/v1/environment/webhooks/{webhook_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -876,7 +886,7 @@ export def "environment-webhooks webhook-by-webhook_id" [
 #
 # GET /v1/environment/webhooks/{webhook_id}
 # operationId: get_webhook_by_id
-export def "environment-webhooks id" [
+export def "environment-webhooks get" [
   webhook_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -889,7 +899,7 @@ export def "environment-webhooks id" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({webhook_id: $webhook_id} | format pattern "/v1/environment/webhooks/{webhook_id}"))
+  let full_url = (build-url $base ({webhook_id: (encode-path-segment $webhook_id)} | format pattern "/v1/environment/webhooks/{webhook_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -899,7 +909,7 @@ export def "environment-webhooks id" [
 #
 # PUT /v1/environment/webhooks/{webhook_id}
 # operationId: update_webhook
-export def "environment-webhooks webhook-by-webhook_id-1" [
+export def "environment-webhooks update" [
   webhook_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -910,24 +920,24 @@ export def "environment-webhooks webhook-by-webhook_id-1" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --body-url: any # The url that the wehbook sends the request (e.g. https://[YOUR ENDPOINT ID].x.requestbin.com)
+  --url: any # The url that the wehbook sends the request (e.g. https://[YOUR ENDPOINT ID].x.requestbin.com)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({webhook_id: $webhook_id} | format pattern "/v1/environment/webhooks/{webhook_id}"))
-  let body = {"url": $body_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({webhook_id: (encode-path-segment $webhook_id)} | format pattern "/v1/environment/webhooks/{webhook_id}"))
+  let req_body = {"url": $url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Add Funds To Insurance
 #
 # PATCH /v1/insurance/shipsurance/add_funds
 # operationId: add_funds_to_insurance
-export def "insurance-shipsurance-add-funds insurance" [
+export def "insurance-shipsurance-add-funds create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -943,18 +953,18 @@ export def "insurance-shipsurance-add-funds insurance" [
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/insurance/shipsurance/add_funds")
-  let body = {"amount": $amount, "currency": $currency} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"amount": $amount, "currency": $currency} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get Insurance Funds Balance
 #
 # GET /v1/insurance/shipsurance/balance
 # operationId: get_insurance_balance
-export def "insurance-shipsurance-balance balance" [
+export def "insurance-shipsurance-balance get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -976,7 +986,7 @@ export def "insurance-shipsurance-balance balance" [
 #
 # GET /v1/labels
 # operationId: list_labels
-export def "labels get" [
+export def "labels list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -995,7 +1005,7 @@ export def "labels get" [
   --warehouse-id: string # Only return labels that originate from a specific [warehouse](https://www.shipengine.com/docs/shipping/ship-from-a-warehouse/) (e.g. se-28529731)
   --created-at-start: string # Only return labels that were created on or after a specific date/time (format: date-time, e.g. 2019-03-12T19:24:13.657Z)
   --created-at-end: string # Only return labels that were created on or before a specific date/time (format: date-time, e.g. 2019-03-12T19:24:13.657Z)
-  --page: int # Return a specific page of results. Defaults to the first page. If set to a number that's greater than the number of pages of results, an empty page is returned.  (format: int32, default: 1, e.g. 2)
+  --page: int # Return a specific page of results. Defaults to the first page. If set to a number that's greater than the number of pages of results, an empty page is returned. (format: int32, default: 1, e.g. 2)
   --page-size: int # The number of results to return per response. (format: int32, default: 25, e.g. 50)
   --sort-dir: string # Controls the sort order of the query. (default: desc)
   --sort-by: string@sort-by-completer-1 # Controls which field the query is sorted by. (default: created_at)
@@ -1016,7 +1026,7 @@ export def "labels get" [
 # --alternative_identifiers item shape: {type?: string, value?: string}
 # --packages item shape: {content_description?: string, dimensions?: any, external_package_id?: string, insured_value?: any, label_messages?: any, package_code?: any, package_id?: any, weight: any}
 @deprecated --flag test-label
-export def "labels label" [
+export def "labels create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1029,13 +1039,13 @@ export def "labels label" [
   --ship-to-service-point-id: string # A unique identifier for a carrier service point where the shipment will be delivered by the carrier. This will take precedence over a shipment's ship to address. (nullable, e.g. 614940)
   --charge-event: any # The label charge event.
   --display-scheme: any # The display format that the label should be shown in. (default: label)
-  --is-return-label: oneof<nothing, bool> # Indicates whether this is a return label.  You may also want to set the `rma_number` so you know what is being returned.
+  --is-return-label: oneof<nothing, bool> # Indicates whether this is a return label. You may also want to set the `rma_number` so you know what is being returned.
   --label-download-type: any # default: url
-  --label-format: any # The file format that you want the label to be in.  We recommend `pdf` format because it is supported by all carriers, whereas some carriers do not support the `png` or `zpl` formats.  (default: pdf)
+  --label-format: any # The file format that you want the label to be in. We recommend `pdf` format because it is supported by all carriers, whereas some carriers do not support the `png` or `zpl` formats. (default: pdf)
   --label-image-id: any # The label image resource that was used to create a custom label image. (nullable)
-  --label-layout: any # The layout (size) that you want the label to be in.  The `label_format` determines which sizes are allowed.  `4x6` is supported for all label formats, whereas `letter` (8.5" x 11") is only supported for `pdf` format.  (default: 4x6)
+  --label-layout: any # The layout (size) that you want the label to be in. The `label_format` determines which sizes are allowed. `4x6` is supported for all label formats, whereas `letter` (8.5" x 11") is only supported for `pdf` format. (default: 4x6)
   --outbound-label-id: any # The `label_id` of the original (outgoing) label that the return label is for. This associates the two labels together, which is required by some carriers.
-  --rma-number: string # An optional Return Merchandise Authorization number.  This field is useful for return labels.  You can set it to any string value.  (nullable)
+  --rma-number: string # An optional Return Merchandise Authorization number. This field is useful for return labels. You can set it to any string value. (nullable)
   shipment: any # The shipment information used to generate the label
   --test-label: oneof<nothing, bool> # Indicate if this label is being used only for testing purposes. If true, then no charge will be added to your account. (DEPRECATED, default: false)
   --validate-address: any # default: validate_and_clean
@@ -1044,18 +1054,18 @@ export def "labels label" [
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/labels")
-  let body = {"ship_from_service_point_id": $ship_from_service_point_id, "ship_to_service_point_id": $ship_to_service_point_id, "charge_event": $charge_event, "display_scheme": $display_scheme, "is_return_label": $is_return_label, "label_download_type": $label_download_type, "label_format": $label_format, "label_image_id": $label_image_id, "label_layout": $label_layout, "outbound_label_id": $outbound_label_id, "rma_number": $rma_number, "shipment": $shipment, "test_label": $test_label, "validate_address": $validate_address} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"ship_from_service_point_id": $ship_from_service_point_id, "ship_to_service_point_id": $ship_to_service_point_id, "charge_event": $charge_event, "display_scheme": $display_scheme, "is_return_label": $is_return_label, "label_download_type": $label_download_type, "label_format": $label_format, "label_image_id": $label_image_id, "label_layout": $label_layout, "outbound_label_id": $outbound_label_id, "rma_number": $rma_number, "shipment": $shipment, "test_label": $test_label, "validate_address": $validate_address} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get Label By External Shipment ID
 #
 # GET /v1/labels/external_shipment_id/{external_shipment_id}
 # operationId: get_label_by_external_shipment_id
-export def "labels-external-shipment-id id" [
+export def "labels-external-shipment-id get" [
   external_shipment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1070,7 +1080,7 @@ export def "labels-external-shipment-id id" [
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "label_download_type" $label_download_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({external_shipment_id: $external_shipment_id} | format pattern "/v1/labels/external_shipment_id/{external_shipment_id}") $qp)
+  let full_url = (build-url $base ({external_shipment_id: (encode-path-segment $external_shipment_id)} | format pattern "/v1/labels/external_shipment_id/{external_shipment_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1080,7 +1090,7 @@ export def "labels-external-shipment-id id" [
 #
 # POST /v1/labels/rates/{rate_id}
 # operationId: create_label_from_rate
-export def "labels-rates rate" [
+export def "labels-rates create" [
   rate_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1099,19 +1109,19 @@ export def "labels-rates rate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({rate_id: $rate_id} | format pattern "/v1/labels/rates/{rate_id}"))
-  let body = {"display_scheme": $display_scheme, "label_download_type": $label_download_type, "label_format": $label_format, "label_layout": $label_layout, "validate_address": $validate_address} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({rate_id: (encode-path-segment $rate_id)} | format pattern "/v1/labels/rates/{rate_id}"))
+  let req_body = {"display_scheme": $display_scheme, "label_download_type": $label_download_type, "label_format": $label_format, "label_layout": $label_layout, "validate_address": $validate_address} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Purchase Label with Shipment ID
 #
 # POST /v1/labels/shipment/{shipment_id}
 # operationId: create_label_from_shipment
-export def "labels-shipment shipment" [
+export def "labels-shipment create" [
   shipment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1130,19 +1140,19 @@ export def "labels-shipment shipment" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({shipment_id: $shipment_id} | format pattern "/v1/labels/shipment/{shipment_id}"))
-  let body = {"display_scheme": $display_scheme, "label_download_type": $label_download_type, "label_format": $label_format, "label_layout": $label_layout, "validate_address": $validate_address} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({shipment_id: (encode-path-segment $shipment_id)} | format pattern "/v1/labels/shipment/{shipment_id}"))
+  let req_body = {"display_scheme": $display_scheme, "label_download_type": $label_download_type, "label_format": $label_format, "label_layout": $label_layout, "validate_address": $validate_address} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get Label By ID
 #
 # GET /v1/labels/{label_id}
 # operationId: get_label_by_id
-export def "labels id" [
+export def "labels get" [
   label_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1157,7 +1167,7 @@ export def "labels id" [
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "label_download_type" $label_download_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({label_id: $label_id} | format pattern "/v1/labels/{label_id}") $qp)
+  let full_url = (build-url $base ({label_id: (encode-path-segment $label_id)} | format pattern "/v1/labels/{label_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1167,7 +1177,7 @@ export def "labels id" [
 #
 # POST /v1/labels/{label_id}/return
 # operationId: create_return_label
-export def "labels-return label" [
+export def "labels-return create" [
   label_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1180,26 +1190,26 @@ export def "labels-return label" [
   --charge-event: any # The label charge event.
   --display-scheme: any # The display format that the label should be shown in. (default: label)
   --label-download-type: any # default: url
-  --label-format: any # The file format that you want the label to be in.  We recommend `pdf` format because it is supported by all carriers, whereas some carriers do not support the `png` or `zpl` formats.  (default: pdf)
+  --label-format: any # The file format that you want the label to be in. We recommend `pdf` format because it is supported by all carriers, whereas some carriers do not support the `png` or `zpl` formats. (default: pdf)
   --label-image-id: any # The label image resource that was used to create a custom label image. (nullable)
-  --label-layout: any # The layout (size) that you want the label to be in.  The `label_format` determines which sizes are allowed.  `4x6` is supported for all label formats, whereas `letter` (8.5" x 11") is only supported for `pdf` format.  (default: 4x6)
+  --label-layout: any # The layout (size) that you want the label to be in. The `label_format` determines which sizes are allowed. `4x6` is supported for all label formats, whereas `letter` (8.5" x 11") is only supported for `pdf` format. (default: 4x6)
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({label_id: $label_id} | format pattern "/v1/labels/{label_id}/return"))
-  let body = {"charge_event": $charge_event, "display_scheme": $display_scheme, "label_download_type": $label_download_type, "label_format": $label_format, "label_image_id": $label_image_id, "label_layout": $label_layout} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({label_id: (encode-path-segment $label_id)} | format pattern "/v1/labels/{label_id}/return"))
+  let req_body = {"charge_event": $charge_event, "display_scheme": $display_scheme, "label_download_type": $label_download_type, "label_format": $label_format, "label_image_id": $label_image_id, "label_layout": $label_layout} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get Label Tracking Information
 #
 # GET /v1/labels/{label_id}/track
 # operationId: get_tracking_log_from_label
-export def "labels-track label" [
+export def "labels-track get-tracking-log" [
   label_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1212,7 +1222,7 @@ export def "labels-track label" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({label_id: $label_id} | format pattern "/v1/labels/{label_id}/track"))
+  let full_url = (build-url $base ({label_id: (encode-path-segment $label_id)} | format pattern "/v1/labels/{label_id}/track"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1222,7 +1232,7 @@ export def "labels-track label" [
 #
 # PUT /v1/labels/{label_id}/void
 # operationId: void_label
-export def "labels-void label" [
+export def "labels-void update" [
   label_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1235,7 +1245,7 @@ export def "labels-void label" [
 ]: nothing -> record<approved: bool, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({label_id: $label_id} | format pattern "/v1/labels/{label_id}/void"))
+  let full_url = (build-url $base ({label_id: (encode-path-segment $label_id)} | format pattern "/v1/labels/{label_id}/void"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1245,7 +1255,7 @@ export def "labels-void label" [
 #
 # GET /v1/manifests
 # operationId: list_manifests
-export def "manifests get" [
+export def "manifests list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1260,9 +1270,9 @@ export def "manifests get" [
   --created-at-start: string # Used to create a filter for when a resource was created (ex. A shipment that was created after a certain time) (format: date-time, e.g. 2019-03-12T19:24:13.657Z)
   --created-at-end: string # Used to create a filter for when a resource was created, (ex. A shipment that was created before a certain time) (format: date-time, e.g. 2019-03-12T19:24:13.657Z)
   --carrier-id: string # Carrier ID (e.g. se-28529731)
-  --page: int # Return a specific page of results. Defaults to the first page. If set to a number that's greater than the number of pages of results, an empty page is returned.  (format: int32, default: 1, e.g. 2)
+  --page: int # Return a specific page of results. Defaults to the first page. If set to a number that's greater than the number of pages of results, an empty page is returned. (format: int32, default: 1, e.g. 2)
   --page-size: int # The number of results to return per response. (format: int32, default: 25, e.g. 50)
-  --label-ids: list
+  --label-ids: list<string>
 ]: nothing -> record<links: record<first: record, last: record, next: record<href: record, type: string>, prev: record<href: record, type: string>>, manifests: table<carrier_id: record, created_at: string, form_id: record, label_ids: list, manifest_download: record, manifest_id: record, ship_date: string, shipments: int, submission_id: string, warehouse_id: record>, page: int, pages: int, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1277,7 +1287,7 @@ export def "manifests get" [
 #
 # POST /v1/manifests
 # operationId: create_manifest
-export def "manifests manifest" [
+export def "manifests create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1296,18 +1306,18 @@ export def "manifests manifest" [
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/manifests")
-  let body = {"carrier_id": $carrier_id, "excluded_label_ids": $excluded_label_ids, "label_ids": $label_ids, "ship_date": $ship_date, "warehouse_id": $warehouse_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"carrier_id": $carrier_id, "excluded_label_ids": $excluded_label_ids, "label_ids": $label_ids, "ship_date": $ship_date, "warehouse_id": $warehouse_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get Manifest Request By Id
 #
 # GET /v1/manifests/requests/{manifest_request_id}
 # operationId: get_manifest_request_by_id
-export def "manifests-requests id" [
+export def "manifests-requests get" [
   manifest_request_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1320,7 +1330,7 @@ export def "manifests-requests id" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({manifest_request_id: $manifest_request_id} | format pattern "/v1/manifests/requests/{manifest_request_id}"))
+  let full_url = (build-url $base ({manifest_request_id: (encode-path-segment $manifest_request_id)} | format pattern "/v1/manifests/requests/{manifest_request_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1330,7 +1340,7 @@ export def "manifests-requests id" [
 #
 # GET /v1/manifests/{manifest_id}
 # operationId: get_manifest_by_id
-export def "manifests id" [
+export def "manifests get" [
   manifest_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1343,7 +1353,7 @@ export def "manifests id" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({manifest_id: $manifest_id} | format pattern "/v1/manifests/{manifest_id}"))
+  let full_url = (build-url $base ({manifest_id: (encode-path-segment $manifest_id)} | format pattern "/v1/manifests/{manifest_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1353,7 +1363,7 @@ export def "manifests id" [
 #
 # GET /v1/packages
 # operationId: list_package_types
-export def "packages types" [
+export def "packages list-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1375,7 +1385,7 @@ export def "packages types" [
 #
 # POST /v1/packages
 # operationId: create_package_type
-export def "packages type" [
+export def "packages create-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1394,18 +1404,18 @@ export def "packages type" [
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/packages")
-  let body = {"description": $description, "dimensions": $dimensions, "name": $name, "package_code": $package_code, "package_id": $package_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"description": $description, "dimensions": $dimensions, "name": $name, "package_code": $package_code, "package_id": $package_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete A Custom Package By ID
 #
 # DELETE /v1/packages/{package_id}
 # operationId: delete_package_type
-export def "packages type-by-package_id" [
+export def "packages delete-type" [
   package_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1419,7 +1429,7 @@ export def "packages type-by-package_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({package_id: $package_id} | format pattern "/v1/packages/{package_id}"))
+  let full_url = (build-url $base ({package_id: (encode-path-segment $package_id)} | format pattern "/v1/packages/{package_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1429,7 +1439,7 @@ export def "packages type-by-package_id" [
 #
 # GET /v1/packages/{package_id}
 # operationId: get_package_type_by_id
-export def "packages id" [
+export def "packages get-type" [
   package_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1442,7 +1452,7 @@ export def "packages id" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({package_id: $package_id} | format pattern "/v1/packages/{package_id}"))
+  let full_url = (build-url $base ({package_id: (encode-path-segment $package_id)} | format pattern "/v1/packages/{package_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1452,7 +1462,7 @@ export def "packages id" [
 #
 # PUT /v1/packages/{package_id}
 # operationId: update_package_type
-export def "packages type-by-package_id-1" [
+export def "packages update-type" [
   package_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1472,19 +1482,19 @@ export def "packages type-by-package_id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({package_id: $package_id} | format pattern "/v1/packages/{package_id}"))
-  let body = {"description": $description, "dimensions": $dimensions, "name": $name, "package_code": $package_code, "package_id": $body_package_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({package_id: (encode-path-segment $package_id)} | format pattern "/v1/packages/{package_id}"))
+  let req_body = {"description": $description, "dimensions": $dimensions, "name": $name, "package_code": $package_code, "package_id": $body_package_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List Scheduled Pickups
 #
 # GET /v1/pickups
 # operationId: list_scheduled_pickups
-export def "pickups get" [
+export def "pickups list-scheduled" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1497,7 +1507,7 @@ export def "pickups get" [
   --warehouse-id: string # Warehouse ID (e.g. se-28529731)
   --created-at-start: string # Only return scheduled pickups that were created on or after a specific date/time (format: date-time, e.g. 2019-03-12T19:24:13.657Z)
   --created-at-end: string # Only return scheduled pickups that were created on or before a specific date/time (format: date-time, e.g. 2019-03-12T19:24:13.657Z)
-  --page: int # Return a specific page of results. Defaults to the first page. If set to a number that's greater than the number of pages of results, an empty page is returned.  (format: int32, default: 1, e.g. 2)
+  --page: int # Return a specific page of results. Defaults to the first page. If set to a number that's greater than the number of pages of results, an empty page is returned. (format: int32, default: 1, e.g. 2)
   --page-size: int # The number of results to return per response. (format: int32, default: 25, e.g. 50)
 ]: nothing -> record<links: record<first: record, last: record, next: record<href: record, type: string>, prev: record<href: record, type: string>>, page: int, pages: int, pickups: table<cancelled_at: record, carrier_id: record, confirmation_number: string, contact_details: record, created_at: record, label_ids: list, pickup_address: record, pickup_id: record, pickup_notes: string, pickup_window: record, pickup_windows: list, warehouse_id: record>, total: int, errors: table<error_code: record, error_source: record, error_type: record, message: string>, request_id: record> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
@@ -1516,7 +1526,7 @@ export def "pickups get" [
 # --contact_details shape: {email: any, name: string, phone: string}
 # --pickup_window shape: {end_at: any, start_at: any}
 # --pickup_windows item shape: {end_at?: any, start_at?: any}
-export def "pickups pickup" [
+export def "pickups create-schedule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1534,18 +1544,18 @@ export def "pickups pickup" [
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/pickups")
-  let body = {"contact_details": $contact_details, "label_ids": $label_ids, "pickup_notes": $pickup_notes, "pickup_window": $pickup_window} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"contact_details": $contact_details, "label_ids": $label_ids, "pickup_notes": $pickup_notes, "pickup_window": $pickup_window} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a Scheduled Pickup
 #
 # DELETE /v1/pickups/{pickup_id}
 # operationId: delete_scheduled_pickup
-export def "pickups pickup-by-pickup_id" [
+export def "pickups delete-scheduled" [
   pickup_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1558,7 +1568,7 @@ export def "pickups pickup-by-pickup_id" [
 ]: nothing -> record<errors: table<error_code: record, error_source: record, error_type: record, message: string>, request_id: record, pickup_id: record> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({pickup_id: $pickup_id} | format pattern "/v1/pickups/{pickup_id}"))
+  let full_url = (build-url $base ({pickup_id: (encode-path-segment $pickup_id)} | format pattern "/v1/pickups/{pickup_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1568,7 +1578,7 @@ export def "pickups pickup-by-pickup_id" [
 #
 # GET /v1/pickups/{pickup_id}
 # operationId: get_pickup_by_id
-export def "pickups id" [
+export def "pickups get" [
   pickup_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1581,7 +1591,7 @@ export def "pickups id" [
 ]: nothing -> record<errors: table<error_code: record, error_source: record, error_type: record, message: string>, request_id: record> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({pickup_id: $pickup_id} | format pattern "/v1/pickups/{pickup_id}"))
+  let full_url = (build-url $base ({pickup_id: (encode-path-segment $pickup_id)} | format pattern "/v1/pickups/{pickup_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1591,7 +1601,7 @@ export def "pickups id" [
 #
 # POST /v1/rates
 # operationId: calculate_rates
-export def "rates post" [
+export def "rates create-calculate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1608,18 +1618,18 @@ export def "rates post" [
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/rates")
-  let body = {"rate_options": $rate_options, "shipment_id": $shipment_id, "shipment": $shipment} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"rate_options": $rate_options, "shipment_id": $shipment_id, "shipment": $shipment} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get Bulk Rates
 #
 # POST /v1/rates/bulk
 # operationId: compare_bulk_rates
-export def "rates-bulk rates" [
+export def "rates-bulk create-compare" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1636,11 +1646,11 @@ export def "rates-bulk rates" [
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/rates/bulk")
-  let body = {"rate_options": $rate_options, "shipment_ids": $shipment_ids, "shipments": $shipments} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"rate_options": $rate_options, "shipment_ids": $shipment_ids, "shipments": $shipments} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Estimate Rates
@@ -1648,7 +1658,7 @@ export def "rates-bulk rates" [
 # POST /v1/rates/estimate
 # operationId: estimate_rates
 @deprecated --flag carrier-id
-export def "rates-estimate rates" [
+export def "rates-estimate create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1671,24 +1681,24 @@ export def "rates-estimate rates" [
   to_state_province: string # To state province (e.g. Houston)
   weight: any # The weight of the package
   --carrier-id: any # A string that uniquely identifies the carrier (DEPRECATED)
-  --carrier-ids: list # Array of Carrier Ids
+  --carrier-ids: list<string> # Array of Carrier Ids
 ]: any -> table<carrier_code: string, carrier_delivery_days: string, carrier_friendly_name: string, carrier_id: record, carrier_nickname: string, confirmation_amount: record<amount: float, currency: record>, delivery_days: int, error_messages: list<string>, estimated_delivery_date: record, guaranteed_service: bool, insurance_amount: record<amount: float, currency: record>, negotiated_rate: bool, other_amount: record<amount: float, currency: record>, package_type: string, rate_type: record, service_code: string, service_type: string, ship_date: string, shipping_amount: record<amount: float, currency: record>, tax_amount: record<amount: float, currency: record>, trackable: bool, validation_status: record, warning_messages: list<string>, zone: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/rates/estimate")
-  let body = {"address_residential_indicator": $address_residential_indicator, "confirmation": $confirmation, "dimensions": $dimensions, "from_city_locality": $from_city_locality, "from_country_code": $from_country_code, "from_postal_code": $from_postal_code, "from_state_province": $from_state_province, "ship_date": $ship_date, "to_city_locality": $to_city_locality, "to_country_code": $to_country_code, "to_postal_code": $to_postal_code, "to_state_province": $to_state_province, "weight": $weight, "carrier_id": $carrier_id, "carrier_ids": $carrier_ids} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"address_residential_indicator": $address_residential_indicator, "confirmation": $confirmation, "dimensions": $dimensions, "from_city_locality": $from_city_locality, "from_country_code": $from_country_code, "from_postal_code": $from_postal_code, "from_state_province": $from_state_province, "ship_date": $ship_date, "to_city_locality": $to_city_locality, "to_country_code": $to_country_code, "to_postal_code": $to_postal_code, "to_state_province": $to_state_province, "weight": $weight, "carrier_id": $carrier_id, "carrier_ids": $carrier_ids} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get Rate By ID
 #
 # GET /v1/rates/{rate_id}
 # operationId: get_rate_by_id
-export def "rates id" [
+export def "rates get" [
   rate_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1701,7 +1711,7 @@ export def "rates id" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({rate_id: $rate_id} | format pattern "/v1/rates/{rate_id}"))
+  let full_url = (build-url $base ({rate_id: (encode-path-segment $rate_id)} | format pattern "/v1/rates/{rate_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1712,7 +1722,7 @@ export def "rates id" [
 # POST /v1/service_points/list
 # operationId: service_points_list
 # --address shape: {address_line1?: string, address_line2?: string, address_line3?: string, city_locality?: string, country_code: string, postal_code?: string, state_province?: string}
-# --providers item shape: {carrier_id?: string, service_code?: list}
+# --providers item shape: {carrier_id?: string, service_code?: list<string>}
 export def "service-points-list list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1727,25 +1737,25 @@ export def "service-points-list list" [
   --lat: float # The latitude of the point. Represented as signed degrees. Required if long is provided. http://www.geomidpoint.com/latlon.html (format: double, e.g. 48.874518928233094)
   --long: float # The longitude of the point. Represented as signed degrees. Required if lat is provided. http://www.geomidpoint.com/latlon.html (format: double, e.g. 2.3591775711639404)
   --max-results: int # The maximum number of service points to return (format: int32, e.g. 25)
-  --providers: list # An array of shipping service providers and service codes — item shape: {carrier_id?: string, service_code?: list}
+  --providers: list # An array of shipping service providers and service codes — item shape: {carrier_id?: string, service_code?: list<string>}
   --radius: int # Search radius in kilometers (format: int32, e.g. 500)
 ]: any -> record<errors: table<error_code: record, error_source: record, error_type: record, message: string>, lat: float, long: float, service_points: table<address_line1: string, carrier_code: string, city_locality: string, company_name: string, country_code: string, distance_in_meters: float, features: list, hours_of_operation: record, lat: float, long: float, phone_number: string, postal_code: string, service_codes: list, service_point_id: string, state_province: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/service_points/list")
-  let body = {"address": $address, "address_query": $address_query, "lat": $lat, "long": $long, "max_results": $max_results, "providers": $providers, "radius": $radius} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"address": $address, "address_query": $address_query, "lat": $lat, "long": $long, "max_results": $max_results, "providers": $providers, "radius": $radius} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get Service Point By ID
 #
 # GET /v1/service_points/{carrier_code}/{country_code}/{service_point_id}
 # operationId: service_points_get_by_id
-export def "service-points id" [
+export def "service-points get" [
   carrier_code: string
   country_code: string
   service_point_id: string
@@ -1760,7 +1770,7 @@ export def "service-points id" [
 ]: nothing -> record<service_point: record<address_line1: string, carrier_code: string, city_locality: string, company_name: string, country_code: string, features: list<string>, hours_of_operation: record<friday: list, monday: list, saturday: list, sunday: list, thursday: list, tuesday: list, wednesday: list>, lat: float, long: float, phone_number: string, postal_code: string, service_codes: list<string>, service_point_id: string, state_province: string>> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({carrier_code: $carrier_code, country_code: $country_code, service_point_id: $service_point_id} | format pattern "/v1/service_points/{carrier_code}/{country_code}/{service_point_id}"))
+  let full_url = (build-url $base ({carrier_code: (encode-path-segment $carrier_code), country_code: (encode-path-segment $country_code), service_point_id: (encode-path-segment $service_point_id)} | format pattern "/v1/service_points/{carrier_code}/{country_code}/{service_point_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1770,7 +1780,7 @@ export def "service-points id" [
 #
 # GET /v1/shipments
 # operationId: list_shipments
-export def "shipments get" [
+export def "shipments list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1786,7 +1796,7 @@ export def "shipments get" [
   --created-at-end: string # Used to create a filter for when a resource was created, (ex. A shipment that was created before a certain time) (format: date-time, e.g. 2019-03-12T19:24:13.657Z)
   --modified-at-start: string # Used to create a filter for when a resource was modified (ex. A shipment that was modified after a certain time) (format: date-time, e.g. 2019-03-12T19:24:13.657Z)
   --modified-at-end: string # Used to create a filter for when a resource was modified (ex. A shipment that was modified before a certain time) (format: date-time, e.g. 2019-03-12T19:24:13.657Z)
-  --page: int # Return a specific page of results. Defaults to the first page. If set to a number that's greater than the number of pages of results, an empty page is returned.  (format: int32, default: 1, e.g. 2)
+  --page: int # Return a specific page of results. Defaults to the first page. If set to a number that's greater than the number of pages of results, an empty page is returned. (format: int32, default: 1, e.g. 2)
   --page-size: int # The number of results to return per response. (format: int32, default: 25, e.g. 50)
   --sales-order-id: string # Sales Order ID
   --sort-dir: string # Controls the sort order of the query. (default: desc)
@@ -1805,7 +1815,7 @@ export def "shipments get" [
 #
 # POST /v1/shipments
 # operationId: create_shipments
-export def "shipments post" [
+export def "shipments create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1820,18 +1830,18 @@ export def "shipments post" [
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/shipments")
-  let body = {"shipments": $shipments} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"shipments": $shipments} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get Shipment By External ID
 #
 # GET /v1/shipments/external_shipment_id/{external_shipment_id}
 # operationId: get_shipment_by_external_id
-export def "shipments-external-shipment-id id" [
+export def "shipments-external-shipment-id get" [
   external_shipment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1844,7 +1854,7 @@ export def "shipments-external-shipment-id id" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({external_shipment_id: $external_shipment_id} | format pattern "/v1/shipments/external_shipment_id/{external_shipment_id}"))
+  let full_url = (build-url $base ({external_shipment_id: (encode-path-segment $external_shipment_id)} | format pattern "/v1/shipments/external_shipment_id/{external_shipment_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1854,7 +1864,7 @@ export def "shipments-external-shipment-id id" [
 #
 # PUT /v1/shipments/recognize
 # operationId: parse_shipment
-export def "shipments-recognize shipment" [
+export def "shipments-recognize update-parse" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1870,18 +1880,18 @@ export def "shipments-recognize shipment" [
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/shipments/recognize")
-  let body = {"shipment": $shipment, "text": $text} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"shipment": $shipment, "text": $text} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get Shipment By ID
 #
 # GET /v1/shipments/{shipment_id}
 # operationId: get_shipment_by_id
-export def "shipments id" [
+export def "shipments get" [
   shipment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1894,7 +1904,7 @@ export def "shipments id" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({shipment_id: $shipment_id} | format pattern "/v1/shipments/{shipment_id}"))
+  let full_url = (build-url $base ({shipment_id: (encode-path-segment $shipment_id)} | format pattern "/v1/shipments/{shipment_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1908,7 +1918,7 @@ export def "shipments id" [
 # --packages item shape: {content_description?: string, dimensions?: any, external_package_id?: string, insured_value?: any, label_messages?: any, package_code?: any, package_id?: any, weight: any}
 # --tags item shape: {name: string}
 # --tax_identifiers item shape: {identifier_type: any, issuing_authority: string, taxable_entity_type: any, value: string}
-export def "shipments shipment" [
+export def "shipments update" [
   shipment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1918,43 +1928,43 @@ export def "shipments shipment" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --advanced-options: any # Advanced shipment options.  These are entirely optional.
+  --advanced-options: any # Advanced shipment options. These are entirely optional.
   --carrier-id: any # The carrier account that is billed for the shipping charges
   --confirmation: any # The type of delivery confirmation that is required for this shipment. (default: none)
-  --customs: any # Customs information.  This is usually only needed for international shipments.  (nullable)
+  --customs: any # Customs information. This is usually only needed for international shipments. (nullable)
   --external-order-id: string # ID that the Order Source assigned (nullable)
-  --external-shipment-id: string # A unique user-defined key to identify a shipment.  This can be used to retrieve the shipment.  > **Warning:** The `external_shipment_id` is limited to 50 characters. Any additional characters will be truncated.  (nullable)
-  --insurance-provider: any # The insurance provider to use for any insured packages in the shipment.  (default: none)
-  --items: list # Describe the packages included in this shipment as related to potential metadata that was imported from external order sources  (default: []) — item shape: {asin?: string, external_order_id?: string, external_order_item_id?: string, name?: string, order_source_code?: any, quantity?: int, sales_order_id?: string, sales_order_item_id?: string, sku?: string}
+  --external-shipment-id: string # A unique user-defined key to identify a shipment. This can be used to retrieve the shipment. > **Warning:** The `external_shipment_id` is limited to 50 characters. Any additional characters will be truncated. (nullable)
+  --insurance-provider: any # The insurance provider to use for any insured packages in the shipment. (default: none)
+  --items: list # Describe the packages included in this shipment as related to potential metadata that was imported from external order sources (default: []) — item shape: {asin?: string, external_order_id?: string, external_order_item_id?: string, name?: string, order_source_code?: any, quantity?: int, sales_order_id?: string, sales_order_item_id?: string, sku?: string}
   --order-source-code: any
   --origin-type: any # Indicates if the package will be picked up or dropped off by the carrier (nullable)
-  --packages: list # The packages in the shipment.  > **Note:** Some carriers only allow one package per shipment.  If you attempt to create a multi-package shipment for a carrier that doesn't allow it, an error will be returned. — item shape: {content_description?: string, dimensions?: any, external_package_id?: string, insured_value?: any, label_messages?: any, package_code?: any, package_id?: any, weight: any}
-  --return-to: any # The return address for this shipment.  Defaults to the `ship_from` address.
+  --packages: list # The packages in the shipment. > **Note:** Some carriers only allow one package per shipment. If you attempt to create a multi-package shipment for a carrier that doesn't allow it, an error will be returned. — item shape: {content_description?: string, dimensions?: any, external_package_id?: string, insured_value?: any, label_messages?: any, package_code?: any, package_id?: any, weight: any}
+  --return-to: any # The return address for this shipment. Defaults to the `ship_from` address.
   --service-code: any # The [carrier service](https://www.shipengine.com/docs/shipping/use-a-carrier-service/) used to ship the package, such as `fedex_ground`, `usps_first_class_mail`, `flat_rate_envelope`, etc.
-  --ship-date: any # The date that the shipment was (or will be) shippped.  ShipEngine will take the day of week into consideration. For example, if the carrier does not operate on Sundays, then a package that would have shipped on Sunday will ship on Monday instead.
-  ship_from: any # The shipment's origin address. If you frequently ship from the same location, consider [creating a warehouse](https://www.shipengine.com/docs/reference/create-warehouse/).  Then you can simply specify the `warehouse_id` rather than the complete address each time.
+  --ship-date: any # The date that the shipment was (or will be) shippped. ShipEngine will take the day of week into consideration. For example, if the carrier does not operate on Sundays, then a package that would have shipped on Sunday will ship on Monday instead.
+  ship_from: any # The shipment's origin address. If you frequently ship from the same location, consider [creating a warehouse](https://www.shipengine.com/docs/reference/create-warehouse/). Then you can simply specify the `warehouse_id` rather than the complete address each time.
   ship_to: any # The recipient's mailing address
-  --shipment-number: string # A non-unique user-defined number used to identify a shipment.  If undefined, this will match the external_shipment_id of the shipment.  > **Warning:** The `shipment_number` is limited to 50 characters. Any additional characters will be truncated.  (nullable)
+  --shipment-number: string # A non-unique user-defined number used to identify a shipment. If undefined, this will match the external_shipment_id of the shipment. > **Warning:** The `shipment_number` is limited to 50 characters. Any additional characters will be truncated. (nullable)
   --tax-identifiers: list # nullable — item shape: {identifier_type: any, issuing_authority: string, taxable_entity_type: any, value: string}
-  --warehouse-id: any # The [warehouse](https://www.shipengine.com/docs/shipping/ship-from-a-warehouse/) that the shipment is being shipped from.  Either `warehouse_id` or `ship_from` must be specified.  (nullable)
+  --warehouse-id: any # The [warehouse](https://www.shipengine.com/docs/shipping/ship-from-a-warehouse/) that the shipment is being shipped from. Either `warehouse_id` or `ship_from` must be specified. (nullable)
   --validate-address: any # default: no_validation
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({shipment_id: $shipment_id} | format pattern "/v1/shipments/{shipment_id}"))
-  let body = {"advanced_options": $advanced_options, "carrier_id": $carrier_id, "confirmation": $confirmation, "customs": $customs, "external_order_id": $external_order_id, "external_shipment_id": $external_shipment_id, "insurance_provider": $insurance_provider, "items": $items, "order_source_code": $order_source_code, "origin_type": $origin_type, "packages": $packages, "return_to": $return_to, "service_code": $service_code, "ship_date": $ship_date, "ship_from": $ship_from, "ship_to": $ship_to, "shipment_number": $shipment_number, "tax_identifiers": $tax_identifiers, "warehouse_id": $warehouse_id, "validate_address": $validate_address} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({shipment_id: (encode-path-segment $shipment_id)} | format pattern "/v1/shipments/{shipment_id}"))
+  let req_body = {"advanced_options": $advanced_options, "carrier_id": $carrier_id, "confirmation": $confirmation, "customs": $customs, "external_order_id": $external_order_id, "external_shipment_id": $external_shipment_id, "insurance_provider": $insurance_provider, "items": $items, "order_source_code": $order_source_code, "origin_type": $origin_type, "packages": $packages, "return_to": $return_to, "service_code": $service_code, "ship_date": $ship_date, "ship_from": $ship_from, "ship_to": $ship_to, "shipment_number": $shipment_number, "tax_identifiers": $tax_identifiers, "warehouse_id": $warehouse_id, "validate_address": $validate_address} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Cancel a Shipment
 #
 # PUT /v1/shipments/{shipment_id}/cancel
 # operationId: cancel_shipments
-export def "shipments-cancel shipments" [
+export def "shipments-cancel cancel" [
   shipment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1968,7 +1978,7 @@ export def "shipments-cancel shipments" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({shipment_id: $shipment_id} | format pattern "/v1/shipments/{shipment_id}/cancel"))
+  let full_url = (build-url $base ({shipment_id: (encode-path-segment $shipment_id)} | format pattern "/v1/shipments/{shipment_id}/cancel"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1978,7 +1988,7 @@ export def "shipments-cancel shipments" [
 #
 # GET /v1/shipments/{shipment_id}/rates
 # operationId: list_shipment_rates
-export def "shipments-rates rates" [
+export def "shipments-rates list" [
   shipment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1993,7 +2003,7 @@ export def "shipments-rates rates" [
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "created_at_start" $created_at_start "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({shipment_id: $shipment_id} | format pattern "/v1/shipments/{shipment_id}/rates") $qp)
+  let full_url = (build-url $base ({shipment_id: (encode-path-segment $shipment_id)} | format pattern "/v1/shipments/{shipment_id}/rates") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2003,7 +2013,7 @@ export def "shipments-rates rates" [
 #
 # DELETE /v1/shipments/{shipment_id}/tags/{tag_name}
 # operationId: untag_shipment
-export def "shipments-tags shipment-by-shipment_id-tag_name" [
+export def "shipments-tags untag" [
   shipment_id: string
   tag_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2018,7 +2028,7 @@ export def "shipments-tags shipment-by-shipment_id-tag_name" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({shipment_id: $shipment_id, tag_name: $tag_name} | format pattern "/v1/shipments/{shipment_id}/tags/{tag_name}"))
+  let full_url = (build-url $base ({shipment_id: (encode-path-segment $shipment_id), tag_name: (encode-path-segment $tag_name)} | format pattern "/v1/shipments/{shipment_id}/tags/{tag_name}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2028,7 +2038,7 @@ export def "shipments-tags shipment-by-shipment_id-tag_name" [
 #
 # POST /v1/shipments/{shipment_id}/tags/{tag_name}
 # operationId: tag_shipment
-export def "shipments-tags shipment-by-shipment_id-tag_name-1" [
+export def "shipments-tags tag" [
   shipment_id: string
   tag_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2042,7 +2052,7 @@ export def "shipments-tags shipment-by-shipment_id-tag_name-1" [
 ]: nothing -> record<shipment_id: record, tag: record<name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({shipment_id: $shipment_id, tag_name: $tag_name} | format pattern "/v1/shipments/{shipment_id}/tags/{tag_name}"))
+  let full_url = (build-url $base ({shipment_id: (encode-path-segment $shipment_id), tag_name: (encode-path-segment $tag_name)} | format pattern "/v1/shipments/{shipment_id}/tags/{tag_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2052,7 +2062,7 @@ export def "shipments-tags shipment-by-shipment_id-tag_name-1" [
 #
 # GET /v1/tags
 # operationId: list_tags
-export def "tags tag-s" [
+export def "tags list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2074,7 +2084,7 @@ export def "tags tag-s" [
 #
 # DELETE /v1/tags/{tag_name}
 # operationId: delete_tag
-export def "tags tag-by-tag_name" [
+export def "tags delete" [
   tag_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2088,7 +2098,7 @@ export def "tags tag-by-tag_name" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({tag_name: $tag_name} | format pattern "/v1/tags/{tag_name}"))
+  let full_url = (build-url $base ({tag_name: (encode-path-segment $tag_name)} | format pattern "/v1/tags/{tag_name}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2098,7 +2108,7 @@ export def "tags tag-by-tag_name" [
 #
 # POST /v1/tags/{tag_name}
 # operationId: create_tag
-export def "tags tag-by-tag_name-1" [
+export def "tags create" [
   tag_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2111,7 +2121,7 @@ export def "tags tag-by-tag_name-1" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({tag_name: $tag_name} | format pattern "/v1/tags/{tag_name}"))
+  let full_url = (build-url $base ({tag_name: (encode-path-segment $tag_name)} | format pattern "/v1/tags/{tag_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2121,7 +2131,7 @@ export def "tags tag-by-tag_name-1" [
 #
 # PUT /v1/tags/{tag_name}/{new_tag_name}
 # operationId: rename_tag
-export def "tags tag-by-tag_name-new_tag_name" [
+export def "tags rename" [
   tag_name: string
   new_tag_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2136,7 +2146,7 @@ export def "tags tag-by-tag_name-new_tag_name" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({tag_name: $tag_name, new_tag_name: $new_tag_name} | format pattern "/v1/tags/{tag_name}/{new_tag_name}"))
+  let full_url = (build-url $base ({tag_name: (encode-path-segment $tag_name), new_tag_name: (encode-path-segment $new_tag_name)} | format pattern "/v1/tags/{tag_name}/{new_tag_name}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2146,7 +2156,7 @@ export def "tags tag-by-tag_name-new_tag_name" [
 #
 # POST /v1/tokens/ephemeral
 # operationId: tokens_get_ephemeral_token
-export def "tokens-ephemeral token" [
+export def "tokens-ephemeral get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2170,7 +2180,7 @@ export def "tokens-ephemeral token" [
 #
 # GET /v1/tracking
 # operationId: get_tracking_log
-export def "tracking log" [
+export def "tracking get-log" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2195,7 +2205,7 @@ export def "tracking log" [
 #
 # POST /v1/tracking/start
 # operationId: start_tracking
-export def "tracking-start tracking" [
+export def "tracking-start start" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2221,7 +2231,7 @@ export def "tracking-start tracking" [
 #
 # POST /v1/tracking/stop
 # operationId: stop_tracking
-export def "tracking-stop tracking" [
+export def "tracking-stop stop" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2247,7 +2257,7 @@ export def "tracking-stop tracking" [
 #
 # GET /v1/warehouses
 # operationId: list_warehouses
-export def "warehouses get" [
+export def "warehouses list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2269,7 +2279,7 @@ export def "warehouses get" [
 #
 # POST /v1/warehouses
 # operationId: create_warehouse
-export def "warehouses warehouse" [
+export def "warehouses create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2287,18 +2297,18 @@ export def "warehouses warehouse" [
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/warehouses")
-  let body = {"is_default": $is_default, "name": $name, "origin_address": $origin_address, "return_address": $return_address} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"is_default": $is_default, "name": $name, "origin_address": $origin_address, "return_address": $return_address} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete Warehouse By ID
 #
 # DELETE /v1/warehouses/{warehouse_id}
 # operationId: delete_warehouse
-export def "warehouses warehouse-by-warehouse_id" [
+export def "warehouses delete" [
   warehouse_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2312,7 +2322,7 @@ export def "warehouses warehouse-by-warehouse_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({warehouse_id: $warehouse_id} | format pattern "/v1/warehouses/{warehouse_id}"))
+  let full_url = (build-url $base ({warehouse_id: (encode-path-segment $warehouse_id)} | format pattern "/v1/warehouses/{warehouse_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2322,7 +2332,7 @@ export def "warehouses warehouse-by-warehouse_id" [
 #
 # GET /v1/warehouses/{warehouse_id}
 # operationId: get_warehouse_by_id
-export def "warehouses id" [
+export def "warehouses get" [
   warehouse_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2335,7 +2345,7 @@ export def "warehouses id" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({warehouse_id: $warehouse_id} | format pattern "/v1/warehouses/{warehouse_id}"))
+  let full_url = (build-url $base ({warehouse_id: (encode-path-segment $warehouse_id)} | format pattern "/v1/warehouses/{warehouse_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2345,7 +2355,7 @@ export def "warehouses id" [
 #
 # PUT /v1/warehouses/{warehouse_id}
 # operationId: update_warehouse
-export def "warehouses warehouse-by-warehouse_id-1" [
+export def "warehouses update" [
   warehouse_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2364,19 +2374,19 @@ export def "warehouses warehouse-by-warehouse_id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({warehouse_id: $warehouse_id} | format pattern "/v1/warehouses/{warehouse_id}"))
-  let body = {"is_default": $is_default, "name": $name, "origin_address": $origin_address, "return_address": $return_address} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({warehouse_id: (encode-path-segment $warehouse_id)} | format pattern "/v1/warehouses/{warehouse_id}"))
+  let req_body = {"is_default": $is_default, "name": $name, "origin_address": $origin_address, "return_address": $return_address} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update Warehouse Settings
 #
 # PUT /v1/warehouses/{warehouse_id}/settings
 # operationId: update_warehouse_settings
-export def "warehouses-settings settings" [
+export def "warehouses-settings update" [
   warehouse_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2392,10 +2402,10 @@ export def "warehouses-settings settings" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({warehouse_id: $warehouse_id} | format pattern "/v1/warehouses/{warehouse_id}/settings"))
-  let body = {"is_default": $is_default} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({warehouse_id: (encode-path-segment $warehouse_id)} | format pattern "/v1/warehouses/{warehouse_id}/settings"))
+  let req_body = {"is_default": $is_default} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

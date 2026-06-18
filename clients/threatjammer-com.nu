@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -62,6 +71,33 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
+# Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
+# the field names whose value should be read from disk as bytes; every
+# other field is sent as a text part (records/lists JSON-stringified).
+# Returns {content_type, body} ready to pass to `do-request`.
+def build-multipart-body [parts: record, file_fields: list<string>]: nothing -> record {
+  let boundary = $"----nu-(random chars --length 24)"
+  let crlf = "\r\n"
+  let chunks = ($parts | transpose k v | where {|p| $p.v != null} | each {|p|
+    let name = $p.k
+    let val = $p.v
+    if $name in $file_fields {
+      let filename = ($val | path basename)
+      let bytes = (open --raw $val | into binary | collect)
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"; filename=\"($filename)\"($crlf)Content-Type: application/octet-stream($crlf)($crlf)" | into binary)
+      $head ++ $bytes ++ ($crlf | into binary)
+    } else {
+      let dt = ($val | describe)
+      let s = if (($dt | str starts-with "record") or ($dt | str starts-with "list") or ($dt | str starts-with "table")) { ($val | to json --raw) } else { ($val | into string) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"($crlf)($crlf)" | into binary)
+      $head ++ ($"($s)($crlf)" | into binary)
+    }
+  })
+  let trailer = ($"--($boundary)--($crlf)" | into binary)
+  let body = ($chunks | reduce --fold (0x[] | into binary) {|chunk, acc| $acc ++ $chunk }) ++ $trailer
+  {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
+}
+
 def base-url-completer [] { ["http://localhost"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -75,7 +111,7 @@ def interval-completer [] { ["HOURLY"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "allowlist-private post" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "allowlist-private create-of-user-create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -99,7 +135,7 @@ export def commands []: nothing -> table {
 #
 # POST /v1/allowlist/private
 # operationId: create_private_allowlist_of_the_user_v1_allowlist_private_post
-export def "allowlist-private post" [
+export def "allowlist-private create-of-user-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -114,18 +150,18 @@ export def "allowlist-private post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/allowlist/private")
-  let body = {"payload": $payload} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"payload": $payload} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get the set of private allowlists of the user.
 #
 # GET /v1/allowlist/private/all
 # operationId: get_all_private_allowlists_v1_allowlist_private_all_get
-export def "allowlist-private-all list" [
+export def "allowlist-private-all get-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -147,7 +183,7 @@ export def "allowlist-private-all list" [
 #
 # GET /v1/allowlist/private/all/{resource_type}
 # operationId: get_all_private_allowlists_by_resource_type_v1_allowlist_private_all__resource_type__get
-export def "allowlist-private-all get" [
+export def "allowlist-private-all get-by-get" [
   resource_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -160,7 +196,7 @@ export def "allowlist-private-all get" [
 ]: nothing -> record<lists: table<content: string, created_at: int, description: string, list_type: string, name: string, origins: record, resource_type: string, self: string, tags: list, ttl: int, updated_at: int>, self: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({resource_type: $resource_type} | format pattern "/v1/allowlist/private/all/{resource_type}"))
+  let full_url = (build-url $base ({resource_type: (encode-path-segment $resource_type)} | format pattern "/v1/allowlist/private/all/{resource_type}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -170,7 +206,7 @@ export def "allowlist-private-all get" [
 #
 # GET /v1/allowlist/private/ip/{address}
 # operationId: query_resource_denylists_v1_allowlist_private_ip__address__get
-export def "allowlist-private-ip get" [
+export def "allowlist-private-ip list-resource-denylists-get" [
   address: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -183,7 +219,7 @@ export def "allowlist-private-ip get" [
 ]: nothing -> record<asns: list<string>, cidrs: list<string>, continents: list<string>, countries: list<string>, datacenters: list<string>, reported: list<string>, self: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({address: $address} | format pattern "/v1/allowlist/private/ip/{address}"))
+  let full_url = (build-url $base ({address: (encode-path-segment $address)} | format pattern "/v1/allowlist/private/ip/{address}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -193,7 +229,7 @@ export def "allowlist-private-ip get" [
 #
 # DELETE /v1/allowlist/private/{allowlist_id}
 # operationId: delete_the_allowlist_v1_allowlist_private__allowlist_id__delete
-export def "allowlist-private delete" [
+export def "allowlist-private delete-delete" [
   allowlist_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -206,7 +242,7 @@ export def "allowlist-private delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({allowlist_id: $allowlist_id} | format pattern "/v1/allowlist/private/{allowlist_id}"))
+  let full_url = (build-url $base ({allowlist_id: (encode-path-segment $allowlist_id)} | format pattern "/v1/allowlist/private/{allowlist_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -216,7 +252,7 @@ export def "allowlist-private delete" [
 #
 # GET /v1/allowlist/private/{allowlist_id}
 # operationId: get_single_allowlist_v1_allowlist_private__allowlist_id__get
-export def "allowlist-private get" [
+export def "allowlist-private get-single-get" [
   allowlist_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -229,7 +265,7 @@ export def "allowlist-private get" [
 ]: nothing -> record<content: string, created_at: int, description: string, list_type: string, name: string, origins: record<lists: list<record>, self: string>, resource_type: string, self: string, tags: list<string>, ttl: int, updated_at: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({allowlist_id: $allowlist_id} | format pattern "/v1/allowlist/private/{allowlist_id}"))
+  let full_url = (build-url $base ({allowlist_id: (encode-path-segment $allowlist_id)} | format pattern "/v1/allowlist/private/{allowlist_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -239,7 +275,7 @@ export def "allowlist-private get" [
 #
 # PUT /v1/allowlist/private/{allowlist_id}
 # operationId: update_private_allowlist_of_the_user_v1_allowlist_private__allowlist_id__put
-export def "allowlist-private put" [
+export def "allowlist-private update-of-user-update" [
   allowlist_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -251,25 +287,25 @@ export def "allowlist-private put" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --description: string # The human readable full description of the list
   --name: string # The name of the list
-  --tags: list # The list of tags to associate with the list
+  --tags: list<string> # The list of tags to associate with the list
   --ttl: int # Optional. The Time To Live (TTL) of a resource in the list in seconds.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({allowlist_id: $allowlist_id} | format pattern "/v1/allowlist/private/{allowlist_id}"))
-  let body = {"description": $description, "name": $name, "tags": $tags, "ttl": $ttl} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({allowlist_id: (encode-path-segment $allowlist_id)} | format pattern "/v1/allowlist/private/{allowlist_id}"))
+  let req_body = {"description": $description, "name": $name, "tags": $tags, "ttl": $ttl} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete all the content of a private allowlist of the user.
 #
 # DELETE /v1/allowlist/private/{allowlist_id}/content
 # operationId: delete_the_allowlist_content_v1_allowlist_private__allowlist_id__content_delete
-export def "allowlist-private-content delete" [
+export def "allowlist-private-content delete-delete" [
   allowlist_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -282,7 +318,7 @@ export def "allowlist-private-content delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({allowlist_id: $allowlist_id} | format pattern "/v1/allowlist/private/{allowlist_id}/content"))
+  let full_url = (build-url $base ({allowlist_id: (encode-path-segment $allowlist_id)} | format pattern "/v1/allowlist/private/{allowlist_id}/content"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -292,7 +328,7 @@ export def "allowlist-private-content delete" [
 #
 # GET /v1/allowlist/private/{allowlist_id}/content
 # operationId: get_allowlist_content_v1_allowlist_private__allowlist_id__content_get
-export def "allowlist-private-content get" [
+export def "allowlist-private-content get-get" [
   allowlist_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -305,7 +341,7 @@ export def "allowlist-private-content get" [
 ]: nothing -> record<asns: list<int>, cidrs: list<any>, continents: list<string>, countries: list<string>, datacenters: list<string>, self: string, user_agents: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({allowlist_id: $allowlist_id} | format pattern "/v1/allowlist/private/{allowlist_id}/content"))
+  let full_url = (build-url $base ({allowlist_id: (encode-path-segment $allowlist_id)} | format pattern "/v1/allowlist/private/{allowlist_id}/content"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -315,7 +351,7 @@ export def "allowlist-private-content get" [
 #
 # PUT /v1/allowlist/private/{allowlist_id}/content
 # operationId: update_private_content_of_the_allowlist_of_the_user_v1_allowlist_private__allowlist_id__content_put
-export def "allowlist-private-content put" [
+export def "allowlist-private-content update-of-of-user-update" [
   allowlist_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -325,25 +361,25 @@ export def "allowlist-private-content put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --append: list # The name of the resources to append to the allowlist
-  --remove: list # The name of the resources to remove from the allowlist
+  --append: list<string> # The name of the resources to append to the allowlist
+  --remove: list<string> # The name of the resources to remove from the allowlist
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({allowlist_id: $allowlist_id} | format pattern "/v1/allowlist/private/{allowlist_id}/content"))
-  let body = {"append": $append, "remove": $remove} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({allowlist_id: (encode-path-segment $allowlist_id)} | format pattern "/v1/allowlist/private/{allowlist_id}/content"))
+  let req_body = {"append": $append, "remove": $remove} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Toogle the status of the origin in an allow list.
 #
 # PUT /v1/allowlist/private/{allowlist_id}/origin
 # operationId: change_status_of_the_origin_allowlist_v1_allowlist_private__allowlist_id__origin_put
-export def "allowlist-private-origin put" [
+export def "allowlist-private-origin update-change-status-of" [
   allowlist_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -359,19 +395,19 @@ export def "allowlist-private-origin put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({allowlist_id: $allowlist_id} | format pattern "/v1/allowlist/private/{allowlist_id}/origin"))
-  let body = {"origin": $origin, "status": $status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({allowlist_id: (encode-path-segment $allowlist_id)} | format pattern "/v1/allowlist/private/{allowlist_id}/origin"))
+  let req_body = {"origin": $origin, "status": $status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get the set of public allowlists.
 #
 # GET /v1/allowlist/public/all
 # operationId: get_all_public_allowlists_v1_allowlist_public_all_get
-export def "allowlist-public-all list" [
+export def "allowlist-public-all get-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -393,7 +429,7 @@ export def "allowlist-public-all list" [
 #
 # GET /v1/allowlist/public/all/{resource_type}
 # operationId: get_all_public_allowlists_by_resource_type_v1_allowlist_public_all__resource_type__get
-export def "allowlist-public-all get" [
+export def "allowlist-public-all get-by-get" [
   resource_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -406,7 +442,7 @@ export def "allowlist-public-all get" [
 ]: nothing -> record<lists: table<created_at: int, description: string, list_type: string, name: string, origins: record, resource_type: string, self: string, status: string, tags: list, ttl: int, updated_at: int>, self: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({resource_type: $resource_type} | format pattern "/v1/allowlist/public/all/{resource_type}"))
+  let full_url = (build-url $base ({resource_type: (encode-path-segment $resource_type)} | format pattern "/v1/allowlist/public/all/{resource_type}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -416,7 +452,7 @@ export def "allowlist-public-all get" [
 #
 # GET /v1/allowlist/public/ip/{address}
 # operationId: query_resource_allowlists_v1_allowlist_public_ip__address__get
-export def "allowlist-public-ip get" [
+export def "allowlist-public-ip list-resource-get" [
   address: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -429,7 +465,7 @@ export def "allowlist-public-ip get" [
 ]: nothing -> record<asns: list<string>, cidrs: list<string>, continents: list<string>, countries: list<string>, datacenters: list<string>, reported: list<string>, self: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({address: $address} | format pattern "/v1/allowlist/public/ip/{address}"))
+  let full_url = (build-url $base ({address: (encode-path-segment $address)} | format pattern "/v1/allowlist/public/ip/{address}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -439,7 +475,7 @@ export def "allowlist-public-ip get" [
 #
 # GET /v1/allowlist/public/owned
 # operationId: get_public_allowlists_owned_by_the_user_v1_allowlist_public_owned_get
-export def "allowlist-public-owned list" [
+export def "allowlist-public-owned get-by-user-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -461,7 +497,7 @@ export def "allowlist-public-owned list" [
 #
 # GET /v1/allowlist/public/owned/{resource_type}
 # operationId: get_all_owned_allowlists_by_resource_type_v1_allowlist_public_owned__resource_type__get
-export def "allowlist-public-owned get" [
+export def "allowlist-public-owned get-list-by-get" [
   resource_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -474,7 +510,7 @@ export def "allowlist-public-owned get" [
 ]: nothing -> record<lists: table<created_at: int, description: string, list_type: string, name: string, origins: record, resource_type: string, self: string, status: string, tags: list, ttl: int, updated_at: int>, self: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({resource_type: $resource_type} | format pattern "/v1/allowlist/public/owned/{resource_type}"))
+  let full_url = (build-url $base ({resource_type: (encode-path-segment $resource_type)} | format pattern "/v1/allowlist/public/owned/{resource_type}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -484,7 +520,7 @@ export def "allowlist-public-owned get" [
 #
 # DELETE /v1/allowlist/public/{allowlist_id}
 # operationId: delete_the_allowlist_v1_allowlist_public__allowlist_id__delete
-export def "allowlist-public delete" [
+export def "allowlist-public delete-delete" [
   allowlist_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -497,7 +533,7 @@ export def "allowlist-public delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({allowlist_id: $allowlist_id} | format pattern "/v1/allowlist/public/{allowlist_id}"))
+  let full_url = (build-url $base ({allowlist_id: (encode-path-segment $allowlist_id)} | format pattern "/v1/allowlist/public/{allowlist_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -507,7 +543,7 @@ export def "allowlist-public delete" [
 #
 # GET /v1/allowlist/public/{allowlist_id}
 # operationId: get_single_allowlist_v1_allowlist_public__allowlist_id__get
-export def "allowlist-public get" [
+export def "allowlist-public get-single-get" [
   allowlist_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -520,7 +556,7 @@ export def "allowlist-public get" [
 ]: nothing -> record<created_at: int, description: string, list_type: string, name: string, origins: record<lists: list<record>, self: string>, resource_type: string, self: string, status: string, tags: list<string>, ttl: int, updated_at: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({allowlist_id: $allowlist_id} | format pattern "/v1/allowlist/public/{allowlist_id}"))
+  let full_url = (build-url $base ({allowlist_id: (encode-path-segment $allowlist_id)} | format pattern "/v1/allowlist/public/{allowlist_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -530,7 +566,7 @@ export def "allowlist-public get" [
 #
 # PUT /v1/allowlist/public/{allowlist_id}
 # operationId: change_status_of_the_allowlist_v1_allowlist_public__allowlist_id__put
-export def "allowlist-public put" [
+export def "allowlist-public update-change-status-of" [
   allowlist_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -545,19 +581,19 @@ export def "allowlist-public put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({allowlist_id: $allowlist_id} | format pattern "/v1/allowlist/public/{allowlist_id}"))
-  let body = {"status": $status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({allowlist_id: (encode-path-segment $allowlist_id)} | format pattern "/v1/allowlist/public/{allowlist_id}"))
+  let req_body = {"status": $status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Toogle the status of the origin in an allow list.
 #
 # PUT /v1/allowlist/public/{allowlist_id}/origin
 # operationId: change_status_of_the_origin_allowlist_v1_allowlist_public__allowlist_id__origin_put
-export def "allowlist-public-origin put" [
+export def "allowlist-public-origin update-change-status-of" [
   allowlist_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -573,19 +609,19 @@ export def "allowlist-public-origin put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({allowlist_id: $allowlist_id} | format pattern "/v1/allowlist/public/{allowlist_id}/origin"))
-  let body = {"origin": $origin, "status": $status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({allowlist_id: (encode-path-segment $allowlist_id)} | format pattern "/v1/allowlist/public/{allowlist_id}/origin"))
+  let req_body = {"origin": $origin, "status": $status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get the IPv4 or IPv6 prefix of the IP address given.
 #
 # GET /v1/asn/ip/{ip_address}
 # operationId: query_IP_address_network_information_v1_asn_ip__ip_address__get
-export def "asn-ip get" [
+export def "asn-ip list-network-information-get" [
   ip_address: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -598,7 +634,7 @@ export def "asn-ip get" [
 ]: nothing -> record<asn: string, description: string, mantainer: string, object_type: string, registry_date: string, registry_status: string, risk: string, score: int, self: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({ip_address: $ip_address} | format pattern "/v1/asn/ip/{ip_address}"))
+  let full_url = (build-url $base ({ip_address: (encode-path-segment $ip_address)} | format pattern "/v1/asn/ip/{ip_address}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -608,7 +644,7 @@ export def "asn-ip get" [
 #
 # POST /v1/asn/prefix
 # operationId: query_asn_prefix_information_v1_asn_prefix_post
-export def "asn-prefix post" [
+export def "asn-prefix list-information-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -623,18 +659,18 @@ export def "asn-prefix post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/asn/prefix")
-  let body = {"prefix": $prefix} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"prefix": $prefix} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get the list of the Regional Internet Registries (RIRs) entities worldwide.
 #
 # GET /v1/asn/registry/all
 # operationId: query_registry_names_v1_asn_registry_all_get
-export def "asn-registry-all get" [
+export def "asn-registry-all list-names-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -656,7 +692,7 @@ export def "asn-registry-all get" [
 #
 # GET /v1/asn/registry/{code}
 # operationId: query_registry_by_the_name_v1_asn_registry__code__get
-export def "asn-registry get" [
+export def "asn-registry list-by-name-get" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -669,7 +705,7 @@ export def "asn-registry get" [
 ]: nothing -> record<code: string, name: string, self: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({code: $code} | format pattern "/v1/asn/registry/{code}"))
+  let full_url = (build-url $base ({code: (encode-path-segment $code)} | format pattern "/v1/asn/registry/{code}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -679,7 +715,7 @@ export def "asn-registry get" [
 #
 # GET /v1/asn/status/all
 # operationId: query_status_names_v1_asn_status_all_get
-export def "asn-status-all get" [
+export def "asn-status-all list-names-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -701,7 +737,7 @@ export def "asn-status-all get" [
 #
 # GET /v1/asn/status/{code}
 # operationId: query_status_by_the_name_v1_asn_status__code__get
-export def "asn-status get" [
+export def "asn-status list-by-name-get" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -714,7 +750,7 @@ export def "asn-status get" [
 ]: nothing -> record<code: string, name: string, self: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({code: $code} | format pattern "/v1/asn/status/{code}"))
+  let full_url = (build-url $base ({code: (encode-path-segment $code)} | format pattern "/v1/asn/status/{code}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -724,7 +760,7 @@ export def "asn-status get" [
 #
 # GET /v1/asn/{number}
 # operationId: query_asn_v1_asn__number__get
-export def "asn get" [
+export def "asn list-get" [
   number: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -737,7 +773,7 @@ export def "asn get" [
 ]: nothing -> record<country_code: string, description: string, name: string, prefixes: string, registry: string, registry_date: string, risk: string, score: int, self: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({number: $number} | format pattern "/v1/asn/{number}"))
+  let full_url = (build-url $base ({number: (encode-path-segment $number)} | format pattern "/v1/asn/{number}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -747,7 +783,7 @@ export def "asn get" [
 #
 # GET /v1/asn/{number}/prefixes
 # operationId: query_asn_prefixes_list_v1_asn__number__prefixes_get
-export def "asn-prefixes get" [
+export def "asn-prefixes list-list-get" [
   number: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -760,7 +796,7 @@ export def "asn-prefixes get" [
 ]: nothing -> record<asn: string, prefixes_v4: table<asn: string, description: string, mantainer: string, object_type: string, registry_date: string, registry_status: string, risk: string, score: int, self: string>, prefixes_v6: table<asn: string, description: string, mantainer: string, object_type: string, registry_date: string, registry_status: string, risk: string, score: int, self: string>, self: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({number: $number} | format pattern "/v1/asn/{number}/prefixes"))
+  let full_url = (build-url $base ({number: (encode-path-segment $number)} | format pattern "/v1/asn/{number}/prefixes"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -770,7 +806,7 @@ export def "asn-prefixes get" [
 #
 # POST /v1/assess/ip
 # operationId: assess_ip_set_v1_assess_ip_post
-export def "assess-ip post" [
+export def "assess-ip update-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -785,17 +821,18 @@ export def "assess-ip post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/assess/ip")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get the risk score of all IP address uploaded and other data signals.
 #
 # POST /v1/assess/ip/csv
 # operationId: assess_ip_set_csv_v1_assess_ip_csv_post
-export def "assess-ip-csv post" [
+export def "assess-ip-csv update-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -812,11 +849,12 @@ export def "assess-ip-csv post" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "strict_parse" $strict_parse "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/assess/ip/csv" $qp)
-  let body = {"csv_file": $csv_file} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"csv_file": $csv_file} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body ["csv_file"])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # Get a risk score of the IP address and different data signals.
@@ -836,7 +874,7 @@ export def "assess-ip get" [
 ]: nothing -> record<allowlisted: string, asn: string, asn_prefix: string, datacenter: string, datacenter_prefix: string, datasets: list<string>, denylisted: string, first_appearance: list<string>, last_appearance: list<string>, reason: string, risk: string, score: int, self: string, sources: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({ip_address: $ip_address} | format pattern "/v1/assess/ip/{ip_address}"))
+  let full_url = (build-url $base ({ip_address: (encode-path-segment $ip_address)} | format pattern "/v1/assess/ip/{ip_address}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -846,7 +884,7 @@ export def "assess-ip get" [
 #
 # GET /v1/datacenter/ip/{ip_address}
 # operationId: query_IP_address_network_information_v1_datacenter_ip__ip_address__get
-export def "datacenter-ip get" [
+export def "datacenter-ip list-network-information-get" [
   ip_address: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -859,7 +897,7 @@ export def "datacenter-ip get" [
 ]: nothing -> record<datacenter: string, ip_abuse_total: int, max_score: int, min_score: int, risk: string, score: int, self: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({ip_address: $ip_address} | format pattern "/v1/datacenter/ip/{ip_address}"))
+  let full_url = (build-url $base ({ip_address: (encode-path-segment $ip_address)} | format pattern "/v1/datacenter/ip/{ip_address}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -869,7 +907,7 @@ export def "datacenter-ip get" [
 #
 # POST /v1/datacenter/prefix
 # operationId: query_datacenter_prefix_information_v1_datacenter_prefix_post
-export def "datacenter-prefix post" [
+export def "datacenter-prefix list-information-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -884,18 +922,18 @@ export def "datacenter-prefix post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/datacenter/prefix")
-  let body = {"prefix": $prefix} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"prefix": $prefix} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get the Datacenter details of datacente given.
 #
 # GET /v1/datacenter/{datacenter_id}
 # operationId: query_datacenter_v1_datacenter__datacenter_id__get
-export def "datacenter get" [
+export def "datacenter list-get" [
   datacenter_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -908,7 +946,7 @@ export def "datacenter get" [
 ]: nothing -> record<asn: string, description: string, name: string, prefixes: string, risk: string, score: int, self: string, source: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({datacenter_id: $datacenter_id} | format pattern "/v1/datacenter/{datacenter_id}"))
+  let full_url = (build-url $base ({datacenter_id: (encode-path-segment $datacenter_id)} | format pattern "/v1/datacenter/{datacenter_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -918,7 +956,7 @@ export def "datacenter get" [
 #
 # GET /v1/datacenter/{datacenter_id}/prefixes
 # operationId: query_datacenter_prefixes_list_v1_datacenter__datacenter_id__prefixes_get
-export def "datacenter-prefixes get" [
+export def "datacenter-prefixes list-list-get" [
   datacenter_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -931,7 +969,7 @@ export def "datacenter-prefixes get" [
 ]: nothing -> record<prefixes_v4: table<datacenter: string, ip_abuse_total: int, max_score: int, min_score: int, risk: string, score: int, self: string>, prefixes_v6: table<datacenter: string, ip_abuse_total: int, max_score: int, min_score: int, risk: string, score: int, self: string>, self: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({datacenter_id: $datacenter_id} | format pattern "/v1/datacenter/{datacenter_id}/prefixes"))
+  let full_url = (build-url $base ({datacenter_id: (encode-path-segment $datacenter_id)} | format pattern "/v1/datacenter/{datacenter_id}/prefixes"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -941,7 +979,7 @@ export def "datacenter-prefixes get" [
 #
 # GET /v1/dataset/ip
 # operationId: query_datataset_information_of_all_the_resource_types_v1_dataset_ip_get
-export def "dataset-ip list" [
+export def "dataset-ip list-datataset-information-of-list-resource-types-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -963,7 +1001,7 @@ export def "dataset-ip list" [
 #
 # GET /v1/dataset/ip/{name}
 # operationId: query_datataset_information_of_the_resource_type_v1_dataset_ip__name__get
-export def "dataset-ip get" [
+export def "dataset-ip list-datataset-information-of-resource-type-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -976,7 +1014,7 @@ export def "dataset-ip get" [
 ]: nothing -> record<description: string, items: int, name: string, self: string, status: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/dataset/ip/{name}"))
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/dataset/ip/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -986,7 +1024,7 @@ export def "dataset-ip get" [
 #
 # POST /v1/denylist/private
 # operationId: create_private_denylist_of_the_user_v1_denylist_private_post
-export def "denylist-private post" [
+export def "denylist-private create-of-user-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1001,18 +1039,18 @@ export def "denylist-private post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/denylist/private")
-  let body = {"payload": $payload} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"payload": $payload} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get the set of private denylists of the user.
 #
 # GET /v1/denylist/private/all
 # operationId: get_all_private_denylists_v1_denylist_private_all_get
-export def "denylist-private-all list" [
+export def "denylist-private-all get-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1034,7 +1072,7 @@ export def "denylist-private-all list" [
 #
 # GET /v1/denylist/private/all/{resource_type}
 # operationId: get_all_private_denylists_by_resource_type_v1_denylist_private_all__resource_type__get
-export def "denylist-private-all get" [
+export def "denylist-private-all get-by-get" [
   resource_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1047,7 +1085,7 @@ export def "denylist-private-all get" [
 ]: nothing -> record<lists: table<content: string, created_at: int, description: string, list_type: string, name: string, origins: record, resource_type: string, self: string, tags: list, ttl: int, updated_at: int>, self: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({resource_type: $resource_type} | format pattern "/v1/denylist/private/all/{resource_type}"))
+  let full_url = (build-url $base ({resource_type: (encode-path-segment $resource_type)} | format pattern "/v1/denylist/private/all/{resource_type}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1057,7 +1095,7 @@ export def "denylist-private-all get" [
 #
 # GET /v1/denylist/private/ip/{address}
 # operationId: query_resource_denylists_v1_denylist_private_ip__address__get
-export def "denylist-private-ip get" [
+export def "denylist-private-ip list-resource-get" [
   address: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1070,7 +1108,7 @@ export def "denylist-private-ip get" [
 ]: nothing -> record<asns: list<string>, cidrs: list<string>, continents: list<string>, countries: list<string>, datacenters: list<string>, reported: list<string>, self: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({address: $address} | format pattern "/v1/denylist/private/ip/{address}"))
+  let full_url = (build-url $base ({address: (encode-path-segment $address)} | format pattern "/v1/denylist/private/ip/{address}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1080,7 +1118,7 @@ export def "denylist-private-ip get" [
 #
 # DELETE /v1/denylist/private/{denylist_id}
 # operationId: delete_the_denylist_v1_denylist_private__denylist_id__delete
-export def "denylist-private delete" [
+export def "denylist-private delete-delete" [
   denylist_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1093,7 +1131,7 @@ export def "denylist-private delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({denylist_id: $denylist_id} | format pattern "/v1/denylist/private/{denylist_id}"))
+  let full_url = (build-url $base ({denylist_id: (encode-path-segment $denylist_id)} | format pattern "/v1/denylist/private/{denylist_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1103,7 +1141,7 @@ export def "denylist-private delete" [
 #
 # GET /v1/denylist/private/{denylist_id}
 # operationId: get_single_denylist_v1_denylist_private__denylist_id__get
-export def "denylist-private get" [
+export def "denylist-private get-single-get" [
   denylist_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1116,7 +1154,7 @@ export def "denylist-private get" [
 ]: nothing -> record<content: string, created_at: int, description: string, list_type: string, name: string, origins: record<lists: list<record>, self: string>, resource_type: string, self: string, tags: list<string>, ttl: int, updated_at: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({denylist_id: $denylist_id} | format pattern "/v1/denylist/private/{denylist_id}"))
+  let full_url = (build-url $base ({denylist_id: (encode-path-segment $denylist_id)} | format pattern "/v1/denylist/private/{denylist_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1126,7 +1164,7 @@ export def "denylist-private get" [
 #
 # PUT /v1/denylist/private/{denylist_id}
 # operationId: update_private_denylist_of_the_user_v1_denylist_private__denylist_id__put
-export def "denylist-private put" [
+export def "denylist-private update-of-user-update" [
   denylist_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1138,25 +1176,25 @@ export def "denylist-private put" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --description: string # The human readable full description of the list
   --name: string # The name of the list
-  --tags: list # The list of tags to associate with the list
+  --tags: list<string> # The list of tags to associate with the list
   --ttl: int # Optional. The Time To Live (TTL) of a resource in the list in seconds.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({denylist_id: $denylist_id} | format pattern "/v1/denylist/private/{denylist_id}"))
-  let body = {"description": $description, "name": $name, "tags": $tags, "ttl": $ttl} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({denylist_id: (encode-path-segment $denylist_id)} | format pattern "/v1/denylist/private/{denylist_id}"))
+  let req_body = {"description": $description, "name": $name, "tags": $tags, "ttl": $ttl} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete all the content of a private denylist of the user.
 #
 # DELETE /v1/denylist/private/{denylist_id}/content
 # operationId: delete_the_denylist_content_v1_denylist_private__denylist_id__content_delete
-export def "denylist-private-content delete" [
+export def "denylist-private-content delete-delete" [
   denylist_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1169,7 +1207,7 @@ export def "denylist-private-content delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({denylist_id: $denylist_id} | format pattern "/v1/denylist/private/{denylist_id}/content"))
+  let full_url = (build-url $base ({denylist_id: (encode-path-segment $denylist_id)} | format pattern "/v1/denylist/private/{denylist_id}/content"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1179,7 +1217,7 @@ export def "denylist-private-content delete" [
 #
 # GET /v1/denylist/private/{denylist_id}/content
 # operationId: get_denylist_content_v1_denylist_private__denylist_id__content_get
-export def "denylist-private-content get" [
+export def "denylist-private-content get-get" [
   denylist_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1192,7 +1230,7 @@ export def "denylist-private-content get" [
 ]: nothing -> record<asns: list<int>, cidrs: list<any>, continents: list<string>, countries: list<string>, datacenters: list<string>, self: string, user_agents: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({denylist_id: $denylist_id} | format pattern "/v1/denylist/private/{denylist_id}/content"))
+  let full_url = (build-url $base ({denylist_id: (encode-path-segment $denylist_id)} | format pattern "/v1/denylist/private/{denylist_id}/content"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1202,7 +1240,7 @@ export def "denylist-private-content get" [
 #
 # PUT /v1/denylist/private/{denylist_id}/content
 # operationId: update_private_content_of_the_denylist_of_the_user_v1_denylist_private__denylist_id__content_put
-export def "denylist-private-content put" [
+export def "denylist-private-content update-of-of-user-update" [
   denylist_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1212,25 +1250,25 @@ export def "denylist-private-content put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --append: list # The name of the resources to append to the denylist
-  --remove: list # The name of the resources to remove from the denylist
+  --append: list<string> # The name of the resources to append to the denylist
+  --remove: list<string> # The name of the resources to remove from the denylist
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({denylist_id: $denylist_id} | format pattern "/v1/denylist/private/{denylist_id}/content"))
-  let body = {"append": $append, "remove": $remove} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({denylist_id: (encode-path-segment $denylist_id)} | format pattern "/v1/denylist/private/{denylist_id}/content"))
+  let req_body = {"append": $append, "remove": $remove} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Toogle the status of the origin in a deny list.
 #
 # PUT /v1/denylist/private/{denylist_id}/origin
 # operationId: change_status_of_the_origin_denylist_v1_denylist_private__denylist_id__origin_put
-export def "denylist-private-origin put" [
+export def "denylist-private-origin update-change-status-of" [
   denylist_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1246,19 +1284,19 @@ export def "denylist-private-origin put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({denylist_id: $denylist_id} | format pattern "/v1/denylist/private/{denylist_id}/origin"))
-  let body = {"origin": $origin, "status": $status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({denylist_id: (encode-path-segment $denylist_id)} | format pattern "/v1/denylist/private/{denylist_id}/origin"))
+  let req_body = {"origin": $origin, "status": $status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get the set of public denylists.
 #
 # GET /v1/denylist/public/all
 # operationId: get_all_public_denylists_v1_denylist_public_all_get
-export def "denylist-public-all list" [
+export def "denylist-public-all get-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1280,7 +1318,7 @@ export def "denylist-public-all list" [
 #
 # GET /v1/denylist/public/all/{resource_type}
 # operationId: get_all_public_denylists_by_resource_type_v1_denylist_public_all__resource_type__get
-export def "denylist-public-all get" [
+export def "denylist-public-all get-by-get" [
   resource_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1293,7 +1331,7 @@ export def "denylist-public-all get" [
 ]: nothing -> record<lists: table<created_at: int, description: string, list_type: string, name: string, origins: record, resource_type: string, self: string, status: string, tags: list, ttl: int, updated_at: int>, self: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({resource_type: $resource_type} | format pattern "/v1/denylist/public/all/{resource_type}"))
+  let full_url = (build-url $base ({resource_type: (encode-path-segment $resource_type)} | format pattern "/v1/denylist/public/all/{resource_type}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1303,7 +1341,7 @@ export def "denylist-public-all get" [
 #
 # GET /v1/denylist/public/ip/{address}
 # operationId: query_resource_denylists_v1_denylist_public_ip__address__get
-export def "denylist-public-ip get" [
+export def "denylist-public-ip list-resource-get" [
   address: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1316,7 +1354,7 @@ export def "denylist-public-ip get" [
 ]: nothing -> record<asns: list<string>, cidrs: list<string>, continents: list<string>, countries: list<string>, datacenters: list<string>, reported: list<string>, self: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({address: $address} | format pattern "/v1/denylist/public/ip/{address}"))
+  let full_url = (build-url $base ({address: (encode-path-segment $address)} | format pattern "/v1/denylist/public/ip/{address}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1326,7 +1364,7 @@ export def "denylist-public-ip get" [
 #
 # GET /v1/denylist/public/owned
 # operationId: get_public_denylists_owned_by_the_user_v1_denylist_public_owned_get
-export def "denylist-public-owned list" [
+export def "denylist-public-owned get-by-user-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1348,7 +1386,7 @@ export def "denylist-public-owned list" [
 #
 # GET /v1/denylist/public/owned/{resource_type}
 # operationId: get_all_owned_denylists_by_resource_type_v1_denylist_public_owned__resource_type__get
-export def "denylist-public-owned get" [
+export def "denylist-public-owned get-list-by-get" [
   resource_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1361,7 +1399,7 @@ export def "denylist-public-owned get" [
 ]: nothing -> record<lists: table<created_at: int, description: string, list_type: string, name: string, origins: record, resource_type: string, self: string, status: string, tags: list, ttl: int, updated_at: int>, self: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({resource_type: $resource_type} | format pattern "/v1/denylist/public/owned/{resource_type}"))
+  let full_url = (build-url $base ({resource_type: (encode-path-segment $resource_type)} | format pattern "/v1/denylist/public/owned/{resource_type}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1371,7 +1409,7 @@ export def "denylist-public-owned get" [
 #
 # DELETE /v1/denylist/public/{denylist_id}
 # operationId: delete_the_denylist_v1_denylist_public__denylist_id__delete
-export def "denylist-public delete" [
+export def "denylist-public delete-delete" [
   denylist_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1384,7 +1422,7 @@ export def "denylist-public delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({denylist_id: $denylist_id} | format pattern "/v1/denylist/public/{denylist_id}"))
+  let full_url = (build-url $base ({denylist_id: (encode-path-segment $denylist_id)} | format pattern "/v1/denylist/public/{denylist_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1394,7 +1432,7 @@ export def "denylist-public delete" [
 #
 # GET /v1/denylist/public/{denylist_id}
 # operationId: get_single_denylist_v1_denylist_public__denylist_id__get
-export def "denylist-public get" [
+export def "denylist-public get-single-get" [
   denylist_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1407,7 +1445,7 @@ export def "denylist-public get" [
 ]: nothing -> record<created_at: int, description: string, list_type: string, name: string, origins: record<lists: list<record>, self: string>, resource_type: string, self: string, status: string, tags: list<string>, ttl: int, updated_at: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({denylist_id: $denylist_id} | format pattern "/v1/denylist/public/{denylist_id}"))
+  let full_url = (build-url $base ({denylist_id: (encode-path-segment $denylist_id)} | format pattern "/v1/denylist/public/{denylist_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1417,7 +1455,7 @@ export def "denylist-public get" [
 #
 # PUT /v1/denylist/public/{denylist_id}
 # operationId: change_status_of_the_denylist_v1_denylist_public__denylist_id__put
-export def "denylist-public put" [
+export def "denylist-public update-change-status-of" [
   denylist_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1432,19 +1470,19 @@ export def "denylist-public put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({denylist_id: $denylist_id} | format pattern "/v1/denylist/public/{denylist_id}"))
-  let body = {"status": $status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({denylist_id: (encode-path-segment $denylist_id)} | format pattern "/v1/denylist/public/{denylist_id}"))
+  let req_body = {"status": $status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Toogle the status of the origin in a deny list.
 #
 # PUT /v1/denylist/public/{denylist_id}/origin
 # operationId: change_status_of_the_origin_denylist_v1_denylist_public__denylist_id__origin_put
-export def "denylist-public-origin put" [
+export def "denylist-public-origin update-change-status-of" [
   denylist_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1460,19 +1498,19 @@ export def "denylist-public-origin put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({denylist_id: $denylist_id} | format pattern "/v1/denylist/public/{denylist_id}/origin"))
-  let body = {"origin": $origin, "status": $status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({denylist_id: (encode-path-segment $denylist_id)} | format pattern "/v1/denylist/public/{denylist_id}/origin"))
+  let req_body = {"origin": $origin, "status": $status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get the list of automatically reported IP addresses by the user.
 #
 # GET /v1/denylist/reported/ip
 # operationId: query_all_the_ip_addresses_reported_by_the_user_v1_denylist_reported_ip_get
-export def "denylist-reported-ip list" [
+export def "denylist-reported-ip list-list-addresses-by-user-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1504,7 +1542,7 @@ export def "denylist-reported-ip list" [
 #
 # DELETE /v1/denylist/reported/ip/all
 # operationId: delete_all_ip_addresses_reported_by_the_user_v1_denylist_reported_ip_all_delete
-export def "denylist-reported-ip-all delete" [
+export def "denylist-reported-ip-all delete-addresses-by-user-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1526,7 +1564,7 @@ export def "denylist-reported-ip-all delete" [
 #
 # DELETE /v1/denylist/reported/ip/{ip_address}
 # operationId: delete_an_ip_address_reported_by_the_user_v1_denylist_reported_ip__ip_address__delete
-export def "denylist-reported-ip delete" [
+export def "denylist-reported-ip delete-by-user-delete" [
   ip_address: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1539,7 +1577,7 @@ export def "denylist-reported-ip delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({ip_address: $ip_address} | format pattern "/v1/denylist/reported/ip/{ip_address}"))
+  let full_url = (build-url $base ({ip_address: (encode-path-segment $ip_address)} | format pattern "/v1/denylist/reported/ip/{ip_address}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1549,7 +1587,7 @@ export def "denylist-reported-ip delete" [
 #
 # GET /v1/denylist/reported/ip/{ip_address}
 # operationId: query_an_ip_addresses_reported_by_the_user_v1_denylist_reported_ip__ip_address__get
-export def "denylist-reported-ip get" [
+export def "denylist-reported-ip list-addresses-by-user-get" [
   ip_address: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1562,7 +1600,7 @@ export def "denylist-reported-ip get" [
 ]: nothing -> record<dataset: string, expiry: int, last_report: int, protocol: string, self: string, tags: list<string>, total_reports: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({ip_address: $ip_address} | format pattern "/v1/denylist/reported/ip/{ip_address}"))
+  let full_url = (build-url $base ({ip_address: (encode-path-segment $ip_address)} | format pattern "/v1/denylist/reported/ip/{ip_address}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1572,7 +1610,7 @@ export def "denylist-reported-ip get" [
 #
 # POST /v1/geo
 # operationId: geolocate_ip_set_v1_geo_post
-export def "geo post" [
+export def "geo update-geolocate-ip-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1587,17 +1625,18 @@ export def "geo post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/geo")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get the geolocation data of all the IP addresses uploaded.
 #
 # POST /v1/geo/csv
 # operationId: assess_ip_set_csv_v1_geo_csv_post
-export def "geo-csv post" [
+export def "geo-csv update-assess-ip-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1614,18 +1653,19 @@ export def "geo-csv post" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "strict_parse" $strict_parse "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/geo/csv" $qp)
-  let body = {"csv_file": $csv_file} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"csv_file": $csv_file} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body ["csv_file"])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # Get the geo location data of the IP address.
 #
 # GET /v1/geo/{ip_address}
 # operationId: geolocate_ip_v1_geo__ip_address__get
-export def "geo get" [
+export def "geo get-geolocate" [
   ip_address: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1638,7 +1678,7 @@ export def "geo get" [
 ]: nothing -> record<accuracy_radius: float, asn_country_iso_code: string, city_geoname_code: int, city_name: string, continent_code: string, country_iso_code: string, hostnames: list<string>, latitude: float, longitude: float, postal_code: string, region_geoname_code: int, region_name: string, self: string, time_zone: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({ip_address: $ip_address} | format pattern "/v1/geo/{ip_address}"))
+  let full_url = (build-url $base ({ip_address: (encode-path-segment $ip_address)} | format pattern "/v1/geo/{ip_address}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1648,7 +1688,7 @@ export def "geo get" [
 #
 # GET /v1/log/ip/id/{logchange_id}
 # operationId: log_change_id_v1_log_ip_id__logchange_id__get
-export def "log-ip-id get" [
+export def "log-ip-id get-change" [
   logchange_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1661,7 +1701,7 @@ export def "log-ip-id get" [
 ]: nothing -> record<action: string, cidr: string, dataset: string, lapse: string, risk: string, score: int, self: string, source: string, timestamp: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({logchange_id: $logchange_id} | format pattern "/v1/log/ip/id/{logchange_id}"))
+  let full_url = (build-url $base ({logchange_id: (encode-path-segment $logchange_id)} | format pattern "/v1/log/ip/id/{logchange_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1671,7 +1711,7 @@ export def "log-ip-id get" [
 #
 # GET /v1/log/ip/{ip_address}
 # operationId: logchanges_ip_v1_log_ip__ip_address__get
-export def "log-ip get" [
+export def "log-ip get-logchanges" [
   ip_address: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1687,7 +1727,7 @@ export def "log-ip get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "dataset" $dataset "scalar") (serialize-qp "logged_after" $logged_after "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({ip_address: $ip_address} | format pattern "/v1/log/ip/{ip_address}") $qp)
+  let full_url = (build-url $base ({ip_address: (encode-path-segment $ip_address)} | format pattern "/v1/log/ip/{ip_address}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1697,7 +1737,7 @@ export def "log-ip get" [
 #
 # GET /v1/origin
 # operationId: query_origin_information_v1_origin_get
-export def "origin get" [
+export def "origin list-information-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1721,7 +1761,7 @@ export def "origin get" [
 #
 # PUT /v1/origin
 # operationId: update_configuration_origin_v1_origin_put
-export def "origin put" [
+export def "origin update-configuration-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1737,18 +1777,18 @@ export def "origin put" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/origin")
-  let body = {"config": $config, "origin": $origin} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"config": $config, "origin": $origin} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get the address status of the origin of the user in the region.
 #
 # GET /v1/origin/addresses
 # operationId: query_origin_address_status_information_v1_origin_addresses_get
-export def "origin-addresses get" [
+export def "origin-addresses list-address-status-information-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1774,7 +1814,7 @@ export def "origin-addresses get" [
 #
 # GET /v1/origin/all
 # operationId: query_all_origin_information_v1_origin_all_get
-export def "origin-all get" [
+export def "origin-all list-information-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1796,7 +1836,7 @@ export def "origin-all get" [
 #
 # GET /v1/origin/client/analysis
 # operationId: query_origin_traffic_client_v1_origin_client_analysis_get
-export def "origin-client-analysis get" [
+export def "origin-client-analysis list-traffic-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1823,7 +1863,7 @@ export def "origin-client-analysis get" [
 #
 # GET /v1/origin/cookies
 # operationId: query_origin_cookie_id_status_information_v1_origin_cookies_get
-export def "origin-cookies get" [
+export def "origin-cookies list-status-information-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1849,7 +1889,7 @@ export def "origin-cookies get" [
 #
 # GET /v1/origin/scripts
 # operationId: query_origin_scripts_v1_origin_scripts_get
-export def "origin-scripts get" [
+export def "origin-scripts list-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1873,7 +1913,7 @@ export def "origin-scripts get" [
 #
 # POST /v1/origin/status
 # operationId: query_origin_status_v1_origin_status_post
-export def "origin-status post" [
+export def "origin-status list-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1891,18 +1931,18 @@ export def "origin-status post" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/origin/status" $qp)
-  let body = {"address": $address, "cookie_id": $cookie_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"address": $address, "cookie_id": $cookie_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get detail of a status available in the platform.
 #
 # GET /v1/origin/status/detail/{status_id}
 # operationId: query_origin_status_detail_v1_origin_status_detail__status_id__get
-export def "origin-status-detail get" [
+export def "origin-status-detail list-get" [
   status_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1915,7 +1955,7 @@ export def "origin-status-detail get" [
 ]: nothing -> record<cardinality: int, description: string, self: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({status_id: $status_id} | format pattern "/v1/origin/status/detail/{status_id}"))
+  let full_url = (build-url $base ({status_id: (encode-path-segment $status_id)} | format pattern "/v1/origin/status/detail/{status_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1925,7 +1965,7 @@ export def "origin-status-detail get" [
 #
 # GET /v1/origin/status/details
 # operationId: query_origin_status_details_v1_origin_status_details_get
-export def "origin-status-details get" [
+export def "origin-status-details list-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1947,7 +1987,7 @@ export def "origin-status-details get" [
 #
 # GET /v1/origin/traffic/analysis
 # operationId: query_origin_traffic_analysis_v1_origin_traffic_analysis_get
-export def "origin-traffic-analysis get" [
+export def "origin-traffic-analysis list-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1974,7 +2014,7 @@ export def "origin-traffic-analysis get" [
 #
 # DELETE /v1/origin_token
 # operationId: delete_token_v1_origin_token_delete
-export def "origin-token delete" [
+export def "origin-token delete-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1989,18 +2029,18 @@ export def "origin-token delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/origin_token")
-  let body = {"origin_token_id": $origin_token_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"origin_token_id": $origin_token_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get the information of an origin token of the user in the region.
 #
 # POST /v1/origin_token
 # operationId: query_origin_token_info_v1_origin_token_post
-export def "origin-token post" [
+export def "origin-token list-get-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2015,18 +2055,18 @@ export def "origin-token post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/origin_token")
-  let body = {"origin_token_id": $origin_token_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"origin_token_id": $origin_token_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get the information of the origin tokens of the user in the region.
 #
 # GET /v1/origin_token/all
 # operationId: query_all_origin_tokens_in_the_region_v1_origin_token_all_get
-export def "origin-token-all get" [
+export def "origin-token-all list-in-region-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2048,7 +2088,7 @@ export def "origin-token-all get" [
 #
 # PUT /v1/origin_token/disable
 # operationId: disable_origin_token_v1_origin_token_disable_put
-export def "origin-token-disable put" [
+export def "origin-token-disable update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2063,18 +2103,18 @@ export def "origin-token-disable put" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/origin_token/disable")
-  let body = {"origin_token_id": $origin_token_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"origin_token_id": $origin_token_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Enable a disabled origin token of the user in the region.
 #
 # PUT /v1/origin_token/enable
 # operationId: enable_origin_token_v1_origin_token_enable_put
-export def "origin-token-enable put" [
+export def "origin-token-enable update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2089,18 +2129,18 @@ export def "origin-token-enable put" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/origin_token/enable")
-  let body = {"origin_token_id": $origin_token_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"origin_token_id": $origin_token_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create an origin token of the user in the region.
 #
 # POST /v1/origin_token/new
 # operationId: create_a_new_origin_token_v1_origin_token_new_post
-export def "origin-token-new post" [
+export def "origin-token-new create-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2115,18 +2155,18 @@ export def "origin-token-new post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/origin_token/new")
-  let body = {"origin": $origin} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"origin": $origin} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get the full information of all the source lists for the subscription level given.
 #
 # GET /v1/source/ip
 # operationId: get_all_sources_v1_source_ip_get
-export def "source-ip list" [
+export def "source-ip get-list-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2148,7 +2188,7 @@ export def "source-ip list" [
 #
 # GET /v1/source/ip/{source}
 # operationId: get_source_info_v1_source_ip__source__get
-export def "source-ip get" [
+export def "source-ip get-get-get" [
   source: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2161,7 +2201,7 @@ export def "source-ip get" [
 ]: nothing -> record<dataset: string, description: string, maximum_risk: string, maximum_score: int, minimum_risk: string, minimum_score: int, name: string, refresh: string, self: string, source: string, time_ranges: list<string>, updated_at: int, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({source: $source} | format pattern "/v1/source/ip/{source}"))
+  let full_url = (build-url $base ({source: (encode-path-segment $source)} | format pattern "/v1/source/ip/{source}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2171,7 +2211,7 @@ export def "source-ip get" [
 #
 # GET /v1/source/ip/{source}/range/{time_range}
 # operationId: get_source_and_timerange_info_v1_source_ip__source__range__time_range__get
-export def "source-ip-range get" [
+export def "source-ip-range get-and-timerange-get-get" [
   source: string
   time_range: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2185,7 +2225,7 @@ export def "source-ip-range get" [
 ]: nothing -> record<items: int, lapse: string, risk: string, score: int, self: string, source: string, updated_at: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({source: $source, time_range: $time_range} | format pattern "/v1/source/ip/{source}/range/{time_range}"))
+  let full_url = (build-url $base ({source: (encode-path-segment $source), time_range: (encode-path-segment $time_range)} | format pattern "/v1/source/ip/{source}/range/{time_range}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2195,7 +2235,7 @@ export def "source-ip-range get" [
 #
 # GET /v1/token
 # operationId: query_token_info_v1_token_get
-export def "token get" [
+export def "token list-get-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2217,7 +2257,7 @@ export def "token get" [
 #
 # GET /v1/token/activity
 # operationId: query_token_activity_v1_token_activity_get
-export def "token-activity get" [
+export def "token-activity list-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2242,7 +2282,7 @@ export def "token-activity get" [
 #
 # POST /v1/ua
 # operationId: parse_user_agents_v1_ua_post
-export def "ua post" [
+export def "ua create-parse-user-agents" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2257,17 +2297,18 @@ export def "ua post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/ua")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get the information found in the set of User Agents uploaded.
 #
 # POST /v1/ua/csv
 # operationId: parse_user_agents_csv_v1_ua_csv_post
-export def "ua-csv post" [
+export def "ua-csv create-parse-user-agents" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2282,18 +2323,19 @@ export def "ua-csv post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/ua/csv")
-  let body = {"csv_file": $csv_file} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"csv_file": $csv_file} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body ["csv_file"])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # Get the information of the device of a user agent.
 #
 # GET /v1/ua/device/{code}
 # operationId: query_device_by_code_v1_ua_device__code__get
-export def "ua-device get" [
+export def "ua-device list-by-get" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2306,7 +2348,7 @@ export def "ua-device get" [
 ]: nothing -> record<code: string, description: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({code: $code} | format pattern "/v1/ua/device/{code}"))
+  let full_url = (build-url $base ({code: (encode-path-segment $code)} | format pattern "/v1/ua/device/{code}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2316,7 +2358,7 @@ export def "ua-device get" [
 #
 # GET /v1/ua/family/{code}
 # operationId: query_family_by_code_v1_ua_family__code__get
-export def "ua-family get" [
+export def "ua-family list-by-get" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2329,7 +2371,7 @@ export def "ua-family get" [
 ]: nothing -> record<code: string, description: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({code: $code} | format pattern "/v1/ua/family/{code}"))
+  let full_url = (build-url $base ({code: (encode-path-segment $code)} | format pattern "/v1/ua/family/{code}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2339,7 +2381,7 @@ export def "ua-family get" [
 #
 # GET /v1/ua/os/{code}
 # operationId: query_os_by_code_v1_ua_os__code__get
-export def "ua-os get" [
+export def "ua-os list-by-get" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2352,7 +2394,7 @@ export def "ua-os get" [
 ]: nothing -> record<code: string, description: string, family: string, vendor: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({code: $code} | format pattern "/v1/ua/os/{code}"))
+  let full_url = (build-url $base ({code: (encode-path-segment $code)} | format pattern "/v1/ua/os/{code}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2362,7 +2404,7 @@ export def "ua-os get" [
 #
 # GET /v1/ua/type/{code}
 # operationId: query_type_by_code_v1_ua_type__code__get
-export def "ua-type get" [
+export def "ua-type list-by-get" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2375,7 +2417,7 @@ export def "ua-type get" [
 ]: nothing -> record<code: string, description: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({code: $code} | format pattern "/v1/ua/type/{code}"))
+  let full_url = (build-url $base ({code: (encode-path-segment $code)} | format pattern "/v1/ua/type/{code}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2385,7 +2427,7 @@ export def "ua-type get" [
 #
 # GET /v1/ua/vendor/{code}
 # operationId: query_vendor_by_code_v1_ua_vendor__code__get
-export def "ua-vendor get" [
+export def "ua-vendor list-by-get" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2398,7 +2440,7 @@ export def "ua-vendor get" [
 ]: nothing -> record<code: string, description: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({code: $code} | format pattern "/v1/ua/vendor/{code}"))
+  let full_url = (build-url $base ({code: (encode-path-segment $code)} | format pattern "/v1/ua/vendor/{code}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2408,7 +2450,7 @@ export def "ua-vendor get" [
 #
 # GET /v1/ua/{user_agent_urlencoded}
 # operationId: parse_user_agent_v1_ua__user_agent_urlencoded__get
-export def "ua get" [
+export def "ua get-parse" [
   user_agent_urlencoded: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2421,7 +2463,7 @@ export def "ua get" [
 ]: nothing -> record<agent: string, classification: string, device: string, engine: string, family: string, frequent: string, latest: string, os: string, self: string, string: string, type: string, vendor: string, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_agent_urlencoded: $user_agent_urlencoded} | format pattern "/v1/ua/{user_agent_urlencoded}"))
+  let full_url = (build-url $base ({user_agent_urlencoded: (encode-path-segment $user_agent_urlencoded)} | format pattern "/v1/ua/{user_agent_urlencoded}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

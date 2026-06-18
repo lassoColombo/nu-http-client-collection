@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -70,7 +79,7 @@ def classification-completer [] { ["committee" "subcommittee"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "bills get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "bills list-get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -94,7 +103,7 @@ export def commands []: nothing -> table {
 #
 # GET /bills
 # operationId: bills_search_bills_get
-export def "bills get" [
+export def "bills list-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -106,9 +115,9 @@ export def "bills get" [
   --jurisdiction: string # Filter by jurisdiction name or ID.
   --session: string # Filter by session identifier.
   --chamber: string # Filter by chamber of origination.
-  --identifier: list # Filter to only include bills with this identifier. (default: [])
+  --identifier: list<string> # Filter to only include bills with this identifier. (default: [])
   --classification: string # Filter by classification, e.g. bill or resolution
-  --subject: list # Filter by one or more subjects. (default: [])
+  --subject: list<string> # Filter by one or more subjects. (default: [])
   --updated-since: string # Filter to only include bills with updates since a given date.
   --created-since: string # Filter to only include bills created since a given date.
   --action-since: string # Filter to only include bills with an action since a given date.
@@ -126,10 +135,10 @@ export def "bills get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "jurisdiction" $jurisdiction "scalar") (serialize-qp "session" $session "scalar") (serialize-qp "chamber" $chamber "scalar") (serialize-qp "identifier" $identifier "multi") (serialize-qp "classification" $classification "scalar") (serialize-qp "subject" $subject "multi") (serialize-qp "updated_since" $updated_since "scalar") (serialize-qp "created_since" $created_since "scalar") (serialize-qp "action_since" $action_since "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "sponsor" $sponsor "scalar") (serialize-qp "sponsor_classification" $sponsor_classification "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "include" $include "multi") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "apikey" $apikey "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/bills" $qp)
-  let extra_headers = {"x-api-key": $x_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-api-key": $x_api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -137,7 +146,7 @@ export def "bills get" [
 #
 # GET /bills/ocd-bill/{openstates_bill_id}
 # operationId: bill_detail_by_id_bills_ocd_bill__openstates_bill_id__get
-export def "bills-ocd-bill get" [
+export def "bills-ocd-bill get-detail-by" [
   openstates_bill_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -154,11 +163,11 @@ export def "bills-ocd-bill get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "include" $include "multi") (serialize-qp "apikey" $apikey "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({openstates_bill_id: $openstates_bill_id} | format pattern "/bills/ocd-bill/{openstates_bill_id}") $qp)
-  let extra_headers = {"x-api-key": $x_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({openstates_bill_id: (encode-path-segment $openstates_bill_id)} | format pattern "/bills/ocd-bill/{openstates_bill_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-api-key": $x_api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -166,7 +175,7 @@ export def "bills-ocd-bill get" [
 #
 # GET /bills/{jurisdiction}/{session}/{bill_id}
 # operationId: bill_detail_bills__jurisdiction___session___bill_id__get
-export def "bills get-by-jurisdiction-session-bill_id" [
+export def "bills get-detail" [
   jurisdiction: string
   session: string
   bill_id: string
@@ -185,11 +194,11 @@ export def "bills get-by-jurisdiction-session-bill_id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "include" $include "multi") (serialize-qp "apikey" $apikey "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({jurisdiction: $jurisdiction, session: $session, bill_id: $bill_id} | format pattern "/bills/{jurisdiction}/{session}/{bill_id}") $qp)
-  let extra_headers = {"x-api-key": $x_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({jurisdiction: (encode-path-segment $jurisdiction), session: (encode-path-segment $session), bill_id: (encode-path-segment $bill_id)} | format pattern "/bills/{jurisdiction}/{session}/{bill_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-api-key": $x_api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -197,7 +206,7 @@ export def "bills get-by-jurisdiction-session-bill_id" [
 #
 # GET /committees
 # operationId: committee_list_committees_get
-export def "committees list" [
+export def "committees list-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -220,10 +229,10 @@ export def "committees list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "jurisdiction" $jurisdiction "scalar") (serialize-qp "classification" $classification "scalar") (serialize-qp "parent" $parent "scalar") (serialize-qp "chamber" $chamber "scalar") (serialize-qp "include" $include "multi") (serialize-qp "apikey" $apikey "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/committees" $qp)
-  let extra_headers = {"x-api-key": $x_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-api-key": $x_api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -231,7 +240,7 @@ export def "committees list" [
 #
 # GET /committees/{committee_id}
 # operationId: committee_detail_committees__committee_id__get
-export def "committees get" [
+export def "committees get-detail" [
   committee_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -248,11 +257,11 @@ export def "committees get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "include" $include "multi") (serialize-qp "apikey" $apikey "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({committee_id: $committee_id} | format pattern "/committees/{committee_id}") $qp)
-  let extra_headers = {"x-api-key": $x_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({committee_id: (encode-path-segment $committee_id)} | format pattern "/committees/{committee_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-api-key": $x_api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -260,7 +269,7 @@ export def "committees get" [
 #
 # GET /events
 # operationId: event_list_events_get
-export def "events list" [
+export def "events list-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -284,10 +293,10 @@ export def "events list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "jurisdiction" $jurisdiction "scalar") (serialize-qp "deleted" $deleted "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "after" $after "scalar") (serialize-qp "require_bills" $require_bills "scalar") (serialize-qp "include" $include "multi") (serialize-qp "apikey" $apikey "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/events" $qp)
-  let extra_headers = {"x-api-key": $x_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-api-key": $x_api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -295,7 +304,7 @@ export def "events list" [
 #
 # GET /events/{event_id}
 # operationId: event_detail_events__event_id__get
-export def "events get" [
+export def "events get-detail" [
   event_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -312,11 +321,11 @@ export def "events get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "include" $include "multi") (serialize-qp "apikey" $apikey "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({event_id: $event_id} | format pattern "/events/{event_id}") $qp)
-  let extra_headers = {"x-api-key": $x_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({event_id: (encode-path-segment $event_id)} | format pattern "/events/{event_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-api-key": $x_api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -324,7 +333,7 @@ export def "events get" [
 #
 # GET /jurisdictions
 # operationId: jurisdiction_list_jurisdictions_get
-export def "jurisdictions list" [
+export def "jurisdictions list-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -344,10 +353,10 @@ export def "jurisdictions list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "classification" $classification "scalar") (serialize-qp "include" $include "multi") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "apikey" $apikey "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/jurisdictions" $qp)
-  let extra_headers = {"x-api-key": $x_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-api-key": $x_api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -355,7 +364,7 @@ export def "jurisdictions list" [
 #
 # GET /jurisdictions/{jurisdiction_id}
 # operationId: jurisdiction_detail_jurisdictions__jurisdiction_id__get
-export def "jurisdictions get" [
+export def "jurisdictions get-detail" [
   jurisdiction_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -372,11 +381,11 @@ export def "jurisdictions get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "include" $include "multi") (serialize-qp "apikey" $apikey "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({jurisdiction_id: $jurisdiction_id} | format pattern "/jurisdictions/{jurisdiction_id}") $qp)
-  let extra_headers = {"x-api-key": $x_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({jurisdiction_id: (encode-path-segment $jurisdiction_id)} | format pattern "/jurisdictions/{jurisdiction_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-api-key": $x_api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -406,7 +415,7 @@ export def "metrics get" [
 #
 # GET /people
 # operationId: people_search_people_get
-export def "people get" [
+export def "people list-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -417,7 +426,7 @@ export def "people get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --jurisdiction: string # Filter by jurisdiction name or id.
   --name: string # Filter by name, case-insensitive match.
-  --id: list # Filter by id, can be specified multiple times for multiple people. (default: [])
+  --id: list<string> # Filter by id, can be specified multiple times for multiple people. (default: [])
   --org-classification: string # Filter by current role.
   --district: string # Filter by district name.
   --include: list # Additional information to include in response. (default: [])
@@ -430,10 +439,10 @@ export def "people get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "jurisdiction" $jurisdiction "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "id" $id "multi") (serialize-qp "org_classification" $org_classification "scalar") (serialize-qp "district" $district "scalar") (serialize-qp "include" $include "multi") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "apikey" $apikey "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/people" $qp)
-  let extra_headers = {"x-api-key": $x_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-api-key": $x_api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -441,7 +450,7 @@ export def "people get" [
 #
 # GET /people.geo
 # operationId: people_geo_people_geo_get
-export def "peoplegeo get" [
+export def "people-geo get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -460,9 +469,9 @@ export def "peoplegeo get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "lat" $lat "scalar") (serialize-qp "lng" $lng "scalar") (serialize-qp "include" $include "multi") (serialize-qp "apikey" $apikey "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/people.geo" $qp)
-  let extra_headers = {"x-api-key": $x_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-api-key": $x_api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

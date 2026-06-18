@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -105,7 +114,7 @@ export def "info-configuration-media-type-extension get" [
 ]: nothing -> record<media: record<picture_filetypes: list<string>, picture_size_max: float, picture_size_min: float>, services: record<appdotnet: record<types: record, urls: record>, facebook: record<types: record, urls: record>, google: record<types: record, urls: record>, linkedin: record<types: record, urls: record>, twitter: record<types: record, urls: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({media_type_extension: $media_type_extension} | format pattern "/info/configuration{media_type_extension}"))
+  let full_url = (build-url $base ({media_type_extension: (encode-path-segment $media_type_extension)} | format pattern "/info/configuration{media_type_extension}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -124,12 +133,12 @@ export def "links-shares-media-type-extension get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-url: string # URL-encoded URL of the page for which the number of shares is requested.
+  --url: string # URL-encoded URL of the page for which the number of shares is requested.
 ]: nothing -> record<shares: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "url" $qp_url "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({media_type_extension: $media_type_extension} | format pattern "/links/shares{media_type_extension}") $qp)
+  let qp = [(serialize-qp "url" $url "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({media_type_extension: (encode-path-segment $media_type_extension)} | format pattern "/links/shares{media_type_extension}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -138,7 +147,7 @@ export def "links-shares-media-type-extension get" [
 # "Set the posting schedules for the specified social media profile.
 #
 # POST /profiles/{id}/schedules/update{mediaTypeExtension}
-export def "profiles-schedules-update-media-type-extension post" [
+export def "profiles-schedules-update-media-type-extension create" [
   id: string
   media_type_extension: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -152,7 +161,7 @@ export def "profiles-schedules-update-media-type-extension post" [
 ]: nothing -> record<success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, media_type_extension: $media_type_extension} | format pattern "/profiles/{id}/schedules/update{media_type_extension}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), media_type_extension: (encode-path-segment $media_type_extension)} | format pattern "/profiles/{id}/schedules/update{media_type_extension}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -175,7 +184,7 @@ export def "profiles-schedules-media-type-extension get" [
 ]: nothing -> record<days: list<string>, times: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, media_type_extension: $media_type_extension} | format pattern "/profiles/{id}/schedules{media_type_extension}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), media_type_extension: (encode-path-segment $media_type_extension)} | format pattern "/profiles/{id}/schedules{media_type_extension}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -203,7 +212,7 @@ export def "profiles-updates-pending-media-type-extension get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "utc" $utc "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id, media_type_extension: $media_type_extension} | format pattern "/profiles/{id}/updates/pending{media_type_extension}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id), media_type_extension: (encode-path-segment $media_type_extension)} | format pattern "/profiles/{id}/updates/pending{media_type_extension}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -212,7 +221,7 @@ export def "profiles-updates-pending-media-type-extension get" [
 # Edit the order at which statuses for the specified social media profile will be sent out of the buffer.
 #
 # POST /profiles/{id}/updates/reorder{mediaTypeExtension}
-export def "profiles-updates-reorder-media-type-extension post" [
+export def "profiles-updates-reorder-media-type-extension create" [
   id: string
   media_type_extension: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -226,7 +235,7 @@ export def "profiles-updates-reorder-media-type-extension post" [
 ]: nothing -> record<success: bool, updates: table<created_at: float, day: string, due_at: float, due_time: string, id: string, profile_id: string, profile_service: string, status: string, text: string, text_formatted: string, user_id: string, via: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, media_type_extension: $media_type_extension} | format pattern "/profiles/{id}/updates/reorder{media_type_extension}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), media_type_extension: (encode-path-segment $media_type_extension)} | format pattern "/profiles/{id}/updates/reorder{media_type_extension}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -254,7 +263,7 @@ export def "profiles-updates-sent-media-type-extension get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "utc" $utc "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id, media_type_extension: $media_type_extension} | format pattern "/profiles/{id}/updates/sent{media_type_extension}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id), media_type_extension: (encode-path-segment $media_type_extension)} | format pattern "/profiles/{id}/updates/sent{media_type_extension}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -263,7 +272,7 @@ export def "profiles-updates-sent-media-type-extension get" [
 # Randomize the order at which statuses for the specified social media profile will be sent out of the buffer.
 #
 # POST /profiles/{id}/updates/shuffle{mediaTypeExtension}
-export def "profiles-updates-shuffle-media-type-extension post" [
+export def "profiles-updates-shuffle-media-type-extension create" [
   id: string
   media_type_extension: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -277,7 +286,7 @@ export def "profiles-updates-shuffle-media-type-extension post" [
 ]: nothing -> record<success: bool, updates: table<created_at: float, day: string, due_at: float, due_time: string, id: string, profile_id: string, profile_service: string, status: string, text: string, text_formatted: string, user_id: string, via: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, media_type_extension: $media_type_extension} | format pattern "/profiles/{id}/updates/shuffle{media_type_extension}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), media_type_extension: (encode-path-segment $media_type_extension)} | format pattern "/profiles/{id}/updates/shuffle{media_type_extension}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -300,7 +309,7 @@ export def "profiles get" [
 ]: nothing -> record<avatar: string, created_at: float, default: bool, formatted_username: string, id: string, schedules: table<days: list, times: list>, service: string, service_id: string, service_username: string, statistics: record<followers: float>, team_members: list<string>, timezone: string, user_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, media_type_extension: $media_type_extension} | format pattern "/profiles/{id}{media_type_extension}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), media_type_extension: (encode-path-segment $media_type_extension)} | format pattern "/profiles/{id}{media_type_extension}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -322,7 +331,7 @@ export def "profiles-media-type-extension get" [
 ]: nothing -> table<_id: string, avatar: string, avatar_https: string, counts: record<daily_suggestions: float, drafts: float, pending: float, sent: float>, cover_photo: string, default: bool, disabled_features: list<any>, disconnected: string, formatted_service: string, formatted_username: string, has_used_suggestions: bool, id: string, schedules: list<record>, service: string, service_id: string, service_type: string, service_username: string, shortener: record<domain: string>, statistics: record<connections: float>, timezone: string, user_id: string, utm_tracking: string, verb: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({media_type_extension: $media_type_extension} | format pattern "/profiles{media_type_extension}"))
+  let full_url = (build-url $base ({media_type_extension: (encode-path-segment $media_type_extension)} | format pattern "/profiles{media_type_extension}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -331,7 +340,7 @@ export def "profiles-media-type-extension get" [
 # Create one or more new status updates.
 #
 # POST /updates/create{mediaTypeExtension}
-export def "updates-create-media-type-extension post" [
+export def "updates-create-media-type-extension create" [
   media_type_extension: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -344,7 +353,7 @@ export def "updates-create-media-type-extension post" [
 ]: nothing -> record<buffer_count: float, buffer_percentage: float, success: bool, updates: table<created_at: float, day: string, due_at: float, due_time: string, id: string, media: record, profile_id: string, profile_service: string, status: string, text: string, text_formatted: string, user_id: string, via: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({media_type_extension: $media_type_extension} | format pattern "/updates/create{media_type_extension}"))
+  let full_url = (build-url $base ({media_type_extension: (encode-path-segment $media_type_extension)} | format pattern "/updates/create{media_type_extension}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -353,7 +362,7 @@ export def "updates-create-media-type-extension post" [
 # Permanently delete an existing status update.
 #
 # POST /updates/{id}/destroy{mediaTypeExtension}
-export def "updates-destroy-media-type-extension post" [
+export def "updates-destroy-media-type-extension create" [
   id: string
   media_type_extension: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -367,7 +376,7 @@ export def "updates-destroy-media-type-extension post" [
 ]: nothing -> record<success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, media_type_extension: $media_type_extension} | format pattern "/updates/{id}/destroy{media_type_extension}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), media_type_extension: (encode-path-segment $media_type_extension)} | format pattern "/updates/{id}/destroy{media_type_extension}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -394,7 +403,7 @@ export def "updates-interactions-media-type-extension get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "event" $event "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id, media_type_extension: $media_type_extension} | format pattern "/updates/{id}/interactions{media_type_extension}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id), media_type_extension: (encode-path-segment $media_type_extension)} | format pattern "/updates/{id}/interactions{media_type_extension}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -403,7 +412,7 @@ export def "updates-interactions-media-type-extension get" [
 # Move an existing status update to the top of the queue and recalculate times for all updates in the queue. Returns the update with its new posting time.
 #
 # POST /updates/{id}/move_to_top{mediaTypeExtension}
-export def "updates-move-to-top-media-type-extension post" [
+export def "updates-move-to-top-media-type-extension create" [
   id: string
   media_type_extension: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -417,7 +426,7 @@ export def "updates-move-to-top-media-type-extension post" [
 ]: nothing -> record<created_at: float, day: string, due_at: float, due_time: string, id: string, profile_id: string, profile_service: string, sent_at: float, service_update_id: string, statistics: record<clicks: float, favorites: float, mentions: float, reach: float, retweets: float>, status: string, text: string, text_formatted: string, user_id: string, via: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, media_type_extension: $media_type_extension} | format pattern "/updates/{id}/move_to_top{media_type_extension}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), media_type_extension: (encode-path-segment $media_type_extension)} | format pattern "/updates/{id}/move_to_top{media_type_extension}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -426,7 +435,7 @@ export def "updates-move-to-top-media-type-extension post" [
 # Immediately shares a single pending update and recalculates times for updates remaining in the queue.
 #
 # POST /updates/{id}/share{mediaTypeExtension}
-export def "updates-share-media-type-extension post" [
+export def "updates-share-media-type-extension create" [
   id: string
   media_type_extension: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -440,7 +449,7 @@ export def "updates-share-media-type-extension post" [
 ]: nothing -> record<success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, media_type_extension: $media_type_extension} | format pattern "/updates/{id}/share{media_type_extension}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), media_type_extension: (encode-path-segment $media_type_extension)} | format pattern "/updates/{id}/share{media_type_extension}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -449,7 +458,7 @@ export def "updates-share-media-type-extension post" [
 # Edit an existing, individual status update.
 #
 # POST /updates/{id}/update{mediaTypeExtension}
-export def "updates-update-media-type-extension post" [
+export def "updates-update-media-type-extension create" [
   id: string
   media_type_extension: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -463,7 +472,7 @@ export def "updates-update-media-type-extension post" [
 ]: nothing -> record<buffer_count: float, buffer_percentage: float, success: bool, update: record<client_id: string, created_at: float, day: string, due_at: float, due_time: string, id: string, media: record<description: string, link: string, title: string>, profile_id: string, profile_service: string, status: string, text: string, text_formatted: string, user_id: string, via: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, media_type_extension: $media_type_extension} | format pattern "/updates/{id}/update{media_type_extension}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), media_type_extension: (encode-path-segment $media_type_extension)} | format pattern "/updates/{id}/update{media_type_extension}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -486,7 +495,7 @@ export def "updates get" [
 ]: nothing -> record<created_at: float, day: string, due_at: float, due_time: string, id: string, profile_id: string, profile_service: string, sent_at: float, service_update_id: string, statistics: record<clicks: float, favorites: float, mentions: float, reach: float, retweets: float>, status: string, text: string, text_formatted: string, user_id: string, via: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, media_type_extension: $media_type_extension} | format pattern "/updates/{id}{media_type_extension}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), media_type_extension: (encode-path-segment $media_type_extension)} | format pattern "/updates/{id}{media_type_extension}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -508,7 +517,7 @@ export def "user-media-type-extension get" [
 ]: nothing -> record<_id: string, activity_at: float, created_at: float, id: string, plan: string, referral_link: string, referral_token: string, secret_email: string, timezone: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({media_type_extension: $media_type_extension} | format pattern "/user{media_type_extension}"))
+  let full_url = (build-url $base ({media_type_extension: (encode-path-segment $media_type_extension)} | format pattern "/user{media_type_extension}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

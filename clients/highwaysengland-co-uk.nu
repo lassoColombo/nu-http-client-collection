@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -105,7 +114,7 @@ export def "v-version-areas list" [
 ]: nothing -> record<areas: table<Description: string, Id: string, Name: string, XLatitude: string, XLongitude: string, YLatitude: string, YLongitude: string>, row_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({version: $version} | format pattern "/v{version}/areas"))
+  let full_url = (build-url $base ({version: (encode-path-segment $version)} | format pattern "/v{version}/areas"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -128,7 +137,7 @@ export def "v-version-areas get" [
 ]: nothing -> record<areas: table<Description: string, Id: string, Name: string, XLatitude: string, XLongitude: string, YLatitude: string, YLongitude: string>, row_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({version: $version, area_ids: $area_ids} | format pattern "/v{version}/areas/{area_ids}"))
+  let full_url = (build-url $base ({version: (encode-path-segment $version), area_ids: (encode-path-segment $area_ids)} | format pattern "/v{version}/areas/{area_ids}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -138,7 +147,7 @@ export def "v-version-areas get" [
 #
 # GET /v{version}/quality/daily
 # operationId: Quality_GetDailyDataQualityForSite
-export def "v-version-quality-daily get-daily-data-quality-for-site" [
+export def "v-version-quality-daily get-data-for-site" [
   version: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -155,7 +164,7 @@ export def "v-version-quality-daily get-daily-data-quality-for-site" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "siteId" $site_id "scalar") (serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({version: $version} | format pattern "/v{version}/quality/daily") $qp)
+  let full_url = (build-url $base ({version: (encode-path-segment $version)} | format pattern "/v{version}/quality/daily") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -165,7 +174,7 @@ export def "v-version-quality-daily get-daily-data-quality-for-site" [
 #
 # GET /v{version}/quality/overall
 # operationId: Quality_GetOverallDataQualityForSites
-export def "v-version-quality-overall get-overall-data-quality-for-sites" [
+export def "v-version-quality-overall get-data-for-sites" [
   version: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -182,7 +191,7 @@ export def "v-version-quality-overall get-overall-data-quality-for-sites" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sites" $sites "scalar") (serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({version: $version} | format pattern "/v{version}/quality/overall") $qp)
+  let full_url = (build-url $base ({version: (encode-path-segment $version)} | format pattern "/v{version}/quality/overall") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -192,7 +201,7 @@ export def "v-version-quality-overall get-overall-data-quality-for-sites" [
 #
 # GET /v{version}/reports/{report_type}
 # operationId: Reports_Index
-export def "v-version-reports get" [
+export def "v-version-reports get-index" [
   version: string
   report_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -213,7 +222,7 @@ export def "v-version-reports get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sites" $sites "scalar") (serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "reportSubTypeId" $report_sub_type_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({version: $version, report_type: $report_type} | format pattern "/v{version}/reports/{report_type}") $qp)
+  let full_url = (build-url $base ({version: (encode-path-segment $version), report_type: (encode-path-segment $report_type)} | format pattern "/v{version}/reports/{report_type}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -243,7 +252,7 @@ export def "v-version-reports-to get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sites" $sites "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "reportSubTypeId" $report_sub_type_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({version: $version, start_date: $start_date, end_date: $end_date, report_type: $report_type} | format pattern "/v{version}/reports/{start_date}/to/{end_date}/{report_type}") $qp)
+  let full_url = (build-url $base ({version: (encode-path-segment $version), start_date: (encode-path-segment $start_date), end_date: (encode-path-segment $end_date), report_type: (encode-path-segment $report_type)} | format pattern "/v{version}/reports/{start_date}/to/{end_date}/{report_type}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -253,7 +262,7 @@ export def "v-version-reports-to get" [
 #
 # GET /v{version}/sites
 # operationId: Sites_Index
-export def "v-version-sites list" [
+export def "v-version-sites get-index" [
   version: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -266,7 +275,7 @@ export def "v-version-sites list" [
 ]: nothing -> record<row_count: int, sites: table<Description: string, Id: string, Latitude: float, Longitude: float, Name: string, Status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({version: $version} | format pattern "/v{version}/sites"))
+  let full_url = (build-url $base ({version: (encode-path-segment $version)} | format pattern "/v{version}/sites"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -289,7 +298,7 @@ export def "v-version-sites get" [
 ]: nothing -> record<row_count: int, sites: table<Description: string, Id: string, Latitude: float, Longitude: float, Name: string, Status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({version: $version, site_ids: $site_ids} | format pattern "/v{version}/sites/{site_ids}"))
+  let full_url = (build-url $base ({version: (encode-path-segment $version), site_ids: (encode-path-segment $site_ids)} | format pattern "/v{version}/sites/{site_ids}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -299,7 +308,7 @@ export def "v-version-sites get" [
 #
 # GET /v{version}/sitetypes
 # operationId: SiteTypes_Index
-export def "v-version-sitetypes get" [
+export def "v-version-sitetypes get-site-types-index" [
   version: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -312,7 +321,7 @@ export def "v-version-sitetypes get" [
 ]: nothing -> record<row_count: int, sitetypes: table<Description: string, Id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({version: $version} | format pattern "/v{version}/sitetypes"))
+  let full_url = (build-url $base ({version: (encode-path-segment $version)} | format pattern "/v{version}/sitetypes"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -322,7 +331,7 @@ export def "v-version-sitetypes get" [
 #
 # GET /v{version}/sitetypes/{siteType_Id}/sites
 # operationId: SiteTypes_GetSitesForPublicFacingAPI
-export def "v-version-sitetypes-sites get-sites-for-public-facing-api" [
+export def "v-version-sitetypes-sites get-types-for-public-facing" [
   version: string
   site_type_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -336,7 +345,7 @@ export def "v-version-sitetypes-sites get-sites-for-public-facing-api" [
 ]: nothing -> record<Sites: table<Active: list, Description: list, Id: list, Lattitude: list, Longitude: list, SiteId: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({version: $version, site_type_id: $site_type_id} | format pattern "/v{version}/sitetypes/{site_type_id}/sites"))
+  let full_url = (build-url $base ({version: (encode-path-segment $version), site_type_id: (encode-path-segment $site_type_id)} | format pattern "/v{version}/sitetypes/{site_type_id}/sites"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

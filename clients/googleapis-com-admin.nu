@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -86,7 +95,7 @@ def event-completer-1 [] { ["add" "delete"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "admin-directory-customer-devices-chromeos directorychromeosdeviceslist" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "admin-directory-customer-devices-chromeos list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -110,7 +119,7 @@ export def commands []: nothing -> table {
 #
 # GET /admin/directory/v1/customer/{customerId}/devices/chromeos
 # operationId: directory.chromeosdevices.list
-export def "admin-directory-customer-devices-chromeos directorychromeosdeviceslist" [
+export def "admin-directory-customer-devices-chromeos list" [
   customer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -143,7 +152,7 @@ export def "admin-directory-customer-devices-chromeos directorychromeosdevicesli
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "includeChildOrgunits" $include_child_orgunits "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "orgUnitPath" $org_unit_path "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sortOrder" $sort_order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer_id: $customer_id} | format pattern "/admin/directory/v1/customer/{customer_id}/devices/chromeos") $qp)
+  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id)} | format pattern "/admin/directory/v1/customer/{customer_id}/devices/chromeos") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -153,7 +162,7 @@ export def "admin-directory-customer-devices-chromeos directorychromeosdevicesli
 #
 # POST /admin/directory/v1/customer/{customerId}/devices/chromeos/moveDevicesToOu
 # operationId: directory.chromeosdevices.moveDevicesToOu
-export def "admin-directory-customer-devices-chromeos-move-devices-to-ou directorychromeosdevicesmoveDevicesToOu" [
+export def "admin-directory-customer-devices-chromeos-move-devices-to-ou move" [
   customer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -175,25 +184,25 @@ export def "admin-directory-customer-devices-chromeos-move-devices-to-ou directo
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --org-unit-path: string # Full path of the target organizational unit or its ID
-  --device-ids: list # Chrome OS devices to be moved to OU
+  --device-ids: list<string> # Chrome OS devices to be moved to OU
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "orgUnitPath" $org_unit_path "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer_id: $customer_id} | format pattern "/admin/directory/v1/customer/{customer_id}/devices/chromeos/moveDevicesToOu") $qp)
-  let body = {"deviceIds": $device_ids} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id)} | format pattern "/admin/directory/v1/customer/{customer_id}/devices/chromeos/moveDevicesToOu") $qp)
+  let req_body = {"deviceIds": $device_ids} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieves a Chrome OS device's properties.
 #
 # GET /admin/directory/v1/customer/{customerId}/devices/chromeos/{deviceId}
 # operationId: directory.chromeosdevices.get
-export def "admin-directory-customer-devices-chromeos directorychromeosdevicesget" [
+export def "admin-directory-customer-devices-chromeos get" [
   customer_id: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -220,7 +229,7 @@ export def "admin-directory-customer-devices-chromeos directorychromeosdevicesge
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "projection" $projection "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer_id: $customer_id, device_id: $device_id} | format pattern "/admin/directory/v1/customer/{customer_id}/devices/chromeos/{device_id}") $qp)
+  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id), device_id: (encode-path-segment $device_id)} | format pattern "/admin/directory/v1/customer/{customer_id}/devices/chromeos/{device_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -232,16 +241,16 @@ export def "admin-directory-customer-devices-chromeos directorychromeosdevicesge
 # operationId: directory.chromeosdevices.patch
 # --activeTimeRanges item shape: {activeTime?: int, date?: string}
 # --cpuInfo item shape: {architecture?: string, logicalCpus?: list, maxClockSpeedKhz?: int, model?: string}
-# --cpuStatusReports item shape: {cpuTemperatureInfo?: list, cpuUtilizationPercentageInfo?: list, reportTime?: string}
+# --cpuStatusReports item shape: {cpuTemperatureInfo?: list, cpuUtilizationPercentageInfo?: list<int>, reportTime?: string}
 # --deviceFiles item shape: {createTime?: string, downloadUrl?: string, name?: string, type?: string}
 # --diskVolumeReports item shape: {volumeInfo?: list}
 # --lastKnownNetwork item shape: {ipAddress?: string, wanIpAddress?: string}
 # --osUpdateStatus shape: {rebootTime?: string, state?: "updateStateUnspecified"|"updateStateNotStarted"|"updateStateDownloadInProgress"|"updateStateNeedReboot", targetKioskAppVersion?: string, targetOsVersion?: string, updateCheckTime?: string, updateTime?: string}
 # --recentUsers item shape: {email?: string, type?: string}
 # --screenshotFiles item shape: {createTime?: string, downloadUrl?: string, name?: string, type?: string}
-# --systemRamFreeReports item shape: {reportTime?: string, systemRamFreeInfo?: list}
+# --systemRamFreeReports item shape: {reportTime?: string, systemRamFreeInfo?: list<string>}
 # --tpmVersionInfo shape: {family?: string, firmwareVersion?: string, manufacturer?: string, specLevel?: string, tpmModel?: string, vendorSpecific?: string}
-export def "admin-directory-customer-devices-chromeos directorychromeosdevicespatch" [
+export def "admin-directory-customer-devices-chromeos update-by-customerId-deviceId" [
   customer_id: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -271,7 +280,7 @@ export def "admin-directory-customer-devices-chromeos directorychromeosdevicespa
   --auto-update-expiration: string # (Read-only) The timestamp after which the device will stop receiving Chrome updates or support (format: int64)
   --boot-mode: string # The boot mode for the device. The possible values are: * `Verified`: The device is running a valid version of the Chrome OS. * `Dev`: The devices's developer hardware switch is enabled. When booted, the device has a command line shell. For an example of a developer switch, see the [Chromebook developer information](https://www.chromium.org/chromium-os/developer-information-for-chrome-os-devices/samsung-series-5-chromebook#TOC-Developer-switch).
   --cpu-info: list # Information regarding CPU specs in the device. — item shape: {architecture?: string, logicalCpus?: list, maxClockSpeedKhz?: int, model?: string}
-  --cpu-status-reports: list # Reports of CPU utilization and temperature (Read-only) — item shape: {cpuTemperatureInfo?: list, cpuUtilizationPercentageInfo?: list, reportTime?: string}
+  --cpu-status-reports: list # Reports of CPU utilization and temperature (Read-only) — item shape: {cpuTemperatureInfo?: list, cpuUtilizationPercentageInfo?: list<int>, reportTime?: string}
   --deprovision-reason: string@deprovision-reason-completer # (Read-only) Deprovision reason.
   --device-files: list # A list of device files to download (Read-only) — item shape: {createTime?: string, downloadUrl?: string, name?: string, type?: string}
   --body-device-id: string # The unique ID of the Chrome device.
@@ -303,7 +312,7 @@ export def "admin-directory-customer-devices-chromeos directorychromeosdevicespa
   --serial-number: string # The Chrome device serial number entered when the device was enabled. This value is the same as the Admin console's *Serial Number* in the *Chrome OS Devices* tab.
   --status: string # The status of the device.
   --support-end-date: string # Final date the device will be supported (Read-only) (format: date-time)
-  --system-ram-free-reports: list # Reports of amounts of available RAM memory (Read-only) — item shape: {reportTime?: string, systemRamFreeInfo?: list}
+  --system-ram-free-reports: list # Reports of amounts of available RAM memory (Read-only) — item shape: {reportTime?: string, systemRamFreeInfo?: list<string>}
   --system-ram-total: string # Total RAM on the device [in bytes] (Read-only) (format: int64)
   --tpm-version-info: record # Trusted Platform Module (TPM) (Read-only) — shape: {family?: string, firmwareVersion?: string, manufacturer?: string, specLevel?: string, tpmModel?: string, vendorSpecific?: string}
   --will-auto-renew: oneof<nothing, bool> # Determines if the device will auto renew its support after the support end date. This is a read-only property.
@@ -312,12 +321,12 @@ export def "admin-directory-customer-devices-chromeos directorychromeosdevicespa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "projection" $projection "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer_id: $customer_id, device_id: $device_id} | format pattern "/admin/directory/v1/customer/{customer_id}/devices/chromeos/{device_id}") $qp)
-  let body = {"activeTimeRanges": $active_time_ranges, "annotatedAssetId": $annotated_asset_id, "annotatedLocation": $annotated_location, "annotatedUser": $annotated_user, "autoUpdateExpiration": $auto_update_expiration, "bootMode": $boot_mode, "cpuInfo": $cpu_info, "cpuStatusReports": $cpu_status_reports, "deprovisionReason": $deprovision_reason, "deviceFiles": $device_files, "deviceId": $body_device_id, "diskVolumeReports": $disk_volume_reports, "dockMacAddress": $dock_mac_address, "etag": $etag, "ethernetMacAddress": $ethernet_mac_address, "ethernetMacAddress0": $ethernet_mac_address0, "firmwareVersion": $firmware_version, "firstEnrollmentTime": $first_enrollment_time, "kind": $kind, "lastDeprovisionTimestamp": $last_deprovision_timestamp, "lastEnrollmentTime": $last_enrollment_time, "lastKnownNetwork": $last_known_network, "lastSync": $last_sync, "macAddress": $mac_address, "manufactureDate": $manufacture_date, "meid": $meid, "model": $model, "notes": $notes, "orderNumber": $order_number, "orgUnitId": $org_unit_id, "orgUnitPath": $org_unit_path, "osUpdateStatus": $os_update_status, "osVersion": $os_version, "platformVersion": $platform_version, "recentUsers": $recent_users, "screenshotFiles": $screenshot_files, "serialNumber": $serial_number, "status": $status, "supportEndDate": $support_end_date, "systemRamFreeReports": $system_ram_free_reports, "systemRamTotal": $system_ram_total, "tpmVersionInfo": $tpm_version_info, "willAutoRenew": $will_auto_renew} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id), device_id: (encode-path-segment $device_id)} | format pattern "/admin/directory/v1/customer/{customer_id}/devices/chromeos/{device_id}") $qp)
+  let req_body = {"activeTimeRanges": $active_time_ranges, "annotatedAssetId": $annotated_asset_id, "annotatedLocation": $annotated_location, "annotatedUser": $annotated_user, "autoUpdateExpiration": $auto_update_expiration, "bootMode": $boot_mode, "cpuInfo": $cpu_info, "cpuStatusReports": $cpu_status_reports, "deprovisionReason": $deprovision_reason, "deviceFiles": $device_files, "deviceId": $body_device_id, "diskVolumeReports": $disk_volume_reports, "dockMacAddress": $dock_mac_address, "etag": $etag, "ethernetMacAddress": $ethernet_mac_address, "ethernetMacAddress0": $ethernet_mac_address0, "firmwareVersion": $firmware_version, "firstEnrollmentTime": $first_enrollment_time, "kind": $kind, "lastDeprovisionTimestamp": $last_deprovision_timestamp, "lastEnrollmentTime": $last_enrollment_time, "lastKnownNetwork": $last_known_network, "lastSync": $last_sync, "macAddress": $mac_address, "manufactureDate": $manufacture_date, "meid": $meid, "model": $model, "notes": $notes, "orderNumber": $order_number, "orgUnitId": $org_unit_id, "orgUnitPath": $org_unit_path, "osUpdateStatus": $os_update_status, "osVersion": $os_version, "platformVersion": $platform_version, "recentUsers": $recent_users, "screenshotFiles": $screenshot_files, "serialNumber": $serial_number, "status": $status, "supportEndDate": $support_end_date, "systemRamFreeReports": $system_ram_free_reports, "systemRamTotal": $system_ram_total, "tpmVersionInfo": $tpm_version_info, "willAutoRenew": $will_auto_renew} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates a device's updatable properties, such as `annotatedUser`, `annotatedLocation`, `notes`, `orgUnitPath`, or `annotatedAssetId`.
@@ -326,16 +335,16 @@ export def "admin-directory-customer-devices-chromeos directorychromeosdevicespa
 # operationId: directory.chromeosdevices.update
 # --activeTimeRanges item shape: {activeTime?: int, date?: string}
 # --cpuInfo item shape: {architecture?: string, logicalCpus?: list, maxClockSpeedKhz?: int, model?: string}
-# --cpuStatusReports item shape: {cpuTemperatureInfo?: list, cpuUtilizationPercentageInfo?: list, reportTime?: string}
+# --cpuStatusReports item shape: {cpuTemperatureInfo?: list, cpuUtilizationPercentageInfo?: list<int>, reportTime?: string}
 # --deviceFiles item shape: {createTime?: string, downloadUrl?: string, name?: string, type?: string}
 # --diskVolumeReports item shape: {volumeInfo?: list}
 # --lastKnownNetwork item shape: {ipAddress?: string, wanIpAddress?: string}
 # --osUpdateStatus shape: {rebootTime?: string, state?: "updateStateUnspecified"|"updateStateNotStarted"|"updateStateDownloadInProgress"|"updateStateNeedReboot", targetKioskAppVersion?: string, targetOsVersion?: string, updateCheckTime?: string, updateTime?: string}
 # --recentUsers item shape: {email?: string, type?: string}
 # --screenshotFiles item shape: {createTime?: string, downloadUrl?: string, name?: string, type?: string}
-# --systemRamFreeReports item shape: {reportTime?: string, systemRamFreeInfo?: list}
+# --systemRamFreeReports item shape: {reportTime?: string, systemRamFreeInfo?: list<string>}
 # --tpmVersionInfo shape: {family?: string, firmwareVersion?: string, manufacturer?: string, specLevel?: string, tpmModel?: string, vendorSpecific?: string}
-export def "admin-directory-customer-devices-chromeos directorychromeosdevicesupdate" [
+export def "admin-directory-customer-devices-chromeos update-by-customerId-deviceId-1" [
   customer_id: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -365,7 +374,7 @@ export def "admin-directory-customer-devices-chromeos directorychromeosdevicesup
   --auto-update-expiration: string # (Read-only) The timestamp after which the device will stop receiving Chrome updates or support (format: int64)
   --boot-mode: string # The boot mode for the device. The possible values are: * `Verified`: The device is running a valid version of the Chrome OS. * `Dev`: The devices's developer hardware switch is enabled. When booted, the device has a command line shell. For an example of a developer switch, see the [Chromebook developer information](https://www.chromium.org/chromium-os/developer-information-for-chrome-os-devices/samsung-series-5-chromebook#TOC-Developer-switch).
   --cpu-info: list # Information regarding CPU specs in the device. — item shape: {architecture?: string, logicalCpus?: list, maxClockSpeedKhz?: int, model?: string}
-  --cpu-status-reports: list # Reports of CPU utilization and temperature (Read-only) — item shape: {cpuTemperatureInfo?: list, cpuUtilizationPercentageInfo?: list, reportTime?: string}
+  --cpu-status-reports: list # Reports of CPU utilization and temperature (Read-only) — item shape: {cpuTemperatureInfo?: list, cpuUtilizationPercentageInfo?: list<int>, reportTime?: string}
   --deprovision-reason: string@deprovision-reason-completer # (Read-only) Deprovision reason.
   --device-files: list # A list of device files to download (Read-only) — item shape: {createTime?: string, downloadUrl?: string, name?: string, type?: string}
   --body-device-id: string # The unique ID of the Chrome device.
@@ -397,7 +406,7 @@ export def "admin-directory-customer-devices-chromeos directorychromeosdevicesup
   --serial-number: string # The Chrome device serial number entered when the device was enabled. This value is the same as the Admin console's *Serial Number* in the *Chrome OS Devices* tab.
   --status: string # The status of the device.
   --support-end-date: string # Final date the device will be supported (Read-only) (format: date-time)
-  --system-ram-free-reports: list # Reports of amounts of available RAM memory (Read-only) — item shape: {reportTime?: string, systemRamFreeInfo?: list}
+  --system-ram-free-reports: list # Reports of amounts of available RAM memory (Read-only) — item shape: {reportTime?: string, systemRamFreeInfo?: list<string>}
   --system-ram-total: string # Total RAM on the device [in bytes] (Read-only) (format: int64)
   --tpm-version-info: record # Trusted Platform Module (TPM) (Read-only) — shape: {family?: string, firmwareVersion?: string, manufacturer?: string, specLevel?: string, tpmModel?: string, vendorSpecific?: string}
   --will-auto-renew: oneof<nothing, bool> # Determines if the device will auto renew its support after the support end date. This is a read-only property.
@@ -406,19 +415,19 @@ export def "admin-directory-customer-devices-chromeos directorychromeosdevicesup
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "projection" $projection "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer_id: $customer_id, device_id: $device_id} | format pattern "/admin/directory/v1/customer/{customer_id}/devices/chromeos/{device_id}") $qp)
-  let body = {"activeTimeRanges": $active_time_ranges, "annotatedAssetId": $annotated_asset_id, "annotatedLocation": $annotated_location, "annotatedUser": $annotated_user, "autoUpdateExpiration": $auto_update_expiration, "bootMode": $boot_mode, "cpuInfo": $cpu_info, "cpuStatusReports": $cpu_status_reports, "deprovisionReason": $deprovision_reason, "deviceFiles": $device_files, "deviceId": $body_device_id, "diskVolumeReports": $disk_volume_reports, "dockMacAddress": $dock_mac_address, "etag": $etag, "ethernetMacAddress": $ethernet_mac_address, "ethernetMacAddress0": $ethernet_mac_address0, "firmwareVersion": $firmware_version, "firstEnrollmentTime": $first_enrollment_time, "kind": $kind, "lastDeprovisionTimestamp": $last_deprovision_timestamp, "lastEnrollmentTime": $last_enrollment_time, "lastKnownNetwork": $last_known_network, "lastSync": $last_sync, "macAddress": $mac_address, "manufactureDate": $manufacture_date, "meid": $meid, "model": $model, "notes": $notes, "orderNumber": $order_number, "orgUnitId": $org_unit_id, "orgUnitPath": $org_unit_path, "osUpdateStatus": $os_update_status, "osVersion": $os_version, "platformVersion": $platform_version, "recentUsers": $recent_users, "screenshotFiles": $screenshot_files, "serialNumber": $serial_number, "status": $status, "supportEndDate": $support_end_date, "systemRamFreeReports": $system_ram_free_reports, "systemRamTotal": $system_ram_total, "tpmVersionInfo": $tpm_version_info, "willAutoRenew": $will_auto_renew} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id), device_id: (encode-path-segment $device_id)} | format pattern "/admin/directory/v1/customer/{customer_id}/devices/chromeos/{device_id}") $qp)
+  let req_body = {"activeTimeRanges": $active_time_ranges, "annotatedAssetId": $annotated_asset_id, "annotatedLocation": $annotated_location, "annotatedUser": $annotated_user, "autoUpdateExpiration": $auto_update_expiration, "bootMode": $boot_mode, "cpuInfo": $cpu_info, "cpuStatusReports": $cpu_status_reports, "deprovisionReason": $deprovision_reason, "deviceFiles": $device_files, "deviceId": $body_device_id, "diskVolumeReports": $disk_volume_reports, "dockMacAddress": $dock_mac_address, "etag": $etag, "ethernetMacAddress": $ethernet_mac_address, "ethernetMacAddress0": $ethernet_mac_address0, "firmwareVersion": $firmware_version, "firstEnrollmentTime": $first_enrollment_time, "kind": $kind, "lastDeprovisionTimestamp": $last_deprovision_timestamp, "lastEnrollmentTime": $last_enrollment_time, "lastKnownNetwork": $last_known_network, "lastSync": $last_sync, "macAddress": $mac_address, "manufactureDate": $manufacture_date, "meid": $meid, "model": $model, "notes": $notes, "orderNumber": $order_number, "orgUnitId": $org_unit_id, "orgUnitPath": $org_unit_path, "osUpdateStatus": $os_update_status, "osVersion": $os_version, "platformVersion": $platform_version, "recentUsers": $recent_users, "screenshotFiles": $screenshot_files, "serialNumber": $serial_number, "status": $status, "supportEndDate": $support_end_date, "systemRamFreeReports": $system_ram_free_reports, "systemRamTotal": $system_ram_total, "tpmVersionInfo": $tpm_version_info, "willAutoRenew": $will_auto_renew} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets command data a specific command issued to the device.
 #
 # GET /admin/directory/v1/customer/{customerId}/devices/chromeos/{deviceId}/commands/{commandId}
 # operationId: admin.customer.devices.chromeos.commands.get
-export def "admin-directory-customer-devices-chromeos-commands admincustomerdeviceschromeoscommandsget" [
+export def "admin-directory-customer-devices-chromeos-commands get" [
   customer_id: string
   device_id: string
   command_id: string
@@ -445,7 +454,7 @@ export def "admin-directory-customer-devices-chromeos-commands admincustomerdevi
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer_id: $customer_id, device_id: $device_id, command_id: $command_id} | format pattern "/admin/directory/v1/customer/{customer_id}/devices/chromeos/{device_id}/commands/{command_id}") $qp)
+  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id), device_id: (encode-path-segment $device_id), command_id: (encode-path-segment $command_id)} | format pattern "/admin/directory/v1/customer/{customer_id}/devices/chromeos/{device_id}/commands/{command_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -455,7 +464,7 @@ export def "admin-directory-customer-devices-chromeos-commands admincustomerdevi
 #
 # POST /admin/directory/v1/customer/{customerId}/devices/chromeos/{deviceId}:issueCommand
 # operationId: admin.customer.devices.chromeos.issueCommand
-export def "admin-directory-customer-devices-chromeos admincustomerdeviceschromeosissueCommand" [
+export def "admin-directory-customer-devices-chromeos create-issue-command" [
   customer_id: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -484,19 +493,19 @@ export def "admin-directory-customer-devices-chromeos admincustomerdeviceschrome
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer_id: $customer_id, device_id: $device_id} | format pattern "/admin/directory/v1/customer/{customer_id}/devices/chromeos/{device_id}:issueCommand") $qp)
-  let body = {"commandType": $command_type, "payload": $payload} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id), device_id: (encode-path-segment $device_id)} | format pattern "/admin/directory/v1/customer/{customer_id}/devices/chromeos/{device_id}:issueCommand") $qp)
+  let req_body = {"commandType": $command_type, "payload": $payload} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Takes an action that affects a Chrome OS Device. This includes deprovisioning, disabling, and re-enabling devices. *Warning:* * Deprovisioning a device will stop device policy syncing and remove device-level printers. After a device is deprovisioned, it must be wiped before it can be re-enrolled. * Lost or stolen devices should use the disable action. * Re-enabling a disabled device will consume a device license. If you do not have sufficient licenses available when completing the re-enable action, you will receive an error. For more information about deprovisioning and disabling devices, visit the [help center](https://support.google.com/chrome/a/answer/3523633).
 #
 # POST /admin/directory/v1/customer/{customerId}/devices/chromeos/{resourceId}/action
 # operationId: directory.chromeosdevices.action
-export def "admin-directory-customer-devices-chromeos-action directorychromeosdevicesaction" [
+export def "admin-directory-customer-devices-chromeos-action create" [
   customer_id: string
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -525,19 +534,19 @@ export def "admin-directory-customer-devices-chromeos-action directorychromeosde
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer_id: $customer_id, resource_id: $resource_id} | format pattern "/admin/directory/v1/customer/{customer_id}/devices/chromeos/{resource_id}/action") $qp)
-  let body = {"action": $action, "deprovisionReason": $deprovision_reason} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id), resource_id: (encode-path-segment $resource_id)} | format pattern "/admin/directory/v1/customer/{customer_id}/devices/chromeos/{resource_id}/action") $qp)
+  let req_body = {"action": $action, "deprovisionReason": $deprovision_reason} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieves a paginated list of all user-owned mobile devices for an account. To retrieve a list that includes company-owned devices, use the Cloud Identity [Devices API](https://cloud.google.com/identity/docs/concepts/overview-devices) instead. This method times out after 60 minutes. For more information, see [Troubleshoot error codes](https://developers.google.com/admin-sdk/directory/v1/guides/troubleshoot-error-codes).
 #
 # GET /admin/directory/v1/customer/{customerId}/devices/mobile
 # operationId: directory.mobiledevices.list
-export def "admin-directory-customer-devices-mobile directorymobiledeviceslist" [
+export def "admin-directory-customer-devices-mobile list" [
   customer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -568,7 +577,7 @@ export def "admin-directory-customer-devices-mobile directorymobiledeviceslist" 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sortOrder" $sort_order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer_id: $customer_id} | format pattern "/admin/directory/v1/customer/{customer_id}/devices/mobile") $qp)
+  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id)} | format pattern "/admin/directory/v1/customer/{customer_id}/devices/mobile") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -578,7 +587,7 @@ export def "admin-directory-customer-devices-mobile directorymobiledeviceslist" 
 #
 # DELETE /admin/directory/v1/customer/{customerId}/devices/mobile/{resourceId}
 # operationId: directory.mobiledevices.delete
-export def "admin-directory-customer-devices-mobile directorymobiledevicesdelete" [
+export def "admin-directory-customer-devices-mobile delete" [
   customer_id: string
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -604,7 +613,7 @@ export def "admin-directory-customer-devices-mobile directorymobiledevicesdelete
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer_id: $customer_id, resource_id: $resource_id} | format pattern "/admin/directory/v1/customer/{customer_id}/devices/mobile/{resource_id}") $qp)
+  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id), resource_id: (encode-path-segment $resource_id)} | format pattern "/admin/directory/v1/customer/{customer_id}/devices/mobile/{resource_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -614,7 +623,7 @@ export def "admin-directory-customer-devices-mobile directorymobiledevicesdelete
 #
 # GET /admin/directory/v1/customer/{customerId}/devices/mobile/{resourceId}
 # operationId: directory.mobiledevices.get
-export def "admin-directory-customer-devices-mobile directorymobiledevicesget" [
+export def "admin-directory-customer-devices-mobile get" [
   customer_id: string
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -641,7 +650,7 @@ export def "admin-directory-customer-devices-mobile directorymobiledevicesget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "projection" $projection "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer_id: $customer_id, resource_id: $resource_id} | format pattern "/admin/directory/v1/customer/{customer_id}/devices/mobile/{resource_id}") $qp)
+  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id), resource_id: (encode-path-segment $resource_id)} | format pattern "/admin/directory/v1/customer/{customer_id}/devices/mobile/{resource_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -651,7 +660,7 @@ export def "admin-directory-customer-devices-mobile directorymobiledevicesget" [
 #
 # POST /admin/directory/v1/customer/{customerId}/devices/mobile/{resourceId}/action
 # operationId: directory.mobiledevices.action
-export def "admin-directory-customer-devices-mobile-action directorymobiledevicesaction" [
+export def "admin-directory-customer-devices-mobile-action create" [
   customer_id: string
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -679,19 +688,19 @@ export def "admin-directory-customer-devices-mobile-action directorymobiledevice
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer_id: $customer_id, resource_id: $resource_id} | format pattern "/admin/directory/v1/customer/{customer_id}/devices/mobile/{resource_id}/action") $qp)
-  let body = {"action": $action} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id), resource_id: (encode-path-segment $resource_id)} | format pattern "/admin/directory/v1/customer/{customer_id}/devices/mobile/{resource_id}/action") $qp)
+  let req_body = {"action": $action} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieves a list of all organizational units for an account.
 #
 # GET /admin/directory/v1/customer/{customerId}/orgunits
 # operationId: directory.orgunits.list
-export def "admin-directory-customer-orgunits directoryorgunitslist" [
+export def "admin-directory-customer-orgunits list" [
   customer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -718,7 +727,7 @@ export def "admin-directory-customer-orgunits directoryorgunitslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "orgUnitPath" $org_unit_path "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer_id: $customer_id} | format pattern "/admin/directory/v1/customer/{customer_id}/orgunits") $qp)
+  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id)} | format pattern "/admin/directory/v1/customer/{customer_id}/orgunits") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -728,7 +737,7 @@ export def "admin-directory-customer-orgunits directoryorgunitslist" [
 #
 # POST /admin/directory/v1/customer/{customerId}/orgunits
 # operationId: directory.orgunits.insert
-export def "admin-directory-customer-orgunits directoryorgunitsinsert" [
+export def "admin-directory-customer-orgunits create" [
   customer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -763,19 +772,19 @@ export def "admin-directory-customer-orgunits directoryorgunitsinsert" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer_id: $customer_id} | format pattern "/admin/directory/v1/customer/{customer_id}/orgunits") $qp)
-  let body = {"blockInheritance": $block_inheritance, "description": $description, "etag": $etag, "kind": $kind, "name": $name, "orgUnitId": $org_unit_id, "orgUnitPath": $org_unit_path, "parentOrgUnitId": $parent_org_unit_id, "parentOrgUnitPath": $parent_org_unit_path} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id)} | format pattern "/admin/directory/v1/customer/{customer_id}/orgunits") $qp)
+  let req_body = {"blockInheritance": $block_inheritance, "description": $description, "etag": $etag, "kind": $kind, "name": $name, "orgUnitId": $org_unit_id, "orgUnitPath": $org_unit_path, "parentOrgUnitId": $parent_org_unit_id, "parentOrgUnitPath": $parent_org_unit_path} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Removes an organizational unit.
 #
 # DELETE /admin/directory/v1/customer/{customerId}/orgunits/{orgUnitPath}
 # operationId: directory.orgunits.delete
-export def "admin-directory-customer-orgunits directoryorgunitsdelete" [
+export def "admin-directory-customer-orgunits delete" [
   customer_id: string
   org_unit_path: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -801,7 +810,7 @@ export def "admin-directory-customer-orgunits directoryorgunitsdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer_id: $customer_id, org_unit_path: $org_unit_path} | format pattern "/admin/directory/v1/customer/{customer_id}/orgunits/{org_unit_path}") $qp)
+  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id), org_unit_path: (encode-path-segment $org_unit_path)} | format pattern "/admin/directory/v1/customer/{customer_id}/orgunits/{org_unit_path}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -811,7 +820,7 @@ export def "admin-directory-customer-orgunits directoryorgunitsdelete" [
 #
 # GET /admin/directory/v1/customer/{customerId}/orgunits/{orgUnitPath}
 # operationId: directory.orgunits.get
-export def "admin-directory-customer-orgunits directoryorgunitsget" [
+export def "admin-directory-customer-orgunits get" [
   customer_id: string
   org_unit_path: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -837,7 +846,7 @@ export def "admin-directory-customer-orgunits directoryorgunitsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer_id: $customer_id, org_unit_path: $org_unit_path} | format pattern "/admin/directory/v1/customer/{customer_id}/orgunits/{org_unit_path}") $qp)
+  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id), org_unit_path: (encode-path-segment $org_unit_path)} | format pattern "/admin/directory/v1/customer/{customer_id}/orgunits/{org_unit_path}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -847,7 +856,7 @@ export def "admin-directory-customer-orgunits directoryorgunitsget" [
 #
 # PATCH /admin/directory/v1/customer/{customerId}/orgunits/{orgUnitPath}
 # operationId: directory.orgunits.patch
-export def "admin-directory-customer-orgunits directoryorgunitspatch" [
+export def "admin-directory-customer-orgunits update-by-customerId-orgUnitPath" [
   customer_id: string
   org_unit_path: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -883,19 +892,19 @@ export def "admin-directory-customer-orgunits directoryorgunitspatch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer_id: $customer_id, org_unit_path: $org_unit_path} | format pattern "/admin/directory/v1/customer/{customer_id}/orgunits/{org_unit_path}") $qp)
-  let body = {"blockInheritance": $block_inheritance, "description": $description, "etag": $etag, "kind": $kind, "name": $name, "orgUnitId": $org_unit_id, "orgUnitPath": $body_org_unit_path, "parentOrgUnitId": $parent_org_unit_id, "parentOrgUnitPath": $parent_org_unit_path} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id), org_unit_path: (encode-path-segment $org_unit_path)} | format pattern "/admin/directory/v1/customer/{customer_id}/orgunits/{org_unit_path}") $qp)
+  let req_body = {"blockInheritance": $block_inheritance, "description": $description, "etag": $etag, "kind": $kind, "name": $name, "orgUnitId": $org_unit_id, "orgUnitPath": $body_org_unit_path, "parentOrgUnitId": $parent_org_unit_id, "parentOrgUnitPath": $parent_org_unit_path} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates an organizational unit.
 #
 # PUT /admin/directory/v1/customer/{customerId}/orgunits/{orgUnitPath}
 # operationId: directory.orgunits.update
-export def "admin-directory-customer-orgunits directoryorgunitsupdate" [
+export def "admin-directory-customer-orgunits update-by-customerId-orgUnitPath-1" [
   customer_id: string
   org_unit_path: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -931,19 +940,19 @@ export def "admin-directory-customer-orgunits directoryorgunitsupdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer_id: $customer_id, org_unit_path: $org_unit_path} | format pattern "/admin/directory/v1/customer/{customer_id}/orgunits/{org_unit_path}") $qp)
-  let body = {"blockInheritance": $block_inheritance, "description": $description, "etag": $etag, "kind": $kind, "name": $name, "orgUnitId": $org_unit_id, "orgUnitPath": $body_org_unit_path, "parentOrgUnitId": $parent_org_unit_id, "parentOrgUnitPath": $parent_org_unit_path} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id), org_unit_path: (encode-path-segment $org_unit_path)} | format pattern "/admin/directory/v1/customer/{customer_id}/orgunits/{org_unit_path}") $qp)
+  let req_body = {"blockInheritance": $block_inheritance, "description": $description, "etag": $etag, "kind": $kind, "name": $name, "orgUnitId": $org_unit_id, "orgUnitPath": $body_org_unit_path, "parentOrgUnitId": $parent_org_unit_id, "parentOrgUnitPath": $parent_org_unit_path} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieves all schemas for a customer.
 #
 # GET /admin/directory/v1/customer/{customerId}/schemas
 # operationId: directory.schemas.list
-export def "admin-directory-customer-schemas directoryschemaslist" [
+export def "admin-directory-customer-schemas list" [
   customer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -968,7 +977,7 @@ export def "admin-directory-customer-schemas directoryschemaslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer_id: $customer_id} | format pattern "/admin/directory/v1/customer/{customer_id}/schemas") $qp)
+  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id)} | format pattern "/admin/directory/v1/customer/{customer_id}/schemas") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -979,7 +988,7 @@ export def "admin-directory-customer-schemas directoryschemaslist" [
 # POST /admin/directory/v1/customer/{customerId}/schemas
 # operationId: directory.schemas.insert
 # --fields item shape: {displayName?: string, etag?: string, fieldId?: string, fieldName?: string, fieldType?: string, indexed?: bool, kind?: string, multiValued?: bool, numericIndexingSpec?: record, readAccessType?: string}
-export def "admin-directory-customer-schemas directoryschemasinsert" [
+export def "admin-directory-customer-schemas create" [
   customer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1011,19 +1020,19 @@ export def "admin-directory-customer-schemas directoryschemasinsert" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer_id: $customer_id} | format pattern "/admin/directory/v1/customer/{customer_id}/schemas") $qp)
-  let body = {"displayName": $display_name, "etag": $etag, "fields": $fields, "kind": $kind, "schemaId": $schema_id, "schemaName": $schema_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id)} | format pattern "/admin/directory/v1/customer/{customer_id}/schemas") $qp)
+  let req_body = {"displayName": $display_name, "etag": $etag, "fields": $fields, "kind": $kind, "schemaId": $schema_id, "schemaName": $schema_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes a schema.
 #
 # DELETE /admin/directory/v1/customer/{customerId}/schemas/{schemaKey}
 # operationId: directory.schemas.delete
-export def "admin-directory-customer-schemas directoryschemasdelete" [
+export def "admin-directory-customer-schemas delete" [
   customer_id: string
   schema_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1049,7 +1058,7 @@ export def "admin-directory-customer-schemas directoryschemasdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer_id: $customer_id, schema_key: $schema_key} | format pattern "/admin/directory/v1/customer/{customer_id}/schemas/{schema_key}") $qp)
+  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id), schema_key: (encode-path-segment $schema_key)} | format pattern "/admin/directory/v1/customer/{customer_id}/schemas/{schema_key}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1059,7 +1068,7 @@ export def "admin-directory-customer-schemas directoryschemasdelete" [
 #
 # GET /admin/directory/v1/customer/{customerId}/schemas/{schemaKey}
 # operationId: directory.schemas.get
-export def "admin-directory-customer-schemas directoryschemasget" [
+export def "admin-directory-customer-schemas get" [
   customer_id: string
   schema_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1085,7 +1094,7 @@ export def "admin-directory-customer-schemas directoryschemasget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer_id: $customer_id, schema_key: $schema_key} | format pattern "/admin/directory/v1/customer/{customer_id}/schemas/{schema_key}") $qp)
+  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id), schema_key: (encode-path-segment $schema_key)} | format pattern "/admin/directory/v1/customer/{customer_id}/schemas/{schema_key}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1096,7 +1105,7 @@ export def "admin-directory-customer-schemas directoryschemasget" [
 # PATCH /admin/directory/v1/customer/{customerId}/schemas/{schemaKey}
 # operationId: directory.schemas.patch
 # --fields item shape: {displayName?: string, etag?: string, fieldId?: string, fieldName?: string, fieldType?: string, indexed?: bool, kind?: string, multiValued?: bool, numericIndexingSpec?: record, readAccessType?: string}
-export def "admin-directory-customer-schemas directoryschemaspatch" [
+export def "admin-directory-customer-schemas update-by-customerId-schemaKey" [
   customer_id: string
   schema_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1129,12 +1138,12 @@ export def "admin-directory-customer-schemas directoryschemaspatch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer_id: $customer_id, schema_key: $schema_key} | format pattern "/admin/directory/v1/customer/{customer_id}/schemas/{schema_key}") $qp)
-  let body = {"displayName": $display_name, "etag": $etag, "fields": $fields, "kind": $kind, "schemaId": $schema_id, "schemaName": $schema_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id), schema_key: (encode-path-segment $schema_key)} | format pattern "/admin/directory/v1/customer/{customer_id}/schemas/{schema_key}") $qp)
+  let req_body = {"displayName": $display_name, "etag": $etag, "fields": $fields, "kind": $kind, "schemaId": $schema_id, "schemaName": $schema_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates a schema.
@@ -1142,7 +1151,7 @@ export def "admin-directory-customer-schemas directoryschemaspatch" [
 # PUT /admin/directory/v1/customer/{customerId}/schemas/{schemaKey}
 # operationId: directory.schemas.update
 # --fields item shape: {displayName?: string, etag?: string, fieldId?: string, fieldName?: string, fieldType?: string, indexed?: bool, kind?: string, multiValued?: bool, numericIndexingSpec?: record, readAccessType?: string}
-export def "admin-directory-customer-schemas directoryschemasupdate" [
+export def "admin-directory-customer-schemas update-by-customerId-schemaKey-1" [
   customer_id: string
   schema_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1175,19 +1184,19 @@ export def "admin-directory-customer-schemas directoryschemasupdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer_id: $customer_id, schema_key: $schema_key} | format pattern "/admin/directory/v1/customer/{customer_id}/schemas/{schema_key}") $qp)
-  let body = {"displayName": $display_name, "etag": $etag, "fields": $fields, "kind": $kind, "schemaId": $schema_id, "schemaName": $schema_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id), schema_key: (encode-path-segment $schema_key)} | format pattern "/admin/directory/v1/customer/{customer_id}/schemas/{schema_key}") $qp)
+  let req_body = {"displayName": $display_name, "etag": $etag, "fields": $fields, "kind": $kind, "schemaId": $schema_id, "schemaName": $schema_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists the domain aliases of the customer.
 #
 # GET /admin/directory/v1/customer/{customer}/domainaliases
 # operationId: directory.domainAliases.list
-export def "admin-directory-customer-domainaliases directorydomainAliaseslist" [
+export def "admin-directory-customer-domainaliases list" [
   customer: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1213,7 +1222,7 @@ export def "admin-directory-customer-domainaliases directorydomainAliaseslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "parentDomainName" $parent_domain_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer: $customer} | format pattern "/admin/directory/v1/customer/{customer}/domainaliases") $qp)
+  let full_url = (build-url $base ({customer: (encode-path-segment $customer)} | format pattern "/admin/directory/v1/customer/{customer}/domainaliases") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1223,7 +1232,7 @@ export def "admin-directory-customer-domainaliases directorydomainAliaseslist" [
 #
 # POST /admin/directory/v1/customer/{customer}/domainaliases
 # operationId: directory.domainAliases.insert
-export def "admin-directory-customer-domainaliases directorydomainAliasesinsert" [
+export def "admin-directory-customer-domainaliases create" [
   customer: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1255,19 +1264,19 @@ export def "admin-directory-customer-domainaliases directorydomainAliasesinsert"
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer: $customer} | format pattern "/admin/directory/v1/customer/{customer}/domainaliases") $qp)
-  let body = {"creationTime": $creation_time, "domainAliasName": $domain_alias_name, "etag": $etag, "kind": $kind, "parentDomainName": $parent_domain_name, "verified": $verified} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({customer: (encode-path-segment $customer)} | format pattern "/admin/directory/v1/customer/{customer}/domainaliases") $qp)
+  let req_body = {"creationTime": $creation_time, "domainAliasName": $domain_alias_name, "etag": $etag, "kind": $kind, "parentDomainName": $parent_domain_name, "verified": $verified} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes a domain Alias of the customer.
 #
 # DELETE /admin/directory/v1/customer/{customer}/domainaliases/{domainAliasName}
 # operationId: directory.domainAliases.delete
-export def "admin-directory-customer-domainaliases directorydomainAliasesdelete" [
+export def "admin-directory-customer-domainaliases delete" [
   customer: string
   domain_alias_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1293,7 +1302,7 @@ export def "admin-directory-customer-domainaliases directorydomainAliasesdelete"
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer: $customer, domain_alias_name: $domain_alias_name} | format pattern "/admin/directory/v1/customer/{customer}/domainaliases/{domain_alias_name}") $qp)
+  let full_url = (build-url $base ({customer: (encode-path-segment $customer), domain_alias_name: (encode-path-segment $domain_alias_name)} | format pattern "/admin/directory/v1/customer/{customer}/domainaliases/{domain_alias_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1303,7 +1312,7 @@ export def "admin-directory-customer-domainaliases directorydomainAliasesdelete"
 #
 # GET /admin/directory/v1/customer/{customer}/domainaliases/{domainAliasName}
 # operationId: directory.domainAliases.get
-export def "admin-directory-customer-domainaliases directorydomainAliasesget" [
+export def "admin-directory-customer-domainaliases get" [
   customer: string
   domain_alias_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1329,7 +1338,7 @@ export def "admin-directory-customer-domainaliases directorydomainAliasesget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer: $customer, domain_alias_name: $domain_alias_name} | format pattern "/admin/directory/v1/customer/{customer}/domainaliases/{domain_alias_name}") $qp)
+  let full_url = (build-url $base ({customer: (encode-path-segment $customer), domain_alias_name: (encode-path-segment $domain_alias_name)} | format pattern "/admin/directory/v1/customer/{customer}/domainaliases/{domain_alias_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1339,7 +1348,7 @@ export def "admin-directory-customer-domainaliases directorydomainAliasesget" [
 #
 # GET /admin/directory/v1/customer/{customer}/domains
 # operationId: directory.domains.list
-export def "admin-directory-customer-domains directorydomainslist" [
+export def "admin-directory-customer-domains list" [
   customer: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1364,7 +1373,7 @@ export def "admin-directory-customer-domains directorydomainslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer: $customer} | format pattern "/admin/directory/v1/customer/{customer}/domains") $qp)
+  let full_url = (build-url $base ({customer: (encode-path-segment $customer)} | format pattern "/admin/directory/v1/customer/{customer}/domains") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1375,7 +1384,7 @@ export def "admin-directory-customer-domains directorydomainslist" [
 # POST /admin/directory/v1/customer/{customer}/domains
 # operationId: directory.domains.insert
 # --domainAliases item shape: {creationTime?: string, domainAliasName?: string, etag?: string, kind?: string, parentDomainName?: string, verified?: bool}
-export def "admin-directory-customer-domains directorydomainsinsert" [
+export def "admin-directory-customer-domains create" [
   customer: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1408,19 +1417,19 @@ export def "admin-directory-customer-domains directorydomainsinsert" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer: $customer} | format pattern "/admin/directory/v1/customer/{customer}/domains") $qp)
-  let body = {"creationTime": $creation_time, "domainAliases": $domain_aliases, "domainName": $domain_name, "etag": $etag, "isPrimary": $is_primary, "kind": $kind, "verified": $verified} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({customer: (encode-path-segment $customer)} | format pattern "/admin/directory/v1/customer/{customer}/domains") $qp)
+  let req_body = {"creationTime": $creation_time, "domainAliases": $domain_aliases, "domainName": $domain_name, "etag": $etag, "isPrimary": $is_primary, "kind": $kind, "verified": $verified} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes a domain of the customer.
 #
 # DELETE /admin/directory/v1/customer/{customer}/domains/{domainName}
 # operationId: directory.domains.delete
-export def "admin-directory-customer-domains directorydomainsdelete" [
+export def "admin-directory-customer-domains delete" [
   customer: string
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1446,7 +1455,7 @@ export def "admin-directory-customer-domains directorydomainsdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer: $customer, domain_name: $domain_name} | format pattern "/admin/directory/v1/customer/{customer}/domains/{domain_name}") $qp)
+  let full_url = (build-url $base ({customer: (encode-path-segment $customer), domain_name: (encode-path-segment $domain_name)} | format pattern "/admin/directory/v1/customer/{customer}/domains/{domain_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1456,7 +1465,7 @@ export def "admin-directory-customer-domains directorydomainsdelete" [
 #
 # GET /admin/directory/v1/customer/{customer}/domains/{domainName}
 # operationId: directory.domains.get
-export def "admin-directory-customer-domains directorydomainsget" [
+export def "admin-directory-customer-domains get" [
   customer: string
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1482,7 +1491,7 @@ export def "admin-directory-customer-domains directorydomainsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer: $customer, domain_name: $domain_name} | format pattern "/admin/directory/v1/customer/{customer}/domains/{domain_name}") $qp)
+  let full_url = (build-url $base ({customer: (encode-path-segment $customer), domain_name: (encode-path-segment $domain_name)} | format pattern "/admin/directory/v1/customer/{customer}/domains/{domain_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1492,7 +1501,7 @@ export def "admin-directory-customer-domains directorydomainsget" [
 #
 # GET /admin/directory/v1/customer/{customer}/resources/buildings
 # operationId: directory.resources.buildings.list
-export def "admin-directory-customer-resources-buildings directoryresourcesbuildingslist" [
+export def "admin-directory-customer-resources-buildings list" [
   customer: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1519,7 +1528,7 @@ export def "admin-directory-customer-resources-buildings directoryresourcesbuild
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer: $customer} | format pattern "/admin/directory/v1/customer/{customer}/resources/buildings") $qp)
+  let full_url = (build-url $base ({customer: (encode-path-segment $customer)} | format pattern "/admin/directory/v1/customer/{customer}/resources/buildings") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1529,9 +1538,9 @@ export def "admin-directory-customer-resources-buildings directoryresourcesbuild
 #
 # POST /admin/directory/v1/customer/{customer}/resources/buildings
 # operationId: directory.resources.buildings.insert
-# --address shape: {addressLines?: list, administrativeArea?: string, languageCode?: string, locality?: string, postalCode?: string, regionCode?: string, sublocality?: string}
+# --address shape: {addressLines?: list<string>, administrativeArea?: string, languageCode?: string, locality?: string, postalCode?: string, regionCode?: string, sublocality?: string}
 # --coordinates shape: {latitude?: float, longitude?: float}
-export def "admin-directory-customer-resources-buildings directoryresourcesbuildingsinsert" [
+export def "admin-directory-customer-resources-buildings create" [
   customer: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1553,32 +1562,32 @@ export def "admin-directory-customer-resources-buildings directoryresourcesbuild
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --coordinates-source: string@coordinates-source-completer # Source from which Building.coordinates are derived.
-  --address: record # Public API: Resources.buildings — shape: {addressLines?: list, administrativeArea?: string, languageCode?: string, locality?: string, postalCode?: string, regionCode?: string, sublocality?: string}
+  --address: record # Public API: Resources.buildings — shape: {addressLines?: list<string>, administrativeArea?: string, languageCode?: string, locality?: string, postalCode?: string, regionCode?: string, sublocality?: string}
   --building-id: string # Unique identifier for the building. The maximum length is 100 characters.
   --building-name: string # The building name as seen by users in Calendar. Must be unique for the customer. For example, "NYC-CHEL". The maximum length is 100 characters.
   --coordinates: record # Public API: Resources.buildings — shape: {latitude?: float, longitude?: float}
   --description: string # A brief description of the building. For example, "Chelsea Market".
   --etags: string # ETag of the resource.
-  --floor-names: list # The display names for all floors in this building. The floors are expected to be sorted in ascending order, from lowest floor to highest floor. For example, ["B2", "B1", "L", "1", "2", "2M", "3", "PH"] Must contain at least one entry.
+  --floor-names: list<string> # The display names for all floors in this building. The floors are expected to be sorted in ascending order, from lowest floor to highest floor. For example, ["B2", "B1", "L", "1", "2", "2M", "3", "PH"] Must contain at least one entry.
   --kind: string # Kind of resource this is. (default: admin#directory#resources#buildings#Building)
 ]: any -> record<address: record<addressLines: list<string>, administrativeArea: string, languageCode: string, locality: string, postalCode: string, regionCode: string, sublocality: string>, buildingId: string, buildingName: string, coordinates: record<latitude: float, longitude: float>, description: string, etags: string, floorNames: list<string>, kind: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "coordinatesSource" $coordinates_source "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer: $customer} | format pattern "/admin/directory/v1/customer/{customer}/resources/buildings") $qp)
-  let body = {"address": $address, "buildingId": $building_id, "buildingName": $building_name, "coordinates": $coordinates, "description": $description, "etags": $etags, "floorNames": $floor_names, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({customer: (encode-path-segment $customer)} | format pattern "/admin/directory/v1/customer/{customer}/resources/buildings") $qp)
+  let req_body = {"address": $address, "buildingId": $building_id, "buildingName": $building_name, "coordinates": $coordinates, "description": $description, "etags": $etags, "floorNames": $floor_names, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes a building.
 #
 # DELETE /admin/directory/v1/customer/{customer}/resources/buildings/{buildingId}
 # operationId: directory.resources.buildings.delete
-export def "admin-directory-customer-resources-buildings directoryresourcesbuildingsdelete" [
+export def "admin-directory-customer-resources-buildings delete" [
   customer: string
   building_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1604,7 +1613,7 @@ export def "admin-directory-customer-resources-buildings directoryresourcesbuild
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer: $customer, building_id: $building_id} | format pattern "/admin/directory/v1/customer/{customer}/resources/buildings/{building_id}") $qp)
+  let full_url = (build-url $base ({customer: (encode-path-segment $customer), building_id: (encode-path-segment $building_id)} | format pattern "/admin/directory/v1/customer/{customer}/resources/buildings/{building_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1614,7 +1623,7 @@ export def "admin-directory-customer-resources-buildings directoryresourcesbuild
 #
 # GET /admin/directory/v1/customer/{customer}/resources/buildings/{buildingId}
 # operationId: directory.resources.buildings.get
-export def "admin-directory-customer-resources-buildings directoryresourcesbuildingsget" [
+export def "admin-directory-customer-resources-buildings get" [
   customer: string
   building_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1640,7 +1649,7 @@ export def "admin-directory-customer-resources-buildings directoryresourcesbuild
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer: $customer, building_id: $building_id} | format pattern "/admin/directory/v1/customer/{customer}/resources/buildings/{building_id}") $qp)
+  let full_url = (build-url $base ({customer: (encode-path-segment $customer), building_id: (encode-path-segment $building_id)} | format pattern "/admin/directory/v1/customer/{customer}/resources/buildings/{building_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1650,9 +1659,9 @@ export def "admin-directory-customer-resources-buildings directoryresourcesbuild
 #
 # PATCH /admin/directory/v1/customer/{customer}/resources/buildings/{buildingId}
 # operationId: directory.resources.buildings.patch
-# --address shape: {addressLines?: list, administrativeArea?: string, languageCode?: string, locality?: string, postalCode?: string, regionCode?: string, sublocality?: string}
+# --address shape: {addressLines?: list<string>, administrativeArea?: string, languageCode?: string, locality?: string, postalCode?: string, regionCode?: string, sublocality?: string}
 # --coordinates shape: {latitude?: float, longitude?: float}
-export def "admin-directory-customer-resources-buildings directoryresourcesbuildingspatch" [
+export def "admin-directory-customer-resources-buildings update-by-customer-buildingId" [
   customer: string
   building_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1675,34 +1684,34 @@ export def "admin-directory-customer-resources-buildings directoryresourcesbuild
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --coordinates-source: string@coordinates-source-completer # Source from which Building.coordinates are derived.
-  --address: record # Public API: Resources.buildings — shape: {addressLines?: list, administrativeArea?: string, languageCode?: string, locality?: string, postalCode?: string, regionCode?: string, sublocality?: string}
+  --address: record # Public API: Resources.buildings — shape: {addressLines?: list<string>, administrativeArea?: string, languageCode?: string, locality?: string, postalCode?: string, regionCode?: string, sublocality?: string}
   --body-building-id: string # Unique identifier for the building. The maximum length is 100 characters.
   --building-name: string # The building name as seen by users in Calendar. Must be unique for the customer. For example, "NYC-CHEL". The maximum length is 100 characters.
   --coordinates: record # Public API: Resources.buildings — shape: {latitude?: float, longitude?: float}
   --description: string # A brief description of the building. For example, "Chelsea Market".
   --etags: string # ETag of the resource.
-  --floor-names: list # The display names for all floors in this building. The floors are expected to be sorted in ascending order, from lowest floor to highest floor. For example, ["B2", "B1", "L", "1", "2", "2M", "3", "PH"] Must contain at least one entry.
+  --floor-names: list<string> # The display names for all floors in this building. The floors are expected to be sorted in ascending order, from lowest floor to highest floor. For example, ["B2", "B1", "L", "1", "2", "2M", "3", "PH"] Must contain at least one entry.
   --kind: string # Kind of resource this is. (default: admin#directory#resources#buildings#Building)
 ]: any -> record<address: record<addressLines: list<string>, administrativeArea: string, languageCode: string, locality: string, postalCode: string, regionCode: string, sublocality: string>, buildingId: string, buildingName: string, coordinates: record<latitude: float, longitude: float>, description: string, etags: string, floorNames: list<string>, kind: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "coordinatesSource" $coordinates_source "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer: $customer, building_id: $building_id} | format pattern "/admin/directory/v1/customer/{customer}/resources/buildings/{building_id}") $qp)
-  let body = {"address": $address, "buildingId": $body_building_id, "buildingName": $building_name, "coordinates": $coordinates, "description": $description, "etags": $etags, "floorNames": $floor_names, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({customer: (encode-path-segment $customer), building_id: (encode-path-segment $building_id)} | format pattern "/admin/directory/v1/customer/{customer}/resources/buildings/{building_id}") $qp)
+  let req_body = {"address": $address, "buildingId": $body_building_id, "buildingName": $building_name, "coordinates": $coordinates, "description": $description, "etags": $etags, "floorNames": $floor_names, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates a building.
 #
 # PUT /admin/directory/v1/customer/{customer}/resources/buildings/{buildingId}
 # operationId: directory.resources.buildings.update
-# --address shape: {addressLines?: list, administrativeArea?: string, languageCode?: string, locality?: string, postalCode?: string, regionCode?: string, sublocality?: string}
+# --address shape: {addressLines?: list<string>, administrativeArea?: string, languageCode?: string, locality?: string, postalCode?: string, regionCode?: string, sublocality?: string}
 # --coordinates shape: {latitude?: float, longitude?: float}
-export def "admin-directory-customer-resources-buildings directoryresourcesbuildingsupdate" [
+export def "admin-directory-customer-resources-buildings update-by-customer-buildingId-1" [
   customer: string
   building_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1725,32 +1734,32 @@ export def "admin-directory-customer-resources-buildings directoryresourcesbuild
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --coordinates-source: string@coordinates-source-completer # Source from which Building.coordinates are derived.
-  --address: record # Public API: Resources.buildings — shape: {addressLines?: list, administrativeArea?: string, languageCode?: string, locality?: string, postalCode?: string, regionCode?: string, sublocality?: string}
+  --address: record # Public API: Resources.buildings — shape: {addressLines?: list<string>, administrativeArea?: string, languageCode?: string, locality?: string, postalCode?: string, regionCode?: string, sublocality?: string}
   --body-building-id: string # Unique identifier for the building. The maximum length is 100 characters.
   --building-name: string # The building name as seen by users in Calendar. Must be unique for the customer. For example, "NYC-CHEL". The maximum length is 100 characters.
   --coordinates: record # Public API: Resources.buildings — shape: {latitude?: float, longitude?: float}
   --description: string # A brief description of the building. For example, "Chelsea Market".
   --etags: string # ETag of the resource.
-  --floor-names: list # The display names for all floors in this building. The floors are expected to be sorted in ascending order, from lowest floor to highest floor. For example, ["B2", "B1", "L", "1", "2", "2M", "3", "PH"] Must contain at least one entry.
+  --floor-names: list<string> # The display names for all floors in this building. The floors are expected to be sorted in ascending order, from lowest floor to highest floor. For example, ["B2", "B1", "L", "1", "2", "2M", "3", "PH"] Must contain at least one entry.
   --kind: string # Kind of resource this is. (default: admin#directory#resources#buildings#Building)
 ]: any -> record<address: record<addressLines: list<string>, administrativeArea: string, languageCode: string, locality: string, postalCode: string, regionCode: string, sublocality: string>, buildingId: string, buildingName: string, coordinates: record<latitude: float, longitude: float>, description: string, etags: string, floorNames: list<string>, kind: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "coordinatesSource" $coordinates_source "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer: $customer, building_id: $building_id} | format pattern "/admin/directory/v1/customer/{customer}/resources/buildings/{building_id}") $qp)
-  let body = {"address": $address, "buildingId": $body_building_id, "buildingName": $building_name, "coordinates": $coordinates, "description": $description, "etags": $etags, "floorNames": $floor_names, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({customer: (encode-path-segment $customer), building_id: (encode-path-segment $building_id)} | format pattern "/admin/directory/v1/customer/{customer}/resources/buildings/{building_id}") $qp)
+  let req_body = {"address": $address, "buildingId": $body_building_id, "buildingName": $building_name, "coordinates": $coordinates, "description": $description, "etags": $etags, "floorNames": $floor_names, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieves a list of calendar resources for an account.
 #
 # GET /admin/directory/v1/customer/{customer}/resources/calendars
 # operationId: directory.resources.calendars.list
-export def "admin-directory-customer-resources-calendars directoryresourcescalendarslist" [
+export def "admin-directory-customer-resources-calendars list" [
   customer: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1779,7 +1788,7 @@ export def "admin-directory-customer-resources-calendars directoryresourcescalen
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "query" $query "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer: $customer} | format pattern "/admin/directory/v1/customer/{customer}/resources/calendars") $qp)
+  let full_url = (build-url $base ({customer: (encode-path-segment $customer)} | format pattern "/admin/directory/v1/customer/{customer}/resources/calendars") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1789,7 +1798,7 @@ export def "admin-directory-customer-resources-calendars directoryresourcescalen
 #
 # POST /admin/directory/v1/customer/{customer}/resources/calendars
 # operationId: directory.resources.calendars.insert
-export def "admin-directory-customer-resources-calendars directoryresourcescalendarsinsert" [
+export def "admin-directory-customer-resources-calendars create" [
   customer: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1830,19 +1839,19 @@ export def "admin-directory-customer-resources-calendars directoryresourcescalen
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer: $customer} | format pattern "/admin/directory/v1/customer/{customer}/resources/calendars") $qp)
-  let body = {"buildingId": $building_id, "capacity": $capacity, "etags": $etags, "featureInstances": $feature_instances, "floorName": $floor_name, "floorSection": $floor_section, "generatedResourceName": $generated_resource_name, "kind": $kind, "resourceCategory": $resource_category, "resourceDescription": $resource_description, "resourceEmail": $resource_email, "resourceId": $resource_id, "resourceName": $resource_name, "resourceType": $resource_type, "userVisibleDescription": $user_visible_description} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({customer: (encode-path-segment $customer)} | format pattern "/admin/directory/v1/customer/{customer}/resources/calendars") $qp)
+  let req_body = {"buildingId": $building_id, "capacity": $capacity, "etags": $etags, "featureInstances": $feature_instances, "floorName": $floor_name, "floorSection": $floor_section, "generatedResourceName": $generated_resource_name, "kind": $kind, "resourceCategory": $resource_category, "resourceDescription": $resource_description, "resourceEmail": $resource_email, "resourceId": $resource_id, "resourceName": $resource_name, "resourceType": $resource_type, "userVisibleDescription": $user_visible_description} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes a calendar resource.
 #
 # DELETE /admin/directory/v1/customer/{customer}/resources/calendars/{calendarResourceId}
 # operationId: directory.resources.calendars.delete
-export def "admin-directory-customer-resources-calendars directoryresourcescalendarsdelete" [
+export def "admin-directory-customer-resources-calendars delete" [
   customer: string
   calendar_resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1868,7 +1877,7 @@ export def "admin-directory-customer-resources-calendars directoryresourcescalen
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer: $customer, calendar_resource_id: $calendar_resource_id} | format pattern "/admin/directory/v1/customer/{customer}/resources/calendars/{calendar_resource_id}") $qp)
+  let full_url = (build-url $base ({customer: (encode-path-segment $customer), calendar_resource_id: (encode-path-segment $calendar_resource_id)} | format pattern "/admin/directory/v1/customer/{customer}/resources/calendars/{calendar_resource_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1878,7 +1887,7 @@ export def "admin-directory-customer-resources-calendars directoryresourcescalen
 #
 # GET /admin/directory/v1/customer/{customer}/resources/calendars/{calendarResourceId}
 # operationId: directory.resources.calendars.get
-export def "admin-directory-customer-resources-calendars directoryresourcescalendarsget" [
+export def "admin-directory-customer-resources-calendars get" [
   customer: string
   calendar_resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1904,7 +1913,7 @@ export def "admin-directory-customer-resources-calendars directoryresourcescalen
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer: $customer, calendar_resource_id: $calendar_resource_id} | format pattern "/admin/directory/v1/customer/{customer}/resources/calendars/{calendar_resource_id}") $qp)
+  let full_url = (build-url $base ({customer: (encode-path-segment $customer), calendar_resource_id: (encode-path-segment $calendar_resource_id)} | format pattern "/admin/directory/v1/customer/{customer}/resources/calendars/{calendar_resource_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1914,7 +1923,7 @@ export def "admin-directory-customer-resources-calendars directoryresourcescalen
 #
 # PATCH /admin/directory/v1/customer/{customer}/resources/calendars/{calendarResourceId}
 # operationId: directory.resources.calendars.patch
-export def "admin-directory-customer-resources-calendars directoryresourcescalendarspatch" [
+export def "admin-directory-customer-resources-calendars update-by-customer-calendarResourceId" [
   customer: string
   calendar_resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1956,19 +1965,19 @@ export def "admin-directory-customer-resources-calendars directoryresourcescalen
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer: $customer, calendar_resource_id: $calendar_resource_id} | format pattern "/admin/directory/v1/customer/{customer}/resources/calendars/{calendar_resource_id}") $qp)
-  let body = {"buildingId": $building_id, "capacity": $capacity, "etags": $etags, "featureInstances": $feature_instances, "floorName": $floor_name, "floorSection": $floor_section, "generatedResourceName": $generated_resource_name, "kind": $kind, "resourceCategory": $resource_category, "resourceDescription": $resource_description, "resourceEmail": $resource_email, "resourceId": $resource_id, "resourceName": $resource_name, "resourceType": $resource_type, "userVisibleDescription": $user_visible_description} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({customer: (encode-path-segment $customer), calendar_resource_id: (encode-path-segment $calendar_resource_id)} | format pattern "/admin/directory/v1/customer/{customer}/resources/calendars/{calendar_resource_id}") $qp)
+  let req_body = {"buildingId": $building_id, "capacity": $capacity, "etags": $etags, "featureInstances": $feature_instances, "floorName": $floor_name, "floorSection": $floor_section, "generatedResourceName": $generated_resource_name, "kind": $kind, "resourceCategory": $resource_category, "resourceDescription": $resource_description, "resourceEmail": $resource_email, "resourceId": $resource_id, "resourceName": $resource_name, "resourceType": $resource_type, "userVisibleDescription": $user_visible_description} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates a calendar resource. This method supports patch semantics, meaning you only need to include the fields you wish to update. Fields that are not present in the request will be preserved.
 #
 # PUT /admin/directory/v1/customer/{customer}/resources/calendars/{calendarResourceId}
 # operationId: directory.resources.calendars.update
-export def "admin-directory-customer-resources-calendars directoryresourcescalendarsupdate" [
+export def "admin-directory-customer-resources-calendars update-by-customer-calendarResourceId-1" [
   customer: string
   calendar_resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2010,19 +2019,19 @@ export def "admin-directory-customer-resources-calendars directoryresourcescalen
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer: $customer, calendar_resource_id: $calendar_resource_id} | format pattern "/admin/directory/v1/customer/{customer}/resources/calendars/{calendar_resource_id}") $qp)
-  let body = {"buildingId": $building_id, "capacity": $capacity, "etags": $etags, "featureInstances": $feature_instances, "floorName": $floor_name, "floorSection": $floor_section, "generatedResourceName": $generated_resource_name, "kind": $kind, "resourceCategory": $resource_category, "resourceDescription": $resource_description, "resourceEmail": $resource_email, "resourceId": $resource_id, "resourceName": $resource_name, "resourceType": $resource_type, "userVisibleDescription": $user_visible_description} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({customer: (encode-path-segment $customer), calendar_resource_id: (encode-path-segment $calendar_resource_id)} | format pattern "/admin/directory/v1/customer/{customer}/resources/calendars/{calendar_resource_id}") $qp)
+  let req_body = {"buildingId": $building_id, "capacity": $capacity, "etags": $etags, "featureInstances": $feature_instances, "floorName": $floor_name, "floorSection": $floor_section, "generatedResourceName": $generated_resource_name, "kind": $kind, "resourceCategory": $resource_category, "resourceDescription": $resource_description, "resourceEmail": $resource_email, "resourceId": $resource_id, "resourceName": $resource_name, "resourceType": $resource_type, "userVisibleDescription": $user_visible_description} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieves a list of features for an account.
 #
 # GET /admin/directory/v1/customer/{customer}/resources/features
 # operationId: directory.resources.features.list
-export def "admin-directory-customer-resources-features directoryresourcesfeatureslist" [
+export def "admin-directory-customer-resources-features list" [
   customer: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2049,7 +2058,7 @@ export def "admin-directory-customer-resources-features directoryresourcesfeatur
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer: $customer} | format pattern "/admin/directory/v1/customer/{customer}/resources/features") $qp)
+  let full_url = (build-url $base ({customer: (encode-path-segment $customer)} | format pattern "/admin/directory/v1/customer/{customer}/resources/features") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2059,7 +2068,7 @@ export def "admin-directory-customer-resources-features directoryresourcesfeatur
 #
 # POST /admin/directory/v1/customer/{customer}/resources/features
 # operationId: directory.resources.features.insert
-export def "admin-directory-customer-resources-features directoryresourcesfeaturesinsert" [
+export def "admin-directory-customer-resources-features create" [
   customer: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2088,19 +2097,19 @@ export def "admin-directory-customer-resources-features directoryresourcesfeatur
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer: $customer} | format pattern "/admin/directory/v1/customer/{customer}/resources/features") $qp)
-  let body = {"etags": $etags, "kind": $kind, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({customer: (encode-path-segment $customer)} | format pattern "/admin/directory/v1/customer/{customer}/resources/features") $qp)
+  let req_body = {"etags": $etags, "kind": $kind, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes a feature.
 #
 # DELETE /admin/directory/v1/customer/{customer}/resources/features/{featureKey}
 # operationId: directory.resources.features.delete
-export def "admin-directory-customer-resources-features directoryresourcesfeaturesdelete" [
+export def "admin-directory-customer-resources-features delete" [
   customer: string
   feature_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2126,7 +2135,7 @@ export def "admin-directory-customer-resources-features directoryresourcesfeatur
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer: $customer, feature_key: $feature_key} | format pattern "/admin/directory/v1/customer/{customer}/resources/features/{feature_key}") $qp)
+  let full_url = (build-url $base ({customer: (encode-path-segment $customer), feature_key: (encode-path-segment $feature_key)} | format pattern "/admin/directory/v1/customer/{customer}/resources/features/{feature_key}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2136,7 +2145,7 @@ export def "admin-directory-customer-resources-features directoryresourcesfeatur
 #
 # GET /admin/directory/v1/customer/{customer}/resources/features/{featureKey}
 # operationId: directory.resources.features.get
-export def "admin-directory-customer-resources-features directoryresourcesfeaturesget" [
+export def "admin-directory-customer-resources-features get" [
   customer: string
   feature_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2162,7 +2171,7 @@ export def "admin-directory-customer-resources-features directoryresourcesfeatur
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer: $customer, feature_key: $feature_key} | format pattern "/admin/directory/v1/customer/{customer}/resources/features/{feature_key}") $qp)
+  let full_url = (build-url $base ({customer: (encode-path-segment $customer), feature_key: (encode-path-segment $feature_key)} | format pattern "/admin/directory/v1/customer/{customer}/resources/features/{feature_key}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2172,7 +2181,7 @@ export def "admin-directory-customer-resources-features directoryresourcesfeatur
 #
 # PATCH /admin/directory/v1/customer/{customer}/resources/features/{featureKey}
 # operationId: directory.resources.features.patch
-export def "admin-directory-customer-resources-features directoryresourcesfeaturespatch" [
+export def "admin-directory-customer-resources-features update-by-customer-featureKey" [
   customer: string
   feature_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2202,19 +2211,19 @@ export def "admin-directory-customer-resources-features directoryresourcesfeatur
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer: $customer, feature_key: $feature_key} | format pattern "/admin/directory/v1/customer/{customer}/resources/features/{feature_key}") $qp)
-  let body = {"etags": $etags, "kind": $kind, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({customer: (encode-path-segment $customer), feature_key: (encode-path-segment $feature_key)} | format pattern "/admin/directory/v1/customer/{customer}/resources/features/{feature_key}") $qp)
+  let req_body = {"etags": $etags, "kind": $kind, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates a feature.
 #
 # PUT /admin/directory/v1/customer/{customer}/resources/features/{featureKey}
 # operationId: directory.resources.features.update
-export def "admin-directory-customer-resources-features directoryresourcesfeaturesupdate" [
+export def "admin-directory-customer-resources-features update-by-customer-featureKey-1" [
   customer: string
   feature_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2244,19 +2253,19 @@ export def "admin-directory-customer-resources-features directoryresourcesfeatur
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer: $customer, feature_key: $feature_key} | format pattern "/admin/directory/v1/customer/{customer}/resources/features/{feature_key}") $qp)
-  let body = {"etags": $etags, "kind": $kind, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({customer: (encode-path-segment $customer), feature_key: (encode-path-segment $feature_key)} | format pattern "/admin/directory/v1/customer/{customer}/resources/features/{feature_key}") $qp)
+  let req_body = {"etags": $etags, "kind": $kind, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Renames a feature.
 #
 # POST /admin/directory/v1/customer/{customer}/resources/features/{oldName}/rename
 # operationId: directory.resources.features.rename
-export def "admin-directory-customer-resources-features-rename directoryresourcesfeaturesrename" [
+export def "admin-directory-customer-resources-features-rename rename" [
   customer: string
   old_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2284,19 +2293,19 @@ export def "admin-directory-customer-resources-features-rename directoryresource
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer: $customer, old_name: $old_name} | format pattern "/admin/directory/v1/customer/{customer}/resources/features/{old_name}/rename") $qp)
-  let body = {"newName": $new_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({customer: (encode-path-segment $customer), old_name: (encode-path-segment $old_name)} | format pattern "/admin/directory/v1/customer/{customer}/resources/features/{old_name}/rename") $qp)
+  let req_body = {"newName": $new_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieves a paginated list of all roleAssignments.
 #
 # GET /admin/directory/v1/customer/{customer}/roleassignments
 # operationId: directory.roleAssignments.list
-export def "admin-directory-customer-roleassignments directoryroleAssignmentslist" [
+export def "admin-directory-customer-roleassignments list" [
   customer: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2326,7 +2335,7 @@ export def "admin-directory-customer-roleassignments directoryroleAssignmentslis
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "includeIndirectRoleAssignments" $include_indirect_role_assignments "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "roleId" $role_id "scalar") (serialize-qp "userKey" $user_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer: $customer} | format pattern "/admin/directory/v1/customer/{customer}/roleassignments") $qp)
+  let full_url = (build-url $base ({customer: (encode-path-segment $customer)} | format pattern "/admin/directory/v1/customer/{customer}/roleassignments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2336,7 +2345,7 @@ export def "admin-directory-customer-roleassignments directoryroleAssignmentslis
 #
 # POST /admin/directory/v1/customer/{customer}/roleassignments
 # operationId: directory.roleAssignments.insert
-export def "admin-directory-customer-roleassignments directoryroleAssignmentsinsert" [
+export def "admin-directory-customer-roleassignments create" [
   customer: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2369,19 +2378,19 @@ export def "admin-directory-customer-roleassignments directoryroleAssignmentsins
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer: $customer} | format pattern "/admin/directory/v1/customer/{customer}/roleassignments") $qp)
-  let body = {"assignedTo": $assigned_to, "etag": $etag, "kind": $kind, "orgUnitId": $org_unit_id, "roleAssignmentId": $role_assignment_id, "roleId": $role_id, "scopeType": $scope_type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({customer: (encode-path-segment $customer)} | format pattern "/admin/directory/v1/customer/{customer}/roleassignments") $qp)
+  let req_body = {"assignedTo": $assigned_to, "etag": $etag, "kind": $kind, "orgUnitId": $org_unit_id, "roleAssignmentId": $role_assignment_id, "roleId": $role_id, "scopeType": $scope_type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes a role assignment.
 #
 # DELETE /admin/directory/v1/customer/{customer}/roleassignments/{roleAssignmentId}
 # operationId: directory.roleAssignments.delete
-export def "admin-directory-customer-roleassignments directoryroleAssignmentsdelete" [
+export def "admin-directory-customer-roleassignments delete" [
   customer: string
   role_assignment_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2407,7 +2416,7 @@ export def "admin-directory-customer-roleassignments directoryroleAssignmentsdel
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer: $customer, role_assignment_id: $role_assignment_id} | format pattern "/admin/directory/v1/customer/{customer}/roleassignments/{role_assignment_id}") $qp)
+  let full_url = (build-url $base ({customer: (encode-path-segment $customer), role_assignment_id: (encode-path-segment $role_assignment_id)} | format pattern "/admin/directory/v1/customer/{customer}/roleassignments/{role_assignment_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2417,7 +2426,7 @@ export def "admin-directory-customer-roleassignments directoryroleAssignmentsdel
 #
 # GET /admin/directory/v1/customer/{customer}/roleassignments/{roleAssignmentId}
 # operationId: directory.roleAssignments.get
-export def "admin-directory-customer-roleassignments directoryroleAssignmentsget" [
+export def "admin-directory-customer-roleassignments get" [
   customer: string
   role_assignment_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2443,7 +2452,7 @@ export def "admin-directory-customer-roleassignments directoryroleAssignmentsget
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer: $customer, role_assignment_id: $role_assignment_id} | format pattern "/admin/directory/v1/customer/{customer}/roleassignments/{role_assignment_id}") $qp)
+  let full_url = (build-url $base ({customer: (encode-path-segment $customer), role_assignment_id: (encode-path-segment $role_assignment_id)} | format pattern "/admin/directory/v1/customer/{customer}/roleassignments/{role_assignment_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2453,7 +2462,7 @@ export def "admin-directory-customer-roleassignments directoryroleAssignmentsget
 #
 # GET /admin/directory/v1/customer/{customer}/roles
 # operationId: directory.roles.list
-export def "admin-directory-customer-roles directoryroleslist" [
+export def "admin-directory-customer-roles list" [
   customer: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2480,7 +2489,7 @@ export def "admin-directory-customer-roles directoryroleslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer: $customer} | format pattern "/admin/directory/v1/customer/{customer}/roles") $qp)
+  let full_url = (build-url $base ({customer: (encode-path-segment $customer)} | format pattern "/admin/directory/v1/customer/{customer}/roles") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2491,7 +2500,7 @@ export def "admin-directory-customer-roles directoryroleslist" [
 # POST /admin/directory/v1/customer/{customer}/roles
 # operationId: directory.roles.insert
 # --rolePrivileges item shape: {privilegeName?: string, serviceId?: string}
-export def "admin-directory-customer-roles directoryrolesinsert" [
+export def "admin-directory-customer-roles create" [
   customer: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2525,19 +2534,19 @@ export def "admin-directory-customer-roles directoryrolesinsert" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer: $customer} | format pattern "/admin/directory/v1/customer/{customer}/roles") $qp)
-  let body = {"etag": $etag, "isSuperAdminRole": $is_super_admin_role, "isSystemRole": $is_system_role, "kind": $kind, "roleDescription": $role_description, "roleId": $role_id, "roleName": $role_name, "rolePrivileges": $role_privileges} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({customer: (encode-path-segment $customer)} | format pattern "/admin/directory/v1/customer/{customer}/roles") $qp)
+  let req_body = {"etag": $etag, "isSuperAdminRole": $is_super_admin_role, "isSystemRole": $is_system_role, "kind": $kind, "roleDescription": $role_description, "roleId": $role_id, "roleName": $role_name, "rolePrivileges": $role_privileges} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieves a paginated list of all privileges for a customer.
 #
 # GET /admin/directory/v1/customer/{customer}/roles/ALL/privileges
 # operationId: directory.privileges.list
-export def "admin-directory-customer-roles-all-privileges directoryprivilegeslist" [
+export def "admin-directory-customer-roles-all-privileges list" [
   customer: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2562,7 +2571,7 @@ export def "admin-directory-customer-roles-all-privileges directoryprivilegeslis
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer: $customer} | format pattern "/admin/directory/v1/customer/{customer}/roles/ALL/privileges") $qp)
+  let full_url = (build-url $base ({customer: (encode-path-segment $customer)} | format pattern "/admin/directory/v1/customer/{customer}/roles/ALL/privileges") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2572,7 +2581,7 @@ export def "admin-directory-customer-roles-all-privileges directoryprivilegeslis
 #
 # DELETE /admin/directory/v1/customer/{customer}/roles/{roleId}
 # operationId: directory.roles.delete
-export def "admin-directory-customer-roles directoryrolesdelete" [
+export def "admin-directory-customer-roles delete" [
   customer: string
   role_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2598,7 +2607,7 @@ export def "admin-directory-customer-roles directoryrolesdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer: $customer, role_id: $role_id} | format pattern "/admin/directory/v1/customer/{customer}/roles/{role_id}") $qp)
+  let full_url = (build-url $base ({customer: (encode-path-segment $customer), role_id: (encode-path-segment $role_id)} | format pattern "/admin/directory/v1/customer/{customer}/roles/{role_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2608,7 +2617,7 @@ export def "admin-directory-customer-roles directoryrolesdelete" [
 #
 # GET /admin/directory/v1/customer/{customer}/roles/{roleId}
 # operationId: directory.roles.get
-export def "admin-directory-customer-roles directoryrolesget" [
+export def "admin-directory-customer-roles get" [
   customer: string
   role_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2634,7 +2643,7 @@ export def "admin-directory-customer-roles directoryrolesget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer: $customer, role_id: $role_id} | format pattern "/admin/directory/v1/customer/{customer}/roles/{role_id}") $qp)
+  let full_url = (build-url $base ({customer: (encode-path-segment $customer), role_id: (encode-path-segment $role_id)} | format pattern "/admin/directory/v1/customer/{customer}/roles/{role_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2645,7 +2654,7 @@ export def "admin-directory-customer-roles directoryrolesget" [
 # PATCH /admin/directory/v1/customer/{customer}/roles/{roleId}
 # operationId: directory.roles.patch
 # --rolePrivileges item shape: {privilegeName?: string, serviceId?: string}
-export def "admin-directory-customer-roles directoryrolespatch" [
+export def "admin-directory-customer-roles update-by-customer-roleId" [
   customer: string
   role_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2680,12 +2689,12 @@ export def "admin-directory-customer-roles directoryrolespatch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer: $customer, role_id: $role_id} | format pattern "/admin/directory/v1/customer/{customer}/roles/{role_id}") $qp)
-  let body = {"etag": $etag, "isSuperAdminRole": $is_super_admin_role, "isSystemRole": $is_system_role, "kind": $kind, "roleDescription": $role_description, "roleId": $body_role_id, "roleName": $role_name, "rolePrivileges": $role_privileges} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({customer: (encode-path-segment $customer), role_id: (encode-path-segment $role_id)} | format pattern "/admin/directory/v1/customer/{customer}/roles/{role_id}") $qp)
+  let req_body = {"etag": $etag, "isSuperAdminRole": $is_super_admin_role, "isSystemRole": $is_system_role, "kind": $kind, "roleDescription": $role_description, "roleId": $body_role_id, "roleName": $role_name, "rolePrivileges": $role_privileges} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates a role.
@@ -2693,7 +2702,7 @@ export def "admin-directory-customer-roles directoryrolespatch" [
 # PUT /admin/directory/v1/customer/{customer}/roles/{roleId}
 # operationId: directory.roles.update
 # --rolePrivileges item shape: {privilegeName?: string, serviceId?: string}
-export def "admin-directory-customer-roles directoryrolesupdate" [
+export def "admin-directory-customer-roles update-by-customer-roleId-1" [
   customer: string
   role_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2728,19 +2737,19 @@ export def "admin-directory-customer-roles directoryrolesupdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer: $customer, role_id: $role_id} | format pattern "/admin/directory/v1/customer/{customer}/roles/{role_id}") $qp)
-  let body = {"etag": $etag, "isSuperAdminRole": $is_super_admin_role, "isSystemRole": $is_system_role, "kind": $kind, "roleDescription": $role_description, "roleId": $body_role_id, "roleName": $role_name, "rolePrivileges": $role_privileges} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({customer: (encode-path-segment $customer), role_id: (encode-path-segment $role_id)} | format pattern "/admin/directory/v1/customer/{customer}/roles/{role_id}") $qp)
+  let req_body = {"etag": $etag, "isSuperAdminRole": $is_super_admin_role, "isSystemRole": $is_system_role, "kind": $kind, "roleDescription": $role_description, "roleId": $body_role_id, "roleName": $role_name, "rolePrivileges": $role_privileges} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieves a customer.
 #
 # GET /admin/directory/v1/customers/{customerKey}
 # operationId: directory.customers.get
-export def "admin-directory-customers directorycustomersget" [
+export def "admin-directory-customers get" [
   customer_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2765,7 +2774,7 @@ export def "admin-directory-customers directorycustomersget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer_key: $customer_key} | format pattern "/admin/directory/v1/customers/{customer_key}") $qp)
+  let full_url = (build-url $base ({customer_key: (encode-path-segment $customer_key)} | format pattern "/admin/directory/v1/customers/{customer_key}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2776,7 +2785,7 @@ export def "admin-directory-customers directorycustomersget" [
 # PATCH /admin/directory/v1/customers/{customerKey}
 # operationId: directory.customers.patch
 # --postalAddress shape: {addressLine1?: string, addressLine2?: string, addressLine3?: string, contactName?: string, countryCode?: string, locality?: string, organizationName?: string, postalCode?: string, region?: string}
-export def "admin-directory-customers directorycustomerspatch" [
+export def "admin-directory-customers update-by-customerKey" [
   customer_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2811,12 +2820,12 @@ export def "admin-directory-customers directorycustomerspatch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer_key: $customer_key} | format pattern "/admin/directory/v1/customers/{customer_key}") $qp)
-  let body = {"alternateEmail": $alternate_email, "customerCreationTime": $customer_creation_time, "customerDomain": $customer_domain, "etag": $etag, "id": $id, "kind": $kind, "language": $language, "phoneNumber": $phone_number, "postalAddress": $postal_address} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({customer_key: (encode-path-segment $customer_key)} | format pattern "/admin/directory/v1/customers/{customer_key}") $qp)
+  let req_body = {"alternateEmail": $alternate_email, "customerCreationTime": $customer_creation_time, "customerDomain": $customer_domain, "etag": $etag, "id": $id, "kind": $kind, "language": $language, "phoneNumber": $phone_number, "postalAddress": $postal_address} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates a customer.
@@ -2824,7 +2833,7 @@ export def "admin-directory-customers directorycustomerspatch" [
 # PUT /admin/directory/v1/customers/{customerKey}
 # operationId: directory.customers.update
 # --postalAddress shape: {addressLine1?: string, addressLine2?: string, addressLine3?: string, contactName?: string, countryCode?: string, locality?: string, organizationName?: string, postalCode?: string, region?: string}
-export def "admin-directory-customers directorycustomersupdate" [
+export def "admin-directory-customers update-by-customerKey-1" [
   customer_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2859,19 +2868,19 @@ export def "admin-directory-customers directorycustomersupdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer_key: $customer_key} | format pattern "/admin/directory/v1/customers/{customer_key}") $qp)
-  let body = {"alternateEmail": $alternate_email, "customerCreationTime": $customer_creation_time, "customerDomain": $customer_domain, "etag": $etag, "id": $id, "kind": $kind, "language": $language, "phoneNumber": $phone_number, "postalAddress": $postal_address} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({customer_key: (encode-path-segment $customer_key)} | format pattern "/admin/directory/v1/customers/{customer_key}") $qp)
+  let req_body = {"alternateEmail": $alternate_email, "customerCreationTime": $customer_creation_time, "customerDomain": $customer_domain, "etag": $etag, "id": $id, "kind": $kind, "language": $language, "phoneNumber": $phone_number, "postalAddress": $postal_address} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieves all groups of a domain or of a user given a userKey (paginated).
 #
 # GET /admin/directory/v1/groups
 # operationId: directory.groups.list
-export def "admin-directory-groups directorygroupslist" [
+export def "admin-directory-groups list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2913,7 +2922,7 @@ export def "admin-directory-groups directorygroupslist" [
 #
 # POST /admin/directory/v1/groups
 # operationId: directory.groups.insert
-export def "admin-directory-groups directorygroupsinsert" [
+export def "admin-directory-groups create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2934,7 +2943,7 @@ export def "admin-directory-groups directorygroupsinsert" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --admin-created: oneof<nothing, bool> # Read-only. Value is `true` if this group was created by an administrator rather than a user.
-  --aliases: list # Read-only. The list of a group's alias email addresses. To add, update, or remove a group's aliases, use the `groups.aliases` methods. If edited in a group's POST or PUT request, the edit is ignored.
+  --aliases: list<string> # Read-only. The list of a group's alias email addresses. To add, update, or remove a group's aliases, use the `groups.aliases` methods. If edited in a group's POST or PUT request, the edit is ignored.
   --description: string # An extended description to help users determine the purpose of a group. For example, you can include information about who should join the group, the types of messages to send to the group, links to FAQs about the group, or related groups. Maximum length is `4,096` characters.
   --direct-members-count: string # The number of users that are direct members of the group. If a group is a member (child) of this group (the parent), members of the child group are not counted in the `directMembersCount` property of the parent group. (format: int64)
   --email: string # The group's email address. If your account has multiple domains, select the appropriate domain for the email address. The `email` must be unique. This property is required when creating a group. Group email addresses are subject to the same character usage rules as usernames, see the [help center](https://support.google.com/a/answer/9193374) for details.
@@ -2942,25 +2951,25 @@ export def "admin-directory-groups directorygroupsinsert" [
   --id: string # Read-only. The unique ID of a group. A group `id` can be used as a group request URI's `groupKey`.
   --kind: string # The type of the API resource. For Groups resources, the value is `admin#directory#group`. (default: admin#directory#group)
   --name: string # The group's display name.
-  --non-editable-aliases: list # Read-only. The list of the group's non-editable alias email addresses that are outside of the account's primary domain or subdomains. These are functioning email addresses used by the group. This is a read-only property returned in the API's response for a group. If edited in a group's POST or PUT request, the edit is ignored.
+  --non-editable-aliases: list<string> # Read-only. The list of the group's non-editable alias email addresses that are outside of the account's primary domain or subdomains. These are functioning email addresses used by the group. This is a read-only property returned in the API's response for a group. If edited in a group's POST or PUT request, the edit is ignored.
 ]: any -> record<adminCreated: bool, aliases: list<string>, description: string, directMembersCount: string, email: string, etag: string, id: string, kind: string, name: string, nonEditableAliases: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/admin/directory/v1/groups" $qp)
-  let body = {"adminCreated": $admin_created, "aliases": $aliases, "description": $description, "directMembersCount": $direct_members_count, "email": $email, "etag": $etag, "id": $id, "kind": $kind, "name": $name, "nonEditableAliases": $non_editable_aliases} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"adminCreated": $admin_created, "aliases": $aliases, "description": $description, "directMembersCount": $direct_members_count, "email": $email, "etag": $etag, "id": $id, "kind": $kind, "name": $name, "nonEditableAliases": $non_editable_aliases} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes a group.
 #
 # DELETE /admin/directory/v1/groups/{groupKey}
 # operationId: directory.groups.delete
-export def "admin-directory-groups directorygroupsdelete" [
+export def "admin-directory-groups delete" [
   group_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2985,7 +2994,7 @@ export def "admin-directory-groups directorygroupsdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({group_key: $group_key} | format pattern "/admin/directory/v1/groups/{group_key}") $qp)
+  let full_url = (build-url $base ({group_key: (encode-path-segment $group_key)} | format pattern "/admin/directory/v1/groups/{group_key}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2995,7 +3004,7 @@ export def "admin-directory-groups directorygroupsdelete" [
 #
 # GET /admin/directory/v1/groups/{groupKey}
 # operationId: directory.groups.get
-export def "admin-directory-groups directorygroupsget" [
+export def "admin-directory-groups get" [
   group_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3020,7 +3029,7 @@ export def "admin-directory-groups directorygroupsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({group_key: $group_key} | format pattern "/admin/directory/v1/groups/{group_key}") $qp)
+  let full_url = (build-url $base ({group_key: (encode-path-segment $group_key)} | format pattern "/admin/directory/v1/groups/{group_key}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3030,7 +3039,7 @@ export def "admin-directory-groups directorygroupsget" [
 #
 # PATCH /admin/directory/v1/groups/{groupKey}
 # operationId: directory.groups.patch
-export def "admin-directory-groups directorygroupspatch" [
+export def "admin-directory-groups update-by-groupKey" [
   group_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3052,7 +3061,7 @@ export def "admin-directory-groups directorygroupspatch" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --admin-created: oneof<nothing, bool> # Read-only. Value is `true` if this group was created by an administrator rather than a user.
-  --aliases: list # Read-only. The list of a group's alias email addresses. To add, update, or remove a group's aliases, use the `groups.aliases` methods. If edited in a group's POST or PUT request, the edit is ignored.
+  --aliases: list<string> # Read-only. The list of a group's alias email addresses. To add, update, or remove a group's aliases, use the `groups.aliases` methods. If edited in a group's POST or PUT request, the edit is ignored.
   --description: string # An extended description to help users determine the purpose of a group. For example, you can include information about who should join the group, the types of messages to send to the group, links to FAQs about the group, or related groups. Maximum length is `4,096` characters.
   --direct-members-count: string # The number of users that are direct members of the group. If a group is a member (child) of this group (the parent), members of the child group are not counted in the `directMembersCount` property of the parent group. (format: int64)
   --email: string # The group's email address. If your account has multiple domains, select the appropriate domain for the email address. The `email` must be unique. This property is required when creating a group. Group email addresses are subject to the same character usage rules as usernames, see the [help center](https://support.google.com/a/answer/9193374) for details.
@@ -3060,25 +3069,25 @@ export def "admin-directory-groups directorygroupspatch" [
   --id: string # Read-only. The unique ID of a group. A group `id` can be used as a group request URI's `groupKey`.
   --kind: string # The type of the API resource. For Groups resources, the value is `admin#directory#group`. (default: admin#directory#group)
   --name: string # The group's display name.
-  --non-editable-aliases: list # Read-only. The list of the group's non-editable alias email addresses that are outside of the account's primary domain or subdomains. These are functioning email addresses used by the group. This is a read-only property returned in the API's response for a group. If edited in a group's POST or PUT request, the edit is ignored.
+  --non-editable-aliases: list<string> # Read-only. The list of the group's non-editable alias email addresses that are outside of the account's primary domain or subdomains. These are functioning email addresses used by the group. This is a read-only property returned in the API's response for a group. If edited in a group's POST or PUT request, the edit is ignored.
 ]: any -> record<adminCreated: bool, aliases: list<string>, description: string, directMembersCount: string, email: string, etag: string, id: string, kind: string, name: string, nonEditableAliases: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({group_key: $group_key} | format pattern "/admin/directory/v1/groups/{group_key}") $qp)
-  let body = {"adminCreated": $admin_created, "aliases": $aliases, "description": $description, "directMembersCount": $direct_members_count, "email": $email, "etag": $etag, "id": $id, "kind": $kind, "name": $name, "nonEditableAliases": $non_editable_aliases} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({group_key: (encode-path-segment $group_key)} | format pattern "/admin/directory/v1/groups/{group_key}") $qp)
+  let req_body = {"adminCreated": $admin_created, "aliases": $aliases, "description": $description, "directMembersCount": $direct_members_count, "email": $email, "etag": $etag, "id": $id, "kind": $kind, "name": $name, "nonEditableAliases": $non_editable_aliases} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates a group's properties.
 #
 # PUT /admin/directory/v1/groups/{groupKey}
 # operationId: directory.groups.update
-export def "admin-directory-groups directorygroupsupdate" [
+export def "admin-directory-groups update-by-groupKey-1" [
   group_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3100,7 +3109,7 @@ export def "admin-directory-groups directorygroupsupdate" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --admin-created: oneof<nothing, bool> # Read-only. Value is `true` if this group was created by an administrator rather than a user.
-  --aliases: list # Read-only. The list of a group's alias email addresses. To add, update, or remove a group's aliases, use the `groups.aliases` methods. If edited in a group's POST or PUT request, the edit is ignored.
+  --aliases: list<string> # Read-only. The list of a group's alias email addresses. To add, update, or remove a group's aliases, use the `groups.aliases` methods. If edited in a group's POST or PUT request, the edit is ignored.
   --description: string # An extended description to help users determine the purpose of a group. For example, you can include information about who should join the group, the types of messages to send to the group, links to FAQs about the group, or related groups. Maximum length is `4,096` characters.
   --direct-members-count: string # The number of users that are direct members of the group. If a group is a member (child) of this group (the parent), members of the child group are not counted in the `directMembersCount` property of the parent group. (format: int64)
   --email: string # The group's email address. If your account has multiple domains, select the appropriate domain for the email address. The `email` must be unique. This property is required when creating a group. Group email addresses are subject to the same character usage rules as usernames, see the [help center](https://support.google.com/a/answer/9193374) for details.
@@ -3108,25 +3117,25 @@ export def "admin-directory-groups directorygroupsupdate" [
   --id: string # Read-only. The unique ID of a group. A group `id` can be used as a group request URI's `groupKey`.
   --kind: string # The type of the API resource. For Groups resources, the value is `admin#directory#group`. (default: admin#directory#group)
   --name: string # The group's display name.
-  --non-editable-aliases: list # Read-only. The list of the group's non-editable alias email addresses that are outside of the account's primary domain or subdomains. These are functioning email addresses used by the group. This is a read-only property returned in the API's response for a group. If edited in a group's POST or PUT request, the edit is ignored.
+  --non-editable-aliases: list<string> # Read-only. The list of the group's non-editable alias email addresses that are outside of the account's primary domain or subdomains. These are functioning email addresses used by the group. This is a read-only property returned in the API's response for a group. If edited in a group's POST or PUT request, the edit is ignored.
 ]: any -> record<adminCreated: bool, aliases: list<string>, description: string, directMembersCount: string, email: string, etag: string, id: string, kind: string, name: string, nonEditableAliases: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({group_key: $group_key} | format pattern "/admin/directory/v1/groups/{group_key}") $qp)
-  let body = {"adminCreated": $admin_created, "aliases": $aliases, "description": $description, "directMembersCount": $direct_members_count, "email": $email, "etag": $etag, "id": $id, "kind": $kind, "name": $name, "nonEditableAliases": $non_editable_aliases} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({group_key: (encode-path-segment $group_key)} | format pattern "/admin/directory/v1/groups/{group_key}") $qp)
+  let req_body = {"adminCreated": $admin_created, "aliases": $aliases, "description": $description, "directMembersCount": $direct_members_count, "email": $email, "etag": $etag, "id": $id, "kind": $kind, "name": $name, "nonEditableAliases": $non_editable_aliases} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists all aliases for a group.
 #
 # GET /admin/directory/v1/groups/{groupKey}/aliases
 # operationId: directory.groups.aliases.list
-export def "admin-directory-groups-aliases directorygroupsaliaseslist" [
+export def "admin-directory-groups-aliases list" [
   group_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3151,7 +3160,7 @@ export def "admin-directory-groups-aliases directorygroupsaliaseslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({group_key: $group_key} | format pattern "/admin/directory/v1/groups/{group_key}/aliases") $qp)
+  let full_url = (build-url $base ({group_key: (encode-path-segment $group_key)} | format pattern "/admin/directory/v1/groups/{group_key}/aliases") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3161,7 +3170,7 @@ export def "admin-directory-groups-aliases directorygroupsaliaseslist" [
 #
 # POST /admin/directory/v1/groups/{groupKey}/aliases
 # operationId: directory.groups.aliases.insert
-export def "admin-directory-groups-aliases directorygroupsaliasesinsert" [
+export def "admin-directory-groups-aliases create" [
   group_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3192,19 +3201,19 @@ export def "admin-directory-groups-aliases directorygroupsaliasesinsert" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({group_key: $group_key} | format pattern "/admin/directory/v1/groups/{group_key}/aliases") $qp)
-  let body = {"alias": $alias, "etag": $etag, "id": $id, "kind": $kind, "primaryEmail": $primary_email} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({group_key: (encode-path-segment $group_key)} | format pattern "/admin/directory/v1/groups/{group_key}/aliases") $qp)
+  let req_body = {"alias": $alias, "etag": $etag, "id": $id, "kind": $kind, "primaryEmail": $primary_email} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Removes an alias.
 #
 # DELETE /admin/directory/v1/groups/{groupKey}/aliases/{alias}
 # operationId: directory.groups.aliases.delete
-export def "admin-directory-groups-aliases directorygroupsaliasesdelete" [
+export def "admin-directory-groups-aliases delete" [
   group_key: string
   alias: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3230,7 +3239,7 @@ export def "admin-directory-groups-aliases directorygroupsaliasesdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({group_key: $group_key, alias: $alias} | format pattern "/admin/directory/v1/groups/{group_key}/aliases/{alias}") $qp)
+  let full_url = (build-url $base ({group_key: (encode-path-segment $group_key), alias: (encode-path-segment $alias)} | format pattern "/admin/directory/v1/groups/{group_key}/aliases/{alias}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3240,7 +3249,7 @@ export def "admin-directory-groups-aliases directorygroupsaliasesdelete" [
 #
 # GET /admin/directory/v1/groups/{groupKey}/hasMember/{memberKey}
 # operationId: directory.members.hasMember
-export def "admin-directory-groups-has-member directorymembershasMember" [
+export def "admin-directory-groups-has-member get" [
   group_key: string
   member_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3266,7 +3275,7 @@ export def "admin-directory-groups-has-member directorymembershasMember" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({group_key: $group_key, member_key: $member_key} | format pattern "/admin/directory/v1/groups/{group_key}/hasMember/{member_key}") $qp)
+  let full_url = (build-url $base ({group_key: (encode-path-segment $group_key), member_key: (encode-path-segment $member_key)} | format pattern "/admin/directory/v1/groups/{group_key}/hasMember/{member_key}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3276,7 +3285,7 @@ export def "admin-directory-groups-has-member directorymembershasMember" [
 #
 # GET /admin/directory/v1/groups/{groupKey}/members
 # operationId: directory.members.list
-export def "admin-directory-groups-members directorymemberslist" [
+export def "admin-directory-groups-members list" [
   group_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3305,7 +3314,7 @@ export def "admin-directory-groups-members directorymemberslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "includeDerivedMembership" $include_derived_membership "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "roles" $roles "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({group_key: $group_key} | format pattern "/admin/directory/v1/groups/{group_key}/members") $qp)
+  let full_url = (build-url $base ({group_key: (encode-path-segment $group_key)} | format pattern "/admin/directory/v1/groups/{group_key}/members") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3315,7 +3324,7 @@ export def "admin-directory-groups-members directorymemberslist" [
 #
 # POST /admin/directory/v1/groups/{groupKey}/members
 # operationId: directory.members.insert
-export def "admin-directory-groups-members directorymembersinsert" [
+export def "admin-directory-groups-members create" [
   group_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3349,19 +3358,19 @@ export def "admin-directory-groups-members directorymembersinsert" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({group_key: $group_key} | format pattern "/admin/directory/v1/groups/{group_key}/members") $qp)
-  let body = {"delivery_settings": $delivery_settings, "email": $email, "etag": $etag, "id": $id, "kind": $kind, "role": $role, "status": $status, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({group_key: (encode-path-segment $group_key)} | format pattern "/admin/directory/v1/groups/{group_key}/members") $qp)
+  let req_body = {"delivery_settings": $delivery_settings, "email": $email, "etag": $etag, "id": $id, "kind": $kind, "role": $role, "status": $status, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Removes a member from a group.
 #
 # DELETE /admin/directory/v1/groups/{groupKey}/members/{memberKey}
 # operationId: directory.members.delete
-export def "admin-directory-groups-members directorymembersdelete" [
+export def "admin-directory-groups-members delete" [
   group_key: string
   member_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3387,7 +3396,7 @@ export def "admin-directory-groups-members directorymembersdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({group_key: $group_key, member_key: $member_key} | format pattern "/admin/directory/v1/groups/{group_key}/members/{member_key}") $qp)
+  let full_url = (build-url $base ({group_key: (encode-path-segment $group_key), member_key: (encode-path-segment $member_key)} | format pattern "/admin/directory/v1/groups/{group_key}/members/{member_key}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3397,7 +3406,7 @@ export def "admin-directory-groups-members directorymembersdelete" [
 #
 # GET /admin/directory/v1/groups/{groupKey}/members/{memberKey}
 # operationId: directory.members.get
-export def "admin-directory-groups-members directorymembersget" [
+export def "admin-directory-groups-members get" [
   group_key: string
   member_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3423,7 +3432,7 @@ export def "admin-directory-groups-members directorymembersget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({group_key: $group_key, member_key: $member_key} | format pattern "/admin/directory/v1/groups/{group_key}/members/{member_key}") $qp)
+  let full_url = (build-url $base ({group_key: (encode-path-segment $group_key), member_key: (encode-path-segment $member_key)} | format pattern "/admin/directory/v1/groups/{group_key}/members/{member_key}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3433,7 +3442,7 @@ export def "admin-directory-groups-members directorymembersget" [
 #
 # PATCH /admin/directory/v1/groups/{groupKey}/members/{memberKey}
 # operationId: directory.members.patch
-export def "admin-directory-groups-members directorymemberspatch" [
+export def "admin-directory-groups-members update-by-groupKey-memberKey" [
   group_key: string
   member_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3468,19 +3477,19 @@ export def "admin-directory-groups-members directorymemberspatch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({group_key: $group_key, member_key: $member_key} | format pattern "/admin/directory/v1/groups/{group_key}/members/{member_key}") $qp)
-  let body = {"delivery_settings": $delivery_settings, "email": $email, "etag": $etag, "id": $id, "kind": $kind, "role": $role, "status": $status, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({group_key: (encode-path-segment $group_key), member_key: (encode-path-segment $member_key)} | format pattern "/admin/directory/v1/groups/{group_key}/members/{member_key}") $qp)
+  let req_body = {"delivery_settings": $delivery_settings, "email": $email, "etag": $etag, "id": $id, "kind": $kind, "role": $role, "status": $status, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates the membership of a user in the specified group.
 #
 # PUT /admin/directory/v1/groups/{groupKey}/members/{memberKey}
 # operationId: directory.members.update
-export def "admin-directory-groups-members directorymembersupdate" [
+export def "admin-directory-groups-members update-by-groupKey-memberKey-1" [
   group_key: string
   member_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3515,19 +3524,19 @@ export def "admin-directory-groups-members directorymembersupdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({group_key: $group_key, member_key: $member_key} | format pattern "/admin/directory/v1/groups/{group_key}/members/{member_key}") $qp)
-  let body = {"delivery_settings": $delivery_settings, "email": $email, "etag": $etag, "id": $id, "kind": $kind, "role": $role, "status": $status, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({group_key: (encode-path-segment $group_key), member_key: (encode-path-segment $member_key)} | format pattern "/admin/directory/v1/groups/{group_key}/members/{member_key}") $qp)
+  let req_body = {"delivery_settings": $delivery_settings, "email": $email, "etag": $etag, "id": $id, "kind": $kind, "role": $role, "status": $status, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieves a paginated list of either deleted users or all users in a domain.
 #
 # GET /admin/directory/v1/users
 # operationId: directory.users.list
-export def "admin-directory-users directoryuserslist" [
+export def "admin-directory-users list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3574,7 +3583,7 @@ export def "admin-directory-users directoryuserslist" [
 # POST /admin/directory/v1/users
 # operationId: directory.users.insert
 # --name shape: {displayName?: string, familyName?: string, fullName?: string, givenName?: string}
-export def "admin-directory-users directoryusersinsert" [
+export def "admin-directory-users create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3629,18 +3638,18 @@ export def "admin-directory-users directoryusersinsert" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/admin/directory/v1/users" $qp)
-  let body = {"addresses": $addresses, "archived": $archived, "changePasswordAtNextLogin": $change_password_at_next_login, "customSchemas": $custom_schemas, "emails": $emails, "externalIds": $external_ids, "gender": $gender, "hashFunction": $hash_function, "id": $id, "ims": $ims, "includeInGlobalAddressList": $include_in_global_address_list, "ipWhitelisted": $ip_whitelisted, "keywords": $keywords, "languages": $languages, "locations": $locations, "name": $name, "notes": $notes, "orgUnitPath": $org_unit_path, "organizations": $organizations, "password": $password, "phones": $phones, "posixAccounts": $posix_accounts, "primaryEmail": $primary_email, "recoveryEmail": $recovery_email, "recoveryPhone": $recovery_phone, "relations": $relations, "sshPublicKeys": $ssh_public_keys, "suspended": $suspended, "websites": $websites} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"addresses": $addresses, "archived": $archived, "changePasswordAtNextLogin": $change_password_at_next_login, "customSchemas": $custom_schemas, "emails": $emails, "externalIds": $external_ids, "gender": $gender, "hashFunction": $hash_function, "id": $id, "ims": $ims, "includeInGlobalAddressList": $include_in_global_address_list, "ipWhitelisted": $ip_whitelisted, "keywords": $keywords, "languages": $languages, "locations": $locations, "name": $name, "notes": $notes, "orgUnitPath": $org_unit_path, "organizations": $organizations, "password": $password, "phones": $phones, "posixAccounts": $posix_accounts, "primaryEmail": $primary_email, "recoveryEmail": $recovery_email, "recoveryPhone": $recovery_phone, "relations": $relations, "sshPublicKeys": $ssh_public_keys, "suspended": $suspended, "websites": $websites} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Watches for changes in users list.
 #
 # POST /admin/directory/v1/users/watch
 # operationId: directory.users.watch
-export def "admin-directory-users-watch directoryuserswatch" [
+export def "admin-directory-users-watch watch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3688,18 +3697,18 @@ export def "admin-directory-users-watch directoryuserswatch" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "customFieldMask" $custom_field_mask "scalar") (serialize-qp "customer" $customer "scalar") (serialize-qp "domain" $domain "scalar") (serialize-qp "event" $event "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "showDeleted" $show_deleted "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "viewType" $view_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/admin/directory/v1/users/watch" $qp)
-  let body = {"address": $address, "expiration": $expiration, "id": $id, "kind": $kind, "params": $params, "payload": $payload, "resourceId": $resource_id, "resourceUri": $resource_uri, "token": $body_token, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"address": $address, "expiration": $expiration, "id": $id, "kind": $kind, "params": $params, "payload": $payload, "resourceId": $resource_id, "resourceUri": $resource_uri, "token": $body_token, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes a user.
 #
 # DELETE /admin/directory/v1/users/{userKey}
 # operationId: directory.users.delete
-export def "admin-directory-users directoryusersdelete" [
+export def "admin-directory-users delete" [
   user_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3724,7 +3733,7 @@ export def "admin-directory-users directoryusersdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_key: $user_key} | format pattern "/admin/directory/v1/users/{user_key}") $qp)
+  let full_url = (build-url $base ({user_key: (encode-path-segment $user_key)} | format pattern "/admin/directory/v1/users/{user_key}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3734,7 +3743,7 @@ export def "admin-directory-users directoryusersdelete" [
 #
 # GET /admin/directory/v1/users/{userKey}
 # operationId: directory.users.get
-export def "admin-directory-users directoryusersget" [
+export def "admin-directory-users get" [
   user_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3762,7 +3771,7 @@ export def "admin-directory-users directoryusersget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "customFieldMask" $custom_field_mask "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "viewType" $view_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_key: $user_key} | format pattern "/admin/directory/v1/users/{user_key}") $qp)
+  let full_url = (build-url $base ({user_key: (encode-path-segment $user_key)} | format pattern "/admin/directory/v1/users/{user_key}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3773,7 +3782,7 @@ export def "admin-directory-users directoryusersget" [
 # PATCH /admin/directory/v1/users/{userKey}
 # operationId: directory.users.patch
 # --name shape: {displayName?: string, familyName?: string, fullName?: string, givenName?: string}
-export def "admin-directory-users directoryuserspatch" [
+export def "admin-directory-users update-by-userKey" [
   user_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3828,12 +3837,12 @@ export def "admin-directory-users directoryuserspatch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_key: $user_key} | format pattern "/admin/directory/v1/users/{user_key}") $qp)
-  let body = {"addresses": $addresses, "archived": $archived, "changePasswordAtNextLogin": $change_password_at_next_login, "customSchemas": $custom_schemas, "emails": $emails, "externalIds": $external_ids, "gender": $gender, "hashFunction": $hash_function, "id": $id, "ims": $ims, "includeInGlobalAddressList": $include_in_global_address_list, "ipWhitelisted": $ip_whitelisted, "keywords": $keywords, "languages": $languages, "locations": $locations, "name": $name, "notes": $notes, "orgUnitPath": $org_unit_path, "organizations": $organizations, "password": $password, "phones": $phones, "posixAccounts": $posix_accounts, "primaryEmail": $primary_email, "recoveryEmail": $recovery_email, "recoveryPhone": $recovery_phone, "relations": $relations, "sshPublicKeys": $ssh_public_keys, "suspended": $suspended, "websites": $websites} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({user_key: (encode-path-segment $user_key)} | format pattern "/admin/directory/v1/users/{user_key}") $qp)
+  let req_body = {"addresses": $addresses, "archived": $archived, "changePasswordAtNextLogin": $change_password_at_next_login, "customSchemas": $custom_schemas, "emails": $emails, "externalIds": $external_ids, "gender": $gender, "hashFunction": $hash_function, "id": $id, "ims": $ims, "includeInGlobalAddressList": $include_in_global_address_list, "ipWhitelisted": $ip_whitelisted, "keywords": $keywords, "languages": $languages, "locations": $locations, "name": $name, "notes": $notes, "orgUnitPath": $org_unit_path, "organizations": $organizations, "password": $password, "phones": $phones, "posixAccounts": $posix_accounts, "primaryEmail": $primary_email, "recoveryEmail": $recovery_email, "recoveryPhone": $recovery_phone, "relations": $relations, "sshPublicKeys": $ssh_public_keys, "suspended": $suspended, "websites": $websites} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates a user. This method supports patch semantics, meaning that you only need to include the fields you wish to update. Fields that are not present in the request will be preserved, and fields set to `null` will be cleared. For repeating fields that contain arrays, individual items in the array can't be patched piecemeal; they must be supplied in the request body with the desired values for all items. See the [user accounts guide](https://developers.google.com/admin-sdk/directory/v1/guides/manage-users#update_user) for more information.
@@ -3841,7 +3850,7 @@ export def "admin-directory-users directoryuserspatch" [
 # PUT /admin/directory/v1/users/{userKey}
 # operationId: directory.users.update
 # --name shape: {displayName?: string, familyName?: string, fullName?: string, givenName?: string}
-export def "admin-directory-users directoryusersupdate" [
+export def "admin-directory-users update-by-userKey-1" [
   user_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3896,19 +3905,19 @@ export def "admin-directory-users directoryusersupdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_key: $user_key} | format pattern "/admin/directory/v1/users/{user_key}") $qp)
-  let body = {"addresses": $addresses, "archived": $archived, "changePasswordAtNextLogin": $change_password_at_next_login, "customSchemas": $custom_schemas, "emails": $emails, "externalIds": $external_ids, "gender": $gender, "hashFunction": $hash_function, "id": $id, "ims": $ims, "includeInGlobalAddressList": $include_in_global_address_list, "ipWhitelisted": $ip_whitelisted, "keywords": $keywords, "languages": $languages, "locations": $locations, "name": $name, "notes": $notes, "orgUnitPath": $org_unit_path, "organizations": $organizations, "password": $password, "phones": $phones, "posixAccounts": $posix_accounts, "primaryEmail": $primary_email, "recoveryEmail": $recovery_email, "recoveryPhone": $recovery_phone, "relations": $relations, "sshPublicKeys": $ssh_public_keys, "suspended": $suspended, "websites": $websites} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({user_key: (encode-path-segment $user_key)} | format pattern "/admin/directory/v1/users/{user_key}") $qp)
+  let req_body = {"addresses": $addresses, "archived": $archived, "changePasswordAtNextLogin": $change_password_at_next_login, "customSchemas": $custom_schemas, "emails": $emails, "externalIds": $external_ids, "gender": $gender, "hashFunction": $hash_function, "id": $id, "ims": $ims, "includeInGlobalAddressList": $include_in_global_address_list, "ipWhitelisted": $ip_whitelisted, "keywords": $keywords, "languages": $languages, "locations": $locations, "name": $name, "notes": $notes, "orgUnitPath": $org_unit_path, "organizations": $organizations, "password": $password, "phones": $phones, "posixAccounts": $posix_accounts, "primaryEmail": $primary_email, "recoveryEmail": $recovery_email, "recoveryPhone": $recovery_phone, "relations": $relations, "sshPublicKeys": $ssh_public_keys, "suspended": $suspended, "websites": $websites} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists all aliases for a user.
 #
 # GET /admin/directory/v1/users/{userKey}/aliases
 # operationId: directory.users.aliases.list
-export def "admin-directory-users-aliases directoryusersaliaseslist" [
+export def "admin-directory-users-aliases list" [
   user_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3934,7 +3943,7 @@ export def "admin-directory-users-aliases directoryusersaliaseslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "event" $event "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_key: $user_key} | format pattern "/admin/directory/v1/users/{user_key}/aliases") $qp)
+  let full_url = (build-url $base ({user_key: (encode-path-segment $user_key)} | format pattern "/admin/directory/v1/users/{user_key}/aliases") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3944,7 +3953,7 @@ export def "admin-directory-users-aliases directoryusersaliaseslist" [
 #
 # POST /admin/directory/v1/users/{userKey}/aliases
 # operationId: directory.users.aliases.insert
-export def "admin-directory-users-aliases directoryusersaliasesinsert" [
+export def "admin-directory-users-aliases create" [
   user_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3975,19 +3984,19 @@ export def "admin-directory-users-aliases directoryusersaliasesinsert" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_key: $user_key} | format pattern "/admin/directory/v1/users/{user_key}/aliases") $qp)
-  let body = {"alias": $alias, "etag": $etag, "id": $id, "kind": $kind, "primaryEmail": $primary_email} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({user_key: (encode-path-segment $user_key)} | format pattern "/admin/directory/v1/users/{user_key}/aliases") $qp)
+  let req_body = {"alias": $alias, "etag": $etag, "id": $id, "kind": $kind, "primaryEmail": $primary_email} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Watches for changes in users list.
 #
 # POST /admin/directory/v1/users/{userKey}/aliases/watch
 # operationId: directory.users.aliases.watch
-export def "admin-directory-users-aliases-watch directoryusersaliaseswatch" [
+export def "admin-directory-users-aliases-watch watch" [
   user_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4024,19 +4033,19 @@ export def "admin-directory-users-aliases-watch directoryusersaliaseswatch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "event" $event "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_key: $user_key} | format pattern "/admin/directory/v1/users/{user_key}/aliases/watch") $qp)
-  let body = {"address": $address, "expiration": $expiration, "id": $id, "kind": $kind, "params": $params, "payload": $payload, "resourceId": $resource_id, "resourceUri": $resource_uri, "token": $body_token, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({user_key: (encode-path-segment $user_key)} | format pattern "/admin/directory/v1/users/{user_key}/aliases/watch") $qp)
+  let req_body = {"address": $address, "expiration": $expiration, "id": $id, "kind": $kind, "params": $params, "payload": $payload, "resourceId": $resource_id, "resourceUri": $resource_uri, "token": $body_token, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Removes an alias.
 #
 # DELETE /admin/directory/v1/users/{userKey}/aliases/{alias}
 # operationId: directory.users.aliases.delete
-export def "admin-directory-users-aliases directoryusersaliasesdelete" [
+export def "admin-directory-users-aliases delete" [
   user_key: string
   alias: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4062,7 +4071,7 @@ export def "admin-directory-users-aliases directoryusersaliasesdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_key: $user_key, alias: $alias} | format pattern "/admin/directory/v1/users/{user_key}/aliases/{alias}") $qp)
+  let full_url = (build-url $base ({user_key: (encode-path-segment $user_key), alias: (encode-path-segment $alias)} | format pattern "/admin/directory/v1/users/{user_key}/aliases/{alias}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4072,7 +4081,7 @@ export def "admin-directory-users-aliases directoryusersaliasesdelete" [
 #
 # GET /admin/directory/v1/users/{userKey}/asps
 # operationId: directory.asps.list
-export def "admin-directory-users-asps directoryaspslist" [
+export def "admin-directory-users-asps list" [
   user_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4097,7 +4106,7 @@ export def "admin-directory-users-asps directoryaspslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_key: $user_key} | format pattern "/admin/directory/v1/users/{user_key}/asps") $qp)
+  let full_url = (build-url $base ({user_key: (encode-path-segment $user_key)} | format pattern "/admin/directory/v1/users/{user_key}/asps") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4107,7 +4116,7 @@ export def "admin-directory-users-asps directoryaspslist" [
 #
 # DELETE /admin/directory/v1/users/{userKey}/asps/{codeId}
 # operationId: directory.asps.delete
-export def "admin-directory-users-asps directoryaspsdelete" [
+export def "admin-directory-users-asps delete" [
   user_key: string
   code_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4133,7 +4142,7 @@ export def "admin-directory-users-asps directoryaspsdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_key: $user_key, code_id: $code_id} | format pattern "/admin/directory/v1/users/{user_key}/asps/{code_id}") $qp)
+  let full_url = (build-url $base ({user_key: (encode-path-segment $user_key), code_id: (encode-path-segment $code_id)} | format pattern "/admin/directory/v1/users/{user_key}/asps/{code_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4143,7 +4152,7 @@ export def "admin-directory-users-asps directoryaspsdelete" [
 #
 # GET /admin/directory/v1/users/{userKey}/asps/{codeId}
 # operationId: directory.asps.get
-export def "admin-directory-users-asps directoryaspsget" [
+export def "admin-directory-users-asps get" [
   user_key: string
   code_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4169,7 +4178,7 @@ export def "admin-directory-users-asps directoryaspsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_key: $user_key, code_id: $code_id} | format pattern "/admin/directory/v1/users/{user_key}/asps/{code_id}") $qp)
+  let full_url = (build-url $base ({user_key: (encode-path-segment $user_key), code_id: (encode-path-segment $code_id)} | format pattern "/admin/directory/v1/users/{user_key}/asps/{code_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4179,7 +4188,7 @@ export def "admin-directory-users-asps directoryaspsget" [
 #
 # POST /admin/directory/v1/users/{userKey}/makeAdmin
 # operationId: directory.users.makeAdmin
-export def "admin-directory-users-make-admin directoryusersmakeAdmin" [
+export def "admin-directory-users-make-admin create" [
   user_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4206,19 +4215,19 @@ export def "admin-directory-users-make-admin directoryusersmakeAdmin" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_key: $user_key} | format pattern "/admin/directory/v1/users/{user_key}/makeAdmin") $qp)
-  let body = {"status": $status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({user_key: (encode-path-segment $user_key)} | format pattern "/admin/directory/v1/users/{user_key}/makeAdmin") $qp)
+  let req_body = {"status": $status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Removes the user's photo.
 #
 # DELETE /admin/directory/v1/users/{userKey}/photos/thumbnail
 # operationId: directory.users.photos.delete
-export def "admin-directory-users-photos-thumbnail directoryusersphotosdelete" [
+export def "admin-directory-users-photos-thumbnail delete" [
   user_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4243,7 +4252,7 @@ export def "admin-directory-users-photos-thumbnail directoryusersphotosdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_key: $user_key} | format pattern "/admin/directory/v1/users/{user_key}/photos/thumbnail") $qp)
+  let full_url = (build-url $base ({user_key: (encode-path-segment $user_key)} | format pattern "/admin/directory/v1/users/{user_key}/photos/thumbnail") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4253,7 +4262,7 @@ export def "admin-directory-users-photos-thumbnail directoryusersphotosdelete" [
 #
 # GET /admin/directory/v1/users/{userKey}/photos/thumbnail
 # operationId: directory.users.photos.get
-export def "admin-directory-users-photos-thumbnail directoryusersphotosget" [
+export def "admin-directory-users-photos-thumbnail get" [
   user_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4278,7 +4287,7 @@ export def "admin-directory-users-photos-thumbnail directoryusersphotosget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_key: $user_key} | format pattern "/admin/directory/v1/users/{user_key}/photos/thumbnail") $qp)
+  let full_url = (build-url $base ({user_key: (encode-path-segment $user_key)} | format pattern "/admin/directory/v1/users/{user_key}/photos/thumbnail") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4288,7 +4297,7 @@ export def "admin-directory-users-photos-thumbnail directoryusersphotosget" [
 #
 # PATCH /admin/directory/v1/users/{userKey}/photos/thumbnail
 # operationId: directory.users.photos.patch
-export def "admin-directory-users-photos-thumbnail directoryusersphotospatch" [
+export def "admin-directory-users-photos-thumbnail update-by-userKey" [
   user_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4322,19 +4331,19 @@ export def "admin-directory-users-photos-thumbnail directoryusersphotospatch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_key: $user_key} | format pattern "/admin/directory/v1/users/{user_key}/photos/thumbnail") $qp)
-  let body = {"etag": $etag, "height": $height, "id": $id, "kind": $kind, "mimeType": $mime_type, "photoData": $photo_data, "primaryEmail": $primary_email, "width": $width} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({user_key: (encode-path-segment $user_key)} | format pattern "/admin/directory/v1/users/{user_key}/photos/thumbnail") $qp)
+  let req_body = {"etag": $etag, "height": $height, "id": $id, "kind": $kind, "mimeType": $mime_type, "photoData": $photo_data, "primaryEmail": $primary_email, "width": $width} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Adds a photo for the user.
 #
 # PUT /admin/directory/v1/users/{userKey}/photos/thumbnail
 # operationId: directory.users.photos.update
-export def "admin-directory-users-photos-thumbnail directoryusersphotosupdate" [
+export def "admin-directory-users-photos-thumbnail update-by-userKey-1" [
   user_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4368,19 +4377,19 @@ export def "admin-directory-users-photos-thumbnail directoryusersphotosupdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_key: $user_key} | format pattern "/admin/directory/v1/users/{user_key}/photos/thumbnail") $qp)
-  let body = {"etag": $etag, "height": $height, "id": $id, "kind": $kind, "mimeType": $mime_type, "photoData": $photo_data, "primaryEmail": $primary_email, "width": $width} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({user_key: (encode-path-segment $user_key)} | format pattern "/admin/directory/v1/users/{user_key}/photos/thumbnail") $qp)
+  let req_body = {"etag": $etag, "height": $height, "id": $id, "kind": $kind, "mimeType": $mime_type, "photoData": $photo_data, "primaryEmail": $primary_email, "width": $width} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Signs a user out of all web and device sessions and reset their sign-in cookies. User will have to sign in by authenticating again.
 #
 # POST /admin/directory/v1/users/{userKey}/signOut
 # operationId: directory.users.signOut
-export def "admin-directory-users-sign-out directoryuserssignOut" [
+export def "admin-directory-users-sign-out create" [
   user_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4405,7 +4414,7 @@ export def "admin-directory-users-sign-out directoryuserssignOut" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_key: $user_key} | format pattern "/admin/directory/v1/users/{user_key}/signOut") $qp)
+  let full_url = (build-url $base ({user_key: (encode-path-segment $user_key)} | format pattern "/admin/directory/v1/users/{user_key}/signOut") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4415,7 +4424,7 @@ export def "admin-directory-users-sign-out directoryuserssignOut" [
 #
 # GET /admin/directory/v1/users/{userKey}/tokens
 # operationId: directory.tokens.list
-export def "admin-directory-users-tokens directorytokenslist" [
+export def "admin-directory-users-tokens list" [
   user_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4440,7 +4449,7 @@ export def "admin-directory-users-tokens directorytokenslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_key: $user_key} | format pattern "/admin/directory/v1/users/{user_key}/tokens") $qp)
+  let full_url = (build-url $base ({user_key: (encode-path-segment $user_key)} | format pattern "/admin/directory/v1/users/{user_key}/tokens") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4450,7 +4459,7 @@ export def "admin-directory-users-tokens directorytokenslist" [
 #
 # DELETE /admin/directory/v1/users/{userKey}/tokens/{clientId}
 # operationId: directory.tokens.delete
-export def "admin-directory-users-tokens directorytokensdelete" [
+export def "admin-directory-users-tokens delete" [
   user_key: string
   client_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4476,7 +4485,7 @@ export def "admin-directory-users-tokens directorytokensdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_key: $user_key, client_id: $client_id} | format pattern "/admin/directory/v1/users/{user_key}/tokens/{client_id}") $qp)
+  let full_url = (build-url $base ({user_key: (encode-path-segment $user_key), client_id: (encode-path-segment $client_id)} | format pattern "/admin/directory/v1/users/{user_key}/tokens/{client_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4486,7 +4495,7 @@ export def "admin-directory-users-tokens directorytokensdelete" [
 #
 # GET /admin/directory/v1/users/{userKey}/tokens/{clientId}
 # operationId: directory.tokens.get
-export def "admin-directory-users-tokens directorytokensget" [
+export def "admin-directory-users-tokens get" [
   user_key: string
   client_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4512,7 +4521,7 @@ export def "admin-directory-users-tokens directorytokensget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_key: $user_key, client_id: $client_id} | format pattern "/admin/directory/v1/users/{user_key}/tokens/{client_id}") $qp)
+  let full_url = (build-url $base ({user_key: (encode-path-segment $user_key), client_id: (encode-path-segment $client_id)} | format pattern "/admin/directory/v1/users/{user_key}/tokens/{client_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4522,7 +4531,7 @@ export def "admin-directory-users-tokens directorytokensget" [
 #
 # POST /admin/directory/v1/users/{userKey}/twoStepVerification/turnOff
 # operationId: directory.twoStepVerification.turnOff
-export def "admin-directory-users-two-step-verification-turn-off directorytwoStepVerificationturnOff" [
+export def "admin-directory-users-two-step-verification-turn-off create" [
   user_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4547,7 +4556,7 @@ export def "admin-directory-users-two-step-verification-turn-off directorytwoSte
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_key: $user_key} | format pattern "/admin/directory/v1/users/{user_key}/twoStepVerification/turnOff") $qp)
+  let full_url = (build-url $base ({user_key: (encode-path-segment $user_key)} | format pattern "/admin/directory/v1/users/{user_key}/twoStepVerification/turnOff") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4557,7 +4566,7 @@ export def "admin-directory-users-two-step-verification-turn-off directorytwoSte
 #
 # POST /admin/directory/v1/users/{userKey}/undelete
 # operationId: directory.users.undelete
-export def "admin-directory-users-undelete directoryusersundelete" [
+export def "admin-directory-users-undelete create" [
   user_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4584,19 +4593,19 @@ export def "admin-directory-users-undelete directoryusersundelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_key: $user_key} | format pattern "/admin/directory/v1/users/{user_key}/undelete") $qp)
-  let body = {"orgUnitPath": $org_unit_path} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({user_key: (encode-path-segment $user_key)} | format pattern "/admin/directory/v1/users/{user_key}/undelete") $qp)
+  let req_body = {"orgUnitPath": $org_unit_path} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns the current set of valid backup verification codes for the specified user.
 #
 # GET /admin/directory/v1/users/{userKey}/verificationCodes
 # operationId: directory.verificationCodes.list
-export def "admin-directory-users-verification-codes directoryverificationCodeslist" [
+export def "admin-directory-users-verification-codes list" [
   user_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4621,7 +4630,7 @@ export def "admin-directory-users-verification-codes directoryverificationCodesl
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_key: $user_key} | format pattern "/admin/directory/v1/users/{user_key}/verificationCodes") $qp)
+  let full_url = (build-url $base ({user_key: (encode-path-segment $user_key)} | format pattern "/admin/directory/v1/users/{user_key}/verificationCodes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4631,7 +4640,7 @@ export def "admin-directory-users-verification-codes directoryverificationCodesl
 #
 # POST /admin/directory/v1/users/{userKey}/verificationCodes/generate
 # operationId: directory.verificationCodes.generate
-export def "admin-directory-users-verification-codes-generate directoryverificationCodesgenerate" [
+export def "admin-directory-users-verification-codes-generate generate" [
   user_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4656,7 +4665,7 @@ export def "admin-directory-users-verification-codes-generate directoryverificat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_key: $user_key} | format pattern "/admin/directory/v1/users/{user_key}/verificationCodes/generate") $qp)
+  let full_url = (build-url $base ({user_key: (encode-path-segment $user_key)} | format pattern "/admin/directory/v1/users/{user_key}/verificationCodes/generate") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4666,7 +4675,7 @@ export def "admin-directory-users-verification-codes-generate directoryverificat
 #
 # POST /admin/directory/v1/users/{userKey}/verificationCodes/invalidate
 # operationId: directory.verificationCodes.invalidate
-export def "admin-directory-users-verification-codes-invalidate directoryverificationCodesinvalidate" [
+export def "admin-directory-users-verification-codes-invalidate create" [
   user_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4691,7 +4700,7 @@ export def "admin-directory-users-verification-codes-invalidate directoryverific
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_key: $user_key} | format pattern "/admin/directory/v1/users/{user_key}/verificationCodes/invalidate") $qp)
+  let full_url = (build-url $base ({user_key: (encode-path-segment $user_key)} | format pattern "/admin/directory/v1/users/{user_key}/verificationCodes/invalidate") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4701,7 +4710,7 @@ export def "admin-directory-users-verification-codes-invalidate directoryverific
 #
 # DELETE /admin/directory/v1/{name}
 # operationId: admin.customers.chrome.printServers.delete
-export def "admin-directory admincustomerschromeprintServersdelete" [
+export def "admin-directory delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4726,7 +4735,7 @@ export def "admin-directory admincustomerschromeprintServersdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/admin/directory/v1/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/admin/directory/v1/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4736,7 +4745,7 @@ export def "admin-directory admincustomerschromeprintServersdelete" [
 #
 # GET /admin/directory/v1/{name}
 # operationId: admin.customers.chrome.printServers.get
-export def "admin-directory admincustomerschromeprintServersget" [
+export def "admin-directory get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4761,7 +4770,7 @@ export def "admin-directory admincustomerschromeprintServersget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/admin/directory/v1/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/admin/directory/v1/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4771,7 +4780,7 @@ export def "admin-directory admincustomerschromeprintServersget" [
 #
 # PATCH /admin/directory/v1/{name}
 # operationId: admin.customers.chrome.printServers.patch
-export def "admin-directory admincustomerschromeprintServerspatch" [
+export def "admin-directory update" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4804,19 +4813,19 @@ export def "admin-directory admincustomerschromeprintServerspatch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/admin/directory/v1/{name}") $qp)
-  let body = {"description": $description, "displayName": $display_name, "id": $id, "name": $body_name, "orgUnitId": $org_unit_id, "uri": $uri} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/admin/directory/v1/{name}") $qp)
+  let req_body = {"description": $description, "displayName": $display_name, "id": $id, "name": $body_name, "orgUnitId": $org_unit_id, "uri": $uri} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists print server configurations.
 #
 # GET /admin/directory/v1/{parent}/chrome/printServers
 # operationId: admin.customers.chrome.printServers.list
-export def "admin-directory-chrome-print-servers admincustomerschromeprintServerslist" [
+export def "admin-directory-chrome-print-servers list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4846,7 +4855,7 @@ export def "admin-directory-chrome-print-servers admincustomerschromeprintServer
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "orgUnitId" $org_unit_id "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/admin/directory/v1/{parent}/chrome/printServers") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/admin/directory/v1/{parent}/chrome/printServers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4856,7 +4865,7 @@ export def "admin-directory-chrome-print-servers admincustomerschromeprintServer
 #
 # POST /admin/directory/v1/{parent}/chrome/printServers
 # operationId: admin.customers.chrome.printServers.create
-export def "admin-directory-chrome-print-servers admincustomerschromeprintServerscreate" [
+export def "admin-directory-chrome-print-servers create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4888,12 +4897,12 @@ export def "admin-directory-chrome-print-servers admincustomerschromeprintServer
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/admin/directory/v1/{parent}/chrome/printServers") $qp)
-  let body = {"description": $description, "displayName": $display_name, "id": $id, "name": $name, "orgUnitId": $org_unit_id, "uri": $uri} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/admin/directory/v1/{parent}/chrome/printServers") $qp)
+  let req_body = {"description": $description, "displayName": $display_name, "id": $id, "name": $name, "orgUnitId": $org_unit_id, "uri": $uri} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Creates multiple print servers.
@@ -4901,7 +4910,7 @@ export def "admin-directory-chrome-print-servers admincustomerschromeprintServer
 # POST /admin/directory/v1/{parent}/chrome/printServers:batchCreatePrintServers
 # operationId: admin.customers.chrome.printServers.batchCreatePrintServers
 # --requests item shape: {parent?: string, printServer?: record}
-export def "admin-directory-chrome-print-servers-batch-create-print-servers admincustomerschromeprintServersbatchCreatePrintServers" [
+export def "admin-directory-chrome-print-servers-batch-create-print-servers create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4928,19 +4937,19 @@ export def "admin-directory-chrome-print-servers-batch-create-print-servers admi
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/admin/directory/v1/{parent}/chrome/printServers:batchCreatePrintServers") $qp)
-  let body = {"requests": $requests} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/admin/directory/v1/{parent}/chrome/printServers:batchCreatePrintServers") $qp)
+  let req_body = {"requests": $requests} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes multiple print servers.
 #
 # POST /admin/directory/v1/{parent}/chrome/printServers:batchDeletePrintServers
 # operationId: admin.customers.chrome.printServers.batchDeletePrintServers
-export def "admin-directory-chrome-print-servers-batch-delete-print-servers admincustomerschromeprintServersbatchDeletePrintServers" [
+export def "admin-directory-chrome-print-servers-batch-delete-print-servers delete" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4961,25 +4970,25 @@ export def "admin-directory-chrome-print-servers-batch-delete-print-servers admi
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --print-server-ids: list # A list of print server IDs that should be deleted (max `100` per batch).
+  --print-server-ids: list<string> # A list of print server IDs that should be deleted (max `100` per batch).
 ]: any -> record<failedPrintServers: table<errorCode: string, errorMessage: string, printServer: record, printServerId: string>, printServerIds: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/admin/directory/v1/{parent}/chrome/printServers:batchDeletePrintServers") $qp)
-  let body = {"printServerIds": $print_server_ids} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/admin/directory/v1/{parent}/chrome/printServers:batchDeletePrintServers") $qp)
+  let req_body = {"printServerIds": $print_server_ids} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List printers configs.
 #
 # GET /admin/directory/v1/{parent}/chrome/printers
 # operationId: admin.customers.chrome.printers.list
-export def "admin-directory-chrome-printers admincustomerschromeprinterslist" [
+export def "admin-directory-chrome-printers list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5009,7 +5018,7 @@ export def "admin-directory-chrome-printers admincustomerschromeprinterslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "orgUnitId" $org_unit_id "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/admin/directory/v1/{parent}/chrome/printers") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/admin/directory/v1/{parent}/chrome/printers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5020,7 +5029,7 @@ export def "admin-directory-chrome-printers admincustomerschromeprinterslist" [
 # POST /admin/directory/v1/{parent}/chrome/printers
 # operationId: admin.customers.chrome.printers.create
 # --auxiliaryMessages item shape: {auxiliaryMessage?: string, fieldMask?: string, severity?: "SEVERITY_UNSPECIFIED"|"SEVERITY_INFO"|"SEVERITY_WARNING"|"SEVERITY_ERROR"}
-export def "admin-directory-chrome-printers admincustomerschromeprinterscreate" [
+export def "admin-directory-chrome-printers create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5054,12 +5063,12 @@ export def "admin-directory-chrome-printers admincustomerschromeprinterscreate" 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/admin/directory/v1/{parent}/chrome/printers") $qp)
-  let body = {"description": $description, "displayName": $display_name, "id": $id, "makeAndModel": $make_and_model, "name": $name, "orgUnitId": $org_unit_id, "uri": $uri, "useDriverlessConfig": $use_driverless_config} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/admin/directory/v1/{parent}/chrome/printers") $qp)
+  let req_body = {"description": $description, "displayName": $display_name, "id": $id, "makeAndModel": $make_and_model, "name": $name, "orgUnitId": $org_unit_id, "uri": $uri, "useDriverlessConfig": $use_driverless_config} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Creates printers under given Organization Unit.
@@ -5067,7 +5076,7 @@ export def "admin-directory-chrome-printers admincustomerschromeprinterscreate" 
 # POST /admin/directory/v1/{parent}/chrome/printers:batchCreatePrinters
 # operationId: admin.customers.chrome.printers.batchCreatePrinters
 # --requests item shape: {parent?: string, printer?: record}
-export def "admin-directory-chrome-printers-batch-create-printers admincustomerschromeprintersbatchCreatePrinters" [
+export def "admin-directory-chrome-printers-batch-create-printers create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5094,19 +5103,19 @@ export def "admin-directory-chrome-printers-batch-create-printers admincustomers
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/admin/directory/v1/{parent}/chrome/printers:batchCreatePrinters") $qp)
-  let body = {"requests": $requests} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/admin/directory/v1/{parent}/chrome/printers:batchCreatePrinters") $qp)
+  let req_body = {"requests": $requests} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes printers in batch.
 #
 # POST /admin/directory/v1/{parent}/chrome/printers:batchDeletePrinters
 # operationId: admin.customers.chrome.printers.batchDeletePrinters
-export def "admin-directory-chrome-printers-batch-delete-printers admincustomerschromeprintersbatchDeletePrinters" [
+export def "admin-directory-chrome-printers-batch-delete-printers delete" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5127,25 +5136,25 @@ export def "admin-directory-chrome-printers-batch-delete-printers admincustomers
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --printer-ids: list # A list of Printer.id that should be deleted. Max 100 at a time.
+  --printer-ids: list<string> # A list of Printer.id that should be deleted. Max 100 at a time.
 ]: any -> record<failedPrinters: table<errorCode: string, errorMessage: string, printer: record, printerId: string>, printerIds: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/admin/directory/v1/{parent}/chrome/printers:batchDeletePrinters") $qp)
-  let body = {"printerIds": $printer_ids} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/admin/directory/v1/{parent}/chrome/printers:batchDeletePrinters") $qp)
+  let req_body = {"printerIds": $printer_ids} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists the supported printer models.
 #
 # GET /admin/directory/v1/{parent}/chrome/printers:listPrinterModels
 # operationId: admin.customers.chrome.printers.listPrinterModels
-export def "admin-directory-chrome-printers-list-printer-models admincustomerschromeprinterslistPrinterModels" [
+export def "admin-directory-chrome-printers-list-printer-models list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5173,7 +5182,7 @@ export def "admin-directory-chrome-printers-list-printer-models admincustomersch
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/admin/directory/v1/{parent}/chrome/printers:listPrinterModels") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/admin/directory/v1/{parent}/chrome/printers:listPrinterModels") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5183,7 +5192,7 @@ export def "admin-directory-chrome-printers-list-printer-models admincustomersch
 #
 # POST /admin/directory_v1/channels/stop
 # operationId: admin.channels.stop
-export def "admin-directory-v1-channels-stop adminchannelsstop" [
+export def "admin-directory-v1-channels-stop stop" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5219,9 +5228,9 @@ export def "admin-directory-v1-channels-stop adminchannelsstop" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/admin/directory_v1/channels/stop" $qp)
-  let body = {"address": $address, "expiration": $expiration, "id": $id, "kind": $kind, "params": $params, "payload": $payload, "resourceId": $resource_id, "resourceUri": $resource_uri, "token": $body_token, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"address": $address, "expiration": $expiration, "id": $id, "kind": $kind, "params": $params, "payload": $payload, "resourceId": $resource_id, "resourceUri": $resource_uri, "token": $body_token, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

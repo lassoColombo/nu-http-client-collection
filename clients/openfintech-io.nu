@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -101,11 +110,11 @@ export def "banks list" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --page-number: int # Current page number.
-  --page-size: int # Page size.<br>*Default value: 100*
+  --page-size: int # Page size.*Default value: 100*
   --filter-sort-code: string # Filtering by banks code.
   --filter-code: string # Filtering by code.
-  --filter-status: list # Filtration by status.
-  --qp-sort: list # Sort params:<br>  | ASC | DESC | |-----|------| | name | -name | | code | -code | | status | -status | | sort_code | -sort_code |
+  --filter-status: list<string> # Filtration by status.
+  --qp-sort: list<string> # Sort params: | ASC | DESC | |-----|------| | name | -name | | code | -code | | status | -status | | sort_code | -sort_code |
 ]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<first: string, last: string, next: string, prev: string>, meta: record<pages: int, total: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -132,7 +141,7 @@ export def "banks get" [
 ]: nothing -> record<data: record<attributes: record<account_number: string, bank_code: string, bic: string, code: string, iban: string, name: string, sort_code: string, status: string, vatin: string>, id: string, links: record<self: string>, relationships: record<organization: record>, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/banks/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/banks/{id}"))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -151,10 +160,10 @@ export def "countries list" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --page-number: int # Current page number.
-  --page-size: int # Page size.<br>*Default value: 100*
-  --filter-region: list # Filtration by region.
-  --filter-sub-region: list # Filtration by sub region.
-  --qp-sort: list # Sort params:<br>  | ASC | DESC | |-----|------| | name | -name | | area | -area | | population | -population | | region | -region | | sub_region | -sub_region |
+  --page-size: int # Page size.*Default value: 100*
+  --filter-region: list<string> # Filtration by region.
+  --filter-sub-region: list<string> # Filtration by sub region.
+  --qp-sort: list<string> # Sort params: | ASC | DESC | |-----|------| | name | -name | | area | -area | | population | -population | | region | -region | | sub_region | -sub_region |
 ]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<first: string, last: string, next: string, prev: string>, meta: record<pages: int, total: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -181,7 +190,7 @@ export def "countries get" [
 ]: nothing -> record<data: record<attributes: record<area: string, calling_codes: list, capital: string, code_alpha3: string, languages: list, name: string, native_name: string, population: string, region: string, sub_region: string, timezones: list, top_level_domains: list>, id: string, links: record<self: string>, relationships: record<translations: record>, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/countries/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/countries/{id}"))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -200,14 +209,14 @@ export def "currencies list" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --page-number: int # Current page number.
-  --page-size: int # Page size.<br>*Default value: 100*
+  --page-size: int # Page size.*Default value: 100*
   --filter-search: string # Full text search with name, code, type, code_iso_alpha3, code_jsons_alpha, code_estandards_alpha, category.
   --filter-code-iso-alpha3: string # Filtering by ISO code.
   --filter-code-iso-numeric3: int # Filtering by ISO number.
   --filter-code-estandards-alpha: string # Filtering by estandards code.
-  --filter-currency-type: list # Filtration by currency type.
-  --filter-category: list # Filtration by category.
-  --qp-sort: list # Sort params:<br>  | ASC | DESC | |-----|------| | name | -name | | type | -type | | category | -category | | code | -code | | code_iso_alpha3 | -code_iso_alpha3 | | code_iso_numeric3 | -code_iso_numeric3 | | code_estandards_alpha | -code_estandards_alpha |
+  --filter-currency-type: list<string> # Filtration by currency type.
+  --filter-category: list<string> # Filtration by category.
+  --qp-sort: list<string> # Sort params: | ASC | DESC | |-----|------| | name | -name | | type | -type | | category | -category | | code | -code | | code_iso_alpha3 | -code_iso_alpha3 | | code_iso_numeric3 | -code_iso_numeric3 | | code_estandards_alpha | -code_estandards_alpha |
 ]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<first: string, last: string, next: string, prev: string>, meta: record<pages: int, total: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -234,7 +243,7 @@ export def "currencies get" [
 ]: nothing -> record<data: record<attributes: record<category: string, code: string, code_estandards_alpha: string, code_iso_alpha3: string, code_iso_numeric3: int, code_json_alpha: string, created: string, currency_type: string, decimal_e: string, icon: record, issuer: string, name: string, native_symbol: string, symbol: string>, id: string, links: record<self: string>, relationships: record<countries: record, issuer: record, issuer_organization: record, parent: record>, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/currencies/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/currencies/{id}"))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -253,13 +262,13 @@ export def "deposit-methods list" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --page-number: int # Current page number.
-  --page-size: int # Page size.<br>*Default value: 100*
+  --page-size: int # Page size.*Default value: 100*
   --filter-search: string # Full text search with id, name, code, category.
   --filter-name: string # Filtering by name.
   --filter-code: string # Filtering by code.
   --filter-processor-name: string # Filtering by processor_name.
-  --filter-category: list # Filtering by category.
-  --qp-sort: list # Sort params:<br>  | ASC | DESC | |-----|------| | name | -name | | code | -code | | processor_name | -processor_name | | category | -category |
+  --filter-category: list<string> # Filtering by category.
+  --qp-sort: list<string> # Sort params: | ASC | DESC | |-----|------| | name | -name | | code | -code | | processor_name | -processor_name | | category | -category |
 ]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<first: string, last: string, next: string, prev: string>, meta: record<pages: int, total: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -286,7 +295,7 @@ export def "deposit-methods get" [
 ]: nothing -> record<data: record<attributes: record<category: string, code: string, name: string, processor_name: string>, id: string, links: record<self: string>, relationships: record<actiove_in_countries: record, currencies: record, payment_processor: record, supported_psps: record>, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/deposit-methods/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/deposit-methods/{id}"))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -305,10 +314,10 @@ export def "exchangers list" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --page-number: int # Current page number.
-  --page-size: int # Page size.<br>*Default value: 100*
+  --page-size: int # Page size.*Default value: 100*
   --filter-name: string # Filtering by name.
-  --filter-status: list # Filtration by status.
-  --qp-sort: list # Sort params:<br>  | ASC | DESC | |-----|------| | name | -name | | status | -status | | wmid | -wmid | | rate_type | -rate_type | | rates_export_standard | <nobr>-rates_export_standard</nobr> |
+  --filter-status: list<string> # Filtration by status.
+  --qp-sort: list<string> # Sort params: | ASC | DESC | |-----|------| | name | -name | | status | -status | | wmid | -wmid | | rate_type | -rate_type | | rates_export_standard | -rates_export_standard |
 ]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<first: string, last: string, next: string, prev: string>, meta: record<pages: int, total: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -335,7 +344,7 @@ export def "exchangers get" [
 ]: nothing -> record<data: record<attributes: record<name: string, rates_export_standard: string, rates_export_url: string, status: string, wmid: int>, id: string, links: record<self: string>, relationships: record<organization: record>, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/exchangers/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/exchangers/{id}"))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -354,7 +363,7 @@ export def "merchant-industries list" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --page-number: int # Current page number.
-  --page-size: int # Page size.<br>*Default value: 100*
+  --page-size: int # Page size.*Default value: 100*
   --filter-name: string # Filtering by name.
 ]: nothing -> record<data: table<attributes: record, id: string, type: string>, links: record<first: string, last: string, next: string, prev: string>, meta: record<pages: int, total: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -382,7 +391,7 @@ export def "merchant-industries get" [
 ]: nothing -> record<data: record<attributes: record<name: string>, id: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/merchant-industries/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/merchant-industries/{id}"))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -401,13 +410,13 @@ export def "organizations list" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --page-number: int # Current page number.
-  --page-size: int # Page size.<br>*Default value: 100*
+  --page-size: int # Page size.*Default value: 100*
   --filter-search: string # Full text search with id, name, code.
   --filter-name: string # Filtering by name.
   --filter-code: string # Filtering by code.
-  --filter-status: list # Filtration by status.
+  --filter-status: list<string> # Filtration by status.
   --filter-industries: string # Filtering by industries.
-  --qp-sort: list # Sort params:<br>  | ASC | DESC | |-----|------| | name | -name | | code | -code | | status | -status | | description | -description |
+  --qp-sort: list<string> # Sort params: | ASC | DESC | |-----|------| | name | -name | | code | -code | | status | -status | | description | -description |
 ]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<first: string, last: string, next: string, prev: string>, meta: record<pages: int, total: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -434,7 +443,7 @@ export def "organizations get" [
 ]: nothing -> record<data: record<attributes: record<address: record, blog: string, code: string, contacts: record, description: string, icon: record, industries: list, logo: record, name: string, site: string, social_profiles: record, status: string, wiki: string>, id: string, links: record<self: string>, relationships: record<active_in_countries: record, hq_in_country: record, source_register_org: record>, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/organizations/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/organizations/{id}"))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -453,13 +462,13 @@ export def "payment-methods list" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --page-number: int # Current page number.
-  --page-size: int # Page size.<br>*Default value: 100*
+  --page-size: int # Page size.*Default value: 100*
   --filter-search: string # Full text search with id, name, code, category.
   --filter-name: string # Filtering by name.
   --filter-code: string # Filtering by code.
   --filter-processor-name: string # Filtering by processor_name.
-  --filter-category: list # Filtering by category.
-  --qp-sort: list # Sort params:<br>  | ASC | DESC | |-----|------| | name | -name | | code | -code | | processor_name | -processor_name | | category | -category |
+  --filter-category: list<string> # Filtering by category.
+  --qp-sort: list<string> # Sort params: | ASC | DESC | |-----|------| | name | -name | | code | -code | | processor_name | -processor_name | | category | -category |
 ]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<first: string, last: string, next: string, prev: string>, meta: record<pages: int, total: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -486,7 +495,7 @@ export def "payment-methods get" [
 ]: nothing -> record<data: record<attributes: record<category: string, code: string, name: string, processor_name: string>, id: string, links: record<self: string>, relationships: record<currencies: record, payment_processor: record>, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/payment-methods/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/payment-methods/{id}"))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -505,14 +514,14 @@ export def "payment-providers list" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --page-number: int # Current page number.
-  --page-size: int # Page size.<br>*Default value: 100*
+  --page-size: int # Page size.*Default value: 100*
   --filter-search: string # Full text search with id, code, name.
   --filter-name: string # Filtering by name.
   --filter-code: string # Filtering by code.
-  --filter-types: list # Filtering by types.
-  --filter-sales-channels: list # Filtering by sales channels.
-  --filter-features: list # Filtering by features.
-  --qp-sort: list # Sort params:<br>  | ASC | DESC | |-----|------| | name | -name | | code | -code |
+  --filter-types: list<string> # Filtering by types.
+  --filter-sales-channels: list<string> # Filtering by sales channels.
+  --filter-features: list<string> # Filtering by features.
+  --qp-sort: list<string> # Sort params: | ASC | DESC | |-----|------| | name | -name | | code | -code |
 ]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<first: string, last: string, next: string, prev: string>, meta: record<pages: int, total: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -539,7 +548,7 @@ export def "payment-providers get" [
 ]: nothing -> record<data: record<attributes: record<code: string, features: list, name: string, sales_channels: list, types: list>, id: string, links: record<self: string>, relationships: record<organization: record, payment_methods: record>, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/payment-providers/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/payment-providers/{id}"))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -68,7 +77,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "products-all-latest get-products-with-latest-product-files" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "products-all-latest get-with-files" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -92,7 +101,7 @@ export def commands []: nothing -> table {
 #
 # GET /products/all/latest
 # operationId: getProductsWithLatestProductFiles
-export def "products-all-latest get-products-with-latest-product-files" [
+export def "products-all-latest get-with-files" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -114,7 +123,7 @@ export def "products-all-latest get-products-with-latest-product-files" [
 #
 # GET /products/byname/{productName}
 # operationId: getProductsByName
-export def "products-byname get" [
+export def "products-byname get-by-name" [
   product_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -136,7 +145,7 @@ export def "products-byname get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fromYear" $from_year "scalar") (serialize-qp "toYear" $to_year "scalar") (serialize-qp "fromMonth" $from_month "scalar") (serialize-qp "toMonth" $to_month "scalar") (serialize-qp "fromDay" $from_day "scalar") (serialize-qp "toDay" $to_day "scalar") (serialize-qp "hierarchy" $hierarchy "scalar") (serialize-qp "maxFiles" $max_files "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({product_name: $product_name} | format pattern "/products/byname/{product_name}") $qp)
+  let full_url = (build-url $base ({product_name: (encode-path-segment $product_name)} | format pattern "/products/byname/{product_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -190,7 +199,7 @@ export def "products-tree get" [
 #
 # GET /products/tree/{shortName}
 # operationId: getProductSubTree
-export def "products-tree get-product-sub" [
+export def "products-tree get-sub" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -203,7 +212,7 @@ export def "products-tree get-product-sub" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({short_name: $short_name} | format pattern "/products/tree/{short_name}"))
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/products/tree/{short_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -213,7 +222,7 @@ export def "products-tree get-product-sub" [
 #
 # GET /products/{shortName}
 # operationId: getProductsByShortName
-export def "products get" [
+export def "products get-by-short-name" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -236,7 +245,7 @@ export def "products get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fromYear" $from_year "scalar") (serialize-qp "toYear" $to_year "scalar") (serialize-qp "fromMonth" $from_month "scalar") (serialize-qp "toMonth" $to_month "scalar") (serialize-qp "fromDay" $from_day "scalar") (serialize-qp "toDay" $to_day "scalar") (serialize-qp "fromDate" $from_date "scalar") (serialize-qp "toDate" $to_date "scalar") (serialize-qp "hierarchy" $hierarchy "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: $short_name} | format pattern "/products/{short_name}") $qp)
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/products/{short_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -246,7 +255,7 @@ export def "products get" [
 #
 # GET /products/{shortName}/latest
 # operationId: getLatestProductFilesByProductIdAndTime
-export def "products-latest get-latest-product-files" [
+export def "products-latest get-files-by-and-time" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -256,13 +265,13 @@ export def "products-latest get-latest-product-files" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --year: int # Year of the product files  needed, for example, 2001. (format: int32)
+  --year: int # Year of the product files needed, for example, 2001. (format: int32)
   --hierarchy: string # Boolean flag (possible values: true and false) to indicate if product hierarchy needs to be return in the response. By default it doesn't return the hierarchy in the response. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "year" $year "scalar") (serialize-qp "hierarchy" $hierarchy "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: $short_name} | format pattern "/products/{short_name}/latest") $qp)
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/products/{short_name}/latest") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

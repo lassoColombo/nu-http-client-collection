@@ -36,6 +36,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -112,12 +121,12 @@ export def "advanced-async get-number-insight" [
   --number: string # A single phone number that you need insight about in national or international format. (e.g. 447700900000)
   --country: string # If a number does not have a country code or is uncertain, set the two-character country code. This code must be in ISO 3166-1 alpha-2 format and in upper case. For example, GB or US. If you set country and number is already in [E.164](https://en.wikipedia.org/wiki/E.164) format, country must match the country code in number. (e.g. GB)
   --cnam: oneof<nothing, bool> # Indicates if the name of the person who owns the phone number should be looked up and returned in the response. Set to true to receive phone number owner name in the response. This features is available for US numbers only and incurs an additional charge. (default: false, e.g. true)
-  --ip: string # This parameter is deprecated as we are no longer able to retrieve reliable IP data globally from carriers.  (DEPRECATED, e.g. 123.0.0.255)
+  --ip: string # This parameter is deprecated as we are no longer able to retrieve reliable IP data globally from carriers. (DEPRECATED, e.g. 123.0.0.255)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "callback" $callback "scalar") (serialize-qp "number" $number "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "cnam" $cnam "scalar") (serialize-qp "ip" $ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({format: $format} | format pattern "/advanced/async/{format}") $qp)
+  let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/advanced/async/{format}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -143,12 +152,12 @@ export def "advanced get-number-insight" [
   --number: string # A single phone number that you need insight about in national or international format. (e.g. 447700900000)
   --country: string # If a number does not have a country code or is uncertain, set the two-character country code. This code must be in ISO 3166-1 alpha-2 format and in upper case. For example, GB or US. If you set country and number is already in [E.164](https://en.wikipedia.org/wiki/E.164) format, country must match the country code in number. (e.g. GB)
   --cnam: oneof<nothing, bool> # Indicates if the name of the person who owns the phone number should be looked up and returned in the response. Set to true to receive phone number owner name in the response. This features is available for US numbers only and incurs an additional charge. (default: false, e.g. true)
-  --ip: string # This parameter is deprecated as we are no longer able to retrieve reliable IP data globally from carriers.  (DEPRECATED, e.g. 123.0.0.255)
+  --ip: string # This parameter is deprecated as we are no longer able to retrieve reliable IP data globally from carriers. (DEPRECATED, e.g. 123.0.0.255)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "real_time_data" $real_time_data "scalar") (serialize-qp "number" $number "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "cnam" $cnam "scalar") (serialize-qp "ip" $ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({format: $format} | format pattern "/advanced/{format}") $qp)
+  let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/advanced/{format}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -175,7 +184,7 @@ export def "basic get-number-insight" [
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "number" $number "scalar") (serialize-qp "country" $country "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({format: $format} | format pattern "/basic/{format}") $qp)
+  let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/basic/{format}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -203,7 +212,7 @@ export def "standard get-number-insight" [
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "number" $number "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "cnam" $cnam "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({format: $format} | format pattern "/standard/{format}") $qp)
+  let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/standard/{format}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

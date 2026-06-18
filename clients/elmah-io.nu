@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -62,6 +71,33 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
+# Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
+# the field names whose value should be read from disk as bytes; every
+# other field is sent as a text part (records/lists JSON-stringified).
+# Returns {content_type, body} ready to pass to `do-request`.
+def build-multipart-body [parts: record, file_fields: list<string>]: nothing -> record {
+  let boundary = $"----nu-(random chars --length 24)"
+  let crlf = "\r\n"
+  let chunks = ($parts | transpose k v | where {|p| $p.v != null} | each {|p|
+    let name = $p.k
+    let val = $p.v
+    if $name in $file_fields {
+      let filename = ($val | path basename)
+      let bytes = (open --raw $val | into binary | collect)
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"; filename=\"($filename)\"($crlf)Content-Type: application/octet-stream($crlf)($crlf)" | into binary)
+      $head ++ $bytes ++ ($crlf | into binary)
+    } else {
+      let dt = ($val | describe)
+      let s = if (($dt | str starts-with "record") or ($dt | str starts-with "list") or ($dt | str starts-with "table")) { ($val | to json --raw) } else { ($val | into string) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"($crlf)($crlf)" | into binary)
+      $head ++ ($"($s)($crlf)" | into binary)
+    }
+  })
+  let trailer = ($"--($boundary)--($crlf)" | into binary)
+  let body = ($chunks | reduce --fold (0x[] | into binary) {|chunk, acc| $acc ++ $chunk }) ++ $trailer
+  {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
+}
+
 def base-url-completer [] { ["http://localhost"] }
 def auth-scheme-completer [] { ["query-api_key"] }
 
@@ -71,7 +107,7 @@ def accept-completer [] { ["application/json" "text/json" "text/plain"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "deployments get-all" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "deployments get-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,7 +131,7 @@ export def commands []: nothing -> table {
 #
 # GET /v3/deployments
 # operationId: Deployments_GetAll
-export def "deployments get-all" [
+export def "deployments get-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -139,11 +175,11 @@ export def "deployments create" [
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v3/deployments")
-  let body = {"created": $created, "description": $description, "logId": $log_id, "userEmail": $user_email, "userName": $user_name, "version": $version} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"created": $created, "description": $description, "logId": $log_id, "userEmail": $user_email, "userName": $user_name, "version": $version} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a deployment by its ID.
@@ -163,7 +199,7 @@ export def "deployments delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v3/deployments/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/deployments/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -187,7 +223,7 @@ export def "deployments get" [
 ]: nothing -> record<created: string, createdBy: string, description: string, id: string, logId: string, userEmail: string, userName: string, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v3/deployments/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/deployments/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -217,19 +253,19 @@ export def "heartbeats create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({log_id: $log_id, id: $id} | format pattern "/v3/heartbeats/{log_id}/{id}"))
-  let body = {"application": $application, "reason": $reason, "result": $result, "took": $took, "version": $version} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({log_id: (encode-path-segment $log_id), id: (encode-path-segment $id)} | format pattern "/v3/heartbeats/{log_id}/{id}"))
+  let req_body = {"application": $application, "reason": $reason, "result": $result, "took": $took, "version": $version} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Fetch a list of logs.
 #
 # GET /v3/logs
 # operationId: Logs_GetAll
-export def "logs get-all" [
+export def "logs get-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -268,11 +304,11 @@ export def "logs create" [
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v3/logs")
-  let body = {"name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Fetch a log by its ID.
@@ -293,7 +329,7 @@ export def "logs get" [
 ]: nothing -> record<color: string, disabled: bool, environmentName: string, id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v3/logs/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/logs/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -303,7 +339,7 @@ export def "logs get" [
 #
 # GET /v3/logs/{id}/_diagnose
 # operationId: Logs_Diagnose
-export def "logs-diagnose get" [
+export def "logs-diagnose logs" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -317,7 +353,7 @@ export def "logs-diagnose get" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v3/logs/{id}/_diagnose"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/logs/{id}/_diagnose"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -327,7 +363,7 @@ export def "logs-diagnose get" [
 #
 # POST /v3/logs/{id}/_disable
 # operationId: Logs_Disable
-export def "logs-disable disable" [
+export def "logs-disable logs" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -340,7 +376,7 @@ export def "logs-disable disable" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v3/logs/{id}/_disable"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/logs/{id}/_disable"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -350,7 +386,7 @@ export def "logs-disable disable" [
 #
 # POST /v3/logs/{id}/_enable
 # operationId: Logs_Enable
-export def "logs-enable enable" [
+export def "logs-enable logs" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -363,7 +399,7 @@ export def "logs-enable enable" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v3/logs/{id}/_enable"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/logs/{id}/_enable"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -373,7 +409,7 @@ export def "logs-enable enable" [
 #
 # DELETE /v3/messages/{logId}
 # operationId: Messages_DeleteAll
-export def "messages delete-all" [
+export def "messages delete-list" [
   log_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -390,19 +426,19 @@ export def "messages delete-all" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({log_id: $log_id} | format pattern "/v3/messages/{log_id}"))
-  let body = {"from": $body_from, "query": $query, "to": $body_to} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({log_id: (encode-path-segment $log_id)} | format pattern "/v3/messages/{log_id}"))
+  let req_body = {"from": $body_from, "query": $query, "to": $body_to} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Fetch messages from a log.
 #
 # GET /v3/messages/{logId}
 # operationId: Messages_GetAll
-export def "messages get-all" [
+export def "messages get-list" [
   log_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -423,7 +459,7 @@ export def "messages get-all" [
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pageIndex" $page_index "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "includeHeaders" $include_headers "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({log_id: $log_id} | format pattern "/v3/messages/{log_id}") $qp)
+  let full_url = (build-url $base ({log_id: (encode-path-segment $log_id)} | format pattern "/v3/messages/{log_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -470,19 +506,19 @@ export def "messages create" [
   --title: string # The textual title or headline of the message to log.
   --title-template: string # The title template of the message to log. This property can be used from logging frameworks that supports structured logging like: "{user} says {quote}". In the example, titleTemplate will be this string and title will be "Gilfoyle says It's not magic. It's talent and sweat".
   --type: string # The type of message. If logging an error, the type of the exception would go into type but you can put anything in there, that makes sense for your domain.
-  --body-url: string # If message relates to a HTTP request, you may send the URL of that request. If you don't provide us with an URL, we will try to find a key named URL in serverVariables.
+  --url: string # If message relates to a HTTP request, you may send the URL of that request. If you don't provide us with an URL, we will try to find a key named URL in serverVariables.
   --user: string # An identification of the user triggering this message. You can put the users email address or your user key into this property.
   --version: string # Versions can be used to distinguish messages from different versions of your software. The value of version can be a SemVer compliant string or any other syntax that you are using as your version numbering scheme.
 ]: any -> record<location: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({log_id: $log_id} | format pattern "/v3/messages/{log_id}"))
-  let body = {"application": $application, "breadcrumbs": $breadcrumbs, "category": $category, "code": $code, "cookies": $cookies, "correlationId": $correlation_id, "data": $data, "dateTime": $date_time, "detail": $detail, "form": $form, "hostname": $hostname, "method": $method, "queryString": $query_string, "serverVariables": $server_variables, "severity": $severity, "source": $body_source, "statusCode": $status_code, "title": $title, "titleTemplate": $title_template, "type": $type, "url": $body_url, "user": $user, "version": $version} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({log_id: (encode-path-segment $log_id)} | format pattern "/v3/messages/{log_id}"))
+  let req_body = {"application": $application, "breadcrumbs": $breadcrumbs, "category": $category, "code": $code, "cookies": $cookies, "correlationId": $correlation_id, "data": $data, "dateTime": $date_time, "detail": $detail, "form": $form, "hostname": $hostname, "method": $method, "queryString": $query_string, "serverVariables": $server_variables, "severity": $severity, "source": $body_source, "statusCode": $status_code, "title": $title, "titleTemplate": $title_template, "type": $type, "url": $url, "user": $user, "version": $version} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create one or more new messages.
@@ -505,18 +541,19 @@ export def "messages-bulk create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({log_id: $log_id} | format pattern "/v3/messages/{log_id}/_bulk"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({log_id: (encode-path-segment $log_id)} | format pattern "/v3/messages/{log_id}/_bulk"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Mark a list of messages as fixed by logid and query.
 #
 # POST /v3/messages/{logId}/_fix
 # operationId: Messages_FixAll
-export def "messages-fix post-by-logId" [
+export def "messages-fix list" [
   log_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -533,12 +570,12 @@ export def "messages-fix post-by-logId" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({log_id: $log_id} | format pattern "/v3/messages/{log_id}/_fix"))
-  let body = {"from": $body_from, "query": $query, "to": $body_to} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({log_id: (encode-path-segment $log_id)} | format pattern "/v3/messages/{log_id}/_fix"))
+  let req_body = {"from": $body_from, "query": $query, "to": $body_to} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a message by its ID.
@@ -559,7 +596,7 @@ export def "messages delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({log_id: $log_id, id: $id} | format pattern "/v3/messages/{log_id}/{id}"))
+  let full_url = (build-url $base ({log_id: (encode-path-segment $log_id), id: (encode-path-segment $id)} | format pattern "/v3/messages/{log_id}/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -584,7 +621,7 @@ export def "messages get" [
 ]: nothing -> record<application: string, breadcrumbs: table<action: string, dateTime: string, message: string, severity: string>, category: string, code: string, cookies: table<key: string, value: string>, correlationId: string, data: table<key: string, value: string>, dateTime: string, detail: string, form: table<key: string, value: string>, hostname: string, id: string, method: string, queryString: table<key: string, value: string>, serverVariables: table<key: string, value: string>, severity: string, source: string, statusCode: int, title: string, titleTemplate: string, type: string, url: string, user: string, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({log_id: $log_id, id: $id} | format pattern "/v3/messages/{log_id}/{id}"))
+  let full_url = (build-url $base ({log_id: (encode-path-segment $log_id), id: (encode-path-segment $id)} | format pattern "/v3/messages/{log_id}/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -594,7 +631,7 @@ export def "messages get" [
 #
 # POST /v3/messages/{logId}/{id}/_fix
 # operationId: Messages_Fix
-export def "messages-fix post-by-logId-id" [
+export def "messages-fix create" [
   log_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -610,7 +647,7 @@ export def "messages-fix post-by-logId-id" [
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "markAllAsFixed" $mark_all_as_fixed "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({log_id: $log_id, id: $id} | format pattern "/v3/messages/{log_id}/{id}/_fix") $qp)
+  let full_url = (build-url $base ({log_id: (encode-path-segment $log_id), id: (encode-path-segment $id)} | format pattern "/v3/messages/{log_id}/{id}/_fix") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -620,7 +657,7 @@ export def "messages-fix post-by-logId-id" [
 #
 # POST /v3/messages/{logId}/{id}/_hide
 # operationId: Messages_Hide
-export def "messages-hide post" [
+export def "messages-hide create" [
   log_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -634,7 +671,7 @@ export def "messages-hide post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({log_id: $log_id, id: $id} | format pattern "/v3/messages/{log_id}/{id}/_hide"))
+  let full_url = (build-url $base ({log_id: (encode-path-segment $log_id), id: (encode-path-segment $id)} | format pattern "/v3/messages/{log_id}/{id}/_hide"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -644,7 +681,7 @@ export def "messages-hide post" [
 #
 # POST /v3/sourcemaps/{logId}
 # operationId: SourceMaps_CreateOrUpdate
-export def "sourcemaps create-or-update" [
+export def "sourcemaps create-source-maps-or-update" [
   log_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -661,19 +698,20 @@ export def "sourcemaps create-or-update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({log_id: $log_id} | format pattern "/v3/sourcemaps/{log_id}"))
-  let body = {"MinifiedJavaScript": $minified_java_script, "Path": $path, "SourceMap": $source_map} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({log_id: (encode-path-segment $log_id)} | format pattern "/v3/sourcemaps/{log_id}"))
+  let req_body = {"MinifiedJavaScript": $minified_java_script, "Path": $path, "SourceMap": $source_map} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body ["MinifiedJavaScript" "SourceMap"])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # Fetch a list of uptime checks. Currently in closed beta. Get in contact to get access to this endpoint.
 #
 # GET /v3/uptimechecks
 # operationId: UptimeChecks_GetAll
-export def "uptimechecks get-all" [
+export def "uptimechecks get-uptime-checks-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

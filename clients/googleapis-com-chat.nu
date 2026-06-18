@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -73,7 +82,7 @@ def message-reply-option-completer [] { ["MESSAGE_REPLY_OPTION_UNSPECIFIED" "REP
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "media chatmediadownload" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "media download" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -97,7 +106,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/media/{resourceName}
 # operationId: chat.media.download
-export def "media chatmediadownload" [
+export def "media download" [
   resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -122,7 +131,7 @@ export def "media chatmediadownload" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_name: $resource_name} | format pattern "/v1/media/{resource_name}") $qp)
+  let full_url = (build-url $base ({resource_name: (encode-path-segment $resource_name)} | format pattern "/v1/media/{resource_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -132,7 +141,7 @@ export def "media chatmediadownload" [
 #
 # GET /v1/spaces
 # operationId: chat.spaces.list
-export def "spaces chatspaceslist" [
+export def "spaces list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -168,7 +177,7 @@ export def "spaces chatspaceslist" [
 #
 # DELETE /v1/{name}
 # operationId: chat.spaces.messages.delete
-export def "spaces chatspacesmessagesdelete" [
+export def "spaces delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -193,7 +202,7 @@ export def "spaces chatspacesmessagesdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -203,7 +212,7 @@ export def "spaces chatspacesmessagesdelete" [
 #
 # GET /v1/{name}
 # operationId: chat.spaces.messages.attachments.get
-export def "spaces chatspacesmessagesattachmentsget" [
+export def "spaces get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -228,7 +237,7 @@ export def "spaces chatspacesmessagesattachmentsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -247,7 +256,7 @@ export def "spaces chatspacesmessagesattachmentsget" [
 # --slashCommand shape: {commandId?: string}
 # --space shape: {displayName?: string, name?: string, singleUserBotDm?: bool, spaceDetails?: record}
 # --thread shape: {name?: string, threadKey?: string}
-export def "spaces chatspacesmessagespatch" [
+export def "spaces update-by-name" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -269,7 +278,7 @@ export def "spaces chatspacesmessagespatch" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --allow-missing: oneof<nothing, bool> # Optional. If `true` and the message is not found, a new message is created and `updateMask` is ignored. The specified message ID must be [client-assigned](https://developers.google.com/chat/api/guides/crudl/messages#name_a_created_message) or the request fails.
-  --update-mask: string # Required. The field paths to update. Separate multiple values with commas. Currently supported field paths: - text - cards (Requires [service account authentication](/chat/api/guides/auth/service-accounts).) - cards_v2 
+  --update-mask: string # Required. The field paths to update. Separate multiple values with commas. Currently supported field paths: - text - cards (Requires [service account authentication](/chat/api/guides/auth/service-accounts).) - cards_v2
   --action-response: record # Parameters that a Chat app can use to configure how its response is posted. — shape: {dialogAction?: record, type?: "TYPE_UNSPECIFIED"|"NEW_MESSAGE"|"UPDATE_MESSAGE"|"UPDATE_USER_MESSAGE_CARDS"|"REQUEST_CONFIG"|"DIALOG", url?: string}
   --attachment: list # User-uploaded attachment. — item shape: {attachmentDataRef?: record, contentName?: string, contentType?: string, driveDataRef?: record, name?: string, source?: "SOURCE_UNSPECIFIED"|"DRIVE_FILE"|"UPLOADED_CONTENT"}
   --cards: list # Deprecated: Use `cards_v2` instead. Rich, formatted and interactive cards that can be used to display UI elements such as: formatted texts, buttons, clickable images. Cards are normally displayed below the plain-text body of the message. `cards` and `cards_v2` can have a maximum size of 32 KB. — item shape: {cardActions?: list, header?: record, name?: string, sections?: list}
@@ -288,12 +297,12 @@ export def "spaces chatspacesmessagespatch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "allowMissing" $allow_missing "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}") $qp)
-  let body = {"actionResponse": $action_response, "attachment": $attachment, "cards": $cards, "cardsV2": $cards_v2, "clientAssignedMessageId": $client_assigned_message_id, "fallbackText": $fallback_text, "matchedUrl": $matched_url, "name": $body_name, "sender": $sender, "slashCommand": $slash_command, "space": $space, "text": $text, "thread": $thread} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}") $qp)
+  let req_body = {"actionResponse": $action_response, "attachment": $attachment, "cards": $cards, "cardsV2": $cards_v2, "clientAssignedMessageId": $client_assigned_message_id, "fallbackText": $fallback_text, "matchedUrl": $matched_url, "name": $body_name, "sender": $sender, "slashCommand": $slash_command, "space": $space, "text": $text, "thread": $thread} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates a message. There's a difference between `patch` and `update` methods. The `patch` method uses a `patch` request while the `update` method uses a `put` request. We recommend using the `patch` method. For example usage, see [Update a message](https://developers.google.com/chat/api/guides/crudl/messages#update_a_message). Requires [authentication](https://developers.google.com/chat/api/guides/auth/). Fully supports [service account authentication](https://developers.google.com/chat/api/guides/auth/service-accounts). Supports [user authentication](https://developers.google.com/chat/api/guides/auth/users) as part of the [Google Workspace Developer Preview Program](https://developers.google.com/workspace/preview), which grants early access to certain features. [User authentication](https://developers.google.com/chat/api/guides/auth/users) requires the `chat.messages` authorization scope.
@@ -309,7 +318,7 @@ export def "spaces chatspacesmessagespatch" [
 # --slashCommand shape: {commandId?: string}
 # --space shape: {displayName?: string, name?: string, singleUserBotDm?: bool, spaceDetails?: record}
 # --thread shape: {name?: string, threadKey?: string}
-export def "spaces chatspacesmessagesupdate" [
+export def "spaces update-by-name-1" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -331,7 +340,7 @@ export def "spaces chatspacesmessagesupdate" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --allow-missing: oneof<nothing, bool> # Optional. If `true` and the message is not found, a new message is created and `updateMask` is ignored. The specified message ID must be [client-assigned](https://developers.google.com/chat/api/guides/crudl/messages#name_a_created_message) or the request fails.
-  --update-mask: string # Required. The field paths to update. Separate multiple values with commas. Currently supported field paths: - text - cards (Requires [service account authentication](/chat/api/guides/auth/service-accounts).) - cards_v2 
+  --update-mask: string # Required. The field paths to update. Separate multiple values with commas. Currently supported field paths: - text - cards (Requires [service account authentication](/chat/api/guides/auth/service-accounts).) - cards_v2
   --action-response: record # Parameters that a Chat app can use to configure how its response is posted. — shape: {dialogAction?: record, type?: "TYPE_UNSPECIFIED"|"NEW_MESSAGE"|"UPDATE_MESSAGE"|"UPDATE_USER_MESSAGE_CARDS"|"REQUEST_CONFIG"|"DIALOG", url?: string}
   --attachment: list # User-uploaded attachment. — item shape: {attachmentDataRef?: record, contentName?: string, contentType?: string, driveDataRef?: record, name?: string, source?: "SOURCE_UNSPECIFIED"|"DRIVE_FILE"|"UPLOADED_CONTENT"}
   --cards: list # Deprecated: Use `cards_v2` instead. Rich, formatted and interactive cards that can be used to display UI elements such as: formatted texts, buttons, clickable images. Cards are normally displayed below the plain-text body of the message. `cards` and `cards_v2` can have a maximum size of 32 KB. — item shape: {cardActions?: list, header?: record, name?: string, sections?: list}
@@ -350,19 +359,19 @@ export def "spaces chatspacesmessagesupdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "allowMissing" $allow_missing "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}") $qp)
-  let body = {"actionResponse": $action_response, "attachment": $attachment, "cards": $cards, "cardsV2": $cards_v2, "clientAssignedMessageId": $client_assigned_message_id, "fallbackText": $fallback_text, "matchedUrl": $matched_url, "name": $body_name, "sender": $sender, "slashCommand": $slash_command, "space": $space, "text": $text, "thread": $thread} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}") $qp)
+  let req_body = {"actionResponse": $action_response, "attachment": $attachment, "cards": $cards, "cardsV2": $cards_v2, "clientAssignedMessageId": $client_assigned_message_id, "fallbackText": $fallback_text, "matchedUrl": $matched_url, "name": $body_name, "sender": $sender, "slashCommand": $slash_command, "space": $space, "text": $text, "thread": $thread} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists memberships in a space. Requires [authentication](https://developers.google.com/chat/api/guides/auth/). Fully supports [service account authentication](https://developers.google.com/chat/api/guides/auth/service-accounts). Supports [user authentication](https://developers.google.com/chat/api/guides/auth/users) as part of the [Google Workspace Developer Preview Program](https://developers.google.com/workspace/preview), which grants early access to certain features. [User authentication](https://developers.google.com/chat/api/guides/auth/users) requires the `chat.memberships` or `chat.memberships.readonly` authorization scope.
 #
 # GET /v1/{parent}/members
 # operationId: chat.spaces.members.list
-export def "members chatspacesmemberslist" [
+export def "members list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -389,7 +398,7 @@ export def "members chatspacesmemberslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/members") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/members") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -408,7 +417,7 @@ export def "members chatspacesmemberslist" [
 # --slashCommand shape: {commandId?: string}
 # --space shape: {displayName?: string, name?: string, singleUserBotDm?: bool, spaceDetails?: record}
 # --thread shape: {name?: string, threadKey?: string}
-export def "messages chatspacesmessagescreate" [
+export def "messages create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -451,10 +460,10 @@ export def "messages chatspacesmessagescreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "messageId" $message_id "scalar") (serialize-qp "messageReplyOption" $message_reply_option "scalar") (serialize-qp "requestId" $request_id "scalar") (serialize-qp "threadKey" $thread_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/messages") $qp)
-  let body = {"actionResponse": $action_response, "attachment": $attachment, "cards": $cards, "cardsV2": $cards_v2, "clientAssignedMessageId": $client_assigned_message_id, "fallbackText": $fallback_text, "matchedUrl": $matched_url, "name": $name, "sender": $sender, "slashCommand": $slash_command, "space": $space, "text": $text, "thread": $thread} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/messages") $qp)
+  let req_body = {"actionResponse": $action_response, "attachment": $attachment, "cards": $cards, "cardsV2": $cards_v2, "clientAssignedMessageId": $client_assigned_message_id, "fallbackText": $fallback_text, "matchedUrl": $matched_url, "name": $name, "sender": $sender, "slashCommand": $slash_command, "space": $space, "text": $text, "thread": $thread} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

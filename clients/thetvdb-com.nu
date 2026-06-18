@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -106,11 +115,11 @@ export def "episodes get" [
 ]: nothing -> record<data: record<absoluteNumber: int, airedEpisodeNumber: int, airedSeason: int, airsAfterSeason: int, airsBeforeEpisode: int, airsBeforeSeason: int, director: string, directors: list<string>, dvdChapter: float, dvdDiscid: string, dvdEpisodeNumber: float, dvdSeason: int, episodeName: string, filename: string, firstAired: string, guestStars: list<string>, id: int, imdbId: string, lastUpdated: int, lastUpdatedBy: string, overview: string, productionCode: string, seriesId: string, showUrl: string, siteRating: float, siteRatingCount: int, thumbAdded: string, thumbAuthor: int, thumbHeight: string, thumbWidth: string, writers: list<string>>, errors: record<invalidFilters: list<string>, invalidLanguage: string, invalidQueryParams: list<string>>> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/episodes/{id}"))
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/episodes/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -151,7 +160,7 @@ export def "languages get" [
 ]: nothing -> record<abbreviation: string, englishName: string, id: int, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/languages/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/languages/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -160,7 +169,7 @@ export def "languages get" [
 # Returns a session token to be included in the rest of the requests. Note that API key authentication is required for all subsequent requests and user auth is required for routes in the `User` section
 #
 # POST /login
-export def "login post" [
+export def "login create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -177,11 +186,11 @@ export def "login post" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/login")
-  let body = {"apikey": $apikey, "userkey": $userkey, "username": $username} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"apikey": $apikey, "userkey": $userkey, "username": $username} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns a movies records that contains all information known about a particular movies id.
@@ -201,11 +210,11 @@ export def "movies get" [
 ]: nothing -> record<artworks: table<artwork_type: string, height: int, id: string, is_primary: bool, tags: string, thumb_url: string, url: string, width: int>, genres: table<id: int, name: string, url: string>, id: int, people: record<actors: list<record>, directors: list<record>, producers: list<record>, writers: list<record>>, release_dates: table<country: string, date: string, type: string>, remoteids: table<id: string, source_id: int, source_name: string, source_url: string, url: string>, runtime: int, trailers: table<name: string, url: string>, translations: table<is_primary: bool, language_code: string, name: string, overview: string, tagline: string>, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/movies/{id}"))
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/movies/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -275,10 +284,10 @@ export def "search-series get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "imdbId" $imdb_id "scalar") (serialize-qp "zap2itId" $zap2it_id "scalar") (serialize-qp "slug" $slug "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/search/series" $qp)
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -320,18 +329,18 @@ export def "series get" [
 ]: nothing -> record<data: record<added: string, airsDayOfWeek: string, airsTime: string, aliases: list<string>, banner: string, firstAired: string, genre: list<string>, id: int, imdbId: string, lastUpdated: int, network: string, networkId: string, overview: string, rating: string, runtime: string, seriesId: string, seriesName: string, siteRating: float, siteRatingCount: int, slug: string, status: string, zap2itId: string>, errors: record<invalidFilters: list<string>, invalidLanguage: string, invalidQueryParams: list<string>>> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/series/{id}"))
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/series/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns header information only about the given series ID.
 #
 # HEAD /series/{id}
-export def "series head" [
+export def "series head-head" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -345,11 +354,11 @@ export def "series head" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/series/{id}"))
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/series/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -369,7 +378,7 @@ export def "series-actors get" [
 ]: nothing -> record<data: table<id: int, image: string, imageAdded: string, imageAuthor: int, lastUpdated: string, name: string, role: string, seriesId: int, sortOrder: int>, errors: record<invalidFilters: list<string>, invalidLanguage: string, invalidQueryParams: list<string>>> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/series/{id}/actors"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/series/{id}/actors"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -393,7 +402,7 @@ export def "series-episodes get" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/series/{id}/episodes") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/series/{id}/episodes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -424,11 +433,11 @@ export def "series-episodes-query get" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "absoluteNumber" $absolute_number "scalar") (serialize-qp "airedSeason" $aired_season "scalar") (serialize-qp "airedEpisode" $aired_episode "scalar") (serialize-qp "dvdSeason" $dvd_season "scalar") (serialize-qp "dvdEpisode" $dvd_episode "scalar") (serialize-qp "imdbId" $imdb_id "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/series/{id}/episodes/query") $qp)
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/series/{id}/episodes/query") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -448,13 +457,13 @@ export def "series-episodes-query-params get" [
 ]: nothing -> record<data: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/series/{id}/episodes/query/params"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/series/{id}/episodes/query/params"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Returns a summary of the episodes and seasons available for the series.  __Note__: Season "0" is for all episodes that are considered to be specials.
+# Returns a summary of the episodes and seasons available for the series. __Note__: Season "0" is for all episodes that are considered to be specials.
 #
 # GET /series/{id}/episodes/summary
 export def "series-episodes-summary get" [
@@ -470,7 +479,7 @@ export def "series-episodes-summary get" [
 ]: nothing -> record<airedEpisodes: string, airedSeasons: list<string>, dvdEpisodes: string, dvdSeasons: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/series/{id}/episodes/summary"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/series/{id}/episodes/summary"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -495,11 +504,11 @@ export def "series-filter get" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "keys" $keys "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/series/{id}/filter") $qp)
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/series/{id}/filter") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -520,11 +529,11 @@ export def "series-filter-params get" [
 ]: nothing -> record<data: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/series/{id}/filter/params"))
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/series/{id}/filter/params"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -545,11 +554,11 @@ export def "series-images get" [
 ]: nothing -> record<data: record<fanart: int, poster: int, season: int, seasonwide: int, series: int>> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/series/{id}/images"))
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/series/{id}/images"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -574,11 +583,11 @@ export def "series-images-query get" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "keyType" $key_type "scalar") (serialize-qp "resolution" $resolution "scalar") (serialize-qp "subKey" $sub_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/series/{id}/images/query") $qp)
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/series/{id}/images/query") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -599,15 +608,15 @@ export def "series-images-query-params get" [
 ]: nothing -> record<data: table<keyType: string, languageId: string, resolution: list, subKey: list>> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/series/{id}/images/query/params"))
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/series/{id}/images/query/params"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Returns an array of series that have changed in a maximum of one week blocks since the provided `fromTime`.   The user may specify a `toTime` to grab results for less than a week. Any timespan larger than a week will be reduced down to one week automatically.
+# Returns an array of series that have changed in a maximum of one week blocks since the provided `fromTime`. The user may specify a `toTime` to grab results for less than a week. Any timespan larger than a week will be reduced down to one week automatically.
 #
 # GET /updated/query
 export def "updated-query get" [
@@ -627,10 +636,10 @@ export def "updated-query get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fromTime" $from_time "scalar") (serialize-qp "toTime" $to_time "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/updated/query" $qp)
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -713,7 +722,7 @@ export def "user-favorites delete" [
 ]: nothing -> record<data: record<favorites: list<string>>, errors: record<invalidFilters: list<string>, invalidLanguage: string, invalidQueryParams: list<string>>> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/user/favorites/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/user/favorites/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -722,7 +731,7 @@ export def "user-favorites delete" [
 # Adds the supplied series ID to the user’s favorite’s list and returns the updated list.
 #
 # PUT /user/favorites/{id}
-export def "user-favorites put" [
+export def "user-favorites update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -735,7 +744,7 @@ export def "user-favorites put" [
 ]: nothing -> record<data: record<favorites: list<string>>, errors: record<invalidFilters: list<string>, invalidLanguage: string, invalidQueryParams: list<string>>> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/user/favorites/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/user/favorites/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -823,7 +832,7 @@ export def "user-ratings delete" [
 ]: nothing -> record<data: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({item_type: $item_type, item_id: $item_id} | format pattern "/user/ratings/{item_type}/{item_id}"))
+  let full_url = (build-url $base ({item_type: (encode-path-segment $item_type), item_id: (encode-path-segment $item_id)} | format pattern "/user/ratings/{item_type}/{item_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -832,7 +841,7 @@ export def "user-ratings delete" [
 # This route updates a given rating of a given type.
 #
 # PUT /user/ratings/{itemType}/{itemId}/{itemRating}
-export def "user-ratings put" [
+export def "user-ratings update" [
   item_type: string
   item_id: int
   item_rating: int
@@ -847,7 +856,7 @@ export def "user-ratings put" [
 ]: nothing -> record<data: table<rating: int, ratingItemId: int, ratingType: string>> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({item_type: $item_type, item_id: $item_id, item_rating: $item_rating} | format pattern "/user/ratings/{item_type}/{item_id}/{item_rating}"))
+  let full_url = (build-url $base ({item_type: (encode-path-segment $item_type), item_id: (encode-path-segment $item_id), item_rating: (encode-path-segment $item_rating)} | format pattern "/user/ratings/{item_type}/{item_id}/{item_rating}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

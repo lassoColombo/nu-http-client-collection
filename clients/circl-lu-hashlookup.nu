@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -68,7 +77,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "bulk-md5 bulkmd5" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "bulk-md5 create-bulkmd5" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -92,7 +101,7 @@ export def commands []: nothing -> table {
 #
 # POST /bulk/md5
 # operationId: post_bulkmd5
-export def "bulk-md5 bulkmd5" [
+export def "bulk-md5 create-bulkmd5" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -114,7 +123,7 @@ export def "bulk-md5 bulkmd5" [
 #
 # POST /bulk/sha1
 # operationId: post_bulksha1
-export def "bulk-sha1 bulksha1" [
+export def "bulk-sha1 create-bulksha1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -132,7 +141,7 @@ export def "bulk-sha1 bulksha1" [
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Return children from a given SHA1.  A number of element to return and an offset must be given. If not set it will be the 100 first elements. A cursor must be given to paginate over. The starting cursor is 0.
+# Return children from a given SHA1. A number of element to return and an offset must be given. If not set it will be the 100 first elements. A cursor must be given to paginate over. The starting cursor is 0.
 #
 # GET /children/{sha1}/{count}/{cursor}
 # operationId: get_children
@@ -151,7 +160,7 @@ export def "children get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({sha1: $sha1, count: $count, cursor: $cursor} | format pattern "/children/{sha1}/{count}/{cursor}"))
+  let full_url = (build-url $base ({sha1: (encode-path-segment $sha1), count: (encode-path-segment $count), cursor: (encode-path-segment $cursor)} | format pattern "/children/{sha1}/{count}/{cursor}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -183,7 +192,7 @@ export def "info get" [
 #
 # GET /lookup/md5/{md5}
 # operationId: get_lookup_md5
-export def "lookup-md5 md5" [
+export def "lookup-md5 get" [
   md5: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -196,7 +205,7 @@ export def "lookup-md5 md5" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({md5: $md5} | format pattern "/lookup/md5/{md5}"))
+  let full_url = (build-url $base ({md5: (encode-path-segment $md5)} | format pattern "/lookup/md5/{md5}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -206,7 +215,7 @@ export def "lookup-md5 md5" [
 #
 # GET /lookup/sha1/{sha1}
 # operationId: get_lookup_sha1
-export def "lookup-sha1 sha1" [
+export def "lookup-sha1 get" [
   sha1: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -219,7 +228,7 @@ export def "lookup-sha1 sha1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({sha1: $sha1} | format pattern "/lookup/sha1/{sha1}"))
+  let full_url = (build-url $base ({sha1: (encode-path-segment $sha1)} | format pattern "/lookup/sha1/{sha1}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -229,7 +238,7 @@ export def "lookup-sha1 sha1" [
 #
 # GET /lookup/sha256/{sha256}
 # operationId: get_lookup_sha256
-export def "lookup-sha256 sha256" [
+export def "lookup-sha256 get" [
   sha256: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -242,7 +251,7 @@ export def "lookup-sha256 sha256" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({sha256: $sha256} | format pattern "/lookup/sha256/{sha256}"))
+  let full_url = (build-url $base ({sha256: (encode-path-segment $sha256)} | format pattern "/lookup/sha256/{sha256}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -267,7 +276,7 @@ export def "parents get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({sha1: $sha1, count: $count, cursor: $cursor} | format pattern "/parents/{sha1}/{count}/{cursor}"))
+  let full_url = (build-url $base ({sha1: (encode-path-segment $sha1), count: (encode-path-segment $count), cursor: (encode-path-segment $cursor)} | format pattern "/parents/{sha1}/{count}/{cursor}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -277,7 +286,7 @@ export def "parents get" [
 #
 # GET /session/create/{name}
 # operationId: get_session_create
-export def "session-create create" [
+export def "session-create get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -290,7 +299,7 @@ export def "session-create create" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({name: $name} | format pattern "/session/create/{name}"))
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/session/create/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -300,7 +309,7 @@ export def "session-create create" [
 #
 # GET /session/get/{name}
 # operationId: get_session_matches
-export def "session-get matches" [
+export def "session-get get-matches" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -313,7 +322,7 @@ export def "session-get matches" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({name: $name} | format pattern "/session/get/{name}"))
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/session/get/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -323,7 +332,7 @@ export def "session-get matches" [
 #
 # GET /stats/top
 # operationId: get_stattop
-export def "stats-top stattop" [
+export def "stats-top get-stattop" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

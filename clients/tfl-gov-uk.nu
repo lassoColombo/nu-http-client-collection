@@ -36,6 +36,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -117,7 +126,7 @@ export def "accident-stats get" [
 ]: nothing -> table<borough: string, casualties: list<record>, date: string, id: int, lat: float, location: string, lon: float, severity: string, vehicles: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({year: $year} | format pattern "/AccidentStats/{year}"))
+  let full_url = (build-url $base ({year: (encode-path-segment $year)} | format pattern "/AccidentStats/{year}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -146,11 +155,11 @@ export def "air-quality get" [
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Gets all bike point locations. The Place object has an addtionalProperties array which contains the nbBikes, nbDocks and nbSpaces             numbers which give the status of the BikePoint. A mismatch in these numbers i.e. nbDocks - (nbBikes + nbSpaces) != 0 indicates broken docks.
+# Gets all bike point locations. The Place object has an addtionalProperties array which contains the nbBikes, nbDocks and nbSpaces numbers which give the status of the BikePoint. A mismatch in these numbers i.e. nbDocks - (nbBikes + nbSpaces) != 0 indicates broken docks.
 #
 # GET /BikePoint
 # operationId: BikePoint_GetAll
-export def "bike-point get-all" [
+export def "bike-point get-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -169,7 +178,7 @@ export def "bike-point get-all" [
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Search for bike stations by their name, a bike point's name often contains information about the name of the street             or nearby landmarks, for example. Note that the search result does not contain the PlaceProperties i.e. the status             or occupancy of the BikePoint, to get that information you should retrieve the BikePoint by its id on /BikePoint/id.
+# Search for bike stations by their name, a bike point's name often contains information about the name of the street or nearby landmarks, for example. Note that the search result does not contain the PlaceProperties i.e. the status or occupancy of the BikePoint, to get that information you should retrieve the BikePoint by its id on /BikePoint/id.
 #
 # GET /BikePoint/Search
 # operationId: BikePoint_Search
@@ -212,7 +221,7 @@ export def "bike-point get" [
 ]: nothing -> record<additionalProperties: table<category: string, key: string, modified: string, sourceSystemKey: string, value: string>, children: list<any>, childrenUrls: list<string>, commonName: string, distance: float, id: string, lat: float, lon: float, placeType: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/BikePoint/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/BikePoint/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -274,8 +283,8 @@ export def "journey-journey-results-to get" [
   --time: string # The time must be in HHmm format
   --time-is: string@time-is-completer # Does the time given relate to arrival or leaving time? Possible options: "departing" | "arriving"
   --journey-preference: string@journey-preference-completer # The journey preference eg possible options: "leastinterchange" | "leasttime" | "leastwalking"
-  --mode: list # The mode must be a comma separated list of modes. eg possible options: "public-bus,overground,train,tube,coach,dlr,cablecar,tram,river,walking,cycle"
-  --accessibility-preference: list # The accessibility preference must be a comma separated list eg. "noSolidStairs,noEscalators,noElevators,stepFreeToVehicle,stepFreeToPlatform"
+  --mode: list<string> # The mode must be a comma separated list of modes. eg possible options: "public-bus,overground,train,tube,coach,dlr,cablecar,tram,river,walking,cycle"
+  --accessibility-preference: list<string> # The accessibility preference must be a comma separated list eg. "noSolidStairs,noEscalators,noElevators,stepFreeToVehicle,stepFreeToPlatform"
   --from-name: string # An optional name to associate with the origin of the journey in the results.
   --to-name: string # An optional name to associate with the destination of the journey in the results.
   --via-name: string # An optional name to associate with the via point of the journey in the results.
@@ -284,7 +293,7 @@ export def "journey-journey-results-to get" [
   --walking-speed: string@walking-speed-completer # The walking speed. eg possible options: "slow" | "average" | "fast".
   --cycle-preference: string@cycle-preference-completer # The cycle preference. eg possible options: "allTheWay" | "leaveAtStation" | "takeOnTransport" | "cycleHire"
   --adjustment: string # Time adjustment command. eg possible options: "TripFirst" | "TripLast"
-  --bike-proficiency: list # A comma separated list of cycling proficiency levels. eg possible options: "easy,moderate,fast"
+  --bike-proficiency: list<string> # A comma separated list of cycling proficiency levels. eg possible options: "easy,moderate,fast"
   --alternative-cycle: oneof<nothing, bool> # Option to determine whether to return alternative cycling journey
   --alternative-walking: oneof<nothing, bool> # Option to determine whether to return alternative walking journey
   --apply-html-markup: oneof<nothing, bool> # Flag to determine whether certain text (e.g. walking instructions) should be output with HTML tags or not.
@@ -298,7 +307,7 @@ export def "journey-journey-results-to get" [
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "via" $via "scalar") (serialize-qp "nationalSearch" $national_search "scalar") (serialize-qp "date" $date "scalar") (serialize-qp "time" $time "scalar") (serialize-qp "timeIs" $time_is "scalar") (serialize-qp "journeyPreference" $journey_preference "scalar") (serialize-qp "mode" $mode "multi") (serialize-qp "accessibilityPreference" $accessibility_preference "multi") (serialize-qp "fromName" $from_name "scalar") (serialize-qp "toName" $to_name "scalar") (serialize-qp "viaName" $via_name "scalar") (serialize-qp "maxTransferMinutes" $max_transfer_minutes "scalar") (serialize-qp "maxWalkingMinutes" $max_walking_minutes "scalar") (serialize-qp "walkingSpeed" $walking_speed "scalar") (serialize-qp "cyclePreference" $cycle_preference "scalar") (serialize-qp "adjustment" $adjustment "scalar") (serialize-qp "bikeProficiency" $bike_proficiency "multi") (serialize-qp "alternativeCycle" $alternative_cycle "scalar") (serialize-qp "alternativeWalking" $alternative_walking "scalar") (serialize-qp "applyHtmlMarkup" $apply_html_markup "scalar") (serialize-qp "useMultiModalCall" $use_multi_modal_call "scalar") (serialize-qp "walkingOptimization" $walking_optimization "scalar") (serialize-qp "taxiOnlyTrip" $taxi_only_trip "scalar") (serialize-qp "routeBetweenEntrances" $route_between_entrances "scalar") (serialize-qp "useRealTimeLiveArrivals" $use_real_time_live_arrivals "scalar") (serialize-qp "calcOneDirection" $calc_one_direction "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({from: $from, to: $to} | format pattern "/Journey/JourneyResults/{from}/to/{to}") $qp)
+  let full_url = (build-url $base ({from: (encode-path-segment $from), to: (encode-path-segment $to)} | format pattern "/Journey/JourneyResults/{from}/to/{to}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -423,7 +432,7 @@ export def "line-meta-severity get" [
 #
 # GET /Line/Mode/{modes}
 # operationId: Line_GetByMode
-export def "line-mode get-by" [
+export def "line-mode get" [
   modes: list
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -437,7 +446,7 @@ export def "line-mode get-by" [
 ]: nothing -> table<created: string, crowding: record<passengerFlows: list, trainLoadings: list>, disruptions: list<record>, id: string, lineStatuses: list<record>, modeName: string, modified: string, name: string, routeSections: list<record>, serviceTypes: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({modes: $modes} | format pattern "/Line/Mode/{modes}"))
+  let full_url = (build-url $base ({modes: (encode-path-segment $modes)} | format pattern "/Line/Mode/{modes}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -461,7 +470,7 @@ export def "line-mode-disruption get" [
 ]: nothing -> table<additionalInfo: string, affectedRoutes: list<record>, affectedStops: list<record>, category: string, categoryDescription: string, closureText: string, created: string, description: string, lastUpdate: string, summary: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({modes: $modes} | format pattern "/Line/Mode/{modes}/Disruption"))
+  let full_url = (build-url $base ({modes: (encode-path-segment $modes)} | format pattern "/Line/Mode/{modes}/Disruption"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -482,12 +491,12 @@ export def "line-mode-route get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --service-types: list # A comma seperated list of service types to filter on. Supported values: Regular, Night. Defaulted to 'Regular' if not specified
+  --service-types: list<string> # A comma seperated list of service types to filter on. Supported values: Regular, Night. Defaulted to 'Regular' if not specified
 ]: nothing -> table<created: string, crowding: record<passengerFlows: list, trainLoadings: list>, disruptions: list<record>, id: string, lineStatuses: list<record>, modeName: string, modified: string, name: string, routeSections: list<record>, serviceTypes: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "serviceTypes" $service_types "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({modes: $modes} | format pattern "/Line/Mode/{modes}/Route") $qp)
+  let full_url = (build-url $base ({modes: (encode-path-segment $modes)} | format pattern "/Line/Mode/{modes}/Route") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -514,7 +523,7 @@ export def "line-mode-status get" [
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "detail" $detail "scalar") (serialize-qp "severityLevel" $severity_level "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({modes: $modes} | format pattern "/Line/Mode/{modes}/Status") $qp)
+  let full_url = (build-url $base ({modes: (encode-path-segment $modes)} | format pattern "/Line/Mode/{modes}/Status") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -534,7 +543,7 @@ export def "line-route list" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --service-types: list # A comma seperated list of service types to filter on. Supported values: Regular, Night. Defaulted to 'Regular' if not specified
+  --service-types: list<string> # A comma seperated list of service types to filter on. Supported values: Regular, Night. Defaulted to 'Regular' if not specified
 ]: nothing -> table<created: string, crowding: record<passengerFlows: list, trainLoadings: list>, disruptions: list<record>, id: string, lineStatuses: list<record>, modeName: string, modified: string, name: string, routeSections: list<record>, serviceTypes: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
@@ -560,19 +569,19 @@ export def "line-search list" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --modes: list # Optionally filter by the specified modes
-  --service-types: list # A comma seperated list of service types to filter on. Supported values: Regular, Night. Defaulted to 'Regular' if not specified
+  --modes: list<string> # Optionally filter by the specified modes
+  --service-types: list<string> # A comma seperated list of service types to filter on. Supported values: Regular, Night. Defaulted to 'Regular' if not specified
 ]: nothing -> record<input: string, searchMatches: table<id: string, lat: float, lineId: string, lineName: string, lineRouteSection: list, lon: float, matchedRouteSections: list, matchedStops: list, mode: string, name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "modes" $modes "multi") (serialize-qp "serviceTypes" $service_types "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({query: $query} | format pattern "/Line/Search/{query}") $qp)
+  let full_url = (build-url $base ({query: (encode-path-segment $query)} | format pattern "/Line/Search/{query}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Gets the line status for all lines with a given severity             A list of valid severity codes can be obtained from a call to Line/Meta/Severity
+# Gets the line status for all lines with a given severity A list of valid severity codes can be obtained from a call to Line/Meta/Severity
 #
 # GET /Line/Status/{severity}
 # operationId: Line_StatusBySeverity
@@ -590,7 +599,7 @@ export def "line-status get-by-severity" [
 ]: nothing -> table<created: string, crowding: record<passengerFlows: list, trainLoadings: list>, disruptions: list<record>, id: string, lineStatuses: list<record>, modeName: string, modified: string, name: string, routeSections: list<record>, serviceTypes: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({severity: $severity} | format pattern "/Line/Status/{severity}"))
+  let full_url = (build-url $base ({severity: (encode-path-segment $severity)} | format pattern "/Line/Status/{severity}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -614,7 +623,7 @@ export def "line get" [
 ]: nothing -> table<created: string, crowding: record<passengerFlows: list, trainLoadings: list>, disruptions: list<record>, id: string, lineStatuses: list<record>, modeName: string, modified: string, name: string, routeSections: list<record>, serviceTypes: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({ids: $ids} | format pattern "/Line/{ids}"))
+  let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/Line/{ids}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -642,7 +651,7 @@ export def "line-arrivals get" [
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "destinationStationId" $destination_station_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({ids: $ids, stop_point_id: $stop_point_id} | format pattern "/Line/{ids}/Arrivals/{stop_point_id}") $qp)
+  let full_url = (build-url $base ({ids: (encode-path-segment $ids), stop_point_id: (encode-path-segment $stop_point_id)} | format pattern "/Line/{ids}/Arrivals/{stop_point_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -666,7 +675,7 @@ export def "line-disruption get" [
 ]: nothing -> table<additionalInfo: string, affectedRoutes: list<record>, affectedStops: list<record>, category: string, categoryDescription: string, closureText: string, created: string, description: string, lastUpdate: string, summary: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({ids: $ids} | format pattern "/Line/{ids}/Disruption"))
+  let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/Line/{ids}/Disruption"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -687,12 +696,12 @@ export def "line-route get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --service-types: list # A comma seperated list of service types to filter on. Supported values: Regular, Night. Defaulted to 'Regular' if not specified
+  --service-types: list<string> # A comma seperated list of service types to filter on. Supported values: Regular, Night. Defaulted to 'Regular' if not specified
 ]: nothing -> table<created: string, crowding: record<passengerFlows: list, trainLoadings: list>, disruptions: list<record>, id: string, lineStatuses: list<record>, modeName: string, modified: string, name: string, routeSections: list<record>, serviceTypes: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "serviceTypes" $service_types "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({ids: $ids} | format pattern "/Line/{ids}/Route") $qp)
+  let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/Line/{ids}/Route") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -718,7 +727,7 @@ export def "line-status get-by-ids" [
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "detail" $detail "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({ids: $ids} | format pattern "/Line/{ids}/Status") $qp)
+  let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/Line/{ids}/Status") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -750,7 +759,7 @@ export def "line-status-to get" [
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "detail" $detail "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "dateRange.startDate" $date_range_start_date "scalar") (serialize-qp "dateRange.endDate" $date_range_end_date "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({ids: $ids, start_date: $start_date, end_date: $end_date} | format pattern "/Line/{ids}/Status/{start_date}/to/{end_date}") $qp)
+  let full_url = (build-url $base ({ids: (encode-path-segment $ids), start_date: (encode-path-segment $start_date), end_date: (encode-path-segment $end_date)} | format pattern "/Line/{ids}/Status/{start_date}/to/{end_date}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -772,13 +781,13 @@ export def "line-route-sequence get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --service-types: list # A comma seperated list of service types to filter on. Supported values: Regular, Night. Defaulted to 'Regular' if not specified
+  --service-types: list<string> # A comma seperated list of service types to filter on. Supported values: Regular, Night. Defaulted to 'Regular' if not specified
   --exclude-crowding: oneof<nothing, bool> # That excludes crowding from line disruptions. Can be true or false.
 ]: nothing -> record<direction: string, isOutboundOnly: bool, lineId: string, lineName: string, lineStrings: list<string>, mode: string, orderedLineRoutes: table<name: string, naptanIds: list, serviceType: string>, stations: table<accessibilitySummary: string, direction: string, hasDisruption: bool, icsId: string, id: string, lat: float, lines: list, lon: float, modes: list, name: string, parentId: string, routeId: int, stationId: string, status: bool, stopLetter: string, stopType: string, topMostParentId: string, towards: string, url: string, zone: string>, stopPointSequences: table<branchId: int, direction: string, lineId: string, lineName: string, nextBranchIds: list, prevBranchIds: list, serviceType: string, stopPoint: list>> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "serviceTypes" $service_types "multi") (serialize-qp "excludeCrowding" $exclude_crowding "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id, direction: $direction} | format pattern "/Line/{id}/Route/Sequence/{direction}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id), direction: (encode-path-segment $direction)} | format pattern "/Line/{id}/Route/Sequence/{direction}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -804,7 +813,7 @@ export def "line-stop-points stop" [
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "tflOperatedNationalRailStationsOnly" $tfl_operated_national_rail_stations_only "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/Line/{id}/StopPoints") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/Line/{id}/StopPoints") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -829,7 +838,7 @@ export def "line-timetable get" [
 ]: nothing -> record<direction: string, disambiguation: record<disambiguationOptions: list<record>>, lineId: string, lineName: string, pdfUrl: string, stations: table<accessibilitySummary: string, direction: string, hasDisruption: bool, icsId: string, id: string, lat: float, lines: list, lon: float, modes: list, name: string, parentId: string, routeId: int, stationId: string, status: bool, stopLetter: string, stopType: string, topMostParentId: string, towards: string, url: string, zone: string>, statusErrorMessage: string, stops: table<accessibilitySummary: string, direction: string, hasDisruption: bool, icsId: string, id: string, lat: float, lines: list, lon: float, modes: list, name: string, parentId: string, routeId: int, stationId: string, status: bool, stopLetter: string, stopType: string, topMostParentId: string, towards: string, url: string, zone: string>, timetable: record<departureStopId: string, routes: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, from_stop_point_id: $from_stop_point_id} | format pattern "/Line/{id}/Timetable/{from_stop_point_id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), from_stop_point_id: (encode-path-segment $from_stop_point_id)} | format pattern "/Line/{id}/Timetable/{from_stop_point_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -855,13 +864,13 @@ export def "line-timetable-to get" [
 ]: nothing -> record<direction: string, disambiguation: record<disambiguationOptions: list<record>>, lineId: string, lineName: string, pdfUrl: string, stations: table<accessibilitySummary: string, direction: string, hasDisruption: bool, icsId: string, id: string, lat: float, lines: list, lon: float, modes: list, name: string, parentId: string, routeId: int, stationId: string, status: bool, stopLetter: string, stopType: string, topMostParentId: string, towards: string, url: string, zone: string>, statusErrorMessage: string, stops: table<accessibilitySummary: string, direction: string, hasDisruption: bool, icsId: string, id: string, lat: float, lines: list, lon: float, modes: list, name: string, parentId: string, routeId: int, stationId: string, status: bool, stopLetter: string, stopType: string, topMostParentId: string, towards: string, url: string, zone: string>, timetable: record<departureStopId: string, routes: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, from_stop_point_id: $from_stop_point_id, to_stop_point_id: $to_stop_point_id} | format pattern "/Line/{id}/Timetable/{from_stop_point_id}/to/{to_stop_point_id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), from_stop_point_id: (encode-path-segment $from_stop_point_id), to_stop_point_id: (encode-path-segment $to_stop_point_id)} | format pattern "/Line/{id}/Timetable/{from_stop_point_id}/to/{to_stop_point_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Returns the service type active for a mode.             Currently only supports tube
+# Returns the service type active for a mode. Currently only supports tube
 #
 # GET /Mode/ActiveServiceTypes
 # operationId: Mode_GetActiveServiceTypes
@@ -904,7 +913,7 @@ export def "mode-arrivals get" [
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({mode: $mode} | format pattern "/Mode/{mode}/Arrivals") $qp)
+  let full_url = (build-url $base ({mode: (encode-path-segment $mode)} | format pattern "/Mode/{mode}/Arrivals") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -914,7 +923,7 @@ export def "mode-arrivals get" [
 #
 # GET /Occupancy/BikePoints/{ids}
 # operationId: Occupancy_GetBikePointsOccupancies
-export def "occupancy-bike-points get-bike-points-occupancies" [
+export def "occupancy-bike-points get-occupancies" [
   ids: list
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -928,7 +937,7 @@ export def "occupancy-bike-points get-bike-points-occupancies" [
 ]: nothing -> table<bikesCount: int, eBikesCount: int, emptyDocks: int, id: string, name: string, standardBikesCount: int, totalDocks: int> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({ids: $ids} | format pattern "/Occupancy/BikePoints/{ids}"))
+  let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/Occupancy/BikePoints/{ids}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -974,7 +983,7 @@ export def "occupancy-car-park get" [
 ]: nothing -> record<bays: table<bayCount: int, bayType: string, free: int, occupied: int>, carParkDetailsUrl: string, id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/Occupancy/CarPark/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/Occupancy/CarPark/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -984,7 +993,7 @@ export def "occupancy-car-park get" [
 #
 # GET /Occupancy/ChargeConnector
 # operationId: Occupancy_GetAllChargeConnectorStatus
-export def "occupancy-charge-connector get-all-charge-connector-status" [
+export def "occupancy-charge-connector get-list-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1007,7 +1016,7 @@ export def "occupancy-charge-connector get-all-charge-connector-status" [
 #
 # GET /Occupancy/ChargeConnector/{ids}
 # operationId: Occupancy_GetChargeConnectorStatus
-export def "occupancy-charge-connector get-charge-connector-status" [
+export def "occupancy-charge-connector get-status" [
   ids: list
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1021,13 +1030,13 @@ export def "occupancy-charge-connector get-charge-connector-status" [
 ]: nothing -> table<id: int, sourceSystemPlaceId: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({ids: $ids} | format pattern "/Occupancy/ChargeConnector/{ids}"))
+  let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/Occupancy/ChargeConnector/{ids}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Gets the places that lie within a geographic region. The geographic region of interest can either be specified             by using a lat/lon geo-point and a radius in metres to return places within the locus defined by the lat/lon of             its centre or alternatively, by the use of a bounding box defined by the lat/lon of its north-west and south-east corners.             Optionally filters on type and can strip properties for a smaller payload.
+# Gets the places that lie within a geographic region. The geographic region of interest can either be specified by using a lat/lon geo-point and a radius in metres to return places within the locus defined by the lat/lon of its centre or alternatively, by the use of a bounding box defined by the lat/lon of its north-west and south-east corners. Optionally filters on type and can strip properties for a smaller payload.
 #
 # GET /Place
 # operationId: Place_GetByGeo
@@ -1042,9 +1051,9 @@ export def "place get-by-geo" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --radius: float # The radius of the bounding circle in metres when only lat/lon are specified. (format: double)
-  --categories: list # An optional list of comma separated property categories to return in the Place's property bag. If null or empty, all categories of property are returned. Pass the keyword "none" to return no properties (a valid list of categories can be obtained from the /Place/Meta/categories endpoint)
+  --categories: list<string> # An optional list of comma separated property categories to return in the Place's property bag. If null or empty, all categories of property are returned. Pass the keyword "none" to return no properties (a valid list of categories can be obtained from the /Place/Meta/categories endpoint)
   --include-children: oneof<nothing, bool> # Defaults to false. If true child places e.g. individual charging stations at a charge point while be included, otherwise just the URLs of any child places will be returned
-  --type: list # Place types to filter on, or null to return all types
+  --type: list<string> # Place types to filter on, or null to return all types
   --active-only: oneof<nothing, bool> # An optional parameter to limit the results to active records only (Currently only the 'VariableMessageSign' place type is supported)
   --number-of-places-to-return: int # If specified, limits the number of returned places equal to the given value (format: int32)
   --place-geo-sw-lat: float # format: double
@@ -1067,7 +1076,7 @@ export def "place get-by-geo" [
 #
 # GET /Place/Address/Streets/{Postcode}
 # operationId: Place_GetStreetsByPostCode
-export def "place-address-streets get" [
+export def "place-address-streets get-by-create-code" [
   postcode: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1084,7 +1093,7 @@ export def "place-address-streets get" [
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "postcode" $postcode "scalar") (serialize-qp "postcodeInput.postcode" $postcode_input_postcode "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({postcode: $postcode} | format pattern "/Place/Address/Streets/{postcode}") $qp)
+  let full_url = (build-url $base ({postcode: (encode-path-segment $postcode)} | format pattern "/Place/Address/Streets/{postcode}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1151,7 +1160,7 @@ export def "place-search list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --name: string # The name of the place, you can use the /Place/Types/{types} endpoint to get a list of places for a given type including their names.
-  --types: list # A comma-separated list of the types to return. Max. approx 12 types.
+  --types: list<string> # A comma-separated list of the types to return. Max. approx 12 types.
 ]: nothing -> table<additionalProperties: list<record>, children: list<any>, childrenUrls: list<string>, commonName: string, distance: float, id: string, lat: float, lon: float, placeType: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
@@ -1166,7 +1175,7 @@ export def "place-search list" [
 #
 # GET /Place/Type/{types}
 # operationId: Place_GetByType
-export def "place-type get-by" [
+export def "place-type get" [
   types: list
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1182,7 +1191,7 @@ export def "place-type get-by" [
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "activeOnly" $active_only "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({types: $types} | format pattern "/Place/Type/{types}") $qp)
+  let full_url = (build-url $base ({types: (encode-path-segment $types)} | format pattern "/Place/Type/{types}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1208,13 +1217,13 @@ export def "place get" [
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "includeChildren" $include_children "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/Place/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/Place/{id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Gets any places of the given type whose geography intersects the given latitude and longitude. In practice this means the Place             must be polygonal e.g. a BoroughBoundary.
+# Gets any places of the given type whose geography intersects the given latitude and longitude. In practice this means the Place must be polygonal e.g. a BoroughBoundary.
 #
 # GET /Place/{type}/At/{Lat}/{Lon}
 # operationId: Place_GetAt
@@ -1239,7 +1248,7 @@ export def "place-at get" [
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "lat" $lat "scalar") (serialize-qp "lon" $lon "scalar") (serialize-qp "location.lat" $location_lat "scalar") (serialize-qp "location.lon" $location_lon "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({type: $type, lat: $lat, lon: $lon} | format pattern "/Place/{type}/At/{lat}/{lon}") $qp)
+  let full_url = (build-url $base ({type: (encode-path-segment $type), lat: (encode-path-segment $lat), lon: (encode-path-segment $lon)} | format pattern "/Place/{type}/At/{lat}/{lon}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1273,7 +1282,7 @@ export def "place-overlay get" [
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "lat" $lat "scalar") (serialize-qp "lon" $lon "scalar") (serialize-qp "location.lat" $location_lat "scalar") (serialize-qp "location.lon" $location_lon "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({type: $type, z: $z, lat: $lat, lon: $lon, width: $width, height: $height} | format pattern "/Place/{type}/overlay/{z}/{lat}/{lon}/{width}/{height}") $qp)
+  let full_url = (build-url $base ({type: (encode-path-segment $type), z: (encode-path-segment $z), lat: (encode-path-segment $lat), lon: (encode-path-segment $lon), width: (encode-path-segment $width), height: (encode-path-segment $height)} | format pattern "/Place/{type}/overlay/{z}/{lat}/{lon}/{width}/{height}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1368,7 +1377,7 @@ export def "road-all-disruption get" [
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "stripContent" $strip_content "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({disruption_ids: $disruption_ids} | format pattern "/Road/all/Disruption/{disruption_ids}") $qp)
+  let full_url = (build-url $base ({disruption_ids: (encode-path-segment $disruption_ids)} | format pattern "/Road/all/Disruption/{disruption_ids}") $qp)
   let accept_val = ($accept | default "application/geo+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1378,7 +1387,7 @@ export def "road-all-disruption get" [
 #
 # GET /Road/all/Street/Disruption
 # operationId: Road_DisruptedStreets
-export def "road-all-street-disruption get" [
+export def "road-all-street-disruption get-disrupted" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1417,7 +1426,7 @@ export def "road get" [
 ]: nothing -> table<bounds: string, displayName: string, envelope: string, group: string, id: string, statusAggregationEndDate: string, statusAggregationStartDate: string, statusSeverity: string, statusSeverityDescription: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({ids: $ids} | format pattern "/Road/{ids}"))
+  let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/Road/{ids}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1439,14 +1448,14 @@ export def "road-disruption get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --strip-content: oneof<nothing, bool> # Optional, defaults to false. When true, removes every property/node except for id, point, severity, severityDescription, startDate, endDate, corridor details, location, comments and streets
-  --severities: list # an optional list of Severity names to filter on (a valid list of severities can be obtained from the /Road/Meta/severities endpoint)
-  --categories: list # an optional list of category names to filter on (a valid list of categories can be obtained from the /Road/Meta/categories endpoint)
+  --severities: list<string> # an optional list of Severity names to filter on (a valid list of severities can be obtained from the /Road/Meta/severities endpoint)
+  --categories: list<string> # an optional list of category names to filter on (a valid list of categories can be obtained from the /Road/Meta/categories endpoint)
   --closures: oneof<nothing, bool> # Optional, defaults to true. When true, always includes disruptions that have road closures, regardless of the severity filter. When false, the severity filter works as normal.
 ]: nothing -> table<category: string, comments: string, corridorIds: list<string>, currentUpdate: string, currentUpdateDateTime: string, endDateTime: string, geography: record<geography: record>, geometry: record<geography: record>, hasClosures: bool, id: string, isProvisional: bool, lastModifiedTime: string, levelOfInterest: string, linkText: string, linkUrl: string, location: string, ordinal: int, point: string, publishEndDate: string, publishStartDate: string, recurringSchedules: list<record>, roadDisruptionImpactAreas: list<record>, roadDisruptionLines: list<record>, roadProject: record<boroughsBenefited: list, constructionEndDate: string, constructionStartDate: string, consultationEndDate: string, consultationPageUrl: string, consultationStartDate: string, contactEmail: string, contactName: string, cycleSuperhighwayId: string, externalPageUrl: string, phase: string, projectDescription: string, projectId: string, projectName: string, projectPageUrl: string, projectSummaryPageUrl: string, schemeName: string>, severity: string, startDateTime: string, status: string, streets: list<record>, subCategory: string, timeFrame: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "stripContent" $strip_content "scalar") (serialize-qp "severities" $severities "multi") (serialize-qp "categories" $categories "multi") (serialize-qp "closures" $closures "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({ids: $ids} | format pattern "/Road/{ids}/Disruption") $qp)
+  let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/Road/{ids}/Disruption") $qp)
   let accept_val = ($accept | default "application/geo+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1473,13 +1482,13 @@ export def "road-status get" [
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "dateRangeNullable.startDate" $date_range_nullable_start_date "scalar") (serialize-qp "dateRangeNullable.endDate" $date_range_nullable_end_date "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({ids: $ids} | format pattern "/Road/{ids}/Status") $qp)
+  let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/Road/{ids}/Status") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Search the site for occurrences of the query string. The maximum number of results returned is equal to the maximum page size             of 100. To return subsequent pages, use the paginated overload.
+# Search the site for occurrences of the query string. The maximum number of results returned is equal to the maximum page size of 100. To return subsequent pages, use the paginated overload.
 #
 # GET /Search
 # operationId: Search_Get
@@ -1508,7 +1517,7 @@ export def "search get" [
 #
 # GET /Search/BusSchedules
 # operationId: Search_BusSchedules
-export def "search-bus-schedules get" [
+export def "search-bus-schedules list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1533,7 +1542,7 @@ export def "search-bus-schedules get" [
 #
 # GET /Search/Meta/Categories
 # operationId: Search_MetaCategories
-export def "search-meta-categories get" [
+export def "search-meta-categories list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1556,7 +1565,7 @@ export def "search-meta-categories get" [
 #
 # GET /Search/Meta/SearchProviders
 # operationId: Search_MetaSearchProviders
-export def "search-meta-search-providers get" [
+export def "search-meta-search-providers list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1579,7 +1588,7 @@ export def "search-meta-search-providers get" [
 #
 # GET /Search/Meta/Sorts
 # operationId: Search_MetaSorts
-export def "search-meta-sorts get" [
+export def "search-meta-sorts list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1612,11 +1621,11 @@ export def "stop-point get-by-geo" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --stop-types: list # a list of stopTypes that should be returned (a list of valid stop types can be obtained from the StopPoint/meta/stoptypes endpoint)
+  --stop-types: list<string> # a list of stopTypes that should be returned (a list of valid stop types can be obtained from the StopPoint/meta/stoptypes endpoint)
   --radius: int # the radius of the bounding circle in metres (default : 200) (format: int32)
   --use-stop-point-hierarchy: oneof<nothing, bool> # Re-arrange the output into a parent/child hierarchy
-  --modes: list # the list of modes to search (comma separated mode names e.g. tube,dlr)
-  --categories: list # an optional list of comma separated property categories to return in the StopPoint's property bag. If null or empty, all categories of property are returned. Pass the keyword "none" to return no properties (a valid list of categories can be obtained from the /StopPoint/Meta/categories endpoint)
+  --modes: list<string> # the list of modes to search (comma separated mode names e.g. tube,dlr)
+  --categories: list<string> # an optional list of comma separated property categories to return in the StopPoint's property bag. If null or empty, all categories of property are returned. Pass the keyword "none" to return no properties (a valid list of categories can be obtained from the /StopPoint/Meta/categories endpoint)
   --return-lines: oneof<nothing, bool> # true to return the lines that each stop point serves as a nested resource
   --location-lat: float # format: double
   --location-lon: float # format: double
@@ -1634,7 +1643,7 @@ export def "stop-point get-by-geo" [
 #
 # GET /StopPoint/Meta/Categories
 # operationId: StopPoint_MetaCategories
-export def "stop-point-meta-categories get" [
+export def "stop-point-meta-categories stop" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1657,7 +1666,7 @@ export def "stop-point-meta-categories get" [
 #
 # GET /StopPoint/Meta/Modes
 # operationId: StopPoint_MetaModes
-export def "stop-point-meta-modes get" [
+export def "stop-point-meta-modes stop" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1680,7 +1689,7 @@ export def "stop-point-meta-modes get" [
 #
 # GET /StopPoint/Meta/StopTypes
 # operationId: StopPoint_MetaStopTypes
-export def "stop-point-meta-stop-types get" [
+export def "stop-point-meta-stop-types stop" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1703,7 +1712,7 @@ export def "stop-point-meta-stop-types get" [
 #
 # GET /StopPoint/Mode/{modes}
 # operationId: StopPoint_GetByMode
-export def "stop-point-mode get-by" [
+export def "stop-point-mode get" [
   modes: list
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1719,7 +1728,7 @@ export def "stop-point-mode get-by" [
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({modes: $modes} | format pattern "/StopPoint/Mode/{modes}") $qp)
+  let full_url = (build-url $base ({modes: (encode-path-segment $modes)} | format pattern "/StopPoint/Mode/{modes}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1729,7 +1738,7 @@ export def "stop-point-mode get-by" [
 #
 # GET /StopPoint/Mode/{modes}/Disruption
 # operationId: StopPoint_DisruptionByMode
-export def "stop-point-mode-disruption get" [
+export def "stop-point-mode-disruption stop" [
   modes: list
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1745,7 +1754,7 @@ export def "stop-point-mode-disruption get" [
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "includeRouteBlockedStops" $include_route_blocked_stops "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({modes: $modes} | format pattern "/StopPoint/Mode/{modes}/Disruption") $qp)
+  let full_url = (build-url $base ({modes: (encode-path-segment $modes)} | format pattern "/StopPoint/Mode/{modes}/Disruption") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1765,10 +1774,10 @@ export def "stop-point-search get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --query: string # The query string, case-insensitive. Leading and trailing wildcards are applied automatically.
-  --modes: list # An optional, parameter separated list of the modes to filter by
+  --modes: list<string> # An optional, parameter separated list of the modes to filter by
   --fares-only: oneof<nothing, bool> # True to only return stations in that have Fares data available for single fares to another station.
-  --max-results: int # An optional result limit, defaulting to and with a maximum of 50. Since children of the stop point heirarchy are returned for matches,             it is possible that the flattened result set will contain more than 50 items. (format: int32)
-  --lines: list # An optional, parameter separated list of the lines to filter by
+  --max-results: int # An optional result limit, defaulting to and with a maximum of 50. Since children of the stop point heirarchy are returned for matches, it is possible that the flattened result set will contain more than 50 items. (format: int32)
+  --lines: list<string> # An optional, parameter separated list of the lines to filter by
   --include-hubs: oneof<nothing, bool> # If true, returns results including HUBs.
   --tfl-operated-national-rail-stations-only: oneof<nothing, bool> # If the national-rail mode is included, this flag will filter the national rail stations so that only those operated by TfL are returned
 ]: nothing -> record<from: int, matches: table<id: string, lat: float, lon: float, name: string, url: string>, maxScore: float, page: int, pageSize: int, provider: string, query: string, total: int> {
@@ -1785,7 +1794,7 @@ export def "stop-point-search get" [
 #
 # GET /StopPoint/Search/{query}
 # operationId: StopPoint_Search
-export def "stop-point-search list" [
+export def "stop-point-search stop" [
   query: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1796,17 +1805,17 @@ export def "stop-point-search list" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --modes: list # An optional, parameter separated list of the modes to filter by
+  --modes: list<string> # An optional, parameter separated list of the modes to filter by
   --fares-only: oneof<nothing, bool> # True to only return stations in that have Fares data available for single fares to another station.
-  --max-results: int # An optional result limit, defaulting to and with a maximum of 50. Since children of the stop point heirarchy are returned for matches,             it is possible that the flattened result set will contain more than 50 items. (format: int32)
-  --lines: list # An optional, parameter separated list of the lines to filter by
+  --max-results: int # An optional result limit, defaulting to and with a maximum of 50. Since children of the stop point heirarchy are returned for matches, it is possible that the flattened result set will contain more than 50 items. (format: int32)
+  --lines: list<string> # An optional, parameter separated list of the lines to filter by
   --include-hubs: oneof<nothing, bool> # If true, returns results including HUBs.
   --tfl-operated-national-rail-stations-only: oneof<nothing, bool> # If the national-rail mode is included, this flag will filter the national rail stations so that only those operated by TfL are returned
 ]: nothing -> record<from: int, matches: table<id: string, lat: float, lon: float, name: string, url: string>, maxScore: float, page: int, pageSize: int, provider: string, query: string, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "modes" $modes "multi") (serialize-qp "faresOnly" $fares_only "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "lines" $lines "multi") (serialize-qp "includeHubs" $include_hubs "scalar") (serialize-qp "tflOperatedNationalRailStationsOnly" $tfl_operated_national_rail_stations_only "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({query: $query} | format pattern "/StopPoint/Search/{query}") $qp)
+  let full_url = (build-url $base ({query: (encode-path-segment $query)} | format pattern "/StopPoint/Search/{query}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1827,8 +1836,8 @@ export def "stop-point-service-types get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --id: string # The Naptan id of the stop
-  --line-ids: list # The lines which contain the given Naptan id (all lines relevant to the given stoppoint if empty)
-  --modes: list # The modes which the lines are relevant to (all if empty)
+  --line-ids: list<string> # The lines which contain the given Naptan id (all lines relevant to the given stoppoint if empty)
+  --modes: list<string> # The modes which the lines are relevant to (all if empty)
 ]: nothing -> table<lineName: string, lineSpecificServiceTypes: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
@@ -1843,7 +1852,7 @@ export def "stop-point-service-types get" [
 #
 # GET /StopPoint/Sms/{id}
 # operationId: StopPoint_GetBySms
-export def "stop-point-sms get-by" [
+export def "stop-point-sms get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1859,7 +1868,7 @@ export def "stop-point-sms get-by" [
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "output" $output "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/StopPoint/Sms/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/StopPoint/Sms/{id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1869,7 +1878,7 @@ export def "stop-point-sms get-by" [
 #
 # GET /StopPoint/Type/{types}
 # operationId: StopPoint_GetByType
-export def "stop-point-type get-by" [
+export def "stop-point-type get" [
   types: list
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1883,7 +1892,7 @@ export def "stop-point-type get-by" [
 ]: nothing -> table<accessibilitySummary: string, additionalProperties: list<record>, children: list<record>, childrenUrls: list<string>, commonName: string, distance: float, fullName: string, hubNaptanCode: string, icsCode: string, id: string, indicator: string, individualStopId: string, lat: float, lineGroup: list<record>, lineModeGroups: list<record>, lines: list<record>, lon: float, modes: list<string>, naptanId: string, naptanMode: string, placeType: string, platformName: string, smsCode: string, stationNaptan: string, status: bool, stopLetter: string, stopType: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({types: $types} | format pattern "/StopPoint/Type/{types}"))
+  let full_url = (build-url $base ({types: (encode-path-segment $types)} | format pattern "/StopPoint/Type/{types}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1893,7 +1902,7 @@ export def "stop-point-type get-by" [
 #
 # GET /StopPoint/Type/{types}/page/{page}
 # operationId: StopPoint_GetByTypeWithPagination
-export def "stop-point-type-page get-by-type-with-pagination" [
+export def "stop-point-type-page get-by-with-pagination" [
   types: list
   page: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1908,7 +1917,7 @@ export def "stop-point-type-page get-by-type-with-pagination" [
 ]: nothing -> table<accessibilitySummary: string, additionalProperties: list<record>, children: list<record>, childrenUrls: list<string>, commonName: string, distance: float, fullName: string, hubNaptanCode: string, icsCode: string, id: string, indicator: string, individualStopId: string, lat: float, lineGroup: list<record>, lineModeGroups: list<record>, lines: list<record>, lon: float, modes: list<string>, naptanId: string, naptanMode: string, placeType: string, platformName: string, smsCode: string, stationNaptan: string, status: bool, stopLetter: string, stopType: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({types: $types, page: $page} | format pattern "/StopPoint/Type/{types}/page/{page}"))
+  let full_url = (build-url $base ({types: (encode-path-segment $types), page: (encode-path-segment $page)} | format pattern "/StopPoint/Type/{types}/page/{page}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1934,7 +1943,7 @@ export def "stop-point get" [
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "includeCrowdingData" $include_crowding_data "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({ids: $ids} | format pattern "/StopPoint/{ids}") $qp)
+  let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/StopPoint/{ids}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1944,7 +1953,7 @@ export def "stop-point get" [
 #
 # GET /StopPoint/{ids}/Disruption
 # operationId: StopPoint_Disruption
-export def "stop-point-disruption get" [
+export def "stop-point-disruption stop" [
   ids: list
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1962,7 +1971,7 @@ export def "stop-point-disruption get" [
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "getFamily" $get_family "scalar") (serialize-qp "includeRouteBlockedStops" $include_route_blocked_stops "scalar") (serialize-qp "flattenResponse" $flatten_response "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({ids: $ids} | format pattern "/StopPoint/{ids}/Disruption") $qp)
+  let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/StopPoint/{ids}/Disruption") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1972,7 +1981,7 @@ export def "stop-point-disruption get" [
 #
 # GET /StopPoint/{id}/ArrivalDepartures
 # operationId: StopPoint_ArrivalDepartures
-export def "stop-point-arrival-departures get" [
+export def "stop-point-arrival-departures stop" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1983,12 +1992,12 @@ export def "stop-point-arrival-departures get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --line-ids: list # A comma-separated list of line ids e.g. elizabeth, london-overground, thameslink
+  --line-ids: list<string> # A comma-separated list of line ids e.g. elizabeth, london-overground, thameslink
 ]: nothing -> table<cause: string, departureStatus: string, destinationName: string, destinationNaptanId: string, estimatedTimeOfArrival: string, estimatedTimeOfDeparture: string, minutesAndSecondsToArrival: string, minutesAndSecondsToDeparture: string, naptanId: string, platformName: string, scheduledTimeOfArrival: string, scheduledTimeOfDeparture: string, stationName: string, timing: record<countdownServerAdjustment: string, insert: string, read: string, received: string, sent: string, source: string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "lineIds" $line_ids "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/StopPoint/{id}/ArrivalDepartures") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/StopPoint/{id}/ArrivalDepartures") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1998,7 +2007,7 @@ export def "stop-point-arrival-departures get" [
 #
 # GET /StopPoint/{id}/Arrivals
 # operationId: StopPoint_Arrivals
-export def "stop-point-arrivals get" [
+export def "stop-point-arrivals stop" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2012,7 +2021,7 @@ export def "stop-point-arrivals get" [
 ]: nothing -> table<bearing: string, currentLocation: string, destinationName: string, destinationNaptanId: string, direction: string, expectedArrival: string, id: string, lineId: string, lineName: string, modeName: string, naptanId: string, operationType: int, platformName: string, stationName: string, timeToLive: string, timeToStation: int, timestamp: string, timing: record<countdownServerAdjustment: string, insert: string, read: string, received: string, sent: string, source: string>, towards: string, vehicleId: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/StopPoint/{id}/Arrivals"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/StopPoint/{id}/Arrivals"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2022,7 +2031,7 @@ export def "stop-point-arrivals get" [
 #
 # GET /StopPoint/{id}/CanReachOnLine/{lineId}
 # operationId: StopPoint_ReachableFrom
-export def "stop-point-can-reach-on-line get" [
+export def "stop-point-can-reach-on-line stop-reachable" [
   id: string
   line_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2034,12 +2043,12 @@ export def "stop-point-can-reach-on-line get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --service-types: list # A comma-separated list of service types to filter on. If not specified. Supported values: Regular, Night. Defaulted to 'Regular' if not specified
+  --service-types: list<string> # A comma-separated list of service types to filter on. If not specified. Supported values: Regular, Night. Defaulted to 'Regular' if not specified
 ]: nothing -> table<accessibilitySummary: string, additionalProperties: list<record>, children: list<record>, childrenUrls: list<string>, commonName: string, distance: float, fullName: string, hubNaptanCode: string, icsCode: string, id: string, indicator: string, individualStopId: string, lat: float, lineGroup: list<record>, lineModeGroups: list<record>, lines: list<record>, lon: float, modes: list<string>, naptanId: string, naptanMode: string, placeType: string, platformName: string, smsCode: string, stationNaptan: string, status: bool, stopLetter: string, stopType: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "serviceTypes" $service_types "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id, line_id: $line_id} | format pattern "/StopPoint/{id}/CanReachOnLine/{line_id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id), line_id: (encode-path-segment $line_id)} | format pattern "/StopPoint/{id}/CanReachOnLine/{line_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2049,7 +2058,7 @@ export def "stop-point-can-reach-on-line get" [
 #
 # GET /StopPoint/{id}/Crowding/{line}
 # operationId: StopPoint_Crowding
-export def "stop-point-crowding get" [
+export def "stop-point-crowding stop" [
   id: string
   line: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2066,17 +2075,17 @@ export def "stop-point-crowding get" [
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "direction" $direction "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id, line: $line} | format pattern "/StopPoint/{id}/Crowding/{line}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id), line: (encode-path-segment $line)} | format pattern "/StopPoint/{id}/Crowding/{line}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Returns the canonical direction, "inbound" or "outbound", for a given pair of stop point Ids in the direction from -&gt; to.
+# Returns the canonical direction, "inbound" or "outbound", for a given pair of stop point Ids in the direction from -> to.
 #
 # GET /StopPoint/{id}/DirectionTo/{toStopPointId}
 # operationId: StopPoint_Direction
-export def "stop-point-direction-to get" [
+export def "stop-point-direction-to stop" [
   id: string
   to_stop_point_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2093,7 +2102,7 @@ export def "stop-point-direction-to get" [
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "lineId" $line_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id, to_stop_point_id: $to_stop_point_id} | format pattern "/StopPoint/{id}/DirectionTo/{to_stop_point_id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id), to_stop_point_id: (encode-path-segment $to_stop_point_id)} | format pattern "/StopPoint/{id}/DirectionTo/{to_stop_point_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2103,7 +2112,7 @@ export def "stop-point-direction-to get" [
 #
 # GET /StopPoint/{id}/Route
 # operationId: StopPoint_Route
-export def "stop-point-route get" [
+export def "stop-point-route stop" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2114,12 +2123,12 @@ export def "stop-point-route get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --service-types: list # A comma-separated list of service types to filter on. If not specified. Supported values: Regular, Night. Defaulted to 'Regular' if not specified
+  --service-types: list<string> # A comma-separated list of service types to filter on. If not specified. Supported values: Regular, Night. Defaulted to 'Regular' if not specified
 ]: nothing -> table<destinationName: string, direction: string, isActive: bool, lineId: string, lineString: string, mode: string, naptanId: string, routeSectionName: string, serviceType: string, validFrom: string, validTo: string, vehicleDestinationText: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "serviceTypes" $service_types "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/StopPoint/{id}/Route") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/StopPoint/{id}/Route") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2139,12 +2148,12 @@ export def "stop-point-place-types get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --place-types: list # A comcomma-separated value representing the place types.
+  --place-types: list<string> # A comcomma-separated value representing the place types.
 ]: nothing -> table<additionalProperties: list<record>, children: list<any>, childrenUrls: list<string>, commonName: string, distance: float, id: string, lat: float, lon: float, placeType: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "placeTypes" $place_types "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/StopPoint/{id}/placeTypes") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/StopPoint/{id}/placeTypes") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2168,7 +2177,7 @@ export def "stop-point-car-parks get" [
 ]: nothing -> table<additionalProperties: list<record>, children: list<any>, childrenUrls: list<string>, commonName: string, distance: float, id: string, lat: float, lon: float, placeType: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({stop_point_id: $stop_point_id} | format pattern "/StopPoint/{stop_point_id}/CarParks"))
+  let full_url = (build-url $base ({stop_point_id: (encode-path-segment $stop_point_id)} | format pattern "/StopPoint/{stop_point_id}/CarParks"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2192,7 +2201,7 @@ export def "stop-point-taxi-ranks get" [
 ]: nothing -> table<additionalProperties: list<record>, children: list<any>, childrenUrls: list<string>, commonName: string, distance: float, id: string, lat: float, lon: float, placeType: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({stop_point_id: $stop_point_id} | format pattern "/StopPoint/{stop_point_id}/TaxiRanks"))
+  let full_url = (build-url $base ({stop_point_id: (encode-path-segment $stop_point_id)} | format pattern "/StopPoint/{stop_point_id}/TaxiRanks"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2230,7 +2239,7 @@ export def "travel-times-compare-overlay-mapcenter-pinlocation-dimensions get" [
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "scenarioTitle" $scenario_title "scalar") (serialize-qp "timeOfDayId" $time_of_day_id "scalar") (serialize-qp "modeId" $mode_id "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "travelTimeInterval" $travel_time_interval "scalar") (serialize-qp "compareType" $compare_type "scalar") (serialize-qp "compareValue" $compare_value "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({z: $z, map_center_lat: $map_center_lat, map_center_lon: $map_center_lon, pin_lat: $pin_lat, pin_lon: $pin_lon, width: $width, height: $height} | format pattern "/TravelTimes/compareOverlay/{z}/mapcenter/{map_center_lat}/{map_center_lon}/pinlocation/{pin_lat}/{pin_lon}/dimensions/{width}/{height}") $qp)
+  let full_url = (build-url $base ({z: (encode-path-segment $z), map_center_lat: (encode-path-segment $map_center_lat), map_center_lon: (encode-path-segment $map_center_lon), pin_lat: (encode-path-segment $pin_lat), pin_lon: (encode-path-segment $pin_lon), width: (encode-path-segment $width), height: (encode-path-segment $height)} | format pattern "/TravelTimes/compareOverlay/{z}/mapcenter/{map_center_lat}/{map_center_lon}/pinlocation/{pin_lat}/{pin_lon}/dimensions/{width}/{height}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2266,7 +2275,7 @@ export def "travel-times-overlay-mapcenter-pinlocation-dimensions get" [
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "scenarioTitle" $scenario_title "scalar") (serialize-qp "timeOfDayId" $time_of_day_id "scalar") (serialize-qp "modeId" $mode_id "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "travelTimeInterval" $travel_time_interval "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({z: $z, map_center_lat: $map_center_lat, map_center_lon: $map_center_lon, pin_lat: $pin_lat, pin_lon: $pin_lon, width: $width, height: $height} | format pattern "/TravelTimes/overlay/{z}/mapcenter/{map_center_lat}/{map_center_lon}/pinlocation/{pin_lat}/{pin_lon}/dimensions/{width}/{height}") $qp)
+  let full_url = (build-url $base ({z: (encode-path-segment $z), map_center_lat: (encode-path-segment $map_center_lat), map_center_lon: (encode-path-segment $map_center_lon), pin_lat: (encode-path-segment $pin_lat), pin_lon: (encode-path-segment $pin_lon), width: (encode-path-segment $width), height: (encode-path-segment $height)} | format pattern "/TravelTimes/overlay/{z}/mapcenter/{map_center_lat}/{map_center_lon}/pinlocation/{pin_lat}/{pin_lon}/dimensions/{width}/{height}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2290,7 +2299,7 @@ export def "vehicle-arrivals get" [
 ]: nothing -> table<bearing: string, currentLocation: string, destinationName: string, destinationNaptanId: string, direction: string, expectedArrival: string, id: string, lineId: string, lineName: string, modeName: string, naptanId: string, operationType: int, platformName: string, stationName: string, timeToLive: string, timeToStation: int, timestamp: string, timing: record<countdownServerAdjustment: string, insert: string, read: string, received: string, sent: string, source: string>, towards: string, vehicleId: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({ids: $ids} | format pattern "/Vehicle/{ids}/Arrivals"))
+  let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/Vehicle/{ids}/Arrivals"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -82,7 +91,7 @@ def response-mode-completer [] { ["2" "4"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "alerts post" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "alerts create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -107,7 +116,7 @@ export def commands []: nothing -> table {
 # POST /alerts
 # --attachments item shape: {content?: string, contentType?: string, encoding?: "0"|"1", id?: string, name?: string}
 # --parameters item shape: {name?: string, order?: int, type?: "0"|"1"|"2"|"3"|"4"|"5"|"6"|"7"|"8"|"9"|"10"|"11"|"12"|"13"|"14"|"15"|"16"|"17"|"100", value?: string}
-export def "alerts post" [
+export def "alerts create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -130,17 +139,17 @@ export def "alerts post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/alerts")
-  let body = {"attachments": $attachments, "category": $category, "externalId": $external_id, "flags": $flags, "parameters": $parameters, "severity": $severity, "text": $text, "title": $title} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"attachments": $attachments, "category": $category, "externalId": $external_id, "flags": $flags, "parameters": $parameters, "severity": $severity, "text": $text, "title": $title} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Confirms all visible alerts
 #
 # POST /alerts/acknowledgeAll
-export def "alerts-acknowledge-all post" [
+export def "alerts-acknowledge-all create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -150,28 +159,28 @@ export def "alerts-acknowledge-all post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --user-id: string # User ID of the user to be used to acknowledge the alarms.
-  --category-ids: list # nullable
+  --category-ids: list<string> # nullable
   --max-date: string # nullable, format: date-time
   --min-date: string # nullable, format: date-time
   --scope: int@scope-completer # format: int32
-  --team-ids: list # nullable
+  --team-ids: list<string> # nullable
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "userId" $user_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/alerts/acknowledgeAll" $qp)
-  let body = {"categoryIds": $category_ids, "maxDate": $max_date, "minDate": $min_date, "scope": $scope, "teamIds": $team_ids} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"categoryIds": $category_ids, "maxDate": $max_date, "minDate": $min_date, "scope": $scope, "teamIds": $team_ids} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Acknowlegde multiple alerts
 #
 # POST /alerts/acknowledgeMultiple
-export def "alerts-acknowledge-multiple post" [
+export def "alerts-acknowledge-multiple create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -180,7 +189,7 @@ export def "alerts-acknowledge-multiple post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --alert-ids: list # nullable
+  --alert-ids: list<string> # nullable
   --description: string # nullable
   --user-id: string # nullable
 ]: any -> any {
@@ -188,17 +197,17 @@ export def "alerts-acknowledge-multiple post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/alerts/acknowledgeMultiple")
-  let body = {"alertIds": $alert_ids, "description": $description, "userId": $user_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"alertIds": $alert_ids, "description": $description, "userId": $user_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Close all acknowledged alerts.
 #
 # POST /alerts/closeAll
-export def "alerts-close-all post" [
+export def "alerts-close-all create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -208,28 +217,28 @@ export def "alerts-close-all post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --user-id: string # User ID of the user to be used to close the alarms.
-  --category-ids: list # nullable
+  --category-ids: list<string> # nullable
   --max-date: string # nullable, format: date-time
   --min-date: string # nullable, format: date-time
   --scope: int@scope-completer # format: int32
-  --team-ids: list # nullable
+  --team-ids: list<string> # nullable
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "userId" $user_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/alerts/closeAll" $qp)
-  let body = {"categoryIds": $category_ids, "maxDate": $max_date, "minDate": $min_date, "scope": $scope, "teamIds": $team_ids} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"categoryIds": $category_ids, "maxDate": $max_date, "minDate": $min_date, "scope": $scope, "teamIds": $team_ids} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Close multiple alerts
 #
 # POST /alerts/closeMultiple
-export def "alerts-close-multiple post" [
+export def "alerts-close-multiple create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -238,7 +247,7 @@ export def "alerts-close-multiple post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --alert-ids: list # nullable
+  --alert-ids: list<string> # nullable
   --description: string # nullable
   --user-id: string # nullable
 ]: any -> any {
@@ -246,18 +255,18 @@ export def "alerts-close-multiple post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/alerts/closeMultiple")
-  let body = {"alertIds": $alert_ids, "description": $description, "userId": $user_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"alertIds": $alert_ids, "description": $description, "userId": $user_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets alerts paged
 #
 # POST /alerts/paged
 # --continuationToken shape: {nextPartitionKey?: string, nextRowKey?: string, nextTableName?: string}
-export def "alerts-paged post" [
+export def "alerts-paged create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -267,11 +276,11 @@ export def "alerts-paged post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --max-results: int # Defines the limit of retrieved alert details per request. 1 to 100 are allowed per request.                 Number of alerts could be less if filtered but at least 1. (format: int32)
+  --max-results: int # Defines the limit of retrieved alert details per request. 1 to 100 are allowed per request. Number of alerts could be less if filtered but at least 1. (format: int32)
   --user-id: string # User ID of the user you want to get alerts for.
-  --alert-ids: list # nullable
+  --alert-ids: list<string> # nullable
   --alerts-after-id: string # nullable
-  --category-ids: list # nullable
+  --category-ids: list<string> # nullable
   --continuation-token: record # shape: {nextPartitionKey?: string, nextRowKey?: string, nextTableName?: string}
   --max-creation-date: string # nullable, format: date-time
   --min-creation-date: string # nullable, format: date-time
@@ -286,11 +295,11 @@ export def "alerts-paged post" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "userId" $user_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/alerts/paged" $qp)
-  let body = {"alertIds": $alert_ids, "alertsAfterId": $alerts_after_id, "categoryIds": $category_ids, "continuationToken": $continuation_token, "maxCreationDate": $max_creation_date, "minCreationDate": $min_creation_date, "modifiedSince": $modified_since, "showPersonalHiddenCategories": $show_personal_hidden_categories, "statusCodes": $status_codes, "teamId": $team_id, "textToSearch": $text_to_search} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"alertIds": $alert_ids, "alertsAfterId": $alerts_after_id, "categoryIds": $category_ids, "continuationToken": $continuation_token, "maxCreationDate": $max_creation_date, "minCreationDate": $min_creation_date, "modifiedSince": $modified_since, "showPersonalHiddenCategories": $show_personal_hidden_categories, "statusCodes": $status_codes, "teamId": $team_id, "textToSearch": $text_to_search} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get Alert Report
@@ -320,7 +329,7 @@ export def "alerts-report get" [
 # Queue undo of multiple acknowledgments.
 #
 # POST /alerts/undoAcknowledgeMultiple
-export def "alerts-undo-acknowledge-multiple post" [
+export def "alerts-undo-acknowledge-multiple create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -329,7 +338,7 @@ export def "alerts-undo-acknowledge-multiple post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --alert-ids: list # nullable
+  --alert-ids: list<string> # nullable
   --description: string # nullable
   --user-id: string # nullable
 ]: any -> any {
@@ -337,17 +346,17 @@ export def "alerts-undo-acknowledge-multiple post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/alerts/undoAcknowledgeMultiple")
-  let body = {"alertIds": $alert_ids, "description": $description, "userId": $user_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"alertIds": $alert_ids, "description": $description, "userId": $user_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Withdraw closure of multiple alerts
 #
 # POST /alerts/undoCloseMultiple
-export def "alerts-undo-close-multiple post" [
+export def "alerts-undo-close-multiple create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -356,7 +365,7 @@ export def "alerts-undo-close-multiple post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --alert-ids: list # nullable
+  --alert-ids: list<string> # nullable
   --description: string # nullable
   --user-id: string # nullable
 ]: any -> any {
@@ -364,11 +373,11 @@ export def "alerts-undo-close-multiple post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/alerts/undoCloseMultiple")
-  let body = {"alertIds": $alert_ids, "description": $description, "userId": $user_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"alertIds": $alert_ids, "description": $description, "userId": $user_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get Alert
@@ -388,7 +397,7 @@ export def "alerts get" [
 ]: nothing -> record<annotations: table<annotationType: int, id: string, text: string, timestamp: string, userId: string>, attachments: table<content: string, contentType: string, encoding: int, id: string, name: string>, category: string, categoryId: string, eventId: string, eventSourceId: string, eventSourceType: int, flags: int, history: record<acknowledged: string, acknowledgedgements: list<string>, closed: string, closedBy: string, created: string, historyEntries: list<record>>, id: string, lastModified: string, parameters: table<name: string, order: int, type: int, value: string>, severity: int, status: int, subscriptionId: string, teamId: string, text: string, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({alert_id: $alert_id} | format pattern "/alerts/{alert_id}"))
+  let full_url = (build-url $base ({alert_id: (encode-path-segment $alert_id)} | format pattern "/alerts/{alert_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -397,7 +406,7 @@ export def "alerts get" [
 # Acknowledge an alert
 #
 # POST /alerts/{alertId}/acknowledge
-export def "alerts-acknowledge post" [
+export def "alerts-acknowledge create" [
   alert_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -414,18 +423,18 @@ export def "alerts-acknowledge post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({alert_id: $alert_id} | format pattern "/alerts/{alert_id}/acknowledge"))
-  let body = {"description": $description, "userId": $user_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({alert_id: (encode-path-segment $alert_id)} | format pattern "/alerts/{alert_id}/acknowledge"))
+  let req_body = {"description": $description, "userId": $user_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Annotate Alert
 #
 # POST /alerts/{alertId}/annotate
-export def "alerts-annotate post" [
+export def "alerts-annotate create" [
   alert_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -445,12 +454,12 @@ export def "alerts-annotate post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({alert_id: $alert_id} | format pattern "/alerts/{alert_id}/annotate"))
-  let body = {"annotationType": $annotation_type, "id": $id, "text": $text, "timestamp": $timestamp, "userId": $user_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({alert_id: (encode-path-segment $alert_id)} | format pattern "/alerts/{alert_id}/annotate"))
+  let req_body = {"annotationType": $annotation_type, "id": $id, "text": $text, "timestamp": $timestamp, "userId": $user_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get annotations of an alert
@@ -470,7 +479,7 @@ export def "alerts-annotations get" [
 ]: nothing -> table<annotationType: int, id: string, text: string, timestamp: string, userId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({alert_id: $alert_id} | format pattern "/alerts/{alert_id}/annotations"))
+  let full_url = (build-url $base ({alert_id: (encode-path-segment $alert_id)} | format pattern "/alerts/{alert_id}/annotations"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -493,7 +502,7 @@ export def "alerts-attachments list" [
 ]: nothing -> table<contentType: string, id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({alert_id: $alert_id} | format pattern "/alerts/{alert_id}/attachments"))
+  let full_url = (build-url $base ({alert_id: (encode-path-segment $alert_id)} | format pattern "/alerts/{alert_id}/attachments"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -521,7 +530,7 @@ export def "alerts-attachments get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "scale" $scale "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({alert_id: $alert_id, attachment_id: $attachment_id} | format pattern "/alerts/{alert_id}/attachments/{attachment_id}") $qp)
+  let full_url = (build-url $base ({alert_id: (encode-path-segment $alert_id), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/alerts/{alert_id}/attachments/{attachment_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -530,7 +539,7 @@ export def "alerts-attachments get" [
 # Close an alert
 #
 # POST /alerts/{alertId}/close
-export def "alerts-close post" [
+export def "alerts-close create" [
   alert_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -547,12 +556,12 @@ export def "alerts-close post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({alert_id: $alert_id} | format pattern "/alerts/{alert_id}/close"))
-  let body = {"description": $description, "userId": $user_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({alert_id: (encode-path-segment $alert_id)} | format pattern "/alerts/{alert_id}/close"))
+  let req_body = {"description": $description, "userId": $user_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get alert notifications
@@ -572,7 +581,7 @@ export def "alerts-notifications get" [
 ]: nothing -> table<address: string, channelType: int, deviceName: string, lastUpdate: string, messageStatus: int, userId: string, userStatus: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({alert_id: $alert_id} | format pattern "/alerts/{alert_id}/notifications"))
+  let full_url = (build-url $base ({alert_id: (encode-path-segment $alert_id)} | format pattern "/alerts/{alert_id}/notifications"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -595,7 +604,7 @@ export def "alerts-overview get" [
 ]: nothing -> record<alertDeliveryStatus: record<statusCode: int, users: list<record>>, annotations: table<annotationType: int, id: string, text: string, timestamp: string, userId: string>, categoryId: string, eventId: string, flags: int, historyDetailed: record<acknowledged: string, acknowledgedgements: list<string>, closed: string, closedBy: string, created: string, historyEntries: list<record>>, id: string, lastModified: string, requiredAcknowledgements: int, status: int, subscriptionId: string, teamId: string, text: string, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({alert_id: $alert_id} | format pattern "/alerts/{alert_id}/overview"))
+  let full_url = (build-url $base ({alert_id: (encode-path-segment $alert_id)} | format pattern "/alerts/{alert_id}/overview"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -604,7 +613,7 @@ export def "alerts-overview get" [
 # Undo the acknowledgement of an alert.
 #
 # POST /alerts/{alertId}/undoAcknowledge
-export def "alerts-undo-acknowledge post" [
+export def "alerts-undo-acknowledge create" [
   alert_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -621,18 +630,18 @@ export def "alerts-undo-acknowledge post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({alert_id: $alert_id} | format pattern "/alerts/{alert_id}/undoAcknowledge"))
-  let body = {"description": $description, "userId": $user_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({alert_id: (encode-path-segment $alert_id)} | format pattern "/alerts/{alert_id}/undoAcknowledge"))
+  let req_body = {"description": $description, "userId": $user_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Undo the closure of an alert.
 #
 # POST /alerts/{alertId}/undoClose
-export def "alerts-undo-close post" [
+export def "alerts-undo-close create" [
   alert_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -649,12 +658,12 @@ export def "alerts-undo-close post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({alert_id: $alert_id} | format pattern "/alerts/{alert_id}/undoClose"))
-  let body = {"description": $description, "userId": $user_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({alert_id: (encode-path-segment $alert_id)} | format pattern "/alerts/{alert_id}/undoClose"))
+  let req_body = {"description": $description, "userId": $user_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets the names of all alert category images. You can get the image by going to account.signl4.com/images/alerts/categoryImageName.svg
@@ -696,7 +705,7 @@ export def "categories list" [
 ]: nothing -> table<augmentations: list<record>, color: string, id: string, imageName: string, isDefault: bool, keywordMatching: int, keywords: list<string>, lastMatch: string, name: string, options: int, order: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({team_id: $team_id} | format pattern "/categories/{team_id}"))
+  let full_url = (build-url $base ({team_id: (encode-path-segment $team_id)} | format pattern "/categories/{team_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -706,7 +715,7 @@ export def "categories list" [
 #
 # POST /categories/{teamId}
 # --augmentations item shape: {enabled?: bool, name?: string, type?: "0"|"1"|"2"|"3", value?: string}
-export def "categories post" [
+export def "categories create" [
   team_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -722,7 +731,7 @@ export def "categories post" [
   --id: string # nullable
   --image-name: string # nullable
   --keyword-matching: int@keyword-matching-completer # format: int32
-  --keywords: list # nullable
+  --keywords: list<string> # nullable
   --last-match: string # nullable, format: date-time
   --name: string # nullable
   --options: int@options-completer # format: int32
@@ -731,12 +740,12 @@ export def "categories post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({team_id: $team_id} | format pattern "/categories/{team_id}"))
-  let body = {"augmentations": $augmentations, "color": $color, "id": $id, "imageName": $image_name, "keywordMatching": $keyword_matching, "keywords": $keywords, "lastMatch": $last_match, "name": $name, "options": $options, "order": $order} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({team_id: (encode-path-segment $team_id)} | format pattern "/categories/{team_id}"))
+  let req_body = {"augmentations": $augmentations, "color": $color, "id": $id, "imageName": $image_name, "keywordMatching": $keyword_matching, "keywords": $keywords, "lastMatch": $last_match, "name": $name, "options": $options, "order": $order} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get metrics for all categories
@@ -756,7 +765,7 @@ export def "categories-metrics list" [
 ]: nothing -> table<categoryId: string, last24Hours: int, lastAlert: string, subscriberCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({team_id: $team_id} | format pattern "/categories/{team_id}/metrics"))
+  let full_url = (build-url $base ({team_id: (encode-path-segment $team_id)} | format pattern "/categories/{team_id}/metrics"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -779,7 +788,7 @@ export def "categories delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({team_id: $team_id, category_id: $category_id} | format pattern "/categories/{team_id}/{category_id}"))
+  let full_url = (build-url $base ({team_id: (encode-path-segment $team_id), category_id: (encode-path-segment $category_id)} | format pattern "/categories/{team_id}/{category_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -803,7 +812,7 @@ export def "categories get" [
 ]: nothing -> record<augmentations: table<enabled: bool, name: string, type: int, value: string>, color: string, id: string, imageName: string, isDefault: bool, keywordMatching: int, keywords: list<string>, lastMatch: string, name: string, options: int, order: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({team_id: $team_id, category_id: $category_id} | format pattern "/categories/{team_id}/{category_id}"))
+  let full_url = (build-url $base ({team_id: (encode-path-segment $team_id), category_id: (encode-path-segment $category_id)} | format pattern "/categories/{team_id}/{category_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -813,7 +822,7 @@ export def "categories get" [
 #
 # PUT /categories/{teamId}/{categoryId}
 # --augmentations item shape: {enabled?: bool, name?: string, type?: "0"|"1"|"2"|"3", value?: string}
-export def "categories put" [
+export def "categories update" [
   team_id: string
   category_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -830,7 +839,7 @@ export def "categories put" [
   --id: string # nullable
   --image-name: string # nullable
   --keyword-matching: int@keyword-matching-completer # format: int32
-  --keywords: list # nullable
+  --keywords: list<string> # nullable
   --last-match: string # nullable, format: date-time
   --name: string # nullable
   --options: int@options-completer # format: int32
@@ -839,12 +848,12 @@ export def "categories put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({team_id: $team_id, category_id: $category_id} | format pattern "/categories/{team_id}/{category_id}"))
-  let body = {"augmentations": $augmentations, "color": $color, "id": $id, "imageName": $image_name, "keywordMatching": $keyword_matching, "keywords": $keywords, "lastMatch": $last_match, "name": $name, "options": $options, "order": $order} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({team_id: (encode-path-segment $team_id), category_id: (encode-path-segment $category_id)} | format pattern "/categories/{team_id}/{category_id}"))
+  let req_body = {"augmentations": $augmentations, "color": $color, "id": $id, "imageName": $image_name, "keywordMatching": $keyword_matching, "keywords": $keywords, "lastMatch": $last_match, "name": $name, "options": $options, "order": $order} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get metrics for a specific category
@@ -865,7 +874,7 @@ export def "categories-metrics get" [
 ]: nothing -> record<categoryId: string, last24Hours: int, lastAlert: string, subscriberCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({team_id: $team_id, category_id: $category_id} | format pattern "/categories/{team_id}/{category_id}/metrics"))
+  let full_url = (build-url $base ({team_id: (encode-path-segment $team_id), category_id: (encode-path-segment $category_id)} | format pattern "/categories/{team_id}/{category_id}/metrics"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -889,7 +898,7 @@ export def "categories-subscriptions get" [
 ]: nothing -> table<status: int, userId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({team_id: $team_id, category_id: $category_id} | format pattern "/categories/{team_id}/{category_id}/subscriptions"))
+  let full_url = (build-url $base ({team_id: (encode-path-segment $team_id), category_id: (encode-path-segment $category_id)} | format pattern "/categories/{team_id}/{category_id}/subscriptions"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -898,7 +907,7 @@ export def "categories-subscriptions get" [
 # Set category subscriptions
 #
 # POST /categories/{teamId}/{categoryId}/subscriptions
-export def "categories-subscriptions post" [
+export def "categories-subscriptions create" [
   team_id: string
   category_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -915,18 +924,19 @@ export def "categories-subscriptions post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({team_id: $team_id, category_id: $category_id} | format pattern "/categories/{team_id}/{category_id}/subscriptions"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({team_id: (encode-path-segment $team_id), category_id: (encode-path-segment $category_id)} | format pattern "/categories/{team_id}/{category_id}/subscriptions"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get overview event paged.
 #
 # POST /events/paged
 # --continuationToken shape: {nextPartitionKey?: string, nextRowKey?: string, nextTableName?: string}
-export def "events-paged post" [
+export def "events-paged create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -936,7 +946,7 @@ export def "events-paged post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --max-results: int # Defines the limit of retrieved alert details per request. 1 to 100 are allowed per request.                  Number of alerts could be less if filtered but at least 1. (format: int32)
+  --max-results: int # Defines the limit of retrieved alert details per request. 1 to 100 are allowed per request. Number of alerts could be less if filtered but at least 1. (format: int32)
   --continuation-token: record # shape: {nextPartitionKey?: string, nextRowKey?: string, nextTableName?: string}
   --event-status-code: int@event-status-code-completer # format: int32
   --max-creation-date: string # nullable, format: date-time
@@ -950,11 +960,11 @@ export def "events-paged post" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/events/paged" $qp)
-  let body = {"continuationToken": $continuation_token, "eventStatusCode": $event_status_code, "maxCreationDate": $max_creation_date, "minCreationDate": $min_creation_date, "modifiedSince": $modified_since, "teamId": $team_id, "textToSearch": $text_to_search} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"continuationToken": $continuation_token, "eventStatusCode": $event_status_code, "maxCreationDate": $max_creation_date, "minCreationDate": $min_creation_date, "modifiedSince": $modified_since, "teamId": $team_id, "textToSearch": $text_to_search} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get overview event
@@ -974,7 +984,7 @@ export def "events-overview get" [
 ]: nothing -> record<acknowledgedAlerts: list<string>, alertId: string, categoryId: string, closedAlerts: list<string>, creationTime: string, eventSourceType: int, eventStatus: int, id: string, lastModified: string, severity: int, teamId: string, text: string, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({event_id: $event_id} | format pattern "/events/{event_id}/overview"))
+  let full_url = (build-url $base ({event_id: (encode-path-segment $event_id)} | format pattern "/events/{event_id}/overview"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -997,7 +1007,7 @@ export def "events-parameters get" [
 ]: nothing -> table<name: string, order: int, type: int, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({event_id: $event_id} | format pattern "/events/{event_id}/parameters"))
+  let full_url = (build-url $base ({event_id: (encode-path-segment $event_id)} | format pattern "/events/{event_id}/parameters"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1050,7 +1060,7 @@ export def "prepaid-settings get" [
 # Update your subscription's current prepaid settings.
 #
 # PUT /prepaid/settings
-export def "prepaid-settings put" [
+export def "prepaid-settings update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1068,11 +1078,11 @@ export def "prepaid-settings put" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/prepaid/settings")
-  let body = {"topUpAmount": $top_up_amount, "topUpEnabled": $top_up_enabled, "topUpLimit": $top_up_limit} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"topUpAmount": $top_up_amount, "topUpEnabled": $top_up_enabled, "topUpLimit": $top_up_limit} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get your subscription's prepaid transactions.
@@ -1125,7 +1135,7 @@ export def "scripts-instances list" [
 #
 # POST /scripts/instances
 # --runtimeInformation shape: {status?: "0"|"1"|"2"|"3"|"-1", statusMessage?: string}
-export def "scripts-instances post" [
+export def "scripts-instances create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1152,11 +1162,11 @@ export def "scripts-instances post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/scripts/instances")
-  let body = {"config": $config, "customScriptDescription": $custom_script_description, "customScriptName": $custom_script_name, "enabled": $enabled, "eventPattern": $event_pattern, "instanceId": $instance_id, "lastModified": $last_modified, "runtimeInformation": $runtime_information, "scriptId": $script_id, "scriptName": $script_name, "subscriptionId": $subscription_id, "teamId": $team_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"config": $config, "customScriptDescription": $custom_script_description, "customScriptName": $custom_script_name, "enabled": $enabled, "eventPattern": $event_pattern, "instanceId": $instance_id, "lastModified": $last_modified, "runtimeInformation": $runtime_information, "scriptId": $script_id, "scriptName": $script_name, "subscriptionId": $subscription_id, "teamId": $team_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes a script instance.
@@ -1175,7 +1185,7 @@ export def "scripts-instances delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({instance_id: $instance_id} | format pattern "/scripts/instances/{instance_id}"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/scripts/instances/{instance_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1198,7 +1208,7 @@ export def "scripts-instances get" [
 ]: nothing -> record<config: any, customScriptDescription: string, customScriptName: string, enabled: bool, eventPattern: any, instanceId: string, lastModified: string, runtimeInformation: record<status: int, statusMessage: string>, scriptId: string, scriptName: string, subscriptionId: string, teamId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({instance_id: $instance_id} | format pattern "/scripts/instances/{instance_id}"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/scripts/instances/{instance_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1208,7 +1218,7 @@ export def "scripts-instances get" [
 #
 # PUT /scripts/instances/{instanceId}
 # --runtimeInformation shape: {status?: "0"|"1"|"2"|"3"|"-1", statusMessage?: string}
-export def "scripts-instances put" [
+export def "scripts-instances update" [
   instance_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1235,18 +1245,18 @@ export def "scripts-instances put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({instance_id: $instance_id} | format pattern "/scripts/instances/{instance_id}"))
-  let body = {"config": $config, "customScriptDescription": $custom_script_description, "customScriptName": $custom_script_name, "enabled": $enabled, "eventPattern": $event_pattern, "instanceId": $body_instance_id, "lastModified": $last_modified, "runtimeInformation": $runtime_information, "scriptId": $script_id, "scriptName": $script_name, "subscriptionId": $subscription_id, "teamId": $team_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/scripts/instances/{instance_id}"))
+  let req_body = {"config": $config, "customScriptDescription": $custom_script_description, "customScriptName": $custom_script_name, "enabled": $enabled, "eventPattern": $event_pattern, "instanceId": $body_instance_id, "lastModified": $last_modified, "runtimeInformation": $runtime_information, "scriptId": $script_id, "scriptName": $script_name, "subscriptionId": $subscription_id, "teamId": $team_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates custom data of a given script instance which includes its display name.
 #
 # PUT /scripts/instances/{instanceId}/data
-export def "scripts-instances-data put" [
+export def "scripts-instances-data update" [
   instance_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1265,18 +1275,18 @@ export def "scripts-instances-data put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({instance_id: $instance_id} | format pattern "/scripts/instances/{instance_id}/data"))
-  let body = {"customScriptDescription": $custom_script_description, "customScriptName": $custom_script_name, "instanceId": $body_instance_id, "scriptId": $script_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/scripts/instances/{instance_id}/data"))
+  let req_body = {"customScriptDescription": $custom_script_description, "customScriptName": $custom_script_name, "instanceId": $body_instance_id, "scriptId": $script_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Disables a given script instance.
 #
 # POST /scripts/instances/{instanceId}/disable
-export def "scripts-instances-disable post" [
+export def "scripts-instances-disable create" [
   instance_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1290,7 +1300,7 @@ export def "scripts-instances-disable post" [
 ]: nothing -> record<config: any, customScriptDescription: string, customScriptName: string, enabled: bool, eventPattern: any, instanceId: string, lastModified: string, runtimeInformation: record<status: int, statusMessage: string>, scriptId: string, scriptName: string, subscriptionId: string, teamId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({instance_id: $instance_id} | format pattern "/scripts/instances/{instance_id}/disable"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/scripts/instances/{instance_id}/disable"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1299,7 +1309,7 @@ export def "scripts-instances-disable post" [
 # Enables a script instance.
 #
 # POST /scripts/instances/{instanceId}/enable
-export def "scripts-instances-enable post" [
+export def "scripts-instances-enable create" [
   instance_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1313,7 +1323,7 @@ export def "scripts-instances-enable post" [
 ]: nothing -> record<config: any, customScriptDescription: string, customScriptName: string, enabled: bool, eventPattern: any, instanceId: string, lastModified: string, runtimeInformation: record<status: int, statusMessage: string>, scriptId: string, scriptName: string, subscriptionId: string, teamId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({instance_id: $instance_id} | format pattern "/scripts/instances/{instance_id}/enable"))
+  let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/scripts/instances/{instance_id}/enable"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1384,7 +1394,7 @@ export def "scripts-inventory-parsed get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "language" $language "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({script_id: $script_id} | format pattern "/scripts/inventory/parsed/{script_id}") $qp)
+  let full_url = (build-url $base ({script_id: (encode-path-segment $script_id)} | format pattern "/scripts/inventory/parsed/{script_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1429,7 +1439,7 @@ export def "subscriptions get" [
 ]: nothing -> record<branchId: string, country: string, currency: string, externalAccountId: string, id: string, name: string, nextBilling: string, ownerId: string, planCode: string, planState: int, referralEnabled: bool, status: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}"))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1452,7 +1462,7 @@ export def "subscriptions-channel-prices get" [
 ]: nothing -> record<smsPerMessage: int, voicePerMinute: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/channelPrices"))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/channelPrices"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1475,7 +1485,7 @@ export def "subscriptions-features get" [
 ]: nothing -> table<name: string, type: int, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/features"))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/features"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1498,7 +1508,7 @@ export def "subscriptions-prepaid-balance get" [
 ]: nothing -> record<balance: int, latestTopUp: string, pendingTransaction: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/prepaidBalance"))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/prepaidBalance"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1521,7 +1531,7 @@ export def "subscriptions-prepaid-settings get" [
 ]: nothing -> record<topUpAmount: int, topUpEnabled: bool, topUpLimit: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/prepaidSettings"))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/prepaidSettings"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1530,7 +1540,7 @@ export def "subscriptions-prepaid-settings get" [
 # Update a subscription's current prepaid settings.
 #
 # PUT /subscriptions/{subscriptionId}/prepaidSettings
-export def "subscriptions-prepaid-settings put" [
+export def "subscriptions-prepaid-settings update" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1548,12 +1558,12 @@ export def "subscriptions-prepaid-settings put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/prepaidSettings"))
-  let body = {"topUpAmount": $top_up_amount, "topUpEnabled": $top_up_enabled, "topUpLimit": $top_up_limit} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/prepaidSettings"))
+  let req_body = {"topUpAmount": $top_up_amount, "topUpEnabled": $top_up_enabled, "topUpLimit": $top_up_limit} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get a subscription's prepaid transactions.
@@ -1573,7 +1583,7 @@ export def "subscriptions-prepaid-transactions get" [
 ]: nothing -> table<autoTopUpId: string, created: string, createdBy: string, credits: int, currency: string, modified: string, packageCode: string, status: string, statusCode: int, subscriptionId: string, transactionId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/prepaidTransactions"))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/prepaidTransactions"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1582,7 +1592,7 @@ export def "subscriptions-prepaid-transactions get" [
 # Updates a subscriptions profile.
 #
 # PUT /subscriptions/{subscriptionId}/profile
-export def "subscriptions-profile put" [
+export def "subscriptions-profile update" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1598,12 +1608,12 @@ export def "subscriptions-profile put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/profile"))
-  let body = {"name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/profile"))
+  let req_body = {"name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get infos for all teams of the subscription.
@@ -1623,7 +1633,7 @@ export def "subscriptions-teams get" [
 ]: nothing -> table<id: string, memberIds: list<string>, name: string, subscriptionId: string, timezone: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/teams"))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/teams"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1646,7 +1656,7 @@ export def "subscriptions-user-licenses get" [
 ]: nothing -> record<currentUsers: int, isFree: bool, isTrial: bool, licensedUsers: int, planCode: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/userLicenses"))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/userLicenses"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1691,7 +1701,7 @@ export def "teams get" [
 ]: nothing -> record<id: string, memberIds: list<string>, name: string, subscriptionId: string, timezone: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({team_id: $team_id} | format pattern "/teams/{team_id}"))
+  let full_url = (build-url $base ({team_id: (encode-path-segment $team_id)} | format pattern "/teams/{team_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1714,7 +1724,7 @@ export def "teams-alert-reports list" [
 ]: nothing -> list<record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({team_id: $team_id} | format pattern "/teams/{team_id}/alertReports"))
+  let full_url = (build-url $base ({team_id: (encode-path-segment $team_id)} | format pattern "/teams/{team_id}/alertReports"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1738,7 +1748,7 @@ export def "teams-alert-reports get" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({team_id: $team_id, file_name: $file_name} | format pattern "/teams/{team_id}/alertReports/{file_name}"))
+  let full_url = (build-url $base ({team_id: (encode-path-segment $team_id), file_name: (encode-path-segment $file_name)} | format pattern "/teams/{team_id}/alertReports/{file_name}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1761,7 +1771,7 @@ export def "teams-alert-settings get" [
 ]: nothing -> record<filterAction: int, filterMode: int, optOutMode: int, persistentNotificicationMode: int, responseMode: int, responseTime: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({team_id: $team_id} | format pattern "/teams/{team_id}/alertSettings"))
+  let full_url = (build-url $base ({team_id: (encode-path-segment $team_id)} | format pattern "/teams/{team_id}/alertSettings"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1770,7 +1780,7 @@ export def "teams-alert-settings get" [
 # Sets alert settings of a specific team.
 #
 # POST /teams/{teamId}/alertSettings
-export def "teams-alert-settings post" [
+export def "teams-alert-settings create" [
   team_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1791,12 +1801,12 @@ export def "teams-alert-settings post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({team_id: $team_id} | format pattern "/teams/{team_id}/alertSettings"))
-  let body = {"filterAction": $filter_action, "filterMode": $filter_mode, "optOutMode": $opt_out_mode, "persistentNotificicationMode": $persistent_notificication_mode, "responseMode": $response_mode, "responseTime": $response_time} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({team_id: (encode-path-segment $team_id)} | format pattern "/teams/{team_id}/alertSettings"))
+  let req_body = {"filterAction": $filter_action, "filterMode": $filter_mode, "optOutMode": $opt_out_mode, "persistentNotificicationMode": $persistent_notificication_mode, "responseMode": $response_mode, "responseTime": $response_time} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get Information about downloadable reports
@@ -1816,7 +1826,7 @@ export def "teams-duty-reports list" [
 ]: nothing -> list<record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({team_id: $team_id} | format pattern "/teams/{team_id}/dutyReports"))
+  let full_url = (build-url $base ({team_id: (encode-path-segment $team_id)} | format pattern "/teams/{team_id}/dutyReports"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1840,7 +1850,7 @@ export def "teams-duty-reports get" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({team_id: $team_id, file_name: $file_name} | format pattern "/teams/{team_id}/dutyReports/{file_name}"))
+  let full_url = (build-url $base ({team_id: (encode-path-segment $team_id), file_name: (encode-path-segment $file_name)} | format pattern "/teams/{team_id}/dutyReports/{file_name}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1865,7 +1875,7 @@ export def "teams-dutysummary get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "lastTwoDuties" $last_two_duties "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({team_id: $team_id} | format pattern "/teams/{team_id}/dutysummary") $qp)
+  let full_url = (build-url $base ({team_id: (encode-path-segment $team_id)} | format pattern "/teams/{team_id}/dutysummary") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1888,7 +1898,7 @@ export def "teams-event-sources get" [
 ]: nothing -> table<address: string, groupId: string, lastEventRaised: string, subscriptionId: string, teamId: string, type: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({team_id: $team_id} | format pattern "/teams/{team_id}/eventSources"))
+  let full_url = (build-url $base ({team_id: (encode-path-segment $team_id)} | format pattern "/teams/{team_id}/eventSources"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1911,7 +1921,7 @@ export def "teams-memberships get" [
 ]: nothing -> table<id: string, isInvite: bool, mail: string, name: string, roleId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({team_id: $team_id} | format pattern "/teams/{team_id}/memberships"))
+  let full_url = (build-url $base ({team_id: (encode-path-segment $team_id)} | format pattern "/teams/{team_id}/memberships"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1921,7 +1931,7 @@ export def "teams-memberships get" [
 #
 # POST /teams/{teamId}/memberships
 # --invites item shape: {email?: string, roleId?: string}
-export def "teams-memberships post" [
+export def "teams-memberships create" [
   team_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1938,18 +1948,18 @@ export def "teams-memberships post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({team_id: $team_id} | format pattern "/teams/{team_id}/memberships"))
-  let body = {"inviterId": $inviter_id, "invites": $invites} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({team_id: (encode-path-segment $team_id)} | format pattern "/teams/{team_id}/memberships"))
+  let req_body = {"inviterId": $inviter_id, "invites": $invites} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Sends invite email again if an invite exists
 #
 # POST /teams/{teamId}/memberships/resendInviteMail
-export def "teams-memberships-resend-invite-mail post" [
+export def "teams-memberships-resend-invite-mail create" [
   team_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1966,12 +1976,12 @@ export def "teams-memberships-resend-invite-mail post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({team_id: $team_id} | format pattern "/teams/{team_id}/memberships/resendInviteMail"))
-  let body = {"inviterId": $inviter_id, "userMail": $user_mail} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({team_id: (encode-path-segment $team_id)} | format pattern "/teams/{team_id}/memberships/resendInviteMail"))
+  let req_body = {"inviterId": $inviter_id, "userMail": $user_mail} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Removes a user or invitation from a team, and may delete the user if he is not in any team.
@@ -1994,7 +2004,7 @@ export def "teams-memberships delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "requesterUserId" $requester_user_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({team_id: $team_id, user_id: $user_id} | format pattern "/teams/{team_id}/memberships/{user_id}") $qp)
+  let full_url = (build-url $base ({team_id: (encode-path-segment $team_id), user_id: (encode-path-segment $user_id)} | format pattern "/teams/{team_id}/memberships/{user_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2003,7 +2013,7 @@ export def "teams-memberships delete" [
 # Update user's team membership.
 #
 # PUT /teams/{teamId}/memberships/{userId}
-export def "teams-memberships put" [
+export def "teams-memberships update" [
   team_id: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2015,7 +2025,7 @@ export def "teams-memberships put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --requester-user-id: string # User ID of user which you want to change role with. This must be provided when using an api key. This user must have role administrator (for setting administrator role) or team administrator (for setting  rights.
+  --requester-user-id: string # User ID of user which you want to change role with. This must be provided when using an api key. This user must have role administrator (for setting administrator role) or team administrator (for setting rights.
   --role-id: string # nullable
   --body-team-id: string # nullable
 ]: any -> record<colorIndex: int, contactAddresses: table<address: string, channel: int, created: string, device: record, id: string, lastUpdated: string, options: int, userId: string>, dutyInfo: record<lastStatusChange: string, onDuty: bool, onManagerDuty: bool, overdue: bool>, id: string, isDeactivated: bool, isInvite: bool, mail: string, name: string, roleId: string, subscriptionId: string, timeZone: string, userImageLastModified: string> {
@@ -2023,18 +2033,18 @@ export def "teams-memberships put" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "requesterUserId" $requester_user_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({team_id: $team_id, user_id: $user_id} | format pattern "/teams/{team_id}/memberships/{user_id}") $qp)
-  let body = {"roleId": $role_id, "teamId": $body_team_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({team_id: (encode-path-segment $team_id), user_id: (encode-path-segment $user_id)} | format pattern "/teams/{team_id}/memberships/{user_id}") $qp)
+  let req_body = {"roleId": $role_id, "teamId": $body_team_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates team profile of a team
 #
 # PUT /teams/{teamId}/profile
-export def "teams-profile put" [
+export def "teams-profile update" [
   team_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2050,12 +2060,12 @@ export def "teams-profile put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({team_id: $team_id} | format pattern "/teams/{team_id}/profile"))
-  let body = {"name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({team_id: (encode-path-segment $team_id)} | format pattern "/teams/{team_id}/profile"))
+  let req_body = {"name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns information about all duties that belong to the team.
@@ -2079,7 +2089,7 @@ export def "teams-schedules list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "UserId" $user_id "scalar") (serialize-qp "MinDate" $min_date "scalar") (serialize-qp "Limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({team_id: $team_id} | format pattern "/teams/{team_id}/schedules") $qp)
+  let full_url = (build-url $base ({team_id: (encode-path-segment $team_id)} | format pattern "/teams/{team_id}/schedules") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2088,7 +2098,7 @@ export def "teams-schedules list" [
 # Create/Update given duty schedule.
 #
 # POST /teams/{teamId}/schedules
-export def "teams-schedules post" [
+export def "teams-schedules create" [
   team_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2108,18 +2118,18 @@ export def "teams-schedules post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({team_id: $team_id} | format pattern "/teams/{team_id}/schedules"))
-  let body = {"end": $end, "id": $id, "options": $options, "start": $start, "userId": $user_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({team_id: (encode-path-segment $team_id)} | format pattern "/teams/{team_id}/schedules"))
+  let req_body = {"end": $end, "id": $id, "options": $options, "start": $start, "userId": $user_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete duty schedules in range
 #
 # POST /teams/{teamId}/schedules/deleteRange
-export def "teams-schedules-delete-range post" [
+export def "teams-schedules-delete-range create" [
   team_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2136,18 +2146,18 @@ export def "teams-schedules-delete-range post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({team_id: $team_id} | format pattern "/teams/{team_id}/schedules/deleteRange"))
-  let body = {"from": $body_from, "to": $body_to} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({team_id: (encode-path-segment $team_id)} | format pattern "/teams/{team_id}/schedules/deleteRange"))
+  let req_body = {"from": $body_from, "to": $body_to} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Save multiple schedules. It is possible to override existing schedules if you wish
 #
 # POST /teams/{teamId}/schedules/multiple
-export def "teams-schedules-multiple post" [
+export def "teams-schedules-multiple create" [
   team_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2165,11 +2175,12 @@ export def "teams-schedules-multiple post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "overrideExisting" $override_existing "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({team_id: $team_id} | format pattern "/teams/{team_id}/schedules/multiple") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({team_id: (encode-path-segment $team_id)} | format pattern "/teams/{team_id}/schedules/multiple") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a specific duty.
@@ -2189,7 +2200,7 @@ export def "teams-schedules delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({team_id: $team_id, duty_id: $duty_id} | format pattern "/teams/{team_id}/schedules/{duty_id}"))
+  let full_url = (build-url $base ({team_id: (encode-path-segment $team_id), duty_id: (encode-path-segment $duty_id)} | format pattern "/teams/{team_id}/schedules/{duty_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2213,7 +2224,7 @@ export def "teams-schedules get" [
 ]: nothing -> record<end: string, id: string, options: int, start: string, userId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({team_id: $team_id, schedule_id: $schedule_id} | format pattern "/teams/{team_id}/schedules/{schedule_id}"))
+  let full_url = (build-url $base ({team_id: (encode-path-segment $team_id), schedule_id: (encode-path-segment $schedule_id)} | format pattern "/teams/{team_id}/schedules/{schedule_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2236,7 +2247,7 @@ export def "teams-setup-progress get" [
 ]: nothing -> record<completedSteps: list<string>, teamId: string, timestamp: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({team_id: $team_id} | format pattern "/teams/{team_id}/setupProgress"))
+  let full_url = (build-url $base ({team_id: (encode-path-segment $team_id)} | format pattern "/teams/{team_id}/setupProgress"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2281,7 +2292,7 @@ export def "users get" [
 ]: nothing -> record<colorIndex: int, contactAddresses: table<address: string, channel: int, created: string, device: record, id: string, lastUpdated: string, options: int, userId: string>, dutyInfo: record<lastStatusChange: string, onDuty: bool, onManagerDuty: bool, overdue: bool>, id: string, isDeactivated: bool, isInvite: bool, mail: string, name: string, roleId: string, subscriptionId: string, timeZone: string, userImageLastModified: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2290,7 +2301,7 @@ export def "users get" [
 # Updates the password of a user
 #
 # PUT /users/{userId}/changePassword
-export def "users-change-password put" [
+export def "users-change-password update" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2306,18 +2317,18 @@ export def "users-change-password put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}/changePassword"))
-  let body = {"currentPassword": $current_password, "newPassword": $new_password} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/changePassword"))
+  let req_body = {"currentPassword": $current_password, "newPassword": $new_password} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Checks if a user has the provided permission.
 #
 # POST /users/{userId}/checkPermissions
-export def "users-check-permissions post" [
+export def "users-check-permissions create" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2329,18 +2340,18 @@ export def "users-check-permissions post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --team-id: string
-  --items: list # nullable
+  --items: list<string> # nullable
 ]: any -> record<content: string, contentDisposition: string, contentEncoding: string, contentType: string, lastModified: string, name: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}/checkPermissions") $qp)
-  let body = {"items": $items} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/checkPermissions") $qp)
+  let req_body = {"items": $items} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get duty status by user Id
@@ -2360,7 +2371,7 @@ export def "users-duty-status get" [
 ]: nothing -> record<lastStatusChange: string, onDuty: bool, onManagerDuty: bool, overdue: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}/dutyStatus"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/dutyStatus"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2384,7 +2395,7 @@ export def "users-image get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "height" $height "scalar") (serialize-qp "width" $width "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}/image") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/image") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2393,7 +2404,7 @@ export def "users-image get" [
 # Uploaded a profile image for a specified user.
 #
 # POST /users/{userId}/image
-export def "users-image post" [
+export def "users-image create" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2406,7 +2417,7 @@ export def "users-image post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}/image"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/image"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2415,7 +2426,7 @@ export def "users-image post" [
 # Updates user profile of an user
 #
 # PUT /users/{userId}/profile
-export def "users-profile put" [
+export def "users-profile update" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2431,18 +2442,18 @@ export def "users-profile put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}/profile"))
-  let body = {"name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/profile"))
+  let req_body = {"name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Punch User in
 #
 # POST /users/{userId}/punchIn
-export def "users-punch-in post" [
+export def "users-punch-in create" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2456,7 +2467,7 @@ export def "users-punch-in post" [
 ]: nothing -> record<lastStatusChange: string, onDuty: bool, onManagerDuty: bool, overdue: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}/punchIn"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/punchIn"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2465,7 +2476,7 @@ export def "users-punch-in post" [
 # Punch User in as Manager
 #
 # POST /users/{userId}/punchInAsManager
-export def "users-punch-in-as-manager post" [
+export def "users-punch-in-as-manager create" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2479,7 +2490,7 @@ export def "users-punch-in-as-manager post" [
 ]: nothing -> record<lastStatusChange: string, onDuty: bool, onManagerDuty: bool, overdue: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}/punchInAsManager"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/punchInAsManager"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2488,7 +2499,7 @@ export def "users-punch-in-as-manager post" [
 # Punch User out
 #
 # POST /users/{userId}/punchOut
-export def "users-punch-out post" [
+export def "users-punch-out create" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2502,7 +2513,7 @@ export def "users-punch-out post" [
 ]: nothing -> record<lastStatusChange: string, onDuty: bool, onManagerDuty: bool, overdue: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}/punchOut"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/punchOut"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2525,7 +2536,7 @@ export def "users-setup-progress get" [
 ]: nothing -> record<completedSteps: list<string>, timestamp: string, userId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}/setupProgress"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/setupProgress"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2558,7 +2569,7 @@ export def "webhooks list" [
 # Create Webhook
 #
 # POST /webhooks
-export def "webhooks post" [
+export def "webhooks create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2576,11 +2587,11 @@ export def "webhooks post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/webhooks")
-  let body = {"externalAddress": $external_address, "name": $name, "teamId": $team_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"externalAddress": $external_address, "name": $name, "teamId": $team_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete Webhook by Id
@@ -2599,7 +2610,7 @@ export def "webhooks delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({webhook_id: $webhook_id} | format pattern "/webhooks/{webhook_id}"))
+  let full_url = (build-url $base ({webhook_id: (encode-path-segment $webhook_id)} | format pattern "/webhooks/{webhook_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2623,7 +2634,7 @@ export def "webhooks get" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({webhook_id: $webhook_id} | format pattern "/webhooks/{webhook_id}"))
+  let full_url = (build-url $base ({webhook_id: (encode-path-segment $webhook_id)} | format pattern "/webhooks/{webhook_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2632,7 +2643,7 @@ export def "webhooks get" [
 # Update Webhook by Id
 #
 # PUT /webhooks/{webhookId}
-export def "webhooks put" [
+export def "webhooks update" [
   webhook_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2650,18 +2661,18 @@ export def "webhooks put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({webhook_id: $webhook_id} | format pattern "/webhooks/{webhook_id}"))
-  let body = {"externalAddress": $external_address, "name": $name, "teamId": $team_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({webhook_id: (encode-path-segment $webhook_id)} | format pattern "/webhooks/{webhook_id}"))
+  let req_body = {"externalAddress": $external_address, "name": $name, "teamId": $team_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Ability to enable a webHook.
 #
 # POST /webhooks/{webhookId}/disable
-export def "webhooks-disable post" [
+export def "webhooks-disable create" [
   webhook_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2675,7 +2686,7 @@ export def "webhooks-disable post" [
 ]: nothing -> record<enabled: bool, externalAddress: string, id: string, name: string, subscriptionId: string, teamId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({webhook_id: $webhook_id} | format pattern "/webhooks/{webhook_id}/disable"))
+  let full_url = (build-url $base ({webhook_id: (encode-path-segment $webhook_id)} | format pattern "/webhooks/{webhook_id}/disable"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2684,7 +2695,7 @@ export def "webhooks-disable post" [
 # Ability to disable a webHook.
 #
 # POST /webhooks/{webhookId}/enable
-export def "webhooks-enable post" [
+export def "webhooks-enable create" [
   webhook_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2698,7 +2709,7 @@ export def "webhooks-enable post" [
 ]: nothing -> record<enabled: bool, externalAddress: string, id: string, name: string, subscriptionId: string, teamId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({webhook_id: $webhook_id} | format pattern "/webhooks/{webhook_id}/enable"))
+  let full_url = (build-url $base ({webhook_id: (encode-path-segment $webhook_id)} | format pattern "/webhooks/{webhook_id}/enable"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

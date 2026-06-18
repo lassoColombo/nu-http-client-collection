@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -73,7 +82,7 @@ def threat-type-completer [] { ["ACCURACY_TIPS" "API_ABUSE" "APK_MALWARE_OFFLINE
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "encoded-full-hashes safebrowsingencodedFullHashesget" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "encoded-full-hashes get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -96,7 +105,7 @@ export def commands []: nothing -> table {
 # GET /v4/encodedFullHashes/{encodedRequest}
 #
 # operationId: safebrowsing.encodedFullHashes.get
-export def "encoded-full-hashes safebrowsingencodedFullHashesget" [
+export def "encoded-full-hashes get" [
   encoded_request: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -123,7 +132,7 @@ export def "encoded-full-hashes safebrowsingencodedFullHashesget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "clientId" $client_id "scalar") (serialize-qp "clientVersion" $client_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({encoded_request: $encoded_request} | format pattern "/v4/encodedFullHashes/{encoded_request}") $qp)
+  let full_url = (build-url $base ({encoded_request: (encode-path-segment $encoded_request)} | format pattern "/v4/encodedFullHashes/{encoded_request}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -132,7 +141,7 @@ export def "encoded-full-hashes safebrowsingencodedFullHashesget" [
 # GET /v4/encodedUpdates/{encodedRequest}
 #
 # operationId: safebrowsing.encodedUpdates.get
-export def "encoded-updates safebrowsingencodedUpdatesget" [
+export def "encoded-updates get" [
   encoded_request: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -159,7 +168,7 @@ export def "encoded-updates safebrowsingencodedUpdatesget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "clientId" $client_id "scalar") (serialize-qp "clientVersion" $client_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({encoded_request: $encoded_request} | format pattern "/v4/encodedUpdates/{encoded_request}") $qp)
+  let full_url = (build-url $base ({encoded_request: (encode-path-segment $encoded_request)} | format pattern "/v4/encodedUpdates/{encoded_request}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -171,8 +180,8 @@ export def "encoded-updates safebrowsingencodedUpdatesget" [
 # operationId: safebrowsing.fullHashes.find
 # --apiClient shape: {clientId?: string, clientVersion?: string}
 # --client shape: {clientId?: string, clientVersion?: string}
-# --threatInfo shape: {platformTypes?: list, threatEntries?: list, threatEntryTypes?: list, threatTypes?: list}
-export def "full-hashes-find safebrowsingfullHashesfind" [
+# --threatInfo shape: {platformTypes?: list<string>, threatEntries?: list, threatEntryTypes?: list<string>, threatTypes?: list<string>}
+export def "full-hashes-find find" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -194,19 +203,19 @@ export def "full-hashes-find safebrowsingfullHashesfind" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --api-client: record # The client metadata associated with Safe Browsing API requests. — shape: {clientId?: string, clientVersion?: string}
   --client: record # The client metadata associated with Safe Browsing API requests. — shape: {clientId?: string, clientVersion?: string}
-  --client-states: list # The current client states for each of the client's local threat lists.
-  --threat-info: record # The information regarding one or more threats that a client submits when checking for matches in threat lists. — shape: {platformTypes?: list, threatEntries?: list, threatEntryTypes?: list, threatTypes?: list}
+  --client-states: list<string> # The current client states for each of the client's local threat lists.
+  --threat-info: record # The information regarding one or more threats that a client submits when checking for matches in threat lists. — shape: {platformTypes?: list<string>, threatEntries?: list, threatEntryTypes?: list<string>, threatTypes?: list<string>}
 ]: any -> record<matches: table<cacheDuration: string, platformType: string, threat: record, threatEntryMetadata: record, threatEntryType: string, threatType: string>, minimumWaitDuration: string, negativeCacheDuration: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v4/fullHashes:find" $qp)
-  let body = {"apiClient": $api_client, "client": $client, "clientStates": $client_states, "threatInfo": $threat_info} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"apiClient": $api_client, "client": $client, "clientStates": $client_states, "threatInfo": $threat_info} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Reports a Safe Browsing threat list hit to Google. Only projects with TRUSTED_REPORTER visibility can use this method.
@@ -217,7 +226,7 @@ export def "full-hashes-find safebrowsingfullHashesfind" [
 # --entry shape: {digest?: string, hash?: string, url?: string}
 # --resources item shape: {referrer?: string, remoteIp?: string, type?: "THREAT_SOURCE_TYPE_UNSPECIFIED"|"MATCHING_URL"|"TAB_URL"|"TAB_REDIRECT"|"TAB_RESOURCE", url?: string}
 # --userInfo shape: {regionCode?: string, userId?: string}
-export def "threat-hits safebrowsingthreatHitscreate" [
+export def "threat-hits create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -249,11 +258,11 @@ export def "threat-hits safebrowsingthreatHitscreate" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v4/threatHits" $qp)
-  let body = {"clientInfo": $client_info, "entry": $entry, "platformType": $platform_type, "resources": $resources, "threatType": $threat_type, "userInfo": $user_info} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"clientInfo": $client_info, "entry": $entry, "platformType": $platform_type, "resources": $resources, "threatType": $threat_type, "userInfo": $user_info} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Fetches the most recent threat list updates. A client can request updates for multiple lists at once.
@@ -261,8 +270,8 @@ export def "threat-hits safebrowsingthreatHitscreate" [
 # POST /v4/threatListUpdates:fetch
 # operationId: safebrowsing.threatListUpdates.fetch
 # --client shape: {clientId?: string, clientVersion?: string}
-# --listUpdateRequests item shape: {constraints?: record, platformType?: "PLATFORM_TYPE_UNSPECIFIED"|"WINDOWS"|"LINUX"|"ANDROID"|"OSX"|"IOS"|"ANY_PLATFORM"|"ALL_PLATFORMS"|"CHROME", state?: string, threatEntryType?: "THREAT_ENTRY_TYPE_UNSPECIFIED"|"URL"|"EXECUTABLE"|"IP_RANGE"|"CHROME_EXTENSION"|"FILENAME"|"CERT", threatType?: "THREAT_TYPE_UNSPECIFIED"|"MALWARE"|"SOCIAL_ENGINEERING"|"UNWANTED_SOFTWARE"|"POTENTIALLY_HARMFUL_APPLICATION"|"SOCIAL_ENGINEERING_INTERNAL"|"API_ABUSE"|"MALICIOUS_BINARY"|"CSD_WHITELIST"|"CSD_DOWNLOAD_WHITELIST"|"CLIENT_INCIDENT"|"CLIENT_INCIDENT_WHITELIST"|"APK_MALWARE_OFFLINE"|"SUBRESOURCE_FILTER"|"SUSPICIOUS"|"TRICK_TO_BILL"|"HIGH_CONFIDENCE_ALLOWLIST"|"ACCURACY_TIPS"}
-export def "threat-list-updates-fetch safebrowsingthreatListUpdatesfetch" [
+# --listUpdateRequests item shape: {constraints?: record, platformType?: "PLATFORM_TYPE_UNSPECIFIED"|"WINDOWS"|"LINUX"|"ANDROID"|"OSX"|"IOS"|"ANY_PLATFORM"|"ALL_PLATFORMS"|"CHROME", state?: string, threatEntryType?: "THREAT_ENTRY_TYPE_UNSPECIFIED"|"URL"|"EXECUTABLE"|"IP_RANGE"|"CHROME_EXTENSION"|"FILENAME"|"CERT", ... (1 more fields)}
+export def "threat-list-updates-fetch get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -283,25 +292,25 @@ export def "threat-list-updates-fetch safebrowsingthreatListUpdatesfetch" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --client: record # The client metadata associated with Safe Browsing API requests. — shape: {clientId?: string, clientVersion?: string}
-  --list-update-requests: list # The requested threat list updates. — item shape: {constraints?: record, platformType?: "PLATFORM_TYPE_UNSPECIFIED"|"WINDOWS"|"LINUX"|"ANDROID"|"OSX"|"IOS"|"ANY_PLATFORM"|"ALL_PLATFORMS"|"CHROME", state?: string, threatEntryType?: "THREAT_ENTRY_TYPE_UNSPECIFIED"|"URL"|"EXECUTABLE"|"IP_RANGE"|"CHROME_EXTENSION"|"FILENAME"|"CERT", threatType?: "THREAT_TYPE_UNSPECIFIED"|"MALWARE"|"SOCIAL_ENGINEERING"|"UNWANTED_SOFTWARE"|"POTENTIALLY_HARMFUL_APPLICATION"|"SOCIAL_ENGINEERING_INTERNAL"|"API_ABUSE"|"MALICIOUS_BINARY"|"CSD_WHITELIST"|"CSD_DOWNLOAD_WHITELIST"|"CLIENT_INCIDENT"|"CLIENT_INCIDENT_WHITELIST"|"APK_MALWARE_OFFLINE"|"SUBRESOURCE_FILTER"|"SUSPICIOUS"|"TRICK_TO_BILL"|"HIGH_CONFIDENCE_ALLOWLIST"|"ACCURACY_TIPS"}
+  --list-update-requests: list # The requested threat list updates. — item shape: {constraints?: record, platformType?: "PLATFORM_TYPE_UNSPECIFIED"|"WINDOWS"|"LINUX"|"ANDROID"|"OSX"|"IOS"|"ANY_PLATFORM"|"ALL_PLATFORMS"|"CHROME", state?: string, threatEntryType?: "THREAT_ENTRY_TYPE_UNSPECIFIED"|"URL"|"EXECUTABLE"|"IP_RANGE"|"CHROME_EXTENSION"|"FILENAME"|"CERT", ... (1 more fields)}
 ]: any -> record<listUpdateResponses: table<additions: list, checksum: record, newClientState: string, platformType: string, removals: list, responseType: string, threatEntryType: string, threatType: string>, minimumWaitDuration: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v4/threatListUpdates:fetch" $qp)
-  let body = {"client": $client, "listUpdateRequests": $list_update_requests} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client": $client, "listUpdateRequests": $list_update_requests} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists the Safe Browsing threat lists available for download.
 #
 # GET /v4/threatLists
 # operationId: safebrowsing.threatLists.list
-export def "threat-lists safebrowsingthreatListslist" [
+export def "threat-lists list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -336,8 +345,8 @@ export def "threat-lists safebrowsingthreatListslist" [
 # POST /v4/threatMatches:find
 # operationId: safebrowsing.threatMatches.find
 # --client shape: {clientId?: string, clientVersion?: string}
-# --threatInfo shape: {platformTypes?: list, threatEntries?: list, threatEntryTypes?: list, threatTypes?: list}
-export def "threat-matches-find safebrowsingthreatMatchesfind" [
+# --threatInfo shape: {platformTypes?: list<string>, threatEntries?: list, threatEntryTypes?: list<string>, threatTypes?: list<string>}
+export def "threat-matches-find find" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -358,16 +367,16 @@ export def "threat-matches-find safebrowsingthreatMatchesfind" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --client: record # The client metadata associated with Safe Browsing API requests. — shape: {clientId?: string, clientVersion?: string}
-  --threat-info: record # The information regarding one or more threats that a client submits when checking for matches in threat lists. — shape: {platformTypes?: list, threatEntries?: list, threatEntryTypes?: list, threatTypes?: list}
+  --threat-info: record # The information regarding one or more threats that a client submits when checking for matches in threat lists. — shape: {platformTypes?: list<string>, threatEntries?: list, threatEntryTypes?: list<string>, threatTypes?: list<string>}
 ]: any -> record<matches: table<cacheDuration: string, platformType: string, threat: record, threatEntryMetadata: record, threatEntryType: string, threatType: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v4/threatMatches:find" $qp)
-  let body = {"client": $client, "threatInfo": $threat_info} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client": $client, "threatInfo": $threat_info} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

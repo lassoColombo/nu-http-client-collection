@@ -36,6 +36,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -112,10 +121,10 @@ export def "account-numbers get-owned" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --application-id: string # The Application that you want to return the numbers for. (e.g. aaaaaaaa-bbbb-cccc-dddd-0123456789ab)
-  --has-application: oneof<nothing, bool> # Set this optional field to `true` to restrict your results to numbers associated with an Application (any Application). Set to `false` to find all numbers not associated with any Application. Omit the field to avoid filtering on whether or not the number is assigned to an Application.  (e.g. false)
+  --has-application: oneof<nothing, bool> # Set this optional field to `true` to restrict your results to numbers associated with an Application (any Application). Set to `false` to find all numbers not associated with any Application. Omit the field to avoid filtering on whether or not the number is assigned to an Application. (e.g. false)
   --country: string # e.g. GB
   --pattern: string # The number pattern you want to search for. Use in conjunction with `search_pattern`. (e.g. 12345)
-  --search-pattern: int@search-pattern-completer # The strategy you want to use for matching:   * `0` - Search for numbers that start with `pattern` (Note: all numbers are in E.164 format, so the starting pattern includes the country code, such as 1 for USA) * `1` - Search for numbers that contain `pattern` * `2` - Search for numbers that end with `pattern`  (default: 0, e.g. 1)
+  --search-pattern: int@search-pattern-completer # The strategy you want to use for matching: * `0` - Search for numbers that start with `pattern` (Note: all numbers are in E.164 format, so the starting pattern includes the country code, such as 1 for USA) * `1` - Search for numbers that contain `pattern` * `2` - Search for numbers that end with `pattern` (default: 0, e.g. 1)
   --size: int # Page size (default: 10, e.g. 10)
   --index: int # Page index (default: 1, e.g. 1)
 ]: nothing -> record<count: int, numbers: table<country: string, features: list, messagesCallbackType: string, messagesCallbackValue: string, moHttpUrl: string, msisdn: string, type: string, voiceCallbackType: string, voiceCallbackValue: string>> {
@@ -132,7 +141,7 @@ export def "account-numbers get-owned" [
 #
 # POST /number/buy
 # operationId: buyANumber
-export def "number-buy buyANumber" [
+export def "number-buy create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -150,11 +159,12 @@ export def "number-buy buyANumber" [
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/number/buy")
-  let body = {"country": $country, "msisdn": $msisdn, "target_api_key": $target_api_key} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"country": $country, "msisdn": $msisdn, "target_api_key": $target_api_key} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Cancel a number
@@ -179,11 +189,12 @@ export def "number-cancel cancel" [
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/number/cancel")
-  let body = {"country": $country, "msisdn": $msisdn, "target_api_key": $target_api_key} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"country": $country, "msisdn": $msisdn, "target_api_key": $target_api_key} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Search available numbers
@@ -203,7 +214,7 @@ export def "number-search get-available" [
   --country: string # The two character country code to filter on (in ISO 3166-1 alpha-2 format) (e.g. GB)
   --type: string@type-completer # Set this parameter to filter the type of number, such as mobile or landline (e.g. mobile-lvn)
   --pattern: string # The number pattern you want to search for. Use in conjunction with `search_pattern`. (e.g. 12345)
-  --search-pattern: int@search-pattern-completer # The strategy you want to use for matching:   * `0` - Search for numbers that start with `pattern` (Note: all numbers are in E.164 format, so the starting pattern includes the country code, such as 1 for USA) * `1` - Search for numbers that contain `pattern` * `2` - Search for numbers that end with `pattern`  (default: 0, e.g. 1)
+  --search-pattern: int@search-pattern-completer # The strategy you want to use for matching: * `0` - Search for numbers that start with `pattern` (Note: all numbers are in E.164 format, so the starting pattern includes the country code, such as 1 for USA) * `1` - Search for numbers that contain `pattern` * `2` - Search for numbers that end with `pattern` (default: 0, e.g. 1)
   --features: string@features-completer # Available features are `SMS`, `VOICE` and `MMS`. To look for numbers that support multiple features, use a comma-separated value: `SMS,MMS,VOICE`. (e.g. SMS)
   --size: int # Page size (default: 10, e.g. 10)
   --index: int # Page index (default: 1, e.g. 1)
@@ -235,12 +246,12 @@ export def "number-update update" [
   --accept: string@accept-completer # Response content type
   --app-id: string # The Application that will handle inbound traffic to this number. (e.g. aaaaaaaa-bbbb-cccc-dddd-0123456789abc)
   country: string # The two character country code in ISO 3166-1 alpha-2 format (e.g. GB)
-  --messages-callback-type: string@messages-callback-type-completer # <strong>DEPRECATED</strong> - We recommend that you use `app_id` instead.  Specifies the Messages webhook type (always `app`) associated with this number and must be used with the `messagesCallbackValue` parameter.  (DEPRECATED, e.g. app)
-  --messages-callback-value: string # <strong>DEPRECATED</strong> - We recommend that you use `app_id` instead.  Specifies the Application ID of your Messages application. It must be used with the `messagesCallbackType` parameter.  (DEPRECATED, e.g. aaaaaaaa-bbbb-cccc-dddd-0123456789ab)
+  --messages-callback-type: string@messages-callback-type-completer # DEPRECATED - We recommend that you use `app_id` instead. Specifies the Messages webhook type (always `app`) associated with this number and must be used with the `messagesCallbackValue` parameter. (DEPRECATED, e.g. app)
+  --messages-callback-value: string # DEPRECATED - We recommend that you use `app_id` instead. Specifies the Application ID of your Messages application. It must be used with the `messagesCallbackType` parameter. (DEPRECATED, e.g. aaaaaaaa-bbbb-cccc-dddd-0123456789ab)
   --mo-http-url: string # An URL-encoded URI to the webhook endpoint that handles inbound messages. Your webhook endpoint must be active before you make this request. Vonage makes a `GET` request to the endpoint and checks that it returns a `200 OK` response. Set this parameter's value to an empty string to remove the webhook. (e.g. https://example.com/webhooks/inbound-sms)
   --mo-smpp-sys-type: string # The associated system type for your SMPP client (e.g. inbound)
   msisdn: string # An available inbound virtual number. (e.g. 447700900000)
-  --voice-callback-type: string@voice-callback-type-completer # Specify whether inbound voice calls on your number are forwarded to a SIP or a telephone number.  This must be used with the `voiceCallbackValue` parameter. If set, `sip` or `tel` are prioritized over the Voice capability in your Application.  *Note: The `app` value is deprecated and will be removed in future.*  (e.g. tel)
+  --voice-callback-type: string@voice-callback-type-completer # Specify whether inbound voice calls on your number are forwarded to a SIP or a telephone number. This must be used with the `voiceCallbackValue` parameter. If set, `sip` or `tel` are prioritized over the Voice capability in your Application. *Note: The `app` value is deprecated and will be removed in future.* (e.g. tel)
   --voice-callback-value: string # A SIP URI or telephone number. Must be used with the `voiceCallbackType` parameter. (e.g. 447700900000)
   --voice-status-callback: string # A webhook URI for Vonage to send a request to when a call ends (e.g. https://example.com/webhooks/status)
 ]: any -> record<error_code: string, error_code_label: string> {
@@ -248,9 +259,10 @@ export def "number-update update" [
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/number/update")
-  let body = {"app_id": $app_id, "country": $country, "messagesCallbackType": $messages_callback_type, "messagesCallbackValue": $messages_callback_value, "moHttpUrl": $mo_http_url, "moSmppSysType": $mo_smpp_sys_type, "msisdn": $msisdn, "voiceCallbackType": $voice_callback_type, "voiceCallbackValue": $voice_callback_value, "voiceStatusCallback": $voice_status_callback} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"app_id": $app_id, "country": $country, "messagesCallbackType": $messages_callback_type, "messagesCallbackValue": $messages_callback_value, "moHttpUrl": $mo_http_url, "moSmppSysType": $mo_smpp_sys_type, "msisdn": $msisdn, "voiceCallbackType": $voice_callback_type, "voiceCallbackValue": $voice_callback_value, "voiceStatusCallback": $voice_status_callback} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }

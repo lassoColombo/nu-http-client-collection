@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -71,7 +80,7 @@ def alt-completer [] { ["csv" "json"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accounts adsensehostaccountslist" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accounts list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,7 +104,7 @@ export def commands []: nothing -> table {
 #
 # GET /accounts
 # operationId: adsensehost.accounts.list
-export def "accounts adsensehostaccountslist" [
+export def "accounts list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -111,7 +120,7 @@ export def "accounts adsensehostaccountslist" [
   --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --user-ip: string # Deprecated. Please use quotaUser instead.
-  --filter-ad-client-id: list # Ad clients to list accounts for.
+  --filter-ad-client-id: list<string> # Ad clients to list accounts for.
 ]: nothing -> record<etag: string, items: table<id: string, kind: string, name: string, status: string>, kind: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -126,7 +135,7 @@ export def "accounts adsensehostaccountslist" [
 #
 # GET /accounts/{accountId}
 # operationId: adsensehost.accounts.get
-export def "accounts adsensehostaccountsget" [
+export def "accounts get" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -147,7 +156,7 @@ export def "accounts adsensehostaccountsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/accounts/{account_id}") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -157,7 +166,7 @@ export def "accounts adsensehostaccountsget" [
 #
 # GET /accounts/{accountId}/adclients
 # operationId: adsensehost.accounts.adclients.list
-export def "accounts-adclients adsensehostaccountsadclientslist" [
+export def "accounts-adclients list" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -180,7 +189,7 @@ export def "accounts-adclients adsensehostaccountsadclientslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/accounts/{account_id}/adclients") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/adclients") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -190,7 +199,7 @@ export def "accounts-adclients adsensehostaccountsadclientslist" [
 #
 # GET /accounts/{accountId}/adclients/{adClientId}
 # operationId: adsensehost.accounts.adclients.get
-export def "accounts-adclients adsensehostaccountsadclientsget" [
+export def "accounts-adclients get" [
   account_id: string
   ad_client_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -212,7 +221,7 @@ export def "accounts-adclients adsensehostaccountsadclientsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, ad_client_id: $ad_client_id} | format pattern "/accounts/{account_id}/adclients/{ad_client_id}") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), ad_client_id: (encode-path-segment $ad_client_id)} | format pattern "/accounts/{account_id}/adclients/{ad_client_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -222,7 +231,7 @@ export def "accounts-adclients adsensehostaccountsadclientsget" [
 #
 # GET /accounts/{accountId}/adclients/{adClientId}/adunits
 # operationId: adsensehost.accounts.adunits.list
-export def "accounts-adclients-adunits adsensehostaccountsadunitslist" [
+export def "accounts-adclients-adunits list" [
   account_id: string
   ad_client_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -247,7 +256,7 @@ export def "accounts-adclients-adunits adsensehostaccountsadunitslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "includeInactive" $include_inactive "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, ad_client_id: $ad_client_id} | format pattern "/accounts/{account_id}/adclients/{ad_client_id}/adunits") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), ad_client_id: (encode-path-segment $ad_client_id)} | format pattern "/accounts/{account_id}/adclients/{ad_client_id}/adunits") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -260,7 +269,7 @@ export def "accounts-adclients-adunits adsensehostaccountsadunitslist" [
 # --contentAdsSettings shape: {backupOption?: record, size?: string, type?: string}
 # --customStyle shape: {colors?: record, corners?: string, font?: record, kind?: string}
 # --mobileContentAdsSettings shape: {markupLanguage?: string, scriptingLanguage?: string, size?: string, type?: string}
-export def "accounts-adclients-adunits adsensehostaccountsadunitspatch" [
+export def "accounts-adclients-adunits update-by-accountId-adClientId" [
   account_id: string
   ad_client_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -286,18 +295,18 @@ export def "accounts-adclients-adunits adsensehostaccountsadunitspatch" [
   --kind: string # Kind of resource this is, in this case adsensehost#adUnit. (default: adsensehost#adUnit)
   --mobile-content-ads-settings: record # Settings specific to WAP mobile content ads (AFMC - deprecated). — shape: {markupLanguage?: string, scriptingLanguage?: string, size?: string, type?: string}
   --name: string # Name of this ad unit.
-  --status: string # Status of this ad unit. Possible values are: NEW: Indicates that the ad unit was created within the last seven days and does not yet have any activity associated with it.  ACTIVE: Indicates that there has been activity on this ad unit in the last seven days.  INACTIVE: Indicates that there has been no activity on this ad unit in the last seven days.
+  --status: string # Status of this ad unit. Possible values are: NEW: Indicates that the ad unit was created within the last seven days and does not yet have any activity associated with it. ACTIVE: Indicates that there has been activity on this ad unit in the last seven days. INACTIVE: Indicates that there has been no activity on this ad unit in the last seven days.
 ]: any -> record<code: string, contentAdsSettings: record<backupOption: record<color: string, type: string, url: string>, size: string, type: string>, customStyle: record<colors: record<background: string, border: string, text: string, title: string, url: string>, corners: string, font: record<family: string, size: string>, kind: string>, id: string, kind: string, mobileContentAdsSettings: record<markupLanguage: string, scriptingLanguage: string, size: string, type: string>, name: string, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "adUnitId" $ad_unit_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, ad_client_id: $ad_client_id} | format pattern "/accounts/{account_id}/adclients/{ad_client_id}/adunits") $qp)
-  let body = {"code": $code, "contentAdsSettings": $content_ads_settings, "customStyle": $custom_style, "id": $id, "kind": $kind, "mobileContentAdsSettings": $mobile_content_ads_settings, "name": $name, "status": $status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), ad_client_id: (encode-path-segment $ad_client_id)} | format pattern "/accounts/{account_id}/adclients/{ad_client_id}/adunits") $qp)
+  let req_body = {"code": $code, "contentAdsSettings": $content_ads_settings, "customStyle": $custom_style, "id": $id, "kind": $kind, "mobileContentAdsSettings": $mobile_content_ads_settings, "name": $name, "status": $status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Insert the supplied ad unit into the specified publisher AdSense account.
@@ -307,7 +316,7 @@ export def "accounts-adclients-adunits adsensehostaccountsadunitspatch" [
 # --contentAdsSettings shape: {backupOption?: record, size?: string, type?: string}
 # --customStyle shape: {colors?: record, corners?: string, font?: record, kind?: string}
 # --mobileContentAdsSettings shape: {markupLanguage?: string, scriptingLanguage?: string, size?: string, type?: string}
-export def "accounts-adclients-adunits adsensehostaccountsadunitsinsert" [
+export def "accounts-adclients-adunits create" [
   account_id: string
   ad_client_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -332,18 +341,18 @@ export def "accounts-adclients-adunits adsensehostaccountsadunitsinsert" [
   --kind: string # Kind of resource this is, in this case adsensehost#adUnit. (default: adsensehost#adUnit)
   --mobile-content-ads-settings: record # Settings specific to WAP mobile content ads (AFMC - deprecated). — shape: {markupLanguage?: string, scriptingLanguage?: string, size?: string, type?: string}
   --name: string # Name of this ad unit.
-  --status: string # Status of this ad unit. Possible values are: NEW: Indicates that the ad unit was created within the last seven days and does not yet have any activity associated with it.  ACTIVE: Indicates that there has been activity on this ad unit in the last seven days.  INACTIVE: Indicates that there has been no activity on this ad unit in the last seven days.
+  --status: string # Status of this ad unit. Possible values are: NEW: Indicates that the ad unit was created within the last seven days and does not yet have any activity associated with it. ACTIVE: Indicates that there has been activity on this ad unit in the last seven days. INACTIVE: Indicates that there has been no activity on this ad unit in the last seven days.
 ]: any -> record<code: string, contentAdsSettings: record<backupOption: record<color: string, type: string, url: string>, size: string, type: string>, customStyle: record<colors: record<background: string, border: string, text: string, title: string, url: string>, corners: string, font: record<family: string, size: string>, kind: string>, id: string, kind: string, mobileContentAdsSettings: record<markupLanguage: string, scriptingLanguage: string, size: string, type: string>, name: string, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, ad_client_id: $ad_client_id} | format pattern "/accounts/{account_id}/adclients/{ad_client_id}/adunits") $qp)
-  let body = {"code": $code, "contentAdsSettings": $content_ads_settings, "customStyle": $custom_style, "id": $id, "kind": $kind, "mobileContentAdsSettings": $mobile_content_ads_settings, "name": $name, "status": $status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), ad_client_id: (encode-path-segment $ad_client_id)} | format pattern "/accounts/{account_id}/adclients/{ad_client_id}/adunits") $qp)
+  let req_body = {"code": $code, "contentAdsSettings": $content_ads_settings, "customStyle": $custom_style, "id": $id, "kind": $kind, "mobileContentAdsSettings": $mobile_content_ads_settings, "name": $name, "status": $status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update the supplied ad unit in the specified publisher AdSense account.
@@ -353,7 +362,7 @@ export def "accounts-adclients-adunits adsensehostaccountsadunitsinsert" [
 # --contentAdsSettings shape: {backupOption?: record, size?: string, type?: string}
 # --customStyle shape: {colors?: record, corners?: string, font?: record, kind?: string}
 # --mobileContentAdsSettings shape: {markupLanguage?: string, scriptingLanguage?: string, size?: string, type?: string}
-export def "accounts-adclients-adunits adsensehostaccountsadunitsupdate" [
+export def "accounts-adclients-adunits update-by-accountId-adClientId-1" [
   account_id: string
   ad_client_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -378,25 +387,25 @@ export def "accounts-adclients-adunits adsensehostaccountsadunitsupdate" [
   --kind: string # Kind of resource this is, in this case adsensehost#adUnit. (default: adsensehost#adUnit)
   --mobile-content-ads-settings: record # Settings specific to WAP mobile content ads (AFMC - deprecated). — shape: {markupLanguage?: string, scriptingLanguage?: string, size?: string, type?: string}
   --name: string # Name of this ad unit.
-  --status: string # Status of this ad unit. Possible values are: NEW: Indicates that the ad unit was created within the last seven days and does not yet have any activity associated with it.  ACTIVE: Indicates that there has been activity on this ad unit in the last seven days.  INACTIVE: Indicates that there has been no activity on this ad unit in the last seven days.
+  --status: string # Status of this ad unit. Possible values are: NEW: Indicates that the ad unit was created within the last seven days and does not yet have any activity associated with it. ACTIVE: Indicates that there has been activity on this ad unit in the last seven days. INACTIVE: Indicates that there has been no activity on this ad unit in the last seven days.
 ]: any -> record<code: string, contentAdsSettings: record<backupOption: record<color: string, type: string, url: string>, size: string, type: string>, customStyle: record<colors: record<background: string, border: string, text: string, title: string, url: string>, corners: string, font: record<family: string, size: string>, kind: string>, id: string, kind: string, mobileContentAdsSettings: record<markupLanguage: string, scriptingLanguage: string, size: string, type: string>, name: string, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, ad_client_id: $ad_client_id} | format pattern "/accounts/{account_id}/adclients/{ad_client_id}/adunits") $qp)
-  let body = {"code": $code, "contentAdsSettings": $content_ads_settings, "customStyle": $custom_style, "id": $id, "kind": $kind, "mobileContentAdsSettings": $mobile_content_ads_settings, "name": $name, "status": $status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), ad_client_id: (encode-path-segment $ad_client_id)} | format pattern "/accounts/{account_id}/adclients/{ad_client_id}/adunits") $qp)
+  let req_body = {"code": $code, "contentAdsSettings": $content_ads_settings, "customStyle": $custom_style, "id": $id, "kind": $kind, "mobileContentAdsSettings": $mobile_content_ads_settings, "name": $name, "status": $status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete the specified ad unit from the specified publisher AdSense account.
 #
 # DELETE /accounts/{accountId}/adclients/{adClientId}/adunits/{adUnitId}
 # operationId: adsensehost.accounts.adunits.delete
-export def "accounts-adclients-adunits adsensehostaccountsadunitsdelete" [
+export def "accounts-adclients-adunits delete" [
   account_id: string
   ad_client_id: string
   ad_unit_id: string
@@ -419,7 +428,7 @@ export def "accounts-adclients-adunits adsensehostaccountsadunitsdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, ad_client_id: $ad_client_id, ad_unit_id: $ad_unit_id} | format pattern "/accounts/{account_id}/adclients/{ad_client_id}/adunits/{ad_unit_id}") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), ad_client_id: (encode-path-segment $ad_client_id), ad_unit_id: (encode-path-segment $ad_unit_id)} | format pattern "/accounts/{account_id}/adclients/{ad_client_id}/adunits/{ad_unit_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -429,7 +438,7 @@ export def "accounts-adclients-adunits adsensehostaccountsadunitsdelete" [
 #
 # GET /accounts/{accountId}/adclients/{adClientId}/adunits/{adUnitId}
 # operationId: adsensehost.accounts.adunits.get
-export def "accounts-adclients-adunits adsensehostaccountsadunitsget" [
+export def "accounts-adclients-adunits get" [
   account_id: string
   ad_client_id: string
   ad_unit_id: string
@@ -452,7 +461,7 @@ export def "accounts-adclients-adunits adsensehostaccountsadunitsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, ad_client_id: $ad_client_id, ad_unit_id: $ad_unit_id} | format pattern "/accounts/{account_id}/adclients/{ad_client_id}/adunits/{ad_unit_id}") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), ad_client_id: (encode-path-segment $ad_client_id), ad_unit_id: (encode-path-segment $ad_unit_id)} | format pattern "/accounts/{account_id}/adclients/{ad_client_id}/adunits/{ad_unit_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -462,7 +471,7 @@ export def "accounts-adclients-adunits adsensehostaccountsadunitsget" [
 #
 # GET /accounts/{accountId}/adclients/{adClientId}/adunits/{adUnitId}/adcode
 # operationId: adsensehost.accounts.adunits.getAdCode
-export def "accounts-adclients-adunits-adcode adsensehostaccountsadunitsgetAdCode" [
+export def "accounts-adclients-adunits-adcode get-ad-code" [
   account_id: string
   ad_client_id: string
   ad_unit_id: string
@@ -481,12 +490,12 @@ export def "accounts-adclients-adunits-adcode adsensehostaccountsadunitsgetAdCod
   --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --user-ip: string # Deprecated. Please use quotaUser instead.
-  --host-custom-channel-id: list # Host custom channel to attach to the ad code.
+  --host-custom-channel-id: list<string> # Host custom channel to attach to the ad code.
 ]: nothing -> record<adCode: string, kind: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "hostCustomChannelId" $host_custom_channel_id "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id, ad_client_id: $ad_client_id, ad_unit_id: $ad_unit_id} | format pattern "/accounts/{account_id}/adclients/{ad_client_id}/adunits/{ad_unit_id}/adcode") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), ad_client_id: (encode-path-segment $ad_client_id), ad_unit_id: (encode-path-segment $ad_unit_id)} | format pattern "/accounts/{account_id}/adclients/{ad_client_id}/adunits/{ad_unit_id}/adcode") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -496,7 +505,7 @@ export def "accounts-adclients-adunits-adcode adsensehostaccountsadunitsgetAdCod
 #
 # GET /accounts/{accountId}/reports
 # operationId: adsensehost.accounts.reports.generate
-export def "accounts-reports adsensehostaccountsreportsgenerate" [
+export def "accounts-reports generate" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -515,18 +524,18 @@ export def "accounts-reports adsensehostaccountsreportsgenerate" [
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --start-date: string # Start of the date range to report on in "YYYY-MM-DD" format, inclusive.
   --end-date: string # End of the date range to report on in "YYYY-MM-DD" format, inclusive.
-  --dimension: list # Dimensions to base the report on.
-  --filter: list # Filters to be run on the report.
+  --dimension: list<string> # Dimensions to base the report on.
+  --filter: list<string> # Filters to be run on the report.
   --locale: string # Optional locale to use for translating report output to a local language. Defaults to "en_US" if not specified.
   --max-results: int # The maximum number of rows of report data to return.
-  --metric: list # Numeric columns to include in the report.
-  --qp-sort: list # The name of a dimension or metric to sort the resulting report on, optionally prefixed with "+" to sort ascending or "-" to sort descending. If no prefix is specified, the column is sorted ascending.
+  --metric: list<string> # Numeric columns to include in the report.
+  --qp-sort: list<string> # The name of a dimension or metric to sort the resulting report on, optionally prefixed with "+" to sort ascending or "-" to sort descending. If no prefix is specified, the column is sorted ascending.
   --start-index: int # Index of the first row of report data to return.
 ]: nothing -> record<averages: list<string>, headers: table<currency: string, name: string, type: string>, kind: string, rows: list<list<string>>, totalMatchedRows: string, totals: list<string>, warnings: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "dimension" $dimension "multi") (serialize-qp "filter" $filter "multi") (serialize-qp "locale" $locale "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "metric" $metric "multi") (serialize-qp "sort" $qp_sort "multi") (serialize-qp "startIndex" $start_index "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/accounts/{account_id}/reports") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/reports") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -536,7 +545,7 @@ export def "accounts-reports adsensehostaccountsreportsgenerate" [
 #
 # GET /adclients
 # operationId: adsensehost.adclients.list
-export def "adclients adsensehostadclientslist" [
+export def "adclients list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -568,7 +577,7 @@ export def "adclients adsensehostadclientslist" [
 #
 # GET /adclients/{adClientId}
 # operationId: adsensehost.adclients.get
-export def "adclients adsensehostadclientsget" [
+export def "adclients get" [
   ad_client_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -589,7 +598,7 @@ export def "adclients adsensehostadclientsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({ad_client_id: $ad_client_id} | format pattern "/adclients/{ad_client_id}") $qp)
+  let full_url = (build-url $base ({ad_client_id: (encode-path-segment $ad_client_id)} | format pattern "/adclients/{ad_client_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -599,7 +608,7 @@ export def "adclients adsensehostadclientsget" [
 #
 # GET /adclients/{adClientId}/customchannels
 # operationId: adsensehost.customchannels.list
-export def "adclients-customchannels adsensehostcustomchannelslist" [
+export def "adclients-customchannels list" [
   ad_client_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -622,7 +631,7 @@ export def "adclients-customchannels adsensehostcustomchannelslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({ad_client_id: $ad_client_id} | format pattern "/adclients/{ad_client_id}/customchannels") $qp)
+  let full_url = (build-url $base ({ad_client_id: (encode-path-segment $ad_client_id)} | format pattern "/adclients/{ad_client_id}/customchannels") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -632,7 +641,7 @@ export def "adclients-customchannels adsensehostcustomchannelslist" [
 #
 # PATCH /adclients/{adClientId}/customchannels
 # operationId: adsensehost.customchannels.patch
-export def "adclients-customchannels adsensehostcustomchannelspatch" [
+export def "adclients-customchannels update-by-adClientId" [
   ad_client_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -659,19 +668,19 @@ export def "adclients-customchannels adsensehostcustomchannelspatch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "customChannelId" $custom_channel_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({ad_client_id: $ad_client_id} | format pattern "/adclients/{ad_client_id}/customchannels") $qp)
-  let body = {"code": $code, "id": $id, "kind": $kind, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({ad_client_id: (encode-path-segment $ad_client_id)} | format pattern "/adclients/{ad_client_id}/customchannels") $qp)
+  let req_body = {"code": $code, "id": $id, "kind": $kind, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Add a new custom channel to the host AdSense account.
 #
 # POST /adclients/{adClientId}/customchannels
 # operationId: adsensehost.customchannels.insert
-export def "adclients-customchannels adsensehostcustomchannelsinsert" [
+export def "adclients-customchannels create" [
   ad_client_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -697,19 +706,19 @@ export def "adclients-customchannels adsensehostcustomchannelsinsert" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({ad_client_id: $ad_client_id} | format pattern "/adclients/{ad_client_id}/customchannels") $qp)
-  let body = {"code": $code, "id": $id, "kind": $kind, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({ad_client_id: (encode-path-segment $ad_client_id)} | format pattern "/adclients/{ad_client_id}/customchannels") $qp)
+  let req_body = {"code": $code, "id": $id, "kind": $kind, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update a custom channel in the host AdSense account.
 #
 # PUT /adclients/{adClientId}/customchannels
 # operationId: adsensehost.customchannels.update
-export def "adclients-customchannels adsensehostcustomchannelsupdate" [
+export def "adclients-customchannels update-by-adClientId-1" [
   ad_client_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -735,19 +744,19 @@ export def "adclients-customchannels adsensehostcustomchannelsupdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({ad_client_id: $ad_client_id} | format pattern "/adclients/{ad_client_id}/customchannels") $qp)
-  let body = {"code": $code, "id": $id, "kind": $kind, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({ad_client_id: (encode-path-segment $ad_client_id)} | format pattern "/adclients/{ad_client_id}/customchannels") $qp)
+  let req_body = {"code": $code, "id": $id, "kind": $kind, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a specific custom channel from the host AdSense account.
 #
 # DELETE /adclients/{adClientId}/customchannels/{customChannelId}
 # operationId: adsensehost.customchannels.delete
-export def "adclients-customchannels adsensehostcustomchannelsdelete" [
+export def "adclients-customchannels delete" [
   ad_client_id: string
   custom_channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -769,7 +778,7 @@ export def "adclients-customchannels adsensehostcustomchannelsdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({ad_client_id: $ad_client_id, custom_channel_id: $custom_channel_id} | format pattern "/adclients/{ad_client_id}/customchannels/{custom_channel_id}") $qp)
+  let full_url = (build-url $base ({ad_client_id: (encode-path-segment $ad_client_id), custom_channel_id: (encode-path-segment $custom_channel_id)} | format pattern "/adclients/{ad_client_id}/customchannels/{custom_channel_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -779,7 +788,7 @@ export def "adclients-customchannels adsensehostcustomchannelsdelete" [
 #
 # GET /adclients/{adClientId}/customchannels/{customChannelId}
 # operationId: adsensehost.customchannels.get
-export def "adclients-customchannels adsensehostcustomchannelsget" [
+export def "adclients-customchannels get" [
   ad_client_id: string
   custom_channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -801,7 +810,7 @@ export def "adclients-customchannels adsensehostcustomchannelsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({ad_client_id: $ad_client_id, custom_channel_id: $custom_channel_id} | format pattern "/adclients/{ad_client_id}/customchannels/{custom_channel_id}") $qp)
+  let full_url = (build-url $base ({ad_client_id: (encode-path-segment $ad_client_id), custom_channel_id: (encode-path-segment $custom_channel_id)} | format pattern "/adclients/{ad_client_id}/customchannels/{custom_channel_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -811,7 +820,7 @@ export def "adclients-customchannels adsensehostcustomchannelsget" [
 #
 # GET /adclients/{adClientId}/urlchannels
 # operationId: adsensehost.urlchannels.list
-export def "adclients-urlchannels adsensehosturlchannelslist" [
+export def "adclients-urlchannels list" [
   ad_client_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -834,7 +843,7 @@ export def "adclients-urlchannels adsensehosturlchannelslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({ad_client_id: $ad_client_id} | format pattern "/adclients/{ad_client_id}/urlchannels") $qp)
+  let full_url = (build-url $base ({ad_client_id: (encode-path-segment $ad_client_id)} | format pattern "/adclients/{ad_client_id}/urlchannels") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -844,7 +853,7 @@ export def "adclients-urlchannels adsensehosturlchannelslist" [
 #
 # POST /adclients/{adClientId}/urlchannels
 # operationId: adsensehost.urlchannels.insert
-export def "adclients-urlchannels adsensehosturlchannelsinsert" [
+export def "adclients-urlchannels create" [
   ad_client_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -869,19 +878,19 @@ export def "adclients-urlchannels adsensehosturlchannelsinsert" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({ad_client_id: $ad_client_id} | format pattern "/adclients/{ad_client_id}/urlchannels") $qp)
-  let body = {"id": $id, "kind": $kind, "urlPattern": $url_pattern} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({ad_client_id: (encode-path-segment $ad_client_id)} | format pattern "/adclients/{ad_client_id}/urlchannels") $qp)
+  let req_body = {"id": $id, "kind": $kind, "urlPattern": $url_pattern} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a URL channel from the host AdSense account.
 #
 # DELETE /adclients/{adClientId}/urlchannels/{urlChannelId}
 # operationId: adsensehost.urlchannels.delete
-export def "adclients-urlchannels adsensehosturlchannelsdelete" [
+export def "adclients-urlchannels delete" [
   ad_client_id: string
   url_channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -903,7 +912,7 @@ export def "adclients-urlchannels adsensehosturlchannelsdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({ad_client_id: $ad_client_id, url_channel_id: $url_channel_id} | format pattern "/adclients/{ad_client_id}/urlchannels/{url_channel_id}") $qp)
+  let full_url = (build-url $base ({ad_client_id: (encode-path-segment $ad_client_id), url_channel_id: (encode-path-segment $url_channel_id)} | format pattern "/adclients/{ad_client_id}/urlchannels/{url_channel_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -913,7 +922,7 @@ export def "adclients-urlchannels adsensehosturlchannelsdelete" [
 #
 # GET /associationsessions/start
 # operationId: adsensehost.associationsessions.start
-export def "associationsessions-start adsensehostassociationsessionsstart" [
+export def "associationsessions-start start" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -929,7 +938,7 @@ export def "associationsessions-start adsensehostassociationsessionsstart" [
   --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --user-ip: string # Deprecated. Please use quotaUser instead.
-  --product-code: list # Products to associate with the user.
+  --product-code: list<string> # Products to associate with the user.
   --website-url: string # The URL of the user's hosted website.
   --callback-url: string # The URL to redirect the user to once association is completed. It receives a token parameter that can then be used to retrieve the associated account.
   --user-locale: string # The preferred locale of the user.
@@ -948,7 +957,7 @@ export def "associationsessions-start adsensehostassociationsessionsstart" [
 #
 # GET /associationsessions/verify
 # operationId: adsensehost.associationsessions.verify
-export def "associationsessions-verify adsensehostassociationsessionsverify" [
+export def "associationsessions-verify verify" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -979,7 +988,7 @@ export def "associationsessions-verify adsensehostassociationsessionsverify" [
 #
 # GET /reports
 # operationId: adsensehost.reports.generate
-export def "reports adsensehostreportsgenerate" [
+export def "reports generate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -997,12 +1006,12 @@ export def "reports adsensehostreportsgenerate" [
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --start-date: string # Start of the date range to report on in "YYYY-MM-DD" format, inclusive.
   --end-date: string # End of the date range to report on in "YYYY-MM-DD" format, inclusive.
-  --dimension: list # Dimensions to base the report on.
-  --filter: list # Filters to be run on the report.
+  --dimension: list<string> # Dimensions to base the report on.
+  --filter: list<string> # Filters to be run on the report.
   --locale: string # Optional locale to use for translating report output to a local language. Defaults to "en_US" if not specified.
   --max-results: int # The maximum number of rows of report data to return.
-  --metric: list # Numeric columns to include in the report.
-  --qp-sort: list # The name of a dimension or metric to sort the resulting report on, optionally prefixed with "+" to sort ascending or "-" to sort descending. If no prefix is specified, the column is sorted ascending.
+  --metric: list<string> # Numeric columns to include in the report.
+  --qp-sort: list<string> # The name of a dimension or metric to sort the resulting report on, optionally prefixed with "+" to sort ascending or "-" to sort descending. If no prefix is specified, the column is sorted ascending.
   --start-index: int # Index of the first row of report data to return.
 ]: nothing -> record<averages: list<string>, headers: table<currency: string, name: string, type: string>, kind: string, rows: list<list<string>>, totalMatchedRows: string, totals: list<string>, warnings: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

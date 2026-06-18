@@ -13,6 +13,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   match $scheme {
     "query-apikey" => { {headers: {}, query: $"apikey=($token_val)"} }
     "basic" => { {headers: {Authorization: $"Basic ($token_val)"}, query: ""} }
+    "basic-credentials" => { {headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: ""} }
     "none" => { {headers: {}, query: ""} }
     _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
   }
@@ -34,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
     "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
     _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -64,7 +74,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 }
 
 def base-url-completer [] { ["https://public.opendatasoft.com/api/v2"] }
-def auth-scheme-completer [] { ["query-apikey" "basic"] }
+def auth-scheme-completer [] { ["query-apikey" "basic" "basic-credentials"] }
 
 # Completers for enum parameters
 def delimiter-completer [] { ["," ";" "|"] }
@@ -92,7 +102,7 @@ export def commands []: nothing -> table {
   }
 }
 
-# API entry point  Provides links for: * catalog, your domain's list of datasets * opendatasoft, all datasets on the Opendatasoft network
+# API entry point Provides links for: * catalog, your domain's list of datasets * opendatasoft, all datasets on the Opendatasoft network
 #
 # GET /
 # operationId: getRoot
@@ -153,13 +163,13 @@ export def "pages get" [
 ]: nothing -> record<links: table<href: string, rel: string>, page: record<description: string, slug: string, title: record<en: string, fr: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({slug: $slug} | format pattern "/pages/{slug}"))
+  let full_url = (build-url $base ({slug: (encode-path-segment $slug)} | format pattern "/pages/{slug}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Source entry points  Provides links for the source's datasets and metadata.
+# Source entry points Provides links for the source's datasets and metadata.
 #
 # GET /{source}
 # operationId: getSource
@@ -176,7 +186,7 @@ export def "catalog get" [
 ]: nothing -> record<links: table<href: string, rel: string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({source: $source} | format pattern "/{source}"))
+  let full_url = (build-url $base ({source: (encode-path-segment $source)} | format pattern "/{source}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -186,7 +196,7 @@ export def "catalog get" [
 #
 # GET /{source}/aggregates
 # operationId: aggregateDatasets
-export def "aggregates aggregateDatasets" [
+export def "aggregates get-datasets" [
   source: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -196,26 +206,26 @@ export def "aggregates aggregateDatasets" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --select: string # A select expression can be used to add, remove or change fields to return. An expression can be:   - a wildcard ('*'): return all fields   - a field name: return only this field   - an include/exclude function. Include (resp exclude) all field matching include/exclude expression. This expression can contain wildcard. For example: include(spa*) will return all fields begining with 'spa'   - a complex expression: return the result of this expression. A label can be set for this expression, in that case, field will be named with this label. For instance: 'size * 2 as bigger_size' will return a new field named bigger_size and containing the double of size field value.
-  --qp-where: list # An array of filters.  A filter is a text expression performing a simple full-text search that can also include logical operations (NOT, AND, OR...) as well as lots of other functions, thus performing more complex and more precise searches.  Read [the query language reference](https://docs.opendatasoft.com/api/explore/v2.html#where-clause) for more details.
-  --group-by: string # A group by expression defines a grouping function for an aggregation. It can be:  - a field name: group result by each value of this field  - a range function: group result by range  - a date function: group result by date It is possible to specify a custom name with the 'as name' notation. For instance: group_by='city_field as city'.
-  --order-by: list # A comma-separated list of field names or aggregations to sort on, followed by an order (`asc` or `desc`).  Sorts results according to the specified fields' values in ascending order by default. To sort results in descending order, use the `desc` keyword.  Example: `sum(age) desc, name asc`
-  --limit: int # Number of items to return.  To use in conjonction with offset to implement pagination.  Limit maximum value is 100. To retrive more data use export entry points. The default value is 10.  (default: 10)
-  --offset: int # Index of the first item to return (starting at 0).  To use in conjonction with limit to implement pagination.  (default: 0)
-  --facet: list # A facet is a field used for simple filtering (through the parameters refine and exclude) or exploration (with the endpoint `/facets`).  Facets can be configured in the back-office or with this parameter.  Read [the facets documentation](https://help.opendatasoft.com/apis/ods-search-v2/#facets) for more details.
-  --refine: list # An array of facet filters. For example **city:Paris** or **modified:2019/12**. The request will only include the selected facet value.  Read [filtering with facets value](https://help.opendatasoft.com/apis/ods-search-v2/#filtering-with-facets-values) for more details.  *Not to be confused with a where filter. Refining with a facet is equivalent to selecting an entry in the left navigation panel.*  *refine is not available for monitoring sources*
-  --exclude: list # An array of facet filters. For example **city:Paris** or **modified:2019/12**. The request will exclude the defined facet value.  Read [filtering with facets value](https://help.opendatasoft.com/apis/ods-search-v2/#filtering-with-facets-values) for more details.  *Not to be confused with a where filter. Excluding a facet value is equivalent to removing an entry in the left navigation panel.*  *exclude is not available for monitoring sources*
+  --select: string # A select expression can be used to add, remove or change fields to return. An expression can be: - a wildcard ('*'): return all fields - a field name: return only this field - an include/exclude function. Include (resp exclude) all field matching include/exclude expression. This expression can contain wildcard. For example: include(spa*) will return all fields begining with 'spa' - a complex expression: return the result of this expression. A label can be set for this expression, in that case, field will be named with this label. For instance: 'size * 2 as bigger_size' will return a new field named bigger_size and containing the double of size field value.
+  --qp-where: list<string> # An array of filters. A filter is a text expression performing a simple full-text search that can also include logical operations (NOT, AND, OR...) as well as lots of other functions, thus performing more complex and more precise searches. Read [the query language reference](https://docs.opendatasoft.com/api/explore/v2.html#where-clause) for more details.
+  --group-by: string # A group by expression defines a grouping function for an aggregation. It can be: - a field name: group result by each value of this field - a range function: group result by range - a date function: group result by date It is possible to specify a custom name with the 'as name' notation. For instance: group_by='city_field as city'.
+  --order-by: list<string> # A comma-separated list of field names or aggregations to sort on, followed by an order (`asc` or `desc`). Sorts results according to the specified fields' values in ascending order by default. To sort results in descending order, use the `desc` keyword. Example: `sum(age) desc, name asc`
+  --limit: int # Number of items to return. To use in conjonction with offset to implement pagination. Limit maximum value is 100. To retrive more data use export entry points. The default value is 10. (default: 10)
+  --offset: int # Index of the first item to return (starting at 0). To use in conjonction with limit to implement pagination. (default: 0)
+  --facet: list<string> # A facet is a field used for simple filtering (through the parameters refine and exclude) or exploration (with the endpoint `/facets`). Facets can be configured in the back-office or with this parameter. Read [the facets documentation](https://help.opendatasoft.com/apis/ods-search-v2/#facets) for more details.
+  --refine: list<string> # An array of facet filters. For example **city:Paris** or **modified:2019/12**. The request will only include the selected facet value. Read [filtering with facets value](https://help.opendatasoft.com/apis/ods-search-v2/#filtering-with-facets-values) for more details. *Not to be confused with a where filter. Refining with a facet is equivalent to selecting an entry in the left navigation panel.* *refine is not available for monitoring sources*
+  --exclude: list<string> # An array of facet filters. For example **city:Paris** or **modified:2019/12**. The request will exclude the defined facet value. Read [filtering with facets value](https://help.opendatasoft.com/apis/ods-search-v2/#filtering-with-facets-values) for more details. *Not to be confused with a where filter. Excluding a facet value is equivalent to removing an entry in the left navigation panel.* *exclude is not available for monitoring sources*
 ]: nothing -> record<aggregations: list<record>, links: table<href: string, rel: string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "select" $select "scalar") (serialize-qp "where" $qp_where "multi") (serialize-qp "group_by" $group_by "scalar") (serialize-qp "order_by" $order_by "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({source: $source} | format pattern "/{source}/aggregates") $qp)
+  let full_url = (build-url $base ({source: (encode-path-segment $source)} | format pattern "/{source}/aggregates") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# List of available datasets, each with their endpoints, paginated.  Links provided: * previous page * next page * last page * first page
+# List of available datasets, each with their endpoints, paginated. Links provided: * previous page * next page * last page * first page
 #
 # GET /{source}/datasets
 # operationId: getDatasets
@@ -229,31 +239,31 @@ export def "datasets list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --select: string # A select expression can be used to add, remove or change fields to return. An expression can be:   - a wildcard ('*'): return all fields   - a field name: return only this field   - an include/exclude function. Include (resp exclude) all field matching include/exclude expression. This expression can contain wildcard. For example: include(spa*) will return all fields begining with 'spa'   - a complex expression: return the result of this expression. A label can be set for this expression, in that case, field will be named with this label. For instance: 'size * 2 as bigger_size' will return a new field named bigger_size and containing the double of size field value.
-  --qp-where: list # An array of filters.  A filter is a text expression performing a simple full-text search that can also include logical operations (NOT, AND, OR...) as well as lots of other functions, thus performing more complex and more precise searches.  Read [the query language reference](https://docs.opendatasoft.com/api/explore/v2.html#where-clause) for more details.
-  --group-by: string # A group by expression defines a grouping function for an aggregation. It can be:  - a field name: group result by each value of this field  - a range function: group result by range  - a date function: group result by date It is possible to specify a custom name with the 'as name' notation. For instance: group_by='city_field as city'.
-  --qp-sort: list # **Deprecated, use `order_by` instead.**  A list of field names, each possibly prefixed with a minus (-).  Sorts results according to the specified fields' values. By default, the sort is ascending (from the smallest value to the biggest value). A minus sign (‘-‘) may be used to perform a descending sort. Sorting is only available on numeric fields (int, double, date and datetime) and on text fields which have the sortable annotation.
-  --order-by: list # A comma-separated list of field names or aggregations to sort on, followed by an order (`asc` or `desc`).  Sorts results according to the specified fields' values in ascending order by default. To sort results in descending order, use the `desc` keyword.  Example: `sum(age) desc, name asc`
-  --limit: int # Number of items to return.  To use in conjonction with offset to implement pagination.  Limit maximum value is 100. To retrive more data use export entry points. The default value is 10.  (default: 10)
-  --offset: int # Index of the first item to return (starting at 0).  To use in conjonction with limit to implement pagination.  (default: 0)
-  --search: list # An array of full text search.  A full text search performs a prefixed text search for each provided terms in all visible fields of a catalog/dataset.
-  --facet: list # A facet is a field used for simple filtering (through the parameters refine and exclude) or exploration (with the endpoint `/facets`).  Facets can be configured in the back-office or with this parameter.  Read [the facets documentation](https://help.opendatasoft.com/apis/ods-search-v2/#facets) for more details.
-  --refine: list # An array of facet filters. For example **city:Paris** or **modified:2019/12**. The request will only include the selected facet value.  Read [filtering with facets value](https://help.opendatasoft.com/apis/ods-search-v2/#filtering-with-facets-values) for more details.  *Not to be confused with a where filter. Refining with a facet is equivalent to selecting an entry in the left navigation panel.*  *refine is not available for monitoring sources*
-  --exclude: list # An array of facet filters. For example **city:Paris** or **modified:2019/12**. The request will exclude the defined facet value.  Read [filtering with facets value](https://help.opendatasoft.com/apis/ods-search-v2/#filtering-with-facets-values) for more details.  *Not to be confused with a where filter. Excluding a facet value is equivalent to removing an entry in the left navigation panel.*  *exclude is not available for monitoring sources*
+  --select: string # A select expression can be used to add, remove or change fields to return. An expression can be: - a wildcard ('*'): return all fields - a field name: return only this field - an include/exclude function. Include (resp exclude) all field matching include/exclude expression. This expression can contain wildcard. For example: include(spa*) will return all fields begining with 'spa' - a complex expression: return the result of this expression. A label can be set for this expression, in that case, field will be named with this label. For instance: 'size * 2 as bigger_size' will return a new field named bigger_size and containing the double of size field value.
+  --qp-where: list<string> # An array of filters. A filter is a text expression performing a simple full-text search that can also include logical operations (NOT, AND, OR...) as well as lots of other functions, thus performing more complex and more precise searches. Read [the query language reference](https://docs.opendatasoft.com/api/explore/v2.html#where-clause) for more details.
+  --group-by: string # A group by expression defines a grouping function for an aggregation. It can be: - a field name: group result by each value of this field - a range function: group result by range - a date function: group result by date It is possible to specify a custom name with the 'as name' notation. For instance: group_by='city_field as city'.
+  --qp-sort: list<string> # **Deprecated, use `order_by` instead.** A list of field names, each possibly prefixed with a minus (-). Sorts results according to the specified fields' values. By default, the sort is ascending (from the smallest value to the biggest value). A minus sign (‘-‘) may be used to perform a descending sort. Sorting is only available on numeric fields (int, double, date and datetime) and on text fields which have the sortable annotation.
+  --order-by: list<string> # A comma-separated list of field names or aggregations to sort on, followed by an order (`asc` or `desc`). Sorts results according to the specified fields' values in ascending order by default. To sort results in descending order, use the `desc` keyword. Example: `sum(age) desc, name asc`
+  --limit: int # Number of items to return. To use in conjonction with offset to implement pagination. Limit maximum value is 100. To retrive more data use export entry points. The default value is 10. (default: 10)
+  --offset: int # Index of the first item to return (starting at 0). To use in conjonction with limit to implement pagination. (default: 0)
+  --search: list<string> # An array of full text search. A full text search performs a prefixed text search for each provided terms in all visible fields of a catalog/dataset.
+  --facet: list<string> # A facet is a field used for simple filtering (through the parameters refine and exclude) or exploration (with the endpoint `/facets`). Facets can be configured in the back-office or with this parameter. Read [the facets documentation](https://help.opendatasoft.com/apis/ods-search-v2/#facets) for more details.
+  --refine: list<string> # An array of facet filters. For example **city:Paris** or **modified:2019/12**. The request will only include the selected facet value. Read [filtering with facets value](https://help.opendatasoft.com/apis/ods-search-v2/#filtering-with-facets-values) for more details. *Not to be confused with a where filter. Refining with a facet is equivalent to selecting an entry in the left navigation panel.* *refine is not available for monitoring sources*
+  --exclude: list<string> # An array of facet filters. For example **city:Paris** or **modified:2019/12**. The request will exclude the defined facet value. Read [filtering with facets value](https://help.opendatasoft.com/apis/ods-search-v2/#filtering-with-facets-values) for more details. *Not to be confused with a where filter. Excluding a facet value is equivalent to removing an entry in the left navigation panel.* *exclude is not available for monitoring sources*
   --pretty: oneof<nothing, bool> # Activate pretty print (default: false)
   --timezone: string # Set timezone for datetime fields (default: UTC)
-  --include-app-metas: oneof<nothing, bool> # Explicitely request application metas for each datasets.  (default: false)
+  --include-app-metas: oneof<nothing, bool> # Explicitely request application metas for each datasets. (default: false)
 ]: nothing -> record<datasets: table<dataset: record, links: list>, links: table<href: string, rel: string>, total_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "select" $select "scalar") (serialize-qp "where" $qp_where "multi") (serialize-qp "group_by" $group_by "scalar") (serialize-qp "sort" $qp_sort "csv") (serialize-qp "order_by" $order_by "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "search" $search "multi") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "pretty" $pretty "scalar") (serialize-qp "timezone" $timezone "scalar") (serialize-qp "include_app_metas" $include_app_metas "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({source: $source} | format pattern "/{source}/datasets") $qp)
+  let full_url = (build-url $base ({source: (encode-path-segment $source)} | format pattern "/{source}/datasets") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# List of available endpoints for the specified dataset, with metadata and endpoints.  Will provide links for: * the attachments endpoint * the files endpoint * the records endpoint * the catalog endpoint
+# List of available endpoints for the specified dataset, with metadata and endpoints. Will provide links for: * the attachments endpoint * the files endpoint * the records endpoint * the catalog endpoint
 #
 # GET /{source}/datasets/{dataset_id}
 # operationId: getDataset
@@ -268,15 +278,15 @@ export def "datasets get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --select: string # A select expression can be used to add, remove or change fields to return. An expression can be:   - a wildcard ('*'): return all fields   - a field name: return only this field   - an include/exclude function. Include (resp exclude) all field matching include/exclude expression. This expression can contain wildcard. For example: include(spa*) will return all fields begining with 'spa'   - a complex expression: return the result of this expression. A label can be set for this expression, in that case, field will be named with this label. For instance: 'size * 2 as bigger_size' will return a new field named bigger_size and containing the double of size field value.
+  --select: string # A select expression can be used to add, remove or change fields to return. An expression can be: - a wildcard ('*'): return all fields - a field name: return only this field - an include/exclude function. Include (resp exclude) all field matching include/exclude expression. This expression can contain wildcard. For example: include(spa*) will return all fields begining with 'spa' - a complex expression: return the result of this expression. A label can be set for this expression, in that case, field will be named with this label. For instance: 'size * 2 as bigger_size' will return a new field named bigger_size and containing the double of size field value.
   --pretty: oneof<nothing, bool> # Activate pretty print (default: false)
   --timezone: string # Set timezone for datetime fields (default: UTC)
-  --include-app-metas: oneof<nothing, bool> # Explicitely request application metas for each datasets.  (default: false)
+  --include-app-metas: oneof<nothing, bool> # Explicitely request application metas for each datasets. (default: false)
 ]: nothing -> record<dataset: record<attachments: list<record>, data_visible: bool, dataset_id: string, features: list<string>, fields: list<record>, has_records: bool, metas: record>, links: table<href: string, rel: string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "select" $select "scalar") (serialize-qp "pretty" $pretty "scalar") (serialize-qp "timezone" $timezone "scalar") (serialize-qp "include_app_metas" $include_app_metas "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({source: $source, dataset_id: $dataset_id} | format pattern "/{source}/datasets/{dataset_id}") $qp)
+  let full_url = (build-url $base ({source: (encode-path-segment $source), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/{source}/datasets/{dataset_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -286,7 +296,7 @@ export def "datasets get" [
 #
 # GET /{source}/datasets/{dataset_id}/aggregates
 # operationId: aggregateRecords
-export def "datasets-aggregates aggregateRecords" [
+export def "datasets-aggregates get-records" [
   source: string
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -297,20 +307,20 @@ export def "datasets-aggregates aggregateRecords" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --select: string # A select expression can be used to add, remove or change fields to return. An expression can be:   - a wildcard ('*'): return all fields   - a field name: return only this field   - an include/exclude function. Include (resp exclude) all field matching include/exclude expression. This expression can contain wildcard. For example: include(spa*) will return all fields begining with 'spa'   - a complex expression: return the result of this expression. A label can be set for this expression, in that case, field will be named with this label. For instance: 'size * 2 as bigger_size' will return a new field named bigger_size and containing the double of size field value.
-  --qp-where: list # An array of filters.  A filter is a text expression performing a simple full-text search that can also include logical operations (NOT, AND, OR...) as well as lots of other functions, thus performing more complex and more precise searches.  Read [the query language reference](https://docs.opendatasoft.com/api/explore/v2.html#where-clause) for more details.
-  --group-by: string # A group by expression defines a grouping function for an aggregation. It can be:  - a field name: group result by each value of this field  - a range function: group result by range  - a date function: group result by date It is possible to specify a custom name with the 'as name' notation. For instance: group_by='city_field as city'.
-  --order-by: list # A comma-separated list of field names or aggregations to sort on, followed by an order (`asc` or `desc`).  Sorts results according to the specified fields' values in ascending order by default. To sort results in descending order, use the `desc` keyword.  Example: `sum(age) desc, name asc`
-  --limit: int # Number of items to return.  To use in conjonction with offset to implement pagination.  Limit maximum value is 100. To retrive more data use export entry points. The default value is 10.  (default: 10)
-  --offset: int # Index of the first item to return (starting at 0).  To use in conjonction with limit to implement pagination.  (default: 0)
-  --facet: list # A facet is a field used for simple filtering (through the parameters refine and exclude) or exploration (with the endpoint `/facets`).  Facets can be configured in the back-office or with this parameter.  Read [the facets documentation](https://help.opendatasoft.com/apis/ods-search-v2/#facets) for more details.
-  --refine: list # An array of facet filters. For example **city:Paris** or **modified:2019/12**. The request will only include the selected facet value.  Read [filtering with facets value](https://help.opendatasoft.com/apis/ods-search-v2/#filtering-with-facets-values) for more details.  *Not to be confused with a where filter. Refining with a facet is equivalent to selecting an entry in the left navigation panel.*  *refine is not available for monitoring sources*
-  --exclude: list # An array of facet filters. For example **city:Paris** or **modified:2019/12**. The request will exclude the defined facet value.  Read [filtering with facets value](https://help.opendatasoft.com/apis/ods-search-v2/#filtering-with-facets-values) for more details.  *Not to be confused with a where filter. Excluding a facet value is equivalent to removing an entry in the left navigation panel.*  *exclude is not available for monitoring sources*
+  --select: string # A select expression can be used to add, remove or change fields to return. An expression can be: - a wildcard ('*'): return all fields - a field name: return only this field - an include/exclude function. Include (resp exclude) all field matching include/exclude expression. This expression can contain wildcard. For example: include(spa*) will return all fields begining with 'spa' - a complex expression: return the result of this expression. A label can be set for this expression, in that case, field will be named with this label. For instance: 'size * 2 as bigger_size' will return a new field named bigger_size and containing the double of size field value.
+  --qp-where: list<string> # An array of filters. A filter is a text expression performing a simple full-text search that can also include logical operations (NOT, AND, OR...) as well as lots of other functions, thus performing more complex and more precise searches. Read [the query language reference](https://docs.opendatasoft.com/api/explore/v2.html#where-clause) for more details.
+  --group-by: string # A group by expression defines a grouping function for an aggregation. It can be: - a field name: group result by each value of this field - a range function: group result by range - a date function: group result by date It is possible to specify a custom name with the 'as name' notation. For instance: group_by='city_field as city'.
+  --order-by: list<string> # A comma-separated list of field names or aggregations to sort on, followed by an order (`asc` or `desc`). Sorts results according to the specified fields' values in ascending order by default. To sort results in descending order, use the `desc` keyword. Example: `sum(age) desc, name asc`
+  --limit: int # Number of items to return. To use in conjonction with offset to implement pagination. Limit maximum value is 100. To retrive more data use export entry points. The default value is 10. (default: 10)
+  --offset: int # Index of the first item to return (starting at 0). To use in conjonction with limit to implement pagination. (default: 0)
+  --facet: list<string> # A facet is a field used for simple filtering (through the parameters refine and exclude) or exploration (with the endpoint `/facets`). Facets can be configured in the back-office or with this parameter. Read [the facets documentation](https://help.opendatasoft.com/apis/ods-search-v2/#facets) for more details.
+  --refine: list<string> # An array of facet filters. For example **city:Paris** or **modified:2019/12**. The request will only include the selected facet value. Read [filtering with facets value](https://help.opendatasoft.com/apis/ods-search-v2/#filtering-with-facets-values) for more details. *Not to be confused with a where filter. Refining with a facet is equivalent to selecting an entry in the left navigation panel.* *refine is not available for monitoring sources*
+  --exclude: list<string> # An array of facet filters. For example **city:Paris** or **modified:2019/12**. The request will exclude the defined facet value. Read [filtering with facets value](https://help.opendatasoft.com/apis/ods-search-v2/#filtering-with-facets-values) for more details. *Not to be confused with a where filter. Excluding a facet value is equivalent to removing an entry in the left navigation panel.* *exclude is not available for monitoring sources*
 ]: nothing -> record<aggregations: list<record>, links: table<href: string, rel: string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "select" $select "scalar") (serialize-qp "where" $qp_where "multi") (serialize-qp "group_by" $group_by "scalar") (serialize-qp "order_by" $order_by "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({source: $source, dataset_id: $dataset_id} | format pattern "/{source}/datasets/{dataset_id}/aggregates") $qp)
+  let full_url = (build-url $base ({source: (encode-path-segment $source), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/{source}/datasets/{dataset_id}/aggregates") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -320,7 +330,7 @@ export def "datasets-aggregates aggregateRecords" [
 #
 # GET /{source}/datasets/{dataset_id}/attachments
 # operationId: getDatasetAttachements
-export def "datasets-attachments get-dataset-attachements" [
+export def "datasets-attachments get-attachements" [
   source: string
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -334,7 +344,7 @@ export def "datasets-attachments get-dataset-attachements" [
 ]: nothing -> record<attachments: table<href: string, metas: record>, links: table<href: string, rel: string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({source: $source, dataset_id: $dataset_id} | format pattern "/{source}/datasets/{dataset_id}/attachments"))
+  let full_url = (build-url $base ({source: (encode-path-segment $source), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/{source}/datasets/{dataset_id}/attachments"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -344,7 +354,7 @@ export def "datasets-attachments get-dataset-attachements" [
 #
 # GET /{source}/datasets/{dataset_id}/attachments/{attachment_id}
 # operationId: downloadDatasetAttachement
-export def "datasets-attachments download-dataset-attachement" [
+export def "datasets-attachments download-attachement" [
   source: string
   dataset_id: string
   attachment_id: string
@@ -359,7 +369,7 @@ export def "datasets-attachments download-dataset-attachement" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({source: $source, dataset_id: $dataset_id, attachment_id: $attachment_id} | format pattern "/{source}/datasets/{dataset_id}/attachments/{attachment_id}"))
+  let full_url = (build-url $base ({source: (encode-path-segment $source), dataset_id: (encode-path-segment $dataset_id), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/{source}/datasets/{dataset_id}/attachments/{attachment_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -380,22 +390,22 @@ export def "datasets-exports-csv export-records" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --select: string # A select expression can be used to add, remove or change fields to return. An expression can be:   - a wildcard ('*'): return all fields   - a field name: return only this field   - an include/exclude function. Include (resp exclude) all field matching include/exclude expression. This expression can contain wildcard. For example: include(spa*) will return all fields begining with 'spa'   - a complex expression: return the result of this expression. A label can be set for this expression, in that case, field will be named with this label. For instance: 'size * 2 as bigger_size' will return a new field named bigger_size and containing the double of size field value.
-  --qp-where: list # An array of filters.  A filter is a text expression performing a simple full-text search that can also include logical operations (NOT, AND, OR...) as well as lots of other functions, thus performing more complex and more precise searches.  Read [the query language reference](https://docs.opendatasoft.com/api/explore/v2.html#where-clause) for more details.
-  --qp-sort: list # **Deprecated, use `order_by` instead.**  A list of field names, each possibly prefixed with a minus (-).  Sorts results according to the specified fields' values. By default, the sort is ascending (from the smallest value to the biggest value). A minus sign (‘-‘) may be used to perform a descending sort. Sorting is only available on numeric fields (int, double, date and datetime) and on text fields which have the sortable annotation.
-  --order-by: list # A comma-separated list of field names or aggregations to sort on, followed by an order (`asc` or `desc`).  Sorts results according to the specified fields' values in ascending order by default. To sort results in descending order, use the `desc` keyword.  Example: `sum(age) desc, name asc`
-  --limit: int # Number of items to return in export.  Use -1 (default) to retrieve all records  (default: -1)
-  --offset: int # Index of the first item to return (starting at 0).  To use in conjonction with limit to implement pagination.  (default: 0)
-  --facet: list # A facet is a field used for simple filtering (through the parameters refine and exclude) or exploration (with the endpoint `/facets`).  Facets can be configured in the back-office or with this parameter.  Read [the facets documentation](https://help.opendatasoft.com/apis/ods-search-v2/#facets) for more details.
-  --refine: list # An array of facet filters. For example **city:Paris** or **modified:2019/12**. The request will only include the selected facet value.  Read [filtering with facets value](https://help.opendatasoft.com/apis/ods-search-v2/#filtering-with-facets-values) for more details.  *Not to be confused with a where filter. Refining with a facet is equivalent to selecting an entry in the left navigation panel.*  *refine is not available for monitoring sources*
-  --exclude: list # An array of facet filters. For example **city:Paris** or **modified:2019/12**. The request will exclude the defined facet value.  Read [filtering with facets value](https://help.opendatasoft.com/apis/ods-search-v2/#filtering-with-facets-values) for more details.  *Not to be confused with a where filter. Excluding a facet value is equivalent to removing an entry in the left navigation panel.*  *exclude is not available for monitoring sources*
+  --select: string # A select expression can be used to add, remove or change fields to return. An expression can be: - a wildcard ('*'): return all fields - a field name: return only this field - an include/exclude function. Include (resp exclude) all field matching include/exclude expression. This expression can contain wildcard. For example: include(spa*) will return all fields begining with 'spa' - a complex expression: return the result of this expression. A label can be set for this expression, in that case, field will be named with this label. For instance: 'size * 2 as bigger_size' will return a new field named bigger_size and containing the double of size field value.
+  --qp-where: list<string> # An array of filters. A filter is a text expression performing a simple full-text search that can also include logical operations (NOT, AND, OR...) as well as lots of other functions, thus performing more complex and more precise searches. Read [the query language reference](https://docs.opendatasoft.com/api/explore/v2.html#where-clause) for more details.
+  --qp-sort: list<string> # **Deprecated, use `order_by` instead.** A list of field names, each possibly prefixed with a minus (-). Sorts results according to the specified fields' values. By default, the sort is ascending (from the smallest value to the biggest value). A minus sign (‘-‘) may be used to perform a descending sort. Sorting is only available on numeric fields (int, double, date and datetime) and on text fields which have the sortable annotation.
+  --order-by: list<string> # A comma-separated list of field names or aggregations to sort on, followed by an order (`asc` or `desc`). Sorts results according to the specified fields' values in ascending order by default. To sort results in descending order, use the `desc` keyword. Example: `sum(age) desc, name asc`
+  --limit: int # Number of items to return in export. Use -1 (default) to retrieve all records (default: -1)
+  --offset: int # Index of the first item to return (starting at 0). To use in conjonction with limit to implement pagination. (default: 0)
+  --facet: list<string> # A facet is a field used for simple filtering (through the parameters refine and exclude) or exploration (with the endpoint `/facets`). Facets can be configured in the back-office or with this parameter. Read [the facets documentation](https://help.opendatasoft.com/apis/ods-search-v2/#facets) for more details.
+  --refine: list<string> # An array of facet filters. For example **city:Paris** or **modified:2019/12**. The request will only include the selected facet value. Read [filtering with facets value](https://help.opendatasoft.com/apis/ods-search-v2/#filtering-with-facets-values) for more details. *Not to be confused with a where filter. Refining with a facet is equivalent to selecting an entry in the left navigation panel.* *refine is not available for monitoring sources*
+  --exclude: list<string> # An array of facet filters. For example **city:Paris** or **modified:2019/12**. The request will exclude the defined facet value. Read [filtering with facets value](https://help.opendatasoft.com/apis/ods-search-v2/#filtering-with-facets-values) for more details. *Not to be confused with a where filter. Excluding a facet value is equivalent to removing an entry in the left navigation panel.* *exclude is not available for monitoring sources*
   --timezone: string # Set timezone for datetime fields (default: UTC)
   --delimiter: string@delimiter-completer # Provide a different delimiter (default ','). (default: ;)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "select" $select "scalar") (serialize-qp "where" $qp_where "multi") (serialize-qp "sort" $qp_sort "csv") (serialize-qp "order_by" $order_by "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "timezone" $timezone "scalar") (serialize-qp "delimiter" $delimiter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({source: $source, dataset_id: $dataset_id} | format pattern "/{source}/datasets/{dataset_id}/exports/csv") $qp)
+  let full_url = (build-url $base ({source: (encode-path-segment $source), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/{source}/datasets/{dataset_id}/exports/csv") $qp)
   let accept_val = "text/csv"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -416,23 +426,23 @@ export def "datasets-exports-geojson export-records" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --select: string # A select expression can be used to add, remove or change fields to return. An expression can be:   - a wildcard ('*'): return all fields   - a field name: return only this field   - an include/exclude function. Include (resp exclude) all field matching include/exclude expression. This expression can contain wildcard. For example: include(spa*) will return all fields begining with 'spa'   - a complex expression: return the result of this expression. A label can be set for this expression, in that case, field will be named with this label. For instance: 'size * 2 as bigger_size' will return a new field named bigger_size and containing the double of size field value.
-  --qp-where: list # An array of filters.  A filter is a text expression performing a simple full-text search that can also include logical operations (NOT, AND, OR...) as well as lots of other functions, thus performing more complex and more precise searches.  Read [the query language reference](https://docs.opendatasoft.com/api/explore/v2.html#where-clause) for more details.
-  --qp-sort: list # **Deprecated, use `order_by` instead.**  A list of field names, each possibly prefixed with a minus (-).  Sorts results according to the specified fields' values. By default, the sort is ascending (from the smallest value to the biggest value). A minus sign (‘-‘) may be used to perform a descending sort. Sorting is only available on numeric fields (int, double, date and datetime) and on text fields which have the sortable annotation.
-  --order-by: list # A comma-separated list of field names or aggregations to sort on, followed by an order (`asc` or `desc`).  Sorts results according to the specified fields' values in ascending order by default. To sort results in descending order, use the `desc` keyword.  Example: `sum(age) desc, name asc`
-  --limit: int # Number of items to return in export.  Use -1 (default) to retrieve all records  (default: -1)
-  --offset: int # Index of the first item to return (starting at 0).  To use in conjonction with limit to implement pagination.  (default: 0)
-  --search: list # An array of full text search.  A full text search performs a prefixed text search for each provided terms in all visible fields of a catalog/dataset.
-  --facet: list # A facet is a field used for simple filtering (through the parameters refine and exclude) or exploration (with the endpoint `/facets`).  Facets can be configured in the back-office or with this parameter.  Read [the facets documentation](https://help.opendatasoft.com/apis/ods-search-v2/#facets) for more details.
-  --refine: list # An array of facet filters. For example **city:Paris** or **modified:2019/12**. The request will only include the selected facet value.  Read [filtering with facets value](https://help.opendatasoft.com/apis/ods-search-v2/#filtering-with-facets-values) for more details.  *Not to be confused with a where filter. Refining with a facet is equivalent to selecting an entry in the left navigation panel.*  *refine is not available for monitoring sources*
-  --exclude: list # An array of facet filters. For example **city:Paris** or **modified:2019/12**. The request will exclude the defined facet value.  Read [filtering with facets value](https://help.opendatasoft.com/apis/ods-search-v2/#filtering-with-facets-values) for more details.  *Not to be confused with a where filter. Excluding a facet value is equivalent to removing an entry in the left navigation panel.*  *exclude is not available for monitoring sources*
+  --select: string # A select expression can be used to add, remove or change fields to return. An expression can be: - a wildcard ('*'): return all fields - a field name: return only this field - an include/exclude function. Include (resp exclude) all field matching include/exclude expression. This expression can contain wildcard. For example: include(spa*) will return all fields begining with 'spa' - a complex expression: return the result of this expression. A label can be set for this expression, in that case, field will be named with this label. For instance: 'size * 2 as bigger_size' will return a new field named bigger_size and containing the double of size field value.
+  --qp-where: list<string> # An array of filters. A filter is a text expression performing a simple full-text search that can also include logical operations (NOT, AND, OR...) as well as lots of other functions, thus performing more complex and more precise searches. Read [the query language reference](https://docs.opendatasoft.com/api/explore/v2.html#where-clause) for more details.
+  --qp-sort: list<string> # **Deprecated, use `order_by` instead.** A list of field names, each possibly prefixed with a minus (-). Sorts results according to the specified fields' values. By default, the sort is ascending (from the smallest value to the biggest value). A minus sign (‘-‘) may be used to perform a descending sort. Sorting is only available on numeric fields (int, double, date and datetime) and on text fields which have the sortable annotation.
+  --order-by: list<string> # A comma-separated list of field names or aggregations to sort on, followed by an order (`asc` or `desc`). Sorts results according to the specified fields' values in ascending order by default. To sort results in descending order, use the `desc` keyword. Example: `sum(age) desc, name asc`
+  --limit: int # Number of items to return in export. Use -1 (default) to retrieve all records (default: -1)
+  --offset: int # Index of the first item to return (starting at 0). To use in conjonction with limit to implement pagination. (default: 0)
+  --search: list<string> # An array of full text search. A full text search performs a prefixed text search for each provided terms in all visible fields of a catalog/dataset.
+  --facet: list<string> # A facet is a field used for simple filtering (through the parameters refine and exclude) or exploration (with the endpoint `/facets`). Facets can be configured in the back-office or with this parameter. Read [the facets documentation](https://help.opendatasoft.com/apis/ods-search-v2/#facets) for more details.
+  --refine: list<string> # An array of facet filters. For example **city:Paris** or **modified:2019/12**. The request will only include the selected facet value. Read [filtering with facets value](https://help.opendatasoft.com/apis/ods-search-v2/#filtering-with-facets-values) for more details. *Not to be confused with a where filter. Refining with a facet is equivalent to selecting an entry in the left navigation panel.* *refine is not available for monitoring sources*
+  --exclude: list<string> # An array of facet filters. For example **city:Paris** or **modified:2019/12**. The request will exclude the defined facet value. Read [filtering with facets value](https://help.opendatasoft.com/apis/ods-search-v2/#filtering-with-facets-values) for more details. *Not to be confused with a where filter. Excluding a facet value is equivalent to removing an entry in the left navigation panel.* *exclude is not available for monitoring sources*
   --timezone: string # Set timezone for datetime fields (default: UTC)
   --pretty: oneof<nothing, bool> # Activate pretty print (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "select" $select "scalar") (serialize-qp "where" $qp_where "multi") (serialize-qp "sort" $qp_sort "csv") (serialize-qp "order_by" $order_by "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "search" $search "multi") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "timezone" $timezone "scalar") (serialize-qp "pretty" $pretty "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({source: $source, dataset_id: $dataset_id} | format pattern "/{source}/datasets/{dataset_id}/exports/geojson") $qp)
+  let full_url = (build-url $base ({source: (encode-path-segment $source), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/{source}/datasets/{dataset_id}/exports/geojson") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -453,22 +463,22 @@ export def "datasets-exports-ical export-records" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --select: string # A select expression can be used to add, remove or change fields to return. An expression can be:   - a wildcard ('*'): return all fields   - a field name: return only this field   - an include/exclude function. Include (resp exclude) all field matching include/exclude expression. This expression can contain wildcard. For example: include(spa*) will return all fields begining with 'spa'   - a complex expression: return the result of this expression. A label can be set for this expression, in that case, field will be named with this label. For instance: 'size * 2 as bigger_size' will return a new field named bigger_size and containing the double of size field value.
-  --qp-where: list # An array of filters.  A filter is a text expression performing a simple full-text search that can also include logical operations (NOT, AND, OR...) as well as lots of other functions, thus performing more complex and more precise searches.  Read [the query language reference](https://docs.opendatasoft.com/api/explore/v2.html#where-clause) for more details.
-  --qp-sort: list # **Deprecated, use `order_by` instead.**  A list of field names, each possibly prefixed with a minus (-).  Sorts results according to the specified fields' values. By default, the sort is ascending (from the smallest value to the biggest value). A minus sign (‘-‘) may be used to perform a descending sort. Sorting is only available on numeric fields (int, double, date and datetime) and on text fields which have the sortable annotation.
-  --order-by: list # A comma-separated list of field names or aggregations to sort on, followed by an order (`asc` or `desc`).  Sorts results according to the specified fields' values in ascending order by default. To sort results in descending order, use the `desc` keyword.  Example: `sum(age) desc, name asc`
-  --limit: int # Number of items to return in export.  Use -1 (default) to retrieve all records  (default: -1)
-  --offset: int # Index of the first item to return (starting at 0).  To use in conjonction with limit to implement pagination.  (default: 0)
-  --search: list # An array of full text search.  A full text search performs a prefixed text search for each provided terms in all visible fields of a catalog/dataset.
-  --facet: list # A facet is a field used for simple filtering (through the parameters refine and exclude) or exploration (with the endpoint `/facets`).  Facets can be configured in the back-office or with this parameter.  Read [the facets documentation](https://help.opendatasoft.com/apis/ods-search-v2/#facets) for more details.
-  --refine: list # An array of facet filters. For example **city:Paris** or **modified:2019/12**. The request will only include the selected facet value.  Read [filtering with facets value](https://help.opendatasoft.com/apis/ods-search-v2/#filtering-with-facets-values) for more details.  *Not to be confused with a where filter. Refining with a facet is equivalent to selecting an entry in the left navigation panel.*  *refine is not available for monitoring sources*
-  --exclude: list # An array of facet filters. For example **city:Paris** or **modified:2019/12**. The request will exclude the defined facet value.  Read [filtering with facets value](https://help.opendatasoft.com/apis/ods-search-v2/#filtering-with-facets-values) for more details.  *Not to be confused with a where filter. Excluding a facet value is equivalent to removing an entry in the left navigation panel.*  *exclude is not available for monitoring sources*
+  --select: string # A select expression can be used to add, remove or change fields to return. An expression can be: - a wildcard ('*'): return all fields - a field name: return only this field - an include/exclude function. Include (resp exclude) all field matching include/exclude expression. This expression can contain wildcard. For example: include(spa*) will return all fields begining with 'spa' - a complex expression: return the result of this expression. A label can be set for this expression, in that case, field will be named with this label. For instance: 'size * 2 as bigger_size' will return a new field named bigger_size and containing the double of size field value.
+  --qp-where: list<string> # An array of filters. A filter is a text expression performing a simple full-text search that can also include logical operations (NOT, AND, OR...) as well as lots of other functions, thus performing more complex and more precise searches. Read [the query language reference](https://docs.opendatasoft.com/api/explore/v2.html#where-clause) for more details.
+  --qp-sort: list<string> # **Deprecated, use `order_by` instead.** A list of field names, each possibly prefixed with a minus (-). Sorts results according to the specified fields' values. By default, the sort is ascending (from the smallest value to the biggest value). A minus sign (‘-‘) may be used to perform a descending sort. Sorting is only available on numeric fields (int, double, date and datetime) and on text fields which have the sortable annotation.
+  --order-by: list<string> # A comma-separated list of field names or aggregations to sort on, followed by an order (`asc` or `desc`). Sorts results according to the specified fields' values in ascending order by default. To sort results in descending order, use the `desc` keyword. Example: `sum(age) desc, name asc`
+  --limit: int # Number of items to return in export. Use -1 (default) to retrieve all records (default: -1)
+  --offset: int # Index of the first item to return (starting at 0). To use in conjonction with limit to implement pagination. (default: 0)
+  --search: list<string> # An array of full text search. A full text search performs a prefixed text search for each provided terms in all visible fields of a catalog/dataset.
+  --facet: list<string> # A facet is a field used for simple filtering (through the parameters refine and exclude) or exploration (with the endpoint `/facets`). Facets can be configured in the back-office or with this parameter. Read [the facets documentation](https://help.opendatasoft.com/apis/ods-search-v2/#facets) for more details.
+  --refine: list<string> # An array of facet filters. For example **city:Paris** or **modified:2019/12**. The request will only include the selected facet value. Read [filtering with facets value](https://help.opendatasoft.com/apis/ods-search-v2/#filtering-with-facets-values) for more details. *Not to be confused with a where filter. Refining with a facet is equivalent to selecting an entry in the left navigation panel.* *refine is not available for monitoring sources*
+  --exclude: list<string> # An array of facet filters. For example **city:Paris** or **modified:2019/12**. The request will exclude the defined facet value. Read [filtering with facets value](https://help.opendatasoft.com/apis/ods-search-v2/#filtering-with-facets-values) for more details. *Not to be confused with a where filter. Excluding a facet value is equivalent to removing an entry in the left navigation panel.* *exclude is not available for monitoring sources*
   --timezone: string # Set timezone for datetime fields (default: UTC)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "select" $select "scalar") (serialize-qp "where" $qp_where "multi") (serialize-qp "sort" $qp_sort "csv") (serialize-qp "order_by" $order_by "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "search" $search "multi") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "timezone" $timezone "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({source: $source, dataset_id: $dataset_id} | format pattern "/{source}/datasets/{dataset_id}/exports/ical") $qp)
+  let full_url = (build-url $base ({source: (encode-path-segment $source), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/{source}/datasets/{dataset_id}/exports/ical") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -489,23 +499,23 @@ export def "datasets-exports-json export-records" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --select: string # A select expression can be used to add, remove or change fields to return. An expression can be:   - a wildcard ('*'): return all fields   - a field name: return only this field   - an include/exclude function. Include (resp exclude) all field matching include/exclude expression. This expression can contain wildcard. For example: include(spa*) will return all fields begining with 'spa'   - a complex expression: return the result of this expression. A label can be set for this expression, in that case, field will be named with this label. For instance: 'size * 2 as bigger_size' will return a new field named bigger_size and containing the double of size field value.
-  --qp-where: list # An array of filters.  A filter is a text expression performing a simple full-text search that can also include logical operations (NOT, AND, OR...) as well as lots of other functions, thus performing more complex and more precise searches.  Read [the query language reference](https://docs.opendatasoft.com/api/explore/v2.html#where-clause) for more details.
-  --qp-sort: list # **Deprecated, use `order_by` instead.**  A list of field names, each possibly prefixed with a minus (-).  Sorts results according to the specified fields' values. By default, the sort is ascending (from the smallest value to the biggest value). A minus sign (‘-‘) may be used to perform a descending sort. Sorting is only available on numeric fields (int, double, date and datetime) and on text fields which have the sortable annotation.
-  --order-by: list # A comma-separated list of field names or aggregations to sort on, followed by an order (`asc` or `desc`).  Sorts results according to the specified fields' values in ascending order by default. To sort results in descending order, use the `desc` keyword.  Example: `sum(age) desc, name asc`
-  --limit: int # Number of items to return in export.  Use -1 (default) to retrieve all records  (default: -1)
-  --offset: int # Index of the first item to return (starting at 0).  To use in conjonction with limit to implement pagination.  (default: 0)
-  --search: list # An array of full text search.  A full text search performs a prefixed text search for each provided terms in all visible fields of a catalog/dataset.
-  --facet: list # A facet is a field used for simple filtering (through the parameters refine and exclude) or exploration (with the endpoint `/facets`).  Facets can be configured in the back-office or with this parameter.  Read [the facets documentation](https://help.opendatasoft.com/apis/ods-search-v2/#facets) for more details.
-  --refine: list # An array of facet filters. For example **city:Paris** or **modified:2019/12**. The request will only include the selected facet value.  Read [filtering with facets value](https://help.opendatasoft.com/apis/ods-search-v2/#filtering-with-facets-values) for more details.  *Not to be confused with a where filter. Refining with a facet is equivalent to selecting an entry in the left navigation panel.*  *refine is not available for monitoring sources*
-  --exclude: list # An array of facet filters. For example **city:Paris** or **modified:2019/12**. The request will exclude the defined facet value.  Read [filtering with facets value](https://help.opendatasoft.com/apis/ods-search-v2/#filtering-with-facets-values) for more details.  *Not to be confused with a where filter. Excluding a facet value is equivalent to removing an entry in the left navigation panel.*  *exclude is not available for monitoring sources*
+  --select: string # A select expression can be used to add, remove or change fields to return. An expression can be: - a wildcard ('*'): return all fields - a field name: return only this field - an include/exclude function. Include (resp exclude) all field matching include/exclude expression. This expression can contain wildcard. For example: include(spa*) will return all fields begining with 'spa' - a complex expression: return the result of this expression. A label can be set for this expression, in that case, field will be named with this label. For instance: 'size * 2 as bigger_size' will return a new field named bigger_size and containing the double of size field value.
+  --qp-where: list<string> # An array of filters. A filter is a text expression performing a simple full-text search that can also include logical operations (NOT, AND, OR...) as well as lots of other functions, thus performing more complex and more precise searches. Read [the query language reference](https://docs.opendatasoft.com/api/explore/v2.html#where-clause) for more details.
+  --qp-sort: list<string> # **Deprecated, use `order_by` instead.** A list of field names, each possibly prefixed with a minus (-). Sorts results according to the specified fields' values. By default, the sort is ascending (from the smallest value to the biggest value). A minus sign (‘-‘) may be used to perform a descending sort. Sorting is only available on numeric fields (int, double, date and datetime) and on text fields which have the sortable annotation.
+  --order-by: list<string> # A comma-separated list of field names or aggregations to sort on, followed by an order (`asc` or `desc`). Sorts results according to the specified fields' values in ascending order by default. To sort results in descending order, use the `desc` keyword. Example: `sum(age) desc, name asc`
+  --limit: int # Number of items to return in export. Use -1 (default) to retrieve all records (default: -1)
+  --offset: int # Index of the first item to return (starting at 0). To use in conjonction with limit to implement pagination. (default: 0)
+  --search: list<string> # An array of full text search. A full text search performs a prefixed text search for each provided terms in all visible fields of a catalog/dataset.
+  --facet: list<string> # A facet is a field used for simple filtering (through the parameters refine and exclude) or exploration (with the endpoint `/facets`). Facets can be configured in the back-office or with this parameter. Read [the facets documentation](https://help.opendatasoft.com/apis/ods-search-v2/#facets) for more details.
+  --refine: list<string> # An array of facet filters. For example **city:Paris** or **modified:2019/12**. The request will only include the selected facet value. Read [filtering with facets value](https://help.opendatasoft.com/apis/ods-search-v2/#filtering-with-facets-values) for more details. *Not to be confused with a where filter. Refining with a facet is equivalent to selecting an entry in the left navigation panel.* *refine is not available for monitoring sources*
+  --exclude: list<string> # An array of facet filters. For example **city:Paris** or **modified:2019/12**. The request will exclude the defined facet value. Read [filtering with facets value](https://help.opendatasoft.com/apis/ods-search-v2/#filtering-with-facets-values) for more details. *Not to be confused with a where filter. Excluding a facet value is equivalent to removing an entry in the left navigation panel.* *exclude is not available for monitoring sources*
   --pretty: oneof<nothing, bool> # Activate pretty print (default: false)
   --timezone: string # Set timezone for datetime fields (default: UTC)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "select" $select "scalar") (serialize-qp "where" $qp_where "multi") (serialize-qp "sort" $qp_sort "csv") (serialize-qp "order_by" $order_by "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "search" $search "multi") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "pretty" $pretty "scalar") (serialize-qp "timezone" $timezone "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({source: $source, dataset_id: $dataset_id} | format pattern "/{source}/datasets/{dataset_id}/exports/json") $qp)
+  let full_url = (build-url $base ({source: (encode-path-segment $source), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/{source}/datasets/{dataset_id}/exports/json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -526,22 +536,22 @@ export def "datasets-exports-ov2 export-records" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --select: string # A select expression can be used to add, remove or change fields to return. An expression can be:   - a wildcard ('*'): return all fields   - a field name: return only this field   - an include/exclude function. Include (resp exclude) all field matching include/exclude expression. This expression can contain wildcard. For example: include(spa*) will return all fields begining with 'spa'   - a complex expression: return the result of this expression. A label can be set for this expression, in that case, field will be named with this label. For instance: 'size * 2 as bigger_size' will return a new field named bigger_size and containing the double of size field value.
-  --qp-where: list # An array of filters.  A filter is a text expression performing a simple full-text search that can also include logical operations (NOT, AND, OR...) as well as lots of other functions, thus performing more complex and more precise searches.  Read [the query language reference](https://docs.opendatasoft.com/api/explore/v2.html#where-clause) for more details.
-  --qp-sort: list # **Deprecated, use `order_by` instead.**  A list of field names, each possibly prefixed with a minus (-).  Sorts results according to the specified fields' values. By default, the sort is ascending (from the smallest value to the biggest value). A minus sign (‘-‘) may be used to perform a descending sort. Sorting is only available on numeric fields (int, double, date and datetime) and on text fields which have the sortable annotation.
-  --order-by: list # A comma-separated list of field names or aggregations to sort on, followed by an order (`asc` or `desc`).  Sorts results according to the specified fields' values in ascending order by default. To sort results in descending order, use the `desc` keyword.  Example: `sum(age) desc, name asc`
-  --limit: int # Number of items to return in export.  Use -1 (default) to retrieve all records  (default: -1)
-  --offset: int # Index of the first item to return (starting at 0).  To use in conjonction with limit to implement pagination.  (default: 0)
-  --search: list # An array of full text search.  A full text search performs a prefixed text search for each provided terms in all visible fields of a catalog/dataset.
-  --facet: list # A facet is a field used for simple filtering (through the parameters refine and exclude) or exploration (with the endpoint `/facets`).  Facets can be configured in the back-office or with this parameter.  Read [the facets documentation](https://help.opendatasoft.com/apis/ods-search-v2/#facets) for more details.
-  --refine: list # An array of facet filters. For example **city:Paris** or **modified:2019/12**. The request will only include the selected facet value.  Read [filtering with facets value](https://help.opendatasoft.com/apis/ods-search-v2/#filtering-with-facets-values) for more details.  *Not to be confused with a where filter. Refining with a facet is equivalent to selecting an entry in the left navigation panel.*  *refine is not available for monitoring sources*
-  --exclude: list # An array of facet filters. For example **city:Paris** or **modified:2019/12**. The request will exclude the defined facet value.  Read [filtering with facets value](https://help.opendatasoft.com/apis/ods-search-v2/#filtering-with-facets-values) for more details.  *Not to be confused with a where filter. Excluding a facet value is equivalent to removing an entry in the left navigation panel.*  *exclude is not available for monitoring sources*
+  --select: string # A select expression can be used to add, remove or change fields to return. An expression can be: - a wildcard ('*'): return all fields - a field name: return only this field - an include/exclude function. Include (resp exclude) all field matching include/exclude expression. This expression can contain wildcard. For example: include(spa*) will return all fields begining with 'spa' - a complex expression: return the result of this expression. A label can be set for this expression, in that case, field will be named with this label. For instance: 'size * 2 as bigger_size' will return a new field named bigger_size and containing the double of size field value.
+  --qp-where: list<string> # An array of filters. A filter is a text expression performing a simple full-text search that can also include logical operations (NOT, AND, OR...) as well as lots of other functions, thus performing more complex and more precise searches. Read [the query language reference](https://docs.opendatasoft.com/api/explore/v2.html#where-clause) for more details.
+  --qp-sort: list<string> # **Deprecated, use `order_by` instead.** A list of field names, each possibly prefixed with a minus (-). Sorts results according to the specified fields' values. By default, the sort is ascending (from the smallest value to the biggest value). A minus sign (‘-‘) may be used to perform a descending sort. Sorting is only available on numeric fields (int, double, date and datetime) and on text fields which have the sortable annotation.
+  --order-by: list<string> # A comma-separated list of field names or aggregations to sort on, followed by an order (`asc` or `desc`). Sorts results according to the specified fields' values in ascending order by default. To sort results in descending order, use the `desc` keyword. Example: `sum(age) desc, name asc`
+  --limit: int # Number of items to return in export. Use -1 (default) to retrieve all records (default: -1)
+  --offset: int # Index of the first item to return (starting at 0). To use in conjonction with limit to implement pagination. (default: 0)
+  --search: list<string> # An array of full text search. A full text search performs a prefixed text search for each provided terms in all visible fields of a catalog/dataset.
+  --facet: list<string> # A facet is a field used for simple filtering (through the parameters refine and exclude) or exploration (with the endpoint `/facets`). Facets can be configured in the back-office or with this parameter. Read [the facets documentation](https://help.opendatasoft.com/apis/ods-search-v2/#facets) for more details.
+  --refine: list<string> # An array of facet filters. For example **city:Paris** or **modified:2019/12**. The request will only include the selected facet value. Read [filtering with facets value](https://help.opendatasoft.com/apis/ods-search-v2/#filtering-with-facets-values) for more details. *Not to be confused with a where filter. Refining with a facet is equivalent to selecting an entry in the left navigation panel.* *refine is not available for monitoring sources*
+  --exclude: list<string> # An array of facet filters. For example **city:Paris** or **modified:2019/12**. The request will exclude the defined facet value. Read [filtering with facets value](https://help.opendatasoft.com/apis/ods-search-v2/#filtering-with-facets-values) for more details. *Not to be confused with a where filter. Excluding a facet value is equivalent to removing an entry in the left navigation panel.* *exclude is not available for monitoring sources*
   --timezone: string # Set timezone for datetime fields (default: UTC)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "select" $select "scalar") (serialize-qp "where" $qp_where "multi") (serialize-qp "sort" $qp_sort "csv") (serialize-qp "order_by" $order_by "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "search" $search "multi") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "timezone" $timezone "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({source: $source, dataset_id: $dataset_id} | format pattern "/{source}/datasets/{dataset_id}/exports/ov2") $qp)
+  let full_url = (build-url $base ({source: (encode-path-segment $source), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/{source}/datasets/{dataset_id}/exports/ov2") $qp)
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -562,22 +572,22 @@ export def "datasets-exports-shp export-records" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --select: string # A select expression can be used to add, remove or change fields to return. An expression can be:   - a wildcard ('*'): return all fields   - a field name: return only this field   - an include/exclude function. Include (resp exclude) all field matching include/exclude expression. This expression can contain wildcard. For example: include(spa*) will return all fields begining with 'spa'   - a complex expression: return the result of this expression. A label can be set for this expression, in that case, field will be named with this label. For instance: 'size * 2 as bigger_size' will return a new field named bigger_size and containing the double of size field value.
-  --qp-where: list # An array of filters.  A filter is a text expression performing a simple full-text search that can also include logical operations (NOT, AND, OR...) as well as lots of other functions, thus performing more complex and more precise searches.  Read [the query language reference](https://docs.opendatasoft.com/api/explore/v2.html#where-clause) for more details.
-  --qp-sort: list # **Deprecated, use `order_by` instead.**  A list of field names, each possibly prefixed with a minus (-).  Sorts results according to the specified fields' values. By default, the sort is ascending (from the smallest value to the biggest value). A minus sign (‘-‘) may be used to perform a descending sort. Sorting is only available on numeric fields (int, double, date and datetime) and on text fields which have the sortable annotation.
-  --order-by: list # A comma-separated list of field names or aggregations to sort on, followed by an order (`asc` or `desc`).  Sorts results according to the specified fields' values in ascending order by default. To sort results in descending order, use the `desc` keyword.  Example: `sum(age) desc, name asc`
-  --limit: int # Number of items to return in export.  Use -1 (default) to retrieve all records  (default: -1)
-  --offset: int # Index of the first item to return (starting at 0).  To use in conjonction with limit to implement pagination.  (default: 0)
-  --search: list # An array of full text search.  A full text search performs a prefixed text search for each provided terms in all visible fields of a catalog/dataset.
-  --facet: list # A facet is a field used for simple filtering (through the parameters refine and exclude) or exploration (with the endpoint `/facets`).  Facets can be configured in the back-office or with this parameter.  Read [the facets documentation](https://help.opendatasoft.com/apis/ods-search-v2/#facets) for more details.
-  --refine: list # An array of facet filters. For example **city:Paris** or **modified:2019/12**. The request will only include the selected facet value.  Read [filtering with facets value](https://help.opendatasoft.com/apis/ods-search-v2/#filtering-with-facets-values) for more details.  *Not to be confused with a where filter. Refining with a facet is equivalent to selecting an entry in the left navigation panel.*  *refine is not available for monitoring sources*
-  --exclude: list # An array of facet filters. For example **city:Paris** or **modified:2019/12**. The request will exclude the defined facet value.  Read [filtering with facets value](https://help.opendatasoft.com/apis/ods-search-v2/#filtering-with-facets-values) for more details.  *Not to be confused with a where filter. Excluding a facet value is equivalent to removing an entry in the left navigation panel.*  *exclude is not available for monitoring sources*
+  --select: string # A select expression can be used to add, remove or change fields to return. An expression can be: - a wildcard ('*'): return all fields - a field name: return only this field - an include/exclude function. Include (resp exclude) all field matching include/exclude expression. This expression can contain wildcard. For example: include(spa*) will return all fields begining with 'spa' - a complex expression: return the result of this expression. A label can be set for this expression, in that case, field will be named with this label. For instance: 'size * 2 as bigger_size' will return a new field named bigger_size and containing the double of size field value.
+  --qp-where: list<string> # An array of filters. A filter is a text expression performing a simple full-text search that can also include logical operations (NOT, AND, OR...) as well as lots of other functions, thus performing more complex and more precise searches. Read [the query language reference](https://docs.opendatasoft.com/api/explore/v2.html#where-clause) for more details.
+  --qp-sort: list<string> # **Deprecated, use `order_by` instead.** A list of field names, each possibly prefixed with a minus (-). Sorts results according to the specified fields' values. By default, the sort is ascending (from the smallest value to the biggest value). A minus sign (‘-‘) may be used to perform a descending sort. Sorting is only available on numeric fields (int, double, date and datetime) and on text fields which have the sortable annotation.
+  --order-by: list<string> # A comma-separated list of field names or aggregations to sort on, followed by an order (`asc` or `desc`). Sorts results according to the specified fields' values in ascending order by default. To sort results in descending order, use the `desc` keyword. Example: `sum(age) desc, name asc`
+  --limit: int # Number of items to return in export. Use -1 (default) to retrieve all records (default: -1)
+  --offset: int # Index of the first item to return (starting at 0). To use in conjonction with limit to implement pagination. (default: 0)
+  --search: list<string> # An array of full text search. A full text search performs a prefixed text search for each provided terms in all visible fields of a catalog/dataset.
+  --facet: list<string> # A facet is a field used for simple filtering (through the parameters refine and exclude) or exploration (with the endpoint `/facets`). Facets can be configured in the back-office or with this parameter. Read [the facets documentation](https://help.opendatasoft.com/apis/ods-search-v2/#facets) for more details.
+  --refine: list<string> # An array of facet filters. For example **city:Paris** or **modified:2019/12**. The request will only include the selected facet value. Read [filtering with facets value](https://help.opendatasoft.com/apis/ods-search-v2/#filtering-with-facets-values) for more details. *Not to be confused with a where filter. Refining with a facet is equivalent to selecting an entry in the left navigation panel.* *refine is not available for monitoring sources*
+  --exclude: list<string> # An array of facet filters. For example **city:Paris** or **modified:2019/12**. The request will exclude the defined facet value. Read [filtering with facets value](https://help.opendatasoft.com/apis/ods-search-v2/#filtering-with-facets-values) for more details. *Not to be confused with a where filter. Excluding a facet value is equivalent to removing an entry in the left navigation panel.* *exclude is not available for monitoring sources*
   --timezone: string # Set timezone for datetime fields (default: UTC)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "select" $select "scalar") (serialize-qp "where" $qp_where "multi") (serialize-qp "sort" $qp_sort "csv") (serialize-qp "order_by" $order_by "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "search" $search "multi") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "timezone" $timezone "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({source: $source, dataset_id: $dataset_id} | format pattern "/{source}/datasets/{dataset_id}/exports/shp") $qp)
+  let full_url = (build-url $base ({source: (encode-path-segment $source), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/{source}/datasets/{dataset_id}/exports/shp") $qp)
   let accept_val = "application/zip"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -598,28 +608,28 @@ export def "datasets-exports-xls export-records" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --select: string # A select expression can be used to add, remove or change fields to return. An expression can be:   - a wildcard ('*'): return all fields   - a field name: return only this field   - an include/exclude function. Include (resp exclude) all field matching include/exclude expression. This expression can contain wildcard. For example: include(spa*) will return all fields begining with 'spa'   - a complex expression: return the result of this expression. A label can be set for this expression, in that case, field will be named with this label. For instance: 'size * 2 as bigger_size' will return a new field named bigger_size and containing the double of size field value.
-  --qp-where: list # An array of filters.  A filter is a text expression performing a simple full-text search that can also include logical operations (NOT, AND, OR...) as well as lots of other functions, thus performing more complex and more precise searches.  Read [the query language reference](https://docs.opendatasoft.com/api/explore/v2.html#where-clause) for more details.
-  --qp-sort: list # **Deprecated, use `order_by` instead.**  A list of field names, each possibly prefixed with a minus (-).  Sorts results according to the specified fields' values. By default, the sort is ascending (from the smallest value to the biggest value). A minus sign (‘-‘) may be used to perform a descending sort. Sorting is only available on numeric fields (int, double, date and datetime) and on text fields which have the sortable annotation.
-  --order-by: list # A comma-separated list of field names or aggregations to sort on, followed by an order (`asc` or `desc`).  Sorts results according to the specified fields' values in ascending order by default. To sort results in descending order, use the `desc` keyword.  Example: `sum(age) desc, name asc`
-  --limit: int # Number of items to return in export.  Use -1 (default) to retrieve all records  (default: -1)
-  --offset: int # Index of the first item to return (starting at 0).  To use in conjonction with limit to implement pagination.  (default: 0)
-  --search: list # An array of full text search.  A full text search performs a prefixed text search for each provided terms in all visible fields of a catalog/dataset.
-  --facet: list # A facet is a field used for simple filtering (through the parameters refine and exclude) or exploration (with the endpoint `/facets`).  Facets can be configured in the back-office or with this parameter.  Read [the facets documentation](https://help.opendatasoft.com/apis/ods-search-v2/#facets) for more details.
-  --refine: list # An array of facet filters. For example **city:Paris** or **modified:2019/12**. The request will only include the selected facet value.  Read [filtering with facets value](https://help.opendatasoft.com/apis/ods-search-v2/#filtering-with-facets-values) for more details.  *Not to be confused with a where filter. Refining with a facet is equivalent to selecting an entry in the left navigation panel.*  *refine is not available for monitoring sources*
-  --exclude: list # An array of facet filters. For example **city:Paris** or **modified:2019/12**. The request will exclude the defined facet value.  Read [filtering with facets value](https://help.opendatasoft.com/apis/ods-search-v2/#filtering-with-facets-values) for more details.  *Not to be confused with a where filter. Excluding a facet value is equivalent to removing an entry in the left navigation panel.*  *exclude is not available for monitoring sources*
+  --select: string # A select expression can be used to add, remove or change fields to return. An expression can be: - a wildcard ('*'): return all fields - a field name: return only this field - an include/exclude function. Include (resp exclude) all field matching include/exclude expression. This expression can contain wildcard. For example: include(spa*) will return all fields begining with 'spa' - a complex expression: return the result of this expression. A label can be set for this expression, in that case, field will be named with this label. For instance: 'size * 2 as bigger_size' will return a new field named bigger_size and containing the double of size field value.
+  --qp-where: list<string> # An array of filters. A filter is a text expression performing a simple full-text search that can also include logical operations (NOT, AND, OR...) as well as lots of other functions, thus performing more complex and more precise searches. Read [the query language reference](https://docs.opendatasoft.com/api/explore/v2.html#where-clause) for more details.
+  --qp-sort: list<string> # **Deprecated, use `order_by` instead.** A list of field names, each possibly prefixed with a minus (-). Sorts results according to the specified fields' values. By default, the sort is ascending (from the smallest value to the biggest value). A minus sign (‘-‘) may be used to perform a descending sort. Sorting is only available on numeric fields (int, double, date and datetime) and on text fields which have the sortable annotation.
+  --order-by: list<string> # A comma-separated list of field names or aggregations to sort on, followed by an order (`asc` or `desc`). Sorts results according to the specified fields' values in ascending order by default. To sort results in descending order, use the `desc` keyword. Example: `sum(age) desc, name asc`
+  --limit: int # Number of items to return in export. Use -1 (default) to retrieve all records (default: -1)
+  --offset: int # Index of the first item to return (starting at 0). To use in conjonction with limit to implement pagination. (default: 0)
+  --search: list<string> # An array of full text search. A full text search performs a prefixed text search for each provided terms in all visible fields of a catalog/dataset.
+  --facet: list<string> # A facet is a field used for simple filtering (through the parameters refine and exclude) or exploration (with the endpoint `/facets`). Facets can be configured in the back-office or with this parameter. Read [the facets documentation](https://help.opendatasoft.com/apis/ods-search-v2/#facets) for more details.
+  --refine: list<string> # An array of facet filters. For example **city:Paris** or **modified:2019/12**. The request will only include the selected facet value. Read [filtering with facets value](https://help.opendatasoft.com/apis/ods-search-v2/#filtering-with-facets-values) for more details. *Not to be confused with a where filter. Refining with a facet is equivalent to selecting an entry in the left navigation panel.* *refine is not available for monitoring sources*
+  --exclude: list<string> # An array of facet filters. For example **city:Paris** or **modified:2019/12**. The request will exclude the defined facet value. Read [filtering with facets value](https://help.opendatasoft.com/apis/ods-search-v2/#filtering-with-facets-values) for more details. *Not to be confused with a where filter. Excluding a facet value is equivalent to removing an entry in the left navigation panel.* *exclude is not available for monitoring sources*
   --timezone: string # Set timezone for datetime fields (default: UTC)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "select" $select "scalar") (serialize-qp "where" $qp_where "multi") (serialize-qp "sort" $qp_sort "csv") (serialize-qp "order_by" $order_by "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "search" $search "multi") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "timezone" $timezone "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({source: $source, dataset_id: $dataset_id} | format pattern "/{source}/datasets/{dataset_id}/exports/xls") $qp)
+  let full_url = (build-url $base ({source: (encode-path-segment $source), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/{source}/datasets/{dataset_id}/exports/xls") $qp)
   let accept_val = "xls"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Enumerate facets values for records and return a list of values for each facet. Can be used to implement guided navigation in large result sets.  Read [the facets documentation](https://help.opendatasoft.com/apis/ods-search-v2/#enumerating-facets-values) for more details.
+# Enumerate facets values for records and return a list of values for each facet. Can be used to implement guided navigation in large result sets. Read [the facets documentation](https://help.opendatasoft.com/apis/ods-search-v2/#enumerating-facets-values) for more details.
 #
 # GET /{source}/datasets/{dataset_id}/facets
 # operationId: getRecordsFacets
@@ -634,17 +644,17 @@ export def "datasets-facets get-records" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-where: list # An array of filters.  A filter is a text expression performing a simple full-text search that can also include logical operations (NOT, AND, OR...) as well as lots of other functions, thus performing more complex and more precise searches.  Read [the query language reference](https://docs.opendatasoft.com/api/explore/v2.html#where-clause) for more details.
-  --facet: list # A facet is a field used for simple filtering (through the parameters refine and exclude) or exploration (with the endpoint `/facets`).  Facets can be configured in the back-office or with this parameter.  Read [the facets documentation](https://help.opendatasoft.com/apis/ods-search-v2/#facets) for more details.
-  --refine: list # An array of facet filters. For example **city:Paris** or **modified:2019/12**. The request will only include the selected facet value.  Read [filtering with facets value](https://help.opendatasoft.com/apis/ods-search-v2/#filtering-with-facets-values) for more details.  *Not to be confused with a where filter. Refining with a facet is equivalent to selecting an entry in the left navigation panel.*  *refine is not available for monitoring sources*
-  --exclude: list # An array of facet filters. For example **city:Paris** or **modified:2019/12**. The request will exclude the defined facet value.  Read [filtering with facets value](https://help.opendatasoft.com/apis/ods-search-v2/#filtering-with-facets-values) for more details.  *Not to be confused with a where filter. Excluding a facet value is equivalent to removing an entry in the left navigation panel.*  *exclude is not available for monitoring sources*
-  --search: list # An array of full text search.  A full text search performs a prefixed text search for each provided terms in all visible fields of a catalog/dataset.
+  --qp-where: list<string> # An array of filters. A filter is a text expression performing a simple full-text search that can also include logical operations (NOT, AND, OR...) as well as lots of other functions, thus performing more complex and more precise searches. Read [the query language reference](https://docs.opendatasoft.com/api/explore/v2.html#where-clause) for more details.
+  --facet: list<string> # A facet is a field used for simple filtering (through the parameters refine and exclude) or exploration (with the endpoint `/facets`). Facets can be configured in the back-office or with this parameter. Read [the facets documentation](https://help.opendatasoft.com/apis/ods-search-v2/#facets) for more details.
+  --refine: list<string> # An array of facet filters. For example **city:Paris** or **modified:2019/12**. The request will only include the selected facet value. Read [filtering with facets value](https://help.opendatasoft.com/apis/ods-search-v2/#filtering-with-facets-values) for more details. *Not to be confused with a where filter. Refining with a facet is equivalent to selecting an entry in the left navigation panel.* *refine is not available for monitoring sources*
+  --exclude: list<string> # An array of facet filters. For example **city:Paris** or **modified:2019/12**. The request will exclude the defined facet value. Read [filtering with facets value](https://help.opendatasoft.com/apis/ods-search-v2/#filtering-with-facets-values) for more details. *Not to be confused with a where filter. Excluding a facet value is equivalent to removing an entry in the left navigation panel.* *exclude is not available for monitoring sources*
+  --search: list<string> # An array of full text search. A full text search performs a prefixed text search for each provided terms in all visible fields of a catalog/dataset.
   --timezone: string # Set timezone for datetime fields (default: UTC)
 ]: nothing -> record<facets: table<facets: list, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "where" $qp_where "multi") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "search" $search "multi") (serialize-qp "timezone" $timezone "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({source: $source, dataset_id: $dataset_id} | format pattern "/{source}/datasets/{dataset_id}/facets") $qp)
+  let full_url = (build-url $base ({source: (encode-path-segment $source), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/{source}/datasets/{dataset_id}/facets") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -673,12 +683,12 @@ export def "datasets-feedback send" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({source: $source, dataset_id: $dataset_id} | format pattern "/{source}/datasets/{dataset_id}/feedback"))
-  let body = {"comment": $comment, "newValues": $new_values, "recordid": $recordid, "schema": $schema} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({source: (encode-path-segment $source), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/{source}/datasets/{dataset_id}/feedback"))
+  let req_body = {"comment": $comment, "newValues": $new_values, "recordid": $recordid, "schema": $schema} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Download file
@@ -702,7 +712,7 @@ export def "datasets-files get" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "thumbnail_size" $thumbnail_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({source: $source, dataset_id: $dataset_id, file_id: $file_id} | format pattern "/{source}/datasets/{dataset_id}/files/{file_id}") $qp)
+  let full_url = (build-url $base ({source: (encode-path-segment $source), dataset_id: (encode-path-segment $dataset_id), file_id: (encode-path-segment $file_id)} | format pattern "/{source}/datasets/{dataset_id}/files/{file_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -723,24 +733,24 @@ export def "datasets-records list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --select: string # A select expression can be used to add, remove or change fields to return. An expression can be:   - a wildcard ('*'): return all fields   - a field name: return only this field   - an include/exclude function. Include (resp exclude) all field matching include/exclude expression. This expression can contain wildcard. For example: include(spa*) will return all fields begining with 'spa'   - a complex expression: return the result of this expression. A label can be set for this expression, in that case, field will be named with this label. For instance: 'size * 2 as bigger_size' will return a new field named bigger_size and containing the double of size field value.
-  --qp-where: list # An array of filters.  A filter is a text expression performing a simple full-text search that can also include logical operations (NOT, AND, OR...) as well as lots of other functions, thus performing more complex and more precise searches.  Read [the query language reference](https://docs.opendatasoft.com/api/explore/v2.html#where-clause) for more details.
-  --group-by: string # A group by expression defines a grouping function for an aggregation. It can be:  - a field name: group result by each value of this field  - a range function: group result by range  - a date function: group result by date It is possible to specify a custom name with the 'as name' notation. For instance: group_by='city_field as city'.
-  --qp-sort: list # **Deprecated, use `order_by` instead.**  A list of field names, each possibly prefixed with a minus (-).  Sorts results according to the specified fields' values. By default, the sort is ascending (from the smallest value to the biggest value). A minus sign (‘-‘) may be used to perform a descending sort. Sorting is only available on numeric fields (int, double, date and datetime) and on text fields which have the sortable annotation.
-  --order-by: list # A comma-separated list of field names or aggregations to sort on, followed by an order (`asc` or `desc`).  Sorts results according to the specified fields' values in ascending order by default. To sort results in descending order, use the `desc` keyword.  Example: `sum(age) desc, name asc`
-  --limit: int # Number of items to return.  To use in conjonction with offset to implement pagination.  Limit maximum value is 100. To retrive more data use export entry points. The default value is 10.  (default: 10)
-  --offset: int # Index of the first item to return (starting at 0).  To use in conjonction with limit to implement pagination.  (default: 0)
-  --search: list # An array of full text search.  A full text search performs a prefixed text search for each provided terms in all visible fields of a catalog/dataset.
-  --facet: list # A facet is a field used for simple filtering (through the parameters refine and exclude) or exploration (with the endpoint `/facets`).  Facets can be configured in the back-office or with this parameter.  Read [the facets documentation](https://help.opendatasoft.com/apis/ods-search-v2/#facets) for more details.
-  --refine: list # An array of facet filters. For example **city:Paris** or **modified:2019/12**. The request will only include the selected facet value.  Read [filtering with facets value](https://help.opendatasoft.com/apis/ods-search-v2/#filtering-with-facets-values) for more details.  *Not to be confused with a where filter. Refining with a facet is equivalent to selecting an entry in the left navigation panel.*  *refine is not available for monitoring sources*
-  --exclude: list # An array of facet filters. For example **city:Paris** or **modified:2019/12**. The request will exclude the defined facet value.  Read [filtering with facets value](https://help.opendatasoft.com/apis/ods-search-v2/#filtering-with-facets-values) for more details.  *Not to be confused with a where filter. Excluding a facet value is equivalent to removing an entry in the left navigation panel.*  *exclude is not available for monitoring sources*
+  --select: string # A select expression can be used to add, remove or change fields to return. An expression can be: - a wildcard ('*'): return all fields - a field name: return only this field - an include/exclude function. Include (resp exclude) all field matching include/exclude expression. This expression can contain wildcard. For example: include(spa*) will return all fields begining with 'spa' - a complex expression: return the result of this expression. A label can be set for this expression, in that case, field will be named with this label. For instance: 'size * 2 as bigger_size' will return a new field named bigger_size and containing the double of size field value.
+  --qp-where: list<string> # An array of filters. A filter is a text expression performing a simple full-text search that can also include logical operations (NOT, AND, OR...) as well as lots of other functions, thus performing more complex and more precise searches. Read [the query language reference](https://docs.opendatasoft.com/api/explore/v2.html#where-clause) for more details.
+  --group-by: string # A group by expression defines a grouping function for an aggregation. It can be: - a field name: group result by each value of this field - a range function: group result by range - a date function: group result by date It is possible to specify a custom name with the 'as name' notation. For instance: group_by='city_field as city'.
+  --qp-sort: list<string> # **Deprecated, use `order_by` instead.** A list of field names, each possibly prefixed with a minus (-). Sorts results according to the specified fields' values. By default, the sort is ascending (from the smallest value to the biggest value). A minus sign (‘-‘) may be used to perform a descending sort. Sorting is only available on numeric fields (int, double, date and datetime) and on text fields which have the sortable annotation.
+  --order-by: list<string> # A comma-separated list of field names or aggregations to sort on, followed by an order (`asc` or `desc`). Sorts results according to the specified fields' values in ascending order by default. To sort results in descending order, use the `desc` keyword. Example: `sum(age) desc, name asc`
+  --limit: int # Number of items to return. To use in conjonction with offset to implement pagination. Limit maximum value is 100. To retrive more data use export entry points. The default value is 10. (default: 10)
+  --offset: int # Index of the first item to return (starting at 0). To use in conjonction with limit to implement pagination. (default: 0)
+  --search: list<string> # An array of full text search. A full text search performs a prefixed text search for each provided terms in all visible fields of a catalog/dataset.
+  --facet: list<string> # A facet is a field used for simple filtering (through the parameters refine and exclude) or exploration (with the endpoint `/facets`). Facets can be configured in the back-office or with this parameter. Read [the facets documentation](https://help.opendatasoft.com/apis/ods-search-v2/#facets) for more details.
+  --refine: list<string> # An array of facet filters. For example **city:Paris** or **modified:2019/12**. The request will only include the selected facet value. Read [filtering with facets value](https://help.opendatasoft.com/apis/ods-search-v2/#filtering-with-facets-values) for more details. *Not to be confused with a where filter. Refining with a facet is equivalent to selecting an entry in the left navigation panel.* *refine is not available for monitoring sources*
+  --exclude: list<string> # An array of facet filters. For example **city:Paris** or **modified:2019/12**. The request will exclude the defined facet value. Read [filtering with facets value](https://help.opendatasoft.com/apis/ods-search-v2/#filtering-with-facets-values) for more details. *Not to be confused with a where filter. Excluding a facet value is equivalent to removing an entry in the left navigation panel.* *exclude is not available for monitoring sources*
   --pretty: oneof<nothing, bool> # Activate pretty print (default: false)
   --timezone: string # Set timezone for datetime fields (default: UTC)
 ]: nothing -> record<links: table<href: string, rel: string>, records: table<links: list, record: record>, total_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "select" $select "scalar") (serialize-qp "where" $qp_where "multi") (serialize-qp "group_by" $group_by "scalar") (serialize-qp "sort" $qp_sort "csv") (serialize-qp "order_by" $order_by "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "search" $search "multi") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "pretty" $pretty "scalar") (serialize-qp "timezone" $timezone "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({source: $source, dataset_id: $dataset_id} | format pattern "/{source}/datasets/{dataset_id}/records") $qp)
+  let full_url = (build-url $base ({source: (encode-path-segment $source), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/{source}/datasets/{dataset_id}/records") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -762,14 +772,14 @@ export def "datasets-records get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --select: string # A select expression can be used to add, remove or change fields to return. An expression can be:   - a wildcard ('*'): return all fields   - a field name: return only this field   - an include/exclude function. Include (resp exclude) all field matching include/exclude expression. This expression can contain wildcard. For example: include(spa*) will return all fields begining with 'spa'   - a complex expression: return the result of this expression. A label can be set for this expression, in that case, field will be named with this label. For instance: 'size * 2 as bigger_size' will return a new field named bigger_size and containing the double of size field value.
+  --select: string # A select expression can be used to add, remove or change fields to return. An expression can be: - a wildcard ('*'): return all fields - a field name: return only this field - an include/exclude function. Include (resp exclude) all field matching include/exclude expression. This expression can contain wildcard. For example: include(spa*) will return all fields begining with 'spa' - a complex expression: return the result of this expression. A label can be set for this expression, in that case, field will be named with this label. For instance: 'size * 2 as bigger_size' will return a new field named bigger_size and containing the double of size field value.
   --pretty: oneof<nothing, bool> # Activate pretty print (default: false)
   --timezone: string # Set timezone for datetime fields (default: UTC)
 ]: nothing -> record<links: table<href: string, rel: string>, record: record<fields: record, id: string, size: int, timestamp: string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "select" $select "scalar") (serialize-qp "pretty" $pretty "scalar") (serialize-qp "timezone" $timezone "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({source: $source, dataset_id: $dataset_id, record_id: $record_id} | format pattern "/{source}/datasets/{dataset_id}/records/{record_id}") $qp)
+  let full_url = (build-url $base ({source: (encode-path-segment $source), dataset_id: (encode-path-segment $dataset_id), record_id: (encode-path-segment $record_id)} | format pattern "/{source}/datasets/{dataset_id}/records/{record_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -790,14 +800,14 @@ export def "datasets-reuses list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --limit: int # Number of items to return.  To use in conjonction with offset to implement pagination.  Limit maximum value is 100. To retrive more data use export entry points. The default value is 10.  (default: 10)
-  --offset: int # Index of the first item to return (starting at 0).  To use in conjonction with limit to implement pagination.  (default: 0)
+  --limit: int # Number of items to return. To use in conjonction with offset to implement pagination. Limit maximum value is 100. To retrive more data use export entry points. The default value is 10. (default: 10)
+  --offset: int # Index of the first item to return (starting at 0). To use in conjonction with limit to implement pagination. (default: 0)
   --timezone: string # Set timezone for datetime fields (default: UTC)
 ]: nothing -> record<links: table<href: string, rel: string>, reuses: table<created_at: string, description: any, id: string, thumbnail: string, title: string, url: string, user: record>> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "timezone" $timezone "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({source: $source, dataset_id: $dataset_id} | format pattern "/{source}/datasets/{dataset_id}/reuses") $qp)
+  let full_url = (build-url $base ({source: (encode-path-segment $source), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/{source}/datasets/{dataset_id}/reuses") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -824,7 +834,7 @@ export def "datasets-reuses get" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "timezone" $timezone "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({source: $source, dataset_id: $dataset_id, reuse_id: $reuse_id} | format pattern "/{source}/datasets/{dataset_id}/reuses/{reuse_id}") $qp)
+  let full_url = (build-url $base ({source: (encode-path-segment $source), dataset_id: (encode-path-segment $dataset_id), reuse_id: (encode-path-segment $reuse_id)} | format pattern "/{source}/datasets/{dataset_id}/reuses/{reuse_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -850,7 +860,7 @@ export def "datasets-snapshots get" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "timezone" $timezone "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({source: $source, dataset_id: $dataset_id} | format pattern "/{source}/datasets/{dataset_id}/snapshots") $qp)
+  let full_url = (build-url $base ({source: (encode-path-segment $source), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/{source}/datasets/{dataset_id}/snapshots") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -877,7 +887,7 @@ export def "datasets-snapshots download" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "timezone" $timezone "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({source: $source, dataset_id: $dataset_id, snapshot_id: $snapshot_id} | format pattern "/{source}/datasets/{dataset_id}/snapshots/{snapshot_id}") $qp)
+  let full_url = (build-url $base ({source: (encode-path-segment $source), dataset_id: (encode-path-segment $dataset_id), snapshot_id: (encode-path-segment $snapshot_id)} | format pattern "/{source}/datasets/{dataset_id}/snapshots/{snapshot_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -897,21 +907,21 @@ export def "exports-csv export-datasets" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-where: list # An array of filters.  A filter is a text expression performing a simple full-text search that can also include logical operations (NOT, AND, OR...) as well as lots of other functions, thus performing more complex and more precise searches.  Read [the query language reference](https://docs.opendatasoft.com/api/explore/v2.html#where-clause) for more details.
-  --limit: int # Number of items to return.  To use in conjonction with offset to implement pagination.  Limit maximum value is 100. To retrive more data use export entry points. The default value is 10.  (default: 10)
-  --offset: int # Index of the first item to return (starting at 0).  To use in conjonction with limit to implement pagination.  (default: 0)
-  --search: list # An array of full text search.  A full text search performs a prefixed text search for each provided terms in all visible fields of a catalog/dataset.
-  --facet: list # A facet is a field used for simple filtering (through the parameters refine and exclude) or exploration (with the endpoint `/facets`).  Facets can be configured in the back-office or with this parameter.  Read [the facets documentation](https://help.opendatasoft.com/apis/ods-search-v2/#facets) for more details.
-  --refine: list # An array of facet filters. For example **city:Paris** or **modified:2019/12**. The request will only include the selected facet value.  Read [filtering with facets value](https://help.opendatasoft.com/apis/ods-search-v2/#filtering-with-facets-values) for more details.  *Not to be confused with a where filter. Refining with a facet is equivalent to selecting an entry in the left navigation panel.*  *refine is not available for monitoring sources*
-  --exclude: list # An array of facet filters. For example **city:Paris** or **modified:2019/12**. The request will exclude the defined facet value.  Read [filtering with facets value](https://help.opendatasoft.com/apis/ods-search-v2/#filtering-with-facets-values) for more details.  *Not to be confused with a where filter. Excluding a facet value is equivalent to removing an entry in the left navigation panel.*  *exclude is not available for monitoring sources*
+  --qp-where: list<string> # An array of filters. A filter is a text expression performing a simple full-text search that can also include logical operations (NOT, AND, OR...) as well as lots of other functions, thus performing more complex and more precise searches. Read [the query language reference](https://docs.opendatasoft.com/api/explore/v2.html#where-clause) for more details.
+  --limit: int # Number of items to return. To use in conjonction with offset to implement pagination. Limit maximum value is 100. To retrive more data use export entry points. The default value is 10. (default: 10)
+  --offset: int # Index of the first item to return (starting at 0). To use in conjonction with limit to implement pagination. (default: 0)
+  --search: list<string> # An array of full text search. A full text search performs a prefixed text search for each provided terms in all visible fields of a catalog/dataset.
+  --facet: list<string> # A facet is a field used for simple filtering (through the parameters refine and exclude) or exploration (with the endpoint `/facets`). Facets can be configured in the back-office or with this parameter. Read [the facets documentation](https://help.opendatasoft.com/apis/ods-search-v2/#facets) for more details.
+  --refine: list<string> # An array of facet filters. For example **city:Paris** or **modified:2019/12**. The request will only include the selected facet value. Read [filtering with facets value](https://help.opendatasoft.com/apis/ods-search-v2/#filtering-with-facets-values) for more details. *Not to be confused with a where filter. Refining with a facet is equivalent to selecting an entry in the left navigation panel.* *refine is not available for monitoring sources*
+  --exclude: list<string> # An array of facet filters. For example **city:Paris** or **modified:2019/12**. The request will exclude the defined facet value. Read [filtering with facets value](https://help.opendatasoft.com/apis/ods-search-v2/#filtering-with-facets-values) for more details. *Not to be confused with a where filter. Excluding a facet value is equivalent to removing an entry in the left navigation panel.* *exclude is not available for monitoring sources*
   --timezone: string # Set timezone for datetime fields (default: UTC)
-  --include-app-metas: oneof<nothing, bool> # Explicitely request application metas for each datasets.  (default: false)
+  --include-app-metas: oneof<nothing, bool> # Explicitely request application metas for each datasets. (default: false)
   --delimiter: string@delimiter-completer # Provide a different delimiter (default ','). (default: ;)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "where" $qp_where "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "search" $search "multi") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "timezone" $timezone "scalar") (serialize-qp "include_app_metas" $include_app_metas "scalar") (serialize-qp "delimiter" $delimiter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({source: $source} | format pattern "/{source}/exports/csv") $qp)
+  let full_url = (build-url $base ({source: (encode-path-segment $source)} | format pattern "/{source}/exports/csv") $qp)
   let accept_val = "text/csv"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -931,21 +941,21 @@ export def "exports-json export-datasets" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-where: list # An array of filters.  A filter is a text expression performing a simple full-text search that can also include logical operations (NOT, AND, OR...) as well as lots of other functions, thus performing more complex and more precise searches.  Read [the query language reference](https://docs.opendatasoft.com/api/explore/v2.html#where-clause) for more details.
-  --limit: int # Number of items to return.  To use in conjonction with offset to implement pagination.  Limit maximum value is 100. To retrive more data use export entry points. The default value is 10.  (default: 10)
-  --offset: int # Index of the first item to return (starting at 0).  To use in conjonction with limit to implement pagination.  (default: 0)
-  --search: list # An array of full text search.  A full text search performs a prefixed text search for each provided terms in all visible fields of a catalog/dataset.
-  --facet: list # A facet is a field used for simple filtering (through the parameters refine and exclude) or exploration (with the endpoint `/facets`).  Facets can be configured in the back-office or with this parameter.  Read [the facets documentation](https://help.opendatasoft.com/apis/ods-search-v2/#facets) for more details.
-  --refine: list # An array of facet filters. For example **city:Paris** or **modified:2019/12**. The request will only include the selected facet value.  Read [filtering with facets value](https://help.opendatasoft.com/apis/ods-search-v2/#filtering-with-facets-values) for more details.  *Not to be confused with a where filter. Refining with a facet is equivalent to selecting an entry in the left navigation panel.*  *refine is not available for monitoring sources*
-  --exclude: list # An array of facet filters. For example **city:Paris** or **modified:2019/12**. The request will exclude the defined facet value.  Read [filtering with facets value](https://help.opendatasoft.com/apis/ods-search-v2/#filtering-with-facets-values) for more details.  *Not to be confused with a where filter. Excluding a facet value is equivalent to removing an entry in the left navigation panel.*  *exclude is not available for monitoring sources*
+  --qp-where: list<string> # An array of filters. A filter is a text expression performing a simple full-text search that can also include logical operations (NOT, AND, OR...) as well as lots of other functions, thus performing more complex and more precise searches. Read [the query language reference](https://docs.opendatasoft.com/api/explore/v2.html#where-clause) for more details.
+  --limit: int # Number of items to return. To use in conjonction with offset to implement pagination. Limit maximum value is 100. To retrive more data use export entry points. The default value is 10. (default: 10)
+  --offset: int # Index of the first item to return (starting at 0). To use in conjonction with limit to implement pagination. (default: 0)
+  --search: list<string> # An array of full text search. A full text search performs a prefixed text search for each provided terms in all visible fields of a catalog/dataset.
+  --facet: list<string> # A facet is a field used for simple filtering (through the parameters refine and exclude) or exploration (with the endpoint `/facets`). Facets can be configured in the back-office or with this parameter. Read [the facets documentation](https://help.opendatasoft.com/apis/ods-search-v2/#facets) for more details.
+  --refine: list<string> # An array of facet filters. For example **city:Paris** or **modified:2019/12**. The request will only include the selected facet value. Read [filtering with facets value](https://help.opendatasoft.com/apis/ods-search-v2/#filtering-with-facets-values) for more details. *Not to be confused with a where filter. Refining with a facet is equivalent to selecting an entry in the left navigation panel.* *refine is not available for monitoring sources*
+  --exclude: list<string> # An array of facet filters. For example **city:Paris** or **modified:2019/12**. The request will exclude the defined facet value. Read [filtering with facets value](https://help.opendatasoft.com/apis/ods-search-v2/#filtering-with-facets-values) for more details. *Not to be confused with a where filter. Excluding a facet value is equivalent to removing an entry in the left navigation panel.* *exclude is not available for monitoring sources*
   --pretty: oneof<nothing, bool> # Activate pretty print (default: false)
   --timezone: string # Set timezone for datetime fields (default: UTC)
-  --include-app-metas: oneof<nothing, bool> # Explicitely request application metas for each datasets.  (default: false)
+  --include-app-metas: oneof<nothing, bool> # Explicitely request application metas for each datasets. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "where" $qp_where "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "search" $search "multi") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "pretty" $pretty "scalar") (serialize-qp "timezone" $timezone "scalar") (serialize-qp "include_app_metas" $include_app_metas "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({source: $source} | format pattern "/{source}/exports/json") $qp)
+  let full_url = (build-url $base ({source: (encode-path-segment $source)} | format pattern "/{source}/exports/json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -965,20 +975,20 @@ export def "exports-rdf export-datasets" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-where: list # An array of filters.  A filter is a text expression performing a simple full-text search that can also include logical operations (NOT, AND, OR...) as well as lots of other functions, thus performing more complex and more precise searches.  Read [the query language reference](https://docs.opendatasoft.com/api/explore/v2.html#where-clause) for more details.
-  --limit: int # Number of items to return.  To use in conjonction with offset to implement pagination.  Limit maximum value is 100. To retrive more data use export entry points. The default value is 10.  (default: 10)
-  --offset: int # Index of the first item to return (starting at 0).  To use in conjonction with limit to implement pagination.  (default: 0)
-  --search: list # An array of full text search.  A full text search performs a prefixed text search for each provided terms in all visible fields of a catalog/dataset.
-  --facet: list # A facet is a field used for simple filtering (through the parameters refine and exclude) or exploration (with the endpoint `/facets`).  Facets can be configured in the back-office or with this parameter.  Read [the facets documentation](https://help.opendatasoft.com/apis/ods-search-v2/#facets) for more details.
-  --refine: list # An array of facet filters. For example **city:Paris** or **modified:2019/12**. The request will only include the selected facet value.  Read [filtering with facets value](https://help.opendatasoft.com/apis/ods-search-v2/#filtering-with-facets-values) for more details.  *Not to be confused with a where filter. Refining with a facet is equivalent to selecting an entry in the left navigation panel.*  *refine is not available for monitoring sources*
-  --exclude: list # An array of facet filters. For example **city:Paris** or **modified:2019/12**. The request will exclude the defined facet value.  Read [filtering with facets value](https://help.opendatasoft.com/apis/ods-search-v2/#filtering-with-facets-values) for more details.  *Not to be confused with a where filter. Excluding a facet value is equivalent to removing an entry in the left navigation panel.*  *exclude is not available for monitoring sources*
+  --qp-where: list<string> # An array of filters. A filter is a text expression performing a simple full-text search that can also include logical operations (NOT, AND, OR...) as well as lots of other functions, thus performing more complex and more precise searches. Read [the query language reference](https://docs.opendatasoft.com/api/explore/v2.html#where-clause) for more details.
+  --limit: int # Number of items to return. To use in conjonction with offset to implement pagination. Limit maximum value is 100. To retrive more data use export entry points. The default value is 10. (default: 10)
+  --offset: int # Index of the first item to return (starting at 0). To use in conjonction with limit to implement pagination. (default: 0)
+  --search: list<string> # An array of full text search. A full text search performs a prefixed text search for each provided terms in all visible fields of a catalog/dataset.
+  --facet: list<string> # A facet is a field used for simple filtering (through the parameters refine and exclude) or exploration (with the endpoint `/facets`). Facets can be configured in the back-office or with this parameter. Read [the facets documentation](https://help.opendatasoft.com/apis/ods-search-v2/#facets) for more details.
+  --refine: list<string> # An array of facet filters. For example **city:Paris** or **modified:2019/12**. The request will only include the selected facet value. Read [filtering with facets value](https://help.opendatasoft.com/apis/ods-search-v2/#filtering-with-facets-values) for more details. *Not to be confused with a where filter. Refining with a facet is equivalent to selecting an entry in the left navigation panel.* *refine is not available for monitoring sources*
+  --exclude: list<string> # An array of facet filters. For example **city:Paris** or **modified:2019/12**. The request will exclude the defined facet value. Read [filtering with facets value](https://help.opendatasoft.com/apis/ods-search-v2/#filtering-with-facets-values) for more details. *Not to be confused with a where filter. Excluding a facet value is equivalent to removing an entry in the left navigation panel.* *exclude is not available for monitoring sources*
   --timezone: string # Set timezone for datetime fields (default: UTC)
-  --include-app-metas: oneof<nothing, bool> # Explicitely request application metas for each datasets.  (default: false)
+  --include-app-metas: oneof<nothing, bool> # Explicitely request application metas for each datasets. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "where" $qp_where "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "search" $search "multi") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "timezone" $timezone "scalar") (serialize-qp "include_app_metas" $include_app_metas "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({source: $source} | format pattern "/{source}/exports/rdf") $qp)
+  let full_url = (build-url $base ({source: (encode-path-segment $source)} | format pattern "/{source}/exports/rdf") $qp)
   let accept_val = "application/rdf+xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -998,20 +1008,20 @@ export def "exports-rss export-datasets" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-where: list # An array of filters.  A filter is a text expression performing a simple full-text search that can also include logical operations (NOT, AND, OR...) as well as lots of other functions, thus performing more complex and more precise searches.  Read [the query language reference](https://docs.opendatasoft.com/api/explore/v2.html#where-clause) for more details.
-  --limit: int # Number of items to return.  To use in conjonction with offset to implement pagination.  Limit maximum value is 100. To retrive more data use export entry points. The default value is 10.  (default: 10)
-  --offset: int # Index of the first item to return (starting at 0).  To use in conjonction with limit to implement pagination.  (default: 0)
-  --search: list # An array of full text search.  A full text search performs a prefixed text search for each provided terms in all visible fields of a catalog/dataset.
-  --facet: list # A facet is a field used for simple filtering (through the parameters refine and exclude) or exploration (with the endpoint `/facets`).  Facets can be configured in the back-office or with this parameter.  Read [the facets documentation](https://help.opendatasoft.com/apis/ods-search-v2/#facets) for more details.
-  --refine: list # An array of facet filters. For example **city:Paris** or **modified:2019/12**. The request will only include the selected facet value.  Read [filtering with facets value](https://help.opendatasoft.com/apis/ods-search-v2/#filtering-with-facets-values) for more details.  *Not to be confused with a where filter. Refining with a facet is equivalent to selecting an entry in the left navigation panel.*  *refine is not available for monitoring sources*
-  --exclude: list # An array of facet filters. For example **city:Paris** or **modified:2019/12**. The request will exclude the defined facet value.  Read [filtering with facets value](https://help.opendatasoft.com/apis/ods-search-v2/#filtering-with-facets-values) for more details.  *Not to be confused with a where filter. Excluding a facet value is equivalent to removing an entry in the left navigation panel.*  *exclude is not available for monitoring sources*
+  --qp-where: list<string> # An array of filters. A filter is a text expression performing a simple full-text search that can also include logical operations (NOT, AND, OR...) as well as lots of other functions, thus performing more complex and more precise searches. Read [the query language reference](https://docs.opendatasoft.com/api/explore/v2.html#where-clause) for more details.
+  --limit: int # Number of items to return. To use in conjonction with offset to implement pagination. Limit maximum value is 100. To retrive more data use export entry points. The default value is 10. (default: 10)
+  --offset: int # Index of the first item to return (starting at 0). To use in conjonction with limit to implement pagination. (default: 0)
+  --search: list<string> # An array of full text search. A full text search performs a prefixed text search for each provided terms in all visible fields of a catalog/dataset.
+  --facet: list<string> # A facet is a field used for simple filtering (through the parameters refine and exclude) or exploration (with the endpoint `/facets`). Facets can be configured in the back-office or with this parameter. Read [the facets documentation](https://help.opendatasoft.com/apis/ods-search-v2/#facets) for more details.
+  --refine: list<string> # An array of facet filters. For example **city:Paris** or **modified:2019/12**. The request will only include the selected facet value. Read [filtering with facets value](https://help.opendatasoft.com/apis/ods-search-v2/#filtering-with-facets-values) for more details. *Not to be confused with a where filter. Refining with a facet is equivalent to selecting an entry in the left navigation panel.* *refine is not available for monitoring sources*
+  --exclude: list<string> # An array of facet filters. For example **city:Paris** or **modified:2019/12**. The request will exclude the defined facet value. Read [filtering with facets value](https://help.opendatasoft.com/apis/ods-search-v2/#filtering-with-facets-values) for more details. *Not to be confused with a where filter. Excluding a facet value is equivalent to removing an entry in the left navigation panel.* *exclude is not available for monitoring sources*
   --timezone: string # Set timezone for datetime fields (default: UTC)
-  --include-app-metas: oneof<nothing, bool> # Explicitely request application metas for each datasets.  (default: false)
+  --include-app-metas: oneof<nothing, bool> # Explicitely request application metas for each datasets. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "where" $qp_where "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "search" $search "multi") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "timezone" $timezone "scalar") (serialize-qp "include_app_metas" $include_app_metas "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({source: $source} | format pattern "/{source}/exports/rss") $qp)
+  let full_url = (build-url $base ({source: (encode-path-segment $source)} | format pattern "/{source}/exports/rss") $qp)
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1031,20 +1041,20 @@ export def "exports-ttl export-datasets" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-where: list # An array of filters.  A filter is a text expression performing a simple full-text search that can also include logical operations (NOT, AND, OR...) as well as lots of other functions, thus performing more complex and more precise searches.  Read [the query language reference](https://docs.opendatasoft.com/api/explore/v2.html#where-clause) for more details.
-  --limit: int # Number of items to return.  To use in conjonction with offset to implement pagination.  Limit maximum value is 100. To retrive more data use export entry points. The default value is 10.  (default: 10)
-  --offset: int # Index of the first item to return (starting at 0).  To use in conjonction with limit to implement pagination.  (default: 0)
-  --search: list # An array of full text search.  A full text search performs a prefixed text search for each provided terms in all visible fields of a catalog/dataset.
-  --facet: list # A facet is a field used for simple filtering (through the parameters refine and exclude) or exploration (with the endpoint `/facets`).  Facets can be configured in the back-office or with this parameter.  Read [the facets documentation](https://help.opendatasoft.com/apis/ods-search-v2/#facets) for more details.
-  --refine: list # An array of facet filters. For example **city:Paris** or **modified:2019/12**. The request will only include the selected facet value.  Read [filtering with facets value](https://help.opendatasoft.com/apis/ods-search-v2/#filtering-with-facets-values) for more details.  *Not to be confused with a where filter. Refining with a facet is equivalent to selecting an entry in the left navigation panel.*  *refine is not available for monitoring sources*
-  --exclude: list # An array of facet filters. For example **city:Paris** or **modified:2019/12**. The request will exclude the defined facet value.  Read [filtering with facets value](https://help.opendatasoft.com/apis/ods-search-v2/#filtering-with-facets-values) for more details.  *Not to be confused with a where filter. Excluding a facet value is equivalent to removing an entry in the left navigation panel.*  *exclude is not available for monitoring sources*
+  --qp-where: list<string> # An array of filters. A filter is a text expression performing a simple full-text search that can also include logical operations (NOT, AND, OR...) as well as lots of other functions, thus performing more complex and more precise searches. Read [the query language reference](https://docs.opendatasoft.com/api/explore/v2.html#where-clause) for more details.
+  --limit: int # Number of items to return. To use in conjonction with offset to implement pagination. Limit maximum value is 100. To retrive more data use export entry points. The default value is 10. (default: 10)
+  --offset: int # Index of the first item to return (starting at 0). To use in conjonction with limit to implement pagination. (default: 0)
+  --search: list<string> # An array of full text search. A full text search performs a prefixed text search for each provided terms in all visible fields of a catalog/dataset.
+  --facet: list<string> # A facet is a field used for simple filtering (through the parameters refine and exclude) or exploration (with the endpoint `/facets`). Facets can be configured in the back-office or with this parameter. Read [the facets documentation](https://help.opendatasoft.com/apis/ods-search-v2/#facets) for more details.
+  --refine: list<string> # An array of facet filters. For example **city:Paris** or **modified:2019/12**. The request will only include the selected facet value. Read [filtering with facets value](https://help.opendatasoft.com/apis/ods-search-v2/#filtering-with-facets-values) for more details. *Not to be confused with a where filter. Refining with a facet is equivalent to selecting an entry in the left navigation panel.* *refine is not available for monitoring sources*
+  --exclude: list<string> # An array of facet filters. For example **city:Paris** or **modified:2019/12**. The request will exclude the defined facet value. Read [filtering with facets value](https://help.opendatasoft.com/apis/ods-search-v2/#filtering-with-facets-values) for more details. *Not to be confused with a where filter. Excluding a facet value is equivalent to removing an entry in the left navigation panel.* *exclude is not available for monitoring sources*
   --timezone: string # Set timezone for datetime fields (default: UTC)
-  --include-app-metas: oneof<nothing, bool> # Explicitely request application metas for each datasets.  (default: false)
+  --include-app-metas: oneof<nothing, bool> # Explicitely request application metas for each datasets. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "where" $qp_where "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "search" $search "multi") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "timezone" $timezone "scalar") (serialize-qp "include_app_metas" $include_app_metas "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({source: $source} | format pattern "/{source}/exports/ttl") $qp)
+  let full_url = (build-url $base ({source: (encode-path-segment $source)} | format pattern "/{source}/exports/ttl") $qp)
   let accept_val = "text/turtle"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1064,26 +1074,26 @@ export def "exports-xls export-datasets" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-where: list # An array of filters.  A filter is a text expression performing a simple full-text search that can also include logical operations (NOT, AND, OR...) as well as lots of other functions, thus performing more complex and more precise searches.  Read [the query language reference](https://docs.opendatasoft.com/api/explore/v2.html#where-clause) for more details.
-  --limit: int # Number of items to return.  To use in conjonction with offset to implement pagination.  Limit maximum value is 100. To retrive more data use export entry points. The default value is 10.  (default: 10)
-  --offset: int # Index of the first item to return (starting at 0).  To use in conjonction with limit to implement pagination.  (default: 0)
-  --search: list # An array of full text search.  A full text search performs a prefixed text search for each provided terms in all visible fields of a catalog/dataset.
-  --facet: list # A facet is a field used for simple filtering (through the parameters refine and exclude) or exploration (with the endpoint `/facets`).  Facets can be configured in the back-office or with this parameter.  Read [the facets documentation](https://help.opendatasoft.com/apis/ods-search-v2/#facets) for more details.
-  --refine: list # An array of facet filters. For example **city:Paris** or **modified:2019/12**. The request will only include the selected facet value.  Read [filtering with facets value](https://help.opendatasoft.com/apis/ods-search-v2/#filtering-with-facets-values) for more details.  *Not to be confused with a where filter. Refining with a facet is equivalent to selecting an entry in the left navigation panel.*  *refine is not available for monitoring sources*
-  --exclude: list # An array of facet filters. For example **city:Paris** or **modified:2019/12**. The request will exclude the defined facet value.  Read [filtering with facets value](https://help.opendatasoft.com/apis/ods-search-v2/#filtering-with-facets-values) for more details.  *Not to be confused with a where filter. Excluding a facet value is equivalent to removing an entry in the left navigation panel.*  *exclude is not available for monitoring sources*
+  --qp-where: list<string> # An array of filters. A filter is a text expression performing a simple full-text search that can also include logical operations (NOT, AND, OR...) as well as lots of other functions, thus performing more complex and more precise searches. Read [the query language reference](https://docs.opendatasoft.com/api/explore/v2.html#where-clause) for more details.
+  --limit: int # Number of items to return. To use in conjonction with offset to implement pagination. Limit maximum value is 100. To retrive more data use export entry points. The default value is 10. (default: 10)
+  --offset: int # Index of the first item to return (starting at 0). To use in conjonction with limit to implement pagination. (default: 0)
+  --search: list<string> # An array of full text search. A full text search performs a prefixed text search for each provided terms in all visible fields of a catalog/dataset.
+  --facet: list<string> # A facet is a field used for simple filtering (through the parameters refine and exclude) or exploration (with the endpoint `/facets`). Facets can be configured in the back-office or with this parameter. Read [the facets documentation](https://help.opendatasoft.com/apis/ods-search-v2/#facets) for more details.
+  --refine: list<string> # An array of facet filters. For example **city:Paris** or **modified:2019/12**. The request will only include the selected facet value. Read [filtering with facets value](https://help.opendatasoft.com/apis/ods-search-v2/#filtering-with-facets-values) for more details. *Not to be confused with a where filter. Refining with a facet is equivalent to selecting an entry in the left navigation panel.* *refine is not available for monitoring sources*
+  --exclude: list<string> # An array of facet filters. For example **city:Paris** or **modified:2019/12**. The request will exclude the defined facet value. Read [filtering with facets value](https://help.opendatasoft.com/apis/ods-search-v2/#filtering-with-facets-values) for more details. *Not to be confused with a where filter. Excluding a facet value is equivalent to removing an entry in the left navigation panel.* *exclude is not available for monitoring sources*
   --timezone: string # Set timezone for datetime fields (default: UTC)
-  --include-app-metas: oneof<nothing, bool> # Explicitely request application metas for each datasets.  (default: false)
+  --include-app-metas: oneof<nothing, bool> # Explicitely request application metas for each datasets. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "where" $qp_where "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "search" $search "multi") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "timezone" $timezone "scalar") (serialize-qp "include_app_metas" $include_app_metas "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({source: $source} | format pattern "/{source}/exports/xls") $qp)
+  let full_url = (build-url $base ({source: (encode-path-segment $source)} | format pattern "/{source}/exports/xls") $qp)
   let accept_val = "xls"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Enumerate facets values for datasets and return a list of values for each facet. Can be used to implement guided navigation in large result sets.  Read [the facets documentation](https://help.opendatasoft.com/apis/ods-search-v2/#enumerating-facets-values) for more details.
+# Enumerate facets values for datasets and return a list of values for each facet. Can be used to implement guided navigation in large result sets. Read [the facets documentation](https://help.opendatasoft.com/apis/ods-search-v2/#enumerating-facets-values) for more details.
 #
 # GET /{source}/facets
 # operationId: getDatasetsFacets
@@ -1097,17 +1107,17 @@ export def "facets get-datasets" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --facet: list # A facet is a field used for simple filtering (through the parameters refine and exclude) or exploration (with the endpoint `/facets`).  Facets can be configured in the back-office or with this parameter.  Read [the facets documentation](https://help.opendatasoft.com/apis/ods-search-v2/#facets) for more details.
-  --refine: list # An array of facet filters. For example **city:Paris** or **modified:2019/12**. The request will only include the selected facet value.  Read [filtering with facets value](https://help.opendatasoft.com/apis/ods-search-v2/#filtering-with-facets-values) for more details.  *Not to be confused with a where filter. Refining with a facet is equivalent to selecting an entry in the left navigation panel.*  *refine is not available for monitoring sources*
-  --exclude: list # An array of facet filters. For example **city:Paris** or **modified:2019/12**. The request will exclude the defined facet value.  Read [filtering with facets value](https://help.opendatasoft.com/apis/ods-search-v2/#filtering-with-facets-values) for more details.  *Not to be confused with a where filter. Excluding a facet value is equivalent to removing an entry in the left navigation panel.*  *exclude is not available for monitoring sources*
-  --qp-where: list # An array of filters.  A filter is a text expression performing a simple full-text search that can also include logical operations (NOT, AND, OR...) as well as lots of other functions, thus performing more complex and more precise searches.  Read [the query language reference](https://docs.opendatasoft.com/api/explore/v2.html#where-clause) for more details.
-  --search: list # An array of full text search.  A full text search performs a prefixed text search for each provided terms in all visible fields of a catalog/dataset.
+  --facet: list<string> # A facet is a field used for simple filtering (through the parameters refine and exclude) or exploration (with the endpoint `/facets`). Facets can be configured in the back-office or with this parameter. Read [the facets documentation](https://help.opendatasoft.com/apis/ods-search-v2/#facets) for more details.
+  --refine: list<string> # An array of facet filters. For example **city:Paris** or **modified:2019/12**. The request will only include the selected facet value. Read [filtering with facets value](https://help.opendatasoft.com/apis/ods-search-v2/#filtering-with-facets-values) for more details. *Not to be confused with a where filter. Refining with a facet is equivalent to selecting an entry in the left navigation panel.* *refine is not available for monitoring sources*
+  --exclude: list<string> # An array of facet filters. For example **city:Paris** or **modified:2019/12**. The request will exclude the defined facet value. Read [filtering with facets value](https://help.opendatasoft.com/apis/ods-search-v2/#filtering-with-facets-values) for more details. *Not to be confused with a where filter. Excluding a facet value is equivalent to removing an entry in the left navigation panel.* *exclude is not available for monitoring sources*
+  --qp-where: list<string> # An array of filters. A filter is a text expression performing a simple full-text search that can also include logical operations (NOT, AND, OR...) as well as lots of other functions, thus performing more complex and more precise searches. Read [the query language reference](https://docs.opendatasoft.com/api/explore/v2.html#where-clause) for more details.
+  --search: list<string> # An array of full text search. A full text search performs a prefixed text search for each provided terms in all visible fields of a catalog/dataset.
   --timezone: string # Set timezone for datetime fields (default: UTC)
 ]: nothing -> record<facets: table<facets: list, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "where" $qp_where "multi") (serialize-qp "search" $search "multi") (serialize-qp "timezone" $timezone "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({source: $source} | format pattern "/{source}/facets") $qp)
+  let full_url = (build-url $base ({source: (encode-path-segment $source)} | format pattern "/{source}/facets") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1117,7 +1127,7 @@ export def "facets get-datasets" [
 #
 # GET /{source}/metadata_templates
 # operationId: getMetadataTemplatesTypes
-export def "metadata-templates get-metadata-templates-types" [
+export def "metadata-templates get-types" [
   source: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1130,7 +1140,7 @@ export def "metadata-templates get-metadata-templates-types" [
 ]: nothing -> record<links: table<href: string, rel: string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({source: $source} | format pattern "/{source}/metadata_templates"))
+  let full_url = (build-url $base ({source: (encode-path-segment $source)} | format pattern "/{source}/metadata_templates"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1140,7 +1150,7 @@ export def "metadata-templates get-metadata-templates-types" [
 #
 # GET /{source}/metadata_templates/{metadata_template_type}
 # operationId: getMetadataTemplatesType
-export def "metadata-templates get-metadata-templates-type" [
+export def "metadata-templates list" [
   source: string
   metadata_template_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1154,7 +1164,7 @@ export def "metadata-templates get-metadata-templates-type" [
 ]: nothing -> record<links: table<href: string, rel: string>, metadata_templates: table<links: list, metadata_template: record>> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({source: $source, metadata_template_type: $metadata_template_type} | format pattern "/{source}/metadata_templates/{metadata_template_type}"))
+  let full_url = (build-url $base ({source: (encode-path-segment $source), metadata_template_type: (encode-path-segment $metadata_template_type)} | format pattern "/{source}/metadata_templates/{metadata_template_type}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1179,7 +1189,7 @@ export def "metadata-templates get" [
 ]: nothing -> record<links: table<href: string, rel: string>, metadata_template: record<name: string, schema: list<record>, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({source: $source, metadata_template_type: $metadata_template_type, metadata_template_name: $metadata_template_name} | format pattern "/{source}/metadata_templates/{metadata_template_type}/{metadata_template_name}"))
+  let full_url = (build-url $base ({source: (encode-path-segment $source), metadata_template_type: (encode-path-segment $metadata_template_type), metadata_template_name: (encode-path-segment $metadata_template_name)} | format pattern "/{source}/metadata_templates/{metadata_template_type}/{metadata_template_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

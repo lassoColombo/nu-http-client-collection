@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -69,7 +78,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "clients-config-ui-accounts-platform get-visible-accounts" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "clients-config-ui-accounts-platform get-visible" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,7 +102,7 @@ export def commands []: nothing -> table {
 #
 # GET /clients/{clientId}/config/ui/accounts/platform/{platformKey}
 # operationId: get-visible-accounts
-export def "clients-config-ui-accounts-platform get-visible-accounts" [
+export def "clients-config-ui-accounts-platform get-visible" [
   client_id: string
   platform_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -107,7 +116,7 @@ export def "clients-config-ui-accounts-platform get-visible-accounts" [
 ]: nothing -> record<visibleAccounts: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({client_id: $client_id, platform_key: $platform_key} | format pattern "/clients/{client_id}/config/ui/accounts/platform/{platform_key}"))
+  let full_url = (build-url $base ({client_id: (encode-path-segment $client_id), platform_key: (encode-path-segment $platform_key)} | format pattern "/clients/{client_id}/config/ui/accounts/platform/{platform_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -117,7 +126,7 @@ export def "clients-config-ui-accounts-platform get-visible-accounts" [
 #
 # POST /companies/{companyId}/sync/commerce/latest
 # operationId: request-sync
-export def "companies-sync-commerce-latest request-sync" [
+export def "companies-sync-commerce-latest request" [
   company_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -127,17 +136,17 @@ export def "companies-sync-commerce-latest request-sync" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --sync-to: any # The DateTime, upto which Sync will run up to starting from the previous successful sync (nullable)
-]: any -> record<commerceSyncId: string, companyId: string, dataConnections: table<additionalProperties: any, connectionInfo: record, created: any, dataConnectionErrors: list, id: string, integrationId: string, integrationKey: string, lastSync: any, linkUrl: string, platformName: string, sourceId: any, sourceType: string, status: any>, dataPushed: bool, errorMessage: string, syncDateRangeUtc: record<finish: any, start: any>, syncExceptionMessage: string, syncStatus: string, syncStatusCode: int, syncUtc: any> {
+  --sync-to: string # In Codat's data model, dates and times are represented using the ISO 8601 standard (https://en.wikipedia.org/wiki/ISO_8601). Date and time fields are formatted as strings; for example: ``` 2020-10-08T22:40:50Z 2021-01-01T00:00:00 ``` When syncing data that contains `DateTime` fields from Codat, make sure you support the following cases when reading time information: - Coordinated Universal Time (UTC): `2021-11-15T06:00:00Z` - Unqualified local time: `2021-11-15T01:00:00` - UTC time offsets: `2021-11-15T01:00:00-05:00` > Time zones > > Not all dates from Codat will contain information about time zones. > Where it is not available from the underlying platform, Codat will return these as times local to the business whose data has been synced.
+]: any -> record<commerceSyncId: string, companyId: string, dataConnections: table<additionalProperties: any, connectionInfo: record, created: string, dataConnectionErrors: list, id: string, integrationId: string, integrationKey: string, lastSync: string, linkUrl: string, platformName: string, sourceId: string, sourceType: string, status: string>, dataPushed: bool, errorMessage: string, syncDateRangeUtc: record<finish: string, start: string>, syncExceptionMessage: string, syncStatus: string, syncStatusCode: int, syncUtc: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({company_id: $company_id} | format pattern "/companies/{company_id}/sync/commerce/latest"))
-  let body = {"syncTo": $sync_to} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/sync/commerce/latest"))
+  let req_body = {"syncTo": $sync_to} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve config preferences set for a company.
@@ -157,7 +166,7 @@ export def "config-companies-sync-commerce get-configuration" [
 ]: nothing -> record<fees: record<accounts: record, feesSupplier: record<selectedSupplierId: string, supplierOptions: list>, syncFees: bool>, newPayments: record<accounts: record, syncPayments: bool>, payments: record<accounts: record, syncPayments: bool>, sales: record<accounts: record, grouping: record<groupingLevels: record, groupingPeriod: record>, invoiceStatus: record<invoiceStatusOptions: list, selectedInvoiceStatus: string>, newTaxRates: record<accountingTaxRateOptions: list, commerceTaxRateOptions: list, defaultZeroTaxRateOptions: list, selectedDefaultZeroTaxRateId: string, taxRateMappings: list>, salesCustomer: record<customerOptions: list, selectedCustomerId: string>, syncSales: bool, taxRates: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({company_id: $company_id} | format pattern "/config/companies/{company_id}/sync/commerce"))
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/config/companies/{company_id}/sync/commerce"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -167,7 +176,7 @@ export def "config-companies-sync-commerce get-configuration" [
 #
 # POST /config/companies/{companyId}/sync/commerce
 # operationId: set-configuration
-export def "config-companies-sync-commerce set-configuration" [
+export def "config-companies-sync-commerce update-configuration" [
   company_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -180,7 +189,7 @@ export def "config-companies-sync-commerce set-configuration" [
 ]: nothing -> record<fees: record<accounts: record, feesSupplier: record<selectedSupplierId: string, supplierOptions: list>, syncFees: bool>, newPayments: record<accounts: record, syncPayments: bool>, payments: record<accounts: record, syncPayments: bool>, sales: record<accounts: record, grouping: record<groupingLevels: record, groupingPeriod: record>, invoiceStatus: record<invoiceStatusOptions: list, selectedInvoiceStatus: string>, newTaxRates: record<accountingTaxRateOptions: list, commerceTaxRateOptions: list, defaultZeroTaxRateOptions: list, selectedDefaultZeroTaxRateId: string, taxRateMappings: list>, salesCustomer: record<customerOptions: list, selectedCustomerId: string>, syncSales: bool, taxRates: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({company_id: $company_id} | format pattern "/config/companies/{company_id}/sync/commerce"))
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/config/companies/{company_id}/sync/commerce"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -190,7 +199,7 @@ export def "config-companies-sync-commerce set-configuration" [
 #
 # GET /config/integrations
 # operationId: list-integrations
-export def "config-integrations list-integrations" [
+export def "config-integrations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -199,10 +208,15 @@ export def "config-integrations list-integrations" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<results: table<dataProvidedBy: string, datatypeFeatures: list, enabled: bool, integrationId: any, isBeta: bool, isOfflineConnector: bool, key: string, logoUrl: string, name: string, sourceId: any, sourceType: any>, _links: record<current: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, pageNumber: int, pageSize: int, totalResults: int> {
+  --page: int # Page number. [Read more](https://docs.codat.io/using-the-api/paging). (format: int32, default: 1)
+  --page-size: int # Number of records to return in a page. [Read more](https://docs.codat.io/using-the-api/paging). (format: int32, default: 100)
+  --query: string # Codat query string. [Read more](https://docs.codat.io/using-the-api/querying).
+  --order-by: string # Field to order results by. [Read more](https://docs.codat.io/using-the-api/ordering-results).
+]: nothing -> record<results: table<dataProvidedBy: string, datatypeFeatures: list, enabled: bool, integrationId: string, isBeta: bool, isOfflineConnector: bool, key: string, logoUrl: string, name: string, sourceId: string, sourceType: string>, _links: record<current: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, pageNumber: int, pageSize: int, totalResults: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/config/integrations")
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "orderBy" $order_by "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/config/integrations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -212,7 +226,7 @@ export def "config-integrations list-integrations" [
 #
 # GET /config/integrations/{platformKey}/branding
 # operationId: get-integration-branding
-export def "config-integrations-branding get-integration-branding" [
+export def "config-integrations-branding get" [
   platform_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -225,7 +239,7 @@ export def "config-integrations-branding get-integration-branding" [
 ]: nothing -> record<button: record<default: any, hover: any>, logo: record<full: record<image: record>, square: any>, sourceId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({platform_key: $platform_key} | format pattern "/config/integrations/{platform_key}/branding"))
+  let full_url = (build-url $base ({platform_key: (encode-path-segment $platform_key)} | format pattern "/config/integrations/{platform_key}/branding"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -235,7 +249,7 @@ export def "config-integrations-branding get-integration-branding" [
 #
 # GET /config/sync/commerce/{commerceKey}/{accountingKey}/start
 # operationId: get-sync-flow-url
-export def "config-sync-commerce-start get-sync-flow-url" [
+export def "config-sync-commerce-start get-flow-url" [
   commerce_key: string
   accounting_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -251,7 +265,7 @@ export def "config-sync-commerce-start get-sync-flow-url" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "merchantIdentifier" $merchant_identifier "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({commerce_key: $commerce_key, accounting_key: $accounting_key} | format pattern "/config/sync/commerce/{commerce_key}/{accounting_key}/start") $qp)
+  let full_url = (build-url $base ({commerce_key: (encode-path-segment $commerce_key), accounting_key: (encode-path-segment $accounting_key)} | format pattern "/config/sync/commerce/{commerce_key}/{accounting_key}/start") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -261,7 +275,7 @@ export def "config-sync-commerce-start get-sync-flow-url" [
 #
 # GET /meta/companies
 # operationId: list-companies
-export def "meta-companies list-companies" [
+export def "meta-companies list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -274,7 +288,7 @@ export def "meta-companies list-companies" [
   --page-size: int # Number of records to return in a page. [Read more](https://docs.codat.io/using-the-api/paging). (format: int32, default: 100)
   --query: string # Codat query string. [Read more](https://docs.codat.io/using-the-api/querying).
   --order-by: string # Field to order results by. [Read more](https://docs.codat.io/using-the-api/ordering-results).
-]: nothing -> record<results: table<created: string, createdByUserName: string, dataConnections: list, description: string, id: string, lastSync: any, name: string, platform: string, redirect: string>, _links: record<current: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, pageNumber: int, pageSize: int, totalResults: int> {
+]: nothing -> record<results: table<created: string, createdByUserName: string, dataConnections: list, description: string, id: string, lastSync: string, name: string, platform: string, redirect: string>, _links: record<current: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, pageNumber: int, pageSize: int, totalResults: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "orderBy" $order_by "scalar")] | flatten | str join "&"
@@ -298,23 +312,23 @@ export def "meta-companies-sync create-company" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   name: string # Name of the company in Codat with a partner-commerce data connection. (format: string)
-]: any -> record<created: string, createdByUserName: string, dataConnections: table<additionalProperties: any, connectionInfo: record, created: any, dataConnectionErrors: list, id: string, integrationId: string, integrationKey: string, lastSync: any, linkUrl: string, platformName: string, sourceId: any, sourceType: string, status: any>, description: string, id: string, lastSync: any, name: string, platform: string, redirect: string> {
+]: any -> record<created: string, createdByUserName: string, dataConnections: table<additionalProperties: any, connectionInfo: record, created: string, dataConnectionErrors: list, id: string, integrationId: string, integrationKey: string, lastSync: string, linkUrl: string, platformName: string, sourceId: string, sourceType: string, status: string>, description: string, id: string, lastSync: string, name: string, platform: string, redirect: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/meta/companies/sync")
-  let body = {"name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List data connections
 #
 # GET /meta/companies/{companyId}/connections
 # operationId: list-connections
-export def "meta-companies-connections list-connections" [
+export def "meta-companies-connections list" [
   company_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -324,10 +338,15 @@ export def "meta-companies-connections list-connections" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<results: table<additionalProperties: any, connectionInfo: record, created: any, dataConnectionErrors: list, id: string, integrationId: string, integrationKey: string, lastSync: any, linkUrl: string, platformName: string, sourceId: any, sourceType: string, status: any>, _links: record<current: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, pageNumber: int, pageSize: int, totalResults: int> {
+  --page: int # Page number. [Read more](https://docs.codat.io/using-the-api/paging). (format: int32, default: 1)
+  --page-size: int # Number of records to return in a page. [Read more](https://docs.codat.io/using-the-api/paging). (format: int32, default: 100)
+  --query: string # Codat query string. [Read more](https://docs.codat.io/using-the-api/querying).
+  --order-by: string # Field to order results by. [Read more](https://docs.codat.io/using-the-api/ordering-results).
+]: nothing -> record<results: table<additionalProperties: any, connectionInfo: record, created: string, dataConnectionErrors: list, id: string, integrationId: string, integrationKey: string, lastSync: string, linkUrl: string, platformName: string, sourceId: string, sourceType: string, status: string>, _links: record<current: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, pageNumber: int, pageSize: int, totalResults: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({company_id: $company_id} | format pattern "/meta/companies/{company_id}/connections"))
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "orderBy" $order_by "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/meta/companies/{company_id}/connections") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -337,7 +356,7 @@ export def "meta-companies-connections list-connections" [
 #
 # POST /meta/companies/{companyId}/connections
 # operationId: create-connection
-export def "meta-companies-connections create-connection" [
+export def "meta-companies-connections create" [
   company_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -348,22 +367,23 @@ export def "meta-companies-connections create-connection" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
-]: any -> record<additionalProperties: any, connectionInfo: record, created: any, dataConnectionErrors: list<any>, id: string, integrationId: string, integrationKey: string, lastSync: any, linkUrl: string, platformName: string, sourceId: any, sourceType: string, status: any> {
+]: any -> record<additionalProperties: any, connectionInfo: record, created: string, dataConnectionErrors: table<errorMessage: string, erroredOnUtc: string, statusCode: string, statusText: string>, id: string, integrationId: string, integrationKey: string, lastSync: string, linkUrl: string, platformName: string, sourceId: string, sourceType: string, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({company_id: $company_id} | format pattern "/meta/companies/{company_id}/connections"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/meta/companies/{company_id}/connections"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update data connection
 #
 # PATCH /meta/companies/{companyId}/connections/{connectionId}
 # operationId: update-connection
-export def "meta-companies-connections update-connection" [
+export def "meta-companies-connections update" [
   company_id: any
   connection_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -375,23 +395,23 @@ export def "meta-companies-connections update-connection" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --status: string # The current authorization status of the data connection. (nullable)
-]: any -> record<additionalProperties: any, connectionInfo: record, created: any, dataConnectionErrors: list<any>, id: string, integrationId: string, integrationKey: string, lastSync: any, linkUrl: string, platformName: string, sourceId: any, sourceType: string, status: any> {
+]: any -> record<additionalProperties: any, connectionInfo: record, created: string, dataConnectionErrors: table<errorMessage: string, erroredOnUtc: string, statusCode: string, statusText: string>, id: string, integrationId: string, integrationKey: string, lastSync: string, linkUrl: string, platformName: string, sourceId: string, sourceType: string, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({company_id: $company_id, connection_id: $connection_id} | format pattern "/meta/companies/{company_id}/connections/{connection_id}"))
-  let body = {"status": $status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/meta/companies/{company_id}/connections/{connection_id}"))
+  let req_body = {"status": $status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Run a Commerce sync from a given date range
 #
 # POST /meta/companies/{companyId}/sync/commerce/historic
 # operationId: request-sync-for-date-range
-export def "meta-companies-sync-commerce-historic request-sync-for-date-range" [
+export def "meta-companies-sync-commerce-historic request-for-date-range" [
   company_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -401,25 +421,25 @@ export def "meta-companies-sync-commerce-historic request-sync-for-date-range" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --finish: any # Finish date of the Sync.
-  --start: any # Start date of the Sync.
-]: any -> record<commerceSyncId: string, companyId: string, dataConnections: table<additionalProperties: any, connectionInfo: record, created: any, dataConnectionErrors: list, id: string, integrationId: string, integrationKey: string, lastSync: any, linkUrl: string, platformName: string, sourceId: any, sourceType: string, status: any>, dataPushed: bool, errorMessage: string, syncDateRangeUtc: record<finish: any, start: any>, syncExceptionMessage: string, syncStatus: string, syncStatusCode: int, syncUtc: any> {
+  --finish: string # In Codat's data model, dates and times are represented using the ISO 8601 standard (https://en.wikipedia.org/wiki/ISO_8601). Date and time fields are formatted as strings; for example: ``` 2020-10-08T22:40:50Z 2021-01-01T00:00:00 ``` When syncing data that contains `DateTime` fields from Codat, make sure you support the following cases when reading time information: - Coordinated Universal Time (UTC): `2021-11-15T06:00:00Z` - Unqualified local time: `2021-11-15T01:00:00` - UTC time offsets: `2021-11-15T01:00:00-05:00` > Time zones > > Not all dates from Codat will contain information about time zones. > Where it is not available from the underlying platform, Codat will return these as times local to the business whose data has been synced.
+  --start: string # In Codat's data model, dates and times are represented using the ISO 8601 standard (https://en.wikipedia.org/wiki/ISO_8601). Date and time fields are formatted as strings; for example: ``` 2020-10-08T22:40:50Z 2021-01-01T00:00:00 ``` When syncing data that contains `DateTime` fields from Codat, make sure you support the following cases when reading time information: - Coordinated Universal Time (UTC): `2021-11-15T06:00:00Z` - Unqualified local time: `2021-11-15T01:00:00` - UTC time offsets: `2021-11-15T01:00:00-05:00` > Time zones > > Not all dates from Codat will contain information about time zones. > Where it is not available from the underlying platform, Codat will return these as times local to the business whose data has been synced.
+]: any -> record<commerceSyncId: string, companyId: string, dataConnections: table<additionalProperties: any, connectionInfo: record, created: string, dataConnectionErrors: list, id: string, integrationId: string, integrationKey: string, lastSync: string, linkUrl: string, platformName: string, sourceId: string, sourceType: string, status: string>, dataPushed: bool, errorMessage: string, syncDateRangeUtc: record<finish: string, start: string>, syncExceptionMessage: string, syncStatus: string, syncStatusCode: int, syncUtc: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({company_id: $company_id} | format pattern "/meta/companies/{company_id}/sync/commerce/historic"))
-  let body = {"finish": $finish, "start": $start} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/meta/companies/{company_id}/sync/commerce/historic"))
+  let req_body = {"finish": $finish, "start": $start} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get status for a company's syncs
 #
 # GET /meta/companies/{companyId}/sync/commerce/status
 # operationId: get-sync-status
-export def "meta-companies-sync-commerce-status get-sync-status" [
+export def "meta-companies-sync-commerce-status get" [
   company_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -432,7 +452,7 @@ export def "meta-companies-sync-commerce-status get-sync-status" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({company_id: $company_id} | format pattern "/meta/companies/{company_id}/sync/commerce/status"))
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/meta/companies/{company_id}/sync/commerce/status"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -442,7 +462,7 @@ export def "meta-companies-sync-commerce-status get-sync-status" [
 #
 # PATCH /sync/commerce/config/ui/accounts/platform/{commerceKey}
 # operationId: update-visible-accounts-sync-flow
-export def "sync-commerce-config-ui-accounts-platform update-visible-accounts-sync-flow" [
+export def "sync-commerce-config-ui-accounts-platform update-visible-flow" [
   commerce_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -452,24 +472,24 @@ export def "sync-commerce-config-ui-accounts-platform update-visible-accounts-sy
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --visible-accounts: list # Visible accounts on sync flow. (nullable)
+  --visible-accounts: list<string> # Visible accounts on sync flow. (nullable)
 ]: any -> record<visibleAccounts: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({commerce_key: $commerce_key} | format pattern "/sync/commerce/config/ui/accounts/platform/{commerce_key}"))
-  let body = {"visibleAccounts": $visible_accounts} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({commerce_key: (encode-path-segment $commerce_key)} | format pattern "/sync/commerce/config/ui/accounts/platform/{commerce_key}"))
+  let req_body = {"visibleAccounts": $visible_accounts} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve preferences for text fields on Sync Flow
 #
 # GET /sync/commerce/config/ui/text
 # operationId: get-config-text-sync-flow
-export def "sync-commerce-config-ui-text get-config-text-sync-flow" [
+export def "sync-commerce-config-ui-text get-flow" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -491,7 +511,7 @@ export def "sync-commerce-config-ui-text get-config-text-sync-flow" [
 #
 # PATCH /sync/commerce/config/ui/text
 # operationId: update-config-text-sync-flow
-export def "sync-commerce-config-ui-text update-config-text-sync-flow" [
+export def "sync-commerce-config-ui-text update-flow" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -506,8 +526,9 @@ export def "sync-commerce-config-ui-text update-config-text-sync-flow" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sync/commerce/config/ui/text")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

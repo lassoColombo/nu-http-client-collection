@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -74,7 +83,7 @@ def deletion-type-completer [] { ["cancel" "deletion_type_undefined" "transfer_t
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "apps-reseller-customers resellercustomersinsert" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "apps-reseller-customers create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -100,7 +109,7 @@ export def commands []: nothing -> table {
 # operationId: reseller.customers.insert
 # --postalAddress shape: {addressLine1?: string, addressLine2?: string, addressLine3?: string, contactName?: string, countryCode?: string, kind?: string, locality?: string, organizationName?: string, postalCode?: string, region?: string}
 # --primaryAdmin shape: {primaryEmail?: string}
-export def "apps-reseller-customers resellercustomersinsert" [
+export def "apps-reseller-customers create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -137,18 +146,18 @@ export def "apps-reseller-customers resellercustomersinsert" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "customerAuthToken" $customer_auth_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/apps/reseller/v1/customers" $qp)
-  let body = {"alternateEmail": $alternate_email, "customerDomain": $customer_domain, "customerDomainVerified": $customer_domain_verified, "customerId": $customer_id, "customerType": $customer_type, "kind": $kind, "phoneNumber": $phone_number, "postalAddress": $postal_address, "primaryAdmin": $primary_admin, "resourceUiUrl": $resource_ui_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"alternateEmail": $alternate_email, "customerDomain": $customer_domain, "customerDomainVerified": $customer_domain_verified, "customerId": $customer_id, "customerType": $customer_type, "kind": $kind, "phoneNumber": $phone_number, "postalAddress": $postal_address, "primaryAdmin": $primary_admin, "resourceUiUrl": $resource_ui_url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets a customer account. Use this operation to see a customer account already in your reseller management, or to see the minimal account information for an existing customer that you do not manage. For more information about the API response for existing customers, see [retrieving a customer account](/admin-sdk/reseller/v1/how-tos/manage_customers#get_customer).
 #
 # GET /apps/reseller/v1/customers/{customerId}
 # operationId: reseller.customers.get
-export def "apps-reseller-customers resellercustomersget" [
+export def "apps-reseller-customers get" [
   customer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -173,7 +182,7 @@ export def "apps-reseller-customers resellercustomersget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer_id: $customer_id} | format pattern "/apps/reseller/v1/customers/{customer_id}") $qp)
+  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id)} | format pattern "/apps/reseller/v1/customers/{customer_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -185,7 +194,7 @@ export def "apps-reseller-customers resellercustomersget" [
 # operationId: reseller.customers.patch
 # --postalAddress shape: {addressLine1?: string, addressLine2?: string, addressLine3?: string, contactName?: string, countryCode?: string, kind?: string, locality?: string, organizationName?: string, postalCode?: string, region?: string}
 # --primaryAdmin shape: {primaryEmail?: string}
-export def "apps-reseller-customers resellercustomerspatch" [
+export def "apps-reseller-customers update-by-customerId" [
   customer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -221,12 +230,12 @@ export def "apps-reseller-customers resellercustomerspatch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer_id: $customer_id} | format pattern "/apps/reseller/v1/customers/{customer_id}") $qp)
-  let body = {"alternateEmail": $alternate_email, "customerDomain": $customer_domain, "customerDomainVerified": $customer_domain_verified, "customerId": $body_customer_id, "customerType": $customer_type, "kind": $kind, "phoneNumber": $phone_number, "postalAddress": $postal_address, "primaryAdmin": $primary_admin, "resourceUiUrl": $resource_ui_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id)} | format pattern "/apps/reseller/v1/customers/{customer_id}") $qp)
+  let req_body = {"alternateEmail": $alternate_email, "customerDomain": $customer_domain, "customerDomainVerified": $customer_domain_verified, "customerId": $body_customer_id, "customerType": $customer_type, "kind": $kind, "phoneNumber": $phone_number, "postalAddress": $postal_address, "primaryAdmin": $primary_admin, "resourceUiUrl": $resource_ui_url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates a customer account's settings. You cannot update `customerType` via the Reseller API, but a `"team"` customer can verify their domain and become `customerType = "domain"`. For more information, see [update a customer's settings](/admin-sdk/reseller/v1/how-tos/manage_customers#update_customer).
@@ -235,7 +244,7 @@ export def "apps-reseller-customers resellercustomerspatch" [
 # operationId: reseller.customers.update
 # --postalAddress shape: {addressLine1?: string, addressLine2?: string, addressLine3?: string, contactName?: string, countryCode?: string, kind?: string, locality?: string, organizationName?: string, postalCode?: string, region?: string}
 # --primaryAdmin shape: {primaryEmail?: string}
-export def "apps-reseller-customers resellercustomersupdate" [
+export def "apps-reseller-customers update-by-customerId-1" [
   customer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -271,12 +280,12 @@ export def "apps-reseller-customers resellercustomersupdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer_id: $customer_id} | format pattern "/apps/reseller/v1/customers/{customer_id}") $qp)
-  let body = {"alternateEmail": $alternate_email, "customerDomain": $customer_domain, "customerDomainVerified": $customer_domain_verified, "customerId": $body_customer_id, "customerType": $customer_type, "kind": $kind, "phoneNumber": $phone_number, "postalAddress": $postal_address, "primaryAdmin": $primary_admin, "resourceUiUrl": $resource_ui_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id)} | format pattern "/apps/reseller/v1/customers/{customer_id}") $qp)
+  let req_body = {"alternateEmail": $alternate_email, "customerDomain": $customer_domain, "customerDomainVerified": $customer_domain_verified, "customerId": $body_customer_id, "customerType": $customer_type, "kind": $kind, "phoneNumber": $phone_number, "postalAddress": $postal_address, "primaryAdmin": $primary_admin, "resourceUiUrl": $resource_ui_url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Creates or transfer a subscription. Create a subscription for a customer's account that you ordered using the [Order a new customer account](/admin-sdk/reseller/v1/reference/customers/insert.html) method. For more information about creating a subscription for different payment plans, see [manage subscriptions](/admin-sdk/reseller/v1/how-tos/manage_subscriptions#create_subscription).\ If you did not order the customer's account using the customer insert method, use the customer's `customerAuthToken` when creating a subscription for that customer. If transferring a G Suite subscription with an associated Google Drive or Google Vault subscription, use the [batch operation](/admin-sdk/reseller/v1/how-tos/batch.html) to transfer all of these subscriptions. For more information, see how to [transfer subscriptions](/admin-sdk/reseller/v1/how-tos/manage_subscriptions#transfer_a_subscription).
@@ -288,7 +297,7 @@ export def "apps-reseller-customers resellercustomersupdate" [
 # --seats shape: {kind?: string, licensedNumberOfSeats?: int, maximumNumberOfSeats?: int, numberOfSeats?: int}
 # --transferInfo shape: {currentLegacySkuId?: string, minimumTransferableSeats?: int, transferabilityExpirationTime?: string}
 # --trialSettings shape: {isInTrial?: bool, trialEndTime?: string}
-export def "apps-reseller-customers-subscriptions resellersubscriptionsinsert" [
+export def "apps-reseller-customers-subscriptions create" [
   customer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -325,7 +334,7 @@ export def "apps-reseller-customers-subscriptions resellersubscriptionsinsert" [
   --sku-name: string # Read-only external display name for a product's SKU assigned to a customer in the subscription. SKU names are subject to change at Google's discretion. For products and SKUs available in this version of the API, see Product and SKU IDs.
   --status: string # This is an optional property.
   --subscription-id: string # The `subscriptionId` is the subscription identifier and is unique for each customer. This is a required property. Since a `subscriptionId` changes when a subscription is updated, we recommend not using this ID as a key for persistent data. Use the `subscriptionId` as described in retrieve all reseller subscriptions.
-  --suspension-reasons: list # Read-only field containing an enumerable of all the current suspension reasons for a subscription. It is possible for a subscription to have many concurrent, overlapping suspension reasons. A subscription's `STATUS` is `SUSPENDED` until all pending suspensions are removed. Possible options include: - `PENDING_TOS_ACCEPTANCE` - The customer has not logged in and accepted the G Suite Resold Terms of Services. - `RENEWAL_WITH_TYPE_CANCEL` - The customer's commitment ended and their service was cancelled at the end of their term. - `RESELLER_INITIATED` - A manual suspension invoked by a Reseller. - `TRIAL_ENDED` - The customer's trial expired without a plan selected. - `OTHER` - The customer is suspended for an internal Google reason (e.g. abuse or otherwise). 
+  --suspension-reasons: list<string> # Read-only field containing an enumerable of all the current suspension reasons for a subscription. It is possible for a subscription to have many concurrent, overlapping suspension reasons. A subscription's `STATUS` is `SUSPENDED` until all pending suspensions are removed. Possible options include: - `PENDING_TOS_ACCEPTANCE` - The customer has not logged in and accepted the G Suite Resold Terms of Services. - `RENEWAL_WITH_TYPE_CANCEL` - The customer's commitment ended and their service was cancelled at the end of their term. - `RESELLER_INITIATED` - A manual suspension invoked by a Reseller. - `TRIAL_ENDED` - The customer's trial expired without a plan selected. - `OTHER` - The customer is suspended for an internal Google reason (e.g. abuse or otherwise).
   --transfer-info: record # Read-only transfer related information for the subscription. For more information, see retrieve transferable subscriptions for a customer. — shape: {currentLegacySkuId?: string, minimumTransferableSeats?: int, transferabilityExpirationTime?: string}
   --trial-settings: record # The G Suite annual commitment and flexible payment plans can be in a 30-day free trial. For more information, see the API concepts. — shape: {isInTrial?: bool, trialEndTime?: string}
 ]: any -> record<billingMethod: string, creationTime: string, customerDomain: string, customerId: string, dealCode: string, kind: string, plan: record<commitmentInterval: record<endTime: string, startTime: string>, isCommitmentPlan: bool, planName: string>, purchaseOrderId: string, renewalSettings: record<kind: string, renewalType: string>, resourceUiUrl: string, seats: record<kind: string, licensedNumberOfSeats: int, maximumNumberOfSeats: int, numberOfSeats: int>, skuId: string, skuName: string, status: string, subscriptionId: string, suspensionReasons: list<string>, transferInfo: record<currentLegacySkuId: string, minimumTransferableSeats: int, transferabilityExpirationTime: string>, trialSettings: record<isInTrial: bool, trialEndTime: string>> {
@@ -333,19 +342,19 @@ export def "apps-reseller-customers-subscriptions resellersubscriptionsinsert" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "customerAuthToken" $customer_auth_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer_id: $customer_id} | format pattern "/apps/reseller/v1/customers/{customer_id}/subscriptions") $qp)
-  let body = {"billingMethod": $billing_method, "creationTime": $creation_time, "customerDomain": $customer_domain, "customerId": $body_customer_id, "dealCode": $deal_code, "kind": $kind, "plan": $plan, "purchaseOrderId": $purchase_order_id, "renewalSettings": $renewal_settings, "resourceUiUrl": $resource_ui_url, "seats": $seats, "skuId": $sku_id, "skuName": $sku_name, "status": $status, "subscriptionId": $subscription_id, "suspensionReasons": $suspension_reasons, "transferInfo": $transfer_info, "trialSettings": $trial_settings} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id)} | format pattern "/apps/reseller/v1/customers/{customer_id}/subscriptions") $qp)
+  let req_body = {"billingMethod": $billing_method, "creationTime": $creation_time, "customerDomain": $customer_domain, "customerId": $body_customer_id, "dealCode": $deal_code, "kind": $kind, "plan": $plan, "purchaseOrderId": $purchase_order_id, "renewalSettings": $renewal_settings, "resourceUiUrl": $resource_ui_url, "seats": $seats, "skuId": $sku_id, "skuName": $sku_name, "status": $status, "subscriptionId": $subscription_id, "suspensionReasons": $suspension_reasons, "transferInfo": $transfer_info, "trialSettings": $trial_settings} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Cancels, suspends, or transfers a subscription to direct.
 #
 # DELETE /apps/reseller/v1/customers/{customerId}/subscriptions/{subscriptionId}
 # operationId: reseller.subscriptions.delete
-export def "apps-reseller-customers-subscriptions resellersubscriptionsdelete" [
+export def "apps-reseller-customers-subscriptions delete" [
   customer_id: string
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -372,7 +381,7 @@ export def "apps-reseller-customers-subscriptions resellersubscriptionsdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "deletionType" $deletion_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer_id: $customer_id, subscription_id: $subscription_id} | format pattern "/apps/reseller/v1/customers/{customer_id}/subscriptions/{subscription_id}") $qp)
+  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id), subscription_id: (encode-path-segment $subscription_id)} | format pattern "/apps/reseller/v1/customers/{customer_id}/subscriptions/{subscription_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -382,7 +391,7 @@ export def "apps-reseller-customers-subscriptions resellersubscriptionsdelete" [
 #
 # GET /apps/reseller/v1/customers/{customerId}/subscriptions/{subscriptionId}
 # operationId: reseller.subscriptions.get
-export def "apps-reseller-customers-subscriptions resellersubscriptionsget" [
+export def "apps-reseller-customers-subscriptions get" [
   customer_id: string
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -408,7 +417,7 @@ export def "apps-reseller-customers-subscriptions resellersubscriptionsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer_id: $customer_id, subscription_id: $subscription_id} | format pattern "/apps/reseller/v1/customers/{customer_id}/subscriptions/{subscription_id}") $qp)
+  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id), subscription_id: (encode-path-segment $subscription_id)} | format pattern "/apps/reseller/v1/customers/{customer_id}/subscriptions/{subscription_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -418,7 +427,7 @@ export def "apps-reseller-customers-subscriptions resellersubscriptionsget" [
 #
 # POST /apps/reseller/v1/customers/{customerId}/subscriptions/{subscriptionId}/activate
 # operationId: reseller.subscriptions.activate
-export def "apps-reseller-customers-subscriptions-activate resellersubscriptionsactivate" [
+export def "apps-reseller-customers-subscriptions-activate create" [
   customer_id: string
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -444,7 +453,7 @@ export def "apps-reseller-customers-subscriptions-activate resellersubscriptions
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer_id: $customer_id, subscription_id: $subscription_id} | format pattern "/apps/reseller/v1/customers/{customer_id}/subscriptions/{subscription_id}/activate") $qp)
+  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id), subscription_id: (encode-path-segment $subscription_id)} | format pattern "/apps/reseller/v1/customers/{customer_id}/subscriptions/{subscription_id}/activate") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -455,7 +464,7 @@ export def "apps-reseller-customers-subscriptions-activate resellersubscriptions
 # POST /apps/reseller/v1/customers/{customerId}/subscriptions/{subscriptionId}/changePlan
 # operationId: reseller.subscriptions.changePlan
 # --seats shape: {kind?: string, licensedNumberOfSeats?: int, maximumNumberOfSeats?: int, numberOfSeats?: int}
-export def "apps-reseller-customers-subscriptions-change-plan resellersubscriptionschangePlan" [
+export def "apps-reseller-customers-subscriptions-change-plan create" [
   customer_id: string
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -479,7 +488,7 @@ export def "apps-reseller-customers-subscriptions-change-plan resellersubscripti
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --deal-code: string # Google-issued code (100 char max) for discounted pricing on subscription plans. Deal code must be included in `changePlan` request in order to receive discounted rate. This property is optional. If a deal code has already been added to a subscription, this property may be left empty and the existing discounted rate will still apply (if not empty, only provide the deal code that is already present on the subscription). If a deal code has never been added to a subscription and this property is left blank, regular pricing will apply.
   --kind: string # Identifies the resource as a subscription change plan request. Value: `subscriptions#changePlanRequest` (default: subscriptions#changePlanRequest)
-  --plan-name: string # The `planName` property is required. This is the name of the subscription's payment plan. For more information about the Google payment plans, see API concepts. Possible values are: - `ANNUAL_MONTHLY_PAY` - The annual commitment plan with monthly payments *Caution: *`ANNUAL_MONTHLY_PAY` is returned as `ANNUAL` in all API responses. - `ANNUAL_YEARLY_PAY` - The annual commitment plan with yearly payments - `FLEXIBLE` - The flexible plan - `TRIAL` - The 30-day free trial plan 
+  --plan-name: string # The `planName` property is required. This is the name of the subscription's payment plan. For more information about the Google payment plans, see API concepts. Possible values are: - `ANNUAL_MONTHLY_PAY` - The annual commitment plan with monthly payments *Caution: *`ANNUAL_MONTHLY_PAY` is returned as `ANNUAL` in all API responses. - `ANNUAL_YEARLY_PAY` - The annual commitment plan with yearly payments - `FLEXIBLE` - The flexible plan - `TRIAL` - The 30-day free trial plan
   --purchase-order-id: string # This is an optional property. This purchase order (PO) information is for resellers to use for their company tracking usage. If a `purchaseOrderId` value is given it appears in the API responses and shows up in the invoice. The property accepts up to 80 plain text characters.
   --seats: record # JSON template for subscription seats. — shape: {kind?: string, licensedNumberOfSeats?: int, maximumNumberOfSeats?: int, numberOfSeats?: int}
 ]: any -> record<billingMethod: string, creationTime: string, customerDomain: string, customerId: string, dealCode: string, kind: string, plan: record<commitmentInterval: record<endTime: string, startTime: string>, isCommitmentPlan: bool, planName: string>, purchaseOrderId: string, renewalSettings: record<kind: string, renewalType: string>, resourceUiUrl: string, seats: record<kind: string, licensedNumberOfSeats: int, maximumNumberOfSeats: int, numberOfSeats: int>, skuId: string, skuName: string, status: string, subscriptionId: string, suspensionReasons: list<string>, transferInfo: record<currentLegacySkuId: string, minimumTransferableSeats: int, transferabilityExpirationTime: string>, trialSettings: record<isInTrial: bool, trialEndTime: string>> {
@@ -487,19 +496,19 @@ export def "apps-reseller-customers-subscriptions-change-plan resellersubscripti
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer_id: $customer_id, subscription_id: $subscription_id} | format pattern "/apps/reseller/v1/customers/{customer_id}/subscriptions/{subscription_id}/changePlan") $qp)
-  let body = {"dealCode": $deal_code, "kind": $kind, "planName": $plan_name, "purchaseOrderId": $purchase_order_id, "seats": $seats} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id), subscription_id: (encode-path-segment $subscription_id)} | format pattern "/apps/reseller/v1/customers/{customer_id}/subscriptions/{subscription_id}/changePlan") $qp)
+  let req_body = {"dealCode": $deal_code, "kind": $kind, "planName": $plan_name, "purchaseOrderId": $purchase_order_id, "seats": $seats} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates a user license's renewal settings. This is applicable for accounts with annual commitment plans only. For more information, see the description in [manage subscriptions](/admin-sdk/reseller/v1/how-tos/manage_subscriptions#update_renewal).
 #
 # POST /apps/reseller/v1/customers/{customerId}/subscriptions/{subscriptionId}/changeRenewalSettings
 # operationId: reseller.subscriptions.changeRenewalSettings
-export def "apps-reseller-customers-subscriptions-change-renewal-settings resellersubscriptionschangeRenewalSettings" [
+export def "apps-reseller-customers-subscriptions-change-renewal-settings create" [
   customer_id: string
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -528,19 +537,19 @@ export def "apps-reseller-customers-subscriptions-change-renewal-settings resell
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer_id: $customer_id, subscription_id: $subscription_id} | format pattern "/apps/reseller/v1/customers/{customer_id}/subscriptions/{subscription_id}/changeRenewalSettings") $qp)
-  let body = {"kind": $kind, "renewalType": $renewal_type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id), subscription_id: (encode-path-segment $subscription_id)} | format pattern "/apps/reseller/v1/customers/{customer_id}/subscriptions/{subscription_id}/changeRenewalSettings") $qp)
+  let req_body = {"kind": $kind, "renewalType": $renewal_type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates a subscription's user license settings. For more information about updating an annual commitment plan or a flexible plan subscription’s licenses, see [Manage Subscriptions](/admin-sdk/reseller/v1/how-tos/manage_subscriptions#update_subscription_seat).
 #
 # POST /apps/reseller/v1/customers/{customerId}/subscriptions/{subscriptionId}/changeSeats
 # operationId: reseller.subscriptions.changeSeats
-export def "apps-reseller-customers-subscriptions-change-seats resellersubscriptionschangeSeats" [
+export def "apps-reseller-customers-subscriptions-change-seats create" [
   customer_id: string
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -571,19 +580,19 @@ export def "apps-reseller-customers-subscriptions-change-seats resellersubscript
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer_id: $customer_id, subscription_id: $subscription_id} | format pattern "/apps/reseller/v1/customers/{customer_id}/subscriptions/{subscription_id}/changeSeats") $qp)
-  let body = {"kind": $kind, "licensedNumberOfSeats": $licensed_number_of_seats, "maximumNumberOfSeats": $maximum_number_of_seats, "numberOfSeats": $number_of_seats} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id), subscription_id: (encode-path-segment $subscription_id)} | format pattern "/apps/reseller/v1/customers/{customer_id}/subscriptions/{subscription_id}/changeSeats") $qp)
+  let req_body = {"kind": $kind, "licensedNumberOfSeats": $licensed_number_of_seats, "maximumNumberOfSeats": $maximum_number_of_seats, "numberOfSeats": $number_of_seats} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Immediately move a 30-day free trial subscription to a paid service subscription. This method is only applicable if a payment plan has already been set up for the 30-day trial subscription. For more information, see [manage subscriptions](/admin-sdk/reseller/v1/how-tos/manage_subscriptions#paid_service).
 #
 # POST /apps/reseller/v1/customers/{customerId}/subscriptions/{subscriptionId}/startPaidService
 # operationId: reseller.subscriptions.startPaidService
-export def "apps-reseller-customers-subscriptions-start-paid-service resellersubscriptionsstartPaidService" [
+export def "apps-reseller-customers-subscriptions-start-paid-service start" [
   customer_id: string
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -609,7 +618,7 @@ export def "apps-reseller-customers-subscriptions-start-paid-service resellersub
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer_id: $customer_id, subscription_id: $subscription_id} | format pattern "/apps/reseller/v1/customers/{customer_id}/subscriptions/{subscription_id}/startPaidService") $qp)
+  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id), subscription_id: (encode-path-segment $subscription_id)} | format pattern "/apps/reseller/v1/customers/{customer_id}/subscriptions/{subscription_id}/startPaidService") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -619,7 +628,7 @@ export def "apps-reseller-customers-subscriptions-start-paid-service resellersub
 #
 # POST /apps/reseller/v1/customers/{customerId}/subscriptions/{subscriptionId}/suspend
 # operationId: reseller.subscriptions.suspend
-export def "apps-reseller-customers-subscriptions-suspend resellersubscriptionssuspend" [
+export def "apps-reseller-customers-subscriptions-suspend create" [
   customer_id: string
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -645,7 +654,7 @@ export def "apps-reseller-customers-subscriptions-suspend resellersubscriptionss
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer_id: $customer_id, subscription_id: $subscription_id} | format pattern "/apps/reseller/v1/customers/{customer_id}/subscriptions/{subscription_id}/suspend") $qp)
+  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id), subscription_id: (encode-path-segment $subscription_id)} | format pattern "/apps/reseller/v1/customers/{customer_id}/subscriptions/{subscription_id}/suspend") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -655,7 +664,7 @@ export def "apps-reseller-customers-subscriptions-suspend resellersubscriptionss
 #
 # GET /apps/reseller/v1/resellernotify/getwatchdetails
 # operationId: reseller.resellernotify.getwatchdetails
-export def "apps-reseller-resellernotify-getwatchdetails resellerresellernotifygetwatchdetails" [
+export def "apps-reseller-resellernotify-getwatchdetails get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -689,7 +698,7 @@ export def "apps-reseller-resellernotify-getwatchdetails resellerresellernotifyg
 #
 # POST /apps/reseller/v1/resellernotify/register
 # operationId: reseller.resellernotify.register
-export def "apps-reseller-resellernotify-register resellerresellernotifyregister" [
+export def "apps-reseller-resellernotify-register create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -724,7 +733,7 @@ export def "apps-reseller-resellernotify-register resellerresellernotifyregister
 #
 # POST /apps/reseller/v1/resellernotify/unregister
 # operationId: reseller.resellernotify.unregister
-export def "apps-reseller-resellernotify-unregister resellerresellernotifyunregister" [
+export def "apps-reseller-resellernotify-unregister delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -759,7 +768,7 @@ export def "apps-reseller-resellernotify-unregister resellerresellernotifyunregi
 #
 # GET /apps/reseller/v1/subscriptions
 # operationId: reseller.subscriptions.list
-export def "apps-reseller-subscriptions resellersubscriptionslist" [
+export def "apps-reseller-subscriptions list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -781,7 +790,7 @@ export def "apps-reseller-subscriptions resellersubscriptionslist" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --customer-auth-token: string # The `customerAuthToken` query string is required when creating a resold account that transfers a direct customer's subscription or transfers another reseller customer's subscription to your reseller management. This is a hexadecimal authentication token needed to complete the subscription transfer. For more information, see the administrator help center.
   --customer-id: string # This can be either the customer's primary domain name or the customer's unique identifier. If the domain name for a customer changes, the old domain name cannot be used to access the customer, but the customer's unique identifier (as returned by the API) can always be used. We recommend storing the unique identifier in your systems where applicable.
-  --customer-name-prefix: string # When retrieving all of your subscriptions and filtering for specific customers, you can enter a prefix for a customer name. Using an example customer group that includes `exam.com`, `example20.com` and `example.com`: - `exa` -- Returns all customer names that start with 'exa' which could include `exam.com`, `example20.com`, and `example.com`. A name prefix is similar to using a regular expression's asterisk, exa*. - `example` -- Returns `example20.com` and `example.com`. 
+  --customer-name-prefix: string # When retrieving all of your subscriptions and filtering for specific customers, you can enter a prefix for a customer name. Using an example customer group that includes `exam.com`, `example20.com` and `example.com`: - `exa` -- Returns all customer names that start with 'exa' which could include `exam.com`, `example20.com`, and `example.com`. A name prefix is similar to using a regular expression's asterisk, exa*. - `example` -- Returns `example20.com` and `example.com`.
   --max-results: int # When retrieving a large list, the `maxResults` is the maximum number of results per page. The `nextPageToken` value takes you to the next page. The default is 20.
   --page-token: string # Token to specify next page in the list
 ]: nothing -> record<kind: string, nextPageToken: string, subscriptions: table<billingMethod: string, creationTime: string, customerDomain: string, customerId: string, dealCode: string, kind: string, plan: record, purchaseOrderId: string, renewalSettings: record, resourceUiUrl: string, seats: record, skuId: string, skuName: string, status: string, subscriptionId: string, suspensionReasons: list, transferInfo: record, trialSettings: record>> {

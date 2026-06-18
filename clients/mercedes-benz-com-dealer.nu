@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -73,7 +82,7 @@ def activity-completer [] { ["PARTS" "SALES" "SERVICE" "USED-VEHICLES-TRADE"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "countries countriesGET" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "countries get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -97,7 +106,7 @@ export def commands []: nothing -> table {
 #
 # GET /countries
 # operationId: countriesGET
-export def "countries countriesGET" [
+export def "countries get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -106,8 +115,8 @@ export def "countries countriesGET" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --page: int # The index of the page to be returned. If this parameter is omitted, the first page will be returned.  (format: int32)
-  --page-size: int # The index of the page to be returned. If this parameter is omitted, the first page will be returned.  (format: int32)
+  --page: int # The index of the page to be returned. If this parameter is omitted, the first page will be returned. (format: int32)
+  --page-size: int # The index of the page to be returned. If this parameter is omitted, the first page will be returned. (format: int32)
 ]: nothing -> record<_links: record<next: record<href: string>, previous: record<href: string>, self: record<href: string>>, countries: table<countryId: string, isoCode: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -122,7 +131,7 @@ export def "countries countriesGET" [
 #
 # GET /dealers
 # operationId: dealersGET
-export def "dealers dealersGET" [
+export def "dealers list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -131,7 +140,7 @@ export def "dealers dealersGET" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --dealer-ids: list # Array of dealer ids. The dealer id is dealer’s business key, also known as GS Id. e.g. GS0000857,GS0017621
+  --dealer-ids: list<string> # Array of dealer ids. The dealer id is dealer’s business key, also known as GS Id. e.g. GS0000857,GS0017621
   --latitude: float # The latitude geo coordinate.
   --longitude: float # The longitude geo coordinate.
   --radius-value: int # The radius value of the search area. The center of the search area is defined by geo coordinates. (latitude, longitude properties) If radiusValue and radiusUnit parameters are missing, then the default radius is 10 km. (default: 10)
@@ -139,12 +148,12 @@ export def "dealers dealersGET" [
   --country-iso-code: string # The country of the dealer address defined as ISO two letter ID (e.g. DE, CH, CN, etc.)
   --city: string # The city of the dealer address.
   --name: string # A name of the dealer, the name filter will be applied to all Dealer names (e.g. legalName, nameAddition). You can also search for parts of Dealer names, e.g. the search term 'Niederlassung' will also match 'Niederlassung Stuttgart'.
-  --brand: string@brand-completer # Filter by brand, valid values are:   * MB: Mercedes-Benz   * SMT: Smart
+  --brand: string@brand-completer # Filter by brand, valid values are: * MB: Mercedes-Benz * SMT: Smart
   --product-group: string@product-group-completer # Filter by a product group
-  --activity: string@activity-completer # Filter by activity, valid actitvity values are:   * PARTS: Spare Parts Sales   * SALES: Sales of new vehicles   * SERVICE: Maintaining and repair   * USED-VEHICLES-TRADE: Sales of used vehicles
+  --activity: string@activity-completer # Filter by activity, valid actitvity values are: * PARTS: Spare Parts Sales * SALES: Sales of new vehicles * SERVICE: Maintaining and repair * USED-VEHICLES-TRADE: Sales of used vehicles
   --fields: string # Specifies which fields should be included in the result. If this filter is not used, per default all fields are returned. e.g. fields=dealers(dealerId,address(street,city))
-  --page: int # The index of the page to be returned. If this parameter is omitted, the first page will be returned.  (format: int32)
-  --page-size: int # The index of the page to be returned. If this parameter is omitted, the first page will be returned.  (format: int32)
+  --page: int # The index of the page to be returned. If this parameter is omitted, the first page will be returned. (format: int32)
+  --page-size: int # The index of the page to be returned. If this parameter is omitted, the first page will be returned. (format: int32)
 ]: nothing -> record<_links: record<next: record<href: string>, previous: record<href: string>, self: record<href: string>>, dealers: table<_links: record, address: record, brandCodes: list, communication: record, dealerId: string, distance: record, functions: list, geoCoordinates: record, legalName: string, nameAddition: string, openingHours: list, region: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -159,7 +168,7 @@ export def "dealers dealersGET" [
 #
 # GET /dealers/{dealerId}
 # operationId: dealerGET
-export def "dealers dealerGET" [
+export def "dealers get" [
   dealer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -174,7 +183,7 @@ export def "dealers dealerGET" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({dealer_id: $dealer_id} | format pattern "/dealers/{dealer_id}") $qp)
+  let full_url = (build-url $base ({dealer_id: (encode-path-segment $dealer_id)} | format pattern "/dealers/{dealer_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -71,7 +80,7 @@ def sort-order-completer [] { ["ASC" "DESC"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "lists-format list-s" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "lists-format get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,7 +104,7 @@ export def commands []: nothing -> table {
 #
 # GET /lists.{format}
 # operationId: GET_lists-format
-export def "lists-format list-s" [
+export def "lists-format get" [
   format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -105,12 +114,12 @@ export def "lists-format list-s" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --list: string # The name of the Times best-seller list. To get valid values, use a list names request.  Be sure to replace spaces with hyphens (e.g., e-book-fiction or hardcover-fiction, not E-Book Fiction or Hardcover Fiction). (The parameter is not case sensitive.)
+  --list: string # The name of the Times best-seller list. To get valid values, use a list names request. Be sure to replace spaces with hyphens (e.g., e-book-fiction or hardcover-fiction, not E-Book Fiction or Hardcover Fiction). (The parameter is not case sensitive.)
   --weeks-on-list: int # The number of weeks that the best seller has been on list-name, as of bestsellers-date
-  --bestsellers-date: string # YYYY-MM-DD  The week-ending date for the sales reflected on list-name. Times best-seller lists are compiled using available book sale data. The bestsellers-date may be significantly earlier than published-date. For additional information, see the explanation at the bottom of any best-seller list page on NYTimes.com (example: Hardcover Fiction, published Dec. 5 but reflecting sales to Nov. 29). (format: date-time)
-  --date: string # YYYY-MM-DD  The date the best-seller list was published on NYTimes.com (compare bestsellers-date)
+  --bestsellers-date: string # YYYY-MM-DD The week-ending date for the sales reflected on list-name. Times best-seller lists are compiled using available book sale data. The bestsellers-date may be significantly earlier than published-date. For additional information, see the explanation at the bottom of any best-seller list page on NYTimes.com (example: Hardcover Fiction, published Dec. 5 but reflecting sales to Nov. 29). (format: date-time)
+  --date: string # YYYY-MM-DD The date the best-seller list was published on NYTimes.com (compare bestsellers-date)
   --isbn: string # International Standard Book Number, 10 or 13 digits
-  --published-date: string # YYYY-MM-DD  The date the best-seller list was published on NYTimes.com (compare bestsellers-date)
+  --published-date: string # YYYY-MM-DD The date the best-seller list was published on NYTimes.com (compare bestsellers-date)
   --rank: int # The rank of the best seller on list-name as of bestsellers-date
   --rank-last-week: int # The rank of the best seller on list-name one week prior to bestsellers-date
   --offset: int # Sets the starting point of the result set
@@ -119,7 +128,7 @@ export def "lists-format list-s" [
   let auth = (build-auth $token ($auth_scheme | default "query-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "list" $list "scalar") (serialize-qp "weeks-on-list" $weeks_on_list "scalar") (serialize-qp "bestsellers-date" $bestsellers_date "scalar") (serialize-qp "date" $date "scalar") (serialize-qp "isbn" $isbn "scalar") (serialize-qp "published-date" $published_date "scalar") (serialize-qp "rank" $rank "scalar") (serialize-qp "rank-last-week" $rank_last_week "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort-order" $sort_order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({format: $format} | format pattern "/lists.{format}") $qp)
+  let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/lists.{format}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -129,7 +138,7 @@ export def "lists-format list-s" [
 #
 # GET /lists/best-sellers/history.json
 # operationId: GET_lists-best-sellers-history-json
-export def "lists-best-sellers-historyjson list-s" [
+export def "lists-best-sellers-history-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -139,12 +148,12 @@ export def "lists-best-sellers-historyjson list-s" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --age-group: string # The target age group for the best seller.
-  --author: string # The author of the best seller. The author field does not include additional contributors (see Data Structure for more details about the author and contributor fields).  When searching the author field, you can specify any combination of first, middle and last names.  When sort-by is set to author, the results will be sorted by author's first name. 
-  --contributor: string # The author of the best seller, as well as other contributors such as the illustrator (to search or sort by author name only, use author instead).  When searching, you can specify any combination of first, middle and last names of any of the contributors.  When sort-by is set to contributor, the results will be sorted by the first name of the first contributor listed. 
-  --isbn: string # International Standard Book Number, 10 or 13 digits  A best seller may have both 10-digit and 13-digit ISBNs, and may have multiple ISBNs of each type. To search on multiple ISBNs, separate the ISBNs with semicolons (example: 9780446579933;0061374229).
+  --author: string # The author of the best seller. The author field does not include additional contributors (see Data Structure for more details about the author and contributor fields). When searching the author field, you can specify any combination of first, middle and last names. When sort-by is set to author, the results will be sorted by author's first name.
+  --contributor: string # The author of the best seller, as well as other contributors such as the illustrator (to search or sort by author name only, use author instead). When searching, you can specify any combination of first, middle and last names of any of the contributors. When sort-by is set to contributor, the results will be sorted by the first name of the first contributor listed.
+  --isbn: string # International Standard Book Number, 10 or 13 digits A best seller may have both 10-digit and 13-digit ISBNs, and may have multiple ISBNs of each type. To search on multiple ISBNs, separate the ISBNs with semicolons (example: 9780446579933;0061374229).
   --price: string # The publisher's list price of the best seller, including decimal point
   --publisher: string # The standardized name of the publisher
-  --title: string # The title of the best seller  When searching, you can specify a portion of a title or a full title.
+  --title: string # The title of the best seller When searching, you can specify a portion of a title or a full title.
 ]: nothing -> record<copyright: string, num_results: int, results: table<age_group: string, author: string, contributor: string, contributor_note: string, description: string, isbns: list, price: int, publisher: string, ranks_history: list, reviews: list, title: string>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -159,7 +168,7 @@ export def "lists-best-sellers-historyjson list-s" [
 #
 # GET /lists/names.{format}
 # operationId: GET_lists-names-format
-export def "lists-names-format list-s" [
+export def "lists-names-format get" [
   format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -174,7 +183,7 @@ export def "lists-names-format list-s" [
   let auth = (build-auth $token ($auth_scheme | default "query-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-key" $api_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({format: $format} | format pattern "/lists/names.{format}") $qp)
+  let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/lists/names.{format}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -184,7 +193,7 @@ export def "lists-names-format list-s" [
 #
 # GET /lists/overview.{format}
 # operationId: GET_lists-overview-format
-export def "lists-overview-format list-s" [
+export def "lists-overview-format get" [
   format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -194,13 +203,13 @@ export def "lists-overview-format list-s" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --published-date: string # The best-seller list publication date. YYYY-MM-DD  You do not have to specify the exact date the list was published. The service will search forward (into the future) for the closest publication date to the date you specify. For example, a request for lists/overview/2013-05-22 will retrieve the list that was published on 05-26.  If you do not include a published_date, the current week's best-sellers lists will be returned.
+  --published-date: string # The best-seller list publication date. YYYY-MM-DD You do not have to specify the exact date the list was published. The service will search forward (into the future) for the closest publication date to the date you specify. For example, a request for lists/overview/2013-05-22 will retrieve the list that was published on 05-26. If you do not include a published_date, the current week's best-sellers lists will be returned.
   --api-key: string
 ]: nothing -> record<copyright: string, num_results: int, results: record<bestsellers_date: string, lists: list<record>, published_date: string>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "published_date" $published_date "scalar") (serialize-qp "api-key" $api_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({format: $format} | format pattern "/lists/overview.{format}") $qp)
+  let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/lists/overview.{format}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -210,7 +219,7 @@ export def "lists-overview-format list-s" [
 #
 # GET /lists/{date}/{list}.json
 # operationId: GET_lists-date-list-json
-export def "lists list-s-json" [
+export def "lists get-json" [
   date: string
   list: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -222,9 +231,9 @@ export def "lists list-s-json" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --isbn: int # International Standard Book Number, 10 or 13 digits
-  --list-name: string # The name of the Times best-seller list. To get valid values, use a list names request.  Be sure to replace spaces with hyphens (e.g., e-book-fiction or hardcover-fiction, not E-Book Fiction or Hardcover Fiction). (The parameter is not case sensitive.)
-  --published-date: string # YYYY-MM-DD  The date the best-seller list was published on NYTimes.com (compare bestsellers-date) (format: date-time)
-  --bestsellers-date: string # YYYY-MM-DD  The week-ending date for the sales reflected on list-name. Times best-seller lists are compiled using available book sale data. The bestsellers-date may be significantly earlier than published-date. For additional information, see the explanation at the bottom of any best-seller list page on NYTimes.com (example: Hardcover Fiction, published Dec. 5 but reflecting sales to Nov. 29).
+  --list-name: string # The name of the Times best-seller list. To get valid values, use a list names request. Be sure to replace spaces with hyphens (e.g., e-book-fiction or hardcover-fiction, not E-Book Fiction or Hardcover Fiction). (The parameter is not case sensitive.)
+  --published-date: string # YYYY-MM-DD The date the best-seller list was published on NYTimes.com (compare bestsellers-date) (format: date-time)
+  --bestsellers-date: string # YYYY-MM-DD The week-ending date for the sales reflected on list-name. Times best-seller lists are compiled using available book sale data. The bestsellers-date may be significantly earlier than published-date. For additional information, see the explanation at the bottom of any best-seller list page on NYTimes.com (example: Hardcover Fiction, published Dec. 5 but reflecting sales to Nov. 29).
   --weeks-on-list: int # The number of weeks that the best seller has been on list-name, as of bestsellers-date
   --rank: string # The rank of the best seller on list-name as of bestsellers-date
   --rank-last-week: int # The rank of the best seller on list-name one week prior to bestsellers-date
@@ -234,7 +243,7 @@ export def "lists list-s-json" [
   let auth = (build-auth $token ($auth_scheme | default "query-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "isbn" $isbn "scalar") (serialize-qp "list-name" $list_name "scalar") (serialize-qp "published-date" $published_date "scalar") (serialize-qp "bestsellers-date" $bestsellers_date "scalar") (serialize-qp "weeks-on-list" $weeks_on_list "scalar") (serialize-qp "rank" $rank "scalar") (serialize-qp "rank-last-week" $rank_last_week "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort-order" $sort_order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({date: $date, list: $list} | format pattern "/lists/{date}/{list}.json") $qp)
+  let full_url = (build-url $base ({date: (encode-path-segment $date), list: (encode-path-segment $list)} | format pattern "/lists/{date}/{list}.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -262,7 +271,7 @@ export def "reviews-format get" [
   let auth = (build-auth $token ($auth_scheme | default "query-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "isbn" $isbn "scalar") (serialize-qp "title" $title "scalar") (serialize-qp "author" $author "scalar") (serialize-qp "api-key" $api_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({format: $format} | format pattern "/reviews.{format}") $qp)
+  let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/reviews.{format}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

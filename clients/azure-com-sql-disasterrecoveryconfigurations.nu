@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -110,7 +119,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-disast
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, server_name: $server_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/disasterRecoveryConfiguration") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), server_name: (encode-path-segment $server_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/disasterRecoveryConfiguration") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -138,7 +147,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-disast
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, server_name: $server_name, disaster_recovery_configuration_name: $disaster_recovery_configuration_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/disasterRecoveryConfiguration/{disaster_recovery_configuration_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), server_name: (encode-path-segment $server_name), disaster_recovery_configuration_name: (encode-path-segment $disaster_recovery_configuration_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/disasterRecoveryConfiguration/{disaster_recovery_configuration_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -166,7 +175,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-disast
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, server_name: $server_name, disaster_recovery_configuration_name: $disaster_recovery_configuration_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/disasterRecoveryConfiguration/{disaster_recovery_configuration_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), server_name: (encode-path-segment $server_name), disaster_recovery_configuration_name: (encode-path-segment $disaster_recovery_configuration_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/disasterRecoveryConfiguration/{disaster_recovery_configuration_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -194,7 +203,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-disast
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, server_name: $server_name, disaster_recovery_configuration_name: $disaster_recovery_configuration_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/disasterRecoveryConfiguration/{disaster_recovery_configuration_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), server_name: (encode-path-segment $server_name), disaster_recovery_configuration_name: (encode-path-segment $disaster_recovery_configuration_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/disasterRecoveryConfiguration/{disaster_recovery_configuration_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -204,7 +213,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-disast
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/disasterRecoveryConfiguration/{disasterRecoveryConfigurationName}/failover
 # operationId: DisasterRecoveryConfigurations_Failover
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-disaster-recovery-configuration-failover post" [
+export def "subscriptions-resource-groups-providers-microsoft-sql-servers-disaster-recovery-configuration-failover create" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -222,7 +231,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-disast
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, server_name: $server_name, disaster_recovery_configuration_name: $disaster_recovery_configuration_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/disasterRecoveryConfiguration/{disaster_recovery_configuration_name}/failover") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), server_name: (encode-path-segment $server_name), disaster_recovery_configuration_name: (encode-path-segment $disaster_recovery_configuration_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/disasterRecoveryConfiguration/{disaster_recovery_configuration_name}/failover") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -232,7 +241,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-disast
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/disasterRecoveryConfiguration/{disasterRecoveryConfigurationName}/forceFailoverAllowDataLoss
 # operationId: DisasterRecoveryConfigurations_FailoverAllowDataLoss
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-disaster-recovery-configuration-force-failover-allow-data-loss post" [
+export def "subscriptions-resource-groups-providers-microsoft-sql-servers-disaster-recovery-configuration-force-failover-allow-data-loss create" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -250,7 +259,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-disast
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, server_name: $server_name, disaster_recovery_configuration_name: $disaster_recovery_configuration_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/disasterRecoveryConfiguration/{disaster_recovery_configuration_name}/forceFailoverAllowDataLoss") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), server_name: (encode-path-segment $server_name), disaster_recovery_configuration_name: (encode-path-segment $disaster_recovery_configuration_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/disasterRecoveryConfiguration/{disaster_recovery_configuration_name}/forceFailoverAllowDataLoss") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

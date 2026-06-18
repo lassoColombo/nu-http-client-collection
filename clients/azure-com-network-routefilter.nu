@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -108,7 +117,7 @@ export def "subscriptions-providers-microsoft-network-route-filters list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Network/routeFilters") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Network/routeFilters") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -118,7 +127,7 @@ export def "subscriptions-providers-microsoft-network-route-filters list" [
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/routeFilters
 # operationId: RouteFilters_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-network-route-filters list-by" [
+export def "subscriptions-resource-groups-providers-microsoft-network-route-filters list" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -134,7 +143,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-route-filt
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/routeFilters") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/routeFilters") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -161,7 +170,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-route-filt
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, route_filter_name: $route_filter_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/routeFilters/{route_filter_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), route_filter_name: (encode-path-segment $route_filter_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/routeFilters/{route_filter_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -189,7 +198,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-route-filt
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, route_filter_name: $route_filter_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/routeFilters/{route_filter_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), route_filter_name: (encode-path-segment $route_filter_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/routeFilters/{route_filter_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -221,12 +230,12 @@ export def "subscriptions-resource-groups-providers-microsoft-network-route-filt
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, route_filter_name: $route_filter_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/routeFilters/{route_filter_name}") $qp)
-  let body = {"properties": $properties, "tags": $tags, "id": $id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), route_filter_name: (encode-path-segment $route_filter_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/routeFilters/{route_filter_name}") $qp)
+  let req_body = {"properties": $properties, "tags": $tags, "id": $id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Creates or updates a route filter in a specified resource group.
@@ -256,19 +265,19 @@ export def "subscriptions-resource-groups-providers-microsoft-network-route-filt
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, route_filter_name: $route_filter_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/routeFilters/{route_filter_name}") $qp)
-  let body = {"properties": $properties, "id": $id, "location": $location, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), route_filter_name: (encode-path-segment $route_filter_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/routeFilters/{route_filter_name}") $qp)
+  let req_body = {"properties": $properties, "id": $id, "location": $location, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets all RouteFilterRules in a route filter.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/routeFilters/{routeFilterName}/routeFilterRules
 # operationId: RouteFilterRules_ListByRouteFilter
-export def "subscriptions-resource-groups-providers-microsoft-network-route-filters-route-filter-rules list-by" [
+export def "subscriptions-resource-groups-providers-microsoft-network-route-filters-route-filter-rules list" [
   subscription_id: string
   resource_group_name: string
   route_filter_name: string
@@ -285,7 +294,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-route-filt
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, route_filter_name: $route_filter_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/routeFilters/{route_filter_name}/routeFilterRules") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), route_filter_name: (encode-path-segment $route_filter_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/routeFilters/{route_filter_name}/routeFilterRules") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -313,7 +322,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-route-filt
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, route_filter_name: $route_filter_name, rule_name: $rule_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/routeFilters/{route_filter_name}/routeFilterRules/{rule_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), route_filter_name: (encode-path-segment $route_filter_name), rule_name: (encode-path-segment $rule_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/routeFilters/{route_filter_name}/routeFilterRules/{rule_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -341,7 +350,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-route-filt
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, route_filter_name: $route_filter_name, rule_name: $rule_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/routeFilters/{route_filter_name}/routeFilterRules/{rule_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), route_filter_name: (encode-path-segment $route_filter_name), rule_name: (encode-path-segment $rule_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/routeFilters/{route_filter_name}/routeFilterRules/{rule_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -351,7 +360,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-route-filt
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/routeFilters/{routeFilterName}/routeFilterRules/{ruleName}
 # operationId: RouteFilterRules_Update
-# --properties shape: {access: "Allow"|"Deny", communities: list, routeFilterRuleType: "Community"}
+# --properties shape: {access: "Allow"|"Deny", communities: list<string>, routeFilterRuleType: "Community"}
 export def "subscriptions-resource-groups-providers-microsoft-network-route-filters-route-filter-rules update" [
   subscription_id: string
   resource_group_name: string
@@ -366,26 +375,26 @@ export def "subscriptions-resource-groups-providers-microsoft-network-route-filt
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version.
-  --properties: any # Route Filter Rule Resource. — shape: {access: "Allow"|"Deny", communities: list, routeFilterRuleType: "Community"}
+  --properties: any # Route Filter Rule Resource. — shape: {access: "Allow"|"Deny", communities: list<string>, routeFilterRuleType: "Community"}
   --id: string # Resource ID.
 ]: any -> record<etag: string, location: string, name: string, properties: record<access: string, communities: list<string>, provisioningState: string, routeFilterRuleType: string>, id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, route_filter_name: $route_filter_name, rule_name: $rule_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/routeFilters/{route_filter_name}/routeFilterRules/{rule_name}") $qp)
-  let body = {"properties": $properties, "id": $id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), route_filter_name: (encode-path-segment $route_filter_name), rule_name: (encode-path-segment $rule_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/routeFilters/{route_filter_name}/routeFilterRules/{rule_name}") $qp)
+  let req_body = {"properties": $properties, "id": $id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Creates or updates a route in the specified route filter.
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/routeFilters/{routeFilterName}/routeFilterRules/{ruleName}
 # operationId: RouteFilterRules_CreateOrUpdate
-# --properties shape: {access: "Allow"|"Deny", communities: list, routeFilterRuleType: "Community"}
+# --properties shape: {access: "Allow"|"Deny", communities: list<string>, routeFilterRuleType: "Community"}
 export def "subscriptions-resource-groups-providers-microsoft-network-route-filters-route-filter-rules create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -402,17 +411,17 @@ export def "subscriptions-resource-groups-providers-microsoft-network-route-filt
   --api-version: string # Client API version.
   --location: string # Resource location.
   --name: string # The name of the resource that is unique within a resource group. This name can be used to access the resource.
-  --properties: any # Route Filter Rule Resource. — shape: {access: "Allow"|"Deny", communities: list, routeFilterRuleType: "Community"}
+  --properties: any # Route Filter Rule Resource. — shape: {access: "Allow"|"Deny", communities: list<string>, routeFilterRuleType: "Community"}
   --id: string # Resource ID.
 ]: any -> record<etag: string, location: string, name: string, properties: record<access: string, communities: list<string>, provisioningState: string, routeFilterRuleType: string>, id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, route_filter_name: $route_filter_name, rule_name: $rule_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/routeFilters/{route_filter_name}/routeFilterRules/{rule_name}") $qp)
-  let body = {"location": $location, "name": $name, "properties": $properties, "id": $id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), route_filter_name: (encode-path-segment $route_filter_name), rule_name: (encode-path-segment $rule_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/routeFilters/{route_filter_name}/routeFilterRules/{rule_name}") $qp)
+  let req_body = {"location": $location, "name": $name, "properties": $properties, "id": $id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

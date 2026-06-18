@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -106,7 +115,7 @@ export def "companies-sync-expenses-config get-company-configuration" [
 ]: nothing -> record<bankAccount: record<id: string>, customer: record<id: string>, supplier: record<id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({company_id: $company_id} | format pattern "/companies/{company_id}/sync/expenses/config"))
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/sync/expenses/config"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -119,7 +128,7 @@ export def "companies-sync-expenses-config get-company-configuration" [
 # --bankAccount shape: {id?: string}
 # --customer shape: {id?: string}
 # --supplier shape: {id?: string}
-export def "companies-sync-expenses-config save-company-configuration" [
+export def "companies-sync-expenses-config create-save-company-configuration" [
   company_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -136,19 +145,19 @@ export def "companies-sync-expenses-config save-company-configuration" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({company_id: $company_id} | format pattern "/companies/{company_id}/sync/expenses/config"))
-  let body = {"bankAccount": $bank_account, "customer": $customer, "supplier": $supplier} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/sync/expenses/config"))
+  let req_body = {"bankAccount": $bank_account, "customer": $customer, "supplier": $supplier} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create Partner Expense connection
 #
 # POST /companies/{companyId}/sync/expenses/connections/partnerExpense
 # operationId: create-partner-expense-connection
-export def "companies-sync-expenses-connections-partner-expense create-partner-expense-connection" [
+export def "companies-sync-expenses-connections-partner-expense create" [
   company_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -158,10 +167,10 @@ export def "companies-sync-expenses-connections-partner-expense create-partner-e
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<additionalProperties: any, connectionInfo: record, created: string, dataConnectionErrors: list<any>, id: string, integrationId: string, integrationKey: string, lastSync: any, linkUrl: string, platformName: string, sourceId: string, sourceType: string, status: any> {
+]: nothing -> record<additionalProperties: any, connectionInfo: record, created: string, dataConnectionErrors: table<errorMessage: string, erroredOnUtc: string, statusCode: string, statusText: string>, id: string, integrationId: string, integrationKey: string, lastSync: string, linkUrl: string, platformName: string, sourceId: string, sourceType: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({company_id: $company_id} | format pattern "/companies/{company_id}/sync/expenses/connections/partnerExpense"))
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/sync/expenses/connections/partnerExpense"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -171,8 +180,8 @@ export def "companies-sync-expenses-connections-partner-expense create-partner-e
 #
 # POST /companies/{companyId}/sync/expenses/data/expense-transactions
 # operationId: create-expense-dataset
-# --items item shape: {currency: string, currencyRate?: float, id: string, issueDate: any, lines?: list, merchantName?: string, notes?: string, type: "Payment"|"Refund"|"Reward"|"Chargeback"|"TransferIn"|"TransferOut"|"AdjustmentIn"|"AdjustmentOut"}
-export def "companies-sync-expenses-data-expense-transactions create-expense-dataset" [
+# --items item shape: {currency: string, currencyRate?: float, id: string, issueDate: string, lines?: list, merchantName?: string, notes?: string, type: "Payment"|"Refund"|"Reward"|"Chargeback"|"TransferIn"|"TransferOut"|"AdjustmentIn"|"AdjustmentOut"}
+export def "companies-sync-expenses-data-expense-transactions create-dataset" [
   company_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -182,24 +191,24 @@ export def "companies-sync-expenses-data-expense-transactions create-expense-dat
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --items: list # item shape: {currency: string, currencyRate?: float, id: string, issueDate: any, lines?: list, merchantName?: string, notes?: string, type: "Payment"|"Refund"|"Reward"|"Chargeback"|"TransferIn"|"TransferOut"|"AdjustmentIn"|"AdjustmentOut"}
+  --items: list # item shape: {currency: string, currencyRate?: float, id: string, issueDate: string, lines?: list, merchantName?: string, notes?: string, type: "Payment"|"Refund"|"Reward"|"Chargeback"|"TransferIn"|"TransferOut"|"AdjustmentIn"|"AdjustmentOut"}
 ]: any -> record<datasetId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({company_id: $company_id} | format pattern "/companies/{company_id}/sync/expenses/data/expense-transactions"))
-  let body = {"items": $items} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/sync/expenses/data/expense-transactions"))
+  let req_body = {"items": $items} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Mapping options
 #
 # GET /companies/{companyId}/sync/expenses/mappingOptions
 # operationId: get-mapping-options
-export def "companies-sync-expenses-mapping-options get-mapping-options" [
+export def "companies-sync-expenses-mapping-options get" [
   company_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -209,10 +218,10 @@ export def "companies-sync-expenses-mapping-options get-mapping-options" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<accounts: table<accountType: string, currency: string, id: string, name: string, validTransactionTypes: list>, expenseProvider: string, taxRates: table<code: string, effectiveTaxRate: float, id: string, name: string, totalTaxRate: float, validTransactionTypes: list>, trackingCategories: table<hasChildren: bool, id: string, modifiedDate: any, name: string, parentId: string>> {
+]: nothing -> record<accounts: table<accountType: string, currency: string, id: string, name: string, validTransactionTypes: list>, expenseProvider: string, taxRates: table<code: string, effectiveTaxRate: float, id: string, name: string, totalTaxRate: float, validTransactionTypes: list>, trackingCategories: table<hasChildren: bool, id: string, modifiedDate: string, name: string, parentId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({company_id: $company_id} | format pattern "/companies/{company_id}/sync/expenses/mappingOptions"))
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/sync/expenses/mappingOptions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -222,7 +231,7 @@ export def "companies-sync-expenses-mapping-options get-mapping-options" [
 #
 # POST /companies/{companyId}/sync/expenses/syncs
 # operationId: intiate-sync
-export def "companies-sync-expenses-syncs intiate-sync" [
+export def "companies-sync-expenses-syncs sync-intiate" [
   company_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -232,24 +241,24 @@ export def "companies-sync-expenses-syncs intiate-sync" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --dataset-ids: list # nullable
+  --dataset-ids: list<string> # nullable
 ]: any -> record<syncId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({company_id: $company_id} | format pattern "/companies/{company_id}/sync/expenses/syncs"))
-  let body = {"datasetIds": $dataset_ids} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/sync/expenses/syncs"))
+  let req_body = {"datasetIds": $dataset_ids} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Last successful sync
 #
 # GET /companies/{companyId}/sync/expenses/syncs/lastSuccessful/status
 # operationId: get-last-successful-sync
-export def "companies-sync-expenses-syncs-last-successful-status get-last-successful-sync" [
+export def "companies-sync-expenses-syncs-last-successful-status get" [
   company_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -259,10 +268,10 @@ export def "companies-sync-expenses-syncs-last-successful-status get-last-succes
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<companyId: string, dataPushed: bool, errorMessage: string, syncExceptionMessage: string, syncId: string, syncStatus: string, syncStatusCode: int, syncUtc: any> {
+]: nothing -> record<companyId: string, dataPushed: bool, errorMessage: string, syncExceptionMessage: string, syncId: string, syncStatus: string, syncStatusCode: int, syncUtc: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({company_id: $company_id} | format pattern "/companies/{company_id}/sync/expenses/syncs/lastSuccessful/status"))
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/sync/expenses/syncs/lastSuccessful/status"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -272,7 +281,7 @@ export def "companies-sync-expenses-syncs-last-successful-status get-last-succes
 #
 # GET /companies/{companyId}/sync/expenses/syncs/latest/status
 # operationId: get-latest-sync
-export def "companies-sync-expenses-syncs-latest-status get-latest-sync" [
+export def "companies-sync-expenses-syncs-latest-status get" [
   company_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -282,10 +291,10 @@ export def "companies-sync-expenses-syncs-latest-status get-latest-sync" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<companyId: string, dataPushed: bool, errorMessage: string, syncExceptionMessage: string, syncId: string, syncStatus: string, syncStatusCode: int, syncUtc: any> {
+]: nothing -> record<companyId: string, dataPushed: bool, errorMessage: string, syncExceptionMessage: string, syncId: string, syncStatus: string, syncStatusCode: int, syncUtc: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({company_id: $company_id} | format pattern "/companies/{company_id}/sync/expenses/syncs/latest/status"))
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/sync/expenses/syncs/latest/status"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -295,7 +304,7 @@ export def "companies-sync-expenses-syncs-latest-status get-latest-sync" [
 #
 # GET /companies/{companyId}/sync/expenses/syncs/list/status
 # operationId: list-syncs
-export def "companies-sync-expenses-syncs-list-status list-syncs" [
+export def "companies-sync-expenses-syncs-list-status list" [
   company_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -305,10 +314,10 @@ export def "companies-sync-expenses-syncs-list-status list-syncs" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<companyId: string, dataPushed: bool, errorMessage: string, syncExceptionMessage: string, syncId: string, syncStatus: string, syncStatusCode: int, syncUtc: any> {
+]: nothing -> table<companyId: string, dataPushed: bool, errorMessage: string, syncExceptionMessage: string, syncId: string, syncStatus: string, syncStatusCode: int, syncUtc: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({company_id: $company_id} | format pattern "/companies/{company_id}/sync/expenses/syncs/list/status"))
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/sync/expenses/syncs/list/status"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -318,7 +327,7 @@ export def "companies-sync-expenses-syncs-list-status list-syncs" [
 #
 # GET /companies/{companyId}/sync/expenses/syncs/{syncId}/status
 # operationId: get-sync-by-id
-export def "companies-sync-expenses-syncs-status get-sync-by-id" [
+export def "companies-sync-expenses-syncs-status get" [
   company_id: any
   sync_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -329,10 +338,10 @@ export def "companies-sync-expenses-syncs-status get-sync-by-id" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<companyId: string, dataPushed: bool, errorMessage: string, syncExceptionMessage: string, syncId: string, syncStatus: string, syncStatusCode: int, syncUtc: any> {
+]: nothing -> record<companyId: string, dataPushed: bool, errorMessage: string, syncExceptionMessage: string, syncId: string, syncStatus: string, syncStatusCode: int, syncUtc: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({company_id: $company_id, sync_id: $sync_id} | format pattern "/companies/{company_id}/sync/expenses/syncs/{sync_id}/status"))
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), sync_id: (encode-path-segment $sync_id)} | format pattern "/companies/{company_id}/sync/expenses/syncs/{sync_id}/status"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -342,7 +351,7 @@ export def "companies-sync-expenses-syncs-status get-sync-by-id" [
 #
 # GET /companies/{companyId}/sync/expenses/syncs/{syncId}/transactions
 # operationId: list-sync-transactions
-export def "companies-sync-expenses-syncs-transactions list-sync-transactions" [
+export def "companies-sync-expenses-syncs-transactions list" [
   company_id: any
   sync_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -359,7 +368,7 @@ export def "companies-sync-expenses-syncs-transactions list-sync-transactions" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: $company_id, sync_id: $sync_id} | format pattern "/companies/{company_id}/sync/expenses/syncs/{sync_id}/transactions") $qp)
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), sync_id: (encode-path-segment $sync_id)} | format pattern "/companies/{company_id}/sync/expenses/syncs/{sync_id}/transactions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -369,7 +378,7 @@ export def "companies-sync-expenses-syncs-transactions list-sync-transactions" [
 #
 # GET /companies/{companyId}/sync/expenses/syncs/{syncId}/transactions/{transactionId}
 # operationId: get-sync-transaction
-export def "companies-sync-expenses-syncs-transactions get-sync-transaction" [
+export def "companies-sync-expenses-syncs-transactions get" [
   company_id: any
   sync_id: string
   transaction_id: string
@@ -384,7 +393,7 @@ export def "companies-sync-expenses-syncs-transactions get-sync-transaction" [
 ]: nothing -> table<integrationType: string, message: string, status: string, transactionId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({company_id: $company_id, sync_id: $sync_id, transaction_id: $transaction_id} | format pattern "/companies/{company_id}/sync/expenses/syncs/{sync_id}/transactions/{transaction_id}"))
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), sync_id: (encode-path-segment $sync_id), transaction_id: (encode-path-segment $transaction_id)} | format pattern "/companies/{company_id}/sync/expenses/syncs/{sync_id}/transactions/{transaction_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -394,7 +403,7 @@ export def "companies-sync-expenses-syncs-transactions get-sync-transaction" [
 #
 # POST /companies/{companyId}/sync/expenses/syncs/{syncId}/transactions/{transactionId}/attachments
 # operationId: upload-attachment
-export def "companies-sync-expenses-syncs-transactions-attachments upload-attachment" [
+export def "companies-sync-expenses-syncs-transactions-attachments upload" [
   company_id: any
   sync_id: string
   transaction_id: string
@@ -411,9 +420,10 @@ export def "companies-sync-expenses-syncs-transactions-attachments upload-attach
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({company_id: $company_id, sync_id: $sync_id, transaction_id: $transaction_id} | format pattern "/companies/{company_id}/sync/expenses/syncs/{sync_id}/transactions/{transaction_id}/attachments"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), sync_id: (encode-path-segment $sync_id), transaction_id: (encode-path-segment $transaction_id)} | format pattern "/companies/{company_id}/sync/expenses/syncs/{sync_id}/transactions/{transaction_id}/attachments"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $req_body
 }

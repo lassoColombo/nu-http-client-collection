@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -70,7 +79,7 @@ def report-completer [] { ["local.command.bookmark" "local.command.dislike" "loc
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "configuration extensionConfiguration" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "configuration get-extension" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -94,7 +103,7 @@ export def commands []: nothing -> table {
 #
 # GET /configuration
 # operationId: extensionConfiguration
-export def "configuration extensionConfiguration" [
+export def "configuration get-extension" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -114,10 +123,10 @@ export def "configuration extensionConfiguration" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/configuration")
-  let extra_headers = {"x-applecloudextension-session-id": $x_applecloudextension_session_id, "x-applecloudextension-retry-count": $x_applecloudextension_retry_count, "Request-Timeout": $request_timeout, "User-Agent": $user_agent, "Accept-Language": $accept_language, "If-None-Match": $if_none_match, "Cache-Control": $cache_control} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/jose"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-applecloudextension-session-id": $x_applecloudextension_session_id, "x-applecloudextension-retry-count": $x_applecloudextension_retry_count, "Request-Timeout": $request_timeout, "User-Agent": $user_agent, "Accept-Language": $accept_language, "If-None-Match": $if_none_match, "Cache-Control": $cache_control} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -125,7 +134,7 @@ export def "configuration extensionConfiguration" [
 #
 # POST /intent/addMedia
 # operationId: addMediaIntentHandling
-export def "intent-add-media create-media-intent-handling" [
+export def "intent-add-media create-handling" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -145,19 +154,20 @@ export def "intent-add-media create-media-intent-handling" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/intent/addMedia")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-applecloudextension-session-id": $x_applecloudextension_session_id, "x-applecloudextension-retry-count": $x_applecloudextension_retry_count, "Request-Timeout": $request_timeout, "User-Agent": $user_agent, "Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"x-applecloudextension-session-id": $x_applecloudextension_session_id, "x-applecloudextension-retry-count": $x_applecloudextension_retry_count, "Request-Timeout": $request_timeout, "User-Agent": $user_agent, "Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # playMedia
 #
 # POST /intent/playMedia
 # operationId: playMediaIntentHandling
-export def "intent-play-media playMediaIntentHandling" [
+export def "intent-play-media create-handling" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -177,19 +187,20 @@ export def "intent-play-media playMediaIntentHandling" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/intent/playMedia")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-applecloudextension-session-id": $x_applecloudextension_session_id, "x-applecloudextension-retry-count": $x_applecloudextension_retry_count, "Request-Timeout": $request_timeout, "User-Agent": $user_agent, "Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"x-applecloudextension-session-id": $x_applecloudextension_session_id, "x-applecloudextension-retry-count": $x_applecloudextension_retry_count, "Request-Timeout": $request_timeout, "User-Agent": $user_agent, "Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # updateMediaAffinity
 #
 # POST /intent/updateMediaAffinity
 # operationId: updateMediaAffinityIntentHandling
-export def "intent-update-media-affinity update-media-affinity-intent-handling" [
+export def "intent-update-media-affinity update-handling" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -209,12 +220,13 @@ export def "intent-update-media-affinity update-media-affinity-intent-handling" 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/intent/updateMediaAffinity")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-applecloudextension-session-id": $x_applecloudextension_session_id, "x-applecloudextension-retry-count": $x_applecloudextension_retry_count, "Request-Timeout": $request_timeout, "User-Agent": $user_agent, "Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"x-applecloudextension-session-id": $x_applecloudextension_session_id, "x-applecloudextension-retry-count": $x_applecloudextension_retry_count, "Request-Timeout": $request_timeout, "User-Agent": $user_agent, "Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # playMedia
@@ -223,7 +235,7 @@ export def "intent-update-media-affinity update-media-affinity-intent-handling" 
 # operationId: playMediaOnQueue
 # --constraints shape: {allowExplicitContent?: bool, maximumQueueSegmentItemCount?: int, updateUserTasteProfile?: bool}
 # --userActivity shape: {activityType: string, persistentIdentifier?: string, title?: string, userInfo?: record, version: string}
-export def "queues-play-media playMediaOnQueue" [
+export def "queues-play-media create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -244,13 +256,13 @@ export def "queues-play-media playMediaOnQueue" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/queues/playMedia")
-  let body = {"constraints": $constraints, "userActivity": $user_activity, "version": $version} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-applecloudextension-session-id": $x_applecloudextension_session_id, "x-applecloudextension-retry-count": $x_applecloudextension_retry_count, "User-Agent": $user_agent, "Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"constraints": $constraints, "userActivity": $user_activity, "version": $version} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"x-applecloudextension-session-id": $x_applecloudextension_session_id, "x-applecloudextension-retry-count": $x_applecloudextension_retry_count, "User-Agent": $user_agent, "Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # updateActivity
@@ -261,7 +273,7 @@ export def "queues-play-media playMediaOnQueue" [
 # --nowPlaying shape: {activityIdentifier?: string, contentIdentifier?: string, offsetInMillis?: int, playbackSpeed?: float, queueIdentifier?: string}
 # --previouslyPlaying shape: {activityIdentifier?: string, contentIdentifier?: string, offsetInMillis?: int, playbackSpeed?: float, queueIdentifier?: string}
 # --userActivity shape: {activityType: string, persistentIdentifier?: string, title?: string, userInfo?: record, version: string}
-export def "queues-update-activity update-activity-on" [
+export def "queues-update-activity update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -286,11 +298,11 @@ export def "queues-update-activity update-activity-on" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/queues/updateActivity")
-  let body = {"constraints": $constraints, "nowPlaying": $now_playing, "previouslyPlaying": $previously_playing, "report": $report, "timestamp": $timestamp, "userActivity": $user_activity, "version": $version} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-applecloudextension-session-id": $x_applecloudextension_session_id, "x-applecloudextension-retry-count": $x_applecloudextension_retry_count, "User-Agent": $user_agent, "Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"constraints": $constraints, "nowPlaying": $now_playing, "previouslyPlaying": $previously_playing, "report": $report, "timestamp": $timestamp, "userActivity": $user_activity, "version": $version} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"x-applecloudextension-session-id": $x_applecloudextension_session_id, "x-applecloudextension-retry-count": $x_applecloudextension_retry_count, "User-Agent": $user_agent, "Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

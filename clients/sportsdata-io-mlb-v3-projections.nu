@@ -36,6 +36,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -107,7 +116,7 @@ export def "depth-charts get" [
 ]: nothing -> table<DepthCharts: list<record>, TeamID: int> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({format: $format} | format pattern "/{format}/DepthCharts"))
+  let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/{format}/DepthCharts"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -131,7 +140,7 @@ export def "dfs-slates-by-date get" [
 ]: nothing -> table<DfsSlateGames: list<record>, DfsSlatePlayers: list<record>, IsMultiDaySlate: bool, NumberOfGames: int, Operator: string, OperatorDay: string, OperatorGameType: string, OperatorName: string, OperatorSlateID: int, OperatorStartTime: string, RemovedByOperator: bool, SalaryCap: int, SlateID: int, SlateRosterSlots: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({format: $format, date: $date} | format pattern "/{format}/DfsSlatesByDate/{date}"))
+  let full_url = (build-url $base ({format: (encode-path-segment $format), date: (encode-path-segment $date)} | format pattern "/{format}/DfsSlatesByDate/{date}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -154,7 +163,7 @@ export def "injured-players get" [
 ]: nothing -> table<BatHand: string, BirthCity: string, BirthCountry: string, BirthDate: string, BirthState: string, College: string, DraftKingsName: string, DraftKingsPlayerID: int, Experience: string, FanDuelName: string, FanDuelPlayerID: int, FantasyAlarmPlayerID: int, FantasyDraftName: string, FantasyDraftPlayerID: int, FirstName: string, GlobalTeamID: int, Height: int, HighSchool: string, InjuryBodyPart: string, InjuryNotes: string, InjuryStartDate: string, InjuryStatus: string, Jersey: int, LastName: string, MLBAMID: int, PhotoUrl: string, PlayerID: int, Position: string, PositionCategory: string, ProDebut: string, RotoWirePlayerID: int, RotoworldPlayerID: int, Salary: int, SportRadarPlayerID: string, SportsDataID: string, SportsDirectPlayerID: int, StatsPlayerID: int, Status: string, Team: string, TeamID: int, ThrowHand: string, UpcomingGameID: int, UsaTodayHeadshotNoBackgroundUpdated: string, UsaTodayHeadshotNoBackgroundUrl: string, UsaTodayHeadshotUpdated: string, UsaTodayHeadshotUrl: string, UsaTodayPlayerID: int, Weight: int, XmlTeamPlayerID: int, YahooName: string, YahooPlayerID: int> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({format: $format} | format pattern "/{format}/InjuredPlayers"))
+  let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/{format}/InjuredPlayers"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -164,7 +173,7 @@ export def "injured-players get" [
 #
 # GET /{format}/PlayerGameProjectionStatsByDate/{date}
 # operationId: ProjectedPlayerGameStatsByDateWInjuriesDfsSalaries
-export def "player-game-projection-stats-by-date get" [
+export def "player-game-projection-stats-by-date stats-projected-w-injuries-dfs-salaries" [
   format: string
   date: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -178,7 +187,7 @@ export def "player-game-projection-stats-by-date get" [
 ]: nothing -> table<AtBats: float, BallsInPlay: float, BattingAverage: float, BattingAverageOnBallsInPlay: float, BattingOrder: int, BattingOrderConfirmed: bool, CaughtStealing: float, DateTime: string, Day: string, DoublePlays: float, Doubles: float, DraftKingsPosition: string, DraftKingsSalary: int, EarnedRunAverage: float, Errors: float, FanDuelPosition: string, FanDuelSalary: int, FantasyDataSalary: int, FantasyDraftPosition: string, FantasyDraftSalary: int, FantasyPoints: float, FantasyPointsBatting: float, FantasyPointsDraftKings: float, FantasyPointsFanDuel: float, FantasyPointsFantasyDraft: float, FantasyPointsPitching: float, FantasyPointsYahoo: float, FieldingIndependentPitching: float, FlyOuts: float, GameID: int, Games: int, GlobalGameID: int, GlobalOpponentID: int, GlobalTeamID: int, GrandSlams: float, GroundIntoDoublePlay: float, GroundOuts: float, HitByPitch: float, Hits: float, HomeOrAway: string, HomeRuns: float, InjuryBodyPart: string, InjuryNotes: string, InjuryStartDate: string, InjuryStatus: string, InningsPitchedDecimal: float, InningsPitchedFull: float, InningsPitchedOuts: float, IntentionalWalks: float, IsGameOver: bool, IsolatedPower: float, LeftOnBase: float, LineOuts: float, Losses: float, Name: string, OnBasePercentage: float, OnBasePlusSlugging: float, Opponent: string, OpponentID: int, OpponentPositionRank: int, OpponentRank: int, Outs: float, PitchesSeen: float, PitchesThrown: float, PitchesThrownStrikes: float, PitchingBallsInPlay: float, PitchingBattingAverageAgainst: float, PitchingBattingAverageOnBallsInPlay: float, PitchingBlownSaves: float, PitchingCatchersInterference: float, PitchingCompleteGames: float, PitchingDoublePlays: float, PitchingDoubles: float, PitchingEarnedRuns: float, PitchingFlyOuts: float, PitchingGrandSlams: float, PitchingGroundIntoDoublePlay: float, PitchingGroundOuts: float, PitchingHitByPitch: float, PitchingHits: float, PitchingHolds: float, PitchingHomeRuns: float, PitchingInningStarted: int, PitchingIntentionalWalks: float, PitchingLineOuts: float, PitchingNoHitters: float, PitchingOnBasePercentage: float, PitchingOnBasePlusSlugging: float, PitchingPerfectGames: float, PitchingPlateAppearances: float, PitchingPopOuts: float, PitchingQualityStarts: float, PitchingReachedOnError: float, PitchingRuns: float, PitchingSacrificeFlies: float, PitchingSacrifices: float, PitchingShutOuts: float, PitchingSingles: float, PitchingSluggingPercentage: float, PitchingStrikeouts: float, PitchingStrikeoutsPerNineInnings: float, PitchingTotalBases: float, PitchingTriples: float, PitchingWalks: float, PitchingWalksPerNineInnings: float, PitchingWeightedOnBasePercentage: float, PlateAppearances: float, PlayerID: int, PopOuts: float, Position: string, PositionCategory: string, ReachedOnError: float, Runs: float, RunsBattedIn: float, SacrificeFlies: float, Sacrifices: float, Saves: float, Season: int, SeasonType: int, Singles: float, SluggingPercentage: float, Started: int, StatID: int, StolenBases: float, Strikeouts: float, SubstituteBattingOrder: int, SubstituteBattingOrderSequence: int, Team: string, TeamID: int, TotalBases: float, TotalOutsPitched: float, Triples: float, Updated: string, Walks: float, WalksHitsPerInningsPitched: float, WeightedOnBasePercentage: float, Wins: float, YahooPosition: string, YahooSalary: int> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({format: $format, date: $date} | format pattern "/{format}/PlayerGameProjectionStatsByDate/{date}"))
+  let full_url = (build-url $base ({format: (encode-path-segment $format), date: (encode-path-segment $date)} | format pattern "/{format}/PlayerGameProjectionStatsByDate/{date}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -188,7 +197,7 @@ export def "player-game-projection-stats-by-date get" [
 #
 # GET /{format}/PlayerGameProjectionStatsByPlayer/{date}/{playerid}
 # operationId: ProjectedPlayerGameStatsByPlayerWInjuriesDfsSalaries
-export def "player-game-projection-stats-by-player get" [
+export def "player-game-projection-stats-by-player stats-projected-w-injuries-dfs-salaries" [
   format: string
   date: string
   playerid: string
@@ -203,7 +212,7 @@ export def "player-game-projection-stats-by-player get" [
 ]: nothing -> table<AtBats: float, BallsInPlay: float, BattingAverage: float, BattingAverageOnBallsInPlay: float, BattingOrder: int, BattingOrderConfirmed: bool, CaughtStealing: float, DateTime: string, Day: string, DoublePlays: float, Doubles: float, DraftKingsPosition: string, DraftKingsSalary: int, EarnedRunAverage: float, Errors: float, FanDuelPosition: string, FanDuelSalary: int, FantasyDataSalary: int, FantasyDraftPosition: string, FantasyDraftSalary: int, FantasyPoints: float, FantasyPointsBatting: float, FantasyPointsDraftKings: float, FantasyPointsFanDuel: float, FantasyPointsFantasyDraft: float, FantasyPointsPitching: float, FantasyPointsYahoo: float, FieldingIndependentPitching: float, FlyOuts: float, GameID: int, Games: int, GlobalGameID: int, GlobalOpponentID: int, GlobalTeamID: int, GrandSlams: float, GroundIntoDoublePlay: float, GroundOuts: float, HitByPitch: float, Hits: float, HomeOrAway: string, HomeRuns: float, InjuryBodyPart: string, InjuryNotes: string, InjuryStartDate: string, InjuryStatus: string, InningsPitchedDecimal: float, InningsPitchedFull: float, InningsPitchedOuts: float, IntentionalWalks: float, IsGameOver: bool, IsolatedPower: float, LeftOnBase: float, LineOuts: float, Losses: float, Name: string, OnBasePercentage: float, OnBasePlusSlugging: float, Opponent: string, OpponentID: int, OpponentPositionRank: int, OpponentRank: int, Outs: float, PitchesSeen: float, PitchesThrown: float, PitchesThrownStrikes: float, PitchingBallsInPlay: float, PitchingBattingAverageAgainst: float, PitchingBattingAverageOnBallsInPlay: float, PitchingBlownSaves: float, PitchingCatchersInterference: float, PitchingCompleteGames: float, PitchingDoublePlays: float, PitchingDoubles: float, PitchingEarnedRuns: float, PitchingFlyOuts: float, PitchingGrandSlams: float, PitchingGroundIntoDoublePlay: float, PitchingGroundOuts: float, PitchingHitByPitch: float, PitchingHits: float, PitchingHolds: float, PitchingHomeRuns: float, PitchingInningStarted: int, PitchingIntentionalWalks: float, PitchingLineOuts: float, PitchingNoHitters: float, PitchingOnBasePercentage: float, PitchingOnBasePlusSlugging: float, PitchingPerfectGames: float, PitchingPlateAppearances: float, PitchingPopOuts: float, PitchingQualityStarts: float, PitchingReachedOnError: float, PitchingRuns: float, PitchingSacrificeFlies: float, PitchingSacrifices: float, PitchingShutOuts: float, PitchingSingles: float, PitchingSluggingPercentage: float, PitchingStrikeouts: float, PitchingStrikeoutsPerNineInnings: float, PitchingTotalBases: float, PitchingTriples: float, PitchingWalks: float, PitchingWalksPerNineInnings: float, PitchingWeightedOnBasePercentage: float, PlateAppearances: float, PlayerID: int, PopOuts: float, Position: string, PositionCategory: string, ReachedOnError: float, Runs: float, RunsBattedIn: float, SacrificeFlies: float, Sacrifices: float, Saves: float, Season: int, SeasonType: int, Singles: float, SluggingPercentage: float, Started: int, StatID: int, StolenBases: float, Strikeouts: float, SubstituteBattingOrder: int, SubstituteBattingOrderSequence: int, Team: string, TeamID: int, TotalBases: float, TotalOutsPitched: float, Triples: float, Updated: string, Walks: float, WalksHitsPerInningsPitched: float, WeightedOnBasePercentage: float, Wins: float, YahooPosition: string, YahooSalary: int> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({format: $format, date: $date, playerid: $playerid} | format pattern "/{format}/PlayerGameProjectionStatsByPlayer/{date}/{playerid}"))
+  let full_url = (build-url $base ({format: (encode-path-segment $format), date: (encode-path-segment $date), playerid: (encode-path-segment $playerid)} | format pattern "/{format}/PlayerGameProjectionStatsByPlayer/{date}/{playerid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -213,7 +222,7 @@ export def "player-game-projection-stats-by-player get" [
 #
 # GET /{format}/PlayerSeasonProjectionStats/{season}
 # operationId: ProjectedPlayerSeasonStatsWithAdp
-export def "player-season-projection-stats get" [
+export def "player-season-projection-stats stats-projected-with-adp" [
   format: string
   season: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -227,7 +236,7 @@ export def "player-season-projection-stats get" [
 ]: nothing -> table<AtBats: float, AuctionValue: int, AverageDraftPosition: float, BallsInPlay: float, BattingAverage: float, BattingAverageOnBallsInPlay: float, BattingOrder: int, BattingOrderConfirmed: bool, CaughtStealing: float, DoublePlays: float, Doubles: float, EarnedRunAverage: float, Errors: float, FantasyPoints: float, FantasyPointsBatting: float, FantasyPointsDraftKings: float, FantasyPointsFanDuel: float, FantasyPointsFantasyDraft: float, FantasyPointsPitching: float, FantasyPointsYahoo: float, FieldingIndependentPitching: float, FlyOuts: float, Games: int, GlobalTeamID: int, GrandSlams: float, GroundIntoDoublePlay: float, GroundOuts: float, HitByPitch: float, Hits: float, HomeRuns: float, InningsPitchedDecimal: float, InningsPitchedFull: float, InningsPitchedOuts: float, IntentionalWalks: float, IsolatedPower: float, LeftOnBase: float, LineOuts: float, Losses: float, Name: string, OnBasePercentage: float, OnBasePlusSlugging: float, Outs: float, PitchesSeen: float, PitchesThrown: float, PitchesThrownStrikes: float, PitchingBallsInPlay: float, PitchingBattingAverageAgainst: float, PitchingBattingAverageOnBallsInPlay: float, PitchingBlownSaves: float, PitchingCatchersInterference: float, PitchingCompleteGames: float, PitchingDoublePlays: float, PitchingDoubles: float, PitchingEarnedRuns: float, PitchingFlyOuts: float, PitchingGrandSlams: float, PitchingGroundIntoDoublePlay: float, PitchingGroundOuts: float, PitchingHitByPitch: float, PitchingHits: float, PitchingHolds: float, PitchingHomeRuns: float, PitchingInningStarted: int, PitchingIntentionalWalks: float, PitchingLineOuts: float, PitchingNoHitters: float, PitchingOnBasePercentage: float, PitchingOnBasePlusSlugging: float, PitchingPerfectGames: float, PitchingPlateAppearances: float, PitchingPopOuts: float, PitchingQualityStarts: float, PitchingReachedOnError: float, PitchingRuns: float, PitchingSacrificeFlies: float, PitchingSacrifices: float, PitchingShutOuts: float, PitchingSingles: float, PitchingSluggingPercentage: float, PitchingStrikeouts: float, PitchingStrikeoutsPerNineInnings: float, PitchingTotalBases: float, PitchingTriples: float, PitchingWalks: float, PitchingWalksPerNineInnings: float, PitchingWeightedOnBasePercentage: float, PlateAppearances: float, PlayerID: int, PopOuts: float, Position: string, PositionCategory: string, ReachedOnError: float, Runs: float, RunsBattedIn: float, SacrificeFlies: float, Sacrifices: float, Saves: float, Season: int, SeasonType: int, Singles: float, SluggingPercentage: float, Started: int, StatID: int, StolenBases: float, Strikeouts: float, SubstituteBattingOrder: int, SubstituteBattingOrderSequence: int, Team: string, TeamID: int, TotalBases: float, TotalOutsPitched: float, Triples: float, Updated: string, Walks: float, WalksHitsPerInningsPitched: float, WeightedOnBasePercentage: float, Wins: float> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({format: $format, season: $season} | format pattern "/{format}/PlayerSeasonProjectionStats/{season}"))
+  let full_url = (build-url $base ({format: (encode-path-segment $format), season: (encode-path-segment $season)} | format pattern "/{format}/PlayerSeasonProjectionStats/{season}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -237,7 +246,7 @@ export def "player-season-projection-stats get" [
 #
 # GET /{format}/StartingLineupsByDate/{date}
 # operationId: StartingLineupsByDate
-export def "starting-lineups-by-date start-ing" [
+export def "starting-lineups-by-date get" [
   format: string
   date: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -251,7 +260,7 @@ export def "starting-lineups-by-date start-ing" [
 ]: nothing -> table<AwayBattingLineup: list<record>, AwayStartingPitcher: record<BattingOrder: int, Confirmed: bool, FirstName: string, LastName: string, PlayerID: int, Position: string, Starting: bool, Team: string, TeamID: int>, AwayTeam: string, AwayTeamID: int, DateTime: string, Day: string, GameID: int, HomeBattingLineup: list<record>, HomeStartingPitcher: record<BattingOrder: int, Confirmed: bool, FirstName: string, LastName: string, PlayerID: int, Position: string, Starting: bool, Team: string, TeamID: int>, HomeTeam: string, HomeTeamID: int, Season: int, SeasonType: int, Status: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({format: $format, date: $date} | format pattern "/{format}/StartingLineupsByDate/{date}"))
+  let full_url = (build-url $base ({format: (encode-path-segment $format), date: (encode-path-segment $date)} | format pattern "/{format}/StartingLineupsByDate/{date}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

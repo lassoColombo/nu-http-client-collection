@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -88,7 +97,7 @@ export def commands []: nothing -> table {
   }
 }
 
-# Returns detailed information about an ATM location.  This information can be used to display ATMs on a map, provide driving directions, or show special ATM features.
+# Returns detailed information about an ATM location. This information can be used to display ATMs on a map, provide driving directions, or show special ATM features.
 #
 # GET /atms/v1/atm
 export def "atms-atm get" [
@@ -102,16 +111,16 @@ export def "atms-atm get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page-offset: int # Zero-based offset where the response will start. The actual start position is this value +1. An offset of 10 starts at item 11. Combined with the PageLength option this allows pagination to be supported through the service requests. (e.g. 0)
   --page-length: int # Maximum number of items to retrieve within the current "page" of results. (e.g. 5)
-  --address-line1: string # Line 1 of the street address for the merchant location.  Usually includes the street number and name. This parameter is ignored if latitude and longitude are provided. If you provide this parameter you must also provide the Country parameter and either City parameter or PostalCode parameter. (e.g. 114 Fifth Avenue)
+  --address-line1: string # Line 1 of the street address for the merchant location. Usually includes the street number and name. This parameter is ignored if latitude and longitude are provided. If you provide this parameter you must also provide the Country parameter and either City parameter or PostalCode parameter. (e.g. 114 Fifth Avenue)
   --address-line2: string # Line 2 of the street address usually an apartment number or suite number. This parameter is used rarely and is ignored if latitude and longitude are provided. If you provide this parameter you must also provide the Country parameter and either City parameter or PostalCode parameter. (e.g. Apartment 1)
-  --city: string # The name of the city for a merchant location.  This parameter is ignored if latitude and longitude are provided. If you provide this parameter you must also provide the Country parameter. (e.g. New York City)
-  --country-subdivision: string # The state or province for a merchant location (only supported for US and Canada locations).  This parameter is ignored if latitude and longitude are provided. If you provide this parameter you must also provide the Country parameter. (e.g. NY)
-  --postal-code: string # The zip code or postal code for a merchant location.  This parameter is ignored if latitude and longitude are provided. If you provide this parameter you must also provide the Country parameter. (e.g. 11101)
-  --country: string # Any three digit country code for an ATM location.  Valid values are Three digit alpha country code as defined in ISO 3166-1.  This parameter is ignored if latitude and longitude are provided. This parameter is required if any other address information is provided including AddressLine1 AddressLine2 City PostalCode or CountrySubdivision. (e.g. USA)
-  --latitude: float # The latitude of a merchant location.  If latitude is provided longitude must also be provided. (format: double, e.g. 38.76006576913497)
-  --longitude: float # The longitude of a merchant location.  If longitude is provided latitude must also be provided. (format: double, e.g. -90.74615107952418)
+  --city: string # The name of the city for a merchant location. This parameter is ignored if latitude and longitude are provided. If you provide this parameter you must also provide the Country parameter. (e.g. New York City)
+  --country-subdivision: string # The state or province for a merchant location (only supported for US and Canada locations). This parameter is ignored if latitude and longitude are provided. If you provide this parameter you must also provide the Country parameter. (e.g. NY)
+  --postal-code: string # The zip code or postal code for a merchant location. This parameter is ignored if latitude and longitude are provided. If you provide this parameter you must also provide the Country parameter. (e.g. 11101)
+  --country: string # Any three digit country code for an ATM location. Valid values are Three digit alpha country code as defined in ISO 3166-1. This parameter is ignored if latitude and longitude are provided. This parameter is required if any other address information is provided including AddressLine1 AddressLine2 City PostalCode or CountrySubdivision. (e.g. USA)
+  --latitude: float # The latitude of a merchant location. If latitude is provided longitude must also be provided. (format: double, e.g. 38.76006576913497)
+  --longitude: float # The longitude of a merchant location. If longitude is provided latitude must also be provided. (format: double, e.g. -90.74615107952418)
   --distance-unit: string # Indicates the unit for the radius as well as the units of the distance of each location from the basepoint in the response. (e.g. MILE)
-  --radius: int # This is the radius from the search point in the distance unit you set.  For example if you want to search for locations within 50 miles of a certain point you would set DistanceUnit=mile and Radius=50.  This parameter is ignored in non-geocoded countries. (e.g. 25)
+  --radius: int # This is the radius from the search point in the distance unit you set. For example if you want to search for locations within 50 miles of a certain point you would set DistanceUnit=mile and Radius=50. This parameter is ignored in non-geocoded countries. (e.g. 25)
   --support-emv: int # This indicates whether the ATM should have the ability to read chip cards or not. (e.g. 1)
   --international-maestro-accepted: int # This field will provide ATM Terminals which can still process Maestro transactions but are not yet EMV chip reader enabled. Information available only for USA and Argentina till October 2014. (e.g. 1)
 ]: nothing -> record<Atms: record<Atm: list<record>, PageOffset: string, TotalCount: int>> {
@@ -145,7 +154,7 @@ export def "atms-country get" [
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Returns country subdivisions that have ATM locations.  A country subdivision is a segment within a country (ex  state or province). Country subdivisions are only available for the US and Canada.
+# Returns country subdivisions that have ATM locations. A country subdivision is a segment within a country (ex state or province). Country subdivisions are only available for the US and Canada.
 #
 # GET /atms/v1/countrysubdivision
 export def "atms-countrysubdivision get" [
@@ -157,7 +166,7 @@ export def "atms-countrysubdivision get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --country: string # Any three digit country code as defined in ISO 3166-1.  "USA" or "CAN" (e.g. USA)
+  --country: string # Any three digit country code as defined in ISO 3166-1. "USA" or "CAN" (e.g. USA)
 ]: nothing -> record<CountrySubdivisions: record<CountrySubdivision: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -168,7 +177,7 @@ export def "atms-countrysubdivision get" [
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Returns a list of all merchant categories for contactless and cash back merchants (example:  Airline, Retail, etc.).
+# Returns a list of all merchant categories for contactless and cash back merchants (example: Airline, Retail, etc.).
 #
 # GET /merchants/v1/category
 export def "merchants-category get" [
@@ -201,7 +210,7 @@ export def "merchants-country get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --details: string # This is the type of merchant location. Options  "acceptance.paypass" "topup.repower"  "products.prepaidtravelcard"  and "offers.easysavings" (e.g. acceptance.paypass)
+  --details: string # This is the type of merchant location. Options "acceptance.paypass" "topup.repower" "products.prepaidtravelcard" and "offers.easysavings" (e.g. acceptance.paypass)
 ]: nothing -> record<Countries: record<Country: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -212,7 +221,7 @@ export def "merchants-country get" [
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Returns country subdivisions that have Merchants offering the following services: accept contactless-enabled cards and devices, allow customers to add money to an eligible MasterCard or Maestro prepaid card, issue MasterCard Prepaid Travel cards, offer cash at checkout when paying with a Debit MasterCard or Maestro Card. A country subdivision is a segment within a country (ex  state or province).  Please note country subdivisions are only available for the US and Canada.
+# Returns country subdivisions that have Merchants offering the following services: accept contactless-enabled cards and devices, allow customers to add money to an eligible MasterCard or Maestro prepaid card, issue MasterCard Prepaid Travel cards, offer cash at checkout when paying with a Debit MasterCard or Maestro Card. A country subdivision is a segment within a country (ex state or province). Please note country subdivisions are only available for the US and Canada.
 #
 # GET /merchants/v1/countrysubdivision
 export def "merchants-countrysubdivision get" [
@@ -224,7 +233,7 @@ export def "merchants-countrysubdivision get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --details: string # This is the type of merchant location. Options  "acceptance.paypass" "topup.repower"  "products.prepaidtravelcard"  and "offers.easysavings" (e.g. topup.repower)
+  --details: string # This is the type of merchant location. Options "acceptance.paypass" "topup.repower" "products.prepaidtravelcard" and "offers.easysavings" (e.g. topup.repower)
   --country: string # Any three digit country code as defined in ISO 3166-1. For example "USA or "CAN" (e.g. USA)
 ]: nothing -> record<CountrySubdivisions: record<CountrySubdivision: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -252,16 +261,16 @@ export def "merchants-merchant get" [
   --page-offset: int # Zero-based offset where the response will start. The actual start position is this value +1. An offset of 10 starts at item 11. Combined with the PageLength option this allows pagination to be supported through the service requests. (e.g. 0)
   --page-length: int # Maximum number of items to retrieve within the current "page" of results. (e.g. 5)
   --category: string # Category of the merchant location. See the Categories (Merchant) resource for a list of valid categories. This parameter is only valid for merchant queries with Details = "acceptance.paypass" or "features.cashback". (e.g. features.cashback)
-  --address-line1: string # Line 1 of the street address for the merchant location.  Usually includes the street number and name. This parameter is ignored if latitude and longitude are provided. If you provide this parameter you must also provide the Country parameter and either City parameter or PostalCode parameter. (e.g. 42 Elm Street)
+  --address-line1: string # Line 1 of the street address for the merchant location. Usually includes the street number and name. This parameter is ignored if latitude and longitude are provided. If you provide this parameter you must also provide the Country parameter and either City parameter or PostalCode parameter. (e.g. 42 Elm Street)
   --address-line2: string # Line 2 of the street address usually an apartment number or suite number. This parameter is used rarely and is ignored if latitude and longitude are provided. If you provide this parameter you must also provide the Country parameter and either City parameter or PostalCode parameter. (e.g. Suite 101)
-  --city: string # Name of the city for a merchant location.  This parameter is ignored if latitude and longitude are provided. If you provide this parameter you must also provide the Country parameter. (e.g. New York)
-  --country-subdivision: string # State or province for a merchant location (only supported for US and Canada locations).  This parameter is ignored if latitude and longitude are provided. If you provide this parameter you must also provide the Country parameter. (e.g. NY)
-  --postal-code: string # Zip code or postal code for a merchant location.  This parameter is ignored if latitude and longitude are provided. If you provide this parameter you must also provide the Country parameter. (e.g. 11001)
-  --country: string # Any three digit country code for an ATM location.  Valid values are Three digit alpha country code as defined in ISO 3166-1.  This parameter is ignored if latitude and longitude are provided. This parameter is required if any other address information is provided including AddressLine1 AddressLine2 City PostalCode or CountrySubdivision. By default we supply ATM location data for United States ATMs for up to twenty-five records per request. (e.g. USA)
-  --latitude: float # Latitude of a merchant location.  If latitude is provided longitude must also be provided. (format: double, e.g. 38.53463)
-  --longitude: float # Longitude of a merchant location.  If longitude is provided latitude must also be provided. (format: double, e.g. -90.286781)
+  --city: string # Name of the city for a merchant location. This parameter is ignored if latitude and longitude are provided. If you provide this parameter you must also provide the Country parameter. (e.g. New York)
+  --country-subdivision: string # State or province for a merchant location (only supported for US and Canada locations). This parameter is ignored if latitude and longitude are provided. If you provide this parameter you must also provide the Country parameter. (e.g. NY)
+  --postal-code: string # Zip code or postal code for a merchant location. This parameter is ignored if latitude and longitude are provided. If you provide this parameter you must also provide the Country parameter. (e.g. 11001)
+  --country: string # Any three digit country code for an ATM location. Valid values are Three digit alpha country code as defined in ISO 3166-1. This parameter is ignored if latitude and longitude are provided. This parameter is required if any other address information is provided including AddressLine1 AddressLine2 City PostalCode or CountrySubdivision. By default we supply ATM location data for United States ATMs for up to twenty-five records per request. (e.g. USA)
+  --latitude: float # Latitude of a merchant location. If latitude is provided longitude must also be provided. (format: double, e.g. 38.53463)
+  --longitude: float # Longitude of a merchant location. If longitude is provided latitude must also be provided. (format: double, e.g. -90.286781)
   --distance-unit: string # Indicates the unit for the radius as well as the units of the distance of each location from the basepoint in the response. (e.g. MILE)
-  --radius: int # This is the radius from the search point in the distance unit you set.  For example if you want to search for locations within 50 miles of a certain point you would set DistanceUnit=mile and Radius=50.  This parameter is ignored in non-geocoded countries. (e.g. 25)
+  --radius: int # This is the radius from the search point in the distance unit you set. For example if you want to search for locations within 50 miles of a certain point you would set DistanceUnit=mile and Radius=50. This parameter is ignored in non-geocoded countries. (e.g. 25)
   --offer-merchant-id: string # Unique identifier that represents the merhcant sponsor of an offer. Any valid merchant ID. (e.g. 34760)
 ]: nothing -> record<Merchants: record<Merchant: list<record>, PageOffset: string, TotalCount: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

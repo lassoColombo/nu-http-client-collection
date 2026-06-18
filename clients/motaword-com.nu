@@ -13,6 +13,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   match $scheme {
     "basic" => { {headers: {Authorization: $"Basic ($token_val)"}, query: ""} }
     "bearer" => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "basic-credentials" => { {headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: ""} }
     "none" => { {headers: {}, query: ""} }
     _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
   }
@@ -34,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
     "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
     _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -64,7 +74,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 }
 
 def base-url-completer [] { ["https://api.motaword.com" "https://sandbox.motaword.com" "http://localhost"] }
-def auth-scheme-completer [] { ["basic" "bearer"] }
+def auth-scheme-completer [] { ["basic" "bearer" "basic-credentials"] }
 
 # Completers for enum parameters
 def type-completer [] { ["active"] }
@@ -154,7 +164,7 @@ export def "async-download download" [
 #
 # GET /blogs
 # operationId: getBlogPosts
-export def "blogs get-blog-posts" [
+export def "blogs get-posts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -194,7 +204,7 @@ export def "cache delete" [
 ]: nothing -> record<status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({key: $key} | format pattern "/cache/{key}"))
+  let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/cache/{key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -226,7 +236,7 @@ export def "commissions get" [
 #
 # POST /commissions
 # operationId: getCommissionsByFilter
-export def "commissions get-1" [
+export def "commissions get-by-filter" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -238,19 +248,19 @@ export def "commissions get-1" [
   --budget-code: string # budget code filter. valid for corporate accounts only.
   --date-from: string # the date-time notation as defined by RFC 3339, section 5.6, for example, 2017-07-21T17:32:28Z (format: date-time)
   --date-to: string # the date-time notation as defined by RFC 3339, section 5.6, for example, 2017-07-21T17:32:28Z (format: date-time)
-  --source-languages: list # List of source language codes.
-  --target-languages: list # List of target language codes.
-  --users: list # List of corporate user IDs. Valid for corporate accounts only.
+  --source-languages: list<string> # List of source language codes.
+  --target-languages: list<string> # List of target language codes.
+  --users: list<int> # List of corporate user IDs. Valid for corporate accounts only.
 ]: any -> record<commissions: table<amount: record, date: string, project: record, status: string>, meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/commissions")
-  let body = {"budget_code": $budget_code, "date_from": $date_from, "date_to": $date_to, "source_languages": $source_languages, "target_languages": $target_languages, "users": $users} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"budget_code": $budget_code, "date_from": $date_from, "date_to": $date_to, "source_languages": $source_languages, "target_languages": $target_languages, "users": $users} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # View continuous projects
@@ -281,7 +291,7 @@ export def "continuous-projects list" [
 #
 # POST /continuous_projects
 # operationId: createContinuousProject
-# --subscription shape: {downgrade?: list, payment_method?: int, period_end?: string, plan_id?: string, plan_name?: string, price?: string, products?: list, schedule_name?: string, schedule_start?: string, subscription_id?: string, upgrade?: list, withTrial?: any}
+# --subscription shape: {downgrade?: list<string>, payment_method?: int, period_end?: string, plan_id?: string, plan_name?: string, price?: string, products?: list, schedule_name?: string, schedule_start?: string, subscription_id?: string, upgrade?: list<string>, withTrial?: any}
 export def "continuous-projects create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -304,8 +314,8 @@ export def "continuous-projects create" [
   --postedit-enabled: oneof<nothing, bool> # Get an instant quote for translation requests that are applied MT.
   --source-language: string
   --status: string # One of "a => ACTIVE", "i => INACTIVE", "d => DELETED", "c => SCHEDULED CANCELLATION", "p => SCHEDULED CHANGE"
-  --subscription: record # shape: {downgrade?: list, payment_method?: int, period_end?: string, plan_id?: string, plan_name?: string, price?: string, products?: list, schedule_name?: string, schedule_start?: string, subscription_id?: string, upgrade?: list, withTrial?: any}
-  --target-languages: list
+  --subscription: record # shape: {downgrade?: list<string>, payment_method?: int, period_end?: string, plan_id?: string, plan_name?: string, price?: string, products?: list, schedule_name?: string, schedule_start?: string, subscription_id?: string, upgrade?: list<string>, withTrial?: any}
+  --target-languages: list<string>
   --type: string # Continuous project type. We currently have only 2 types, NULL and "active".
   --word-count: int # format: int64
 ]: any -> record<analytics_enabled: bool, auto_start_postedit: bool, created_at: string, id: int, is_enabled: bool, last_activity_at: string, links: record<self: record<href: string>, editors: record>, mt_enabled: bool, mt_engine: string, name: string, postedit_enabled: bool, source_language: string, status: string, subscription: record<downgrade: list<string>, payment_method: int, period_end: string, plan_id: string, plan_name: string, price: string, products: list<any>, schedule_name: string, schedule_start: string, subscription_id: string, upgrade: list<string>, withTrial: any>, target_languages: list<string>, type: string, word_count: int> {
@@ -313,11 +323,11 @@ export def "continuous-projects create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/continuous_projects")
-  let body = {"analytics_enabled": $analytics_enabled, "auto_start_postedit": $auto_start_postedit, "created_at": $created_at, "id": $id, "is_enabled": $is_enabled, "last_activity_at": $last_activity_at, "links": $links, "mt_enabled": $mt_enabled, "mt_engine": $mt_engine, "name": $name, "postedit_enabled": $postedit_enabled, "source_language": $source_language, "status": $status, "subscription": $subscription, "target_languages": $target_languages, "type": $type, "word_count": $word_count} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"analytics_enabled": $analytics_enabled, "auto_start_postedit": $auto_start_postedit, "created_at": $created_at, "id": $id, "is_enabled": $is_enabled, "last_activity_at": $last_activity_at, "links": $links, "mt_enabled": $mt_enabled, "mt_engine": $mt_engine, "name": $name, "postedit_enabled": $postedit_enabled, "source_language": $source_language, "status": $status, "subscription": $subscription, "target_languages": $target_languages, "type": $type, "word_count": $word_count} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a continuous project
@@ -337,7 +347,7 @@ export def "continuous-projects delete" [
 ]: nothing -> record<status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/continuous_projects/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/continuous_projects/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -360,7 +370,7 @@ export def "continuous-projects get" [
 ]: nothing -> record<analytics_enabled: bool, auto_start_postedit: bool, created_at: string, id: int, is_enabled: bool, last_activity_at: string, links: record<self: record<href: string>, editors: record>, mt_enabled: bool, mt_engine: string, name: string, postedit_enabled: bool, source_language: string, status: string, subscription: record<downgrade: list<string>, payment_method: int, period_end: string, plan_id: string, plan_name: string, price: string, products: list<any>, schedule_name: string, schedule_start: string, subscription_id: string, upgrade: list<string>, withTrial: any>, target_languages: list<string>, type: string, word_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/continuous_projects/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/continuous_projects/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -392,12 +402,12 @@ export def "continuous-projects update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/continuous_projects/{id}"))
-  let body = {"analytics_enabled": $analytics_enabled, "auto_start_postedit": $auto_start_postedit, "is_enabled": $is_enabled, "languages": $languages, "mt_enabled": $mt_enabled, "name": $name, "postedit_enabled": $postedit_enabled} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/continuous_projects/{id}"))
+  let req_body = {"analytics_enabled": $analytics_enabled, "auto_start_postedit": $auto_start_postedit, "is_enabled": $is_enabled, "languages": $languages, "mt_enabled": $mt_enabled, "name": $name, "postedit_enabled": $postedit_enabled} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get JWT token to be used in analytics dashboards
@@ -417,7 +427,7 @@ export def "continuous-projects-analytics-token get" [
 ]: nothing -> record<jwt: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/continuous_projects/{id}/analytics-token"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/continuous_projects/{id}/analytics-token"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -427,7 +437,7 @@ export def "continuous-projects-analytics-token get" [
 #
 # POST /continuous_projects/{id}/collect-analytics
 # operationId: collectAnalytics
-export def "continuous-projects-collect-analytics collectAnalytics" [
+export def "continuous-projects-collect-analytics create" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -446,12 +456,12 @@ export def "continuous-projects-collect-analytics collectAnalytics" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/continuous_projects/{id}/collect-analytics"))
-  let body = {"anonymousId": $anonymous_id, "properties": $properties, "sessionId": $session_id, "type": $type, "userId": $user_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/continuous_projects/{id}/collect-analytics"))
+  let req_body = {"anonymousId": $anonymous_id, "properties": $properties, "sessionId": $session_id, "type": $type, "userId": $user_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Complete continuous project
@@ -471,7 +481,7 @@ export def "continuous-projects-complete complete" [
 ]: nothing -> record<status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/continuous_projects/{id}/complete"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/continuous_projects/{id}/complete"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -481,7 +491,7 @@ export def "continuous-projects-complete complete" [
 #
 # POST /continuous_projects/{id}/documents/quote
 # operationId: getQuoteForDocuments
-export def "continuous-projects-documents-quote get-quote-for-by-id" [
+export def "continuous-projects-documents-quote get-by-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -491,24 +501,24 @@ export def "continuous-projects-documents-quote get-quote-for-by-id" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --files: list
+  --files: list<int>
 ]: any -> record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, projects: table<average_scores: record, budget_code: string, callback_url: string, can_pam_manage: bool, client: record, cm_id: int, completed_on: string, continuous_project_type: string, created_at: int, custom: record, delivery_at: int, errors: list, id: int, is_api_project: bool, is_certified: bool, is_continuous: bool, is_manual: bool, links: record, pairs: list, pivoted_projects: list, price: record, price_without_discount: record, role: string, should_send_client_survey: bool, source: string, source_language: string, status: string, subjects: list, target_languages: list, tms_name: string, valid_until: int, vendor_word_count: int, word_count: int, word_count_analysis: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/continuous_projects/{id}/documents/quote"))
-  let body = {"files": $files} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/continuous_projects/{id}/documents/quote"))
+  let req_body = {"files": $files} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Complete a continuous project document
 #
 # POST /continuous_projects/{id}/documents/{documentId}/complete
 # operationId: completeContinuousDocument
-export def "continuous-projects-documents-complete completeContinuousDocument" [
+export def "continuous-projects-documents-complete complete" [
   id: int
   document_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -522,7 +532,7 @@ export def "continuous-projects-documents-complete completeContinuousDocument" [
 ]: nothing -> record<status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, document_id: $document_id} | format pattern "/continuous_projects/{id}/documents/{document_id}/complete"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), document_id: (encode-path-segment $document_id)} | format pattern "/continuous_projects/{id}/documents/{document_id}/complete"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -532,7 +542,7 @@ export def "continuous-projects-documents-complete completeContinuousDocument" [
 #
 # POST /continuous_projects/{id}/documents/{documentId}/quote
 # operationId: getQuoteForDocument
-export def "continuous-projects-documents-quote get-quote-for-by-id-documentId" [
+export def "continuous-projects-documents-quote get-by-id-documentId" [
   id: int
   document_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -546,7 +556,7 @@ export def "continuous-projects-documents-quote get-quote-for-by-id-documentId" 
 ]: nothing -> record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, projects: table<average_scores: record, budget_code: string, callback_url: string, can_pam_manage: bool, client: record, cm_id: int, completed_on: string, continuous_project_type: string, created_at: int, custom: record, delivery_at: int, errors: list, id: int, is_api_project: bool, is_certified: bool, is_continuous: bool, is_manual: bool, links: record, pairs: list, pivoted_projects: list, price: record, price_without_discount: record, role: string, should_send_client_survey: bool, source: string, source_language: string, status: string, subjects: list, target_languages: list, tms_name: string, valid_until: int, vendor_word_count: int, word_count: int, word_count_analysis: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, document_id: $document_id} | format pattern "/continuous_projects/{id}/documents/{document_id}/quote"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), document_id: (encode-path-segment $document_id)} | format pattern "/continuous_projects/{id}/documents/{document_id}/quote"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -556,7 +566,7 @@ export def "continuous-projects-documents-quote get-quote-for-by-id-documentId" 
 #
 # POST /continuous_projects/{id}/languages/quote
 # operationId: getQuoteForLanguages
-export def "continuous-projects-languages-quote get-quote-for-by-id" [
+export def "continuous-projects-languages-quote get-by-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -566,24 +576,24 @@ export def "continuous-projects-languages-quote get-quote-for-by-id" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --languages: list
+  --languages: list<string>
 ]: any -> record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, projects: table<average_scores: record, budget_code: string, callback_url: string, can_pam_manage: bool, client: record, cm_id: int, completed_on: string, continuous_project_type: string, created_at: int, custom: record, delivery_at: int, errors: list, id: int, is_api_project: bool, is_certified: bool, is_continuous: bool, is_manual: bool, links: record, pairs: list, pivoted_projects: list, price: record, price_without_discount: record, role: string, should_send_client_survey: bool, source: string, source_language: string, status: string, subjects: list, target_languages: list, tms_name: string, valid_until: int, vendor_word_count: int, word_count: int, word_count_analysis: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/continuous_projects/{id}/languages/quote"))
-  let body = {"languages": $languages} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/continuous_projects/{id}/languages/quote"))
+  let req_body = {"languages": $languages} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Complete continuous project language
 #
 # POST /continuous_projects/{id}/languages/{targetLanguage}/complete
 # operationId: completeLanguage
-export def "continuous-projects-languages-complete completeLanguage" [
+export def "continuous-projects-languages-complete complete" [
   id: int
   target_language: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -597,7 +607,7 @@ export def "continuous-projects-languages-complete completeLanguage" [
 ]: nothing -> record<status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, target_language: $target_language} | format pattern "/continuous_projects/{id}/languages/{target_language}/complete"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), target_language: (encode-path-segment $target_language)} | format pattern "/continuous_projects/{id}/languages/{target_language}/complete"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -607,7 +617,7 @@ export def "continuous-projects-languages-complete completeLanguage" [
 #
 # POST /continuous_projects/{id}/languages/{targetLanguage}/quote
 # operationId: getQuoteForLanguage
-export def "continuous-projects-languages-quote get-quote-for-by-id-targetLanguage" [
+export def "continuous-projects-languages-quote get-by-id-targetLanguage" [
   id: int
   target_language: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -621,7 +631,7 @@ export def "continuous-projects-languages-quote get-quote-for-by-id-targetLangua
 ]: nothing -> record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, projects: table<average_scores: record, budget_code: string, callback_url: string, can_pam_manage: bool, client: record, cm_id: int, completed_on: string, continuous_project_type: string, created_at: int, custom: record, delivery_at: int, errors: list, id: int, is_api_project: bool, is_certified: bool, is_continuous: bool, is_manual: bool, links: record, pairs: list, pivoted_projects: list, price: record, price_without_discount: record, role: string, should_send_client_survey: bool, source: string, source_language: string, status: string, subjects: list, target_languages: list, tms_name: string, valid_until: int, vendor_word_count: int, word_count: int, word_count_analysis: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, target_language: $target_language} | format pattern "/continuous_projects/{id}/languages/{target_language}/quote"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), target_language: (encode-path-segment $target_language)} | format pattern "/continuous_projects/{id}/languages/{target_language}/quote"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -644,7 +654,7 @@ export def "continuous-projects-subscription delete" [
 ]: nothing -> record<downgrade: list<string>, payment_method: int, period_end: string, plan_id: string, plan_name: string, price: string, products: list<any>, schedule_name: string, schedule_start: string, subscription_id: string, upgrade: list<string>, withTrial: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/continuous_projects/{id}/subscription"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/continuous_projects/{id}/subscription"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -667,7 +677,7 @@ export def "continuous-projects-subscription get" [
 ]: nothing -> record<downgrade: list<string>, payment_method: int, period_end: string, plan_id: string, plan_name: string, price: string, products: list<any>, schedule_name: string, schedule_start: string, subscription_id: string, upgrade: list<string>, withTrial: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/continuous_projects/{id}/subscription"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/continuous_projects/{id}/subscription"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -687,7 +697,7 @@ export def "continuous-projects-subscription create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --downgrade: list # Stripe downgradable plan
+  --downgrade: list<string> # Stripe downgradable plan
   --payment-method: int # Stripe subscription plan payment card internal id
   --period-end: string # Stripe plan period end (format: date-time)
   --plan-id: string # Stripe subscription plan id
@@ -697,18 +707,18 @@ export def "continuous-projects-subscription create" [
   --schedule-name: string # Stripe Scheduled plan period end
   --schedule-start: string # Stripe Scheduled start date (format: date-time)
   --subscription-id: string # Stripe subscription id for this project
-  --upgrade: list # Stripe upgradable plan
+  --upgrade: list<string> # Stripe upgradable plan
   --with-trial: any # Stripe plan trial (format: boolean)
 ]: any -> record<downgrade: list<string>, payment_method: int, period_end: string, plan_id: string, plan_name: string, price: string, products: list<any>, schedule_name: string, schedule_start: string, subscription_id: string, upgrade: list<string>, withTrial: any> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/continuous_projects/{id}/subscription"))
-  let body = {"downgrade": $downgrade, "payment_method": $payment_method, "period_end": $period_end, "plan_id": $plan_id, "plan_name": $plan_name, "price": $price, "products": $products, "schedule_name": $schedule_name, "schedule_start": $schedule_start, "subscription_id": $subscription_id, "upgrade": $upgrade, "withTrial": $with_trial} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/continuous_projects/{id}/subscription"))
+  let req_body = {"downgrade": $downgrade, "payment_method": $payment_method, "period_end": $period_end, "plan_id": $plan_id, "plan_name": $plan_name, "price": $price, "products": $products, "schedule_name": $schedule_name, "schedule_start": $schedule_start, "subscription_id": $subscription_id, "upgrade": $upgrade, "withTrial": $with_trial} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update subscription for continuous project
@@ -725,7 +735,7 @@ export def "continuous-projects-subscription update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --downgrade: list # Stripe downgradable plan
+  --downgrade: list<string> # Stripe downgradable plan
   --payment-method: int # Stripe subscription plan payment card internal id
   --period-end: string # Stripe plan period end (format: date-time)
   --plan-id: string # Stripe subscription plan id
@@ -735,25 +745,25 @@ export def "continuous-projects-subscription update" [
   --schedule-name: string # Stripe Scheduled plan period end
   --schedule-start: string # Stripe Scheduled start date (format: date-time)
   --subscription-id: string # Stripe subscription id for this project
-  --upgrade: list # Stripe upgradable plan
+  --upgrade: list<string> # Stripe upgradable plan
   --with-trial: any # Stripe plan trial (format: boolean)
 ]: any -> record<downgrade: list<string>, payment_method: int, period_end: string, plan_id: string, plan_name: string, price: string, products: list<any>, schedule_name: string, schedule_start: string, subscription_id: string, upgrade: list<string>, withTrial: any> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/continuous_projects/{id}/subscription"))
-  let body = {"downgrade": $downgrade, "payment_method": $payment_method, "period_end": $period_end, "plan_id": $plan_id, "plan_name": $plan_name, "price": $price, "products": $products, "schedule_name": $schedule_name, "schedule_start": $schedule_start, "subscription_id": $subscription_id, "upgrade": $upgrade, "withTrial": $with_trial} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/continuous_projects/{id}/subscription"))
+  let req_body = {"downgrade": $downgrade, "payment_method": $payment_method, "period_end": $period_end, "plan_id": $plan_id, "plan_name": $plan_name, "price": $price, "products": $products, "schedule_name": $schedule_name, "schedule_start": $schedule_start, "subscription_id": $subscription_id, "upgrade": $upgrade, "withTrial": $with_trial} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update subscription payment method for continuous project
 #
 # PUT /continuous_projects/{id}/subscription/payment
 # operationId: updateSubscriptionPaymentMethod
-export def "continuous-projects-subscription-payment update-subscription-payment-method" [
+export def "continuous-projects-subscription-payment update-method" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -763,7 +773,7 @@ export def "continuous-projects-subscription-payment update-subscription-payment
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --downgrade: list # Stripe downgradable plan
+  --downgrade: list<string> # Stripe downgradable plan
   --payment-method: int # Stripe subscription plan payment card internal id
   --period-end: string # Stripe plan period end (format: date-time)
   --plan-id: string # Stripe subscription plan id
@@ -773,18 +783,18 @@ export def "continuous-projects-subscription-payment update-subscription-payment
   --schedule-name: string # Stripe Scheduled plan period end
   --schedule-start: string # Stripe Scheduled start date (format: date-time)
   --subscription-id: string # Stripe subscription id for this project
-  --upgrade: list # Stripe upgradable plan
+  --upgrade: list<string> # Stripe upgradable plan
   --with-trial: any # Stripe plan trial (format: boolean)
 ]: any -> record<downgrade: list<string>, payment_method: int, period_end: string, plan_id: string, plan_name: string, price: string, products: list<any>, schedule_name: string, schedule_start: string, subscription_id: string, upgrade: list<string>, withTrial: any> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/continuous_projects/{id}/subscription/payment"))
-  let body = {"downgrade": $downgrade, "payment_method": $payment_method, "period_end": $period_end, "plan_id": $plan_id, "plan_name": $plan_name, "price": $price, "products": $products, "schedule_name": $schedule_name, "schedule_start": $schedule_start, "subscription_id": $subscription_id, "upgrade": $upgrade, "withTrial": $with_trial} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/continuous_projects/{id}/subscription/payment"))
+  let req_body = {"downgrade": $downgrade, "payment_method": $payment_method, "period_end": $period_end, "plan_id": $plan_id, "plan_name": $plan_name, "price": $price, "products": $products, "schedule_name": $schedule_name, "schedule_start": $schedule_start, "subscription_id": $subscription_id, "upgrade": $upgrade, "withTrial": $with_trial} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Instantly translate your content
@@ -792,8 +802,8 @@ export def "continuous-projects-subscription-payment update-subscription-payment
 # POST /continuous_projects/{id}/translate/{targetLanguage}
 # operationId: translate
 # --documents item shape: {data?: string, name?: string}
-# --filters shape: {skipMt?: list, skipPostEdit?: list}
-export def "continuous-projects-translate translate" [
+# --filters shape: {skipMt?: list<string>, skipPostEdit?: list<string>}
+export def "continuous-projects-translate create" [
   id: int
   target_language: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -804,20 +814,20 @@ export def "continuous-projects-translate translate" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --contents: list # Simple list of strings to be translated. You can also choose to upload files instead of strings.
+  --contents: list<string> # Simple list of strings to be translated. You can also choose to upload files instead of strings.
   --documents: list # You can add as many files as you want in documents parameter. — item shape: {data?: string, name?: string}
-  --filters: record # shape: {skipMt?: list, skipPostEdit?: list}
+  --filters: record # shape: {skipMt?: list<string>, skipPostEdit?: list<string>}
   --meta: record # Free-form meta data to attach to your instant translation request. This can be used in statistics and analytical dashboards.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, target_language: $target_language} | format pattern "/continuous_projects/{id}/translate/{target_language}"))
-  let body = {"contents": $contents, "documents": $documents, "filters": $filters, "meta": $meta} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id), target_language: (encode-path-segment $target_language)} | format pattern "/continuous_projects/{id}/translate/{target_language}"))
+  let req_body = {"contents": $contents, "documents": $documents, "filters": $filters, "meta": $meta} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # View continuous documents
@@ -839,7 +849,7 @@ export def "continuous-projects-documents list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filterByLanguage" $filter_by_language "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/continuous_projects/{project_id}/documents") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/continuous_projects/{project_id}/documents") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -865,12 +875,12 @@ export def "continuous-projects-documents create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/continuous_projects/{project_id}/documents"))
-  let body = {"document": $document} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/continuous_projects/{project_id}/documents"))
+  let req_body = {"document": $document} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get continuous project document progress for multiple IDs
@@ -893,19 +903,19 @@ export def "continuous-projects-documents-progress create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/continuous_projects/{project_id}/documents/progress"))
-  let body = {"documentName": $document_name, "filterByLanguage": $filter_by_language} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/continuous_projects/{project_id}/documents/progress"))
+  let req_body = {"documentName": $document_name, "filterByLanguage": $filter_by_language} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get a list of strings and its translations in the project.
 #
 # POST /continuous_projects/{projectId}/documents/strings
 # operationId: postContinuousProjectFileStrings
-export def "continuous-projects-documents-strings create-continuous-project-file" [
+export def "continuous-projects-documents-strings create-file" [
   project_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -920,12 +930,12 @@ export def "continuous-projects-documents-strings create-continuous-project-file
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/continuous_projects/{project_id}/documents/strings"))
-  let body = {"documentName": $document_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/continuous_projects/{project_id}/documents/strings"))
+  let req_body = {"documentName": $document_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # View a continuous document
@@ -946,7 +956,7 @@ export def "continuous-projects-documents get" [
 ]: nothing -> record<billed_word_count: int, id: string, links: record<self: record<href: string>, admins: record, download: record<href: string>, editors: record, preview_box: record<href: string>, preview_pdf: record<href: string>, preview_pdf_viewer: record<href: string>, progress: record<href: string>, project: record<href: string>, strings: record<href: string>, thumbnail: record<href: string>>, name: string, post_edit_enabled: bool, project_id: string, source_language: string, target_languages: list<string>, word_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({project_id: $project_id, document_id: $document_id} | format pattern "/continuous_projects/{project_id}/documents/{document_id}"))
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), document_id: (encode-path-segment $document_id)} | format pattern "/continuous_projects/{project_id}/documents/{document_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -973,12 +983,12 @@ export def "continuous-projects-documents update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({project_id: $project_id, document_id: $document_id} | format pattern "/continuous_projects/{project_id}/documents/{document_id}"))
-  let body = {"document": $document} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), document_id: (encode-path-segment $document_id)} | format pattern "/continuous_projects/{project_id}/documents/{document_id}"))
+  let req_body = {"document": $document} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Monitor progress of a continuous document
@@ -1001,7 +1011,7 @@ export def "continuous-projects-documents-progress get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filterByLanguage" $filter_by_language "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id, document_id: $document_id} | format pattern "/continuous_projects/{project_id}/documents/{document_id}/progress") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), document_id: (encode-path-segment $document_id)} | format pattern "/continuous_projects/{project_id}/documents/{document_id}/progress") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1011,7 +1021,7 @@ export def "continuous-projects-documents-progress get" [
 #
 # GET /continuous_projects/{projectId}/documents/{documentId}/strings
 # operationId: getContinuousProjectFileStrings
-export def "continuous-projects-documents-strings get-continuous-project-file" [
+export def "continuous-projects-documents-strings get-file" [
   project_id: int
   document_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1025,7 +1035,7 @@ export def "continuous-projects-documents-strings get-continuous-project-file" [
 ]: nothing -> record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, translations: table<content: string, file_id: int, id: string, translations: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({project_id: $project_id, document_id: $document_id} | format pattern "/continuous_projects/{project_id}/documents/{document_id}/strings"))
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), document_id: (encode-path-segment $document_id)} | format pattern "/continuous_projects/{project_id}/documents/{document_id}/strings"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1048,7 +1058,7 @@ export def "continuous-projects-invoices get" [
 ]: nothing -> record<invoices: table<amount: float, base_amount: float, base_currency: string, billing: record, currency: string, id: int, invoice_no: int, invoiced_at: string, links: record, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/continuous_projects/{project_id}/invoices"))
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/continuous_projects/{project_id}/invoices"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1073,7 +1083,7 @@ export def "continuous-projects-progress get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filterByLanguage" $filter_by_language "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/continuous_projects/{project_id}/progress") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/continuous_projects/{project_id}/progress") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1096,7 +1106,7 @@ export def "continuous-projects-strings get" [
 ]: nothing -> record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, translations: table<content: string, file_id: int, id: string, translations: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/continuous_projects/{project_id}/strings"))
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/continuous_projects/{project_id}/strings"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1106,7 +1116,7 @@ export def "continuous-projects-strings get" [
 #
 # DELETE /continuous_projects/{projectId}/strings/cached
 # operationId: clearTranslationCache
-export def "continuous-projects-strings-cached clearTranslationCache" [
+export def "continuous-projects-strings-cached delete-clear-translation-cache" [
   project_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1122,7 +1132,7 @@ export def "continuous-projects-strings-cached clearTranslationCache" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "locale" $locale "scalar") (serialize-qp "file_id" $file_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/continuous_projects/{project_id}/strings/cached") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/continuous_projects/{project_id}/strings/cached") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1147,7 +1157,7 @@ export def "continuous-projects-strings-cached get-translation-cache" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "flatten" $flatten "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/continuous_projects/{project_id}/strings/cached") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/continuous_projects/{project_id}/strings/cached") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1157,7 +1167,7 @@ export def "continuous-projects-strings-cached get-translation-cache" [
 #
 # POST /continuous_projects/{projectId}/strings/recache-tms
 # operationId: recacheTranslations
-export def "continuous-projects-strings-recache-tms recacheTranslations" [
+export def "continuous-projects-strings-recache-tms create-translations" [
   project_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1173,7 +1183,7 @@ export def "continuous-projects-strings-recache-tms recacheTranslations" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "locale" $locale "scalar") (serialize-qp "file_id" $file_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/continuous_projects/{project_id}/strings/recache-tms") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/continuous_projects/{project_id}/strings/recache-tms") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1196,7 +1206,7 @@ export def "continuous-projects-widgets list" [
 ]: nothing -> record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, widgets: table<allow_hash_in_url: bool, allow_query_in_url: bool, auto_detect_source_language: bool, created_at: string, elements: string, follow_user: bool, force_cache_refresh_interval: bool, id: int, language_mappings: string, live: bool, modify_links: bool, name: string, optimize_per_page: bool, pages: string, path_regex: string, position: string, query_name: string, reboot_on_url_change: bool, restricted_domains: string, sections: string, test_mode: bool, theme: string, token: string, url_change_mode: string, url_mode: string, use_cache: bool, use_dummy_translations: bool, variables: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/continuous_projects/{project_id}/widgets"))
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/continuous_projects/{project_id}/widgets"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1248,12 +1258,12 @@ export def "continuous-projects-widgets create-active" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/continuous_projects/{project_id}/widgets"))
-  let body = {"allow_hash_in_url": $allow_hash_in_url, "allow_query_in_url": $allow_query_in_url, "auto_detect_source_language": $auto_detect_source_language, "created_at": $created_at, "elements": $elements, "follow_user": $follow_user, "force_cache_refresh_interval": $force_cache_refresh_interval, "id": $id, "language_mappings": $language_mappings, "live": $live, "modify_links": $modify_links, "name": $name, "optimize_per_page": $optimize_per_page, "pages": $pages, "path_regex": $path_regex, "position": $position, "query_name": $query_name, "reboot_on_url_change": $reboot_on_url_change, "restricted_domains": $restricted_domains, "sections": $sections, "test_mode": $test_mode, "theme": $theme, "token": $body_token, "url_change_mode": $url_change_mode, "url_mode": $url_mode, "use_cache": $use_cache, "use_dummy_translations": $use_dummy_translations, "variables": $variables} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/continuous_projects/{project_id}/widgets"))
+  let req_body = {"allow_hash_in_url": $allow_hash_in_url, "allow_query_in_url": $allow_query_in_url, "auto_detect_source_language": $auto_detect_source_language, "created_at": $created_at, "elements": $elements, "follow_user": $follow_user, "force_cache_refresh_interval": $force_cache_refresh_interval, "id": $id, "language_mappings": $language_mappings, "live": $live, "modify_links": $modify_links, "name": $name, "optimize_per_page": $optimize_per_page, "pages": $pages, "path_regex": $path_regex, "position": $position, "query_name": $query_name, "reboot_on_url_change": $reboot_on_url_change, "restricted_domains": $restricted_domains, "sections": $sections, "test_mode": $test_mode, "theme": $theme, "token": $body_token, "url_change_mode": $url_change_mode, "url_mode": $url_mode, "use_cache": $use_cache, "use_dummy_translations": $use_dummy_translations, "variables": $variables} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a single widget for this Active project
@@ -1274,7 +1284,7 @@ export def "continuous-projects-widgets delete-active" [
 ]: nothing -> record<status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({project_id: $project_id, widget_id: $widget_id} | format pattern "/continuous_projects/{project_id}/widgets/{widget_id}"))
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), widget_id: (encode-path-segment $widget_id)} | format pattern "/continuous_projects/{project_id}/widgets/{widget_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1298,7 +1308,7 @@ export def "continuous-projects-widgets get-active" [
 ]: nothing -> record<allow_hash_in_url: bool, allow_query_in_url: bool, auto_detect_source_language: bool, created_at: string, elements: string, follow_user: bool, force_cache_refresh_interval: bool, id: int, language_mappings: string, live: bool, modify_links: bool, name: string, optimize_per_page: bool, pages: string, path_regex: string, position: string, query_name: string, reboot_on_url_change: bool, restricted_domains: string, sections: string, test_mode: bool, theme: string, token: string, url_change_mode: string, url_mode: string, use_cache: bool, use_dummy_translations: bool, variables: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({project_id: $project_id, widget_id: $widget_id} | format pattern "/continuous_projects/{project_id}/widgets/{widget_id}"))
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), widget_id: (encode-path-segment $widget_id)} | format pattern "/continuous_projects/{project_id}/widgets/{widget_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1351,12 +1361,12 @@ export def "continuous-projects-widgets update-active" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({project_id: $project_id, widget_id: $widget_id} | format pattern "/continuous_projects/{project_id}/widgets/{widget_id}"))
-  let body = {"allow_hash_in_url": $allow_hash_in_url, "allow_query_in_url": $allow_query_in_url, "auto_detect_source_language": $auto_detect_source_language, "created_at": $created_at, "elements": $elements, "follow_user": $follow_user, "force_cache_refresh_interval": $force_cache_refresh_interval, "id": $id, "language_mappings": $language_mappings, "live": $live, "modify_links": $modify_links, "name": $name, "optimize_per_page": $optimize_per_page, "pages": $pages, "path_regex": $path_regex, "position": $position, "query_name": $query_name, "reboot_on_url_change": $reboot_on_url_change, "restricted_domains": $restricted_domains, "sections": $sections, "test_mode": $test_mode, "theme": $theme, "token": $body_token, "url_change_mode": $url_change_mode, "url_mode": $url_mode, "use_cache": $use_cache, "use_dummy_translations": $use_dummy_translations, "variables": $variables} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), widget_id: (encode-path-segment $widget_id)} | format pattern "/continuous_projects/{project_id}/widgets/{widget_id}"))
+  let req_body = {"allow_hash_in_url": $allow_hash_in_url, "allow_query_in_url": $allow_query_in_url, "auto_detect_source_language": $auto_detect_source_language, "created_at": $created_at, "elements": $elements, "follow_user": $follow_user, "force_cache_refresh_interval": $force_cache_refresh_interval, "id": $id, "language_mappings": $language_mappings, "live": $live, "modify_links": $modify_links, "name": $name, "optimize_per_page": $optimize_per_page, "pages": $pages, "path_regex": $path_regex, "position": $position, "query_name": $query_name, "reboot_on_url_change": $reboot_on_url_change, "restricted_domains": $restricted_domains, "sections": $sections, "test_mode": $test_mode, "theme": $theme, "token": $body_token, "url_change_mode": $url_change_mode, "url_mode": $url_mode, "use_cache": $use_cache, "use_dummy_translations": $use_dummy_translations, "variables": $variables} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Reset Active widget token
@@ -1377,7 +1387,7 @@ export def "continuous-projects-widgets-reset-token reset-active" [
 ]: nothing -> record<allow_hash_in_url: bool, allow_query_in_url: bool, auto_detect_source_language: bool, created_at: string, elements: string, follow_user: bool, force_cache_refresh_interval: bool, id: int, language_mappings: string, live: bool, modify_links: bool, name: string, optimize_per_page: bool, pages: string, path_regex: string, position: string, query_name: string, reboot_on_url_change: bool, restricted_domains: string, sections: string, test_mode: bool, theme: string, token: string, url_change_mode: string, url_mode: string, use_cache: bool, use_dummy_translations: bool, variables: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({project_id: $project_id, widget_id: $widget_id} | format pattern "/continuous_projects/{project_id}/widgets/{widget_id}/reset-token"))
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), widget_id: (encode-path-segment $widget_id)} | format pattern "/continuous_projects/{project_id}/widgets/{widget_id}/reset-token"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1453,7 +1463,7 @@ export def "corporate-user-groups get" [
 #
 # POST /corporate/user-groups
 # operationId: saveCorporateUserGroup
-export def "corporate-user-groups saveCorporateUserGroup" [
+export def "corporate-user-groups create-save" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1465,17 +1475,17 @@ export def "corporate-user-groups saveCorporateUserGroup" [
   --corporate-id: int # format: int64
   --id: int # format: int64
   --name: string
-  --permissions: list
+  --permissions: list<string>
 ]: any -> record<corporate_id: int, id: int, name: string, permissions: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/corporate/user-groups")
-  let body = {"corporate_id": $corporate_id, "id": $id, "name": $name, "permissions": $permissions} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"corporate_id": $corporate_id, "id": $id, "name": $name, "permissions": $permissions} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # View users
@@ -1505,7 +1515,7 @@ export def "corporate-users get" [
 # POST /corporate/users
 # operationId: saveCorporateUser
 # --notifications shape: {phone_number?: string, sms_enabled?: bool}
-export def "corporate-users saveCorporateUser" [
+export def "corporate-users create-save" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1529,24 +1539,24 @@ export def "corporate-users saveCorporateUser" [
   --notify: oneof<nothing, bool> # Notify new user account creation with login information and MotaWord introduction.
   --paypal-email: string # Optional. Vendor paypal e-mail
   --require-1099: oneof<nothing, bool> # Optional. Whether this vendor requires 1099 form in US for their earnings.
-  --user-groups: list # A list of user group IDs
+  --user-groups: list<int> # A list of user group IDs
 ]: any -> record<billing: record<city: string, country: string, phone: string, state: string, street: string, zip: string, name: string>, birthday: string, can_work_manual_files: bool, city: string, client: record<corporate: record<email: string, id: int, logo: string, name: string, phone_number: string>, nps: float, subjects: record>, corporate_id: int, country: string, created_at: int, do_not_contact: bool, email: string, first_name: string, has_pwd: bool, id: int, is_client: bool, is_developer: bool, is_proofreader: bool, is_prospect: bool, is_sales_person: bool, is_vendor: bool, language_pairs: table<source_language: string, target_language: string>, last_name: string, last_seen_online_at: int, links: record<self: record<href: string>, login_as: record<href: string>, projects: record<href: string>, responsivity: record<href: string>, stats: record<href: string>>, locale: string, mailing: record<city: string, country: string, phone: string, state: string, street: string, zip: string>, name: string, native_language: string, nps: float, phone_number: string, profile_picture_path: string, social_media: record<facebook_url: string, linkedIn_url: string, twitter_url: string>, state: string, status: string, street: string, timezone: string, tms_user_name: string, user_groups: table<corporate_id: int, id: int, name: string, permissions: list>, vendor: record<can_work_manual_files: bool, email_open_rate: float, is_frozen: bool, is_proofreader: bool, language_pairs: list<record>, native_language: string, pam_tqs: float, paypal_email: string, profile_survey: record<current_services: string, daily_proofreading_capacity: string, daily_translation_capacity: string, dtp_software: string, experience: string, is_certified_translator: string, is_sworn_translator: string, memoq: string, memsource: string, omegat: string, proofreader_experience: string, provides_creative_writing_service: string, provides_postedit_service: string, reference: string, sdl_trados: string, skype_id: string, smartcat: string, smartling: string, software: string, specialization: string, subtitle_edit: string, subtitle_workshop: string, translator_association: string, transsuite_2000: string, vendor_profile_lsp: string, wordbee: string, wordfast: string, work_type: string, work_with: string, working_as: string, working_timezone: string, xbench: string, xtm: string>, require_1099: bool, tags: list<string>, tms_user_name: string, vendor_type: string>, zip_code: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/corporate/users")
-  let body = {"city": $city, "country": $country, "phone": $phone, "state": $state, "street": $street, "zip": $zip, "birthday": $birthday, "email": $email, "first_name": $first_name, "id": $id, "last_name": $last_name, "notifications": $notifications, "notify": $notify, "paypal_email": $paypal_email, "require_1099": $require_1099, "user_groups": $user_groups} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"city": $city, "country": $country, "phone": $phone, "state": $state, "street": $street, "zip": $zip, "birthday": $birthday, "email": $email, "first_name": $first_name, "id": $id, "last_name": $last_name, "notifications": $notifications, "notify": $notify, "paypal_email": $paypal_email, "require_1099": $require_1099, "user_groups": $user_groups} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get a list of corporate accounts
 #
 # GET /corporates/all
 # operationId: getCorporatesList
-export def "corporates-all get-corporates-list" [
+export def "corporates-all get-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1581,7 +1591,7 @@ export def "corporates get" [
 ]: nothing -> record<billing: record<city: string, country: string, phone: string, state: string, street: string, zip: string, name: string>, domain: string, email: string, id: int, logo: string, name: string, web_site: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({corporate_id: $corporate_id} | format pattern "/corporates/{corporate_id}"))
+  let full_url = (build-url $base ({corporate_id: (encode-path-segment $corporate_id)} | format pattern "/corporates/{corporate_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1604,7 +1614,7 @@ export def "corporates-permissions get-available" [
 ]: nothing -> record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, permissions: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({corporate_id: $corporate_id} | format pattern "/corporates/{corporate_id}/permissions"))
+  let full_url = (build-url $base ({corporate_id: (encode-path-segment $corporate_id)} | format pattern "/corporates/{corporate_id}/permissions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1627,7 +1637,7 @@ export def "corporates-user-groups get" [
 ]: nothing -> record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, user_groups: table<corporate_id: int, id: int, name: string, permissions: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({corporate_id: $corporate_id} | format pattern "/corporates/{corporate_id}/user-groups"))
+  let full_url = (build-url $base ({corporate_id: (encode-path-segment $corporate_id)} | format pattern "/corporates/{corporate_id}/user-groups"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1637,7 +1647,7 @@ export def "corporates-user-groups get" [
 #
 # POST /corporates/{corporateId}/user-groups
 # operationId: saveCorporateUserGroupById
-export def "corporates-user-groups saveCorporateUserGroupById" [
+export def "corporates-user-groups create-save" [
   corporate_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1650,17 +1660,17 @@ export def "corporates-user-groups saveCorporateUserGroupById" [
   --body-corporate-id: int # format: int64
   --id: int # format: int64
   --name: string
-  --permissions: list
+  --permissions: list<string>
 ]: any -> record<corporate_id: int, id: int, name: string, permissions: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({corporate_id: $corporate_id} | format pattern "/corporates/{corporate_id}/user-groups"))
-  let body = {"corporate_id": $body_corporate_id, "id": $id, "name": $name, "permissions": $permissions} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({corporate_id: (encode-path-segment $corporate_id)} | format pattern "/corporates/{corporate_id}/user-groups"))
+  let req_body = {"corporate_id": $body_corporate_id, "id": $id, "name": $name, "permissions": $permissions} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get a list of users for this corporate account
@@ -1680,7 +1690,7 @@ export def "corporates-users get" [
 ]: nothing -> record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, users: table<billing: record, birthday: string, can_work_manual_files: bool, city: string, client: record, corporate_id: int, country: string, created_at: int, do_not_contact: bool, email: string, first_name: string, has_pwd: bool, id: int, is_client: bool, is_developer: bool, is_proofreader: bool, is_prospect: bool, is_sales_person: bool, is_vendor: bool, language_pairs: list, last_name: string, last_seen_online_at: int, links: record, locale: string, mailing: record, name: string, native_language: string, nps: float, phone_number: string, profile_picture_path: string, social_media: record, state: string, status: string, street: string, timezone: string, tms_user_name: string, user_groups: list, vendor: record, zip_code: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({corporate_id: $corporate_id} | format pattern "/corporates/{corporate_id}/users"))
+  let full_url = (build-url $base ({corporate_id: (encode-path-segment $corporate_id)} | format pattern "/corporates/{corporate_id}/users"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1729,7 +1739,7 @@ export def "documents list" [
   --per-page: int # format: int64, default: 10
   --order-by: string@order-by-completer # default: updated_at
   --order-type: string@order-type-completer
-  --with: list # Attach further information. Possible values 'preview' to fetch temporary preview URLs. This is NOT recommended to be used with list calls. Only use with[]=preview for single document/style guide calls.
+  --with: list<string> # Attach further information. Possible values 'preview' to fetch temporary preview URLs. This is NOT recommended to be used with list calls. Only use with[]=preview for single document/style guide calls.
 ]: nothing -> record<documents: table<file_type: string, has_custom_package: bool, id: int, links: record, manual_files: list, name: string, project_id: int, review_in_manual_editor: bool, scheme: record, search_score: float, source_language: string, subject: string, target_languages: list, uploaded_at: int, word_count: int>, meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1744,7 +1754,7 @@ export def "documents list" [
 #
 # GET /documents/subjects
 # operationId: getAllDocumentSubjects
-export def "documents-subjects get-all" [
+export def "documents-subjects get-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1779,7 +1789,7 @@ export def "documents get" [
 ]: nothing -> record<billed_word_count: int, id: string, links: record<self: record<href: string>, admins: record, download: record<href: string>, editors: record, preview_box: record<href: string>, preview_pdf: record<href: string>, preview_pdf_viewer: record<href: string>, progress: record<href: string>, project: record<href: string>, strings: record<href: string>, thumbnail: record<href: string>>, name: string, post_edit_enabled: bool, project_id: string, source_language: string, target_languages: list<string>, word_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({document_id: $document_id} | format pattern "/documents/{document_id}"))
+  let full_url = (build-url $base ({document_id: (encode-path-segment $document_id)} | format pattern "/documents/{document_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1802,7 +1812,7 @@ export def "documents-progress get" [
 ]: nothing -> record<languages: record, links: record<self: record<href: string>, project: record<href: string>>, project_status: string, proofreading: float, total: float, translation: float, word_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({document_id: $document_id} | format pattern "/documents/{document_id}/progress"))
+  let full_url = (build-url $base ({document_id: (encode-path-segment $document_id)} | format pattern "/documents/{document_id}/progress"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1812,7 +1822,7 @@ export def "documents-progress get" [
 #
 # POST /documents/{documentId}/regenerate_preview
 # operationId: regeneratePreview
-export def "documents-regenerate-preview regeneratePreview" [
+export def "documents-regenerate-preview create" [
   document_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1825,7 +1835,7 @@ export def "documents-regenerate-preview regeneratePreview" [
 ]: nothing -> record<link: record<href: string>, source: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({document_id: $document_id} | format pattern "/documents/{document_id}/regenerate_preview"))
+  let full_url = (build-url $base ({document_id: (encode-path-segment $document_id)} | format pattern "/documents/{document_id}/regenerate_preview"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1846,12 +1856,12 @@ export def "documents-similars get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --per-page: int # Determines the number of similar documents to return. (format: int64, default: 1)
-  --with: list # Attach further information. Possible values 'preview' to fetch temporary preview URLs. This is NOT recommended to be used with list calls. Only use with[]=preview for single document/style guide calls.
+  --with: list<string> # Attach further information. Possible values 'preview' to fetch temporary preview URLs. This is NOT recommended to be used with list calls. Only use with[]=preview for single document/style guide calls.
 ]: nothing -> record<documents: table<file_type: string, has_custom_package: bool, id: int, links: record, manual_files: list, name: string, project_id: int, review_in_manual_editor: bool, scheme: record, search_score: float, source_language: string, subject: string, target_languages: list, uploaded_at: int, word_count: int>, meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "with[]" $with "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({document_id: $document_id} | format pattern "/documents/{document_id}/similars") $qp)
+  let full_url = (build-url $base ({document_id: (encode-path-segment $document_id)} | format pattern "/documents/{document_id}/similars") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1861,7 +1871,7 @@ export def "documents-similars get" [
 #
 # POST /documents/{documentId}/use_as_draft
 # operationId: useAsDraft
-export def "documents-use-as-draft useAsDraft" [
+export def "documents-use-as-draft create" [
   document_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1878,19 +1888,19 @@ export def "documents-use-as-draft useAsDraft" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({document_id: $document_id} | format pattern "/documents/{document_id}/use_as_draft"))
-  let body = {"fromFileId": $from_file_id, "fromManualTranslationFileId": $from_manual_translation_file_id, "toManualTranslationFileId": $to_manual_translation_file_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({document_id: (encode-path-segment $document_id)} | format pattern "/documents/{document_id}/use_as_draft"))
+  let req_body = {"fromFileId": $from_file_id, "fromManualTranslationFileId": $from_manual_translation_file_id, "toManualTranslationFileId": $to_manual_translation_file_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Use the translation of the given manual document as a regular file.
 #
 # POST /documents/{documentId}/use_as_regular
 # operationId: useAsRegular
-export def "documents-use-as-regular useAsRegular" [
+export def "documents-use-as-regular create" [
   document_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1910,18 +1920,18 @@ export def "documents-use-as-regular useAsRegular" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({document_id: $document_id} | format pattern "/documents/{document_id}/use_as_regular"))
-  let body = {"allowOriginalFilePreview": $allow_original_file_preview, "allowReviewInManualEditor": $allow_review_in_manual_editor, "disableInvitations": $disable_invitations, "fromManualTranslationFileId": $from_manual_translation_file_id, "hideNumbers": $hide_numbers, "recreate": $recreate} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({document_id: (encode-path-segment $document_id)} | format pattern "/documents/{document_id}/use_as_regular"))
+  let req_body = {"allowOriginalFilePreview": $allow_original_file_preview, "allowReviewInManualEditor": $allow_review_in_manual_editor, "disableInvitations": $disable_invitations, "fromManualTranslationFileId": $from_manual_translation_file_id, "hideNumbers": $hide_numbers, "recreate": $recreate} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /downgrade-proofreader
 #
 # operationId: downgradeProofreader
-export def "downgrade-proofreader downgradeProofreader" [
+export def "downgrade-proofreader create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1987,7 +1997,7 @@ export def "formats get" [
 #
 # POST /freeze-account
 # operationId: freezeAccount
-export def "freeze-account freezeAccount" [
+export def "freeze-account create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2046,11 +2056,11 @@ export def "glossary update-global" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/glossary")
-  let body = {"glossary": $glossary} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"glossary": $glossary} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Generate a new access token for MotaWord's integrations service
@@ -2094,10 +2104,11 @@ export def "invitation-vendors get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/invitation/vendors")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List of supported languages
@@ -2126,7 +2137,7 @@ export def "languages get" [
 #
 # POST /location
 # operationId: logLocation
-export def "location logLocation" [
+export def "location create-log" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2143,17 +2154,17 @@ export def "location logLocation" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/location")
-  let body = {"lat": $lat, "lon": $lon, "timestamp": $timestamp} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"lat": $lat, "lon": $lon, "timestamp": $timestamp} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /make-proofreader
 #
 # operationId: makeProofreader
-export def "make-proofreader makeProofreader" [
+export def "make-proofreader create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2222,17 +2233,17 @@ export def "me update" [
   --notify: oneof<nothing, bool> # Notify new user account creation with login information and MotaWord introduction.
   --paypal-email: string # Optional. Vendor paypal e-mail
   --require-1099: oneof<nothing, bool> # Optional. Whether this vendor requires 1099 form in US for their earnings.
-  --user-groups: list # A list of user group IDs
+  --user-groups: list<int> # A list of user group IDs
 ]: any -> record<billing: record<city: string, country: string, phone: string, state: string, street: string, zip: string, name: string>, birthday: string, can_work_manual_files: bool, city: string, client: record<corporate: record<email: string, id: int, logo: string, name: string, phone_number: string>, nps: float, subjects: record>, corporate_id: int, country: string, created_at: int, do_not_contact: bool, email: string, first_name: string, has_pwd: bool, id: int, is_client: bool, is_developer: bool, is_proofreader: bool, is_prospect: bool, is_sales_person: bool, is_vendor: bool, language_pairs: table<source_language: string, target_language: string>, last_name: string, last_seen_online_at: int, links: record<self: record<href: string>, login_as: record<href: string>, projects: record<href: string>, responsivity: record<href: string>, stats: record<href: string>>, locale: string, mailing: record<city: string, country: string, phone: string, state: string, street: string, zip: string>, name: string, native_language: string, nps: float, phone_number: string, profile_picture_path: string, social_media: record<facebook_url: string, linkedIn_url: string, twitter_url: string>, state: string, status: string, street: string, timezone: string, tms_user_name: string, user_groups: table<corporate_id: int, id: int, name: string, permissions: list>, vendor: record<can_work_manual_files: bool, email_open_rate: float, is_frozen: bool, is_proofreader: bool, language_pairs: list<record>, native_language: string, pam_tqs: float, paypal_email: string, profile_survey: record<current_services: string, daily_proofreading_capacity: string, daily_translation_capacity: string, dtp_software: string, experience: string, is_certified_translator: string, is_sworn_translator: string, memoq: string, memsource: string, omegat: string, proofreader_experience: string, provides_creative_writing_service: string, provides_postedit_service: string, reference: string, sdl_trados: string, skype_id: string, smartcat: string, smartling: string, software: string, specialization: string, subtitle_edit: string, subtitle_workshop: string, translator_association: string, transsuite_2000: string, vendor_profile_lsp: string, wordbee: string, wordfast: string, work_type: string, work_with: string, working_as: string, working_timezone: string, xbench: string, xtm: string>, require_1099: bool, tags: list<string>, tms_user_name: string, vendor_type: string>, zip_code: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/me")
-  let body = {"city": $city, "country": $country, "phone": $phone, "state": $state, "street": $street, "zip": $zip, "birthday": $birthday, "email": $email, "first_name": $first_name, "id": $id, "last_name": $last_name, "notifications": $notifications, "notify": $notify, "paypal_email": $paypal_email, "require_1099": $require_1099, "user_groups": $user_groups} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"city": $city, "country": $country, "phone": $phone, "state": $state, "street": $street, "zip": $zip, "birthday": $birthday, "email": $email, "first_name": $first_name, "id": $id, "last_name": $last_name, "notifications": $notifications, "notify": $notify, "paypal_email": $paypal_email, "require_1099": $require_1099, "user_groups": $user_groups} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get a delivery prediction for a project
@@ -2254,11 +2265,11 @@ export def "ml-delivery-prediction get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ml/delivery-prediction")
-  let body = {"projectId": $project_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"projectId": $project_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Subscribe to push notifications
@@ -2282,11 +2293,11 @@ export def "notifications-subscribe subscribe" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/notifications/subscribe")
-  let body = {"device": $device, "endpoint": $endpoint, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"device": $device, "endpoint": $endpoint, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /notifications/unsubscribe
@@ -2309,11 +2320,11 @@ export def "notifications-unsubscribe unsubscribe" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/notifications/unsubscribe")
-  let body = {"device": $device, "endpoint": $endpoint, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"device": $device, "endpoint": $endpoint, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Sends a message to chat
@@ -2330,8 +2341,8 @@ export def "pam-chat create-message" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --message: string # the message to be sent
-  --recipients: list # name of the recipients in the channel
-  --slots: list # contexts for next message
+  --recipients: list<string> # name of the recipients in the channel
+  --slots: list<string> # contexts for next message
   --thread-id: string # id of the thread
   --thread-key: string # the key for thread_id default is project
 ]: any -> record<status: string> {
@@ -2339,18 +2350,18 @@ export def "pam-chat create-message" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/pam/chat")
-  let body = {"message": $message, "recipients": $recipients, "slots": $slots, "thread_id": $thread_id, "thread_key": $thread_key} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"message": $message, "recipients": $recipients, "slots": $slots, "thread_id": $thread_id, "thread_key": $thread_key} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get the Pam profile of a client for this client ID
 #
 # GET /pam/profiles/client/{clientId}
 # operationId: getClientProfileForPam
-export def "pam-profiles-client get-client-profile-for" [
+export def "pam-profiles-client get" [
   client_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2363,7 +2374,7 @@ export def "pam-profiles-client get-client-profile-for" [
 ]: nothing -> record<account_creation_date: string, client_project_count: float, corporate: string, corporate_id: float, corporate_user_count: float, frequent_file_extension: string, frequent_language_pairs: list<string>, full_name: string, growth: bool, is_complex: bool, last_12_months_spending: float, last_project: float, last_project_time: string, last_proofreaders: table<full_name: string, id: float, language: string, vendor_link: string>, notes: list<string>, nps: record<average: record<completed_surveys_count: float, score: float>, last: record<completion_date: string, score: float>>, user_rank_in_project_count: float, user_rank_in_spending: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({client_id: $client_id} | format pattern "/pam/profiles/client/{client_id}"))
+  let full_url = (build-url $base ({client_id: (encode-path-segment $client_id)} | format pattern "/pam/profiles/client/{client_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2373,7 +2384,7 @@ export def "pam-profiles-client get-client-profile-for" [
 #
 # GET /pam/projects/{projectId}/completion-report
 # operationId: getProjectCompletionReportForPam
-export def "pam-projects-completion-report get-project-completion-report-for" [
+export def "pam-projects-completion-report get" [
   project_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2386,7 +2397,7 @@ export def "pam-projects-completion-report get-project-completion-report-for" [
 ]: nothing -> record<admin_user_id: float, completion_report_data: table<invited_vendors: list, target_language: string>, id: float, quote_id: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/pam/projects/{project_id}/completion-report"))
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/pam/projects/{project_id}/completion-report"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2411,18 +2422,18 @@ export def "password update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/password")
-  let body = {"password": $password} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"password": $password} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # View your payment and billing info
 #
 # GET /payment
 # operationId: getPaymentInfo
-export def "payment get-payment-info" [
+export def "payment get-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2444,7 +2455,7 @@ export def "payment get-payment-info" [
 #
 # POST /payment
 # operationId: updatePaymentInfo
-export def "payment update-payment-info" [
+export def "payment update-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2468,11 +2479,11 @@ export def "payment update-payment-info" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/payment")
-  let body = {"city": $city, "country": $country, "phone": $phone, "state": $state, "street": $street, "zip": $zip, "bin": $bin, "save_as_corporate_primary": $save_as_corporate_primary, "share_with_corporate_users": $share_with_corporate_users, "stripeToken": $stripe_token} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"city": $city, "country": $country, "phone": $phone, "state": $state, "street": $street, "zip": $zip, "bin": $bin, "save_as_corporate_primary": $save_as_corporate_primary, "share_with_corporate_users": $share_with_corporate_users, "stripeToken": $stripe_token} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Reset payment code
@@ -2501,7 +2512,7 @@ export def "payment-reset-corporate-payment-code reset" [
 #
 # POST /payment/toggle-corporate-auto-charge
 # operationId: toggleCorporateAutoCharge
-export def "payment-toggle-corporate-auto-charge toggleCorporateAutoCharge" [
+export def "payment-toggle-corporate-auto-charge create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2536,7 +2547,7 @@ export def "payment get-credit-card" [
 ]: nothing -> record<bin: string, id: int, is_default: bool, payment_code: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({card_id: $card_id} | format pattern "/payment/{card_id}"))
+  let full_url = (build-url $base ({card_id: (encode-path-segment $card_id)} | format pattern "/payment/{card_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2559,7 +2570,7 @@ export def "payment-delete delete-credit-card" [
 ]: nothing -> record<status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({card_id: $card_id} | format pattern "/payment/{card_id}/delete"))
+  let full_url = (build-url $base ({card_id: (encode-path-segment $card_id)} | format pattern "/payment/{card_id}/delete"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2582,7 +2593,7 @@ export def "payment-reset-payment-code reset-card" [
 ]: nothing -> record<bin: string, id: int, is_default: bool, payment_code: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({card_id: $card_id} | format pattern "/payment/{card_id}/reset-payment-code"))
+  let full_url = (build-url $base ({card_id: (encode-path-segment $card_id)} | format pattern "/payment/{card_id}/reset-payment-code"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2629,11 +2640,11 @@ export def "profile-picture upload" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/profile-picture")
-  let body = {"profile_picture": $profile_picture} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"profile_picture": $profile_picture} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # View your translation projects
@@ -2660,7 +2671,7 @@ export def "projects list" [
   --with-completed: oneof<nothing, bool> # deprecated. use `status[]` param. (DEPRECATED, default: true)
   --order-by: string@order-by-completer-1 # default: id
   --order-type: string@order-type-completer
-  --with: list # Include detailed information. Possible values 'client', 'vendor'
+  --with: list<string> # Include detailed information. Possible values 'client', 'vendor'
 ]: nothing -> record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, projects: table<average_scores: record, budget_code: string, callback_url: string, can_pam_manage: bool, client: record, cm_id: int, completed_on: string, continuous_project_type: string, created_at: int, custom: record, delivery_at: int, errors: list, id: int, is_api_project: bool, is_certified: bool, is_continuous: bool, is_manual: bool, links: record, pairs: list, pivoted_projects: list, price: record, price_without_discount: record, role: string, should_send_client_survey: bool, source: string, source_language: string, status: string, subjects: list, target_languages: list, tms_name: string, valid_until: int, vendor_word_count: int, word_count: int, word_count_analysis: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2686,22 +2697,22 @@ export def "projects create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --callback-url: string # Optional. If you provide a callback URL, we will send POST callbacks when the status of the current project is changed. Possible status changes are, 'translated', 'proofread', 'completed'.
   --coupon-code: string # Coupon code to redeem
-  --custom: list # Optional. This is a consistent custom data parameter that will be given to you in the response across every request of this project model. Values should be provided like this, custom[my_key] = my_value.
+  --custom: list<string> # Optional. This is a consistent custom data parameter that will be given to you in the response across every request of this project model. Values should be provided like this, custom[my_key] = my_value.
   --documents: string # Optional. You can add as many files as you want in documents[] parameter. Or you add your documents later in separate calls. (format: binary)
   --glossaries: string # Optional. Only one glossary is supported at the moment. (format: binary)
   --source-language: string
   --styleguides: string # Optional. You can add as many files as you want in styleguides[] parameter. Or you add your style guides later in separate calls. (format: binary)
-  --target-languages: list
+  --target-languages: list<string>
 ]: any -> record<average_scores: record, budget_code: string, callback_url: string, can_pam_manage: bool, client: record<billing: record<city: string, country: string, phone: string, state: string, street: string, zip: string, name: string>, birthday: string, can_work_manual_files: bool, city: string, client: record<corporate: record, nps: float, subjects: record>, corporate_id: int, country: string, created_at: int, do_not_contact: bool, email: string, first_name: string, has_pwd: bool, id: int, is_client: bool, is_developer: bool, is_proofreader: bool, is_prospect: bool, is_sales_person: bool, is_vendor: bool, language_pairs: list<record>, last_name: string, last_seen_online_at: int, links: record<self: record, login_as: record, projects: record, responsivity: record, stats: record>, locale: string, mailing: record<city: string, country: string, phone: string, state: string, street: string, zip: string>, name: string, native_language: string, nps: float, phone_number: string, profile_picture_path: string, social_media: record<facebook_url: string, linkedIn_url: string, twitter_url: string>, state: string, status: string, street: string, timezone: string, tms_user_name: string, user_groups: list<record>, vendor: record<can_work_manual_files: bool, email_open_rate: float, is_frozen: bool, is_proofreader: bool, language_pairs: list, native_language: string, pam_tqs: float, paypal_email: string, profile_survey: record, require_1099: bool, tags: list, tms_user_name: string, vendor_type: string>, zip_code: string>, cm_id: int, completed_on: string, continuous_project_type: string, created_at: int, custom: record, delivery_at: int, errors: table<code: string, help: string, http_code: int, message: string>, id: int, is_api_project: bool, is_certified: bool, is_continuous: bool, is_manual: bool, links: record<self: record<href: string>, documents: record<href: string>, glossaries: record<href: string>, payment: record<href: string>, quote_pdf: record<href: string>, styleguides: record<href: string>>, pairs: table<currency: string, is_proofreader: bool, proofreader: record, proofreading_rate: float, source_language: string, target_language: string, translation_rate: float>, pivoted_projects: list<int>, price: record<amount: float, base_amount: float, base_currency: string, currency: string, usd_amount: float>, price_without_discount: record<amount: float, base_amount: float, base_currency: string, currency: string, usd_amount: float>, role: string, should_send_client_survey: bool, source: string, source_language: string, status: string, subjects: list<string>, target_languages: list<string>, tms_name: string, valid_until: int, vendor_word_count: int, word_count: int, word_count_analysis: record<base: float, duplicate: float, exclusion: float, final: float, tm: float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/projects")
-  let body = {"callback_url": $callback_url, "coupon_code": $coupon_code, "custom": $custom, "documents[]": $documents, "glossaries[]": $glossaries, "source_language": $source_language, "styleguides[]": $styleguides, "target_languages[]": $target_languages} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"callback_url": $callback_url, "coupon_code": $coupon_code, "custom": $custom, "documents[]": $documents, "glossaries[]": $glossaries, "source_language": $source_language, "styleguides[]": $styleguides, "target_languages[]": $target_languages} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get Quote Id
@@ -2721,7 +2732,7 @@ export def "projects-from-internal-id get-quote" [
 ]: nothing -> record<internal_id: int, public_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/projects/from-internal-id/{project_id}"))
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/from-internal-id/{project_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2731,7 +2742,7 @@ export def "projects-from-internal-id get-quote" [
 #
 # GET /projects/vendor
 # operationId: getVendorProjects
-export def "projects-vendor list" [
+export def "projects-vendor get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2771,7 +2782,7 @@ export def "projects delete" [
 ]: nothing -> record<status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/projects/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/projects/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2791,12 +2802,12 @@ export def "projects get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --with: list # Include detailed information. Possible values 'client', 'vendor', 'score'
+  --with: list<string> # Include detailed information. Possible values 'client', 'vendor', 'score'
 ]: nothing -> record<average_scores: record, budget_code: string, callback_url: string, can_pam_manage: bool, client: record<billing: record<city: string, country: string, phone: string, state: string, street: string, zip: string, name: string>, birthday: string, can_work_manual_files: bool, city: string, client: record<corporate: record, nps: float, subjects: record>, corporate_id: int, country: string, created_at: int, do_not_contact: bool, email: string, first_name: string, has_pwd: bool, id: int, is_client: bool, is_developer: bool, is_proofreader: bool, is_prospect: bool, is_sales_person: bool, is_vendor: bool, language_pairs: list<record>, last_name: string, last_seen_online_at: int, links: record<self: record, login_as: record, projects: record, responsivity: record, stats: record>, locale: string, mailing: record<city: string, country: string, phone: string, state: string, street: string, zip: string>, name: string, native_language: string, nps: float, phone_number: string, profile_picture_path: string, social_media: record<facebook_url: string, linkedIn_url: string, twitter_url: string>, state: string, status: string, street: string, timezone: string, tms_user_name: string, user_groups: list<record>, vendor: record<can_work_manual_files: bool, email_open_rate: float, is_frozen: bool, is_proofreader: bool, language_pairs: list, native_language: string, pam_tqs: float, paypal_email: string, profile_survey: record, require_1099: bool, tags: list, tms_user_name: string, vendor_type: string>, zip_code: string>, cm_id: int, completed_on: string, continuous_project_type: string, created_at: int, custom: record, delivery_at: int, errors: table<code: string, help: string, http_code: int, message: string>, id: int, is_api_project: bool, is_certified: bool, is_continuous: bool, is_manual: bool, links: record<self: record<href: string>, documents: record<href: string>, glossaries: record<href: string>, payment: record<href: string>, quote_pdf: record<href: string>, styleguides: record<href: string>>, pairs: table<currency: string, is_proofreader: bool, proofreader: record, proofreading_rate: float, source_language: string, target_language: string, translation_rate: float>, pivoted_projects: list<int>, price: record<amount: float, base_amount: float, base_currency: string, currency: string, usd_amount: float>, price_without_discount: record<amount: float, base_amount: float, base_currency: string, currency: string, usd_amount: float>, role: string, should_send_client_survey: bool, source: string, source_language: string, status: string, subjects: list<string>, target_languages: list<string>, tms_name: string, valid_until: int, vendor_word_count: int, word_count: int, word_count_analysis: record<base: float, duplicate: float, exclusion: float, final: float, tm: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "with[]" $with "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/projects/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/projects/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2818,26 +2829,26 @@ export def "projects update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --callback-url: string # Optional. If you provide a callback URL, we will send POST callbacks when the status of the current project is changed. Possible status changes are, 'translated', 'proofread', 'completed'.
   --coupon-code: string # Coupon code to redeem
-  --custom: list # Optional. This is a consistent custom data parameter that will be given to you in the response across every request of this project model. Values should be provided like this, custom[my_key] = my_value. If you previously provided one, it will be replaced.
+  --custom: list<string> # Optional. This is a consistent custom data parameter that will be given to you in the response across every request of this project model. Values should be provided like this, custom[my_key] = my_value. If you previously provided one, it will be replaced.
   --source-language: string
-  --target-languages: list
+  --target-languages: list<string>
 ]: any -> record<average_scores: record, budget_code: string, callback_url: string, can_pam_manage: bool, client: record<billing: record<city: string, country: string, phone: string, state: string, street: string, zip: string, name: string>, birthday: string, can_work_manual_files: bool, city: string, client: record<corporate: record, nps: float, subjects: record>, corporate_id: int, country: string, created_at: int, do_not_contact: bool, email: string, first_name: string, has_pwd: bool, id: int, is_client: bool, is_developer: bool, is_proofreader: bool, is_prospect: bool, is_sales_person: bool, is_vendor: bool, language_pairs: list<record>, last_name: string, last_seen_online_at: int, links: record<self: record, login_as: record, projects: record, responsivity: record, stats: record>, locale: string, mailing: record<city: string, country: string, phone: string, state: string, street: string, zip: string>, name: string, native_language: string, nps: float, phone_number: string, profile_picture_path: string, social_media: record<facebook_url: string, linkedIn_url: string, twitter_url: string>, state: string, status: string, street: string, timezone: string, tms_user_name: string, user_groups: list<record>, vendor: record<can_work_manual_files: bool, email_open_rate: float, is_frozen: bool, is_proofreader: bool, language_pairs: list, native_language: string, pam_tqs: float, paypal_email: string, profile_survey: record, require_1099: bool, tags: list, tms_user_name: string, vendor_type: string>, zip_code: string>, cm_id: int, completed_on: string, continuous_project_type: string, created_at: int, custom: record, delivery_at: int, errors: table<code: string, help: string, http_code: int, message: string>, id: int, is_api_project: bool, is_certified: bool, is_continuous: bool, is_manual: bool, links: record<self: record<href: string>, documents: record<href: string>, glossaries: record<href: string>, payment: record<href: string>, quote_pdf: record<href: string>, styleguides: record<href: string>>, pairs: table<currency: string, is_proofreader: bool, proofreader: record, proofreading_rate: float, source_language: string, target_language: string, translation_rate: float>, pivoted_projects: list<int>, price: record<amount: float, base_amount: float, base_currency: string, currency: string, usd_amount: float>, price_without_discount: record<amount: float, base_amount: float, base_currency: string, currency: string, usd_amount: float>, role: string, should_send_client_survey: bool, source: string, source_language: string, status: string, subjects: list<string>, target_languages: list<string>, tms_name: string, valid_until: int, vendor_word_count: int, word_count: int, word_count_analysis: record<base: float, duplicate: float, exclusion: float, final: float, tm: float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/projects/{id}"))
-  let body = {"callback_url": $callback_url, "coupon_code": $coupon_code, "custom": $custom, "source_language": $source_language, "target_languages[]": $target_languages} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/projects/{id}"))
+  let req_body = {"callback_url": $callback_url, "coupon_code": $coupon_code, "custom": $custom, "source_language": $source_language, "target_languages[]": $target_languages} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Assign a CM to the project
 #
 # POST /projects/{id}/assign-cm
 # operationId: assignCM
-export def "projects-assign-cm assignCM" [
+export def "projects-assign-cm assign" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2852,12 +2863,12 @@ export def "projects-assign-cm assignCM" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/projects/{id}/assign-cm"))
-  let body = {"user_id": $user_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/projects/{id}/assign-cm"))
+  let req_body = {"user_id": $user_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Trigger a call to your callback URL related to this project.
@@ -2878,7 +2889,7 @@ export def "projects-callback trigger" [
 ]: nothing -> record<data: record<average_scores: record, budget_code: string, callback_url: string, can_pam_manage: bool, client: record<billing: record, birthday: string, can_work_manual_files: bool, city: string, client: record, corporate_id: int, country: string, created_at: int, do_not_contact: bool, email: string, first_name: string, has_pwd: bool, id: int, is_client: bool, is_developer: bool, is_proofreader: bool, is_prospect: bool, is_sales_person: bool, is_vendor: bool, language_pairs: list, last_name: string, last_seen_online_at: int, links: record, locale: string, mailing: record, name: string, native_language: string, nps: float, phone_number: string, profile_picture_path: string, social_media: record, state: string, status: string, street: string, timezone: string, tms_user_name: string, user_groups: list, vendor: record, zip_code: string>, cm_id: int, completed_on: string, continuous_project_type: string, created_at: int, custom: record, delivery_at: int, errors: list<record>, id: int, is_api_project: bool, is_certified: bool, is_continuous: bool, is_manual: bool, links: record<self: record, documents: record, glossaries: record, payment: record, quote_pdf: record, styleguides: record>, pairs: list<record>, pivoted_projects: list<int>, price: record<amount: float, base_amount: float, base_currency: string, currency: string, usd_amount: float>, price_without_discount: record<amount: float, base_amount: float, base_currency: string, currency: string, usd_amount: float>, role: string, should_send_client_survey: bool, source: string, source_language: string, status: string, subjects: list<string>, target_languages: list<string>, tms_name: string, valid_until: int, vendor_word_count: int, word_count: int, word_count_analysis: record<base: float, duplicate: float, exclusion: float, final: float, tm: float>>, result: string, type: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, action_type: $action_type} | format pattern "/projects/{id}/callback/{action_type}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), action_type: (encode-path-segment $action_type)} | format pattern "/projects/{id}/callback/{action_type}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2903,19 +2914,19 @@ export def "projects-cancel cancel" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/projects/{id}/cancel"))
-  let body = {"reason": $reason} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/projects/{id}/cancel"))
+  let req_body = {"reason": $reason} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deliver project
 #
 # POST /projects/{id}/deliver
 # operationId: deliverProject
-export def "projects-deliver deliverProject" [
+export def "projects-deliver create" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2928,7 +2939,7 @@ export def "projects-deliver deliverProject" [
 ]: nothing -> record<status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/projects/{id}/deliver"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/projects/{id}/deliver"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2951,7 +2962,7 @@ export def "projects-download list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/projects/{id}/download"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/projects/{id}/download"))
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2975,7 +2986,7 @@ export def "projects-download download" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, language: $language} | format pattern "/projects/{id}/download/{language}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), language: (encode-path-segment $language)} | format pattern "/projects/{id}/download/{language}"))
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2998,7 +3009,7 @@ export def "projects-email-quote send" [
 ]: nothing -> record<status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/projects/{id}/email-quote"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/projects/{id}/email-quote"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3021,7 +3032,7 @@ export def "projects-invoice get" [
 ]: nothing -> record<amount: float, base_amount: float, base_currency: string, billing: record<city: string, country: string, phone: string, state: string, street: string, zip: string, name: string>, currency: string, id: int, invoice_no: int, invoiced_at: string, links: record<self: record<href: string>, corporate: record<href: string>, html: record<href: string>, json: record<href: string>, pdf: record<href: string>, project: record<href: string>, view: record<href: string>>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/projects/{id}/invoice"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/projects/{id}/invoice"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3031,7 +3042,7 @@ export def "projects-invoice get" [
 #
 # GET /projects/{id}/invoice.html
 # operationId: downloadHtmlInvoice
-export def "projects-invoicehtml download-html-invoice" [
+export def "projects-invoice-html download" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3044,7 +3055,7 @@ export def "projects-invoicehtml download-html-invoice" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/projects/{id}/invoice.html"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/projects/{id}/invoice.html"))
   let accept_val = "text/html"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3054,7 +3065,7 @@ export def "projects-invoicehtml download-html-invoice" [
 #
 # GET /projects/{id}/invoice.pdf
 # operationId: downloadPdfInvoice
-export def "projects-invoicepdf download-pdf-invoice" [
+export def "projects-invoice-pdf download" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3067,7 +3078,7 @@ export def "projects-invoicepdf download-pdf-invoice" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/projects/{id}/invoice.pdf"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/projects/{id}/invoice.pdf"))
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3077,7 +3088,7 @@ export def "projects-invoicepdf download-pdf-invoice" [
 #
 # POST /projects/{id}/launch
 # operationId: launchProject
-export def "projects-launch launchProject" [
+export def "projects-launch create" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3097,19 +3108,19 @@ export def "projects-launch launchProject" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/projects/{id}/launch"))
-  let body = {"bin": $bin, "budget_code": $budget_code, "card_id": $card_id, "payment_code": $payment_code, "payment_method": $payment_method, "stripe_token": $stripe_token} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/projects/{id}/launch"))
+  let req_body = {"bin": $bin, "budget_code": $budget_code, "card_id": $card_id, "payment_code": $payment_code, "payment_method": $payment_method, "stripe_token": $stripe_token} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Package your translated project
 #
 # POST /projects/{id}/package
 # operationId: package
-export def "projects-package package" [
+export def "projects-package create-by-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3124,7 +3135,7 @@ export def "projects-package package" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "async" $async "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/projects/{id}/package") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/projects/{id}/package") $qp)
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3134,7 +3145,7 @@ export def "projects-package package" [
 #
 # GET /projects/{id}/package/check
 # operationId: trackPackage
-export def "projects-package-check trackPackage" [
+export def "projects-package-check get-track" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3149,7 +3160,7 @@ export def "projects-package-check trackPackage" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/projects/{id}/package/check") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/projects/{id}/package/check") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3159,7 +3170,7 @@ export def "projects-package-check trackPackage" [
 #
 # POST /projects/{id}/package/{language}
 # operationId: packageLanguage
-export def "projects-package packageLanguage" [
+export def "projects-package create-by-id-language" [
   id: int
   language: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3176,7 +3187,7 @@ export def "projects-package packageLanguage" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "async" $async "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id, language: $language} | format pattern "/projects/{id}/package/{language}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id), language: (encode-path-segment $language)} | format pattern "/projects/{id}/package/{language}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3201,7 +3212,7 @@ export def "projects-progress get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/projects/{id}/progress") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/projects/{id}/progress") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3211,7 +3222,7 @@ export def "projects-progress get" [
 #
 # POST /projects/{id}/recreate
 # operationId: recreateProject
-export def "projects-recreate recreateProject" [
+export def "projects-recreate create" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3224,7 +3235,7 @@ export def "projects-recreate recreateProject" [
 ]: nothing -> record<status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/projects/{id}/recreate"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/projects/{id}/recreate"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3250,12 +3261,12 @@ export def "projects-reports submit" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/projects/{id}/reports"))
-  let body = {"activity_type": $activity_type, "message": $message} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/projects/{id}/reports"))
+  let req_body = {"activity_type": $activity_type, "message": $message} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get sales activities for a project
@@ -3278,7 +3289,7 @@ export def "projects-sales-activities get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "excludeOwner" $exclude_owner "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/projects/{id}/sales/activities") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/projects/{id}/sales/activities") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3288,7 +3299,7 @@ export def "projects-sales-activities get" [
 #
 # POST /projects/{id}/sales/activities
 # operationId: insertSalesActivity
-export def "projects-sales-activities create-sales-activity" [
+export def "projects-sales-activities create-activity" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3305,12 +3316,12 @@ export def "projects-sales-activities create-sales-activity" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/projects/{id}/sales/activities"))
-  let body = {"subject": $subject, "timestamp": $timestamp, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/projects/{id}/sales/activities"))
+  let req_body = {"subject": $subject, "timestamp": $timestamp, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete project webhooks
@@ -3330,7 +3341,7 @@ export def "projects-webhooks delete" [
 ]: nothing -> record<status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/projects/{id}/webhooks"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/projects/{id}/webhooks"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3353,7 +3364,7 @@ export def "projects-webhooks get" [
 ]: nothing -> record<average_scores: record, budget_code: string, callback_url: string, can_pam_manage: bool, client: record<billing: record<city: string, country: string, phone: string, state: string, street: string, zip: string, name: string>, birthday: string, can_work_manual_files: bool, city: string, client: record<corporate: record, nps: float, subjects: record>, corporate_id: int, country: string, created_at: int, do_not_contact: bool, email: string, first_name: string, has_pwd: bool, id: int, is_client: bool, is_developer: bool, is_proofreader: bool, is_prospect: bool, is_sales_person: bool, is_vendor: bool, language_pairs: list<record>, last_name: string, last_seen_online_at: int, links: record<self: record, login_as: record, projects: record, responsivity: record, stats: record>, locale: string, mailing: record<city: string, country: string, phone: string, state: string, street: string, zip: string>, name: string, native_language: string, nps: float, phone_number: string, profile_picture_path: string, social_media: record<facebook_url: string, linkedIn_url: string, twitter_url: string>, state: string, status: string, street: string, timezone: string, tms_user_name: string, user_groups: list<record>, vendor: record<can_work_manual_files: bool, email_open_rate: float, is_frozen: bool, is_proofreader: bool, language_pairs: list, native_language: string, pam_tqs: float, paypal_email: string, profile_survey: record, require_1099: bool, tags: list, tms_user_name: string, vendor_type: string>, zip_code: string>, cm_id: int, completed_on: string, continuous_project_type: string, created_at: int, custom: record, delivery_at: int, errors: table<code: string, help: string, http_code: int, message: string>, id: int, is_api_project: bool, is_certified: bool, is_continuous: bool, is_manual: bool, links: record<self: record<href: string>, documents: record<href: string>, glossaries: record<href: string>, payment: record<href: string>, quote_pdf: record<href: string>, styleguides: record<href: string>>, pairs: table<currency: string, is_proofreader: bool, proofreader: record, proofreading_rate: float, source_language: string, target_language: string, translation_rate: float>, pivoted_projects: list<int>, price: record<amount: float, base_amount: float, base_currency: string, currency: string, usd_amount: float>, price_without_discount: record<amount: float, base_amount: float, base_currency: string, currency: string, usd_amount: float>, role: string, should_send_client_survey: bool, source: string, source_language: string, status: string, subjects: list<string>, target_languages: list<string>, tms_name: string, valid_until: int, vendor_word_count: int, word_count: int, word_count_analysis: record<base: float, duplicate: float, exclusion: float, final: float, tm: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/projects/{id}/webhooks"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/projects/{id}/webhooks"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3378,12 +3389,12 @@ export def "projects-webhooks create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/projects/{id}/webhooks"))
-  let body = {"callback_url": $callback_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/projects/{id}/webhooks"))
+  let req_body = {"callback_url": $callback_url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update project webhook
@@ -3405,12 +3416,12 @@ export def "projects-webhooks update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/projects/{id}/webhooks"))
-  let body = {"callback_url": $callback_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/projects/{id}/webhooks"))
+  let req_body = {"callback_url": $callback_url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Monitor project activities
@@ -3433,7 +3444,7 @@ export def "projects-activities get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/projects/{project_id}/activities") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/activities") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3457,7 +3468,7 @@ export def "projects-activities get-activity" [
 ]: nothing -> record<activity_at: int, id: int, links: record<self: record<href: string>, comments: record<href: string>, project: record<href: string>>, source_text: string, target_text: string, translator: int, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({project_id: $project_id, activity_id: $activity_id} | format pattern "/projects/{project_id}/activities/{activity_id}"))
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), activity_id: (encode-path-segment $activity_id)} | format pattern "/projects/{project_id}/activities/{activity_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3486,12 +3497,12 @@ export def "projects-activities submit-comment" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({project_id: $project_id, activity_id: $activity_id} | format pattern "/projects/{project_id}/activities/{activity_id}"))
-  let body = {"comment": $comment, "commented_at": $commented_at, "id": $id, "links": $links} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), activity_id: (encode-path-segment $activity_id)} | format pattern "/projects/{project_id}/activities/{activity_id}"))
+  let req_body = {"comment": $comment, "commented_at": $commented_at, "id": $id, "links": $links} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # View activity comments
@@ -3512,7 +3523,7 @@ export def "projects-activities-comments get-activity" [
 ]: nothing -> record<activities: table<comment: string, commented_at: int, id: int, links: record>, meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({project_id: $project_id, activity_id: $activity_id} | format pattern "/projects/{project_id}/activities/{activity_id}/comments"))
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), activity_id: (encode-path-segment $activity_id)} | format pattern "/projects/{project_id}/activities/{activity_id}/comments"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3538,7 +3549,7 @@ export def "projects-comments get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/projects/{project_id}/comments") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/comments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3558,12 +3569,12 @@ export def "projects-documents list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --with: list # Attach further information. Possible values 'preview' to fetch temporary preview URLs. This is NOT recommended to be used with list calls. Only use with[]=preview for single document/style guide calls.
+  --with: list<string> # Attach further information. Possible values 'preview' to fetch temporary preview URLs. This is NOT recommended to be used with list calls. Only use with[]=preview for single document/style guide calls.
 ]: nothing -> record<documents: table<file_type: string, has_custom_package: bool, id: int, links: record, manual_files: list, name: string, project_id: int, review_in_manual_editor: bool, scheme: record, search_score: float, source_language: string, subject: string, target_languages: list, uploaded_at: int, word_count: int>, meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "with[]" $with "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/projects/{project_id}/documents") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/documents") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3584,19 +3595,19 @@ export def "projects-documents create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --documents: list # You can add as many files as you want in documents[] parameter.
+  --documents: list<string> # You can add as many files as you want in documents[] parameter.
   --schemes: string # JSON string. If your documents have a scheme, as in cases of CSV files, use the same array index keys for `schemes` parameter to specify their schemes. See `Document Schemes` title in the API documentation.
   --source-links: list # When provided, we will download the files from these URLs, in addition to files provded in `documents` parameter and then save as source documents — item shape: {name?: string, size?: int, source?: "dropbox"|"googledrive"|"icloud", url?: string}
 ]: any -> record<documents: table<file_type: string, has_custom_package: bool, id: int, links: record, manual_files: list, name: string, project_id: int, review_in_manual_editor: bool, scheme: record, search_score: float, source_language: string, subject: string, target_languages: list, uploaded_at: int, word_count: int>, meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/projects/{project_id}/documents"))
-  let body = {"documents[]": $documents, "schemes[]": $schemes, "source-links[]": $source_links} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/documents"))
+  let req_body = {"documents[]": $documents, "schemes[]": $schemes, "source-links[]": $source_links} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete the document
@@ -3617,7 +3628,7 @@ export def "projects-documents delete" [
 ]: nothing -> record<status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({project_id: $project_id, document_id: $document_id} | format pattern "/projects/{project_id}/documents/{document_id}"))
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), document_id: (encode-path-segment $document_id)} | format pattern "/projects/{project_id}/documents/{document_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3638,12 +3649,12 @@ export def "projects-documents get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --with: list # Attach further information. Possible values 'preview' to fetch temporary preview URLs. This is NOT recommended to be used with list calls. Only use with[]=preview for single document/style guide calls.
+  --with: list<string> # Attach further information. Possible values 'preview' to fetch temporary preview URLs. This is NOT recommended to be used with list calls. Only use with[]=preview for single document/style guide calls.
 ]: nothing -> record<file_type: string, has_custom_package: bool, id: int, links: record<self: record<href: string>, admins: record, download: record<href: string>, editors: record, preview_box: record<href: string>, preview_pdf: record<href: string>, preview_pdf_viewer: record<href: string>, progress: record<href: string>, project: record<href: string>, strings: record<href: string>, thumbnail: record<href: string>>, manual_files: table<driveFileId: int, isProofread: bool, isTranslated: bool, language: string, proofreadingFileId: int, translationFileId: int>, name: string, project_id: int, review_in_manual_editor: bool, scheme: record, search_score: float, source_language: string, subject: string, target_languages: list<string>, uploaded_at: int, word_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "with[]" $with "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id, document_id: $document_id} | format pattern "/projects/{project_id}/documents/{document_id}") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), document_id: (encode-path-segment $document_id)} | format pattern "/projects/{project_id}/documents/{document_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3672,12 +3683,12 @@ export def "projects-documents update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({project_id: $project_id, document_id: $document_id} | format pattern "/projects/{project_id}/documents/{document_id}"))
-  let body = {"documents": $documents, "schemes": $schemes, "source-link": $source_link} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), document_id: (encode-path-segment $document_id)} | format pattern "/projects/{project_id}/documents/{document_id}"))
+  let req_body = {"documents": $documents, "schemes": $schemes, "source-link": $source_link} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Download a project source document
@@ -3698,7 +3709,7 @@ export def "projects-documents-download download" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({project_id: $project_id, document_id: $document_id} | format pattern "/projects/{project_id}/documents/{document_id}/download"))
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), document_id: (encode-path-segment $document_id)} | format pattern "/projects/{project_id}/documents/{document_id}/download"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3708,7 +3719,7 @@ export def "projects-documents-download download" [
 #
 # GET /projects/{projectId}/documents/{documentId}/translations
 # operationId: getDocumentTranslations
-export def "projects-documents-translations get" [
+export def "projects-documents-translations list" [
   project_id: int
   document_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3722,7 +3733,7 @@ export def "projects-documents-translations get" [
 ]: nothing -> record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, translations: table<content: string, file_id: int, id: string, translations: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({project_id: $project_id, document_id: $document_id} | format pattern "/projects/{project_id}/documents/{document_id}/translations"))
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), document_id: (encode-path-segment $document_id)} | format pattern "/projects/{project_id}/documents/{document_id}/translations"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3732,7 +3743,7 @@ export def "projects-documents-translations get" [
 #
 # GET /projects/{projectId}/documents/{documentId}/translations/download/{language}
 # operationId: downloadTranslatedDocumentForLanguage
-export def "projects-documents-translations-download download-translated-document-for" [
+export def "projects-documents-translations-download download-translated" [
   project_id: int
   document_id: int
   language: string
@@ -3749,7 +3760,7 @@ export def "projects-documents-translations-download download-translated-documen
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "certified" $certified "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id, document_id: $document_id, language: $language} | format pattern "/projects/{project_id}/documents/{document_id}/translations/download/{language}") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), document_id: (encode-path-segment $document_id), language: (encode-path-segment $language)} | format pattern "/projects/{project_id}/documents/{document_id}/translations/download/{language}") $qp)
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3759,7 +3770,7 @@ export def "projects-documents-translations-download download-translated-documen
 #
 # GET /projects/{projectId}/documents/{documentId}/translations/{language}
 # operationId: getDocumentTranslationsForLanguage
-export def "projects-documents-translations get-document-translations-for" [
+export def "projects-documents-translations get" [
   project_id: int
   document_id: int
   language: string
@@ -3774,7 +3785,7 @@ export def "projects-documents-translations get-document-translations-for" [
 ]: nothing -> record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, translations: table<content: string, file_id: int, id: string, translations: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({project_id: $project_id, document_id: $document_id, language: $language} | format pattern "/projects/{project_id}/documents/{document_id}/translations/{language}"))
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), document_id: (encode-path-segment $document_id), language: (encode-path-segment $language)} | format pattern "/projects/{project_id}/documents/{document_id}/translations/{language}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3797,7 +3808,7 @@ export def "projects-glossaries get" [
 ]: nothing -> record<glossaries: table<id: int, links: record, name: string, uploaded_at: int>, meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/projects/{project_id}/glossaries"))
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/glossaries"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3822,12 +3833,12 @@ export def "projects-glossaries create-glossary" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/projects/{project_id}/glossaries"))
-  let body = {"glossaries": $glossaries} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/glossaries"))
+  let req_body = {"glossaries": $glossaries} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a glossary
@@ -3848,7 +3859,7 @@ export def "projects-glossaries delete-glossary" [
 ]: nothing -> record<status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({project_id: $project_id, glossary_id: $glossary_id} | format pattern "/projects/{project_id}/glossaries/{glossary_id}"))
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), glossary_id: (encode-path-segment $glossary_id)} | format pattern "/projects/{project_id}/glossaries/{glossary_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3872,7 +3883,7 @@ export def "projects-glossaries get-glossary" [
 ]: nothing -> record<id: int, links: record<self: record<href: string>, admins: record, download: record<href: string>, editors: record, preview_box: record<href: string>, preview_pdf: record<href: string>, preview_pdf_viewer: record<href: string>, progress: record<href: string>, project: record<href: string>, strings: record<href: string>, thumbnail: record<href: string>>, name: string, uploaded_at: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({project_id: $project_id, glossary_id: $glossary_id} | format pattern "/projects/{project_id}/glossaries/{glossary_id}"))
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), glossary_id: (encode-path-segment $glossary_id)} | format pattern "/projects/{project_id}/glossaries/{glossary_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3898,12 +3909,12 @@ export def "projects-glossaries update-glossary" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({project_id: $project_id, glossary_id: $glossary_id} | format pattern "/projects/{project_id}/glossaries/{glossary_id}"))
-  let body = {"glossaries": $glossaries} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), glossary_id: (encode-path-segment $glossary_id)} | format pattern "/projects/{project_id}/glossaries/{glossary_id}"))
+  let req_body = {"glossaries": $glossaries} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Download a glossary
@@ -3924,7 +3935,7 @@ export def "projects-glossaries-download download-glossary" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({project_id: $project_id, glossary_id: $glossary_id} | format pattern "/projects/{project_id}/glossaries/{glossary_id}/download"))
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), glossary_id: (encode-path-segment $glossary_id)} | format pattern "/projects/{project_id}/glossaries/{glossary_id}/download"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3934,7 +3945,7 @@ export def "projects-glossaries-download download-glossary" [
 #
 # GET /projects/{projectId}/strings
 # operationId: getProjectStrings
-export def "projects-strings get" [
+export def "projects-strings list" [
   project_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3947,7 +3958,7 @@ export def "projects-strings get" [
 ]: nothing -> record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, translations: table<content: string, file_id: int, id: string, translations: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/projects/{project_id}/strings"))
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/strings"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3957,7 +3968,7 @@ export def "projects-strings get" [
 #
 # POST /projects/{projectId}/strings/package
 # operationId: packageProjectTranslationMemory
-export def "projects-strings-package packageProjectTranslationMemory" [
+export def "projects-strings-package create-translation-memory" [
   project_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3974,7 +3985,7 @@ export def "projects-strings-package packageProjectTranslationMemory" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "async" $async "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/projects/{project_id}/strings/package") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/strings/package") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3984,7 +3995,7 @@ export def "projects-strings-package packageProjectTranslationMemory" [
 #
 # GET /projects/{projectId}/strings/package/status
 # operationId: packageProjectTranslationMemoryStatus
-export def "projects-strings-package-status packageProjectTranslationMemoryStatus" [
+export def "projects-strings-package-status get-translation-memory" [
   project_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3999,7 +4010,7 @@ export def "projects-strings-package-status packageProjectTranslationMemoryStatu
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "async_request_key" $async_request_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/projects/{project_id}/strings/package/status") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/strings/package/status") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4009,7 +4020,7 @@ export def "projects-strings-package-status packageProjectTranslationMemoryStatu
 #
 # POST /projects/{projectId}/strings/{languageCode}/package
 # operationId: packageProjectTranslationMemoryForLanguage
-export def "projects-strings-package packageProjectTranslationMemoryForLanguage" [
+export def "projects-strings-package create-translation-memory-for-language" [
   project_id: int
   language_code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4027,7 +4038,7 @@ export def "projects-strings-package packageProjectTranslationMemoryForLanguage"
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "async" $async "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id, language_code: $language_code} | format pattern "/projects/{project_id}/strings/{language_code}/package") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), language_code: (encode-path-segment $language_code)} | format pattern "/projects/{project_id}/strings/{language_code}/package") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4037,7 +4048,7 @@ export def "projects-strings-package packageProjectTranslationMemoryForLanguage"
 #
 # GET /projects/{projectId}/strings/{languageCode}/package/status
 # operationId: packageProjectTranslationMemoryForLanguageStatus
-export def "projects-strings-package-status packageProjectTranslationMemoryForLanguageStatus" [
+export def "projects-strings-package-status get-translation-memory-for-language" [
   project_id: int
   language_code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4053,7 +4064,7 @@ export def "projects-strings-package-status packageProjectTranslationMemoryForLa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "async_request_key" $async_request_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id, language_code: $language_code} | format pattern "/projects/{project_id}/strings/{language_code}/package/status") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), language_code: (encode-path-segment $language_code)} | format pattern "/projects/{project_id}/strings/{language_code}/package/status") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4063,7 +4074,7 @@ export def "projects-strings-package-status packageProjectTranslationMemoryForLa
 #
 # GET /projects/{projectId}/strings/{language}
 # operationId: getProjectStringsForLanguage
-export def "projects-strings get-project-strings-for" [
+export def "projects-strings get" [
   project_id: int
   language: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4077,7 +4088,7 @@ export def "projects-strings get-project-strings-for" [
 ]: nothing -> record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, translations: table<content: string, file_id: int, id: string, translations: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({project_id: $project_id, language: $language} | format pattern "/projects/{project_id}/strings/{language}"))
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), language: (encode-path-segment $language)} | format pattern "/projects/{project_id}/strings/{language}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4087,7 +4098,7 @@ export def "projects-strings get-project-strings-for" [
 #
 # GET /projects/{projectId}/styleguides
 # operationId: getStyleGuides
-export def "projects-styleguides list" [
+export def "projects-styleguides get-style-guides" [
   project_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4097,12 +4108,12 @@ export def "projects-styleguides list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --with: list # Attach further information. Possible values 'preview' to fetch temporary preview URLs. This is NOT recommended to be used with list calls. Only use with[]=preview for single document/style guide calls.
+  --with: list<string> # Attach further information. Possible values 'preview' to fetch temporary preview URLs. This is NOT recommended to be used with list calls. Only use with[]=preview for single document/style guide calls.
 ]: nothing -> record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, styleguides: table<id: int, links: record, name: string, uploaded_at: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "with[]" $with "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/projects/{project_id}/styleguides") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/styleguides") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4112,7 +4123,7 @@ export def "projects-styleguides list" [
 #
 # POST /projects/{projectId}/styleguides
 # operationId: createStyleGuide
-export def "projects-styleguides create" [
+export def "projects-styleguides create-style-guide" [
   project_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4127,19 +4138,19 @@ export def "projects-styleguides create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/projects/{project_id}/styleguides"))
-  let body = {"styleguides": $styleguides} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/styleguides"))
+  let req_body = {"styleguides": $styleguides} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a style guide
 #
 # DELETE /projects/{projectId}/styleguides/{styleGuideId}
 # operationId: deleteStyleGuide
-export def "projects-styleguides delete" [
+export def "projects-styleguides delete-style-guide" [
   project_id: int
   style_guide_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4153,7 +4164,7 @@ export def "projects-styleguides delete" [
 ]: nothing -> record<status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({project_id: $project_id, style_guide_id: $style_guide_id} | format pattern "/projects/{project_id}/styleguides/{style_guide_id}"))
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), style_guide_id: (encode-path-segment $style_guide_id)} | format pattern "/projects/{project_id}/styleguides/{style_guide_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4163,7 +4174,7 @@ export def "projects-styleguides delete" [
 #
 # GET /projects/{projectId}/styleguides/{styleGuideId}
 # operationId: getStyleGuide
-export def "projects-styleguides get" [
+export def "projects-styleguides get-style-guide" [
   project_id: int
   style_guide_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4174,12 +4185,12 @@ export def "projects-styleguides get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --with: list # Attach further information. Possible values 'preview' to fetch temporary preview URLs. This is NOT recommended to be used with list calls. Only use with[]=preview for single document/style guide calls.
+  --with: list<string> # Attach further information. Possible values 'preview' to fetch temporary preview URLs. This is NOT recommended to be used with list calls. Only use with[]=preview for single document/style guide calls.
 ]: nothing -> record<id: int, links: record<self: record<href: string>, admins: record, download: record<href: string>, editors: record, preview_box: record<href: string>, preview_pdf: record<href: string>, preview_pdf_viewer: record<href: string>, progress: record<href: string>, project: record<href: string>, strings: record<href: string>, thumbnail: record<href: string>>, name: string, uploaded_at: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "with[]" $with "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id, style_guide_id: $style_guide_id} | format pattern "/projects/{project_id}/styleguides/{style_guide_id}") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), style_guide_id: (encode-path-segment $style_guide_id)} | format pattern "/projects/{project_id}/styleguides/{style_guide_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4189,7 +4200,7 @@ export def "projects-styleguides get" [
 #
 # PUT /projects/{projectId}/styleguides/{styleGuideId}
 # operationId: updateStyleGuide
-export def "projects-styleguides update" [
+export def "projects-styleguides update-style-guide" [
   project_id: int
   style_guide_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4205,19 +4216,19 @@ export def "projects-styleguides update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({project_id: $project_id, style_guide_id: $style_guide_id} | format pattern "/projects/{project_id}/styleguides/{style_guide_id}"))
-  let body = {"styleguides": $styleguides} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), style_guide_id: (encode-path-segment $style_guide_id)} | format pattern "/projects/{project_id}/styleguides/{style_guide_id}"))
+  let req_body = {"styleguides": $styleguides} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Download a style guide
 #
 # GET /projects/{projectId}/styleguides/{styleGuideId}/download
 # operationId: downloadStyleGuide
-export def "projects-styleguides-download download" [
+export def "projects-styleguides-download download-style-guide" [
   project_id: int
   style_guide_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4231,7 +4242,7 @@ export def "projects-styleguides-download download" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({project_id: $project_id, style_guide_id: $style_guide_id} | format pattern "/projects/{project_id}/styleguides/{style_guide_id}/download"))
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), style_guide_id: (encode-path-segment $style_guide_id)} | format pattern "/projects/{project_id}/styleguides/{style_guide_id}/download"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4243,7 +4254,7 @@ export def "projects-styleguides-download download" [
 # DEPRECATED
 # operationId: getProjectTranslations
 @deprecated
-export def "projects-translations get" [
+export def "projects-translations list" [
   project_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4256,7 +4267,7 @@ export def "projects-translations get" [
 ]: nothing -> record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, translations: table<content: string, file_id: int, id: string, translations: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/projects/{project_id}/translations"))
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/translations"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4268,7 +4279,7 @@ export def "projects-translations get" [
 # DEPRECATED
 # operationId: getProjectTranslationsForLanguage
 @deprecated
-export def "projects-translations get-project-translations-for" [
+export def "projects-translations get" [
   project_id: int
   language: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4282,7 +4293,7 @@ export def "projects-translations get-project-translations-for" [
 ]: nothing -> record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, translations: table<content: string, file_id: int, id: string, translations: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({project_id: $project_id, language: $language} | format pattern "/projects/{project_id}/translations/{language}"))
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), language: (encode-path-segment $language)} | format pattern "/projects/{project_id}/translations/{language}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4305,7 +4316,7 @@ export def "projects-vendors get" [
 ]: nothing -> record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, users: table<billing: record, birthday: string, can_work_manual_files: bool, city: string, client: record, corporate_id: int, country: string, created_at: int, do_not_contact: bool, email: string, first_name: string, has_pwd: bool, id: int, is_client: bool, is_developer: bool, is_proofreader: bool, is_prospect: bool, is_sales_person: bool, is_vendor: bool, language_pairs: list, last_name: string, last_seen_online_at: int, links: record, locale: string, mailing: record, name: string, native_language: string, nps: float, phone_number: string, profile_picture_path: string, social_media: record, state: string, status: string, street: string, timezone: string, tms_user_name: string, user_groups: list, vendor: record, zip_code: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/projects/{project_id}/vendors"))
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/vendors"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4315,7 +4326,7 @@ export def "projects-vendors get" [
 #
 # POST /reports/filter
 # operationId: getFilterContents
-export def "reports-filter get-filter-contents" [
+export def "reports-filter get-contents" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4331,11 +4342,11 @@ export def "reports-filter get-filter-contents" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/reports/filter")
-  let body = {"date_from": $date_from, "date_to": $date_to} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"date_from": $date_from, "date_to": $date_to} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Language pairs report
@@ -4354,19 +4365,19 @@ export def "reports-language-pairs get" [
   --budget-code: string # budget code filter. valid for corporate accounts only.
   --date-from: string # the date-time notation as defined by RFC 3339, section 5.6, for example, 2017-07-21T17:32:28Z (format: date-time)
   --date-to: string # the date-time notation as defined by RFC 3339, section 5.6, for example, 2017-07-21T17:32:28Z (format: date-time)
-  --source-languages: list # List of source language codes.
-  --target-languages: list # List of target language codes.
-  --users: list # List of corporate user IDs. Valid for corporate accounts only.
+  --source-languages: list<string> # List of source language codes.
+  --target-languages: list<string> # List of target language codes.
+  --users: list<int> # List of corporate user IDs. Valid for corporate accounts only.
 ]: any -> record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, report: table<language_pair: record, spending: float, word_count: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/reports/language-pairs")
-  let body = {"budget_code": $budget_code, "date_from": $date_from, "date_to": $date_to, "source_languages": $source_languages, "target_languages": $target_languages, "users": $users} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"budget_code": $budget_code, "date_from": $date_from, "date_to": $date_to, "source_languages": $source_languages, "target_languages": $target_languages, "users": $users} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Projects report
@@ -4385,26 +4396,26 @@ export def "reports-projects get" [
   --budget-code: string # budget code filter. valid for corporate accounts only.
   --date-from: string # the date-time notation as defined by RFC 3339, section 5.6, for example, 2017-07-21T17:32:28Z (format: date-time)
   --date-to: string # the date-time notation as defined by RFC 3339, section 5.6, for example, 2017-07-21T17:32:28Z (format: date-time)
-  --source-languages: list # List of source language codes.
-  --target-languages: list # List of target language codes.
-  --users: list # List of corporate user IDs. Valid for corporate accounts only.
+  --source-languages: list<string> # List of source language codes.
+  --target-languages: list<string> # List of target language codes.
+  --users: list<int> # List of corporate user IDs. Valid for corporate accounts only.
 ]: any -> record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, projects: table<average_scores: record, budget_code: string, callback_url: string, can_pam_manage: bool, client: record, cm_id: int, completed_on: string, continuous_project_type: string, created_at: int, custom: record, delivery_at: int, errors: list, id: int, is_api_project: bool, is_certified: bool, is_continuous: bool, is_manual: bool, links: record, pairs: list, pivoted_projects: list, price: record, price_without_discount: record, role: string, should_send_client_survey: bool, source: string, source_language: string, status: string, subjects: list, target_languages: list, tms_name: string, valid_until: int, vendor_word_count: int, word_count: int, word_count_analysis: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/reports/projects")
-  let body = {"budget_code": $budget_code, "date_from": $date_from, "date_to": $date_to, "source_languages": $source_languages, "target_languages": $target_languages, "users": $users} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"budget_code": $budget_code, "date_from": $date_from, "date_to": $date_to, "source_languages": $source_languages, "target_languages": $target_languages, "users": $users} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Generate a QA report for given filter
 #
 # POST /reports/qa
 # operationId: generateQAReport
-export def "reports-qa generateQAReport" [
+export def "reports-qa generate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4413,28 +4424,28 @@ export def "reports-qa generateQAReport" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --budget-codes: list
-  --categories: list
-  --clients: list
+  --budget-codes: list<string>
+  --categories: list<string>
+  --clients: list<float>
   --date-from: string # the date-time notation as defined by RFC 3339, section 5.6, for example, 2017-07-21T17:32:28Z (format: date-time)
   --date-to: string # the date-time notation as defined by RFC 3339, section 5.6, for example, 2017-07-21T17:32:28Z (format: date-time)
-  --documents: list
-  --projects: list
-  --severities: list
-  --source-languages: list
-  --subjects: list
-  --target-languages: list
-  --vendors: list
+  --documents: list<float>
+  --projects: list<float>
+  --severities: list<string>
+  --source-languages: list<string>
+  --subjects: list<string>
+  --target-languages: list<string>
+  --vendors: list<float>
 ]: any -> record<report: table<category: string, comment: string, docId: string, editorLink: string, end: int, inSource: bool, isCurrent: bool, module: string, projectId: record, severity: string, source: string, sourceLanguage: record, start: int, state: string, targetLanguage: record, translation: string, uniqueKey: string, vendor: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/reports/qa")
-  let body = {"budget_codes": $budget_codes, "categories": $categories, "clients": $clients, "date_from": $date_from, "date_to": $date_to, "documents": $documents, "projects": $projects, "severities": $severities, "source_languages": $source_languages, "subjects": $subjects, "target_languages": $target_languages, "vendors": $vendors} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"budget_codes": $budget_codes, "categories": $categories, "clients": $clients, "date_from": $date_from, "date_to": $date_to, "documents": $documents, "projects": $projects, "severities": $severities, "source_languages": $source_languages, "subjects": $subjects, "target_languages": $target_languages, "vendors": $vendors} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Company users report
@@ -4453,19 +4464,19 @@ export def "reports-users get" [
   --budget-code: string # budget code filter. valid for corporate accounts only.
   --date-from: string # the date-time notation as defined by RFC 3339, section 5.6, for example, 2017-07-21T17:32:28Z (format: date-time)
   --date-to: string # the date-time notation as defined by RFC 3339, section 5.6, for example, 2017-07-21T17:32:28Z (format: date-time)
-  --source-languages: list # List of source language codes.
-  --target-languages: list # List of target language codes.
-  --users: list # List of corporate user IDs. Valid for corporate accounts only.
+  --source-languages: list<string> # List of source language codes.
+  --target-languages: list<string> # List of target language codes.
+  --users: list<int> # List of corporate user IDs. Valid for corporate accounts only.
 ]: any -> record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, report: table<currency: string, spending: float, user: record, word_count: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/reports/users")
-  let body = {"budget_code": $budget_code, "date_from": $date_from, "date_to": $date_to, "source_languages": $source_languages, "target_languages": $target_languages, "users": $users} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"budget_code": $budget_code, "date_from": $date_from, "date_to": $date_to, "source_languages": $source_languages, "target_languages": $target_languages, "users": $users} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Sends email confirmation email for current user
@@ -4528,7 +4539,7 @@ export def "search list-everywhere" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # Search query term
-  --include: list # Search in these entities. Current oprions are projects, documents, strings. Can be multiple. When not provided, we'll search through all entities.
+  --include: list<string> # Search in these entities. Current oprions are projects, documents, strings. Can be multiple. When not provided, we'll search through all entities.
   --page: int # format: int64, default: 1
   --per-page: int # format: int64, default: 10
 ]: nothing -> record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, result: record<documents: list<record>, projects: list<record>, strings: list<record>>> {
@@ -4545,7 +4556,7 @@ export def "search list-everywhere" [
 #
 # POST /search/documents/reindex
 # operationId: reindexDocuments
-export def "search-documents-reindex reindexDocuments" [
+export def "search-documents-reindex create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4635,7 +4646,7 @@ export def "stats-commissions get" [
 #
 # POST /stats/commissions
 # operationId: getCommissionStatsByFilter
-export def "stats-commissions get-1" [
+export def "stats-commissions get-by-filter" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4647,19 +4658,19 @@ export def "stats-commissions get-1" [
   --budget-code: string # budget code filter. valid for corporate accounts only.
   --date-from: string # the date-time notation as defined by RFC 3339, section 5.6, for example, 2017-07-21T17:32:28Z (format: date-time)
   --date-to: string # the date-time notation as defined by RFC 3339, section 5.6, for example, 2017-07-21T17:32:28Z (format: date-time)
-  --source-languages: list # List of source language codes.
-  --target-languages: list # List of target language codes.
-  --users: list # List of corporate user IDs. Valid for corporate accounts only.
+  --source-languages: list<string> # List of source language codes.
+  --target-languages: list<string> # List of target language codes.
+  --users: list<int> # List of corporate user IDs. Valid for corporate accounts only.
 ]: any -> record<balance: record<amount: float, currency: string>, paid: record<amount: float, currency: string>, quote_total: record<amount: float, currency: string>, total: record<amount: float, currency: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/stats/commissions")
-  let body = {"budget_code": $budget_code, "date_from": $date_from, "date_to": $date_to, "source_languages": $source_languages, "target_languages": $target_languages, "users": $users} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"budget_code": $budget_code, "date_from": $date_from, "date_to": $date_to, "source_languages": $source_languages, "target_languages": $target_languages, "users": $users} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # View your popular language pairs
@@ -4768,19 +4779,19 @@ export def "strings create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --contents: list
+  --contents: list<string>
   --source-language: string
-  --target-languages: list
+  --target-languages: list<string>
 ]: any -> record<cost: record<amount: float, currency: string>, strings: table<content: string, language: string, last_changed: string, translations: list>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/strings")
-  let body = {"contents": $contents, "source_language": $source_language, "target_languages": $target_languages} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"contents": $contents, "source_language": $source_language, "target_languages": $target_languages} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update string translation
@@ -4805,18 +4816,18 @@ export def "strings update-translation-memory-unit" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/strings")
-  let body = {"sourceLanguage": $source_language, "sourceText": $source_text, "targetLanguage": $target_language, "targetText": $target_text} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"sourceLanguage": $source_language, "sourceText": $source_text, "targetLanguage": $target_language, "targetText": $target_text} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Download account translation memory
 #
 # POST /strings/{languageCode}/package
 # operationId: packageUserTranslationMemory
-export def "strings-package packageUserTranslationMemory" [
+export def "strings-package create-user-translation-memory" [
   language_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4833,7 +4844,7 @@ export def "strings-package packageUserTranslationMemory" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "async" $async "scalar") (serialize-qp "email" $email "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({language_code: $language_code} | format pattern "/strings/{language_code}/package") $qp)
+  let full_url = (build-url $base ({language_code: (encode-path-segment $language_code)} | format pattern "/strings/{language_code}/package") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4843,7 +4854,7 @@ export def "strings-package packageUserTranslationMemory" [
 #
 # GET /strings/{languageCode}/package/status
 # operationId: packageUserTranslationMemoryForLanguageStatus
-export def "strings-package-status packageUserTranslationMemoryForLanguageStatus" [
+export def "strings-package-status get-user-translation-memory-for-language" [
   language_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4858,7 +4869,7 @@ export def "strings-package-status packageUserTranslationMemoryForLanguageStatus
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "async_request_key" $async_request_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({language_code: $language_code} | format pattern "/strings/{language_code}/package/status") $qp)
+  let full_url = (build-url $base ({language_code: (encode-path-segment $language_code)} | format pattern "/strings/{language_code}/package/status") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4868,7 +4879,7 @@ export def "strings-package-status packageUserTranslationMemoryForLanguageStatus
 #
 # GET /styleguide
 # operationId: downloadGlobalStyleGuide
-export def "styleguide download-global" [
+export def "styleguide download-global-style-guide" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4890,7 +4901,7 @@ export def "styleguide download-global" [
 #
 # POST /styleguide
 # operationId: updateGlobalStyleGuide
-export def "styleguide update-global" [
+export def "styleguide update-global-style-guide" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4905,11 +4916,11 @@ export def "styleguide update-global" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/styleguide")
-  let body = {"styleguide": $styleguide} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"styleguide": $styleguide} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get survey questions in given scope and type
@@ -4932,7 +4943,7 @@ export def "surveys get-questions" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "attach_answers_for_project" $attach_answers_for_project "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({scope: $scope, type: $type} | format pattern "/surveys/{scope}/{type}") $qp)
+  let full_url = (build-url $base ({scope: (encode-path-segment $scope), type: (encode-path-segment $type)} | format pattern "/surveys/{scope}/{type}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4959,19 +4970,19 @@ export def "surveys submit-answers" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({scope: $scope, type: $type} | format pattern "/surveys/{scope}/{type}"))
-  let body = {"answers": $answers} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({scope: (encode-path-segment $scope), type: (encode-path-segment $type)} | format pattern "/surveys/{scope}/{type}"))
+  let req_body = {"answers": $answers} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # OpenAPI YAML representation of our API
 #
 # GET /swagger
 # operationId: getSwaggerYaml
-export def "swagger get-swagger-yaml" [
+export def "swagger get-yaml" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5013,18 +5024,18 @@ export def "token get-access" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/token")
-  let body = {"grant_type": $grant_type, "password": $password, "refresh_token": $refresh_token, "scope": $scope, "user_id": $user_id, "username": $username} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"grant_type": $grant_type, "password": $password, "refresh_token": $refresh_token, "scope": $scope, "user_id": $user_id, "username": $username} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Defreeze your account
 #
 # POST /unfreeze-account
 # operationId: unfreezeAccount
-export def "unfreeze-account unfreezeAccount" [
+export def "unfreeze-account create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5100,8 +5111,8 @@ export def "users get" [
 # --language_pairs item shape: {source_language?: string, target_language?: string}
 # --mailing shape: {city?: string, country?: string, phone?: string, state?: string, street?: string, zip?: string}
 # --social_media shape: {facebook_url?: string, linkedIn_url?: string, twitter_url?: string}
-# --user_groups item shape: {corporate_id?: int, id?: int, name?: string, permissions?: list}
-# --vendor shape: {can_work_manual_files?: bool, email_open_rate?: float, is_frozen?: bool, is_proofreader?: bool, language_pairs?: list, native_language?: string, pam_tqs?: float, paypal_email?: string, profile_survey?: record, require_1099?: bool, tags?: list, tms_user_name?: string, vendor_type?: string}
+# --user_groups item shape: {corporate_id?: int, id?: int, name?: string, permissions?: list<string>}
+# --vendor shape: {can_work_manual_files?: bool, email_open_rate?: float, is_frozen?: bool, is_proofreader?: bool, language_pairs?: list, native_language?: string, pam_tqs?: float, paypal_email?: string, profile_survey?: record, require_1099?: bool, tags?: list<string>, tms_user_name?: string, vendor_type?: string}
 @deprecated --flag can-work-manual-files
 @deprecated --flag city
 @deprecated --flag country
@@ -5159,8 +5170,8 @@ export def "users create" [
   --street: string # \@deprecated. use mailing or billing key. (DEPRECATED)
   --timezone: string
   --tms-user-name: string # \@deprecated. use `vendor` key (DEPRECATED)
-  --user-groups: list # item shape: {corporate_id?: int, id?: int, name?: string, permissions?: list}
-  --vendor: record # shape: {can_work_manual_files?: bool, email_open_rate?: float, is_frozen?: bool, is_proofreader?: bool, language_pairs?: list, native_language?: string, pam_tqs?: float, paypal_email?: string, profile_survey?: record, require_1099?: bool, tags?: list, tms_user_name?: string, vendor_type?: string}
+  --user-groups: list # item shape: {corporate_id?: int, id?: int, name?: string, permissions?: list<string>}
+  --vendor: record # shape: {can_work_manual_files?: bool, email_open_rate?: float, is_frozen?: bool, is_proofreader?: bool, language_pairs?: list, native_language?: string, pam_tqs?: float, paypal_email?: string, profile_survey?: record, require_1099?: bool, tags?: list<string>, tms_user_name?: string, vendor_type?: string}
   --zip-code: string # \@deprecated. use mailing or billing key. new key name is "zip". (DEPRECATED)
 ]: any -> record<billing: record<city: string, country: string, phone: string, state: string, street: string, zip: string, name: string>, birthday: string, can_work_manual_files: bool, city: string, client: record<corporate: record<email: string, id: int, logo: string, name: string, phone_number: string>, nps: float, subjects: record>, corporate_id: int, country: string, created_at: int, do_not_contact: bool, email: string, first_name: string, has_pwd: bool, id: int, is_client: bool, is_developer: bool, is_proofreader: bool, is_prospect: bool, is_sales_person: bool, is_vendor: bool, language_pairs: table<source_language: string, target_language: string>, last_name: string, last_seen_online_at: int, links: record<self: record<href: string>, login_as: record<href: string>, projects: record<href: string>, responsivity: record<href: string>, stats: record<href: string>>, locale: string, mailing: record<city: string, country: string, phone: string, state: string, street: string, zip: string>, name: string, native_language: string, nps: float, phone_number: string, profile_picture_path: string, social_media: record<facebook_url: string, linkedIn_url: string, twitter_url: string>, state: string, status: string, street: string, timezone: string, tms_user_name: string, user_groups: table<corporate_id: int, id: int, name: string, permissions: list>, vendor: record<can_work_manual_files: bool, email_open_rate: float, is_frozen: bool, is_proofreader: bool, language_pairs: list<record>, native_language: string, pam_tqs: float, paypal_email: string, profile_survey: record<current_services: string, daily_proofreading_capacity: string, daily_translation_capacity: string, dtp_software: string, experience: string, is_certified_translator: string, is_sworn_translator: string, memoq: string, memsource: string, omegat: string, proofreader_experience: string, provides_creative_writing_service: string, provides_postedit_service: string, reference: string, sdl_trados: string, skype_id: string, smartcat: string, smartling: string, software: string, specialization: string, subtitle_edit: string, subtitle_workshop: string, translator_association: string, transsuite_2000: string, vendor_profile_lsp: string, wordbee: string, wordfast: string, work_type: string, work_with: string, working_as: string, working_timezone: string, xbench: string, xtm: string>, require_1099: bool, tags: list<string>, tms_user_name: string, vendor_type: string>, zip_code: string> {
   let input = $in
@@ -5168,11 +5179,11 @@ export def "users create" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "notify" $notify "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/users" $qp)
-  let body = {"billing": $billing, "birthday": $birthday, "can_work_manual_files": $can_work_manual_files, "city": $city, "client": $client, "corporate_id": $corporate_id, "country": $country, "created_at": $created_at, "do_not_contact": $do_not_contact, "email": $email, "first_name": $first_name, "has_pwd": $has_pwd, "id": $id, "is_client": $is_client, "is_developer": $is_developer, "is_proofreader": $is_proofreader, "is_prospect": $is_prospect, "is_sales_person": $is_sales_person, "is_vendor": $is_vendor, "language_pairs": $language_pairs, "last_name": $last_name, "last_seen_online_at": $last_seen_online_at, "links": $links, "locale": $locale, "mailing": $mailing, "name": $name, "native_language": $native_language, "nps": $nps, "phone_number": $phone_number, "profile_picture_path": $profile_picture_path, "social_media": $social_media, "state": $state, "status": $status, "street": $street, "timezone": $timezone, "tms_user_name": $tms_user_name, "user_groups": $user_groups, "vendor": $vendor, "zip_code": $zip_code} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"billing": $billing, "birthday": $birthday, "can_work_manual_files": $can_work_manual_files, "city": $city, "client": $client, "corporate_id": $corporate_id, "country": $country, "created_at": $created_at, "do_not_contact": $do_not_contact, "email": $email, "first_name": $first_name, "has_pwd": $has_pwd, "id": $id, "is_client": $is_client, "is_developer": $is_developer, "is_proofreader": $is_proofreader, "is_prospect": $is_prospect, "is_sales_person": $is_sales_person, "is_vendor": $is_vendor, "language_pairs": $language_pairs, "last_name": $last_name, "last_seen_online_at": $last_seen_online_at, "links": $links, "locale": $locale, "mailing": $mailing, "name": $name, "native_language": $native_language, "nps": $nps, "phone_number": $phone_number, "profile_picture_path": $profile_picture_path, "social_media": $social_media, "state": $state, "status": $status, "street": $street, "timezone": $timezone, "tms_user_name": $tms_user_name, "user_groups": $user_groups, "vendor": $vendor, "zip_code": $zip_code} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get a list of vendors available for the criteria given
@@ -5188,23 +5199,23 @@ export def "users-available-vendors get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --with: list # Include detailed information. Possible values 'user'. Requesting user info enrichment takes much longer.
+  --with: list<string> # Include detailed information. Possible values 'user'. Requesting user info enrichment takes much longer.
   --corporate-id: float # Corporate account ID to filter for vendor authorization
   --manual-work-permission: oneof<nothing, bool> # Filter vendors for manual work permission (default: 0)
   --source-language: string # Source language code
-  --target-languages: list # List of target language codes.
-  --types: list # List of vendor types
+  --target-languages: list<string> # List of target language codes.
+  --types: list<string> # List of vendor types
 ]: any -> record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, users: table<billing: record, birthday: string, can_work_manual_files: bool, city: string, client: record, corporate_id: int, country: string, created_at: int, do_not_contact: bool, email: string, first_name: string, has_pwd: bool, id: int, is_client: bool, is_developer: bool, is_proofreader: bool, is_prospect: bool, is_sales_person: bool, is_vendor: bool, language_pairs: list, last_name: string, last_seen_online_at: int, links: record, locale: string, mailing: record, name: string, native_language: string, nps: float, phone_number: string, profile_picture_path: string, social_media: record, state: string, status: string, street: string, timezone: string, tms_user_name: string, user_groups: list, vendor: record, zip_code: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "with[]" $with "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/users/available-vendors" $qp)
-  let body = {"corporateId": $corporate_id, "manualWorkPermission": $manual_work_permission, "sourceLanguage": $source_language, "targetLanguages": $target_languages, "types": $types} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"corporateId": $corporate_id, "manualWorkPermission": $manual_work_permission, "sourceLanguage": $source_language, "targetLanguages": $target_languages, "types": $types} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Filter vendors based on provided parameters
@@ -5224,21 +5235,21 @@ export def "users-filter get-filtered-vendors" [
   --per-page: int # The number of items per page
   --order-by: string # The field to order the results by
   --order: string # The order to sort the results by (ascending or descending)
-  --clients: list
-  --communication-channel: list
-  --corporate-ids-for-auth: list
-  --corporates: list
-  --country: list
+  --clients: list<int>
+  --communication-channel: list<string>
+  --corporate-ids-for-auth: list<int>
+  --corporates: list<int>
+  --country: list<string>
   --created-at: string
-  --current-services: list
+  --current-services: list<string>
   --daily-proofreading-capacity: int
   --daily-translation-capacity: int
-  --destination-languages: list
-  --dtp-software: list
+  --destination-languages: list<int>
+  --dtp-software: list<string>
   --email-address: string
-  --experience: list
+  --experience: list<string>
   --first-name: string
-  --id: list
+  --id: list<int>
   --is-certified-translator: oneof<nothing, bool>
   --is-sworn-translator: oneof<nothing, bool>
   --language-pairs: list
@@ -5253,31 +5264,31 @@ export def "users-filter get-filtered-vendors" [
   --proofreader-experience: int
   --provides-creative-writing-service: oneof<nothing, bool>
   --provides-postedit-service: oneof<nothing, bool>
-  --quote-file-subjects: list
+  --quote-file-subjects: list<string>
   --reference: string
   --sdl-trados: int
   --search: string
   --skype-id: string
   --smartcat: int
   --smartling: int
-  --source-languages: list
-  --specialization: list
-  --status: list
+  --source-languages: list<int>
+  --specialization: list<string>
+  --status: list<string>
   --subtitle-edit: int
   --subtitle-workshop: int
   --translator-association: string
   --transsuite-2000: int
-  --user-working-timezone: list
+  --user-working-timezone: list<string>
   --vendor-profile-lsp: string
-  --vendor-tags: list
-  --vendor-type: list
-  --vendor-working-timezone: list
+  --vendor-tags: list<string>
+  --vendor-type: list<string>
+  --vendor-working-timezone: list<string>
   --word-count: int
   --wordbee: int
   --wordfast: int
   --work-type: string
   --work-with: string
-  --working-as: list
+  --working-as: list<string>
   --xbench: int
   --xtm: int
 ]: any -> record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, users: table<billing: record, birthday: string, can_work_manual_files: bool, city: string, client: record, corporate_id: int, country: string, created_at: int, do_not_contact: bool, email: string, first_name: string, has_pwd: bool, id: int, is_client: bool, is_developer: bool, is_proofreader: bool, is_prospect: bool, is_sales_person: bool, is_vendor: bool, language_pairs: list, last_name: string, last_seen_online_at: int, links: record, locale: string, mailing: record, name: string, native_language: string, nps: float, phone_number: string, profile_picture_path: string, social_media: record, state: string, status: string, street: string, timezone: string, tms_user_name: string, user_groups: list, vendor: record, zip_code: string>> {
@@ -5286,11 +5297,11 @@ export def "users-filter get-filtered-vendors" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/users/filter" $qp)
-  let body = {"clients": $clients, "communication_channel": $communication_channel, "corporate_ids_for_auth": $corporate_ids_for_auth, "corporates": $corporates, "country": $country, "created_at": $created_at, "current_services": $current_services, "daily_proofreading_capacity": $daily_proofreading_capacity, "daily_translation_capacity": $daily_translation_capacity, "destination_languages": $destination_languages, "dtp_software": $dtp_software, "email_address": $email_address, "experience": $experience, "first_name": $first_name, "id": $id, "is_certified_translator": $is_certified_translator, "is_sworn_translator": $is_sworn_translator, "language_pairs": $language_pairs, "last_name": $last_name, "last_online": $last_online, "last_worked": $last_worked, "memoq": $memoq, "memsource": $memsource, "min_tqs": $min_tqs, "omegat": $omegat, "project_count": $project_count, "proofreader_experience": $proofreader_experience, "provides_creative_writing_service": $provides_creative_writing_service, "provides_postedit_service": $provides_postedit_service, "quote_file_subjects": $quote_file_subjects, "reference": $reference, "sdl_trados": $sdl_trados, "search": $search, "skype_id": $skype_id, "smartcat": $smartcat, "smartling": $smartling, "source_languages": $source_languages, "specialization": $specialization, "status": $status, "subtitle_edit": $subtitle_edit, "subtitle_workshop": $subtitle_workshop, "translator_association": $translator_association, "transsuite_2000": $transsuite_2000, "user_working_timezone": $user_working_timezone, "vendor_profile_lsp": $vendor_profile_lsp, "vendor_tags": $vendor_tags, "vendor_type": $vendor_type, "vendor_working_timezone": $vendor_working_timezone, "word_count": $word_count, "wordbee": $wordbee, "wordfast": $wordfast, "work_type": $work_type, "work_with": $work_with, "working_as": $working_as, "xbench": $xbench, "xtm": $xtm} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"clients": $clients, "communication_channel": $communication_channel, "corporate_ids_for_auth": $corporate_ids_for_auth, "corporates": $corporates, "country": $country, "created_at": $created_at, "current_services": $current_services, "daily_proofreading_capacity": $daily_proofreading_capacity, "daily_translation_capacity": $daily_translation_capacity, "destination_languages": $destination_languages, "dtp_software": $dtp_software, "email_address": $email_address, "experience": $experience, "first_name": $first_name, "id": $id, "is_certified_translator": $is_certified_translator, "is_sworn_translator": $is_sworn_translator, "language_pairs": $language_pairs, "last_name": $last_name, "last_online": $last_online, "last_worked": $last_worked, "memoq": $memoq, "memsource": $memsource, "min_tqs": $min_tqs, "omegat": $omegat, "project_count": $project_count, "proofreader_experience": $proofreader_experience, "provides_creative_writing_service": $provides_creative_writing_service, "provides_postedit_service": $provides_postedit_service, "quote_file_subjects": $quote_file_subjects, "reference": $reference, "sdl_trados": $sdl_trados, "search": $search, "skype_id": $skype_id, "smartcat": $smartcat, "smartling": $smartling, "source_languages": $source_languages, "specialization": $specialization, "status": $status, "subtitle_edit": $subtitle_edit, "subtitle_workshop": $subtitle_workshop, "translator_association": $translator_association, "transsuite_2000": $transsuite_2000, "user_working_timezone": $user_working_timezone, "vendor_profile_lsp": $vendor_profile_lsp, "vendor_tags": $vendor_tags, "vendor_type": $vendor_type, "vendor_working_timezone": $vendor_working_timezone, "word_count": $word_count, "wordbee": $wordbee, "wordfast": $wordfast, "work_type": $work_type, "work_with": $work_with, "working_as": $working_as, "xbench": $xbench, "xtm": $xtm} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Sends password reset email to the user's registered email address
@@ -5312,18 +5323,18 @@ export def "users-send-password-reminder send" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/users/send-password-reminder")
-  let body = {"email": $email} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"email": $email} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns all vendor tags for vendors filter
 #
 # GET /users/tags
 # operationId: getAllVendorTags
-export def "users-tags get-all-vendor" [
+export def "users-tags get-list-vendor" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5358,7 +5369,7 @@ export def "user get" [
 ]: nothing -> record<billing: record<city: string, country: string, phone: string, state: string, street: string, zip: string, name: string>, birthday: string, can_work_manual_files: bool, city: string, client: record<corporate: record<email: string, id: int, logo: string, name: string, phone_number: string>, nps: float, subjects: record>, corporate_id: int, country: string, created_at: int, do_not_contact: bool, email: string, first_name: string, has_pwd: bool, id: int, is_client: bool, is_developer: bool, is_proofreader: bool, is_prospect: bool, is_sales_person: bool, is_vendor: bool, language_pairs: table<source_language: string, target_language: string>, last_name: string, last_seen_online_at: int, links: record<self: record<href: string>, login_as: record<href: string>, projects: record<href: string>, responsivity: record<href: string>, stats: record<href: string>>, locale: string, mailing: record<city: string, country: string, phone: string, state: string, street: string, zip: string>, name: string, native_language: string, nps: float, phone_number: string, profile_picture_path: string, social_media: record<facebook_url: string, linkedIn_url: string, twitter_url: string>, state: string, status: string, street: string, timezone: string, tms_user_name: string, user_groups: table<corporate_id: int, id: int, name: string, permissions: list>, vendor: record<can_work_manual_files: bool, email_open_rate: float, is_frozen: bool, is_proofreader: bool, language_pairs: list<record>, native_language: string, pam_tqs: float, paypal_email: string, profile_survey: record<current_services: string, daily_proofreading_capacity: string, daily_translation_capacity: string, dtp_software: string, experience: string, is_certified_translator: string, is_sworn_translator: string, memoq: string, memsource: string, omegat: string, proofreader_experience: string, provides_creative_writing_service: string, provides_postedit_service: string, reference: string, sdl_trados: string, skype_id: string, smartcat: string, smartling: string, software: string, specialization: string, subtitle_edit: string, subtitle_workshop: string, translator_association: string, transsuite_2000: string, vendor_profile_lsp: string, wordbee: string, wordfast: string, work_type: string, work_with: string, working_as: string, working_timezone: string, xbench: string, xtm: string>, require_1099: bool, tags: list<string>, tms_user_name: string, vendor_type: string>, zip_code: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/{user_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/{user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5393,17 +5404,17 @@ export def "user update" [
   --notify: oneof<nothing, bool> # Notify new user account creation with login information and MotaWord introduction.
   --paypal-email: string # Optional. Vendor paypal e-mail
   --require-1099: oneof<nothing, bool> # Optional. Whether this vendor requires 1099 form in US for their earnings.
-  --user-groups: list # A list of user group IDs
+  --user-groups: list<int> # A list of user group IDs
 ]: any -> record<billing: record<city: string, country: string, phone: string, state: string, street: string, zip: string, name: string>, birthday: string, can_work_manual_files: bool, city: string, client: record<corporate: record<email: string, id: int, logo: string, name: string, phone_number: string>, nps: float, subjects: record>, corporate_id: int, country: string, created_at: int, do_not_contact: bool, email: string, first_name: string, has_pwd: bool, id: int, is_client: bool, is_developer: bool, is_proofreader: bool, is_prospect: bool, is_sales_person: bool, is_vendor: bool, language_pairs: table<source_language: string, target_language: string>, last_name: string, last_seen_online_at: int, links: record<self: record<href: string>, login_as: record<href: string>, projects: record<href: string>, responsivity: record<href: string>, stats: record<href: string>>, locale: string, mailing: record<city: string, country: string, phone: string, state: string, street: string, zip: string>, name: string, native_language: string, nps: float, phone_number: string, profile_picture_path: string, social_media: record<facebook_url: string, linkedIn_url: string, twitter_url: string>, state: string, status: string, street: string, timezone: string, tms_user_name: string, user_groups: table<corporate_id: int, id: int, name: string, permissions: list>, vendor: record<can_work_manual_files: bool, email_open_rate: float, is_frozen: bool, is_proofreader: bool, language_pairs: list<record>, native_language: string, pam_tqs: float, paypal_email: string, profile_survey: record<current_services: string, daily_proofreading_capacity: string, daily_translation_capacity: string, dtp_software: string, experience: string, is_certified_translator: string, is_sworn_translator: string, memoq: string, memsource: string, omegat: string, proofreader_experience: string, provides_creative_writing_service: string, provides_postedit_service: string, reference: string, sdl_trados: string, skype_id: string, smartcat: string, smartling: string, software: string, specialization: string, subtitle_edit: string, subtitle_workshop: string, translator_association: string, transsuite_2000: string, vendor_profile_lsp: string, wordbee: string, wordfast: string, work_type: string, work_with: string, working_as: string, working_timezone: string, xbench: string, xtm: string>, require_1099: bool, tags: list<string>, tms_user_name: string, vendor_type: string>, zip_code: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/{user_id}"))
-  let body = {"city": $city, "country": $country, "phone": $phone, "state": $state, "street": $street, "zip": $zip, "birthday": $birthday, "email": $email, "first_name": $first_name, "id": $id, "last_name": $last_name, "notifications": $notifications, "notify": $notify, "paypal_email": $paypal_email, "require_1099": $require_1099, "user_groups": $user_groups} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/{user_id}"))
+  let req_body = {"city": $city, "country": $country, "phone": $phone, "state": $state, "street": $street, "zip": $zip, "birthday": $birthday, "email": $email, "first_name": $first_name, "id": $id, "last_name": $last_name, "notifications": $notifications, "notify": $notify, "paypal_email": $paypal_email, "require_1099": $require_1099, "user_groups": $user_groups} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /{userId}/approve
@@ -5422,7 +5433,7 @@ export def "approve approve-vendor-application" [
 ]: nothing -> record<status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/{user_id}/approve"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/{user_id}/approve"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5445,7 +5456,7 @@ export def "delete-account delete-user" [
 ]: nothing -> record<status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/{user_id}/delete-account"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/{user_id}/delete-account"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5477,7 +5488,7 @@ export def "documents get-user" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "recent" $recent "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "type_filter" $type_filter "scalar") (serialize-qp "language_code" $language_code "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "order_type" $order_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/{user_id}/documents") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/{user_id}/documents") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5486,7 +5497,7 @@ export def "documents get-user" [
 # POST /{userId}/downgrade-proofreader
 #
 # operationId: downgradeUserProofreader
-export def "downgrade-proofreader downgradeUserProofreader" [
+export def "downgrade-proofreader create-user" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5499,7 +5510,7 @@ export def "downgrade-proofreader downgradeUserProofreader" [
 ]: nothing -> record<status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/{user_id}/downgrade-proofreader"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/{user_id}/downgrade-proofreader"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5522,7 +5533,7 @@ export def "earnings get-user" [
 ]: nothing -> record<completed: table<amount: float, currency: string, due_date: string, status: string, words: int, words_approved: int, words_translated: int, is_above_average: bool, score: float, strings_edited: int, strings_translated: int, project_id: int>, ongoing: table<amount: float, currency: string, due_date: string, status: string, words: int, words_approved: int, words_translated: int, is_above_average: bool, score: float, strings_edited: int, strings_translated: int, project_id: int>, total: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/{user_id}/earnings"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/{user_id}/earnings"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5532,7 +5543,7 @@ export def "earnings get-user" [
 #
 # POST /{userId}/freeze-account
 # operationId: freezeUserAccount
-export def "freeze-account freezeUserAccount" [
+export def "freeze-account create-user" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5545,7 +5556,7 @@ export def "freeze-account freezeUserAccount" [
 ]: nothing -> record<status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/{user_id}/freeze-account"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/{user_id}/freeze-account"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5554,7 +5565,7 @@ export def "freeze-account freezeUserAccount" [
 # POST /{userId}/make-proofreader
 #
 # operationId: makeUserProofreader
-export def "make-proofreader makeUserProofreader" [
+export def "make-proofreader create-user" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5567,7 +5578,7 @@ export def "make-proofreader makeUserProofreader" [
 ]: nothing -> record<status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/{user_id}/make-proofreader"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/{user_id}/make-proofreader"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5593,12 +5604,12 @@ export def "notifications-subscribe subscribe-user" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/{user_id}/notifications/subscribe"))
-  let body = {"device": $device, "endpoint": $endpoint, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/{user_id}/notifications/subscribe"))
+  let req_body = {"device": $device, "endpoint": $endpoint, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /{userId}/notifications/unsubscribe
@@ -5621,19 +5632,19 @@ export def "notifications-unsubscribe unsubscribe-user" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/{user_id}/notifications/unsubscribe"))
-  let body = {"device": $device, "endpoint": $endpoint, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/{user_id}/notifications/unsubscribe"))
+  let req_body = {"device": $device, "endpoint": $endpoint, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # View user's payment and billing info
 #
 # GET /{userId}/payment
 # operationId: getUserPaymentInfo
-export def "payment get-user-payment-info" [
+export def "payment get-user-get" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5646,7 +5657,7 @@ export def "payment get-user-payment-info" [
 ]: nothing -> record<billing: record<city: string, country: string, phone: string, state: string, street: string, zip: string, name: string>, card: record<bin: string, id: int, is_default: bool, payment_code: string>, cards: table<bin: string, id: int, is_default: bool, payment_code: string>, corporate: record<allow_api_invoicing: bool, allow_payment_code: bool, auto_charge: bool, billing: record<city: string, country: string, phone: string, state: string, street: string, zip: string, name: string>, card: record<bin: string, id: int, is_default: bool, payment_code: string>, contact_email_address: string, payment_code: string>, shared_card: record<bin: string, id: int, is_default: bool, payment_code: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/{user_id}/payment"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/{user_id}/payment"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5660,7 +5671,7 @@ export def "payment get-user-payment-info" [
 # --cards item shape: {bin?: string, id?: int, is_default?: bool, payment_code?: string}
 # --corporate shape: {allow_api_invoicing?: bool, allow_payment_code?: bool, auto_charge?: bool, billing?: any, card?: record, contact_email_address?: string, payment_code?: string}
 # --shared_card shape: {bin?: string, id?: int, is_default?: bool, payment_code?: string}
-export def "payment update-user-payment-info" [
+export def "payment update-user-get" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5679,12 +5690,12 @@ export def "payment update-user-payment-info" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/{user_id}/payment"))
-  let body = {"billing": $billing, "card": $card, "cards": $cards, "corporate": $corporate, "shared_card": $shared_card} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/{user_id}/payment"))
+  let req_body = {"billing": $billing, "card": $card, "cards": $cards, "corporate": $corporate, "shared_card": $shared_card} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns a list of permissions that this user is authorized for.
@@ -5704,7 +5715,7 @@ export def "permissions get-user" [
 ]: nothing -> record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, permissions: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/{user_id}/permissions"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/{user_id}/permissions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5728,19 +5739,19 @@ export def "profile-picture upload-user" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/{user_id}/profile-picture"))
-  let body = {"profile_picture": $profile_picture} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/{user_id}/profile-picture"))
+  let req_body = {"profile_picture": $profile_picture} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get a list of user/vendor projects
 #
 # GET /{userId}/projects/vendor
 # operationId: getVendorProjectsByUserId
-export def "projects-vendor get" [
+export def "projects-vendor get-by-user" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5758,7 +5769,7 @@ export def "projects-vendor get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "joined" $joined "scalar") (serialize-qp "completed" $completed "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/{user_id}/projects/vendor") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/{user_id}/projects/vendor") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5780,7 +5791,7 @@ export def "reject reject-vendor-application" [
 ]: nothing -> record<status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/{user_id}/reject"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/{user_id}/reject"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5803,7 +5814,7 @@ export def "resend-email-confirmation send-user" [
 ]: nothing -> record<status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/{user_id}/resend-email-confirmation"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/{user_id}/resend-email-confirmation"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5828,7 +5839,7 @@ export def "responsivity get-user" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "period" $period "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/{user_id}/responsivity") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/{user_id}/responsivity") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5851,7 +5862,7 @@ export def "stats get-user" [
 ]: nothing -> record<client: record<document_count: int, nps: float, started_project_count: int, total_discounted: record<amount: float, currency: string>, total_project_count: int, total_spending: float, translator_count: int>, vendor: record<earnings: record<total: float>, projects: record<invited: int, total: int, worked: int>, words: record<approved: int, translated: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/{user_id}/stats"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/{user_id}/stats"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5874,7 +5885,7 @@ export def "stats-popular-pairs get-user" [
 ]: nothing -> record<pairs: table<source_language: string, target_language: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/{user_id}/stats/popular-pairs"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/{user_id}/stats/popular-pairs"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5897,7 +5908,7 @@ export def "stats-projects get-user" [
 ]: nothing -> record<stats: table<languages: list, month: string, number_of_projects: int, total_spending: float, week: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/{user_id}/stats/projects"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/{user_id}/stats/projects"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5906,7 +5917,7 @@ export def "stats-projects get-user" [
 # POST /{userId}/suspend
 #
 # operationId: suspendUser
-export def "suspend suspendUser" [
+export def "suspend create-user" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5921,19 +5932,19 @@ export def "suspend suspendUser" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/{user_id}/suspend"))
-  let body = {"reason": $reason} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/{user_id}/suspend"))
+  let req_body = {"reason": $reason} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Unfreeze requester account for project notifications
 #
 # POST /{userId}/unfreeze-account
 # operationId: unfreezeUserAccount
-export def "unfreeze-account unfreezeUserAccount" [
+export def "unfreeze-account create-user" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5946,7 +5957,7 @@ export def "unfreeze-account unfreezeUserAccount" [
 ]: nothing -> record<status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/{user_id}/unfreeze-account"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/{user_id}/unfreeze-account"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5969,7 +5980,7 @@ export def "user-groups get-this" [
 ]: nothing -> record<meta: record<paging: record<count: int, links: record, page: int, per_page: int, total_count: int>>, user_groups: table<corporate_id: int, id: int, name: string, permissions: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/{user_id}/user-groups"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/{user_id}/user-groups"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6020,10 +6031,10 @@ export def "user-groups update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/{user_id}/user-groups"))
-  let body = {"allow_hash_in_url": $allow_hash_in_url, "allow_query_in_url": $allow_query_in_url, "auto_detect_source_language": $auto_detect_source_language, "created_at": $created_at, "elements": $elements, "follow_user": $follow_user, "force_cache_refresh_interval": $force_cache_refresh_interval, "id": $id, "language_mappings": $language_mappings, "live": $live, "modify_links": $modify_links, "name": $name, "optimize_per_page": $optimize_per_page, "pages": $pages, "path_regex": $path_regex, "position": $position, "query_name": $query_name, "reboot_on_url_change": $reboot_on_url_change, "restricted_domains": $restricted_domains, "sections": $sections, "test_mode": $test_mode, "theme": $theme, "token": $body_token, "url_change_mode": $url_change_mode, "url_mode": $url_mode, "use_cache": $use_cache, "use_dummy_translations": $use_dummy_translations, "variables": $variables} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/{user_id}/user-groups"))
+  let req_body = {"allow_hash_in_url": $allow_hash_in_url, "allow_query_in_url": $allow_query_in_url, "auto_detect_source_language": $auto_detect_source_language, "created_at": $created_at, "elements": $elements, "follow_user": $follow_user, "force_cache_refresh_interval": $force_cache_refresh_interval, "id": $id, "language_mappings": $language_mappings, "live": $live, "modify_links": $modify_links, "name": $name, "optimize_per_page": $optimize_per_page, "pages": $pages, "path_regex": $path_regex, "position": $position, "query_name": $query_name, "reboot_on_url_change": $reboot_on_url_change, "restricted_domains": $restricted_domains, "sections": $sections, "test_mode": $test_mode, "theme": $theme, "token": $body_token, "url_change_mode": $url_change_mode, "url_mode": $url_mode, "use_cache": $use_cache, "use_dummy_translations": $use_dummy_translations, "variables": $variables} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

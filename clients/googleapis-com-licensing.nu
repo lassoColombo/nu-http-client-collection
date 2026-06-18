@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -72,7 +81,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "apps-licensing-product-sku-user licensinglicenseAssignmentsinsert" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "apps-licensing-product-sku-user create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -96,7 +105,7 @@ export def commands []: nothing -> table {
 #
 # POST /apps/licensing/v1/product/{productId}/sku/{skuId}/user
 # operationId: licensing.licenseAssignments.insert
-export def "apps-licensing-product-sku-user licensinglicenseAssignmentsinsert" [
+export def "apps-licensing-product-sku-user create" [
   product_id: string
   sku_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -124,19 +133,19 @@ export def "apps-licensing-product-sku-user licensinglicenseAssignmentsinsert" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({product_id: $product_id, sku_id: $sku_id} | format pattern "/apps/licensing/v1/product/{product_id}/sku/{sku_id}/user") $qp)
-  let body = {"userId": $user_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({product_id: (encode-path-segment $product_id), sku_id: (encode-path-segment $sku_id)} | format pattern "/apps/licensing/v1/product/{product_id}/sku/{sku_id}/user") $qp)
+  let req_body = {"userId": $user_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Revoke a license.
 #
 # DELETE /apps/licensing/v1/product/{productId}/sku/{skuId}/user/{userId}
 # operationId: licensing.licenseAssignments.delete
-export def "apps-licensing-product-sku-user licensinglicenseAssignmentsdelete" [
+export def "apps-licensing-product-sku-user delete" [
   product_id: string
   sku_id: string
   user_id: string
@@ -163,7 +172,7 @@ export def "apps-licensing-product-sku-user licensinglicenseAssignmentsdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({product_id: $product_id, sku_id: $sku_id, user_id: $user_id} | format pattern "/apps/licensing/v1/product/{product_id}/sku/{sku_id}/user/{user_id}") $qp)
+  let full_url = (build-url $base ({product_id: (encode-path-segment $product_id), sku_id: (encode-path-segment $sku_id), user_id: (encode-path-segment $user_id)} | format pattern "/apps/licensing/v1/product/{product_id}/sku/{sku_id}/user/{user_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -173,7 +182,7 @@ export def "apps-licensing-product-sku-user licensinglicenseAssignmentsdelete" [
 #
 # GET /apps/licensing/v1/product/{productId}/sku/{skuId}/user/{userId}
 # operationId: licensing.licenseAssignments.get
-export def "apps-licensing-product-sku-user licensinglicenseAssignmentsget" [
+export def "apps-licensing-product-sku-user get" [
   product_id: string
   sku_id: string
   user_id: string
@@ -200,7 +209,7 @@ export def "apps-licensing-product-sku-user licensinglicenseAssignmentsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({product_id: $product_id, sku_id: $sku_id, user_id: $user_id} | format pattern "/apps/licensing/v1/product/{product_id}/sku/{sku_id}/user/{user_id}") $qp)
+  let full_url = (build-url $base ({product_id: (encode-path-segment $product_id), sku_id: (encode-path-segment $sku_id), user_id: (encode-path-segment $user_id)} | format pattern "/apps/licensing/v1/product/{product_id}/sku/{sku_id}/user/{user_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -210,7 +219,7 @@ export def "apps-licensing-product-sku-user licensinglicenseAssignmentsget" [
 #
 # PATCH /apps/licensing/v1/product/{productId}/sku/{skuId}/user/{userId}
 # operationId: licensing.licenseAssignments.patch
-export def "apps-licensing-product-sku-user licensinglicenseAssignmentspatch" [
+export def "apps-licensing-product-sku-user update-by-productId-skuId-userId" [
   product_id: string
   sku_id: string
   user_id: string
@@ -246,19 +255,19 @@ export def "apps-licensing-product-sku-user licensinglicenseAssignmentspatch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({product_id: $product_id, sku_id: $sku_id, user_id: $user_id} | format pattern "/apps/licensing/v1/product/{product_id}/sku/{sku_id}/user/{user_id}") $qp)
-  let body = {"etags": $etags, "kind": $kind, "productId": $body_product_id, "productName": $product_name, "selfLink": $self_link, "skuId": $body_sku_id, "skuName": $sku_name, "userId": $body_user_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({product_id: (encode-path-segment $product_id), sku_id: (encode-path-segment $sku_id), user_id: (encode-path-segment $user_id)} | format pattern "/apps/licensing/v1/product/{product_id}/sku/{sku_id}/user/{user_id}") $qp)
+  let req_body = {"etags": $etags, "kind": $kind, "productId": $body_product_id, "productName": $product_name, "selfLink": $self_link, "skuId": $body_sku_id, "skuName": $sku_name, "userId": $body_user_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Reassign a user's product SKU with a different SKU in the same product.
 #
 # PUT /apps/licensing/v1/product/{productId}/sku/{skuId}/user/{userId}
 # operationId: licensing.licenseAssignments.update
-export def "apps-licensing-product-sku-user licensinglicenseAssignmentsupdate" [
+export def "apps-licensing-product-sku-user update-by-productId-skuId-userId-1" [
   product_id: string
   sku_id: string
   user_id: string
@@ -294,19 +303,19 @@ export def "apps-licensing-product-sku-user licensinglicenseAssignmentsupdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({product_id: $product_id, sku_id: $sku_id, user_id: $user_id} | format pattern "/apps/licensing/v1/product/{product_id}/sku/{sku_id}/user/{user_id}") $qp)
-  let body = {"etags": $etags, "kind": $kind, "productId": $body_product_id, "productName": $product_name, "selfLink": $self_link, "skuId": $body_sku_id, "skuName": $sku_name, "userId": $body_user_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({product_id: (encode-path-segment $product_id), sku_id: (encode-path-segment $sku_id), user_id: (encode-path-segment $user_id)} | format pattern "/apps/licensing/v1/product/{product_id}/sku/{sku_id}/user/{user_id}") $qp)
+  let req_body = {"etags": $etags, "kind": $kind, "productId": $body_product_id, "productName": $product_name, "selfLink": $self_link, "skuId": $body_sku_id, "skuName": $sku_name, "userId": $body_user_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List all users assigned licenses for a specific product SKU.
 #
 # GET /apps/licensing/v1/product/{productId}/sku/{skuId}/users
 # operationId: licensing.licenseAssignments.listForProductAndSku
-export def "apps-licensing-product-sku-users licensinglicenseAssignmentslistForProductAndSku" [
+export def "apps-licensing-product-sku-users list-for-and" [
   product_id: string
   sku_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -335,7 +344,7 @@ export def "apps-licensing-product-sku-users licensinglicenseAssignmentslistForP
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "customerId" $customer_id "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({product_id: $product_id, sku_id: $sku_id} | format pattern "/apps/licensing/v1/product/{product_id}/sku/{sku_id}/users") $qp)
+  let full_url = (build-url $base ({product_id: (encode-path-segment $product_id), sku_id: (encode-path-segment $sku_id)} | format pattern "/apps/licensing/v1/product/{product_id}/sku/{sku_id}/users") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -345,7 +354,7 @@ export def "apps-licensing-product-sku-users licensinglicenseAssignmentslistForP
 #
 # GET /apps/licensing/v1/product/{productId}/users
 # operationId: licensing.licenseAssignments.listForProduct
-export def "apps-licensing-product-users licensinglicenseAssignmentslistForProduct" [
+export def "apps-licensing-product-users list" [
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -373,7 +382,7 @@ export def "apps-licensing-product-users licensinglicenseAssignmentslistForProdu
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "customerId" $customer_id "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({product_id: $product_id} | format pattern "/apps/licensing/v1/product/{product_id}/users") $qp)
+  let full_url = (build-url $base ({product_id: (encode-path-segment $product_id)} | format pattern "/apps/licensing/v1/product/{product_id}/users") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

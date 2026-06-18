@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -68,7 +77,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "mbus api" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "mbus get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -92,7 +101,7 @@ export def commands []: nothing -> table {
 #
 # GET /mbus/api
 # operationId: mbus_api
-export def "mbus api" [
+export def "mbus get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -129,7 +138,7 @@ export def "mbus-get get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({device: $device, baudrate: $baudrate, address: $address} | format pattern "/mbus/get/{device}/{baudrate}/{address}"))
+  let full_url = (build-url $base ({device: (encode-path-segment $device), baudrate: (encode-path-segment $baudrate), address: (encode-path-segment $address)} | format pattern "/mbus/get/{device}/{baudrate}/{address}"))
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -155,7 +164,7 @@ export def "mbus-get-multi get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({device: $device, baudrate: $baudrate, address: $address, maxframes: $maxframes} | format pattern "/mbus/getMulti/{device}/{baudrate}/{address}/{maxframes}"))
+  let full_url = (build-url $base ({device: (encode-path-segment $device), baudrate: (encode-path-segment $baudrate), address: (encode-path-segment $address), maxframes: (encode-path-segment $maxframes)} | format pattern "/mbus/getMulti/{device}/{baudrate}/{address}/{maxframes}"))
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -165,7 +174,7 @@ export def "mbus-get-multi get" [
 #
 # GET /mbus/hat
 # operationId: hat
-export def "mbus-hat hat" [
+export def "mbus-hat get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -187,7 +196,7 @@ export def "mbus-hat hat" [
 #
 # POST /mbus/hat/off
 # operationId: hatOff
-export def "mbus-hat-off hatOff" [
+export def "mbus-hat-off create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -209,7 +218,7 @@ export def "mbus-hat-off hatOff" [
 #
 # POST /mbus/hat/on
 # operationId: hatOn
-export def "mbus-hat-on hatOn" [
+export def "mbus-hat-on create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -231,7 +240,7 @@ export def "mbus-hat-on hatOn" [
 #
 # POST /mbus/scan/{device}/{baudrate}
 # operationId: scan
-export def "mbus-scan scan" [
+export def "mbus-scan create" [
   device: string
   baudrate: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -245,7 +254,7 @@ export def "mbus-scan scan" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({device: $device, baudrate: $baudrate} | format pattern "/mbus/scan/{device}/{baudrate}"))
+  let full_url = (build-url $base ({device: (encode-path-segment $device), baudrate: (encode-path-segment $baudrate)} | format pattern "/mbus/scan/{device}/{baudrate}"))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

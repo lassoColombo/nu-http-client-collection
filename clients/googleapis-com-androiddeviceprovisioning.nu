@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -72,7 +81,7 @@ def section-type-completer [] { ["SECTION_TYPE_SIM_LOCK" "SECTION_TYPE_UNSPECIFI
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "customers androiddeviceprovisioningcustomerslist" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "customers list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -96,7 +105,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/customers
 # operationId: androiddeviceprovisioning.customers.list
-export def "customers androiddeviceprovisioningcustomerslist" [
+export def "customers list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -133,7 +142,7 @@ export def "customers androiddeviceprovisioningcustomerslist" [
 # POST /v1/partners/{metadataOwnerId}/devices/{deviceId}/metadata
 # operationId: androiddeviceprovisioning.partners.devices.metadata
 # --deviceMetadata shape: {entries?: record}
-export def "partners-devices-metadata androiddeviceprovisioningpartnersdevicesmetadata" [
+export def "partners-devices-metadata create" [
   metadata_owner_id: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -161,19 +170,19 @@ export def "partners-devices-metadata androiddeviceprovisioningpartnersdevicesme
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({metadata_owner_id: $metadata_owner_id, device_id: $device_id} | format pattern "/v1/partners/{metadata_owner_id}/devices/{device_id}/metadata") $qp)
-  let body = {"deviceMetadata": $device_metadata} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({metadata_owner_id: (encode-path-segment $metadata_owner_id), device_id: (encode-path-segment $device_id)} | format pattern "/v1/partners/{metadata_owner_id}/devices/{device_id}/metadata") $qp)
+  let req_body = {"deviceMetadata": $device_metadata} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists the customers that are enrolled to the reseller identified by the `partnerId` argument. This list includes customers that the reseller created and customers that enrolled themselves using the portal.
 #
 # GET /v1/partners/{partnerId}/customers
 # operationId: androiddeviceprovisioning.partners.customers.list
-export def "partners-customers androiddeviceprovisioningpartnerscustomerslist" [
+export def "partners-customers list" [
   partner_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -200,7 +209,7 @@ export def "partners-customers androiddeviceprovisioningpartnerscustomerslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({partner_id: $partner_id} | format pattern "/v1/partners/{partner_id}/customers") $qp)
+  let full_url = (build-url $base ({partner_id: (encode-path-segment $partner_id)} | format pattern "/v1/partners/{partner_id}/customers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -212,7 +221,7 @@ export def "partners-customers androiddeviceprovisioningpartnerscustomerslist" [
 # operationId: androiddeviceprovisioning.partners.devices.claim
 # --deviceIdentifier shape: {chromeOsAttestedDeviceId?: string, deviceType?: "DEVICE_TYPE_UNSPECIFIED"|"DEVICE_TYPE_ANDROID"|"DEVICE_TYPE_CHROME_OS", imei?: string, manufacturer?: string, meid?: string, model?: string, serialNumber?: string}
 # --deviceMetadata shape: {entries?: record}
-export def "partners-devices-claim androiddeviceprovisioningpartnersdevicesclaim" [
+export def "partners-devices-claim create" [
   partner_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -245,12 +254,12 @@ export def "partners-devices-claim androiddeviceprovisioningpartnersdevicesclaim
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({partner_id: $partner_id} | format pattern "/v1/partners/{partner_id}/devices:claim") $qp)
-  let body = {"customerId": $customer_id, "deviceIdentifier": $device_identifier, "deviceMetadata": $device_metadata, "googleWorkspaceCustomerId": $google_workspace_customer_id, "preProvisioningToken": $pre_provisioning_token, "sectionType": $section_type, "simlockProfileId": $simlock_profile_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({partner_id: (encode-path-segment $partner_id)} | format pattern "/v1/partners/{partner_id}/devices:claim") $qp)
+  let req_body = {"customerId": $customer_id, "deviceIdentifier": $device_identifier, "deviceMetadata": $device_metadata, "googleWorkspaceCustomerId": $google_workspace_customer_id, "preProvisioningToken": $pre_provisioning_token, "sectionType": $section_type, "simlockProfileId": $simlock_profile_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Claims a batch of devices for a customer asynchronously. Adds the devices to zero-touch enrollment. To learn more, read [Long‑running batch operations](/zero-touch/guides/how-it-works#operations).
@@ -258,7 +267,7 @@ export def "partners-devices-claim androiddeviceprovisioningpartnersdevicesclaim
 # POST /v1/partners/{partnerId}/devices:claimAsync
 # operationId: androiddeviceprovisioning.partners.devices.claimAsync
 # --claims item shape: {customerId?: string, deviceIdentifier?: record, deviceMetadata?: record, googleWorkspaceCustomerId?: string, preProvisioningToken?: string, sectionType?: "SECTION_TYPE_UNSPECIFIED"|"SECTION_TYPE_SIM_LOCK"|"SECTION_TYPE_ZERO_TOUCH", simlockProfileId?: string}
-export def "partners-devices-claim-async androiddeviceprovisioningpartnersdevicesclaimAsync" [
+export def "partners-devices-claim-async create" [
   partner_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -285,12 +294,12 @@ export def "partners-devices-claim-async androiddeviceprovisioningpartnersdevice
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({partner_id: $partner_id} | format pattern "/v1/partners/{partner_id}/devices:claimAsync") $qp)
-  let body = {"claims": $claims} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({partner_id: (encode-path-segment $partner_id)} | format pattern "/v1/partners/{partner_id}/devices:claimAsync") $qp)
+  let req_body = {"claims": $claims} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Finds devices by hardware identifiers, such as IMEI.
@@ -298,7 +307,7 @@ export def "partners-devices-claim-async androiddeviceprovisioningpartnersdevice
 # POST /v1/partners/{partnerId}/devices:findByIdentifier
 # operationId: androiddeviceprovisioning.partners.devices.findByIdentifier
 # --deviceIdentifier shape: {chromeOsAttestedDeviceId?: string, deviceType?: "DEVICE_TYPE_UNSPECIFIED"|"DEVICE_TYPE_ANDROID"|"DEVICE_TYPE_CHROME_OS", imei?: string, manufacturer?: string, meid?: string, model?: string, serialNumber?: string}
-export def "partners-devices-find-by-identifier androiddeviceprovisioningpartnersdevicesfindByIdentifier" [
+export def "partners-devices-find-by-identifier find" [
   partner_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -327,19 +336,19 @@ export def "partners-devices-find-by-identifier androiddeviceprovisioningpartner
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({partner_id: $partner_id} | format pattern "/v1/partners/{partner_id}/devices:findByIdentifier") $qp)
-  let body = {"deviceIdentifier": $device_identifier, "limit": $limit, "pageToken": $page_token} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({partner_id: (encode-path-segment $partner_id)} | format pattern "/v1/partners/{partner_id}/devices:findByIdentifier") $qp)
+  let req_body = {"deviceIdentifier": $device_identifier, "limit": $limit, "pageToken": $page_token} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Finds devices claimed for customers. The results only contain devices registered to the reseller that's identified by the `partnerId` argument. The customer's devices purchased from other resellers don't appear in the results.
 #
 # POST /v1/partners/{partnerId}/devices:findByOwner
 # operationId: androiddeviceprovisioning.partners.devices.findByOwner
-export def "partners-devices-find-by-owner androiddeviceprovisioningpartnersdevicesfindByOwner" [
+export def "partners-devices-find-by-owner find" [
   partner_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -360,8 +369,8 @@ export def "partners-devices-find-by-owner androiddeviceprovisioningpartnersdevi
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --customer-id: list # The list of customer IDs to search for.
-  --google-workspace-customer-id: list # The list of IDs of Google Workspace accounts to search for.
+  --customer-id: list<string> # The list of customer IDs to search for.
+  --google-workspace-customer-id: list<string> # The list of IDs of Google Workspace accounts to search for.
   --limit: string # Required. The maximum number of devices to show in a page of results. Must be between 1 and 100 inclusive. (format: int64)
   --page-token: string # A token specifying which result page to return.
   --section-type: string@section-type-completer # Required. The section type of the device's provisioning record.
@@ -370,12 +379,12 @@ export def "partners-devices-find-by-owner androiddeviceprovisioningpartnersdevi
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({partner_id: $partner_id} | format pattern "/v1/partners/{partner_id}/devices:findByOwner") $qp)
-  let body = {"customerId": $customer_id, "googleWorkspaceCustomerId": $google_workspace_customer_id, "limit": $limit, "pageToken": $page_token, "sectionType": $section_type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({partner_id: (encode-path-segment $partner_id)} | format pattern "/v1/partners/{partner_id}/devices:findByOwner") $qp)
+  let req_body = {"customerId": $customer_id, "googleWorkspaceCustomerId": $google_workspace_customer_id, "limit": $limit, "pageToken": $page_token, "sectionType": $section_type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Unclaims a device from a customer and removes it from zero-touch enrollment.
@@ -383,7 +392,7 @@ export def "partners-devices-find-by-owner androiddeviceprovisioningpartnersdevi
 # POST /v1/partners/{partnerId}/devices:unclaim
 # operationId: androiddeviceprovisioning.partners.devices.unclaim
 # --deviceIdentifier shape: {chromeOsAttestedDeviceId?: string, deviceType?: "DEVICE_TYPE_UNSPECIFIED"|"DEVICE_TYPE_ANDROID"|"DEVICE_TYPE_CHROME_OS", imei?: string, manufacturer?: string, meid?: string, model?: string, serialNumber?: string}
-export def "partners-devices-unclaim androiddeviceprovisioningpartnersdevicesunclaim" [
+export def "partners-devices-unclaim create" [
   partner_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -414,12 +423,12 @@ export def "partners-devices-unclaim androiddeviceprovisioningpartnersdevicesunc
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({partner_id: $partner_id} | format pattern "/v1/partners/{partner_id}/devices:unclaim") $qp)
-  let body = {"deviceId": $device_id, "deviceIdentifier": $device_identifier, "sectionType": $section_type, "vacationModeDays": $vacation_mode_days, "vacationModeExpireTime": $vacation_mode_expire_time} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({partner_id: (encode-path-segment $partner_id)} | format pattern "/v1/partners/{partner_id}/devices:unclaim") $qp)
+  let req_body = {"deviceId": $device_id, "deviceIdentifier": $device_identifier, "sectionType": $section_type, "vacationModeDays": $vacation_mode_days, "vacationModeExpireTime": $vacation_mode_expire_time} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Unclaims a batch of devices for a customer asynchronously. Removes the devices from zero-touch enrollment. To learn more, read [Long‑running batch operations](/zero-touch/guides/how-it-works#operations).
@@ -427,7 +436,7 @@ export def "partners-devices-unclaim androiddeviceprovisioningpartnersdevicesunc
 # POST /v1/partners/{partnerId}/devices:unclaimAsync
 # operationId: androiddeviceprovisioning.partners.devices.unclaimAsync
 # --unclaims item shape: {deviceId?: string, deviceIdentifier?: record, sectionType?: "SECTION_TYPE_UNSPECIFIED"|"SECTION_TYPE_SIM_LOCK"|"SECTION_TYPE_ZERO_TOUCH", vacationModeDays?: int, vacationModeExpireTime?: string}
-export def "partners-devices-unclaim-async androiddeviceprovisioningpartnersdevicesunclaimAsync" [
+export def "partners-devices-unclaim-async create" [
   partner_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -454,12 +463,12 @@ export def "partners-devices-unclaim-async androiddeviceprovisioningpartnersdevi
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({partner_id: $partner_id} | format pattern "/v1/partners/{partner_id}/devices:unclaimAsync") $qp)
-  let body = {"unclaims": $unclaims} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({partner_id: (encode-path-segment $partner_id)} | format pattern "/v1/partners/{partner_id}/devices:unclaimAsync") $qp)
+  let req_body = {"unclaims": $unclaims} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates the reseller metadata attached to a batch of devices. This method updates devices asynchronously and returns an `Operation` that can be used to track progress. Read [Long‑running batch operations](/zero-touch/guides/how-it-works#operations). Android Devices only.
@@ -467,7 +476,7 @@ export def "partners-devices-unclaim-async androiddeviceprovisioningpartnersdevi
 # POST /v1/partners/{partnerId}/devices:updateMetadataAsync
 # operationId: androiddeviceprovisioning.partners.devices.updateMetadataAsync
 # --updates item shape: {deviceId?: string, deviceIdentifier?: record, deviceMetadata?: record}
-export def "partners-devices-update-metadata-async androiddeviceprovisioningpartnersdevicesupdateMetadataAsync" [
+export def "partners-devices-update-metadata-async update" [
   partner_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -494,19 +503,19 @@ export def "partners-devices-update-metadata-async androiddeviceprovisioningpart
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({partner_id: $partner_id} | format pattern "/v1/partners/{partner_id}/devices:updateMetadataAsync") $qp)
-  let body = {"updates": $updates} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({partner_id: (encode-path-segment $partner_id)} | format pattern "/v1/partners/{partner_id}/devices:updateMetadataAsync") $qp)
+  let req_body = {"updates": $updates} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes an unused configuration. The API call fails if the customer has devices with the configuration applied.
 #
 # DELETE /v1/{name}
 # operationId: androiddeviceprovisioning.customers.configurations.delete
-export def "customers androiddeviceprovisioningcustomersconfigurationsdelete" [
+export def "customers delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -531,7 +540,7 @@ export def "customers androiddeviceprovisioningcustomersconfigurationsdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -541,7 +550,7 @@ export def "customers androiddeviceprovisioningcustomersconfigurationsdelete" [
 #
 # GET /v1/{name}
 # operationId: androiddeviceprovisioning.partners.devices.get
-export def "partners androiddeviceprovisioningpartnersdevicesget" [
+export def "partners get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -566,7 +575,7 @@ export def "partners androiddeviceprovisioningpartnersdevicesget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -576,7 +585,7 @@ export def "partners androiddeviceprovisioningpartnersdevicesget" [
 #
 # PATCH /v1/{name}
 # operationId: androiddeviceprovisioning.customers.configurations.patch
-export def "customers androiddeviceprovisioningcustomersconfigurationspatch" [
+export def "customers update" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -611,19 +620,19 @@ export def "customers androiddeviceprovisioningcustomersconfigurationspatch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}") $qp)
-  let body = {"companyName": $company_name, "configurationName": $configuration_name, "contactEmail": $contact_email, "contactPhone": $contact_phone, "customMessage": $custom_message, "dpcExtras": $dpc_extras, "dpcResourcePath": $dpc_resource_path, "isDefault": $is_default} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}") $qp)
+  let req_body = {"companyName": $company_name, "configurationName": $configuration_name, "contactEmail": $contact_email, "contactPhone": $contact_phone, "customMessage": $custom_message, "dpcExtras": $dpc_extras, "dpcResourcePath": $dpc_resource_path, "isDefault": $is_default} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists a customer's configurations.
 #
 # GET /v1/{parent}/configurations
 # operationId: androiddeviceprovisioning.customers.configurations.list
-export def "configurations androiddeviceprovisioningcustomersconfigurationslist" [
+export def "configurations list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -648,7 +657,7 @@ export def "configurations androiddeviceprovisioningcustomersconfigurationslist"
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/configurations") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/configurations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -658,7 +667,7 @@ export def "configurations androiddeviceprovisioningcustomersconfigurationslist"
 #
 # POST /v1/{parent}/configurations
 # operationId: androiddeviceprovisioning.customers.configurations.create
-export def "configurations androiddeviceprovisioningcustomersconfigurationscreate" [
+export def "configurations create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -692,19 +701,19 @@ export def "configurations androiddeviceprovisioningcustomersconfigurationscreat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/configurations") $qp)
-  let body = {"companyName": $company_name, "configurationName": $configuration_name, "contactEmail": $contact_email, "contactPhone": $contact_phone, "customMessage": $custom_message, "dpcExtras": $dpc_extras, "dpcResourcePath": $dpc_resource_path, "isDefault": $is_default} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/configurations") $qp)
+  let req_body = {"companyName": $company_name, "configurationName": $configuration_name, "contactEmail": $contact_email, "contactPhone": $contact_phone, "customMessage": $custom_message, "dpcExtras": $dpc_extras, "dpcResourcePath": $dpc_resource_path, "isDefault": $is_default} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists the customers of the vendor.
 #
 # GET /v1/{parent}/customers
 # operationId: androiddeviceprovisioning.partners.vendors.customers.list
-export def "customers androiddeviceprovisioningpartnersvendorscustomerslist" [
+export def "customers list-1" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -731,7 +740,7 @@ export def "customers androiddeviceprovisioningpartnersvendorscustomerslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/customers") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/customers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -741,8 +750,8 @@ export def "customers androiddeviceprovisioningpartnersvendorscustomerslist" [
 #
 # POST /v1/{parent}/customers
 # operationId: androiddeviceprovisioning.partners.customers.create
-# --customer shape: {adminEmails?: list, companyName?: string, googleWorkspaceAccount?: record, languageCode?: string, ownerEmails?: list, skipWelcomeEmail?: bool}
-export def "customers androiddeviceprovisioningpartnerscustomerscreate" [
+# --customer shape: {adminEmails?: list<string>, companyName?: string, googleWorkspaceAccount?: record, languageCode?: string, ownerEmails?: list<string>, skipWelcomeEmail?: bool}
+export def "customers create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -763,25 +772,25 @@ export def "customers androiddeviceprovisioningpartnerscustomerscreate" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --customer: record # A reseller, vendor, or customer in the zero-touch reseller and customer APIs. — shape: {adminEmails?: list, companyName?: string, googleWorkspaceAccount?: record, languageCode?: string, ownerEmails?: list, skipWelcomeEmail?: bool}
+  --customer: record # A reseller, vendor, or customer in the zero-touch reseller and customer APIs. — shape: {adminEmails?: list<string>, companyName?: string, googleWorkspaceAccount?: record, languageCode?: string, ownerEmails?: list<string>, skipWelcomeEmail?: bool}
 ]: any -> record<adminEmails: list<string>, companyId: string, companyName: string, googleWorkspaceAccount: record<customerId: string, preProvisioningTokens: list<string>>, languageCode: string, name: string, ownerEmails: list<string>, skipWelcomeEmail: bool, termsStatus: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/customers") $qp)
-  let body = {"customer": $customer} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/customers") $qp)
+  let req_body = {"customer": $customer} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists a customer's devices.
 #
 # GET /v1/{parent}/devices
 # operationId: androiddeviceprovisioning.customers.devices.list
-export def "devices androiddeviceprovisioningcustomersdeviceslist" [
+export def "devices list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -808,7 +817,7 @@ export def "devices androiddeviceprovisioningcustomersdeviceslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/devices") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/devices") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -819,7 +828,7 @@ export def "devices androiddeviceprovisioningcustomersdeviceslist" [
 # POST /v1/{parent}/devices:applyConfiguration
 # operationId: androiddeviceprovisioning.customers.devices.applyConfiguration
 # --device shape: {deviceId?: string, deviceIdentifier?: record}
-export def "devices-apply-configuration androiddeviceprovisioningcustomersdevicesapplyConfiguration" [
+export def "devices-apply-configuration create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -847,12 +856,12 @@ export def "devices-apply-configuration androiddeviceprovisioningcustomersdevice
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/devices:applyConfiguration") $qp)
-  let body = {"configuration": $configuration, "device": $device} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/devices:applyConfiguration") $qp)
+  let req_body = {"configuration": $configuration, "device": $device} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Removes a configuration from device.
@@ -860,7 +869,7 @@ export def "devices-apply-configuration androiddeviceprovisioningcustomersdevice
 # POST /v1/{parent}/devices:removeConfiguration
 # operationId: androiddeviceprovisioning.customers.devices.removeConfiguration
 # --device shape: {deviceId?: string, deviceIdentifier?: record}
-export def "devices-remove-configuration androiddeviceprovisioningcustomersdevicesremoveConfiguration" [
+export def "devices-remove-configuration delete" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -887,12 +896,12 @@ export def "devices-remove-configuration androiddeviceprovisioningcustomersdevic
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/devices:removeConfiguration") $qp)
-  let body = {"device": $device} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/devices:removeConfiguration") $qp)
+  let req_body = {"device": $device} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Unclaims a device from a customer and removes it from zero-touch enrollment. After removing a device, a customer must contact their reseller to register the device into zero-touch enrollment again.
@@ -900,7 +909,7 @@ export def "devices-remove-configuration androiddeviceprovisioningcustomersdevic
 # POST /v1/{parent}/devices:unclaim
 # operationId: androiddeviceprovisioning.customers.devices.unclaim
 # --device shape: {deviceId?: string, deviceIdentifier?: record}
-export def "devices-unclaim androiddeviceprovisioningcustomersdevicesunclaim" [
+export def "devices-unclaim create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -927,19 +936,19 @@ export def "devices-unclaim androiddeviceprovisioningcustomersdevicesunclaim" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/devices:unclaim") $qp)
-  let body = {"device": $device} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/devices:unclaim") $qp)
+  let req_body = {"device": $device} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists the DPCs (device policy controllers) that support zero-touch enrollment.
 #
 # GET /v1/{parent}/dpcs
 # operationId: androiddeviceprovisioning.customers.dpcs.list
-export def "dpcs androiddeviceprovisioningcustomersdpcslist" [
+export def "dpcs list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -964,7 +973,7 @@ export def "dpcs androiddeviceprovisioningcustomersdpcslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/dpcs") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/dpcs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -974,7 +983,7 @@ export def "dpcs androiddeviceprovisioningcustomersdpcslist" [
 #
 # GET /v1/{parent}/vendors
 # operationId: androiddeviceprovisioning.partners.vendors.list
-export def "vendors androiddeviceprovisioningpartnersvendorslist" [
+export def "vendors list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1001,7 +1010,7 @@ export def "vendors androiddeviceprovisioningpartnersvendorslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/vendors") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/vendors") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

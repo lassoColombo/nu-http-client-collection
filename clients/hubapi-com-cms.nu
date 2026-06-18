@@ -38,6 +38,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -72,7 +81,7 @@ def auth-scheme-completer [] { ["query-hapikey" "bearer" "private-app" "private-
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "cms-domains get-page" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "cms-domains get-get-page" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -96,7 +105,7 @@ export def commands []: nothing -> table {
 #
 # GET /cms/v3/domains/
 # operationId: get-/cms/v3/domains/_getPage
-export def "cms-domains get-page" [
+export def "cms-domains get-get-page" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -111,7 +120,7 @@ export def "cms-domains get-page" [
   --updated-at: string # Only return domains updated at this date. (format: date-time)
   --updated-after: string # Only return domains updated after this date. (format: date-time)
   --updated-before: string # Only return domains updated before this date. (format: date-time)
-  --qp-sort: list
+  --qp-sort: list<string>
   --after: string # The paging cursor token of the last successfully read resource will be returned as the `paging.next.after` JSON property of a paged response containing more results.
   --limit: int # Maximum number of results per page. (format: int32)
   --archived: oneof<nothing, bool> # Whether to return only results that have been archived.
@@ -129,7 +138,7 @@ export def "cms-domains get-page" [
 #
 # GET /cms/v3/domains/{domainId}
 # operationId: get-/cms/v3/domains/{domainId}_getById
-export def "cms-domains get-by" [
+export def "cms-domains get-{domain-id}-get" [
   domain_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -142,7 +151,7 @@ export def "cms-domains get-by" [
 ]: nothing -> record<correctCname: string, created: string, domain: string, id: string, isResolving: bool, isSslEnabled: bool, isSslOnly: bool, isUsedForBlogPost: bool, isUsedForEmail: bool, isUsedForKnowledge: bool, isUsedForLandingPage: bool, isUsedForSitePage: bool, manuallyMarkedAsResolving: bool, primaryBlogPost: bool, primaryEmail: bool, primaryKnowledge: bool, primaryLandingPage: bool, primarySitePage: bool, secondaryToDomain: string, updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "private-app-legacy"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({domain_id: $domain_id} | format pattern "/cms/v3/domains/{domain_id}"))
+  let full_url = (build-url $base ({domain_id: (encode-path-segment $domain_id)} | format pattern "/cms/v3/domains/{domain_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

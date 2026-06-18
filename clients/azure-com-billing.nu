@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -134,7 +143,7 @@ export def "providers-microsoft-billing-billing-accounts get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({billing_account_name: $billing_account_name} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}") $qp)
+  let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -162,19 +171,19 @@ export def "providers-microsoft-billing-billing-accounts update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({billing_account_name: $billing_account_name} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}") $qp)
-  let body = {"properties": $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}") $qp)
+  let req_body = {"properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists all agreements for a billing account.
 #
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/agreements
 # operationId: Agreements_ListByBillingAccount
-export def "providers-microsoft-billing-billing-accounts-agreements list-by" [
+export def "providers-microsoft-billing-billing-accounts-agreements list" [
   billing_account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -190,7 +199,7 @@ export def "providers-microsoft-billing-billing-accounts-agreements list-by" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({billing_account_name: $billing_account_name} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/agreements") $qp)
+  let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/agreements") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -217,7 +226,7 @@ export def "providers-microsoft-billing-billing-accounts-agreements get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({billing_account_name: $billing_account_name, agreement_name: $agreement_name} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/agreements/{agreement_name}") $qp)
+  let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), agreement_name: (encode-path-segment $agreement_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/agreements/{agreement_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -227,7 +236,7 @@ export def "providers-microsoft-billing-billing-accounts-agreements get" [
 #
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingPermissions
 # operationId: BillingPermissions_ListByBillingAccount
-export def "providers-microsoft-billing-billing-accounts-billing-permissions list-by" [
+export def "providers-microsoft-billing-billing-accounts-billing-permissions list" [
   billing_account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -242,7 +251,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-permissions lis
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({billing_account_name: $billing_account_name} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingPermissions") $qp)
+  let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingPermissions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -252,7 +261,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-permissions lis
 #
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles
 # operationId: BillingProfiles_ListByBillingAccount
-export def "providers-microsoft-billing-billing-accounts-billing-profiles list-by" [
+export def "providers-microsoft-billing-billing-accounts-billing-profiles list" [
   billing_account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -268,7 +277,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles list-b
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({billing_account_name: $billing_account_name} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles") $qp)
+  let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -295,7 +304,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({billing_account_name: $billing_account_name, billing_profile_name: $billing_profile_name} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}") $qp)
+  let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -324,12 +333,12 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles update
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({billing_account_name: $billing_account_name, billing_profile_name: $billing_profile_name} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}") $qp)
-  let body = {"properties": $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}") $qp)
+  let req_body = {"properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # The operation to create a BillingProfile.
@@ -360,19 +369,19 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles create
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({billing_account_name: $billing_account_name, billing_profile_name: $billing_profile_name} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}") $qp)
-  let body = {"address": $address, "displayName": $display_name, "enabledAzurePlans": $enabled_azure_plans, "invoiceEmailOptIn": $invoice_email_opt_in, "poNumber": $po_number} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}") $qp)
+  let req_body = {"address": $address, "displayName": $display_name, "enabledAzurePlans": $enabled_azure_plans, "invoiceEmailOptIn": $invoice_email_opt_in, "poNumber": $po_number} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # The latest available credit balance for a given billingAccountName and billingProfileName.
 #
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/availableBalance/default
 # operationId: AvailableBalances_GetByBillingProfile
-export def "providers-microsoft-billing-billing-accounts-billing-profiles-available-balance-default get-by" [
+export def "providers-microsoft-billing-billing-accounts-billing-profiles-available-balance-default get" [
   billing_account_name: string
   billing_profile_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -388,7 +397,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-availa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({billing_account_name: $billing_account_name, billing_profile_name: $billing_profile_name} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/availableBalance/default") $qp)
+  let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/availableBalance/default") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -398,7 +407,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-availa
 #
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/billingPermissions
 # operationId: BillingPermissions_ListByBillingProfile
-export def "providers-microsoft-billing-billing-accounts-billing-profiles-billing-permissions list-by" [
+export def "providers-microsoft-billing-billing-accounts-billing-profiles-billing-permissions list" [
   billing_account_name: string
   billing_profile_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -414,7 +423,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-billin
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({billing_account_name: $billing_account_name, billing_profile_name: $billing_profile_name} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/billingPermissions") $qp)
+  let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/billingPermissions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -424,7 +433,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-billin
 #
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/billingRoleAssignments
 # operationId: BillingRoleAssignments_ListByBillingProfile
-export def "providers-microsoft-billing-billing-accounts-billing-profiles-billing-role-assignments list-by" [
+export def "providers-microsoft-billing-billing-accounts-billing-profiles-billing-role-assignments list" [
   billing_account_name: string
   billing_profile_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -440,7 +449,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-billin
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({billing_account_name: $billing_account_name, billing_profile_name: $billing_profile_name} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/billingRoleAssignments") $qp)
+  let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/billingRoleAssignments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -450,7 +459,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-billin
 #
 # DELETE /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/billingRoleAssignments/{billingRoleAssignmentName}
 # operationId: BillingRoleAssignments_DeleteByBillingProfile
-export def "providers-microsoft-billing-billing-accounts-billing-profiles-billing-role-assignments delete-by" [
+export def "providers-microsoft-billing-billing-accounts-billing-profiles-billing-role-assignments delete" [
   billing_account_name: string
   billing_profile_name: string
   billing_role_assignment_name: string
@@ -467,7 +476,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-billin
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({billing_account_name: $billing_account_name, billing_profile_name: $billing_profile_name, billing_role_assignment_name: $billing_role_assignment_name} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/billingRoleAssignments/{billing_role_assignment_name}") $qp)
+  let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), billing_role_assignment_name: (encode-path-segment $billing_role_assignment_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/billingRoleAssignments/{billing_role_assignment_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -477,7 +486,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-billin
 #
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/billingRoleAssignments/{billingRoleAssignmentName}
 # operationId: BillingRoleAssignments_GetByBillingProfile
-export def "providers-microsoft-billing-billing-accounts-billing-profiles-billing-role-assignments get-by" [
+export def "providers-microsoft-billing-billing-accounts-billing-profiles-billing-role-assignments get" [
   billing_account_name: string
   billing_profile_name: string
   billing_role_assignment_name: string
@@ -494,7 +503,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-billin
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({billing_account_name: $billing_account_name, billing_profile_name: $billing_profile_name, billing_role_assignment_name: $billing_role_assignment_name} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/billingRoleAssignments/{billing_role_assignment_name}") $qp)
+  let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), billing_role_assignment_name: (encode-path-segment $billing_role_assignment_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/billingRoleAssignments/{billing_role_assignment_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -504,7 +513,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-billin
 #
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/billingRoleDefinitions
 # operationId: BillingRoleDefinitions_ListByBillingProfile
-export def "providers-microsoft-billing-billing-accounts-billing-profiles-billing-role-definitions list-by" [
+export def "providers-microsoft-billing-billing-accounts-billing-profiles-billing-role-definitions list" [
   billing_account_name: string
   billing_profile_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -520,7 +529,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-billin
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({billing_account_name: $billing_account_name, billing_profile_name: $billing_profile_name} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/billingRoleDefinitions") $qp)
+  let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/billingRoleDefinitions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -530,7 +539,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-billin
 #
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/billingRoleDefinitions/{billingRoleDefinitionName}
 # operationId: BillingRoleDefinitions_GetByBillingProfile
-export def "providers-microsoft-billing-billing-accounts-billing-profiles-billing-role-definitions get-by" [
+export def "providers-microsoft-billing-billing-accounts-billing-profiles-billing-role-definitions get" [
   billing_account_name: string
   billing_profile_name: string
   billing_role_definition_name: string
@@ -547,7 +556,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-billin
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({billing_account_name: $billing_account_name, billing_profile_name: $billing_profile_name, billing_role_definition_name: $billing_role_definition_name} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/billingRoleDefinitions/{billing_role_definition_name}") $qp)
+  let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), billing_role_definition_name: (encode-path-segment $billing_role_definition_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/billingRoleDefinitions/{billing_role_definition_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -558,7 +567,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-billin
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/billingSubscriptions
 # Docs: https://docs.microsoft.com/en-us/rest/api/billing/
 # operationId: BillingSubscriptions_ListByBillingProfile
-export def "providers-microsoft-billing-billing-accounts-billing-profiles-billing-subscriptions list-by" [
+export def "providers-microsoft-billing-billing-accounts-billing-profiles-billing-subscriptions list" [
   billing_account_name: string
   billing_profile_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -574,7 +583,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-billin
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({billing_account_name: $billing_account_name, billing_profile_name: $billing_profile_name} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/billingSubscriptions") $qp)
+  let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/billingSubscriptions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -584,7 +593,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-billin
 #
 # POST /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/createBillingRoleAssignment
 # operationId: BillingRoleAssignments_AddByBillingProfile
-export def "providers-microsoft-billing-billing-accounts-billing-profiles-create-billing-role-assignment create-by" [
+export def "providers-microsoft-billing-billing-accounts-billing-profiles-create-billing-role-assignment create" [
   billing_account_name: string
   billing_profile_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -603,19 +612,19 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-create
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({billing_account_name: $billing_account_name, billing_profile_name: $billing_profile_name} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/createBillingRoleAssignment") $qp)
-  let body = {"billingRoleDefinitionId": $billing_role_definition_id, "principalId": $principal_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/createBillingRoleAssignment") $qp)
+  let req_body = {"billingRoleDefinitionId": $billing_role_definition_id, "principalId": $principal_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists customers by billing profile which the current user can work with on-behalf of a partner.
 #
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/customers
 # operationId: Customers_ListByBillingProfile
-export def "providers-microsoft-billing-billing-accounts-billing-profiles-customers list-by" [
+export def "providers-microsoft-billing-billing-accounts-billing-profiles-customers list" [
   billing_account_name: string
   billing_profile_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -633,7 +642,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-custom
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$skiptoken" $skiptoken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({billing_account_name: $billing_account_name, billing_profile_name: $billing_profile_name} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/customers") $qp)
+  let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/customers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -644,7 +653,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-custom
 # POST /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/customers/{customerName}/initiateTransfer
 # operationId: PartnerTransfers_Initiate
 # --properties shape: {recipientEmailId?: string, resellerId?: string}
-export def "providers-microsoft-billing-billing-accounts-billing-profiles-customers-initiate-transfer post" [
+export def "providers-microsoft-billing-billing-accounts-billing-profiles-customers-initiate-transfer create-partner" [
   billing_account_name: string
   billing_profile_name: string
   customer_name: string
@@ -661,19 +670,19 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-custom
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({billing_account_name: $billing_account_name, billing_profile_name: $billing_profile_name, customer_name: $customer_name} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/customers/{customer_name}/initiateTransfer"))
-  let body = {"properties": $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), customer_name: (encode-path-segment $customer_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/customers/{customer_name}/initiateTransfer"))
+  let req_body = {"properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists all transfer's details initiated from given invoice section.
 #
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/customers/{customerName}/transfers
 # operationId: PartnerTransfers_List
-export def "providers-microsoft-billing-billing-accounts-billing-profiles-customers-transfers list" [
+export def "providers-microsoft-billing-billing-accounts-billing-profiles-customers-transfers list-partner" [
   billing_account_name: string
   billing_profile_name: string
   customer_name: string
@@ -688,7 +697,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-custom
 ]: nothing -> record<nextLink: string, value: table<properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({billing_account_name: $billing_account_name, billing_profile_name: $billing_profile_name, customer_name: $customer_name} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/customers/{customer_name}/transfers"))
+  let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), customer_name: (encode-path-segment $customer_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/customers/{customer_name}/transfers"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -698,7 +707,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-custom
 #
 # DELETE /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/customers/{customerName}/transfers/{transferName}
 # operationId: PartnerTransfers_Cancel
-export def "providers-microsoft-billing-billing-accounts-billing-profiles-customers-transfers cancel" [
+export def "providers-microsoft-billing-billing-accounts-billing-profiles-customers-transfers cancel-partner" [
   billing_account_name: string
   billing_profile_name: string
   customer_name: string
@@ -714,7 +723,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-custom
 ]: nothing -> record<properties: record<billingAccountId: string, billingProfileId: string, canceledBy: string, creationTime: string, detailedTransferStatus: list<record>, expirationTime: string, initiatorCustomerType: string, initiatorEmailId: string, invoiceSectionId: string, lastModifiedTime: string, recipientEmailId: string, resellerId: string, resellerName: string, transferStatus: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({billing_account_name: $billing_account_name, billing_profile_name: $billing_profile_name, customer_name: $customer_name, transfer_name: $transfer_name} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/customers/{customer_name}/transfers/{transfer_name}"))
+  let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), customer_name: (encode-path-segment $customer_name), transfer_name: (encode-path-segment $transfer_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/customers/{customer_name}/transfers/{transfer_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -724,7 +733,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-custom
 #
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/customers/{customerName}/transfers/{transferName}
 # operationId: PartnerTransfers_Get
-export def "providers-microsoft-billing-billing-accounts-billing-profiles-customers-transfers get" [
+export def "providers-microsoft-billing-billing-accounts-billing-profiles-customers-transfers get-partner" [
   billing_account_name: string
   billing_profile_name: string
   customer_name: string
@@ -740,7 +749,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-custom
 ]: nothing -> record<properties: record<billingAccountId: string, billingProfileId: string, canceledBy: string, creationTime: string, detailedTransferStatus: list<record>, expirationTime: string, initiatorCustomerType: string, initiatorEmailId: string, invoiceSectionId: string, lastModifiedTime: string, recipientEmailId: string, resellerId: string, resellerName: string, transferStatus: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({billing_account_name: $billing_account_name, billing_profile_name: $billing_profile_name, customer_name: $customer_name, transfer_name: $transfer_name} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/customers/{customer_name}/transfers/{transfer_name}"))
+  let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), customer_name: (encode-path-segment $customer_name), transfer_name: (encode-path-segment $transfer_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/customers/{customer_name}/transfers/{transfer_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -751,7 +760,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-custom
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/instructions
 # Docs: https://docs.microsoft.com/en-us/rest/api/billing/
 # operationId: Instructions_ListByBillingProfile
-export def "providers-microsoft-billing-billing-accounts-billing-profiles-instructions list-by" [
+export def "providers-microsoft-billing-billing-accounts-billing-profiles-instructions list" [
   billing_account_name: string
   billing_profile_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -767,7 +776,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-instru
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({billing_account_name: $billing_account_name, billing_profile_name: $billing_profile_name} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/instructions") $qp)
+  let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/instructions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -794,7 +803,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-instru
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({billing_account_name: $billing_account_name, billing_profile_name: $billing_profile_name, instruction_name: $instruction_name} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/instructions/{instruction_name}") $qp)
+  let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), instruction_name: (encode-path-segment $instruction_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/instructions/{instruction_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -824,19 +833,19 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-instru
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({billing_account_name: $billing_account_name, billing_profile_name: $billing_profile_name, instruction_name: $instruction_name} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/instructions/{instruction_name}") $qp)
-  let body = {"properties": $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), instruction_name: (encode-path-segment $instruction_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/instructions/{instruction_name}") $qp)
+  let req_body = {"properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists all invoice sections for a user which he has access to.
 #
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/invoiceSections
 # operationId: InvoiceSections_ListByBillingProfile
-export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoice-sections list-by" [
+export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoice-sections list" [
   billing_account_name: string
   billing_profile_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -852,7 +861,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({billing_account_name: $billing_account_name, billing_profile_name: $billing_profile_name} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections") $qp)
+  let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -879,7 +888,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({billing_account_name: $billing_account_name, billing_profile_name: $billing_profile_name, invoice_section_name: $invoice_section_name} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}") $qp)
+  let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_section_name: (encode-path-segment $invoice_section_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -909,12 +918,12 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({billing_account_name: $billing_account_name, billing_profile_name: $billing_profile_name, invoice_section_name: $invoice_section_name} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}") $qp)
-  let body = {"properties": $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_section_name: (encode-path-segment $invoice_section_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}") $qp)
+  let req_body = {"properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # The operation to create an invoice section.
@@ -940,19 +949,19 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({billing_account_name: $billing_account_name, billing_profile_name: $billing_profile_name, invoice_section_name: $invoice_section_name} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}") $qp)
-  let body = {"displayName": $display_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_section_name: (encode-path-segment $invoice_section_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}") $qp)
+  let req_body = {"displayName": $display_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists all billing permissions for the caller under invoice section.
 #
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/invoiceSections/{invoiceSectionName}/billingPermissions
 # operationId: BillingPermissions_ListByInvoiceSections
-export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoice-sections-billing-permissions list-by" [
+export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoice-sections-billing-permissions list" [
   billing_account_name: string
   billing_profile_name: string
   invoice_section_name: string
@@ -969,7 +978,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({billing_account_name: $billing_account_name, billing_profile_name: $billing_profile_name, invoice_section_name: $invoice_section_name} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/billingPermissions") $qp)
+  let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_section_name: (encode-path-segment $invoice_section_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/billingPermissions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -979,7 +988,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
 #
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/invoiceSections/{invoiceSectionName}/billingRoleAssignments
 # operationId: BillingRoleAssignments_ListByInvoiceSection
-export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoice-sections-billing-role-assignments list-by" [
+export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoice-sections-billing-role-assignments list" [
   billing_account_name: string
   billing_profile_name: string
   invoice_section_name: string
@@ -996,7 +1005,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({billing_account_name: $billing_account_name, billing_profile_name: $billing_profile_name, invoice_section_name: $invoice_section_name} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/billingRoleAssignments") $qp)
+  let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_section_name: (encode-path-segment $invoice_section_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/billingRoleAssignments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1006,7 +1015,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
 #
 # DELETE /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/invoiceSections/{invoiceSectionName}/billingRoleAssignments/{billingRoleAssignmentName}
 # operationId: BillingRoleAssignments_DeleteByInvoiceSection
-export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoice-sections-billing-role-assignments delete-by" [
+export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoice-sections-billing-role-assignments delete" [
   billing_account_name: string
   billing_profile_name: string
   invoice_section_name: string
@@ -1024,7 +1033,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({billing_account_name: $billing_account_name, billing_profile_name: $billing_profile_name, invoice_section_name: $invoice_section_name, billing_role_assignment_name: $billing_role_assignment_name} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/billingRoleAssignments/{billing_role_assignment_name}") $qp)
+  let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_section_name: (encode-path-segment $invoice_section_name), billing_role_assignment_name: (encode-path-segment $billing_role_assignment_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/billingRoleAssignments/{billing_role_assignment_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1034,7 +1043,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
 #
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/invoiceSections/{invoiceSectionName}/billingRoleAssignments/{billingRoleAssignmentName}
 # operationId: BillingRoleAssignments_GetByInvoiceSection
-export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoice-sections-billing-role-assignments get-by" [
+export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoice-sections-billing-role-assignments get" [
   billing_account_name: string
   billing_profile_name: string
   invoice_section_name: string
@@ -1052,7 +1061,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({billing_account_name: $billing_account_name, billing_profile_name: $billing_profile_name, invoice_section_name: $invoice_section_name, billing_role_assignment_name: $billing_role_assignment_name} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/billingRoleAssignments/{billing_role_assignment_name}") $qp)
+  let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_section_name: (encode-path-segment $invoice_section_name), billing_role_assignment_name: (encode-path-segment $billing_role_assignment_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/billingRoleAssignments/{billing_role_assignment_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1062,7 +1071,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
 #
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/invoiceSections/{invoiceSectionName}/billingRoleDefinitions
 # operationId: BillingRoleDefinitions_ListByInvoiceSection
-export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoice-sections-billing-role-definitions list-by" [
+export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoice-sections-billing-role-definitions list" [
   billing_account_name: string
   billing_profile_name: string
   invoice_section_name: string
@@ -1079,7 +1088,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({billing_account_name: $billing_account_name, billing_profile_name: $billing_profile_name, invoice_section_name: $invoice_section_name} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/billingRoleDefinitions") $qp)
+  let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_section_name: (encode-path-segment $invoice_section_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/billingRoleDefinitions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1089,7 +1098,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
 #
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/invoiceSections/{invoiceSectionName}/billingRoleDefinitions/{billingRoleDefinitionName}
 # operationId: BillingRoleDefinitions_GetByInvoiceSection
-export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoice-sections-billing-role-definitions get-by" [
+export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoice-sections-billing-role-definitions get" [
   billing_account_name: string
   billing_profile_name: string
   invoice_section_name: string
@@ -1107,7 +1116,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({billing_account_name: $billing_account_name, billing_profile_name: $billing_profile_name, invoice_section_name: $invoice_section_name, billing_role_definition_name: $billing_role_definition_name} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/billingRoleDefinitions/{billing_role_definition_name}") $qp)
+  let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_section_name: (encode-path-segment $invoice_section_name), billing_role_definition_name: (encode-path-segment $billing_role_definition_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/billingRoleDefinitions/{billing_role_definition_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1118,7 +1127,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/invoiceSections/{invoiceSectionName}/billingSubscriptions
 # Docs: https://docs.microsoft.com/en-us/rest/api/billing/
 # operationId: BillingSubscriptions_ListByInvoiceSection
-export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoice-sections-billing-subscriptions list-by" [
+export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoice-sections-billing-subscriptions list" [
   billing_account_name: string
   billing_profile_name: string
   invoice_section_name: string
@@ -1135,7 +1144,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({billing_account_name: $billing_account_name, billing_profile_name: $billing_profile_name, invoice_section_name: $invoice_section_name} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/billingSubscriptions") $qp)
+  let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_section_name: (encode-path-segment $invoice_section_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/billingSubscriptions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1164,7 +1173,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({billing_account_name: $billing_account_name, billing_profile_name: $billing_profile_name, invoice_section_name: $invoice_section_name, billing_subscription_name: $billing_subscription_name} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/billingSubscriptions/{billing_subscription_name}") $qp)
+  let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_section_name: (encode-path-segment $invoice_section_name), billing_subscription_name: (encode-path-segment $billing_subscription_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/billingSubscriptions/{billing_subscription_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1174,7 +1183,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
 #
 # POST /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/invoiceSections/{invoiceSectionName}/billingSubscriptions/{billingSubscriptionName}/transfer
 # operationId: BillingSubscriptions_Transfer
-export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoice-sections-billing-subscriptions-transfer post" [
+export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoice-sections-billing-subscriptions-transfer create" [
   billing_account_name: string
   billing_profile_name: string
   invoice_section_name: string
@@ -1193,12 +1202,12 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({billing_account_name: $billing_account_name, billing_profile_name: $billing_profile_name, invoice_section_name: $invoice_section_name, billing_subscription_name: $billing_subscription_name} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/billingSubscriptions/{billing_subscription_name}/transfer"))
-  let body = {"destinationBillingProfileId": $destination_billing_profile_id, "destinationInvoiceSectionId": $destination_invoice_section_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_section_name: (encode-path-segment $invoice_section_name), billing_subscription_name: (encode-path-segment $billing_subscription_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/billingSubscriptions/{billing_subscription_name}/transfer"))
+  let req_body = {"destinationBillingProfileId": $destination_billing_profile_id, "destinationInvoiceSectionId": $destination_invoice_section_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Validates the transfer of billing subscriptions across invoice sections.
@@ -1224,19 +1233,19 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({billing_account_name: $billing_account_name, billing_profile_name: $billing_profile_name, invoice_section_name: $invoice_section_name, billing_subscription_name: $billing_subscription_name} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/billingSubscriptions/{billing_subscription_name}/validateTransferEligibility"))
-  let body = {"destinationBillingProfileId": $destination_billing_profile_id, "destinationInvoiceSectionId": $destination_invoice_section_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_section_name: (encode-path-segment $invoice_section_name), billing_subscription_name: (encode-path-segment $billing_subscription_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/billingSubscriptions/{billing_subscription_name}/validateTransferEligibility"))
+  let req_body = {"destinationBillingProfileId": $destination_billing_profile_id, "destinationInvoiceSectionId": $destination_invoice_section_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # The operation to add a role assignment to a invoice Section.
 #
 # POST /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/invoiceSections/{invoiceSectionName}/createBillingRoleAssignment
 # operationId: BillingRoleAssignments_AddByInvoiceSection
-export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoice-sections-create-billing-role-assignment create-by" [
+export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoice-sections-create-billing-role-assignment create" [
   billing_account_name: string
   billing_profile_name: string
   invoice_section_name: string
@@ -1256,19 +1265,19 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({billing_account_name: $billing_account_name, billing_profile_name: $billing_profile_name, invoice_section_name: $invoice_section_name} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/createBillingRoleAssignment") $qp)
-  let body = {"billingRoleDefinitionId": $billing_role_definition_id, "principalId": $principal_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_section_name: (encode-path-segment $invoice_section_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/createBillingRoleAssignment") $qp)
+  let req_body = {"billingRoleDefinitionId": $billing_role_definition_id, "principalId": $principal_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Elevates the caller's access to match their billing profile access.
 #
 # POST /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/invoiceSections/{invoiceSectionName}/elevate
 # operationId: InvoiceSections_ElevateToBillingProfile
-export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoice-sections-elevate post" [
+export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoice-sections-elevate create" [
   billing_account_name: string
   billing_profile_name: string
   invoice_section_name: string
@@ -1283,7 +1292,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
 ]: nothing -> record<error: record<code: string, message: string, target: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({billing_account_name: $billing_account_name, billing_profile_name: $billing_profile_name, invoice_section_name: $invoice_section_name} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/elevate"))
+  let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_section_name: (encode-path-segment $invoice_section_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/elevate"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1294,7 +1303,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
 # POST /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/invoiceSections/{invoiceSectionName}/initiateTransfer
 # operationId: Transfers_Initiate
 # --properties shape: {recipientEmailId?: string, resellerId?: string}
-export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoice-sections-initiate-transfer post" [
+export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoice-sections-initiate-transfer create" [
   billing_account_name: string
   billing_profile_name: string
   invoice_section_name: string
@@ -1311,12 +1320,12 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({billing_account_name: $billing_account_name, billing_profile_name: $billing_profile_name, invoice_section_name: $invoice_section_name} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/initiateTransfer"))
-  let body = {"properties": $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_section_name: (encode-path-segment $invoice_section_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/initiateTransfer"))
+  let req_body = {"properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists products by invoice section name.
@@ -1324,7 +1333,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/invoiceSections/{invoiceSectionName}/products
 # Docs: https://docs.microsoft.com/en-us/rest/api/billing/
 # operationId: Products_ListByInvoiceSection
-export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoice-sections-products list-by" [
+export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoice-sections-products list" [
   billing_account_name: string
   billing_profile_name: string
   invoice_section_name: string
@@ -1342,7 +1351,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({billing_account_name: $billing_account_name, billing_profile_name: $billing_profile_name, invoice_section_name: $invoice_section_name} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/products") $qp)
+  let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_section_name: (encode-path-segment $invoice_section_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/products") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1371,7 +1380,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({billing_account_name: $billing_account_name, billing_profile_name: $billing_profile_name, invoice_section_name: $invoice_section_name, product_name: $product_name} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/products/{product_name}") $qp)
+  let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_section_name: (encode-path-segment $invoice_section_name), product_name: (encode-path-segment $product_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/products/{product_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1381,7 +1390,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
 #
 # POST /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/invoiceSections/{invoiceSectionName}/products/{productName}/transfer
 # operationId: Products_Transfer
-export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoice-sections-products-transfer post" [
+export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoice-sections-products-transfer create" [
   billing_account_name: string
   billing_profile_name: string
   invoice_section_name: string
@@ -1402,12 +1411,12 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({billing_account_name: $billing_account_name, billing_profile_name: $billing_profile_name, invoice_section_name: $invoice_section_name, product_name: $product_name} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/products/{product_name}/transfer") $qp)
-  let body = {"destinationBillingProfileId": $destination_billing_profile_id, "destinationInvoiceSectionId": $destination_invoice_section_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_section_name: (encode-path-segment $invoice_section_name), product_name: (encode-path-segment $product_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/products/{product_name}/transfer") $qp)
+  let req_body = {"destinationBillingProfileId": $destination_billing_profile_id, "destinationInvoiceSectionId": $destination_invoice_section_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Cancel auto renew for product by product id and invoice section name
@@ -1432,7 +1441,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({billing_account_name: $billing_account_name, billing_profile_name: $billing_profile_name, invoice_section_name: $invoice_section_name, product_name: $product_name} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/products/{product_name}/updateAutoRenew") $qp)
+  let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_section_name: (encode-path-segment $invoice_section_name), product_name: (encode-path-segment $product_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/products/{product_name}/updateAutoRenew") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1461,12 +1470,12 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({billing_account_name: $billing_account_name, billing_profile_name: $billing_profile_name, invoice_section_name: $invoice_section_name, product_name: $product_name} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/products/{product_name}/validateTransferEligibility"))
-  let body = {"destinationBillingProfileId": $destination_billing_profile_id, "destinationInvoiceSectionId": $destination_invoice_section_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_section_name: (encode-path-segment $invoice_section_name), product_name: (encode-path-segment $product_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/products/{product_name}/validateTransferEligibility"))
+  let req_body = {"destinationBillingProfileId": $destination_billing_profile_id, "destinationInvoiceSectionId": $destination_invoice_section_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists the transactions by invoice section name for given start date and end date.
@@ -1474,7 +1483,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/invoiceSections/{invoiceSectionName}/transactions
 # Docs: https://docs.microsoft.com/en-us/rest/api/billing/
 # operationId: Transactions_ListByInvoiceSection
-export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoice-sections-transactions list-by" [
+export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoice-sections-transactions list" [
   billing_account_name: string
   billing_profile_name: string
   invoice_section_name: string
@@ -1494,7 +1503,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "periodStartDate" $period_start_date "scalar") (serialize-qp "periodEndDate" $period_end_date "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({billing_account_name: $billing_account_name, billing_profile_name: $billing_profile_name, invoice_section_name: $invoice_section_name} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/transactions") $qp)
+  let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_section_name: (encode-path-segment $invoice_section_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/transactions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1519,7 +1528,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
 ]: nothing -> record<nextLink: string, value: table<properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({billing_account_name: $billing_account_name, billing_profile_name: $billing_profile_name, invoice_section_name: $invoice_section_name} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/transfers"))
+  let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_section_name: (encode-path-segment $invoice_section_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/transfers"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1545,7 +1554,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
 ]: nothing -> record<properties: record<billingAccountId: string, billingProfileId: string, canceledBy: string, creationTime: string, detailedTransferStatus: list<record>, expirationTime: string, initiatorCustomerType: string, initiatorEmailId: string, invoiceSectionId: string, lastModifiedTime: string, recipientEmailId: string, resellerId: string, resellerName: string, transferStatus: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({billing_account_name: $billing_account_name, billing_profile_name: $billing_profile_name, invoice_section_name: $invoice_section_name, transfer_name: $transfer_name} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/transfers/{transfer_name}"))
+  let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_section_name: (encode-path-segment $invoice_section_name), transfer_name: (encode-path-segment $transfer_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/transfers/{transfer_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1571,7 +1580,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
 ]: nothing -> record<properties: record<billingAccountId: string, billingProfileId: string, canceledBy: string, creationTime: string, detailedTransferStatus: list<record>, expirationTime: string, initiatorCustomerType: string, initiatorEmailId: string, invoiceSectionId: string, lastModifiedTime: string, recipientEmailId: string, resellerId: string, resellerName: string, transferStatus: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({billing_account_name: $billing_account_name, billing_profile_name: $billing_profile_name, invoice_section_name: $invoice_section_name, transfer_name: $transfer_name} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/transfers/{transfer_name}"))
+  let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_section_name: (encode-path-segment $invoice_section_name), transfer_name: (encode-path-segment $transfer_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/transfers/{transfer_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1581,7 +1590,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
 #
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/invoices
 # operationId: Invoices_ListByBillingProfile
-export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoices list-by" [
+export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoices list" [
   billing_account_name: string
   billing_profile_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1599,7 +1608,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "periodStartDate" $period_start_date "scalar") (serialize-qp "periodEndDate" $period_end_date "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({billing_account_name: $billing_account_name, billing_profile_name: $billing_profile_name} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoices") $qp)
+  let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoices") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1626,7 +1635,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({billing_account_name: $billing_account_name, billing_profile_name: $billing_profile_name, invoice_name: $invoice_name} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoices/{invoice_name}") $qp)
+  let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_name: (encode-path-segment $invoice_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoices/{invoice_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1636,7 +1645,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
 #
 # POST /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/invoices/{invoiceName}/pricesheet/default/download
 # operationId: PriceSheet_Download
-export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoices-pricesheet-default-download download" [
+export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoices-pricesheet-default-download download-price-sheet" [
   billing_account_name: string
   billing_profile_name: string
   invoice_name: string
@@ -1653,7 +1662,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({billing_account_name: $billing_account_name, billing_profile_name: $billing_profile_name, invoice_name: $invoice_name} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoices/{invoice_name}/pricesheet/default/download") $qp)
+  let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_name: (encode-path-segment $invoice_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoices/{invoice_name}/pricesheet/default/download") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1664,7 +1673,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/paymentMethods
 # Docs: https://docs.microsoft.com/en-us/rest/api/billing/
 # operationId: PaymentMethods_ListByBillingProfile
-export def "providers-microsoft-billing-billing-accounts-billing-profiles-payment-methods list-by" [
+export def "providers-microsoft-billing-billing-accounts-billing-profiles-payment-methods list" [
   billing_account_name: string
   billing_profile_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1680,7 +1689,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-paymen
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({billing_account_name: $billing_account_name, billing_profile_name: $billing_profile_name} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/paymentMethods") $qp)
+  let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/paymentMethods") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1691,7 +1700,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-paymen
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/policies/default
 # Docs: https://docs.microsoft.com/en-us/rest/api/billing/
 # operationId: Policies_GetByBillingProfile
-export def "providers-microsoft-billing-billing-accounts-billing-profiles-policies-default get-by" [
+export def "providers-microsoft-billing-billing-accounts-billing-profiles-policies-default get" [
   billing_account_name: string
   billing_profile_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1707,7 +1716,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-polici
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({billing_account_name: $billing_account_name, billing_profile_name: $billing_profile_name} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/policies/default") $qp)
+  let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/policies/default") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1736,19 +1745,19 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-polici
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({billing_account_name: $billing_account_name, billing_profile_name: $billing_profile_name} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/policies/default") $qp)
-  let body = {"properties": $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/policies/default") $qp)
+  let req_body = {"properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Download price sheet for a billing profile.
 #
 # POST /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/pricesheet/default/download
 # operationId: PriceSheet_DownloadByBillingProfile
-export def "providers-microsoft-billing-billing-accounts-billing-profiles-pricesheet-default-download download-by" [
+export def "providers-microsoft-billing-billing-accounts-billing-profiles-pricesheet-default-download download-price-sheet" [
   billing_account_name: string
   billing_profile_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1764,7 +1773,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-prices
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({billing_account_name: $billing_account_name, billing_profile_name: $billing_profile_name} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/pricesheet/default/download") $qp)
+  let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/pricesheet/default/download") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1775,7 +1784,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-prices
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/transactions
 # Docs: https://docs.microsoft.com/en-us/rest/api/billing/
 # operationId: Transactions_ListByBillingProfile
-export def "providers-microsoft-billing-billing-accounts-billing-profiles-transactions list-by" [
+export def "providers-microsoft-billing-billing-accounts-billing-profiles-transactions list" [
   billing_account_name: string
   billing_profile_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1794,7 +1803,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-transa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "periodStartDate" $period_start_date "scalar") (serialize-qp "periodEndDate" $period_end_date "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({billing_account_name: $billing_account_name, billing_profile_name: $billing_profile_name} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/transactions") $qp)
+  let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/transactions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1824,7 +1833,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-transa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "periodStartDate" $period_start_date "scalar") (serialize-qp "periodEndDate" $period_end_date "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({billing_account_name: $billing_account_name, billing_profile_name: $billing_profile_name, transaction_name: $transaction_name} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/transactions/{transaction_name}") $qp)
+  let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), transaction_name: (encode-path-segment $transaction_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/transactions/{transaction_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1834,7 +1843,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-transa
 #
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingRoleAssignments
 # operationId: BillingRoleAssignments_ListByBillingAccount
-export def "providers-microsoft-billing-billing-accounts-billing-role-assignments list-by" [
+export def "providers-microsoft-billing-billing-accounts-billing-role-assignments list" [
   billing_account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1849,7 +1858,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-role-assignment
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({billing_account_name: $billing_account_name} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingRoleAssignments") $qp)
+  let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingRoleAssignments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1859,7 +1868,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-role-assignment
 #
 # DELETE /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingRoleAssignments/{billingRoleAssignmentName}
 # operationId: BillingRoleAssignments_DeleteByBillingAccount
-export def "providers-microsoft-billing-billing-accounts-billing-role-assignments delete-by" [
+export def "providers-microsoft-billing-billing-accounts-billing-role-assignments delete" [
   billing_account_name: string
   billing_role_assignment_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1875,7 +1884,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-role-assignment
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({billing_account_name: $billing_account_name, billing_role_assignment_name: $billing_role_assignment_name} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingRoleAssignments/{billing_role_assignment_name}") $qp)
+  let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_role_assignment_name: (encode-path-segment $billing_role_assignment_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingRoleAssignments/{billing_role_assignment_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1885,7 +1894,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-role-assignment
 #
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingRoleAssignments/{billingRoleAssignmentName}
 # operationId: BillingRoleAssignments_GetByBillingAccount
-export def "providers-microsoft-billing-billing-accounts-billing-role-assignments get-by" [
+export def "providers-microsoft-billing-billing-accounts-billing-role-assignments get" [
   billing_account_name: string
   billing_role_assignment_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1901,7 +1910,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-role-assignment
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({billing_account_name: $billing_account_name, billing_role_assignment_name: $billing_role_assignment_name} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingRoleAssignments/{billing_role_assignment_name}") $qp)
+  let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_role_assignment_name: (encode-path-segment $billing_role_assignment_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingRoleAssignments/{billing_role_assignment_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1911,7 +1920,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-role-assignment
 #
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingRoleDefinitions
 # operationId: BillingRoleDefinitions_ListByBillingAccount
-export def "providers-microsoft-billing-billing-accounts-billing-role-definitions list-by" [
+export def "providers-microsoft-billing-billing-accounts-billing-role-definitions list" [
   billing_account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1926,7 +1935,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-role-definition
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({billing_account_name: $billing_account_name} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingRoleDefinitions") $qp)
+  let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingRoleDefinitions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1936,7 +1945,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-role-definition
 #
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingRoleDefinitions/{billingRoleDefinitionName}
 # operationId: BillingRoleDefinitions_GetByBillingAccount
-export def "providers-microsoft-billing-billing-accounts-billing-role-definitions get-by" [
+export def "providers-microsoft-billing-billing-accounts-billing-role-definitions get" [
   billing_account_name: string
   billing_role_definition_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1952,7 +1961,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-role-definition
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({billing_account_name: $billing_account_name, billing_role_definition_name: $billing_role_definition_name} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingRoleDefinitions/{billing_role_definition_name}") $qp)
+  let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_role_definition_name: (encode-path-segment $billing_role_definition_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingRoleDefinitions/{billing_role_definition_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1963,7 +1972,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-role-definition
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingSubscriptions
 # Docs: https://docs.microsoft.com/en-us/rest/api/billing/
 # operationId: BillingSubscriptions_ListByBillingAccount
-export def "providers-microsoft-billing-billing-accounts-billing-subscriptions list-by" [
+export def "providers-microsoft-billing-billing-accounts-billing-subscriptions list" [
   billing_account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1978,7 +1987,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-subscriptions l
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({billing_account_name: $billing_account_name} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingSubscriptions") $qp)
+  let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingSubscriptions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1989,7 +1998,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-subscriptions l
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingSubscriptions/{billingSubscriptionName}/invoices
 # Docs: https://docs.microsoft.com/en-us/rest/api/billing/
 # operationId: Invoices_ListByBillingSubscription
-export def "providers-microsoft-billing-billing-accounts-billing-subscriptions-invoices list-by" [
+export def "providers-microsoft-billing-billing-accounts-billing-subscriptions-invoices list" [
   billing_account_name: string
   billing_subscription_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2007,7 +2016,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-subscriptions-i
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "periodStartDate" $period_start_date "scalar") (serialize-qp "periodEndDate" $period_end_date "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({billing_account_name: $billing_account_name, billing_subscription_name: $billing_subscription_name} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingSubscriptions/{billing_subscription_name}/invoices") $qp)
+  let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_subscription_name: (encode-path-segment $billing_subscription_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingSubscriptions/{billing_subscription_name}/invoices") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2018,7 +2027,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-subscriptions-i
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingSubscriptions/{billingSubscriptionName}/invoices/{invoiceName}
 # Docs: https://docs.microsoft.com/en-us/rest/api/billing/
 # operationId: Invoices_GetById
-export def "providers-microsoft-billing-billing-accounts-billing-subscriptions-invoices get-by" [
+export def "providers-microsoft-billing-billing-accounts-billing-subscriptions-invoices get" [
   billing_account_name: string
   billing_subscription_name: string
   invoice_name: string
@@ -2035,7 +2044,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-subscriptions-i
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({billing_account_name: $billing_account_name, billing_subscription_name: $billing_subscription_name, invoice_name: $invoice_name} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingSubscriptions/{billing_subscription_name}/invoices/{invoice_name}") $qp)
+  let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_subscription_name: (encode-path-segment $billing_subscription_name), invoice_name: (encode-path-segment $invoice_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingSubscriptions/{billing_subscription_name}/invoices/{invoice_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2045,7 +2054,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-subscriptions-i
 #
 # POST /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/createBillingRoleAssignment
 # operationId: BillingRoleAssignments_AddByBillingAccount
-export def "providers-microsoft-billing-billing-accounts-create-billing-role-assignment create-by" [
+export def "providers-microsoft-billing-billing-accounts-create-billing-role-assignment create" [
   billing_account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2063,19 +2072,19 @@ export def "providers-microsoft-billing-billing-accounts-create-billing-role-ass
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({billing_account_name: $billing_account_name} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/createBillingRoleAssignment") $qp)
-  let body = {"billingRoleDefinitionId": $billing_role_definition_id, "principalId": $principal_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/createBillingRoleAssignment") $qp)
+  let req_body = {"billingRoleDefinitionId": $billing_role_definition_id, "principalId": $principal_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists customers which the current user can work with on-behalf of a partner.
 #
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/customers
 # operationId: Customers_ListByBillingAccount
-export def "providers-microsoft-billing-billing-accounts-customers list-by" [
+export def "providers-microsoft-billing-billing-accounts-customers list" [
   billing_account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2092,7 +2101,7 @@ export def "providers-microsoft-billing-billing-accounts-customers list-by" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$skiptoken" $skiptoken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({billing_account_name: $billing_account_name} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/customers") $qp)
+  let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/customers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2119,7 +2128,7 @@ export def "providers-microsoft-billing-billing-accounts-customers get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({billing_account_name: $billing_account_name, customer_name: $customer_name} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/customers/{customer_name}") $qp)
+  let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), customer_name: (encode-path-segment $customer_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/customers/{customer_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2129,7 +2138,7 @@ export def "providers-microsoft-billing-billing-accounts-customers get" [
 #
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/customers/{customerName}/billingPermissions
 # operationId: BillingPermissions_ListByCustomer
-export def "providers-microsoft-billing-billing-accounts-customers-billing-permissions list-by" [
+export def "providers-microsoft-billing-billing-accounts-customers-billing-permissions list" [
   billing_account_name: string
   customer_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2145,7 +2154,7 @@ export def "providers-microsoft-billing-billing-accounts-customers-billing-permi
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({billing_account_name: $billing_account_name, customer_name: $customer_name} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/customers/{customer_name}/billingPermissions") $qp)
+  let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), customer_name: (encode-path-segment $customer_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/customers/{customer_name}/billingPermissions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2156,7 +2165,7 @@ export def "providers-microsoft-billing-billing-accounts-customers-billing-permi
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/customers/{customerName}/billingSubscriptions
 # Docs: https://docs.microsoft.com/en-us/rest/api/consumption/
 # operationId: BillingSubscriptions_ListByCustomer
-export def "providers-microsoft-billing-billing-accounts-customers-billing-subscriptions list-by" [
+export def "providers-microsoft-billing-billing-accounts-customers-billing-subscriptions list" [
   billing_account_name: string
   customer_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2172,7 +2181,7 @@ export def "providers-microsoft-billing-billing-accounts-customers-billing-subsc
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({billing_account_name: $billing_account_name, customer_name: $customer_name} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/customers/{customer_name}/billingSubscriptions") $qp)
+  let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), customer_name: (encode-path-segment $customer_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/customers/{customer_name}/billingSubscriptions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2183,7 +2192,7 @@ export def "providers-microsoft-billing-billing-accounts-customers-billing-subsc
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/customers/{customerName}/billingSubscriptions/{billingSubscriptionName}
 # Docs: https://docs.microsoft.com/en-us/rest/api/consumption/
 # operationId: BillingSubscriptions_GetByCustomer
-export def "providers-microsoft-billing-billing-accounts-customers-billing-subscriptions get-by" [
+export def "providers-microsoft-billing-billing-accounts-customers-billing-subscriptions get" [
   billing_account_name: string
   customer_name: string
   billing_subscription_name: string
@@ -2200,7 +2209,7 @@ export def "providers-microsoft-billing-billing-accounts-customers-billing-subsc
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({billing_account_name: $billing_account_name, customer_name: $customer_name, billing_subscription_name: $billing_subscription_name} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/customers/{customer_name}/billingSubscriptions/{billing_subscription_name}") $qp)
+  let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), customer_name: (encode-path-segment $customer_name), billing_subscription_name: (encode-path-segment $billing_subscription_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/customers/{customer_name}/billingSubscriptions/{billing_subscription_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2211,7 +2220,7 @@ export def "providers-microsoft-billing-billing-accounts-customers-billing-subsc
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/customers/{customerName}/policies/default
 # Docs: https://docs.microsoft.com/en-us/rest/api/billing/
 # operationId: Policies_GetByCustomer
-export def "providers-microsoft-billing-billing-accounts-customers-policies-default get-by" [
+export def "providers-microsoft-billing-billing-accounts-customers-policies-default get" [
   billing_account_name: string
   customer_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2227,7 +2236,7 @@ export def "providers-microsoft-billing-billing-accounts-customers-policies-defa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({billing_account_name: $billing_account_name, customer_name: $customer_name} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/customers/{customer_name}/policies/default") $qp)
+  let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), customer_name: (encode-path-segment $customer_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/customers/{customer_name}/policies/default") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2256,12 +2265,12 @@ export def "providers-microsoft-billing-billing-accounts-customers-policies-defa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({billing_account_name: $billing_account_name, customer_name: $customer_name} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/customers/{customer_name}/policies/default") $qp)
-  let body = {"properties": $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), customer_name: (encode-path-segment $customer_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/customers/{customer_name}/policies/default") $qp)
+  let req_body = {"properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists products by customer id.
@@ -2269,7 +2278,7 @@ export def "providers-microsoft-billing-billing-accounts-customers-policies-defa
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/customers/{customerName}/products
 # Docs: https://docs.microsoft.com/en-us/rest/api/billing/
 # operationId: Products_ListByCustomer
-export def "providers-microsoft-billing-billing-accounts-customers-products list-by" [
+export def "providers-microsoft-billing-billing-accounts-customers-products list" [
   billing_account_name: string
   customer_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2286,7 +2295,7 @@ export def "providers-microsoft-billing-billing-accounts-customers-products list
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({billing_account_name: $billing_account_name, customer_name: $customer_name} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/customers/{customer_name}/products") $qp)
+  let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), customer_name: (encode-path-segment $customer_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/customers/{customer_name}/products") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2297,7 +2306,7 @@ export def "providers-microsoft-billing-billing-accounts-customers-products list
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/customers/{customerName}/products/{productName}
 # Docs: https://docs.microsoft.com/en-us/rest/api/billing/
 # operationId: Products_GetByCustomer
-export def "providers-microsoft-billing-billing-accounts-customers-products get-by" [
+export def "providers-microsoft-billing-billing-accounts-customers-products get" [
   billing_account_name: string
   customer_name: string
   product_name: string
@@ -2314,7 +2323,7 @@ export def "providers-microsoft-billing-billing-accounts-customers-products get-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({billing_account_name: $billing_account_name, customer_name: $customer_name, product_name: $product_name} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/customers/{customer_name}/products/{product_name}") $qp)
+  let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), customer_name: (encode-path-segment $customer_name), product_name: (encode-path-segment $product_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/customers/{customer_name}/products/{product_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2325,7 +2334,7 @@ export def "providers-microsoft-billing-billing-accounts-customers-products get-
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/customers/{customerName}/transactions
 # Docs: https://docs.microsoft.com/en-us/rest/api/consumption/
 # operationId: Transactions_ListByCustomer
-export def "providers-microsoft-billing-billing-accounts-customers-transactions list-by" [
+export def "providers-microsoft-billing-billing-accounts-customers-transactions list" [
   billing_account_name: string
   customer_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2344,7 +2353,7 @@ export def "providers-microsoft-billing-billing-accounts-customers-transactions 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "periodStartDate" $period_start_date "scalar") (serialize-qp "periodEndDate" $period_end_date "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({billing_account_name: $billing_account_name, customer_name: $customer_name} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/customers/{customer_name}/transactions") $qp)
+  let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), customer_name: (encode-path-segment $customer_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/customers/{customer_name}/transactions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2354,7 +2363,7 @@ export def "providers-microsoft-billing-billing-accounts-customers-transactions 
 #
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/departments
 # operationId: Departments_ListByBillingAccountName
-export def "providers-microsoft-billing-billing-accounts-departments list-by-billing-account-name" [
+export def "providers-microsoft-billing-billing-accounts-departments list-by-name" [
   billing_account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2371,7 +2380,7 @@ export def "providers-microsoft-billing-billing-accounts-departments list-by-bil
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$expand" $expand "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({billing_account_name: $billing_account_name} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/departments") $qp)
+  let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/departments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2399,7 +2408,7 @@ export def "providers-microsoft-billing-billing-accounts-departments get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$expand" $expand "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({billing_account_name: $billing_account_name, department_name: $department_name} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/departments/{department_name}") $qp)
+  let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), department_name: (encode-path-segment $department_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/departments/{department_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2409,7 +2418,7 @@ export def "providers-microsoft-billing-billing-accounts-departments get" [
 #
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/enrollmentAccounts
 # operationId: EnrollmentAccounts_ListByBillingAccountName
-export def "providers-microsoft-billing-billing-accounts-enrollment-accounts list-by-billing-account-name" [
+export def "providers-microsoft-billing-billing-accounts-enrollment-accounts list-by-name" [
   billing_account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2426,7 +2435,7 @@ export def "providers-microsoft-billing-billing-accounts-enrollment-accounts lis
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$expand" $expand "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({billing_account_name: $billing_account_name} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/enrollmentAccounts") $qp)
+  let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/enrollmentAccounts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2436,7 +2445,7 @@ export def "providers-microsoft-billing-billing-accounts-enrollment-accounts lis
 #
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/enrollmentAccounts/{enrollmentAccountName}
 # operationId: EnrollmentAccounts_GetByEnrollmentAccountId
-export def "providers-microsoft-billing-billing-accounts-enrollment-accounts get-by" [
+export def "providers-microsoft-billing-billing-accounts-enrollment-accounts get" [
   billing_account_name: string
   enrollment_account_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2454,7 +2463,7 @@ export def "providers-microsoft-billing-billing-accounts-enrollment-accounts get
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$expand" $expand "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({billing_account_name: $billing_account_name, enrollment_account_name: $enrollment_account_name} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/enrollmentAccounts/{enrollment_account_name}") $qp)
+  let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), enrollment_account_name: (encode-path-segment $enrollment_account_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/enrollmentAccounts/{enrollment_account_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2464,7 +2473,7 @@ export def "providers-microsoft-billing-billing-accounts-enrollment-accounts get
 #
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/invoices
 # operationId: Invoices_ListByBillingAccount
-export def "providers-microsoft-billing-billing-accounts-invoices list-by" [
+export def "providers-microsoft-billing-billing-accounts-invoices list" [
   billing_account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2481,7 +2490,7 @@ export def "providers-microsoft-billing-billing-accounts-invoices list-by" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "periodStartDate" $period_start_date "scalar") (serialize-qp "periodEndDate" $period_end_date "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({billing_account_name: $billing_account_name} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/invoices") $qp)
+  let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/invoices") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2506,7 +2515,7 @@ export def "providers-microsoft-billing-billing-accounts-list-invoice-sections-w
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({billing_account_name: $billing_account_name} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/listInvoiceSectionsWithCreateSubscriptionPermission") $qp)
+  let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/listInvoiceSectionsWithCreateSubscriptionPermission") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2517,7 +2526,7 @@ export def "providers-microsoft-billing-billing-accounts-list-invoice-sections-w
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/paymentMethods
 # Docs: https://docs.microsoft.com/en-us/rest/api/billing/2019-10-01-preview/paymentmethods
 # operationId: PaymentMethods_ListByBillingAccount
-export def "providers-microsoft-billing-billing-accounts-payment-methods list-by" [
+export def "providers-microsoft-billing-billing-accounts-payment-methods list" [
   billing_account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2532,7 +2541,7 @@ export def "providers-microsoft-billing-billing-accounts-payment-methods list-by
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({billing_account_name: $billing_account_name} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/paymentMethods") $qp)
+  let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/paymentMethods") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2543,7 +2552,7 @@ export def "providers-microsoft-billing-billing-accounts-payment-methods list-by
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/products
 # Docs: https://docs.microsoft.com/en-us/rest/api/billing/
 # operationId: Products_ListByBillingAccount
-export def "providers-microsoft-billing-billing-accounts-products list-by" [
+export def "providers-microsoft-billing-billing-accounts-products list" [
   billing_account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2559,7 +2568,7 @@ export def "providers-microsoft-billing-billing-accounts-products list-by" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({billing_account_name: $billing_account_name} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/products") $qp)
+  let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/products") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2570,7 +2579,7 @@ export def "providers-microsoft-billing-billing-accounts-products list-by" [
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/transactions
 # Docs: https://docs.microsoft.com/en-us/rest/api/billing/
 # operationId: Transactions_ListByBillingAccount
-export def "providers-microsoft-billing-billing-accounts-transactions list-by" [
+export def "providers-microsoft-billing-billing-accounts-transactions list" [
   billing_account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2588,7 +2597,7 @@ export def "providers-microsoft-billing-billing-accounts-transactions list-by" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "periodStartDate" $period_start_date "scalar") (serialize-qp "periodEndDate" $period_end_date "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({billing_account_name: $billing_account_name} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/transactions") $qp)
+  let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/transactions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2622,7 +2631,7 @@ export def "providers-microsoft-billing-operations list" [
 #
 # GET /providers/Microsoft.Billing/transfers
 # operationId: RecipientTransfers_List
-export def "providers-microsoft-billing-transfers list" [
+export def "providers-microsoft-billing-transfers list-recipient" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2644,7 +2653,7 @@ export def "providers-microsoft-billing-transfers list" [
 #
 # GET /providers/Microsoft.Billing/transfers/{transferName}
 # operationId: RecipientTransfers_Get
-export def "providers-microsoft-billing-transfers get" [
+export def "providers-microsoft-billing-transfers get-recipient" [
   transfer_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2657,7 +2666,7 @@ export def "providers-microsoft-billing-transfers get" [
 ]: nothing -> record<properties: record<allowedProductType: list<string>, canceledBy: string, creationTime: string, detailedTransferStatus: list<record>, expirationTime: string, initiatorCustomerType: string, initiatorEmailId: string, lastModifiedTime: string, recipientEmailId: string, resellerId: string, resellerName: string, transferStatus: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({transfer_name: $transfer_name} | format pattern "/providers/Microsoft.Billing/transfers/{transfer_name}"))
+  let full_url = (build-url $base ({transfer_name: (encode-path-segment $transfer_name)} | format pattern "/providers/Microsoft.Billing/transfers/{transfer_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2668,7 +2677,7 @@ export def "providers-microsoft-billing-transfers get" [
 # POST /providers/Microsoft.Billing/transfers/{transferName}/acceptTransfer
 # operationId: RecipientTransfers_Accept
 # --properties shape: {productDetails?: list}
-export def "providers-microsoft-billing-transfers-accept-transfer post" [
+export def "providers-microsoft-billing-transfers-accept-transfer create-recipient" [
   transfer_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2683,19 +2692,19 @@ export def "providers-microsoft-billing-transfers-accept-transfer post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({transfer_name: $transfer_name} | format pattern "/providers/Microsoft.Billing/transfers/{transfer_name}/acceptTransfer"))
-  let body = {"properties": $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({transfer_name: (encode-path-segment $transfer_name)} | format pattern "/providers/Microsoft.Billing/transfers/{transfer_name}/acceptTransfer"))
+  let req_body = {"properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Declines the transfer with given transfer Id.
 #
 # POST /providers/Microsoft.Billing/transfers/{transferName}/declineTransfer
 # operationId: RecipientTransfers_Decline
-export def "providers-microsoft-billing-transfers-decline-transfer post" [
+export def "providers-microsoft-billing-transfers-decline-transfer create-recipient" [
   transfer_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2708,7 +2717,7 @@ export def "providers-microsoft-billing-transfers-decline-transfer post" [
 ]: nothing -> record<properties: record<allowedProductType: list<string>, canceledBy: string, creationTime: string, detailedTransferStatus: list<record>, expirationTime: string, initiatorCustomerType: string, initiatorEmailId: string, lastModifiedTime: string, recipientEmailId: string, resellerId: string, resellerName: string, transferStatus: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({transfer_name: $transfer_name} | format pattern "/providers/Microsoft.Billing/transfers/{transfer_name}/declineTransfer"))
+  let full_url = (build-url $base ({transfer_name: (encode-path-segment $transfer_name)} | format pattern "/providers/Microsoft.Billing/transfers/{transfer_name}/declineTransfer"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2719,7 +2728,7 @@ export def "providers-microsoft-billing-transfers-decline-transfer post" [
 # POST /providers/Microsoft.Billing/transfers/{transferName}/validateTransfer
 # operationId: RecipientTransfers_Validate
 # --properties shape: {productDetails?: list}
-export def "providers-microsoft-billing-transfers-validate-transfer validate" [
+export def "providers-microsoft-billing-transfers-validate-transfer validate-recipient" [
   transfer_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2734,12 +2743,12 @@ export def "providers-microsoft-billing-transfers-validate-transfer validate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({transfer_name: $transfer_name} | format pattern "/providers/Microsoft.Billing/transfers/{transfer_name}/validateTransfer"))
-  let body = {"properties": $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({transfer_name: (encode-path-segment $transfer_name)} | format pattern "/providers/Microsoft.Billing/transfers/{transfer_name}/validateTransfer"))
+  let req_body = {"properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Validates the address.
@@ -2772,11 +2781,11 @@ export def "providers-microsoft-billing-validate-address validate" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.Billing/validateAddress" $qp)
-  let body = {"addressLine1": $address_line1, "addressLine2": $address_line2, "addressLine3": $address_line3, "city": $city, "companyName": $company_name, "country": $country, "firstName": $first_name, "lastName": $last_name, "postalCode": $postal_code, "region": $region} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"addressLine1": $address_line1, "addressLine2": $address_line2, "addressLine3": $address_line3, "city": $city, "companyName": $company_name, "country": $country, "firstName": $first_name, "lastName": $last_name, "postalCode": $postal_code, "region": $region} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get the current line of credit.
@@ -2798,7 +2807,7 @@ export def "subscriptions-providers-microsoft-billing-billing-accounts-default-l
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Billing/billingAccounts/default/lineOfCredit/default") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Billing/billingAccounts/default/lineOfCredit/default") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2826,12 +2835,12 @@ export def "subscriptions-providers-microsoft-billing-billing-accounts-default-l
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Billing/billingAccounts/default/lineOfCredit/default") $qp)
-  let body = {"properties": $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Billing/billingAccounts/default/lineOfCredit/default") $qp)
+  let req_body = {"properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get billing property by subscription Id.
@@ -2854,7 +2863,7 @@ export def "subscriptions-providers-microsoft-billing-billing-property-default g
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Billing/billingProperty/default") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Billing/billingProperty/default") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

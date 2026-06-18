@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -170,7 +179,7 @@ export def "bank-accounts create" [
   --ac-code: string
   --account-name: string
   --account-number: string
-  --address: list
+  --address: list<string>
   --bank-feed-source: int # format: int32
   --business-identifier-codes: string
   --category-id: int # format: int64
@@ -189,18 +198,18 @@ export def "bank-accounts create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/bankAccounts")
-  let body = {"acCode": $ac_code, "accountName": $account_name, "accountNumber": $account_number, "address": $address, "bankFeedSource": $bank_feed_source, "businessIdentifierCodes": $business_identifier_codes, "categoryId": $category_id, "creditorScheme": $creditor_scheme, "details": $details, "id": $id, "internationalBankAccountNumber": $international_bank_account_number, "isDefaultBank": $is_default_bank, "lastChq": $last_chq, "nominalAcCode": $nominal_ac_code, "oBalance": $o_balance, "sortCode": $sort_code, "timestamp": $timestamp} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"acCode": $ac_code, "accountName": $account_name, "accountNumber": $account_number, "address": $address, "bankFeedSource": $bank_feed_source, "businessIdentifierCodes": $business_identifier_codes, "categoryId": $category_id, "creditorScheme": $creditor_scheme, "details": $details, "id": $id, "internationalBankAccountNumber": $international_bank_account_number, "isDefaultBank": $is_default_bank, "lastChq": $last_chq, "nominalAcCode": $nominal_ac_code, "oBalance": $o_balance, "sortCode": $sort_code, "timestamp": $timestamp} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Processes a batch of Bank Accounts.
 #
 # PUT /v1/bankAccounts/batch
 # operationId: BankAccounts_ProcessBatch
-export def "bank-accounts-batch put" [
+export def "bank-accounts-batch update-process" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -215,10 +224,11 @@ export def "bank-accounts-batch put" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/bankAccounts/batch")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Removes an existing Bank Account.
@@ -240,7 +250,7 @@ export def "bank-accounts delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "timestamp" $timestamp "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/bankAccounts/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/bankAccounts/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -262,7 +272,7 @@ export def "bank-accounts get" [
 ]: nothing -> record<acCode: string, accountName: string, accountNumber: string, address: list<string>, bankFeedSource: int, businessIdentifierCodes: string, categoryId: int, creditorScheme: string, details: string, id: int, internationalBankAccountNumber: string, isDefaultBank: bool, lastChq: string, nominalAcCode: string, oBalance: float, sortCode: string, timestamp: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/bankAccounts/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/bankAccounts/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -285,7 +295,7 @@ export def "bank-accounts update" [
   --ac-code: string
   --account-name: string
   --account-number: string
-  --address: list
+  --address: list<string>
   --bank-feed-source: int # format: int32
   --business-identifier-codes: string
   --category-id: int # format: int64
@@ -303,12 +313,12 @@ export def "bank-accounts update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/bankAccounts/{id}"))
-  let body = {"acCode": $ac_code, "accountName": $account_name, "accountNumber": $account_number, "address": $address, "bankFeedSource": $bank_feed_source, "businessIdentifierCodes": $business_identifier_codes, "categoryId": $category_id, "creditorScheme": $creditor_scheme, "details": $details, "id": $body_id, "internationalBankAccountNumber": $international_bank_account_number, "isDefaultBank": $is_default_bank, "lastChq": $last_chq, "nominalAcCode": $nominal_ac_code, "oBalance": $o_balance, "sortCode": $sort_code, "timestamp": $timestamp} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/bankAccounts/{id}"))
+  let req_body = {"acCode": $ac_code, "accountName": $account_name, "accountNumber": $account_number, "address": $address, "bankFeedSource": $bank_feed_source, "businessIdentifierCodes": $business_identifier_codes, "categoryId": $category_id, "creditorScheme": $creditor_scheme, "details": $details, "id": $body_id, "internationalBankAccountNumber": $international_bank_account_number, "isDefaultBank": $is_default_bank, "lastChq": $last_chq, "nominalAcCode": $nominal_ac_code, "oBalance": $o_balance, "sortCode": $sort_code, "timestamp": $timestamp} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns a list of global Book Transactions' Types. Supports OData querying protocol. Filtering is forbidden. Ordering is allowed by "id" field.
@@ -376,7 +386,7 @@ export def "cash-payments create" [
   --bank-account-id: int # format: int64
   --book-tran-type-id: int # format: int64
   --custom-fields: list # item shape: {description?: string, id?: int, userDefinedFieldId?: int, value?: string}
-  --detail-collection: list
+  --detail-collection: list<string>
   --discount: float # format: double
   --entry-date: string # format: date-time
   --id: int # format: int64
@@ -393,18 +403,18 @@ export def "cash-payments create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/cashPayments")
-  let body = {"acCode": $ac_code, "acEntries": $ac_entries, "bankAccountCode": $bank_account_code, "bankAccountId": $bank_account_id, "bookTranTypeId": $book_tran_type_id, "customFields": $custom_fields, "detailCollection": $detail_collection, "discount": $discount, "entryDate": $entry_date, "id": $id, "ledger": $ledger, "lodgement": $lodgement, "note": $note, "plaidTransactionId": $plaid_transaction_id, "procDate": $proc_date, "supplierId": $supplier_id, "timestamp": $timestamp, "total": $total} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"acCode": $ac_code, "acEntries": $ac_entries, "bankAccountCode": $bank_account_code, "bankAccountId": $bank_account_id, "bookTranTypeId": $book_tran_type_id, "customFields": $custom_fields, "detailCollection": $detail_collection, "discount": $discount, "entryDate": $entry_date, "id": $id, "ledger": $ledger, "lodgement": $lodgement, "note": $note, "plaidTransactionId": $plaid_transaction_id, "procDate": $proc_date, "supplierId": $supplier_id, "timestamp": $timestamp, "total": $total} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Processes a batch of Cash Payments.
 #
 # PUT /v1/cashPayments/batch
 # operationId: CashPayments_ProcessBatch
-export def "cash-payments-batch put" [
+export def "cash-payments-batch update-process" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -419,10 +429,11 @@ export def "cash-payments-batch put" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/cashPayments/batch")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Removes an existing Cash Payment.
@@ -444,7 +455,7 @@ export def "cash-payments delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "timestamp" $timestamp "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/cashPayments/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/cashPayments/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -466,7 +477,7 @@ export def "cash-payments get" [
 ]: nothing -> record<acCode: string, acEntries: table<accountCode: string, analysisCategoryId: int, description: string, id: int, value: float>, bankAccountCode: string, bankAccountId: int, bookTranTypeId: int, customFields: table<description: string, id: int, userDefinedFieldId: int, value: string>, detailCollection: list<string>, discount: float, entryDate: string, id: int, ledger: float, lodgement: float, note: string, plaidTransactionId: string, procDate: string, supplierId: int, timestamp: string, total: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/cashPayments/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/cashPayments/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -494,7 +505,7 @@ export def "cash-payments update" [
   --bank-account-id: int # format: int64
   --book-tran-type-id: int # format: int64
   --custom-fields: list # item shape: {description?: string, id?: int, userDefinedFieldId?: int, value?: string}
-  --detail-collection: list
+  --detail-collection: list<string>
   --discount: float # format: double
   --entry-date: string # format: date-time
   --body-id: int # format: int64
@@ -510,12 +521,12 @@ export def "cash-payments update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/cashPayments/{id}"))
-  let body = {"acCode": $ac_code, "acEntries": $ac_entries, "bankAccountCode": $bank_account_code, "bankAccountId": $bank_account_id, "bookTranTypeId": $book_tran_type_id, "customFields": $custom_fields, "detailCollection": $detail_collection, "discount": $discount, "entryDate": $entry_date, "id": $body_id, "ledger": $ledger, "lodgement": $lodgement, "note": $note, "plaidTransactionId": $plaid_transaction_id, "procDate": $proc_date, "supplierId": $supplier_id, "timestamp": $timestamp, "total": $total} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/cashPayments/{id}"))
+  let req_body = {"acCode": $ac_code, "acEntries": $ac_entries, "bankAccountCode": $bank_account_code, "bankAccountId": $bank_account_id, "bookTranTypeId": $book_tran_type_id, "customFields": $custom_fields, "detailCollection": $detail_collection, "discount": $discount, "entryDate": $entry_date, "id": $body_id, "ledger": $ledger, "lodgement": $lodgement, "note": $note, "plaidTransactionId": $plaid_transaction_id, "procDate": $proc_date, "supplierId": $supplier_id, "timestamp": $timestamp, "total": $total} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns a list of company's Cash Receipts. Supports OData querying protocol. Filtering is allowed by "entryDate" field. Ordering is allowed by "id" field.
@@ -561,7 +572,7 @@ export def "cash-receipts create" [
   --book-tran-type-id: int # format: int64
   --custom-fields: list # item shape: {description?: string, id?: int, userDefinedFieldId?: int, value?: string}
   --customer-id: int # format: int64
-  --detail-collection: list
+  --detail-collection: list<string>
   --discount: float # format: double
   --entry-date: string # format: date-time
   --id: int # format: int64
@@ -579,18 +590,18 @@ export def "cash-receipts create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/cashReceipts")
-  let body = {"acCode": $ac_code, "acEntries": $ac_entries, "bookTranTypeId": $book_tran_type_id, "customFields": $custom_fields, "customerId": $customer_id, "detailCollection": $detail_collection, "discount": $discount, "entryDate": $entry_date, "id": $id, "ledger": $ledger, "note": $note, "plaidTransactionId": $plaid_transaction_id, "procDate": $proc_date, "timestamp": $timestamp, "total": $total, "unallocated": $unallocated, "vatEntries": $vat_entries, "vatTypeId": $vat_type_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"acCode": $ac_code, "acEntries": $ac_entries, "bookTranTypeId": $book_tran_type_id, "customFields": $custom_fields, "customerId": $customer_id, "detailCollection": $detail_collection, "discount": $discount, "entryDate": $entry_date, "id": $id, "ledger": $ledger, "note": $note, "plaidTransactionId": $plaid_transaction_id, "procDate": $proc_date, "timestamp": $timestamp, "total": $total, "unallocated": $unallocated, "vatEntries": $vat_entries, "vatTypeId": $vat_type_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Processes a batch of Cash Receipts.
 #
 # PUT /v1/cashReceipts/batch
 # operationId: CashReceipts_ProcessBatch
-export def "cash-receipts-batch put" [
+export def "cash-receipts-batch update-process" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -605,10 +616,11 @@ export def "cash-receipts-batch put" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/cashReceipts/batch")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Removes an existing Cash Receipt.
@@ -630,7 +642,7 @@ export def "cash-receipts delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "timestamp" $timestamp "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/cashReceipts/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/cashReceipts/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -652,7 +664,7 @@ export def "cash-receipts get" [
 ]: nothing -> record<acCode: string, acEntries: table<accountCode: string, analysisCategoryId: int, description: string, id: int, value: float>, bookTranTypeId: int, customFields: table<description: string, id: int, userDefinedFieldId: int, value: string>, customerId: int, detailCollection: list<string>, discount: float, entryDate: string, id: int, ledger: float, note: string, plaidTransactionId: string, procDate: string, timestamp: string, total: float, unallocated: float, vatEntries: table<amount: float, id: int, percentage: float, vatRateId: int>, vatTypeId: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/cashReceipts/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/cashReceipts/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -680,7 +692,7 @@ export def "cash-receipts update" [
   --book-tran-type-id: int # format: int64
   --custom-fields: list # item shape: {description?: string, id?: int, userDefinedFieldId?: int, value?: string}
   --customer-id: int # format: int64
-  --detail-collection: list
+  --detail-collection: list<string>
   --discount: float # format: double
   --entry-date: string # format: date-time
   --body-id: int # format: int64
@@ -697,12 +709,12 @@ export def "cash-receipts update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/cashReceipts/{id}"))
-  let body = {"acCode": $ac_code, "acEntries": $ac_entries, "bookTranTypeId": $book_tran_type_id, "customFields": $custom_fields, "customerId": $customer_id, "detailCollection": $detail_collection, "discount": $discount, "entryDate": $entry_date, "id": $body_id, "ledger": $ledger, "note": $note, "plaidTransactionId": $plaid_transaction_id, "procDate": $proc_date, "timestamp": $timestamp, "total": $total, "unallocated": $unallocated, "vatEntries": $vat_entries, "vatTypeId": $vat_type_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/cashReceipts/{id}"))
+  let req_body = {"acCode": $ac_code, "acEntries": $ac_entries, "bookTranTypeId": $book_tran_type_id, "customFields": $custom_fields, "customerId": $customer_id, "detailCollection": $detail_collection, "discount": $discount, "entryDate": $entry_date, "id": $body_id, "ledger": $ledger, "note": $note, "plaidTransactionId": $plaid_transaction_id, "procDate": $proc_date, "timestamp": $timestamp, "total": $total, "unallocated": $unallocated, "vatEntries": $vat_entries, "vatTypeId": $vat_type_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns a list of company's Category Types. Supports OData querying protocol. Filtering is forbidden. Ordering is allowed by "id" field.
@@ -855,14 +867,14 @@ export def "customers create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --account-name: string
   --account-number: string
-  --additional-emails: list
-  --address: list
+  --additional-emails: list<string>
+  --address: list<string>
   --auth-code: string
   --bank: record # shape: {branch?: string, id?: int, name?: string, sortCode?: string}
   --business-identifier-code: string
   --code: string
   --contact: string
-  --delivery: list
+  --delivery: list<string>
   --e-ft-reference: string
   --email: string
   --fax: string
@@ -885,18 +897,18 @@ export def "customers create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/customers")
-  let body = {"accountName": $account_name, "accountNumber": $account_number, "additionalEmails": $additional_emails, "address": $address, "authCode": $auth_code, "bank": $bank, "businessIdentifierCode": $business_identifier_code, "code": $code, "contact": $contact, "delivery": $delivery, "eFTReference": $e_ft_reference, "email": $email, "fax": $fax, "id": $id, "internationalBankAccountNumber": $international_bank_account_number, "ledgerBalance": $ledger_balance, "mobile": $mobile, "name": $name, "openingBalance": $opening_balance, "openingBalances": $opening_balances, "ourCode": $our_code, "ownerTypeId": $owner_type_id, "phone": $phone, "timestamp": $timestamp, "vatAnalysisTypeId": $vat_analysis_type_id, "vatReg": $vat_reg, "vatType": $vat_type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"accountName": $account_name, "accountNumber": $account_number, "additionalEmails": $additional_emails, "address": $address, "authCode": $auth_code, "bank": $bank, "businessIdentifierCode": $business_identifier_code, "code": $code, "contact": $contact, "delivery": $delivery, "eFTReference": $e_ft_reference, "email": $email, "fax": $fax, "id": $id, "internationalBankAccountNumber": $international_bank_account_number, "ledgerBalance": $ledger_balance, "mobile": $mobile, "name": $name, "openingBalance": $opening_balance, "openingBalances": $opening_balances, "ourCode": $our_code, "ownerTypeId": $owner_type_id, "phone": $phone, "timestamp": $timestamp, "vatAnalysisTypeId": $vat_analysis_type_id, "vatReg": $vat_reg, "vatType": $vat_type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Processes a batch of Customers.
 #
 # PUT /v1/customers/batch
 # operationId: Customers_ProcessBatch
-export def "customers-batch put" [
+export def "customers-batch update-process" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -911,10 +923,11 @@ export def "customers-batch put" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/customers/batch")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Removes an existing Customer.
@@ -936,7 +949,7 @@ export def "customers delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "timestamp" $timestamp "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/customers/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/customers/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -960,7 +973,7 @@ export def "customers get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "needBalance" $need_balance "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/customers/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/customers/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -985,14 +998,14 @@ export def "customers update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --account-name: string
   --account-number: string
-  --additional-emails: list
-  --address: list
+  --additional-emails: list<string>
+  --address: list<string>
   --auth-code: string
   --bank: record # shape: {branch?: string, id?: int, name?: string, sortCode?: string}
   --business-identifier-code: string
   --code: string
   --contact: string
-  --delivery: list
+  --delivery: list<string>
   --e-ft-reference: string
   --email: string
   --fax: string
@@ -1014,12 +1027,12 @@ export def "customers update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/customers/{id}"))
-  let body = {"accountName": $account_name, "accountNumber": $account_number, "additionalEmails": $additional_emails, "address": $address, "authCode": $auth_code, "bank": $bank, "businessIdentifierCode": $business_identifier_code, "code": $code, "contact": $contact, "delivery": $delivery, "eFTReference": $e_ft_reference, "email": $email, "fax": $fax, "id": $body_id, "internationalBankAccountNumber": $international_bank_account_number, "ledgerBalance": $ledger_balance, "mobile": $mobile, "name": $name, "openingBalance": $opening_balance, "openingBalances": $opening_balances, "ourCode": $our_code, "ownerTypeId": $owner_type_id, "phone": $phone, "timestamp": $timestamp, "vatAnalysisTypeId": $vat_analysis_type_id, "vatReg": $vat_reg, "vatType": $vat_type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/customers/{id}"))
+  let req_body = {"accountName": $account_name, "accountNumber": $account_number, "additionalEmails": $additional_emails, "address": $address, "authCode": $auth_code, "bank": $bank, "businessIdentifierCode": $business_identifier_code, "code": $code, "contact": $contact, "delivery": $delivery, "eFTReference": $e_ft_reference, "email": $email, "fax": $fax, "id": $body_id, "internationalBankAccountNumber": $international_bank_account_number, "ledgerBalance": $ledger_balance, "mobile": $mobile, "name": $name, "openingBalance": $opening_balance, "openingBalances": $opening_balances, "ourCode": $our_code, "ownerTypeId": $owner_type_id, "phone": $phone, "timestamp": $timestamp, "vatAnalysisTypeId": $vat_analysis_type_id, "vatReg": $vat_reg, "vatType": $vat_type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns a list of Customer's account transactions.
@@ -1039,7 +1052,7 @@ export def "customers-account-trans get" [
 ]: nothing -> table<bookTranId: int, bookTranTypeId: int, bookTransactionReference: string, bookTypeDesc: string, credit: float, debit: float, id: int, procDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({item_id: $item_id} | format pattern "/v1/customers/{item_id}/accountTrans"))
+  let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/v1/customers/{item_id}/accountTrans"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1062,7 +1075,7 @@ export def "customers-opening-balance get" [
 ]: nothing -> record<currentMonth: float, oneMonthOld: float, threeMonthsOld: float, twoMonthsOld: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({item_id: $item_id} | format pattern "/v1/customers/{item_id}/openingBalance"))
+  let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/v1/customers/{item_id}/openingBalance"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1085,7 +1098,7 @@ export def "customers-opening-balance-list get" [
 ]: nothing -> table<entryDate: string, id: int, isChanged: bool, procDate: string, reference: string, timestamp: string, total: float, totalVAT: float, unpaid: float, vatEntries: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({item_id: $item_id} | format pattern "/v1/customers/{item_id}/openingBalanceList"))
+  let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/v1/customers/{item_id}/openingBalanceList"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1108,7 +1121,7 @@ export def "customers-quotes get" [
 ]: nothing -> table<acCode: string, closedDate: string, comments: string, companyId: int, customFields: list<record>, customerOwnerId: int, customerOwnerName: string, ddNumber: string, deliveryList: string, deliveryTo: list<string>, entryDate: string, id: int, layoutType: int, note: string, poNumber: string, procDate: string, productTrans: list<record>, reference: string, saleInvoiceId: int, saleRepCode: string, saleRepId: int, timeStamp: string, total: float, totalNet: float, totalVat: float, vatTypeId: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({item_id: $item_id} | format pattern "/v1/customers/{item_id}/quotes"))
+  let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/v1/customers/{item_id}/quotes"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1127,7 +1140,7 @@ export def "email-send-email-statement send" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --bcc-addresses: list
+  --bcc-addresses: list<string>
   --customer-id: int # format: int64
   --from-period: string # format: date-time
   --message-body: string
@@ -1139,11 +1152,11 @@ export def "email-send-email-statement send" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/email/sendEmailStatement")
-  let body = {"bccAddresses": $bcc_addresses, "customerId": $customer_id, "fromPeriod": $from_period, "messageBody": $message_body, "minimumBalance": $minimum_balance, "toAddress": $to_address, "toPeriod": $to_period} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"bccAddresses": $bcc_addresses, "customerId": $customer_id, "fromPeriod": $from_period, "messageBody": $message_body, "minimumBalance": $minimum_balance, "toAddress": $to_address, "toPeriod": $to_period} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Sends a Quote email. If "toAddress" is not empty then email will be sent to this address. Otherwise email will be sent to Statement Customer's address.
@@ -1159,7 +1172,7 @@ export def "email-send-quote send" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --bcc-addresses: list
+  --bcc-addresses: list<string>
   --message-body: string
   --quote-id: int # format: int64
   --to-address: string
@@ -1168,11 +1181,11 @@ export def "email-send-quote send" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/email/sendQuote")
-  let body = {"bccAddresses": $bcc_addresses, "messageBody": $message_body, "quoteId": $quote_id, "toAddress": $to_address} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"bccAddresses": $bcc_addresses, "messageBody": $message_body, "quoteId": $quote_id, "toAddress": $to_address} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Sends a Sales Invoice email. If "toAddress" is not empty then email will be sent to this address. Otherwise email will be sent to Sales Invoice Customer's address.
@@ -1188,7 +1201,7 @@ export def "email-send-sales-invoice send" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --bcc-addresses: list
+  --bcc-addresses: list<string>
   --message-body: string
   --sales-invoice-id: int # format: int64
   --to-address: string
@@ -1197,11 +1210,11 @@ export def "email-send-sales-invoice send" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/email/sendSalesInvoice")
-  let body = {"bccAddresses": $bcc_addresses, "messageBody": $message_body, "salesInvoiceId": $sales_invoice_id, "toAddress": $to_address} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"bccAddresses": $bcc_addresses, "messageBody": $message_body, "salesInvoiceId": $sales_invoice_id, "toAddress": $to_address} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns a list of global Owner Type Groups. Supports OData querying protocol. Filtering is forbidden. Ordering is allowed by "id" field.
@@ -1291,7 +1304,7 @@ export def "payments create" [
   --bank-account-id: int # format: int64
   --book-tran-type-id: int # format: int64
   --custom-fields: list # item shape: {description?: string, id?: int, userDefinedFieldId?: int, value?: string}
-  --detail-collection: list
+  --detail-collection: list<string>
   --discount: float # format: double
   --entry-date: string # format: date-time
   --id: int # format: int64
@@ -1310,18 +1323,18 @@ export def "payments create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/payments")
-  let body = {"acCode": $ac_code, "acEntries": $ac_entries, "bankAccountCode": $bank_account_code, "bankAccountId": $bank_account_id, "bookTranTypeId": $book_tran_type_id, "customFields": $custom_fields, "detailCollection": $detail_collection, "discount": $discount, "entryDate": $entry_date, "id": $id, "note": $note, "plaidTransactionId": $plaid_transaction_id, "procDate": $proc_date, "reference": $reference, "supplierId": $supplier_id, "timestamp": $timestamp, "total": $total, "transferBankCode": $transfer_bank_code, "transferBankId": $transfer_bank_id, "unallocated": $unallocated} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"acCode": $ac_code, "acEntries": $ac_entries, "bankAccountCode": $bank_account_code, "bankAccountId": $bank_account_id, "bookTranTypeId": $book_tran_type_id, "customFields": $custom_fields, "detailCollection": $detail_collection, "discount": $discount, "entryDate": $entry_date, "id": $id, "note": $note, "plaidTransactionId": $plaid_transaction_id, "procDate": $proc_date, "reference": $reference, "supplierId": $supplier_id, "timestamp": $timestamp, "total": $total, "transferBankCode": $transfer_bank_code, "transferBankId": $transfer_bank_id, "unallocated": $unallocated} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Processes a batch of Payments.
 #
 # PUT /v1/payments/batch
 # operationId: Payments_ProcessBatch
-export def "payments-batch put" [
+export def "payments-batch update-process" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1336,10 +1349,11 @@ export def "payments-batch put" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/payments/batch")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Removes an existing Payment.
@@ -1361,7 +1375,7 @@ export def "payments delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "timestamp" $timestamp "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/payments/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/payments/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1383,7 +1397,7 @@ export def "payments get" [
 ]: nothing -> record<acCode: string, acEntries: table<accountCode: string, analysisCategoryId: int, description: string, id: int, value: float>, bankAccountCode: string, bankAccountId: int, bookTranTypeId: int, customFields: table<description: string, id: int, userDefinedFieldId: int, value: string>, detailCollection: list<string>, discount: float, entryDate: string, id: int, note: string, plaidTransactionId: string, procDate: string, reference: string, supplierId: int, timestamp: string, total: float, transferBankCode: string, transferBankId: int, unallocated: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/payments/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/payments/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1411,7 +1425,7 @@ export def "payments update" [
   --bank-account-id: int # format: int64
   --book-tran-type-id: int # format: int64
   --custom-fields: list # item shape: {description?: string, id?: int, userDefinedFieldId?: int, value?: string}
-  --detail-collection: list
+  --detail-collection: list<string>
   --discount: float # format: double
   --entry-date: string # format: date-time
   --body-id: int # format: int64
@@ -1429,12 +1443,12 @@ export def "payments update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/payments/{id}"))
-  let body = {"acCode": $ac_code, "acEntries": $ac_entries, "bankAccountCode": $bank_account_code, "bankAccountId": $bank_account_id, "bookTranTypeId": $book_tran_type_id, "customFields": $custom_fields, "detailCollection": $detail_collection, "discount": $discount, "entryDate": $entry_date, "id": $body_id, "note": $note, "plaidTransactionId": $plaid_transaction_id, "procDate": $proc_date, "reference": $reference, "supplierId": $supplier_id, "timestamp": $timestamp, "total": $total, "transferBankCode": $transfer_bank_code, "transferBankId": $transfer_bank_id, "unallocated": $unallocated} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/payments/{id}"))
+  let req_body = {"acCode": $ac_code, "acEntries": $ac_entries, "bankAccountCode": $bank_account_code, "bankAccountId": $bank_account_id, "bookTranTypeId": $book_tran_type_id, "customFields": $custom_fields, "detailCollection": $detail_collection, "discount": $discount, "entryDate": $entry_date, "id": $body_id, "note": $note, "plaidTransactionId": $plaid_transaction_id, "procDate": $proc_date, "reference": $reference, "supplierId": $supplier_id, "timestamp": $timestamp, "total": $total, "transferBankCode": $transfer_bank_code, "transferBankId": $transfer_bank_id, "unallocated": $unallocated} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns a list of global Product Types. Supports OData querying protocol. Filtering is forbidden. Ordering is allowed by "id" field.
@@ -1494,7 +1508,7 @@ export def "products create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --details: list
+  --details: list<string>
   --gross-unit-price: oneof<nothing, bool>
   --has-default-vat-rate: oneof<nothing, bool>
   --id: int # format: int64
@@ -1509,18 +1523,18 @@ export def "products create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/products")
-  let body = {"details": $details, "grossUnitPrice": $gross_unit_price, "hasDefaultVatRate": $has_default_vat_rate, "id": $id, "productTypeId": $product_type_id, "stockCode": $stock_code, "timestamp": $timestamp, "unitPrice": $unit_price, "vatAnalysisTypeId": $vat_analysis_type_id, "vatRateId": $vat_rate_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"details": $details, "grossUnitPrice": $gross_unit_price, "hasDefaultVatRate": $has_default_vat_rate, "id": $id, "productTypeId": $product_type_id, "stockCode": $stock_code, "timestamp": $timestamp, "unitPrice": $unit_price, "vatAnalysisTypeId": $vat_analysis_type_id, "vatRateId": $vat_rate_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Processes a batch of Products.
 #
 # PUT /v1/products/batch
 # operationId: Products_ProcessBatch
-export def "products-batch put" [
+export def "products-batch update-process" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1535,10 +1549,11 @@ export def "products-batch put" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/products/batch")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Removes an existing Product.
@@ -1560,7 +1575,7 @@ export def "products delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "timestamp" $timestamp "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/products/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/products/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1582,7 +1597,7 @@ export def "products get" [
 ]: nothing -> record<details: list<string>, grossUnitPrice: bool, hasDefaultVatRate: bool, id: int, productTypeId: int, stockCode: string, timestamp: string, unitPrice: float, vatAnalysisTypeId: int, vatRateId: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/products/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/products/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1602,7 +1617,7 @@ export def "products update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --details: list
+  --details: list<string>
   --gross-unit-price: oneof<nothing, bool>
   --has-default-vat-rate: oneof<nothing, bool>
   --body-id: int # format: int64
@@ -1616,12 +1631,12 @@ export def "products update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/products/{id}"))
-  let body = {"details": $details, "grossUnitPrice": $gross_unit_price, "hasDefaultVatRate": $has_default_vat_rate, "id": $body_id, "productTypeId": $product_type_id, "stockCode": $stock_code, "timestamp": $timestamp, "unitPrice": $unit_price, "vatAnalysisTypeId": $vat_analysis_type_id, "vatRateId": $vat_rate_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/products/{id}"))
+  let req_body = {"details": $details, "grossUnitPrice": $gross_unit_price, "hasDefaultVatRate": $has_default_vat_rate, "id": $body_id, "productTypeId": $product_type_id, "stockCode": $stock_code, "timestamp": $timestamp, "unitPrice": $unit_price, "vatAnalysisTypeId": $vat_analysis_type_id, "vatRateId": $vat_rate_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns a list of company's Purchases. Supports OData querying protocol. Filtering is allowed by "entryDate" field. Ordering is allowed by "id" field.
@@ -1666,7 +1681,7 @@ export def "purchases create" [
   --ac-entries: list # item shape: {accountCode?: string, analysisCategoryId?: int, description?: string, id?: int, value?: float}
   --book-tran-type-id: int # format: int64
   --custom-fields: list # item shape: {description?: string, id?: int, userDefinedFieldId?: int, value?: string}
-  --detail-collection: list
+  --detail-collection: list<string>
   --entry-date: string # format: date-time
   --id: int # format: int64
   --is-discrepancy-accepted: oneof<nothing, bool>
@@ -1690,18 +1705,18 @@ export def "purchases create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/purchases")
-  let body = {"acCode": $ac_code, "acEntries": $ac_entries, "bookTranTypeId": $book_tran_type_id, "customFields": $custom_fields, "detailCollection": $detail_collection, "entryDate": $entry_date, "id": $id, "isDiscrepancyAccepted": $is_discrepancy_accepted, "netGoods": $net_goods, "netServices": $net_services, "note": $note, "postponedAccounting": $postponed_accounting, "procDate": $proc_date, "reference": $reference, "supplierId": $supplier_id, "timestamp": $timestamp, "total": $total, "totalNet": $total_net, "totalVAT": $total_vat, "unallocated": $unallocated, "unpaid": $unpaid, "vatEntries": $vat_entries, "vatTypeId": $vat_type_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"acCode": $ac_code, "acEntries": $ac_entries, "bookTranTypeId": $book_tran_type_id, "customFields": $custom_fields, "detailCollection": $detail_collection, "entryDate": $entry_date, "id": $id, "isDiscrepancyAccepted": $is_discrepancy_accepted, "netGoods": $net_goods, "netServices": $net_services, "note": $note, "postponedAccounting": $postponed_accounting, "procDate": $proc_date, "reference": $reference, "supplierId": $supplier_id, "timestamp": $timestamp, "total": $total, "totalNet": $total_net, "totalVAT": $total_vat, "unallocated": $unallocated, "unpaid": $unpaid, "vatEntries": $vat_entries, "vatTypeId": $vat_type_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Processes a batch of Purchases.
 #
 # PUT /v1/purchases/batch
 # operationId: Purchases_ProcessBatch
-export def "purchases-batch put" [
+export def "purchases-batch update-process" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1716,10 +1731,11 @@ export def "purchases-batch put" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/purchases/batch")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Removes an existing Purchase.
@@ -1741,7 +1757,7 @@ export def "purchases delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "timestamp" $timestamp "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/purchases/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/purchases/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1763,7 +1779,7 @@ export def "purchases get" [
 ]: nothing -> record<acCode: string, acEntries: table<accountCode: string, analysisCategoryId: int, description: string, id: int, value: float>, bookTranTypeId: int, customFields: table<description: string, id: int, userDefinedFieldId: int, value: string>, detailCollection: list<string>, entryDate: string, id: int, isDiscrepancyAccepted: bool, netGoods: float, netServices: float, note: string, postponedAccounting: bool, procDate: string, reference: string, supplierId: int, timestamp: string, total: float, totalNet: float, totalVAT: float, unallocated: float, unpaid: float, vatEntries: table<amount: float, id: int, percentage: float, vatRateId: int>, vatTypeId: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/purchases/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/purchases/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1790,7 +1806,7 @@ export def "purchases update" [
   --ac-entries: list # item shape: {accountCode?: string, analysisCategoryId?: int, description?: string, id?: int, value?: float}
   --book-tran-type-id: int # format: int64
   --custom-fields: list # item shape: {description?: string, id?: int, userDefinedFieldId?: int, value?: string}
-  --detail-collection: list
+  --detail-collection: list<string>
   --entry-date: string # format: date-time
   --body-id: int # format: int64
   --is-discrepancy-accepted: oneof<nothing, bool>
@@ -1813,12 +1829,12 @@ export def "purchases update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/purchases/{id}"))
-  let body = {"acCode": $ac_code, "acEntries": $ac_entries, "bookTranTypeId": $book_tran_type_id, "customFields": $custom_fields, "detailCollection": $detail_collection, "entryDate": $entry_date, "id": $body_id, "isDiscrepancyAccepted": $is_discrepancy_accepted, "netGoods": $net_goods, "netServices": $net_services, "note": $note, "postponedAccounting": $postponed_accounting, "procDate": $proc_date, "reference": $reference, "supplierId": $supplier_id, "timestamp": $timestamp, "total": $total, "totalNet": $total_net, "totalVAT": $total_vat, "unallocated": $unallocated, "unpaid": $unpaid, "vatEntries": $vat_entries, "vatTypeId": $vat_type_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/purchases/{id}"))
+  let req_body = {"acCode": $ac_code, "acEntries": $ac_entries, "bookTranTypeId": $book_tran_type_id, "customFields": $custom_fields, "detailCollection": $detail_collection, "entryDate": $entry_date, "id": $body_id, "isDiscrepancyAccepted": $is_discrepancy_accepted, "netGoods": $net_goods, "netServices": $net_services, "note": $note, "postponedAccounting": $postponed_accounting, "procDate": $proc_date, "reference": $reference, "supplierId": $supplier_id, "timestamp": $timestamp, "total": $total, "totalNet": $total_net, "totalVAT": $total_vat, "unallocated": $unallocated, "unpaid": $unpaid, "vatEntries": $vat_entries, "vatTypeId": $vat_type_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns a list of company's Quotes. Filtering is forbidden. Ordering is allowed by "id".
@@ -1848,7 +1864,7 @@ export def "quotes list" [
 # POST /v1/quotes
 # operationId: Quote_Post
 # --customFields item shape: {description?: string, id?: int, userDefinedFieldId?: int, value?: string}
-# --productTrans item shape: {acEntries?: list, amount?: float, companyId?: int, id?: int, percentage?: float, productCode?: string, productId?: int, quantity?: float, tranNotes?: list, unitPrice?: float, vatAmount?: float, vatAnalysisTypeId?: int, vatRateId?: int}
+# --productTrans item shape: {acEntries?: list, amount?: float, companyId?: int, id?: int, percentage?: float, productCode?: string, productId?: int, quantity?: float, tranNotes?: list<string>, unitPrice?: float, vatAmount?: float, vatAnalysisTypeId?: int, vatRateId?: int}
 export def "quotes create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1867,14 +1883,14 @@ export def "quotes create" [
   --customer-owner-name: string
   --dd-number: string
   --delivery-list: string
-  --delivery-to: list
+  --delivery-to: list<string>
   --entry-date: string # format: date-time
   --id: int # format: int64
   --layout-type: int # format: int32
   --note: string
   --po-number: string
   --proc-date: string # format: date-time
-  --product-trans: list # item shape: {acEntries?: list, amount?: float, companyId?: int, id?: int, percentage?: float, productCode?: string, productId?: int, quantity?: float, tranNotes?: list, unitPrice?: float, vatAmount?: float, vatAnalysisTypeId?: int, vatRateId?: int}
+  --product-trans: list # item shape: {acEntries?: list, amount?: float, companyId?: int, id?: int, percentage?: float, productCode?: string, productId?: int, quantity?: float, tranNotes?: list<string>, unitPrice?: float, vatAmount?: float, vatAnalysisTypeId?: int, vatRateId?: int}
   --reference: string
   --sale-invoice-id: int # format: int64
   --sale-rep-code: string
@@ -1889,18 +1905,18 @@ export def "quotes create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/quotes")
-  let body = {"acCode": $ac_code, "closedDate": $closed_date, "comments": $comments, "companyId": $company_id, "customFields": $custom_fields, "customerOwnerId": $customer_owner_id, "customerOwnerName": $customer_owner_name, "ddNumber": $dd_number, "deliveryList": $delivery_list, "deliveryTo": $delivery_to, "entryDate": $entry_date, "id": $id, "layoutType": $layout_type, "note": $note, "poNumber": $po_number, "procDate": $proc_date, "productTrans": $product_trans, "reference": $reference, "saleInvoiceId": $sale_invoice_id, "saleRepCode": $sale_rep_code, "saleRepId": $sale_rep_id, "timeStamp": $time_stamp, "total": $total, "totalNet": $total_net, "totalVat": $total_vat, "vatTypeId": $vat_type_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"acCode": $ac_code, "closedDate": $closed_date, "comments": $comments, "companyId": $company_id, "customFields": $custom_fields, "customerOwnerId": $customer_owner_id, "customerOwnerName": $customer_owner_name, "ddNumber": $dd_number, "deliveryList": $delivery_list, "deliveryTo": $delivery_to, "entryDate": $entry_date, "id": $id, "layoutType": $layout_type, "note": $note, "poNumber": $po_number, "procDate": $proc_date, "productTrans": $product_trans, "reference": $reference, "saleInvoiceId": $sale_invoice_id, "saleRepCode": $sale_rep_code, "saleRepId": $sale_rep_id, "timeStamp": $time_stamp, "total": $total, "totalNet": $total_net, "totalVat": $total_vat, "vatTypeId": $vat_type_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Processes a batch of Quote.
 #
 # PUT /v1/quotes/batch
 # operationId: Quote_ProcessBatch
-export def "quotes-batch put" [
+export def "quotes-batch update-process" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1915,10 +1931,11 @@ export def "quotes-batch put" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/quotes/batch")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Close a Quote.
@@ -1938,7 +1955,7 @@ export def "quotes-close close" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/quotes/close/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/quotes/close/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1949,7 +1966,7 @@ export def "quotes-close close" [
 # POST /v1/quotes/createQuoteWithGeneratingReference
 # operationId: Quote_Post_CreateQuoteWithGeneratingReference
 # --customFields item shape: {description?: string, id?: int, userDefinedFieldId?: int, value?: string}
-# --productTrans item shape: {acEntries?: list, amount?: float, companyId?: int, id?: int, percentage?: float, productCode?: string, productId?: int, quantity?: float, tranNotes?: list, unitPrice?: float, vatAmount?: float, vatAnalysisTypeId?: int, vatRateId?: int}
+# --productTrans item shape: {acEntries?: list, amount?: float, companyId?: int, id?: int, percentage?: float, productCode?: string, productId?: int, quantity?: float, tranNotes?: list<string>, unitPrice?: float, vatAmount?: float, vatAnalysisTypeId?: int, vatRateId?: int}
 export def "quotes-create-quote-with-generating-reference create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1968,14 +1985,14 @@ export def "quotes-create-quote-with-generating-reference create" [
   --customer-owner-name: string
   --dd-number: string
   --delivery-list: string
-  --delivery-to: list
+  --delivery-to: list<string>
   --entry-date: string # format: date-time
   --id: int # format: int64
   --layout-type: int # format: int32
   --note: string
   --po-number: string
   --proc-date: string # format: date-time
-  --product-trans: list # item shape: {acEntries?: list, amount?: float, companyId?: int, id?: int, percentage?: float, productCode?: string, productId?: int, quantity?: float, tranNotes?: list, unitPrice?: float, vatAmount?: float, vatAnalysisTypeId?: int, vatRateId?: int}
+  --product-trans: list # item shape: {acEntries?: list, amount?: float, companyId?: int, id?: int, percentage?: float, productCode?: string, productId?: int, quantity?: float, tranNotes?: list<string>, unitPrice?: float, vatAmount?: float, vatAnalysisTypeId?: int, vatRateId?: int}
   --reference: string
   --sale-invoice-id: int # format: int64
   --sale-rep-code: string
@@ -1990,19 +2007,19 @@ export def "quotes-create-quote-with-generating-reference create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/quotes/createQuoteWithGeneratingReference")
-  let body = {"acCode": $ac_code, "closedDate": $closed_date, "comments": $comments, "companyId": $company_id, "customFields": $custom_fields, "customerOwnerId": $customer_owner_id, "customerOwnerName": $customer_owner_name, "ddNumber": $dd_number, "deliveryList": $delivery_list, "deliveryTo": $delivery_to, "entryDate": $entry_date, "id": $id, "layoutType": $layout_type, "note": $note, "poNumber": $po_number, "procDate": $proc_date, "productTrans": $product_trans, "reference": $reference, "saleInvoiceId": $sale_invoice_id, "saleRepCode": $sale_rep_code, "saleRepId": $sale_rep_id, "timeStamp": $time_stamp, "total": $total, "totalNet": $total_net, "totalVat": $total_vat, "vatTypeId": $vat_type_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"acCode": $ac_code, "closedDate": $closed_date, "comments": $comments, "companyId": $company_id, "customFields": $custom_fields, "customerOwnerId": $customer_owner_id, "customerOwnerName": $customer_owner_name, "ddNumber": $dd_number, "deliveryList": $delivery_list, "deliveryTo": $delivery_to, "entryDate": $entry_date, "id": $id, "layoutType": $layout_type, "note": $note, "poNumber": $po_number, "procDate": $proc_date, "productTrans": $product_trans, "reference": $reference, "saleInvoiceId": $sale_invoice_id, "saleRepCode": $sale_rep_code, "saleRepId": $sale_rep_id, "timeStamp": $time_stamp, "total": $total, "totalNet": $total_net, "totalVat": $total_vat, "vatTypeId": $vat_type_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Generate a sale invoice from a Quote. When sale invoice is empty, new sale invoice will be generated from Quote.
 #
 # POST /v1/quotes/generateSaleInvoice
 # operationId: Quote_Post_GenerateSaleInvoice
-# --saleInvoice shape: {acCode?: string, bookTranTypeId?: int, customFields?: list, customerId?: int, deliveryTo?: list, details?: string, entryDate?: string, id?: int, loType?: string, netGoods?: float, netServices?: float, note?: string, ourReference?: string, procDate?: string, productTrans?: list, quoteId?: int, reference?: string, saleRepCode?: string, saleRepId?: int, timestamp?: string, total?: float, totalNet?: float, totalVAT?: float, unpaid?: float, vatTypeId?: int, yourReference?: string}
-export def "quotes-generate-sale-invoice post" [
+# --saleInvoice shape: {acCode?: string, bookTranTypeId?: int, customFields?: list, customerId?: int, deliveryTo?: list<string>, details?: string, entryDate?: string, id?: int, loType?: string, netGoods?: float, netServices?: float, note?: string, ourReference?: string, procDate?: string, productTrans?: list, quoteId?: int, reference?: string, saleRepCode?: string, saleRepId?: int, timestamp?: string, total?: float, totalNet?: float, totalVAT?: float, unpaid?: float, vatTypeId?: int, yourReference?: string}
+export def "quotes-generate-sale-invoice create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2012,24 +2029,24 @@ export def "quotes-generate-sale-invoice post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --quote-id: int # format: int64
-  --sale-invoice: record # e.g. {acCode: CUS3, bookTranTypeId: 7, customFields: [{description: acudf_1, id: 1, userDefinedFieldId: 1, value: acudfv_1}, {description: acudf_2, id: 2, userDefinedFieldId: 1, value: acudfv_2}], customerId: 70585, deliveryTo: [dt_1, dt_2], details: detail_1, entryDate: 2016-06-01T00:00:00, id: 75813, loType: 1, note: Customer 3, ourReference: ddNumber_1, procDate: 2016-06-24T00:00:00, productTrans: [{acEntries: [{accountCode: SA02, analysisCategoryId: 40889, description: AnCat1, id: 73455, value: -200}], amount: -220, amountNet: -200, id: 51820, percentage: 10, productCode: PRO2, productId: 20108, quantity: -1, tranNotes: [tn_1, tn_2], unitPrice: 200, vat: -20, vatAnalysisTypeId: 0, vatRateId: 30657}], saleRepId: 33110, timestamp: oq6NcBIe2wg=, total: -220, totalNet: -200, totalVAT: -20, unpaid: -220, vatTypeId: 1, yourReference: poNumber_1} — shape: {acCode?: string, bookTranTypeId?: int, customFields?: list, customerId?: int, deliveryTo?: list, details?: string, entryDate?: string, id?: int, loType?: string, netGoods?: float, netServices?: float, note?: string, ourReference?: string, procDate?: string, productTrans?: list, quoteId?: int, reference?: string, saleRepCode?: string, saleRepId?: int, timestamp?: string, total?: float, totalNet?: float, totalVAT?: float, unpaid?: float, vatTypeId?: int, yourReference?: string}
+  --sale-invoice: record # e.g. {acCode: CUS3, bookTranTypeId: 7, customFields: [{description: acudf_1, id: 1, userDefinedFieldId: 1, value: acudfv_1}, {description: acudf_2, id: 2, userDefinedFieldId: 1, value: acudfv_2}], customerId: 70585, deliveryTo: [dt_1, dt_2], details: detail_1, entryDate: 2016-06-01T00:00:00, id: 75813, loType: 1, note: Customer 3, ourReference: ddNumber_1, procDate: 2016-06-24T00:00:00, productTrans: [{acEntries: [{accountCode: SA02, analysisCategoryId: 40889, description: AnCat1, id: 73455, value: -200}], amount: -220, amountNet: -200, id: 51820, percentage: 10, productCode: PRO2, productId: 20108, quantity: -1, tranNotes: [tn_1, tn_2], unitPrice: 200, vat: -20, vatAnalysisTypeId: 0, vatRateId: 30657}], saleRepId: 33110, timestamp: oq6NcBIe2wg=, total: -220, totalNet: -200, totalVAT: -20, unpaid: -220, vatTypeId: 1, yourReference: poNumber_1} — shape: {acCode?: string, bookTranTypeId?: int, customFields?: list, customerId?: int, deliveryTo?: list<string>, details?: string, entryDate?: string, id?: int, loType?: string, netGoods?: float, netServices?: float, note?: string, ourReference?: string, procDate?: string, productTrans?: list, quoteId?: int, reference?: string, saleRepCode?: string, saleRepId?: int, timestamp?: string, total?: float, totalNet?: float, totalVAT?: float, unpaid?: float, vatTypeId?: int, yourReference?: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/quotes/generateSaleInvoice")
-  let body = {"quoteId": $quote_id, "saleInvoice": $sale_invoice} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"quoteId": $quote_id, "saleInvoice": $sale_invoice} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Reopen a Quote.
 #
 # PUT /v1/quotes/reopen/{id}
 # operationId: Quote_Reopen
-export def "quotes-reopen put" [
+export def "quotes-reopen update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2042,7 +2059,7 @@ export def "quotes-reopen put" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/quotes/reopen/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/quotes/reopen/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2067,7 +2084,7 @@ export def "quotes delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "timestamp" $timestamp "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/quotes/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/quotes/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2089,7 +2106,7 @@ export def "quotes get" [
 ]: nothing -> record<acCode: string, closedDate: string, comments: string, companyId: int, customFields: table<description: string, id: int, userDefinedFieldId: int, value: string>, customerOwnerId: int, customerOwnerName: string, ddNumber: string, deliveryList: string, deliveryTo: list<string>, entryDate: string, id: int, layoutType: int, note: string, poNumber: string, procDate: string, productTrans: table<acEntries: list, amount: float, companyId: int, id: int, percentage: float, productCode: string, productId: int, quantity: float, tranNotes: list, unitPrice: float, vatAmount: float, vatAnalysisTypeId: int, vatRateId: int>, reference: string, saleInvoiceId: int, saleRepCode: string, saleRepId: int, timeStamp: string, total: float, totalNet: float, totalVat: float, vatTypeId: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/quotes/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/quotes/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2100,7 +2117,7 @@ export def "quotes get" [
 # PUT /v1/quotes/{id}
 # operationId: Quote_Put
 # --customFields item shape: {description?: string, id?: int, userDefinedFieldId?: int, value?: string}
-# --productTrans item shape: {acEntries?: list, amount?: float, companyId?: int, id?: int, percentage?: float, productCode?: string, productId?: int, quantity?: float, tranNotes?: list, unitPrice?: float, vatAmount?: float, vatAnalysisTypeId?: int, vatRateId?: int}
+# --productTrans item shape: {acEntries?: list, amount?: float, companyId?: int, id?: int, percentage?: float, productCode?: string, productId?: int, quantity?: float, tranNotes?: list<string>, unitPrice?: float, vatAmount?: float, vatAnalysisTypeId?: int, vatRateId?: int}
 export def "quotes update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2120,14 +2137,14 @@ export def "quotes update" [
   --customer-owner-name: string
   --dd-number: string
   --delivery-list: string
-  --delivery-to: list
+  --delivery-to: list<string>
   --entry-date: string # format: date-time
   --body-id: int # format: int64
   --layout-type: int # format: int32
   --note: string
   --po-number: string
   --proc-date: string # format: date-time
-  --product-trans: list # item shape: {acEntries?: list, amount?: float, companyId?: int, id?: int, percentage?: float, productCode?: string, productId?: int, quantity?: float, tranNotes?: list, unitPrice?: float, vatAmount?: float, vatAnalysisTypeId?: int, vatRateId?: int}
+  --product-trans: list # item shape: {acEntries?: list, amount?: float, companyId?: int, id?: int, percentage?: float, productCode?: string, productId?: int, quantity?: float, tranNotes?: list<string>, unitPrice?: float, vatAmount?: float, vatAnalysisTypeId?: int, vatRateId?: int}
   --reference: string
   --sale-invoice-id: int # format: int64
   --sale-rep-code: string
@@ -2141,12 +2158,12 @@ export def "quotes update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/quotes/{id}"))
-  let body = {"acCode": $ac_code, "closedDate": $closed_date, "comments": $comments, "companyId": $company_id, "customFields": $custom_fields, "customerOwnerId": $customer_owner_id, "customerOwnerName": $customer_owner_name, "ddNumber": $dd_number, "deliveryList": $delivery_list, "deliveryTo": $delivery_to, "entryDate": $entry_date, "id": $body_id, "layoutType": $layout_type, "note": $note, "poNumber": $po_number, "procDate": $proc_date, "productTrans": $product_trans, "reference": $reference, "saleInvoiceId": $sale_invoice_id, "saleRepCode": $sale_rep_code, "saleRepId": $sale_rep_id, "timeStamp": $time_stamp, "total": $total, "totalNet": $total_net, "totalVat": $total_vat, "vatTypeId": $vat_type_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/quotes/{id}"))
+  let req_body = {"acCode": $ac_code, "closedDate": $closed_date, "comments": $comments, "companyId": $company_id, "customFields": $custom_fields, "customerOwnerId": $customer_owner_id, "customerOwnerName": $customer_owner_name, "ddNumber": $dd_number, "deliveryList": $delivery_list, "deliveryTo": $delivery_to, "entryDate": $entry_date, "id": $body_id, "layoutType": $layout_type, "note": $note, "poNumber": $po_number, "procDate": $proc_date, "productTrans": $product_trans, "reference": $reference, "saleInvoiceId": $sale_invoice_id, "saleRepCode": $sale_rep_code, "saleRepId": $sale_rep_id, "timeStamp": $time_stamp, "total": $total, "totalNet": $total_net, "totalVat": $total_vat, "vatTypeId": $vat_type_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns a list of company's Sales Entries, Sales Invoices and Sales Credit Notes. Supports OData querying protocol. Filtering is allowed by "entryDate" field. Ordering is allowed by "id" field.
@@ -2198,7 +2215,7 @@ export def "sales-credit-notes list" [
 # POST /v1/salesCreditNotes
 # operationId: SalesCreditNotes_Post
 # --customFields item shape: {description?: string, id?: int, userDefinedFieldId?: int, value?: string}
-# --productTrans item shape: {acEntries?: list, amount?: float, amountNet: float, id?: int, percentage?: float, productCode?: string, productId?: int, quantity?: float, tranNotes?: list, unitPrice?: float, vat?: float, vatAnalysisTypeId?: int, vatRateId?: int}
+# --productTrans item shape: {acEntries?: list, amount?: float, amountNet: float, id?: int, percentage?: float, productCode?: string, productId?: int, quantity?: float, tranNotes?: list<string>, unitPrice?: float, vat?: float, vatAnalysisTypeId?: int, vatRateId?: int}
 export def "sales-credit-notes create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2212,7 +2229,7 @@ export def "sales-credit-notes create" [
   --book-tran-type-id: int # format: int64
   --custom-fields: list # item shape: {description?: string, id?: int, userDefinedFieldId?: int, value?: string}
   --customer-id: int # format: int64
-  --delivery-to: list
+  --delivery-to: list<string>
   --details: string
   --entry-date: string # format: date-time
   --id: int # format: int64
@@ -2222,7 +2239,7 @@ export def "sales-credit-notes create" [
   --note: string
   --our-reference: string
   --proc-date: string # format: date-time
-  --product-trans: list # item shape: {acEntries?: list, amount?: float, amountNet: float, id?: int, percentage?: float, productCode?: string, productId?: int, quantity?: float, tranNotes?: list, unitPrice?: float, vat?: float, vatAnalysisTypeId?: int, vatRateId?: int}
+  --product-trans: list # item shape: {acEntries?: list, amount?: float, amountNet: float, id?: int, percentage?: float, productCode?: string, productId?: int, quantity?: float, tranNotes?: list<string>, unitPrice?: float, vat?: float, vatAnalysisTypeId?: int, vatRateId?: int}
   --quote-id: int # format: int64
   --reference: string
   --sale-rep-code: string
@@ -2239,18 +2256,18 @@ export def "sales-credit-notes create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/salesCreditNotes")
-  let body = {"acCode": $ac_code, "bookTranTypeId": $book_tran_type_id, "customFields": $custom_fields, "customerId": $customer_id, "deliveryTo": $delivery_to, "details": $details, "entryDate": $entry_date, "id": $id, "loType": $lo_type, "netGoods": $net_goods, "netServices": $net_services, "note": $note, "ourReference": $our_reference, "procDate": $proc_date, "productTrans": $product_trans, "quoteId": $quote_id, "reference": $reference, "saleRepCode": $sale_rep_code, "saleRepId": $sale_rep_id, "timestamp": $timestamp, "total": $total, "totalNet": $total_net, "totalVAT": $total_vat, "unpaid": $unpaid, "vatTypeId": $vat_type_id, "yourReference": $your_reference} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"acCode": $ac_code, "bookTranTypeId": $book_tran_type_id, "customFields": $custom_fields, "customerId": $customer_id, "deliveryTo": $delivery_to, "details": $details, "entryDate": $entry_date, "id": $id, "loType": $lo_type, "netGoods": $net_goods, "netServices": $net_services, "note": $note, "ourReference": $our_reference, "procDate": $proc_date, "productTrans": $product_trans, "quoteId": $quote_id, "reference": $reference, "saleRepCode": $sale_rep_code, "saleRepId": $sale_rep_id, "timestamp": $timestamp, "total": $total, "totalNet": $total_net, "totalVAT": $total_vat, "unpaid": $unpaid, "vatTypeId": $vat_type_id, "yourReference": $your_reference} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Processes a batch of Sales Credit Notes.
 #
 # PUT /v1/salesCreditNotes/batch
 # operationId: SalesCreditNotes_ProcessBatch
-export def "sales-credit-notes-batch put" [
+export def "sales-credit-notes-batch update-process" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2265,10 +2282,11 @@ export def "sales-credit-notes-batch put" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/salesCreditNotes/batch")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Removes an existing Sales Credit Note.
@@ -2290,7 +2308,7 @@ export def "sales-credit-notes delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "timestamp" $timestamp "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/salesCreditNotes/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/salesCreditNotes/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2312,7 +2330,7 @@ export def "sales-credit-notes get" [
 ]: nothing -> record<acCode: string, bookTranTypeId: int, customFields: table<description: string, id: int, userDefinedFieldId: int, value: string>, customerId: int, deliveryTo: list<string>, details: string, entryDate: string, id: int, loType: string, netGoods: float, netServices: float, note: string, ourReference: string, procDate: string, productTrans: table<acEntries: list, amount: float, amountNet: float, id: int, percentage: float, productCode: string, productId: int, quantity: float, tranNotes: list, unitPrice: float, vat: float, vatAnalysisTypeId: int, vatRateId: int>, quoteId: int, reference: string, saleRepCode: string, saleRepId: int, timestamp: string, total: float, totalNet: float, totalVAT: float, unpaid: float, vatTypeId: int, yourReference: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/salesCreditNotes/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/salesCreditNotes/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2323,7 +2341,7 @@ export def "sales-credit-notes get" [
 # PUT /v1/salesCreditNotes/{id}
 # operationId: SalesCreditNotes_Put
 # --customFields item shape: {description?: string, id?: int, userDefinedFieldId?: int, value?: string}
-# --productTrans item shape: {acEntries?: list, amount?: float, amountNet: float, id?: int, percentage?: float, productCode?: string, productId?: int, quantity?: float, tranNotes?: list, unitPrice?: float, vat?: float, vatAnalysisTypeId?: int, vatRateId?: int}
+# --productTrans item shape: {acEntries?: list, amount?: float, amountNet: float, id?: int, percentage?: float, productCode?: string, productId?: int, quantity?: float, tranNotes?: list<string>, unitPrice?: float, vat?: float, vatAnalysisTypeId?: int, vatRateId?: int}
 export def "sales-credit-notes update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2338,7 +2356,7 @@ export def "sales-credit-notes update" [
   --book-tran-type-id: int # format: int64
   --custom-fields: list # item shape: {description?: string, id?: int, userDefinedFieldId?: int, value?: string}
   --customer-id: int # format: int64
-  --delivery-to: list
+  --delivery-to: list<string>
   --details: string
   --entry-date: string # format: date-time
   --body-id: int # format: int64
@@ -2348,7 +2366,7 @@ export def "sales-credit-notes update" [
   --note: string
   --our-reference: string
   --proc-date: string # format: date-time
-  --product-trans: list # item shape: {acEntries?: list, amount?: float, amountNet: float, id?: int, percentage?: float, productCode?: string, productId?: int, quantity?: float, tranNotes?: list, unitPrice?: float, vat?: float, vatAnalysisTypeId?: int, vatRateId?: int}
+  --product-trans: list # item shape: {acEntries?: list, amount?: float, amountNet: float, id?: int, percentage?: float, productCode?: string, productId?: int, quantity?: float, tranNotes?: list<string>, unitPrice?: float, vat?: float, vatAnalysisTypeId?: int, vatRateId?: int}
   --quote-id: int # format: int64
   --reference: string
   --sale-rep-code: string
@@ -2364,12 +2382,12 @@ export def "sales-credit-notes update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/salesCreditNotes/{id}"))
-  let body = {"acCode": $ac_code, "bookTranTypeId": $book_tran_type_id, "customFields": $custom_fields, "customerId": $customer_id, "deliveryTo": $delivery_to, "details": $details, "entryDate": $entry_date, "id": $body_id, "loType": $lo_type, "netGoods": $net_goods, "netServices": $net_services, "note": $note, "ourReference": $our_reference, "procDate": $proc_date, "productTrans": $product_trans, "quoteId": $quote_id, "reference": $reference, "saleRepCode": $sale_rep_code, "saleRepId": $sale_rep_id, "timestamp": $timestamp, "total": $total, "totalNet": $total_net, "totalVAT": $total_vat, "unpaid": $unpaid, "vatTypeId": $vat_type_id, "yourReference": $your_reference} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/salesCreditNotes/{id}"))
+  let req_body = {"acCode": $ac_code, "bookTranTypeId": $book_tran_type_id, "customFields": $custom_fields, "customerId": $customer_id, "deliveryTo": $delivery_to, "details": $details, "entryDate": $entry_date, "id": $body_id, "loType": $lo_type, "netGoods": $net_goods, "netServices": $net_services, "note": $note, "ourReference": $our_reference, "procDate": $proc_date, "productTrans": $product_trans, "quoteId": $quote_id, "reference": $reference, "saleRepCode": $sale_rep_code, "saleRepId": $sale_rep_id, "timestamp": $timestamp, "total": $total, "totalNet": $total_net, "totalVAT": $total_vat, "unpaid": $unpaid, "vatTypeId": $vat_type_id, "yourReference": $your_reference} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns a list of company's Sales Entries. Supports OData querying protocol. Filtering is allowed by "entryDate" field. Ordering is allowed by "id" field.
@@ -2415,7 +2433,7 @@ export def "sales-entries create" [
   --book-tran-type-id: int # format: int64
   --custom-fields: list # item shape: {description?: string, id?: int, userDefinedFieldId?: int, value?: string}
   --customer-id: int # format: int64
-  --detail-collection: list
+  --detail-collection: list<string>
   --details: string
   --entry-date: string # format: date-time
   --id: int # format: int64
@@ -2436,18 +2454,18 @@ export def "sales-entries create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/salesEntries")
-  let body = {"acCode": $ac_code, "acEntries": $ac_entries, "bookTranTypeId": $book_tran_type_id, "customFields": $custom_fields, "customerId": $customer_id, "detailCollection": $detail_collection, "details": $details, "entryDate": $entry_date, "id": $id, "netGoods": $net_goods, "netServices": $net_services, "note": $note, "procDate": $proc_date, "reference": $reference, "timestamp": $timestamp, "total": $total, "totalNet": $total_net, "totalVAT": $total_vat, "unpaid": $unpaid, "vatEntries": $vat_entries, "vatTypeId": $vat_type_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"acCode": $ac_code, "acEntries": $ac_entries, "bookTranTypeId": $book_tran_type_id, "customFields": $custom_fields, "customerId": $customer_id, "detailCollection": $detail_collection, "details": $details, "entryDate": $entry_date, "id": $id, "netGoods": $net_goods, "netServices": $net_services, "note": $note, "procDate": $proc_date, "reference": $reference, "timestamp": $timestamp, "total": $total, "totalNet": $total_net, "totalVAT": $total_vat, "unpaid": $unpaid, "vatEntries": $vat_entries, "vatTypeId": $vat_type_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Processes a batch of Sales Entries.
 #
 # PUT /v1/salesEntries/batch
 # operationId: SalesEntries_ProcessBatch
-export def "sales-entries-batch put" [
+export def "sales-entries-batch update-process" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2462,10 +2480,11 @@ export def "sales-entries-batch put" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/salesEntries/batch")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Removes an existing Sales Entry.
@@ -2487,7 +2506,7 @@ export def "sales-entries delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "timestamp" $timestamp "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/salesEntries/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/salesEntries/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2509,7 +2528,7 @@ export def "sales-entries get" [
 ]: nothing -> record<acCode: string, acEntries: table<accountCode: string, analysisCategoryId: int, description: string, id: int, value: float>, bookTranTypeId: int, customFields: table<description: string, id: int, userDefinedFieldId: int, value: string>, customerId: int, detailCollection: list<string>, details: string, entryDate: string, id: int, netGoods: float, netServices: float, note: string, procDate: string, reference: string, timestamp: string, total: float, totalNet: float, totalVAT: float, unpaid: float, vatEntries: table<amount: float, id: int, percentage: float, vatRateId: int>, vatTypeId: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/salesEntries/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/salesEntries/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2537,7 +2556,7 @@ export def "sales-entries update" [
   --book-tran-type-id: int # format: int64
   --custom-fields: list # item shape: {description?: string, id?: int, userDefinedFieldId?: int, value?: string}
   --customer-id: int # format: int64
-  --detail-collection: list
+  --detail-collection: list<string>
   --details: string
   --entry-date: string # format: date-time
   --body-id: int # format: int64
@@ -2557,12 +2576,12 @@ export def "sales-entries update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/salesEntries/{id}"))
-  let body = {"acCode": $ac_code, "acEntries": $ac_entries, "bookTranTypeId": $book_tran_type_id, "customFields": $custom_fields, "customerId": $customer_id, "detailCollection": $detail_collection, "details": $details, "entryDate": $entry_date, "id": $body_id, "netGoods": $net_goods, "netServices": $net_services, "note": $note, "procDate": $proc_date, "reference": $reference, "timestamp": $timestamp, "total": $total, "totalNet": $total_net, "totalVAT": $total_vat, "unpaid": $unpaid, "vatEntries": $vat_entries, "vatTypeId": $vat_type_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/salesEntries/{id}"))
+  let req_body = {"acCode": $ac_code, "acEntries": $ac_entries, "bookTranTypeId": $book_tran_type_id, "customFields": $custom_fields, "customerId": $customer_id, "detailCollection": $detail_collection, "details": $details, "entryDate": $entry_date, "id": $body_id, "netGoods": $net_goods, "netServices": $net_services, "note": $note, "procDate": $proc_date, "reference": $reference, "timestamp": $timestamp, "total": $total, "totalNet": $total_net, "totalVAT": $total_vat, "unpaid": $unpaid, "vatEntries": $vat_entries, "vatTypeId": $vat_type_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns a list of company's Sales Invoices. Supports OData querying protocol. Filtering is allowed by "entryDate" field. Ordering is allowed by "id" field.
@@ -2592,7 +2611,7 @@ export def "sales-invoices list" [
 # POST /v1/salesInvoices
 # operationId: SalesInvoices_Post
 # --customFields item shape: {description?: string, id?: int, userDefinedFieldId?: int, value?: string}
-# --productTrans item shape: {acEntries?: list, amount?: float, amountNet: float, id?: int, percentage?: float, productCode?: string, productId?: int, quantity?: float, tranNotes?: list, unitPrice?: float, vat?: float, vatAnalysisTypeId?: int, vatRateId?: int}
+# --productTrans item shape: {acEntries?: list, amount?: float, amountNet: float, id?: int, percentage?: float, productCode?: string, productId?: int, quantity?: float, tranNotes?: list<string>, unitPrice?: float, vat?: float, vatAnalysisTypeId?: int, vatRateId?: int}
 export def "sales-invoices create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2606,7 +2625,7 @@ export def "sales-invoices create" [
   --book-tran-type-id: int # format: int64
   --custom-fields: list # item shape: {description?: string, id?: int, userDefinedFieldId?: int, value?: string}
   --customer-id: int # format: int64
-  --delivery-to: list
+  --delivery-to: list<string>
   --details: string
   --entry-date: string # format: date-time
   --id: int # format: int64
@@ -2616,7 +2635,7 @@ export def "sales-invoices create" [
   --note: string
   --our-reference: string
   --proc-date: string # format: date-time
-  --product-trans: list # item shape: {acEntries?: list, amount?: float, amountNet: float, id?: int, percentage?: float, productCode?: string, productId?: int, quantity?: float, tranNotes?: list, unitPrice?: float, vat?: float, vatAnalysisTypeId?: int, vatRateId?: int}
+  --product-trans: list # item shape: {acEntries?: list, amount?: float, amountNet: float, id?: int, percentage?: float, productCode?: string, productId?: int, quantity?: float, tranNotes?: list<string>, unitPrice?: float, vat?: float, vatAnalysisTypeId?: int, vatRateId?: int}
   --quote-id: int # format: int64
   --reference: string
   --sale-rep-code: string
@@ -2633,18 +2652,18 @@ export def "sales-invoices create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/salesInvoices")
-  let body = {"acCode": $ac_code, "bookTranTypeId": $book_tran_type_id, "customFields": $custom_fields, "customerId": $customer_id, "deliveryTo": $delivery_to, "details": $details, "entryDate": $entry_date, "id": $id, "loType": $lo_type, "netGoods": $net_goods, "netServices": $net_services, "note": $note, "ourReference": $our_reference, "procDate": $proc_date, "productTrans": $product_trans, "quoteId": $quote_id, "reference": $reference, "saleRepCode": $sale_rep_code, "saleRepId": $sale_rep_id, "timestamp": $timestamp, "total": $total, "totalNet": $total_net, "totalVAT": $total_vat, "unpaid": $unpaid, "vatTypeId": $vat_type_id, "yourReference": $your_reference} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"acCode": $ac_code, "bookTranTypeId": $book_tran_type_id, "customFields": $custom_fields, "customerId": $customer_id, "deliveryTo": $delivery_to, "details": $details, "entryDate": $entry_date, "id": $id, "loType": $lo_type, "netGoods": $net_goods, "netServices": $net_services, "note": $note, "ourReference": $our_reference, "procDate": $proc_date, "productTrans": $product_trans, "quoteId": $quote_id, "reference": $reference, "saleRepCode": $sale_rep_code, "saleRepId": $sale_rep_id, "timestamp": $timestamp, "total": $total, "totalNet": $total_net, "totalVAT": $total_vat, "unpaid": $unpaid, "vatTypeId": $vat_type_id, "yourReference": $your_reference} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Processes a batch of Sales Invoices.
 #
 # PUT /v1/salesInvoices/batch
 # operationId: SalesInvoices_ProcessBatch
-export def "sales-invoices-batch put" [
+export def "sales-invoices-batch update-process" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2659,10 +2678,11 @@ export def "sales-invoices-batch put" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/salesInvoices/batch")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Creates a new Sale Invoice with auto generating reference.
@@ -2670,7 +2690,7 @@ export def "sales-invoices-batch put" [
 # POST /v1/salesInvoices/createSaleInvoiceWithGeneratingReference
 # operationId: SalesInvoices_Post_CreateSaleInvoiceWithGeneratingReference
 # --customFields item shape: {description?: string, id?: int, userDefinedFieldId?: int, value?: string}
-# --productTrans item shape: {acEntries?: list, amount?: float, amountNet: float, id?: int, percentage?: float, productCode?: string, productId?: int, quantity?: float, tranNotes?: list, unitPrice?: float, vat?: float, vatAnalysisTypeId?: int, vatRateId?: int}
+# --productTrans item shape: {acEntries?: list, amount?: float, amountNet: float, id?: int, percentage?: float, productCode?: string, productId?: int, quantity?: float, tranNotes?: list<string>, unitPrice?: float, vat?: float, vatAnalysisTypeId?: int, vatRateId?: int}
 export def "sales-invoices-create-sale-invoice-with-generating-reference create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2684,7 +2704,7 @@ export def "sales-invoices-create-sale-invoice-with-generating-reference create"
   --book-tran-type-id: int # format: int64
   --custom-fields: list # item shape: {description?: string, id?: int, userDefinedFieldId?: int, value?: string}
   --customer-id: int # format: int64
-  --delivery-to: list
+  --delivery-to: list<string>
   --details: string
   --entry-date: string # format: date-time
   --id: int # format: int64
@@ -2694,7 +2714,7 @@ export def "sales-invoices-create-sale-invoice-with-generating-reference create"
   --note: string
   --our-reference: string
   --proc-date: string # format: date-time
-  --product-trans: list # item shape: {acEntries?: list, amount?: float, amountNet: float, id?: int, percentage?: float, productCode?: string, productId?: int, quantity?: float, tranNotes?: list, unitPrice?: float, vat?: float, vatAnalysisTypeId?: int, vatRateId?: int}
+  --product-trans: list # item shape: {acEntries?: list, amount?: float, amountNet: float, id?: int, percentage?: float, productCode?: string, productId?: int, quantity?: float, tranNotes?: list<string>, unitPrice?: float, vat?: float, vatAnalysisTypeId?: int, vatRateId?: int}
   --quote-id: int # format: int64
   --reference: string
   --sale-rep-code: string
@@ -2711,11 +2731,11 @@ export def "sales-invoices-create-sale-invoice-with-generating-reference create"
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/salesInvoices/createSaleInvoiceWithGeneratingReference")
-  let body = {"acCode": $ac_code, "bookTranTypeId": $book_tran_type_id, "customFields": $custom_fields, "customerId": $customer_id, "deliveryTo": $delivery_to, "details": $details, "entryDate": $entry_date, "id": $id, "loType": $lo_type, "netGoods": $net_goods, "netServices": $net_services, "note": $note, "ourReference": $our_reference, "procDate": $proc_date, "productTrans": $product_trans, "quoteId": $quote_id, "reference": $reference, "saleRepCode": $sale_rep_code, "saleRepId": $sale_rep_id, "timestamp": $timestamp, "total": $total, "totalNet": $total_net, "totalVAT": $total_vat, "unpaid": $unpaid, "vatTypeId": $vat_type_id, "yourReference": $your_reference} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"acCode": $ac_code, "bookTranTypeId": $book_tran_type_id, "customFields": $custom_fields, "customerId": $customer_id, "deliveryTo": $delivery_to, "details": $details, "entryDate": $entry_date, "id": $id, "loType": $lo_type, "netGoods": $net_goods, "netServices": $net_services, "note": $note, "ourReference": $our_reference, "procDate": $proc_date, "productTrans": $product_trans, "quoteId": $quote_id, "reference": $reference, "saleRepCode": $sale_rep_code, "saleRepId": $sale_rep_id, "timestamp": $timestamp, "total": $total, "totalNet": $total_net, "totalVAT": $total_vat, "unpaid": $unpaid, "vatTypeId": $vat_type_id, "yourReference": $your_reference} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Removes an existing Sales Invoice.
@@ -2737,7 +2757,7 @@ export def "sales-invoices delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "timestamp" $timestamp "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/salesInvoices/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/salesInvoices/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2759,7 +2779,7 @@ export def "sales-invoices get" [
 ]: nothing -> record<acCode: string, bookTranTypeId: int, customFields: table<description: string, id: int, userDefinedFieldId: int, value: string>, customerId: int, deliveryTo: list<string>, details: string, entryDate: string, id: int, loType: string, netGoods: float, netServices: float, note: string, ourReference: string, procDate: string, productTrans: table<acEntries: list, amount: float, amountNet: float, id: int, percentage: float, productCode: string, productId: int, quantity: float, tranNotes: list, unitPrice: float, vat: float, vatAnalysisTypeId: int, vatRateId: int>, quoteId: int, reference: string, saleRepCode: string, saleRepId: int, timestamp: string, total: float, totalNet: float, totalVAT: float, unpaid: float, vatTypeId: int, yourReference: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/salesInvoices/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/salesInvoices/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2770,7 +2790,7 @@ export def "sales-invoices get" [
 # PUT /v1/salesInvoices/{id}
 # operationId: SalesInvoices_Put
 # --customFields item shape: {description?: string, id?: int, userDefinedFieldId?: int, value?: string}
-# --productTrans item shape: {acEntries?: list, amount?: float, amountNet: float, id?: int, percentage?: float, productCode?: string, productId?: int, quantity?: float, tranNotes?: list, unitPrice?: float, vat?: float, vatAnalysisTypeId?: int, vatRateId?: int}
+# --productTrans item shape: {acEntries?: list, amount?: float, amountNet: float, id?: int, percentage?: float, productCode?: string, productId?: int, quantity?: float, tranNotes?: list<string>, unitPrice?: float, vat?: float, vatAnalysisTypeId?: int, vatRateId?: int}
 export def "sales-invoices update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2785,7 +2805,7 @@ export def "sales-invoices update" [
   --book-tran-type-id: int # format: int64
   --custom-fields: list # item shape: {description?: string, id?: int, userDefinedFieldId?: int, value?: string}
   --customer-id: int # format: int64
-  --delivery-to: list
+  --delivery-to: list<string>
   --details: string
   --entry-date: string # format: date-time
   --body-id: int # format: int64
@@ -2795,7 +2815,7 @@ export def "sales-invoices update" [
   --note: string
   --our-reference: string
   --proc-date: string # format: date-time
-  --product-trans: list # item shape: {acEntries?: list, amount?: float, amountNet: float, id?: int, percentage?: float, productCode?: string, productId?: int, quantity?: float, tranNotes?: list, unitPrice?: float, vat?: float, vatAnalysisTypeId?: int, vatRateId?: int}
+  --product-trans: list # item shape: {acEntries?: list, amount?: float, amountNet: float, id?: int, percentage?: float, productCode?: string, productId?: int, quantity?: float, tranNotes?: list<string>, unitPrice?: float, vat?: float, vatAnalysisTypeId?: int, vatRateId?: int}
   --quote-id: int # format: int64
   --reference: string
   --sale-rep-code: string
@@ -2811,12 +2831,12 @@ export def "sales-invoices update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/salesInvoices/{id}"))
-  let body = {"acCode": $ac_code, "bookTranTypeId": $book_tran_type_id, "customFields": $custom_fields, "customerId": $customer_id, "deliveryTo": $delivery_to, "details": $details, "entryDate": $entry_date, "id": $body_id, "loType": $lo_type, "netGoods": $net_goods, "netServices": $net_services, "note": $note, "ourReference": $our_reference, "procDate": $proc_date, "productTrans": $product_trans, "quoteId": $quote_id, "reference": $reference, "saleRepCode": $sale_rep_code, "saleRepId": $sale_rep_id, "timestamp": $timestamp, "total": $total, "totalNet": $total_net, "totalVAT": $total_vat, "unpaid": $unpaid, "vatTypeId": $vat_type_id, "yourReference": $your_reference} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/salesInvoices/{id}"))
+  let req_body = {"acCode": $ac_code, "bookTranTypeId": $book_tran_type_id, "customFields": $custom_fields, "customerId": $customer_id, "deliveryTo": $delivery_to, "details": $details, "entryDate": $entry_date, "id": $body_id, "loType": $lo_type, "netGoods": $net_goods, "netServices": $net_services, "note": $note, "ourReference": $our_reference, "procDate": $proc_date, "productTrans": $product_trans, "quoteId": $quote_id, "reference": $reference, "saleRepCode": $sale_rep_code, "saleRepId": $sale_rep_id, "timestamp": $timestamp, "total": $total, "totalNet": $total_net, "totalVAT": $total_vat, "unpaid": $unpaid, "vatTypeId": $vat_type_id, "yourReference": $your_reference} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns a list of company's SaleRep. Filtering is forbidden. Ordering is allowed by "id".
@@ -2866,18 +2886,18 @@ export def "sales-reps create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/salesReps")
-  let body = {"code": $code, "companyId": $company_id, "email": $email, "id": $id, "name": $name, "phone": $phone, "timeStamp": $time_stamp} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"code": $code, "companyId": $company_id, "email": $email, "id": $id, "name": $name, "phone": $phone, "timeStamp": $time_stamp} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Processes a batch of Sale Rep.
 #
 # PUT /v1/salesReps/batch
 # operationId: SalesRep_ProcessBatch
-export def "sales-reps-batch put" [
+export def "sales-reps-batch update-process" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2892,10 +2912,11 @@ export def "sales-reps-batch put" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/salesReps/batch")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Removes an existing Sale Rep.
@@ -2917,7 +2938,7 @@ export def "sales-reps delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "timestamp" $timestamp "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/salesReps/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/salesReps/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2939,7 +2960,7 @@ export def "sales-reps get" [
 ]: nothing -> record<code: string, companyId: int, email: string, id: int, name: string, phone: string, timeStamp: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/salesReps/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/salesReps/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2970,12 +2991,12 @@ export def "sales-reps update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/salesReps/{id}"))
-  let body = {"code": $code, "companyId": $company_id, "email": $email, "id": $body_id, "name": $name, "phone": $phone, "timeStamp": $time_stamp} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/salesReps/{id}"))
+  let req_body = {"code": $code, "companyId": $company_id, "email": $email, "id": $body_id, "name": $name, "phone": $phone, "timeStamp": $time_stamp} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns a list of company's Suppliers. Supports OData querying protocol. Filtering is forbidden. Ordering is allowed by "id" and "code" fields.
@@ -3018,8 +3039,8 @@ export def "suppliers create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --account-name: string
   --account-number: string
-  --additional-emails: list
-  --address: list
+  --additional-emails: list<string>
+  --address: list<string>
   --auth-code: string
   --bank: record # shape: {branch?: string, id?: int, name?: string, sortCode?: string}
   --business-identifier-code: string
@@ -3048,18 +3069,18 @@ export def "suppliers create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/suppliers")
-  let body = {"accountName": $account_name, "accountNumber": $account_number, "additionalEmails": $additional_emails, "address": $address, "authCode": $auth_code, "bank": $bank, "businessIdentifierCode": $business_identifier_code, "code": $code, "contact": $contact, "eFTReference": $e_ft_reference, "email": $email, "fax": $fax, "id": $id, "internationalBankAccountNumber": $international_bank_account_number, "ledgerBalance": $ledger_balance, "mobile": $mobile, "name": $name, "openingBalance": $opening_balance, "openingBalances": $opening_balances, "ourCode": $our_code, "ownerTypeId": $owner_type_id, "phone": $phone, "postponedAccounting": $postponed_accounting, "timestamp": $timestamp, "vatAnalysisTypeId": $vat_analysis_type_id, "vatReg": $vat_reg, "vatType": $vat_type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"accountName": $account_name, "accountNumber": $account_number, "additionalEmails": $additional_emails, "address": $address, "authCode": $auth_code, "bank": $bank, "businessIdentifierCode": $business_identifier_code, "code": $code, "contact": $contact, "eFTReference": $e_ft_reference, "email": $email, "fax": $fax, "id": $id, "internationalBankAccountNumber": $international_bank_account_number, "ledgerBalance": $ledger_balance, "mobile": $mobile, "name": $name, "openingBalance": $opening_balance, "openingBalances": $opening_balances, "ourCode": $our_code, "ownerTypeId": $owner_type_id, "phone": $phone, "postponedAccounting": $postponed_accounting, "timestamp": $timestamp, "vatAnalysisTypeId": $vat_analysis_type_id, "vatReg": $vat_reg, "vatType": $vat_type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Processes a batch of Suppliers.
 #
 # PUT /v1/suppliers/batch
 # operationId: Suppliers_ProcessBatch
-export def "suppliers-batch put" [
+export def "suppliers-batch update-process" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3074,10 +3095,11 @@ export def "suppliers-batch put" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/suppliers/batch")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Removes an existing Supplier.
@@ -3099,7 +3121,7 @@ export def "suppliers delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "timestamp" $timestamp "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/suppliers/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/suppliers/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3123,7 +3145,7 @@ export def "suppliers get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "needBalance" $need_balance "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/suppliers/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/suppliers/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3148,8 +3170,8 @@ export def "suppliers update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --account-name: string
   --account-number: string
-  --additional-emails: list
-  --address: list
+  --additional-emails: list<string>
+  --address: list<string>
   --auth-code: string
   --bank: record # shape: {branch?: string, id?: int, name?: string, sortCode?: string}
   --business-identifier-code: string
@@ -3177,12 +3199,12 @@ export def "suppliers update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/suppliers/{id}"))
-  let body = {"accountName": $account_name, "accountNumber": $account_number, "additionalEmails": $additional_emails, "address": $address, "authCode": $auth_code, "bank": $bank, "businessIdentifierCode": $business_identifier_code, "code": $code, "contact": $contact, "eFTReference": $e_ft_reference, "email": $email, "fax": $fax, "id": $body_id, "internationalBankAccountNumber": $international_bank_account_number, "ledgerBalance": $ledger_balance, "mobile": $mobile, "name": $name, "openingBalance": $opening_balance, "openingBalances": $opening_balances, "ourCode": $our_code, "ownerTypeId": $owner_type_id, "phone": $phone, "postponedAccounting": $postponed_accounting, "timestamp": $timestamp, "vatAnalysisTypeId": $vat_analysis_type_id, "vatReg": $vat_reg, "vatType": $vat_type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/suppliers/{id}"))
+  let req_body = {"accountName": $account_name, "accountNumber": $account_number, "additionalEmails": $additional_emails, "address": $address, "authCode": $auth_code, "bank": $bank, "businessIdentifierCode": $business_identifier_code, "code": $code, "contact": $contact, "eFTReference": $e_ft_reference, "email": $email, "fax": $fax, "id": $body_id, "internationalBankAccountNumber": $international_bank_account_number, "ledgerBalance": $ledger_balance, "mobile": $mobile, "name": $name, "openingBalance": $opening_balance, "openingBalances": $opening_balances, "ourCode": $our_code, "ownerTypeId": $owner_type_id, "phone": $phone, "postponedAccounting": $postponed_accounting, "timestamp": $timestamp, "vatAnalysisTypeId": $vat_analysis_type_id, "vatReg": $vat_reg, "vatType": $vat_type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns a list of Supplier's account transactions.
@@ -3202,7 +3224,7 @@ export def "suppliers-account-trans get" [
 ]: nothing -> table<bookTranId: int, bookTranTypeId: int, bookTransactionReference: string, bookTypeDesc: string, credit: float, debit: float, id: int, procDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({item_id: $item_id} | format pattern "/v1/suppliers/{item_id}/accountTrans"))
+  let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/v1/suppliers/{item_id}/accountTrans"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3225,7 +3247,7 @@ export def "suppliers-opening-balance get" [
 ]: nothing -> record<currentMonth: float, oneMonthOld: float, threeMonthsOld: float, twoMonthsOld: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({item_id: $item_id} | format pattern "/v1/suppliers/{item_id}/openingBalance"))
+  let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/v1/suppliers/{item_id}/openingBalance"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3248,7 +3270,7 @@ export def "suppliers-opening-balance-list get" [
 ]: nothing -> table<entryDate: string, id: int, isChanged: bool, procDate: string, reference: string, timestamp: string, total: float, totalVAT: float, unpaid: float, vatEntries: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({item_id: $item_id} | format pattern "/v1/suppliers/{item_id}/openingBalanceList"))
+  let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/v1/suppliers/{item_id}/openingBalanceList"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3324,7 +3346,7 @@ export def "vat-categories get" [
 #
 # POST /v1/vatCategories/vatRates
 # operationId: VatCategories_ProcessVatRates
-export def "vat-categories-vat-rates post" [
+export def "vat-categories-vat-rates create-process" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3339,10 +3361,11 @@ export def "vat-categories-vat-rates post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/vatCategories/vatRates")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns a list of company's Vat Rates. Supports OData querying protocol. Filtering is allowed by "vatCategoryId" field. Ordering is allowed by "id" and "orderIndex" fields.

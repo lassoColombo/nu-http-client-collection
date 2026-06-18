@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -72,7 +81,7 @@ def fields-completer [] { ["*"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "templeton-hive submit-hive-job" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "templeton-hive submit-job-job" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -96,7 +105,7 @@ export def commands []: nothing -> table {
 #
 # POST /templeton/v1/hive
 # operationId: Job_SubmitHiveJob
-export def "templeton-hive submit-hive-job" [
+export def "templeton-hive submit-job-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -113,10 +122,11 @@ export def "templeton-hive submit-hive-job" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "user.name" $user_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/templeton/v1/hive" $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets the list of jobs from the specified HDInsight cluster.
@@ -164,7 +174,7 @@ export def "templeton-jobs kill" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "user.name" $user_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({job_id: $job_id} | format pattern "/templeton/v1/jobs/{job_id}") $qp)
+  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/templeton/v1/jobs/{job_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -190,7 +200,7 @@ export def "templeton-jobs get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "user.name" $user_name "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({job_id: $job_id} | format pattern "/templeton/v1/jobs/{job_id}") $qp)
+  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/templeton/v1/jobs/{job_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -200,7 +210,7 @@ export def "templeton-jobs get" [
 #
 # GET /templeton/v1/jobs?op=LISTAFTERID
 # operationId: Job_ListAfterJobId
-export def "templeton-jobs-op-listafterid list-after" [
+export def "templeton-jobs-op-listafterid list-job-after-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -228,7 +238,7 @@ export def "templeton-jobs-op-listafterid list-after" [
 #
 # POST /templeton/v1/mapreduce/jar
 # operationId: Job_SubmitMapReduceJob
-export def "templeton-mapreduce-jar submit-map-reduce-job" [
+export def "templeton-mapreduce-jar submit-job-map-reduce-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -245,17 +255,18 @@ export def "templeton-mapreduce-jar submit-map-reduce-job" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "user.name" $user_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/templeton/v1/mapreduce/jar" $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Submits a MapReduce streaming job to an HDInsight cluster.
 #
 # POST /templeton/v1/mapreduce/streaming
 # operationId: Job_SubmitMapReduceStreamingJob
-export def "templeton-mapreduce-streaming submit-map-reduce-streaming-job" [
+export def "templeton-mapreduce-streaming submit-job-map-reduce-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -272,17 +283,18 @@ export def "templeton-mapreduce-streaming submit-map-reduce-streaming-job" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "user.name" $user_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/templeton/v1/mapreduce/streaming" $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Submits a Pig job to an HDInsight cluster.
 #
 # POST /templeton/v1/pig
 # operationId: Job_SubmitPigJob
-export def "templeton-pig submit-pig-job" [
+export def "templeton-pig submit-job-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -299,17 +311,18 @@ export def "templeton-pig submit-pig-job" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "user.name" $user_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/templeton/v1/pig" $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Submits a Sqoop job to an HDInsight cluster.
 #
 # POST /templeton/v1/sqoop
 # operationId: Job_SubmitSqoopJob
-export def "templeton-sqoop submit-sqoop-job" [
+export def "templeton-sqoop submit-job-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -326,17 +339,18 @@ export def "templeton-sqoop submit-sqoop-job" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "user.name" $user_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/templeton/v1/sqoop" $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets application state from the specified HDInsight cluster.
 #
 # GET /ws/v1/cluster/apps/{appId}/state
 # operationId: Job_GetAppState
-export def "ws-cluster-apps-state get" [
+export def "ws-cluster-apps-state get-job" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -349,7 +363,7 @@ export def "ws-cluster-apps-state get" [
 ]: nothing -> record<state: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/ws/v1/cluster/apps/{app_id}/state"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/ws/v1/cluster/apps/{app_id}/state"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

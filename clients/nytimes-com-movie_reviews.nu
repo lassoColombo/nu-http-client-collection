@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -106,14 +115,14 @@ export def "critics get" [
 ]: nothing -> record<copyright: string, num_results: int, results: table<bio: string, display_name: string, multimedia: record, seo_name: string, sort_name: string, status: string>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({resource_type: $resource_type} | format pattern "/critics/{resource_type}.json"))
+  let full_url = (build-url $base ({resource_type: (encode-path-segment $resource_type)} | format pattern "/critics/{resource_type}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /reviews/search.json
-export def "reviews-searchjson get" [
+export def "reviews-search-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -122,13 +131,13 @@ export def "reviews-searchjson get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --query: string # Search keywords; matches movie title and indexed terms  To limit your search to exact matches only, surround your search string with single quotation marks (e.g., query='28+days+later'). Otherwise, responses will include partial matches ("head words") as well as exact matches (e.g., president will match president, presidents and presidential).      If you specify multiple terms without quotation marks, they will be combined in an OR search.      If you omit the query parameter, your request will be equivalent to a reviews and NYT Critics' Picks request.
+  --query: string # Search keywords; matches movie title and indexed terms To limit your search to exact matches only, surround your search string with single quotation marks (e.g., query='28+days+later'). Otherwise, responses will include partial matches ("head words") as well as exact matches (e.g., president will match president, presidents and presidential). If you specify multiple terms without quotation marks, they will be combined in an OR search. If you omit the query parameter, your request will be equivalent to a reviews and NYT Critics' Picks request.
   --critics-pick: string@critics-pick-completer # Set this parameter to Y to limit the results to NYT Critics' Picks. To get only those movies that have not been highlighted by Times critics, specify critics-pick=N. (To get all reviews regardless of critics-pick status, simply omit this parameter.)
   --reviewer: string # Include this parameter to limit your results to reviews by a specific critic. Reviewer names should be formatted like this: Manohla Dargis.
-  --publication-date: string # Single date: YYYY-MM-DD  Start and end date: YYYY-MM-DD;YYYY-MM-DD  The publication-date is the date the review was first published in The Times.
-  --opening-date: string # Single date: YYYY-MM-DD  Start and end date: YYYY-MM-DD;YYYY-MM-DD  The opening-date is the date the movie's opening date in the New York region.
+  --publication-date: string # Single date: YYYY-MM-DD Start and end date: YYYY-MM-DD;YYYY-MM-DD The publication-date is the date the review was first published in The Times.
+  --opening-date: string # Single date: YYYY-MM-DD Start and end date: YYYY-MM-DD;YYYY-MM-DD The opening-date is the date the movie's opening date in the New York region.
   --offset: int # Positive integer, multiple of 20 (default: 20)
-  --order: string # Sets the sort order of the results.  Results ordered by-title are in ascending alphabetical order. Results ordered by one of the date parameters are in reverse chronological order.  If you do not specify a sort order, the results will be ordered by publication-date.
+  --order: string # Sets the sort order of the results. Results ordered by-title are in ascending alphabetical order. Results ordered by one of the date parameters are in reverse chronological order. If you do not specify a sort order, the results will be ordered by publication-date.
 ]: nothing -> record<copyright: string, num_results: int, results: table<byline: string, critics_pick: int, date_updated: string, display_title: string, headline: string, link: record, mpaa_rating: string, multimedia: record, opening_date: string, publication_date: string, summary_short: string>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -151,12 +160,12 @@ export def "reviews get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # Positive integer, multiple of 20 (default: 20)
-  --order: string@order-completer # Sets the sort order of the results.  Results ordered by-title are in ascending alphabetical order. Results ordered by one of the date parameters are in reverse chronological order.  If you do not specify a sort order, the results will be ordered by publication-date.  (default: by-publication-date)
+  --order: string@order-completer # Sets the sort order of the results. Results ordered by-title are in ascending alphabetical order. Results ordered by one of the date parameters are in reverse chronological order. If you do not specify a sort order, the results will be ordered by publication-date. (default: by-publication-date)
 ]: nothing -> record<copyright: string, num_results: int, results: table<byline: string, critics_pick: int, date_updated: string, display_title: string, headline: string, link: record, mpaa_rating: string, multimedia: record, opening_date: string, publication_date: string, summary_short: string>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_type: $resource_type} | format pattern "/reviews/{resource_type}.json") $qp)
+  let full_url = (build-url $base ({resource_type: (encode-path-segment $resource_type)} | format pattern "/reviews/{resource_type}.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

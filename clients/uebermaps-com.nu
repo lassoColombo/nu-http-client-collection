@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -72,7 +81,7 @@ def order-completer [] { ["created_at_asc" "created_at_desc" "title_asc" "title_
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account patch" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account update" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,7 +104,7 @@ export def commands []: nothing -> table {
 # Update account
 #
 # PATCH /account
-export def "account patch" [
+export def "account update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -112,17 +121,17 @@ export def "account patch" [
   --picture: string # e.g. <BASE_64_ENCODED_STRING>
   --screen-name: string # e.g. billhicks
   --time-zone: string # e.g. Pacific Time (US & Canada)
-  --body-url: string # e.g. http://www.billhicks.com
+  --url: string # e.g. http://www.billhicks.com
 ]: any -> record<about: string, counts: record<maps: int>, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account")
-  let body = {"about": $about, "header": $header, "language": $language, "location": $location, "name": $name, "picture": $picture, "screen_name": $screen_name, "time_zone": $time_zone, "url": $body_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"about": $about, "header": $header, "language": $language, "location": $location, "name": $name, "picture": $picture, "screen_name": $screen_name, "time_zone": $time_zone, "url": $url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete attachment
@@ -141,7 +150,7 @@ export def "attachments delete" [
 ]: nothing -> record<attachable_id: int, attachable_type: string, created_at: string, description: string, file_url: string, id: int, map_id: int, sizes: record, spot: record<counts: record<attachments: int, comments: int, respot: int>, created_at: string, description: string, id: int, lat: float, lon: float, map_id: int, picture_url: string, status: string, time_zone: string, title: string, updated_at: string, user: record<about: string, counts: record, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>>, status: string, user: record<about: string, counts: record<maps: int>, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/attachments/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/attachments/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -150,7 +159,7 @@ export def "attachments delete" [
 # Sign in user
 #
 # POST /authentication
-export def "authentication post" [
+export def "authentication create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -166,11 +175,11 @@ export def "authentication post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/authentication")
-  let body = {"email": $email, "password": $password} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"email": $email, "password": $password} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List your collaborator invitations
@@ -197,7 +206,7 @@ export def "collaborator-invitations list" [
 # Invite user to collaborate on map
 #
 # POST /collaborator_invitations
-export def "collaborator-invitations post" [
+export def "collaborator-invitations create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -215,11 +224,11 @@ export def "collaborator-invitations post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/collaborator_invitations")
-  let body = {"emails": $emails, "is_admin": $is_admin, "map_id": $map_id, "user_ids": $user_ids} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"emails": $emails, "is_admin": $is_admin, "map_id": $map_id, "user_ids": $user_ids} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete collaborator invitation
@@ -238,7 +247,7 @@ export def "collaborator-invitations delete" [
 ]: nothing -> record<accepted: bool, created_at: string, email: string, group: string, id: int, invited_by_user: record<about: string, counts: record<maps: int>, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>, map: record<counts: record<attachments: int, comments: int, impressions: int, respots: int, spots: int, subscriptions: int>, created_at: string, description: string, id: int, map_settings: record<editor_access: string, respotting_to_this_map: bool, visitor_access: string>, owner_id: int, picture_url: string, title: string, updated_at: string, visibility: string>, sent: bool, updated_at: string, user: record<about: string, counts: record<maps: int>, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/collaborator_invitations/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/collaborator_invitations/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -260,7 +269,7 @@ export def "collaborator-invitations get" [
 ]: nothing -> record<accepted: bool, created_at: string, email: string, group: string, id: int, invited_by_user: record<about: string, counts: record<maps: int>, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>, map: record<counts: record<attachments: int, comments: int, impressions: int, respots: int, spots: int, subscriptions: int>, created_at: string, description: string, id: int, map_settings: record<editor_access: string, respotting_to_this_map: bool, visitor_access: string>, owner_id: int, picture_url: string, title: string, updated_at: string, visibility: string>, sent: bool, updated_at: string, user: record<about: string, counts: record<maps: int>, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/collaborator_invitations/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/collaborator_invitations/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -269,7 +278,7 @@ export def "collaborator-invitations get" [
 # Accept collaborator invitation.
 #
 # PATCH /collaborator_invitations/{id}
-export def "collaborator-invitations patch" [
+export def "collaborator-invitations update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -282,7 +291,7 @@ export def "collaborator-invitations patch" [
 ]: nothing -> record<accepted: bool, created_at: string, email: string, group: string, id: int, invited_by_user: record<about: string, counts: record<maps: int>, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>, map: record<counts: record<attachments: int, comments: int, impressions: int, respots: int, spots: int, subscriptions: int>, created_at: string, description: string, id: int, map_settings: record<editor_access: string, respotting_to_this_map: bool, visitor_access: string>, owner_id: int, picture_url: string, title: string, updated_at: string, visibility: string>, sent: bool, updated_at: string, user: record<about: string, counts: record<maps: int>, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/collaborator_invitations/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/collaborator_invitations/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -304,7 +313,7 @@ export def "comments delete" [
 ]: nothing -> record<body: string, created_at: string, id: int, status: string, updated_at: string, user: record<about: string, counts: record<maps: int>, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/comments/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/comments/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -313,7 +322,7 @@ export def "comments delete" [
 # Update comment
 #
 # PATCH /comments/{id}
-export def "comments patch" [
+export def "comments update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -323,17 +332,17 @@ export def "comments patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-body: string # e.g. Nice photo
+  --body: string # e.g. Nice photo
 ]: any -> record<body: string, created_at: string, id: int, status: string, updated_at: string, user: record<about: string, counts: record<maps: int>, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/comments/{id}"))
-  let body = {"body": $body_body} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/comments/{id}"))
+  let req_body = {"body": $body} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List your own events
@@ -350,7 +359,7 @@ export def "events list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --timeframe-start: string # Begin of time range of event (ISO 8601 date format).
   --timeframe-end: string # End of time range of event (ISO 8601 date format).
-  --bounds: string # To refine your event index request to contain only events within                                                             a geographical box pass the followng bounds parameters.                                                             F. e. to get events within 'Hamburg, St. Pauli':                                                             bounds[sw_lat]=53.54831449741324                                                             bounds[sw_lon]=9.943227767944336                                                             bounds[ne_lat]=53.5571103674878                                                             bounds[ne_lon]=9.9776029586792
+  --bounds: string # To refine your event index request to contain only events within a geographical box pass the followng bounds parameters. F. e. to get events within 'Hamburg, St. Pauli': bounds[sw_lat]=53.54831449741324 bounds[sw_lon]=9.943227767944336 bounds[ne_lat]=53.5571103674878 bounds[ne_lon]=9.9776029586792
 ]: nothing -> table<counts: record<attachments: int, comments: int>, created_at: string, description: string, ends_at: string, id: int, lat: float, lon: float, owner_id: int, picture_url: string, spot: record<counts: record, created_at: string, description: string, id: int, lat: float, lon: float, map_id: int, picture_url: string, status: string, time_zone: string, title: string, updated_at: string, user: record>, starts_at: string, time_zone: string, title: string, updated_at: string, user: record<about: string, counts: record, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -377,7 +386,7 @@ export def "events delete" [
 ]: nothing -> record<counts: record<attachments: int, comments: int>, created_at: string, description: string, ends_at: string, id: int, lat: float, lon: float, owner_id: int, picture_url: string, spot: record<counts: record<attachments: int, comments: int, respot: int>, created_at: string, description: string, id: int, lat: float, lon: float, map_id: int, picture_url: string, status: string, time_zone: string, title: string, updated_at: string, user: record<about: string, counts: record, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>>, starts_at: string, time_zone: string, title: string, updated_at: string, user: record<about: string, counts: record<maps: int>, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/events/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/events/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -399,7 +408,7 @@ export def "events get" [
 ]: nothing -> record<counts: record<attachments: int, comments: int>, created_at: string, description: string, ends_at: string, id: int, lat: float, lon: float, owner_id: int, picture_url: string, spot: record<counts: record<attachments: int, comments: int, respot: int>, created_at: string, description: string, id: int, lat: float, lon: float, map_id: int, picture_url: string, status: string, time_zone: string, title: string, updated_at: string, user: record<about: string, counts: record, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>>, starts_at: string, time_zone: string, title: string, updated_at: string, user: record<about: string, counts: record<maps: int>, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/events/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/events/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -408,7 +417,7 @@ export def "events get" [
 # Update event
 #
 # PATCH /events/{id}
-export def "events patch" [
+export def "events update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -431,12 +440,12 @@ export def "events patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/events/{id}"))
-  let body = {"description": $description, "ends_at": $ends_at, "lat": $lat, "lon": $lon, "picture": $picture, "starts_at": $starts_at, "time_zone": $time_zone, "title": $title, "user_id": $user_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/events/{id}"))
+  let req_body = {"description": $description, "ends_at": $ends_at, "lat": $lat, "lon": $lon, "picture": $picture, "starts_at": $starts_at, "time_zone": $time_zone, "title": $title, "user_id": $user_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List your own maps
@@ -464,7 +473,7 @@ export def "maps list" [
 #
 # POST /maps
 # --map_settings shape: {editor_access?: string, respotting_to_this_map?: bool, visitor_access?: string}
-export def "maps post" [
+export def "maps create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -483,11 +492,11 @@ export def "maps post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/maps")
-  let body = {"description": $description, "map_settings": $map_settings, "picture": $picture, "title": $title, "visibility": $visibility} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"description": $description, "map_settings": $map_settings, "picture": $picture, "title": $title, "visibility": $visibility} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Search maps
@@ -532,7 +541,7 @@ export def "maps delete" [
 ]: nothing -> record<counts: record<attachments: int, comments: int, impressions: int, respots: int, spots: int, subscriptions: int>, created_at: string, description: string, id: int, map_settings: record<editor_access: string, respotting_to_this_map: bool, visitor_access: string>, owner_id: int, picture_url: string, title: string, updated_at: string, visibility: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/maps/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/maps/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -554,7 +563,7 @@ export def "maps get" [
 ]: nothing -> record<counts: record<attachments: int, comments: int, impressions: int, respots: int, spots: int, subscriptions: int>, created_at: string, description: string, id: int, map_settings: record<editor_access: string, respotting_to_this_map: bool, visitor_access: string>, owner_id: int, picture_url: string, relation: record<access: string, access_group: string, subscribed: bool>, title: string, updated_at: string, visibility: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/maps/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/maps/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -564,7 +573,7 @@ export def "maps get" [
 #
 # PATCH /maps/{id}
 # --map_settings shape: {editor_access?: string, respotting_to_this_map?: bool, visitor_access?: string}
-export def "maps patch" [
+export def "maps update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -583,12 +592,12 @@ export def "maps patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/maps/{id}"))
-  let body = {"description": $description, "map_settings": $map_settings, "picture": $picture, "title": $title, "visibility": $visibility} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/maps/{id}"))
+  let req_body = {"description": $description, "map_settings": $map_settings, "picture": $picture, "title": $title, "visibility": $visibility} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List attachments for a given map
@@ -607,7 +616,7 @@ export def "maps-attachments get" [
 ]: nothing -> table<attachable_id: int, attachable_type: string, created_at: string, description: string, file_url: string, id: int, map_id: int, sizes: record, spot: record<counts: record, created_at: string, description: string, id: int, lat: float, lon: float, map_id: int, picture_url: string, status: string, time_zone: string, title: string, updated_at: string, user: record>, status: string, user: record<about: string, counts: record, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/maps/{id}/attachments"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/maps/{id}/attachments"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -616,7 +625,7 @@ export def "maps-attachments get" [
 # Upload map attachment
 #
 # POST /maps/{id}/attachments
-export def "maps-attachments post" [
+export def "maps-attachments create" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -631,11 +640,12 @@ export def "maps-attachments post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/maps/{id}/attachments"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/maps/{id}/attachments"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List collaborators of a map
@@ -654,7 +664,7 @@ export def "maps-collaborators get" [
 ]: nothing -> table<created_at: string, group: string, id: int, is_admin: bool, map: record<counts: record, created_at: string, description: string, id: int, map_settings: record, owner_id: int, picture_url: string, title: string, updated_at: string, visibility: string>, map_id: int, updated_at: string, user: record<about: string, counts: record, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>, user_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/maps/{id}/collaborators/"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/maps/{id}/collaborators/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -677,7 +687,7 @@ export def "maps-collaborators delete" [
 ]: nothing -> record<created_at: string, group: string, id: int, is_admin: bool, map: record<counts: record<attachments: int, comments: int, impressions: int, respots: int, spots: int, subscriptions: int>, created_at: string, description: string, id: int, map_settings: record<editor_access: string, respotting_to_this_map: bool, visitor_access: string>, owner_id: int, picture_url: string, title: string, updated_at: string, visibility: string>, map_id: int, updated_at: string, user: record<about: string, counts: record<maps: int>, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>, user_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, user_id: $user_id} | format pattern "/maps/{id}/collaborators/{user_id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), user_id: (encode-path-segment $user_id)} | format pattern "/maps/{id}/collaborators/{user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -686,7 +696,7 @@ export def "maps-collaborators delete" [
 # Update collaborator
 #
 # PATCH /maps/{id}/collaborators/{user_id}
-export def "maps-collaborators patch" [
+export def "maps-collaborators update" [
   id: int
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -702,12 +712,12 @@ export def "maps-collaborators patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, user_id: $user_id} | format pattern "/maps/{id}/collaborators/{user_id}"))
-  let body = {"group": $group} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id), user_id: (encode-path-segment $user_id)} | format pattern "/maps/{id}/collaborators/{user_id}"))
+  let req_body = {"group": $group} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List comments for a given map
@@ -726,7 +736,7 @@ export def "maps-comments get" [
 ]: nothing -> table<body: string, created_at: string, id: int, status: string, updated_at: string, user: record<about: string, counts: record, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/maps/{id}/comments"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/maps/{id}/comments"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -735,7 +745,7 @@ export def "maps-comments get" [
 # Create map comment
 #
 # POST /maps/{id}/comments
-export def "maps-comments post" [
+export def "maps-comments create" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -745,17 +755,17 @@ export def "maps-comments post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-body: string # e.g. Nice photo
+  --body: string # e.g. Nice photo
 ]: any -> record<body: string, created_at: string, id: int, status: string, updated_at: string, user: record<about: string, counts: record<maps: int>, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/maps/{id}/comments"))
-  let body = {"body": $body_body} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/maps/{id}/comments"))
+  let req_body = {"body": $body} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List respots of a map
@@ -774,7 +784,7 @@ export def "maps-respots get" [
 ]: nothing -> table<created_at: string, id: int, map: record<counts: record, created_at: string, description: string, id: int, map_settings: record, owner_id: int, picture_url: string, title: string, updated_at: string, visibility: string>, map_id: int, spot: record<counts: record, created_at: string, description: string, id: int, lat: float, lon: float, map_id: int, picture_url: string, status: string, time_zone: string, title: string, updated_at: string, user: record>, updated_at: string, user: record<about: string, counts: record, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/maps/{id}/respots"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/maps/{id}/respots"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -798,7 +808,7 @@ export def "maps-spots list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "order" $order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/maps/{id}/spots") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/maps/{id}/spots") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -807,7 +817,7 @@ export def "maps-spots list" [
 # Create spot
 #
 # POST /maps/{id}/spots
-export def "maps-spots post" [
+export def "maps-spots create" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -827,12 +837,12 @@ export def "maps-spots post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/maps/{id}/spots"))
-  let body = {"description": $description, "lat": $lat, "lon": $lon, "picture": $picture, "time_zone": $time_zone, "title": $title} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/maps/{id}/spots"))
+  let req_body = {"description": $description, "lat": $lat, "lon": $lon, "picture": $picture, "time_zone": $time_zone, "title": $title} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Unsubscribe from map
@@ -851,7 +861,7 @@ export def "maps-subscriptions delete" [
 ]: nothing -> record<created_at: string, id: int, map: record<counts: record<attachments: int, comments: int, impressions: int, respots: int, spots: int, subscriptions: int>, created_at: string, description: string, id: int, map_settings: record<editor_access: string, respotting_to_this_map: bool, visitor_access: string>, owner_id: int, picture_url: string, title: string, updated_at: string, visibility: string>, updated_at: string, user: record<about: string, counts: record<maps: int>, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>, user_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/maps/{id}/subscriptions"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/maps/{id}/subscriptions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -873,7 +883,7 @@ export def "maps-subscriptions get" [
 ]: nothing -> table<created_at: string, id: int, map: record<counts: record, created_at: string, description: string, id: int, map_settings: record, owner_id: int, picture_url: string, title: string, updated_at: string, visibility: string>, updated_at: string, user: record<about: string, counts: record, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>, user_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/maps/{id}/subscriptions"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/maps/{id}/subscriptions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -896,7 +906,7 @@ export def "maps-spots get" [
 ]: nothing -> record<counts: record<attachments: int, comments: int, respot: int>, created_at: string, description: string, id: int, lat: float, lon: float, map_id: int, picture_url: string, status: string, time_zone: string, title: string, updated_at: string, user: record<about: string, counts: record<maps: int>, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({map_id: $map_id, id: $id} | format pattern "/maps/{map_id}/spots/{id}"))
+  let full_url = (build-url $base ({map_id: (encode-path-segment $map_id), id: (encode-path-segment $id)} | format pattern "/maps/{map_id}/spots/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -919,7 +929,7 @@ export def "maps-spots-respot delete" [
 ]: nothing -> record<created_at: string, id: int, map: record<counts: record<attachments: int, comments: int, impressions: int, respots: int, spots: int, subscriptions: int>, created_at: string, description: string, id: int, map_settings: record<editor_access: string, respotting_to_this_map: bool, visitor_access: string>, owner_id: int, picture_url: string, title: string, updated_at: string, visibility: string>, map_id: int, spot: record<counts: record<attachments: int, comments: int, respot: int>, created_at: string, description: string, id: int, lat: float, lon: float, map_id: int, picture_url: string, status: string, time_zone: string, title: string, updated_at: string, user: record<about: string, counts: record, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>>, updated_at: string, user: record<about: string, counts: record<maps: int>, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({map_id: $map_id, spot_id: $spot_id} | format pattern "/maps/{map_id}/spots/{spot_id}/respot"))
+  let full_url = (build-url $base ({map_id: (encode-path-segment $map_id), spot_id: (encode-path-segment $spot_id)} | format pattern "/maps/{map_id}/spots/{spot_id}/respot"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -962,7 +972,7 @@ export def "respots delete" [
 ]: nothing -> record<created_at: string, id: int, map: record<counts: record<attachments: int, comments: int, impressions: int, respots: int, spots: int, subscriptions: int>, created_at: string, description: string, id: int, map_settings: record<editor_access: string, respotting_to_this_map: bool, visitor_access: string>, owner_id: int, picture_url: string, title: string, updated_at: string, visibility: string>, map_id: int, spot: record<counts: record<attachments: int, comments: int, respot: int>, created_at: string, description: string, id: int, lat: float, lon: float, map_id: int, picture_url: string, status: string, time_zone: string, title: string, updated_at: string, user: record<about: string, counts: record, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>>, updated_at: string, user: record<about: string, counts: record<maps: int>, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/respots/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/respots/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -984,7 +994,7 @@ export def "respots get" [
 ]: nothing -> record<created_at: string, id: int, map: record<counts: record<attachments: int, comments: int, impressions: int, respots: int, spots: int, subscriptions: int>, created_at: string, description: string, id: int, map_settings: record<editor_access: string, respotting_to_this_map: bool, visitor_access: string>, owner_id: int, picture_url: string, title: string, updated_at: string, visibility: string>, map_id: int, spot: record<counts: record<attachments: int, comments: int, respot: int>, created_at: string, description: string, id: int, lat: float, lon: float, map_id: int, picture_url: string, status: string, time_zone: string, title: string, updated_at: string, user: record<about: string, counts: record, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>>, updated_at: string, user: record<about: string, counts: record<maps: int>, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/respots/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/respots/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1006,7 +1016,7 @@ export def "share-map get" [
 ]: nothing -> record<counts: record<attachments: int, comments: int, impressions: int, respots: int, spots: int, subscriptions: int>, created_at: string, description: string, id: int, owner_id: int, picture_url: string, title: string, token: string, updated_at: string, visibility: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/share/map/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/share/map/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1077,7 +1087,7 @@ export def "spots delete" [
 ]: nothing -> record<counts: record<attachments: int, comments: int, respot: int>, created_at: string, description: string, id: int, lat: float, lon: float, map_id: int, picture_url: string, status: string, time_zone: string, title: string, updated_at: string, user: record<about: string, counts: record<maps: int>, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/spots/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/spots/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1086,7 +1096,7 @@ export def "spots delete" [
 # Update spot
 #
 # PATCH /spots/{id}
-export def "spots patch" [
+export def "spots update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1106,12 +1116,12 @@ export def "spots patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/spots/{id}"))
-  let body = {"description": $description, "lat": $lat, "lon": $lon, "picture": $picture, "time_zone": $time_zone, "title": $title} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/spots/{id}"))
+  let req_body = {"description": $description, "lat": $lat, "lon": $lon, "picture": $picture, "time_zone": $time_zone, "title": $title} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List attachments for a given spot
@@ -1130,7 +1140,7 @@ export def "spots-attachments get" [
 ]: nothing -> table<attachable_id: int, attachable_type: string, created_at: string, description: string, file_url: string, id: int, map_id: int, sizes: record, spot: record<counts: record, created_at: string, description: string, id: int, lat: float, lon: float, map_id: int, picture_url: string, status: string, time_zone: string, title: string, updated_at: string, user: record>, status: string, user: record<about: string, counts: record, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/spots/{id}/attachments"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/spots/{id}/attachments"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1139,7 +1149,7 @@ export def "spots-attachments get" [
 # Upload spot attachment
 #
 # POST /spots/{id}/attachments
-export def "spots-attachments post" [
+export def "spots-attachments create" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1154,11 +1164,12 @@ export def "spots-attachments post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/spots/{id}/attachments"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/spots/{id}/attachments"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List comments for a given spot
@@ -1177,7 +1188,7 @@ export def "spots-comments get" [
 ]: nothing -> table<body: string, created_at: string, id: int, status: string, updated_at: string, user: record<about: string, counts: record, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/spots/{id}/comments"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/spots/{id}/comments"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1186,7 +1197,7 @@ export def "spots-comments get" [
 # Create spot comment
 #
 # POST /spots/{id}/comments
-export def "spots-comments post" [
+export def "spots-comments create" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1196,17 +1207,17 @@ export def "spots-comments post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-body: string # e.g. Nice photo
+  --body: string # e.g. Nice photo
 ]: any -> record<body: string, created_at: string, id: int, status: string, updated_at: string, user: record<about: string, counts: record<maps: int>, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/spots/{id}/comments"))
-  let body = {"body": $body_body} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/spots/{id}/comments"))
+  let req_body = {"body": $body} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List events for a given spot
@@ -1224,12 +1235,12 @@ export def "spots-events get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --timeframe-start: string # Begin of time range of event (ISO 8601 date format).
   --timeframe-end: string # End of time range of event (ISO 8601 date format).
-  --bounds: string # To refine your event index request to contain only events within                                                             a geographical box pass the followng bounds parameters.                                                             F. e. to get events within 'Hamburg, St. Pauli':                                                             bounds[sw_lat]=53.54831449741324                                                             bounds[sw_lon]=9.943227767944336                                                             bounds[ne_lat]=53.5571103674878                                                             bounds[ne_lon]=9.9776029586792
+  --bounds: string # To refine your event index request to contain only events within a geographical box pass the followng bounds parameters. F. e. to get events within 'Hamburg, St. Pauli': bounds[sw_lat]=53.54831449741324 bounds[sw_lon]=9.943227767944336 bounds[ne_lat]=53.5571103674878 bounds[ne_lon]=9.9776029586792
 ]: nothing -> table<counts: record<attachments: int, comments: int>, created_at: string, description: string, ends_at: string, id: int, lat: float, lon: float, owner_id: int, picture_url: string, spot: record<counts: record, created_at: string, description: string, id: int, lat: float, lon: float, map_id: int, picture_url: string, status: string, time_zone: string, title: string, updated_at: string, user: record>, starts_at: string, time_zone: string, title: string, updated_at: string, user: record<about: string, counts: record, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "timeframe_start" $timeframe_start "scalar") (serialize-qp "timeframe_end" $timeframe_end "scalar") (serialize-qp "bounds" $bounds "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/spots/{id}/events") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/spots/{id}/events") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1238,7 +1249,7 @@ export def "spots-events get" [
 # Create event
 #
 # POST /spots/{id}/events
-export def "spots-events post" [
+export def "spots-events create" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1261,18 +1272,18 @@ export def "spots-events post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/spots/{id}/events"))
-  let body = {"description": $description, "ends_at": $ends_at, "lat": $lat, "lon": $lon, "picture": $picture, "starts_at": $starts_at, "time_zone": $time_zone, "title": $title, "user_id": $user_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/spots/{id}/events"))
+  let req_body = {"description": $description, "ends_at": $ends_at, "lat": $lat, "lon": $lon, "picture": $picture, "starts_at": $starts_at, "time_zone": $time_zone, "title": $title, "user_id": $user_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Respot a spot onto a map
 #
 # POST /spots/{id}/respots
-export def "spots-respots post" [
+export def "spots-respots create" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1287,11 +1298,12 @@ export def "spots-respots post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/spots/{id}/respots"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/spots/{id}/respots"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List subscriptions. Pass no parameters to get own subscriptions
@@ -1321,7 +1333,7 @@ export def "subscriptions get" [
 # Create map subscription
 #
 # POST /subscriptions
-export def "subscriptions post" [
+export def "subscriptions create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1336,10 +1348,11 @@ export def "subscriptions post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/subscriptions")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List latest maps
@@ -1423,7 +1436,7 @@ export def "users get" [
 ]: nothing -> record<about: string, counts: record<maps: int>, header_picture: string, id: int, location: string, name: string, picture_url: string, screen_name: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/users/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1445,7 +1458,7 @@ export def "users-maps get" [
 ]: nothing -> table<counts: record<attachments: int, comments: int, impressions: int, respots: int, spots: int, subscriptions: int>, created_at: string, description: string, id: int, map_settings: record<editor_access: string, respotting_to_this_map: bool, visitor_access: string>, owner_id: int, picture_url: string, title: string, updated_at: string, visibility: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}/maps"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/maps"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

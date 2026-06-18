@@ -13,6 +13,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   match $scheme {
     "apikey" => { {headers: {ApiKey: $token_val}, query: ""} }
     "basic" => { {headers: {Authorization: $"Basic ($token_val)"}, query: ""} }
+    "basic-credentials" => { {headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: ""} }
     "none" => { {headers: {}, query: ""} }
     _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
   }
@@ -34,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
     "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
     _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -64,7 +74,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 }
 
 def base-url-completer [] { ["https://live-api.letmc.com"] }
-def auth-scheme-completer [] { ["apikey" "basic"] }
+def auth-scheme-completer [] { ["apikey" "basic" "basic-credentials"] }
 
 # Completers for enum parameters
 def accept-completer [] { ["application/json" "application/xml" "text/json" "text/xml"] }
@@ -73,7 +83,7 @@ def accept-completer-1 [] { ["application/json" "text/json"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "diary-allocations get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "diary-allocations get-controller" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -97,7 +107,7 @@ export def commands []: nothing -> table {
 #
 # GET /v3/diary/{shortName}/allocations
 # operationId: DiaryController_GetAllocations
-export def "diary-allocations get" [
+export def "diary-allocations get-controller" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -117,7 +127,7 @@ export def "diary-allocations get" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "preferredDate" $preferred_date "scalar") (serialize-qp "appointmentType" $appointment_type "scalar") (serialize-qp "lettings" $lettings "scalar") (serialize-qp "propertyIdentifier" $property_identifier "scalar") (serialize-qp "branchID" $branch_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: $short_name} | format pattern "/v3/diary/{short_name}/allocations") $qp)
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v3/diary/{short_name}/allocations") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -127,7 +137,7 @@ export def "diary-allocations get" [
 #
 # DELETE /v3/diary/{shortName}/appointment
 # operationId: DiaryController_DeleteAppointment
-export def "diary-appointment delete" [
+export def "diary-appointment delete-controller" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -143,7 +153,7 @@ export def "diary-appointment delete" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "appointmentID" $appointment_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: $short_name} | format pattern "/v3/diary/{short_name}/appointment") $qp)
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v3/diary/{short_name}/appointment") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -153,7 +163,7 @@ export def "diary-appointment delete" [
 #
 # GET /v3/diary/{shortName}/appointment
 # operationId: DiaryController_GetAppointment
-export def "diary-appointment get" [
+export def "diary-appointment get-controller" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -169,7 +179,7 @@ export def "diary-appointment get" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "appointmentID" $appointment_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: $short_name} | format pattern "/v3/diary/{short_name}/appointment") $qp)
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v3/diary/{short_name}/appointment") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -181,7 +191,7 @@ export def "diary-appointment get" [
 # operationId: DiaryController_PostAppointment
 # --AllocationDetails shape: {End?: string, StaffID?: string, StaffName?: string, Start?: string}
 # --Guests item shape: {AllowMarketingCorrespondence?: bool, EmailAddress?: string, Forename?: string, MobilePhone?: string, OID?: string, Surname?: string}
-export def "diary-appointment create" [
+export def "diary-appointment create-controller" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -192,7 +202,7 @@ export def "diary-appointment create" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --property-identifier: list # The unique property identifier (Sales or Lettings)
+  --property-identifier: list<string> # The unique property identifier (Sales or Lettings)
   --lettings: oneof<nothing, bool> # Sales or Lettings property?
   --allocation-details: record # Represents a viewing booking slot — shape: {End?: string, StaffID?: string, StaffName?: string, Start?: string}
   --appointment-type: string # The Appointment Type ID
@@ -204,12 +214,12 @@ export def "diary-appointment create" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "propertyIdentifier" $property_identifier "multi") (serialize-qp "lettings" $lettings "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: $short_name} | format pattern "/v3/diary/{short_name}/appointment") $qp)
-  let body = {"AllocationDetails": $allocation_details, "AppointmentType": $appointment_type, "ExtraComments": $extra_comments, "Guests": $guests, "Subject": $subject} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v3/diary/{short_name}/appointment") $qp)
+  let req_body = {"AllocationDetails": $allocation_details, "AppointmentType": $appointment_type, "ExtraComments": $extra_comments, "Guests": $guests, "Subject": $subject} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update an existing appointment using its unique identifier
@@ -218,7 +228,7 @@ export def "diary-appointment create" [
 # operationId: DiaryController_PutAppointment
 # --AllocationDetails shape: {End?: string, StaffID?: string, StaffName?: string, Start?: string}
 # --Guests item shape: {AllowMarketingCorrespondence?: bool, EmailAddress?: string, Forename?: string, MobilePhone?: string, OID?: string, Surname?: string}
-export def "diary-appointment update" [
+export def "diary-appointment update-controller" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -242,19 +252,19 @@ export def "diary-appointment update" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "appointmentID" $appointment_id "scalar") (serialize-qp "lettings" $lettings "scalar") (serialize-qp "AllowMarketingCorrespondence" $allow_marketing_correspondence "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: $short_name} | format pattern "/v3/diary/{short_name}/appointment") $qp)
-  let body = {"AllocationDetails": $allocation_details, "AppointmentType": $appointment_type, "ExtraComments": $extra_comments, "Guests": $guests, "Subject": $subject} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v3/diary/{short_name}/appointment") $qp)
+  let req_body = {"AllocationDetails": $allocation_details, "AppointmentType": $appointment_type, "ExtraComments": $extra_comments, "Guests": $guests, "Subject": $subject} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Submit appointment feedback
 #
 # POST /v3/diary/{shortName}/appointment/feedback
 # operationId: DiaryController_AddFeedback
-export def "diary-appointment-feedback create" [
+export def "diary-appointment-feedback create-controller" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -272,19 +282,19 @@ export def "diary-appointment-feedback create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({short_name: $short_name} | format pattern "/v3/diary/{short_name}/appointment/feedback"))
-  let body = {"AppointmentID": $appointment_id, "Feedback": $feedback, "PropertyID": $property_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v3/diary/{short_name}/appointment/feedback"))
+  let req_body = {"AppointmentID": $appointment_id, "Feedback": $feedback, "PropertyID": $property_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Cancel an existing appointment using its unique identifier
 #
 # PATCH /v3/diary/{shortName}/appointment/{appointmentID}/cancel
 # operationId: DiaryController_CancelAppointment
-export def "diary-appointment-cancel cancel" [
+export def "diary-appointment-cancel cancel-controller" [
   short_name: string
   appointment_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -299,7 +309,7 @@ export def "diary-appointment-cancel cancel" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({short_name: $short_name, appointment_id: $appointment_id} | format pattern "/v3/diary/{short_name}/appointment/{appointment_id}/cancel"))
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), appointment_id: (encode-path-segment $appointment_id)} | format pattern "/v3/diary/{short_name}/appointment/{appointment_id}/cancel"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -309,7 +319,7 @@ export def "diary-appointment-cancel cancel" [
 #
 # GET /v3/diary/{shortName}/appointmentsbetweendates
 # operationId: DiaryController_GetAppointmentsBetweenDates
-export def "diary-appointmentsbetweendates get-appointments-between-dates" [
+export def "diary-appointmentsbetweendates get-controller-appointments-between-dates" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -323,14 +333,14 @@ export def "diary-appointmentsbetweendates get-appointments-between-dates" [
   --branch-id: string # The unique ID of the Branch
   --start-date: string # The search from date (format: date-time)
   --end-date: string # The search to date (format: date-time)
-  --appointment-types-to-search: list # The appointment IDs to search for
+  --appointment-types-to-search: list<string> # The appointment IDs to search for
   --offset: int # The index of the first item to return (format: int32)
   --count: int # The maximum number of items to return (up to 1000 per request) (format: int32)
 ]: nothing -> record<Count: int, Data: table<AppointmentType: string, Cancelled: bool, Comment: string, CreatedAt: string, CreatedBy: string, ETag: string, End: string, LinkedProperties: list, NextRecurringDate: string, OID: string, Recurrence: int, RecurrenceType: string, RemindAt: string, RemindBefore: string, Staff: string, Start: string, Subject: string>> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "branchID" $branch_id "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "appointmentTypesToSearch" $appointment_types_to_search "multi") (serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: $short_name} | format pattern "/v3/diary/{short_name}/appointmentsbetweendates") $qp)
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v3/diary/{short_name}/appointmentsbetweendates") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -340,7 +350,7 @@ export def "diary-appointmentsbetweendates get-appointments-between-dates" [
 #
 # GET /v3/diary/{shortName}/appointmenttypes
 # operationId: DiaryController_GetAppointmentTypes
-export def "diary-appointmenttypes get" [
+export def "diary-appointmenttypes get-controller-appointment-types" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -357,7 +367,7 @@ export def "diary-appointmenttypes get" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: $short_name} | format pattern "/v3/diary/{short_name}/appointmenttypes") $qp)
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v3/diary/{short_name}/appointmenttypes") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -367,7 +377,7 @@ export def "diary-appointmenttypes get" [
 #
 # GET /v3/diary/{shortName}/company/branches
 # operationId: CompanyController_GetBranches
-export def "diary-company-branches list" [
+export def "diary-company-branches get-controller" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -384,7 +394,7 @@ export def "diary-company-branches list" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: $short_name} | format pattern "/v3/diary/{short_name}/company/branches") $qp)
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v3/diary/{short_name}/company/branches") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -408,7 +418,7 @@ export def "diary-company-branches get" [
 ]: nothing -> record<Address1: string, Address2: string, Address3: string, Address4: string, CompanyName: string, County: string, EMailAddress: string, ETag: string, FaxPhone: string, LandPhone: string, Name: string, OID: string, Postcode: string, WebAddress: string> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({short_name: $short_name, branch_id: $branch_id} | format pattern "/v3/diary/{short_name}/company/branches/{branch_id}"))
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), branch_id: (encode-path-segment $branch_id)} | format pattern "/v3/diary/{short_name}/company/branches/{branch_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -418,7 +428,7 @@ export def "diary-company-branches get" [
 #
 # GET /v3/diary/{shortName}/recurringappointment
 # operationId: DiaryController_GetRecurringAppointments
-export def "diary-recurringappointment get" [
+export def "diary-recurringappointment get-controller-recurring-appointments" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -430,14 +440,14 @@ export def "diary-recurringappointment get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --branch-id: string # The unique ID of the Branch
-  --appointment-types-to-search: list # The appointment IDs to search for
+  --appointment-types-to-search: list<string> # The appointment IDs to search for
   --offset: int # The index of the first item to return (format: int32)
   --count: int # The maximum number of items to return (up to 1000 per request) (format: int32)
 ]: nothing -> record<Count: int, Data: table<AppointmentType: string, Cancelled: bool, Comment: string, CreatedAt: string, CreatedBy: string, ETag: string, End: string, LinkedProperties: list, NextRecurringDate: string, OID: string, Recurrence: int, RecurrenceType: string, RemindAt: string, RemindBefore: string, Staff: string, Start: string, Subject: string>> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "branchID" $branch_id "scalar") (serialize-qp "appointmentTypesToSearch" $appointment_types_to_search "multi") (serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: $short_name} | format pattern "/v3/diary/{short_name}/recurringappointment") $qp)
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v3/diary/{short_name}/recurringappointment") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -447,7 +457,7 @@ export def "diary-recurringappointment get" [
 #
 # GET /v3/diary/{shortname}/{branchID}/guest/search
 # operationId: DiaryController_SearchGuest
-export def "diary-guest-search list" [
+export def "diary-guest-search list-controller" [
   shortname: string
   branch_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -468,7 +478,7 @@ export def "diary-guest-search list" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "forename" $forename "scalar") (serialize-qp "emailaddress" $emailaddress "scalar") (serialize-qp "surname" $surname "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({shortname: $shortname, branch_id: $branch_id} | format pattern "/v3/diary/{shortname}/{branch_id}/guest/search") $qp)
+  let full_url = (build-url $base ({shortname: (encode-path-segment $shortname), branch_id: (encode-path-segment $branch_id)} | format pattern "/v3/diary/{shortname}/{branch_id}/guest/search") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

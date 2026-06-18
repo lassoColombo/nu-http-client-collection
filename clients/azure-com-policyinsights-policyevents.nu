@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -69,7 +78,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-management-groups-providers-microsoft-policy-insights-policy-events-query-results list-query-results-for" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-management-groups-providers-microsoft-policy-insights-policy-events-query-results list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,7 +102,7 @@ export def commands []: nothing -> table {
 #
 # POST /providers/{managementGroupsNamespace}/managementGroups/{managementGroupName}/providers/Microsoft.PolicyInsights/policyEvents/{policyEventsResource}/queryResults
 # operationId: PolicyEvents_ListQueryResultsForManagementGroup
-export def "providers-management-groups-providers-microsoft-policy-insights-policy-events-query-results list-query-results-for" [
+export def "providers-management-groups-providers-microsoft-policy-insights-policy-events-query-results list" [
   management_groups_namespace: string
   management_group_name: string
   policy_events_resource: string
@@ -117,7 +126,7 @@ export def "providers-management-groups-providers-microsoft-policy-insights-poli
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$from" $qp_from "scalar") (serialize-qp "$to" $qp_to "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$apply" $apply "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({management_groups_namespace: $management_groups_namespace, management_group_name: $management_group_name, policy_events_resource: $policy_events_resource} | format pattern "/providers/{management_groups_namespace}/managementGroups/{management_group_name}/providers/Microsoft.PolicyInsights/policyEvents/{policy_events_resource}/queryResults") $qp)
+  let full_url = (build-url $base ({management_groups_namespace: (encode-path-segment $management_groups_namespace), management_group_name: (encode-path-segment $management_group_name), policy_events_resource: (encode-path-segment $policy_events_resource)} | format pattern "/providers/{management_groups_namespace}/managementGroups/{management_group_name}/providers/Microsoft.PolicyInsights/policyEvents/{policy_events_resource}/queryResults") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -127,7 +136,7 @@ export def "providers-management-groups-providers-microsoft-policy-insights-poli
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.PolicyInsights/policyEvents/{policyEventsResource}/queryResults
 # operationId: PolicyEvents_ListQueryResultsForSubscription
-export def "subscriptions-providers-microsoft-policy-insights-policy-events-query-results list-query-results-for" [
+export def "subscriptions-providers-microsoft-policy-insights-policy-events-query-results list" [
   subscription_id: string
   policy_events_resource: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -150,7 +159,7 @@ export def "subscriptions-providers-microsoft-policy-insights-policy-events-quer
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$from" $qp_from "scalar") (serialize-qp "$to" $qp_to "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$apply" $apply "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, policy_events_resource: $policy_events_resource} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.PolicyInsights/policyEvents/{policy_events_resource}/queryResults") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), policy_events_resource: (encode-path-segment $policy_events_resource)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.PolicyInsights/policyEvents/{policy_events_resource}/queryResults") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -160,7 +169,7 @@ export def "subscriptions-providers-microsoft-policy-insights-policy-events-quer
 #
 # POST /subscriptions/{subscriptionId}/providers/{authorizationNamespace}/policyAssignments/{policyAssignmentName}/providers/Microsoft.PolicyInsights/policyEvents/{policyEventsResource}/queryResults
 # operationId: PolicyEvents_ListQueryResultsForSubscriptionLevelPolicyAssignment
-export def "subscriptions-providers-policy-assignments-providers-microsoft-policy-insights-policy-events-query-results list-query-results-for-subscription-level" [
+export def "subscriptions-providers-policy-assignments-providers-microsoft-policy-insights-policy-events-query-results list-for-level" [
   subscription_id: string
   authorization_namespace: string
   policy_assignment_name: string
@@ -185,7 +194,7 @@ export def "subscriptions-providers-policy-assignments-providers-microsoft-polic
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$from" $qp_from "scalar") (serialize-qp "$to" $qp_to "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$apply" $apply "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, authorization_namespace: $authorization_namespace, policy_assignment_name: $policy_assignment_name, policy_events_resource: $policy_events_resource} | format pattern "/subscriptions/{subscription_id}/providers/{authorization_namespace}/policyAssignments/{policy_assignment_name}/providers/Microsoft.PolicyInsights/policyEvents/{policy_events_resource}/queryResults") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), authorization_namespace: (encode-path-segment $authorization_namespace), policy_assignment_name: (encode-path-segment $policy_assignment_name), policy_events_resource: (encode-path-segment $policy_events_resource)} | format pattern "/subscriptions/{subscription_id}/providers/{authorization_namespace}/policyAssignments/{policy_assignment_name}/providers/Microsoft.PolicyInsights/policyEvents/{policy_events_resource}/queryResults") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -195,7 +204,7 @@ export def "subscriptions-providers-policy-assignments-providers-microsoft-polic
 #
 # POST /subscriptions/{subscriptionId}/providers/{authorizationNamespace}/policyDefinitions/{policyDefinitionName}/providers/Microsoft.PolicyInsights/policyEvents/{policyEventsResource}/queryResults
 # operationId: PolicyEvents_ListQueryResultsForPolicyDefinition
-export def "subscriptions-providers-policy-definitions-providers-microsoft-policy-insights-policy-events-query-results list-query-results-for" [
+export def "subscriptions-providers-policy-definitions-providers-microsoft-policy-insights-policy-events-query-results list" [
   subscription_id: string
   authorization_namespace: string
   policy_definition_name: string
@@ -220,7 +229,7 @@ export def "subscriptions-providers-policy-definitions-providers-microsoft-polic
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$from" $qp_from "scalar") (serialize-qp "$to" $qp_to "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$apply" $apply "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, authorization_namespace: $authorization_namespace, policy_definition_name: $policy_definition_name, policy_events_resource: $policy_events_resource} | format pattern "/subscriptions/{subscription_id}/providers/{authorization_namespace}/policyDefinitions/{policy_definition_name}/providers/Microsoft.PolicyInsights/policyEvents/{policy_events_resource}/queryResults") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), authorization_namespace: (encode-path-segment $authorization_namespace), policy_definition_name: (encode-path-segment $policy_definition_name), policy_events_resource: (encode-path-segment $policy_events_resource)} | format pattern "/subscriptions/{subscription_id}/providers/{authorization_namespace}/policyDefinitions/{policy_definition_name}/providers/Microsoft.PolicyInsights/policyEvents/{policy_events_resource}/queryResults") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -230,7 +239,7 @@ export def "subscriptions-providers-policy-definitions-providers-microsoft-polic
 #
 # POST /subscriptions/{subscriptionId}/providers/{authorizationNamespace}/policySetDefinitions/{policySetDefinitionName}/providers/Microsoft.PolicyInsights/policyEvents/{policyEventsResource}/queryResults
 # operationId: PolicyEvents_ListQueryResultsForPolicySetDefinition
-export def "subscriptions-providers-policy-set-definitions-providers-microsoft-policy-insights-policy-events-query-results list-query-results-for" [
+export def "subscriptions-providers-policy-set-definitions-providers-microsoft-policy-insights-policy-events-query-results list" [
   subscription_id: string
   authorization_namespace: string
   policy_set_definition_name: string
@@ -255,7 +264,7 @@ export def "subscriptions-providers-policy-set-definitions-providers-microsoft-p
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$from" $qp_from "scalar") (serialize-qp "$to" $qp_to "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$apply" $apply "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, authorization_namespace: $authorization_namespace, policy_set_definition_name: $policy_set_definition_name, policy_events_resource: $policy_events_resource} | format pattern "/subscriptions/{subscription_id}/providers/{authorization_namespace}/policySetDefinitions/{policy_set_definition_name}/providers/Microsoft.PolicyInsights/policyEvents/{policy_events_resource}/queryResults") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), authorization_namespace: (encode-path-segment $authorization_namespace), policy_set_definition_name: (encode-path-segment $policy_set_definition_name), policy_events_resource: (encode-path-segment $policy_events_resource)} | format pattern "/subscriptions/{subscription_id}/providers/{authorization_namespace}/policySetDefinitions/{policy_set_definition_name}/providers/Microsoft.PolicyInsights/policyEvents/{policy_events_resource}/queryResults") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -265,7 +274,7 @@ export def "subscriptions-providers-policy-set-definitions-providers-microsoft-p
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.PolicyInsights/policyEvents/{policyEventsResource}/queryResults
 # operationId: PolicyEvents_ListQueryResultsForResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-policy-insights-policy-events-query-results list-query-results-for" [
+export def "subscriptions-resource-groups-providers-microsoft-policy-insights-policy-events-query-results list" [
   subscription_id: string
   resource_group_name: string
   policy_events_resource: string
@@ -289,7 +298,7 @@ export def "subscriptions-resource-groups-providers-microsoft-policy-insights-po
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$from" $qp_from "scalar") (serialize-qp "$to" $qp_to "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$apply" $apply "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, policy_events_resource: $policy_events_resource} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.PolicyInsights/policyEvents/{policy_events_resource}/queryResults") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), policy_events_resource: (encode-path-segment $policy_events_resource)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.PolicyInsights/policyEvents/{policy_events_resource}/queryResults") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -299,7 +308,7 @@ export def "subscriptions-resource-groups-providers-microsoft-policy-insights-po
 #
 # POST /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/{authorizationNamespace}/policyAssignments/{policyAssignmentName}/providers/Microsoft.PolicyInsights/policyEvents/{policyEventsResource}/queryResults
 # operationId: PolicyEvents_ListQueryResultsForResourceGroupLevelPolicyAssignment
-export def "subscriptions-resourcegroups-providers-policy-assignments-providers-microsoft-policy-insights-policy-events-query-results list-query-results-for-resource-group-level" [
+export def "subscriptions-resourcegroups-providers-policy-assignments-providers-microsoft-policy-insights-policy-events-query-results list-for-resource-group-level" [
   subscription_id: string
   resource_group_name: string
   authorization_namespace: string
@@ -325,7 +334,7 @@ export def "subscriptions-resourcegroups-providers-policy-assignments-providers-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$from" $qp_from "scalar") (serialize-qp "$to" $qp_to "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$apply" $apply "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, authorization_namespace: $authorization_namespace, policy_assignment_name: $policy_assignment_name, policy_events_resource: $policy_events_resource} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/{authorization_namespace}/policyAssignments/{policy_assignment_name}/providers/Microsoft.PolicyInsights/policyEvents/{policy_events_resource}/queryResults") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), authorization_namespace: (encode-path-segment $authorization_namespace), policy_assignment_name: (encode-path-segment $policy_assignment_name), policy_events_resource: (encode-path-segment $policy_events_resource)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/{authorization_namespace}/policyAssignments/{policy_assignment_name}/providers/Microsoft.PolicyInsights/policyEvents/{policy_events_resource}/queryResults") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -335,7 +344,7 @@ export def "subscriptions-resourcegroups-providers-policy-assignments-providers-
 #
 # POST /{resourceId}/providers/Microsoft.PolicyInsights/policyEvents/{policyEventsResource}/queryResults
 # operationId: PolicyEvents_ListQueryResultsForResource
-export def "providers-microsoft-policy-insights-policy-events-query-results list-query-results-for-resource" [
+export def "providers-microsoft-policy-insights-policy-events-query-results list-for-resource" [
   resource_id: string
   policy_events_resource: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -358,7 +367,7 @@ export def "providers-microsoft-policy-insights-policy-events-query-results list
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$from" $qp_from "scalar") (serialize-qp "$to" $qp_to "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$apply" $apply "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_id: $resource_id, policy_events_resource: $policy_events_resource} | format pattern "/{resource_id}/providers/Microsoft.PolicyInsights/policyEvents/{policy_events_resource}/queryResults") $qp)
+  let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id), policy_events_resource: (encode-path-segment $policy_events_resource)} | format pattern "/{resource_id}/providers/Microsoft.PolicyInsights/policyEvents/{policy_events_resource}/queryResults") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -368,7 +377,7 @@ export def "providers-microsoft-policy-insights-policy-events-query-results list
 #
 # GET /{scope}/providers/Microsoft.PolicyInsights/policyEvents/$metadata
 # operationId: PolicyEvents_GetMetadata
-export def "providers-microsoft-policy-insights-policy-events-metadata get" [
+export def "providers-microsoft-policy-insights-policy-events-metadata get-metadata" [
   scope: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -383,7 +392,7 @@ export def "providers-microsoft-policy-insights-policy-events-metadata get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({scope: $scope} | format pattern "/{scope}/providers/Microsoft.PolicyInsights/policyEvents/$metadata") $qp)
+  let full_url = (build-url $base ({scope: (encode-path-segment $scope)} | format pattern "/{scope}/providers/Microsoft.PolicyInsights/policyEvents/$metadata") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

@@ -37,6 +37,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -71,7 +80,7 @@ def auth-scheme-completer [] { ["x-appwrite-jwt" "x-appwrite-locale" "x-appwrite
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account accountDelete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,7 +104,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /account
 # operationId: accountDelete
-export def "account accountDelete" [
+export def "account delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -117,7 +126,7 @@ export def "account accountDelete" [
 #
 # GET /account
 # operationId: accountGet
-export def "account accountGet" [
+export def "account get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -139,7 +148,7 @@ export def "account accountGet" [
 #
 # POST /account
 # operationId: accountCreate
-export def "account accountCreate" [
+export def "account create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -156,18 +165,18 @@ export def "account accountCreate" [
   let auth = (build-auth $token ($auth_scheme | default "x-appwrite-project"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account")
-  let body = {"email": $email, "name": $name, "password": $password} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"email": $email, "name": $name, "password": $password} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update Account Email
 #
 # PATCH /account/email
 # operationId: accountUpdateEmail
-export def "account-email accountUpdateEmail" [
+export def "account-email update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -183,18 +192,18 @@ export def "account-email accountUpdateEmail" [
   let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account/email")
-  let body = {"email": $email, "password": $password} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"email": $email, "password": $password} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create Account JWT
 #
 # POST /account/jwt
 # operationId: accountCreateJWT
-export def "account-jwt accountCreateJWT" [
+export def "account-jwt create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -216,7 +225,7 @@ export def "account-jwt accountCreateJWT" [
 #
 # GET /account/logs
 # operationId: accountGetLogs
-export def "account-logs accountGetLogs" [
+export def "account-logs get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -238,7 +247,7 @@ export def "account-logs accountGetLogs" [
 #
 # PATCH /account/name
 # operationId: accountUpdateName
-export def "account-name accountUpdateName" [
+export def "account-name update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -253,18 +262,18 @@ export def "account-name accountUpdateName" [
   let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account/name")
-  let body = {"name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update Account Password
 #
 # PATCH /account/password
 # operationId: accountUpdatePassword
-export def "account-password accountUpdatePassword" [
+export def "account-password update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -280,18 +289,18 @@ export def "account-password accountUpdatePassword" [
   let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account/password")
-  let body = {"oldPassword": $old_password, "password": $password} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"oldPassword": $old_password, "password": $password} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get Account Preferences
 #
 # GET /account/prefs
 # operationId: accountGetPrefs
-export def "account-prefs accountGetPrefs" [
+export def "account-prefs get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -313,7 +322,7 @@ export def "account-prefs accountGetPrefs" [
 #
 # PATCH /account/prefs
 # operationId: accountUpdatePrefs
-export def "account-prefs accountUpdatePrefs" [
+export def "account-prefs update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -328,18 +337,18 @@ export def "account-prefs accountUpdatePrefs" [
   let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account/prefs")
-  let body = {"prefs": $prefs} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"prefs": $prefs} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create Password Recovery
 #
 # POST /account/recovery
 # operationId: accountCreateRecovery
-export def "account-recovery accountCreateRecovery" [
+export def "account-recovery create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -349,24 +358,24 @@ export def "account-recovery accountCreateRecovery" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   email: string # User email.
-  --body-url: string # URL to redirect the user back to your app from the recovery email. Only URLs from hostnames in your project platform list are allowed. This requirement helps to prevent an [open redirect](https://cheatsheetseries.owasp.org/cheatsheets/Unvalidated_Redirects_and_Forwards_Cheat_Sheet.html) attack against your project API.
+  url: string # URL to redirect the user back to your app from the recovery email. Only URLs from hostnames in your project platform list are allowed. This requirement helps to prevent an [open redirect](https://cheatsheetseries.owasp.org/cheatsheets/Unvalidated_Redirects_and_Forwards_Cheat_Sheet.html) attack against your project API.
 ]: any -> record<_id: string, expire: int, secret: string, userId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account/recovery")
-  let body = {"email": $email, "url": $body_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"email": $email, "url": $url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Complete Password Recovery
 #
 # PUT /account/recovery
 # operationId: accountUpdateRecovery
-export def "account-recovery accountUpdateRecovery" [
+export def "account-recovery update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -384,18 +393,18 @@ export def "account-recovery accountUpdateRecovery" [
   let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account/recovery")
-  let body = {"password": $password, "passwordAgain": $password_again, "secret": $secret, "userId": $user_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"password": $password, "passwordAgain": $password_again, "secret": $secret, "userId": $user_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete All Account Sessions
 #
 # DELETE /account/sessions
 # operationId: accountDeleteSessions
-export def "account-sessions accountDeleteSessions" [
+export def "account-sessions delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -417,7 +426,7 @@ export def "account-sessions accountDeleteSessions" [
 #
 # GET /account/sessions
 # operationId: accountGetSessions
-export def "account-sessions accountGetSessions" [
+export def "account-sessions list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -439,7 +448,7 @@ export def "account-sessions accountGetSessions" [
 #
 # POST /account/sessions
 # operationId: accountCreateSession
-export def "account-sessions accountCreateSession" [
+export def "account-sessions create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -455,18 +464,18 @@ export def "account-sessions accountCreateSession" [
   let auth = (build-auth $token ($auth_scheme | default "x-appwrite-project"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account/sessions")
-  let body = {"email": $email, "password": $password} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"email": $email, "password": $password} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create Anonymous Session
 #
 # POST /account/sessions/anonymous
 # operationId: accountCreateAnonymousSession
-export def "account-sessions-anonymous accountCreateAnonymousSession" [
+export def "account-sessions-anonymous create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -488,7 +497,7 @@ export def "account-sessions-anonymous accountCreateAnonymousSession" [
 #
 # GET /account/sessions/oauth2/{provider}
 # operationId: accountCreateOAuth2Session
-export def "account-sessions-oauth2 accountCreateOAuth2Session" [
+export def "account-sessions-oauth2 create-o-auth2" [
   provider: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -498,14 +507,14 @@ export def "account-sessions-oauth2 accountCreateOAuth2Session" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --success: string # URL to redirect back to your app after a successful login attempt.  Only URLs from hostnames in your project platform list are allowed. This requirement helps to prevent an [open redirect](https://cheatsheetseries.owasp.org/cheatsheets/Unvalidated_Redirects_and_Forwards_Cheat_Sheet.html) attack against your project API. (format: url, default: https://appwrite.io/auth/oauth2/success)
-  --failure: string # URL to redirect back to your app after a failed login attempt.  Only URLs from hostnames in your project platform list are allowed. This requirement helps to prevent an [open redirect](https://cheatsheetseries.owasp.org/cheatsheets/Unvalidated_Redirects_and_Forwards_Cheat_Sheet.html) attack against your project API. (format: url, default: https://appwrite.io/auth/oauth2/failure)
-  --scopes: list # A list of custom OAuth2 scopes. Check each provider internal docs for a list of supported scopes. (default: [])
+  --success: string # URL to redirect back to your app after a successful login attempt. Only URLs from hostnames in your project platform list are allowed. This requirement helps to prevent an [open redirect](https://cheatsheetseries.owasp.org/cheatsheets/Unvalidated_Redirects_and_Forwards_Cheat_Sheet.html) attack against your project API. (format: url, default: https://appwrite.io/auth/oauth2/success)
+  --failure: string # URL to redirect back to your app after a failed login attempt. Only URLs from hostnames in your project platform list are allowed. This requirement helps to prevent an [open redirect](https://cheatsheetseries.owasp.org/cheatsheets/Unvalidated_Redirects_and_Forwards_Cheat_Sheet.html) attack against your project API. (format: url, default: https://appwrite.io/auth/oauth2/failure)
+  --scopes: list<string> # A list of custom OAuth2 scopes. Check each provider internal docs for a list of supported scopes. (default: [])
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-appwrite-project"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "success" $success "scalar") (serialize-qp "failure" $failure "scalar") (serialize-qp "scopes" $scopes "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({provider: $provider} | format pattern "/account/sessions/oauth2/{provider}") $qp)
+  let full_url = (build-url $base ({provider: (encode-path-segment $provider)} | format pattern "/account/sessions/oauth2/{provider}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -515,7 +524,7 @@ export def "account-sessions-oauth2 accountCreateOAuth2Session" [
 #
 # DELETE /account/sessions/{sessionId}
 # operationId: accountDeleteSession
-export def "account-sessions accountDeleteSession" [
+export def "account-sessions delete-by-sessionId" [
   session_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -528,7 +537,7 @@ export def "account-sessions accountDeleteSession" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({session_id: $session_id} | format pattern "/account/sessions/{session_id}"))
+  let full_url = (build-url $base ({session_id: (encode-path-segment $session_id)} | format pattern "/account/sessions/{session_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -538,7 +547,7 @@ export def "account-sessions accountDeleteSession" [
 #
 # GET /account/sessions/{sessionId}
 # operationId: accountGetSession
-export def "account-sessions accountGetSession" [
+export def "account-sessions get" [
   session_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -551,7 +560,7 @@ export def "account-sessions accountGetSession" [
 ]: nothing -> record<_id: string, clientCode: string, clientEngine: string, clientEngineVersion: string, clientName: string, clientType: string, clientVersion: string, countryCode: string, countryName: string, current: bool, deviceBrand: string, deviceModel: string, deviceName: string, expire: int, ip: string, osCode: string, osName: string, osVersion: string, provider: string, providerToken: string, providerUid: string, userId: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({session_id: $session_id} | format pattern "/account/sessions/{session_id}"))
+  let full_url = (build-url $base ({session_id: (encode-path-segment $session_id)} | format pattern "/account/sessions/{session_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -561,7 +570,7 @@ export def "account-sessions accountGetSession" [
 #
 # POST /account/verification
 # operationId: accountCreateVerification
-export def "account-verification accountCreateVerification" [
+export def "account-verification create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -570,24 +579,24 @@ export def "account-verification accountCreateVerification" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-url: string # URL to redirect the user back to your app from the verification email. Only URLs from hostnames in your project platform list are allowed. This requirement helps to prevent an [open redirect](https://cheatsheetseries.owasp.org/cheatsheets/Unvalidated_Redirects_and_Forwards_Cheat_Sheet.html) attack against your project API.
+  url: string # URL to redirect the user back to your app from the verification email. Only URLs from hostnames in your project platform list are allowed. This requirement helps to prevent an [open redirect](https://cheatsheetseries.owasp.org/cheatsheets/Unvalidated_Redirects_and_Forwards_Cheat_Sheet.html) attack against your project API.
 ]: any -> record<_id: string, expire: int, secret: string, userId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account/verification")
-  let body = {"url": $body_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"url": $url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Complete Email Verification
 #
 # PUT /account/verification
 # operationId: accountUpdateVerification
-export def "account-verification accountUpdateVerification" [
+export def "account-verification update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -603,18 +612,18 @@ export def "account-verification accountUpdateVerification" [
   let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account/verification")
-  let body = {"secret": $secret, "userId": $user_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"secret": $secret, "userId": $user_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get Browser Icon
 #
 # GET /avatars/browsers/{code}
 # operationId: avatarsGetBrowser
-export def "avatars-browsers avatarsGetBrowser" [
+export def "avatars-browsers get" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -631,7 +640,7 @@ export def "avatars-browsers avatarsGetBrowser" [
   let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "quality" $quality "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({code: $code} | format pattern "/avatars/browsers/{code}") $qp)
+  let full_url = (build-url $base ({code: (encode-path-segment $code)} | format pattern "/avatars/browsers/{code}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -641,7 +650,7 @@ export def "avatars-browsers avatarsGetBrowser" [
 #
 # GET /avatars/credit-cards/{code}
 # operationId: avatarsGetCreditCard
-export def "avatars-credit-cards avatarsGetCreditCard" [
+export def "avatars-credit-cards get" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -658,7 +667,7 @@ export def "avatars-credit-cards avatarsGetCreditCard" [
   let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "quality" $quality "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({code: $code} | format pattern "/avatars/credit-cards/{code}") $qp)
+  let full_url = (build-url $base ({code: (encode-path-segment $code)} | format pattern "/avatars/credit-cards/{code}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -668,7 +677,7 @@ export def "avatars-credit-cards avatarsGetCreditCard" [
 #
 # GET /avatars/favicon
 # operationId: avatarsGetFavicon
-export def "avatars-favicon avatarsGetFavicon" [
+export def "avatars-favicon get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -677,11 +686,11 @@ export def "avatars-favicon avatarsGetFavicon" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-url: string # Website URL which you want to fetch the favicon from. (format: url)
+  --url: string # Website URL which you want to fetch the favicon from. (format: url)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "url" $qp_url "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "url" $url "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/avatars/favicon" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -692,7 +701,7 @@ export def "avatars-favicon avatarsGetFavicon" [
 #
 # GET /avatars/flags/{code}
 # operationId: avatarsGetFlag
-export def "avatars-flags avatarsGetFlag" [
+export def "avatars-flags get" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -709,7 +718,7 @@ export def "avatars-flags avatarsGetFlag" [
   let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "quality" $quality "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({code: $code} | format pattern "/avatars/flags/{code}") $qp)
+  let full_url = (build-url $base ({code: (encode-path-segment $code)} | format pattern "/avatars/flags/{code}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -719,7 +728,7 @@ export def "avatars-flags avatarsGetFlag" [
 #
 # GET /avatars/image
 # operationId: avatarsGetImage
-export def "avatars-image avatarsGetImage" [
+export def "avatars-image get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -728,13 +737,13 @@ export def "avatars-image avatarsGetImage" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-url: string # Image URL which you want to crop. (format: url)
+  --url: string # Image URL which you want to crop. (format: url)
   --width: int # Resize preview image width, Pass an integer between 0 to 2000. (format: int32, default: 400)
   --height: int # Resize preview image height, Pass an integer between 0 to 2000. (format: int32, default: 400)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "url" $qp_url "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "url" $url "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/avatars/image" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -745,7 +754,7 @@ export def "avatars-image avatarsGetImage" [
 #
 # GET /avatars/initials
 # operationId: avatarsGetInitials
-export def "avatars-initials avatarsGetInitials" [
+export def "avatars-initials get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -773,7 +782,7 @@ export def "avatars-initials avatarsGetInitials" [
 #
 # GET /avatars/qr
 # operationId: avatarsGetQR
-export def "avatars-qr avatarsGetQR" [
+export def "avatars-qr get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -800,7 +809,7 @@ export def "avatars-qr avatarsGetQR" [
 #
 # GET /database/collections/{collectionId}/documents
 # operationId: databaseListDocuments
-export def "database-collections-documents databaseListDocuments" [
+export def "database-collections-documents list" [
   collection_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -810,8 +819,8 @@ export def "database-collections-documents databaseListDocuments" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filters: list # Array of filter strings. Each filter is constructed from a key name, comparison operator (=, !=, >, <, <=, >=) and a value. You can also use a dot (.) separator in attribute names to filter by child document attributes. Examples: 'name=John Doe' or 'category.$id>=5bed2d152c362'. (default: [])
-  --limit: int # Maximum number of documents to return in response.  Use this value to manage pagination. By default will return maximum 25 results. Maximum of 100 results allowed per request. (format: int32, default: 25)
+  --filters: list<string> # Array of filter strings. Each filter is constructed from a key name, comparison operator (=, !=, >, <, <=, >=) and a value. You can also use a dot (.) separator in attribute names to filter by child document attributes. Examples: 'name=John Doe' or 'category.$id>=5bed2d152c362'. (default: [])
+  --limit: int # Maximum number of documents to return in response. Use this value to manage pagination. By default will return maximum 25 results. Maximum of 100 results allowed per request. (format: int32, default: 25)
   --offset: int # Offset value. The default value is 0. Use this param to manage pagination. (format: int32, default: 0)
   --order-field: string # Document field that results will be sorted by. (default: )
   --order-type: string # Order direction. Possible values are DESC for descending order, or ASC for ascending order. (default: ASC)
@@ -821,7 +830,7 @@ export def "database-collections-documents databaseListDocuments" [
   let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filters" $filters "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "orderField" $order_field "scalar") (serialize-qp "orderType" $order_type "scalar") (serialize-qp "orderCast" $order_cast "scalar") (serialize-qp "search" $search "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({collection_id: $collection_id} | format pattern "/database/collections/{collection_id}/documents") $qp)
+  let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id)} | format pattern "/database/collections/{collection_id}/documents") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -831,7 +840,7 @@ export def "database-collections-documents databaseListDocuments" [
 #
 # POST /database/collections/{collectionId}/documents
 # operationId: databaseCreateDocument
-export def "database-collections-documents databaseCreateDocument" [
+export def "database-collections-documents create" [
   collection_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -845,25 +854,25 @@ export def "database-collections-documents databaseCreateDocument" [
   --parent-document: string # Parent document unique ID. Use when you want your new document to be a child of a parent document.
   --parent-property: string # Parent document property name. Use when you want your new document to be a child of a parent document.
   --parent-property-type: string # Parent document property connection type. You can set this value to **assign**, **append** or **prepend**, default value is assign. Use when you want your new document to be a child of a parent document.
-  --read: list # An array of strings with read permissions. By default only the current user is granted with read permissions. [learn more about permissions](/docs/permissions) and get a full list of available permissions.
-  --write: list # An array of strings with write permissions. By default only the current user is granted with write permissions. [learn more about permissions](/docs/permissions) and get a full list of available permissions.
+  --read: list<string> # An array of strings with read permissions. By default only the current user is granted with read permissions. [learn more about permissions](/docs/permissions) and get a full list of available permissions.
+  --write: list<string> # An array of strings with write permissions. By default only the current user is granted with write permissions. [learn more about permissions](/docs/permissions) and get a full list of available permissions.
 ]: any -> record<_collection: string, _id: string, _permissions: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({collection_id: $collection_id} | format pattern "/database/collections/{collection_id}/documents"))
-  let body = {"data": $data, "parentDocument": $parent_document, "parentProperty": $parent_property, "parentPropertyType": $parent_property_type, "read": $read, "write": $write} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id)} | format pattern "/database/collections/{collection_id}/documents"))
+  let req_body = {"data": $data, "parentDocument": $parent_document, "parentProperty": $parent_property, "parentPropertyType": $parent_property_type, "read": $read, "write": $write} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete Document
 #
 # DELETE /database/collections/{collectionId}/documents/{documentId}
 # operationId: databaseDeleteDocument
-export def "database-collections-documents databaseDeleteDocument" [
+export def "database-collections-documents delete" [
   collection_id: string
   document_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -877,7 +886,7 @@ export def "database-collections-documents databaseDeleteDocument" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({collection_id: $collection_id, document_id: $document_id} | format pattern "/database/collections/{collection_id}/documents/{document_id}"))
+  let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id), document_id: (encode-path-segment $document_id)} | format pattern "/database/collections/{collection_id}/documents/{document_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -887,7 +896,7 @@ export def "database-collections-documents databaseDeleteDocument" [
 #
 # GET /database/collections/{collectionId}/documents/{documentId}
 # operationId: databaseGetDocument
-export def "database-collections-documents databaseGetDocument" [
+export def "database-collections-documents get" [
   collection_id: string
   document_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -901,7 +910,7 @@ export def "database-collections-documents databaseGetDocument" [
 ]: nothing -> record<_collection: string, _id: string, _permissions: record> {
   let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({collection_id: $collection_id, document_id: $document_id} | format pattern "/database/collections/{collection_id}/documents/{document_id}"))
+  let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id), document_id: (encode-path-segment $document_id)} | format pattern "/database/collections/{collection_id}/documents/{document_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -911,7 +920,7 @@ export def "database-collections-documents databaseGetDocument" [
 #
 # PATCH /database/collections/{collectionId}/documents/{documentId}
 # operationId: databaseUpdateDocument
-export def "database-collections-documents databaseUpdateDocument" [
+export def "database-collections-documents update" [
   collection_id: string
   document_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -923,25 +932,25 @@ export def "database-collections-documents databaseUpdateDocument" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   data: record # Document data as JSON object.
-  --read: list # An array of strings with read permissions. By default inherits the existing read permissions. [learn more about permissions](/docs/permissions) and get a full list of available permissions.
-  --write: list # An array of strings with write permissions. By default inherits the existing write permissions. [learn more about permissions](/docs/permissions) and get a full list of available permissions.
+  --read: list<string> # An array of strings with read permissions. By default inherits the existing read permissions. [learn more about permissions](/docs/permissions) and get a full list of available permissions.
+  --write: list<string> # An array of strings with write permissions. By default inherits the existing write permissions. [learn more about permissions](/docs/permissions) and get a full list of available permissions.
 ]: any -> record<_collection: string, _id: string, _permissions: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({collection_id: $collection_id, document_id: $document_id} | format pattern "/database/collections/{collection_id}/documents/{document_id}"))
-  let body = {"data": $data, "read": $read, "write": $write} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id), document_id: (encode-path-segment $document_id)} | format pattern "/database/collections/{collection_id}/documents/{document_id}"))
+  let req_body = {"data": $data, "read": $read, "write": $write} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List Executions
 #
 # GET /functions/{functionId}/executions
 # operationId: functionsListExecutions
-export def "functions-executions functionsListExecutions" [
+export def "functions-executions list" [
   function_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -959,7 +968,7 @@ export def "functions-executions functionsListExecutions" [
   let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "orderType" $order_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({function_id: $function_id} | format pattern "/functions/{function_id}/executions") $qp)
+  let full_url = (build-url $base ({function_id: (encode-path-segment $function_id)} | format pattern "/functions/{function_id}/executions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -969,7 +978,7 @@ export def "functions-executions functionsListExecutions" [
 #
 # POST /functions/{functionId}/executions
 # operationId: functionsCreateExecution
-export def "functions-executions functionsCreateExecution" [
+export def "functions-executions create" [
   function_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -984,19 +993,19 @@ export def "functions-executions functionsCreateExecution" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({function_id: $function_id} | format pattern "/functions/{function_id}/executions"))
-  let body = {"data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({function_id: (encode-path-segment $function_id)} | format pattern "/functions/{function_id}/executions"))
+  let req_body = {"data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get Execution
 #
 # GET /functions/{functionId}/executions/{executionId}
 # operationId: functionsGetExecution
-export def "functions-executions functionsGetExecution" [
+export def "functions-executions get" [
   function_id: string
   execution_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1010,7 +1019,7 @@ export def "functions-executions functionsGetExecution" [
 ]: nothing -> record<_id: string, dateCreated: int, exitCode: int, functionId: string, status: string, stderr: string, stdout: string, time: float, trigger: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({function_id: $function_id, execution_id: $execution_id} | format pattern "/functions/{function_id}/executions/{execution_id}"))
+  let full_url = (build-url $base ({function_id: (encode-path-segment $function_id), execution_id: (encode-path-segment $execution_id)} | format pattern "/functions/{function_id}/executions/{execution_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1020,7 +1029,7 @@ export def "functions-executions functionsGetExecution" [
 #
 # GET /locale
 # operationId: localeGet
-export def "locale localeGet" [
+export def "locale get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1042,7 +1051,7 @@ export def "locale localeGet" [
 #
 # GET /locale/continents
 # operationId: localeGetContinents
-export def "locale-continents localeGetContinents" [
+export def "locale-continents get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1064,7 +1073,7 @@ export def "locale-continents localeGetContinents" [
 #
 # GET /locale/countries
 # operationId: localeGetCountries
-export def "locale-countries localeGetCountries" [
+export def "locale-countries get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1086,7 +1095,7 @@ export def "locale-countries localeGetCountries" [
 #
 # GET /locale/countries/eu
 # operationId: localeGetCountriesEU
-export def "locale-countries-eu localeGetCountriesEU" [
+export def "locale-countries-eu get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1108,7 +1117,7 @@ export def "locale-countries-eu localeGetCountriesEU" [
 #
 # GET /locale/countries/phones
 # operationId: localeGetCountriesPhones
-export def "locale-countries-phones localeGetCountriesPhones" [
+export def "locale-countries-phones get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1130,7 +1139,7 @@ export def "locale-countries-phones localeGetCountriesPhones" [
 #
 # GET /locale/currencies
 # operationId: localeGetCurrencies
-export def "locale-currencies localeGetCurrencies" [
+export def "locale-currencies get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1152,7 +1161,7 @@ export def "locale-currencies localeGetCurrencies" [
 #
 # GET /locale/languages
 # operationId: localeGetLanguages
-export def "locale-languages localeGetLanguages" [
+export def "locale-languages get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1174,7 +1183,7 @@ export def "locale-languages localeGetLanguages" [
 #
 # GET /storage/files
 # operationId: storageListFiles
-export def "storage-files storageListFiles" [
+export def "storage-files list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1201,7 +1210,7 @@ export def "storage-files storageListFiles" [
 #
 # POST /storage/files
 # operationId: storageCreateFile
-export def "storage-files storageCreateFile" [
+export def "storage-files create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1211,25 +1220,26 @@ export def "storage-files storageCreateFile" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   file: string # Binary file.
-  --read: list # An array of strings with read permissions. By default only the current user is granted with read permissions. [learn more about permissions](/docs/permissions) and get a full list of available permissions.
-  --write: list # An array of strings with write permissions. By default only the current user is granted with write permissions. [learn more about permissions](/docs/permissions) and get a full list of available permissions.
+  --read: list<string> # An array of strings with read permissions. By default only the current user is granted with read permissions. [learn more about permissions](/docs/permissions) and get a full list of available permissions.
+  --write: list<string> # An array of strings with write permissions. By default only the current user is granted with write permissions. [learn more about permissions](/docs/permissions) and get a full list of available permissions.
 ]: any -> record<_id: string, _permissions: record, dateCreated: int, mimeType: string, name: string, signature: string, sizeOriginal: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/storage/files")
-  let body = {"file": $file, "read": $read, "write": $write} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"file": $file, "read": $read, "write": $write} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body [])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # Delete File
 #
 # DELETE /storage/files/{fileId}
 # operationId: storageDeleteFile
-export def "storage-files storageDeleteFile" [
+export def "storage-files delete" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1242,7 +1252,7 @@ export def "storage-files storageDeleteFile" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({file_id: $file_id} | format pattern "/storage/files/{file_id}"))
+  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/storage/files/{file_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1252,7 +1262,7 @@ export def "storage-files storageDeleteFile" [
 #
 # GET /storage/files/{fileId}
 # operationId: storageGetFile
-export def "storage-files storageGetFile" [
+export def "storage-files get" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1265,7 +1275,7 @@ export def "storage-files storageGetFile" [
 ]: nothing -> record<_id: string, _permissions: record, dateCreated: int, mimeType: string, name: string, signature: string, sizeOriginal: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({file_id: $file_id} | format pattern "/storage/files/{file_id}"))
+  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/storage/files/{file_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1275,7 +1285,7 @@ export def "storage-files storageGetFile" [
 #
 # PUT /storage/files/{fileId}
 # operationId: storageUpdateFile
-export def "storage-files storageUpdateFile" [
+export def "storage-files update" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1285,25 +1295,25 @@ export def "storage-files storageUpdateFile" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  read: list # An array of strings with read permissions. By default no user is granted with any read permissions. [learn more about permissions](/docs/permissions) and get a full list of available permissions.
-  write: list # An array of strings with write permissions. By default no user is granted with any write permissions. [learn more about permissions](/docs/permissions) and get a full list of available permissions.
+  read: list<string> # An array of strings with read permissions. By default no user is granted with any read permissions. [learn more about permissions](/docs/permissions) and get a full list of available permissions.
+  write: list<string> # An array of strings with write permissions. By default no user is granted with any write permissions. [learn more about permissions](/docs/permissions) and get a full list of available permissions.
 ]: any -> record<_id: string, _permissions: record, dateCreated: int, mimeType: string, name: string, signature: string, sizeOriginal: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({file_id: $file_id} | format pattern "/storage/files/{file_id}"))
-  let body = {"read": $read, "write": $write} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/storage/files/{file_id}"))
+  let req_body = {"read": $read, "write": $write} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get File for Download
 #
 # GET /storage/files/{fileId}/download
 # operationId: storageGetFileDownload
-export def "storage-files-download storageGetFileDownload" [
+export def "storage-files-download get" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1316,7 +1326,7 @@ export def "storage-files-download storageGetFileDownload" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({file_id: $file_id} | format pattern "/storage/files/{file_id}/download"))
+  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/storage/files/{file_id}/download"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1326,7 +1336,7 @@ export def "storage-files-download storageGetFileDownload" [
 #
 # GET /storage/files/{fileId}/preview
 # operationId: storageGetFilePreview
-export def "storage-files-preview storageGetFilePreview" [
+export def "storage-files-preview get" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1351,7 +1361,7 @@ export def "storage-files-preview storageGetFilePreview" [
   let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "gravity" $gravity "scalar") (serialize-qp "quality" $quality "scalar") (serialize-qp "borderWidth" $border_width "scalar") (serialize-qp "borderColor" $border_color "scalar") (serialize-qp "borderRadius" $border_radius "scalar") (serialize-qp "opacity" $opacity "scalar") (serialize-qp "rotation" $rotation "scalar") (serialize-qp "background" $background "scalar") (serialize-qp "output" $output "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({file_id: $file_id} | format pattern "/storage/files/{file_id}/preview") $qp)
+  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/storage/files/{file_id}/preview") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1361,7 +1371,7 @@ export def "storage-files-preview storageGetFilePreview" [
 #
 # GET /storage/files/{fileId}/view
 # operationId: storageGetFileView
-export def "storage-files-view storageGetFileView" [
+export def "storage-files-view get" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1374,7 +1384,7 @@ export def "storage-files-view storageGetFileView" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({file_id: $file_id} | format pattern "/storage/files/{file_id}/view"))
+  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/storage/files/{file_id}/view"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1384,7 +1394,7 @@ export def "storage-files-view storageGetFileView" [
 #
 # GET /teams
 # operationId: teamsList
-export def "teams teamsList" [
+export def "teams list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1411,7 +1421,7 @@ export def "teams teamsList" [
 #
 # POST /teams
 # operationId: teamsCreate
-export def "teams teamsCreate" [
+export def "teams create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1421,24 +1431,24 @@ export def "teams teamsCreate" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   name: string # Team name. Max length: 128 chars.
-  --roles: list # Array of strings. Use this param to set the roles in the team for the user who created it. The default role is **owner**. A role can be any string. Learn more about [roles and permissions](/docs/permissions). Max length for each role is 32 chars.
+  --roles: list<string> # Array of strings. Use this param to set the roles in the team for the user who created it. The default role is **owner**. A role can be any string. Learn more about [roles and permissions](/docs/permissions). Max length for each role is 32 chars.
 ]: any -> record<_id: string, dateCreated: int, name: string, sum: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/teams")
-  let body = {"name": $name, "roles": $roles} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"name": $name, "roles": $roles} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete Team
 #
 # DELETE /teams/{teamId}
 # operationId: teamsDelete
-export def "teams teamsDelete" [
+export def "teams delete" [
   team_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1451,7 +1461,7 @@ export def "teams teamsDelete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({team_id: $team_id} | format pattern "/teams/{team_id}"))
+  let full_url = (build-url $base ({team_id: (encode-path-segment $team_id)} | format pattern "/teams/{team_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1461,7 +1471,7 @@ export def "teams teamsDelete" [
 #
 # GET /teams/{teamId}
 # operationId: teamsGet
-export def "teams teamsGet" [
+export def "teams get" [
   team_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1474,7 +1484,7 @@ export def "teams teamsGet" [
 ]: nothing -> record<_id: string, dateCreated: int, name: string, sum: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({team_id: $team_id} | format pattern "/teams/{team_id}"))
+  let full_url = (build-url $base ({team_id: (encode-path-segment $team_id)} | format pattern "/teams/{team_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1484,7 +1494,7 @@ export def "teams teamsGet" [
 #
 # PUT /teams/{teamId}
 # operationId: teamsUpdate
-export def "teams teamsUpdate" [
+export def "teams update" [
   team_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1499,19 +1509,19 @@ export def "teams teamsUpdate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({team_id: $team_id} | format pattern "/teams/{team_id}"))
-  let body = {"name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({team_id: (encode-path-segment $team_id)} | format pattern "/teams/{team_id}"))
+  let req_body = {"name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get Team Memberships
 #
 # GET /teams/{teamId}/memberships
 # operationId: teamsGetMemberships
-export def "teams-memberships teamsGetMemberships" [
+export def "teams-memberships get" [
   team_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1529,7 +1539,7 @@ export def "teams-memberships teamsGetMemberships" [
   let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "orderType" $order_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({team_id: $team_id} | format pattern "/teams/{team_id}/memberships") $qp)
+  let full_url = (build-url $base ({team_id: (encode-path-segment $team_id)} | format pattern "/teams/{team_id}/memberships") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1539,7 +1549,7 @@ export def "teams-memberships teamsGetMemberships" [
 #
 # POST /teams/{teamId}/memberships
 # operationId: teamsCreateMembership
-export def "teams-memberships teamsCreateMembership" [
+export def "teams-memberships create" [
   team_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1551,25 +1561,25 @@ export def "teams-memberships teamsCreateMembership" [
   --dry-run(-n) # Return the request that would be sent without executing it
   email: string # New team member email.
   --name: string # New team member name. Max length: 128 chars.
-  roles: list # Array of strings. Use this param to set the user roles in the team. A role can be any string. Learn more about [roles and permissions](/docs/permissions). Max length for each role is 32 chars.
-  --body-url: string # URL to redirect the user back to your app from the invitation email.  Only URLs from hostnames in your project platform list are allowed. This requirement helps to prevent an [open redirect](https://cheatsheetseries.owasp.org/cheatsheets/Unvalidated_Redirects_and_Forwards_Cheat_Sheet.html) attack against your project API.
+  roles: list<string> # Array of strings. Use this param to set the user roles in the team. A role can be any string. Learn more about [roles and permissions](/docs/permissions). Max length for each role is 32 chars.
+  url: string # URL to redirect the user back to your app from the invitation email. Only URLs from hostnames in your project platform list are allowed. This requirement helps to prevent an [open redirect](https://cheatsheetseries.owasp.org/cheatsheets/Unvalidated_Redirects_and_Forwards_Cheat_Sheet.html) attack against your project API.
 ]: any -> record<_id: string, confirm: bool, email: string, invited: int, joined: int, name: string, roles: list<string>, teamId: string, userId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({team_id: $team_id} | format pattern "/teams/{team_id}/memberships"))
-  let body = {"email": $email, "name": $name, "roles": $roles, "url": $body_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({team_id: (encode-path-segment $team_id)} | format pattern "/teams/{team_id}/memberships"))
+  let req_body = {"email": $email, "name": $name, "roles": $roles, "url": $url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete Team Membership
 #
 # DELETE /teams/{teamId}/memberships/{membershipId}
 # operationId: teamsDeleteMembership
-export def "teams-memberships teamsDeleteMembership" [
+export def "teams-memberships delete" [
   team_id: string
   membership_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1583,7 +1593,7 @@ export def "teams-memberships teamsDeleteMembership" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({team_id: $team_id, membership_id: $membership_id} | format pattern "/teams/{team_id}/memberships/{membership_id}"))
+  let full_url = (build-url $base ({team_id: (encode-path-segment $team_id), membership_id: (encode-path-segment $membership_id)} | format pattern "/teams/{team_id}/memberships/{membership_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1593,7 +1603,7 @@ export def "teams-memberships teamsDeleteMembership" [
 #
 # PATCH /teams/{teamId}/memberships/{membershipId}
 # operationId: teamsUpdateMembershipRoles
-export def "teams-memberships teamsUpdateMembershipRoles" [
+export def "teams-memberships update-roles" [
   team_id: string
   membership_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1604,24 +1614,24 @@ export def "teams-memberships teamsUpdateMembershipRoles" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  roles: list # Array of strings. Use this param to set the user roles in the team. A role can be any string. Learn more about [roles and permissions](/docs/permissions). Max length for each role is 32 chars.
+  roles: list<string> # Array of strings. Use this param to set the user roles in the team. A role can be any string. Learn more about [roles and permissions](/docs/permissions). Max length for each role is 32 chars.
 ]: any -> record<_id: string, confirm: bool, email: string, invited: int, joined: int, name: string, roles: list<string>, teamId: string, userId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({team_id: $team_id, membership_id: $membership_id} | format pattern "/teams/{team_id}/memberships/{membership_id}"))
-  let body = {"roles": $roles} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({team_id: (encode-path-segment $team_id), membership_id: (encode-path-segment $membership_id)} | format pattern "/teams/{team_id}/memberships/{membership_id}"))
+  let req_body = {"roles": $roles} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update Team Membership Status
 #
 # PATCH /teams/{teamId}/memberships/{membershipId}/status
 # operationId: teamsUpdateMembershipStatus
-export def "teams-memberships-status teamsUpdateMembershipStatus" [
+export def "teams-memberships-status update" [
   team_id: string
   membership_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1638,10 +1648,10 @@ export def "teams-memberships-status teamsUpdateMembershipStatus" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({team_id: $team_id, membership_id: $membership_id} | format pattern "/teams/{team_id}/memberships/{membership_id}/status"))
-  let body = {"secret": $secret, "userId": $user_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({team_id: (encode-path-segment $team_id), membership_id: (encode-path-segment $membership_id)} | format pattern "/teams/{team_id}/memberships/{membership_id}/status"))
+  let req_body = {"secret": $secret, "userId": $user_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

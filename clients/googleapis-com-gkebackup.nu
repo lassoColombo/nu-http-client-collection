@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -72,7 +81,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "projects gkebackupprojectslocationsrestorePlansrestoresdelete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "projects delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -96,7 +105,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /v1/{name}
 # operationId: gkebackup.projects.locations.restorePlans.restores.delete
-export def "projects gkebackupprojectslocationsrestorePlansrestoresdelete" [
+export def "projects delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -123,7 +132,7 @@ export def "projects gkebackupprojectslocationsrestorePlansrestoresdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "etag" $etag "scalar") (serialize-qp "force" $force "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -133,7 +142,7 @@ export def "projects gkebackupprojectslocationsrestorePlansrestoresdelete" [
 #
 # GET /v1/{name}
 # operationId: gkebackup.projects.locations.restorePlans.restores.volumeRestores.get
-export def "projects gkebackupprojectslocationsrestorePlansrestoresvolumeRestoresget" [
+export def "projects get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -158,7 +167,7 @@ export def "projects gkebackupprojectslocationsrestorePlansrestoresvolumeRestore
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -168,8 +177,8 @@ export def "projects gkebackupprojectslocationsrestorePlansrestoresvolumeRestore
 #
 # PATCH /v1/{name}
 # operationId: gkebackup.projects.locations.restorePlans.restores.patch
-# --restoreConfig shape: {allNamespaces?: bool, clusterResourceConflictPolicy?: "CLUSTER_RESOURCE_CONFLICT_POLICY_UNSPECIFIED"|"USE_EXISTING_VERSION"|"USE_BACKUP_VERSION", clusterResourceRestoreScope?: record, namespacedResourceRestoreMode?: "NAMESPACED_RESOURCE_RESTORE_MODE_UNSPECIFIED"|"DELETE_AND_RESTORE"|"FAIL_ON_CONFLICT", selectedApplications?: record, selectedNamespaces?: record, substitutionRules?: list, volumeDataRestorePolicy?: "VOLUME_DATA_RESTORE_POLICY_UNSPECIFIED"|"RESTORE_VOLUME_DATA_FROM_BACKUP"|"REUSE_VOLUME_HANDLE_FROM_BACKUP"|"NO_VOLUME_DATA_RESTORATION"}
-export def "projects gkebackupprojectslocationsrestorePlansrestorespatch" [
+# --restoreConfig shape: {allNamespaces?: bool, clusterResourceConflictPolicy?: "CLUSTER_RESOURCE_CONFLICT_POLICY_UNSPECIFIED"|"USE_EXISTING_VERSION"|"USE_BACKUP_VERSION", clusterResourceRestoreScope?: record, namespacedResourceRestoreMode?: "NAMESPACED_RESOURCE_RESTORE_MODE_UNSPECIFIED"|"DELETE_AND_RESTORE"|"FAIL_ON_CONFLICT", selectedApplications?: record, selectedNamespaces?: record, substitutionRules?: list, ... (1 more fields)}
+export def "projects update" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -194,25 +203,25 @@ export def "projects gkebackupprojectslocationsrestorePlansrestorespatch" [
   --backup: string # Required. Immutable. A reference to the Backup used as the source from which this Restore will restore. Note that this Backup must be a sub-resource of the RestorePlan's backup_plan. Format: `projects/*/locations/*/backupPlans/*/backups/*`.
   --description: string # User specified descriptive string for this Restore.
   --labels: record # A set of custom labels supplied by user.
-  --restore-config: record # Configuration of a restore. Next id: 12 — shape: {allNamespaces?: bool, clusterResourceConflictPolicy?: "CLUSTER_RESOURCE_CONFLICT_POLICY_UNSPECIFIED"|"USE_EXISTING_VERSION"|"USE_BACKUP_VERSION", clusterResourceRestoreScope?: record, namespacedResourceRestoreMode?: "NAMESPACED_RESOURCE_RESTORE_MODE_UNSPECIFIED"|"DELETE_AND_RESTORE"|"FAIL_ON_CONFLICT", selectedApplications?: record, selectedNamespaces?: record, substitutionRules?: list, volumeDataRestorePolicy?: "VOLUME_DATA_RESTORE_POLICY_UNSPECIFIED"|"RESTORE_VOLUME_DATA_FROM_BACKUP"|"REUSE_VOLUME_HANDLE_FROM_BACKUP"|"NO_VOLUME_DATA_RESTORATION"}
+  --restore-config: record # Configuration of a restore. Next id: 12 — shape: {allNamespaces?: bool, clusterResourceConflictPolicy?: "CLUSTER_RESOURCE_CONFLICT_POLICY_UNSPECIFIED"|"USE_EXISTING_VERSION"|"USE_BACKUP_VERSION", clusterResourceRestoreScope?: record, namespacedResourceRestoreMode?: "NAMESPACED_RESOURCE_RESTORE_MODE_UNSPECIFIED"|"DELETE_AND_RESTORE"|"FAIL_ON_CONFLICT", selectedApplications?: record, selectedNamespaces?: record, substitutionRules?: list, ... (1 more fields)}
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}") $qp)
-  let body = {"backup": $backup, "description": $description, "labels": $labels, "restoreConfig": $restore_config} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}") $qp)
+  let req_body = {"backup": $backup, "description": $description, "labels": $labels, "restoreConfig": $restore_config} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists information about the supported locations for this service.
 #
 # GET /v1/{name}/locations
 # operationId: gkebackup.projects.locations.list
-export def "locations gkebackupprojectslocationslist" [
+export def "locations list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -240,7 +249,7 @@ export def "locations gkebackupprojectslocationslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}/locations") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}/locations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -250,7 +259,7 @@ export def "locations gkebackupprojectslocationslist" [
 #
 # DELETE /v1/{name}/operations
 # operationId: gkebackup.projects.locations.deleteOperations
-export def "operations gkebackupprojectslocationsdeleteOperations" [
+export def "operations delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -275,7 +284,7 @@ export def "operations gkebackupprojectslocationsdeleteOperations" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}/operations") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}/operations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -285,7 +294,7 @@ export def "operations gkebackupprojectslocationsdeleteOperations" [
 #
 # GET /v1/{name}/operations
 # operationId: gkebackup.projects.locations.operations.list
-export def "operations gkebackupprojectslocationsoperationslist" [
+export def "operations list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -313,7 +322,7 @@ export def "operations gkebackupprojectslocationsoperationslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}/operations") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}/operations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -323,7 +332,7 @@ export def "operations gkebackupprojectslocationsoperationslist" [
 #
 # POST /v1/{name}:cancel
 # operationId: gkebackup.projects.locations.operations.cancel
-export def "projects gkebackupprojectslocationsoperationscancel" [
+export def "projects cancel" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -350,18 +359,19 @@ export def "projects gkebackupprojectslocationsoperationscancel" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}:cancel") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}:cancel") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists BackupPlans in a given location.
 #
 # GET /v1/{parent}/backupPlans
 # operationId: gkebackup.projects.locations.backupPlans.list
-export def "backup-plans gkebackupprojectslocationsbackupPlanslist" [
+export def "backup-plans list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -390,7 +400,7 @@ export def "backup-plans gkebackupprojectslocationsbackupPlanslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/backupPlans") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/backupPlans") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -403,7 +413,7 @@ export def "backup-plans gkebackupprojectslocationsbackupPlanslist" [
 # --backupConfig shape: {allNamespaces?: bool, encryptionKey?: record, includeSecrets?: bool, includeVolumeData?: bool, selectedApplications?: record, selectedNamespaces?: record}
 # --backupSchedule shape: {cronSchedule?: string, paused?: bool}
 # --retentionPolicy shape: {backupDeleteLockDays?: int, backupRetainDays?: int, locked?: bool}
-export def "backup-plans gkebackupprojectslocationsbackupPlanscreate" [
+export def "backup-plans create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -437,19 +447,19 @@ export def "backup-plans gkebackupprojectslocationsbackupPlanscreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "backupPlanId" $backup_plan_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/backupPlans") $qp)
-  let body = {"backupConfig": $backup_config, "backupSchedule": $backup_schedule, "cluster": $cluster, "deactivated": $deactivated, "description": $description, "labels": $labels, "retentionPolicy": $retention_policy} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/backupPlans") $qp)
+  let req_body = {"backupConfig": $backup_config, "backupSchedule": $backup_schedule, "cluster": $cluster, "deactivated": $deactivated, "description": $description, "labels": $labels, "retentionPolicy": $retention_policy} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists the Backups for a given BackupPlan.
 #
 # GET /v1/{parent}/backups
 # operationId: gkebackup.projects.locations.backupPlans.backups.list
-export def "backups gkebackupprojectslocationsbackupPlansbackupslist" [
+export def "backups list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -478,7 +488,7 @@ export def "backups gkebackupprojectslocationsbackupPlansbackupslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/backups") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/backups") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -491,8 +501,8 @@ export def "backups gkebackupprojectslocationsbackupPlansbackupslist" [
 # --clusterMetadata shape: {anthosVersion?: string, backupCrdVersions?: record, cluster?: string, gkeVersion?: string, k8sVersion?: string}
 # --encryptionKey shape: {gcpKmsEncryptionKey?: string}
 # --selectedApplications shape: {namespacedNames?: list}
-# --selectedNamespaces shape: {namespaces?: list}
-export def "backups gkebackupprojectslocationsbackupPlansbackupscreate" [
+# --selectedNamespaces shape: {namespaces?: list<string>}
+export def "backups create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -521,25 +531,25 @@ export def "backups gkebackupprojectslocationsbackupPlansbackupscreate" [
   --labels: record # A set of custom labels supplied by user.
   --retain-days: int # The age (in days) after which this Backup will be automatically deleted. Must be an integer value >= 0: - If 0, no automatic deletion will occur for this Backup. - If not 0, this must be >= delete_lock_days and <= 365. Once a Backup is created, this value may only be increased. Defaults to the parent BackupPlan's backup_retain_days value. (format: int32)
   --selected-applications: record # A list of namespaced Kubernetes resources. — shape: {namespacedNames?: list}
-  --selected-namespaces: record # A list of Kubernetes Namespaces — shape: {namespaces?: list}
+  --selected-namespaces: record # A list of Kubernetes Namespaces — shape: {namespaces?: list<string>}
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "backupId" $backup_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/backups") $qp)
-  let body = {"clusterMetadata": $cluster_metadata, "deleteLockDays": $delete_lock_days, "description": $description, "encryptionKey": $encryption_key, "labels": $labels, "retainDays": $retain_days, "selectedApplications": $selected_applications, "selectedNamespaces": $selected_namespaces} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/backups") $qp)
+  let req_body = {"clusterMetadata": $cluster_metadata, "deleteLockDays": $delete_lock_days, "description": $description, "encryptionKey": $encryption_key, "labels": $labels, "retainDays": $retain_days, "selectedApplications": $selected_applications, "selectedNamespaces": $selected_namespaces} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists RestorePlans in a given location.
 #
 # GET /v1/{parent}/restorePlans
 # operationId: gkebackup.projects.locations.restorePlans.list
-export def "restore-plans gkebackupprojectslocationsrestorePlanslist" [
+export def "restore-plans list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -568,7 +578,7 @@ export def "restore-plans gkebackupprojectslocationsrestorePlanslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/restorePlans") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/restorePlans") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -578,8 +588,8 @@ export def "restore-plans gkebackupprojectslocationsrestorePlanslist" [
 #
 # POST /v1/{parent}/restorePlans
 # operationId: gkebackup.projects.locations.restorePlans.create
-# --restoreConfig shape: {allNamespaces?: bool, clusterResourceConflictPolicy?: "CLUSTER_RESOURCE_CONFLICT_POLICY_UNSPECIFIED"|"USE_EXISTING_VERSION"|"USE_BACKUP_VERSION", clusterResourceRestoreScope?: record, namespacedResourceRestoreMode?: "NAMESPACED_RESOURCE_RESTORE_MODE_UNSPECIFIED"|"DELETE_AND_RESTORE"|"FAIL_ON_CONFLICT", selectedApplications?: record, selectedNamespaces?: record, substitutionRules?: list, volumeDataRestorePolicy?: "VOLUME_DATA_RESTORE_POLICY_UNSPECIFIED"|"RESTORE_VOLUME_DATA_FROM_BACKUP"|"REUSE_VOLUME_HANDLE_FROM_BACKUP"|"NO_VOLUME_DATA_RESTORATION"}
-export def "restore-plans gkebackupprojectslocationsrestorePlanscreate" [
+# --restoreConfig shape: {allNamespaces?: bool, clusterResourceConflictPolicy?: "CLUSTER_RESOURCE_CONFLICT_POLICY_UNSPECIFIED"|"USE_EXISTING_VERSION"|"USE_BACKUP_VERSION", clusterResourceRestoreScope?: record, namespacedResourceRestoreMode?: "NAMESPACED_RESOURCE_RESTORE_MODE_UNSPECIFIED"|"DELETE_AND_RESTORE"|"FAIL_ON_CONFLICT", selectedApplications?: record, selectedNamespaces?: record, substitutionRules?: list, ... (1 more fields)}
+export def "restore-plans create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -605,25 +615,25 @@ export def "restore-plans gkebackupprojectslocationsrestorePlanscreate" [
   --cluster: string # Required. Immutable. The target cluster into which Restores created via this RestorePlan will restore data. NOTE: the cluster's region must be the same as the RestorePlan. Valid formats: - `projects/*/locations/*/clusters/*` - `projects/*/zones/*/clusters/*`
   --description: string # User specified descriptive string for this RestorePlan.
   --labels: record # A set of custom labels supplied by user.
-  --restore-config: record # Configuration of a restore. Next id: 12 — shape: {allNamespaces?: bool, clusterResourceConflictPolicy?: "CLUSTER_RESOURCE_CONFLICT_POLICY_UNSPECIFIED"|"USE_EXISTING_VERSION"|"USE_BACKUP_VERSION", clusterResourceRestoreScope?: record, namespacedResourceRestoreMode?: "NAMESPACED_RESOURCE_RESTORE_MODE_UNSPECIFIED"|"DELETE_AND_RESTORE"|"FAIL_ON_CONFLICT", selectedApplications?: record, selectedNamespaces?: record, substitutionRules?: list, volumeDataRestorePolicy?: "VOLUME_DATA_RESTORE_POLICY_UNSPECIFIED"|"RESTORE_VOLUME_DATA_FROM_BACKUP"|"REUSE_VOLUME_HANDLE_FROM_BACKUP"|"NO_VOLUME_DATA_RESTORATION"}
+  --restore-config: record # Configuration of a restore. Next id: 12 — shape: {allNamespaces?: bool, clusterResourceConflictPolicy?: "CLUSTER_RESOURCE_CONFLICT_POLICY_UNSPECIFIED"|"USE_EXISTING_VERSION"|"USE_BACKUP_VERSION", clusterResourceRestoreScope?: record, namespacedResourceRestoreMode?: "NAMESPACED_RESOURCE_RESTORE_MODE_UNSPECIFIED"|"DELETE_AND_RESTORE"|"FAIL_ON_CONFLICT", selectedApplications?: record, selectedNamespaces?: record, substitutionRules?: list, ... (1 more fields)}
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "restorePlanId" $restore_plan_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/restorePlans") $qp)
-  let body = {"backupPlan": $backup_plan, "cluster": $cluster, "description": $description, "labels": $labels, "restoreConfig": $restore_config} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/restorePlans") $qp)
+  let req_body = {"backupPlan": $backup_plan, "cluster": $cluster, "description": $description, "labels": $labels, "restoreConfig": $restore_config} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists the Restores for a given RestorePlan.
 #
 # GET /v1/{parent}/restores
 # operationId: gkebackup.projects.locations.restorePlans.restores.list
-export def "restores gkebackupprojectslocationsrestorePlansrestoreslist" [
+export def "restores list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -652,7 +662,7 @@ export def "restores gkebackupprojectslocationsrestorePlansrestoreslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/restores") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/restores") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -662,8 +672,8 @@ export def "restores gkebackupprojectslocationsrestorePlansrestoreslist" [
 #
 # POST /v1/{parent}/restores
 # operationId: gkebackup.projects.locations.restorePlans.restores.create
-# --restoreConfig shape: {allNamespaces?: bool, clusterResourceConflictPolicy?: "CLUSTER_RESOURCE_CONFLICT_POLICY_UNSPECIFIED"|"USE_EXISTING_VERSION"|"USE_BACKUP_VERSION", clusterResourceRestoreScope?: record, namespacedResourceRestoreMode?: "NAMESPACED_RESOURCE_RESTORE_MODE_UNSPECIFIED"|"DELETE_AND_RESTORE"|"FAIL_ON_CONFLICT", selectedApplications?: record, selectedNamespaces?: record, substitutionRules?: list, volumeDataRestorePolicy?: "VOLUME_DATA_RESTORE_POLICY_UNSPECIFIED"|"RESTORE_VOLUME_DATA_FROM_BACKUP"|"REUSE_VOLUME_HANDLE_FROM_BACKUP"|"NO_VOLUME_DATA_RESTORATION"}
-export def "restores gkebackupprojectslocationsrestorePlansrestorescreate" [
+# --restoreConfig shape: {allNamespaces?: bool, clusterResourceConflictPolicy?: "CLUSTER_RESOURCE_CONFLICT_POLICY_UNSPECIFIED"|"USE_EXISTING_VERSION"|"USE_BACKUP_VERSION", clusterResourceRestoreScope?: record, namespacedResourceRestoreMode?: "NAMESPACED_RESOURCE_RESTORE_MODE_UNSPECIFIED"|"DELETE_AND_RESTORE"|"FAIL_ON_CONFLICT", selectedApplications?: record, selectedNamespaces?: record, substitutionRules?: list, ... (1 more fields)}
+export def "restores create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -688,25 +698,25 @@ export def "restores gkebackupprojectslocationsrestorePlansrestorescreate" [
   --backup: string # Required. Immutable. A reference to the Backup used as the source from which this Restore will restore. Note that this Backup must be a sub-resource of the RestorePlan's backup_plan. Format: `projects/*/locations/*/backupPlans/*/backups/*`.
   --description: string # User specified descriptive string for this Restore.
   --labels: record # A set of custom labels supplied by user.
-  --restore-config: record # Configuration of a restore. Next id: 12 — shape: {allNamespaces?: bool, clusterResourceConflictPolicy?: "CLUSTER_RESOURCE_CONFLICT_POLICY_UNSPECIFIED"|"USE_EXISTING_VERSION"|"USE_BACKUP_VERSION", clusterResourceRestoreScope?: record, namespacedResourceRestoreMode?: "NAMESPACED_RESOURCE_RESTORE_MODE_UNSPECIFIED"|"DELETE_AND_RESTORE"|"FAIL_ON_CONFLICT", selectedApplications?: record, selectedNamespaces?: record, substitutionRules?: list, volumeDataRestorePolicy?: "VOLUME_DATA_RESTORE_POLICY_UNSPECIFIED"|"RESTORE_VOLUME_DATA_FROM_BACKUP"|"REUSE_VOLUME_HANDLE_FROM_BACKUP"|"NO_VOLUME_DATA_RESTORATION"}
+  --restore-config: record # Configuration of a restore. Next id: 12 — shape: {allNamespaces?: bool, clusterResourceConflictPolicy?: "CLUSTER_RESOURCE_CONFLICT_POLICY_UNSPECIFIED"|"USE_EXISTING_VERSION"|"USE_BACKUP_VERSION", clusterResourceRestoreScope?: record, namespacedResourceRestoreMode?: "NAMESPACED_RESOURCE_RESTORE_MODE_UNSPECIFIED"|"DELETE_AND_RESTORE"|"FAIL_ON_CONFLICT", selectedApplications?: record, selectedNamespaces?: record, substitutionRules?: list, ... (1 more fields)}
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "restoreId" $restore_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/restores") $qp)
-  let body = {"backup": $backup, "description": $description, "labels": $labels, "restoreConfig": $restore_config} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/restores") $qp)
+  let req_body = {"backup": $backup, "description": $description, "labels": $labels, "restoreConfig": $restore_config} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists the VolumeBackups for a given Backup.
 #
 # GET /v1/{parent}/volumeBackups
 # operationId: gkebackup.projects.locations.backupPlans.backups.volumeBackups.list
-export def "volume-backups gkebackupprojectslocationsbackupPlansbackupsvolumeBackupslist" [
+export def "volume-backups list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -735,7 +745,7 @@ export def "volume-backups gkebackupprojectslocationsbackupPlansbackupsvolumeBac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/volumeBackups") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/volumeBackups") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -745,7 +755,7 @@ export def "volume-backups gkebackupprojectslocationsbackupPlansbackupsvolumeBac
 #
 # GET /v1/{parent}/volumeRestores
 # operationId: gkebackup.projects.locations.restorePlans.restores.volumeRestores.list
-export def "volume-restores gkebackupprojectslocationsrestorePlansrestoresvolumeRestoreslist" [
+export def "volume-restores list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -774,7 +784,7 @@ export def "volume-restores gkebackupprojectslocationsrestorePlansrestoresvolume
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/volumeRestores") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/volumeRestores") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -784,7 +794,7 @@ export def "volume-restores gkebackupprojectslocationsrestorePlansrestoresvolume
 #
 # GET /v1/{resource}:getIamPolicy
 # operationId: gkebackup.projects.locations.restorePlans.restores.volumeRestores.getIamPolicy
-export def "projects gkebackupprojectslocationsrestorePlansrestoresvolumeRestoresgetIamPolicy" [
+export def "projects get-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -810,7 +820,7 @@ export def "projects gkebackupprojectslocationsrestorePlansrestoresvolumeRestore
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "options.requestedPolicyVersion" $options_requested_policy_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource: $resource} | format pattern "/v1/{resource}:getIamPolicy") $qp)
+  let full_url = (build-url $base ({resource: (encode-path-segment $resource)} | format pattern "/v1/{resource}:getIamPolicy") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -821,7 +831,7 @@ export def "projects gkebackupprojectslocationsrestorePlansrestoresvolumeRestore
 # POST /v1/{resource}:setIamPolicy
 # operationId: gkebackup.projects.locations.restorePlans.restores.volumeRestores.setIamPolicy
 # --policy shape: {auditConfigs?: list, bindings?: list, etag?: string, version?: int}
-export def "projects gkebackupprojectslocationsrestorePlansrestoresvolumeRestoressetIamPolicy" [
+export def "projects update-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -849,19 +859,19 @@ export def "projects gkebackupprojectslocationsrestorePlansrestoresvolumeRestore
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource: $resource} | format pattern "/v1/{resource}:setIamPolicy") $qp)
-  let body = {"policy": $policy, "updateMask": $update_mask} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({resource: (encode-path-segment $resource)} | format pattern "/v1/{resource}:setIamPolicy") $qp)
+  let req_body = {"policy": $policy, "updateMask": $update_mask} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns permissions that a caller has on the specified resource. If the resource does not exist, this will return an empty set of permissions, not a `NOT_FOUND` error. Note: This operation is designed to be used for building permission-aware UIs and command-line tools, not for authorization checking. This operation may "fail open" without warning.
 #
 # POST /v1/{resource}:testIamPermissions
 # operationId: gkebackup.projects.locations.restorePlans.restores.volumeRestores.testIamPermissions
-export def "projects gkebackupprojectslocationsrestorePlansrestoresvolumeRestorestestIamPermissions" [
+export def "projects test-iam-permissions" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -882,16 +892,16 @@ export def "projects gkebackupprojectslocationsrestorePlansrestoresvolumeRestore
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --permissions: list # The set of permissions to check for the `resource`. Permissions with wildcards (such as `*` or `storage.*`) are not allowed. For more information see [IAM Overview](https://cloud.google.com/iam/docs/overview#permissions).
+  --permissions: list<string> # The set of permissions to check for the `resource`. Permissions with wildcards (such as `*` or `storage.*`) are not allowed. For more information see [IAM Overview](https://cloud.google.com/iam/docs/overview#permissions).
 ]: any -> record<permissions: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource: $resource} | format pattern "/v1/{resource}:testIamPermissions") $qp)
-  let body = {"permissions": $permissions} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({resource: (encode-path-segment $resource)} | format pattern "/v1/{resource}:testIamPermissions") $qp)
+  let req_body = {"permissions": $permissions} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

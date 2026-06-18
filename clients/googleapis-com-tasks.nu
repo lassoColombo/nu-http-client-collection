@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -72,7 +81,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "tasks-lists-clear taskstasksclear" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "tasks-lists-clear create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -96,7 +105,7 @@ export def commands []: nothing -> table {
 #
 # POST /tasks/v1/lists/{tasklist}/clear
 # operationId: tasks.tasks.clear
-export def "tasks-lists-clear taskstasksclear" [
+export def "tasks-lists-clear create" [
   tasklist: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -121,7 +130,7 @@ export def "tasks-lists-clear taskstasksclear" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tasklist: $tasklist} | format pattern "/tasks/v1/lists/{tasklist}/clear") $qp)
+  let full_url = (build-url $base ({tasklist: (encode-path-segment $tasklist)} | format pattern "/tasks/v1/lists/{tasklist}/clear") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -131,7 +140,7 @@ export def "tasks-lists-clear taskstasksclear" [
 #
 # GET /tasks/v1/lists/{tasklist}/tasks
 # operationId: tasks.tasks.list
-export def "tasks-lists-tasks taskstaskslist" [
+export def "tasks-lists-tasks list" [
   tasklist: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -166,7 +175,7 @@ export def "tasks-lists-tasks taskstaskslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "completedMax" $completed_max "scalar") (serialize-qp "completedMin" $completed_min "scalar") (serialize-qp "dueMax" $due_max "scalar") (serialize-qp "dueMin" $due_min "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "showCompleted" $show_completed "scalar") (serialize-qp "showDeleted" $show_deleted "scalar") (serialize-qp "showHidden" $show_hidden "scalar") (serialize-qp "updatedMin" $updated_min "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tasklist: $tasklist} | format pattern "/tasks/v1/lists/{tasklist}/tasks") $qp)
+  let full_url = (build-url $base ({tasklist: (encode-path-segment $tasklist)} | format pattern "/tasks/v1/lists/{tasklist}/tasks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -177,7 +186,7 @@ export def "tasks-lists-tasks taskstaskslist" [
 # POST /tasks/v1/lists/{tasklist}/tasks
 # operationId: tasks.tasks.insert
 # --links item shape: {description?: string, link?: string, type?: string}
-export def "tasks-lists-tasks taskstasksinsert" [
+export def "tasks-lists-tasks create" [
   tasklist: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -220,19 +229,19 @@ export def "tasks-lists-tasks taskstasksinsert" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "parent" $parent "scalar") (serialize-qp "previous" $previous "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tasklist: $tasklist} | format pattern "/tasks/v1/lists/{tasklist}/tasks") $qp)
-  let body = {"completed": $completed, "deleted": $deleted, "due": $due, "etag": $etag, "hidden": $hidden, "id": $id, "kind": $kind, "links": $links, "notes": $notes, "parent": $parent, "position": $position, "selfLink": $self_link, "status": $status, "title": $title, "updated": $updated} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({tasklist: (encode-path-segment $tasklist)} | format pattern "/tasks/v1/lists/{tasklist}/tasks") $qp)
+  let req_body = {"completed": $completed, "deleted": $deleted, "due": $due, "etag": $etag, "hidden": $hidden, "id": $id, "kind": $kind, "links": $links, "notes": $notes, "parent": $parent, "position": $position, "selfLink": $self_link, "status": $status, "title": $title, "updated": $updated} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes the specified task from the task list.
 #
 # DELETE /tasks/v1/lists/{tasklist}/tasks/{task}
 # operationId: tasks.tasks.delete
-export def "tasks-lists-tasks taskstasksdelete" [
+export def "tasks-lists-tasks delete" [
   tasklist: string
   task: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -258,7 +267,7 @@ export def "tasks-lists-tasks taskstasksdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tasklist: $tasklist, task: $task} | format pattern "/tasks/v1/lists/{tasklist}/tasks/{task}") $qp)
+  let full_url = (build-url $base ({tasklist: (encode-path-segment $tasklist), task: (encode-path-segment $task)} | format pattern "/tasks/v1/lists/{tasklist}/tasks/{task}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -268,7 +277,7 @@ export def "tasks-lists-tasks taskstasksdelete" [
 #
 # GET /tasks/v1/lists/{tasklist}/tasks/{task}
 # operationId: tasks.tasks.get
-export def "tasks-lists-tasks taskstasksget" [
+export def "tasks-lists-tasks get" [
   tasklist: string
   task: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -294,7 +303,7 @@ export def "tasks-lists-tasks taskstasksget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tasklist: $tasklist, task: $task} | format pattern "/tasks/v1/lists/{tasklist}/tasks/{task}") $qp)
+  let full_url = (build-url $base ({tasklist: (encode-path-segment $tasklist), task: (encode-path-segment $task)} | format pattern "/tasks/v1/lists/{tasklist}/tasks/{task}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -305,7 +314,7 @@ export def "tasks-lists-tasks taskstasksget" [
 # PATCH /tasks/v1/lists/{tasklist}/tasks/{task}
 # operationId: tasks.tasks.patch
 # --links item shape: {description?: string, link?: string, type?: string}
-export def "tasks-lists-tasks taskstaskspatch" [
+export def "tasks-lists-tasks update-by-tasklist-task" [
   tasklist: string
   task: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -347,12 +356,12 @@ export def "tasks-lists-tasks taskstaskspatch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tasklist: $tasklist, task: $task} | format pattern "/tasks/v1/lists/{tasklist}/tasks/{task}") $qp)
-  let body = {"completed": $completed, "deleted": $deleted, "due": $due, "etag": $etag, "hidden": $hidden, "id": $id, "kind": $kind, "links": $links, "notes": $notes, "parent": $parent, "position": $position, "selfLink": $self_link, "status": $status, "title": $title, "updated": $updated} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({tasklist: (encode-path-segment $tasklist), task: (encode-path-segment $task)} | format pattern "/tasks/v1/lists/{tasklist}/tasks/{task}") $qp)
+  let req_body = {"completed": $completed, "deleted": $deleted, "due": $due, "etag": $etag, "hidden": $hidden, "id": $id, "kind": $kind, "links": $links, "notes": $notes, "parent": $parent, "position": $position, "selfLink": $self_link, "status": $status, "title": $title, "updated": $updated} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates the specified task.
@@ -360,7 +369,7 @@ export def "tasks-lists-tasks taskstaskspatch" [
 # PUT /tasks/v1/lists/{tasklist}/tasks/{task}
 # operationId: tasks.tasks.update
 # --links item shape: {description?: string, link?: string, type?: string}
-export def "tasks-lists-tasks taskstasksupdate" [
+export def "tasks-lists-tasks update-by-tasklist-task-1" [
   tasklist: string
   task: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -402,19 +411,19 @@ export def "tasks-lists-tasks taskstasksupdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tasklist: $tasklist, task: $task} | format pattern "/tasks/v1/lists/{tasklist}/tasks/{task}") $qp)
-  let body = {"completed": $completed, "deleted": $deleted, "due": $due, "etag": $etag, "hidden": $hidden, "id": $id, "kind": $kind, "links": $links, "notes": $notes, "parent": $parent, "position": $position, "selfLink": $self_link, "status": $status, "title": $title, "updated": $updated} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({tasklist: (encode-path-segment $tasklist), task: (encode-path-segment $task)} | format pattern "/tasks/v1/lists/{tasklist}/tasks/{task}") $qp)
+  let req_body = {"completed": $completed, "deleted": $deleted, "due": $due, "etag": $etag, "hidden": $hidden, "id": $id, "kind": $kind, "links": $links, "notes": $notes, "parent": $parent, "position": $position, "selfLink": $self_link, "status": $status, "title": $title, "updated": $updated} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Moves the specified task to another position in the task list. This can include putting it as a child task under a new parent and/or move it to a different position among its sibling tasks.
 #
 # POST /tasks/v1/lists/{tasklist}/tasks/{task}/move
 # operationId: tasks.tasks.move
-export def "tasks-lists-tasks-move taskstasksmove" [
+export def "tasks-lists-tasks-move move" [
   tasklist: string
   task: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -442,7 +451,7 @@ export def "tasks-lists-tasks-move taskstasksmove" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "parent" $parent "scalar") (serialize-qp "previous" $previous "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tasklist: $tasklist, task: $task} | format pattern "/tasks/v1/lists/{tasklist}/tasks/{task}/move") $qp)
+  let full_url = (build-url $base ({tasklist: (encode-path-segment $tasklist), task: (encode-path-segment $task)} | format pattern "/tasks/v1/lists/{tasklist}/tasks/{task}/move") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -452,7 +461,7 @@ export def "tasks-lists-tasks-move taskstasksmove" [
 #
 # GET /tasks/v1/users/@me/lists
 # operationId: tasks.tasklists.list
-export def "tasks-users-me-lists taskstasklistslist" [
+export def "tasks-users-me-lists list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -488,7 +497,7 @@ export def "tasks-users-me-lists taskstasklistslist" [
 #
 # POST /tasks/v1/users/@me/lists
 # operationId: tasks.tasklists.insert
-export def "tasks-users-me-lists taskstasklistsinsert" [
+export def "tasks-users-me-lists create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -520,18 +529,18 @@ export def "tasks-users-me-lists taskstasklistsinsert" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/tasks/v1/users/@me/lists" $qp)
-  let body = {"etag": $etag, "id": $id, "kind": $kind, "selfLink": $self_link, "title": $title, "updated": $updated} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"etag": $etag, "id": $id, "kind": $kind, "selfLink": $self_link, "title": $title, "updated": $updated} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes the authenticated user's specified task list.
 #
 # DELETE /tasks/v1/users/@me/lists/{tasklist}
 # operationId: tasks.tasklists.delete
-export def "tasks-users-me-lists taskstasklistsdelete" [
+export def "tasks-users-me-lists delete" [
   tasklist: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -556,7 +565,7 @@ export def "tasks-users-me-lists taskstasklistsdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tasklist: $tasklist} | format pattern "/tasks/v1/users/@me/lists/{tasklist}") $qp)
+  let full_url = (build-url $base ({tasklist: (encode-path-segment $tasklist)} | format pattern "/tasks/v1/users/@me/lists/{tasklist}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -566,7 +575,7 @@ export def "tasks-users-me-lists taskstasklistsdelete" [
 #
 # GET /tasks/v1/users/@me/lists/{tasklist}
 # operationId: tasks.tasklists.get
-export def "tasks-users-me-lists taskstasklistsget" [
+export def "tasks-users-me-lists get" [
   tasklist: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -591,7 +600,7 @@ export def "tasks-users-me-lists taskstasklistsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tasklist: $tasklist} | format pattern "/tasks/v1/users/@me/lists/{tasklist}") $qp)
+  let full_url = (build-url $base ({tasklist: (encode-path-segment $tasklist)} | format pattern "/tasks/v1/users/@me/lists/{tasklist}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -601,7 +610,7 @@ export def "tasks-users-me-lists taskstasklistsget" [
 #
 # PATCH /tasks/v1/users/@me/lists/{tasklist}
 # operationId: tasks.tasklists.patch
-export def "tasks-users-me-lists taskstasklistspatch" [
+export def "tasks-users-me-lists update-by-tasklist" [
   tasklist: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -633,19 +642,19 @@ export def "tasks-users-me-lists taskstasklistspatch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tasklist: $tasklist} | format pattern "/tasks/v1/users/@me/lists/{tasklist}") $qp)
-  let body = {"etag": $etag, "id": $id, "kind": $kind, "selfLink": $self_link, "title": $title, "updated": $updated} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({tasklist: (encode-path-segment $tasklist)} | format pattern "/tasks/v1/users/@me/lists/{tasklist}") $qp)
+  let req_body = {"etag": $etag, "id": $id, "kind": $kind, "selfLink": $self_link, "title": $title, "updated": $updated} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates the authenticated user's specified task list.
 #
 # PUT /tasks/v1/users/@me/lists/{tasklist}
 # operationId: tasks.tasklists.update
-export def "tasks-users-me-lists taskstasklistsupdate" [
+export def "tasks-users-me-lists update-by-tasklist-1" [
   tasklist: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -677,10 +686,10 @@ export def "tasks-users-me-lists taskstasklistsupdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tasklist: $tasklist} | format pattern "/tasks/v1/users/@me/lists/{tasklist}") $qp)
-  let body = {"etag": $etag, "id": $id, "kind": $kind, "selfLink": $self_link, "title": $title, "updated": $updated} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({tasklist: (encode-path-segment $tasklist)} | format pattern "/tasks/v1/users/@me/lists/{tasklist}") $qp)
+  let req_body = {"etag": $etag, "id": $id, "kind": $kind, "selfLink": $self_link, "title": $title, "updated": $updated} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

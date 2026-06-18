@@ -36,6 +36,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -70,7 +79,7 @@ def auth-scheme-completer [] { ["ocp-apim-subscription-key" "query-key"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "all-teams get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "all-teams list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -94,7 +103,7 @@ export def commands []: nothing -> table {
 #
 # GET /{format}/AllTeams
 # operationId: TeamsAll
-export def "all-teams get" [
+export def "all-teams list" [
   format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -107,7 +116,7 @@ export def "all-teams get" [
 ]: nothing -> table<Active: bool, City: string, Conference: string, Division: string, GlobalTeamID: int, Key: string, Name: string, PrimaryColor: string, QuaternaryColor: string, SecondaryColor: string, StadiumID: int, TeamID: int, TertiaryColor: string, WikipediaLogoUrl: string, WikipediaWordMarkUrl: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({format: $format} | format pattern "/{format}/AllTeams"))
+  let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/{format}/AllTeams"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -130,7 +139,7 @@ export def "are-any-games-in-progress get" [
 ]: nothing -> bool {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({format: $format} | format pattern "/{format}/AreAnyGamesInProgress"))
+  let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/{format}/AreAnyGamesInProgress"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -154,7 +163,7 @@ export def "box-score get" [
 ]: nothing -> record<Game: record<Attendance: int, AwayRotationNumber: int, AwayTeam: string, AwayTeamID: int, AwayTeamMoneyLine: int, AwayTeamScore: int, Channel: string, DateTime: string, DateTimeUTC: string, Day: string, GameEndDateTime: string, GameID: int, GlobalAwayTeamID: int, GlobalGameID: int, GlobalHomeTeamID: int, HomeRotationNumber: int, HomeTeam: string, HomeTeamID: int, HomeTeamMoneyLine: int, HomeTeamScore: int, IsClosed: bool, LastPlay: string, NeutralVenue: bool, OverPayout: int, OverUnder: float, Period: string, Periods: list<record>, PointSpread: float, PointSpreadAwayTeamMoneyLine: int, PointSpreadHomeTeamMoneyLine: int, Season: int, SeasonType: int, SeriesInfo: record<AwayTeamWins: int, GameNumber: int, HomeTeamWins: int, MaxLength: int>, StadiumID: int, Status: string, TimeRemainingMinutes: int, TimeRemainingSeconds: int, UnderPayout: int, Updated: string>, Periods: table<AwayScore: int, GameID: int, HomeScore: int, Name: string, Penalties: list, PeriodID: int, ScoringPlays: list>, PlayerGames: table<Assists: float, BenchPenaltyMinutes: float, Blocks: float, DateTime: string, Day: string, DraftKingsPosition: string, DraftKingsSalary: int, EmptyNetGoals: float, FaceoffsLost: float, FaceoffsWon: float, FanDuelPosition: string, FanDuelSalary: int, FantasyDataSalary: int, FantasyDraftPosition: string, FantasyDraftSalary: int, FantasyPoints: float, FantasyPointsDraftKings: float, FantasyPointsFanDuel: float, FantasyPointsFantasyDraft: float, FantasyPointsYahoo: float, GameID: int, Games: int, Giveaways: float, GlobalGameID: int, GlobalOpponentID: int, GlobalTeamID: int, Goals: float, GoaltendingGoalsAgainst: float, GoaltendingLosses: float, GoaltendingMinutes: int, GoaltendingOvertimeLosses: float, GoaltendingSaves: float, GoaltendingSeconds: int, GoaltendingShotsAgainst: float, GoaltendingShutouts: float, GoaltendingWins: float, HatTricks: float, Hits: float, HomeOrAway: string, InjuryBodyPart: string, InjuryNotes: string, InjuryStartDate: string, InjuryStatus: string, IsGameOver: bool, Minutes: int, Name: string, Opponent: string, OpponentID: int, OpponentPositionRank: int, OpponentRank: int, PenaltyMinutes: float, PlayerID: int, PlusMinus: float, Position: string, PowerPlayAssists: float, PowerPlayGoals: float, Season: int, SeasonType: int, Seconds: int, Shifts: float, ShootoutGoals: float, ShortHandedAssists: float, ShortHandedGoals: float, ShotsOnGoal: float, Started: int, StatID: int, Takeaways: float, Team: string, TeamID: int, Updated: string, YahooPosition: string, YahooSalary: int>, ShootoutPlays: table<AwayTeamScore: int, Category: string, ClockMinutes: int, ClockSeconds: int, Created: string, Description: string, FirstAssistedByPlayerID: int, HomeTeamScore: int, Opponent: string, OpponentID: int, OpposingPlayerID: int, PeriodID: int, PeriodName: string, PlayID: int, PlayerID: int, PowerPlayTeam: string, PowerPlayTeamID: int, SecondAssistedByPlayerID: int, Sequence: int, Team: string, TeamID: int, Type: string, Updated: string>, TeamGames: table<Assists: float, BenchPenaltyMinutes: float, Blocks: float, DateTime: string, Day: string, EmptyNetGoals: float, FaceoffsLost: float, FaceoffsWon: float, FantasyPoints: float, FantasyPointsDraftKings: float, FantasyPointsFanDuel: float, FantasyPointsFantasyDraft: float, FantasyPointsYahoo: float, GameID: int, Games: int, Giveaways: float, GlobalGameID: int, GlobalOpponentID: int, GlobalTeamID: int, Goals: float, GoaltendingGoalsAgainst: float, GoaltendingLosses: float, GoaltendingMinutes: int, GoaltendingOvertimeLosses: float, GoaltendingSaves: float, GoaltendingSeconds: int, GoaltendingShotsAgainst: float, GoaltendingShutouts: float, GoaltendingWins: float, HatTricks: float, Hits: float, HomeOrAway: string, IsGameOver: bool, Losses: int, Minutes: int, Name: string, Opponent: string, OpponentID: int, OvertimeLosses: int, PenaltyMinutes: float, PlusMinus: float, PowerPlayAssists: float, PowerPlayGoals: float, Season: int, SeasonType: int, Seconds: int, Shifts: float, ShootoutGoals: float, ShortHandedAssists: float, ShortHandedGoals: float, ShotsOnGoal: float, Started: int, StatID: int, Takeaways: float, Team: string, TeamID: int, Updated: string, Wins: int>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({format: $format, gameid: $gameid} | format pattern "/{format}/BoxScore/{gameid}"))
+  let full_url = (build-url $base ({format: (encode-path-segment $format), gameid: (encode-path-segment $gameid)} | format pattern "/{format}/BoxScore/{gameid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -178,7 +187,7 @@ export def "box-scores get" [
 ]: nothing -> table<Game: record<Attendance: int, AwayRotationNumber: int, AwayTeam: string, AwayTeamID: int, AwayTeamMoneyLine: int, AwayTeamScore: int, Channel: string, DateTime: string, DateTimeUTC: string, Day: string, GameEndDateTime: string, GameID: int, GlobalAwayTeamID: int, GlobalGameID: int, GlobalHomeTeamID: int, HomeRotationNumber: int, HomeTeam: string, HomeTeamID: int, HomeTeamMoneyLine: int, HomeTeamScore: int, IsClosed: bool, LastPlay: string, NeutralVenue: bool, OverPayout: int, OverUnder: float, Period: string, Periods: list, PointSpread: float, PointSpreadAwayTeamMoneyLine: int, PointSpreadHomeTeamMoneyLine: int, Season: int, SeasonType: int, SeriesInfo: record, StadiumID: int, Status: string, TimeRemainingMinutes: int, TimeRemainingSeconds: int, UnderPayout: int, Updated: string>, Periods: list<record>, PlayerGames: list<record>, ShootoutPlays: list<record>, TeamGames: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({format: $format, date: $date} | format pattern "/{format}/BoxScores/{date}"))
+  let full_url = (build-url $base ({format: (encode-path-segment $format), date: (encode-path-segment $date)} | format pattern "/{format}/BoxScores/{date}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -203,7 +212,7 @@ export def "box-scores-delta get" [
 ]: nothing -> table<Game: record<Attendance: int, AwayRotationNumber: int, AwayTeam: string, AwayTeamID: int, AwayTeamMoneyLine: int, AwayTeamScore: int, Channel: string, DateTime: string, DateTimeUTC: string, Day: string, GameEndDateTime: string, GameID: int, GlobalAwayTeamID: int, GlobalGameID: int, GlobalHomeTeamID: int, HomeRotationNumber: int, HomeTeam: string, HomeTeamID: int, HomeTeamMoneyLine: int, HomeTeamScore: int, IsClosed: bool, LastPlay: string, NeutralVenue: bool, OverPayout: int, OverUnder: float, Period: string, Periods: list, PointSpread: float, PointSpreadAwayTeamMoneyLine: int, PointSpreadHomeTeamMoneyLine: int, Season: int, SeasonType: int, SeriesInfo: record, StadiumID: int, Status: string, TimeRemainingMinutes: int, TimeRemainingSeconds: int, UnderPayout: int, Updated: string>, Periods: list<record>, PlayerGames: list<record>, ShootoutPlays: list<record>, TeamGames: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({format: $format, date: $date, minutes: $minutes} | format pattern "/{format}/BoxScoresDelta/{date}/{minutes}"))
+  let full_url = (build-url $base ({format: (encode-path-segment $format), date: (encode-path-segment $date), minutes: (encode-path-segment $minutes)} | format pattern "/{format}/BoxScoresDelta/{date}/{minutes}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -226,7 +235,7 @@ export def "current-season get" [
 ]: nothing -> record<ApiSeason: string, Description: string, EndYear: int, PostSeasonStartDate: string, RegularSeasonStartDate: string, Season: int, SeasonType: string, StartYear: int> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({format: $format} | format pattern "/{format}/CurrentSeason"))
+  let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/{format}/CurrentSeason"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -250,7 +259,7 @@ export def "dfs-slates-by-date get" [
 ]: nothing -> table<DfsSlateGames: list<record>, DfsSlatePlayers: list<record>, IsMultiDaySlate: bool, NumberOfGames: int, Operator: string, OperatorDay: string, OperatorGameType: string, OperatorName: string, OperatorSlateID: int, OperatorStartTime: string, RemovedByOperator: bool, SalaryCap: int, SlateID: int, SlateRosterSlots: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({format: $format, date: $date} | format pattern "/{format}/DfsSlatesByDate/{date}"))
+  let full_url = (build-url $base ({format: (encode-path-segment $format), date: (encode-path-segment $date)} | format pattern "/{format}/DfsSlatesByDate/{date}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -260,7 +269,7 @@ export def "dfs-slates-by-date get" [
 #
 # GET /{format}/FreeAgents
 # operationId: PlayerDetailsByFreeAgent
-export def "free-agents get" [
+export def "free-agents get-player-details" [
   format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -273,7 +282,7 @@ export def "free-agents get" [
 ]: nothing -> table<BirthCity: string, BirthDate: string, BirthState: string, Catches: string, DepthChartOrder: int, DepthChartPosition: string, DraftKingsName: string, DraftKingsPlayerID: int, FanDuelName: string, FanDuelPlayerID: int, FantasyAlarmPlayerID: int, FantasyDraftName: string, FantasyDraftPlayerID: int, FirstName: string, GlobalTeamID: int, Height: int, InjuryBodyPart: string, InjuryNotes: string, InjuryStartDate: string, InjuryStatus: string, Jersey: int, LastName: string, PhotoUrl: string, PlayerID: int, Position: string, RotoWirePlayerID: int, RotoworldPlayerID: int, Shoots: string, SportRadarPlayerID: string, SportsDirectPlayerID: int, StatsPlayerID: int, Status: string, Team: string, TeamID: int, UsaTodayHeadshotNoBackgroundUpdated: string, UsaTodayHeadshotNoBackgroundUrl: string, UsaTodayHeadshotUpdated: string, UsaTodayHeadshotUrl: string, UsaTodayPlayerID: int, Weight: int, XmlTeamPlayerID: int, YahooName: string, YahooPlayerID: int> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({format: $format} | format pattern "/{format}/FreeAgents"))
+  let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/{format}/FreeAgents"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -283,7 +292,7 @@ export def "free-agents get" [
 #
 # GET /{format}/Games/{season}
 # operationId: Schedules
-export def "games get" [
+export def "games get-schedules" [
   format: string
   season: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -297,7 +306,7 @@ export def "games get" [
 ]: nothing -> table<Attendance: int, AwayRotationNumber: int, AwayTeam: string, AwayTeamID: int, AwayTeamMoneyLine: int, AwayTeamScore: int, Channel: string, DateTime: string, DateTimeUTC: string, Day: string, GameEndDateTime: string, GameID: int, GlobalAwayTeamID: int, GlobalGameID: int, GlobalHomeTeamID: int, HomeRotationNumber: int, HomeTeam: string, HomeTeamID: int, HomeTeamMoneyLine: int, HomeTeamScore: int, IsClosed: bool, LastPlay: string, NeutralVenue: bool, OverPayout: int, OverUnder: float, Period: string, Periods: list<record>, PointSpread: float, PointSpreadAwayTeamMoneyLine: int, PointSpreadHomeTeamMoneyLine: int, Season: int, SeasonType: int, SeriesInfo: record<AwayTeamWins: int, GameNumber: int, HomeTeamWins: int, MaxLength: int>, StadiumID: int, Status: string, TimeRemainingMinutes: int, TimeRemainingSeconds: int, UnderPayout: int, Updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({format: $format, season: $season} | format pattern "/{format}/Games/{season}"))
+  let full_url = (build-url $base ({format: (encode-path-segment $format), season: (encode-path-segment $season)} | format pattern "/{format}/Games/{season}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -321,7 +330,7 @@ export def "games-by-date get" [
 ]: nothing -> table<Attendance: int, AwayRotationNumber: int, AwayTeam: string, AwayTeamID: int, AwayTeamMoneyLine: int, AwayTeamScore: int, Channel: string, DateTime: string, DateTimeUTC: string, Day: string, GameEndDateTime: string, GameID: int, GlobalAwayTeamID: int, GlobalGameID: int, GlobalHomeTeamID: int, HomeRotationNumber: int, HomeTeam: string, HomeTeamID: int, HomeTeamMoneyLine: int, HomeTeamScore: int, IsClosed: bool, LastPlay: string, NeutralVenue: bool, OverPayout: int, OverUnder: float, Period: string, Periods: list<record>, PointSpread: float, PointSpreadAwayTeamMoneyLine: int, PointSpreadHomeTeamMoneyLine: int, Season: int, SeasonType: int, SeriesInfo: record<AwayTeamWins: int, GameNumber: int, HomeTeamWins: int, MaxLength: int>, StadiumID: int, Status: string, TimeRemainingMinutes: int, TimeRemainingSeconds: int, UnderPayout: int, Updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({format: $format, date: $date} | format pattern "/{format}/GamesByDate/{date}"))
+  let full_url = (build-url $base ({format: (encode-path-segment $format), date: (encode-path-segment $date)} | format pattern "/{format}/GamesByDate/{date}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -331,7 +340,7 @@ export def "games-by-date get" [
 #
 # GET /{format}/LinesBySeason/{season}
 # operationId: LineCombinationsBySeason
-export def "lines-by-season get" [
+export def "lines-by-season get-combinations" [
   format: string
   season: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -345,7 +354,7 @@ export def "lines-by-season get" [
 ]: nothing -> table<EvenStrengthLines: list<record>, FullName: string, Key: string, PowerPlayLines: list<record>, TeamID: int> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({format: $format, season: $season} | format pattern "/{format}/LinesBySeason/{season}"))
+  let full_url = (build-url $base ({format: (encode-path-segment $format), season: (encode-path-segment $season)} | format pattern "/{format}/LinesBySeason/{season}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -368,7 +377,7 @@ export def "news get" [
 ]: nothing -> table<Content: string, NewsID: int, PlayerID: int, Source: string, Team: string, TeamID: int, TermsOfUse: string, Title: string, Updated: string, Url: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({format: $format} | format pattern "/{format}/News"))
+  let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/{format}/News"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -392,7 +401,7 @@ export def "news-by-date get" [
 ]: nothing -> table<Content: string, NewsID: int, PlayerID: int, Source: string, Team: string, TeamID: int, TermsOfUse: string, Title: string, Updated: string, Url: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({format: $format, date: $date} | format pattern "/{format}/NewsByDate/{date}"))
+  let full_url = (build-url $base ({format: (encode-path-segment $format), date: (encode-path-segment $date)} | format pattern "/{format}/NewsByDate/{date}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -416,7 +425,7 @@ export def "news-by-player-id get" [
 ]: nothing -> table<Content: string, NewsID: int, PlayerID: int, Source: string, Team: string, TeamID: int, TermsOfUse: string, Title: string, Updated: string, Url: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({format: $format, playerid: $playerid} | format pattern "/{format}/NewsByPlayerID/{playerid}"))
+  let full_url = (build-url $base ({format: (encode-path-segment $format), playerid: (encode-path-segment $playerid)} | format pattern "/{format}/NewsByPlayerID/{playerid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -426,7 +435,7 @@ export def "news-by-player-id get" [
 #
 # GET /{format}/Player/{playerid}
 # operationId: PlayerDetailsByPlayer
-export def "player get" [
+export def "player get-details" [
   format: string
   playerid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -440,7 +449,7 @@ export def "player get" [
 ]: nothing -> record<BirthCity: string, BirthDate: string, BirthState: string, Catches: string, DepthChartOrder: int, DepthChartPosition: string, DraftKingsName: string, DraftKingsPlayerID: int, FanDuelName: string, FanDuelPlayerID: int, FantasyAlarmPlayerID: int, FantasyDraftName: string, FantasyDraftPlayerID: int, FirstName: string, GlobalTeamID: int, Height: int, InjuryBodyPart: string, InjuryNotes: string, InjuryStartDate: string, InjuryStatus: string, Jersey: int, LastName: string, PhotoUrl: string, PlayerID: int, Position: string, RotoWirePlayerID: int, RotoworldPlayerID: int, Shoots: string, SportRadarPlayerID: string, SportsDirectPlayerID: int, StatsPlayerID: int, Status: string, Team: string, TeamID: int, UsaTodayHeadshotNoBackgroundUpdated: string, UsaTodayHeadshotNoBackgroundUrl: string, UsaTodayHeadshotUpdated: string, UsaTodayHeadshotUrl: string, UsaTodayPlayerID: int, Weight: int, XmlTeamPlayerID: int, YahooName: string, YahooPlayerID: int> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({format: $format, playerid: $playerid} | format pattern "/{format}/Player/{playerid}"))
+  let full_url = (build-url $base ({format: (encode-path-segment $format), playerid: (encode-path-segment $playerid)} | format pattern "/{format}/Player/{playerid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -450,7 +459,7 @@ export def "player get" [
 #
 # GET /{format}/PlayerGameStatsByDate/{date}
 # operationId: PlayerGameStatsByDate
-export def "player-game-stats-by-date get" [
+export def "player-game-stats-by-date stats" [
   format: string
   date: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -464,7 +473,7 @@ export def "player-game-stats-by-date get" [
 ]: nothing -> table<Assists: float, BenchPenaltyMinutes: float, Blocks: float, DateTime: string, Day: string, DraftKingsPosition: string, DraftKingsSalary: int, EmptyNetGoals: float, FaceoffsLost: float, FaceoffsWon: float, FanDuelPosition: string, FanDuelSalary: int, FantasyDataSalary: int, FantasyDraftPosition: string, FantasyDraftSalary: int, FantasyPoints: float, FantasyPointsDraftKings: float, FantasyPointsFanDuel: float, FantasyPointsFantasyDraft: float, FantasyPointsYahoo: float, GameID: int, Games: int, Giveaways: float, GlobalGameID: int, GlobalOpponentID: int, GlobalTeamID: int, Goals: float, GoaltendingGoalsAgainst: float, GoaltendingLosses: float, GoaltendingMinutes: int, GoaltendingOvertimeLosses: float, GoaltendingSaves: float, GoaltendingSeconds: int, GoaltendingShotsAgainst: float, GoaltendingShutouts: float, GoaltendingWins: float, HatTricks: float, Hits: float, HomeOrAway: string, InjuryBodyPart: string, InjuryNotes: string, InjuryStartDate: string, InjuryStatus: string, IsGameOver: bool, Minutes: int, Name: string, Opponent: string, OpponentID: int, OpponentPositionRank: int, OpponentRank: int, PenaltyMinutes: float, PlayerID: int, PlusMinus: float, Position: string, PowerPlayAssists: float, PowerPlayGoals: float, Season: int, SeasonType: int, Seconds: int, Shifts: float, ShootoutGoals: float, ShortHandedAssists: float, ShortHandedGoals: float, ShotsOnGoal: float, Started: int, StatID: int, Takeaways: float, Team: string, TeamID: int, Updated: string, YahooPosition: string, YahooSalary: int> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({format: $format, date: $date} | format pattern "/{format}/PlayerGameStatsByDate/{date}"))
+  let full_url = (build-url $base ({format: (encode-path-segment $format), date: (encode-path-segment $date)} | format pattern "/{format}/PlayerGameStatsByDate/{date}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -474,7 +483,7 @@ export def "player-game-stats-by-date get" [
 #
 # GET /{format}/PlayerGameStatsByPlayer/{date}/{playerid}
 # operationId: PlayerGameStatsByPlayer
-export def "player-game-stats-by-player get" [
+export def "player-game-stats-by-player stats" [
   format: string
   date: string
   playerid: string
@@ -489,7 +498,7 @@ export def "player-game-stats-by-player get" [
 ]: nothing -> record<Assists: float, BenchPenaltyMinutes: float, Blocks: float, DateTime: string, Day: string, DraftKingsPosition: string, DraftKingsSalary: int, EmptyNetGoals: float, FaceoffsLost: float, FaceoffsWon: float, FanDuelPosition: string, FanDuelSalary: int, FantasyDataSalary: int, FantasyDraftPosition: string, FantasyDraftSalary: int, FantasyPoints: float, FantasyPointsDraftKings: float, FantasyPointsFanDuel: float, FantasyPointsFantasyDraft: float, FantasyPointsYahoo: float, GameID: int, Games: int, Giveaways: float, GlobalGameID: int, GlobalOpponentID: int, GlobalTeamID: int, Goals: float, GoaltendingGoalsAgainst: float, GoaltendingLosses: float, GoaltendingMinutes: int, GoaltendingOvertimeLosses: float, GoaltendingSaves: float, GoaltendingSeconds: int, GoaltendingShotsAgainst: float, GoaltendingShutouts: float, GoaltendingWins: float, HatTricks: float, Hits: float, HomeOrAway: string, InjuryBodyPart: string, InjuryNotes: string, InjuryStartDate: string, InjuryStatus: string, IsGameOver: bool, Minutes: int, Name: string, Opponent: string, OpponentID: int, OpponentPositionRank: int, OpponentRank: int, PenaltyMinutes: float, PlayerID: int, PlusMinus: float, Position: string, PowerPlayAssists: float, PowerPlayGoals: float, Season: int, SeasonType: int, Seconds: int, Shifts: float, ShootoutGoals: float, ShortHandedAssists: float, ShortHandedGoals: float, ShotsOnGoal: float, Started: int, StatID: int, Takeaways: float, Team: string, TeamID: int, Updated: string, YahooPosition: string, YahooSalary: int> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({format: $format, date: $date, playerid: $playerid} | format pattern "/{format}/PlayerGameStatsByPlayer/{date}/{playerid}"))
+  let full_url = (build-url $base ({format: (encode-path-segment $format), date: (encode-path-segment $date), playerid: (encode-path-segment $playerid)} | format pattern "/{format}/PlayerGameStatsByPlayer/{date}/{playerid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -499,7 +508,7 @@ export def "player-game-stats-by-player get" [
 #
 # GET /{format}/PlayerGameStatsBySeason/{season}/{playerid}/{numberofgames}
 # operationId: PlayerGameLogsBySeason
-export def "player-game-stats-by-season get" [
+export def "player-game-stats-by-season logs" [
   format: string
   season: string
   playerid: string
@@ -515,7 +524,7 @@ export def "player-game-stats-by-season get" [
 ]: nothing -> table<Assists: float, BenchPenaltyMinutes: float, Blocks: float, DateTime: string, Day: string, DraftKingsPosition: string, DraftKingsSalary: int, EmptyNetGoals: float, FaceoffsLost: float, FaceoffsWon: float, FanDuelPosition: string, FanDuelSalary: int, FantasyDataSalary: int, FantasyDraftPosition: string, FantasyDraftSalary: int, FantasyPoints: float, FantasyPointsDraftKings: float, FantasyPointsFanDuel: float, FantasyPointsFantasyDraft: float, FantasyPointsYahoo: float, GameID: int, Games: int, Giveaways: float, GlobalGameID: int, GlobalOpponentID: int, GlobalTeamID: int, Goals: float, GoaltendingGoalsAgainst: float, GoaltendingLosses: float, GoaltendingMinutes: int, GoaltendingOvertimeLosses: float, GoaltendingSaves: float, GoaltendingSeconds: int, GoaltendingShotsAgainst: float, GoaltendingShutouts: float, GoaltendingWins: float, HatTricks: float, Hits: float, HomeOrAway: string, InjuryBodyPart: string, InjuryNotes: string, InjuryStartDate: string, InjuryStatus: string, IsGameOver: bool, Minutes: int, Name: string, Opponent: string, OpponentID: int, OpponentPositionRank: int, OpponentRank: int, PenaltyMinutes: float, PlayerID: int, PlusMinus: float, Position: string, PowerPlayAssists: float, PowerPlayGoals: float, Season: int, SeasonType: int, Seconds: int, Shifts: float, ShootoutGoals: float, ShortHandedAssists: float, ShortHandedGoals: float, ShotsOnGoal: float, Started: int, StatID: int, Takeaways: float, Team: string, TeamID: int, Updated: string, YahooPosition: string, YahooSalary: int> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({format: $format, season: $season, playerid: $playerid, numberofgames: $numberofgames} | format pattern "/{format}/PlayerGameStatsBySeason/{season}/{playerid}/{numberofgames}"))
+  let full_url = (build-url $base ({format: (encode-path-segment $format), season: (encode-path-segment $season), playerid: (encode-path-segment $playerid), numberofgames: (encode-path-segment $numberofgames)} | format pattern "/{format}/PlayerGameStatsBySeason/{season}/{playerid}/{numberofgames}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -539,7 +548,7 @@ export def "player-season-stats stats" [
 ]: nothing -> table<Assists: float, BenchPenaltyMinutes: float, Blocks: float, EmptyNetGoals: float, FaceoffsLost: float, FaceoffsWon: float, FantasyPoints: float, FantasyPointsDraftKings: float, FantasyPointsFanDuel: float, FantasyPointsFantasyDraft: float, FantasyPointsYahoo: float, Games: int, Giveaways: float, GlobalTeamID: int, Goals: float, GoaltendingGoalsAgainst: float, GoaltendingLosses: float, GoaltendingMinutes: int, GoaltendingOvertimeLosses: float, GoaltendingSaves: float, GoaltendingSeconds: int, GoaltendingShotsAgainst: float, GoaltendingShutouts: float, GoaltendingWins: float, HatTricks: float, Hits: float, Minutes: int, Name: string, PenaltyMinutes: float, PlayerID: int, PlusMinus: float, Position: string, PowerPlayAssists: float, PowerPlayGoals: float, Season: int, SeasonType: int, Seconds: int, Shifts: float, ShootoutGoals: float, ShortHandedAssists: float, ShortHandedGoals: float, ShotsOnGoal: float, Started: int, StatID: int, Takeaways: float, Team: string, TeamID: int, Updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({format: $format, season: $season} | format pattern "/{format}/PlayerSeasonStats/{season}"))
+  let full_url = (build-url $base ({format: (encode-path-segment $format), season: (encode-path-segment $season)} | format pattern "/{format}/PlayerSeasonStats/{season}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -549,7 +558,7 @@ export def "player-season-stats stats" [
 #
 # GET /{format}/PlayerSeasonStatsByPlayer/{season}/{playerid}
 # operationId: PlayerSeasonStatsByPlayer
-export def "player-season-stats-by-player get" [
+export def "player-season-stats-by-player stats" [
   format: string
   season: string
   playerid: string
@@ -564,7 +573,7 @@ export def "player-season-stats-by-player get" [
 ]: nothing -> record<Assists: float, BenchPenaltyMinutes: float, Blocks: float, EmptyNetGoals: float, FaceoffsLost: float, FaceoffsWon: float, FantasyPoints: float, FantasyPointsDraftKings: float, FantasyPointsFanDuel: float, FantasyPointsFantasyDraft: float, FantasyPointsYahoo: float, Games: int, Giveaways: float, GlobalTeamID: int, Goals: float, GoaltendingGoalsAgainst: float, GoaltendingLosses: float, GoaltendingMinutes: int, GoaltendingOvertimeLosses: float, GoaltendingSaves: float, GoaltendingSeconds: int, GoaltendingShotsAgainst: float, GoaltendingShutouts: float, GoaltendingWins: float, HatTricks: float, Hits: float, Minutes: int, Name: string, PenaltyMinutes: float, PlayerID: int, PlusMinus: float, Position: string, PowerPlayAssists: float, PowerPlayGoals: float, Season: int, SeasonType: int, Seconds: int, Shifts: float, ShootoutGoals: float, ShortHandedAssists: float, ShortHandedGoals: float, ShotsOnGoal: float, Started: int, StatID: int, Takeaways: float, Team: string, TeamID: int, Updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({format: $format, season: $season, playerid: $playerid} | format pattern "/{format}/PlayerSeasonStatsByPlayer/{season}/{playerid}"))
+  let full_url = (build-url $base ({format: (encode-path-segment $format), season: (encode-path-segment $season), playerid: (encode-path-segment $playerid)} | format pattern "/{format}/PlayerSeasonStatsByPlayer/{season}/{playerid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -574,7 +583,7 @@ export def "player-season-stats-by-player get" [
 #
 # GET /{format}/PlayerSeasonStatsByTeam/{season}/{team}
 # operationId: PlayerSeasonStatsByTeam
-export def "player-season-stats-by-team get" [
+export def "player-season-stats-by-team stats" [
   format: string
   season: string
   team: string
@@ -589,7 +598,7 @@ export def "player-season-stats-by-team get" [
 ]: nothing -> table<Assists: float, BenchPenaltyMinutes: float, Blocks: float, EmptyNetGoals: float, FaceoffsLost: float, FaceoffsWon: float, FantasyPoints: float, FantasyPointsDraftKings: float, FantasyPointsFanDuel: float, FantasyPointsFantasyDraft: float, FantasyPointsYahoo: float, Games: int, Giveaways: float, GlobalTeamID: int, Goals: float, GoaltendingGoalsAgainst: float, GoaltendingLosses: float, GoaltendingMinutes: int, GoaltendingOvertimeLosses: float, GoaltendingSaves: float, GoaltendingSeconds: int, GoaltendingShotsAgainst: float, GoaltendingShutouts: float, GoaltendingWins: float, HatTricks: float, Hits: float, Minutes: int, Name: string, PenaltyMinutes: float, PlayerID: int, PlusMinus: float, Position: string, PowerPlayAssists: float, PowerPlayGoals: float, Season: int, SeasonType: int, Seconds: int, Shifts: float, ShootoutGoals: float, ShortHandedAssists: float, ShortHandedGoals: float, ShotsOnGoal: float, Started: int, StatID: int, Takeaways: float, Team: string, TeamID: int, Updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({format: $format, season: $season, team: $team} | format pattern "/{format}/PlayerSeasonStatsByTeam/{season}/{team}"))
+  let full_url = (build-url $base ({format: (encode-path-segment $format), season: (encode-path-segment $season), team: (encode-path-segment $team)} | format pattern "/{format}/PlayerSeasonStatsByTeam/{season}/{team}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -599,7 +608,7 @@ export def "player-season-stats-by-team get" [
 #
 # GET /{format}/Players
 # operationId: PlayerDetailsByActive
-export def "players list" [
+export def "players get-details-by-active" [
   format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -612,7 +621,7 @@ export def "players list" [
 ]: nothing -> table<BirthCity: string, BirthDate: string, BirthState: string, Catches: string, DepthChartOrder: int, DepthChartPosition: string, DraftKingsName: string, DraftKingsPlayerID: int, FanDuelName: string, FanDuelPlayerID: int, FantasyAlarmPlayerID: int, FantasyDraftName: string, FantasyDraftPlayerID: int, FirstName: string, GlobalTeamID: int, Height: int, InjuryBodyPart: string, InjuryNotes: string, InjuryStartDate: string, InjuryStatus: string, Jersey: int, LastName: string, PhotoUrl: string, PlayerID: int, Position: string, RotoWirePlayerID: int, RotoworldPlayerID: int, Shoots: string, SportRadarPlayerID: string, SportsDirectPlayerID: int, StatsPlayerID: int, Status: string, Team: string, TeamID: int, UsaTodayHeadshotNoBackgroundUpdated: string, UsaTodayHeadshotNoBackgroundUrl: string, UsaTodayHeadshotUpdated: string, UsaTodayHeadshotUrl: string, UsaTodayPlayerID: int, Weight: int, XmlTeamPlayerID: int, YahooName: string, YahooPlayerID: int> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({format: $format} | format pattern "/{format}/Players"))
+  let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/{format}/Players"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -636,7 +645,7 @@ export def "players get" [
 ]: nothing -> table<BirthCity: string, BirthDate: string, BirthState: string, Catches: string, DepthChartOrder: int, DepthChartPosition: string, DraftKingsName: string, DraftKingsPlayerID: int, FanDuelName: string, FanDuelPlayerID: int, FantasyAlarmPlayerID: int, FantasyDraftName: string, FantasyDraftPlayerID: int, FirstName: string, GlobalTeamID: int, Height: int, InjuryBodyPart: string, InjuryNotes: string, InjuryStartDate: string, InjuryStatus: string, Jersey: int, LastName: string, PhotoUrl: string, PlayerID: int, Position: string, RotoWirePlayerID: int, RotoworldPlayerID: int, Shoots: string, SportRadarPlayerID: string, SportsDirectPlayerID: int, StatsPlayerID: int, Status: string, Team: string, TeamID: int, UsaTodayHeadshotNoBackgroundUpdated: string, UsaTodayHeadshotNoBackgroundUrl: string, UsaTodayHeadshotUpdated: string, UsaTodayHeadshotUrl: string, UsaTodayPlayerID: int, Weight: int, XmlTeamPlayerID: int, YahooName: string, YahooPlayerID: int> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({format: $format, team: $team} | format pattern "/{format}/Players/{team}"))
+  let full_url = (build-url $base ({format: (encode-path-segment $format), team: (encode-path-segment $team)} | format pattern "/{format}/Players/{team}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -659,7 +668,7 @@ export def "stadiums get" [
 ]: nothing -> table<Active: bool, Address: string, Capacity: int, City: string, Country: string, GeoLat: float, GeoLong: float, Name: string, StadiumID: int, State: string, Zip: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({format: $format} | format pattern "/{format}/Stadiums"))
+  let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/{format}/Stadiums"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -683,7 +692,7 @@ export def "standings get" [
 ]: nothing -> table<City: string, Conference: string, ConferenceLosses: int, ConferenceRank: int, ConferenceWins: int, Division: string, DivisionLosses: int, DivisionRank: int, DivisionWins: int, GlobalTeamID: int, Key: string, Losses: int, Name: string, OvertimeLosses: int, Percentage: float, Season: int, SeasonType: int, ShutoutWins: int, TeamID: int, Wins: int> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({format: $format, season: $season} | format pattern "/{format}/Standings/{season}"))
+  let full_url = (build-url $base ({format: (encode-path-segment $format), season: (encode-path-segment $season)} | format pattern "/{format}/Standings/{season}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -693,7 +702,7 @@ export def "standings get" [
 #
 # GET /{format}/TeamGameStatsByDate/{date}
 # operationId: TeamGameStatsByDate
-export def "team-game-stats-by-date get" [
+export def "team-game-stats-by-date stats" [
   format: string
   date: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -707,7 +716,7 @@ export def "team-game-stats-by-date get" [
 ]: nothing -> table<Assists: float, BenchPenaltyMinutes: float, Blocks: float, DateTime: string, Day: string, EmptyNetGoals: float, FaceoffsLost: float, FaceoffsWon: float, FantasyPoints: float, FantasyPointsDraftKings: float, FantasyPointsFanDuel: float, FantasyPointsFantasyDraft: float, FantasyPointsYahoo: float, GameID: int, Games: int, Giveaways: float, GlobalGameID: int, GlobalOpponentID: int, GlobalTeamID: int, Goals: float, GoaltendingGoalsAgainst: float, GoaltendingLosses: float, GoaltendingMinutes: int, GoaltendingOvertimeLosses: float, GoaltendingSaves: float, GoaltendingSeconds: int, GoaltendingShotsAgainst: float, GoaltendingShutouts: float, GoaltendingWins: float, HatTricks: float, Hits: float, HomeOrAway: string, IsGameOver: bool, Losses: int, Minutes: int, Name: string, Opponent: string, OpponentID: int, OvertimeLosses: int, PenaltyMinutes: float, PlusMinus: float, PowerPlayAssists: float, PowerPlayGoals: float, Season: int, SeasonType: int, Seconds: int, Shifts: float, ShootoutGoals: float, ShortHandedAssists: float, ShortHandedGoals: float, ShotsOnGoal: float, Started: int, StatID: int, Takeaways: float, Team: string, TeamID: int, Updated: string, Wins: int> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({format: $format, date: $date} | format pattern "/{format}/TeamGameStatsByDate/{date}"))
+  let full_url = (build-url $base ({format: (encode-path-segment $format), date: (encode-path-segment $date)} | format pattern "/{format}/TeamGameStatsByDate/{date}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -717,7 +726,7 @@ export def "team-game-stats-by-date get" [
 #
 # GET /{format}/TeamGameStatsBySeason/{season}/{teamid}/{numberofgames}
 # operationId: TeamGameLogsBySeason
-export def "team-game-stats-by-season get" [
+export def "team-game-stats-by-season logs" [
   format: string
   season: string
   teamid: string
@@ -733,7 +742,7 @@ export def "team-game-stats-by-season get" [
 ]: nothing -> table<Assists: float, BenchPenaltyMinutes: float, Blocks: float, DateTime: string, Day: string, EmptyNetGoals: float, FaceoffsLost: float, FaceoffsWon: float, FantasyPoints: float, FantasyPointsDraftKings: float, FantasyPointsFanDuel: float, FantasyPointsFantasyDraft: float, FantasyPointsYahoo: float, GameID: int, Games: int, Giveaways: float, GlobalGameID: int, GlobalOpponentID: int, GlobalTeamID: int, Goals: float, GoaltendingGoalsAgainst: float, GoaltendingLosses: float, GoaltendingMinutes: int, GoaltendingOvertimeLosses: float, GoaltendingSaves: float, GoaltendingSeconds: int, GoaltendingShotsAgainst: float, GoaltendingShutouts: float, GoaltendingWins: float, HatTricks: float, Hits: float, HomeOrAway: string, IsGameOver: bool, Losses: int, Minutes: int, Name: string, Opponent: string, OpponentID: int, OvertimeLosses: int, PenaltyMinutes: float, PlusMinus: float, PowerPlayAssists: float, PowerPlayGoals: float, Season: int, SeasonType: int, Seconds: int, Shifts: float, ShootoutGoals: float, ShortHandedAssists: float, ShortHandedGoals: float, ShotsOnGoal: float, Started: int, StatID: int, Takeaways: float, Team: string, TeamID: int, Updated: string, Wins: int> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({format: $format, season: $season, teamid: $teamid, numberofgames: $numberofgames} | format pattern "/{format}/TeamGameStatsBySeason/{season}/{teamid}/{numberofgames}"))
+  let full_url = (build-url $base ({format: (encode-path-segment $format), season: (encode-path-segment $season), teamid: (encode-path-segment $teamid), numberofgames: (encode-path-segment $numberofgames)} | format pattern "/{format}/TeamGameStatsBySeason/{season}/{teamid}/{numberofgames}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -757,7 +766,7 @@ export def "team-season-stats stats" [
 ]: nothing -> table<Assists: float, BenchPenaltyMinutes: float, Blocks: float, EmptyNetGoals: float, FaceoffsLost: float, FaceoffsWon: float, FantasyPoints: float, FantasyPointsDraftKings: float, FantasyPointsFanDuel: float, FantasyPointsFantasyDraft: float, FantasyPointsYahoo: float, Games: int, Giveaways: float, GlobalTeamID: int, Goals: float, GoaltendingGoalsAgainst: float, GoaltendingLosses: float, GoaltendingMinutes: int, GoaltendingOvertimeLosses: float, GoaltendingSaves: float, GoaltendingSeconds: int, GoaltendingShotsAgainst: float, GoaltendingShutouts: float, GoaltendingWins: float, HatTricks: float, Hits: float, Losses: int, Minutes: int, Name: string, OpponentPosition: string, OpponentStat: record<Assists: float, BenchPenaltyMinutes: float, Blocks: float, EmptyNetGoals: float, FaceoffsLost: float, FaceoffsWon: float, FantasyPoints: float, FantasyPointsDraftKings: float, FantasyPointsFanDuel: float, FantasyPointsFantasyDraft: float, FantasyPointsYahoo: float, Games: int, Giveaways: float, GlobalTeamID: int, Goals: float, GoaltendingGoalsAgainst: float, GoaltendingLosses: float, GoaltendingMinutes: int, GoaltendingOvertimeLosses: float, GoaltendingSaves: float, GoaltendingSeconds: int, GoaltendingShotsAgainst: float, GoaltendingShutouts: float, GoaltendingWins: float, HatTricks: float, Hits: float, Losses: int, Minutes: int, Name: string, OpponentPosition: string, OvertimeLosses: int, PenaltyMinutes: float, PlusMinus: float, PowerPlayAssists: float, PowerPlayGoals: float, Season: int, SeasonType: int, Seconds: int, Shifts: float, ShootoutGoals: float, ShortHandedAssists: float, ShortHandedGoals: float, ShotsOnGoal: float, Started: int, StatID: int, Takeaways: float, Team: string, TeamID: int, Updated: string, Wins: int>, OvertimeLosses: int, PenaltyMinutes: float, PlusMinus: float, PowerPlayAssists: float, PowerPlayGoals: float, Season: int, SeasonType: int, Seconds: int, Shifts: float, ShootoutGoals: float, ShortHandedAssists: float, ShortHandedGoals: float, ShotsOnGoal: float, Started: int, StatID: int, Takeaways: float, Team: string, TeamID: int, Updated: string, Wins: int> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({format: $format, season: $season} | format pattern "/{format}/TeamSeasonStats/{season}"))
+  let full_url = (build-url $base ({format: (encode-path-segment $format), season: (encode-path-segment $season)} | format pattern "/{format}/TeamSeasonStats/{season}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -767,7 +776,7 @@ export def "team-season-stats stats" [
 #
 # GET /{format}/TeamStatsAllowedByPosition/{season}
 # operationId: TeamStatsAllowedByPosition
-export def "team-stats-allowed-by-position get" [
+export def "team-stats-allowed-by-position stats" [
   format: string
   season: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -781,7 +790,7 @@ export def "team-stats-allowed-by-position get" [
 ]: nothing -> table<Assists: float, BenchPenaltyMinutes: float, Blocks: float, EmptyNetGoals: float, FaceoffsLost: float, FaceoffsWon: float, FantasyPoints: float, FantasyPointsDraftKings: float, FantasyPointsFanDuel: float, FantasyPointsFantasyDraft: float, FantasyPointsYahoo: float, Games: int, Giveaways: float, GlobalTeamID: int, Goals: float, GoaltendingGoalsAgainst: float, GoaltendingLosses: float, GoaltendingMinutes: int, GoaltendingOvertimeLosses: float, GoaltendingSaves: float, GoaltendingSeconds: int, GoaltendingShotsAgainst: float, GoaltendingShutouts: float, GoaltendingWins: float, HatTricks: float, Hits: float, Losses: int, Minutes: int, Name: string, OpponentPosition: string, OpponentStat: record<Assists: float, BenchPenaltyMinutes: float, Blocks: float, EmptyNetGoals: float, FaceoffsLost: float, FaceoffsWon: float, FantasyPoints: float, FantasyPointsDraftKings: float, FantasyPointsFanDuel: float, FantasyPointsFantasyDraft: float, FantasyPointsYahoo: float, Games: int, Giveaways: float, GlobalTeamID: int, Goals: float, GoaltendingGoalsAgainst: float, GoaltendingLosses: float, GoaltendingMinutes: int, GoaltendingOvertimeLosses: float, GoaltendingSaves: float, GoaltendingSeconds: int, GoaltendingShotsAgainst: float, GoaltendingShutouts: float, GoaltendingWins: float, HatTricks: float, Hits: float, Losses: int, Minutes: int, Name: string, OpponentPosition: string, OvertimeLosses: int, PenaltyMinutes: float, PlusMinus: float, PowerPlayAssists: float, PowerPlayGoals: float, Season: int, SeasonType: int, Seconds: int, Shifts: float, ShootoutGoals: float, ShortHandedAssists: float, ShortHandedGoals: float, ShotsOnGoal: float, Started: int, StatID: int, Takeaways: float, Team: string, TeamID: int, Updated: string, Wins: int>, OvertimeLosses: int, PenaltyMinutes: float, PlusMinus: float, PowerPlayAssists: float, PowerPlayGoals: float, Season: int, SeasonType: int, Seconds: int, Shifts: float, ShootoutGoals: float, ShortHandedAssists: float, ShortHandedGoals: float, ShotsOnGoal: float, Started: int, StatID: int, Takeaways: float, Team: string, TeamID: int, Updated: string, Wins: int> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({format: $format, season: $season} | format pattern "/{format}/TeamStatsAllowedByPosition/{season}"))
+  let full_url = (build-url $base ({format: (encode-path-segment $format), season: (encode-path-segment $season)} | format pattern "/{format}/TeamStatsAllowedByPosition/{season}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -791,7 +800,7 @@ export def "team-stats-allowed-by-position get" [
 #
 # GET /{format}/teams
 # operationId: TeamsActive
-export def "teams get" [
+export def "teams get-active" [
   format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -804,7 +813,7 @@ export def "teams get" [
 ]: nothing -> table<Active: bool, City: string, Conference: string, Division: string, GlobalTeamID: int, Key: string, Name: string, PrimaryColor: string, QuaternaryColor: string, SecondaryColor: string, StadiumID: int, TeamID: int, TertiaryColor: string, WikipediaLogoUrl: string, WikipediaWordMarkUrl: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({format: $format} | format pattern "/{format}/teams"))
+  let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/{format}/teams"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

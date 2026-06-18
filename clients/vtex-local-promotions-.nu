@@ -36,6 +36,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -72,7 +81,7 @@ def accept-completer [] { ["Promotion" "Tax"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "rnb-pub-notifications post" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "rnb-pub-notifications create-usagenotification" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -96,7 +105,7 @@ export def commands []: nothing -> table {
 #
 # POST /api/rnb/pub/notifications
 # operationId: Usagenotification
-export def "rnb-pub-notifications post" [
+export def "rnb-pub-notifications create-usagenotification" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -108,7 +117,7 @@ export def "rnb-pub-notifications post" [
   --content-type: string # Type of the content being sent.
   --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand.
   account_id: string
-  calculator_ids: list
+  calculator_ids: list<string>
   coupon: string
   items_count: int # format: int32
   order_id: string
@@ -119,13 +128,15 @@ export def "rnb-pub-notifications post" [
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default "http://example.com/.{environment}.com.br/api/rnb")
   let full_url = (build-url $base "/api/rnb/pub/notifications")
-  let body = {"accountId": $account_id, "calculatorIds": $calculator_ids, "coupon": $coupon, "itemsCount": $items_count, "orderId": $order_id, "profileId": $profile_id, "used": $used} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"accountId": $account_id, "calculatorIds": $calculator_ids, "coupon": $coupon, "itemsCount": $items_count, "orderId": $order_id, "profileId": $profile_id, "used": $used} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # List Archived Promotions
@@ -147,10 +158,10 @@ export def "rnb-pvt-archive-benefits-calculator-configuration get-archived-promo
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rnb/pvt/archive/benefits/calculatorConfiguration")
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -173,11 +184,11 @@ export def "rnb-pvt-archive-calculator-configuration archive-promotion" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id_calculator_configuration: $id_calculator_configuration} | format pattern "/api/rnb/pvt/archive/calculatorConfiguration/{id_calculator_configuration}"))
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id_calculator_configuration: (encode-path-segment $id_calculator_configuration)} | format pattern "/api/rnb/pvt/archive/calculatorConfiguration/{id_calculator_configuration}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -185,7 +196,7 @@ export def "rnb-pvt-archive-calculator-configuration archive-promotion" [
 #
 # GET /api/rnb/pvt/archive/coupon/{couponCode}
 # operationId: Getarchivedbycouponcode
-export def "rnb-pvt-archive-coupon get-archivedbycouponcode" [
+export def "rnb-pvt-archive-coupon get-getarchivedbycouponcode" [
   coupon_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -200,11 +211,11 @@ export def "rnb-pvt-archive-coupon get-archivedbycouponcode" [
 ]: nothing -> record<couponCode: string, expirationIntervalPerUse: string, isArchived: bool, lastModifiedUtc: string, maxItemsPerClient: int, utmCampaign: string, utmSource: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({coupon_code: $coupon_code} | format pattern "/api/rnb/pvt/archive/coupon/{coupon_code}"))
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({coupon_code: (encode-path-segment $coupon_code)} | format pattern "/api/rnb/pvt/archive/coupon/{coupon_code}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -212,7 +223,7 @@ export def "rnb-pvt-archive-coupon get-archivedbycouponcode" [
 #
 # POST /api/rnb/pvt/archive/coupon/{couponCode}
 # operationId: Archivebycouponcode
-export def "rnb-pvt-archive-coupon archive-bycouponcode" [
+export def "rnb-pvt-archive-coupon create-archivebycouponcode" [
   coupon_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -227,11 +238,11 @@ export def "rnb-pvt-archive-coupon archive-bycouponcode" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({coupon_code: $coupon_code} | format pattern "/api/rnb/pvt/archive/coupon/{coupon_code}"))
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({coupon_code: (encode-path-segment $coupon_code)} | format pattern "/api/rnb/pvt/archive/coupon/{coupon_code}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -254,10 +265,10 @@ export def "rnb-pvt-archive-taxes-calculator-configuration get-archived" [
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rnb/pvt/archive/taxes/calculatorConfiguration")
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -265,7 +276,7 @@ export def "rnb-pvt-archive-taxes-calculator-configuration get-archived" [
 #
 # GET /api/rnb/pvt/benefits/calculatorconfiguration
 # operationId: GetAllBenefits
-export def "rnb-pvt-benefits-calculatorconfiguration get-all" [
+export def "rnb-pvt-benefits-calculatorconfiguration get-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -280,10 +291,10 @@ export def "rnb-pvt-benefits-calculatorconfiguration get-all" [
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rnb/pvt/benefits/calculatorconfiguration")
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -312,7 +323,7 @@ export def "rnb-pvt-benefits-calculatorconfiguration get-all" [
 @deprecated --flag stores
 @deprecated --flag stores-are-inclusive
 @deprecated --flag total-value-include-all-items
-export def "rnb-pvt-calculatorconfiguration create-or-update" [
+export def "rnb-pvt-calculatorconfiguration create-or-update-calculator-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -326,7 +337,7 @@ export def "rnb-pvt-calculatorconfiguration create-or-update" [
   --absolute-shipping-discount-value: float # Maximum shipping value. (e.g. 0)
   --accumulate-with-manual-price: oneof<nothing, bool> # Allows the promotion to apply to products whose prices have been manually added by a call-center operator. (e.g. false)
   --activate-gifts-multiplier: oneof<nothing, bool> # If set as `true`, it activates gifts Multiplier. (e.g. false)
-  --active-days-of-week: list # Defines which days of the week the Promotion or Tax will applied.
+  --active-days-of-week: list<string> # Defines which days of the week the Promotion or Tax will applied.
   --affiliates: list # Marketplace order identifier. The discount will apply to selected affiliates. — item shape: {id?: string, name?: string}
   --apply-to-all-shippings: oneof<nothing, bool> # Promotion or Tax will be applied to all kind of shipping. (e.g. false)
   --are-sales-channel-ids-exclusive: oneof<nothing, bool> # If set to `false`, this Promotion or Tax will be applied to any trade policies present on the `idsSalesChannel` field. If set to `true`, trade policies present on that field will make this Promotion or Tax not to be applied. (e.g. false)
@@ -337,13 +348,13 @@ export def "rnb-pvt-calculatorconfiguration create-or-update" [
   --card-issuers: list # DEPRECATED
   --categories: list # Object composed by the categories that will activate or deactivate the Promotion or Tax. — item shape: {id?: string, name?: string}
   --categories-are-inclusive: oneof<nothing, bool> # If set to `true`, this Promotion or Tax will be applied to any category present on the `categories` field. If set to `false`, categories present on that field will make this Promotion or Tax not to be applied. (e.g. true)
-  --cluster-expressions: list # An expression to use with clusters.
+  --cluster-expressions: list<string> # An expression to use with clusters.
   --collections: list # Object composed by the collections that will activate or deactivate the Promotion or Tax. — item shape: {id?: string, name?: string}
-  --collections1-buy-together: list # Collections that will generate the Promotion, type **Buy Together**, **More for less**, **Progressive Discount**, **Buy One Get One**.
+  --collections1-buy-together: list<string> # Collections that will generate the Promotion, type **Buy Together**, **More for less**, **Progressive Discount**, **Buy One Get One**.
   --collections2-buy-together: list # DEPRECATED
   --collections-is-inclusive: oneof<nothing, bool> # If set to `true`, this Promotion or Tax will be applied to any collection present on the `collections` field. If set to `false`, collections present on that field will make this Promotion or Tax not to be applied. (e.g. false)
   --compare-list-price-and-price: oneof<nothing, bool> # If the **List Price** and **Price** are the same. (e.g. false)
-  --conditions-ids: list # Array with conditions IDs.
+  --conditions-ids: list<string> # Array with conditions IDs.
   --coupon: list # DEPRECATED
   --cumulative: oneof<nothing, bool> # Defines if a Promotion or Tax can accumulate with another one. (`true`) or not (`false`). (e.g. false)
   --days-ago-of-purchases: int # Number of days that are considered to add the purchase history. (e.g. 0)
@@ -353,11 +364,11 @@ export def "rnb-pvt-calculatorconfiguration create-or-update" [
   --enable-buy-together-per-sku: oneof<nothing, bool> # Enable **Buy Together** per SKU. (e.g. false)
   --end-date-utc: string # Promotion or Tax End Date (UTC). (e.g. 2020-05-01T18:47:15.89Z)
   --first-buy-is-profile-optimistic: oneof<nothing, bool> # Applies the discount even if the user is not logged. (e.g. false)
-  --gift-list-types: list # Gifts List Type.
+  --gift-list-types: list<string> # Gifts List Type.
   --id-calculator-configuration: string # Promotion ID or Tax ID. (e.g. ba087fa9-8587-44b3-8ef1-ade8d053e9e9)
   --id-seller: string # Seller Name. (e.g. 1)
   --id-seller-is-inclusive: oneof<nothing, bool> # If set to `true`, this Promotion or Tax will be applied to any seller present on the `idSeller` field. If set to `false`, sellers present on that field will make this Promotion or Tax not to be applied. (e.g. false)
-  --ids-sales-channel: list # List of Trade Policies that activate this Promotion or Tax.
+  --ids-sales-channel: list<string> # List of Trade Policies that activate this Promotion or Tax.
   --installment: int # DEPRECATED
   --is-active: oneof<nothing, bool> # If set as `true` the Promotion or Tax is activated. If set as `false` the Promotion or Tax is deactivated. (e.g. true)
   --is-archived: oneof<nothing, bool> # If set as `true` the Promotion or Tax is archived. If set as `false` the Promotion or Tax is not archived. (e.g. false)
@@ -371,7 +382,7 @@ export def "rnb-pvt-calculatorconfiguration create-or-update" [
   --last-modified: string # Date when the Promotion or Tax was last modified. (e.g. 2021-02-23T20:58:38.7963862Z)
   --list-sku1-buy-together: list # SKU first list for the promotion **Buy Together**. (e.g. [SKU])
   --list-sku2-buy-together: list # SKU second list for the promotion **Buy Together**. (e.g. [SKU])
-  --marketing-tags: list # Promotion or Tax Marketing tags.
+  --marketing-tags: list<string> # Promotion or Tax Marketing tags.
   --marketing-tags-are-not-inclusive: oneof<nothing, bool> # If set to `false`, this Promotion or Tax will be applied to any marketing tag present on the `marketingTags` field. If set to `true`, marketing tags present on that field will make this Promotion or Tax not to be applied. (e.g. false)
   --max-installment: int # Maximum value for installment. (e.g. 0)
   --max-number-of-affected-items: int # The maximum number of affected items for a promotion. (e.g. 0)
@@ -392,11 +403,11 @@ export def "rnb-pvt-calculatorconfiguration create-or-update" [
   --nominal-tax: float # Nominal Tax. (e.g. 0)
   --offset: int # Time offset from UTC in seconds. (e.g. -3)
   --order-status-reward-value: string # Order status reward value. (e.g. invoiced)
-  --origin: string # Origin of the Promotion or Tax, `marketplace` or `Fulfillment`.  Read [Difference between orders with marketplace and fulfillment sources](https://help.vtex.com/en/tutorial/what-are-orders-with-marketplace-source-and-orders-with-fulfillment-source--6eVYrmUAwMOeKICU2KuG06) for more information. (e.g. marketplace)
+  --origin: string # Origin of the Promotion or Tax, `marketplace` or `Fulfillment`. Read [Difference between orders with marketplace and fulfillment sources](https://help.vtex.com/en/tutorial/what-are-orders-with-marketplace-source-and-orders-with-fulfillment-source--6eVYrmUAwMOeKICU2KuG06) for more information. (e.g. marketplace)
   --payments-methods: list # Array composed by all the Payments Methods that activate this Promotion or Tax. — item shape: {id?: string, name?: string}
   --payments-rules: list # DEPRECATED
   --percentual-discount-value: float # Percentage discount to be applied for total purchase value. (e.g. 10)
-  --percentual-discount-value-list: list # Percentual discount value list.
+  --percentual-discount-value-list: list<float> # Percentual discount value list.
   --percentual-discount-value-list1: float # Valid discounts for the SKUs in `listSku1BuyTogether`, discount list used for Buy Together Promotions. (e.g. 0)
   --percentual-discount-value-list2: float # Equivalent to `percentualDiscountValueList1`. (e.g. 0)
   --percentual-reward-value: float # Percentage value for rewards program. (e.g. 0)
@@ -407,13 +418,13 @@ export def "rnb-pvt-calculatorconfiguration create-or-update" [
   --products-specifications: list # DEPRECATED
   --quantity-to-affect-buy-together: int # Quantity to affect **Buy Together** promotion. (e.g. 0)
   --rebate-percentual-discount-value: float # Percentual Shipping Discount Value. (e.g. 0)
-  --restrictions-bins: list # The discount will be granted if the card's BIN is given.
+  --restrictions-bins: list<string> # The discount will be granted if the card's BIN is given.
   --shipping-percentual-tax: float # Shipping Percentual Tax over purchase total value. (e.g. 0)
   --should-distribute-discount-among-matched-items: oneof<nothing, bool> # Should distribute discount among matched items. (e.g. false)
   --skus: list # Object composed by the SKUs that will activate or deactivate the Promotion or Tax. — item shape: {id?: string, name?: string}
   --skus-are-inclusive: oneof<nothing, bool> # If set to `true`, this Promotion or Tax will be applied to any SKU present on the `skus` field. If set to `false`, SKUs present on that field will make this Promotion or Tax not to be applied. (e.g. true)
   --skus-gift: record # SKU Gift Object. Total discount on the product value set as a gift. — shape: {gifts?: list, quantitySelectable?: int}
-  --slas-ids: list # The discount will be granted if the shipping method is the same as the one given.
+  --slas-ids: list<string> # The discount will be granted if the shipping method is the same as the one given.
   --stores: list # DEPRECATED
   --stores-are-inclusive: oneof<nothing, bool> # DEPRECATED
   --total-value-celing: float # Maximum chart value to activate the Promotion or Tax. (e.g. 0)
@@ -431,20 +442,22 @@ export def "rnb-pvt-calculatorconfiguration create-or-update" [
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rnb/pvt/calculatorconfiguration")
-  let body = {"absoluteShippingDiscountValue": $absolute_shipping_discount_value, "accumulateWithManualPrice": $accumulate_with_manual_price, "activateGiftsMultiplier": $activate_gifts_multiplier, "activeDaysOfWeek": $active_days_of_week, "affiliates": $affiliates, "applyToAllShippings": $apply_to_all_shippings, "areSalesChannelIdsExclusive": $are_sales_channel_ids_exclusive, "beginDateUtc": $begin_date_utc, "brands": $brands, "brandsAreInclusive": $brands_are_inclusive, "campaigns": $campaigns, "cardIssuers": $card_issuers, "categories": $categories, "categoriesAreInclusive": $categories_are_inclusive, "clusterExpressions": $cluster_expressions, "collections": $collections, "collections1BuyTogether": $collections1_buy_together, "collections2BuyTogether": $collections2_buy_together, "collectionsIsInclusive": $collections_is_inclusive, "compareListPriceAndPrice": $compare_list_price_and_price, "conditionsIds": $conditions_ids, "coupon": $coupon, "cumulative": $cumulative, "daysAgoOfPurchases": $days_ago_of_purchases, "description": $description, "disableDeal": $disable_deal, "discountType": $discount_type, "enableBuyTogetherPerSku": $enable_buy_together_per_sku, "endDateUtc": $end_date_utc, "firstBuyIsProfileOptimistic": $first_buy_is_profile_optimistic, "giftListTypes": $gift_list_types, "idCalculatorConfiguration": $id_calculator_configuration, "idSeller": $id_seller, "idSellerIsInclusive": $id_seller_is_inclusive, "idsSalesChannel": $ids_sales_channel, "installment": $installment, "isActive": $is_active, "isArchived": $is_archived, "isDifferentListPriceAndPrice": $is_different_list_price_and_price, "isFeatured": $is_featured, "isFirstBuy": $is_first_buy, "isMinMaxInstallments": $is_min_max_installments, "isSlaSelected": $is_sla_selected, "itemMaxPrice": $item_max_price, "itemMinPrice": $item_min_price, "lastModified": $last_modified, "listSku1BuyTogether": $list_sku1_buy_together, "listSku2BuyTogether": $list_sku2_buy_together, "marketingTags": $marketing_tags, "marketingTagsAreNotInclusive": $marketing_tags_are_not_inclusive, "maxInstallment": $max_installment, "maxNumberOfAffectedItems": $max_number_of_affected_items, "maxNumberOfAffectedItemsGroupKey": $max_number_of_affected_items_group_key, "maxPricesPerItems": $max_prices_per_items, "maxUsage": $max_usage, "maxUsagePerClient": $max_usage_per_client, "maximumUnitPriceDiscount": $maximum_unit_price_discount, "merchants": $merchants, "minInstallment": $min_installment, "minimumQuantityBuyTogether": $minimum_quantity_buy_together, "multipleUsePerClient": $multiple_use_per_client, "name": $name, "newOffset": $new_offset, "nominalDiscountValue": $nominal_discount_value, "nominalRewardValue": $nominal_reward_value, "nominalShippingDiscountValue": $nominal_shipping_discount_value, "nominalTax": $nominal_tax, "offset": $offset, "orderStatusRewardValue": $order_status_reward_value, "origin": $origin, "paymentsMethods": $payments_methods, "paymentsRules": $payments_rules, "percentualDiscountValue": $percentual_discount_value, "percentualDiscountValueList": $percentual_discount_value_list, "percentualDiscountValueList1": $percentual_discount_value_list1, "percentualDiscountValueList2": $percentual_discount_value_list2, "percentualRewardValue": $percentual_reward_value, "percentualShippingDiscountValue": $percentual_shipping_discount_value, "percentualTax": $percentual_tax, "products": $products, "productsAreInclusive": $products_are_inclusive, "productsSpecifications": $products_specifications, "quantityToAffectBuyTogether": $quantity_to_affect_buy_together, "rebatePercentualDiscountValue": $rebate_percentual_discount_value, "restrictionsBins": $restrictions_bins, "shippingPercentualTax": $shipping_percentual_tax, "shouldDistributeDiscountAmongMatchedItems": $should_distribute_discount_among_matched_items, "skus": $skus, "skusAreInclusive": $skus_are_inclusive, "skusGift": $skus_gift, "slasIds": $slas_ids, "stores": $stores, "storesAreInclusive": $stores_are_inclusive, "totalValueCeling": $total_value_celing, "totalValueFloor": $total_value_floor, "totalValueIncludeAllItems": $total_value_include_all_items, "totalValueMode": $total_value_mode, "totalValuePurchase": $total_value_purchase, "type": $type, "useNewProgressiveAlgorithm": $use_new_progressive_algorithm, "utmCampaign": $utm_campaign, "utmSource": $utm_source, "zipCodeRanges": $zip_code_ranges} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"absoluteShippingDiscountValue": $absolute_shipping_discount_value, "accumulateWithManualPrice": $accumulate_with_manual_price, "activateGiftsMultiplier": $activate_gifts_multiplier, "activeDaysOfWeek": $active_days_of_week, "affiliates": $affiliates, "applyToAllShippings": $apply_to_all_shippings, "areSalesChannelIdsExclusive": $are_sales_channel_ids_exclusive, "beginDateUtc": $begin_date_utc, "brands": $brands, "brandsAreInclusive": $brands_are_inclusive, "campaigns": $campaigns, "cardIssuers": $card_issuers, "categories": $categories, "categoriesAreInclusive": $categories_are_inclusive, "clusterExpressions": $cluster_expressions, "collections": $collections, "collections1BuyTogether": $collections1_buy_together, "collections2BuyTogether": $collections2_buy_together, "collectionsIsInclusive": $collections_is_inclusive, "compareListPriceAndPrice": $compare_list_price_and_price, "conditionsIds": $conditions_ids, "coupon": $coupon, "cumulative": $cumulative, "daysAgoOfPurchases": $days_ago_of_purchases, "description": $description, "disableDeal": $disable_deal, "discountType": $discount_type, "enableBuyTogetherPerSku": $enable_buy_together_per_sku, "endDateUtc": $end_date_utc, "firstBuyIsProfileOptimistic": $first_buy_is_profile_optimistic, "giftListTypes": $gift_list_types, "idCalculatorConfiguration": $id_calculator_configuration, "idSeller": $id_seller, "idSellerIsInclusive": $id_seller_is_inclusive, "idsSalesChannel": $ids_sales_channel, "installment": $installment, "isActive": $is_active, "isArchived": $is_archived, "isDifferentListPriceAndPrice": $is_different_list_price_and_price, "isFeatured": $is_featured, "isFirstBuy": $is_first_buy, "isMinMaxInstallments": $is_min_max_installments, "isSlaSelected": $is_sla_selected, "itemMaxPrice": $item_max_price, "itemMinPrice": $item_min_price, "lastModified": $last_modified, "listSku1BuyTogether": $list_sku1_buy_together, "listSku2BuyTogether": $list_sku2_buy_together, "marketingTags": $marketing_tags, "marketingTagsAreNotInclusive": $marketing_tags_are_not_inclusive, "maxInstallment": $max_installment, "maxNumberOfAffectedItems": $max_number_of_affected_items, "maxNumberOfAffectedItemsGroupKey": $max_number_of_affected_items_group_key, "maxPricesPerItems": $max_prices_per_items, "maxUsage": $max_usage, "maxUsagePerClient": $max_usage_per_client, "maximumUnitPriceDiscount": $maximum_unit_price_discount, "merchants": $merchants, "minInstallment": $min_installment, "minimumQuantityBuyTogether": $minimum_quantity_buy_together, "multipleUsePerClient": $multiple_use_per_client, "name": $name, "newOffset": $new_offset, "nominalDiscountValue": $nominal_discount_value, "nominalRewardValue": $nominal_reward_value, "nominalShippingDiscountValue": $nominal_shipping_discount_value, "nominalTax": $nominal_tax, "offset": $offset, "orderStatusRewardValue": $order_status_reward_value, "origin": $origin, "paymentsMethods": $payments_methods, "paymentsRules": $payments_rules, "percentualDiscountValue": $percentual_discount_value, "percentualDiscountValueList": $percentual_discount_value_list, "percentualDiscountValueList1": $percentual_discount_value_list1, "percentualDiscountValueList2": $percentual_discount_value_list2, "percentualRewardValue": $percentual_reward_value, "percentualShippingDiscountValue": $percentual_shipping_discount_value, "percentualTax": $percentual_tax, "products": $products, "productsAreInclusive": $products_are_inclusive, "productsSpecifications": $products_specifications, "quantityToAffectBuyTogether": $quantity_to_affect_buy_together, "rebatePercentualDiscountValue": $rebate_percentual_discount_value, "restrictionsBins": $restrictions_bins, "shippingPercentualTax": $shipping_percentual_tax, "shouldDistributeDiscountAmongMatchedItems": $should_distribute_discount_among_matched_items, "skus": $skus, "skusAreInclusive": $skus_are_inclusive, "skusGift": $skus_gift, "slasIds": $slas_ids, "stores": $stores, "storesAreInclusive": $stores_are_inclusive, "totalValueCeling": $total_value_celing, "totalValueFloor": $total_value_floor, "totalValueIncludeAllItems": $total_value_include_all_items, "totalValueMode": $total_value_mode, "totalValuePurchase": $total_value_purchase, "type": $type, "useNewProgressiveAlgorithm": $use_new_progressive_algorithm, "utmCampaign": $utm_campaign, "utmSource": $utm_source, "zipCodeRanges": $zip_code_ranges} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Get Promotion or Tax by ID
 #
 # GET /api/rnb/pvt/calculatorconfiguration/{idCalculatorConfiguration}
 # operationId: GetCalculatorConfigurationById
-export def "rnb-pvt-calculatorconfiguration get" [
+export def "rnb-pvt-calculatorconfiguration get-calculator-configuration" [
   id_calculator_configuration: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -460,11 +473,11 @@ export def "rnb-pvt-calculatorconfiguration get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id_calculator_configuration: $id_calculator_configuration} | format pattern "/api/rnb/pvt/calculatorconfiguration/{id_calculator_configuration}"))
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id_calculator_configuration: (encode-path-segment $id_calculator_configuration)} | format pattern "/api/rnb/pvt/calculatorconfiguration/{id_calculator_configuration}"))
   let accept_val = ($accept | default "Promotion")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -472,7 +485,7 @@ export def "rnb-pvt-calculatorconfiguration get" [
 #
 # GET /api/rnb/pvt/campaignConfiguration
 # operationId: Getcampaignaudiences
-export def "rnb-pvt-campaign-configuration get-campaignaudiences" [
+export def "rnb-pvt-campaign-configuration get-getcampaignaudiences" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -487,10 +500,10 @@ export def "rnb-pvt-campaign-configuration get-campaignaudiences" [
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rnb/pvt/campaignConfiguration")
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -499,8 +512,8 @@ export def "rnb-pvt-campaign-configuration get-campaignaudiences" [
 # POST /api/rnb/pvt/campaignConfiguration
 # operationId: Setcampaignconfiguration
 # --lastModified shape: {dateUtc?: string, user?: string}
-# --targetConfigurations item shape: {affiliates?: list, areSalesChannelIdsExclusive?: bool, brands?: list, brandsAreInclusive?: bool, campaigns?: list, cardIssuers?: list, categories?: list, categoriesAreInclusive?: bool, clusterExpressions?: list, clusterOperator?: string, collections?: list, collections1BuyTogether?: list, collections2BuyTogether?: list, collectionsIsInclusive?: bool, compareListPriceAndPrice?: bool, coupon?: list, daysAgoOfPurchases?: int, enableBuyTogetherPerSku?: bool, featured?: bool, firstBuyIsProfileOptimistic?: bool, giftListTypes?: list, id?: string, idSellerIsInclusive?: bool, idsSalesChannel?: list, installment?: int, isDifferentListPriceAndPrice?: bool, isFirstBuy?: bool, isMinMaxInstallments?: bool, isSlaSelected?: bool, itemMaxPrice?: float, itemMinPrice?: float, listBrand1BuyTogether?: list, listCategory1BuyTogether?: list, listSku1BuyTogether?: list, listSku2BuyTogether?: list, marketingTags?: list, marketingTagsAreNotInclusive?: bool, maxInstallment?: int, maxUsage?: int, maxUsagePerClient?: int, merchants?: list, minInstallment?: int, minimumQuantityBuyTogether?: int, multipleUsePerClient?: bool, name?: string, origin?: string, paymentsMethods?: list, paymentsRules?: list, percentualDiscountValueList?: list, products?: list, productsAreInclusive?: bool, productsSpecifications?: list, quantityToAffectBuyTogether?: int, restrictionsBins?: list, shouldDistributeDiscountAmongMatchedItems?: bool, skus?: list, skusAreInclusive?: bool, slasIds?: list, stores?: list, storesAreInclusive?: bool, totalValueCeling?: float, totalValueFloor?: float, totalValueIncludeAllItems?: bool, totalValueMode?: string, totalValuePurchase?: float, useNewProgressiveAlgorithm?: bool, zipCodeRanges?: list}
-export def "rnb-pvt-campaign-configuration post" [
+# --targetConfigurations item shape: {affiliates?: list, areSalesChannelIdsExclusive?: bool, brands?: list, brandsAreInclusive?: bool, campaigns?: list, cardIssuers?: list, categories?: list, categoriesAreInclusive?: bool, clusterExpressions?: list<string>, clusterOperator?: string, collections?: list, collections1BuyTogether?: list<string>, collections2BuyTogether?: list, collectionsIsInclusive?: bool, compareListPriceAndPrice?: bool, coupon?: list, daysAgoOfPurchases?: int, enableBuyTogetherPerSku?: bool, featured?: bool, ... (48 more fields)}
+export def "rnb-pvt-campaign-configuration create-setcampaignconfiguration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -519,26 +532,28 @@ export def "rnb-pvt-campaign-configuration post" [
   --is-archived: oneof<nothing, bool> # Defines if the campaign audience is archived (`true`) or not (`false`). (e.g. false)
   --last-modified: record # Object with information about the last update of the campaign audience. — shape: {dateUtc?: string, user?: string}
   --name: string # Campaign audience name. (e.g. Interna)
-  --target-configurations: list # Array that contains all target audience that the campaign audience will be valid. — item shape: {affiliates?: list, areSalesChannelIdsExclusive?: bool, brands?: list, brandsAreInclusive?: bool, campaigns?: list, cardIssuers?: list, categories?: list, categoriesAreInclusive?: bool, clusterExpressions?: list, clusterOperator?: string, collections?: list, collections1BuyTogether?: list, collections2BuyTogether?: list, collectionsIsInclusive?: bool, compareListPriceAndPrice?: bool, coupon?: list, daysAgoOfPurchases?: int, enableBuyTogetherPerSku?: bool, featured?: bool, firstBuyIsProfileOptimistic?: bool, giftListTypes?: list, id?: string, idSellerIsInclusive?: bool, idsSalesChannel?: list, installment?: int, isDifferentListPriceAndPrice?: bool, isFirstBuy?: bool, isMinMaxInstallments?: bool, isSlaSelected?: bool, itemMaxPrice?: float, itemMinPrice?: float, listBrand1BuyTogether?: list, listCategory1BuyTogether?: list, listSku1BuyTogether?: list, listSku2BuyTogether?: list, marketingTags?: list, marketingTagsAreNotInclusive?: bool, maxInstallment?: int, maxUsage?: int, maxUsagePerClient?: int, merchants?: list, minInstallment?: int, minimumQuantityBuyTogether?: int, multipleUsePerClient?: bool, name?: string, origin?: string, paymentsMethods?: list, paymentsRules?: list, percentualDiscountValueList?: list, products?: list, productsAreInclusive?: bool, productsSpecifications?: list, quantityToAffectBuyTogether?: int, restrictionsBins?: list, shouldDistributeDiscountAmongMatchedItems?: bool, skus?: list, skusAreInclusive?: bool, slasIds?: list, stores?: list, storesAreInclusive?: bool, totalValueCeling?: float, totalValueFloor?: float, totalValueIncludeAllItems?: bool, totalValueMode?: string, totalValuePurchase?: float, useNewProgressiveAlgorithm?: bool, zipCodeRanges?: list}
+  --target-configurations: list # Array that contains all target audience that the campaign audience will be valid. — item shape: {affiliates?: list, areSalesChannelIdsExclusive?: bool, brands?: list, brandsAreInclusive?: bool, campaigns?: list, cardIssuers?: list, categories?: list, categoriesAreInclusive?: bool, clusterExpressions?: list<string>, clusterOperator?: string, collections?: list, collections1BuyTogether?: list<string>, collections2BuyTogether?: list, collectionsIsInclusive?: bool, compareListPriceAndPrice?: bool, coupon?: list, daysAgoOfPurchases?: int, enableBuyTogetherPerSku?: bool, featured?: bool, ... (48 more fields)}
 ]: any -> record<beginDateUtc: string, endDateUtc: string, id: string, isActive: bool, isAndOperator: bool, isArchived: bool, lastModified: record<dateUtc: string, user: string>, name: string, targetConfigurations: table<affiliates: list, areSalesChannelIdsExclusive: bool, brands: list, brandsAreInclusive: bool, campaigns: list, cardIssuers: list, categories: list, categoriesAreInclusive: bool, clusterExpressions: list, clusterOperator: string, collections: list, collections1BuyTogether: list, collections2BuyTogether: list, collectionsIsInclusive: bool, compareListPriceAndPrice: bool, coupon: list, daysAgoOfPurchases: int, enableBuyTogetherPerSku: bool, featured: bool, firstBuyIsProfileOptimistic: bool, giftListTypes: list, id: string, idSellerIsInclusive: bool, idsSalesChannel: list, installment: int, isDifferentListPriceAndPrice: bool, isFirstBuy: bool, isMinMaxInstallments: bool, isSlaSelected: bool, itemMaxPrice: float, itemMinPrice: float, listBrand1BuyTogether: list, listCategory1BuyTogether: list, listSku1BuyTogether: list, listSku2BuyTogether: list, marketingTags: list, marketingTagsAreNotInclusive: bool, maxInstallment: int, maxUsage: int, maxUsagePerClient: int, merchants: list, minInstallment: int, minimumQuantityBuyTogether: int, multipleUsePerClient: bool, name: string, origin: string, paymentsMethods: list, paymentsRules: list, percentualDiscountValueList: list, products: list, productsAreInclusive: bool, productsSpecifications: list, quantityToAffectBuyTogether: int, restrictionsBins: list, shouldDistributeDiscountAmongMatchedItems: bool, skus: list, skusAreInclusive: bool, slasIds: list, stores: list, storesAreInclusive: bool, totalValueCeling: float, totalValueFloor: float, totalValueIncludeAllItems: bool, totalValueMode: string, totalValuePurchase: float, useNewProgressiveAlgorithm: bool, zipCodeRanges: list>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rnb/pvt/campaignConfiguration")
-  let body = {"beginDateUtc": $begin_date_utc, "endDateUtc": $end_date_utc, "id": $id, "isActive": $is_active, "isAndOperator": $is_and_operator, "isArchived": $is_archived, "lastModified": $last_modified, "name": $name, "targetConfigurations": $target_configurations} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"beginDateUtc": $begin_date_utc, "endDateUtc": $end_date_utc, "id": $id, "isActive": $is_active, "isAndOperator": $is_and_operator, "isArchived": $is_archived, "lastModified": $last_modified, "name": $name, "targetConfigurations": $target_configurations} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Get campaign audience configuration
 #
 # GET /api/rnb/pvt/campaignConfiguration/{campaignId}
 # operationId: Getcampaignconfiguration
-export def "rnb-pvt-campaign-configuration get-campaignconfiguration" [
+export def "rnb-pvt-campaign-configuration get-getcampaignconfiguration" [
   campaign_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -553,11 +568,11 @@ export def "rnb-pvt-campaign-configuration get-campaignconfiguration" [
 ]: nothing -> record<beginDateUtc: string, endDateUtc: string, id: string, isActive: bool, isAndOperator: bool, isArchived: bool, lastModified: record<dateUtc: string, user: string>, name: string, targetConfigurations: table<affiliates: list, areSalesChannelIdsExclusive: bool, brands: list, brandsAreInclusive: bool, campaigns: list, cardIssuers: list, categories: list, categoriesAreInclusive: bool, clusterExpressions: list, collections: list, collections1BuyTogether: list, collections2BuyTogether: list, collectionsIsInclusive: bool, compareListPriceAndPrice: bool, coupon: list, daysAgoOfPurchases: int, enableBuyTogetherPerSku: bool, featured: bool, firstBuyIsProfileOptimistic: bool, giftListTypes: list, id: string, idSellerIsInclusive: bool, idsSalesChannel: list, installment: int, isDifferentListPriceAndPrice: bool, isFirstBuy: bool, isMinMaxInstallments: bool, isSlaSelected: bool, itemMaxPrice: float, itemMinPrice: float, listBrand1BuyTogether: list, listCategory1BuyTogether: list, listSku1BuyTogether: list, listSku2BuyTogether: list, marketingTags: list, marketingTagsAreNotInclusive: bool, maxInstallment: int, maxUsage: int, maxUsagePerClient: int, merchants: list, minInstallment: int, minimumQuantityBuyTogether: int, multipleUsePerClient: bool, name: string, origin: string, paymentsMethods: list, paymentsRules: list, percentualDiscountValueList: list, products: list, productsAreInclusive: bool, productsSpecifications: list, quantityToAffectBuyTogether: int, restrictionsBins: list, shouldDistributeDiscountAmongMatchedItems: bool, skus: list, skusAreInclusive: bool, slasIds: list, stores: list, storesAreInclusive: bool, totalValueCeling: float, totalValueFloor: float, totalValueIncludeAllItems: bool, totalValueMode: string, totalValuePurchase: float, useNewProgressiveAlgorithm: bool, zipCodeRanges: list>> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({campaign_id: $campaign_id} | format pattern "/api/rnb/pvt/campaignConfiguration/{campaign_id}"))
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({campaign_id: (encode-path-segment $campaign_id)} | format pattern "/api/rnb/pvt/campaignConfiguration/{campaign_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -565,7 +580,7 @@ export def "rnb-pvt-campaign-configuration get-campaignconfiguration" [
 #
 # GET /api/rnb/pvt/coupon
 # operationId: Getall
-export def "rnb-pvt-coupon get-all" [
+export def "rnb-pvt-coupon get-getall" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -580,10 +595,10 @@ export def "rnb-pvt-coupon get-all" [
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rnb/pvt/coupon")
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -613,19 +628,21 @@ export def "rnb-pvt-coupon update" [
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rnb/pvt/coupon")
-  let body = {"couponCode": $coupon_code, "expirationIntervalPerUse": $expiration_interval_per_use, "isArchived": $is_archived, "maxItemsPerClient": $max_items_per_client, "utmCampaign": $utm_campaign, "utmSource": $utm_source} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"couponCode": $coupon_code, "expirationIntervalPerUse": $expiration_interval_per_use, "isArchived": $is_archived, "maxItemsPerClient": $max_items_per_client, "utmCampaign": $utm_campaign, "utmSource": $utm_source} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Create coupon
 #
 # POST /api/rnb/pvt/coupon/
-export def "rnb-pvt-coupon post" [
+export def "rnb-pvt-coupon create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -646,20 +663,22 @@ export def "rnb-pvt-coupon post" [
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rnb/pvt/coupon/")
-  let body = {"couponCode": $coupon_code, "expirationIntervalPerUse": $expiration_interval_per_use, "maxItemsPerClient": $max_items_per_client, "utmCampaign": $utm_campaign, "utmSource": $utm_source} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"couponCode": $coupon_code, "expirationIntervalPerUse": $expiration_interval_per_use, "maxItemsPerClient": $max_items_per_client, "utmCampaign": $utm_campaign, "utmSource": $utm_source} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Get coupon usage
 #
 # GET /api/rnb/pvt/coupon/usage/{couponCode}
 # operationId: Getusage
-export def "rnb-pvt-coupon-usage get" [
+export def "rnb-pvt-coupon-usage get-getusage" [
   coupon_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -674,11 +693,11 @@ export def "rnb-pvt-coupon-usage get" [
 ]: nothing -> record<couponCode: string, hostName: string, profileUsages: record<profileId: record<orderUsage: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({coupon_code: $coupon_code} | format pattern "/api/rnb/pvt/coupon/usage/{coupon_code}"))
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({coupon_code: (encode-path-segment $coupon_code)} | format pattern "/api/rnb/pvt/coupon/usage/{coupon_code}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -686,7 +705,7 @@ export def "rnb-pvt-coupon-usage get" [
 #
 # GET /api/rnb/pvt/coupon/{couponCode}
 # operationId: Getbycouponcode
-export def "rnb-pvt-coupon get-bycouponcode" [
+export def "rnb-pvt-coupon get-getbycouponcode" [
   coupon_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -701,11 +720,11 @@ export def "rnb-pvt-coupon get-bycouponcode" [
 ]: nothing -> record<couponCode: string, expirationIntervalPerUse: string, isArchived: bool, lastModifiedUtc: string, maxItemsPerClient: int, utmCampaign: string, utmSource: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({coupon_code: $coupon_code} | format pattern "/api/rnb/pvt/coupon/{coupon_code}"))
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({coupon_code: (encode-path-segment $coupon_code)} | format pattern "/api/rnb/pvt/coupon/{coupon_code}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -713,7 +732,7 @@ export def "rnb-pvt-coupon get-bycouponcode" [
 #
 # POST /api/rnb/pvt/coupons
 # operationId: MassiveGeneration
-export def "rnb-pvt-coupons post" [
+export def "rnb-pvt-coupons create-massive-generation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -736,19 +755,21 @@ export def "rnb-pvt-coupons post" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "quantity" $quantity "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/rnb/pvt/coupons" $qp)
-  let body = {"couponCode": $coupon_code, "expirationIntervalPerUse": $expiration_interval_per_use, "maxItemsPerClient": $max_items_per_client, "utmCampaign": $utm_campaign, "utmSource": $utm_source} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"couponCode": $coupon_code, "expirationIntervalPerUse": $expiration_interval_per_use, "maxItemsPerClient": $max_items_per_client, "utmCampaign": $utm_campaign, "utmSource": $utm_source} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Create Multiple SKU Promotion
 #
 # POST /api/rnb/pvt/import/calculatorConfiguration
-export def "rnb-pvt-import-calculator-configuration post" [
+export def "rnb-pvt-import-calculator-configuration create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -772,18 +793,21 @@ export def "rnb-pvt-import-calculator-configuration post" [
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rnb/pvt/import/calculatorConfiguration")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept, "X-VTEX-calculator-name": $x_vtex_calculator_name, "X-VTEX-cumulative": $x_vtex_cumulative, "X-VTEX-cluster-operator": $x_vtex_cluster_operator, "X-VTEX-cluster-expression": $x_vtex_cluster_expression, "X-VTEX-start-date": $x_vtex_start_date, "X-VTEX-end-date": $x_vtex_end_date, "X-VTEX-accumulate-with-manual-prices": $x_vtex_accumulate_with_manual_prices} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "text/csv" $body
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept, "X-VTEX-calculator-name": $x_vtex_calculator_name, "X-VTEX-cumulative": $x_vtex_cumulative, "X-VTEX-cluster-operator": $x_vtex_cluster_operator, "X-VTEX-cluster-expression": $x_vtex_cluster_expression, "X-VTEX-start-date": $x_vtex_start_date, "X-VTEX-end-date": $x_vtex_end_date, "X-VTEX-accumulate-with-manual-prices": $x_vtex_accumulate_with_manual_prices} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "text/csv")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Update Multiple SKU Promotion
 #
 # PUT /api/rnb/pvt/import/calculatorConfiguration/{promotionId}
-export def "rnb-pvt-import-calculator-configuration put" [
+export def "rnb-pvt-import-calculator-configuration update" [
   promotion_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -807,19 +831,22 @@ export def "rnb-pvt-import-calculator-configuration put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({promotion_id: $promotion_id} | format pattern "/api/rnb/pvt/import/calculatorConfiguration/{promotion_id}"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept, "X-VTEX-calculator-name": $x_vtex_calculator_name, "X-VTEX-cumulative": $x_vtex_cumulative, "X-VTEX-cluster-operator": $x_vtex_cluster_operator, "X-VTEX-cluster-expression": $x_vtex_cluster_expression, "X-VTEX-start-date": $x_vtex_start_date, "X-VTEX-end-date": $x_vtex_end_date, "X-VTEX-accumulate-with-manual-prices": $x_vtex_accumulate_with_manual_prices} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({promotion_id: (encode-path-segment $promotion_id)} | format pattern "/api/rnb/pvt/import/calculatorConfiguration/{promotion_id}"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "text/csv" $body
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept, "X-VTEX-calculator-name": $x_vtex_calculator_name, "X-VTEX-cumulative": $x_vtex_cumulative, "X-VTEX-cluster-operator": $x_vtex_cluster_operator, "X-VTEX-cluster-expression": $x_vtex_cluster_expression, "X-VTEX-start-date": $x_vtex_start_date, "X-VTEX-end-date": $x_vtex_end_date, "X-VTEX-accumulate-with-manual-prices": $x_vtex_accumulate_with_manual_prices} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "text/csv")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Create multiple coupons
 #
 # POST /api/rnb/pvt/multiple-coupons
-export def "rnb-pvt-multiple-coupons post" [
+export def "rnb-pvt-multiple-coupons create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -836,19 +863,22 @@ export def "rnb-pvt-multiple-coupons post" [
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rnb/pvt/multiple-coupons")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Get All Taxes
 #
 # GET /api/rnb/pvt/taxes/calculatorconfiguration
 # operationId: GetAllTaxes
-export def "rnb-pvt-taxes-calculatorconfiguration get-all" [
+export def "rnb-pvt-taxes-calculatorconfiguration get-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -863,10 +893,10 @@ export def "rnb-pvt-taxes-calculatorconfiguration get-all" [
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rnb/pvt/taxes/calculatorconfiguration")
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -889,11 +919,11 @@ export def "rnb-pvt-unarchive-calculator-configuration unarchive-promotion" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id_calculator_configuration: $id_calculator_configuration} | format pattern "/api/rnb/pvt/unarchive/calculatorConfiguration/{id_calculator_configuration}"))
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id_calculator_configuration: (encode-path-segment $id_calculator_configuration)} | format pattern "/api/rnb/pvt/unarchive/calculatorConfiguration/{id_calculator_configuration}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -901,7 +931,7 @@ export def "rnb-pvt-unarchive-calculator-configuration unarchive-promotion" [
 #
 # POST /api/rnb/pvt/unarchive/coupon/{couponCode}
 # operationId: Unarchivebycouponcode
-export def "rnb-pvt-unarchive-coupon unarchive-bycouponcode" [
+export def "rnb-pvt-unarchive-coupon create-unarchivebycouponcode" [
   coupon_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -916,11 +946,11 @@ export def "rnb-pvt-unarchive-coupon unarchive-bycouponcode" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({coupon_code: $coupon_code} | format pattern "/api/rnb/pvt/unarchive/coupon/{coupon_code}"))
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({coupon_code: (encode-path-segment $coupon_code)} | format pattern "/api/rnb/pvt/unarchive/coupon/{coupon_code}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -928,7 +958,7 @@ export def "rnb-pvt-unarchive-coupon unarchive-bycouponcode" [
 #
 # POST /price-sheet
 # operationId: Saveprice
-export def "price-sheet post" [
+export def "price-sheet create-saveprice" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -947,19 +977,22 @@ export def "price-sheet post" [
   let base = ($base_url | default "https://rnb.{environment}.com.br/api/pricing/pvt")
   let qp = [(serialize-qp "an" $an "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/price-sheet" $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Get all paged prices
 #
 # GET /price-sheet/all/{page}/{pageSize}
 # operationId: Getallpaged
-export def "price-sheet-all get-allpaged" [
+export def "price-sheet-all get-getallpaged" [
   page: string
   page_size: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -977,11 +1010,11 @@ export def "price-sheet-all get-allpaged" [
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default "https://rnb.{environment}.com.br/api/pricing/pvt")
   let qp = [(serialize-qp "an" $an "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({page: $page, page_size: $page_size} | format pattern "/price-sheet/all/{page}/{page_size}") $qp)
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({page: (encode-path-segment $page), page_size: (encode-path-segment $page_size)} | format pattern "/price-sheet/all/{page}/{page_size}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -989,7 +1022,7 @@ export def "price-sheet-all get-allpaged" [
 #
 # POST /price-sheet/context
 # operationId: Pricebycontext
-export def "price-sheet-context post" [
+export def "price-sheet-context create-pricebycontext" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1013,20 +1046,22 @@ export def "price-sheet-context post" [
   let base = ($base_url | default "https://rnb.{environment}.com.br/api/pricing/pvt")
   let qp = [(serialize-qp "an" $an "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/price-sheet/context" $qp)
-  let body = {"id": $id, "itemId": $item_id, "salesChannel": $sales_channel, "sellerId": $seller_id, "validFrom": $valid_from, "validTo": $valid_to} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"id": $id, "itemId": $item_id, "salesChannel": $sales_channel, "sellerId": $seller_id, "validFrom": $valid_from, "validTo": $valid_to} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Delete Price by SKU Id
 #
 # DELETE /price-sheet/{skuId}
 # operationId: DeletebyskuId
-export def "price-sheet delete-bysku" [
+export def "price-sheet delete-deletebysku" [
   sku_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1043,11 +1078,11 @@ export def "price-sheet delete-bysku" [
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default "https://rnb.{environment}.com.br/api/pricing/pvt")
   let qp = [(serialize-qp "an" $an "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({sku_id: $sku_id} | format pattern "/price-sheet/{sku_id}") $qp)
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({sku_id: (encode-path-segment $sku_id)} | format pattern "/price-sheet/{sku_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1055,7 +1090,7 @@ export def "price-sheet delete-bysku" [
 #
 # GET /price-sheet/{skuId}
 # operationId: PricebyskuId
-export def "price-sheet list" [
+export def "price-sheet get-pricebysku" [
   sku_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1072,11 +1107,11 @@ export def "price-sheet list" [
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default "https://rnb.{environment}.com.br/api/pricing/pvt")
   let qp = [(serialize-qp "an" $an "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({sku_id: $sku_id} | format pattern "/price-sheet/{sku_id}") $qp)
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({sku_id: (encode-path-segment $sku_id)} | format pattern "/price-sheet/{sku_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1084,7 +1119,7 @@ export def "price-sheet list" [
 #
 # GET /price-sheet/{skuId}/{tradePolicy}
 # operationId: PricebyskuIdandtradePolicy
-export def "price-sheet get" [
+export def "price-sheet get-pricebysku-idandtrade-policy" [
   sku_id: string
   trade_policy: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1102,11 +1137,11 @@ export def "price-sheet get" [
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default "https://rnb.{environment}.com.br/api/pricing/pvt")
   let qp = [(serialize-qp "an" $an "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({sku_id: $sku_id, trade_policy: $trade_policy} | format pattern "/price-sheet/{sku_id}/{trade_policy}") $qp)
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({sku_id: (encode-path-segment $sku_id), trade_policy: (encode-path-segment $trade_policy)} | format pattern "/price-sheet/{sku_id}/{trade_policy}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1114,9 +1149,9 @@ export def "price-sheet get" [
 #
 # POST /pub/bundles
 # operationId: Calculatediscountsandtaxes(Bundles)
-# --items item shape: {id: string, index: int, isGift: bool, logisticsInfos: list, measurementUnit: string, params: list, priceSheet: list, priceTags: list, productSpecifications: list, quantity: int, sellerId: string, unitMultiplier: int}
+# --items item shape: {id: string, index: int, isGift: bool, logisticsInfos: list<string>, measurementUnit: string, params: list, priceSheet: list<string>, priceTags: list<string>, productSpecifications: list<string>, quantity: int, sellerId: string, unitMultiplier: int}
 # --params item shape: {name: string, value: string}
-export def "pub-bundles post" [
+export def "pub-bundles create-calculatediscountsandtaxesbundles" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1128,7 +1163,7 @@ export def "pub-bundles post" [
   --content-type: string # Type of the content being sent.
   --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand.
   --is-shopping-cart: oneof<nothing, bool>
-  items: list # item shape: {id: string, index: int, isGift: bool, logisticsInfos: list, measurementUnit: string, params: list, priceSheet: list, priceTags: list, productSpecifications: list, quantity: int, sellerId: string, unitMultiplier: int}
+  items: list # item shape: {id: string, index: int, isGift: bool, logisticsInfos: list<string>, measurementUnit: string, params: list, priceSheet: list<string>, priceTags: list<string>, productSpecifications: list<string>, quantity: int, sellerId: string, unitMultiplier: int}
   origin: string
   params: list # item shape: {name: string, value: string}
   profile_id: string
@@ -1138,11 +1173,13 @@ export def "pub-bundles post" [
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default "http://example.com/.{environment}.com.br/api/rnb")
   let full_url = (build-url $base "/pub/bundles")
-  let body = {"isShoppingCart": $is_shopping_cart, "items": $items, "origin": $origin, "params": $params, "profileId": $profile_id, "salesChannel": $sales_channel} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"isShoppingCart": $is_shopping_cart, "items": $items, "origin": $origin, "params": $params, "profileId": $profile_id, "salesChannel": $sales_channel} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }

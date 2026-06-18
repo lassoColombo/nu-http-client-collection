@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -82,7 +91,7 @@ def basis-completer [] { ["DAILY" "HOURLY" "MONTHLY"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "hardware-actions-collect-now collectNow" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "hardware-actions-collect-now create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -106,7 +115,7 @@ export def commands []: nothing -> table {
 #
 # POST /hardware/actions/{deviceId}/collect-now
 # operationId: collectNow
-export def "hardware-actions-collect-now collectNow" [
+export def "hardware-actions-collect-now create" [
   device_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -121,7 +130,7 @@ export def "hardware-actions-collect-now collectNow" [
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "monitorClass" $monitor_class "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({device_id: $device_id} | format pattern "/hardware/actions/{device_id}/collect-now") $qp)
+  let full_url = (build-url $base ({device_id: (encode-path-segment $device_id)} | format pattern "/hardware/actions/{device_id}/collect-now") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -131,7 +140,7 @@ export def "hardware-actions-collect-now collectNow" [
 #
 # POST /hardware/actions/{deviceId}/rediscover
 # operationId: rediscover
-export def "hardware-actions-rediscover rediscover" [
+export def "hardware-actions-rediscover create" [
   device_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -144,7 +153,7 @@ export def "hardware-actions-rediscover rediscover" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({device_id: $device_id} | format pattern "/hardware/actions/{device_id}/rediscover"))
+  let full_url = (build-url $base ({device_id: (encode-path-segment $device_id)} | format pattern "/hardware/actions/{device_id}/rediscover"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -154,7 +163,7 @@ export def "hardware-actions-rediscover rediscover" [
 #
 # POST /hardware/actions/{deviceId}/reinitialize
 # operationId: reinitialize
-export def "hardware-actions-reinitialize reinitialize" [
+export def "hardware-actions-reinitialize create" [
   device_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -164,32 +173,32 @@ export def "hardware-actions-reinitialize reinitialize" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --reset-alert-actions: int@reset-alert-actions-completer # When set to <em>1</em>, removes all manually set Alert Actions and reverts to basic default actions i.e. trigger a PATROL event and annotate a parameter graph. (format: int32, e.g. 1)
-  --reset-alert-after-n-times: int@reset-alert-after-n-times-completer # When set to <em>1</em>, resets the number of times thresholds can be breached before triggering an alert to their default values (1 time) for numeric, discrete, connector status and present parameters. (format: int32, e.g. 1)
-  --reset-debug-mode: int@reset-debug-mode-completer # When set to <em>1</em>, deactivates the debug mode when it was manually enabled. (format: int32, e.g. 1)
-  --reset-discovery-and-polling-intervals: int@reset-discovery-and-polling-intervals-completer # When set to <em>1</em>, removes all user-defined frequencies for discovery and polling processes to their default values (respectively 1 hour and 2 minutes). (format: int32, e.g. 1)
-  --reset-java-settings: int@reset-java-settings-completer # When set to <em>1</em>, removes the custom Java settings (path and credentials). The KM will try to automatically find a suitable JRE. (format: int32, e.g. 1)
-  --reset-other-alert-settings: int@reset-other-alert-settings-completer # When set to <em>1</em>, reverts any manually performed configuration changes to the default Hardware Sentry values. (format: int32, e.g. 1)
-  --reset-removed-paused-object-list: int@reset-removed-paused-object-list-completer # When set to <em>1</em>, reactivates the monitoring of all paused or removed objects. (format: int32, e.g. 1)
-  --reset-report-settings: int@reset-report-settings-completer # When set to <em>1</em>, clears the report schedule. (format: int32, e.g. 1)
-  --reset-thresholds: int@reset-thresholds-completer # When set to <em>1</em>, resets all thresholds. (format: int32, e.g. 1)
+  --reset-alert-actions: int@reset-alert-actions-completer # When set to 1, removes all manually set Alert Actions and reverts to basic default actions i.e. trigger a PATROL event and annotate a parameter graph. (format: int32, e.g. 1)
+  --reset-alert-after-n-times: int@reset-alert-after-n-times-completer # When set to 1, resets the number of times thresholds can be breached before triggering an alert to their default values (1 time) for numeric, discrete, connector status and present parameters. (format: int32, e.g. 1)
+  --reset-debug-mode: int@reset-debug-mode-completer # When set to 1, deactivates the debug mode when it was manually enabled. (format: int32, e.g. 1)
+  --reset-discovery-and-polling-intervals: int@reset-discovery-and-polling-intervals-completer # When set to 1, removes all user-defined frequencies for discovery and polling processes to their default values (respectively 1 hour and 2 minutes). (format: int32, e.g. 1)
+  --reset-java-settings: int@reset-java-settings-completer # When set to 1, removes the custom Java settings (path and credentials). The KM will try to automatically find a suitable JRE. (format: int32, e.g. 1)
+  --reset-other-alert-settings: int@reset-other-alert-settings-completer # When set to 1, reverts any manually performed configuration changes to the default Hardware Sentry values. (format: int32, e.g. 1)
+  --reset-removed-paused-object-list: int@reset-removed-paused-object-list-completer # When set to 1, reactivates the monitoring of all paused or removed objects. (format: int32, e.g. 1)
+  --reset-report-settings: int@reset-report-settings-completer # When set to 1, clears the report schedule. (format: int32, e.g. 1)
+  --reset-thresholds: int@reset-thresholds-completer # When set to 1, resets all thresholds. (format: int32, e.g. 1)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({device_id: $device_id} | format pattern "/hardware/actions/{device_id}/reinitialize"))
-  let body = {"resetAlertActions": $reset_alert_actions, "resetAlertAfterNTimes": $reset_alert_after_n_times, "resetDebugMode": $reset_debug_mode, "resetDiscoveryAndPollingIntervals": $reset_discovery_and_polling_intervals, "resetJavaSettings": $reset_java_settings, "resetOtherAlertSettings": $reset_other_alert_settings, "resetRemovedPausedObjectList": $reset_removed_paused_object_list, "resetReportSettings": $reset_report_settings, "resetThresholds": $reset_thresholds} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({device_id: (encode-path-segment $device_id)} | format pattern "/hardware/actions/{device_id}/reinitialize"))
+  let req_body = {"resetAlertActions": $reset_alert_actions, "resetAlertAfterNTimes": $reset_alert_after_n_times, "resetDebugMode": $reset_debug_mode, "resetDiscoveryAndPollingIntervals": $reset_discovery_and_polling_intervals, "resetJavaSettings": $reset_java_settings, "resetOtherAlertSettings": $reset_other_alert_settings, "resetRemovedPausedObjectList": $reset_removed_paused_object_list, "resetReportSettings": $reset_report_settings, "resetThresholds": $reset_thresholds} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Removes a specific instance from the monitoring environment.
 #
 # POST /hardware/actions/{deviceId}/remove
 # operationId: remove
-export def "hardware-actions-remove remove" [
+export def "hardware-actions-remove delete" [
   device_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -205,7 +214,7 @@ export def "hardware-actions-remove remove" [
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "monitorClass" $monitor_class "scalar") (serialize-qp "monitorSid" $monitor_sid "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({device_id: $device_id} | format pattern "/hardware/actions/{device_id}/remove") $qp)
+  let full_url = (build-url $base ({device_id: (encode-path-segment $device_id)} | format pattern "/hardware/actions/{device_id}/remove") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -231,7 +240,7 @@ export def "hardware-actions-reset-error-count reset" [
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "monitorClass" $monitor_class "scalar") (serialize-qp "monitorSid" $monitor_sid "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({device_id: $device_id} | format pattern "/hardware/actions/{device_id}/reset-error-count") $qp)
+  let full_url = (build-url $base ({device_id: (encode-path-segment $device_id)} | format pattern "/hardware/actions/{device_id}/reset-error-count") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -281,7 +290,7 @@ export def "hardware-applications get-one" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({application_id: $application_id} | format pattern "/hardware/applications/{application_id}"))
+  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/hardware/applications/{application_id}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -304,7 +313,7 @@ export def "hardware-device-monitors get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({device_id: $device_id} | format pattern "/hardware/device-monitors/{device_id}"))
+  let full_url = (build-url $base ({device_id: (encode-path-segment $device_id)} | format pattern "/hardware/device-monitors/{device_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -379,7 +388,7 @@ export def "hardware-devices get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({device_id: $device_id} | format pattern "/hardware/devices/{device_id}"))
+  let full_url = (build-url $base ({device_id: (encode-path-segment $device_id)} | format pattern "/hardware/devices/{device_id}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -402,7 +411,7 @@ export def "hardware-devices-agent get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({device_id: $device_id} | format pattern "/hardware/devices/{device_id}/agent"))
+  let full_url = (build-url $base ({device_id: (encode-path-segment $device_id)} | format pattern "/hardware/devices/{device_id}/agent"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -425,7 +434,7 @@ export def "hardware-devices-agent-devices get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({device_id: $device_id} | format pattern "/hardware/devices/{device_id}/agent-devices"))
+  let full_url = (build-url $base ({device_id: (encode-path-segment $device_id)} | format pattern "/hardware/devices/{device_id}/agent-devices"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -454,7 +463,7 @@ export def "hardware-devices-parameter-history get" [
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "parameterName" $parameter_name "scalar") (serialize-qp "monitorType" $monitor_type "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "monitorSid" $monitor_sid "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({device_id: $device_id} | format pattern "/hardware/devices/{device_id}/parameter-history") $qp)
+  let full_url = (build-url $base ({device_id: (encode-path-segment $device_id)} | format pattern "/hardware/devices/{device_id}/parameter-history") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -480,7 +489,7 @@ export def "hardware-energy-usage get-device" [
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "rollPeriod" $roll_period "scalar") (serialize-qp "basis" $basis "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({device_id: $device_id} | format pattern "/hardware/energy-usage/{device_id}") $qp)
+  let full_url = (build-url $base ({device_id: (encode-path-segment $device_id)} | format pattern "/hardware/energy-usage/{device_id}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -530,7 +539,7 @@ export def "hardware-groups get-one" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/hardware/groups/{group_id}"))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/hardware/groups/{group_id}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -550,26 +559,26 @@ export def "hardware-groups update-energy-cost" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --co2-emission: float # Updates the CO<sub>2</sub> emission (unit: kg/kWh). (format: double, e.g. 0.3)
+  --co2-emission: float # Updates the CO2 emission (unit: kg/kWh). (format: double, e.g. 0.3)
   --energy-cost: float # Updates the electricity rate (unit: $/kWh). (format: double, e.g. 0.3)
   --group-name-filter: string # Updates the regular expression used to filter the groups for which the power consumption should be reported. (e.g. Group [0-9]+)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/hardware/groups/{group_id}"))
-  let body = {"co2Emission": $co2_emission, "energyCost": $energy_cost, "groupNameFilter": $group_name_filter} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/hardware/groups/{group_id}"))
+  let req_body = {"co2Emission": $co2_emission, "energyCost": $energy_cost, "groupNameFilter": $group_name_filter} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets the heating margin values for each monitored device, when available.
 #
 # GET /hardware/heating-margin-devices
 # operationId: getHeatingMarginCoverage
-export def "hardware-heating-margin-devices get-heating-margin-coverage" [
+export def "hardware-heating-margin-devices get-coverage" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -578,7 +587,7 @@ export def "hardware-heating-margin-devices get-heating-margin-coverage" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --covered: oneof<nothing, bool> # If set to <em>true</em>, only gets devices whose heating margin information is available.<br>Otherwise, gets any other devices. (default: true)
+  --covered: oneof<nothing, bool> # If set to true, only gets devices whose heating margin information is available.Otherwise, gets any other devices. (default: true)
   --page: string # The page number to retrieve (first page is 0). (format: int32, default: 0)
   --limit: int # The maximum number of entries per page. (format: int32, default: 100)
   --direction: string@direction-completer # The sorting order (case insensitive). (default: asc)
@@ -697,7 +706,7 @@ export def "hardware-services get-one" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({service_id: $service_id} | format pattern "/hardware/services/{service_id}"))
+  let full_url = (build-url $base ({service_id: (encode-path-segment $service_id)} | format pattern "/hardware/services/{service_id}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

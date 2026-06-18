@@ -36,6 +36,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -72,7 +81,7 @@ def format-completer [] { ["pdf"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "alimw-certificate alimw" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "alimw-certificate create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -98,7 +107,7 @@ export def commands []: nothing -> table {
 # operationId: alimw
 # --certificateParameters shape: {RefNo: string, TokenNo: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "alimw-certificate alimw" [
+export def "alimw-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -116,11 +125,11 @@ export def "alimw-certificate alimw" [
   let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/alimw/certificate")
-  let body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Application/ License for Boilers
@@ -129,7 +138,7 @@ export def "alimw-certificate alimw" [
 # operationId: alsbl
 # --certificateParameters shape: {RefNo: string, TokenNo: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "alsbl-certificate alsbl" [
+export def "alsbl-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -147,11 +156,11 @@ export def "alsbl-certificate alsbl" [
   let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/alsbl/certificate")
-  let body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Application/ License for Factory
@@ -160,7 +169,7 @@ export def "alsbl-certificate alsbl" [
 # operationId: alsfc
 # --certificateParameters shape: {RefNo: string, TokenNo: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "alsfc-certificate alsfc" [
+export def "alsfc-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -178,11 +187,11 @@ export def "alsfc-certificate alsfc" [
   let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/alsfc/certificate")
-  let body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Application realted to Trade Unions
@@ -191,7 +200,7 @@ export def "alsfc-certificate alsfc" [
 # operationId: apptu
 # --certificateParameters shape: {RefNo: string, TokenNo: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "apptu-certificate apptu" [
+export def "apptu-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -209,11 +218,11 @@ export def "apptu-certificate apptu" [
   let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/apptu/certificate")
-  let body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Registration Certificate for Contract Labour License
@@ -222,7 +231,7 @@ export def "apptu-certificate apptu" [
 # operationId: clcer
 # --certificateParameters shape: {RefNo: string, TokenNo: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "clcer-certificate clcer" [
+export def "clcer-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -240,11 +249,11 @@ export def "clcer-certificate clcer" [
   let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/clcer/certificate")
-  let body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Notice of Closure
@@ -253,7 +262,7 @@ export def "clcer-certificate clcer" [
 # operationId: noocl
 # --certificateParameters shape: {RefNo: string, TokenNo: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "noocl-certificate noocl" [
+export def "noocl-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -271,11 +280,11 @@ export def "noocl-certificate noocl" [
   let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/noocl/certificate")
-  let body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Registration Certificate of Shops And Commercial Establishment
@@ -284,7 +293,7 @@ export def "noocl-certificate noocl" [
 # operationId: srcer
 # --certificateParameters shape: {RefNo: string, TokenNo: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "srcer-certificate srcer" [
+export def "srcer-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -302,9 +311,9 @@ export def "srcer-certificate srcer" [
   let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/srcer/certificate")
-  let body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

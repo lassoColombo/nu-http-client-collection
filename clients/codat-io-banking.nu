@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -69,7 +78,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "companies-connections-data-banking-account-balances list-account-balances" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "companies-connections-data-banking-account-balances list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,7 +102,7 @@ export def commands []: nothing -> table {
 #
 # GET /companies/{companyId}/connections/{connectionId}/data/banking-accountBalances
 # operationId: list-account-balances
-export def "companies-connections-data-banking-account-balances list-account-balances" [
+export def "companies-connections-data-banking-account-balances list" [
   company_id: string
   connection_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -112,7 +121,7 @@ export def "companies-connections-data-banking-account-balances list-account-bal
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "orderBy" $order_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: $company_id, connection_id: $connection_id} | format pattern "/companies/{company_id}/connections/{connection_id}/data/banking-accountBalances") $qp)
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/banking-accountBalances") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -122,7 +131,7 @@ export def "companies-connections-data-banking-account-balances list-account-bal
 #
 # GET /companies/{companyId}/connections/{connectionId}/data/banking-accounts
 # operationId: list-accounts
-export def "companies-connections-data-banking-accounts list-accounts" [
+export def "companies-connections-data-banking-accounts list" [
   company_id: string
   connection_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -141,7 +150,7 @@ export def "companies-connections-data-banking-accounts list-accounts" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "orderBy" $order_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: $company_id, connection_id: $connection_id} | format pattern "/companies/{company_id}/connections/{connection_id}/data/banking-accounts") $qp)
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/banking-accounts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -153,7 +162,7 @@ export def "companies-connections-data-banking-accounts list-accounts" [
 # DEPRECATED
 # operationId: get-account
 @deprecated
-export def "companies-connections-data-banking-accounts get-account" [
+export def "companies-connections-data-banking-accounts get" [
   company_id: string
   connection_id: string
   account_id: string
@@ -168,7 +177,7 @@ export def "companies-connections-data-banking-accounts get-account" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({company_id: $company_id, connection_id: $connection_id, account_id: $account_id} | format pattern "/companies/{company_id}/connections/{connection_id}/data/banking-accounts/{account_id}"))
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), account_id: (encode-path-segment $account_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/banking-accounts/{account_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -178,7 +187,7 @@ export def "companies-connections-data-banking-accounts get-account" [
 #
 # GET /companies/{companyId}/connections/{connectionId}/data/banking-transactionCategories
 # operationId: list-transaction-categories
-export def "companies-connections-data-banking-transaction-categories list-transaction-categories" [
+export def "companies-connections-data-banking-transaction-categories list" [
   company_id: any
   connection_id: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -197,7 +206,7 @@ export def "companies-connections-data-banking-transaction-categories list-trans
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "orderBy" $order_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: $company_id, connection_id: $connection_id} | format pattern "/companies/{company_id}/connections/{connection_id}/data/banking-transactionCategories") $qp)
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/banking-transactionCategories") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -209,7 +218,7 @@ export def "companies-connections-data-banking-transaction-categories list-trans
 # DEPRECATED
 # operationId: get-transaction-category
 @deprecated
-export def "companies-connections-data-banking-transaction-categories get-transaction-category" [
+export def "companies-connections-data-banking-transaction-categories get-category" [
   company_id: string
   connection_id: string
   transaction_category_id: string
@@ -224,7 +233,7 @@ export def "companies-connections-data-banking-transaction-categories get-transa
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({company_id: $company_id, connection_id: $connection_id, transaction_category_id: $transaction_category_id} | format pattern "/companies/{company_id}/connections/{connection_id}/data/banking-transactionCategories/{transaction_category_id}"))
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), transaction_category_id: (encode-path-segment $transaction_category_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/banking-transactionCategories/{transaction_category_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -234,7 +243,7 @@ export def "companies-connections-data-banking-transaction-categories get-transa
 #
 # GET /companies/{companyId}/connections/{connectionId}/data/banking-transactions
 # operationId: list-transactions
-export def "companies-connections-data-banking-transactions list-transactions" [
+export def "companies-connections-data-banking-transactions list" [
   company_id: any
   connection_id: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -253,7 +262,7 @@ export def "companies-connections-data-banking-transactions list-transactions" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "orderBy" $order_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: $company_id, connection_id: $connection_id} | format pattern "/companies/{company_id}/connections/{connection_id}/data/banking-transactions") $qp)
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/banking-transactions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -265,7 +274,7 @@ export def "companies-connections-data-banking-transactions list-transactions" [
 # DEPRECATED
 # operationId: get-transaction
 @deprecated
-export def "companies-connections-data-banking-transactions get-transaction" [
+export def "companies-connections-data-banking-transactions get" [
   company_id: string
   connection_id: string
   transaction_id: string
@@ -280,7 +289,7 @@ export def "companies-connections-data-banking-transactions get-transaction" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({company_id: $company_id, connection_id: $connection_id, transaction_id: $transaction_id} | format pattern "/companies/{company_id}/connections/{connection_id}/data/banking-transactions/{transaction_id}"))
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id), transaction_id: (encode-path-segment $transaction_id)} | format pattern "/companies/{company_id}/connections/{connection_id}/data/banking-transactions/{transaction_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -290,7 +299,7 @@ export def "companies-connections-data-banking-transactions get-transaction" [
 #
 # GET /companies/{companyId}/data/banking-transactions
 # operationId: list-bank-transactions
-export def "companies-data-banking-transactions list-bank-transactions" [
+export def "companies-data-banking-transactions list-bank" [
   company_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -308,7 +317,7 @@ export def "companies-data-banking-transactions list-bank-transactions" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "orderBy" $order_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({company_id: $company_id} | format pattern "/companies/{company_id}/data/banking-transactions") $qp)
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/data/banking-transactions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

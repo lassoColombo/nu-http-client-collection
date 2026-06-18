@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -68,7 +77,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v10-compare-station compareStation" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1-0-compare-station get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -88,11 +97,11 @@ export def commands []: nothing -> table {
   }
 }
 
-# Get forecast and realtime information for known points<br/>None
+# Get forecast and realtime information for known pointsNone
 #
 # GET /v1.0/compareStation/{stationName}/
 # operationId: compareStation
-export def "v10-compare-station compareStation" [
+export def "v1-0-compare-station get" [
   station_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -105,17 +114,17 @@ export def "v10-compare-station compareStation" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({station_name: $station_name} | format pattern "/v1.0/compareStation/{station_name}/"))
+  let full_url = (build-url $base ({station_name: (encode-path-segment $station_name)} | format pattern "/v1.0/compareStation/{station_name}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Get data from the aemet stations<br/>None
+# Get data from the aemet stationsNone
 #
 # GET /v1.0/getAemetStation/{stationName}/{period}/
 # operationId: getAemetStation
-export def "v10-get-aemet-station get" [
+export def "v1-0-get-aemet-station get" [
   station_name: string
   period: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -129,17 +138,17 @@ export def "v10-get-aemet-station get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({station_name: $station_name, period: $period} | format pattern "/v1.0/getAemetStation/{station_name}/{period}/"))
+  let full_url = (build-url $base ({station_name: (encode-path-segment $station_name), period: (encode-path-segment $period)} | format pattern "/v1.0/getAemetStation/{station_name}/{period}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Get data from the easywind weather stations<br/>None
+# Get data from the easywind weather stationsNone
 #
 # GET /v1.0/getEasyWind/{easywindId}/
 # operationId: getEasywind
-export def "v10-get-easy-wind get-easywind" [
+export def "v1-0-get-easy-wind get-easywind" [
   easywind_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -154,17 +163,17 @@ export def "v10-get-easy-wind get-easywind" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "period" $period "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({easywind_id: $easywind_id} | format pattern "/v1.0/getEasyWind/{easywind_id}/") $qp)
+  let full_url = (build-url $base ({easywind_id: (encode-path-segment $easywind_id)} | format pattern "/v1.0/getEasyWind/{easywind_id}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Get stations in an event<br/>None
+# Get stations in an eventNone
 #
 # GET /v1.0/getEventStations/{eventId}/
 # operationId: getEventStations
-export def "v10-get-event-stations get" [
+export def "v1-0-get-event-stations get" [
   event_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -177,17 +186,17 @@ export def "v10-get-event-stations get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({event_id: $event_id} | format pattern "/v1.0/getEventStations/{event_id}/"))
+  let full_url = (build-url $base ({event_id: (encode-path-segment $event_id)} | format pattern "/v1.0/getEventStations/{event_id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Get forecast points of a yatchclub<br/>None
+# Get forecast points of a yatchclubNone
 #
 # GET /v1.0/getForecastPoints/{yatchclubid}/language/{language}
 # operationId: getForecastPoints
-export def "v10-get-forecast-points-language get" [
+export def "v1-0-get-forecast-points-language get" [
   yatchclubid: string
   language: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -201,17 +210,17 @@ export def "v10-get-forecast-points-language get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({yatchclubid: $yatchclubid, language: $language} | format pattern "/v1.0/getForecastPoints/{yatchclubid}/language/{language}"))
+  let full_url = (build-url $base ({yatchclubid: (encode-path-segment $yatchclubid), language: (encode-path-segment $language)} | format pattern "/v1.0/getForecastPoints/{yatchclubid}/language/{language}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Get timeseries forecast information<br/>None
+# Get timeseries forecast informationNone
 #
 # GET /v1.0/getForecastTimeSeries/{latitude}/{longitude}/
 # operationId: getForecastTimeSeries
-export def "v10-get-forecast-time-series get" [
+export def "v1-0-get-forecast-time-series get" [
   latitude: float
   longitude: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -226,24 +235,24 @@ export def "v10-get-forecast-time-series get" [
   --endtime: string # end date for the forecast ISO string YYYY-MM-DDTHH:mm:SS.SZ
   --days: int # optional number of days in string. Will be added to init forecast date (format: int32)
   --hours: int # optional number of hours in string. Will be added to init forecast date (format: int32)
-  --weather: string #  Comma separated values for the weather parameteres temperature,rain,wind_u,wind_v,gust,pressure,cloud,humidity&wave=height,direction,period
-  --wave: string #  Comma separated values for the wave parameteres height,direction,period
+  --weather: string # Comma separated values for the weather parameteres temperature,rain,wind_u,wind_v,gust,pressure,cloud,humidity&wave=height,direction,period
+  --wave: string # Comma separated values for the wave parameteres height,direction,period
   --entryid: string # Direct file I want to extract
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "inittime" $inittime "scalar") (serialize-qp "endtime" $endtime "scalar") (serialize-qp "days" $days "scalar") (serialize-qp "hours" $hours "scalar") (serialize-qp "weather" $weather "scalar") (serialize-qp "wave" $wave "scalar") (serialize-qp "entryid" $entryid "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({latitude: $latitude, longitude: $longitude} | format pattern "/v1.0/getForecastTimeSeries/{latitude}/{longitude}/") $qp)
+  let full_url = (build-url $base ({latitude: (encode-path-segment $latitude), longitude: (encode-path-segment $longitude)} | format pattern "/v1.0/getForecastTimeSeries/{latitude}/{longitude}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Get timeseries forecast information<br/>None
+# Get timeseries forecast informationNone
 #
 # GET /v1.0/getForecastTimeSeriesWrf/{latitude}/{longitude}/
 # operationId: getForecastTimeSeriesWrf
-export def "v10-get-forecast-time-series-wrf get" [
+export def "v1-0-get-forecast-time-series-wrf get" [
   latitude: float
   longitude: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -258,24 +267,24 @@ export def "v10-get-forecast-time-series-wrf get" [
   --endtime: string # end date for the forecast ISO string YYYY-MM-DDTHH:mm:SS.SZ
   --days: int # optional number of days in string. Will be added to init forecast date (format: int32)
   --hours: int # optional number of hours in string. Will be added to init forecast date (format: int32)
-  --weather: string #  Comma separated values for the weather parameteres temperature,rain,wind_u,wind_v,gust,pressure,cloud,humidity&wave=height,direction,period
-  --wave: string #  Comma separated values for the wave parameteres height,direction,period
+  --weather: string # Comma separated values for the weather parameteres temperature,rain,wind_u,wind_v,gust,pressure,cloud,humidity&wave=height,direction,period
+  --wave: string # Comma separated values for the wave parameteres height,direction,period
   --entryid: string # Direct file I want to extract
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "inittime" $inittime "scalar") (serialize-qp "endtime" $endtime "scalar") (serialize-qp "days" $days "scalar") (serialize-qp "hours" $hours "scalar") (serialize-qp "weather" $weather "scalar") (serialize-qp "wave" $wave "scalar") (serialize-qp "entryid" $entryid "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({latitude: $latitude, longitude: $longitude} | format pattern "/v1.0/getForecastTimeSeriesWrf/{latitude}/{longitude}/") $qp)
+  let full_url = (build-url $base ({latitude: (encode-path-segment $latitude), longitude: (encode-path-segment $longitude)} | format pattern "/v1.0/getForecastTimeSeriesWrf/{latitude}/{longitude}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Get data from the socib bahia de palma buoy<br/>None
+# Get data from the socib bahia de palma buoyNone
 #
 # GET /v1.0/getSocibWeatherStation/{stationName}/{period}/
 # operationId: getSocibWeatherStation
-export def "v10-get-socib-weather-station get" [
+export def "v1-0-get-socib-weather-station get" [
   station_name: string
   period: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -289,17 +298,17 @@ export def "v10-get-socib-weather-station get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({station_name: $station_name, period: $period} | format pattern "/v1.0/getSocibWeatherStation/{station_name}/{period}/"))
+  let full_url = (build-url $base ({station_name: (encode-path-segment $station_name), period: (encode-path-segment $period)} | format pattern "/v1.0/getSocibWeatherStation/{station_name}/{period}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Get data from the weather display software<br/>None
+# Get data from the weather display softwareNone
 #
 # GET /v1.0/getWeatherDisplay/{stationName}/
 # operationId: getWeatherDisplay
-export def "v10-get-weather-display get" [
+export def "v1-0-get-weather-display get" [
   station_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -314,17 +323,17 @@ export def "v10-get-weather-display get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "period" $period "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({station_name: $station_name} | format pattern "/v1.0/getWeatherDisplay/{station_name}/") $qp)
+  let full_url = (build-url $base ({station_name: (encode-path-segment $station_name)} | format pattern "/v1.0/getWeatherDisplay/{station_name}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Get forecast and realtime information for known points<br/>None
+# Get forecast and realtime information for known pointsNone
 #
 # GET /v1.0/getWebCams/
 # operationId: getWebCams
-export def "v10-get-web-cams get" [
+export def "v1-0-get-web-cams get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

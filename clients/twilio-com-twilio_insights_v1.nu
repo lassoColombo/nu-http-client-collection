@@ -12,6 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
   match $scheme {
     "basic" => { {headers: {Authorization: $"Basic ($token_val)"}, query: ""} }
+    "basic-credentials" => { {headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: ""} }
     "none" => { {headers: {}, query: ""} }
     _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
   }
@@ -33,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
     "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
     _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -63,7 +73,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 }
 
 def base-url-completer [] { ["https://insights.twilio.com"] }
-def auth-scheme-completer [] { ["basic"] }
+def auth-scheme-completer [] { ["basic" "basic-credentials"] }
 
 # Completers for enum parameters
 def processing-state-completer [] { ["all" "completed" "partial" "started"] }
@@ -151,7 +161,7 @@ export def "conferences get" [
 ]: nothing -> record<account_sid: string, conference_sid: string, connect_duration_seconds: int, create_time: string, detected_issues: any, duration_seconds: int, end_reason: string, end_time: string, ended_by: string, friendly_name: string, links: record, max_concurrent_participants: int, max_participants: int, mixer_region: string, mixer_region_requested: string, processing_state: string, recording_enabled: bool, start_time: string, status: string, tag_info: any, tags: list<string>, unique_participants: int, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://insights.twilio.com")
-  let full_url = (build-url $base ({conference_sid: $conference_sid} | format pattern "/v1/Conferences/{conference_sid}"))
+  let full_url = (build-url $base ({conference_sid: (encode-path-segment $conference_sid)} | format pattern "/v1/Conferences/{conference_sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -181,7 +191,7 @@ export def "conferences-participants list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://insights.twilio.com")
   let qp = [(serialize-qp "ParticipantSid" $participant_sid "scalar") (serialize-qp "Label" $label "scalar") (serialize-qp "Events" $events "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({conference_sid: $conference_sid} | format pattern "/v1/Conferences/{conference_sid}/Participants") $qp)
+  let full_url = (build-url $base ({conference_sid: (encode-path-segment $conference_sid)} | format pattern "/v1/Conferences/{conference_sid}/Participants") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -208,7 +218,7 @@ export def "conferences-participants get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://insights.twilio.com")
   let qp = [(serialize-qp "Events" $events "scalar") (serialize-qp "Metrics" $metrics "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({conference_sid: $conference_sid, participant_sid: $participant_sid} | format pattern "/v1/Conferences/{conference_sid}/Participants/{participant_sid}") $qp)
+  let full_url = (build-url $base ({conference_sid: (encode-path-segment $conference_sid), participant_sid: (encode-path-segment $participant_sid)} | format pattern "/v1/Conferences/{conference_sid}/Participants/{participant_sid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -218,7 +228,7 @@ export def "conferences-participants get" [
 #
 # GET /v1/Video/Rooms
 # operationId: ListVideoRoomSummary
-export def "video-rooms list-video-room-summary" [
+export def "video-rooms list-summary" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -227,8 +237,8 @@ export def "video-rooms list-video-room-summary" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --room-type: list # Type of room. Can be `go`, `peer_to_peer`, `group`, or `group_small`.
-  --codec: list # Codecs used by participants in the room. Can be `VP8`, `H264`, or `VP9`.
+  --room-type: list<string> # Type of room. Can be `go`, `peer_to_peer`, `group`, or `group_small`.
+  --codec: list<string> # Codecs used by participants in the room. Can be `VP8`, `H264`, or `VP9`.
   --room-name: string # Room friendly name.
   --created-after: string # Only read rooms that started on or after this ISO 8601 timestamp. (format: date-time)
   --created-before: string # Only read rooms that started before this ISO 8601 timestamp. (format: date-time)
@@ -249,7 +259,7 @@ export def "video-rooms list-video-room-summary" [
 #
 # GET /v1/Video/Rooms/{RoomSid}
 # operationId: FetchVideoRoomSummary
-export def "video-rooms get-video-room-summary" [
+export def "video-rooms get-summary" [
   room_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -262,7 +272,7 @@ export def "video-rooms get-video-room-summary" [
 ]: nothing -> record<account_sid: string, codecs: list<string>, concurrent_participants: int, create_time: string, created_method: string, duration_sec: int, edge_location: string, end_reason: string, end_time: string, links: record, max_concurrent_participants: int, max_participants: int, media_region: string, processing_state: string, recording_enabled: bool, room_name: string, room_sid: string, room_status: string, room_type: string, status_callback: string, status_callback_method: string, total_participant_duration_sec: int, total_recording_duration_sec: int, unique_participant_identities: int, unique_participants: int, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://insights.twilio.com")
-  let full_url = (build-url $base ({room_sid: $room_sid} | format pattern "/v1/Video/Rooms/{room_sid}"))
+  let full_url = (build-url $base ({room_sid: (encode-path-segment $room_sid)} | format pattern "/v1/Video/Rooms/{room_sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -272,7 +282,7 @@ export def "video-rooms get-video-room-summary" [
 #
 # GET /v1/Video/Rooms/{RoomSid}/Participants
 # operationId: ListVideoParticipantSummary
-export def "video-rooms-participants list-video-participant-summary" [
+export def "video-rooms-participants list-summary" [
   room_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -289,7 +299,7 @@ export def "video-rooms-participants list-video-participant-summary" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://insights.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({room_sid: $room_sid} | format pattern "/v1/Video/Rooms/{room_sid}/Participants") $qp)
+  let full_url = (build-url $base ({room_sid: (encode-path-segment $room_sid)} | format pattern "/v1/Video/Rooms/{room_sid}/Participants") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -299,7 +309,7 @@ export def "video-rooms-participants list-video-participant-summary" [
 #
 # GET /v1/Video/Rooms/{RoomSid}/Participants/{ParticipantSid}
 # operationId: FetchVideoParticipantSummary
-export def "video-rooms-participants get-video-participant-summary" [
+export def "video-rooms-participants get-summary" [
   room_sid: string
   participant_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -313,7 +323,7 @@ export def "video-rooms-participants get-video-participant-summary" [
 ]: nothing -> record<account_sid: string, codecs: list<string>, duration_sec: int, edge_location: string, end_reason: string, error_code: int, error_code_url: string, join_time: string, leave_time: string, media_region: string, participant_identity: string, participant_sid: string, properties: any, publisher_info: any, room_sid: string, status: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://insights.twilio.com")
-  let full_url = (build-url $base ({room_sid: $room_sid, participant_sid: $participant_sid} | format pattern "/v1/Video/Rooms/{room_sid}/Participants/{participant_sid}"))
+  let full_url = (build-url $base ({room_sid: (encode-path-segment $room_sid), participant_sid: (encode-path-segment $participant_sid)} | format pattern "/v1/Video/Rooms/{room_sid}/Participants/{participant_sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -362,11 +372,12 @@ export def "voice-settings update-account" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://insights.twilio.com")
   let full_url = (build-url $base "/v1/Voice/Settings")
-  let body = {"AdvancedFeatures": $advanced_features, "SubaccountSid": $subaccount_sid, "VoiceTrace": $voice_trace} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"AdvancedFeatures": $advanced_features, "SubaccountSid": $subaccount_sid, "VoiceTrace": $voice_trace} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # GET /v1/Voice/Summaries
@@ -430,7 +441,7 @@ export def "voice-annotation get" [
 ]: nothing -> record<account_sid: string, answered_by: string, call_score: int, call_sid: string, comment: string, connectivity_issue: string, incident: string, quality_issues: list<string>, spam: bool, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://insights.twilio.com")
-  let full_url = (build-url $base ({call_sid: $call_sid} | format pattern "/v1/Voice/{call_sid}/Annotation"))
+  let full_url = (build-url $base ({call_sid: (encode-path-segment $call_sid)} | format pattern "/v1/Voice/{call_sid}/Annotation"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -455,18 +466,19 @@ export def "voice-annotation update" [
   --comment: string # Specify any comments pertaining to the call. This of type string with a max limit of 100 characters. Twilio does not treat this field as PII, so don’t put any PII in here.
   --connectivity-issue: string@connectivity-issue-completer
   --incident: string # Associate this call with an incident or support ticket. This is of type string with a max limit of 100 characters. Twilio does not treat this field as PII, so don’t put any PII in here.
-  --quality-issues: string # Specify if the call had any subjective quality issues. Possible values, one or more of:  no_quality_issue, low_volume, choppy_robotic, echo, dtmf, latency, owa, static_noise. Use comma separated values to indicate multiple quality issues for the same call
+  --quality-issues: string # Specify if the call had any subjective quality issues. Possible values, one or more of: no_quality_issue, low_volume, choppy_robotic, echo, dtmf, latency, owa, static_noise. Use comma separated values to indicate multiple quality issues for the same call
   --spam: oneof<nothing, bool> # Specify if the call was a spam call. Use this to provide feedback on whether calls placed from your account were marked as spam, or if inbound calls received by your account were unwanted spam. Is of type Boolean: true, false. Use true if the call was a spam call.
 ]: any -> record<account_sid: string, answered_by: string, call_score: int, call_sid: string, comment: string, connectivity_issue: string, incident: string, quality_issues: list<string>, spam: bool, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://insights.twilio.com")
-  let full_url = (build-url $base ({call_sid: $call_sid} | format pattern "/v1/Voice/{call_sid}/Annotation"))
-  let body = {"AnsweredBy": $answered_by, "CallScore": $call_score, "Comment": $comment, "ConnectivityIssue": $connectivity_issue, "Incident": $incident, "QualityIssues": $quality_issues, "Spam": $spam} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({call_sid: (encode-path-segment $call_sid)} | format pattern "/v1/Voice/{call_sid}/Annotation"))
+  let req_body = {"AnsweredBy": $answered_by, "CallScore": $call_score, "Comment": $comment, "ConnectivityIssue": $connectivity_issue, "Incident": $incident, "QualityIssues": $quality_issues, "Spam": $spam} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # GET /v1/Voice/{CallSid}/Events
@@ -490,7 +502,7 @@ export def "voice-events list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://insights.twilio.com")
   let qp = [(serialize-qp "Edge" $edge "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({call_sid: $call_sid} | format pattern "/v1/Voice/{call_sid}/Events") $qp)
+  let full_url = (build-url $base ({call_sid: (encode-path-segment $call_sid)} | format pattern "/v1/Voice/{call_sid}/Events") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -518,7 +530,7 @@ export def "voice-metrics list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://insights.twilio.com")
   let qp = [(serialize-qp "Edge" $edge "scalar") (serialize-qp "Direction" $direction "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({call_sid: $call_sid} | format pattern "/v1/Voice/{call_sid}/Metrics") $qp)
+  let full_url = (build-url $base ({call_sid: (encode-path-segment $call_sid)} | format pattern "/v1/Voice/{call_sid}/Metrics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -542,7 +554,7 @@ export def "voice-summary get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://insights.twilio.com")
   let qp = [(serialize-qp "ProcessingState" $processing_state "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({call_sid: $call_sid} | format pattern "/v1/Voice/{call_sid}/Summary") $qp)
+  let full_url = (build-url $base ({call_sid: (encode-path-segment $call_sid)} | format pattern "/v1/Voice/{call_sid}/Summary") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -564,7 +576,7 @@ export def "voice get-call" [
 ]: nothing -> record<links: record, sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://insights.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/Voice/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Voice/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

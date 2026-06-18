@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -74,7 +83,7 @@ def mode-completer [] { ["ASYNCHRONOUS" "SYNCHRONOUS" "UNSPECIFIED"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "debug-items-search-by-view-url cloudsearchdebugdatasourcesitemssearchByViewUrl" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "debug-items-search-by-view-url list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -99,7 +108,7 @@ export def commands []: nothing -> table {
 # POST /v1/debug/{name}/items:searchByViewUrl
 # operationId: cloudsearch.debug.datasources.items.searchByViewUrl
 # --debugOptions shape: {enableDebugging?: bool}
-export def "debug-items-search-by-view-url cloudsearchdebugdatasourcesitemssearchByViewUrl" [
+export def "debug-items-search-by-view-url list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -128,12 +137,12 @@ export def "debug-items-search-by-view-url cloudsearchdebugdatasourcesitemssearc
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/debug/{name}/items:searchByViewUrl") $qp)
-  let body = {"debugOptions": $debug_options, "pageToken": $page_token, "viewUrl": $view_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/debug/{name}/items:searchByViewUrl") $qp)
+  let req_body = {"debugOptions": $debug_options, "pageToken": $page_token, "viewUrl": $view_url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Checks whether an item is accessible by specified principal. Principal must be a user; groups and domain values aren't supported. **Note:** This API requires an admin account to execute.
@@ -141,7 +150,7 @@ export def "debug-items-search-by-view-url cloudsearchdebugdatasourcesitemssearc
 # POST /v1/debug/{name}:checkAccess
 # operationId: cloudsearch.debug.datasources.items.checkAccess
 # --gsuitePrincipal shape: {gsuiteDomain?: bool, gsuiteGroupEmail?: string, gsuiteUserEmail?: string}
-export def "debug cloudsearchdebugdatasourcesitemscheckAccess" [
+export def "debug check-access" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -171,19 +180,19 @@ export def "debug cloudsearchdebugdatasourcesitemscheckAccess" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "debugOptions.enableDebugging" $debug_options_enable_debugging "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/debug/{name}:checkAccess") $qp)
-  let body = {"groupResourceName": $group_resource_name, "gsuitePrincipal": $gsuite_principal, "userResourceName": $user_resource_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/debug/{name}:checkAccess") $qp)
+  let req_body = {"groupResourceName": $group_resource_name, "gsuitePrincipal": $gsuite_principal, "userResourceName": $user_resource_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists names of items associated with an unmapped identity. **Note:** This API requires an admin account to execute.
 #
 # GET /v1/debug/{parent}/items:forunmappedidentity
 # operationId: cloudsearch.debug.identitysources.items.listForunmappedidentity
-export def "debug-items-forunmappedidentity cloudsearchdebugidentitysourcesitemslistForunmappedidentity" [
+export def "debug-items-forunmappedidentity list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -213,7 +222,7 @@ export def "debug-items-forunmappedidentity cloudsearchdebugidentitysourcesitems
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "debugOptions.enableDebugging" $debug_options_enable_debugging "scalar") (serialize-qp "groupResourceName" $group_resource_name "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "userResourceName" $user_resource_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/debug/{parent}/items:forunmappedidentity") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/debug/{parent}/items:forunmappedidentity") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -223,7 +232,7 @@ export def "debug-items-forunmappedidentity cloudsearchdebugidentitysourcesitems
 #
 # GET /v1/debug/{parent}/unmappedids
 # operationId: cloudsearch.debug.identitysources.unmappedids.list
-export def "debug-unmappedids cloudsearchdebugidentitysourcesunmappedidslist" [
+export def "debug-unmappedids list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -252,7 +261,7 @@ export def "debug-unmappedids cloudsearchdebugidentitysourcesunmappedidslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "debugOptions.enableDebugging" $debug_options_enable_debugging "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "resolutionStatusCode" $resolution_status_code "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/debug/{parent}/unmappedids") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/debug/{parent}/unmappedids") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -262,7 +271,7 @@ export def "debug-unmappedids cloudsearchdebugidentitysourcesunmappedidslist" [
 #
 # DELETE /v1/indexing/{name}
 # operationId: cloudsearch.indexing.datasources.items.delete
-export def "indexing cloudsearchindexingdatasourcesitemsdelete" [
+export def "indexing delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -291,7 +300,7 @@ export def "indexing cloudsearchindexingdatasourcesitemsdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "connectorName" $connector_name "scalar") (serialize-qp "debugOptions.enableDebugging" $debug_options_enable_debugging "scalar") (serialize-qp "mode" $mode "scalar") (serialize-qp "version" $version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/indexing/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/indexing/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -301,7 +310,7 @@ export def "indexing cloudsearchindexingdatasourcesitemsdelete" [
 #
 # GET /v1/indexing/{name}
 # operationId: cloudsearch.indexing.datasources.items.get
-export def "indexing cloudsearchindexingdatasourcesitemsget" [
+export def "indexing get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -328,7 +337,7 @@ export def "indexing cloudsearchindexingdatasourcesitemsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "connectorName" $connector_name "scalar") (serialize-qp "debugOptions.enableDebugging" $debug_options_enable_debugging "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/indexing/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/indexing/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -338,7 +347,7 @@ export def "indexing cloudsearchindexingdatasourcesitemsget" [
 #
 # GET /v1/indexing/{name}/items
 # operationId: cloudsearch.indexing.datasources.items.list
-export def "indexing-items cloudsearchindexingdatasourcesitemslist" [
+export def "indexing-items list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -368,7 +377,7 @@ export def "indexing-items cloudsearchindexingdatasourcesitemslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "brief" $brief "scalar") (serialize-qp "connectorName" $connector_name "scalar") (serialize-qp "debugOptions.enableDebugging" $debug_options_enable_debugging "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/indexing/{name}/items") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/indexing/{name}/items") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -379,7 +388,7 @@ export def "indexing-items cloudsearchindexingdatasourcesitemslist" [
 # POST /v1/indexing/{name}/items:deleteQueueItems
 # operationId: cloudsearch.indexing.datasources.items.deleteQueueItems
 # --debugOptions shape: {enableDebugging?: bool}
-export def "indexing-items-delete-queue-items cloudsearchindexingdatasourcesitemsdeleteQueueItems" [
+export def "indexing-items-delete-queue-items delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -408,12 +417,12 @@ export def "indexing-items-delete-queue-items cloudsearchindexingdatasourcesitem
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/indexing/{name}/items:deleteQueueItems") $qp)
-  let body = {"connectorName": $connector_name, "debugOptions": $debug_options, "queue": $queue} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/indexing/{name}/items:deleteQueueItems") $qp)
+  let req_body = {"connectorName": $connector_name, "debugOptions": $debug_options, "queue": $queue} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Polls for unreserved items from the indexing queue and marks a set as reserved, starting with items that have the oldest timestamp from the highest priority ItemStatus. The priority order is as follows: ERROR MODIFIED NEW_ITEM ACCEPTED Reserving items ensures that polling from other threads cannot create overlapping sets. After handling the reserved items, the client should put items back into the unreserved state, either by calling index, or by calling push with the type REQUEUE. Items automatically become available (unreserved) after 4 hours even if no update or push method is called. This API requires an admin or service account to execute. The service account used is the one whitelisted in the corresponding data source.
@@ -421,7 +430,7 @@ export def "indexing-items-delete-queue-items cloudsearchindexingdatasourcesitem
 # POST /v1/indexing/{name}/items:poll
 # operationId: cloudsearch.indexing.datasources.items.poll
 # --debugOptions shape: {enableDebugging?: bool}
-export def "indexing-items-poll cloudsearchindexingdatasourcesitemspoll" [
+export def "indexing-items-poll create" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -446,18 +455,18 @@ export def "indexing-items-poll cloudsearchindexingdatasourcesitemspoll" [
   --debug-options: record # Shared request debug options for all cloudsearch RPC methods. — shape: {enableDebugging?: bool}
   --limit: int # Maximum number of items to return. The maximum value is 100 and the default value is 20. (format: int32)
   --queue: string # Queue name to fetch items from. If unspecified, PollItems will fetch from 'default' queue. The maximum length is 100 characters.
-  --status-codes: list # Limit the items polled to the ones with these statuses.
+  --status-codes: list<string> # Limit the items polled to the ones with these statuses.
 ]: any -> record<items: table<acl: record, content: record, itemType: string, metadata: record, name: string, payload: string, queue: string, status: record, structuredData: record, version: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/indexing/{name}/items:poll") $qp)
-  let body = {"connectorName": $connector_name, "debugOptions": $debug_options, "limit": $limit, "queue": $queue, "statusCodes": $status_codes} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/indexing/{name}/items:poll") $qp)
+  let req_body = {"connectorName": $connector_name, "debugOptions": $debug_options, "limit": $limit, "queue": $queue, "statusCodes": $status_codes} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Unreserves all items from a queue, making them all eligible to be polled. This method is useful for resetting the indexing queue after a connector has been restarted. This API requires an admin or service account to execute. The service account used is the one whitelisted in the corresponding data source.
@@ -465,7 +474,7 @@ export def "indexing-items-poll cloudsearchindexingdatasourcesitemspoll" [
 # POST /v1/indexing/{name}/items:unreserve
 # operationId: cloudsearch.indexing.datasources.items.unreserve
 # --debugOptions shape: {enableDebugging?: bool}
-export def "indexing-items-unreserve cloudsearchindexingdatasourcesitemsunreserve" [
+export def "indexing-items-unreserve create" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -494,19 +503,19 @@ export def "indexing-items-unreserve cloudsearchindexingdatasourcesitemsunreserv
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/indexing/{name}/items:unreserve") $qp)
-  let body = {"connectorName": $connector_name, "debugOptions": $debug_options, "queue": $queue} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/indexing/{name}/items:unreserve") $qp)
+  let req_body = {"connectorName": $connector_name, "debugOptions": $debug_options, "queue": $queue} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes the schema of a data source. **Note:** This API requires an admin or service account to execute.
 #
 # DELETE /v1/indexing/{name}/schema
 # operationId: cloudsearch.indexing.datasources.deleteSchema
-export def "indexing-schema cloudsearchindexingdatasourcesdeleteSchema" [
+export def "indexing-schema delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -532,7 +541,7 @@ export def "indexing-schema cloudsearchindexingdatasourcesdeleteSchema" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "debugOptions.enableDebugging" $debug_options_enable_debugging "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/indexing/{name}/schema") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/indexing/{name}/schema") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -542,7 +551,7 @@ export def "indexing-schema cloudsearchindexingdatasourcesdeleteSchema" [
 #
 # GET /v1/indexing/{name}/schema
 # operationId: cloudsearch.indexing.datasources.getSchema
-export def "indexing-schema cloudsearchindexingdatasourcesgetSchema" [
+export def "indexing-schema get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -568,7 +577,7 @@ export def "indexing-schema cloudsearchindexingdatasourcesgetSchema" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "debugOptions.enableDebugging" $debug_options_enable_debugging "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/indexing/{name}/schema") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/indexing/{name}/schema") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -579,8 +588,8 @@ export def "indexing-schema cloudsearchindexingdatasourcesgetSchema" [
 # PUT /v1/indexing/{name}/schema
 # operationId: cloudsearch.indexing.datasources.updateSchema
 # --debugOptions shape: {enableDebugging?: bool}
-# --schema shape: {objectDefinitions?: list, operationIds?: list}
-export def "indexing-schema cloudsearchindexingdatasourcesupdateSchema" [
+# --schema shape: {objectDefinitions?: list, operationIds?: list<string>}
+export def "indexing-schema update" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -602,19 +611,19 @@ export def "indexing-schema cloudsearchindexingdatasourcesupdateSchema" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --debug-options: record # Shared request debug options for all cloudsearch RPC methods. — shape: {enableDebugging?: bool}
-  --schema: record # The schema definition for a data source. — shape: {objectDefinitions?: list, operationIds?: list}
+  --schema: record # The schema definition for a data source. — shape: {objectDefinitions?: list, operationIds?: list<string>}
   --validate-only: oneof<nothing, bool> # If true, the schema will be checked for validity, but will not be registered with the data source, even if valid.
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/indexing/{name}/schema") $qp)
-  let body = {"debugOptions": $debug_options, "schema": $schema, "validateOnly": $validate_only} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/indexing/{name}/schema") $qp)
+  let req_body = {"debugOptions": $debug_options, "schema": $schema, "validateOnly": $validate_only} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates Item ACL, metadata, and content. It will insert the Item if it does not exist. This method does not support partial updates. Fields with no provided values are cleared out in the Cloud Search index. This API requires an admin or service account to execute. The service account used is the one whitelisted in the corresponding data source.
@@ -624,7 +633,7 @@ export def "indexing-schema cloudsearchindexingdatasourcesupdateSchema" [
 # --debugOptions shape: {enableDebugging?: bool}
 # --indexItemOptions shape: {allowUnknownGsuitePrincipals?: bool}
 # --item shape: {acl?: record, content?: record, itemType?: "UNSPECIFIED"|"CONTENT_ITEM"|"CONTAINER_ITEM"|"VIRTUAL_CONTAINER_ITEM", metadata?: record, name?: string, payload?: string, queue?: string, status?: record, structuredData?: record, version?: string}
-export def "indexing cloudsearchindexingdatasourcesitemsindex" [
+export def "indexing create-index" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -655,12 +664,12 @@ export def "indexing cloudsearchindexingdatasourcesitemsindex" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/indexing/{name}:index") $qp)
-  let body = {"connectorName": $connector_name, "debugOptions": $debug_options, "indexItemOptions": $index_item_options, "item": $item, "mode": $mode} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/indexing/{name}:index") $qp)
+  let req_body = {"connectorName": $connector_name, "debugOptions": $debug_options, "indexItemOptions": $index_item_options, "item": $item, "mode": $mode} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Pushes an item onto a queue for later polling and updating. This API requires an admin or service account to execute. The service account used is the one whitelisted in the corresponding data source.
@@ -669,7 +678,7 @@ export def "indexing cloudsearchindexingdatasourcesitemsindex" [
 # operationId: cloudsearch.indexing.datasources.items.push
 # --debugOptions shape: {enableDebugging?: bool}
 # --item shape: {contentHash?: string, metadataHash?: string, payload?: string, queue?: string, repositoryError?: record, structuredDataHash?: string, type?: "UNSPECIFIED"|"MODIFIED"|"NOT_MODIFIED"|"REPOSITORY_ERROR"|"REQUEUE"}
-export def "indexing cloudsearchindexingdatasourcesitemspush" [
+export def "indexing push" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -698,12 +707,12 @@ export def "indexing cloudsearchindexingdatasourcesitemspush" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/indexing/{name}:push") $qp)
-  let body = {"connectorName": $connector_name, "debugOptions": $debug_options, "item": $item} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/indexing/{name}:push") $qp)
+  let req_body = {"connectorName": $connector_name, "debugOptions": $debug_options, "item": $item} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Creates an upload session for uploading item content. For items smaller than 100 KB, it's easier to embed the content inline within an index request. This API requires an admin or service account to execute. The service account used is the one whitelisted in the corresponding data source.
@@ -711,7 +720,7 @@ export def "indexing cloudsearchindexingdatasourcesitemspush" [
 # POST /v1/indexing/{name}:upload
 # operationId: cloudsearch.indexing.datasources.items.upload
 # --debugOptions shape: {enableDebugging?: bool}
-export def "indexing cloudsearchindexingdatasourcesitemsupload" [
+export def "indexing upload" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -739,19 +748,19 @@ export def "indexing cloudsearchindexingdatasourcesitemsupload" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/indexing/{name}:upload") $qp)
-  let body = {"connectorName": $connector_name, "debugOptions": $debug_options} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/indexing/{name}:upload") $qp)
+  let req_body = {"connectorName": $connector_name, "debugOptions": $debug_options} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Uploads media for indexing. The upload endpoint supports direct and resumable upload protocols and is intended for large items that can not be [inlined during index requests](https://developers.google.com/cloud-search/docs/reference/rest/v1/indexing.datasources.items#itemcontent). To index large content: 1. Call indexing.datasources.items.upload with the item name to begin an upload session and retrieve the UploadItemRef. 1. Call media.upload to upload the content, as a streaming request, using the same resource name from the UploadItemRef from step 1. 1. Call indexing.datasources.items.index to index the item. Populate the [ItemContent](/cloud-search/docs/reference/rest/v1/indexing.datasources.items#ItemContent) with the UploadItemRef from step 1. For additional information, see [Create a content connector using the REST API](https://developers.google.com/cloud-search/docs/guides/content-connector#rest). **Note:** This API requires a service account to execute.
 #
 # POST /v1/media/{resourceName}
 # operationId: cloudsearch.media.upload
-export def "media cloudsearchmediaupload" [
+export def "media upload" [
   resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -778,24 +787,25 @@ export def "media cloudsearchmediaupload" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_name: $resource_name} | format pattern "/v1/media/{resource_name}") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({resource_name: (encode-path-segment $resource_name)} | format pattern "/v1/media/{resource_name}") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/octet-stream" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/octet-stream" $req_body
 }
 
 # The Cloud Search Query API provides the search method, which returns the most relevant results from a user query. The results can come from Google Workspace apps, such as Gmail or Google Drive, or they can come from data that you have indexed from a third party. **Note:** This API requires a standard end user account to execute. A service account can't perform Query API requests directly; to use a service account to perform queries, set up [Google Workspace domain-wide delegation of authority](https://developers.google.com/cloud-search/docs/guides/delegation/).
 #
 # POST /v1/query/search
 # operationId: cloudsearch.query.search
-# --contextAttributes item shape: {name?: string, values?: list}
+# --contextAttributes item shape: {name?: string, values?: list<string>}
 # --dataSourceRestrictions item shape: {filterOptions?: list, source?: record}
 # --facetOptions item shape: {integerFacetingOptions?: record, numFacetBuckets?: int, objectType?: string, operatorName?: string, sourceName?: string}
 # --queryInterpretationOptions shape: {disableNlInterpretation?: bool, disableSupplementalResults?: bool, enableVerbatimMode?: bool}
 # --requestOptions shape: {debugOptions?: record, languageCode?: string, searchApplicationId?: string, timeZone?: string}
 # --sortOptions shape: {operatorName?: string, sortOrder?: "ASCENDING"|"DESCENDING"}
-export def "query-search cloudsearchquerysearch" [
+export def "query-search list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -815,7 +825,7 @@ export def "query-search cloudsearchquerysearch" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --context-attributes: list # Context attributes for the request which will be used to adjust ranking of search results. The maximum number of elements is 10. — item shape: {name?: string, values?: list}
+  --context-attributes: list # Context attributes for the request which will be used to adjust ranking of search results. The maximum number of elements is 10. — item shape: {name?: string, values?: list<string>}
   --data-source-restrictions: list # The sources to use for querying. If not specified, all data sources from the current search application are used. — item shape: {filterOptions?: list, source?: record}
   --facet-options: list # item shape: {integerFacetingOptions?: record, numFacetBuckets?: int, objectType?: string, operatorName?: string, sourceName?: string}
   --page-size: int # Maximum number of search results to return in one page. Valid values are between 1 and 100, inclusive. Default value is 10. Minimum value is 50 when results beyond 2000 are requested. (format: int32)
@@ -830,18 +840,18 @@ export def "query-search cloudsearchquerysearch" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/query/search" $qp)
-  let body = {"contextAttributes": $context_attributes, "dataSourceRestrictions": $data_source_restrictions, "facetOptions": $facet_options, "pageSize": $page_size, "query": $query, "queryInterpretationOptions": $query_interpretation_options, "requestOptions": $request_options, "sortOptions": $sort_options, "start": $start} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"contextAttributes": $context_attributes, "dataSourceRestrictions": $data_source_restrictions, "facetOptions": $facet_options, "pageSize": $page_size, "query": $query, "queryInterpretationOptions": $query_interpretation_options, "requestOptions": $request_options, "sortOptions": $sort_options, "start": $start} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns list of sources that user can use for Search and Suggest APIs. **Note:** This API requires a standard end user account to execute. A service account can't perform Query API requests directly; to use a service account to perform queries, set up [Google Workspace domain-wide delegation of authority](https://developers.google.com/cloud-search/docs/guides/delegation/).
 #
 # GET /v1/query/sources
 # operationId: cloudsearch.query.sources.list
-export def "query-sources cloudsearchquerysourceslist" [
+export def "query-sources list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -882,7 +892,7 @@ export def "query-sources cloudsearchquerysourceslist" [
 # operationId: cloudsearch.query.suggest
 # --dataSourceRestrictions item shape: {filterOptions?: list, source?: record}
 # --requestOptions shape: {debugOptions?: record, languageCode?: string, searchApplicationId?: string, timeZone?: string}
-export def "query-suggest cloudsearchquerysuggest" [
+export def "query-suggest create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -911,18 +921,18 @@ export def "query-suggest cloudsearchquerysuggest" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/query/suggest" $qp)
-  let body = {"dataSourceRestrictions": $data_source_restrictions, "query": $query, "requestOptions": $request_options} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"dataSourceRestrictions": $data_source_restrictions, "query": $query, "requestOptions": $request_options} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get customer settings. **Note:** This API requires an admin account to execute.
 #
 # GET /v1/settings/customer
 # operationId: cloudsearch.settings.getCustomer
-export def "settings-customer cloudsearchsettingsgetCustomer" [
+export def "settings-customer get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -958,7 +968,7 @@ export def "settings-customer cloudsearchsettingsgetCustomer" [
 # operationId: cloudsearch.settings.updateCustomer
 # --auditLoggingSettings shape: {logAdminReadActions?: bool, logDataReadActions?: bool, logDataWriteActions?: bool, project?: string}
 # --vpcSettings shape: {project?: string}
-export def "settings-customer cloudsearchsettingsupdateCustomer" [
+export def "settings-customer update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -987,18 +997,18 @@ export def "settings-customer cloudsearchsettingsupdateCustomer" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/settings/customer" $qp)
-  let body = {"auditLoggingSettings": $audit_logging_settings, "vpcSettings": $vpc_settings} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"auditLoggingSettings": $audit_logging_settings, "vpcSettings": $vpc_settings} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists datasources. **Note:** This API requires an admin account to execute.
 #
 # GET /v1/settings/datasources
 # operationId: cloudsearch.settings.datasources.list
-export def "settings-datasources cloudsearchsettingsdatasourceslist" [
+export def "settings-datasources list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1036,7 +1046,7 @@ export def "settings-datasources cloudsearchsettingsdatasourceslist" [
 # POST /v1/settings/datasources
 # operationId: cloudsearch.settings.datasources.create
 # --itemsVisibility item shape: {gsuiteDomain?: bool, gsuiteGroupEmail?: string, gsuiteUserEmail?: string}
-export def "settings-datasources cloudsearchsettingsdatasourcescreate" [
+export def "settings-datasources create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1059,30 +1069,30 @@ export def "settings-datasources cloudsearchsettingsdatasourcescreate" [
   --disable-modifications: oneof<nothing, bool> # If true, sets the datasource to read-only mode. In read-only mode, the Indexing API rejects any requests to index or delete items in this source. Enabling read-only mode does not stop the processing of previously accepted data.
   --disable-serving: oneof<nothing, bool> # Disable serving any search or assist results.
   --display-name: string # Required. Display name of the datasource The maximum length is 300 characters.
-  --indexing-service-accounts: list # List of service accounts that have indexing access.
+  --indexing-service-accounts: list<string> # List of service accounts that have indexing access.
   --items-visibility: list # This field restricts visibility to items at the datasource level. Items within the datasource are restricted to the union of users and groups included in this field. Note that, this does not ensure access to a specific item, as users need to have ACL permissions on the contained items. This ensures a high level access on the entire datasource, and that the individual items are not shared outside this visibility. — item shape: {gsuiteDomain?: bool, gsuiteGroupEmail?: string, gsuiteUserEmail?: string}
   --name: string # The name of the datasource resource. Format: datasources/{source_id}. The name is ignored when creating a datasource.
-  --operation-ids: list # IDs of the Long Running Operations (LROs) currently running for this schema.
+  --operation-ids: list<string> # IDs of the Long Running Operations (LROs) currently running for this schema.
   --return-thumbnail-urls: oneof<nothing, bool> # Can a user request to get thumbnail URI for Items indexed in this data source.
-  --short-name: string # A short name or alias for the source. This value will be used to match the 'source' operator. For example, if the short name is *<value>* then queries like *source:<value>* will only return results for this source. The value must be unique across all datasources. The value must only contain alphanumeric characters (a-zA-Z0-9). The value cannot start with 'google' and cannot be one of the following: mail, gmail, docs, drive, groups, sites, calendar, hangouts, gplus, keep, people, teams. Its maximum length is 32 characters.
+  --short-name: string # A short name or alias for the source. This value will be used to match the 'source' operator. For example, if the short name is ** then queries like *source:* will only return results for this source. The value must be unique across all datasources. The value must only contain alphanumeric characters (a-zA-Z0-9). The value cannot start with 'google' and cannot be one of the following: mail, gmail, docs, drive, groups, sites, calendar, hangouts, gplus, keep, people, teams. Its maximum length is 32 characters.
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/settings/datasources" $qp)
-  let body = {"disableModifications": $disable_modifications, "disableServing": $disable_serving, "displayName": $display_name, "indexingServiceAccounts": $indexing_service_accounts, "itemsVisibility": $items_visibility, "name": $name, "operationIds": $operation_ids, "returnThumbnailUrls": $return_thumbnail_urls, "shortName": $short_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"disableModifications": $disable_modifications, "disableServing": $disable_serving, "displayName": $display_name, "indexingServiceAccounts": $indexing_service_accounts, "itemsVisibility": $items_visibility, "name": $name, "operationIds": $operation_ids, "returnThumbnailUrls": $return_thumbnail_urls, "shortName": $short_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists all search applications. **Note:** This API requires an admin account to execute.
 #
 # GET /v1/settings/searchapplications
 # operationId: cloudsearch.settings.searchapplications.list
-export def "settings-searchapplications cloudsearchsettingssearchapplicationslist" [
+export def "settings-searchapplications list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1125,7 +1135,7 @@ export def "settings-searchapplications cloudsearchsettingssearchapplicationslis
 # --queryInterpretationConfig shape: {forceDisableSupplementalResults?: bool, forceVerbatimMode?: bool}
 # --scoringConfig shape: {disableFreshness?: bool, disablePersonalization?: bool}
 # --sourceConfig item shape: {crowdingConfig?: record, scoringConfig?: record, source?: record}
-export def "settings-searchapplications cloudsearchsettingssearchapplicationscreate" [
+export def "settings-searchapplications create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1161,18 +1171,18 @@ export def "settings-searchapplications cloudsearchsettingssearchapplicationscre
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/settings/searchapplications" $qp)
-  let body = {"dataSourceRestrictions": $data_source_restrictions, "defaultFacetOptions": $default_facet_options, "defaultSortOptions": $default_sort_options, "displayName": $display_name, "enableAuditLog": $enable_audit_log, "name": $name, "queryInterpretationConfig": $query_interpretation_config, "returnResultThumbnailUrls": $return_result_thumbnail_urls, "scoringConfig": $scoring_config, "sourceConfig": $source_config} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"dataSourceRestrictions": $data_source_restrictions, "defaultFacetOptions": $default_facet_options, "defaultSortOptions": $default_sort_options, "displayName": $display_name, "enableAuditLog": $enable_audit_log, "name": $name, "queryInterpretationConfig": $query_interpretation_config, "returnResultThumbnailUrls": $return_result_thumbnail_urls, "scoringConfig": $scoring_config, "sourceConfig": $source_config} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes a search application. **Note:** This API requires an admin account to execute.
 #
 # DELETE /v1/settings/{name}
 # operationId: cloudsearch.settings.searchapplications.delete
-export def "settings cloudsearchsettingssearchapplicationsdelete" [
+export def "settings delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1198,7 +1208,7 @@ export def "settings cloudsearchsettingssearchapplicationsdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "debugOptions.enableDebugging" $debug_options_enable_debugging "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/settings/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/settings/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1208,7 +1218,7 @@ export def "settings cloudsearchsettingssearchapplicationsdelete" [
 #
 # GET /v1/settings/{name}
 # operationId: cloudsearch.settings.searchapplications.get
-export def "settings cloudsearchsettingssearchapplicationsget" [
+export def "settings get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1234,7 +1244,7 @@ export def "settings cloudsearchsettingssearchapplicationsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "debugOptions.enableDebugging" $debug_options_enable_debugging "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/settings/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/settings/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1250,7 +1260,7 @@ export def "settings cloudsearchsettingssearchapplicationsget" [
 # --queryInterpretationConfig shape: {forceDisableSupplementalResults?: bool, forceVerbatimMode?: bool}
 # --scoringConfig shape: {disableFreshness?: bool, disablePersonalization?: bool}
 # --sourceConfig item shape: {crowdingConfig?: record, scoringConfig?: record, source?: record}
-export def "settings cloudsearchsettingssearchapplicationspatch" [
+export def "settings update-by-name" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1287,12 +1297,12 @@ export def "settings cloudsearchsettingssearchapplicationspatch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/settings/{name}") $qp)
-  let body = {"dataSourceRestrictions": $data_source_restrictions, "defaultFacetOptions": $default_facet_options, "defaultSortOptions": $default_sort_options, "displayName": $display_name, "enableAuditLog": $enable_audit_log, "name": $body_name, "queryInterpretationConfig": $query_interpretation_config, "returnResultThumbnailUrls": $return_result_thumbnail_urls, "scoringConfig": $scoring_config, "sourceConfig": $source_config} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/settings/{name}") $qp)
+  let req_body = {"dataSourceRestrictions": $data_source_restrictions, "defaultFacetOptions": $default_facet_options, "defaultSortOptions": $default_sort_options, "displayName": $display_name, "enableAuditLog": $enable_audit_log, "name": $body_name, "queryInterpretationConfig": $query_interpretation_config, "returnResultThumbnailUrls": $return_result_thumbnail_urls, "scoringConfig": $scoring_config, "sourceConfig": $source_config} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates a search application. **Note:** This API requires an admin account to execute.
@@ -1305,7 +1315,7 @@ export def "settings cloudsearchsettingssearchapplicationspatch" [
 # --queryInterpretationConfig shape: {forceDisableSupplementalResults?: bool, forceVerbatimMode?: bool}
 # --scoringConfig shape: {disableFreshness?: bool, disablePersonalization?: bool}
 # --sourceConfig item shape: {crowdingConfig?: record, scoringConfig?: record, source?: record}
-export def "settings cloudsearchsettingssearchapplicationsupdate" [
+export def "settings update-by-name-1" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1342,12 +1352,12 @@ export def "settings cloudsearchsettingssearchapplicationsupdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/settings/{name}") $qp)
-  let body = {"dataSourceRestrictions": $data_source_restrictions, "defaultFacetOptions": $default_facet_options, "defaultSortOptions": $default_sort_options, "displayName": $display_name, "enableAuditLog": $enable_audit_log, "name": $body_name, "queryInterpretationConfig": $query_interpretation_config, "returnResultThumbnailUrls": $return_result_thumbnail_urls, "scoringConfig": $scoring_config, "sourceConfig": $source_config} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/settings/{name}") $qp)
+  let req_body = {"dataSourceRestrictions": $data_source_restrictions, "defaultFacetOptions": $default_facet_options, "defaultSortOptions": $default_sort_options, "displayName": $display_name, "enableAuditLog": $enable_audit_log, "name": $body_name, "queryInterpretationConfig": $query_interpretation_config, "returnResultThumbnailUrls": $return_result_thumbnail_urls, "scoringConfig": $scoring_config, "sourceConfig": $source_config} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Resets a search application to default settings. This will return an empty response. **Note:** This API requires an admin account to execute.
@@ -1355,7 +1365,7 @@ export def "settings cloudsearchsettingssearchapplicationsupdate" [
 # POST /v1/settings/{name}:reset
 # operationId: cloudsearch.settings.searchapplications.reset
 # --debugOptions shape: {enableDebugging?: bool}
-export def "settings cloudsearchsettingssearchapplicationsreset" [
+export def "settings reset" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1382,19 +1392,19 @@ export def "settings cloudsearchsettingssearchapplicationsreset" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/settings/{name}:reset") $qp)
-  let body = {"debugOptions": $debug_options} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/settings/{name}:reset") $qp)
+  let req_body = {"debugOptions": $debug_options} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets indexed item statistics aggreggated across all data sources. This API only returns statistics for previous dates; it doesn't return statistics for the current day. **Note:** This API requires a standard end user account to execute.
 #
 # GET /v1/stats/index
 # operationId: cloudsearch.stats.getIndex
-export def "stats-index cloudsearchstatsgetIndex" [
+export def "stats-index list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1434,7 +1444,7 @@ export def "stats-index cloudsearchstatsgetIndex" [
 #
 # GET /v1/stats/index/{name}
 # operationId: cloudsearch.stats.index.datasources.get
-export def "stats-index cloudsearchstatsindexdatasourcesget" [
+export def "stats-index get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1465,7 +1475,7 @@ export def "stats-index cloudsearchstatsindexdatasourcesget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "fromDate.day" $from_date_day "scalar") (serialize-qp "fromDate.month" $from_date_month "scalar") (serialize-qp "fromDate.year" $from_date_year "scalar") (serialize-qp "toDate.day" $to_date_day "scalar") (serialize-qp "toDate.month" $to_date_month "scalar") (serialize-qp "toDate.year" $to_date_year "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/stats/index/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/stats/index/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1475,7 +1485,7 @@ export def "stats-index cloudsearchstatsindexdatasourcesget" [
 #
 # GET /v1/stats/query
 # operationId: cloudsearch.stats.getQuery
-export def "stats-query cloudsearchstatsgetQuery" [
+export def "stats-query list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1515,7 +1525,7 @@ export def "stats-query cloudsearchstatsgetQuery" [
 #
 # GET /v1/stats/query/{name}
 # operationId: cloudsearch.stats.query.searchapplications.get
-export def "stats-query cloudsearchstatsquerysearchapplicationsget" [
+export def "stats-query get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1546,7 +1556,7 @@ export def "stats-query cloudsearchstatsquerysearchapplicationsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "fromDate.day" $from_date_day "scalar") (serialize-qp "fromDate.month" $from_date_month "scalar") (serialize-qp "fromDate.year" $from_date_year "scalar") (serialize-qp "toDate.day" $to_date_day "scalar") (serialize-qp "toDate.month" $to_date_month "scalar") (serialize-qp "toDate.year" $to_date_year "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/stats/query/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/stats/query/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1556,7 +1566,7 @@ export def "stats-query cloudsearchstatsquerysearchapplicationsget" [
 #
 # GET /v1/stats/searchapplication
 # operationId: cloudsearch.stats.getSearchapplication
-export def "stats-searchapplication cloudsearchstatsgetSearchapplication" [
+export def "stats-searchapplication get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1596,7 +1606,7 @@ export def "stats-searchapplication cloudsearchstatsgetSearchapplication" [
 #
 # GET /v1/stats/session
 # operationId: cloudsearch.stats.getSession
-export def "stats-session cloudsearchstatsgetSession" [
+export def "stats-session list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1636,7 +1646,7 @@ export def "stats-session cloudsearchstatsgetSession" [
 #
 # GET /v1/stats/session/{name}
 # operationId: cloudsearch.stats.session.searchapplications.get
-export def "stats-session cloudsearchstatssessionsearchapplicationsget" [
+export def "stats-session get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1667,7 +1677,7 @@ export def "stats-session cloudsearchstatssessionsearchapplicationsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "fromDate.day" $from_date_day "scalar") (serialize-qp "fromDate.month" $from_date_month "scalar") (serialize-qp "fromDate.year" $from_date_year "scalar") (serialize-qp "toDate.day" $to_date_day "scalar") (serialize-qp "toDate.month" $to_date_month "scalar") (serialize-qp "toDate.year" $to_date_year "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/stats/session/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/stats/session/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1677,7 +1687,7 @@ export def "stats-session cloudsearchstatssessionsearchapplicationsget" [
 #
 # GET /v1/stats/user
 # operationId: cloudsearch.stats.getUser
-export def "stats-user cloudsearchstatsgetUser" [
+export def "stats-user list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1717,7 +1727,7 @@ export def "stats-user cloudsearchstatsgetUser" [
 #
 # GET /v1/stats/user/{name}
 # operationId: cloudsearch.stats.user.searchapplications.get
-export def "stats-user cloudsearchstatsusersearchapplicationsget" [
+export def "stats-user get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1748,7 +1758,7 @@ export def "stats-user cloudsearchstatsusersearchapplicationsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "fromDate.day" $from_date_day "scalar") (serialize-qp "fromDate.month" $from_date_month "scalar") (serialize-qp "fromDate.year" $from_date_year "scalar") (serialize-qp "toDate.day" $to_date_day "scalar") (serialize-qp "toDate.month" $to_date_month "scalar") (serialize-qp "toDate.year" $to_date_year "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/stats/user/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/stats/user/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1758,7 +1768,7 @@ export def "stats-user cloudsearchstatsusersearchapplicationsget" [
 #
 # GET /v1/{name}
 # operationId: cloudsearch.operations.get
-export def "operations cloudsearchoperationsget" [
+export def "operations get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1783,7 +1793,7 @@ export def "operations cloudsearchoperationsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1793,7 +1803,7 @@ export def "operations cloudsearchoperationsget" [
 #
 # GET /v1/{name}/lro
 # operationId: cloudsearch.operations.lro.list
-export def "lro cloudsearchoperationslrolist" [
+export def "lro list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1821,7 +1831,7 @@ export def "lro cloudsearchoperationslrolist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}/lro") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}/lro") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1831,7 +1841,7 @@ export def "lro cloudsearchoperationslrolist" [
 #
 # POST /v1:initializeCustomer
 # operationId: cloudsearch.initializeCustomer
-export def "v1-initialize-customer cloudsearchinitializeCustomer" [
+export def "v1-initialize-customer create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1858,8 +1868,9 @@ export def "v1-initialize-customer cloudsearchinitializeCustomer" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1:initializeCustomer" $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

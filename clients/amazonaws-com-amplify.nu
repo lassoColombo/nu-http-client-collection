@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -93,7 +102,7 @@ export def commands []: nothing -> table {
   }
 }
 
-#  Creates a new Amplify app. 
+# Creates a new Amplify app.
 #
 # POST /apps
 # operationId: CreateApp
@@ -115,40 +124,40 @@ export def "apps create" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  name: string #  The name for an Amplify app. 
-  --description: string #  The description for an Amplify app. 
-  --repository: string #  The repository for an Amplify app. 
-  --platform: string@platform-completer #  The platform for the Amplify app. For a static app, set the platform type to <code>WEB</code>. For a dynamic server-side rendered (SSR) app, set the platform type to <code>WEB_COMPUTE</code>. For an app requiring Amplify Hosting's original SSR support only, set the platform type to <code>WEB_DYNAMIC</code>.
-  --iam-service-role-arn: string #  The AWS Identity and Access Management (IAM) service role for an Amplify app. 
-  --oauth-token: string # <p>The OAuth token for a third-party source control system for an Amplify app. The OAuth token is used to create a webhook and a read-only deploy key using SSH cloning. The OAuth token is not stored.</p> <p>Use <code>oauthToken</code> for repository providers other than GitHub, such as Bitbucket or CodeCommit. To authorize access to GitHub as your repository provider, use <code>accessToken</code>.</p> <p>You must specify either <code>oauthToken</code> or <code>accessToken</code> when you create a new app.</p> <p>Existing Amplify apps deployed from a GitHub repository using OAuth continue to work with CI/CD. However, we strongly recommend that you migrate these apps to use the GitHub App. For more information, see <a href="https://docs.aws.amazon.com/amplify/latest/UserGuide/setting-up-GitHub-access.html#migrating-to-github-app-auth">Migrating an existing OAuth app to the Amplify GitHub App</a> in the <i>Amplify User Guide</i> .</p> (format: password)
-  --access-token: string # <p>The personal access token for a GitHub repository for an Amplify app. The personal access token is used to authorize access to a GitHub repository using the Amplify GitHub App. The token is not stored.</p> <p>Use <code>accessToken</code> for GitHub repositories only. To authorize access to a repository provider such as Bitbucket or CodeCommit, use <code>oauthToken</code>.</p> <p>You must specify either <code>accessToken</code> or <code>oauthToken</code> when you create a new app.</p> <p>Existing Amplify apps deployed from a GitHub repository using OAuth continue to work with CI/CD. However, we strongly recommend that you migrate these apps to use the GitHub App. For more information, see <a href="https://docs.aws.amazon.com/amplify/latest/UserGuide/setting-up-GitHub-access.html#migrating-to-github-app-auth">Migrating an existing OAuth app to the Amplify GitHub App</a> in the <i>Amplify User Guide</i> .</p> (format: password)
-  --environment-variables: record #  The environment variables map for an Amplify app. 
-  --enable-branch-auto-build: oneof<nothing, bool> #  Enables the auto building of branches for an Amplify app. 
-  --enable-branch-auto-deletion: oneof<nothing, bool> #  Automatically disconnects a branch in the Amplify Console when you delete a branch from your Git repository. 
-  --enable-basic-auth: oneof<nothing, bool> #  Enables basic authorization for an Amplify app. This will apply to all branches that are part of this app. 
-  --basic-auth-credentials: string #  The credentials for basic authorization for an Amplify app. You must base64-encode the authorization credentials and provide them in the format <code>user:password</code>. (format: password)
-  --custom-rules: list #  The custom rewrite and redirect rules for an Amplify app.  — item shape: {source: any, target: any, status?: any, condition?: any}
-  --tags: record #  The tag for an Amplify app. 
-  --build-spec: string #  The build specification (build spec) file for an Amplify app build.  (format: password)
+  name: string # The name for an Amplify app.
+  --description: string # The description for an Amplify app.
+  --repository: string # The repository for an Amplify app.
+  --platform: string@platform-completer # The platform for the Amplify app. For a static app, set the platform type to WEB. For a dynamic server-side rendered (SSR) app, set the platform type to WEB_COMPUTE. For an app requiring Amplify Hosting's original SSR support only, set the platform type to WEB_DYNAMIC.
+  --iam-service-role-arn: string # The AWS Identity and Access Management (IAM) service role for an Amplify app.
+  --oauth-token: string # The OAuth token for a third-party source control system for an Amplify app. The OAuth token is used to create a webhook and a read-only deploy key using SSH cloning. The OAuth token is not stored. Use oauthToken for repository providers other than GitHub, such as Bitbucket or CodeCommit. To authorize access to GitHub as your repository provider, use accessToken. You must specify either oauthToken or accessToken when you create a new app. Existing Amplify apps deployed from a GitHub repository using OAuth continue to work with CI/CD. However, we strongly recommend that you migrate these apps to use the GitHub App. For more information, see Migrating an existing OAuth app to the Amplify GitHub App (https://docs.aws.amazon.com/amplify/latest/UserGuide/setting-up-GitHub-access.html#migrating-to-github-app-auth) in the Amplify User Guide . (format: password)
+  --access-token: string # The personal access token for a GitHub repository for an Amplify app. The personal access token is used to authorize access to a GitHub repository using the Amplify GitHub App. The token is not stored. Use accessToken for GitHub repositories only. To authorize access to a repository provider such as Bitbucket or CodeCommit, use oauthToken. You must specify either accessToken or oauthToken when you create a new app. Existing Amplify apps deployed from a GitHub repository using OAuth continue to work with CI/CD. However, we strongly recommend that you migrate these apps to use the GitHub App. For more information, see Migrating an existing OAuth app to the Amplify GitHub App (https://docs.aws.amazon.com/amplify/latest/UserGuide/setting-up-GitHub-access.html#migrating-to-github-app-auth) in the Amplify User Guide . (format: password)
+  --environment-variables: record # The environment variables map for an Amplify app.
+  --enable-branch-auto-build: oneof<nothing, bool> # Enables the auto building of branches for an Amplify app.
+  --enable-branch-auto-deletion: oneof<nothing, bool> # Automatically disconnects a branch in the Amplify Console when you delete a branch from your Git repository.
+  --enable-basic-auth: oneof<nothing, bool> # Enables basic authorization for an Amplify app. This will apply to all branches that are part of this app.
+  --basic-auth-credentials: string # The credentials for basic authorization for an Amplify app. You must base64-encode the authorization credentials and provide them in the format user:password. (format: password)
+  --custom-rules: list # The custom rewrite and redirect rules for an Amplify app. — item shape: {source: any, target: any, status?: any, condition?: any}
+  --tags: record # The tag for an Amplify app.
+  --build-spec: string # The build specification (build spec) file for an Amplify app build. (format: password)
   --custom-headers: string # The custom HTTP headers for an Amplify app.
-  --enable-auto-branch-creation: oneof<nothing, bool> #  Enables automated branch creation for an Amplify app. 
-  --auto-branch-creation-patterns: list #  The automated branch creation glob patterns for an Amplify app. 
-  --auto-branch-creation-config: record #  Describes the automated branch creation configuration.  — shape: {stage?: any, framework?: any, enableAutoBuild?: any, environmentVariables?: any, basicAuthCredentials?: any, enableBasicAuth?: any, enablePerformanceMode?: any, buildSpec?: any, enablePullRequestPreview?: any, pullRequestEnvironmentName?: any}
+  --enable-auto-branch-creation: oneof<nothing, bool> # Enables automated branch creation for an Amplify app.
+  --auto-branch-creation-patterns: list<string> # The automated branch creation glob patterns for an Amplify app.
+  --auto-branch-creation-config: record # Describes the automated branch creation configuration. — shape: {stage?: any, framework?: any, enableAutoBuild?: any, environmentVariables?: any, basicAuthCredentials?: any, enableBasicAuth?: any, enablePerformanceMode?: any, buildSpec?: any, enablePullRequestPreview?: any, pullRequestEnvironmentName?: any}
 ]: any -> record<app: record<appId: record, appArn: record, name: record, tags: record, description: record, repository: record, platform: record, createTime: record, updateTime: record, iamServiceRoleArn: record, environmentVariables: record, defaultDomain: record, enableBranchAutoBuild: record, enableBranchAutoDeletion: record, enableBasicAuth: record, basicAuthCredentials: record, customRules: record, productionBranch: record<lastDeployTime: record, status: record, thumbnailUrl: record, branchName: record>, buildSpec: record, customHeaders: record, enableAutoBranchCreation: record, autoBranchCreationPatterns: record, autoBranchCreationConfig: record<stage: record, framework: record, enableAutoBuild: record, environmentVariables: record, basicAuthCredentials: record, enableBasicAuth: record, enablePerformanceMode: record, buildSpec: record, enablePullRequestPreview: record, pullRequestEnvironmentName: record>, repositoryCloneMethod: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/apps")
-  let body = {"name": $name, "description": $description, "repository": $repository, "platform": $platform, "iamServiceRoleArn": $iam_service_role_arn, "oauthToken": $oauth_token, "accessToken": $access_token, "environmentVariables": $environment_variables, "enableBranchAutoBuild": $enable_branch_auto_build, "enableBranchAutoDeletion": $enable_branch_auto_deletion, "enableBasicAuth": $enable_basic_auth, "basicAuthCredentials": $basic_auth_credentials, "customRules": $custom_rules, "tags": $tags, "buildSpec": $build_spec, "customHeaders": $custom_headers, "enableAutoBranchCreation": $enable_auto_branch_creation, "autoBranchCreationPatterns": $auto_branch_creation_patterns, "autoBranchCreationConfig": $auto_branch_creation_config} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"name": $name, "description": $description, "repository": $repository, "platform": $platform, "iamServiceRoleArn": $iam_service_role_arn, "oauthToken": $oauth_token, "accessToken": $access_token, "environmentVariables": $environment_variables, "enableBranchAutoBuild": $enable_branch_auto_build, "enableBranchAutoDeletion": $enable_branch_auto_deletion, "enableBasicAuth": $enable_basic_auth, "basicAuthCredentials": $basic_auth_credentials, "customRules": $custom_rules, "tags": $tags, "buildSpec": $build_spec, "customHeaders": $custom_headers, "enableAutoBranchCreation": $enable_auto_branch_creation, "autoBranchCreationPatterns": $auto_branch_creation_patterns, "autoBranchCreationConfig": $auto_branch_creation_config} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-#  Returns a list of the existing Amplify apps. 
+# Returns a list of the existing Amplify apps.
 #
 # GET /apps
 # operationId: ListApps
@@ -161,8 +170,8 @@ export def "apps list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --next-token: string #  A pagination token. If non-null, the pagination token is returned in a result. Pass its value in another request to retrieve more entries. 
-  --max-results: int #  The maximum number of records to list in a single response. 
+  --next-token: string # A pagination token. If non-null, the pagination token is returned in a result. Pass its value in another request to retrieve more entries.
+  --max-results: int # The maximum number of records to list in a single response.
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -175,18 +184,18 @@ export def "apps list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/apps" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-#  Creates a new backend environment for an Amplify app. 
+# Creates a new backend environment for an Amplify app.
 #
 # POST /apps/{appId}/backendenvironments
 # operationId: CreateBackendEnvironment
-export def "apps-backendenvironments create" [
+export def "apps-backendenvironments create-backend-environment" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -203,28 +212,28 @@ export def "apps-backendenvironments create" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  environment_name: string #  The name for the backend environment. 
-  --stack-name: string #  The AWS CloudFormation stack name of a backend environment. 
-  --deployment-artifacts: string #  The name of deployment artifacts. 
+  environment_name: string # The name for the backend environment.
+  --stack-name: string # The AWS CloudFormation stack name of a backend environment.
+  --deployment-artifacts: string # The name of deployment artifacts.
 ]: any -> record<backendEnvironment: record<backendEnvironmentArn: record, environmentName: record, stackName: record, deploymentArtifacts: record, createTime: record, updateTime: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/backendenvironments"))
-  let body = {"environmentName": $environment_name, "stackName": $stack_name, "deploymentArtifacts": $deployment_artifacts} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/backendenvironments"))
+  let req_body = {"environmentName": $environment_name, "stackName": $stack_name, "deploymentArtifacts": $deployment_artifacts} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-#  Lists the backend environments for an Amplify app. 
+# Lists the backend environments for an Amplify app.
 #
 # GET /apps/{appId}/backendenvironments
 # operationId: ListBackendEnvironments
-export def "apps-backendenvironments list" [
+export def "apps-backendenvironments list-backend-environments" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -234,9 +243,9 @@ export def "apps-backendenvironments list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --environment-name: string #  The name of the backend environment 
-  --next-token: string #  A pagination token. Set to null to start listing backend environments from the start. If a non-null pagination token is returned in a result, pass its value in here to list more backend environments. 
-  --max-results: int #  The maximum number of records to list in a single response. 
+  --environment-name: string # The name of the backend environment
+  --next-token: string # A pagination token. Set to null to start listing backend environments from the start. If a non-null pagination token is returned in a result, pass its value in here to list more backend environments.
+  --max-results: int # The maximum number of records to list in a single response.
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -248,15 +257,15 @@ export def "apps-backendenvironments list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "environmentName" $environment_name "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/backendenvironments") $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/backendenvironments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-#  Creates a new branch for an Amplify app. 
+# Creates a new branch for an Amplify app.
 #
 # POST /apps/{appId}/branches
 # operationId: CreateBranch
@@ -277,38 +286,38 @@ export def "apps-branches create-branch" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  branch_name: string #  The name for the branch. 
-  --description: string #  The description for the branch. 
-  --stage: string@stage-completer #  Describes the current stage for the branch. 
-  --framework: string #  The framework for the branch. 
-  --enable-notification: oneof<nothing, bool> #  Enables notifications for the branch. 
-  --enable-auto-build: oneof<nothing, bool> #  Enables auto building for the branch. 
-  --environment-variables: record #  The environment variables for the branch. 
-  --basic-auth-credentials: string #  The basic authorization credentials for the branch. You must base64-encode the authorization credentials and provide them in the format <code>user:password</code>. (format: password)
-  --enable-basic-auth: oneof<nothing, bool> #  Enables basic authorization for the branch. 
-  --enable-performance-mode: oneof<nothing, bool> # <p>Enables performance mode for the branch.</p> <p>Performance mode optimizes for faster hosting performance by keeping content cached at the edge for a longer interval. When performance mode is enabled, hosting configuration or code changes can take up to 10 minutes to roll out. </p>
-  --tags: record #  The tag for the branch. 
-  --build-spec: string #  The build specification (build spec) file for an Amplify app build.  (format: password)
-  --ttl: string #  The content Time to Live (TTL) for the website in seconds. 
-  --display-name: string #  The display name for a branch. This is used as the default domain prefix. 
-  --enable-pull-request-preview: oneof<nothing, bool> #  Enables pull request previews for this branch. 
-  --pull-request-environment-name: string #  The Amplify environment name for the pull request. 
-  --backend-environment-arn: string #  The Amazon Resource Name (ARN) for a backend environment that is part of an Amplify app. 
+  branch_name: string # The name for the branch.
+  --description: string # The description for the branch.
+  --stage: string@stage-completer # Describes the current stage for the branch.
+  --framework: string # The framework for the branch.
+  --enable-notification: oneof<nothing, bool> # Enables notifications for the branch.
+  --enable-auto-build: oneof<nothing, bool> # Enables auto building for the branch.
+  --environment-variables: record # The environment variables for the branch.
+  --basic-auth-credentials: string # The basic authorization credentials for the branch. You must base64-encode the authorization credentials and provide them in the format user:password. (format: password)
+  --enable-basic-auth: oneof<nothing, bool> # Enables basic authorization for the branch.
+  --enable-performance-mode: oneof<nothing, bool> # Enables performance mode for the branch. Performance mode optimizes for faster hosting performance by keeping content cached at the edge for a longer interval. When performance mode is enabled, hosting configuration or code changes can take up to 10 minutes to roll out.
+  --tags: record # The tag for the branch.
+  --build-spec: string # The build specification (build spec) file for an Amplify app build. (format: password)
+  --ttl: string # The content Time to Live (TTL) for the website in seconds.
+  --display-name: string # The display name for a branch. This is used as the default domain prefix.
+  --enable-pull-request-preview: oneof<nothing, bool> # Enables pull request previews for this branch.
+  --pull-request-environment-name: string # The Amplify environment name for the pull request.
+  --backend-environment-arn: string # The Amazon Resource Name (ARN) for a backend environment that is part of an Amplify app.
 ]: any -> record<branch: record<branchArn: record, branchName: record, description: record, tags: record, stage: record, displayName: record, enableNotification: record, createTime: record, updateTime: record, environmentVariables: record, enableAutoBuild: record, customDomains: record, framework: record, activeJobId: record, totalNumberOfJobs: record, enableBasicAuth: record, enablePerformanceMode: record, thumbnailUrl: record, basicAuthCredentials: record, buildSpec: record, ttl: record, associatedResources: record, enablePullRequestPreview: record, pullRequestEnvironmentName: record, destinationBranch: record, sourceBranch: record, backendEnvironmentArn: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/branches"))
-  let body = {"branchName": $branch_name, "description": $description, "stage": $stage, "framework": $framework, "enableNotification": $enable_notification, "enableAutoBuild": $enable_auto_build, "environmentVariables": $environment_variables, "basicAuthCredentials": $basic_auth_credentials, "enableBasicAuth": $enable_basic_auth, "enablePerformanceMode": $enable_performance_mode, "tags": $tags, "buildSpec": $build_spec, "ttl": $ttl, "displayName": $display_name, "enablePullRequestPreview": $enable_pull_request_preview, "pullRequestEnvironmentName": $pull_request_environment_name, "backendEnvironmentArn": $backend_environment_arn} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/branches"))
+  let req_body = {"branchName": $branch_name, "description": $description, "stage": $stage, "framework": $framework, "enableNotification": $enable_notification, "enableAutoBuild": $enable_auto_build, "environmentVariables": $environment_variables, "basicAuthCredentials": $basic_auth_credentials, "enableBasicAuth": $enable_basic_auth, "enablePerformanceMode": $enable_performance_mode, "tags": $tags, "buildSpec": $build_spec, "ttl": $ttl, "displayName": $display_name, "enablePullRequestPreview": $enable_pull_request_preview, "pullRequestEnvironmentName": $pull_request_environment_name, "backendEnvironmentArn": $backend_environment_arn} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-#  Lists the branches of an Amplify app. 
+# Lists the branches of an Amplify app.
 #
 # GET /apps/{appId}/branches
 # operationId: ListBranches
@@ -322,8 +331,8 @@ export def "apps-branches list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --next-token: string #  A pagination token. Set to null to start listing branches from the start. If a non-null pagination token is returned in a result, pass its value in here to list more branches. 
-  --max-results: int #  The maximum number of records to list in a single response. 
+  --next-token: string # A pagination token. Set to null to start listing branches from the start. If a non-null pagination token is returned in a result, pass its value in here to list more branches.
+  --max-results: int # The maximum number of records to list in a single response.
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -335,15 +344,15 @@ export def "apps-branches list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/branches") $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/branches") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-#  Creates a deployment for a manually deployed Amplify app. Manually deployed apps are not connected to a repository. 
+# Creates a deployment for a manually deployed Amplify app. Manually deployed apps are not connected to a repository.
 #
 # POST /apps/{appId}/branches/{branchName}/deployments
 # operationId: CreateDeployment
@@ -365,27 +374,27 @@ export def "apps-branches-deployments create" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --file-map: record #  An optional file map that contains the file name as the key and the file content md5 hash as the value. If this argument is provided, the service will generate a unique upload URL per file. Otherwise, the service will only generate a single upload URL for the zipped files. 
+  --file-map: record # An optional file map that contains the file name as the key and the file content md5 hash as the value. If this argument is provided, the service will generate a unique upload URL per file. Otherwise, the service will only generate a single upload URL for the zipped files.
 ]: any -> record<jobId: record, fileUploadUrls: record, zipUploadUrl: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, branch_name: $branch_name} | format pattern "/apps/{app_id}/branches/{branch_name}/deployments"))
-  let body = {"fileMap": $file_map} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), branch_name: (encode-path-segment $branch_name)} | format pattern "/apps/{app_id}/branches/{branch_name}/deployments"))
+  let req_body = {"fileMap": $file_map} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-#  Creates a new domain association for an Amplify app. This action associates a custom domain with the Amplify app 
+# Creates a new domain association for an Amplify app. This action associates a custom domain with the Amplify app
 #
 # POST /apps/{appId}/domains
 # operationId: CreateDomainAssociation
 # --subDomainSettings item shape: {prefix: any, branchName: any}
-export def "apps-domains create-domain-association" [
+export def "apps-domains create-association" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -402,30 +411,30 @@ export def "apps-domains create-domain-association" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  domain_name: string #  The domain name for the domain association. 
-  --enable-auto-sub-domain: oneof<nothing, bool> #  Enables the automated creation of subdomains for branches. 
-  sub_domain_settings: list #  The setting for the subdomain.  — item shape: {prefix: any, branchName: any}
-  --auto-sub-domain-creation-patterns: list #  Sets the branch patterns for automatic subdomain creation. 
-  --auto-sub-domain-iam-role: string #  The required AWS Identity and Access Management (IAM) service role for the Amazon Resource Name (ARN) for automatically creating subdomains. 
+  domain_name: string # The domain name for the domain association.
+  --enable-auto-sub-domain: oneof<nothing, bool> # Enables the automated creation of subdomains for branches.
+  sub_domain_settings: list # The setting for the subdomain. — item shape: {prefix: any, branchName: any}
+  --auto-sub-domain-creation-patterns: list<string> # Sets the branch patterns for automatic subdomain creation.
+  --auto-sub-domain-iam-role: string # The required AWS Identity and Access Management (IAM) service role for the Amazon Resource Name (ARN) for automatically creating subdomains.
 ]: any -> record<domainAssociation: record<domainAssociationArn: record, domainName: record, enableAutoSubDomain: record, autoSubDomainCreationPatterns: record, autoSubDomainIAMRole: record, domainStatus: record, statusReason: record, certificateVerificationDNSRecord: record, subDomains: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/domains"))
-  let body = {"domainName": $domain_name, "enableAutoSubDomain": $enable_auto_sub_domain, "subDomainSettings": $sub_domain_settings, "autoSubDomainCreationPatterns": $auto_sub_domain_creation_patterns, "autoSubDomainIAMRole": $auto_sub_domain_iam_role} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/domains"))
+  let req_body = {"domainName": $domain_name, "enableAutoSubDomain": $enable_auto_sub_domain, "subDomainSettings": $sub_domain_settings, "autoSubDomainCreationPatterns": $auto_sub_domain_creation_patterns, "autoSubDomainIAMRole": $auto_sub_domain_iam_role} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-#  Returns the domain associations for an Amplify app. 
+# Returns the domain associations for an Amplify app.
 #
 # GET /apps/{appId}/domains
 # operationId: ListDomainAssociations
-export def "apps-domains list-domain-associations" [
+export def "apps-domains list-associations" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -435,8 +444,8 @@ export def "apps-domains list-domain-associations" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --next-token: string #  A pagination token. Set to null to start listing apps from the start. If non-null, a pagination token is returned in a result. Pass its value in here to list more projects. 
-  --max-results: int #  The maximum number of records to list in a single response. 
+  --next-token: string # A pagination token. Set to null to start listing apps from the start. If non-null, a pagination token is returned in a result. Pass its value in here to list more projects.
+  --max-results: int # The maximum number of records to list in a single response.
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -448,15 +457,15 @@ export def "apps-domains list-domain-associations" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/domains") $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/domains") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-#  Creates a new webhook on an Amplify app. 
+# Creates a new webhook on an Amplify app.
 #
 # POST /apps/{appId}/webhooks
 # operationId: CreateWebhook
@@ -477,23 +486,23 @@ export def "apps-webhooks create" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  branch_name: string #  The name for a branch that is part of an Amplify app. 
-  --description: string #  The description for a webhook. 
+  branch_name: string # The name for a branch that is part of an Amplify app.
+  --description: string # The description for a webhook.
 ]: any -> record<webhook: record<webhookArn: record, webhookId: record, webhookUrl: record, branchName: record, description: record, createTime: record, updateTime: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/webhooks"))
-  let body = {"branchName": $branch_name, "description": $description} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/webhooks"))
+  let req_body = {"branchName": $branch_name, "description": $description} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-#  Returns a list of webhooks for an Amplify app. 
+# Returns a list of webhooks for an Amplify app.
 #
 # GET /apps/{appId}/webhooks
 # operationId: ListWebhooks
@@ -507,8 +516,8 @@ export def "apps-webhooks list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --next-token: string #  A pagination token. Set to null to start listing webhooks from the start. If non-null,the pagination token is returned in a result. Pass its value in here to list more webhooks. 
-  --max-results: int #  The maximum number of records to list in a single response. 
+  --next-token: string # A pagination token. Set to null to start listing webhooks from the start. If non-null,the pagination token is returned in a result. Pass its value in here to list more webhooks.
+  --max-results: int # The maximum number of records to list in a single response.
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -520,15 +529,15 @@ export def "apps-webhooks list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/webhooks") $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/webhooks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-#  Deletes an existing Amplify app specified by an app ID. 
+# Deletes an existing Amplify app specified by an app ID.
 #
 # DELETE /apps/{appId}
 # operationId: DeleteApp
@@ -552,15 +561,15 @@ export def "apps delete" [
 ]: nothing -> record<app: record<appId: record, appArn: record, name: record, tags: record, description: record, repository: record, platform: record, createTime: record, updateTime: record, iamServiceRoleArn: record, environmentVariables: record, defaultDomain: record, enableBranchAutoBuild: record, enableBranchAutoDeletion: record, enableBasicAuth: record, basicAuthCredentials: record, customRules: record, productionBranch: record<lastDeployTime: record, status: record, thumbnailUrl: record, branchName: record>, buildSpec: record, customHeaders: record, enableAutoBranchCreation: record, autoBranchCreationPatterns: record, autoBranchCreationConfig: record<stage: record, framework: record, enableAutoBuild: record, environmentVariables: record, basicAuthCredentials: record, enableBasicAuth: record, enablePerformanceMode: record, buildSpec: record, enablePullRequestPreview: record, pullRequestEnvironmentName: record>, repositoryCloneMethod: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-#  Returns an existing Amplify app by appID. 
+# Returns an existing Amplify app by appID.
 #
 # GET /apps/{appId}
 # operationId: GetApp
@@ -584,15 +593,15 @@ export def "apps get" [
 ]: nothing -> record<app: record<appId: record, appArn: record, name: record, tags: record, description: record, repository: record, platform: record, createTime: record, updateTime: record, iamServiceRoleArn: record, environmentVariables: record, defaultDomain: record, enableBranchAutoBuild: record, enableBranchAutoDeletion: record, enableBasicAuth: record, basicAuthCredentials: record, customRules: record, productionBranch: record<lastDeployTime: record, status: record, thumbnailUrl: record, branchName: record>, buildSpec: record, customHeaders: record, enableAutoBranchCreation: record, autoBranchCreationPatterns: record, autoBranchCreationConfig: record<stage: record, framework: record, enableAutoBuild: record, environmentVariables: record, basicAuthCredentials: record, enableBasicAuth: record, enablePerformanceMode: record, buildSpec: record, enablePullRequestPreview: record, pullRequestEnvironmentName: record>, repositoryCloneMethod: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-#  Updates an existing Amplify app. 
+# Updates an existing Amplify app.
 #
 # POST /apps/{appId}
 # operationId: UpdateApp
@@ -615,43 +624,43 @@ export def "apps update" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --name: string #  The name for an Amplify app. 
-  --description: string #  The description for an Amplify app. 
-  --platform: string@platform-completer #  The platform for the Amplify app. For a static app, set the platform type to <code>WEB</code>. For a dynamic server-side rendered (SSR) app, set the platform type to <code>WEB_COMPUTE</code>. For an app requiring Amplify Hosting's original SSR support only, set the platform type to <code>WEB_DYNAMIC</code>.
-  --iam-service-role-arn: string #  The AWS Identity and Access Management (IAM) service role for an Amplify app. 
-  --environment-variables: record #  The environment variables for an Amplify app. 
-  --enable-branch-auto-build: oneof<nothing, bool> #  Enables branch auto-building for an Amplify app. 
-  --enable-branch-auto-deletion: oneof<nothing, bool> #  Automatically disconnects a branch in the Amplify Console when you delete a branch from your Git repository. 
-  --enable-basic-auth: oneof<nothing, bool> #  Enables basic authorization for an Amplify app. 
-  --basic-auth-credentials: string #  The basic authorization credentials for an Amplify app. You must base64-encode the authorization credentials and provide them in the format <code>user:password</code>. (format: password)
-  --custom-rules: list #  The custom redirect and rewrite rules for an Amplify app.  — item shape: {source: any, target: any, status?: any, condition?: any}
-  --build-spec: string #  The build specification (build spec) file for an Amplify app build.  (format: password)
+  --name: string # The name for an Amplify app.
+  --description: string # The description for an Amplify app.
+  --platform: string@platform-completer # The platform for the Amplify app. For a static app, set the platform type to WEB. For a dynamic server-side rendered (SSR) app, set the platform type to WEB_COMPUTE. For an app requiring Amplify Hosting's original SSR support only, set the platform type to WEB_DYNAMIC.
+  --iam-service-role-arn: string # The AWS Identity and Access Management (IAM) service role for an Amplify app.
+  --environment-variables: record # The environment variables for an Amplify app.
+  --enable-branch-auto-build: oneof<nothing, bool> # Enables branch auto-building for an Amplify app.
+  --enable-branch-auto-deletion: oneof<nothing, bool> # Automatically disconnects a branch in the Amplify Console when you delete a branch from your Git repository.
+  --enable-basic-auth: oneof<nothing, bool> # Enables basic authorization for an Amplify app.
+  --basic-auth-credentials: string # The basic authorization credentials for an Amplify app. You must base64-encode the authorization credentials and provide them in the format user:password. (format: password)
+  --custom-rules: list # The custom redirect and rewrite rules for an Amplify app. — item shape: {source: any, target: any, status?: any, condition?: any}
+  --build-spec: string # The build specification (build spec) file for an Amplify app build. (format: password)
   --custom-headers: string # The custom HTTP headers for an Amplify app.
-  --enable-auto-branch-creation: oneof<nothing, bool> #  Enables automated branch creation for an Amplify app. 
-  --auto-branch-creation-patterns: list #  Describes the automated branch creation glob patterns for an Amplify app. 
-  --auto-branch-creation-config: record #  Describes the automated branch creation configuration.  — shape: {stage?: any, framework?: any, enableAutoBuild?: any, environmentVariables?: any, basicAuthCredentials?: any, enableBasicAuth?: any, enablePerformanceMode?: any, buildSpec?: any, enablePullRequestPreview?: any, pullRequestEnvironmentName?: any}
-  --repository: string #  The name of the repository for an Amplify app 
-  --oauth-token: string # <p>The OAuth token for a third-party source control system for an Amplify app. The OAuth token is used to create a webhook and a read-only deploy key using SSH cloning. The OAuth token is not stored.</p> <p>Use <code>oauthToken</code> for repository providers other than GitHub, such as Bitbucket or CodeCommit.</p> <p>To authorize access to GitHub as your repository provider, use <code>accessToken</code>.</p> <p>You must specify either <code>oauthToken</code> or <code>accessToken</code> when you update an app.</p> <p>Existing Amplify apps deployed from a GitHub repository using OAuth continue to work with CI/CD. However, we strongly recommend that you migrate these apps to use the GitHub App. For more information, see <a href="https://docs.aws.amazon.com/amplify/latest/UserGuide/setting-up-GitHub-access.html#migrating-to-github-app-auth">Migrating an existing OAuth app to the Amplify GitHub App</a> in the <i>Amplify User Guide</i> .</p> (format: password)
-  --access-token: string # <p>The personal access token for a GitHub repository for an Amplify app. The personal access token is used to authorize access to a GitHub repository using the Amplify GitHub App. The token is not stored.</p> <p>Use <code>accessToken</code> for GitHub repositories only. To authorize access to a repository provider such as Bitbucket or CodeCommit, use <code>oauthToken</code>.</p> <p>You must specify either <code>accessToken</code> or <code>oauthToken</code> when you update an app.</p> <p>Existing Amplify apps deployed from a GitHub repository using OAuth continue to work with CI/CD. However, we strongly recommend that you migrate these apps to use the GitHub App. For more information, see <a href="https://docs.aws.amazon.com/amplify/latest/UserGuide/setting-up-GitHub-access.html#migrating-to-github-app-auth">Migrating an existing OAuth app to the Amplify GitHub App</a> in the <i>Amplify User Guide</i> .</p> (format: password)
+  --enable-auto-branch-creation: oneof<nothing, bool> # Enables automated branch creation for an Amplify app.
+  --auto-branch-creation-patterns: list<string> # Describes the automated branch creation glob patterns for an Amplify app.
+  --auto-branch-creation-config: record # Describes the automated branch creation configuration. — shape: {stage?: any, framework?: any, enableAutoBuild?: any, environmentVariables?: any, basicAuthCredentials?: any, enableBasicAuth?: any, enablePerformanceMode?: any, buildSpec?: any, enablePullRequestPreview?: any, pullRequestEnvironmentName?: any}
+  --repository: string # The name of the repository for an Amplify app
+  --oauth-token: string # The OAuth token for a third-party source control system for an Amplify app. The OAuth token is used to create a webhook and a read-only deploy key using SSH cloning. The OAuth token is not stored. Use oauthToken for repository providers other than GitHub, such as Bitbucket or CodeCommit. To authorize access to GitHub as your repository provider, use accessToken. You must specify either oauthToken or accessToken when you update an app. Existing Amplify apps deployed from a GitHub repository using OAuth continue to work with CI/CD. However, we strongly recommend that you migrate these apps to use the GitHub App. For more information, see Migrating an existing OAuth app to the Amplify GitHub App (https://docs.aws.amazon.com/amplify/latest/UserGuide/setting-up-GitHub-access.html#migrating-to-github-app-auth) in the Amplify User Guide . (format: password)
+  --access-token: string # The personal access token for a GitHub repository for an Amplify app. The personal access token is used to authorize access to a GitHub repository using the Amplify GitHub App. The token is not stored. Use accessToken for GitHub repositories only. To authorize access to a repository provider such as Bitbucket or CodeCommit, use oauthToken. You must specify either accessToken or oauthToken when you update an app. Existing Amplify apps deployed from a GitHub repository using OAuth continue to work with CI/CD. However, we strongly recommend that you migrate these apps to use the GitHub App. For more information, see Migrating an existing OAuth app to the Amplify GitHub App (https://docs.aws.amazon.com/amplify/latest/UserGuide/setting-up-GitHub-access.html#migrating-to-github-app-auth) in the Amplify User Guide . (format: password)
 ]: any -> record<app: record<appId: record, appArn: record, name: record, tags: record, description: record, repository: record, platform: record, createTime: record, updateTime: record, iamServiceRoleArn: record, environmentVariables: record, defaultDomain: record, enableBranchAutoBuild: record, enableBranchAutoDeletion: record, enableBasicAuth: record, basicAuthCredentials: record, customRules: record, productionBranch: record<lastDeployTime: record, status: record, thumbnailUrl: record, branchName: record>, buildSpec: record, customHeaders: record, enableAutoBranchCreation: record, autoBranchCreationPatterns: record, autoBranchCreationConfig: record<stage: record, framework: record, enableAutoBuild: record, environmentVariables: record, basicAuthCredentials: record, enableBasicAuth: record, enablePerformanceMode: record, buildSpec: record, enablePullRequestPreview: record, pullRequestEnvironmentName: record>, repositoryCloneMethod: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}"))
-  let body = {"name": $name, "description": $description, "platform": $platform, "iamServiceRoleArn": $iam_service_role_arn, "environmentVariables": $environment_variables, "enableBranchAutoBuild": $enable_branch_auto_build, "enableBranchAutoDeletion": $enable_branch_auto_deletion, "enableBasicAuth": $enable_basic_auth, "basicAuthCredentials": $basic_auth_credentials, "customRules": $custom_rules, "buildSpec": $build_spec, "customHeaders": $custom_headers, "enableAutoBranchCreation": $enable_auto_branch_creation, "autoBranchCreationPatterns": $auto_branch_creation_patterns, "autoBranchCreationConfig": $auto_branch_creation_config, "repository": $repository, "oauthToken": $oauth_token, "accessToken": $access_token} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}"))
+  let req_body = {"name": $name, "description": $description, "platform": $platform, "iamServiceRoleArn": $iam_service_role_arn, "environmentVariables": $environment_variables, "enableBranchAutoBuild": $enable_branch_auto_build, "enableBranchAutoDeletion": $enable_branch_auto_deletion, "enableBasicAuth": $enable_basic_auth, "basicAuthCredentials": $basic_auth_credentials, "customRules": $custom_rules, "buildSpec": $build_spec, "customHeaders": $custom_headers, "enableAutoBranchCreation": $enable_auto_branch_creation, "autoBranchCreationPatterns": $auto_branch_creation_patterns, "autoBranchCreationConfig": $auto_branch_creation_config, "repository": $repository, "oauthToken": $oauth_token, "accessToken": $access_token} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-#  Deletes a backend environment for an Amplify app. 
+# Deletes a backend environment for an Amplify app.
 #
 # DELETE /apps/{appId}/backendenvironments/{environmentName}
 # operationId: DeleteBackendEnvironment
-export def "apps-backendenvironments delete" [
+export def "apps-backendenvironments delete-backend-environment" [
   app_id: string
   environment_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -672,19 +681,19 @@ export def "apps-backendenvironments delete" [
 ]: nothing -> record<backendEnvironment: record<backendEnvironmentArn: record, environmentName: record, stackName: record, deploymentArtifacts: record, createTime: record, updateTime: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, environment_name: $environment_name} | format pattern "/apps/{app_id}/backendenvironments/{environment_name}"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), environment_name: (encode-path-segment $environment_name)} | format pattern "/apps/{app_id}/backendenvironments/{environment_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-#  Returns a backend environment for an Amplify app. 
+# Returns a backend environment for an Amplify app.
 #
 # GET /apps/{appId}/backendenvironments/{environmentName}
 # operationId: GetBackendEnvironment
-export def "apps-backendenvironments get" [
+export def "apps-backendenvironments get-backend-environment" [
   app_id: string
   environment_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -705,15 +714,15 @@ export def "apps-backendenvironments get" [
 ]: nothing -> record<backendEnvironment: record<backendEnvironmentArn: record, environmentName: record, stackName: record, deploymentArtifacts: record, createTime: record, updateTime: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, environment_name: $environment_name} | format pattern "/apps/{app_id}/backendenvironments/{environment_name}"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), environment_name: (encode-path-segment $environment_name)} | format pattern "/apps/{app_id}/backendenvironments/{environment_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-#  Deletes a branch for an Amplify app. 
+# Deletes a branch for an Amplify app.
 #
 # DELETE /apps/{appId}/branches/{branchName}
 # operationId: DeleteBranch
@@ -738,15 +747,15 @@ export def "apps-branches delete-branch" [
 ]: nothing -> record<branch: record<branchArn: record, branchName: record, description: record, tags: record, stage: record, displayName: record, enableNotification: record, createTime: record, updateTime: record, environmentVariables: record, enableAutoBuild: record, customDomains: record, framework: record, activeJobId: record, totalNumberOfJobs: record, enableBasicAuth: record, enablePerformanceMode: record, thumbnailUrl: record, basicAuthCredentials: record, buildSpec: record, ttl: record, associatedResources: record, enablePullRequestPreview: record, pullRequestEnvironmentName: record, destinationBranch: record, sourceBranch: record, backendEnvironmentArn: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, branch_name: $branch_name} | format pattern "/apps/{app_id}/branches/{branch_name}"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), branch_name: (encode-path-segment $branch_name)} | format pattern "/apps/{app_id}/branches/{branch_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-#  Returns a branch for an Amplify app. 
+# Returns a branch for an Amplify app.
 #
 # GET /apps/{appId}/branches/{branchName}
 # operationId: GetBranch
@@ -771,15 +780,15 @@ export def "apps-branches get-branch" [
 ]: nothing -> record<branch: record<branchArn: record, branchName: record, description: record, tags: record, stage: record, displayName: record, enableNotification: record, createTime: record, updateTime: record, environmentVariables: record, enableAutoBuild: record, customDomains: record, framework: record, activeJobId: record, totalNumberOfJobs: record, enableBasicAuth: record, enablePerformanceMode: record, thumbnailUrl: record, basicAuthCredentials: record, buildSpec: record, ttl: record, associatedResources: record, enablePullRequestPreview: record, pullRequestEnvironmentName: record, destinationBranch: record, sourceBranch: record, backendEnvironmentArn: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, branch_name: $branch_name} | format pattern "/apps/{app_id}/branches/{branch_name}"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), branch_name: (encode-path-segment $branch_name)} | format pattern "/apps/{app_id}/branches/{branch_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-#  Updates a branch for an Amplify app. 
+# Updates a branch for an Amplify app.
 #
 # POST /apps/{appId}/branches/{branchName}
 # operationId: UpdateBranch
@@ -801,40 +810,40 @@ export def "apps-branches update-branch" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --description: string #  The description for the branch. 
-  --framework: string #  The framework for the branch. 
-  --stage: string@stage-completer #  Describes the current stage for the branch. 
-  --enable-notification: oneof<nothing, bool> #  Enables notifications for the branch. 
-  --enable-auto-build: oneof<nothing, bool> #  Enables auto building for the branch. 
-  --environment-variables: record #  The environment variables for the branch. 
-  --basic-auth-credentials: string #  The basic authorization credentials for the branch. You must base64-encode the authorization credentials and provide them in the format <code>user:password</code>. (format: password)
-  --enable-basic-auth: oneof<nothing, bool> #  Enables basic authorization for the branch. 
-  --enable-performance-mode: oneof<nothing, bool> # <p>Enables performance mode for the branch.</p> <p>Performance mode optimizes for faster hosting performance by keeping content cached at the edge for a longer interval. When performance mode is enabled, hosting configuration or code changes can take up to 10 minutes to roll out. </p>
-  --build-spec: string #  The build specification (build spec) file for an Amplify app build.  (format: password)
-  --ttl: string #  The content Time to Live (TTL) for the website in seconds. 
-  --display-name: string #  The display name for a branch. This is used as the default domain prefix. 
-  --enable-pull-request-preview: oneof<nothing, bool> #  Enables pull request previews for this branch. 
-  --pull-request-environment-name: string #  The Amplify environment name for the pull request. 
-  --backend-environment-arn: string #  The Amazon Resource Name (ARN) for a backend environment that is part of an Amplify app. 
+  --description: string # The description for the branch.
+  --framework: string # The framework for the branch.
+  --stage: string@stage-completer # Describes the current stage for the branch.
+  --enable-notification: oneof<nothing, bool> # Enables notifications for the branch.
+  --enable-auto-build: oneof<nothing, bool> # Enables auto building for the branch.
+  --environment-variables: record # The environment variables for the branch.
+  --basic-auth-credentials: string # The basic authorization credentials for the branch. You must base64-encode the authorization credentials and provide them in the format user:password. (format: password)
+  --enable-basic-auth: oneof<nothing, bool> # Enables basic authorization for the branch.
+  --enable-performance-mode: oneof<nothing, bool> # Enables performance mode for the branch. Performance mode optimizes for faster hosting performance by keeping content cached at the edge for a longer interval. When performance mode is enabled, hosting configuration or code changes can take up to 10 minutes to roll out.
+  --build-spec: string # The build specification (build spec) file for an Amplify app build. (format: password)
+  --ttl: string # The content Time to Live (TTL) for the website in seconds.
+  --display-name: string # The display name for a branch. This is used as the default domain prefix.
+  --enable-pull-request-preview: oneof<nothing, bool> # Enables pull request previews for this branch.
+  --pull-request-environment-name: string # The Amplify environment name for the pull request.
+  --backend-environment-arn: string # The Amazon Resource Name (ARN) for a backend environment that is part of an Amplify app.
 ]: any -> record<branch: record<branchArn: record, branchName: record, description: record, tags: record, stage: record, displayName: record, enableNotification: record, createTime: record, updateTime: record, environmentVariables: record, enableAutoBuild: record, customDomains: record, framework: record, activeJobId: record, totalNumberOfJobs: record, enableBasicAuth: record, enablePerformanceMode: record, thumbnailUrl: record, basicAuthCredentials: record, buildSpec: record, ttl: record, associatedResources: record, enablePullRequestPreview: record, pullRequestEnvironmentName: record, destinationBranch: record, sourceBranch: record, backendEnvironmentArn: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, branch_name: $branch_name} | format pattern "/apps/{app_id}/branches/{branch_name}"))
-  let body = {"description": $description, "framework": $framework, "stage": $stage, "enableNotification": $enable_notification, "enableAutoBuild": $enable_auto_build, "environmentVariables": $environment_variables, "basicAuthCredentials": $basic_auth_credentials, "enableBasicAuth": $enable_basic_auth, "enablePerformanceMode": $enable_performance_mode, "buildSpec": $build_spec, "ttl": $ttl, "displayName": $display_name, "enablePullRequestPreview": $enable_pull_request_preview, "pullRequestEnvironmentName": $pull_request_environment_name, "backendEnvironmentArn": $backend_environment_arn} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), branch_name: (encode-path-segment $branch_name)} | format pattern "/apps/{app_id}/branches/{branch_name}"))
+  let req_body = {"description": $description, "framework": $framework, "stage": $stage, "enableNotification": $enable_notification, "enableAutoBuild": $enable_auto_build, "environmentVariables": $environment_variables, "basicAuthCredentials": $basic_auth_credentials, "enableBasicAuth": $enable_basic_auth, "enablePerformanceMode": $enable_performance_mode, "buildSpec": $build_spec, "ttl": $ttl, "displayName": $display_name, "enablePullRequestPreview": $enable_pull_request_preview, "pullRequestEnvironmentName": $pull_request_environment_name, "backendEnvironmentArn": $backend_environment_arn} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-#  Deletes a domain association for an Amplify app. 
+# Deletes a domain association for an Amplify app.
 #
 # DELETE /apps/{appId}/domains/{domainName}
 # operationId: DeleteDomainAssociation
-export def "apps-domains delete-domain-association" [
+export def "apps-domains delete-association" [
   app_id: string
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -855,19 +864,19 @@ export def "apps-domains delete-domain-association" [
 ]: nothing -> record<domainAssociation: record<domainAssociationArn: record, domainName: record, enableAutoSubDomain: record, autoSubDomainCreationPatterns: record, autoSubDomainIAMRole: record, domainStatus: record, statusReason: record, certificateVerificationDNSRecord: record, subDomains: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, domain_name: $domain_name} | format pattern "/apps/{app_id}/domains/{domain_name}"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), domain_name: (encode-path-segment $domain_name)} | format pattern "/apps/{app_id}/domains/{domain_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-#  Returns the domain information for an Amplify app. 
+# Returns the domain information for an Amplify app.
 #
 # GET /apps/{appId}/domains/{domainName}
 # operationId: GetDomainAssociation
-export def "apps-domains get-domain-association" [
+export def "apps-domains get-association" [
   app_id: string
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -888,20 +897,20 @@ export def "apps-domains get-domain-association" [
 ]: nothing -> record<domainAssociation: record<domainAssociationArn: record, domainName: record, enableAutoSubDomain: record, autoSubDomainCreationPatterns: record, autoSubDomainIAMRole: record, domainStatus: record, statusReason: record, certificateVerificationDNSRecord: record, subDomains: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, domain_name: $domain_name} | format pattern "/apps/{app_id}/domains/{domain_name}"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), domain_name: (encode-path-segment $domain_name)} | format pattern "/apps/{app_id}/domains/{domain_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-#  Creates a new domain association for an Amplify app.
+# Creates a new domain association for an Amplify app.
 #
 # POST /apps/{appId}/domains/{domainName}
 # operationId: UpdateDomainAssociation
 # --subDomainSettings item shape: {prefix: any, branchName: any}
-export def "apps-domains update-domain-association" [
+export def "apps-domains update-association" [
   app_id: string
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -919,25 +928,25 @@ export def "apps-domains update-domain-association" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --enable-auto-sub-domain: oneof<nothing, bool> #  Enables the automated creation of subdomains for branches. 
-  --sub-domain-settings: list #  Describes the settings for the subdomain.  — item shape: {prefix: any, branchName: any}
-  --auto-sub-domain-creation-patterns: list #  Sets the branch patterns for automatic subdomain creation. 
-  --auto-sub-domain-iam-role: string #  The required AWS Identity and Access Management (IAM) service role for the Amazon Resource Name (ARN) for automatically creating subdomains. 
+  --enable-auto-sub-domain: oneof<nothing, bool> # Enables the automated creation of subdomains for branches.
+  --sub-domain-settings: list # Describes the settings for the subdomain. — item shape: {prefix: any, branchName: any}
+  --auto-sub-domain-creation-patterns: list<string> # Sets the branch patterns for automatic subdomain creation.
+  --auto-sub-domain-iam-role: string # The required AWS Identity and Access Management (IAM) service role for the Amazon Resource Name (ARN) for automatically creating subdomains.
 ]: any -> record<domainAssociation: record<domainAssociationArn: record, domainName: record, enableAutoSubDomain: record, autoSubDomainCreationPatterns: record, autoSubDomainIAMRole: record, domainStatus: record, statusReason: record, certificateVerificationDNSRecord: record, subDomains: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, domain_name: $domain_name} | format pattern "/apps/{app_id}/domains/{domain_name}"))
-  let body = {"enableAutoSubDomain": $enable_auto_sub_domain, "subDomainSettings": $sub_domain_settings, "autoSubDomainCreationPatterns": $auto_sub_domain_creation_patterns, "autoSubDomainIAMRole": $auto_sub_domain_iam_role} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), domain_name: (encode-path-segment $domain_name)} | format pattern "/apps/{app_id}/domains/{domain_name}"))
+  let req_body = {"enableAutoSubDomain": $enable_auto_sub_domain, "subDomainSettings": $sub_domain_settings, "autoSubDomainCreationPatterns": $auto_sub_domain_creation_patterns, "autoSubDomainIAMRole": $auto_sub_domain_iam_role} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-#  Deletes a job for a branch of an Amplify app. 
+# Deletes a job for a branch of an Amplify app.
 #
 # DELETE /apps/{appId}/branches/{branchName}/jobs/{jobId}
 # operationId: DeleteJob
@@ -963,15 +972,15 @@ export def "apps-branches-jobs delete" [
 ]: nothing -> record<jobSummary: record<jobArn: record, jobId: record, commitId: record, commitMessage: record, commitTime: record, startTime: record, status: record, endTime: record, jobType: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, branch_name: $branch_name, job_id: $job_id} | format pattern "/apps/{app_id}/branches/{branch_name}/jobs/{job_id}"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), branch_name: (encode-path-segment $branch_name), job_id: (encode-path-segment $job_id)} | format pattern "/apps/{app_id}/branches/{branch_name}/jobs/{job_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-#  Returns a job for a branch of an Amplify app. 
+# Returns a job for a branch of an Amplify app.
 #
 # GET /apps/{appId}/branches/{branchName}/jobs/{jobId}
 # operationId: GetJob
@@ -997,15 +1006,15 @@ export def "apps-branches-jobs get" [
 ]: nothing -> record<job: record<summary: record<jobArn: record, jobId: record, commitId: record, commitMessage: record, commitTime: record, startTime: record, status: record, endTime: record, jobType: record>, steps: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, branch_name: $branch_name, job_id: $job_id} | format pattern "/apps/{app_id}/branches/{branch_name}/jobs/{job_id}"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), branch_name: (encode-path-segment $branch_name), job_id: (encode-path-segment $job_id)} | format pattern "/apps/{app_id}/branches/{branch_name}/jobs/{job_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-#  Deletes a webhook. 
+# Deletes a webhook.
 #
 # DELETE /webhooks/{webhookId}
 # operationId: DeleteWebhook
@@ -1029,15 +1038,15 @@ export def "webhooks delete" [
 ]: nothing -> record<webhook: record<webhookArn: record, webhookId: record, webhookUrl: record, branchName: record, description: record, createTime: record, updateTime: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({webhook_id: $webhook_id} | format pattern "/webhooks/{webhook_id}"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({webhook_id: (encode-path-segment $webhook_id)} | format pattern "/webhooks/{webhook_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-#  Returns the webhook information that corresponds to a specified webhook ID. 
+# Returns the webhook information that corresponds to a specified webhook ID.
 #
 # GET /webhooks/{webhookId}
 # operationId: GetWebhook
@@ -1061,15 +1070,15 @@ export def "webhooks get" [
 ]: nothing -> record<webhook: record<webhookArn: record, webhookId: record, webhookUrl: record, branchName: record, description: record, createTime: record, updateTime: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({webhook_id: $webhook_id} | format pattern "/webhooks/{webhook_id}"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({webhook_id: (encode-path-segment $webhook_id)} | format pattern "/webhooks/{webhook_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-#  Updates a webhook. 
+# Updates a webhook.
 #
 # POST /webhooks/{webhookId}
 # operationId: UpdateWebhook
@@ -1090,27 +1099,27 @@ export def "webhooks update" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --branch-name: string #  The name for a branch that is part of an Amplify app. 
-  --description: string #  The description for a webhook. 
+  --branch-name: string # The name for a branch that is part of an Amplify app.
+  --description: string # The description for a webhook.
 ]: any -> record<webhook: record<webhookArn: record, webhookId: record, webhookUrl: record, branchName: record, description: record, createTime: record, updateTime: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({webhook_id: $webhook_id} | format pattern "/webhooks/{webhook_id}"))
-  let body = {"branchName": $branch_name, "description": $description} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({webhook_id: (encode-path-segment $webhook_id)} | format pattern "/webhooks/{webhook_id}"))
+  let req_body = {"branchName": $branch_name, "description": $description} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-#  Returns the website access logs for a specific time range using a presigned URL. 
+# Returns the website access logs for a specific time range using a presigned URL.
 #
 # POST /apps/{appId}/accesslogs
 # operationId: GenerateAccessLogs
-export def "apps-accesslogs post" [
+export def "apps-accesslogs generate-access-logs" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1127,28 +1136,28 @@ export def "apps-accesslogs post" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --start-time: string #  The time at which the logs should start. The time range specified is inclusive of the start time.  (format: date-time)
-  --end-time: string #  The time at which the logs should end. The time range specified is inclusive of the end time.  (format: date-time)
-  domain_name: string #  The name of the domain. 
+  --start-time: string # The time at which the logs should start. The time range specified is inclusive of the start time. (format: date-time)
+  --end-time: string # The time at which the logs should end. The time range specified is inclusive of the end time. (format: date-time)
+  domain_name: string # The name of the domain.
 ]: any -> record<logUrl: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/accesslogs"))
-  let body = {"startTime": $start_time, "endTime": $end_time, "domainName": $domain_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/accesslogs"))
+  let req_body = {"startTime": $start_time, "endTime": $end_time, "domainName": $domain_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-#  Returns the artifact info that corresponds to an artifact id. 
+# Returns the artifact info that corresponds to an artifact id.
 #
 # GET /artifacts/{artifactId}
 # operationId: GetArtifactUrl
-export def "artifacts get-artifact-url" [
+export def "artifacts get-url" [
   artifact_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1168,15 +1177,15 @@ export def "artifacts get-artifact-url" [
 ]: nothing -> record<artifactId: record, artifactUrl: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({artifact_id: $artifact_id} | format pattern "/artifacts/{artifact_id}"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({artifact_id: (encode-path-segment $artifact_id)} | format pattern "/artifacts/{artifact_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-#  Returns a list of artifacts for a specified app, branch, and job. 
+# Returns a list of artifacts for a specified app, branch, and job.
 #
 # GET /apps/{appId}/branches/{branchName}/jobs/{jobId}/artifacts
 # operationId: ListArtifacts
@@ -1192,8 +1201,8 @@ export def "apps-branches-jobs-artifacts list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --next-token: string #  A pagination token. Set to null to start listing artifacts from start. If a non-null pagination token is returned in a result, pass its value in here to list more artifacts. 
-  --max-results: int #  The maximum number of records to list in a single response. 
+  --next-token: string # A pagination token. Set to null to start listing artifacts from start. If a non-null pagination token is returned in a result, pass its value in here to list more artifacts.
+  --max-results: int # The maximum number of records to list in a single response.
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1205,15 +1214,15 @@ export def "apps-branches-jobs-artifacts list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id, branch_name: $branch_name, job_id: $job_id} | format pattern "/apps/{app_id}/branches/{branch_name}/jobs/{job_id}/artifacts") $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), branch_name: (encode-path-segment $branch_name), job_id: (encode-path-segment $job_id)} | format pattern "/apps/{app_id}/branches/{branch_name}/jobs/{job_id}/artifacts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-#  Lists the jobs for a branch of an Amplify app. 
+# Lists the jobs for a branch of an Amplify app.
 #
 # GET /apps/{appId}/branches/{branchName}/jobs
 # operationId: ListJobs
@@ -1228,8 +1237,8 @@ export def "apps-branches-jobs list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --next-token: string #  A pagination token. Set to null to start listing steps from the start. If a non-null pagination token is returned in a result, pass its value in here to list more steps. 
-  --max-results: int #  The maximum number of records to list in a single response. 
+  --next-token: string # A pagination token. Set to null to start listing steps from the start. If a non-null pagination token is returned in a result, pass its value in here to list more steps.
+  --max-results: int # The maximum number of records to list in a single response.
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1241,15 +1250,15 @@ export def "apps-branches-jobs list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id, branch_name: $branch_name} | format pattern "/apps/{app_id}/branches/{branch_name}/jobs") $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), branch_name: (encode-path-segment $branch_name)} | format pattern "/apps/{app_id}/branches/{branch_name}/jobs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-#  Starts a new job for a branch of an Amplify app. 
+# Starts a new job for a branch of an Amplify app.
 #
 # POST /apps/{appId}/branches/{branchName}/jobs
 # operationId: StartJob
@@ -1271,31 +1280,31 @@ export def "apps-branches-jobs start" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --job-id: string #  The unique ID for an existing job. This is required if the value of <code>jobType</code> is <code>RETRY</code>. 
-  job_type: string@job-type-completer #  Describes the type for the job. The job type <code>RELEASE</code> starts a new job with the latest change from the specified branch. This value is available only for apps that are connected to a repository. The job type <code>RETRY</code> retries an existing job. If the job type value is <code>RETRY</code>, the <code>jobId</code> is also required. 
-  --job-reason: string #  A descriptive reason for starting this job. 
-  --commit-id: string #  The commit ID from a third-party repository provider for the job. 
-  --commit-message: string #  The commit message from a third-party repository provider for the job. 
-  --commit-time: string #  The commit date and time for the job.  (format: date-time)
+  --job-id: string # The unique ID for an existing job. This is required if the value of jobType is RETRY.
+  job_type: string@job-type-completer # Describes the type for the job. The job type RELEASE starts a new job with the latest change from the specified branch. This value is available only for apps that are connected to a repository. The job type RETRY retries an existing job. If the job type value is RETRY, the jobId is also required.
+  --job-reason: string # A descriptive reason for starting this job.
+  --commit-id: string # The commit ID from a third-party repository provider for the job.
+  --commit-message: string # The commit message from a third-party repository provider for the job.
+  --commit-time: string # The commit date and time for the job. (format: date-time)
 ]: any -> record<jobSummary: record<jobArn: record, jobId: record, commitId: record, commitMessage: record, commitTime: record, startTime: record, status: record, endTime: record, jobType: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, branch_name: $branch_name} | format pattern "/apps/{app_id}/branches/{branch_name}/jobs"))
-  let body = {"jobId": $job_id, "jobType": $job_type, "jobReason": $job_reason, "commitId": $commit_id, "commitMessage": $commit_message, "commitTime": $commit_time} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), branch_name: (encode-path-segment $branch_name)} | format pattern "/apps/{app_id}/branches/{branch_name}/jobs"))
+  let req_body = {"jobId": $job_id, "jobType": $job_type, "jobReason": $job_reason, "commitId": $commit_id, "commitMessage": $commit_message, "commitTime": $commit_time} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-#  Returns a list of tags for a specified Amazon Resource Name (ARN). 
+# Returns a list of tags for a specified Amazon Resource Name (ARN).
 #
 # GET /tags/{resourceArn}
 # operationId: ListTagsForResource
-export def "tags list-tags-for-resource" [
+export def "tags list-for-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1315,15 +1324,15 @@ export def "tags list-tags-for-resource" [
 ]: nothing -> record<tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({resource_arn: $resource_arn} | format pattern "/tags/{resource_arn}"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/tags/{resource_arn}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-#  Tags the resource with a tag key and value. 
+# Tags the resource with a tag key and value.
 #
 # POST /tags/{resourceArn}
 # operationId: TagResource
@@ -1344,22 +1353,22 @@ export def "tags tag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  tags: record #  The tags used to tag the resource. 
+  tags: record # The tags used to tag the resource.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({resource_arn: $resource_arn} | format pattern "/tags/{resource_arn}"))
-  let body = {"tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/tags/{resource_arn}"))
+  let req_body = {"tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-#  Starts a deployment for a manually deployed app. Manually deployed apps are not connected to a repository. 
+# Starts a deployment for a manually deployed app. Manually deployed apps are not connected to a repository.
 #
 # POST /apps/{appId}/branches/{branchName}/deployments/start
 # operationId: StartDeployment
@@ -1381,23 +1390,23 @@ export def "apps-branches-deployments-start start" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --job-id: string #  The job ID for this deployment, generated by the create deployment request. 
-  --source-url: string #  The source URL for this deployment, used when calling start deployment without create deployment. The source URL can be any HTTP GET URL that is publicly accessible and downloads a single .zip file. 
+  --job-id: string # The job ID for this deployment, generated by the create deployment request.
+  --source-url: string # The source URL for this deployment, used when calling start deployment without create deployment. The source URL can be any HTTP GET URL that is publicly accessible and downloads a single .zip file.
 ]: any -> record<jobSummary: record<jobArn: record, jobId: record, commitId: record, commitMessage: record, commitTime: record, startTime: record, status: record, endTime: record, jobType: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, branch_name: $branch_name} | format pattern "/apps/{app_id}/branches/{branch_name}/deployments/start"))
-  let body = {"jobId": $job_id, "sourceUrl": $source_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), branch_name: (encode-path-segment $branch_name)} | format pattern "/apps/{app_id}/branches/{branch_name}/deployments/start"))
+  let req_body = {"jobId": $job_id, "sourceUrl": $source_url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-#  Stops a job that is in progress for a branch of an Amplify app. 
+# Stops a job that is in progress for a branch of an Amplify app.
 #
 # DELETE /apps/{appId}/branches/{branchName}/jobs/{jobId}/stop
 # operationId: StopJob
@@ -1423,15 +1432,15 @@ export def "apps-branches-jobs-stop stop" [
 ]: nothing -> record<jobSummary: record<jobArn: record, jobId: record, commitId: record, commitMessage: record, commitTime: record, startTime: record, status: record, endTime: record, jobType: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, branch_name: $branch_name, job_id: $job_id} | format pattern "/apps/{app_id}/branches/{branch_name}/jobs/{job_id}/stop"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), branch_name: (encode-path-segment $branch_name), job_id: (encode-path-segment $job_id)} | format pattern "/apps/{app_id}/branches/{branch_name}/jobs/{job_id}/stop"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-#  Untags a resource with a specified Amazon Resource Name (ARN). 
+# Untags a resource with a specified Amazon Resource Name (ARN).
 #
 # DELETE /tags/{resourceArn}#tagKeys
 # operationId: UntagResource
@@ -1445,7 +1454,7 @@ export def "tags untag-resource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tag-keys: list #  The tag keys to use to untag a resource. 
+  --tag-keys: list # The tag keys to use to untag a resource.
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1457,10 +1466,10 @@ export def "tags untag-resource" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "tagKeys" $tag_keys "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_arn: $resource_arn} | format pattern "/tags/{resource_arn}#tagKeys") $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/tags/{resource_arn}#tagKeys") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

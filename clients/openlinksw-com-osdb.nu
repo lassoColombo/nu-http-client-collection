@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -108,7 +117,7 @@ export def "actions list" [
 ]: nothing -> record<api: string, method: string, response: table<action_id: string, description: string, entry_point: record>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({service_id: $service_id} | format pattern "/api/v1/actions/{service_id}"))
+  let full_url = (build-url $base ({service_id: (encode-path-segment $service_id)} | format pattern "/api/v1/actions/{service_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -118,7 +127,7 @@ export def "actions list" [
 #
 # GET /api/v1/actions/{serviceId}/{actionId}
 # operationId: describeAction
-export def "actions describeAction" [
+export def "actions get" [
   service_id: string
   action_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -132,7 +141,7 @@ export def "actions describeAction" [
 ]: nothing -> record<api: string, method: string, response: record<action_id: string, description: string, entry_point: record<content_types: list, description: string, encoding_types: list, http_method: string, name: string, parameters: list, url: string, url_template: string>>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({service_id: $service_id, action_id: $action_id} | format pattern "/api/v1/actions/{service_id}/{action_id}"))
+  let full_url = (build-url $base ({service_id: (encode-path-segment $service_id), action_id: (encode-path-segment $action_id)} | format pattern "/api/v1/actions/{service_id}/{action_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -142,7 +151,7 @@ export def "actions describeAction" [
 #
 # POST /api/v1/actions/{serviceId}/{actionId}/exec
 # operationId: executeAction
-export def "actions-exec exec-ute" [
+export def "actions-exec create-execute" [
   service_id: string
   action_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -165,19 +174,19 @@ export def "actions-exec exec-ute" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({service_id: $service_id, action_id: $action_id} | format pattern "/api/v1/actions/{service_id}/{action_id}/exec"))
-  let body = {"action_specific_property1": $action_specific_property1, "action_specific_property2": $action_specific_property2, "osdb:body_data_encoding": $osdb_body_data_encoding, "osdb:body_data_raw": $osdb_body_data_raw, "osdb:body_data_src_url": $osdb_body_data_src_url, "osdb:output_type": $osdb_output_type, "osdb:response_format": $osdb_response_format} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({service_id: (encode-path-segment $service_id), action_id: (encode-path-segment $action_id)} | format pattern "/api/v1/actions/{service_id}/{action_id}/exec"))
+  let req_body = {"action_specific_property1": $action_specific_property1, "action_specific_property2": $action_specific_property2, "osdb:body_data_encoding": $osdb_body_data_encoding, "osdb:body_data_raw": $osdb_body_data_raw, "osdb:body_data_src_url": $osdb_body_data_src_url, "osdb:output_type": $osdb_output_type, "osdb:response_format": $osdb_response_format} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Action help
 #
 # GET /api/v1/actions/{serviceId}/{actionId}/help
 # operationId: actionHelp
-export def "actions-help actionHelp" [
+export def "actions-help get" [
   service_id: string
   action_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -191,7 +200,7 @@ export def "actions-help actionHelp" [
 ]: nothing -> record<api: string, method: string, response: record<action_id: string, help_text: string, service_id: string>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({service_id: $service_id, action_id: $action_id} | format pattern "/api/v1/actions/{service_id}/{action_id}/help"))
+  let full_url = (build-url $base ({service_id: (encode-path-segment $service_id), action_id: (encode-path-segment $action_id)} | format pattern "/api/v1/actions/{service_id}/{action_id}/help"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -267,7 +276,7 @@ export def "services list" [
 #
 # POST /api/v1/services
 # operationId: loadService
-export def "services loadService" [
+export def "services create-load" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -283,18 +292,18 @@ export def "services loadService" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/services")
-  let body = {"service_description_url": $service_description_url, "service_moniker": $service_moniker} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"service_description_url": $service_description_url, "service_moniker": $service_moniker} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Unload service
 #
 # DELETE /api/v1/services/{serviceId}
 # operationId: unloadService
-export def "services unloadService" [
+export def "services delete-unload" [
   service_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -307,7 +316,7 @@ export def "services unloadService" [
 ]: nothing -> record<api: string, method: string, response: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({service_id: $service_id} | format pattern "/api/v1/services/{service_id}"))
+  let full_url = (build-url $base ({service_id: (encode-path-segment $service_id)} | format pattern "/api/v1/services/{service_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -317,7 +326,7 @@ export def "services unloadService" [
 #
 # GET /api/v1/services/{serviceId}
 # operationId: describeService
-export def "services describeService" [
+export def "services get" [
   service_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -330,7 +339,7 @@ export def "services describeService" [
 ]: nothing -> record<api: string, method: string, response: record<description: string, import_source_uri: string, service_id: string, service_name: string>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({service_id: $service_id} | format pattern "/api/v1/services/{service_id}"))
+  let full_url = (build-url $base ({service_id: (encode-path-segment $service_id)} | format pattern "/api/v1/services/{service_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

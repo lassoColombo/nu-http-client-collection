@@ -13,6 +13,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   match $scheme {
     "apikey" => { {headers: {ApiKey: $token_val}, query: ""} }
     "basic" => { {headers: {Authorization: $"Basic ($token_val)"}, query: ""} }
+    "basic-credentials" => { {headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: ""} }
     "none" => { {headers: {}, query: ""} }
     _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
   }
@@ -34,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
     "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
     _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -64,7 +74,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 }
 
 def base-url-completer [] { ["https://live-api.letmc.com"] }
-def auth-scheme-completer [] { ["apikey" "basic"] }
+def auth-scheme-completer [] { ["apikey" "basic" "basic-credentials"] }
 
 # Completers for enum parameters
 def accept-completer [] { ["application/json" "application/xml" "text/json" "text/xml"] }
@@ -72,7 +82,7 @@ def accept-completer [] { ["application/json" "application/xml" "text/json" "tex
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "reporting-mortgagesbycreateddate get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "reporting-mortgagesbycreateddate get-controller-mortgages-by-created-date" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -96,7 +106,7 @@ export def commands []: nothing -> table {
 #
 # GET /v3/reporting/{shortName}/mortgagesbycreateddate
 # operationId: ReportingController_MortgagesByCreatedDate
-export def "reporting-mortgagesbycreateddate get" [
+export def "reporting-mortgagesbycreateddate get-controller-mortgages-by-created-date" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -115,7 +125,7 @@ export def "reporting-mortgagesbycreateddate get" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "branchID" $branch_id "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: $short_name} | format pattern "/v3/reporting/{short_name}/mortgagesbycreateddate") $qp)
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v3/reporting/{short_name}/mortgagesbycreateddate") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -125,7 +135,7 @@ export def "reporting-mortgagesbycreateddate get" [
 #
 # GET /v3/reporting/{shortName}/mortgagesbyupdateddate
 # operationId: ReportingController_MortgagesByUpdatedDate
-export def "reporting-mortgagesbyupdateddate get" [
+export def "reporting-mortgagesbyupdateddate get-controller-mortgages-by-updated-date" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -144,7 +154,7 @@ export def "reporting-mortgagesbyupdateddate get" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "branchID" $branch_id "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: $short_name} | format pattern "/v3/reporting/{short_name}/mortgagesbyupdateddate") $qp)
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v3/reporting/{short_name}/mortgagesbyupdateddate") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -154,7 +164,7 @@ export def "reporting-mortgagesbyupdateddate get" [
 #
 # GET /v3/reporting/{shortName}/repossesionsbycreateddate
 # operationId: ReportingController_RepossessionsByCreatedDate
-export def "reporting-repossesionsbycreateddate get" [
+export def "reporting-repossesionsbycreateddate get-controller-repossessions-by-created-date" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -173,7 +183,7 @@ export def "reporting-repossesionsbycreateddate get" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "branchID" $branch_id "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: $short_name} | format pattern "/v3/reporting/{short_name}/repossesionsbycreateddate") $qp)
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v3/reporting/{short_name}/repossesionsbycreateddate") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -183,7 +193,7 @@ export def "reporting-repossesionsbycreateddate get" [
 #
 # GET /v3/reporting/{shortName}/repossesionsbyupdateddate
 # operationId: ReportingController_RepossessionsByUpdatedDate
-export def "reporting-repossesionsbyupdateddate get" [
+export def "reporting-repossesionsbyupdateddate get-controller-repossessions-by-updated-date" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -202,7 +212,7 @@ export def "reporting-repossesionsbyupdateddate get" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "branchID" $branch_id "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: $short_name} | format pattern "/v3/reporting/{short_name}/repossesionsbyupdateddate") $qp)
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v3/reporting/{short_name}/repossesionsbyupdateddate") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

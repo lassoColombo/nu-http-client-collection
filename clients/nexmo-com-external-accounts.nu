@@ -13,6 +13,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   match $scheme {
     "basic" => { {headers: {Authorization: $"Basic ($token_val)"}, query: ""} }
     "bearer" => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "basic-credentials" => { {headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: ""} }
     "none" => { {headers: {}, query: ""} }
     _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
   }
@@ -34,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
     "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
     _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -64,7 +74,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 }
 
 def base-url-completer [] { ["https://api.nexmo.com/beta/chatapp-accounts"] }
-def auth-scheme-completer [] { ["basic" "bearer"] }
+def auth-scheme-completer [] { ["basic" "bearer" "basic-credentials"] }
 
 # Completers for enum parameters
 def provider-completer [] { ["messenger" "viber_service_msg" "whatsapp"] }
@@ -72,7 +82,7 @@ def provider-completer [] { ["messenger" "viber_service_msg" "whatsapp"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account get-all" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account get-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -96,7 +106,7 @@ export def commands []: nothing -> table {
 #
 # GET /
 # operationId: GetAllAccounts
-export def "account get-all" [
+export def "account get-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -122,7 +132,7 @@ export def "account get-all" [
 #
 # POST /messenger
 # operationId: CreateMessengerAccount
-export def "messenger create-messenger-account" [
+export def "messenger create-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -131,8 +141,8 @@ export def "messenger create-messenger-account" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  access_token: string # This is the Facebook Business Page token. You can obtain the token using one of the following methods:  * Linking your Facebook Business Page to your account [with our Dashboard tool](https://dashboard.nexmo.com/messages/social-channels/facebook-connect) * Requesting a Page Access Token using the steps in the [Facebook token reference](https://developers.facebook.com/docs/pages/access-tokens/)  (e.g. myAccessToken)
-  --applications: list # Contains a list of application IDs which are linked to the account. <ul> <li>There is just one application allowed per an account.</li> <li>The application type must be type "messages".</li> </ul> For more information see [Application API spec](https://developer.nexmo.com/api/application.v2) (e.g. [optionalApplicationId])
+  access_token: string # This is the Facebook Business Page token. You can obtain the token using one of the following methods: * Linking your Facebook Business Page to your account [with our Dashboard tool](https://dashboard.nexmo.com/messages/social-channels/facebook-connect) * Requesting a Page Access Token using the steps in the [Facebook token reference](https://developers.facebook.com/docs/pages/access-tokens/) (e.g. myAccessToken)
+  --applications: list<string> # Contains a list of application IDs which are linked to the account. There is just one application allowed per an account. The application type must be type "messages". For more information see [Application API spec](https://developer.nexmo.com/api/application.v2) (e.g. [optionalApplicationId])
   external_id: string # This is the unique identifier within the provider's domain. In this case it is the Page ID for your Facebook Page. Go to your Facebook Page, click "Settings", click "Messenger platform " scroll down to "Messenger link" to find your Page ID. (e.g. 12345678)
   --name: string # Custom account name (e.g. optionalName)
 ]: any -> record<access_token: string, api_key: string, applications: list<string>, external_id: string, name: string, provider: string> {
@@ -140,18 +150,18 @@ export def "messenger create-messenger-account" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/messenger")
-  let body = {"access_token": $access_token, "applications": $applications, "external_id": $external_id, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"access_token": $access_token, "applications": $applications, "external_id": $external_id, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a Messenger account
 #
 # DELETE /messenger/{external_id}
 # operationId: DeleteMessengerAccount
-export def "messenger delete-messenger-account" [
+export def "messenger delete-account" [
   external_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -164,7 +174,7 @@ export def "messenger delete-messenger-account" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({external_id: $external_id} | format pattern "/messenger/{external_id}"))
+  let full_url = (build-url $base ({external_id: (encode-path-segment $external_id)} | format pattern "/messenger/{external_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -174,7 +184,7 @@ export def "messenger delete-messenger-account" [
 #
 # GET /messenger/{external_id}
 # operationId: GetMessengerAccount
-export def "messenger get-messenger-account" [
+export def "messenger get-account" [
   external_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -187,7 +197,7 @@ export def "messenger get-messenger-account" [
 ]: nothing -> record<access_token: string, api_key: string, applications: list<string>, external_id: string, name: string, provider: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({external_id: $external_id} | format pattern "/messenger/{external_id}"))
+  let full_url = (build-url $base ({external_id: (encode-path-segment $external_id)} | format pattern "/messenger/{external_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -197,7 +207,7 @@ export def "messenger get-messenger-account" [
 #
 # PATCH /messenger/{external_id}
 # operationId: UpdateMessengerAccount
-export def "messenger update-messenger-account" [
+export def "messenger update-account" [
   external_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -208,18 +218,18 @@ export def "messenger update-messenger-account" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --access-token: string # e.g. updatedAccessToken
-  --applications: list # e.g. [newApplicationId]
+  --applications: list<string> # e.g. [newApplicationId]
   --name: string # The new account name (e.g. newName)
 ]: any -> record<access_token: string, api_key: string, applications: list<string>, external_id: string, name: string, provider: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({external_id: $external_id} | format pattern "/messenger/{external_id}"))
-  let body = {"access_token": $access_token, "applications": $applications, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({external_id: (encode-path-segment $external_id)} | format pattern "/messenger/{external_id}"))
+  let req_body = {"access_token": $access_token, "applications": $applications, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve a Viber Service Message account
@@ -239,7 +249,7 @@ export def "viber-service-msg get-vsm-account" [
 ]: nothing -> record<api_key: string, applications: list<string>, external_id: string, name: string, provider: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({external_id: $external_id} | format pattern "/viber_service_msg/{external_id}"))
+  let full_url = (build-url $base ({external_id: (encode-path-segment $external_id)} | format pattern "/viber_service_msg/{external_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -262,7 +272,7 @@ export def "whatsapp get-wa-account" [
 ]: nothing -> record<api_key: string, applications: list<string>, external_id: string, name: string, provider: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({external_id: $external_id} | format pattern "/whatsapp/{external_id}"))
+  let full_url = (build-url $base ({external_id: (encode-path-segment $external_id)} | format pattern "/whatsapp/{external_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -272,7 +282,7 @@ export def "whatsapp get-wa-account" [
 #
 # POST /{provider}/{external_id}/applications
 # operationId: LinkApplication
-export def "applications post" [
+export def "applications create-link" [
   provider: string
   external_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -288,19 +298,19 @@ export def "applications post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({provider: $provider, external_id: $external_id} | format pattern "/{provider}/{external_id}/applications"))
-  let body = {"application": $application} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({provider: (encode-path-segment $provider), external_id: (encode-path-segment $external_id)} | format pattern "/{provider}/{external_id}/applications"))
+  let req_body = {"application": $application} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Unlink application from an account
 #
 # DELETE /{provider}/{external_id}/applications/{application_id}
 # operationId: UnliWithoutApplicationnkApplication
-export def "applications delete" [
+export def "applications delete-unli-without-applicationnk" [
   provider: string
   external_id: string
   application_id: string
@@ -315,7 +325,7 @@ export def "applications delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({provider: $provider, external_id: $external_id, application_id: $application_id} | format pattern "/{provider}/{external_id}/applications/{application_id}"))
+  let full_url = (build-url $base ({provider: (encode-path-segment $provider), external_id: (encode-path-segment $external_id), application_id: (encode-path-segment $application_id)} | format pattern "/{provider}/{external_id}/applications/{application_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

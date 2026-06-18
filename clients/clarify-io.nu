@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -122,7 +131,7 @@ export def "bundles list" [
 # Create a bundle
 #
 # POST /v1/bundles
-export def "bundles post" [
+export def "bundles create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -146,11 +155,12 @@ export def "bundles post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/bundles")
-  let body = {"name": $name, "media_url": $media_url, "audio_channel": $audio_channel, "audio_language": $audio_language, "start_time": $start_time, "parts_pending": $parts_pending, "label": $label, "metadata": $metadata, "notify_url": $notify_url, "external_id": $external_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"name": $name, "media_url": $media_url, "audio_channel": $audio_channel, "audio_language": $audio_language, "start_time": $start_time, "parts_pending": $parts_pending, "label": $label, "metadata": $metadata, "notify_url": $notify_url, "external_id": $external_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/hal+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Delete a bundle
@@ -169,7 +179,7 @@ export def "bundles delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({bundle_id: $bundle_id} | format pattern "/v1/bundles/{bundle_id}"))
+  let full_url = (build-url $base ({bundle_id: (encode-path-segment $bundle_id)} | format pattern "/v1/bundles/{bundle_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -193,7 +203,7 @@ export def "bundles get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "embed" $embed "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bundle_id: $bundle_id} | format pattern "/v1/bundles/{bundle_id}") $qp)
+  let full_url = (build-url $base ({bundle_id: (encode-path-segment $bundle_id)} | format pattern "/v1/bundles/{bundle_id}") $qp)
   let accept_val = "application/hal+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -202,7 +212,7 @@ export def "bundles get" [
 # Update a bundle
 #
 # PUT /v1/bundles/{bundle_id}
-export def "bundles put" [
+export def "bundles update" [
   bundle_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -220,12 +230,13 @@ export def "bundles put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({bundle_id: $bundle_id} | format pattern "/v1/bundles/{bundle_id}"))
-  let body = {"name": $name, "notify_url": $notify_url, "external_id": $external_id, "version": $version} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({bundle_id: (encode-path-segment $bundle_id)} | format pattern "/v1/bundles/{bundle_id}"))
+  let req_body = {"name": $name, "notify_url": $notify_url, "external_id": $external_id, "version": $version} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/hal+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Get bundle insights
@@ -244,7 +255,7 @@ export def "bundles-insights get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({bundle_id: $bundle_id} | format pattern "/v1/bundles/{bundle_id}/insights"))
+  let full_url = (build-url $base ({bundle_id: (encode-path-segment $bundle_id)} | format pattern "/v1/bundles/{bundle_id}/insights"))
   let accept_val = "application/hal+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -253,7 +264,7 @@ export def "bundles-insights get" [
 # Request an insight to be run
 #
 # POST /v1/bundles/{bundle_id}/insights
-export def "bundles-insights post" [
+export def "bundles-insights create" [
   bundle_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -268,19 +279,20 @@ export def "bundles-insights post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({bundle_id: $bundle_id} | format pattern "/v1/bundles/{bundle_id}/insights"))
-  let body = {"insight": $insight} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({bundle_id: (encode-path-segment $bundle_id)} | format pattern "/v1/bundles/{bundle_id}/insights"))
+  let req_body = {"insight": $insight} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/hal+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Get bundle insight
 #
 # GET /v1/bundles/{bundle_id}/insights/{insight_id}
 # operationId: v1bundlesbundle_idinsightsinsight_id
-export def "bundles-insights id" [
+export def "bundles-insights get-v1bundlesbundle-idinsightsinsight" [
   bundle_id: string
   insight_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -294,7 +306,7 @@ export def "bundles-insights id" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({bundle_id: $bundle_id, insight_id: $insight_id} | format pattern "/v1/bundles/{bundle_id}/insights/{insight_id}"))
+  let full_url = (build-url $base ({bundle_id: (encode-path-segment $bundle_id), insight_id: (encode-path-segment $insight_id)} | format pattern "/v1/bundles/{bundle_id}/insights/{insight_id}"))
   let accept_val = "application/hal+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -316,7 +328,7 @@ export def "bundles-metadata delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({bundle_id: $bundle_id} | format pattern "/v1/bundles/{bundle_id}/metadata"))
+  let full_url = (build-url $base ({bundle_id: (encode-path-segment $bundle_id)} | format pattern "/v1/bundles/{bundle_id}/metadata"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -338,7 +350,7 @@ export def "bundles-metadata get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({bundle_id: $bundle_id} | format pattern "/v1/bundles/{bundle_id}/metadata"))
+  let full_url = (build-url $base ({bundle_id: (encode-path-segment $bundle_id)} | format pattern "/v1/bundles/{bundle_id}/metadata"))
   let accept_val = "application/hal+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -347,7 +359,7 @@ export def "bundles-metadata get" [
 # Update bundle metadata
 #
 # PUT /v1/bundles/{bundle_id}/metadata
-export def "bundles-metadata put" [
+export def "bundles-metadata update" [
   bundle_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -363,12 +375,13 @@ export def "bundles-metadata put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({bundle_id: $bundle_id} | format pattern "/v1/bundles/{bundle_id}/metadata"))
-  let body = {"data": $data, "version": $version} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({bundle_id: (encode-path-segment $bundle_id)} | format pattern "/v1/bundles/{bundle_id}/metadata"))
+  let req_body = {"data": $data, "version": $version} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/hal+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Delete bundle tracks
@@ -387,7 +400,7 @@ export def "bundles-tracks delete-by-bundle_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({bundle_id: $bundle_id} | format pattern "/v1/bundles/{bundle_id}/tracks"))
+  let full_url = (build-url $base ({bundle_id: (encode-path-segment $bundle_id)} | format pattern "/v1/bundles/{bundle_id}/tracks"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -409,7 +422,7 @@ export def "bundles-tracks list" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({bundle_id: $bundle_id} | format pattern "/v1/bundles/{bundle_id}/tracks"))
+  let full_url = (build-url $base ({bundle_id: (encode-path-segment $bundle_id)} | format pattern "/v1/bundles/{bundle_id}/tracks"))
   let accept_val = "application/hal+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -418,7 +431,7 @@ export def "bundles-tracks list" [
 # Add a track for a bundle
 #
 # POST /v1/bundles/{bundle_id}/tracks
-export def "bundles-tracks post" [
+export def "bundles-tracks create" [
   bundle_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -440,18 +453,19 @@ export def "bundles-tracks post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({bundle_id: $bundle_id} | format pattern "/v1/bundles/{bundle_id}/tracks"))
-  let body = {"label": $label, "media_url": $media_url, "audio_channel": $audio_channel, "audio_language": $audio_language, "start_time": $start_time, "parts_pending": $parts_pending, "track": $track, "version": $version} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({bundle_id: (encode-path-segment $bundle_id)} | format pattern "/v1/bundles/{bundle_id}/tracks"))
+  let req_body = {"label": $label, "media_url": $media_url, "audio_channel": $audio_channel, "audio_language": $audio_language, "start_time": $start_time, "parts_pending": $parts_pending, "track": $track, "version": $version} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/hal+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Update a tracks for a bundle
 #
 # PUT /v1/bundles/{bundle_id}/tracks
-export def "bundles-tracks put-by-bundle_id" [
+export def "bundles-tracks update-by-bundle_id" [
   bundle_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -467,12 +481,13 @@ export def "bundles-tracks put-by-bundle_id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({bundle_id: $bundle_id} | format pattern "/v1/bundles/{bundle_id}/tracks"))
-  let body = {"parts_complete": $parts_complete, "version": $version} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({bundle_id: (encode-path-segment $bundle_id)} | format pattern "/v1/bundles/{bundle_id}/tracks"))
+  let req_body = {"parts_complete": $parts_complete, "version": $version} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/hal+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Delete a bundle track
@@ -492,7 +507,7 @@ export def "bundles-tracks delete-by-bundle_id-track_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({bundle_id: $bundle_id, track_id: $track_id} | format pattern "/v1/bundles/{bundle_id}/tracks/{track_id}"))
+  let full_url = (build-url $base ({bundle_id: (encode-path-segment $bundle_id), track_id: (encode-path-segment $track_id)} | format pattern "/v1/bundles/{bundle_id}/tracks/{track_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -515,7 +530,7 @@ export def "bundles-tracks get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({bundle_id: $bundle_id, track_id: $track_id} | format pattern "/v1/bundles/{bundle_id}/tracks/{track_id}"))
+  let full_url = (build-url $base ({bundle_id: (encode-path-segment $bundle_id), track_id: (encode-path-segment $track_id)} | format pattern "/v1/bundles/{bundle_id}/tracks/{track_id}"))
   let accept_val = "application/hal+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -524,7 +539,7 @@ export def "bundles-tracks get" [
 # Add media to a track
 #
 # PUT /v1/bundles/{bundle_id}/tracks/{track_id}
-export def "bundles-tracks put-by-bundle_id-track_id" [
+export def "bundles-tracks update-by-bundle_id-track_id" [
   bundle_id: string
   track_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -545,19 +560,20 @@ export def "bundles-tracks put-by-bundle_id-track_id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({bundle_id: $bundle_id, track_id: $track_id} | format pattern "/v1/bundles/{bundle_id}/tracks/{track_id}"))
-  let body = {"media_url": $media_url, "audio_channel": $audio_channel, "audio_language": $audio_language, "start_time": $start_time, "parts_pending": $parts_pending, "version": $version} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({bundle_id: (encode-path-segment $bundle_id), track_id: (encode-path-segment $track_id)} | format pattern "/v1/bundles/{bundle_id}/tracks/{track_id}"))
+  let req_body = {"media_url": $media_url, "audio_channel": $audio_channel, "audio_language": $audio_language, "start_time": $start_time, "parts_pending": $parts_pending, "version": $version} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/hal+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
-# Generate Group Report <span class="label">beta</span>
+# Generate Group Report beta
 #
 # GET /v1/reports/scores
 # operationId: v1reportsscores
-export def "reports-scores v1reportsscores" [
+export def "reports-scores get-v1reportsscores" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -581,11 +597,11 @@ export def "reports-scores v1reportsscores" [
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Generate Trends Report <span class="label">beta</span>
+# Generate Trends Report beta
 #
 # GET /v1/reports/trends
 # operationId: v1reportstrends
-export def "reports-trends v1reportstrends" [
+export def "reports-trends get-v1reportstrends" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -612,7 +628,7 @@ export def "reports-trends v1reportstrends" [
 #
 # GET /v1/search
 # operationId: v1search
-export def "search v1search" [
+export def "search get-v1search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

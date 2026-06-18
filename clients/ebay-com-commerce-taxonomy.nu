@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -106,7 +115,7 @@ export def "category-tree get" [
 ]: nothing -> record<applicableMarketplaceIds: list<string>, categoryTreeId: string, categoryTreeVersion: string, rootCategoryNode: record<category: record<categoryId: string, categoryName: string>, categoryTreeNodeLevel: int, childCategoryTreeNodes: list<any>, leafCategoryTreeNode: bool, parentCategoryTreeNodeHref: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({category_tree_id: $category_tree_id} | format pattern "/category_tree/{category_tree_id}"))
+  let full_url = (build-url $base ({category_tree_id: (encode-path-segment $category_tree_id)} | format pattern "/category_tree/{category_tree_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -129,7 +138,7 @@ export def "category-tree-fetch-item-aspects get" [
 ]: nothing -> record<categoryAspects: table<aspects: list, category: record>, categoryTreeId: string, categoryTreeVersion: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({category_tree_id: $category_tree_id} | format pattern "/category_tree/{category_tree_id}/fetch_item_aspects"))
+  let full_url = (build-url $base ({category_tree_id: (encode-path-segment $category_tree_id)} | format pattern "/category_tree/{category_tree_id}/fetch_item_aspects"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -154,7 +163,7 @@ export def "category-tree-get-category-subtree get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "category_id" $category_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({category_tree_id: $category_tree_id} | format pattern "/category_tree/{category_tree_id}/get_category_subtree") $qp)
+  let full_url = (build-url $base ({category_tree_id: (encode-path-segment $category_tree_id)} | format pattern "/category_tree/{category_tree_id}/get_category_subtree") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -179,7 +188,7 @@ export def "category-tree-get-category-suggestions get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({category_tree_id: $category_tree_id} | format pattern "/category_tree/{category_tree_id}/get_category_suggestions") $qp)
+  let full_url = (build-url $base ({category_tree_id: (encode-path-segment $category_tree_id)} | format pattern "/category_tree/{category_tree_id}/get_category_suggestions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -204,7 +213,7 @@ export def "category-tree-get-compatibility-properties get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "category_id" $category_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({category_tree_id: $category_tree_id} | format pattern "/category_tree/{category_tree_id}/get_compatibility_properties") $qp)
+  let full_url = (build-url $base ({category_tree_id: (encode-path-segment $category_tree_id)} | format pattern "/category_tree/{category_tree_id}/get_compatibility_properties") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -224,14 +233,14 @@ export def "category-tree-get-compatibility-property-values get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --compatibility-property: string # One compatible vehicle property applicable to the specified eBay marketplace and eBay category is specified in this required filter. Compatible vehicle properties are returned in the compatibilityProperties.name field of a getCompatibilityProperties response. For example, if you wanted to retrieve all vehicle trims for a 2018 Toyota Camry, you would set this filter as follows: compatibility_property=Trim; and then include the following three name/value filters through one filter parameter: filter=Year:2018,Make:Toyota,Model:Camry. So, putting this all together, your URI would look something like this: GET https://api.ebay.com/commerce/ taxonomy/v1/category_tree/100/ get_compatibility_property_values? category_id=6016&amp;compatibility_property=Trim &amp;filter=filter=Year:2018,Make:Toyota,Model:Camry
+  --compatibility-property: string # One compatible vehicle property applicable to the specified eBay marketplace and eBay category is specified in this required filter. Compatible vehicle properties are returned in the compatibilityProperties.name field of a getCompatibilityProperties response. For example, if you wanted to retrieve all vehicle trims for a 2018 Toyota Camry, you would set this filter as follows: compatibility_property=Trim; and then include the following three name/value filters through one filter parameter: filter=Year:2018,Make:Toyota,Model:Camry. So, putting this all together, your URI would look something like this: GET https://api.ebay.com/commerce/ taxonomy/v1/category_tree/100/ get_compatibility_property_values? category_id=6016&compatibility_property=Trim &filter=filter=Year:2018,Make:Toyota,Model:Camry
   --category-id: string # The unique identifier of an eBay category. This eBay category must be a valid eBay category on the specified eBay marketplace, and the category must support parts compatibility for cars, trucks, or motorcyles. The getAutomotivePartsCompatibilityPolicies method of the Selling Metadata API can be used to retrieve all eBay categories for an eBay marketplace that supports parts compatibility cars, trucks, or motorcyles. The getAutomotivePartsCompatibilityPolicies method can also be used to see if one or more specific eBay categories support parts compatibility.
-  --filter: string # One or more compatible vehicle property name/value pairs are passed in through this query parameter. The compatible vehicle property name and corresponding value are delimited with a colon (:), such as filter=Year:2018, and multiple compatible vehicle property name/value pairs are delimited with a comma (,). For example, if you wanted to retrieve all vehicle trims for a 2018 Toyota Camry, you would set the compatibility_property filter as follows: compatibility_property=Trim; and then include the following three name/value filters through one filter parameter: filter=Year:2018,Make:Toyota,Model:Camry. So, putting this all together, your URI would look something like this: GET https://api.ebay.com/commerce/ taxonomy/v1/category_tree/100/ get_compatibility_property_values? category_id=6016&amp;compatibility_property=Trim &amp;filter=filter=Year:2018,Make:Toyota,Model:Camry For implementation help, refer to eBay API documentation at https://developer.ebay.com/api-docs/commerce/taxonomy/types/txn:ConstraintFilter
+  --filter: string # One or more compatible vehicle property name/value pairs are passed in through this query parameter. The compatible vehicle property name and corresponding value are delimited with a colon (:), such as filter=Year:2018, and multiple compatible vehicle property name/value pairs are delimited with a comma (,). For example, if you wanted to retrieve all vehicle trims for a 2018 Toyota Camry, you would set the compatibility_property filter as follows: compatibility_property=Trim; and then include the following three name/value filters through one filter parameter: filter=Year:2018,Make:Toyota,Model:Camry. So, putting this all together, your URI would look something like this: GET https://api.ebay.com/commerce/ taxonomy/v1/category_tree/100/ get_compatibility_property_values? category_id=6016&compatibility_property=Trim &filter=filter=Year:2018,Make:Toyota,Model:Camry For implementation help, refer to eBay API documentation at https://developer.ebay.com/api-docs/commerce/taxonomy/types/txn:ConstraintFilter
 ]: nothing -> record<compatibilityPropertyValues: table<value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "compatibility_property" $compatibility_property "scalar") (serialize-qp "category_id" $category_id "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({category_tree_id: $category_tree_id} | format pattern "/category_tree/{category_tree_id}/get_compatibility_property_values") $qp)
+  let full_url = (build-url $base ({category_tree_id: (encode-path-segment $category_tree_id)} | format pattern "/category_tree/{category_tree_id}/get_compatibility_property_values") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -256,7 +265,7 @@ export def "category-tree-get-item-aspects-for-category get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "category_id" $category_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({category_tree_id: $category_tree_id} | format pattern "/category_tree/{category_tree_id}/get_item_aspects_for_category") $qp)
+  let full_url = (build-url $base ({category_tree_id: (encode-path-segment $category_tree_id)} | format pattern "/category_tree/{category_tree_id}/get_item_aspects_for_category") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -282,9 +291,9 @@ export def "get-default-category-tree-id get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "marketplace_id" $marketplace_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/get_default_category_tree_id" $qp)
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

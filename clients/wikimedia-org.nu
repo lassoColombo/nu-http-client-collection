@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -118,7 +127,7 @@ export def "feed-availability get" [
 # Check and normalize a TeX formula.
 #
 # POST /media/math/check/{type}
-export def "media-math-check post" [
+export def "media-math-check create" [
   type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -134,12 +143,13 @@ export def "media-math-check post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({type: $type} | format pattern "/media/math/check/{type}"))
-  let body = {"q": $q} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({type: (encode-path-segment $type)} | format pattern "/media/math/check/{type}"))
+  let req_body = {"q": $q} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Get a previously-stored formula
@@ -159,7 +169,7 @@ export def "media-math-formula get" [
 ]: nothing -> record<detail: string, method: string, status: int, title: string, type: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({hash: $hash} | format pattern "/media/math/formula/{hash}"))
+  let full_url = (build-url $base ({hash: (encode-path-segment $hash)} | format pattern "/media/math/formula/{hash}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -183,7 +193,7 @@ export def "media-math-render get" [
 ]: nothing -> record<detail: string, method: string, status: int, title: string, type: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({format: $format, hash: $hash} | format pattern "/media/math/render/{format}/{hash}"))
+  let full_url = (build-url $base ({format: (encode-path-segment $format), hash: (encode-path-segment $hash)} | format pattern "/media/math/render/{format}/{hash}"))
   let accept_val = ($accept | default "image/svg+xml")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -211,7 +221,7 @@ export def "metrics-bytes-difference-absolute-aggregate get" [
 ]: nothing -> record<items: table<editor_type: string, granularity: string, page_type: string, project: string, results: list>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({project: $project, editor_type: $editor_type, page_type: $page_type, granularity: $granularity, start: $start, end: $end} | format pattern "/metrics/bytes-difference/absolute/aggregate/{project}/{editor_type}/{page_type}/{granularity}/{start}/{end}"))
+  let full_url = (build-url $base ({project: (encode-path-segment $project), editor_type: (encode-path-segment $editor_type), page_type: (encode-path-segment $page_type), granularity: (encode-path-segment $granularity), start: (encode-path-segment $start), end: (encode-path-segment $end)} | format pattern "/metrics/bytes-difference/absolute/aggregate/{project}/{editor_type}/{page_type}/{granularity}/{start}/{end}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -239,7 +249,7 @@ export def "metrics-bytes-difference-absolute-per-page get" [
 ]: nothing -> record<items: table<editor_type: string, granularity: string, page_title: string, project: string, results: list>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({project: $project, page_title: $page_title, editor_type: $editor_type, granularity: $granularity, start: $start, end: $end} | format pattern "/metrics/bytes-difference/absolute/per-page/{project}/{page_title}/{editor_type}/{granularity}/{start}/{end}"))
+  let full_url = (build-url $base ({project: (encode-path-segment $project), page_title: (encode-path-segment $page_title), editor_type: (encode-path-segment $editor_type), granularity: (encode-path-segment $granularity), start: (encode-path-segment $start), end: (encode-path-segment $end)} | format pattern "/metrics/bytes-difference/absolute/per-page/{project}/{page_title}/{editor_type}/{granularity}/{start}/{end}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -267,7 +277,7 @@ export def "metrics-bytes-difference-net-aggregate get" [
 ]: nothing -> record<items: table<editor_type: string, granularity: string, page_type: string, project: string, results: list>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({project: $project, editor_type: $editor_type, page_type: $page_type, granularity: $granularity, start: $start, end: $end} | format pattern "/metrics/bytes-difference/net/aggregate/{project}/{editor_type}/{page_type}/{granularity}/{start}/{end}"))
+  let full_url = (build-url $base ({project: (encode-path-segment $project), editor_type: (encode-path-segment $editor_type), page_type: (encode-path-segment $page_type), granularity: (encode-path-segment $granularity), start: (encode-path-segment $start), end: (encode-path-segment $end)} | format pattern "/metrics/bytes-difference/net/aggregate/{project}/{editor_type}/{page_type}/{granularity}/{start}/{end}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -295,7 +305,7 @@ export def "metrics-bytes-difference-net-per-page get" [
 ]: nothing -> record<items: table<editor_type: string, granularity: string, page_title: string, project: string, results: list>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({project: $project, page_title: $page_title, editor_type: $editor_type, granularity: $granularity, start: $start, end: $end} | format pattern "/metrics/bytes-difference/net/per-page/{project}/{page_title}/{editor_type}/{granularity}/{start}/{end}"))
+  let full_url = (build-url $base ({project: (encode-path-segment $project), page_title: (encode-path-segment $page_title), editor_type: (encode-path-segment $editor_type), granularity: (encode-path-segment $granularity), start: (encode-path-segment $start), end: (encode-path-segment $end)} | format pattern "/metrics/bytes-difference/net/per-page/{project}/{page_title}/{editor_type}/{granularity}/{start}/{end}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -324,7 +334,7 @@ export def "metrics-edited-pages-aggregate get" [
 ]: nothing -> record<items: table<activity_level: string, editor_type: string, granularity: string, page_type: string, project: string, results: list>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({project: $project, editor_type: $editor_type, page_type: $page_type, activity_level: $activity_level, granularity: $granularity, start: $start, end: $end} | format pattern "/metrics/edited-pages/aggregate/{project}/{editor_type}/{page_type}/{activity_level}/{granularity}/{start}/{end}"))
+  let full_url = (build-url $base ({project: (encode-path-segment $project), editor_type: (encode-path-segment $editor_type), page_type: (encode-path-segment $page_type), activity_level: (encode-path-segment $activity_level), granularity: (encode-path-segment $granularity), start: (encode-path-segment $start), end: (encode-path-segment $end)} | format pattern "/metrics/edited-pages/aggregate/{project}/{editor_type}/{page_type}/{activity_level}/{granularity}/{start}/{end}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -352,7 +362,7 @@ export def "metrics-edited-pages-new get" [
 ]: nothing -> record<items: table<editor_type: string, granularity: string, page_type: string, project: string, results: list>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({project: $project, editor_type: $editor_type, page_type: $page_type, granularity: $granularity, start: $start, end: $end} | format pattern "/metrics/edited-pages/new/{project}/{editor_type}/{page_type}/{granularity}/{start}/{end}"))
+  let full_url = (build-url $base ({project: (encode-path-segment $project), editor_type: (encode-path-segment $editor_type), page_type: (encode-path-segment $page_type), granularity: (encode-path-segment $granularity), start: (encode-path-segment $start), end: (encode-path-segment $end)} | format pattern "/metrics/edited-pages/new/{project}/{editor_type}/{page_type}/{granularity}/{start}/{end}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -380,7 +390,7 @@ export def "metrics-edited-pages-top-by-absolute-bytes-difference get" [
 ]: nothing -> record<items: table<editor_type: string, granularity: string, page_type: string, project: string, results: list>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({project: $project, editor_type: $editor_type, page_type: $page_type, year: $year, month: $month, day: $day} | format pattern "/metrics/edited-pages/top-by-absolute-bytes-difference/{project}/{editor_type}/{page_type}/{year}/{month}/{day}"))
+  let full_url = (build-url $base ({project: (encode-path-segment $project), editor_type: (encode-path-segment $editor_type), page_type: (encode-path-segment $page_type), year: (encode-path-segment $year), month: (encode-path-segment $month), day: (encode-path-segment $day)} | format pattern "/metrics/edited-pages/top-by-absolute-bytes-difference/{project}/{editor_type}/{page_type}/{year}/{month}/{day}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -408,7 +418,7 @@ export def "metrics-edited-pages-top-by-edits get" [
 ]: nothing -> record<items: table<editor_type: string, granularity: string, page_type: string, project: string, results: list>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({project: $project, editor_type: $editor_type, page_type: $page_type, year: $year, month: $month, day: $day} | format pattern "/metrics/edited-pages/top-by-edits/{project}/{editor_type}/{page_type}/{year}/{month}/{day}"))
+  let full_url = (build-url $base ({project: (encode-path-segment $project), editor_type: (encode-path-segment $editor_type), page_type: (encode-path-segment $page_type), year: (encode-path-segment $year), month: (encode-path-segment $month), day: (encode-path-segment $day)} | format pattern "/metrics/edited-pages/top-by-edits/{project}/{editor_type}/{page_type}/{year}/{month}/{day}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -436,7 +446,7 @@ export def "metrics-edited-pages-top-by-net-bytes-difference get" [
 ]: nothing -> record<items: table<editor_type: string, granularity: string, page_type: string, project: string, results: list>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({project: $project, editor_type: $editor_type, page_type: $page_type, year: $year, month: $month, day: $day} | format pattern "/metrics/edited-pages/top-by-net-bytes-difference/{project}/{editor_type}/{page_type}/{year}/{month}/{day}"))
+  let full_url = (build-url $base ({project: (encode-path-segment $project), editor_type: (encode-path-segment $editor_type), page_type: (encode-path-segment $page_type), year: (encode-path-segment $year), month: (encode-path-segment $month), day: (encode-path-segment $day)} | format pattern "/metrics/edited-pages/top-by-net-bytes-difference/{project}/{editor_type}/{page_type}/{year}/{month}/{day}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -465,7 +475,7 @@ export def "metrics-editors-aggregate get" [
 ]: nothing -> record<items: table<activity_level: string, editor_type: string, granularity: string, page_type: string, project: string, results: list>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({project: $project, editor_type: $editor_type, page_type: $page_type, activity_level: $activity_level, granularity: $granularity, start: $start, end: $end} | format pattern "/metrics/editors/aggregate/{project}/{editor_type}/{page_type}/{activity_level}/{granularity}/{start}/{end}"))
+  let full_url = (build-url $base ({project: (encode-path-segment $project), editor_type: (encode-path-segment $editor_type), page_type: (encode-path-segment $page_type), activity_level: (encode-path-segment $activity_level), granularity: (encode-path-segment $granularity), start: (encode-path-segment $start), end: (encode-path-segment $end)} | format pattern "/metrics/editors/aggregate/{project}/{editor_type}/{page_type}/{activity_level}/{granularity}/{start}/{end}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -493,7 +503,7 @@ export def "metrics-editors-top-by-absolute-bytes-difference get" [
 ]: nothing -> record<items: table<editor_type: string, granularity: string, page_type: string, project: string, results: list>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({project: $project, editor_type: $editor_type, page_type: $page_type, year: $year, month: $month, day: $day} | format pattern "/metrics/editors/top-by-absolute-bytes-difference/{project}/{editor_type}/{page_type}/{year}/{month}/{day}"))
+  let full_url = (build-url $base ({project: (encode-path-segment $project), editor_type: (encode-path-segment $editor_type), page_type: (encode-path-segment $page_type), year: (encode-path-segment $year), month: (encode-path-segment $month), day: (encode-path-segment $day)} | format pattern "/metrics/editors/top-by-absolute-bytes-difference/{project}/{editor_type}/{page_type}/{year}/{month}/{day}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -521,7 +531,7 @@ export def "metrics-editors-top-by-edits get" [
 ]: nothing -> record<items: table<editor_type: string, granularity: string, page_type: string, project: string, results: list>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({project: $project, editor_type: $editor_type, page_type: $page_type, year: $year, month: $month, day: $day} | format pattern "/metrics/editors/top-by-edits/{project}/{editor_type}/{page_type}/{year}/{month}/{day}"))
+  let full_url = (build-url $base ({project: (encode-path-segment $project), editor_type: (encode-path-segment $editor_type), page_type: (encode-path-segment $page_type), year: (encode-path-segment $year), month: (encode-path-segment $month), day: (encode-path-segment $day)} | format pattern "/metrics/editors/top-by-edits/{project}/{editor_type}/{page_type}/{year}/{month}/{day}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -549,7 +559,7 @@ export def "metrics-editors-top-by-net-bytes-difference get" [
 ]: nothing -> record<items: table<editor_type: string, granularity: string, page_type: string, project: string, results: list>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({project: $project, editor_type: $editor_type, page_type: $page_type, year: $year, month: $month, day: $day} | format pattern "/metrics/editors/top-by-net-bytes-difference/{project}/{editor_type}/{page_type}/{year}/{month}/{day}"))
+  let full_url = (build-url $base ({project: (encode-path-segment $project), editor_type: (encode-path-segment $editor_type), page_type: (encode-path-segment $page_type), year: (encode-path-segment $year), month: (encode-path-segment $month), day: (encode-path-segment $day)} | format pattern "/metrics/editors/top-by-net-bytes-difference/{project}/{editor_type}/{page_type}/{year}/{month}/{day}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -577,7 +587,7 @@ export def "metrics-edits-aggregate get" [
 ]: nothing -> record<items: table<editor_type: string, granularity: string, page_type: string, project: string, results: list>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({project: $project, editor_type: $editor_type, page_type: $page_type, granularity: $granularity, start: $start, end: $end} | format pattern "/metrics/edits/aggregate/{project}/{editor_type}/{page_type}/{granularity}/{start}/{end}"))
+  let full_url = (build-url $base ({project: (encode-path-segment $project), editor_type: (encode-path-segment $editor_type), page_type: (encode-path-segment $page_type), granularity: (encode-path-segment $granularity), start: (encode-path-segment $start), end: (encode-path-segment $end)} | format pattern "/metrics/edits/aggregate/{project}/{editor_type}/{page_type}/{granularity}/{start}/{end}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -605,13 +615,13 @@ export def "metrics-edits-per-page get" [
 ]: nothing -> record<items: table<editor_type: string, granularity: string, page_title: string, project: string, results: list>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({project: $project, page_title: $page_title, editor_type: $editor_type, granularity: $granularity, start: $start, end: $end} | format pattern "/metrics/edits/per-page/{project}/{page_title}/{editor_type}/{granularity}/{start}/{end}"))
+  let full_url = (build-url $base ({project: (encode-path-segment $project), page_title: (encode-path-segment $page_title), editor_type: (encode-path-segment $editor_type), granularity: (encode-path-segment $granularity), start: (encode-path-segment $start), end: (encode-path-segment $end)} | format pattern "/metrics/edits/per-page/{project}/{page_title}/{editor_type}/{granularity}/{start}/{end}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Given a project and a date range, returns a timeseries of pagecounts. You can filter by access site (mobile or desktop) and you can choose between monthly, daily and hourly granularity as well.  - Stability: [experimental](https://www.mediawiki.org/wiki/API_versioning#Experimental) - Rate limit: 100 req/s - License: Data accessible via this endpoint is available under the   [CC0 1.0 license](https://creativecommons.org/publicdomain/zero/1.0/).
+# Given a project and a date range, returns a timeseries of pagecounts. You can filter by access site (mobile or desktop) and you can choose between monthly, daily and hourly granularity as well. - Stability: [experimental](https://www.mediawiki.org/wiki/API_versioning#Experimental) - Rate limit: 100 req/s - License: Data accessible via this endpoint is available under the [CC0 1.0 license](https://creativecommons.org/publicdomain/zero/1.0/).
 #
 # GET /metrics/legacy/pagecounts/aggregate/{project}/{access-site}/{granularity}/{start}/{end}
 export def "metrics-legacy-pagecounts-aggregate get" [
@@ -632,7 +642,7 @@ export def "metrics-legacy-pagecounts-aggregate get" [
 ]: nothing -> record<items: table<access_site: string, count: int, granularity: string, project: string, timestamp: string>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({project: $project, access_site: $access_site, granularity: $granularity, start: $start, end: $end} | format pattern "/metrics/legacy/pagecounts/aggregate/{project}/{access_site}/{granularity}/{start}/{end}"))
+  let full_url = (build-url $base ({project: (encode-path-segment $project), access_site: (encode-path-segment $access_site), granularity: (encode-path-segment $granularity), start: (encode-path-segment $start), end: (encode-path-segment $end)} | format pattern "/metrics/legacy/pagecounts/aggregate/{project}/{access_site}/{granularity}/{start}/{end}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -660,7 +670,7 @@ export def "metrics-pageviews-aggregate get" [
 ]: nothing -> record<items: table<access: string, agent: string, granularity: string, project: string, timestamp: string, views: int>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({project: $project, access: $access, agent: $agent, granularity: $granularity, start: $start, end: $end} | format pattern "/metrics/pageviews/aggregate/{project}/{access}/{agent}/{granularity}/{start}/{end}"))
+  let full_url = (build-url $base ({project: (encode-path-segment $project), access: (encode-path-segment $access), agent: (encode-path-segment $agent), granularity: (encode-path-segment $granularity), start: (encode-path-segment $start), end: (encode-path-segment $end)} | format pattern "/metrics/pageviews/aggregate/{project}/{access}/{agent}/{granularity}/{start}/{end}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -689,7 +699,7 @@ export def "metrics-pageviews-per-article get" [
 ]: nothing -> record<items: table<access: string, agent: string, article: string, granularity: string, project: string, timestamp: string, views: int>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({project: $project, access: $access, agent: $agent, article: $article, granularity: $granularity, start: $start, end: $end} | format pattern "/metrics/pageviews/per-article/{project}/{access}/{agent}/{article}/{granularity}/{start}/{end}"))
+  let full_url = (build-url $base ({project: (encode-path-segment $project), access: (encode-path-segment $access), agent: (encode-path-segment $agent), article: (encode-path-segment $article), granularity: (encode-path-segment $granularity), start: (encode-path-segment $start), end: (encode-path-segment $end)} | format pattern "/metrics/pageviews/per-article/{project}/{access}/{agent}/{article}/{granularity}/{start}/{end}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -715,7 +725,7 @@ export def "metrics-pageviews-top-by-country get" [
 ]: nothing -> record<items: table<access: string, countries: list, month: string, project: string, year: string>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({project: $project, access: $access, year: $year, month: $month} | format pattern "/metrics/pageviews/top-by-country/{project}/{access}/{year}/{month}"))
+  let full_url = (build-url $base ({project: (encode-path-segment $project), access: (encode-path-segment $access), year: (encode-path-segment $year), month: (encode-path-segment $month)} | format pattern "/metrics/pageviews/top-by-country/{project}/{access}/{year}/{month}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -742,7 +752,7 @@ export def "metrics-pageviews-top get" [
 ]: nothing -> record<items: table<access: string, articles: list, day: string, month: string, project: string, year: string>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({project: $project, access: $access, year: $year, month: $month, day: $day} | format pattern "/metrics/pageviews/top/{project}/{access}/{year}/{month}/{day}"))
+  let full_url = (build-url $base ({project: (encode-path-segment $project), access: (encode-path-segment $access), year: (encode-path-segment $year), month: (encode-path-segment $month), day: (encode-path-segment $day)} | format pattern "/metrics/pageviews/top/{project}/{access}/{year}/{month}/{day}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -768,7 +778,7 @@ export def "metrics-registered-users-new get" [
 ]: nothing -> record<items: table<granularity: string, project: string, results: list>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({project: $project, granularity: $granularity, start: $start, end: $end} | format pattern "/metrics/registered-users/new/{project}/{granularity}/{start}/{end}"))
+  let full_url = (build-url $base ({project: (encode-path-segment $project), granularity: (encode-path-segment $granularity), start: (encode-path-segment $start), end: (encode-path-segment $end)} | format pattern "/metrics/registered-users/new/{project}/{granularity}/{start}/{end}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -795,7 +805,7 @@ export def "metrics-unique-devices get" [
 ]: nothing -> record<items: table<access_site: string, devices: int, granularity: string, project: string, timestamp: string>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({project: $project, access_site: $access_site, granularity: $granularity, start: $start, end: $end} | format pattern "/metrics/unique-devices/{project}/{access_site}/{granularity}/{start}/{end}"))
+  let full_url = (build-url $base ({project: (encode-path-segment $project), access_site: (encode-path-segment $access_site), granularity: (encode-path-segment $granularity), start: (encode-path-segment $start), end: (encode-path-segment $end)} | format pattern "/metrics/unique-devices/{project}/{access_site}/{granularity}/{start}/{end}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -804,7 +814,7 @@ export def "metrics-unique-devices get" [
 # Machine-translate content
 #
 # POST /transform/html/from/{from_lang}/to/{to_lang}
-export def "transform-html-from-to post-by-from_lang-to_lang" [
+export def "transform-html-from-to create-by-from_lang-to_lang" [
   from_lang: string
   to_lang: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -821,18 +831,19 @@ export def "transform-html-from-to post-by-from_lang-to_lang" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({from_lang: $from_lang, to_lang: $to_lang} | format pattern "/transform/html/from/{from_lang}/to/{to_lang}"))
-  let body = {"html": $html} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({from_lang: (encode-path-segment $from_lang), to_lang: (encode-path-segment $to_lang)} | format pattern "/transform/html/from/{from_lang}/to/{to_lang}"))
+  let req_body = {"html": $html} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Machine-translate content
 #
 # POST /transform/html/from/{from_lang}/to/{to_lang}/{provider}
-export def "transform-html-from-to post-by-from_lang-to_lang-provider" [
+export def "transform-html-from-to create-by-from_lang-to_lang-provider" [
   from_lang: string
   to_lang: string
   provider: string
@@ -850,12 +861,13 @@ export def "transform-html-from-to post-by-from_lang-to_lang-provider" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({from_lang: $from_lang, to_lang: $to_lang, provider: $provider} | format pattern "/transform/html/from/{from_lang}/to/{to_lang}/{provider}"))
-  let body = {"html": $html} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({from_lang: (encode-path-segment $from_lang), to_lang: (encode-path-segment $to_lang), provider: (encode-path-segment $provider)} | format pattern "/transform/html/from/{from_lang}/to/{to_lang}/{provider}"))
+  let req_body = {"html": $html} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Lists the language pairs supported by the back-end
@@ -897,7 +909,7 @@ export def "transform-list-pair get" [
 ]: nothing -> record<tools: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({from: $from, to: $to} | format pattern "/transform/list/pair/{from}/{to}/"))
+  let full_url = (build-url $base ({from: (encode-path-segment $from), to: (encode-path-segment $to)} | format pattern "/transform/list/pair/{from}/{to}/"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -920,7 +932,7 @@ export def "transform-list-tool get-by-tool" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({tool: $tool} | format pattern "/transform/list/tool/{tool}"))
+  let full_url = (build-url $base ({tool: (encode-path-segment $tool)} | format pattern "/transform/list/tool/{tool}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -944,7 +956,7 @@ export def "transform-list-tool get-by-tool-from" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({tool: $tool, from: $from} | format pattern "/transform/list/tool/{tool}/{from}"))
+  let full_url = (build-url $base ({tool: (encode-path-segment $tool), from: (encode-path-segment $from)} | format pattern "/transform/list/tool/{tool}/{from}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -969,7 +981,7 @@ export def "transform-list-tool get-by-tool-from-to" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({tool: $tool, from: $from, to: $to} | format pattern "/transform/list/tool/{tool}/{from}/{to}"))
+  let full_url = (build-url $base ({tool: (encode-path-segment $tool), from: (encode-path-segment $from), to: (encode-path-segment $to)} | format pattern "/transform/list/tool/{tool}/{from}/{to}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -994,7 +1006,7 @@ export def "transform-word-from-to list" [
 ]: nothing -> record<source: string, translations: table<info: string, phrase: string, sources: string>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({from_lang: $from_lang, to_lang: $to_lang, word: $word} | format pattern "/transform/word/from/{from_lang}/to/{to_lang}/{word}"))
+  let full_url = (build-url $base ({from_lang: (encode-path-segment $from_lang), to_lang: (encode-path-segment $to_lang), word: (encode-path-segment $word)} | format pattern "/transform/word/from/{from_lang}/to/{to_lang}/{word}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1020,7 +1032,7 @@ export def "transform-word-from-to get" [
 ]: nothing -> record<source: string, translations: table<info: string, phrase: string, sources: string>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({from_lang: $from_lang, to_lang: $to_lang, word: $word, provider: $provider} | format pattern "/transform/word/from/{from_lang}/to/{to_lang}/{word}/{provider}"))
+  let full_url = (build-url $base ({from_lang: (encode-path-segment $from_lang), to_lang: (encode-path-segment $to_lang), word: (encode-path-segment $word), provider: (encode-path-segment $provider)} | format pattern "/transform/word/from/{from_lang}/to/{to_lang}/{word}/{provider}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

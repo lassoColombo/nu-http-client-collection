@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -71,7 +80,7 @@ def priority-completer [] { ["high" "low"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "rank-collect rankCollect" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "rank-collect create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,7 +104,7 @@ export def commands []: nothing -> table {
 #
 # POST /rank-collect
 # operationId: rankCollect
-export def "rank-collect rankCollect" [
+export def "rank-collect create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -104,17 +113,17 @@ export def "rank-collect rankCollect" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  task_ids: list # Receiving the request results through thier task id's
+  task_ids: list<string> # Receiving the request results through thier task id's
 ]: any -> record<tasks: table<task_id: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-apiKey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rank-collect")
-  let body = {"task_ids": $task_ids} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"task_ids": $task_ids} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Submit rank jobs
@@ -122,7 +131,7 @@ export def "rank-collect rankCollect" [
 # POST /rank-submit
 # operationId: rankSubmit
 # --tasks item shape: {domain?: string, keyword: string, localization_code: "us"|"uk"|"au"|"br"|"be_dutch"|"be_french"|"ca"|"de"|"es"|"ie"|"il"|"nl"|"sg"|"za"|"it"|"is"|"ch"|"fr"|"se"|"at"|"dk"|"nz"|"gr"|"no"|"in"|"ms"|"pl"|"hk"|"id"|"ru"|"ae"|"fi"|"pt"|"mx"|"tr"|"cl"|"jp"|"ar", localization_zip?: string, search_engine?: "google"|"bing"|"google_mobile"}
-export def "rank-submit rankSubmit" [
+export def "rank-submit submit" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -138,18 +147,18 @@ export def "rank-submit rankSubmit" [
   let auth = (build-auth $token ($auth_scheme | default "query-apiKey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rank-submit")
-  let body = {"priority": $priority, "tasks": $tasks} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"priority": $priority, "tasks": $tasks} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Submit serp jobs
 #
 # POST /serp-collect
 # operationId: serpCollect
-export def "serp-collect serpCollect" [
+export def "serp-collect create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -158,17 +167,17 @@ export def "serp-collect serpCollect" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  task_ids: list # Receiving the request results through thier task id's
+  task_ids: list<string> # Receiving the request results through thier task id's
 ]: any -> record<tasks: table<task_id: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-apiKey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/serp-collect")
-  let body = {"task_ids": $task_ids} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"task_ids": $task_ids} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Submit serp jobs
@@ -176,7 +185,7 @@ export def "serp-collect serpCollect" [
 # POST /serp-submit
 # operationId: serpSubmit
 # --tasks item shape: {keyword: string, localization_code: "us"|"uk"|"au"|"br"|"be_dutch"|"be_french"|"ca"|"de"|"es"|"ie"|"il"|"nl"|"sg"|"za"|"it"|"is"|"ch"|"fr"|"se"|"at"|"dk"|"nz"|"gr"|"no"|"in"|"ms"|"pl"|"hk"|"id"|"ru"|"ae"|"fi"|"pt"|"mx"|"tr"|"cl"|"jp"|"ar", localization_zip?: string, search_engine?: "google"|"bing"|"google_mobile"}
-export def "serp-submit serpSubmit" [
+export def "serp-submit submit" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -192,9 +201,9 @@ export def "serp-submit serpSubmit" [
   let auth = (build-auth $token ($auth_scheme | default "query-apiKey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/serp-submit")
-  let body = {"priority": $priority, "tasks": $tasks} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"priority": $priority, "tasks": $tasks} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

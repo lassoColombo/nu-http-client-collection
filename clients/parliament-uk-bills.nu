@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -142,13 +151,13 @@ export def "bills list" [
   --originating-house: string@originating-house-completer
   --member-id: int # format: int32
   --department-id: int # format: int32
-  --bill-stage: list
-  --bill-stages-excluded: list
+  --bill-stage: list<int>
+  --bill-stages-excluded: list<int>
   --is-defeated: oneof<nothing, bool>
   --is-withdrawn: oneof<nothing, bool>
-  --bill-type: list
+  --bill-type: list<int>
   --sort-order: string@sort-order-completer
-  --bill-ids: list
+  --bill-ids: list<int>
   --skip: int # format: int32
   --take: int # format: int32
 ]: nothing -> record<items: table<billId: int, billTypeId: int, billWithdrawn: string, currentHouse: string, currentStage: record, includedSessionIds: list, introducedSessionId: int, isAct: bool, isDefeated: bool, lastUpdate: string, originatingHouse: string, shortTitle: string>, itemsPerPage: int, totalResults: int> {
@@ -179,7 +188,7 @@ export def "bills get" [
 ]: nothing -> record<agent: record<address: string, email: string, name: string, phoneNo: string, website: string>, billId: int, billTypeId: int, billWithdrawn: string, currentHouse: string, currentStage: record<abbreviation: string, description: string, house: string, id: int, sessionId: int, sortOrder: int, stageId: int, stageSittings: list<record>>, includedSessionIds: list<int>, introducedSessionId: int, isAct: bool, isDefeated: bool, lastUpdate: string, longTitle: string, originatingHouse: string, petitionInformation: string, petitioningPeriod: string, promoters: table<organisationName: string, organisationUrl: string>, shortTitle: string, sponsors: table<member: record, organisation: record, sortOrder: int>, summary: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({bill_id: $bill_id} | format pattern "/api/v1/Bills/{bill_id}"))
+  let full_url = (build-url $base ({bill_id: (encode-path-segment $bill_id)} | format pattern "/api/v1/Bills/{bill_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -206,7 +215,7 @@ export def "bills-news-articles get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "Skip" $skip "scalar") (serialize-qp "Take" $take "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bill_id: $bill_id} | format pattern "/api/v1/Bills/{bill_id}/NewsArticles") $qp)
+  let full_url = (build-url $base ({bill_id: (encode-path-segment $bill_id)} | format pattern "/api/v1/Bills/{bill_id}/NewsArticles") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -230,7 +239,7 @@ export def "bills-publications get" [
 ]: nothing -> record<billId: int, publications: table<displayDate: string, files: list, house: string, id: int, links: list, publicationType: record, title: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({bill_id: $bill_id} | format pattern "/api/v1/Bills/{bill_id}/Publications"))
+  let full_url = (build-url $base ({bill_id: (encode-path-segment $bill_id)} | format pattern "/api/v1/Bills/{bill_id}/Publications"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -256,7 +265,7 @@ export def "bills-stages get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "Skip" $skip "scalar") (serialize-qp "Take" $take "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bill_id: $bill_id} | format pattern "/api/v1/Bills/{bill_id}/Stages") $qp)
+  let full_url = (build-url $base ({bill_id: (encode-path-segment $bill_id)} | format pattern "/api/v1/Bills/{bill_id}/Stages") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -266,7 +275,7 @@ export def "bills-stages get" [
 #
 # GET /api/v1/Bills/{billId}/Stages/{billStageId}
 # operationId: GetBillStageDetails
-export def "bills-stages get-bill-stage-details" [
+export def "bills-stages get-details" [
   bill_id: int
   bill_stage_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -281,7 +290,7 @@ export def "bills-stages get-bill-stage-details" [
 ]: nothing -> record<abbreviation: string, committee: record<category: string, house: string, id: int, name: string, url: string>, description: string, house: string, id: int, lastUpdate: string, nextStageBillStageId: int, previousStageBillStageId: int, sessionId: int, sortOrder: int, stageId: int, stageSittings: table<billId: int, billStageId: int, date: string, id: int, stageId: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({bill_id: $bill_id, bill_stage_id: $bill_stage_id} | format pattern "/api/v1/Bills/{bill_id}/Stages/{bill_stage_id}"))
+  let full_url = (build-url $base ({bill_id: (encode-path-segment $bill_id), bill_stage_id: (encode-path-segment $bill_stage_id)} | format pattern "/api/v1/Bills/{bill_id}/Stages/{bill_stage_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -312,7 +321,7 @@ export def "bills-stages-amendments list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "SearchTerm" $search_term "scalar") (serialize-qp "Decision" $decision "scalar") (serialize-qp "MemberId" $member_id "scalar") (serialize-qp "Skip" $skip "scalar") (serialize-qp "Take" $take "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bill_id: $bill_id, bill_stage_id: $bill_stage_id} | format pattern "/api/v1/Bills/{bill_id}/Stages/{bill_stage_id}/Amendments") $qp)
+  let full_url = (build-url $base ({bill_id: (encode-path-segment $bill_id), bill_stage_id: (encode-path-segment $bill_stage_id)} | format pattern "/api/v1/Bills/{bill_id}/Stages/{bill_stage_id}/Amendments") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -338,7 +347,7 @@ export def "bills-stages-amendments get" [
 ]: nothing -> record<amendmentId: int, amendmentLines: table<hangingIndentation: string, imageType: string, indentation: int, isImage: bool, text: string>, amendmentNote: string, amendmentPosition: string, amendmentType: string, billId: int, billStageId: int, clause: int, decision: string, explanatoryText: string, explanatoryTextPrefix: string, lineNumber: int, marshalledListText: string, pageNumber: int, schedule: int, sponsors: table<house: string, isLead: bool, memberFrom: string, memberId: int, memberPage: string, memberPhoto: string, name: string, party: string, partyColour: string, sortOrder: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({bill_id: $bill_id, bill_stage_id: $bill_stage_id, amendment_id: $amendment_id} | format pattern "/api/v1/Bills/{bill_id}/Stages/{bill_stage_id}/Amendments/{amendment_id}"))
+  let full_url = (build-url $base ({bill_id: (encode-path-segment $bill_id), bill_stage_id: (encode-path-segment $bill_stage_id), amendment_id: (encode-path-segment $amendment_id)} | format pattern "/api/v1/Bills/{bill_id}/Stages/{bill_stage_id}/Amendments/{amendment_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -362,7 +371,7 @@ export def "bills-stages-publications get" [
 ]: nothing -> record<billStageId: int, publications: table<displayDate: string, files: list, id: int, links: list, publicationType: record, title: string>, sittings: table<publications: list, sittingId: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({bill_id: $bill_id, stage_id: $stage_id} | format pattern "/api/v1/Bills/{bill_id}/Stages/{stage_id}/Publications"))
+  let full_url = (build-url $base ({bill_id: (encode-path-segment $bill_id), stage_id: (encode-path-segment $stage_id)} | format pattern "/api/v1/Bills/{bill_id}/Stages/{stage_id}/Publications"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -411,7 +420,7 @@ export def "publications-documents get" [
 ]: nothing -> record<contentLength: int, contentType: string, filename: string, id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({publication_id: $publication_id, document_id: $document_id} | format pattern "/api/v1/Publications/{publication_id}/Documents/{document_id}"))
+  let full_url = (build-url $base ({publication_id: (encode-path-segment $publication_id), document_id: (encode-path-segment $document_id)} | format pattern "/api/v1/Publications/{publication_id}/Documents/{document_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -434,7 +443,7 @@ export def "publications-documents-download get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({publication_id: $publication_id, document_id: $document_id} | format pattern "/api/v1/Publications/{publication_id}/Documents/{document_id}/Download"))
+  let full_url = (build-url $base ({publication_id: (encode-path-segment $publication_id), document_id: (encode-path-segment $document_id)} | format pattern "/api/v1/Publications/{publication_id}/Documents/{document_id}/Download"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -456,7 +465,7 @@ export def "rss-bills get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/Rss/Bills/{id}.rss"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/Rss/Bills/{id}.rss"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -465,7 +474,7 @@ export def "rss-bills get" [
 # Returns an Rss feed of all Bills.
 #
 # GET /api/v1/Rss/allbills.rss
-export def "rss-allbillsrss get" [
+export def "rss-allbills-rss get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -486,7 +495,7 @@ export def "rss-allbillsrss get" [
 # Returns an Rss feed of private Bills.
 #
 # GET /api/v1/Rss/privatebills.rss
-export def "rss-privatebillsrss get" [
+export def "rss-privatebills-rss get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -507,7 +516,7 @@ export def "rss-privatebillsrss get" [
 # Returns an Rss feed of public Bills.
 #
 # GET /api/v1/Rss/publicbills.rss
-export def "rss-publicbillsrss get" [
+export def "rss-publicbills-rss get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

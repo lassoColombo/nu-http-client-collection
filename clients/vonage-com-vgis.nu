@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -190,11 +199,11 @@ export def "self-calls create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/self/calls")
-  let body = {"phoneNumber": $phone_number} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"phoneNumber": $phone_number} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get calls count
@@ -241,7 +250,7 @@ export def "self-calls delete" [
 ]: nothing -> table<accountId: int, answerTime: string, callerId: string, direction: string, duration: int, endTime: string, externalId: string, id: int, phoneNumber: string, startTime: string, state: string, type: string, uciId: int, userId: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/self/calls/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/self/calls/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -264,7 +273,7 @@ export def "self-calls get-roles" [
 ]: nothing -> table<accountId: int, answerTime: string, callerId: string, direction: string, duration: int, endTime: string, externalId: string, id: int, phoneNumber: string, startTime: string, state: string, type: string, uciId: int, userId: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/self/calls/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/self/calls/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -274,7 +283,7 @@ export def "self-calls get-roles" [
 #
 # PUT /self/calls/{id}/answer
 # operationId: callAnswer
-export def "self-calls-answer callAnswer" [
+export def "self-calls-answer update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -287,7 +296,7 @@ export def "self-calls-answer callAnswer" [
 ]: nothing -> record<accountId: int, answerTime: string, callerId: string, direction: string, duration: int, endTime: string, externalId: string, id: int, phoneNumber: string, startTime: string, state: string, type: string, uciId: int, userId: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/self/calls/{id}/answer"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/self/calls/{id}/answer"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -297,7 +306,7 @@ export def "self-calls-answer callAnswer" [
 #
 # DELETE /self/calls/{id}/hold
 # operationId: callUnold
-export def "self-calls-hold callUnold" [
+export def "self-calls-hold delete-unold" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -310,7 +319,7 @@ export def "self-calls-hold callUnold" [
 ]: nothing -> record<accountId: int, answerTime: string, callerId: string, direction: string, duration: int, endTime: string, externalId: string, id: int, phoneNumber: string, startTime: string, state: string, type: string, uciId: int, userId: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/self/calls/{id}/hold"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/self/calls/{id}/hold"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -320,7 +329,7 @@ export def "self-calls-hold callUnold" [
 #
 # PUT /self/calls/{id}/hold
 # operationId: callHold
-export def "self-calls-hold callHold" [
+export def "self-calls-hold update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -333,7 +342,7 @@ export def "self-calls-hold callHold" [
 ]: nothing -> record<accountId: int, answerTime: string, callerId: string, direction: string, duration: int, endTime: string, externalId: string, id: int, phoneNumber: string, startTime: string, state: string, type: string, uciId: int, userId: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/self/calls/{id}/hold"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/self/calls/{id}/hold"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -343,7 +352,7 @@ export def "self-calls-hold callHold" [
 #
 # POST /self/calls/{id}/transfer
 # operationId: callTransfer
-export def "self-calls-transfer callTransfer" [
+export def "self-calls-transfer create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -358,19 +367,19 @@ export def "self-calls-transfer callTransfer" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/self/calls/{id}/transfer"))
-  let body = {"phoneNumber": $phone_number} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/self/calls/{id}/transfer"))
+  let req_body = {"phoneNumber": $phone_number} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Send call to voicemail
 #
 # PUT /self/calls/{id}/vmtransfer
 # operationId: callVMTransfer
-export def "self-calls-vmtransfer callVMTransfer" [
+export def "self-calls-vmtransfer update-vm-transfer" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -383,7 +392,7 @@ export def "self-calls-vmtransfer callVMTransfer" [
 ]: nothing -> record<accountId: int, answerTime: string, callerId: string, direction: string, duration: int, endTime: string, externalId: string, id: int, phoneNumber: string, startTime: string, state: string, type: string, uciId: int, userId: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/self/calls/{id}/vmtransfer"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/self/calls/{id}/vmtransfer"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -465,7 +474,7 @@ export def "self-events get" [
 ]: nothing -> table<accountId: int, answerTime: string, callerId: string, direction: string, duration: int, endTime: string, externalId: string, id: int, phoneNumber: string, smsData: string, startTime: string, state: string, type: string, uciId: int, userId: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/self/events/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/self/events/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -506,21 +515,21 @@ export def "self-webhooks create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --events: list # Events to subscribe to the webhook (e.g. [CALL])
+  --events: list<string> # Events to subscribe to the webhook (e.g. [CALL])
   --metadata-policy: string@metadata-policy-completer # Metadata policy for the webhook (e.g. NONE)
   --signing-algo: string@signing-algo-completer # Signing algorithm for the webhook (e.g. HMAC_SHA256)
   --signing-key: string # Signing key for the webhook
-  --body-url: string # Destination URL for events (e.g. https://www.example.com)
+  --url: string # Destination URL for events (e.g. https://www.example.com)
 ]: any -> record<accountId: string, createdAt: string, events: list<string>, expireAt: string, id: string, metadataPolicy: string, purgeAt: string, renewedAt: string, signingAlgo: string, signingKey: string, statistics: record<failed: bool, totalAttempts: int, totalFailures: int, totalSuccesses: int>, status: string, url: string, userId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/self/webhooks")
-  let body = {"events": $events, "metadataPolicy": $metadata_policy, "signingAlgo": $signing_algo, "signingKey": $signing_key, "url": $body_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"events": $events, "metadataPolicy": $metadata_policy, "signingAlgo": $signing_algo, "signingKey": $signing_key, "url": $url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Remove a web hook
@@ -540,7 +549,7 @@ export def "self-webhooks delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/self/webhooks/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/self/webhooks/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -550,7 +559,7 @@ export def "self-webhooks delete" [
 #
 # GET /self/webhooks/{id}
 # operationId: viewWebhook
-export def "self-webhooks viewWebhook" [
+export def "self-webhooks get-view" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -563,7 +572,7 @@ export def "self-webhooks viewWebhook" [
 ]: nothing -> record<accountId: string, createdAt: string, events: list<string>, expireAt: string, id: string, metadataPolicy: string, purgeAt: string, renewedAt: string, signingAlgo: string, signingKey: string, statistics: record<failed: bool, totalAttempts: int, totalFailures: int, totalSuccesses: int>, status: string, url: string, userId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/self/webhooks/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/self/webhooks/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -573,7 +582,7 @@ export def "self-webhooks viewWebhook" [
 #
 # PUT /self/webhooks/{id}/renew
 # operationId: renewWebhook
-export def "self-webhooks-renew renewWebhook" [
+export def "self-webhooks-renew update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -586,7 +595,7 @@ export def "self-webhooks-renew renewWebhook" [
 ]: nothing -> record<accountId: string, createdAt: string, events: list<string>, expireAt: string, id: string, metadataPolicy: string, purgeAt: string, renewedAt: string, signingAlgo: string, signingKey: string, statistics: record<failed: bool, totalAttempts: int, totalFailures: int, totalSuccesses: int>, status: string, url: string, userId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/self/webhooks/{id}/renew"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/self/webhooks/{id}/renew"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

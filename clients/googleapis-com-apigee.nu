@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -88,7 +97,7 @@ def protocol-completer [] { ["GRPC" "HTTP" "PROTOCOL_UNSPECIFIED"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "organizations apigeeorganizationscreate" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "organizations create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -114,7 +123,7 @@ export def commands []: nothing -> table {
 # operationId: apigee.organizations.create
 # --addonsConfig shape: {advancedApiOpsConfig?: record, apiSecurityConfig?: record, connectorsPlatformConfig?: record, integrationConfig?: record, monetizationConfig?: record}
 # --properties shape: {property?: list}
-export def "organizations apigeeorganizationscreate" [
+export def "organizations create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -139,7 +148,7 @@ export def "organizations apigeeorganizationscreate" [
   --analytics-region: string # Required. DEPRECATED: This field will be deprecated once Apigee supports DRZ. Primary Google Cloud region for analytics data storage. For valid values, see [Create an Apigee organization](https://cloud.google.com/apigee/docs/api-platform/get-started/create-org).
   --api-consumer-data-encryption-key-name: string # Cloud KMS key name used for encrypting API consumer data. Required for US/EU regions when [BillingType](#BillingType) is `SUBSCRIPTION`. When [BillingType](#BillingType) is `EVALUATION` or the region is not US/EU, a Google-Managed encryption key will be used. Format: `projects/*/locations/*/keyRings/*/cryptoKeys/*`
   --api-consumer-data-location: string # This field is needed only for customers with control plane in US or EU. Apigee stores some control plane data only in single region. This field determines which single region Apigee should use. For example: "us-west1" when control plane is in US or "europe-west2" when control plane is in EU.
-  --attributes: list # Not used by Apigee.
+  --attributes: list<string> # Not used by Apigee.
   --authorized-network: string # Compute Engine network used for Service Networking to be peered with Apigee runtime instances. See [Getting started with the Service Networking API](https://cloud.google.com/service-infrastructure/docs/service-networking/getting-started). Valid only when [RuntimeType](#RuntimeType) is set to `CLOUD`. The value must be set before the creation of a runtime instance and can be updated only when there are no runtime instances. For example: `default`. Apigee also supports shared VPC (that is, the host network project is not the same as the one that is peering with Apigee). See [Shared VPC overview](https://cloud.google.com/vpc/docs/shared-vpc). To use a shared VPC network, use the following format: `projects/{host-project-id}/{region}/networks/{network-name}`. For example: `projects/my-sharedvpc-host/global/networks/mynetwork` **Note:** Not supported for Apigee hybrid.
   --billing-type: string@billing-type-completer # Billing type of the Apigee organization. See [Apigee pricing](https://cloud.google.com/apigee/pricing).
   --control-plane-encryption-key-name: string # Cloud KMS key name used for encrypting control plane data that is stored in a multi region. Required when [BillingType](#BillingType) is `SUBSCRIPTION`. When [BillingType](#BillingType) is `EVALUATION`, a Google-Managed encryption key will be used. Format: `projects/*/locations/*/keyRings/*/cryptoKeys/*`
@@ -157,11 +166,11 @@ export def "organizations apigeeorganizationscreate" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "parent" $parent "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/organizations" $qp)
-  let body = {"addonsConfig": $addons_config, "analyticsRegion": $analytics_region, "apiConsumerDataEncryptionKeyName": $api_consumer_data_encryption_key_name, "apiConsumerDataLocation": $api_consumer_data_location, "attributes": $attributes, "authorizedNetwork": $authorized_network, "billingType": $billing_type, "controlPlaneEncryptionKeyName": $control_plane_encryption_key_name, "customerName": $customer_name, "description": $description, "displayName": $display_name, "portalDisabled": $portal_disabled, "properties": $properties, "runtimeDatabaseEncryptionKeyName": $runtime_database_encryption_key_name, "runtimeType": $runtime_type, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"addonsConfig": $addons_config, "analyticsRegion": $analytics_region, "apiConsumerDataEncryptionKeyName": $api_consumer_data_encryption_key_name, "apiConsumerDataLocation": $api_consumer_data_location, "attributes": $attributes, "authorizedNetwork": $authorized_network, "billingType": $billing_type, "controlPlaneEncryptionKeyName": $control_plane_encryption_key_name, "customerName": $customer_name, "description": $description, "displayName": $display_name, "portalDisabled": $portal_disabled, "properties": $properties, "runtimeDatabaseEncryptionKeyName": $runtime_database_encryption_key_name, "runtimeType": $runtime_type, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Reports the latest status for a runtime instance.
@@ -169,7 +178,7 @@ export def "organizations apigeeorganizationscreate" [
 # POST /v1/{instance}:reportStatus
 # operationId: apigee.organizations.instances.reportStatus
 # --resources item shape: {resource?: string, revisions?: list, totalReplicas?: int, uid?: string}
-export def "organizations apigeeorganizationsinstancesreportStatus" [
+export def "organizations create-report-status" [
   instance: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -198,19 +207,19 @@ export def "organizations apigeeorganizationsinstancesreportStatus" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({instance: $instance} | format pattern "/v1/{instance}:reportStatus") $qp)
-  let body = {"instanceUid": $instance_uid, "reportTime": $report_time, "resources": $resources} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({instance: (encode-path-segment $instance)} | format pattern "/v1/{instance}:reportStatus") $qp)
+  let req_body = {"instanceUid": $instance_uid, "reportTime": $report_time, "resources": $resources} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes a category from the portal.
 #
 # DELETE /v1/{name}
 # operationId: apigee.organizations.sites.apicategories.delete
-export def "organizations apigeeorganizationssitesapicategoriesdelete" [
+export def "organizations delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -236,7 +245,7 @@ export def "organizations apigeeorganizationssitesapicategoriesdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "retention" $retention "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -246,7 +255,7 @@ export def "organizations apigeeorganizationssitesapicategoriesdelete" [
 #
 # GET /v1/{name}
 # operationId: apigee.organizations.sites.apicategories.get
-export def "organizations apigeeorganizationssitesapicategoriesget" [
+export def "organizations get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -285,7 +294,7 @@ export def "organizations apigeeorganizationssitesapicategoriesget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "envgroupHostname" $envgroup_hostname "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "realtime" $realtime "scalar") (serialize-qp "select" $select "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "sortby" $sortby "scalar") (serialize-qp "timeRange" $time_range "scalar") (serialize-qp "timeUnit" $time_unit "scalar") (serialize-qp "topk" $topk "scalar") (serialize-qp "tsAscending" $ts_ascending "scalar") (serialize-qp "tzo" $tzo "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -295,7 +304,7 @@ export def "organizations apigeeorganizationssitesapicategoriesget" [
 #
 # PATCH /v1/{name}
 # operationId: apigee.organizations.sites.apicategories.patch
-export def "organizations apigeeorganizationssitesapicategoriespatch" [
+export def "organizations update-by-name" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -326,19 +335,19 @@ export def "organizations apigeeorganizationssitesapicategoriespatch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}") $qp)
-  let body = {"id": $id, "name": $body_name, "siteId": $site_id, "updateTime": $update_time} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}") $qp)
+  let req_body = {"id": $id, "name": $body_name, "siteId": $site_id, "updateTime": $update_time} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates a shared flow revision. This operation is only allowed on revisions which have never been deployed. After deployment a revision becomes immutable, even if it becomes undeployed. The payload is a ZIP-formatted shared flow. Content type must be either multipart/form-data or application/octet-stream.
 #
 # POST /v1/{name}
 # operationId: apigee.organizations.sharedflows.revisions.updateSharedFlowRevision
-export def "organizations apigeeorganizationssharedflowsrevisionsupdateSharedFlowRevision" [
+export def "organizations update-shared-flow-revision" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -368,12 +377,12 @@ export def "organizations apigeeorganizationssharedflowsrevisionsupdateSharedFlo
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "validate" $validate "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}") $qp)
-  let body = {"contentType": $content_type, "data": $data, "extensions": $extensions} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}") $qp)
+  let req_body = {"contentType": $content_type, "data": $data, "extensions": $extensions} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update an existing custom report definition
@@ -382,7 +391,7 @@ export def "organizations apigeeorganizationssharedflowsrevisionsupdateSharedFlo
 # operationId: apigee.organizations.reports.update
 # --metrics item shape: {function?: string, name?: string}
 # --properties item shape: {property?: string, value?: list}
-export def "organizations apigeeorganizationsreportsupdate" [
+export def "organizations update-by-name-1" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -406,8 +415,8 @@ export def "organizations apigeeorganizationsreportsupdate" [
   --ignore-expiry-validation: oneof<nothing, bool> # Required. Flag that specifies whether to ignore expiry validation. If set to `true`, no expiry validation will be performed.
   --ignore-newline-validation: oneof<nothing, bool> # Flag that specifies whether to ignore newline validation. If set to `true`, no error is thrown when the file contains a certificate chain with no newline between each certificate. Defaults to `false`.
   --chart-type: string # This field contains the chart type for the report
-  --comments: list # Legacy field: not used. This field contains a list of comments associated with custom report
-  --dimensions: list # This contains the list of dimensions for the report
+  --comments: list<string> # Legacy field: not used. This field contains a list of comments associated with custom report
+  --dimensions: list<string> # This contains the list of dimensions for the report
   --display-name: string # This is the display name for the report
   --filter: string # This field contains the filter expression
   --from-time: string # Legacy field: not used. Contains the from time for the report
@@ -416,9 +425,9 @@ export def "organizations apigeeorganizationsreportsupdate" [
   --body-name: string # Required. Unique identifier for the report T his is a legacy field used to encode custom report unique id
   --offset: string # Legacy field: not used. This field contains the offset for the data
   --properties: list # This field contains report properties such as ui metadata etc. — item shape: {property?: string, value?: list}
-  --sort-by-cols: list # Legacy field: not used much. Contains the list of sort by columns
+  --sort-by-cols: list<string> # Legacy field: not used much. Contains the list of sort by columns
   --sort-order: string # Legacy field: not used much. Contains the sort order for the sort columns
-  --tags: list # Legacy field: not used. This field contains a list of tags associated with custom report
+  --tags: list<string> # Legacy field: not used. This field contains a list of tags associated with custom report
   --time-unit: string # This field contains the time unit of aggregation for the report
   --to-time: string # Legacy field: not used. Contains the end time for the report
   --topk: string # Legacy field: not used. This field contains the top k parameter value for restricting the result
@@ -427,12 +436,12 @@ export def "organizations apigeeorganizationsreportsupdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "ignoreExpiryValidation" $ignore_expiry_validation "scalar") (serialize-qp "ignoreNewlineValidation" $ignore_newline_validation "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}") $qp)
-  let body = {"chartType": $chart_type, "comments": $comments, "dimensions": $dimensions, "displayName": $display_name, "filter": $filter, "fromTime": $from_time, "limit": $limit, "metrics": $metrics, "name": $body_name, "offset": $offset, "properties": $properties, "sortByCols": $sort_by_cols, "sortOrder": $sort_order, "tags": $tags, "timeUnit": $time_unit, "toTime": $to_time, "topk": $topk} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}") $qp)
+  let req_body = {"chartType": $chart_type, "comments": $comments, "dimensions": $dimensions, "displayName": $display_name, "filter": $filter, "fromTime": $from_time, "limit": $limit, "metrics": $metrics, "name": $body_name, "offset": $offset, "properties": $properties, "sortByCols": $sort_by_cols, "sortOrder": $sort_order, "tags": $tags, "timeUnit": $time_unit, "toTime": $to_time, "topk": $topk} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates attributes for a developer app. This API replaces the current attributes with those specified in the request.
@@ -440,7 +449,7 @@ export def "organizations apigeeorganizationsreportsupdate" [
 # POST /v1/{name}/attributes
 # operationId: apigee.organizations.developers.apps.attributes
 # --attribute item shape: {name?: string, value?: string}
-export def "attributes apigeeorganizationsdevelopersappsattributes" [
+export def "attributes create-by-name" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -467,19 +476,19 @@ export def "attributes apigeeorganizationsdevelopersappsattributes" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}/attributes") $qp)
-  let body = {"attribute": $attribute} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}/attributes") $qp)
+  let req_body = {"attribute": $attribute} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets the certificate from an alias in PEM-encoded form.
 #
 # GET /v1/{name}/certificate
 # operationId: apigee.organizations.environments.keystores.aliases.getCertificate
-export def "certificate apigeeorganizationsenvironmentskeystoresaliasesgetCertificate" [
+export def "certificate get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -504,7 +513,7 @@ export def "certificate apigeeorganizationsenvironmentskeystoresaliasesgetCertif
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}/certificate") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}/certificate") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -514,7 +523,7 @@ export def "certificate apigeeorganizationsenvironmentskeystoresaliasesgetCertif
 #
 # GET /v1/{name}/csr
 # operationId: apigee.organizations.environments.keystores.aliases.csr
-export def "csr apigeeorganizationsenvironmentskeystoresaliasescsr" [
+export def "csr get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -539,7 +548,7 @@ export def "csr apigeeorganizationsenvironmentskeystoresaliasescsr" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}/csr") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}/csr") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -549,7 +558,7 @@ export def "csr apigeeorganizationsenvironmentskeystoresaliasescsr" [
 #
 # DELETE /v1/{name}/data
 # operationId: apigee.organizations.environments.apis.revisions.debugsessions.deleteData
-export def "data apigeeorganizationsenvironmentsapisrevisionsdebugsessionsdeleteData" [
+export def "data delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -574,7 +583,7 @@ export def "data apigeeorganizationsenvironmentsapisrevisionsdebugsessionsdelete
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}/data") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}/data") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -584,7 +593,7 @@ export def "data apigeeorganizationsenvironmentsapisrevisionsdebugsessionsdelete
 #
 # DELETE /v1/{name}/deployments
 # operationId: apigee.organizations.environments.sharedflows.revisions.undeploy
-export def "deployments apigeeorganizationsenvironmentssharedflowsrevisionsundeploy" [
+export def "deployments delete-undeploy" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -610,7 +619,7 @@ export def "deployments apigeeorganizationsenvironmentssharedflowsrevisionsundep
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "sequencedRollout" $sequenced_rollout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}/deployments") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}/deployments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -620,7 +629,7 @@ export def "deployments apigeeorganizationsenvironmentssharedflowsrevisionsundep
 #
 # GET /v1/{name}/deployments
 # operationId: apigee.organizations.environments.sharedflows.revisions.getDeployments
-export def "deployments apigeeorganizationsenvironmentssharedflowsrevisionsgetDeployments" [
+export def "deployments get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -645,7 +654,7 @@ export def "deployments apigeeorganizationsenvironmentssharedflowsrevisionsgetDe
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}/deployments") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}/deployments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -655,7 +664,7 @@ export def "deployments apigeeorganizationsenvironmentssharedflowsrevisionsgetDe
 #
 # POST /v1/{name}/deployments
 # operationId: apigee.organizations.environments.sharedflows.revisions.deploy
-export def "deployments apigeeorganizationsenvironmentssharedflowsrevisionsdeploy" [
+export def "deployments create-deploy" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -682,7 +691,7 @@ export def "deployments apigeeorganizationsenvironmentssharedflowsrevisionsdeplo
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "override" $override "scalar") (serialize-qp "serviceAccount" $service_account "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}/deployments") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}/deployments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -692,7 +701,7 @@ export def "deployments apigeeorganizationsenvironmentssharedflowsrevisionsdeplo
 #
 # POST /v1/{name}/deployments:generateDeployChangeReport
 # operationId: apigee.organizations.environments.apis.revisions.deployments.generateDeployChangeReport
-export def "deployments-generate-deploy-change-report apigeeorganizationsenvironmentsapisrevisionsdeploymentsgenerateDeployChangeReport" [
+export def "deployments-generate-deploy-change-report generate" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -718,7 +727,7 @@ export def "deployments-generate-deploy-change-report apigeeorganizationsenviron
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "override" $override "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}/deployments:generateDeployChangeReport") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}/deployments:generateDeployChangeReport") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -728,7 +737,7 @@ export def "deployments-generate-deploy-change-report apigeeorganizationsenviron
 #
 # POST /v1/{name}/deployments:generateUndeployChangeReport
 # operationId: apigee.organizations.environments.apis.revisions.deployments.generateUndeployChangeReport
-export def "deployments-generate-undeploy-change-report apigeeorganizationsenvironmentsapisrevisionsdeploymentsgenerateUndeployChangeReport" [
+export def "deployments-generate-undeploy-change-report generate" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -753,7 +762,7 @@ export def "deployments-generate-undeploy-change-report apigeeorganizationsenvir
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}/deployments:generateUndeployChangeReport") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}/deployments:generateUndeployChangeReport") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -763,7 +772,7 @@ export def "deployments-generate-undeploy-change-report apigeeorganizationsenvir
 #
 # GET /v1/{name}/operations
 # operationId: apigee.organizations.operations.list
-export def "operations apigeeorganizationsoperationslist" [
+export def "operations list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -791,7 +800,7 @@ export def "operations apigeeorganizationsoperationslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}/operations") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}/operations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -801,7 +810,7 @@ export def "operations apigeeorganizationsoperationslist" [
 #
 # POST /v1/{name}:activate
 # operationId: apigee.organizations.instances.natAddresses.activate
-export def "organizations apigeeorganizationsinstancesnatAddressesactivate" [
+export def "organizations create-activate" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -828,11 +837,12 @@ export def "organizations apigeeorganizationsinstancesnatAddressesactivate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}:activate") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}:activate") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Adjust the prepaid balance for the developer. This API will be used in scenarios where the developer has been under-charged or over-charged.
@@ -840,7 +850,7 @@ export def "organizations apigeeorganizationsinstancesnatAddressesactivate" [
 # POST /v1/{name}:adjust
 # operationId: apigee.organizations.developers.balance.adjust
 # --adjustment shape: {currencyCode?: string, nanos?: int, units?: string}
-export def "organizations apigeeorganizationsdevelopersbalanceadjust" [
+export def "organizations create-adjust" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -867,12 +877,12 @@ export def "organizations apigeeorganizationsdevelopersbalanceadjust" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}:adjust") $qp)
-  let body = {"adjustment": $adjustment} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}:adjust") $qp)
+  let req_body = {"adjustment": $adjustment} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Credits the account balance for the developer.
@@ -880,7 +890,7 @@ export def "organizations apigeeorganizationsdevelopersbalanceadjust" [
 # POST /v1/{name}:credit
 # operationId: apigee.organizations.developers.balance.credit
 # --transactionAmount shape: {currencyCode?: string, nanos?: int, units?: string}
-export def "organizations apigeeorganizationsdevelopersbalancecredit" [
+export def "organizations create-credit" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -908,19 +918,19 @@ export def "organizations apigeeorganizationsdevelopersbalancecredit" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}:credit") $qp)
-  let body = {"transactionAmount": $transaction_amount, "transactionId": $transaction_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}:credit") $qp)
+  let req_body = {"transactionAmount": $transaction_amount, "transactionId": $transaction_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Expires an API product subscription immediately.
 #
 # POST /v1/{name}:expire
 # operationId: apigee.organizations.developers.subscriptions.expire
-export def "organizations apigeeorganizationsdeveloperssubscriptionsexpire" [
+export def "organizations create-expire" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -947,18 +957,19 @@ export def "organizations apigeeorganizationsdeveloperssubscriptionsexpire" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}:expire") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}:expire") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Generates a signed URL for downloading the original zip file used to create an Archive Deployment. The URL is only valid for a limited period and should be used within minutes after generation. Each call returns a new upload URL.
 #
 # POST /v1/{name}:generateDownloadUrl
 # operationId: apigee.organizations.environments.archiveDeployments.generateDownloadUrl
-export def "organizations apigeeorganizationsenvironmentsarchiveDeploymentsgenerateDownloadUrl" [
+export def "organizations generate-download-url" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -985,18 +996,19 @@ export def "organizations apigeeorganizationsenvironmentsarchiveDeploymentsgener
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}:generateDownloadUrl") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}:generateDownloadUrl") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets the project ID and region for an Apigee organization.
 #
 # GET /v1/{name}:getProjectMapping
 # operationId: apigee.organizations.getProjectMapping
-export def "organizations apigeeorganizationsgetProjectMapping" [
+export def "organizations get-project-mapping" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1021,7 +1033,7 @@ export def "organizations apigeeorganizationsgetProjectMapping" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}:getProjectMapping") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}:getProjectMapping") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1031,7 +1043,7 @@ export def "organizations apigeeorganizationsgetProjectMapping" [
 #
 # POST /v1/{name}:getSyncAuthorization
 # operationId: apigee.organizations.getSyncAuthorization
-export def "organizations apigeeorganizationsgetSyncAuthorization" [
+export def "organizations get-sync-authorization" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1058,18 +1070,19 @@ export def "organizations apigeeorganizationsgetSyncAuthorization" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}:getSyncAuthorization") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}:getSyncAuthorization") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # ListSecurityProfileRevisions lists all the revisions of the security profile.
 #
 # GET /v1/{name}:listRevisions
 # operationId: apigee.organizations.securityProfiles.listRevisions
-export def "organizations apigeeorganizationssecurityProfileslistRevisions" [
+export def "organizations list-revisions" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1096,7 +1109,7 @@ export def "organizations apigeeorganizationssecurityProfileslistRevisions" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}:listRevisions") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}:listRevisions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1106,7 +1119,7 @@ export def "organizations apigeeorganizationssecurityProfileslistRevisions" [
 #
 # POST /v1/{name}:setSyncAuthorization
 # operationId: apigee.organizations.setSyncAuthorization
-export def "organizations apigeeorganizationssetSyncAuthorization" [
+export def "organizations update-sync-authorization" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1128,18 +1141,18 @@ export def "organizations apigeeorganizationssetSyncAuthorization" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --etag: string # Entity tag (ETag) used for optimistic concurrency control as a way to help prevent simultaneous updates from overwriting each other. For example, when you call [getSyncAuthorization](organizations/getSyncAuthorization) an ETag is returned in the response. Pass that ETag when calling the [setSyncAuthorization](organizations/setSyncAuthorization) to ensure that you are updating the correct version. If you don't pass the ETag in the call to `setSyncAuthorization`, then the existing authorization is overwritten indiscriminately. **Note**: We strongly recommend that you use the ETag in the read-modify-write cycle to avoid race conditions. (format: byte)
-  --identities: list # Required. Array of service accounts to grant access to control plane resources, each specified using the following format: `serviceAccount:` service-account-name. The service-account-name is formatted like an email address. For example: `my-synchronizer-manager-service_account@my_project_id.iam.gserviceaccount.com` You might specify multiple service accounts, for example, if you have multiple environments and wish to assign a unique service account to each one. The service accounts must have **Apigee Synchronizer Manager** role. See also [Create service accounts](https://cloud.google.com/apigee/docs/hybrid/latest/sa-about#create-the-service-accounts).
+  --identities: list<string> # Required. Array of service accounts to grant access to control plane resources, each specified using the following format: `serviceAccount:` service-account-name. The service-account-name is formatted like an email address. For example: `my-synchronizer-manager-service_account@my_project_id.iam.gserviceaccount.com` You might specify multiple service accounts, for example, if you have multiple environments and wish to assign a unique service account to each one. The service accounts must have **Apigee Synchronizer Manager** role. See also [Create service accounts](https://cloud.google.com/apigee/docs/hybrid/latest/sa-about#create-the-service-accounts).
 ]: any -> record<etag: string, identities: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}:setSyncAuthorization") $qp)
-  let body = {"etag": $etag, "identities": $identities} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}:setSyncAuthorization") $qp)
+  let req_body = {"etag": $etag, "identities": $identities} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve security statistics as tabular rows.
@@ -1148,7 +1161,7 @@ export def "organizations apigeeorganizationssetSyncAuthorization" [
 # operationId: apigee.organizations.environments.securityStats.queryTabularStats
 # --metrics item shape: {aggregation?: "AGGREGATION_FUNCTION_UNSPECIFIED"|"AVG"|"SUM"|"MIN"|"MAX"|"COUNT_DISTINCT", name?: string, order?: "ORDER_UNSPECIFIED"|"ASCENDING"|"DESCENDING"}
 # --timeRange shape: {endTime?: string, startTime?: string}
-export def "security-stats-query-tabular-stats apigeeorganizationsenvironmentssecurityStatsqueryTabularStats" [
+export def "security-stats-query-tabular-stats list" [
   orgenv: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1169,7 +1182,7 @@ export def "security-stats-query-tabular-stats apigeeorganizationsenvironmentsse
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --dimensions: list # Required. List of dimension names to group the aggregations by.
+  --dimensions: list<string> # Required. List of dimension names to group the aggregations by.
   --filter: string # Filter further on specific dimension values. Follows the same grammar as custom report's filter expressions. Example, apiproxy eq 'foobar'. https://cloud.google.com/apigee/docs/api-platform/analytics/analytics-reference#filters
   --metrics: list # Required. List of metrics and their aggregations. — item shape: {aggregation?: "AGGREGATION_FUNCTION_UNSPECIFIED"|"AVG"|"SUM"|"MIN"|"MAX"|"COUNT_DISTINCT", name?: string, order?: "ORDER_UNSPECIFIED"|"ASCENDING"|"DESCENDING"}
   --page-size: int # Page size represents the number of rows. (format: int32)
@@ -1180,12 +1193,12 @@ export def "security-stats-query-tabular-stats apigeeorganizationsenvironmentsse
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({orgenv: $orgenv} | format pattern "/v1/{orgenv}/securityStats:queryTabularStats") $qp)
-  let body = {"dimensions": $dimensions, "filter": $filter, "metrics": $metrics, "pageSize": $page_size, "pageToken": $page_token, "timeRange": $time_range} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({orgenv: (encode-path-segment $orgenv)} | format pattern "/v1/{orgenv}/securityStats:queryTabularStats") $qp)
+  let req_body = {"dimensions": $dimensions, "filter": $filter, "metrics": $metrics, "pageSize": $page_size, "pageToken": $page_token, "timeRange": $time_range} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve security statistics as a collection of time series.
@@ -1194,7 +1207,7 @@ export def "security-stats-query-tabular-stats apigeeorganizationsenvironmentsse
 # operationId: apigee.organizations.environments.securityStats.queryTimeSeriesStats
 # --metrics item shape: {aggregation?: "AGGREGATION_FUNCTION_UNSPECIFIED"|"AVG"|"SUM"|"MIN"|"MAX"|"COUNT_DISTINCT", name?: string, order?: "ORDER_UNSPECIFIED"|"ASCENDING"|"DESCENDING"}
 # --timeRange shape: {endTime?: string, startTime?: string}
-export def "security-stats-query-time-series-stats apigeeorganizationsenvironmentssecurityStatsqueryTimeSeriesStats" [
+export def "security-stats-query-time-series-stats list" [
   orgenv: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1215,7 +1228,7 @@ export def "security-stats-query-time-series-stats apigeeorganizationsenvironmen
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --dimensions: list # List of dimension names to group the aggregations by. If no dimensions are passed, a single trend line representing the requested metric aggregations grouped by environment is returned.
+  --dimensions: list<string> # List of dimension names to group the aggregations by. If no dimensions are passed, a single trend line representing the requested metric aggregations grouped by environment is returned.
   --filter: string # Filter further on specific dimension values. Follows the same grammar as custom report's filter expressions. Example, apiproxy eq 'foobar'. https://cloud.google.com/apigee/docs/api-platform/analytics/analytics-reference#filters
   --metrics: list # Required. List of metrics and their aggregations. — item shape: {aggregation?: "AGGREGATION_FUNCTION_UNSPECIFIED"|"AVG"|"SUM"|"MIN"|"MAX"|"COUNT_DISTINCT", name?: string, order?: "ORDER_UNSPECIFIED"|"ASCENDING"|"DESCENDING"}
   --page-size: int # Page size represents the number of time series sequences, one per unique set of dimensions and their values. (format: int32)
@@ -1228,12 +1241,12 @@ export def "security-stats-query-time-series-stats apigeeorganizationsenvironmen
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({orgenv: $orgenv} | format pattern "/v1/{orgenv}/securityStats:queryTimeSeriesStats") $qp)
-  let body = {"dimensions": $dimensions, "filter": $filter, "metrics": $metrics, "pageSize": $page_size, "pageToken": $page_token, "timeRange": $time_range, "timestampOrder": $timestamp_order, "windowSize": $window_size} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({orgenv: (encode-path-segment $orgenv)} | format pattern "/v1/{orgenv}/securityStats:queryTimeSeriesStats") $qp)
+  let req_body = {"dimensions": $dimensions, "filter": $filter, "metrics": $metrics, "pageSize": $page_size, "pageToken": $page_token, "timeRange": $time_range, "timestampOrder": $timestamp_order, "windowSize": $window_size} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Configures the add-ons for the Apigee organization. The existing add-on configuration will be fully replaced.
@@ -1241,7 +1254,7 @@ export def "security-stats-query-time-series-stats apigeeorganizationsenvironmen
 # POST /v1/{org}:setAddons
 # operationId: apigee.organizations.setAddons
 # --addonsConfig shape: {advancedApiOpsConfig?: record, apiSecurityConfig?: record, connectorsPlatformConfig?: record, integrationConfig?: record, monetizationConfig?: record}
-export def "organizations apigeeorganizationssetAddons" [
+export def "organizations update-addons" [
   org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1268,19 +1281,19 @@ export def "organizations apigeeorganizationssetAddons" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({org: $org} | format pattern "/v1/{org}:setAddons") $qp)
-  let body = {"addonsConfig": $addons_config} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({org: (encode-path-segment $org)} | format pattern "/v1/{org}:setAddons") $qp)
+  let req_body = {"addonsConfig": $addons_config} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists the Apigee organizations and associated Google Cloud projects that you have permission to access. See [Understanding organizations](https://cloud.google.com/apigee/docs/api-platform/fundamentals/organization-structure).
 #
 # GET /v1/{parent}
 # operationId: apigee.organizations.list
-export def "organizations apigeeorganizationslist" [
+export def "organizations list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1305,7 +1318,7 @@ export def "organizations apigeeorganizationslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1315,7 +1328,7 @@ export def "organizations apigeeorganizationslist" [
 #
 # POST /v1/{parent}/aliases
 # operationId: apigee.organizations.environments.keystores.aliases.create
-export def "aliases apigeeorganizationsenvironmentskeystoresaliasescreate" [
+export def "aliases create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1349,19 +1362,19 @@ export def "aliases apigeeorganizationsenvironmentskeystoresaliasescreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "_password" $password "scalar") (serialize-qp "alias" $alias "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "ignoreExpiryValidation" $ignore_expiry_validation "scalar") (serialize-qp "ignoreNewlineValidation" $ignore_newline_validation "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/aliases") $qp)
-  let body = {"contentType": $content_type, "data": $data, "extensions": $extensions} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/aliases") $qp)
+  let req_body = {"contentType": $content_type, "data": $data, "extensions": $extensions} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List Datastores
 #
 # GET /v1/{parent}/analytics/datastores
 # operationId: apigee.organizations.analytics.datastores.list
-export def "analytics-datastores apigeeorganizationsanalyticsdatastoreslist" [
+export def "analytics-datastores list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1387,7 +1400,7 @@ export def "analytics-datastores apigeeorganizationsanalyticsdatastoreslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "targetType" $target_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/analytics/datastores") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/analytics/datastores") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1398,7 +1411,7 @@ export def "analytics-datastores apigeeorganizationsanalyticsdatastoreslist" [
 # POST /v1/{parent}/analytics/datastores
 # operationId: apigee.organizations.analytics.datastores.create
 # --datastoreConfig shape: {bucketName?: string, datasetName?: string, path?: string, projectId?: string, tablePrefix?: string}
-export def "analytics-datastores apigeeorganizationsanalyticsdatastorescreate" [
+export def "analytics-datastores create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1427,12 +1440,12 @@ export def "analytics-datastores apigeeorganizationsanalyticsdatastorescreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/analytics/datastores") $qp)
-  let body = {"datastoreConfig": $datastore_config, "displayName": $display_name, "targetType": $target_type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/analytics/datastores") $qp)
+  let req_body = {"datastoreConfig": $datastore_config, "displayName": $display_name, "targetType": $target_type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Test if Datastore configuration is correct. This includes checking if credentials provided by customer have required permissions in target destination storage
@@ -1440,7 +1453,7 @@ export def "analytics-datastores apigeeorganizationsanalyticsdatastorescreate" [
 # POST /v1/{parent}/analytics/datastores:test
 # operationId: apigee.organizations.analytics.datastores.test
 # --datastoreConfig shape: {bucketName?: string, datasetName?: string, path?: string, projectId?: string, tablePrefix?: string}
-export def "analytics-datastores-test apigeeorganizationsanalyticsdatastorestest" [
+export def "analytics-datastores-test test" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1469,19 +1482,19 @@ export def "analytics-datastores-test apigeeorganizationsanalyticsdatastorestest
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/analytics/datastores:test") $qp)
-  let body = {"datastoreConfig": $datastore_config, "displayName": $display_name, "targetType": $target_type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/analytics/datastores:test") $qp)
+  let req_body = {"datastoreConfig": $datastore_config, "displayName": $display_name, "targetType": $target_type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists the details and status of all analytics export jobs belonging to the parent organization and environment.
 #
 # GET /v1/{parent}/analytics/exports
 # operationId: apigee.organizations.environments.analytics.exports.list
-export def "analytics-exports apigeeorganizationsenvironmentsanalyticsexportslist" [
+export def "analytics-exports list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1506,7 +1519,7 @@ export def "analytics-exports apigeeorganizationsenvironmentsanalyticsexportslis
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/analytics/exports") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/analytics/exports") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1517,7 +1530,7 @@ export def "analytics-exports apigeeorganizationsenvironmentsanalyticsexportslis
 # POST /v1/{parent}/analytics/exports
 # operationId: apigee.organizations.environments.analytics.exports.create
 # --dateRange shape: {end?: string, start?: string}
-export def "analytics-exports apigeeorganizationsenvironmentsanalyticsexportscreate" [
+export def "analytics-exports create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1549,19 +1562,19 @@ export def "analytics-exports apigeeorganizationsenvironmentsanalyticsexportscre
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/analytics/exports") $qp)
-  let body = {"csvDelimiter": $csv_delimiter, "datastoreName": $datastore_name, "dateRange": $date_range, "description": $description, "name": $name, "outputFormat": $output_format} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/analytics/exports") $qp)
+  let req_body = {"csvDelimiter": $csv_delimiter, "datastoreName": $datastore_name, "dateRange": $date_range, "description": $description, "name": $name, "outputFormat": $output_format} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists the categories on the portal.
 #
 # GET /v1/{parent}/apicategories
 # operationId: apigee.organizations.sites.apicategories.list
-export def "apicategories apigeeorganizationssitesapicategorieslist" [
+export def "apicategories list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1586,7 +1599,7 @@ export def "apicategories apigeeorganizationssitesapicategorieslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/apicategories") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/apicategories") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1596,7 +1609,7 @@ export def "apicategories apigeeorganizationssitesapicategorieslist" [
 #
 # POST /v1/{parent}/apicategories
 # operationId: apigee.organizations.sites.apicategories.create
-export def "apicategories apigeeorganizationssitesapicategoriescreate" [
+export def "apicategories create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1626,19 +1639,19 @@ export def "apicategories apigeeorganizationssitesapicategoriescreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/apicategories") $qp)
-  let body = {"id": $id, "name": $name, "siteId": $site_id, "updateTime": $update_time} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/apicategories") $qp)
+  let req_body = {"id": $id, "name": $name, "siteId": $site_id, "updateTime": $update_time} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists all API product names for an organization. Filter the list by passing an `attributename` and `attibutevalue`. The maximum number of API products returned is 1000. You can paginate the list of API products returned using the `startKey` and `count` query parameters.
 #
 # GET /v1/{parent}/apiproducts
 # operationId: apigee.organizations.apiproducts.list
-export def "apiproducts apigeeorganizationsapiproductslist" [
+export def "apiproducts list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1668,7 +1681,7 @@ export def "apiproducts apigeeorganizationsapiproductslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "attributename" $attributename "scalar") (serialize-qp "attributevalue" $attributevalue "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "startKey" $start_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/apiproducts") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/apiproducts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1681,7 +1694,7 @@ export def "apiproducts apigeeorganizationsapiproductslist" [
 # --attributes item shape: {name?: string, value?: string}
 # --graphqlOperationGroup shape: {operationConfigType?: string, operationConfigs?: list}
 # --operationGroup shape: {operationConfigType?: string, operationConfigs?: list}
-export def "apiproducts apigeeorganizationsapiproductscreate" [
+export def "apiproducts create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1702,41 +1715,41 @@ export def "apiproducts apigeeorganizationsapiproductscreate" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --api-resources: list # Comma-separated list of API resources to be bundled in the API product. By default, the resource paths are mapped from the `proxy.pathsuffix` variable. The proxy path suffix is defined as the URI fragment following the ProxyEndpoint base path. For example, if the `apiResources` element is defined to be `/forecastrss` and the base path defined for the API proxy is `/weather`, then only requests to `/weather/forecastrss` are permitted by the API product. You can select a specific path, or you can select all subpaths with the following wildcard: - `/**`: Indicates that all sub-URIs are included. - `/*` : Indicates that only URIs one level down are included. By default, / supports the same resources as /** as well as the base path defined by the API proxy. For example, if the base path of the API proxy is `/v1/weatherapikey`, then the API product supports requests to `/v1/weatherapikey` and to any sub-URIs, such as `/v1/weatherapikey/forecastrss`, `/v1/weatherapikey/region/CA`, and so on. For more information, see Managing API products.
+  --api-resources: list<string> # Comma-separated list of API resources to be bundled in the API product. By default, the resource paths are mapped from the `proxy.pathsuffix` variable. The proxy path suffix is defined as the URI fragment following the ProxyEndpoint base path. For example, if the `apiResources` element is defined to be `/forecastrss` and the base path defined for the API proxy is `/weather`, then only requests to `/weather/forecastrss` are permitted by the API product. You can select a specific path, or you can select all subpaths with the following wildcard: - `/**`: Indicates that all sub-URIs are included. - `/*` : Indicates that only URIs one level down are included. By default, / supports the same resources as /** as well as the base path defined by the API proxy. For example, if the base path of the API proxy is `/v1/weatherapikey`, then the API product supports requests to `/v1/weatherapikey` and to any sub-URIs, such as `/v1/weatherapikey/forecastrss`, `/v1/weatherapikey/region/CA`, and so on. For more information, see Managing API products.
   --approval-type: string # Flag that specifies how API keys are approved to access the APIs defined by the API product. If set to `manual`, the consumer key is generated and returned in "pending" state. In this case, the API keys won't work until they have been explicitly approved. If set to `auto`, the consumer key is generated and returned in "approved" state and can be used immediately. **Note:** Typically, `auto` is used to provide access to free or trial API products that provide limited quota or capabilities.
   --attributes: list # Array of attributes that may be used to extend the default API product profile with customer-specific metadata. You can specify a maximum of 18 attributes. Use this property to specify the access level of the API product as either `public`, `private`, or `internal`. Only products marked `public` are available to developers in the Apigee developer portal. For example, you can set a product to `internal` while it is in development and then change access to `public` when it is ready to release on the portal. API products marked as `private` do not appear on the portal, but can be accessed by external developers. — item shape: {name?: string, value?: string}
   --created-at: string # Response only. Creation time of this environment as milliseconds since epoch. (format: int64)
   --description: string # Description of the API product. Include key information about the API product that is not captured by other fields.
   --display-name: string # Name displayed in the UI or developer portal to developers registering for API access.
-  --environments: list # Comma-separated list of environment names to which the API product is bound. Requests to environments that are not listed are rejected. By specifying one or more environments, you can bind the resources listed in the API product to a specific environment, preventing developers from accessing those resources through API proxies deployed in another environment. This setting is used, for example, to prevent resources associated with API proxies in `prod` from being accessed by API proxies deployed in `test`.
+  --environments: list<string> # Comma-separated list of environment names to which the API product is bound. Requests to environments that are not listed are rejected. By specifying one or more environments, you can bind the resources listed in the API product to a specific environment, preventing developers from accessing those resources through API proxies deployed in another environment. This setting is used, for example, to prevent resources associated with API proxies in `prod` from being accessed by API proxies deployed in `test`.
   --graphql-operation-group: record # List of graphQL operation configuration details associated with Apigee API proxies or remote services. Remote services are non-Apigee proxies, such as Istio-Envoy. — shape: {operationConfigType?: string, operationConfigs?: list}
   --last-modified-at: string # Response only. Modified time of this environment as milliseconds since epoch. (format: int64)
   --name: string # Internal name of the API product. Characters you can use in the name are restricted to: `A-Z0-9._\-$ %`. **Note:** The internal name cannot be edited when updating the API product.
   --operation-group: record # List of operation configuration details associated with Apigee API proxies or remote services. Remote services are non-Apigee proxies, such as Istio-Envoy. — shape: {operationConfigType?: string, operationConfigs?: list}
-  --proxies: list # Comma-separated list of API proxy names to which this API product is bound. By specifying API proxies, you can associate resources in the API product with specific API proxies, preventing developers from accessing those resources through other API proxies. Apigee rejects requests to API proxies that are not listed. **Note:** The API proxy names must already exist in the specified environment as they will be validated upon creation.
+  --proxies: list<string> # Comma-separated list of API proxy names to which this API product is bound. By specifying API proxies, you can associate resources in the API product with specific API proxies, preventing developers from accessing those resources through other API proxies. Apigee rejects requests to API proxies that are not listed. **Note:** The API proxy names must already exist in the specified environment as they will be validated upon creation.
   --quota: string # Number of request messages permitted per app by this API product for the specified `quotaInterval` and `quotaTimeUnit`. For example, a `quota` of 50, for a `quotaInterval` of 12 and a `quotaTimeUnit` of hours means 50 requests are allowed every 12 hours.
   --quota-counter-scope: string@quota-counter-scope-completer # Scope of the quota decides how the quota counter gets applied and evaluate for quota violation. If the Scope is set as PROXY, then all the operations defined for the APIproduct that are associated with the same proxy will share the same quota counter set at the APIproduct level, making it a global counter at a proxy level. If the Scope is set as OPERATION, then each operations get the counter set at the API product dedicated, making it a local counter. Note that, the QuotaCounterScope applies only when an operation does not have dedicated quota set for itself.
   --quota-interval: string # Time interval over which the number of request messages is calculated.
   --quota-time-unit: string # Time unit defined for the `quotaInterval`. Valid values include `minute`, `hour`, `day`, or `month`.
-  --scopes: list # Comma-separated list of OAuth scopes that are validated at runtime. Apigee validates that the scopes in any access token presented match the scopes defined in the OAuth policy associated with the API product.
+  --scopes: list<string> # Comma-separated list of OAuth scopes that are validated at runtime. Apigee validates that the scopes in any access token presented match the scopes defined in the OAuth policy associated with the API product.
 ]: any -> record<apiResources: list<string>, approvalType: string, attributes: table<name: string, value: string>, createdAt: string, description: string, displayName: string, environments: list<string>, graphqlOperationGroup: record<operationConfigType: string, operationConfigs: list<record>>, lastModifiedAt: string, name: string, operationGroup: record<operationConfigType: string, operationConfigs: list<record>>, proxies: list<string>, quota: string, quotaCounterScope: string, quotaInterval: string, quotaTimeUnit: string, scopes: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/apiproducts") $qp)
-  let body = {"apiResources": $api_resources, "approvalType": $approval_type, "attributes": $attributes, "createdAt": $created_at, "description": $description, "displayName": $display_name, "environments": $environments, "graphqlOperationGroup": $graphql_operation_group, "lastModifiedAt": $last_modified_at, "name": $name, "operationGroup": $operation_group, "proxies": $proxies, "quota": $quota, "quotaCounterScope": $quota_counter_scope, "quotaInterval": $quota_interval, "quotaTimeUnit": $quota_time_unit, "scopes": $scopes} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/apiproducts") $qp)
+  let req_body = {"apiResources": $api_resources, "approvalType": $approval_type, "attributes": $attributes, "createdAt": $created_at, "description": $description, "displayName": $display_name, "environments": $environments, "graphqlOperationGroup": $graphql_operation_group, "lastModifiedAt": $last_modified_at, "name": $name, "operationGroup": $operation_group, "proxies": $proxies, "quota": $quota, "quotaCounterScope": $quota_counter_scope, "quotaInterval": $quota_interval, "quotaTimeUnit": $quota_time_unit, "scopes": $scopes} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists the names of all API proxies in an organization. The names returned correspond to the names defined in the configuration files for each API proxy.
 #
 # GET /v1/{parent}/apis
 # operationId: apigee.organizations.apis.list
-export def "apis apigeeorganizationsapislist" [
+export def "apis list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1763,7 +1776,7 @@ export def "apis apigeeorganizationsapislist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "includeMetaData" $include_meta_data "scalar") (serialize-qp "includeRevisions" $include_revisions "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/apis") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/apis") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1773,7 +1786,7 @@ export def "apis apigeeorganizationsapislist" [
 #
 # POST /v1/{parent}/apis
 # operationId: apigee.organizations.apis.create
-export def "apis apigeeorganizationsapiscreate" [
+export def "apis create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1805,19 +1818,19 @@ export def "apis apigeeorganizationsapiscreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "action" $action "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "validate" $validate "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/apis") $qp)
-  let body = {"contentType": $content_type, "data": $data, "extensions": $extensions} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/apis") $qp)
+  let req_body = {"contentType": $content_type, "data": $data, "extensions": $extensions} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists all apps created by a developer in an Apigee organization. Optionally, you can request an expanded view of the developer apps. A maximum of 100 developer apps are returned per API call. You can paginate the list of deveoper apps returned using the `startKey` and `count` query parameters.
 #
 # GET /v1/{parent}/apps
 # operationId: apigee.organizations.developers.apps.list
-export def "apps apigeeorganizationsdevelopersappslist" [
+export def "apps list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1850,7 +1863,7 @@ export def "apps apigeeorganizationsdevelopersappslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "shallowExpand" $shallow_expand "scalar") (serialize-qp "startKey" $start_key "scalar") (serialize-qp "includeCred" $include_cred "scalar") (serialize-qp "keyStatus" $key_status "scalar") (serialize-qp "rows" $rows "scalar") (serialize-qp "status" $status "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/apps") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/apps") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1861,8 +1874,8 @@ export def "apps apigeeorganizationsdevelopersappslist" [
 # POST /v1/{parent}/apps
 # operationId: apigee.organizations.developers.apps.create
 # --attributes item shape: {name?: string, value?: string}
-# --credentials item shape: {apiProducts?: list, attributes?: list, consumerKey?: string, consumerSecret?: string, expiresAt?: string, issuedAt?: string, scopes?: list, status?: string}
-export def "apps apigeeorganizationsdevelopersappscreate" [
+# --credentials item shape: {apiProducts?: list, attributes?: list, consumerKey?: string, consumerSecret?: string, expiresAt?: string, issuedAt?: string, scopes?: list<string>, status?: string}
+export def "apps create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1883,7 +1896,7 @@ export def "apps apigeeorganizationsdevelopersappscreate" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --api-products: list # List of API products associated with the developer app.
+  --api-products: list<string> # List of API products associated with the developer app.
   --app-family: string # Developer app family.
   --app-id: string # ID of the developer app.
   --attributes: list # List of attributes for the developer app. — item shape: {name?: string, value?: string}
@@ -1891,26 +1904,26 @@ export def "apps apigeeorganizationsdevelopersappscreate" [
   --developer-id: string # ID of the developer.
   --key-expires-in: string # Expiration time, in milliseconds, for the consumer key that is generated for the developer app. If not set or left to the default value of `-1`, the API key never expires. The expiration time can't be updated after it is set. (format: int64)
   --name: string # Name of the developer app.
-  --scopes: list # Scopes to apply to the developer app. The specified scopes must already exist for the API product that you associate with the developer app.
+  --scopes: list<string> # Scopes to apply to the developer app. The specified scopes must already exist for the API product that you associate with the developer app.
   --status: string # Status of the credential. Valid values include `approved` or `revoked`.
 ]: any -> record<apiProducts: list<string>, appFamily: string, appId: string, attributes: table<name: string, value: string>, callbackUrl: string, createdAt: string, credentials: table<apiProducts: list, attributes: list, consumerKey: string, consumerSecret: string, expiresAt: string, issuedAt: string, scopes: list, status: string>, developerId: string, keyExpiresIn: string, lastModifiedAt: string, name: string, scopes: list<string>, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/apps") $qp)
-  let body = {"apiProducts": $api_products, "appFamily": $app_family, "appId": $app_id, "attributes": $attributes, "callbackUrl": $callback_url, "developerId": $developer_id, "keyExpiresIn": $key_expires_in, "name": $name, "scopes": $scopes, "status": $status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/apps") $qp)
+  let req_body = {"apiProducts": $api_products, "appFamily": $app_family, "appId": $app_id, "attributes": $attributes, "callbackUrl": $callback_url, "developerId": $developer_id, "keyExpiresIn": $key_expires_in, "name": $name, "scopes": $scopes, "status": $status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists the ArchiveDeployments in the specified Environment.
 #
 # GET /v1/{parent}/archiveDeployments
 # operationId: apigee.organizations.environments.archiveDeployments.list
-export def "archive-deployments apigeeorganizationsenvironmentsarchiveDeploymentslist" [
+export def "archive-deployments list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1938,7 +1951,7 @@ export def "archive-deployments apigeeorganizationsenvironmentsarchiveDeployment
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/archiveDeployments") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/archiveDeployments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1948,7 +1961,7 @@ export def "archive-deployments apigeeorganizationsenvironmentsarchiveDeployment
 #
 # POST /v1/{parent}/archiveDeployments
 # operationId: apigee.organizations.environments.archiveDeployments.create
-export def "archive-deployments apigeeorganizationsenvironmentsarchiveDeploymentscreate" [
+export def "archive-deployments create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1977,19 +1990,19 @@ export def "archive-deployments apigeeorganizationsenvironmentsarchiveDeployment
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/archiveDeployments") $qp)
-  let body = {"gcsUri": $gcs_uri, "labels": $labels, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/archiveDeployments") $qp)
+  let req_body = {"gcsUri": $gcs_uri, "labels": $labels, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Generates a signed URL for uploading an Archive zip file to Google Cloud Storage. Once the upload is complete, the signed URL should be passed to CreateArchiveDeployment. When uploading to the generated signed URL, please follow these restrictions: * Source file type should be a zip file. * Source file size should not exceed 1GB limit. * No credentials should be attached - the signed URLs provide access to the target bucket using internal service identity; if credentials were attached, the identity from the credentials would be used, but that identity does not have permissions to upload files to the URL. When making a HTTP PUT request, these two headers need to be specified: * `content-type: application/zip` * `x-goog-content-length-range: 0,1073741824` And this header SHOULD NOT be specified: * `Authorization: Bearer YOUR_TOKEN`
 #
 # POST /v1/{parent}/archiveDeployments:generateUploadUrl
 # operationId: apigee.organizations.environments.archiveDeployments.generateUploadUrl
-export def "archive-deployments-generate-upload-url apigeeorganizationsenvironmentsarchiveDeploymentsgenerateUploadUrl" [
+export def "archive-deployments-generate-upload-url generate" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2016,18 +2029,19 @@ export def "archive-deployments-generate-upload-url apigeeorganizationsenvironme
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/archiveDeployments:generateUploadUrl") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/archiveDeployments:generateUploadUrl") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists all attachments to an instance. **Note:** Not supported for Apigee hybrid.
 #
 # GET /v1/{parent}/attachments
 # operationId: apigee.organizations.instances.attachments.list
-export def "attachments apigeeorganizationsinstancesattachmentslist" [
+export def "attachments list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2054,7 +2068,7 @@ export def "attachments apigeeorganizationsinstancesattachmentslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/attachments") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/attachments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2064,7 +2078,7 @@ export def "attachments apigeeorganizationsinstancesattachmentslist" [
 #
 # POST /v1/{parent}/attachments
 # operationId: apigee.organizations.instances.attachments.create
-export def "attachments apigeeorganizationsinstancesattachmentscreate" [
+export def "attachments create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2091,19 +2105,19 @@ export def "attachments apigeeorganizationsinstancesattachmentscreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/attachments") $qp)
-  let body = {"environment": $environment} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/attachments") $qp)
+  let req_body = {"environment": $environment} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns a list of all developer attributes.
 #
 # GET /v1/{parent}/attributes
 # operationId: apigee.organizations.developers.attributes.list
-export def "attributes apigeeorganizationsdevelopersattributeslist" [
+export def "attributes list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2128,7 +2142,7 @@ export def "attributes apigeeorganizationsdevelopersattributeslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/attributes") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/attributes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2139,7 +2153,7 @@ export def "attributes apigeeorganizationsdevelopersattributeslist" [
 # POST /v1/{parent}/attributes
 # operationId: apigee.organizations.developers.attributes
 # --attribute item shape: {name?: string, value?: string}
-export def "attributes apigeeorganizationsdevelopersattributes" [
+export def "attributes create-by-parent" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2166,12 +2180,12 @@ export def "attributes apigeeorganizationsdevelopersattributes" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/attributes") $qp)
-  let body = {"attribute": $attribute} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/attributes") $qp)
+  let req_body = {"attribute": $attribute} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Creates a new canary evaluation for an organization.
@@ -2179,7 +2193,7 @@ export def "attributes apigeeorganizationsdevelopersattributes" [
 # POST /v1/{parent}/canaryevaluations
 # operationId: apigee.organizations.instances.canaryevaluations.create
 # --metricLabels shape: {env?: string, instance_id?: string, location?: string}
-export def "canaryevaluations apigeeorganizationsinstancescanaryevaluationscreate" [
+export def "canaryevaluations create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2210,19 +2224,19 @@ export def "canaryevaluations apigeeorganizationsinstancescanaryevaluationscreat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/canaryevaluations") $qp)
-  let body = {"control": $control, "endTime": $end_time, "metricLabels": $metric_labels, "startTime": $start_time, "treatment": $treatment} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/canaryevaluations") $qp)
+  let req_body = {"control": $control, "endTime": $end_time, "metricLabels": $metric_labels, "startTime": $start_time, "treatment": $treatment} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists all data collectors.
 #
 # GET /v1/{parent}/datacollectors
 # operationId: apigee.organizations.datacollectors.list
-export def "datacollectors apigeeorganizationsdatacollectorslist" [
+export def "datacollectors list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2249,7 +2263,7 @@ export def "datacollectors apigeeorganizationsdatacollectorslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/datacollectors") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/datacollectors") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2259,7 +2273,7 @@ export def "datacollectors apigeeorganizationsdatacollectorslist" [
 #
 # POST /v1/{parent}/datacollectors
 # operationId: apigee.organizations.datacollectors.create
-export def "datacollectors apigeeorganizationsdatacollectorscreate" [
+export def "datacollectors create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2289,19 +2303,19 @@ export def "datacollectors apigeeorganizationsdatacollectorscreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "dataCollectorId" $data_collector_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/datacollectors") $qp)
-  let body = {"description": $description, "name": $name, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/datacollectors") $qp)
+  let req_body = {"description": $description, "name": $name, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists debug sessions that are currently active in the given API Proxy revision.
 #
 # GET /v1/{parent}/debugsessions
 # operationId: apigee.organizations.environments.apis.revisions.debugsessions.list
-export def "debugsessions apigeeorganizationsenvironmentsapisrevisionsdebugsessionslist" [
+export def "debugsessions list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2328,7 +2342,7 @@ export def "debugsessions apigeeorganizationsenvironmentsapisrevisionsdebugsessi
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/debugsessions") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/debugsessions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2338,7 +2352,7 @@ export def "debugsessions apigeeorganizationsenvironmentsapisrevisionsdebugsessi
 #
 # POST /v1/{parent}/debugsessions
 # operationId: apigee.organizations.environments.apis.revisions.debugsessions.create
-export def "debugsessions apigeeorganizationsenvironmentsapisrevisionsdebugsessionscreate" [
+export def "debugsessions create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2371,19 +2385,19 @@ export def "debugsessions apigeeorganizationsenvironmentsapisrevisionsdebugsessi
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/debugsessions") $qp)
-  let body = {"count": $count, "filter": $filter, "name": $name, "timeout": $timeout, "tracesize": $tracesize, "validity": $validity} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/debugsessions") $qp)
+  let req_body = {"count": $count, "filter": $filter, "name": $name, "timeout": $timeout, "tracesize": $tracesize, "validity": $validity} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists all deployments of a shared flow revision.
 #
 # GET /v1/{parent}/deployments
 # operationId: apigee.organizations.sharedflows.revisions.deployments.list
-export def "deployments apigeeorganizationssharedflowsrevisionsdeploymentslist" [
+export def "deployments list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2409,7 +2423,7 @@ export def "deployments apigeeorganizationssharedflowsrevisionsdeploymentslist" 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "sharedFlows" $shared_flows "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/deployments") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/deployments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2419,7 +2433,7 @@ export def "deployments apigeeorganizationssharedflowsrevisionsdeploymentslist" 
 #
 # GET /v1/{parent}/developers
 # operationId: apigee.organizations.developers.list
-export def "developers apigeeorganizationsdeveloperslist" [
+export def "developers list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2450,7 +2464,7 @@ export def "developers apigeeorganizationsdeveloperslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "app" $app "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "ids" $ids "scalar") (serialize-qp "includeCompany" $include_company "scalar") (serialize-qp "startKey" $start_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/developers") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/developers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2461,7 +2475,7 @@ export def "developers apigeeorganizationsdeveloperslist" [
 # POST /v1/{parent}/developers
 # operationId: apigee.organizations.developers.create
 # --attributes item shape: {name?: string, value?: string}
-export def "developers apigeeorganizationsdeveloperscreate" [
+export def "developers create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2484,9 +2498,9 @@ export def "developers apigeeorganizationsdeveloperscreate" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --access-type: string # Access type.
   --app-family: string # Developer app family.
-  --apps: list # List of apps associated with the developer.
+  --apps: list<string> # List of apps associated with the developer.
   --attributes: list # Optional. Developer attributes (name/value pairs). The custom attribute limit is 18. — item shape: {name?: string, value?: string}
-  --companies: list # List of companies associated with the developer.
+  --companies: list<string> # List of companies associated with the developer.
   --developer-id: string # ID of the developer. **Note**: IDs are generated internally by Apigee and are not guaranteed to stay the same over time.
   --email: string # Required. Email address of the developer. This value is used to uniquely identify the developer in Apigee hybrid. Note that the email address has to be in lowercase only.
   --first-name: string # Required. First name of the developer.
@@ -2497,19 +2511,19 @@ export def "developers apigeeorganizationsdeveloperscreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/developers") $qp)
-  let body = {"accessType": $access_type, "appFamily": $app_family, "apps": $apps, "attributes": $attributes, "companies": $companies, "developerId": $developer_id, "email": $email, "firstName": $first_name, "lastName": $last_name, "userName": $user_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/developers") $qp)
+  let req_body = {"accessType": $access_type, "appFamily": $app_family, "apps": $apps, "attributes": $attributes, "companies": $companies, "developerId": $developer_id, "email": $email, "firstName": $first_name, "lastName": $last_name, "userName": $user_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists the endpoint attachments in an organization.
 #
 # GET /v1/{parent}/endpointAttachments
 # operationId: apigee.organizations.endpointAttachments.list
-export def "endpoint-attachments apigeeorganizationsendpointAttachmentslist" [
+export def "endpoint-attachments list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2536,7 +2550,7 @@ export def "endpoint-attachments apigeeorganizationsendpointAttachmentslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/endpointAttachments") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/endpointAttachments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2546,7 +2560,7 @@ export def "endpoint-attachments apigeeorganizationsendpointAttachmentslist" [
 #
 # POST /v1/{parent}/endpointAttachments
 # operationId: apigee.organizations.endpointAttachments.create
-export def "endpoint-attachments apigeeorganizationsendpointAttachmentscreate" [
+export def "endpoint-attachments create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2576,19 +2590,19 @@ export def "endpoint-attachments apigeeorganizationsendpointAttachmentscreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "endpointAttachmentId" $endpoint_attachment_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/endpointAttachments") $qp)
-  let body = {"location": $location, "name": $name, "serviceAttachment": $service_attachment} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/endpointAttachments") $qp)
+  let req_body = {"location": $location, "name": $name, "serviceAttachment": $service_attachment} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists key value entries for key values maps scoped to an organization, environment, or API proxy. **Note**: Supported for Apigee hybrid 1.8.x and higher.
 #
 # GET /v1/{parent}/entries
 # operationId: apigee.organizations.keyvaluemaps.entries.list
-export def "entries apigeeorganizationskeyvaluemapsentrieslist" [
+export def "entries list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2615,7 +2629,7 @@ export def "entries apigeeorganizationskeyvaluemapsentrieslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/entries") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/entries") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2625,7 +2639,7 @@ export def "entries apigeeorganizationskeyvaluemapsentrieslist" [
 #
 # POST /v1/{parent}/entries
 # operationId: apigee.organizations.keyvaluemaps.entries.create
-export def "entries apigeeorganizationskeyvaluemapsentriescreate" [
+export def "entries create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2653,19 +2667,19 @@ export def "entries apigeeorganizationskeyvaluemapsentriescreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/entries") $qp)
-  let body = {"name": $name, "value": $value} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/entries") $qp)
+  let req_body = {"name": $name, "value": $value} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists all environment groups.
 #
 # GET /v1/{parent}/envgroups
 # operationId: apigee.organizations.envgroups.list
-export def "envgroups apigeeorganizationsenvgroupslist" [
+export def "envgroups list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2692,7 +2706,7 @@ export def "envgroups apigeeorganizationsenvgroupslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/envgroups") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/envgroups") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2702,7 +2716,7 @@ export def "envgroups apigeeorganizationsenvgroupslist" [
 #
 # POST /v1/{parent}/envgroups
 # operationId: apigee.organizations.envgroups.create
-export def "envgroups apigeeorganizationsenvgroupscreate" [
+export def "envgroups create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2724,26 +2738,26 @@ export def "envgroups apigeeorganizationsenvgroupscreate" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --name: string # ID of the environment group. Overrides any ID in the environment_group resource.
-  --hostnames: list # Required. Host names for this environment group.
+  --hostnames: list<string> # Required. Host names for this environment group.
   --name: string # ID of the environment group.
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "name" $name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/envgroups") $qp)
-  let body = {"hostnames": $hostnames, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/envgroups") $qp)
+  let req_body = {"hostnames": $hostnames, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # CreateSecurityProfileEnvironmentAssociation creates profile environment association i.e. attaches environment to security profile.
 #
 # POST /v1/{parent}/environments
 # operationId: apigee.organizations.securityProfiles.environments.create
-export def "environments apigeeorganizationssecurityProfilesenvironmentscreate" [
+export def "environments create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2772,19 +2786,19 @@ export def "environments apigeeorganizationssecurityProfilesenvironmentscreate" 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "name" $name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/environments") $qp)
-  let body = {"name": $name, "securityProfileRevisionId": $security_profile_revision_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/environments") $qp)
+  let req_body = {"name": $name, "securityProfileRevisionId": $security_profile_revision_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Return a list of Asynchronous Queries at host level.
 #
 # GET /v1/{parent}/hostQueries
 # operationId: apigee.organizations.hostQueries.list
-export def "host-queries apigeeorganizationshostQuerieslist" [
+export def "host-queries list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2816,7 +2830,7 @@ export def "host-queries apigeeorganizationshostQuerieslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "dataset" $dataset "scalar") (serialize-qp "envgroupHostname" $envgroup_hostname "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "inclQueriesWithoutReport" $incl_queries_without_report "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "submittedBy" $submitted_by "scalar") (serialize-qp "to" $qp_to "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/hostQueries") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/hostQueries") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2827,7 +2841,7 @@ export def "host-queries apigeeorganizationshostQuerieslist" [
 # POST /v1/{parent}/hostQueries
 # operationId: apigee.organizations.hostQueries.create
 # --metrics item shape: {alias?: string, function?: string, name?: string, operator?: string, value?: string}
-export def "host-queries apigeeorganizationshostQueriescreate" [
+export def "host-queries create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2849,7 +2863,7 @@ export def "host-queries apigeeorganizationshostQueriescreate" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --csv-delimiter: string # Delimiter used in the CSV file, if `outputFormat` is set to `csv`. Defaults to the `,` (comma) character. Supported delimiter characters include comma (`,`), pipe (`|`), and tab (`\t`).
-  --dimensions: list # A list of dimensions. https://docs.apigee.com/api-platform/analytics/analytics-reference#dimensions
+  --dimensions: list<string> # A list of dimensions. https://docs.apigee.com/api-platform/analytics/analytics-reference#dimensions
   --envgroup-hostname: string # Hostname needs to be specified if query intends to run at host level. This field is only allowed when query is submitted by CreateHostAsyncQuery where analytics data will be grouped by organization and hostname.
   --filter: string # Boolean expression that can be used to filter data. Filter expressions can be combined using AND/OR terms and should be fully parenthesized to avoid ambiguity. See Analytics metrics, dimensions, and filters reference https://docs.apigee.com/api-platform/analytics/analytics-reference for more information on the fields available to filter on. For more information on the tokens that you use to build filter expressions, see Filter expression syntax. https://docs.apigee.com/api-platform/analytics/asynch-reports-api#filter-expression-syntax
   --group-by-time-unit: string # Time unit used to group the result set. Valid values include: second, minute, hour, day, week, or month. If a query includes groupByTimeUnit, then the result is an aggregation based on the specified time unit and the resultant timestamp does not include milliseconds precision. If a query omits groupByTimeUnit, then the resultant timestamp includes milliseconds precision.
@@ -2864,19 +2878,19 @@ export def "host-queries apigeeorganizationshostQueriescreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/hostQueries") $qp)
-  let body = {"csvDelimiter": $csv_delimiter, "dimensions": $dimensions, "envgroupHostname": $envgroup_hostname, "filter": $filter, "groupByTimeUnit": $group_by_time_unit, "limit": $limit, "metrics": $metrics, "name": $name, "outputFormat": $output_format, "reportDefinitionId": $report_definition_id, "timeRange": $time_range} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/hostQueries") $qp)
+  let req_body = {"csvDelimiter": $csv_delimiter, "dimensions": $dimensions, "envgroupHostname": $envgroup_hostname, "filter": $filter, "groupByTimeUnit": $group_by_time_unit, "limit": $limit, "metrics": $metrics, "name": $name, "outputFormat": $output_format, "reportDefinitionId": $report_definition_id, "timeRange": $time_range} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Return a list of Security Reports at host level.
 #
 # GET /v1/{parent}/hostSecurityReports
 # operationId: apigee.organizations.hostSecurityReports.list
-export def "host-security-reports apigeeorganizationshostSecurityReportslist" [
+export def "host-security-reports list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2909,7 +2923,7 @@ export def "host-security-reports apigeeorganizationshostSecurityReportslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "dataset" $dataset "scalar") (serialize-qp "envgroupHostname" $envgroup_hostname "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "submittedBy" $submitted_by "scalar") (serialize-qp "to" $qp_to "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/hostSecurityReports") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/hostSecurityReports") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2920,7 +2934,7 @@ export def "host-security-reports apigeeorganizationshostSecurityReportslist" [
 # POST /v1/{parent}/hostSecurityReports
 # operationId: apigee.organizations.hostSecurityReports.create
 # --metrics item shape: {aggregationFunction?: string, alias?: string, name?: string, operator?: string, value?: string}
-export def "host-security-reports apigeeorganizationshostSecurityReportscreate" [
+export def "host-security-reports create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2942,7 +2956,7 @@ export def "host-security-reports apigeeorganizationshostSecurityReportscreate" 
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --csv-delimiter: string # Delimiter used in the CSV file, if `outputFormat` is set to `csv`. Defaults to the `,` (comma) character. Supported delimiter characters include comma (`,`), pipe (`|`), and tab (`\t`).
-  --dimensions: list # A list of dimensions. https://docs.apigee.com/api-platform/analytics/analytics-reference#dimensions
+  --dimensions: list<string> # A list of dimensions. https://docs.apigee.com/api-platform/analytics/analytics-reference#dimensions
   --display-name: string # Security Report display name which users can specify.
   --envgroup-hostname: string # Hostname needs to be specified if query intends to run at host level. This field is only allowed when query is submitted by CreateHostSecurityReport where analytics data will be grouped by organization and hostname.
   --filter: string # Boolean expression that can be used to filter data. Filter expressions can be combined using AND/OR terms and should be fully parenthesized to avoid ambiguity. See Analytics metrics, dimensions, and filters reference https://docs.apigee.com/api-platform/analytics/analytics-reference for more information on the fields available to filter on. For more information on the tokens that you use to build filter expressions, see Filter expression syntax. https://docs.apigee.com/api-platform/analytics/asynch-reports-api#filter-expression-syntax
@@ -2957,19 +2971,19 @@ export def "host-security-reports apigeeorganizationshostSecurityReportscreate" 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/hostSecurityReports") $qp)
-  let body = {"csvDelimiter": $csv_delimiter, "dimensions": $dimensions, "displayName": $display_name, "envgroupHostname": $envgroup_hostname, "filter": $filter, "groupByTimeUnit": $group_by_time_unit, "limit": $limit, "metrics": $metrics, "mimeType": $mime_type, "reportDefinitionId": $report_definition_id, "timeRange": $time_range} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/hostSecurityReports") $qp)
+  let req_body = {"csvDelimiter": $csv_delimiter, "dimensions": $dimensions, "displayName": $display_name, "envgroupHostname": $envgroup_hostname, "filter": $filter, "groupByTimeUnit": $group_by_time_unit, "limit": $limit, "metrics": $metrics, "mimeType": $mime_type, "reportDefinitionId": $report_definition_id, "timeRange": $time_range} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists all Apigee runtime instances for the organization. **Note:** Not supported for Apigee hybrid.
 #
 # GET /v1/{parent}/instances
 # operationId: apigee.organizations.instances.list
-export def "instances apigeeorganizationsinstanceslist" [
+export def "instances list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2996,7 +3010,7 @@ export def "instances apigeeorganizationsinstanceslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/instances") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/instances") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3006,7 +3020,7 @@ export def "instances apigeeorganizationsinstanceslist" [
 #
 # POST /v1/{parent}/instances
 # operationId: apigee.organizations.instances.create
-export def "instances apigeeorganizationsinstancescreate" [
+export def "instances create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3027,7 +3041,7 @@ export def "instances apigeeorganizationsinstancescreate" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --consumer-accept-list: list # Optional. Customer accept list represents the list of projects (id/number) on customer side that can privately connect to the service attachment. It is an optional field which the customers can provide during the instance creation. By default, the customer project associated with the Apigee organization will be included to the list.
+  --consumer-accept-list: list<string> # Optional. Customer accept list represents the list of projects (id/number) on customer side that can privately connect to the service attachment. It is an optional field which the customers can provide during the instance creation. By default, the customer project associated with the Apigee organization will be included to the list.
   --description: string # Optional. Description of the instance.
   --disk-encryption-key-name: string # Customer Managed Encryption Key (CMEK) used for disk and volume encryption. Required for Apigee paid subscriptions only. Use the following format: `projects/([^/]+)/locations/([^/]+)/keyRings/([^/]+)/cryptoKeys/([^/]+)`
   --display-name: string # Optional. Display name for the instance.
@@ -3040,12 +3054,12 @@ export def "instances apigeeorganizationsinstancescreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/instances") $qp)
-  let body = {"consumerAcceptList": $consumer_accept_list, "description": $description, "diskEncryptionKeyName": $disk_encryption_key_name, "displayName": $display_name, "ipRange": $ip_range, "location": $location, "name": $name, "peeringCidrRange": $peering_cidr_range} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/instances") $qp)
+  let req_body = {"consumerAcceptList": $consumer_accept_list, "description": $description, "diskEncryptionKeyName": $disk_encryption_key_name, "displayName": $display_name, "ipRange": $ip_range, "location": $location, "name": $name, "peeringCidrRange": $peering_cidr_range} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Creates a custom consumer key and secret for a developer app. This is particularly useful if you want to migrate existing consumer keys and secrets to Apigee from another system. Consumer keys and secrets can contain letters, numbers, underscores, and hyphens. No other special characters are allowed. To avoid service disruptions, a consumer key and secret should not exceed 2 KBs each. **Note**: When creating the consumer key and secret, an association to API products will not be made. Therefore, you should not specify the associated API products in your request. Instead, use the UpdateDeveloperAppKey API to make the association after the consumer key and secret are created. If a consumer key and secret already exist, you can keep them or delete them using the DeleteDeveloperAppKey API.
@@ -3053,7 +3067,7 @@ export def "instances apigeeorganizationsinstancescreate" [
 # POST /v1/{parent}/keys
 # operationId: apigee.organizations.developers.apps.keys.create
 # --attributes item shape: {name?: string, value?: string}
-export def "keys apigeeorganizationsdevelopersappskeyscreate" [
+export def "keys create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3081,19 +3095,19 @@ export def "keys apigeeorganizationsdevelopersappskeyscreate" [
   --expires-at: string # Time the developer app expires in milliseconds since epoch. (format: int64)
   --expires-in-seconds: string # Input only. Expiration time, in seconds, for the consumer key. If not set or left to the default value of `-1`, the API key never expires. The expiration time can't be updated after it is set. (format: int64)
   --issued-at: string # Time the developer app was created in milliseconds since epoch. (format: int64)
-  --scopes: list # Scopes to apply to the app. The specified scope names must already be defined for the API product that you associate with the app.
+  --scopes: list<string> # Scopes to apply to the app. The specified scope names must already be defined for the API product that you associate with the app.
   --status: string # Status of the credential. Valid values include `approved` or `revoked`.
 ]: any -> record<apiProducts: list<any>, attributes: table<name: string, value: string>, consumerKey: string, consumerSecret: string, expiresAt: string, expiresInSeconds: string, issuedAt: string, scopes: list<string>, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/keys") $qp)
-  let body = {"apiProducts": $api_products, "attributes": $attributes, "consumerKey": $consumer_key, "consumerSecret": $consumer_secret, "expiresAt": $expires_at, "expiresInSeconds": $expires_in_seconds, "issuedAt": $issued_at, "scopes": $scopes, "status": $status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/keys") $qp)
+  let req_body = {"apiProducts": $api_products, "attributes": $attributes, "consumerKey": $consumer_key, "consumerSecret": $consumer_secret, "expiresAt": $expires_at, "expiresInSeconds": $expires_in_seconds, "issuedAt": $issued_at, "scopes": $scopes, "status": $status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Creates a custom consumer key and secret for a developer app. This is particularly useful if you want to migrate existing consumer keys and secrets to Apigee from another system. Consumer keys and secrets can contain letters, numbers, underscores, and hyphens. No other special characters are allowed. To avoid service disruptions, a consumer key and secret should not exceed 2 KBs each. **Note**: When creating the consumer key and secret, an association to API products will not be made. Therefore, you should not specify the associated API products in your request. Instead, use the UpdateDeveloperAppKey API to make the association after the consumer key and secret are created. If a consumer key and secret already exist, you can keep them or delete them using the DeleteDeveloperAppKey API.
@@ -3101,7 +3115,7 @@ export def "keys apigeeorganizationsdevelopersappskeyscreate" [
 # POST /v1/{parent}/keys/create
 # operationId: apigee.organizations.developers.apps.keys.create.create
 # --attributes item shape: {name?: string, value?: string}
-export def "keys-create apigeeorganizationsdevelopersappskeyscreatecreate" [
+export def "keys-create create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3129,26 +3143,26 @@ export def "keys-create apigeeorganizationsdevelopersappskeyscreatecreate" [
   --expires-at: string # Time the developer app expires in milliseconds since epoch. (format: int64)
   --expires-in-seconds: string # Input only. Expiration time, in seconds, for the consumer key. If not set or left to the default value of `-1`, the API key never expires. The expiration time can't be updated after it is set. (format: int64)
   --issued-at: string # Time the developer app was created in milliseconds since epoch. (format: int64)
-  --scopes: list # Scopes to apply to the app. The specified scope names must already be defined for the API product that you associate with the app.
+  --scopes: list<string> # Scopes to apply to the app. The specified scope names must already be defined for the API product that you associate with the app.
   --status: string # Status of the credential. Valid values include `approved` or `revoked`.
 ]: any -> record<apiProducts: list<any>, attributes: table<name: string, value: string>, consumerKey: string, consumerSecret: string, expiresAt: string, expiresInSeconds: string, issuedAt: string, scopes: list<string>, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/keys/create") $qp)
-  let body = {"apiProducts": $api_products, "attributes": $attributes, "consumerKey": $consumer_key, "consumerSecret": $consumer_secret, "expiresAt": $expires_at, "expiresInSeconds": $expires_in_seconds, "issuedAt": $issued_at, "scopes": $scopes, "status": $status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/keys/create") $qp)
+  let req_body = {"apiProducts": $api_products, "attributes": $attributes, "consumerKey": $consumer_key, "consumerSecret": $consumer_secret, "expiresAt": $expires_at, "expiresInSeconds": $expires_in_seconds, "issuedAt": $issued_at, "scopes": $scopes, "status": $status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Creates a keystore or truststore. - Keystore: Contains certificates and their associated keys. - Truststore: Contains trusted certificates used to validate a server's certificate. These certificates are typically self-signed certificates or certificates that are not signed by a trusted CA.
 #
 # POST /v1/{parent}/keystores
 # operationId: apigee.organizations.environments.keystores.create
-export def "keystores apigeeorganizationsenvironmentskeystorescreate" [
+export def "keystores create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3176,19 +3190,19 @@ export def "keystores apigeeorganizationsenvironmentskeystorescreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "name" $name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/keystores") $qp)
-  let body = {"name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/keystores") $qp)
+  let req_body = {"name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Creates a key value map in an organization.
 #
 # POST /v1/{parent}/keyvaluemaps
 # operationId: apigee.organizations.keyvaluemaps.create
-export def "keyvaluemaps apigeeorganizationskeyvaluemapscreate" [
+export def "keyvaluemaps create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3216,19 +3230,19 @@ export def "keyvaluemaps apigeeorganizationskeyvaluemapscreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/keyvaluemaps") $qp)
-  let body = {"encrypted": $encrypted, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/keyvaluemaps") $qp)
+  let req_body = {"encrypted": $encrypted, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists the NAT addresses for an Apigee instance. **Note:** Not supported for Apigee hybrid.
 #
 # GET /v1/{parent}/natAddresses
 # operationId: apigee.organizations.instances.natAddresses.list
-export def "nat-addresses apigeeorganizationsinstancesnatAddresseslist" [
+export def "nat-addresses list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3255,7 +3269,7 @@ export def "nat-addresses apigeeorganizationsinstancesnatAddresseslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/natAddresses") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/natAddresses") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3265,7 +3279,7 @@ export def "nat-addresses apigeeorganizationsinstancesnatAddresseslist" [
 #
 # POST /v1/{parent}/natAddresses
 # operationId: apigee.organizations.instances.natAddresses.create
-export def "nat-addresses apigeeorganizationsinstancesnatAddressescreate" [
+export def "nat-addresses create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3292,19 +3306,19 @@ export def "nat-addresses apigeeorganizationsinstancesnatAddressescreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/natAddresses") $qp)
-  let body = {"name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/natAddresses") $qp)
+  let req_body = {"name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists all of the distributed trace configuration overrides in an environment.
 #
 # GET /v1/{parent}/overrides
 # operationId: apigee.organizations.environments.traceConfig.overrides.list
-export def "overrides apigeeorganizationsenvironmentstraceConfigoverrideslist" [
+export def "overrides list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3331,7 +3345,7 @@ export def "overrides apigeeorganizationsenvironmentstraceConfigoverrideslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/overrides") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/overrides") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3342,7 +3356,7 @@ export def "overrides apigeeorganizationsenvironmentstraceConfigoverrideslist" [
 # POST /v1/{parent}/overrides
 # operationId: apigee.organizations.environments.traceConfig.overrides.create
 # --samplingConfig shape: {sampler?: "SAMPLER_UNSPECIFIED"|"OFF"|"PROBABILITY", samplingRate?: float}
-export def "overrides apigeeorganizationsenvironmentstraceConfigoverridescreate" [
+export def "overrides create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3371,19 +3385,19 @@ export def "overrides apigeeorganizationsenvironmentstraceConfigoverridescreate"
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/overrides") $qp)
-  let body = {"apiProxy": $api_proxy, "name": $name, "samplingConfig": $sampling_config} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/overrides") $qp)
+  let req_body = {"apiProxy": $api_proxy, "name": $name, "samplingConfig": $sampling_config} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Return a list of Asynchronous Queries
 #
 # GET /v1/{parent}/queries
 # operationId: apigee.organizations.environments.queries.list
-export def "queries apigeeorganizationsenvironmentsquerieslist" [
+export def "queries list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3414,7 +3428,7 @@ export def "queries apigeeorganizationsenvironmentsquerieslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "dataset" $dataset "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "inclQueriesWithoutReport" $incl_queries_without_report "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "submittedBy" $submitted_by "scalar") (serialize-qp "to" $qp_to "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/queries") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/queries") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3425,7 +3439,7 @@ export def "queries apigeeorganizationsenvironmentsquerieslist" [
 # POST /v1/{parent}/queries
 # operationId: apigee.organizations.environments.queries.create
 # --metrics item shape: {alias?: string, function?: string, name?: string, operator?: string, value?: string}
-export def "queries apigeeorganizationsenvironmentsqueriescreate" [
+export def "queries create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3447,7 +3461,7 @@ export def "queries apigeeorganizationsenvironmentsqueriescreate" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --csv-delimiter: string # Delimiter used in the CSV file, if `outputFormat` is set to `csv`. Defaults to the `,` (comma) character. Supported delimiter characters include comma (`,`), pipe (`|`), and tab (`\t`).
-  --dimensions: list # A list of dimensions. https://docs.apigee.com/api-platform/analytics/analytics-reference#dimensions
+  --dimensions: list<string> # A list of dimensions. https://docs.apigee.com/api-platform/analytics/analytics-reference#dimensions
   --envgroup-hostname: string # Hostname needs to be specified if query intends to run at host level. This field is only allowed when query is submitted by CreateHostAsyncQuery where analytics data will be grouped by organization and hostname.
   --filter: string # Boolean expression that can be used to filter data. Filter expressions can be combined using AND/OR terms and should be fully parenthesized to avoid ambiguity. See Analytics metrics, dimensions, and filters reference https://docs.apigee.com/api-platform/analytics/analytics-reference for more information on the fields available to filter on. For more information on the tokens that you use to build filter expressions, see Filter expression syntax. https://docs.apigee.com/api-platform/analytics/asynch-reports-api#filter-expression-syntax
   --group-by-time-unit: string # Time unit used to group the result set. Valid values include: second, minute, hour, day, week, or month. If a query includes groupByTimeUnit, then the result is an aggregation based on the specified time unit and the resultant timestamp does not include milliseconds precision. If a query omits groupByTimeUnit, then the resultant timestamp includes milliseconds precision.
@@ -3462,19 +3476,19 @@ export def "queries apigeeorganizationsenvironmentsqueriescreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/queries") $qp)
-  let body = {"csvDelimiter": $csv_delimiter, "dimensions": $dimensions, "envgroupHostname": $envgroup_hostname, "filter": $filter, "groupByTimeUnit": $group_by_time_unit, "limit": $limit, "metrics": $metrics, "name": $name, "outputFormat": $output_format, "reportDefinitionId": $report_definition_id, "timeRange": $time_range} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/queries") $qp)
+  let req_body = {"csvDelimiter": $csv_delimiter, "dimensions": $dimensions, "envgroupHostname": $envgroup_hostname, "filter": $filter, "groupByTimeUnit": $group_by_time_unit, "limit": $limit, "metrics": $metrics, "name": $name, "outputFormat": $output_format, "reportDefinitionId": $report_definition_id, "timeRange": $time_range} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists all the rate plans for an API product.
 #
 # GET /v1/{parent}/rateplans
 # operationId: apigee.organizations.apiproducts.rateplans.list
-export def "rateplans apigeeorganizationsapiproductsrateplanslist" [
+export def "rateplans list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3504,7 +3518,7 @@ export def "rateplans apigeeorganizationsapiproductsrateplanslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "startKey" $start_key "scalar") (serialize-qp "state" $state "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/rateplans") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/rateplans") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3518,7 +3532,7 @@ export def "rateplans apigeeorganizationsapiproductsrateplanslist" [
 # --fixedRecurringFee shape: {currencyCode?: string, nanos?: int, units?: string}
 # --revenueShareRates item shape: {end?: string, sharePercentage?: float, start?: string}
 # --setupFee shape: {currencyCode?: string, nanos?: int, units?: string}
-export def "rateplans apigeeorganizationsapiproductsrateplanscreate" [
+export def "rateplans create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3560,19 +3574,19 @@ export def "rateplans apigeeorganizationsapiproductsrateplanscreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/rateplans") $qp)
-  let body = {"apiproduct": $apiproduct, "billingPeriod": $billing_period, "consumptionPricingRates": $consumption_pricing_rates, "consumptionPricingType": $consumption_pricing_type, "currencyCode": $currency_code, "description": $description, "displayName": $display_name, "endTime": $end_time, "fixedFeeFrequency": $fixed_fee_frequency, "fixedRecurringFee": $fixed_recurring_fee, "paymentFundingModel": $payment_funding_model, "revenueShareRates": $revenue_share_rates, "revenueShareType": $revenue_share_type, "setupFee": $setup_fee, "startTime": $start_time, "state": $state} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/rateplans") $qp)
+  let req_body = {"apiproduct": $apiproduct, "billingPeriod": $billing_period, "consumptionPricingRates": $consumption_pricing_rates, "consumptionPricingType": $consumption_pricing_type, "currencyCode": $currency_code, "description": $description, "displayName": $display_name, "endTime": $end_time, "fixedFeeFrequency": $fixed_fee_frequency, "fixedRecurringFee": $fixed_recurring_fee, "paymentFundingModel": $payment_funding_model, "revenueShareRates": $revenue_share_rates, "revenueShareType": $revenue_share_type, "setupFee": $setup_fee, "startTime": $start_time, "state": $state} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Creates a Reference in the specified environment.
 #
 # POST /v1/{parent}/references
 # operationId: apigee.organizations.environments.references.create
-export def "references apigeeorganizationsenvironmentsreferencescreate" [
+export def "references create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3602,19 +3616,19 @@ export def "references apigeeorganizationsenvironmentsreferencescreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/references") $qp)
-  let body = {"description": $description, "name": $name, "refers": $refers, "resourceType": $resource_type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/references") $qp)
+  let req_body = {"description": $description, "name": $name, "refers": $refers, "resourceType": $resource_type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Return a list of Custom Reports
 #
 # GET /v1/{parent}/reports
 # operationId: apigee.organizations.reports.list
-export def "reports apigeeorganizationsreportslist" [
+export def "reports list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3640,7 +3654,7 @@ export def "reports apigeeorganizationsreportslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/reports") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/reports") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3652,7 +3666,7 @@ export def "reports apigeeorganizationsreportslist" [
 # operationId: apigee.organizations.reports.create
 # --metrics item shape: {function?: string, name?: string}
 # --properties item shape: {property?: string, value?: list}
-export def "reports apigeeorganizationsreportscreate" [
+export def "reports create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3674,8 +3688,8 @@ export def "reports apigeeorganizationsreportscreate" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --chart-type: string # This field contains the chart type for the report
-  --comments: list # Legacy field: not used. This field contains a list of comments associated with custom report
-  --dimensions: list # This contains the list of dimensions for the report
+  --comments: list<string> # Legacy field: not used. This field contains a list of comments associated with custom report
+  --dimensions: list<string> # This contains the list of dimensions for the report
   --display-name: string # This is the display name for the report
   --filter: string # This field contains the filter expression
   --from-time: string # Legacy field: not used. Contains the from time for the report
@@ -3684,9 +3698,9 @@ export def "reports apigeeorganizationsreportscreate" [
   --name: string # Required. Unique identifier for the report T his is a legacy field used to encode custom report unique id
   --offset: string # Legacy field: not used. This field contains the offset for the data
   --properties: list # This field contains report properties such as ui metadata etc. — item shape: {property?: string, value?: list}
-  --sort-by-cols: list # Legacy field: not used much. Contains the list of sort by columns
+  --sort-by-cols: list<string> # Legacy field: not used much. Contains the list of sort by columns
   --sort-order: string # Legacy field: not used much. Contains the sort order for the sort columns
-  --tags: list # Legacy field: not used. This field contains a list of tags associated with custom report
+  --tags: list<string> # Legacy field: not used. This field contains a list of tags associated with custom report
   --time-unit: string # This field contains the time unit of aggregation for the report
   --to-time: string # Legacy field: not used. Contains the end time for the report
   --topk: string # Legacy field: not used. This field contains the top k parameter value for restricting the result
@@ -3695,19 +3709,19 @@ export def "reports apigeeorganizationsreportscreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/reports") $qp)
-  let body = {"chartType": $chart_type, "comments": $comments, "dimensions": $dimensions, "displayName": $display_name, "filter": $filter, "fromTime": $from_time, "limit": $limit, "metrics": $metrics, "name": $name, "offset": $offset, "properties": $properties, "sortByCols": $sort_by_cols, "sortOrder": $sort_order, "tags": $tags, "timeUnit": $time_unit, "toTime": $to_time, "topk": $topk} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/reports") $qp)
+  let req_body = {"chartType": $chart_type, "comments": $comments, "dimensions": $dimensions, "displayName": $display_name, "filter": $filter, "fromTime": $from_time, "limit": $limit, "metrics": $metrics, "name": $name, "offset": $offset, "properties": $properties, "sortByCols": $sort_by_cols, "sortOrder": $sort_order, "tags": $tags, "timeUnit": $time_unit, "toTime": $to_time, "topk": $topk} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists all resource files, optionally filtering by type. For more information about resource files, see [Resource files](https://cloud.google.com/apigee/docs/api-platform/develop/resource-files).
 #
 # GET /v1/{parent}/resourcefiles
 # operationId: apigee.organizations.environments.resourcefiles.list
-export def "resourcefiles apigeeorganizationsenvironmentsresourcefileslist" [
+export def "resourcefiles list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3733,7 +3747,7 @@ export def "resourcefiles apigeeorganizationsenvironmentsresourcefileslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/resourcefiles") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/resourcefiles") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3743,7 +3757,7 @@ export def "resourcefiles apigeeorganizationsenvironmentsresourcefileslist" [
 #
 # POST /v1/{parent}/resourcefiles
 # operationId: apigee.organizations.environments.resourcefiles.create
-export def "resourcefiles apigeeorganizationsenvironmentsresourcefilescreate" [
+export def "resourcefiles create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3774,19 +3788,19 @@ export def "resourcefiles apigeeorganizationsenvironmentsresourcefilescreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/resourcefiles") $qp)
-  let body = {"contentType": $content_type, "data": $data, "extensions": $extensions} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/resourcefiles") $qp)
+  let req_body = {"contentType": $content_type, "data": $data, "extensions": $extensions} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists all resource files, optionally filtering by type. For more information about resource files, see [Resource files](https://cloud.google.com/apigee/docs/api-platform/develop/resource-files).
 #
 # GET /v1/{parent}/resourcefiles/{type}
 # operationId: apigee.organizations.environments.resourcefiles.listEnvironmentResources
-export def "resourcefiles apigeeorganizationsenvironmentsresourcefileslistEnvironmentResources" [
+export def "resourcefiles list-environment-resources" [
   parent: string
   type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3812,7 +3826,7 @@ export def "resourcefiles apigeeorganizationsenvironmentsresourcefileslistEnviro
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent, type: $type} | format pattern "/v1/{parent}/resourcefiles/{type}") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent), type: (encode-path-segment $type)} | format pattern "/v1/{parent}/resourcefiles/{type}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3822,7 +3836,7 @@ export def "resourcefiles apigeeorganizationsenvironmentsresourcefileslistEnviro
 #
 # DELETE /v1/{parent}/resourcefiles/{type}/{name}
 # operationId: apigee.organizations.environments.resourcefiles.delete
-export def "resourcefiles apigeeorganizationsenvironmentsresourcefilesdelete" [
+export def "resourcefiles delete" [
   parent: string
   type: string
   name: string
@@ -3849,7 +3863,7 @@ export def "resourcefiles apigeeorganizationsenvironmentsresourcefilesdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent, type: $type, name: $name} | format pattern "/v1/{parent}/resourcefiles/{type}/{name}") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent), type: (encode-path-segment $type), name: (encode-path-segment $name)} | format pattern "/v1/{parent}/resourcefiles/{type}/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3859,7 +3873,7 @@ export def "resourcefiles apigeeorganizationsenvironmentsresourcefilesdelete" [
 #
 # GET /v1/{parent}/resourcefiles/{type}/{name}
 # operationId: apigee.organizations.environments.resourcefiles.get
-export def "resourcefiles apigeeorganizationsenvironmentsresourcefilesget" [
+export def "resourcefiles get" [
   parent: string
   type: string
   name: string
@@ -3886,7 +3900,7 @@ export def "resourcefiles apigeeorganizationsenvironmentsresourcefilesget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent, type: $type, name: $name} | format pattern "/v1/{parent}/resourcefiles/{type}/{name}") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent), type: (encode-path-segment $type), name: (encode-path-segment $name)} | format pattern "/v1/{parent}/resourcefiles/{type}/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3896,7 +3910,7 @@ export def "resourcefiles apigeeorganizationsenvironmentsresourcefilesget" [
 #
 # PUT /v1/{parent}/resourcefiles/{type}/{name}
 # operationId: apigee.organizations.environments.resourcefiles.update
-export def "resourcefiles apigeeorganizationsenvironmentsresourcefilesupdate" [
+export def "resourcefiles update" [
   parent: string
   type: string
   name: string
@@ -3927,19 +3941,19 @@ export def "resourcefiles apigeeorganizationsenvironmentsresourcefilesupdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent, type: $type, name: $name} | format pattern "/v1/{parent}/resourcefiles/{type}/{name}") $qp)
-  let body = {"contentType": $content_type, "data": $data, "extensions": $extensions} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent), type: (encode-path-segment $type), name: (encode-path-segment $name)} | format pattern "/v1/{parent}/resourcefiles/{type}/{name}") $qp)
+  let req_body = {"contentType": $content_type, "data": $data, "extensions": $extensions} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # ListSecurityIncidents lists all the security incident associated with the environment.
 #
 # GET /v1/{parent}/securityIncidents
 # operationId: apigee.organizations.environments.securityIncidents.list
-export def "security-incidents apigeeorganizationsenvironmentssecurityIncidentslist" [
+export def "security-incidents list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3967,7 +3981,7 @@ export def "security-incidents apigeeorganizationsenvironmentssecurityIncidentsl
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/securityIncidents") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/securityIncidents") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3977,7 +3991,7 @@ export def "security-incidents apigeeorganizationsenvironmentssecurityIncidentsl
 #
 # GET /v1/{parent}/securityProfiles
 # operationId: apigee.organizations.securityProfiles.list
-export def "security-profiles apigeeorganizationssecurityProfileslist" [
+export def "security-profiles list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4004,7 +4018,7 @@ export def "security-profiles apigeeorganizationssecurityProfileslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/securityProfiles") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/securityProfiles") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4014,7 +4028,7 @@ export def "security-profiles apigeeorganizationssecurityProfileslist" [
 #
 # GET /v1/{parent}/securityReports
 # operationId: apigee.organizations.environments.securityReports.list
-export def "security-reports apigeeorganizationsenvironmentssecurityReportslist" [
+export def "security-reports list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4046,7 +4060,7 @@ export def "security-reports apigeeorganizationsenvironmentssecurityReportslist"
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "dataset" $dataset "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "submittedBy" $submitted_by "scalar") (serialize-qp "to" $qp_to "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/securityReports") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/securityReports") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4057,7 +4071,7 @@ export def "security-reports apigeeorganizationsenvironmentssecurityReportslist"
 # POST /v1/{parent}/securityReports
 # operationId: apigee.organizations.environments.securityReports.create
 # --metrics item shape: {aggregationFunction?: string, alias?: string, name?: string, operator?: string, value?: string}
-export def "security-reports apigeeorganizationsenvironmentssecurityReportscreate" [
+export def "security-reports create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4079,7 +4093,7 @@ export def "security-reports apigeeorganizationsenvironmentssecurityReportscreat
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --csv-delimiter: string # Delimiter used in the CSV file, if `outputFormat` is set to `csv`. Defaults to the `,` (comma) character. Supported delimiter characters include comma (`,`), pipe (`|`), and tab (`\t`).
-  --dimensions: list # A list of dimensions. https://docs.apigee.com/api-platform/analytics/analytics-reference#dimensions
+  --dimensions: list<string> # A list of dimensions. https://docs.apigee.com/api-platform/analytics/analytics-reference#dimensions
   --display-name: string # Security Report display name which users can specify.
   --envgroup-hostname: string # Hostname needs to be specified if query intends to run at host level. This field is only allowed when query is submitted by CreateHostSecurityReport where analytics data will be grouped by organization and hostname.
   --filter: string # Boolean expression that can be used to filter data. Filter expressions can be combined using AND/OR terms and should be fully parenthesized to avoid ambiguity. See Analytics metrics, dimensions, and filters reference https://docs.apigee.com/api-platform/analytics/analytics-reference for more information on the fields available to filter on. For more information on the tokens that you use to build filter expressions, see Filter expression syntax. https://docs.apigee.com/api-platform/analytics/asynch-reports-api#filter-expression-syntax
@@ -4094,19 +4108,19 @@ export def "security-reports apigeeorganizationsenvironmentssecurityReportscreat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/securityReports") $qp)
-  let body = {"csvDelimiter": $csv_delimiter, "dimensions": $dimensions, "displayName": $display_name, "envgroupHostname": $envgroup_hostname, "filter": $filter, "groupByTimeUnit": $group_by_time_unit, "limit": $limit, "metrics": $metrics, "mimeType": $mime_type, "reportDefinitionId": $report_definition_id, "timeRange": $time_range} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/securityReports") $qp)
+  let req_body = {"csvDelimiter": $csv_delimiter, "dimensions": $dimensions, "displayName": $display_name, "envgroupHostname": $envgroup_hostname, "filter": $filter, "groupByTimeUnit": $group_by_time_unit, "limit": $limit, "metrics": $metrics, "mimeType": $mime_type, "reportDefinitionId": $report_definition_id, "timeRange": $time_range} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists all shared flows in the organization.
 #
 # GET /v1/{parent}/sharedflows
 # operationId: apigee.organizations.sharedflows.list
-export def "sharedflows apigeeorganizationssharedflowslist" [
+export def "sharedflows list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4133,7 +4147,7 @@ export def "sharedflows apigeeorganizationssharedflowslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "includeMetaData" $include_meta_data "scalar") (serialize-qp "includeRevisions" $include_revisions "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/sharedflows") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/sharedflows") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4143,7 +4157,7 @@ export def "sharedflows apigeeorganizationssharedflowslist" [
 #
 # POST /v1/{parent}/sharedflows
 # operationId: apigee.organizations.sharedflows.create
-export def "sharedflows apigeeorganizationssharedflowscreate" [
+export def "sharedflows create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4174,19 +4188,19 @@ export def "sharedflows apigeeorganizationssharedflowscreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "action" $action "scalar") (serialize-qp "name" $name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/sharedflows") $qp)
-  let body = {"contentType": $content_type, "data": $data, "extensions": $extensions} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/sharedflows") $qp)
+  let req_body = {"contentType": $content_type, "data": $data, "extensions": $extensions} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists all API product subscriptions for a developer.
 #
 # GET /v1/{parent}/subscriptions
 # operationId: apigee.organizations.developers.subscriptions.list
-export def "subscriptions apigeeorganizationsdeveloperssubscriptionslist" [
+export def "subscriptions list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4213,17 +4227,17 @@ export def "subscriptions apigeeorganizationsdeveloperssubscriptionslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "startKey" $start_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/subscriptions") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/subscriptions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Creates a subscription to an API product. 
+# Creates a subscription to an API product.
 #
 # POST /v1/{parent}/subscriptions
 # operationId: apigee.organizations.developers.subscriptions.create
-export def "subscriptions apigeeorganizationsdeveloperssubscriptionscreate" [
+export def "subscriptions create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4252,20 +4266,20 @@ export def "subscriptions apigeeorganizationsdeveloperssubscriptionscreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/subscriptions") $qp)
-  let body = {"apiproduct": $apiproduct, "endTime": $end_time, "startTime": $start_time} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/subscriptions") $qp)
+  let req_body = {"apiproduct": $apiproduct, "endTime": $end_time, "startTime": $start_time} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Creates a TargetServer in the specified environment.
 #
 # POST /v1/{parent}/targetservers
 # operationId: apigee.organizations.environments.targetservers.create
-# --sSLInfo shape: {ciphers?: list, clientAuthEnabled?: bool, commonName?: record, enabled?: bool, ignoreValidationErrors?: bool, keyAlias?: string, keyStore?: string, protocols?: list, trustStore?: string}
-export def "targetservers apigeeorganizationsenvironmentstargetserverscreate" [
+# --sSLInfo shape: {ciphers?: list<string>, clientAuthEnabled?: bool, commonName?: record, enabled?: bool, ignoreValidationErrors?: bool, keyAlias?: string, keyStore?: string, protocols?: list<string>, trustStore?: string}
+export def "targetservers create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4290,28 +4304,28 @@ export def "targetservers apigeeorganizationsenvironmentstargetserverscreate" [
   --description: string # Optional. A human-readable description of this TargetServer.
   --host: string # Required. The host name this target connects to. Value must be a valid hostname as described by RFC-1123.
   --is-enabled: oneof<nothing, bool> # Optional. Enabling/disabling a TargetServer is useful when TargetServers are used in load balancing configurations, and one or more TargetServers need to taken out of rotation periodically. Defaults to true.
-  --name: string # Required. The resource id of this target server. Values must match the regular expression 
+  --name: string # Required. The resource id of this target server. Values must match the regular expression
   --port: int # Required. The port number this target connects to on the given host. Value must be between 1 and 65535, inclusive. (format: int32)
   --protocol: string@protocol-completer # Immutable. The protocol used by this TargetServer.
-  --s-sl-info: record # TLS configuration information for virtual hosts and TargetServers. — shape: {ciphers?: list, clientAuthEnabled?: bool, commonName?: record, enabled?: bool, ignoreValidationErrors?: bool, keyAlias?: string, keyStore?: string, protocols?: list, trustStore?: string}
+  --s-sl-info: record # TLS configuration information for virtual hosts and TargetServers. — shape: {ciphers?: list<string>, clientAuthEnabled?: bool, commonName?: record, enabled?: bool, ignoreValidationErrors?: bool, keyAlias?: string, keyStore?: string, protocols?: list<string>, trustStore?: string}
 ]: any -> record<description: string, host: string, isEnabled: bool, name: string, port: int, protocol: string, sSLInfo: record<ciphers: list<string>, clientAuthEnabled: bool, commonName: record<value: string, wildcardMatch: bool>, enabled: bool, ignoreValidationErrors: bool, keyAlias: string, keyStore: string, protocols: list<string>, trustStore: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "name" $name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/targetservers") $qp)
-  let body = {"description": $description, "host": $host, "isEnabled": $is_enabled, "name": $name, "port": $port, "protocol": $protocol, "sSLInfo": $s_sl_info} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/targetservers") $qp)
+  let req_body = {"description": $description, "host": $host, "isEnabled": $is_enabled, "name": $name, "port": $port, "protocol": $protocol, "sSLInfo": $s_sl_info} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Creates a subscription for the environment's Pub/Sub topic. The server will assign a random name for this subscription. The "name" and "push_config" must *not* be specified.
 #
 # POST /v1/{parent}:subscribe
 # operationId: apigee.organizations.environments.subscribe
-export def "organizations apigeeorganizationsenvironmentssubscribe" [
+export def "organizations subscribe" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4336,7 +4350,7 @@ export def "organizations apigeeorganizationsenvironmentssubscribe" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}:subscribe") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}:subscribe") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4346,7 +4360,7 @@ export def "organizations apigeeorganizationsenvironmentssubscribe" [
 #
 # POST /v1/{parent}:unsubscribe
 # operationId: apigee.organizations.environments.unsubscribe
-export def "organizations apigeeorganizationsenvironmentsunsubscribe" [
+export def "organizations unsubscribe" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4373,12 +4387,12 @@ export def "organizations apigeeorganizationsenvironmentsunsubscribe" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}:unsubscribe") $qp)
-  let body = {"name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}:unsubscribe") $qp)
+  let req_body = {"name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # ComputeEnvironmentScores calculates scores for requested time range for the specified security profile and environment.
@@ -4387,7 +4401,7 @@ export def "organizations apigeeorganizationsenvironmentsunsubscribe" [
 # operationId: apigee.organizations.securityProfiles.environments.computeEnvironmentScores
 # --filters item shape: {scorePath?: string}
 # --timeRange shape: {endTime?: string, startTime?: string}
-export def "organizations apigeeorganizationssecurityProfilesenvironmentscomputeEnvironmentScores" [
+export def "organizations create-compute-environment-scores" [
   profile_environment: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4417,19 +4431,19 @@ export def "organizations apigeeorganizationssecurityProfilesenvironmentscompute
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_environment: $profile_environment} | format pattern "/v1/{profile_environment}:computeEnvironmentScores") $qp)
-  let body = {"filters": $filters, "pageSize": $page_size, "pageToken": $page_token, "timeRange": $time_range} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({profile_environment: (encode-path-segment $profile_environment)} | format pattern "/v1/{profile_environment}:computeEnvironmentScores") $qp)
+  let req_body = {"filters": $filters, "pageSize": $page_size, "pageToken": $page_token, "timeRange": $time_range} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Provisions a new Apigee organization with a functioning runtime. This is the standard way to create trial organizations for a free Apigee trial.
 #
 # POST /v1/{project}:provisionOrganization
 # operationId: apigee.projects.provisionOrganization
-export def "projects apigeeprojectsprovisionOrganization" [
+export def "projects create-provision-organization" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4458,19 +4472,19 @@ export def "projects apigeeprojectsprovisionOrganization" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project: $project} | format pattern "/v1/{project}:provisionOrganization") $qp)
-  let body = {"analyticsRegion": $analytics_region, "authorizedNetwork": $authorized_network, "runtimeLocation": $runtime_location} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({project: (encode-path-segment $project)} | format pattern "/v1/{project}:provisionOrganization") $qp)
+  let req_body = {"analyticsRegion": $analytics_region, "authorizedNetwork": $authorized_network, "runtimeLocation": $runtime_location} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets the IAM policy on an environment. For more information, see [Manage users, roles, and permissions using the API](https://cloud.google.com/apigee/docs/api-platform/system-administration/manage-users-roles). You must have the `apigee.environments.getIamPolicy` permission to call this API.
 #
 # GET /v1/{resource}:getIamPolicy
 # operationId: apigee.organizations.environments.getIamPolicy
-export def "organizations apigeeorganizationsenvironmentsgetIamPolicy" [
+export def "organizations get-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4496,7 +4510,7 @@ export def "organizations apigeeorganizationsenvironmentsgetIamPolicy" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "options.requestedPolicyVersion" $options_requested_policy_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource: $resource} | format pattern "/v1/{resource}:getIamPolicy") $qp)
+  let full_url = (build-url $base ({resource: (encode-path-segment $resource)} | format pattern "/v1/{resource}:getIamPolicy") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4507,7 +4521,7 @@ export def "organizations apigeeorganizationsenvironmentsgetIamPolicy" [
 # POST /v1/{resource}:setIamPolicy
 # operationId: apigee.organizations.environments.setIamPolicy
 # --policy shape: {auditConfigs?: list, bindings?: list, etag?: string, version?: int}
-export def "organizations apigeeorganizationsenvironmentssetIamPolicy" [
+export def "organizations update-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4535,19 +4549,19 @@ export def "organizations apigeeorganizationsenvironmentssetIamPolicy" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource: $resource} | format pattern "/v1/{resource}:setIamPolicy") $qp)
-  let body = {"policy": $policy, "updateMask": $update_mask} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({resource: (encode-path-segment $resource)} | format pattern "/v1/{resource}:setIamPolicy") $qp)
+  let req_body = {"policy": $policy, "updateMask": $update_mask} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Tests the permissions of a user on an environment, and returns a subset of permissions that the user has on the environment. If the environment does not exist, an empty permission set is returned (a NOT_FOUND error is not returned).
 #
 # POST /v1/{resource}:testIamPermissions
 # operationId: apigee.organizations.environments.testIamPermissions
-export def "organizations apigeeorganizationsenvironmentstestIamPermissions" [
+export def "organizations test-iam-permissions" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4568,16 +4582,16 @@ export def "organizations apigeeorganizationsenvironmentstestIamPermissions" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --permissions: list # The set of permissions to check for the `resource`. Permissions with wildcards (such as `*` or `storage.*`) are not allowed. For more information see [IAM Overview](https://cloud.google.com/iam/docs/overview#permissions).
+  --permissions: list<string> # The set of permissions to check for the `resource`. Permissions with wildcards (such as `*` or `storage.*`) are not allowed. For more information see [IAM Overview](https://cloud.google.com/iam/docs/overview#permissions).
 ]: any -> record<permissions: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource: $resource} | format pattern "/v1/{resource}:testIamPermissions") $qp)
-  let body = {"permissions": $permissions} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({resource: (encode-path-segment $resource)} | format pattern "/v1/{resource}:testIamPermissions") $qp)
+  let req_body = {"permissions": $permissions} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

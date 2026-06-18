@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -69,7 +78,7 @@ def auth-scheme-completer [] { ["x-api-token"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "directories-mailinglists-contacts create-contact-in" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "directories-mailinglists-contacts create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,7 +102,7 @@ export def commands []: nothing -> table {
 #
 # POST /directories/{DirectoryId}/mailinglists/{MailingListId}/contacts
 # operationId: CreateContactInMailinglist
-export def "directories-mailinglists-contacts create-contact-in" [
+export def "directories-mailinglists-contacts create" [
   directory_id: string
   mailing_list_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -112,12 +121,12 @@ export def "directories-mailinglists-contacts create-contact-in" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({directory_id: $directory_id, mailing_list_id: $mailing_list_id} | format pattern "/directories/{directory_id}/mailinglists/{mailing_list_id}/contacts"))
-  let body = {"email": $email, "firstName": $first_name, "lastName": $last_name, "unsubscribed": $unsubscribed} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({directory_id: (encode-path-segment $directory_id), mailing_list_id: (encode-path-segment $mailing_list_id)} | format pattern "/directories/{directory_id}/mailinglists/{mailing_list_id}/contacts"))
+  let req_body = {"email": $email, "firstName": $first_name, "lastName": $last_name, "unsubscribed": $unsubscribed} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get distributions for survey
@@ -148,7 +157,7 @@ export def "distributions get" [
 #
 # POST /distributions
 # operationId: GenerateDistributionLinks
-export def "distributions post" [
+export def "distributions generate-links" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -168,18 +177,18 @@ export def "distributions post" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/distributions")
-  let body = {"action": $action, "description": $description, "expirationDate": $expiration_date, "linkType": $link_type, "mailingListId": $mailing_list_id, "surveyId": $survey_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"action": $action, "description": $description, "expirationDate": $expiration_date, "linkType": $link_type, "mailingListId": $mailing_list_id, "surveyId": $survey_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve distribution links
 #
 # GET /distributions/{DistributionId}/links
 # operationId: Retrievedistributionlinks
-export def "distributions-links retrieve-distributionlinks" [
+export def "distributions-links get-retrievedistributionlinks" [
   distribution_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -194,7 +203,7 @@ export def "distributions-links retrieve-distributionlinks" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "surveyId" $survey_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({distribution_id: $distribution_id} | format pattern "/distributions/{distribution_id}/links") $qp)
+  let full_url = (build-url $base ({distribution_id: (encode-path-segment $distribution_id)} | format pattern "/distributions/{distribution_id}/links") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -204,7 +213,7 @@ export def "distributions-links retrieve-distributionlinks" [
 #
 # DELETE /eventsubscriptions/
 # operationId: WebhookDelete
-export def "eventsubscriptions delete" [
+export def "eventsubscriptions delete-webhook" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -221,18 +230,18 @@ export def "eventsubscriptions delete" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/eventsubscriptions/")
-  let body = {"encrypt": $encrypt, "publicationUrl": $publication_url, "topics": $topics} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"encrypt": $encrypt, "publicationUrl": $publication_url, "topics": $topics} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Triggers when a response is submitted to a qualtrics survey
 #
 # POST /eventsubscriptions/
 # operationId: WhenAResponseIsReceived
-export def "eventsubscriptions post" [
+export def "eventsubscriptions create-when-response-is-received" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -249,18 +258,18 @@ export def "eventsubscriptions post" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/eventsubscriptions/")
-  let body = {"encrypt": $encrypt, "publicationUrl": $publication_url, "topics": $topics} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"encrypt": $encrypt, "publicationUrl": $publication_url, "topics": $topics} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get event subscriptions
 #
 # GET /eventsubscriptions/{SubscriptionId}
 # operationId: GetEventSubscriptions
-export def "eventsubscriptions get" [
+export def "eventsubscriptions get-event-subscriptions" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -273,7 +282,7 @@ export def "eventsubscriptions get" [
 ]: nothing -> record<meta: record<httpStatus: string, requestId: string>, result: record<meta: record<httpStatus: string>, result: record<id: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/eventsubscriptions/{subscription_id}"))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/eventsubscriptions/{subscription_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -296,7 +305,7 @@ export def "survey-definitions get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({survey_id: $survey_id} | format pattern "/survey-definitions/{survey_id}"))
+  let full_url = (build-url $base ({survey_id: (encode-path-segment $survey_id)} | format pattern "/survey-definitions/{survey_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

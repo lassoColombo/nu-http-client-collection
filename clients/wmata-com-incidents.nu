@@ -36,6 +36,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -73,7 +82,7 @@ def station-code-completer [] { ["A03" "E09"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "bus-incidents 54763641281d830c946a3d78" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "bus-incidents get-54763641281d830c946a3d78" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -97,7 +106,7 @@ export def commands []: nothing -> table {
 #
 # GET /BusIncidents
 # operationId: 54763641281d830c946a3d78
-export def "bus-incidents 54763641281d830c946a3d78" [
+export def "bus-incidents get-54763641281d830c946a3d78" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -106,7 +115,7 @@ export def "bus-incidents 54763641281d830c946a3d78" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --route: string@route-completer # Bus route.  Use full route code, i.e.: C2 instead of C2v1, C2v2, etc.
+  --route: string@route-completer # Bus route. Use full route code, i.e.: C2 instead of C2v1, C2v2, etc.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
@@ -121,7 +130,7 @@ export def "bus-incidents 54763641281d830c946a3d78" [
 #
 # GET /ElevatorIncidents
 # operationId: 54763641281d830c946a3d79
-export def "elevator-incidents 54763641281d830c946a3d79" [
+export def "elevator-incidents get-54763641281d830c946a3d79" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -130,7 +139,7 @@ export def "elevator-incidents 54763641281d830c946a3d79" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --station-code: string@station-code-completer # Two-letter station code.  Use the Station List method to return a list of all station codes.
+  --station-code: string@station-code-completer # Two-letter station code. Use the Station List method to return a list of all station codes.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
@@ -145,7 +154,7 @@ export def "elevator-incidents 54763641281d830c946a3d79" [
 #
 # GET /Incidents
 # operationId: 54763641281d830c946a3d7a
-export def "incidents 54763641281d830c946a3d7a" [
+export def "incidents get-54763641281d830c946a3d7a" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -167,7 +176,7 @@ export def "incidents 54763641281d830c946a3d7a" [
 #
 # GET /json/BusIncidents
 # operationId: 54763641281d830c946a3d75
-export def "json-bus-incidents 54763641281d830c946a3d75" [
+export def "json-bus-incidents get-54763641281d830c946a3d75" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -191,7 +200,7 @@ export def "json-bus-incidents 54763641281d830c946a3d75" [
 #
 # GET /json/ElevatorIncidents
 # operationId: 54763641281d830c946a3d76
-export def "json-elevator-incidents 54763641281d830c946a3d76" [
+export def "json-elevator-incidents get-54763641281d830c946a3d76" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -200,7 +209,7 @@ export def "json-elevator-incidents 54763641281d830c946a3d76" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --station-code: string@station-code-completer # Station code.  Use the Station List method to return a list of all station codes.
+  --station-code: string@station-code-completer # Station code. Use the Station List method to return a list of all station codes.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
@@ -215,7 +224,7 @@ export def "json-elevator-incidents 54763641281d830c946a3d76" [
 #
 # GET /json/Incidents
 # operationId: 54763641281d830c946a3d77
-export def "json-incidents 54763641281d830c946a3d77" [
+export def "json-incidents get-54763641281d830c946a3d77" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

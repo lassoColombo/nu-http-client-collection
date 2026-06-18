@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -72,7 +81,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1beta osconfigprojectszonesinstanceslookupEffectiveGuestPolicy" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1beta create-lookup-effective-guest-policy" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -96,7 +105,7 @@ export def commands []: nothing -> table {
 #
 # POST /v1beta/{instance}:lookupEffectiveGuestPolicy
 # operationId: osconfig.projects.zones.instances.lookupEffectiveGuestPolicy
-export def "v1beta osconfigprojectszonesinstanceslookupEffectiveGuestPolicy" [
+export def "v1beta create-lookup-effective-guest-policy" [
   instance: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -125,19 +134,19 @@ export def "v1beta osconfigprojectszonesinstanceslookupEffectiveGuestPolicy" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({instance: $instance} | format pattern "/v1beta/{instance}:lookupEffectiveGuestPolicy") $qp)
-  let body = {"osArchitecture": $os_architecture, "osShortName": $os_short_name, "osVersion": $os_version} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({instance: (encode-path-segment $instance)} | format pattern "/v1beta/{instance}:lookupEffectiveGuestPolicy") $qp)
+  let req_body = {"osArchitecture": $os_architecture, "osShortName": $os_short_name, "osVersion": $os_version} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete an OS Config patch deployment.
 #
 # DELETE /v1beta/{name}
 # operationId: osconfig.projects.patchDeployments.delete
-export def "v1beta osconfigprojectspatchDeploymentsdelete" [
+export def "v1beta delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -162,7 +171,7 @@ export def "v1beta osconfigprojectspatchDeploymentsdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1beta/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -172,7 +181,7 @@ export def "v1beta osconfigprojectspatchDeploymentsdelete" [
 #
 # GET /v1beta/{name}
 # operationId: osconfig.projects.patchJobs.get
-export def "v1beta osconfigprojectspatchJobsget" [
+export def "v1beta get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -197,7 +206,7 @@ export def "v1beta osconfigprojectspatchJobsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1beta/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -207,12 +216,12 @@ export def "v1beta osconfigprojectspatchJobsget" [
 #
 # PATCH /v1beta/{name}
 # operationId: osconfig.projects.patchDeployments.patch
-# --instanceFilter shape: {all?: bool, groupLabels?: list, instanceNamePrefixes?: list, instances?: list, zones?: list}
+# --instanceFilter shape: {all?: bool, groupLabels?: list, instanceNamePrefixes?: list<string>, instances?: list<string>, zones?: list<string>}
 # --oneTimeSchedule shape: {executeTime?: string}
 # --patchConfig shape: {apt?: record, goo?: record, migInstancesAllowed?: bool, postStep?: record, preStep?: record, rebootConfig?: "REBOOT_CONFIG_UNSPECIFIED"|"DEFAULT"|"ALWAYS"|"NEVER", windowsUpdate?: record, yum?: record, zypper?: record}
 # --recurringSchedule shape: {endTime?: string, frequency?: "FREQUENCY_UNSPECIFIED"|"WEEKLY"|"MONTHLY"|"DAILY", monthly?: record, startTime?: string, timeOfDay?: record, timeZone?: record, weekly?: record}
 # --rollout shape: {disruptionBudget?: record, mode?: "MODE_UNSPECIFIED"|"ZONE_BY_ZONE"|"CONCURRENT_ZONES"}
-export def "v1beta osconfigprojectspatchDeploymentspatch" [
+export def "v1beta update" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -236,7 +245,7 @@ export def "v1beta osconfigprojectspatchDeploymentspatch" [
   --update-mask: string # Optional. Field mask that controls which fields of the patch deployment should be updated.
   --description: string # Optional. Description of the patch deployment. Length of the description is limited to 1024 characters.
   --duration: string # Optional. Duration of the patch. After the duration ends, the patch times out. (format: google-duration)
-  --instance-filter: record # A filter to target VM instances for patching. The targeted VMs must meet all criteria specified. So if both labels and zones are specified, the patch job targets only VMs with those labels and in those zones. — shape: {all?: bool, groupLabels?: list, instanceNamePrefixes?: list, instances?: list, zones?: list}
+  --instance-filter: record # A filter to target VM instances for patching. The targeted VMs must meet all criteria specified. So if both labels and zones are specified, the patch job targets only VMs with those labels and in those zones. — shape: {all?: bool, groupLabels?: list, instanceNamePrefixes?: list<string>, instances?: list<string>, zones?: list<string>}
   --body-name: string # Unique name for the patch deployment resource in a project. The patch deployment name is in the form: `projects/{project_id}/patchDeployments/{patch_deployment_id}`. This field is ignored when you create a new patch deployment.
   --one-time-schedule: record # Sets the time for a one time patch deployment. Timestamp is in [RFC3339](https://www.ietf.org/rfc/rfc3339.txt) text format. — shape: {executeTime?: string}
   --patch-config: record # Patch configuration specifications. Contains details on how to apply the patch(es) to a VM instance. — shape: {apt?: record, goo?: record, migInstancesAllowed?: bool, postStep?: record, preStep?: record, rebootConfig?: "REBOOT_CONFIG_UNSPECIFIED"|"DEFAULT"|"ALWAYS"|"NEVER", windowsUpdate?: record, yum?: record, zypper?: record}
@@ -247,19 +256,19 @@ export def "v1beta osconfigprojectspatchDeploymentspatch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1beta/{name}") $qp)
-  let body = {"description": $description, "duration": $duration, "instanceFilter": $instance_filter, "name": $body_name, "oneTimeSchedule": $one_time_schedule, "patchConfig": $patch_config, "recurringSchedule": $recurring_schedule, "rollout": $rollout} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta/{name}") $qp)
+  let req_body = {"description": $description, "duration": $duration, "instanceFilter": $instance_filter, "name": $body_name, "oneTimeSchedule": $one_time_schedule, "patchConfig": $patch_config, "recurringSchedule": $recurring_schedule, "rollout": $rollout} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Cancel a patch job. The patch job must be active. Canceled patch jobs cannot be restarted.
 #
 # POST /v1beta/{name}:cancel
 # operationId: osconfig.projects.patchJobs.cancel
-export def "v1beta osconfigprojectspatchJobscancel" [
+export def "v1beta cancel" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -286,18 +295,19 @@ export def "v1beta osconfigprojectspatchJobscancel" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1beta/{name}:cancel") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta/{name}:cancel") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Change state of patch deployment to "PAUSED". Patch deployment in paused state doesn't generate patch jobs.
 #
 # POST /v1beta/{name}:pause
 # operationId: osconfig.projects.patchDeployments.pause
-export def "v1beta osconfigprojectspatchDeploymentspause" [
+export def "v1beta pause" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -324,18 +334,19 @@ export def "v1beta osconfigprojectspatchDeploymentspause" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1beta/{name}:pause") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta/{name}:pause") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Change state of patch deployment back to "ACTIVE". Patch deployment in active state continues to generate patch jobs.
 #
 # POST /v1beta/{name}:resume
 # operationId: osconfig.projects.patchDeployments.resume
-export def "v1beta osconfigprojectspatchDeploymentsresume" [
+export def "v1beta create-resume" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -362,18 +373,19 @@ export def "v1beta osconfigprojectspatchDeploymentsresume" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1beta/{name}:resume") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta/{name}:resume") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get a page of OS Config guest policies.
 #
 # GET /v1beta/{parent}/guestPolicies
 # operationId: osconfig.projects.guestPolicies.list
-export def "v1beta-guest-policies osconfigprojectsguestPolicieslist" [
+export def "v1beta-guest-policies list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -400,7 +412,7 @@ export def "v1beta-guest-policies osconfigprojectsguestPolicieslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta/{parent}/guestPolicies") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta/{parent}/guestPolicies") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -410,11 +422,11 @@ export def "v1beta-guest-policies osconfigprojectsguestPolicieslist" [
 #
 # POST /v1beta/{parent}/guestPolicies
 # operationId: osconfig.projects.guestPolicies.create
-# --assignment shape: {groupLabels?: list, instanceNamePrefixes?: list, instances?: list, osTypes?: list, zones?: list}
+# --assignment shape: {groupLabels?: list, instanceNamePrefixes?: list<string>, instances?: list<string>, osTypes?: list, zones?: list<string>}
 # --packageRepositories item shape: {apt?: record, goo?: record, yum?: record, zypper?: record}
 # --packages item shape: {desiredState?: "DESIRED_STATE_UNSPECIFIED"|"INSTALLED"|"UPDATED"|"REMOVED", manager?: "MANAGER_UNSPECIFIED"|"ANY"|"APT"|"YUM"|"ZYPPER"|"GOO", name?: string}
 # --recipes item shape: {artifacts?: list, desiredState?: "DESIRED_STATE_UNSPECIFIED"|"INSTALLED"|"UPDATED"|"REMOVED", installSteps?: list, name?: string, updateSteps?: list, version?: string}
-export def "v1beta-guest-policies osconfigprojectsguestPoliciescreate" [
+export def "v1beta-guest-policies create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -436,7 +448,7 @@ export def "v1beta-guest-policies osconfigprojectsguestPoliciescreate" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --guest-policy-id: string # Required. The logical name of the guest policy in the project with the following restrictions: * Must contain only lowercase letters, numbers, and hyphens. * Must start with a letter. * Must be between 1-63 characters. * Must end with a number or a letter. * Must be unique within the project.
-  --assignment: record # An assignment represents the group or groups of VM instances that the policy applies to. If an assignment is empty, it applies to all VM instances. Otherwise, the targeted VM instances must meet all the criteria specified. So if both labels and zones are specified, the policy applies to VM instances with those labels and in those zones. — shape: {groupLabels?: list, instanceNamePrefixes?: list, instances?: list, osTypes?: list, zones?: list}
+  --assignment: record # An assignment represents the group or groups of VM instances that the policy applies to. If an assignment is empty, it applies to all VM instances. Otherwise, the targeted VM instances must meet all the criteria specified. So if both labels and zones are specified, the policy applies to VM instances with those labels and in those zones. — shape: {groupLabels?: list, instanceNamePrefixes?: list<string>, instances?: list<string>, osTypes?: list, zones?: list<string>}
   --description: string # Description of the guest policy. Length of the description is limited to 1024 characters.
   --etag: string # The etag for this guest policy. If this is provided on update, it must match the server's etag.
   --name: string # Required. Unique name of the resource in this project using one of the following forms: `projects/{project_number}/guestPolicies/{guest_policy_id}`.
@@ -448,19 +460,19 @@ export def "v1beta-guest-policies osconfigprojectsguestPoliciescreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "guestPolicyId" $guest_policy_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta/{parent}/guestPolicies") $qp)
-  let body = {"assignment": $assignment, "description": $description, "etag": $etag, "name": $name, "packageRepositories": $package_repositories, "packages": $packages, "recipes": $recipes} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta/{parent}/guestPolicies") $qp)
+  let req_body = {"assignment": $assignment, "description": $description, "etag": $etag, "name": $name, "packageRepositories": $package_repositories, "packages": $packages, "recipes": $recipes} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get a list of instance details for a given patch job.
 #
 # GET /v1beta/{parent}/instanceDetails
 # operationId: osconfig.projects.patchJobs.instanceDetails.list
-export def "v1beta-instance-details osconfigprojectspatchJobsinstanceDetailslist" [
+export def "v1beta-instance-details list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -488,7 +500,7 @@ export def "v1beta-instance-details osconfigprojectspatchJobsinstanceDetailslist
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta/{parent}/instanceDetails") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta/{parent}/instanceDetails") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -498,7 +510,7 @@ export def "v1beta-instance-details osconfigprojectspatchJobsinstanceDetailslist
 #
 # GET /v1beta/{parent}/patchDeployments
 # operationId: osconfig.projects.patchDeployments.list
-export def "v1beta-patch-deployments osconfigprojectspatchDeploymentslist" [
+export def "v1beta-patch-deployments list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -525,7 +537,7 @@ export def "v1beta-patch-deployments osconfigprojectspatchDeploymentslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta/{parent}/patchDeployments") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta/{parent}/patchDeployments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -535,12 +547,12 @@ export def "v1beta-patch-deployments osconfigprojectspatchDeploymentslist" [
 #
 # POST /v1beta/{parent}/patchDeployments
 # operationId: osconfig.projects.patchDeployments.create
-# --instanceFilter shape: {all?: bool, groupLabels?: list, instanceNamePrefixes?: list, instances?: list, zones?: list}
+# --instanceFilter shape: {all?: bool, groupLabels?: list, instanceNamePrefixes?: list<string>, instances?: list<string>, zones?: list<string>}
 # --oneTimeSchedule shape: {executeTime?: string}
 # --patchConfig shape: {apt?: record, goo?: record, migInstancesAllowed?: bool, postStep?: record, preStep?: record, rebootConfig?: "REBOOT_CONFIG_UNSPECIFIED"|"DEFAULT"|"ALWAYS"|"NEVER", windowsUpdate?: record, yum?: record, zypper?: record}
 # --recurringSchedule shape: {endTime?: string, frequency?: "FREQUENCY_UNSPECIFIED"|"WEEKLY"|"MONTHLY"|"DAILY", monthly?: record, startTime?: string, timeOfDay?: record, timeZone?: record, weekly?: record}
 # --rollout shape: {disruptionBudget?: record, mode?: "MODE_UNSPECIFIED"|"ZONE_BY_ZONE"|"CONCURRENT_ZONES"}
-export def "v1beta-patch-deployments osconfigprojectspatchDeploymentscreate" [
+export def "v1beta-patch-deployments create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -564,7 +576,7 @@ export def "v1beta-patch-deployments osconfigprojectspatchDeploymentscreate" [
   --patch-deployment-id: string # Required. A name for the patch deployment in the project. When creating a name the following rules apply: * Must contain only lowercase letters, numbers, and hyphens. * Must start with a letter. * Must be between 1-63 characters. * Must end with a number or a letter. * Must be unique within the project.
   --description: string # Optional. Description of the patch deployment. Length of the description is limited to 1024 characters.
   --duration: string # Optional. Duration of the patch. After the duration ends, the patch times out. (format: google-duration)
-  --instance-filter: record # A filter to target VM instances for patching. The targeted VMs must meet all criteria specified. So if both labels and zones are specified, the patch job targets only VMs with those labels and in those zones. — shape: {all?: bool, groupLabels?: list, instanceNamePrefixes?: list, instances?: list, zones?: list}
+  --instance-filter: record # A filter to target VM instances for patching. The targeted VMs must meet all criteria specified. So if both labels and zones are specified, the patch job targets only VMs with those labels and in those zones. — shape: {all?: bool, groupLabels?: list, instanceNamePrefixes?: list<string>, instances?: list<string>, zones?: list<string>}
   --name: string # Unique name for the patch deployment resource in a project. The patch deployment name is in the form: `projects/{project_id}/patchDeployments/{patch_deployment_id}`. This field is ignored when you create a new patch deployment.
   --one-time-schedule: record # Sets the time for a one time patch deployment. Timestamp is in [RFC3339](https://www.ietf.org/rfc/rfc3339.txt) text format. — shape: {executeTime?: string}
   --patch-config: record # Patch configuration specifications. Contains details on how to apply the patch(es) to a VM instance. — shape: {apt?: record, goo?: record, migInstancesAllowed?: bool, postStep?: record, preStep?: record, rebootConfig?: "REBOOT_CONFIG_UNSPECIFIED"|"DEFAULT"|"ALWAYS"|"NEVER", windowsUpdate?: record, yum?: record, zypper?: record}
@@ -575,19 +587,19 @@ export def "v1beta-patch-deployments osconfigprojectspatchDeploymentscreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "patchDeploymentId" $patch_deployment_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta/{parent}/patchDeployments") $qp)
-  let body = {"description": $description, "duration": $duration, "instanceFilter": $instance_filter, "name": $name, "oneTimeSchedule": $one_time_schedule, "patchConfig": $patch_config, "recurringSchedule": $recurring_schedule, "rollout": $rollout} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta/{parent}/patchDeployments") $qp)
+  let req_body = {"description": $description, "duration": $duration, "instanceFilter": $instance_filter, "name": $name, "oneTimeSchedule": $one_time_schedule, "patchConfig": $patch_config, "recurringSchedule": $recurring_schedule, "rollout": $rollout} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get a list of patch jobs.
 #
 # GET /v1beta/{parent}/patchJobs
 # operationId: osconfig.projects.patchJobs.list
-export def "v1beta-patch-jobs osconfigprojectspatchJobslist" [
+export def "v1beta-patch-jobs list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -615,7 +627,7 @@ export def "v1beta-patch-jobs osconfigprojectspatchJobslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta/{parent}/patchJobs") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta/{parent}/patchJobs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -625,10 +637,10 @@ export def "v1beta-patch-jobs osconfigprojectspatchJobslist" [
 #
 # POST /v1beta/{parent}/patchJobs:execute
 # operationId: osconfig.projects.patchJobs.execute
-# --instanceFilter shape: {all?: bool, groupLabels?: list, instanceNamePrefixes?: list, instances?: list, zones?: list}
+# --instanceFilter shape: {all?: bool, groupLabels?: list, instanceNamePrefixes?: list<string>, instances?: list<string>, zones?: list<string>}
 # --patchConfig shape: {apt?: record, goo?: record, migInstancesAllowed?: bool, postStep?: record, preStep?: record, rebootConfig?: "REBOOT_CONFIG_UNSPECIFIED"|"DEFAULT"|"ALWAYS"|"NEVER", windowsUpdate?: record, yum?: record, zypper?: record}
 # --rollout shape: {disruptionBudget?: record, mode?: "MODE_UNSPECIFIED"|"ZONE_BY_ZONE"|"CONCURRENT_ZONES"}
-export def "v1beta-patch-jobs-execute osconfigprojectspatchJobsexecute" [
+export def "v1beta-patch-jobs-execute create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -653,7 +665,7 @@ export def "v1beta-patch-jobs-execute osconfigprojectspatchJobsexecute" [
   --display-name: string # Display name for this patch job. This does not have to be unique.
   --body-dry-run: oneof<nothing, bool> # If this patch is a dry-run only, instances are contacted but will do nothing.
   --duration: string # Duration of the patch job. After the duration ends, the patch job times out. (format: google-duration)
-  --instance-filter: record # A filter to target VM instances for patching. The targeted VMs must meet all criteria specified. So if both labels and zones are specified, the patch job targets only VMs with those labels and in those zones. — shape: {all?: bool, groupLabels?: list, instanceNamePrefixes?: list, instances?: list, zones?: list}
+  --instance-filter: record # A filter to target VM instances for patching. The targeted VMs must meet all criteria specified. So if both labels and zones are specified, the patch job targets only VMs with those labels and in those zones. — shape: {all?: bool, groupLabels?: list, instanceNamePrefixes?: list<string>, instances?: list<string>, zones?: list<string>}
   --patch-config: record # Patch configuration specifications. Contains details on how to apply the patch(es) to a VM instance. — shape: {apt?: record, goo?: record, migInstancesAllowed?: bool, postStep?: record, preStep?: record, rebootConfig?: "REBOOT_CONFIG_UNSPECIFIED"|"DEFAULT"|"ALWAYS"|"NEVER", windowsUpdate?: record, yum?: record, zypper?: record}
   --rollout: record # Patch rollout configuration specifications. Contains details on the concurrency control when applying patch(es) to all targeted VMs. — shape: {disruptionBudget?: record, mode?: "MODE_UNSPECIFIED"|"ZONE_BY_ZONE"|"CONCURRENT_ZONES"}
 ]: any -> record<createTime: string, description: string, displayName: string, dryRun: bool, duration: string, errorMessage: string, instanceDetailsSummary: record<ackedInstanceCount: string, applyingPatchesInstanceCount: string, downloadingPatchesInstanceCount: string, failedInstanceCount: string, inactiveInstanceCount: string, noAgentDetectedInstanceCount: string, notifiedInstanceCount: string, pendingInstanceCount: string, postPatchStepInstanceCount: string, prePatchStepInstanceCount: string, rebootingInstanceCount: string, startedInstanceCount: string, succeededInstanceCount: string, succeededRebootRequiredInstanceCount: string, timedOutInstanceCount: string>, instanceFilter: record<all: bool, groupLabels: list<record>, instanceNamePrefixes: list<string>, instances: list<string>, zones: list<string>>, name: string, patchConfig: record<apt: record<excludes: list, exclusivePackages: list, type: string>, goo: record, migInstancesAllowed: bool, postStep: record<linuxExecStepConfig: record, windowsExecStepConfig: record>, preStep: record<linuxExecStepConfig: record, windowsExecStepConfig: record>, rebootConfig: string, windowsUpdate: record<classifications: list, excludes: list, exclusivePatches: list>, yum: record<excludes: list, exclusivePackages: list, minimal: bool, security: bool>, zypper: record<categories: list, excludes: list, exclusivePatches: list, severities: list, withOptional: bool, withUpdate: bool>>, patchDeployment: string, percentComplete: float, rollout: record<disruptionBudget: record<fixed: int, percent: int>, mode: string>, state: string, updateTime: string> {
@@ -661,10 +673,10 @@ export def "v1beta-patch-jobs-execute osconfigprojectspatchJobsexecute" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta/{parent}/patchJobs:execute") $qp)
-  let body = {"description": $description, "displayName": $display_name, "dryRun": $body_dry_run, "duration": $duration, "instanceFilter": $instance_filter, "patchConfig": $patch_config, "rollout": $rollout} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta/{parent}/patchJobs:execute") $qp)
+  let req_body = {"description": $description, "displayName": $display_name, "dryRun": $body_dry_run, "duration": $duration, "instanceFilter": $instance_filter, "patchConfig": $patch_config, "rollout": $rollout} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

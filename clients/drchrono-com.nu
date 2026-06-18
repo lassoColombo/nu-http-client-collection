@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -145,7 +154,7 @@ export def "allergies create" [
 #
 # GET /api/allergies/{id}
 # operationId: allergies_read
-export def "allergies read" [
+export def "allergies get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -161,7 +170,7 @@ export def "allergies read" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/allergies/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/allergies/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -171,7 +180,7 @@ export def "allergies read" [
 #
 # PATCH /api/allergies/{id}
 # operationId: allergies_partial_update
-export def "allergies patch" [
+export def "allergies update-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -187,7 +196,7 @@ export def "allergies patch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/allergies/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/allergies/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -197,7 +206,7 @@ export def "allergies patch" [
 #
 # PUT /api/allergies/{id}
 # operationId: allergies_update
-export def "allergies update" [
+export def "allergies update-by-id-1" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -213,7 +222,7 @@ export def "allergies update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/allergies/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/allergies/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -294,7 +303,7 @@ export def "amendments delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "appointment" $appointment "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/amendments/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/amendments/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -304,7 +313,7 @@ export def "amendments delete" [
 #
 # GET /api/amendments/{id}
 # operationId: amendments_read
-export def "amendments read" [
+export def "amendments get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -321,7 +330,7 @@ export def "amendments read" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "appointment" $appointment "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/amendments/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/amendments/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -331,7 +340,7 @@ export def "amendments read" [
 #
 # PATCH /api/amendments/{id}
 # operationId: amendments_partial_update
-export def "amendments patch" [
+export def "amendments update-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -348,7 +357,7 @@ export def "amendments patch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "appointment" $appointment "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/amendments/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/amendments/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -358,7 +367,7 @@ export def "amendments patch" [
 #
 # PUT /api/amendments/{id}
 # operationId: amendments_update
-export def "amendments update" [
+export def "amendments update-by-id-1" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -375,7 +384,7 @@ export def "amendments update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "appointment" $appointment "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/amendments/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/amendments/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -450,7 +459,7 @@ export def "appointment-profiles delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/appointment_profiles/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/appointment_profiles/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -460,7 +469,7 @@ export def "appointment-profiles delete" [
 #
 # GET /api/appointment_profiles/{id}
 # operationId: appointment_profiles_read
-export def "appointment-profiles read" [
+export def "appointment-profiles get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -475,7 +484,7 @@ export def "appointment-profiles read" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/appointment_profiles/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/appointment_profiles/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -485,7 +494,7 @@ export def "appointment-profiles read" [
 #
 # PATCH /api/appointment_profiles/{id}
 # operationId: appointment_profiles_partial_update
-export def "appointment-profiles patch" [
+export def "appointment-profiles update-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -500,7 +509,7 @@ export def "appointment-profiles patch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/appointment_profiles/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/appointment_profiles/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -510,7 +519,7 @@ export def "appointment-profiles patch" [
 #
 # PUT /api/appointment_profiles/{id}
 # operationId: appointment_profiles_update
-export def "appointment-profiles update" [
+export def "appointment-profiles update-by-id-1" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -525,7 +534,7 @@ export def "appointment-profiles update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/appointment_profiles/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/appointment_profiles/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -606,7 +615,7 @@ export def "appointment-templates delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "profile" $profile "scalar") (serialize-qp "office" $office "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/appointment_templates/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/appointment_templates/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -616,7 +625,7 @@ export def "appointment-templates delete" [
 #
 # GET /api/appointment_templates/{id}
 # operationId: appointment_templates_read
-export def "appointment-templates read" [
+export def "appointment-templates get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -633,7 +642,7 @@ export def "appointment-templates read" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "profile" $profile "scalar") (serialize-qp "office" $office "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/appointment_templates/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/appointment_templates/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -643,7 +652,7 @@ export def "appointment-templates read" [
 #
 # PATCH /api/appointment_templates/{id}
 # operationId: appointment_templates_partial_update
-export def "appointment-templates patch" [
+export def "appointment-templates update-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -660,7 +669,7 @@ export def "appointment-templates patch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "profile" $profile "scalar") (serialize-qp "office" $office "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/appointment_templates/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/appointment_templates/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -670,7 +679,7 @@ export def "appointment-templates patch" [
 #
 # PUT /api/appointment_templates/{id}
 # operationId: appointment_templates_update
-export def "appointment-templates update" [
+export def "appointment-templates update-by-id-1" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -687,13 +696,13 @@ export def "appointment-templates update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "profile" $profile "scalar") (serialize-qp "office" $office "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/appointment_templates/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/appointment_templates/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Retrieve or search appointment or breaks. <b>Note:</b> Either `since`, `date` or `date_range` parameter must be specified.             
+# Retrieve or search appointment or breaks. Note: Either `since`, `date` or `date_range` parameter must be specified.
 #
 # GET /api/appointments
 # operationId: appointments_list
@@ -780,7 +789,7 @@ export def "appointments delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "status" $status "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "office" $office "scalar") (serialize-qp "doctor" $doctor "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "date_range" $date_range "scalar") (serialize-qp "date" $date "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/appointments/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/appointments/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -790,7 +799,7 @@ export def "appointments delete" [
 #
 # GET /api/appointments/{id}
 # operationId: appointments_read
-export def "appointments read" [
+export def "appointments get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -811,7 +820,7 @@ export def "appointments read" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "status" $status "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "office" $office "scalar") (serialize-qp "doctor" $doctor "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "date_range" $date_range "scalar") (serialize-qp "date" $date "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/appointments/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/appointments/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -821,7 +830,7 @@ export def "appointments read" [
 #
 # PATCH /api/appointments/{id}
 # operationId: appointments_partial_update
-export def "appointments patch" [
+export def "appointments update-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -842,7 +851,7 @@ export def "appointments patch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "status" $status "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "office" $office "scalar") (serialize-qp "doctor" $doctor "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "date_range" $date_range "scalar") (serialize-qp "date" $date "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/appointments/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/appointments/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -852,7 +861,7 @@ export def "appointments patch" [
 #
 # PUT /api/appointments/{id}
 # operationId: appointments_update
-export def "appointments update" [
+export def "appointments update-by-id-1" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -873,7 +882,7 @@ export def "appointments update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "status" $status "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "office" $office "scalar") (serialize-qp "doctor" $doctor "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "date_range" $date_range "scalar") (serialize-qp "date" $date "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/appointments/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/appointments/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -909,7 +918,7 @@ export def "billing-profiles list" [
 #
 # GET /api/billing_profiles/{id}
 # operationId: billing_profiles_read
-export def "billing-profiles read" [
+export def "billing-profiles get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -924,7 +933,7 @@ export def "billing-profiles read" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/billing_profiles/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/billing_profiles/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -962,7 +971,7 @@ export def "care-plans list" [
 #
 # GET /api/care_plans/{id}
 # operationId: care_plans_read
-export def "care-plans read" [
+export def "care-plans get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -979,7 +988,7 @@ export def "care-plans read" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "patient" $patient "scalar") (serialize-qp "plan_type" $plan_type "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/care_plans/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/care_plans/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1015,7 +1024,7 @@ export def "care-team-members list" [
 # GET /api/care_team_members/{id}
 #
 # operationId: care_team_members_read
-export def "care-team-members read" [
+export def "care-team-members get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1032,7 +1041,7 @@ export def "care-team-members read" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "patient" $patient "scalar") (serialize-qp "appointment" $appointment "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/care_team_members/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/care_team_members/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1094,7 +1103,7 @@ export def "claim-billing-notes create" [
 #
 # GET /api/claim_billing_notes/{id}
 # operationId: claim_billing_notes_read
-export def "claim-billing-notes read" [
+export def "claim-billing-notes get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1110,7 +1119,7 @@ export def "claim-billing-notes read" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "appointment" $appointment "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/claim_billing_notes/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/claim_billing_notes/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1147,7 +1156,7 @@ export def "clinical-note-field-types list" [
 #
 # GET /api/clinical_note_field_types/{id}
 # operationId: clinical_note_field_types_read
-export def "clinical-note-field-types read" [
+export def "clinical-note-field-types get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1163,7 +1172,7 @@ export def "clinical-note-field-types read" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "clinical_note_template" $clinical_note_template "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/clinical_note_field_types/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/clinical_note_field_types/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1231,7 +1240,7 @@ export def "clinical-note-field-values create" [
 #
 # GET /api/clinical_note_field_values/{id}
 # operationId: clinical_note_field_values_read
-export def "clinical-note-field-values read" [
+export def "clinical-note-field-values get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1250,7 +1259,7 @@ export def "clinical-note-field-values read" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "clinical_note_field" $clinical_note_field "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "appointment" $appointment "scalar") (serialize-qp "clinical_note_template" $clinical_note_template "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/clinical_note_field_values/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/clinical_note_field_values/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1260,7 +1269,7 @@ export def "clinical-note-field-values read" [
 #
 # PATCH /api/clinical_note_field_values/{id}
 # operationId: clinical_note_field_values_partial_update
-export def "clinical-note-field-values patch" [
+export def "clinical-note-field-values update-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1279,7 +1288,7 @@ export def "clinical-note-field-values patch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "clinical_note_field" $clinical_note_field "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "appointment" $appointment "scalar") (serialize-qp "clinical_note_template" $clinical_note_template "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/clinical_note_field_values/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/clinical_note_field_values/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1289,7 +1298,7 @@ export def "clinical-note-field-values patch" [
 #
 # PUT /api/clinical_note_field_values/{id}
 # operationId: clinical_note_field_values_update
-export def "clinical-note-field-values update" [
+export def "clinical-note-field-values update-by-id-1" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1308,7 +1317,7 @@ export def "clinical-note-field-values update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "clinical_note_field" $clinical_note_field "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "appointment" $appointment "scalar") (serialize-qp "clinical_note_template" $clinical_note_template "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/clinical_note_field_values/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/clinical_note_field_values/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1344,7 +1353,7 @@ export def "clinical-note-templates list" [
 #
 # GET /api/clinical_note_templates/{id}
 # operationId: clinical_note_templates_read
-export def "clinical-note-templates read" [
+export def "clinical-note-templates get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1359,7 +1368,7 @@ export def "clinical-note-templates read" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/clinical_note_templates/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/clinical_note_templates/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1398,7 +1407,7 @@ export def "clinical-notes list" [
 # GET /api/clinical_notes/{id}
 #
 # operationId: clinical_notes_read
-export def "clinical-notes read" [
+export def "clinical-notes get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1418,7 +1427,7 @@ export def "clinical-notes read" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "patient" $patient "scalar") (serialize-qp "office" $office "scalar") (serialize-qp "doctor" $doctor "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "date_range" $date_range "scalar") (serialize-qp "date" $date "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/clinical_notes/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/clinical_notes/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1482,7 +1491,7 @@ export def "comm-logs create" [
 #
 # GET /api/comm_logs/{id}
 # operationId: comm_logs_read
-export def "comm-logs read" [
+export def "comm-logs get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1499,7 +1508,7 @@ export def "comm-logs read" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "since" $since "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/comm_logs/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/comm_logs/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1509,7 +1518,7 @@ export def "comm-logs read" [
 #
 # PATCH /api/comm_logs/{id}
 # operationId: comm_logs_partial_update
-export def "comm-logs patch" [
+export def "comm-logs update-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1526,7 +1535,7 @@ export def "comm-logs patch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "since" $since "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/comm_logs/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/comm_logs/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1536,7 +1545,7 @@ export def "comm-logs patch" [
 #
 # PUT /api/comm_logs/{id}
 # operationId: comm_logs_update
-export def "comm-logs update" [
+export def "comm-logs update-by-id-1" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1553,7 +1562,7 @@ export def "comm-logs update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "since" $since "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/comm_logs/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/comm_logs/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1613,7 +1622,7 @@ export def "consent-forms create" [
 #
 # GET /api/consent_forms/{id}
 # operationId: consent_forms_read
-export def "consent-forms read" [
+export def "consent-forms get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1628,7 +1637,7 @@ export def "consent-forms read" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/consent_forms/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/consent_forms/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1638,7 +1647,7 @@ export def "consent-forms read" [
 #
 # PATCH /api/consent_forms/{id}
 # operationId: consent_forms_partial_update
-export def "consent-forms patch" [
+export def "consent-forms update-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1653,7 +1662,7 @@ export def "consent-forms patch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/consent_forms/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/consent_forms/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1663,7 +1672,7 @@ export def "consent-forms patch" [
 #
 # PUT /api/consent_forms/{id}
 # operationId: consent_forms_update
-export def "consent-forms update" [
+export def "consent-forms update-by-id-1" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1678,7 +1687,7 @@ export def "consent-forms update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/consent_forms/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/consent_forms/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1688,7 +1697,7 @@ export def "consent-forms update" [
 #
 # POST /api/consent_forms/{id}/apply_to_appointment
 # operationId: consent_forms_apply_to_appointment
-export def "consent-forms-apply-to-appointment appointment" [
+export def "consent-forms-apply-to-appointment create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1703,7 +1712,7 @@ export def "consent-forms-apply-to-appointment appointment" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/consent_forms/{id}/apply_to_appointment") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/consent_forms/{id}/apply_to_appointment") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1713,7 +1722,7 @@ export def "consent-forms-apply-to-appointment appointment" [
 #
 # POST /api/consent_forms/{id}/unapply_from_appointment
 # operationId: consent_forms_unapply_from_appointment
-export def "consent-forms-unapply-from-appointment appointment" [
+export def "consent-forms-unapply-from-appointment create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1728,7 +1737,7 @@ export def "consent-forms-unapply-from-appointment appointment" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/consent_forms/{id}/unapply_from_appointment") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/consent_forms/{id}/unapply_from_appointment") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1788,7 +1797,7 @@ export def "custom-appointment-fields create" [
 #
 # GET /api/custom_appointment_fields/{id}
 # operationId: custom_appointment_fields_read
-export def "custom-appointment-fields read" [
+export def "custom-appointment-fields get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1803,7 +1812,7 @@ export def "custom-appointment-fields read" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/custom_appointment_fields/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/custom_appointment_fields/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1813,7 +1822,7 @@ export def "custom-appointment-fields read" [
 #
 # PATCH /api/custom_appointment_fields/{id}
 # operationId: custom_appointment_fields_partial_update
-export def "custom-appointment-fields patch" [
+export def "custom-appointment-fields update-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1828,7 +1837,7 @@ export def "custom-appointment-fields patch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/custom_appointment_fields/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/custom_appointment_fields/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1838,7 +1847,7 @@ export def "custom-appointment-fields patch" [
 #
 # PUT /api/custom_appointment_fields/{id}
 # operationId: custom_appointment_fields_update
-export def "custom-appointment-fields update" [
+export def "custom-appointment-fields update-by-id-1" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1853,7 +1862,7 @@ export def "custom-appointment-fields update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/custom_appointment_fields/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/custom_appointment_fields/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1913,7 +1922,7 @@ export def "custom-demographics create" [
 #
 # GET /api/custom_demographics/{id}
 # operationId: custom_demographics_read
-export def "custom-demographics read" [
+export def "custom-demographics get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1928,7 +1937,7 @@ export def "custom-demographics read" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/custom_demographics/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/custom_demographics/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1938,7 +1947,7 @@ export def "custom-demographics read" [
 #
 # PATCH /api/custom_demographics/{id}
 # operationId: custom_demographics_partial_update
-export def "custom-demographics patch" [
+export def "custom-demographics update-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1953,7 +1962,7 @@ export def "custom-demographics patch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/custom_demographics/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/custom_demographics/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1963,7 +1972,7 @@ export def "custom-demographics patch" [
 #
 # PUT /api/custom_demographics/{id}
 # operationId: custom_demographics_update
-export def "custom-demographics update" [
+export def "custom-demographics update-by-id-1" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1978,7 +1987,7 @@ export def "custom-demographics update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/custom_demographics/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/custom_demographics/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2017,7 +2026,7 @@ export def "custom-insurance-plan-names list" [
 #
 # GET /api/custom_insurance_plan_names/{id}
 # operationId: custom_insurance_plan_names_read
-export def "custom-insurance-plan-names read" [
+export def "custom-insurance-plan-names get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2035,7 +2044,7 @@ export def "custom-insurance-plan-names read" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "since" $since "scalar") (serialize-qp "user" $user "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/custom_insurance_plan_names/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/custom_insurance_plan_names/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2071,7 +2080,7 @@ export def "custom-vitals list" [
 #
 # GET /api/custom_vitals/{id}
 # operationId: custom_vitals_read
-export def "custom-vitals read" [
+export def "custom-vitals get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2086,7 +2095,7 @@ export def "custom-vitals read" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/custom_vitals/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/custom_vitals/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2122,7 +2131,7 @@ export def "doctors list" [
 #
 # GET /api/doctors/{id}
 # operationId: doctors_read
-export def "doctors read" [
+export def "doctors get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2137,7 +2146,7 @@ export def "doctors read" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/doctors/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/doctors/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2218,7 +2227,7 @@ export def "documents delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "since" $since "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/documents/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/documents/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2228,7 +2237,7 @@ export def "documents delete" [
 #
 # GET /api/documents/{id}
 # operationId: documents_read
-export def "documents read" [
+export def "documents get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2245,7 +2254,7 @@ export def "documents read" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "since" $since "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/documents/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/documents/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2255,7 +2264,7 @@ export def "documents read" [
 #
 # PATCH /api/documents/{id}
 # operationId: documents_partial_update
-export def "documents patch" [
+export def "documents update-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2272,7 +2281,7 @@ export def "documents patch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "since" $since "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/documents/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/documents/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2282,7 +2291,7 @@ export def "documents patch" [
 #
 # PUT /api/documents/{id}
 # operationId: documents_update
-export def "documents update" [
+export def "documents update-by-id-1" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2299,7 +2308,7 @@ export def "documents update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "since" $since "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/documents/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/documents/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2341,7 +2350,7 @@ export def "eligibility-checks list" [
 #
 # GET /api/eligibility_checks/{id}
 # operationId: eligibility_checks_read
-export def "eligibility-checks read" [
+export def "eligibility-checks get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2362,7 +2371,7 @@ export def "eligibility-checks read" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "appointment" $appointment "scalar") (serialize-qp "appointment_date" $appointment_date "scalar") (serialize-qp "doctor" $doctor "scalar") (serialize-qp "query_date_range" $query_date_range "scalar") (serialize-qp "appointment_date_range" $appointment_date_range "scalar") (serialize-qp "query_date" $query_date "scalar") (serialize-qp "patient" $patient "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/eligibility_checks/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/eligibility_checks/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2422,7 +2431,7 @@ export def "eobs create" [
 #
 # GET /api/eobs/{id}
 # operationId: eobs_read
-export def "eobs read" [
+export def "eobs get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2437,7 +2446,7 @@ export def "eobs read" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/eobs/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/eobs/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2475,7 +2484,7 @@ export def "fee-schedules list" [
 # GET /api/fee_schedules/{id}
 #
 # operationId: fee_schedules_read
-export def "fee-schedules read" [
+export def "fee-schedules get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2494,7 +2503,7 @@ export def "fee-schedules read" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "code" $code "scalar") (serialize-qp "code_type" $code_type "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "payer_id" $payer_id "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/fee_schedules/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/fee_schedules/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2533,7 +2542,7 @@ export def "implantable-devices list" [
 #
 # GET /api/implantable_devices/{id}
 # operationId: implantable_devices_read
-export def "implantable-devices read" [
+export def "implantable-devices get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2551,7 +2560,7 @@ export def "implantable-devices read" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "mu_date" $mu_date "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "mu_date_range" $mu_date_range "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/implantable_devices/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/implantable_devices/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2586,7 +2595,7 @@ export def "insurances list" [
 # GET /api/insurances/{id}
 #
 # operationId: insurances_read
-export def "insurances read" [
+export def "insurances get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2602,7 +2611,7 @@ export def "insurances read" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "payer_type" $payer_type "scalar") (serialize-qp "term" $term "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/insurances/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/insurances/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2639,7 +2648,7 @@ export def "inventory-categories list" [
 #
 # GET /api/inventory_categories/{id}
 # operationId: inventory_categories_read
-export def "inventory-categories read" [
+export def "inventory-categories get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2655,7 +2664,7 @@ export def "inventory-categories read" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "since" $since "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/inventory_categories/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/inventory_categories/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2721,7 +2730,7 @@ export def "inventory-vaccines create" [
 #
 # GET /api/inventory_vaccines/{id}
 # operationId: inventory_vaccines_read
-export def "inventory-vaccines read" [
+export def "inventory-vaccines get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2739,7 +2748,7 @@ export def "inventory-vaccines read" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "status" $status "scalar") (serialize-qp "cvx_code" $cvx_code "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/inventory_vaccines/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/inventory_vaccines/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2772,7 +2781,7 @@ export def "lab-documents list" [
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Create lab order documents. An example lab workflow is as following:  - When you get orders, submit them via `/api/lab_orders`, such that doctors can see them in drchrono.  - When results come in, submit the result document PDF via `/api/lab_documents` and submit the results data via `/api/lab_results`  - Update `/api/lab_orders` status
+# Create lab order documents. An example lab workflow is as following: - When you get orders, submit them via `/api/lab_orders`, such that doctors can see them in drchrono. - When results come in, submit the result document PDF via `/api/lab_documents` and submit the results data via `/api/lab_results` - Update `/api/lab_orders` status
 #
 # POST /api/lab_documents
 # operationId: lab_documents_create
@@ -2817,7 +2826,7 @@ export def "lab-documents delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "since" $since "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/lab_documents/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/lab_documents/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2827,7 +2836,7 @@ export def "lab-documents delete" [
 #
 # GET /api/lab_documents/{id}
 # operationId: lab_documents_read
-export def "lab-documents read" [
+export def "lab-documents get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2843,7 +2852,7 @@ export def "lab-documents read" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "since" $since "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/lab_documents/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/lab_documents/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2853,7 +2862,7 @@ export def "lab-documents read" [
 #
 # PATCH /api/lab_documents/{id}
 # operationId: lab_documents_partial_update
-export def "lab-documents patch" [
+export def "lab-documents update-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2869,7 +2878,7 @@ export def "lab-documents patch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "since" $since "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/lab_documents/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/lab_documents/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2879,7 +2888,7 @@ export def "lab-documents patch" [
 #
 # PUT /api/lab_documents/{id}
 # operationId: lab_documents_update
-export def "lab-documents update" [
+export def "lab-documents update-by-id-1" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2895,7 +2904,7 @@ export def "lab-documents update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "since" $since "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/lab_documents/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/lab_documents/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2928,7 +2937,7 @@ export def "lab-orders list" [
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Create lab orders. An example lab workflow is as following:  - When you get orders, submit them via `/api/lab_orders`, such that doctors can see them in drchrono.  - When results come in, submit the result document PDF via `/api/lab_documents` and submit the results data via `/api/lab_results`  - Update `/api/lab_orders` status
+# Create lab orders. An example lab workflow is as following: - When you get orders, submit them via `/api/lab_orders`, such that doctors can see them in drchrono. - When results come in, submit the result document PDF via `/api/lab_documents` and submit the results data via `/api/lab_results` - Update `/api/lab_orders` status
 #
 # POST /api/lab_orders
 # operationId: lab_orders_create
@@ -2973,7 +2982,7 @@ export def "lab-orders delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "since" $since "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/lab_orders/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/lab_orders/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2983,7 +2992,7 @@ export def "lab-orders delete" [
 #
 # GET /api/lab_orders/{id}
 # operationId: lab_orders_read
-export def "lab-orders read" [
+export def "lab-orders get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2999,7 +3008,7 @@ export def "lab-orders read" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "since" $since "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/lab_orders/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/lab_orders/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3009,7 +3018,7 @@ export def "lab-orders read" [
 #
 # PATCH /api/lab_orders/{id}
 # operationId: lab_orders_partial_update
-export def "lab-orders patch" [
+export def "lab-orders update-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3025,7 +3034,7 @@ export def "lab-orders patch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "since" $since "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/lab_orders/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/lab_orders/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3035,7 +3044,7 @@ export def "lab-orders patch" [
 #
 # PUT /api/lab_orders/{id}
 # operationId: lab_orders_update
-export def "lab-orders update" [
+export def "lab-orders update-by-id-1" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3051,7 +3060,7 @@ export def "lab-orders update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "since" $since "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/lab_orders/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/lab_orders/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3087,7 +3096,7 @@ export def "lab-orders-summary list" [
 # GET /api/lab_orders_summary/{id}
 #
 # operationId: lab_orders_summary_read
-export def "lab-orders-summary read" [
+export def "lab-orders-summary get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3104,7 +3113,7 @@ export def "lab-orders-summary read" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "since" $since "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/lab_orders_summary/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/lab_orders_summary/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3137,7 +3146,7 @@ export def "lab-results list" [
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Create lab results. An example lab workflow is as following:  - When you get orders, submit them via `/api/lab_orders`, such that doctors can see them in drchrono.  - When results come in, submit the result document PDF via `/api/lab_documents` and submit the results data via `/api/lab_results`  - Update `/api/lab_orders` status
+# Create lab results. An example lab workflow is as following: - When you get orders, submit them via `/api/lab_orders`, such that doctors can see them in drchrono. - When results come in, submit the result document PDF via `/api/lab_documents` and submit the results data via `/api/lab_results` - Update `/api/lab_orders` status
 #
 # POST /api/lab_results
 # operationId: lab_results_create
@@ -3182,7 +3191,7 @@ export def "lab-results delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/lab_results/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/lab_results/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3192,7 +3201,7 @@ export def "lab-results delete" [
 #
 # GET /api/lab_results/{id}
 # operationId: lab_results_read
-export def "lab-results read" [
+export def "lab-results get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3208,7 +3217,7 @@ export def "lab-results read" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/lab_results/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/lab_results/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3218,7 +3227,7 @@ export def "lab-results read" [
 #
 # PATCH /api/lab_results/{id}
 # operationId: lab_results_partial_update
-export def "lab-results patch" [
+export def "lab-results update-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3234,7 +3243,7 @@ export def "lab-results patch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/lab_results/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/lab_results/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3244,7 +3253,7 @@ export def "lab-results patch" [
 #
 # PUT /api/lab_results/{id}
 # operationId: lab_results_update
-export def "lab-results update" [
+export def "lab-results update-by-id-1" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3260,7 +3269,7 @@ export def "lab-results update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/lab_results/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/lab_results/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3293,7 +3302,7 @@ export def "lab-tests list" [
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Create lab tests. An example lab workflow is as following:  - When you get orders, submit them via `/api/lab_orders`, such that doctors can see them in drchrono.  - When results come in, submit the result document PDF via `/api/lab_documents` and submit the results data via `/api/lab_results`  - Update `/api/lab_orders` status
+# Create lab tests. An example lab workflow is as following: - When you get orders, submit them via `/api/lab_orders`, such that doctors can see them in drchrono. - When results come in, submit the result document PDF via `/api/lab_documents` and submit the results data via `/api/lab_results` - Update `/api/lab_orders` status
 #
 # POST /api/lab_tests
 # operationId: lab_tests_create
@@ -3338,7 +3347,7 @@ export def "lab-tests delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/lab_tests/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/lab_tests/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3348,7 +3357,7 @@ export def "lab-tests delete" [
 #
 # GET /api/lab_tests/{id}
 # operationId: lab_tests_read
-export def "lab-tests read" [
+export def "lab-tests get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3364,7 +3373,7 @@ export def "lab-tests read" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/lab_tests/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/lab_tests/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3374,7 +3383,7 @@ export def "lab-tests read" [
 #
 # PATCH /api/lab_tests/{id}
 # operationId: lab_tests_partial_update
-export def "lab-tests patch" [
+export def "lab-tests update-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3390,7 +3399,7 @@ export def "lab-tests patch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/lab_tests/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/lab_tests/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3400,7 +3409,7 @@ export def "lab-tests patch" [
 #
 # PUT /api/lab_tests/{id}
 # operationId: lab_tests_update
-export def "lab-tests update" [
+export def "lab-tests update-by-id-1" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3416,7 +3425,7 @@ export def "lab-tests update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/lab_tests/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/lab_tests/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3508,7 +3517,7 @@ export def "line-items delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "posted_date" $posted_date "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "office" $office "scalar") (serialize-qp "doctor" $doctor "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "appointment" $appointment "scalar") (serialize-qp "service_date" $service_date "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/line_items/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/line_items/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3518,7 +3527,7 @@ export def "line-items delete" [
 #
 # GET /api/line_items/{id}
 # operationId: line_items_read
-export def "line-items read" [
+export def "line-items get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3539,7 +3548,7 @@ export def "line-items read" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "posted_date" $posted_date "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "office" $office "scalar") (serialize-qp "doctor" $doctor "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "appointment" $appointment "scalar") (serialize-qp "service_date" $service_date "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/line_items/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/line_items/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3548,7 +3557,7 @@ export def "line-items read" [
 # PATCH /api/line_items/{id}
 #
 # operationId: line_items_partial_update
-export def "line-items patch" [
+export def "line-items update-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3569,7 +3578,7 @@ export def "line-items patch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "posted_date" $posted_date "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "office" $office "scalar") (serialize-qp "doctor" $doctor "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "appointment" $appointment "scalar") (serialize-qp "service_date" $service_date "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/line_items/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/line_items/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3578,7 +3587,7 @@ export def "line-items patch" [
 # PUT /api/line_items/{id}
 #
 # operationId: line_items_update
-export def "line-items update" [
+export def "line-items update-by-id-1" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3599,7 +3608,7 @@ export def "line-items update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "posted_date" $posted_date "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "office" $office "scalar") (serialize-qp "doctor" $doctor "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "appointment" $appointment "scalar") (serialize-qp "service_date" $service_date "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/line_items/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/line_items/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3661,7 +3670,7 @@ export def "medications create" [
 #
 # GET /api/medications/{id}
 # operationId: medications_read
-export def "medications read" [
+export def "medications get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3677,7 +3686,7 @@ export def "medications read" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/medications/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/medications/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3687,7 +3696,7 @@ export def "medications read" [
 #
 # PATCH /api/medications/{id}
 # operationId: medications_partial_update
-export def "medications patch" [
+export def "medications update-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3703,7 +3712,7 @@ export def "medications patch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/medications/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/medications/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3713,7 +3722,7 @@ export def "medications patch" [
 #
 # PUT /api/medications/{id}
 # operationId: medications_update
-export def "medications update" [
+export def "medications update-by-id-1" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3729,7 +3738,7 @@ export def "medications update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/medications/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/medications/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3739,7 +3748,7 @@ export def "medications update" [
 #
 # PATCH /api/medications/{id}/append_to_pharmacy_note
 # operationId: medications_append_to_pharmacy_note
-export def "medications-append-to-pharmacy-note note" [
+export def "medications-append-to-pharmacy-note create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3755,7 +3764,7 @@ export def "medications-append-to-pharmacy-note note" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/medications/{id}/append_to_pharmacy_note") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/medications/{id}/append_to_pharmacy_note") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3848,7 +3857,7 @@ export def "messages delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar") (serialize-qp "responsible_user" $responsible_user "scalar") (serialize-qp "updated_since" $updated_since "scalar") (serialize-qp "received_since" $received_since "scalar") (serialize-qp "owner" $owner "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/messages/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/messages/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3858,7 +3867,7 @@ export def "messages delete" [
 #
 # GET /api/messages/{id}
 # operationId: messages_read
-export def "messages read" [
+export def "messages get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3879,7 +3888,7 @@ export def "messages read" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar") (serialize-qp "responsible_user" $responsible_user "scalar") (serialize-qp "updated_since" $updated_since "scalar") (serialize-qp "received_since" $received_since "scalar") (serialize-qp "owner" $owner "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/messages/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/messages/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3889,7 +3898,7 @@ export def "messages read" [
 #
 # PATCH /api/messages/{id}
 # operationId: messages_partial_update
-export def "messages patch" [
+export def "messages update-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3910,7 +3919,7 @@ export def "messages patch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar") (serialize-qp "responsible_user" $responsible_user "scalar") (serialize-qp "updated_since" $updated_since "scalar") (serialize-qp "received_since" $received_since "scalar") (serialize-qp "owner" $owner "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/messages/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/messages/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3920,7 +3929,7 @@ export def "messages patch" [
 #
 # PUT /api/messages/{id}
 # operationId: messages_update
-export def "messages update" [
+export def "messages update-by-id-1" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3941,7 +3950,7 @@ export def "messages update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar") (serialize-qp "responsible_user" $responsible_user "scalar") (serialize-qp "updated_since" $updated_since "scalar") (serialize-qp "received_since" $received_since "scalar") (serialize-qp "owner" $owner "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/messages/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/messages/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3977,7 +3986,7 @@ export def "offices list" [
 #
 # GET /api/offices/{id}
 # operationId: offices_read
-export def "offices read" [
+export def "offices get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3992,7 +4001,7 @@ export def "offices read" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/offices/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/offices/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4002,7 +4011,7 @@ export def "offices read" [
 #
 # PATCH /api/offices/{id}
 # operationId: offices_partial_update
-export def "offices patch" [
+export def "offices update-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4017,7 +4026,7 @@ export def "offices patch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/offices/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/offices/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4027,7 +4036,7 @@ export def "offices patch" [
 #
 # PUT /api/offices/{id}
 # operationId: offices_update
-export def "offices update" [
+export def "offices update-by-id-1" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4042,7 +4051,7 @@ export def "offices update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/offices/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/offices/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4052,7 +4061,7 @@ export def "offices update" [
 #
 # POST /api/offices/{id}/add_exam_room
 # operationId: offices_add_exam_room
-export def "offices-add-exam-room room" [
+export def "offices-add-exam-room create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4067,7 +4076,7 @@ export def "offices-add-exam-room room" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/offices/{id}/add_exam_room") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/offices/{id}/add_exam_room") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4129,7 +4138,7 @@ export def "patient-communications create" [
 #
 # GET /api/patient_communications/{id}
 # operationId: patient_communications_read
-export def "patient-communications read" [
+export def "patient-communications get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4145,7 +4154,7 @@ export def "patient-communications read" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/patient_communications/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/patient_communications/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4155,7 +4164,7 @@ export def "patient-communications read" [
 #
 # PATCH /api/patient_communications/{id}
 # operationId: patient_communications_partial_update
-export def "patient-communications patch" [
+export def "patient-communications update-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4171,7 +4180,7 @@ export def "patient-communications patch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/patient_communications/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/patient_communications/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4181,7 +4190,7 @@ export def "patient-communications patch" [
 #
 # PUT /api/patient_communications/{id}
 # operationId: patient_communications_update
-export def "patient-communications update" [
+export def "patient-communications update-by-id-1" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4197,7 +4206,7 @@ export def "patient-communications update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/patient_communications/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/patient_communications/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4257,7 +4266,7 @@ export def "patient-flag-types create" [
 #
 # GET /api/patient_flag_types/{id}
 # operationId: patient_flag_types_read
-export def "patient-flag-types read" [
+export def "patient-flag-types get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4272,7 +4281,7 @@ export def "patient-flag-types read" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/patient_flag_types/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/patient_flag_types/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4282,7 +4291,7 @@ export def "patient-flag-types read" [
 #
 # PATCH /api/patient_flag_types/{id}
 # operationId: patient_flag_types_partial_update
-export def "patient-flag-types patch" [
+export def "patient-flag-types update-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4297,7 +4306,7 @@ export def "patient-flag-types patch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/patient_flag_types/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/patient_flag_types/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4307,7 +4316,7 @@ export def "patient-flag-types patch" [
 #
 # PUT /api/patient_flag_types/{id}
 # operationId: patient_flag_types_update
-export def "patient-flag-types update" [
+export def "patient-flag-types update-by-id-1" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4322,7 +4331,7 @@ export def "patient-flag-types update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/patient_flag_types/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/patient_flag_types/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4384,7 +4393,7 @@ export def "patient-interventions create" [
 #
 # GET /api/patient_interventions/{id}
 # operationId: patient_interventions_read
-export def "patient-interventions read" [
+export def "patient-interventions get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4400,7 +4409,7 @@ export def "patient-interventions read" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/patient_interventions/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/patient_interventions/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4410,7 +4419,7 @@ export def "patient-interventions read" [
 #
 # PATCH /api/patient_interventions/{id}
 # operationId: patient_interventions_partial_update
-export def "patient-interventions patch" [
+export def "patient-interventions update-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4426,7 +4435,7 @@ export def "patient-interventions patch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/patient_interventions/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/patient_interventions/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4436,7 +4445,7 @@ export def "patient-interventions patch" [
 #
 # PUT /api/patient_interventions/{id}
 # operationId: patient_interventions_update
-export def "patient-interventions update" [
+export def "patient-interventions update-by-id-1" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4452,7 +4461,7 @@ export def "patient-interventions update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/patient_interventions/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/patient_interventions/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4533,7 +4542,7 @@ export def "patient-lab-results delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ordering_doctor" $ordering_doctor "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/patient_lab_results/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/patient_lab_results/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4542,7 +4551,7 @@ export def "patient-lab-results delete" [
 # GET /api/patient_lab_results/{id}
 #
 # operationId: patient_lab_results_read
-export def "patient-lab-results read" [
+export def "patient-lab-results get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4560,7 +4569,7 @@ export def "patient-lab-results read" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ordering_doctor" $ordering_doctor "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/patient_lab_results/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/patient_lab_results/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4569,7 +4578,7 @@ export def "patient-lab-results read" [
 # PATCH /api/patient_lab_results/{id}
 #
 # operationId: patient_lab_results_partial_update
-export def "patient-lab-results patch" [
+export def "patient-lab-results update-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4587,7 +4596,7 @@ export def "patient-lab-results patch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ordering_doctor" $ordering_doctor "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/patient_lab_results/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/patient_lab_results/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4596,7 +4605,7 @@ export def "patient-lab-results patch" [
 # PUT /api/patient_lab_results/{id}
 #
 # operationId: patient_lab_results_update
-export def "patient-lab-results update" [
+export def "patient-lab-results update-by-id-1" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4614,7 +4623,7 @@ export def "patient-lab-results update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ordering_doctor" $ordering_doctor "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/patient_lab_results/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/patient_lab_results/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4675,7 +4684,7 @@ export def "patient-messages create" [
 # GET /api/patient_messages/{id}
 #
 # operationId: patient_messages_read
-export def "patient-messages read" [
+export def "patient-messages get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4692,7 +4701,7 @@ export def "patient-messages read" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "since" $since "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/patient_messages/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/patient_messages/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4701,7 +4710,7 @@ export def "patient-messages read" [
 # PATCH /api/patient_messages/{id}
 #
 # operationId: patient_messages_partial_update
-export def "patient-messages patch" [
+export def "patient-messages update-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4718,7 +4727,7 @@ export def "patient-messages patch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "since" $since "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/patient_messages/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/patient_messages/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4727,7 +4736,7 @@ export def "patient-messages patch" [
 # PUT /api/patient_messages/{id}
 #
 # operationId: patient_messages_update
-export def "patient-messages update" [
+export def "patient-messages update-by-id-1" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4744,7 +4753,7 @@ export def "patient-messages update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "since" $since "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/patient_messages/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/patient_messages/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4782,7 +4791,7 @@ export def "patient-payment-log list" [
 #
 # GET /api/patient_payment_log/{id}
 # operationId: patient_payment_log_read
-export def "patient-payment-log read" [
+export def "patient-payment-log get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4799,7 +4808,7 @@ export def "patient-payment-log read" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "since" $since "scalar") (serialize-qp "office" $office "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/patient_payment_log/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/patient_payment_log/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4863,7 +4872,7 @@ export def "patient-payments create" [
 #
 # GET /api/patient_payments/{id}
 # operationId: patient_payments_read
-export def "patient-payments read" [
+export def "patient-payments get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4880,7 +4889,7 @@ export def "patient-payments read" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "since" $since "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/patient_payments/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/patient_payments/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4942,7 +4951,7 @@ export def "patient-physical-exams create" [
 #
 # GET /api/patient_physical_exams/{id}
 # operationId: patient_physical_exams_read
-export def "patient-physical-exams read" [
+export def "patient-physical-exams get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4958,7 +4967,7 @@ export def "patient-physical-exams read" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/patient_physical_exams/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/patient_physical_exams/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4968,7 +4977,7 @@ export def "patient-physical-exams read" [
 #
 # PATCH /api/patient_physical_exams/{id}
 # operationId: patient_physical_exams_partial_update
-export def "patient-physical-exams patch" [
+export def "patient-physical-exams update-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4984,7 +4993,7 @@ export def "patient-physical-exams patch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/patient_physical_exams/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/patient_physical_exams/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4994,7 +5003,7 @@ export def "patient-physical-exams patch" [
 #
 # PUT /api/patient_physical_exams/{id}
 # operationId: patient_physical_exams_update
-export def "patient-physical-exams update" [
+export def "patient-physical-exams update-by-id-1" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5010,7 +5019,7 @@ export def "patient-physical-exams update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/patient_physical_exams/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/patient_physical_exams/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5069,7 +5078,7 @@ export def "patient-risk-assessments create" [
 # GET /api/patient_risk_assessments/{id}
 #
 # operationId: patient_risk_assessments_read
-export def "patient-risk-assessments read" [
+export def "patient-risk-assessments get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5085,7 +5094,7 @@ export def "patient-risk-assessments read" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/patient_risk_assessments/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/patient_risk_assessments/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5094,7 +5103,7 @@ export def "patient-risk-assessments read" [
 # PATCH /api/patient_risk_assessments/{id}
 #
 # operationId: patient_risk_assessments_partial_update
-export def "patient-risk-assessments patch" [
+export def "patient-risk-assessments update-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5110,7 +5119,7 @@ export def "patient-risk-assessments patch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/patient_risk_assessments/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/patient_risk_assessments/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5119,7 +5128,7 @@ export def "patient-risk-assessments patch" [
 # PUT /api/patient_risk_assessments/{id}
 #
 # operationId: patient_risk_assessments_update
-export def "patient-risk-assessments update" [
+export def "patient-risk-assessments update-by-id-1" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5135,7 +5144,7 @@ export def "patient-risk-assessments update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/patient_risk_assessments/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/patient_risk_assessments/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5201,7 +5210,7 @@ export def "patient-vaccine-records create" [
 #
 # GET /api/patient_vaccine_records/{id}
 # operationId: patient_vaccine_records_read
-export def "patient-vaccine-records read" [
+export def "patient-vaccine-records get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5219,7 +5228,7 @@ export def "patient-vaccine-records read" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cvx_code" $cvx_code "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/patient_vaccine_records/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/patient_vaccine_records/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5229,7 +5238,7 @@ export def "patient-vaccine-records read" [
 #
 # PATCH /api/patient_vaccine_records/{id}
 # operationId: patient_vaccine_records_partial_update
-export def "patient-vaccine-records patch" [
+export def "patient-vaccine-records update-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5247,7 +5256,7 @@ export def "patient-vaccine-records patch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cvx_code" $cvx_code "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/patient_vaccine_records/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/patient_vaccine_records/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5257,7 +5266,7 @@ export def "patient-vaccine-records patch" [
 #
 # PUT /api/patient_vaccine_records/{id}
 # operationId: patient_vaccine_records_update
-export def "patient-vaccine-records update" [
+export def "patient-vaccine-records update-by-id-1" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5275,7 +5284,7 @@ export def "patient-vaccine-records update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cvx_code" $cvx_code "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/patient_vaccine_records/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/patient_vaccine_records/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5380,7 +5389,7 @@ export def "patients delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "first_name" $first_name "scalar") (serialize-qp "last_name" $last_name "scalar") (serialize-qp "preferred_language" $preferred_language "scalar") (serialize-qp "doctor" $doctor "scalar") (serialize-qp "gender" $gender "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "date_of_birth" $date_of_birth "scalar") (serialize-qp "race" $race "scalar") (serialize-qp "chart_id" $chart_id "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "ethnicity" $ethnicity "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/patients/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/patients/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5390,7 +5399,7 @@ export def "patients delete" [
 #
 # GET /api/patients/{id}
 # operationId: patients_read
-export def "patients read" [
+export def "patients get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5415,7 +5424,7 @@ export def "patients read" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "first_name" $first_name "scalar") (serialize-qp "last_name" $last_name "scalar") (serialize-qp "preferred_language" $preferred_language "scalar") (serialize-qp "doctor" $doctor "scalar") (serialize-qp "gender" $gender "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "date_of_birth" $date_of_birth "scalar") (serialize-qp "race" $race "scalar") (serialize-qp "chart_id" $chart_id "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "ethnicity" $ethnicity "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/patients/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/patients/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5425,7 +5434,7 @@ export def "patients read" [
 #
 # PATCH /api/patients/{id}
 # operationId: patients_partial_update
-export def "patients patch" [
+export def "patients update-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5450,7 +5459,7 @@ export def "patients patch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "first_name" $first_name "scalar") (serialize-qp "last_name" $last_name "scalar") (serialize-qp "preferred_language" $preferred_language "scalar") (serialize-qp "doctor" $doctor "scalar") (serialize-qp "gender" $gender "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "date_of_birth" $date_of_birth "scalar") (serialize-qp "race" $race "scalar") (serialize-qp "chart_id" $chart_id "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "ethnicity" $ethnicity "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/patients/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/patients/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5460,7 +5469,7 @@ export def "patients patch" [
 #
 # PUT /api/patients/{id}
 # operationId: patients_update
-export def "patients update" [
+export def "patients update-by-id-1" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5485,7 +5494,7 @@ export def "patients update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "first_name" $first_name "scalar") (serialize-qp "last_name" $last_name "scalar") (serialize-qp "preferred_language" $preferred_language "scalar") (serialize-qp "doctor" $doctor "scalar") (serialize-qp "gender" $gender "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "date_of_birth" $date_of_birth "scalar") (serialize-qp "race" $race "scalar") (serialize-qp "chart_id" $chart_id "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "ethnicity" $ethnicity "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/patients/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/patients/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5495,7 +5504,7 @@ export def "patients update" [
 #
 # GET /api/patients/{id}/ccda
 # operationId: patients_ccda
-export def "patients-ccda ccda" [
+export def "patients-ccda get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5520,7 +5529,7 @@ export def "patients-ccda ccda" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "first_name" $first_name "scalar") (serialize-qp "last_name" $last_name "scalar") (serialize-qp "preferred_language" $preferred_language "scalar") (serialize-qp "doctor" $doctor "scalar") (serialize-qp "gender" $gender "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "date_of_birth" $date_of_birth "scalar") (serialize-qp "race" $race "scalar") (serialize-qp "chart_id" $chart_id "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "ethnicity" $ethnicity "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/patients/{id}/ccda") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/patients/{id}/ccda") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5555,7 +5564,7 @@ export def "patients-onpatient-access delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "first_name" $first_name "scalar") (serialize-qp "last_name" $last_name "scalar") (serialize-qp "preferred_language" $preferred_language "scalar") (serialize-qp "doctor" $doctor "scalar") (serialize-qp "gender" $gender "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "date_of_birth" $date_of_birth "scalar") (serialize-qp "race" $race "scalar") (serialize-qp "chart_id" $chart_id "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "ethnicity" $ethnicity "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/patients/{id}/onpatient_access") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/patients/{id}/onpatient_access") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5565,7 +5574,7 @@ export def "patients-onpatient-access delete" [
 #
 # GET /api/patients/{id}/onpatient_access
 # operationId: patients_onpatient_access_read
-export def "patients-onpatient-access read" [
+export def "patients-onpatient-access get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5590,7 +5599,7 @@ export def "patients-onpatient-access read" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "first_name" $first_name "scalar") (serialize-qp "last_name" $last_name "scalar") (serialize-qp "preferred_language" $preferred_language "scalar") (serialize-qp "doctor" $doctor "scalar") (serialize-qp "gender" $gender "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "date_of_birth" $date_of_birth "scalar") (serialize-qp "race" $race "scalar") (serialize-qp "chart_id" $chart_id "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "ethnicity" $ethnicity "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/patients/{id}/onpatient_access") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/patients/{id}/onpatient_access") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5625,7 +5634,7 @@ export def "patients-onpatient-access create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "first_name" $first_name "scalar") (serialize-qp "last_name" $last_name "scalar") (serialize-qp "preferred_language" $preferred_language "scalar") (serialize-qp "doctor" $doctor "scalar") (serialize-qp "gender" $gender "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "date_of_birth" $date_of_birth "scalar") (serialize-qp "race" $race "scalar") (serialize-qp "chart_id" $chart_id "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "ethnicity" $ethnicity "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/patients/{id}/onpatient_access") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/patients/{id}/onpatient_access") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5635,7 +5644,7 @@ export def "patients-onpatient-access create" [
 #
 # GET /api/patients/{id}/qrda1
 # operationId: patients_qrda1
-export def "patients-qrda1 qrda1" [
+export def "patients-qrda1 get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5660,7 +5669,7 @@ export def "patients-qrda1 qrda1" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "first_name" $first_name "scalar") (serialize-qp "last_name" $last_name "scalar") (serialize-qp "preferred_language" $preferred_language "scalar") (serialize-qp "doctor" $doctor "scalar") (serialize-qp "gender" $gender "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "date_of_birth" $date_of_birth "scalar") (serialize-qp "race" $race "scalar") (serialize-qp "chart_id" $chart_id "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "ethnicity" $ethnicity "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/patients/{id}/qrda1") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/patients/{id}/qrda1") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5747,7 +5756,7 @@ export def "patients-summary delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "first_name" $first_name "scalar") (serialize-qp "last_name" $last_name "scalar") (serialize-qp "doctor" $doctor "scalar") (serialize-qp "gender" $gender "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "date_of_birth" $date_of_birth "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/patients_summary/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/patients_summary/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5756,7 +5765,7 @@ export def "patients-summary delete" [
 # GET /api/patients_summary/{id}
 #
 # operationId: patients_summary_read
-export def "patients-summary read" [
+export def "patients-summary get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5776,7 +5785,7 @@ export def "patients-summary read" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "first_name" $first_name "scalar") (serialize-qp "last_name" $last_name "scalar") (serialize-qp "doctor" $doctor "scalar") (serialize-qp "gender" $gender "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "date_of_birth" $date_of_birth "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/patients_summary/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/patients_summary/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5785,7 +5794,7 @@ export def "patients-summary read" [
 # PATCH /api/patients_summary/{id}
 #
 # operationId: patients_summary_partial_update
-export def "patients-summary patch" [
+export def "patients-summary update-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5805,7 +5814,7 @@ export def "patients-summary patch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "first_name" $first_name "scalar") (serialize-qp "last_name" $last_name "scalar") (serialize-qp "doctor" $doctor "scalar") (serialize-qp "gender" $gender "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "date_of_birth" $date_of_birth "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/patients_summary/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/patients_summary/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5814,7 +5823,7 @@ export def "patients-summary patch" [
 # PUT /api/patients_summary/{id}
 #
 # operationId: patients_summary_update
-export def "patients-summary update" [
+export def "patients-summary update-by-id-1" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5834,7 +5843,7 @@ export def "patients-summary update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "first_name" $first_name "scalar") (serialize-qp "last_name" $last_name "scalar") (serialize-qp "doctor" $doctor "scalar") (serialize-qp "gender" $gender "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "date_of_birth" $date_of_birth "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/patients_summary/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/patients_summary/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5873,7 +5882,7 @@ export def "prescription-messages list" [
 #
 # GET /api/prescription_messages/{id}
 # operationId: prescription_messages_read
-export def "prescription-messages read" [
+export def "prescription-messages get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5891,7 +5900,7 @@ export def "prescription-messages read" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "parent_message" $parent_message "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/prescription_messages/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/prescription_messages/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5953,7 +5962,7 @@ export def "problems create" [
 #
 # GET /api/problems/{id}
 # operationId: problems_read
-export def "problems read" [
+export def "problems get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5969,7 +5978,7 @@ export def "problems read" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/problems/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/problems/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5979,7 +5988,7 @@ export def "problems read" [
 #
 # PATCH /api/problems/{id}
 # operationId: problems_partial_update
-export def "problems patch" [
+export def "problems update-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5995,7 +6004,7 @@ export def "problems patch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/problems/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/problems/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6005,7 +6014,7 @@ export def "problems patch" [
 #
 # PUT /api/problems/{id}
 # operationId: problems_update
-export def "problems update" [
+export def "problems update-by-id-1" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6021,7 +6030,7 @@ export def "problems update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/problems/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/problems/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6060,7 +6069,7 @@ export def "procedures list" [
 # GET /api/procedures/{id}
 #
 # operationId: procedures_read
-export def "procedures read" [
+export def "procedures get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6080,7 +6089,7 @@ export def "procedures read" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "mu_date" $mu_date "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar") (serialize-qp "mu_date_range" $mu_date_range "scalar") (serialize-qp "appointment" $appointment "scalar") (serialize-qp "service_date" $service_date "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/procedures/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/procedures/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6155,7 +6164,7 @@ export def "reminder-profiles delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/reminder_profiles/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/reminder_profiles/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6165,7 +6174,7 @@ export def "reminder-profiles delete" [
 #
 # GET /api/reminder_profiles/{id}
 # operationId: reminder_profiles_read
-export def "reminder-profiles read" [
+export def "reminder-profiles get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6180,7 +6189,7 @@ export def "reminder-profiles read" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/reminder_profiles/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/reminder_profiles/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6190,7 +6199,7 @@ export def "reminder-profiles read" [
 #
 # PATCH /api/reminder_profiles/{id}
 # operationId: reminder_profiles_partial_update
-export def "reminder-profiles patch" [
+export def "reminder-profiles update-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6205,7 +6214,7 @@ export def "reminder-profiles patch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/reminder_profiles/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/reminder_profiles/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6215,7 +6224,7 @@ export def "reminder-profiles patch" [
 #
 # PUT /api/reminder_profiles/{id}
 # operationId: reminder_profiles_update
-export def "reminder-profiles update" [
+export def "reminder-profiles update-by-id-1" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6230,7 +6239,7 @@ export def "reminder-profiles update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/reminder_profiles/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/reminder_profiles/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6261,7 +6270,7 @@ export def "sublabs list" [
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Create sub-vendors  - When you get orders, submit them via `/api/lab_orders`, such that doctors can see them in drchrono.  - When results come in, submit the result document PDF via `/api/lab_documents` and submit the results data via `/api/lab_results`  - Update `/api/lab_orders` status
+# Create sub-vendors - When you get orders, submit them via `/api/lab_orders`, such that doctors can see them in drchrono. - When results come in, submit the result document PDF via `/api/lab_documents` and submit the results data via `/api/lab_results` - Update `/api/lab_orders` status
 #
 # POST /api/sublabs
 # operationId: sublabs_create
@@ -6300,7 +6309,7 @@ export def "sublabs delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/sublabs/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/sublabs/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6310,7 +6319,7 @@ export def "sublabs delete" [
 #
 # GET /api/sublabs/{id}
 # operationId: sublabs_read
-export def "sublabs read" [
+export def "sublabs get" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6323,7 +6332,7 @@ export def "sublabs read" [
 ]: nothing -> record<facility_code: string, id: int, name: string, vendor_name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/sublabs/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/sublabs/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6333,7 +6342,7 @@ export def "sublabs read" [
 #
 # PATCH /api/sublabs/{id}
 # operationId: sublabs_partial_update
-export def "sublabs patch" [
+export def "sublabs update-by-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6346,7 +6355,7 @@ export def "sublabs patch" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/sublabs/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/sublabs/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6356,7 +6365,7 @@ export def "sublabs patch" [
 #
 # PUT /api/sublabs/{id}
 # operationId: sublabs_update
-export def "sublabs update" [
+export def "sublabs update-by-id-1" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6369,7 +6378,7 @@ export def "sublabs update" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/sublabs/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/sublabs/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6429,7 +6438,7 @@ export def "task-categories create" [
 #
 # GET /api/task_categories/{id}
 # operationId: task_categories_read
-export def "task-categories read" [
+export def "task-categories get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6444,7 +6453,7 @@ export def "task-categories read" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "since" $since "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/task_categories/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/task_categories/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6454,7 +6463,7 @@ export def "task-categories read" [
 #
 # PATCH /api/task_categories/{id}
 # operationId: task_categories_partial_update
-export def "task-categories patch" [
+export def "task-categories update-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6469,7 +6478,7 @@ export def "task-categories patch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "since" $since "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/task_categories/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/task_categories/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6479,7 +6488,7 @@ export def "task-categories patch" [
 #
 # PUT /api/task_categories/{id}
 # operationId: task_categories_update
-export def "task-categories update" [
+export def "task-categories update-by-id-1" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6494,7 +6503,7 @@ export def "task-categories update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "since" $since "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/task_categories/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/task_categories/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6556,7 +6565,7 @@ export def "task-notes create" [
 #
 # GET /api/task_notes/{id}
 # operationId: task_notes_read
-export def "task-notes read" [
+export def "task-notes get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6572,7 +6581,7 @@ export def "task-notes read" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "task" $task "scalar") (serialize-qp "since" $since "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/task_notes/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/task_notes/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6582,7 +6591,7 @@ export def "task-notes read" [
 #
 # PATCH /api/task_notes/{id}
 # operationId: task_notes_partial_update
-export def "task-notes patch" [
+export def "task-notes update-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6598,7 +6607,7 @@ export def "task-notes patch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "task" $task "scalar") (serialize-qp "since" $since "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/task_notes/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/task_notes/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6608,7 +6617,7 @@ export def "task-notes patch" [
 #
 # PUT /api/task_notes/{id}
 # operationId: task_notes_update
-export def "task-notes update" [
+export def "task-notes update-by-id-1" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6624,7 +6633,7 @@ export def "task-notes update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "task" $task "scalar") (serialize-qp "since" $since "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/task_notes/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/task_notes/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6684,7 +6693,7 @@ export def "task-statuses create" [
 #
 # GET /api/task_statuses/{id}
 # operationId: task_statuses_read
-export def "task-statuses read" [
+export def "task-statuses get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6699,7 +6708,7 @@ export def "task-statuses read" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "since" $since "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/task_statuses/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/task_statuses/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6709,7 +6718,7 @@ export def "task-statuses read" [
 #
 # PATCH /api/task_statuses/{id}
 # operationId: task_statuses_partial_update
-export def "task-statuses patch" [
+export def "task-statuses update-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6724,7 +6733,7 @@ export def "task-statuses patch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "since" $since "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/task_statuses/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/task_statuses/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6734,7 +6743,7 @@ export def "task-statuses patch" [
 #
 # PUT /api/task_statuses/{id}
 # operationId: task_statuses_update
-export def "task-statuses update" [
+export def "task-statuses update-by-id-1" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6749,7 +6758,7 @@ export def "task-statuses update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "since" $since "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/task_statuses/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/task_statuses/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6817,7 +6826,7 @@ export def "task-templates create" [
 #
 # GET /api/task_templates/{id}
 # operationId: task_templates_read
-export def "task-templates read" [
+export def "task-templates get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6836,7 +6845,7 @@ export def "task-templates read" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "assignee_user" $assignee_user "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "assignee_group" $assignee_group "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "category" $category "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/task_templates/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/task_templates/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6846,7 +6855,7 @@ export def "task-templates read" [
 #
 # PATCH /api/task_templates/{id}
 # operationId: task_templates_partial_update
-export def "task-templates patch" [
+export def "task-templates update-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6865,7 +6874,7 @@ export def "task-templates patch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "assignee_user" $assignee_user "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "assignee_group" $assignee_group "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "category" $category "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/task_templates/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/task_templates/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6875,7 +6884,7 @@ export def "task-templates patch" [
 #
 # PUT /api/task_templates/{id}
 # operationId: task_templates_update
-export def "task-templates update" [
+export def "task-templates update-by-id-1" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6894,7 +6903,7 @@ export def "task-templates update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "assignee_user" $assignee_user "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "assignee_group" $assignee_group "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "category" $category "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/task_templates/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/task_templates/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6970,7 +6979,7 @@ export def "tasks create" [
 #
 # GET /api/tasks/{id}
 # operationId: tasks_read
-export def "tasks read" [
+export def "tasks get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6993,7 +7002,7 @@ export def "tasks read" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "status" $status "scalar") (serialize-qp "category" $category "scalar") (serialize-qp "due_at_date" $due_at_date "scalar") (serialize-qp "due_at_unknown" $due_at_unknown "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "due_at_since" $due_at_since "scalar") (serialize-qp "assignee_user" $assignee_user "scalar") (serialize-qp "assignee_group" $assignee_group "scalar") (serialize-qp "due_at_range" $due_at_range "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/tasks/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/tasks/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7003,7 +7012,7 @@ export def "tasks read" [
 #
 # PATCH /api/tasks/{id}
 # operationId: tasks_partial_update
-export def "tasks patch" [
+export def "tasks update-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7026,7 +7035,7 @@ export def "tasks patch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "status" $status "scalar") (serialize-qp "category" $category "scalar") (serialize-qp "due_at_date" $due_at_date "scalar") (serialize-qp "due_at_unknown" $due_at_unknown "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "due_at_since" $due_at_since "scalar") (serialize-qp "assignee_user" $assignee_user "scalar") (serialize-qp "assignee_group" $assignee_group "scalar") (serialize-qp "due_at_range" $due_at_range "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/tasks/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/tasks/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7036,7 +7045,7 @@ export def "tasks patch" [
 #
 # PUT /api/tasks/{id}
 # operationId: tasks_update
-export def "tasks update" [
+export def "tasks update-by-id-1" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7059,7 +7068,7 @@ export def "tasks update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "status" $status "scalar") (serialize-qp "category" $category "scalar") (serialize-qp "due_at_date" $due_at_date "scalar") (serialize-qp "due_at_unknown" $due_at_unknown "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "due_at_since" $due_at_since "scalar") (serialize-qp "assignee_user" $assignee_user "scalar") (serialize-qp "assignee_group" $assignee_group "scalar") (serialize-qp "due_at_range" $due_at_range "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/tasks/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/tasks/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7099,7 +7108,7 @@ export def "transactions list" [
 #
 # GET /api/transactions/{id}
 # operationId: transactions_read
-export def "transactions read" [
+export def "transactions get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7118,7 +7127,7 @@ export def "transactions read" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "line_item" $line_item "scalar") (serialize-qp "posted_date" $posted_date "scalar") (serialize-qp "appointment" $appointment "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/transactions/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transactions/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7154,7 +7163,7 @@ export def "user-groups list" [
 #
 # GET /api/user_groups/{id}
 # operationId: user_groups_read
-export def "user-groups read" [
+export def "user-groups get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7169,7 +7178,7 @@ export def "user-groups read" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/user_groups/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/user_groups/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7205,7 +7214,7 @@ export def "users list" [
 #
 # GET /api/users/{id}
 # operationId: users_read
-export def "users read" [
+export def "users get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7220,7 +7229,7 @@ export def "users read" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/users/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/users/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

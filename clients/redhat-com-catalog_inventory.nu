@@ -12,6 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
   match $scheme {
     "basic" => { {headers: {Authorization: $"Basic ($token_val)"}, query: ""} }
+    "basic-credentials" => { {headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: ""} }
     "none" => { {headers: {}, query: ""} }
     _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
   }
@@ -33,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
     "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
     _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -63,7 +73,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 }
 
 def base-url-completer [] { ["https://cloud.redhat.com//api/catalog-inventory/v1.0" "http://localhost:3000//api/catalog-inventory/v1.0"] }
-def auth-scheme-completer [] { ["basic"] }
+def auth-scheme-completer [] { ["basic" "basic-credentials"] }
 
 # Completers for enum parameters
 def state-completer [] { ["completed" "pending" "queued" "running" "timedout"] }
@@ -72,7 +82,7 @@ def status-completer [] { ["error" "ok" "unchanged" "warn"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "graphql create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "graphql create-graph-ql" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -96,7 +106,7 @@ export def commands []: nothing -> table {
 #
 # POST /graphql
 # operationId: postGraphQL
-export def "graphql create" [
+export def "graphql create-graph-ql" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -113,18 +123,18 @@ export def "graphql create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/graphql")
-  let body = {"operationName": $operation_name, "query": $query, "variables": $variables} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"operationName": $operation_name, "query": $query, "variables": $variables} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Return this API document in JSON format
 #
 # GET /openapi.json
 # operationId: getDocumentation
-export def "openapijson get-documentation" [
+export def "openapi-json get-documentation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -173,7 +183,7 @@ export def "service-credential-types list" [
 #
 # GET /service_credential_types/{id}
 # operationId: showServiceCredentialType
-export def "service-credential-types showServiceCredentialType" [
+export def "service-credential-types get-show" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -186,7 +196,7 @@ export def "service-credential-types showServiceCredentialType" [
 ]: nothing -> record<archived_at: string, created_at: string, description: string, id: string, kind: string, last_seen_at: string, name: string, namespace: string, refresh_state_part_id: string, source_created_at: string, source_deleted_at: string, source_id: string, source_ref: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/service_credential_types/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/service_credential_types/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -223,7 +233,7 @@ export def "service-credentials list" [
 #
 # GET /service_credentials/{id}
 # operationId: showServiceCredential
-export def "service-credentials showServiceCredential" [
+export def "service-credentials get-show" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -236,7 +246,7 @@ export def "service-credentials showServiceCredential" [
 ]: nothing -> record<archived_at: string, created_at: string, description: string, id: string, last_seen_at: string, name: string, refresh_state_part_id: string, service_credential_type_id: string, source_created_at: string, source_id: string, source_ref: string, source_updated_at: string, type_name: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/service_credentials/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/service_credentials/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -273,7 +283,7 @@ export def "service-instances list" [
 #
 # GET /service_instances/{id}
 # operationId: showServiceInstance
-export def "service-instances showServiceInstance" [
+export def "service-instances get-show" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -286,7 +296,7 @@ export def "service-instances showServiceInstance" [
 ]: nothing -> record<archived_at: string, created_at: string, external_url: string, extra: record, id: string, last_seen_at: string, name: string, refresh_state_part_id: string, root_service_instance_id: string, service_inventory_id: string, service_offering_id: string, service_plan_id: string, source_created_at: string, source_deleted_at: string, source_id: string, source_ref: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/service_instances/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/service_instances/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -323,7 +333,7 @@ export def "service-inventories list" [
 #
 # GET /service_inventories/{id}
 # operationId: showServiceInventory
-export def "service-inventories showServiceInventory" [
+export def "service-inventories get-show-inventory" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -336,7 +346,7 @@ export def "service-inventories showServiceInventory" [
 ]: nothing -> record<archived_at: string, created_at: string, description: string, extra: record, id: string, last_seen_at: string, name: string, refresh_state_part_id: string, source_created_at: string, source_id: string, source_ref: string, source_updated_at: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/service_inventories/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/service_inventories/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -346,7 +356,7 @@ export def "service-inventories showServiceInventory" [
 #
 # POST /service_inventories/{id}/tag
 # operationId: tagServiceInventory
-export def "service-inventories-tag tag-service-inventory" [
+export def "service-inventories-tag tag-inventory" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -361,18 +371,19 @@ export def "service-inventories-tag tag-service-inventory" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/service_inventories/{id}/tag"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/service_inventories/{id}/tag"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List Tags for ServiceInventory
 #
 # GET /service_inventories/{id}/tags
 # operationId: listServiceInventoryTags
-export def "service-inventories-tags list-service-inventory" [
+export def "service-inventories-tags list-inventory" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -390,7 +401,7 @@ export def "service-inventories-tags list-service-inventory" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "filter" $filter "deepObject") (serialize-qp "sort_by" $sort_by "deepObject")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/service_inventories/{id}/tags") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/service_inventories/{id}/tags") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -400,7 +411,7 @@ export def "service-inventories-tags list-service-inventory" [
 #
 # POST /service_inventories/{id}/untag
 # operationId: untagServiceInventory
-export def "service-inventories-untag untag-service-inventory" [
+export def "service-inventories-untag untag-inventory" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -415,11 +426,12 @@ export def "service-inventories-untag untag-service-inventory" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/service_inventories/{id}/untag"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/service_inventories/{id}/untag"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List ServiceOfferingNodes
@@ -453,7 +465,7 @@ export def "service-offering-nodes list" [
 #
 # GET /service_offering_nodes/{id}
 # operationId: showServiceOfferingNode
-export def "service-offering-nodes showServiceOfferingNode" [
+export def "service-offering-nodes get-show" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -466,7 +478,7 @@ export def "service-offering-nodes showServiceOfferingNode" [
 ]: nothing -> record<archived_at: string, created_at: string, extra: record, id: string, last_seen_at: string, name: string, refresh_state_part_id: string, root_service_offering_id: string, service_inventory_id: string, service_offering_id: string, source_created_at: string, source_id: string, source_ref: string, source_updated_at: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/service_offering_nodes/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/service_offering_nodes/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -503,7 +515,7 @@ export def "service-offerings list" [
 #
 # GET /service_offerings/{id}
 # operationId: showServiceOffering
-export def "service-offerings showServiceOffering" [
+export def "service-offerings get-show" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -516,7 +528,7 @@ export def "service-offerings showServiceOffering" [
 ]: nothing -> record<archived_at: string, created_at: string, description: string, display_name: string, distributor: string, documentation_url: string, extra: record, id: string, last_seen_at: string, long_description: string, name: string, refresh_state_part_id: string, service_inventory_id: string, source_created_at: string, source_deleted_at: string, source_id: string, source_ref: string, support_url: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/service_offerings/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/service_offerings/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -526,7 +538,7 @@ export def "service-offerings showServiceOffering" [
 #
 # POST /service_offerings/{id}/applied_inventories_tags
 # operationId: appliedInventoriesTagsForServiceOffering
-export def "service-offerings-applied-inventories-tags appliedInventoriesTagsForServiceOffering" [
+export def "service-offerings-applied-inventories-tags create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -541,19 +553,19 @@ export def "service-offerings-applied-inventories-tags appliedInventoriesTagsFor
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/service_offerings/{id}/applied_inventories_tags"))
-  let body = {"service_parameters": $service_parameters} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/service_offerings/{id}/applied_inventories_tags"))
+  let req_body = {"service_parameters": $service_parameters} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Order an existing ServiceOffering
 #
 # POST /service_offerings/{id}/order
 # operationId: orderServiceOffering
-export def "service-offerings-order orderServiceOffering" [
+export def "service-offerings-order create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -569,12 +581,12 @@ export def "service-offerings-order orderServiceOffering" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/service_offerings/{id}/order"))
-  let body = {"provider_control_parameters": $provider_control_parameters, "service_parameters": $service_parameters} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/service_offerings/{id}/order"))
+  let req_body = {"provider_control_parameters": $provider_control_parameters, "service_parameters": $service_parameters} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List ServiceInstances for ServiceOffering
@@ -599,7 +611,7 @@ export def "service-offerings-service-instances list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "filter" $filter "deepObject") (serialize-qp "sort_by" $sort_by "deepObject")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/service_offerings/{id}/service_instances") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/service_offerings/{id}/service_instances") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -627,7 +639,7 @@ export def "service-offerings-service-offering-nodes list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "filter" $filter "deepObject") (serialize-qp "sort_by" $sort_by "deepObject")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/service_offerings/{id}/service_offering_nodes") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/service_offerings/{id}/service_offering_nodes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -655,7 +667,7 @@ export def "service-offerings-service-plans list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "filter" $filter "deepObject") (serialize-qp "sort_by" $sort_by "deepObject")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/service_offerings/{id}/service_plans") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/service_offerings/{id}/service_plans") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -692,7 +704,7 @@ export def "service-plans list" [
 #
 # GET /service_plans/{id}
 # operationId: showServicePlan
-export def "service-plans showServicePlan" [
+export def "service-plans get-show" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -705,7 +717,7 @@ export def "service-plans showServicePlan" [
 ]: nothing -> record<archived_at: string, create_json_schema: record, created_at: string, description: string, extra: record, id: string, last_seen_at: string, name: string, refresh_state_part_id: string, resource_version: string, service_offering_id: string, source_created_at: string, source_deleted_at: string, source_id: string, source_ref: string, update_json_schema: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/service_plans/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/service_plans/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -742,7 +754,7 @@ export def "sources list" [
 #
 # GET /sources/{id}
 # operationId: showSource
-export def "sources showSource" [
+export def "sources get-show" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -755,7 +767,7 @@ export def "sources showSource" [
 ]: nothing -> record<archived_at: string, availability_message: string, availability_status: string, cloud_connector_id: string, created_at: string, enabled: bool, id: string, info: record, last_available_at: string, last_checked_at: string, last_refresh_message: string, last_successful_refresh_at: string, name: string, previous_sha: string, previous_size: int, refresh_finished_at: string, refresh_started_at: string, refresh_state: string, refresh_task_id: string, uid: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/sources/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/sources/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -765,7 +777,7 @@ export def "sources showSource" [
 #
 # PATCH /sources/{id}/incremental_refresh
 # operationId: incrementalRefreshSource
-export def "sources-incremental-refresh incrementalRefreshSource" [
+export def "sources-incremental-refresh refresh" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -778,13 +790,13 @@ export def "sources-incremental-refresh incrementalRefreshSource" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/sources/{id}/incremental_refresh"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/sources/{id}/incremental_refresh"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-#  Refresh an existing Source
+# Refresh an existing Source
 #
 # PATCH /sources/{id}/refresh
 # operationId: refreshSource
@@ -801,7 +813,7 @@ export def "sources-refresh refresh" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/sources/{id}/refresh"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/sources/{id}/refresh"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -829,7 +841,7 @@ export def "sources-service-instances list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "filter" $filter "deepObject") (serialize-qp "sort_by" $sort_by "deepObject")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/sources/{id}/service_instances") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/sources/{id}/service_instances") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -857,7 +869,7 @@ export def "sources-service-inventories list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "filter" $filter "deepObject") (serialize-qp "sort_by" $sort_by "deepObject")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/sources/{id}/service_inventories") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/sources/{id}/service_inventories") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -885,7 +897,7 @@ export def "sources-service-offering-nodes list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "filter" $filter "deepObject") (serialize-qp "sort_by" $sort_by "deepObject")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/sources/{id}/service_offering_nodes") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/sources/{id}/service_offering_nodes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -913,7 +925,7 @@ export def "sources-service-offerings list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "filter" $filter "deepObject") (serialize-qp "sort_by" $sort_by "deepObject")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/sources/{id}/service_offerings") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/sources/{id}/service_offerings") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -941,7 +953,7 @@ export def "sources-service-plans list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "filter" $filter "deepObject") (serialize-qp "sort_by" $sort_by "deepObject")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/sources/{id}/service_plans") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/sources/{id}/service_plans") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -969,7 +981,7 @@ export def "sources-tasks list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "filter" $filter "deepObject") (serialize-qp "sort_by" $sort_by "deepObject")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/sources/{id}/tasks") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/sources/{id}/tasks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1033,7 +1045,7 @@ export def "tasks list" [
 #
 # GET /tasks/{id}
 # operationId: showTask
-export def "tasks showTask" [
+export def "tasks get-show" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1046,7 +1058,7 @@ export def "tasks showTask" [
 ]: nothing -> record<archived_at: string, child_task_id: string, completed_at: string, controller_message_id: string, created_at: string, id: string, input: record, message: string, name: string, output: record, owner: string, source_id: string, state: string, status: string, target_source_ref: string, target_type: string, type: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/tasks/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/tasks/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1079,10 +1091,10 @@ export def "tasks update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/tasks/{id}"))
-  let body = {"completed_at": $completed_at, "message": $message, "name": $name, "output": $output, "state": $state, "status": $status, "target_source_ref": $target_source_ref, "target_type": $target_type, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/tasks/{id}"))
+  let req_body = {"completed_at": $completed_at, "message": $message, "name": $name, "output": $output, "state": $state, "status": $status, "target_source_ref": $target_source_ref, "target_type": $target_type, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

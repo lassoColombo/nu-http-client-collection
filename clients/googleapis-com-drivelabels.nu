@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -76,7 +85,7 @@ def role-completer [] { ["APPLIER" "EDITOR" "LABEL_ROLE_UNSPECIFIED" "ORGANIZER"
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v2beta-labels drivelabelslabelslist" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v2beta-labels list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -100,7 +109,7 @@ export def commands []: nothing -> table {
 #
 # GET /v2beta/labels
 # operationId: drivelabels.labels.list
-export def "v2beta-labels drivelabelslabelslist" [
+export def "v2beta-labels list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -153,7 +162,7 @@ export def "v2beta-labels drivelabelslabelslist" [
 # --publisher shape: {person?: string}
 # --revisionCreator shape: {person?: string}
 # --schemaCapabilities shape: {canDelete?: bool, canDisable?: bool, canEnable?: bool, canUpdate?: bool}
-export def "v2beta-labels drivelabelslabelscreate" [
+export def "v2beta-labels create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -195,18 +204,18 @@ export def "v2beta-labels drivelabelslabelscreate" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "languageCode" $language_code "scalar") (serialize-qp "useAdminAccess" $use_admin_access "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2beta/labels" $qp)
-  let body = {"appliedCapabilities": $applied_capabilities, "appliedLabelPolicy": $applied_label_policy, "creator": $creator, "disabler": $disabler, "displayHints": $display_hints, "fields": $fields, "labelType": $label_type, "learnMoreUri": $learn_more_uri, "lifecycle": $lifecycle, "lockStatus": $lock_status, "properties": $properties, "publisher": $publisher, "revisionCreator": $revision_creator, "schemaCapabilities": $schema_capabilities} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"appliedCapabilities": $applied_capabilities, "appliedLabelPolicy": $applied_label_policy, "creator": $creator, "disabler": $disabler, "displayHints": $display_hints, "fields": $fields, "labelType": $label_type, "learnMoreUri": $learn_more_uri, "lifecycle": $lifecycle, "lockStatus": $lock_status, "properties": $properties, "publisher": $publisher, "revisionCreator": $revision_creator, "schemaCapabilities": $schema_capabilities} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get the constraints on the structure of a Label; such as, the maximum number of Fields allowed and maximum length of the label title.
 #
 # GET /v2beta/limits/label
 # operationId: drivelabels.limits.getLabel
-export def "v2beta-limits-label drivelabelslimitsgetLabel" [
+export def "v2beta-limits-label get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -241,7 +250,7 @@ export def "v2beta-limits-label drivelabelslimitsgetLabel" [
 #
 # DELETE /v2beta/{name}
 # operationId: drivelabels.labels.revisions.permissions.delete
-export def "v2beta drivelabelslabelsrevisionspermissionsdelete" [
+export def "v2beta delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -268,7 +277,7 @@ export def "v2beta drivelabelslabelsrevisionspermissionsdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "useAdminAccess" $use_admin_access "scalar") (serialize-qp "writeControl.requiredRevisionId" $write_control_required_revision_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v2beta/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v2beta/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -278,7 +287,7 @@ export def "v2beta drivelabelslabelsrevisionspermissionsdelete" [
 #
 # GET /v2beta/{name}
 # operationId: drivelabels.users.getCapabilities
-export def "v2beta drivelabelsusersgetCapabilities" [
+export def "v2beta get-capabilities" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -306,7 +315,7 @@ export def "v2beta drivelabelsusersgetCapabilities" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "customer" $customer "scalar") (serialize-qp "useAdminAccess" $use_admin_access "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v2beta/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v2beta/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -318,7 +327,7 @@ export def "v2beta drivelabelsusersgetCapabilities" [
 # operationId: drivelabels.labels.delta
 # --requests item shape: {createField?: record, createSelectionChoice?: record, deleteField?: record, deleteSelectionChoice?: record, disableField?: record, disableSelectionChoice?: record, enableField?: record, enableSelectionChoice?: record, updateField?: record, updateFieldType?: record, updateLabel?: record, updateSelectionChoiceProperties?: record}
 # --writeControl shape: {requiredRevisionId?: string}
-export def "v2beta drivelabelslabelsdelta" [
+export def "v2beta create-delta" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -349,12 +358,12 @@ export def "v2beta drivelabelslabelsdelta" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v2beta/{name}:delta") $qp)
-  let body = {"languageCode": $language_code, "requests": $requests, "useAdminAccess": $use_admin_access, "view": $view, "writeControl": $write_control} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v2beta/{name}:delta") $qp)
+  let req_body = {"languageCode": $language_code, "requests": $requests, "useAdminAccess": $use_admin_access, "view": $view, "writeControl": $write_control} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Disable a published Label. Disabling a Label will result in a new disabled published revision based on the current published revision. If there is a draft revision, a new disabled draft revision will be created based on the latest draft revision. Older draft revisions will be deleted. Once disabled, a label may be deleted with `DeleteLabel`.
@@ -363,7 +372,7 @@ export def "v2beta drivelabelslabelsdelta" [
 # operationId: drivelabels.labels.disable
 # --disabledPolicy shape: {hideInSearch?: bool, showInApply?: bool}
 # --writeControl shape: {requiredRevisionId?: string}
-export def "v2beta drivelabelslabelsdisable" [
+export def "v2beta disable" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -394,12 +403,12 @@ export def "v2beta drivelabelslabelsdisable" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v2beta/{name}:disable") $qp)
-  let body = {"disabledPolicy": $disabled_policy, "languageCode": $language_code, "updateMask": $update_mask, "useAdminAccess": $use_admin_access, "writeControl": $write_control} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v2beta/{name}:disable") $qp)
+  let req_body = {"disabledPolicy": $disabled_policy, "languageCode": $language_code, "updateMask": $update_mask, "useAdminAccess": $use_admin_access, "writeControl": $write_control} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Enable a disabled Label and restore it to its published state. This will result in a new published revision based on the current disabled published revision. If there is an existing disabled draft revision, a new revision will be created based on that draft and will be enabled.
@@ -407,7 +416,7 @@ export def "v2beta drivelabelslabelsdisable" [
 # POST /v2beta/{name}:enable
 # operationId: drivelabels.labels.enable
 # --writeControl shape: {requiredRevisionId?: string}
-export def "v2beta drivelabelslabelsenable" [
+export def "v2beta enable" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -436,12 +445,12 @@ export def "v2beta drivelabelslabelsenable" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v2beta/{name}:enable") $qp)
-  let body = {"languageCode": $language_code, "useAdminAccess": $use_admin_access, "writeControl": $write_control} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v2beta/{name}:enable") $qp)
+  let req_body = {"languageCode": $language_code, "useAdminAccess": $use_admin_access, "writeControl": $write_control} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Publish all draft changes to the Label. Once published, the Label may not return to its draft state. See `google.apps.drive.labels.v2.Lifecycle` for more information. Publishing a Label will result in a new published revision. All previous draft revisions will be deleted. Previous published revisions will be kept but are subject to automated deletion as needed. Once published, some changes are no longer permitted. Generally, any change that would invalidate or cause new restrictions on existing metadata related to the Label will be rejected. For example, the following changes to a Label will be rejected after the Label is published: * The label cannot be directly deleted. It must be disabled first, then deleted. * Field.FieldType cannot be changed. * Changes to Field validation options cannot reject something that was previously accepted. * Reducing the max entries.
@@ -449,7 +458,7 @@ export def "v2beta drivelabelslabelsenable" [
 # POST /v2beta/{name}:publish
 # operationId: drivelabels.labels.publish
 # --writeControl shape: {requiredRevisionId?: string}
-export def "v2beta drivelabelslabelspublish" [
+export def "v2beta publish" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -478,19 +487,19 @@ export def "v2beta drivelabelslabelspublish" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v2beta/{name}:publish") $qp)
-  let body = {"languageCode": $language_code, "useAdminAccess": $use_admin_access, "writeControl": $write_control} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v2beta/{name}:publish") $qp)
+  let req_body = {"languageCode": $language_code, "useAdminAccess": $use_admin_access, "writeControl": $write_control} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates a Label's `CopyMode`. Changes to this policy are not revisioned, do not require publishing, and take effect immediately.
 #
 # POST /v2beta/{name}:updateLabelCopyMode
 # operationId: drivelabels.labels.updateLabelCopyMode
-export def "v2beta drivelabelslabelsupdateLabelCopyMode" [
+export def "v2beta update-label-copy-mode" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -520,19 +529,19 @@ export def "v2beta drivelabelslabelsupdateLabelCopyMode" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v2beta/{name}:updateLabelCopyMode") $qp)
-  let body = {"copyMode": $copy_mode, "languageCode": $language_code, "useAdminAccess": $use_admin_access, "view": $view} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v2beta/{name}:updateLabelCopyMode") $qp)
+  let req_body = {"copyMode": $copy_mode, "languageCode": $language_code, "useAdminAccess": $use_admin_access, "view": $view} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists the LabelLocks on a Label.
 #
 # GET /v2beta/{parent}/locks
 # operationId: drivelabels.labels.revisions.locks.list
-export def "v2beta-locks drivelabelslabelsrevisionslockslist" [
+export def "v2beta-locks list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -559,7 +568,7 @@ export def "v2beta-locks drivelabelslabelsrevisionslockslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v2beta/{parent}/locks") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v2beta/{parent}/locks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -569,7 +578,7 @@ export def "v2beta-locks drivelabelslabelsrevisionslockslist" [
 #
 # GET /v2beta/{parent}/permissions
 # operationId: drivelabels.labels.revisions.permissions.list
-export def "v2beta-permissions drivelabelslabelsrevisionspermissionslist" [
+export def "v2beta-permissions list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -597,7 +606,7 @@ export def "v2beta-permissions drivelabelslabelsrevisionspermissionslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "useAdminAccess" $use_admin_access "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v2beta/{parent}/permissions") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v2beta/{parent}/permissions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -607,7 +616,7 @@ export def "v2beta-permissions drivelabelslabelsrevisionspermissionslist" [
 #
 # PATCH /v2beta/{parent}/permissions
 # operationId: drivelabels.labels.revisions.updatePermissions
-export def "v2beta-permissions drivelabelslabelsrevisionsupdatePermissions" [
+export def "v2beta-permissions update" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -640,19 +649,19 @@ export def "v2beta-permissions drivelabelslabelsrevisionsupdatePermissions" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "useAdminAccess" $use_admin_access "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v2beta/{parent}/permissions") $qp)
-  let body = {"audience": $audience, "email": $email, "group": $group, "name": $name, "person": $person, "role": $role} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v2beta/{parent}/permissions") $qp)
+  let req_body = {"audience": $audience, "email": $email, "group": $group, "name": $name, "person": $person, "role": $role} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates a Label's permissions. If a permission for the indicated principal doesn't exist, a new Label Permission is created, otherwise the existing permission is updated. Permissions affect the Label resource as a whole, are not revisioned, and do not require publishing.
 #
 # POST /v2beta/{parent}/permissions
 # operationId: drivelabels.labels.revisions.permissions.create
-export def "v2beta-permissions drivelabelslabelsrevisionspermissionscreate" [
+export def "v2beta-permissions create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -685,12 +694,12 @@ export def "v2beta-permissions drivelabelslabelsrevisionspermissionscreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "useAdminAccess" $use_admin_access "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v2beta/{parent}/permissions") $qp)
-  let body = {"audience": $audience, "email": $email, "group": $group, "name": $name, "person": $person, "role": $role} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v2beta/{parent}/permissions") $qp)
+  let req_body = {"audience": $audience, "email": $email, "group": $group, "name": $name, "person": $person, "role": $role} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes Label permissions. Permissions affect the Label resource as a whole, are not revisioned, and do not require publishing.
@@ -698,7 +707,7 @@ export def "v2beta-permissions drivelabelslabelsrevisionspermissionscreate" [
 # POST /v2beta/{parent}/permissions:batchDelete
 # operationId: drivelabels.labels.revisions.permissions.batchDelete
 # --requests item shape: {name?: string, useAdminAccess?: bool}
-export def "v2beta-permissions-batch-delete drivelabelslabelsrevisionspermissionsbatchDelete" [
+export def "v2beta-permissions-batch-delete delete" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -726,12 +735,12 @@ export def "v2beta-permissions-batch-delete drivelabelslabelsrevisionspermission
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v2beta/{parent}/permissions:batchDelete") $qp)
-  let body = {"requests": $requests, "useAdminAccess": $use_admin_access} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v2beta/{parent}/permissions:batchDelete") $qp)
+  let req_body = {"requests": $requests, "useAdminAccess": $use_admin_access} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates Label permissions. If a permission for the indicated principal doesn't exist, a new Label Permission is created, otherwise the existing permission is updated. Permissions affect the Label resource as a whole, are not revisioned, and do not require publishing.
@@ -739,7 +748,7 @@ export def "v2beta-permissions-batch-delete drivelabelslabelsrevisionspermission
 # POST /v2beta/{parent}/permissions:batchUpdate
 # operationId: drivelabels.labels.revisions.permissions.batchUpdate
 # --requests item shape: {labelPermission?: record, parent?: string, useAdminAccess?: bool}
-export def "v2beta-permissions-batch-update drivelabelslabelsrevisionspermissionsbatchUpdate" [
+export def "v2beta-permissions-batch-update update" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -767,10 +776,10 @@ export def "v2beta-permissions-batch-update drivelabelslabelsrevisionspermission
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v2beta/{parent}/permissions:batchUpdate") $qp)
-  let body = {"requests": $requests, "useAdminAccess": $use_admin_access} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v2beta/{parent}/permissions:batchUpdate") $qp)
+  let req_body = {"requests": $requests, "useAdminAccess": $use_admin_access} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

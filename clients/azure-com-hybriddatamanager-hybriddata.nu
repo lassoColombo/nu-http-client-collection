@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -134,7 +143,7 @@ export def "subscriptions-providers-microsoft-hybrid-data-data-managers list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.HybridData/dataManagers") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.HybridData/dataManagers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -144,7 +153,7 @@ export def "subscriptions-providers-microsoft-hybrid-data-data-managers list" [
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HybridData/dataManagers
 # operationId: DataManagers_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-managers list-by" [
+export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-managers list" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -160,7 +169,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-m
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HybridData/dataManagers") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HybridData/dataManagers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -187,7 +196,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-m
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, data_manager_name: $data_manager_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HybridData/dataManagers/{data_manager_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), data_manager_name: (encode-path-segment $data_manager_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HybridData/dataManagers/{data_manager_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -214,7 +223,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-m
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, data_manager_name: $data_manager_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HybridData/dataManagers/{data_manager_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), data_manager_name: (encode-path-segment $data_manager_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HybridData/dataManagers/{data_manager_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -246,14 +255,14 @@ export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-m
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, data_manager_name: $data_manager_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HybridData/dataManagers/{data_manager_name}") $qp)
-  let body = {"sku": $sku, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"If-Match": $if_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), data_manager_name: (encode-path-segment $data_manager_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HybridData/dataManagers/{data_manager_name}") $qp)
+  let req_body = {"sku": $sku, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"If-Match": $if_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Creates a new data manager resource with the specified parameters. Existing resources cannot be updated with this API and should instead be updated with the Update data manager resource API.
@@ -283,19 +292,19 @@ export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-m
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, data_manager_name: $data_manager_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HybridData/dataManagers/{data_manager_name}") $qp)
-  let body = {"etag": $etag, "location": $location, "sku": $sku, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), data_manager_name: (encode-path-segment $data_manager_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HybridData/dataManagers/{data_manager_name}") $qp)
+  let req_body = {"etag": $etag, "location": $location, "sku": $sku, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # This method gets all the data services.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HybridData/dataManagers/{dataManagerName}/dataServices
 # operationId: DataServices_ListByDataManager
-export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-managers-data-services list-by" [
+export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-managers-data-services list" [
   subscription_id: string
   resource_group_name: string
   data_manager_name: string
@@ -312,7 +321,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-m
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, data_manager_name: $data_manager_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HybridData/dataManagers/{data_manager_name}/dataServices") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), data_manager_name: (encode-path-segment $data_manager_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HybridData/dataManagers/{data_manager_name}/dataServices") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -340,7 +349,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-m
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, data_manager_name: $data_manager_name, data_service_name: $data_service_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HybridData/dataManagers/{data_manager_name}/dataServices/{data_service_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), data_manager_name: (encode-path-segment $data_manager_name), data_service_name: (encode-path-segment $data_service_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HybridData/dataManagers/{data_manager_name}/dataServices/{data_service_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -350,7 +359,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-m
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HybridData/dataManagers/{dataManagerName}/dataServices/{dataServiceName}/jobDefinitions
 # operationId: JobDefinitions_ListByDataService
-export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-managers-data-services-job-definitions list-by" [
+export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-managers-data-services-job-definitions list" [
   subscription_id: string
   resource_group_name: string
   data_manager_name: string
@@ -369,7 +378,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-m
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, data_manager_name: $data_manager_name, data_service_name: $data_service_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HybridData/dataManagers/{data_manager_name}/dataServices/{data_service_name}/jobDefinitions") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), data_manager_name: (encode-path-segment $data_manager_name), data_service_name: (encode-path-segment $data_service_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HybridData/dataManagers/{data_manager_name}/dataServices/{data_service_name}/jobDefinitions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -398,7 +407,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-m
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, data_manager_name: $data_manager_name, data_service_name: $data_service_name, job_definition_name: $job_definition_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HybridData/dataManagers/{data_manager_name}/dataServices/{data_service_name}/jobDefinitions/{job_definition_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), data_manager_name: (encode-path-segment $data_manager_name), data_service_name: (encode-path-segment $data_service_name), job_definition_name: (encode-path-segment $job_definition_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HybridData/dataManagers/{data_manager_name}/dataServices/{data_service_name}/jobDefinitions/{job_definition_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -427,7 +436,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-m
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, data_manager_name: $data_manager_name, data_service_name: $data_service_name, job_definition_name: $job_definition_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HybridData/dataManagers/{data_manager_name}/dataServices/{data_service_name}/jobDefinitions/{job_definition_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), data_manager_name: (encode-path-segment $data_manager_name), data_service_name: (encode-path-segment $data_service_name), job_definition_name: (encode-path-segment $job_definition_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HybridData/dataManagers/{data_manager_name}/dataServices/{data_service_name}/jobDefinitions/{job_definition_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -437,7 +446,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-m
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HybridData/dataManagers/{dataManagerName}/dataServices/{dataServiceName}/jobDefinitions/{jobDefinitionName}
 # operationId: JobDefinitions_CreateOrUpdate
-# --properties shape: {customerSecrets?: list, dataServiceInput?: record, dataSinkId: string, dataSourceId: string, lastModifiedTime?: string, runLocation?: "none"|"australiaeast"|"australiasoutheast"|"brazilsouth"|"canadacentral"|"canadaeast"|"centralindia"|"centralus"|"eastasia"|"eastus"|"eastus2"|"japaneast"|"japanwest"|"koreacentral"|"koreasouth"|"southeastasia"|"southcentralus"|"southindia"|"northcentralus"|"northeurope"|"uksouth"|"ukwest"|"westcentralus"|"westeurope"|"westindia"|"westus"|"westus2", schedules?: list, state: "Disabled"|"Enabled"|"Supported", userConfirmation?: "NotRequired"|"Required"}
+# --properties shape: {customerSecrets?: list, dataServiceInput?: record, dataSinkId: string, dataSourceId: string, lastModifiedTime?: string, runLocation?: "none"|"australiaeast"|"australiasoutheast"|"brazilsouth"|"canadacentral"|"canadaeast"|"centralindia"|"centralus"|"eastasia"|"eastus"|"eastus2"|"japaneast"|"japanwest"|"koreacentral"|"koreasouth"|"southeastasia"|"southcentralus"|"southindia"|"northcentralus"|"northeurope"|"uksouth"|"ukwest"|"westcentralus"|"westeurope"|"westindia"|"westus"|"westus2", ... (3 more fields)}
 export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-managers-data-services-job-definitions create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -453,25 +462,25 @@ export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-m
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API Version
-  properties: record # Job Definition — shape: {customerSecrets?: list, dataServiceInput?: record, dataSinkId: string, dataSourceId: string, lastModifiedTime?: string, runLocation?: "none"|"australiaeast"|"australiasoutheast"|"brazilsouth"|"canadacentral"|"canadaeast"|"centralindia"|"centralus"|"eastasia"|"eastus"|"eastus2"|"japaneast"|"japanwest"|"koreacentral"|"koreasouth"|"southeastasia"|"southcentralus"|"southindia"|"northcentralus"|"northeurope"|"uksouth"|"ukwest"|"westcentralus"|"westeurope"|"westindia"|"westus"|"westus2", schedules?: list, state: "Disabled"|"Enabled"|"Supported", userConfirmation?: "NotRequired"|"Required"}
+  properties: record # Job Definition — shape: {customerSecrets?: list, dataServiceInput?: record, dataSinkId: string, dataSourceId: string, lastModifiedTime?: string, runLocation?: "none"|"australiaeast"|"australiasoutheast"|"brazilsouth"|"canadacentral"|"canadaeast"|"centralindia"|"centralus"|"eastasia"|"eastus"|"eastus2"|"japaneast"|"japanwest"|"koreacentral"|"koreasouth"|"southeastasia"|"southcentralus"|"southindia"|"northcentralus"|"northeurope"|"uksouth"|"ukwest"|"westcentralus"|"westeurope"|"westindia"|"westus"|"westus2", ... (3 more fields)}
 ]: any -> record<properties: record<customerSecrets: list<record>, dataServiceInput: record, dataSinkId: string, dataSourceId: string, lastModifiedTime: string, runLocation: string, schedules: list<record>, state: string, userConfirmation: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, data_manager_name: $data_manager_name, data_service_name: $data_service_name, job_definition_name: $job_definition_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HybridData/dataManagers/{data_manager_name}/dataServices/{data_service_name}/jobDefinitions/{job_definition_name}") $qp)
-  let body = {"properties": $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), data_manager_name: (encode-path-segment $data_manager_name), data_service_name: (encode-path-segment $data_service_name), job_definition_name: (encode-path-segment $job_definition_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HybridData/dataManagers/{data_manager_name}/dataServices/{data_service_name}/jobDefinitions/{job_definition_name}") $qp)
+  let req_body = {"properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # This method gets all the jobs of a given job definition.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HybridData/dataManagers/{dataManagerName}/dataServices/{dataServiceName}/jobDefinitions/{jobDefinitionName}/jobs
 # operationId: Jobs_ListByJobDefinition
-export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-managers-data-services-job-definitions-jobs list-by" [
+export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-managers-data-services-job-definitions-jobs list" [
   subscription_id: string
   resource_group_name: string
   data_manager_name: string
@@ -491,7 +500,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-m
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, data_manager_name: $data_manager_name, data_service_name: $data_service_name, job_definition_name: $job_definition_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HybridData/dataManagers/{data_manager_name}/dataServices/{data_service_name}/jobDefinitions/{job_definition_name}/jobs") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), data_manager_name: (encode-path-segment $data_manager_name), data_service_name: (encode-path-segment $data_service_name), job_definition_name: (encode-path-segment $job_definition_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HybridData/dataManagers/{data_manager_name}/dataServices/{data_service_name}/jobDefinitions/{job_definition_name}/jobs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -522,7 +531,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-m
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, data_manager_name: $data_manager_name, data_service_name: $data_service_name, job_definition_name: $job_definition_name, job_id: $job_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HybridData/dataManagers/{data_manager_name}/dataServices/{data_service_name}/jobDefinitions/{job_definition_name}/jobs/{job_id}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), data_manager_name: (encode-path-segment $data_manager_name), data_service_name: (encode-path-segment $data_service_name), job_definition_name: (encode-path-segment $job_definition_name), job_id: (encode-path-segment $job_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HybridData/dataManagers/{data_manager_name}/dataServices/{data_service_name}/jobDefinitions/{job_definition_name}/jobs/{job_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -552,7 +561,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-m
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, data_manager_name: $data_manager_name, data_service_name: $data_service_name, job_definition_name: $job_definition_name, job_id: $job_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HybridData/dataManagers/{data_manager_name}/dataServices/{data_service_name}/jobDefinitions/{job_definition_name}/jobs/{job_id}/cancel") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), data_manager_name: (encode-path-segment $data_manager_name), data_service_name: (encode-path-segment $data_service_name), job_definition_name: (encode-path-segment $job_definition_name), job_id: (encode-path-segment $job_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HybridData/dataManagers/{data_manager_name}/dataServices/{data_service_name}/jobDefinitions/{job_definition_name}/jobs/{job_id}/cancel") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -562,7 +571,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-m
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HybridData/dataManagers/{dataManagerName}/dataServices/{dataServiceName}/jobDefinitions/{jobDefinitionName}/jobs/{jobId}/resume
 # operationId: Jobs_Resume
-export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-managers-data-services-job-definitions-jobs-resume post" [
+export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-managers-data-services-job-definitions-jobs-resume create" [
   subscription_id: string
   resource_group_name: string
   data_manager_name: string
@@ -582,7 +591,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-m
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, data_manager_name: $data_manager_name, data_service_name: $data_service_name, job_definition_name: $job_definition_name, job_id: $job_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HybridData/dataManagers/{data_manager_name}/dataServices/{data_service_name}/jobDefinitions/{job_definition_name}/jobs/{job_id}/resume") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), data_manager_name: (encode-path-segment $data_manager_name), data_service_name: (encode-path-segment $data_service_name), job_definition_name: (encode-path-segment $job_definition_name), job_id: (encode-path-segment $job_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HybridData/dataManagers/{data_manager_name}/dataServices/{data_service_name}/jobDefinitions/{job_definition_name}/jobs/{job_id}/resume") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -593,7 +602,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-m
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HybridData/dataManagers/{dataManagerName}/dataServices/{dataServiceName}/jobDefinitions/{jobDefinitionName}/run
 # operationId: JobDefinitions_Run
 # --customerSecrets item shape: {algorithm: "None"|"RSA1_5"|"RSA_OAEP"|"PlainText", keyIdentifier: string, keyValue: string}
-export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-managers-data-services-job-definitions-run post" [
+export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-managers-data-services-job-definitions-run create" [
   subscription_id: string
   resource_group_name: string
   data_manager_name: string
@@ -616,19 +625,19 @@ export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-m
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, data_manager_name: $data_manager_name, data_service_name: $data_service_name, job_definition_name: $job_definition_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HybridData/dataManagers/{data_manager_name}/dataServices/{data_service_name}/jobDefinitions/{job_definition_name}/run") $qp)
-  let body = {"customerSecrets": $customer_secrets, "dataServiceInput": $data_service_input, "userConfirmation": $user_confirmation} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), data_manager_name: (encode-path-segment $data_manager_name), data_service_name: (encode-path-segment $data_service_name), job_definition_name: (encode-path-segment $job_definition_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HybridData/dataManagers/{data_manager_name}/dataServices/{data_service_name}/jobDefinitions/{job_definition_name}/run") $qp)
+  let req_body = {"customerSecrets": $customer_secrets, "dataServiceInput": $data_service_input, "userConfirmation": $user_confirmation} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # This method gets all the jobs of a data service type in a given resource.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HybridData/dataManagers/{dataManagerName}/dataServices/{dataServiceName}/jobs
 # operationId: Jobs_ListByDataService
-export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-managers-data-services-jobs list-by" [
+export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-managers-data-services-jobs list" [
   subscription_id: string
   resource_group_name: string
   data_manager_name: string
@@ -647,7 +656,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-m
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, data_manager_name: $data_manager_name, data_service_name: $data_service_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HybridData/dataManagers/{data_manager_name}/dataServices/{data_service_name}/jobs") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), data_manager_name: (encode-path-segment $data_manager_name), data_service_name: (encode-path-segment $data_service_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HybridData/dataManagers/{data_manager_name}/dataServices/{data_service_name}/jobs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -657,7 +666,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-m
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HybridData/dataManagers/{dataManagerName}/dataStoreTypes
 # operationId: DataStoreTypes_ListByDataManager
-export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-managers-data-store-types list-by" [
+export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-managers-data-store-types list" [
   subscription_id: string
   resource_group_name: string
   data_manager_name: string
@@ -674,7 +683,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-m
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, data_manager_name: $data_manager_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HybridData/dataManagers/{data_manager_name}/dataStoreTypes") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), data_manager_name: (encode-path-segment $data_manager_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HybridData/dataManagers/{data_manager_name}/dataStoreTypes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -702,7 +711,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-m
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, data_manager_name: $data_manager_name, data_store_type_name: $data_store_type_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HybridData/dataManagers/{data_manager_name}/dataStoreTypes/{data_store_type_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), data_manager_name: (encode-path-segment $data_manager_name), data_store_type_name: (encode-path-segment $data_store_type_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HybridData/dataManagers/{data_manager_name}/dataStoreTypes/{data_store_type_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -712,7 +721,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-m
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HybridData/dataManagers/{dataManagerName}/dataStores
 # operationId: DataStores_ListByDataManager
-export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-managers-data-stores list-by" [
+export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-managers-data-stores list" [
   subscription_id: string
   resource_group_name: string
   data_manager_name: string
@@ -730,7 +739,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-m
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, data_manager_name: $data_manager_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HybridData/dataManagers/{data_manager_name}/dataStores") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), data_manager_name: (encode-path-segment $data_manager_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HybridData/dataManagers/{data_manager_name}/dataStores") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -758,7 +767,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-m
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, data_manager_name: $data_manager_name, data_store_name: $data_store_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HybridData/dataManagers/{data_manager_name}/dataStores/{data_store_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), data_manager_name: (encode-path-segment $data_manager_name), data_store_name: (encode-path-segment $data_store_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HybridData/dataManagers/{data_manager_name}/dataStores/{data_store_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -786,7 +795,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-m
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, data_manager_name: $data_manager_name, data_store_name: $data_store_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HybridData/dataManagers/{data_manager_name}/dataStores/{data_store_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), data_manager_name: (encode-path-segment $data_manager_name), data_store_name: (encode-path-segment $data_store_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HybridData/dataManagers/{data_manager_name}/dataStores/{data_store_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -817,19 +826,19 @@ export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-m
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, data_manager_name: $data_manager_name, data_store_name: $data_store_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HybridData/dataManagers/{data_manager_name}/dataStores/{data_store_name}") $qp)
-  let body = {"properties": $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), data_manager_name: (encode-path-segment $data_manager_name), data_store_name: (encode-path-segment $data_store_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HybridData/dataManagers/{data_manager_name}/dataStores/{data_store_name}") $qp)
+  let req_body = {"properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # This method gets all the job definitions of the given data manager resource.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HybridData/dataManagers/{dataManagerName}/jobDefinitions
 # operationId: JobDefinitions_ListByDataManager
-export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-managers-job-definitions list-by" [
+export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-managers-job-definitions list" [
   subscription_id: string
   resource_group_name: string
   data_manager_name: string
@@ -847,7 +856,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-m
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, data_manager_name: $data_manager_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HybridData/dataManagers/{data_manager_name}/jobDefinitions") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), data_manager_name: (encode-path-segment $data_manager_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HybridData/dataManagers/{data_manager_name}/jobDefinitions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -857,7 +866,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-m
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HybridData/dataManagers/{dataManagerName}/jobs
 # operationId: Jobs_ListByDataManager
-export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-managers-jobs list-by" [
+export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-managers-jobs list" [
   subscription_id: string
   resource_group_name: string
   data_manager_name: string
@@ -875,7 +884,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-m
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, data_manager_name: $data_manager_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HybridData/dataManagers/{data_manager_name}/jobs") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), data_manager_name: (encode-path-segment $data_manager_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HybridData/dataManagers/{data_manager_name}/jobs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -885,7 +894,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-m
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HybridData/dataManagers/{dataManagerName}/publicKeys
 # operationId: PublicKeys_ListByDataManager
-export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-managers-public-keys list-by" [
+export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-managers-public-keys list" [
   subscription_id: string
   resource_group_name: string
   data_manager_name: string
@@ -902,7 +911,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-m
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, data_manager_name: $data_manager_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HybridData/dataManagers/{data_manager_name}/publicKeys") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), data_manager_name: (encode-path-segment $data_manager_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HybridData/dataManagers/{data_manager_name}/publicKeys") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -930,7 +939,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-m
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, data_manager_name: $data_manager_name, public_key_name: $public_key_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HybridData/dataManagers/{data_manager_name}/publicKeys/{public_key_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), data_manager_name: (encode-path-segment $data_manager_name), public_key_name: (encode-path-segment $public_key_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HybridData/dataManagers/{data_manager_name}/publicKeys/{public_key_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

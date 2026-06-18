@@ -12,6 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
   match $scheme {
     "basic" => { {headers: {Authorization: $"Basic ($token_val)"}, query: ""} }
+    "basic-credentials" => { {headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: ""} }
     "none" => { {headers: {}, query: ""} }
     _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
   }
@@ -33,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
     "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
     _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -63,7 +73,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 }
 
 def base-url-completer [] { ["https://lookups.twilio.com"] }
-def auth-scheme-completer [] { ["basic"] }
+def auth-scheme-completer [] { ["basic" "basic-credentials"] }
 
 
 # List all available API commands with their parameters
@@ -118,7 +128,7 @@ export def "phone-numbers get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://lookups.twilio.com")
   let qp = [(serialize-qp "Fields" $fields "scalar") (serialize-qp "CountryCode" $country_code "scalar") (serialize-qp "FirstName" $first_name "scalar") (serialize-qp "LastName" $last_name "scalar") (serialize-qp "AddressLine1" $address_line1 "scalar") (serialize-qp "AddressLine2" $address_line2 "scalar") (serialize-qp "City" $city "scalar") (serialize-qp "State" $state "scalar") (serialize-qp "PostalCode" $postal_code "scalar") (serialize-qp "AddressCountryCode" $address_country_code "scalar") (serialize-qp "NationalId" $national_id "scalar") (serialize-qp "DateOfBirth" $date_of_birth "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({phone_number: $phone_number} | format pattern "/v2/PhoneNumbers/{phone_number}") $qp)
+  let full_url = (build-url $base ({phone_number: (encode-path-segment $phone_number)} | format pattern "/v2/PhoneNumbers/{phone_number}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

@@ -36,6 +36,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -70,7 +79,7 @@ def auth-scheme-completer [] { ["x-vtex-api-appkey" "x-vtex-api-apptoken"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "creditcontrol-accounts list-allaccounts" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "creditcontrol-accounts get-searchallaccounts" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -94,7 +103,7 @@ export def commands []: nothing -> table {
 #
 # GET /api/creditcontrol/accounts
 # operationId: Searchallaccounts
-export def "creditcontrol-accounts list-allaccounts" [
+export def "creditcontrol-accounts get-searchallaccounts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -109,10 +118,10 @@ export def "creditcontrol-accounts list-allaccounts" [
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/creditcontrol/accounts")
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -120,7 +129,7 @@ export def "creditcontrol-accounts list-allaccounts" [
 #
 # POST /api/creditcontrol/accounts
 # operationId: OpenanAccount
-export def "creditcontrol-accounts open-an" [
+export def "creditcontrol-accounts create-openan" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -142,20 +151,22 @@ export def "creditcontrol-accounts open-an" [
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/creditcontrol/accounts")
-  let body = {"creditLimit": $credit_limit, "description": $description, "document": $document, "documentType": $document_type, "email": $email, "tolerance": $tolerance} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"creditLimit": $credit_limit, "description": $description, "document": $document, "documentType": $document_type, "email": $email, "tolerance": $tolerance} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Open or Change Account
 #
 # PUT /api/creditcontrol/accounts/{accountId}
 # operationId: OpenorChangeAccount
-export def "creditcontrol-accounts open-or-change" [
+export def "creditcontrol-accounts update-openor-change" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -175,21 +186,23 @@ export def "creditcontrol-accounts open-or-change" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/api/creditcontrol/accounts/{account_id}"))
-  let body = {"creditLimit": $credit_limit, "document": $document, "email": $email, "id": $id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/api/creditcontrol/accounts/{account_id}"))
+  let req_body = {"creditLimit": $credit_limit, "document": $document, "email": $email, "id": $id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Close an Account
 #
 # DELETE /api/creditcontrol/accounts/{creditAccountId}
 # operationId: CloseanAccount
-export def "creditcontrol-accounts close-an" [
+export def "creditcontrol-accounts delete-closean" [
   credit_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -208,21 +221,23 @@ export def "creditcontrol-accounts close-an" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({credit_account_id: $credit_account_id} | format pattern "/api/creditcontrol/accounts/{credit_account_id}"))
-  let body = {"document": $document, "documentType": $document_type, "email": $email} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({credit_account_id: (encode-path-segment $credit_account_id)} | format pattern "/api/creditcontrol/accounts/{credit_account_id}"))
+  let req_body = {"document": $document, "documentType": $document_type, "email": $email} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Retrieve an Account by Id
 #
 # GET /api/creditcontrol/accounts/{creditAccountId}
 # operationId: RetrieveaAccountbyId
-export def "creditcontrol-accounts retrieve-a-accountby" [
+export def "creditcontrol-accounts get-retrievea-accountby" [
   credit_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -237,11 +252,11 @@ export def "creditcontrol-accounts retrieve-a-accountby" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({credit_account_id: $credit_account_id} | format pattern "/api/creditcontrol/accounts/{credit_account_id}"))
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({credit_account_id: (encode-path-segment $credit_account_id)} | format pattern "/api/creditcontrol/accounts/{credit_account_id}"))
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -249,7 +264,7 @@ export def "creditcontrol-accounts retrieve-a-accountby" [
 #
 # PUT /api/creditcontrol/accounts/{creditAccountId}
 # operationId: Updateemailanddescriptionofaaccount
-export def "creditcontrol-accounts update-emailanddescriptionofaaccount" [
+export def "creditcontrol-accounts update-updateemailanddescriptionofaaccount" [
   credit_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -267,21 +282,23 @@ export def "creditcontrol-accounts update-emailanddescriptionofaaccount" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({credit_account_id: $credit_account_id} | format pattern "/api/creditcontrol/accounts/{credit_account_id}"))
-  let body = {"description": $description, "email": $email} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({credit_account_id: (encode-path-segment $credit_account_id)} | format pattern "/api/creditcontrol/accounts/{credit_account_id}"))
+  let req_body = {"description": $description, "email": $email} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Change credit limit of an Account
 #
 # PUT /api/creditcontrol/accounts/{creditAccountId}/creditlimit
 # operationId: ChangecreditlimitofanAccount
-export def "creditcontrol-accounts-creditlimit put" [
+export def "creditcontrol-accounts-creditlimit update-changecreditlimitofan" [
   credit_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -298,14 +315,16 @@ export def "creditcontrol-accounts-creditlimit put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({credit_account_id: $credit_account_id} | format pattern "/api/creditcontrol/accounts/{credit_account_id}/creditlimit"))
-  let body = {"value": $value} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({credit_account_id: (encode-path-segment $credit_account_id)} | format pattern "/api/creditcontrol/accounts/{credit_account_id}/creditlimit"))
+  let req_body = {"value": $value} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Add an account Holder
@@ -313,7 +332,7 @@ export def "creditcontrol-accounts-creditlimit put" [
 # POST /api/creditcontrol/accounts/{creditAccountId}/holders
 # operationId: AddanaccountHolder
 # --claims shape: {email: string}
-export def "creditcontrol-accounts-holders create-anaccount" [
+export def "creditcontrol-accounts-holders create-addanaccount" [
   credit_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -330,21 +349,23 @@ export def "creditcontrol-accounts-holders create-anaccount" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({credit_account_id: $credit_account_id} | format pattern "/api/creditcontrol/accounts/{credit_account_id}/holders"))
-  let body = {"claims": $claims} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({credit_account_id: (encode-path-segment $credit_account_id)} | format pattern "/api/creditcontrol/accounts/{credit_account_id}/holders"))
+  let req_body = {"claims": $claims} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Delete an account holder
 #
 # DELETE /api/creditcontrol/accounts/{creditAccountId}/holders/{holderId}
 # operationId: Deleteanaccountholder
-export def "creditcontrol-accounts-holders delete-anaccountholder" [
+export def "creditcontrol-accounts-holders delete-deleteanaccountholder" [
   credit_account_id: string
   holder_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -360,11 +381,11 @@ export def "creditcontrol-accounts-holders delete-anaccountholder" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({credit_account_id: $credit_account_id, holder_id: $holder_id} | format pattern "/api/creditcontrol/accounts/{credit_account_id}/holders/{holder_id}"))
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({credit_account_id: (encode-path-segment $credit_account_id), holder_id: (encode-path-segment $holder_id)} | format pattern "/api/creditcontrol/accounts/{credit_account_id}/holders/{holder_id}"))
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -372,7 +393,7 @@ export def "creditcontrol-accounts-holders delete-anaccountholder" [
 #
 # GET /api/creditcontrol/accounts/{creditAccountId}/invoices
 # operationId: SearchallinvoicesofaAccount
-export def "creditcontrol-accounts-invoices list-allinvoicesofa" [
+export def "creditcontrol-accounts-invoices get-searchallinvoicesofa" [
   credit_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -387,11 +408,11 @@ export def "creditcontrol-accounts-invoices list-allinvoicesofa" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({credit_account_id: $credit_account_id} | format pattern "/api/creditcontrol/accounts/{credit_account_id}/invoices"))
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({credit_account_id: (encode-path-segment $credit_account_id)} | format pattern "/api/creditcontrol/accounts/{credit_account_id}/invoices"))
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -415,11 +436,11 @@ export def "creditcontrol-accounts-invoices cancel" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({credit_account_id: $credit_account_id, invoice_id: $invoice_id} | format pattern "/api/creditcontrol/accounts/{credit_account_id}/invoices/{invoice_id}"))
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({credit_account_id: (encode-path-segment $credit_account_id), invoice_id: (encode-path-segment $invoice_id)} | format pattern "/api/creditcontrol/accounts/{credit_account_id}/invoices/{invoice_id}"))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -427,7 +448,7 @@ export def "creditcontrol-accounts-invoices cancel" [
 #
 # GET /api/creditcontrol/accounts/{creditAccountId}/invoices/{invoiceId}
 # operationId: RetrieveInvoicebyId
-export def "creditcontrol-accounts-invoices retrieve-invoiceby" [
+export def "creditcontrol-accounts-invoices get-invoiceby" [
   credit_account_id: string
   invoice_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -443,11 +464,11 @@ export def "creditcontrol-accounts-invoices retrieve-invoiceby" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({credit_account_id: $credit_account_id, invoice_id: $invoice_id} | format pattern "/api/creditcontrol/accounts/{credit_account_id}/invoices/{invoice_id}"))
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({credit_account_id: (encode-path-segment $credit_account_id), invoice_id: (encode-path-segment $invoice_id)} | format pattern "/api/creditcontrol/accounts/{credit_account_id}/invoices/{invoice_id}"))
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -455,7 +476,7 @@ export def "creditcontrol-accounts-invoices retrieve-invoiceby" [
 #
 # PUT /api/creditcontrol/accounts/{creditAccountId}/invoices/{invoiceId}
 # operationId: ChangeInvoice
-export def "creditcontrol-accounts-invoices put" [
+export def "creditcontrol-accounts-invoices update-change" [
   credit_account_id: string
   invoice_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -471,27 +492,29 @@ export def "creditcontrol-accounts-invoices put" [
   --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
   observation: string # default: example
   payment_link: string # default: example
-  status: string # Invoice's status. It must be completed with &quot;Paid&quot;, &quot;Cancelled&quot; or &quot;Open&quot; value. (default: Paid)
+  status: string # Invoice's status. It must be completed with "Paid", "Cancelled" or "Open" value. (default: Paid)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "friendlyId" $friendly_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({credit_account_id: $credit_account_id, invoice_id: $invoice_id} | format pattern "/api/creditcontrol/accounts/{credit_account_id}/invoices/{invoice_id}") $qp)
-  let body = {"observation": $observation, "paymentLink": $payment_link, "status": $status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({credit_account_id: (encode-path-segment $credit_account_id), invoice_id: (encode-path-segment $invoice_id)} | format pattern "/api/creditcontrol/accounts/{credit_account_id}/invoices/{invoice_id}") $qp)
+  let req_body = {"observation": $observation, "paymentLink": $payment_link, "status": $status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Mark an invoice as Paid
 #
 # POST /api/creditcontrol/accounts/{creditAccountId}/invoices/{invoiceId}/payments
 # operationId: MarkaninvoiceasPaid
-export def "creditcontrol-accounts-invoices-payments post" [
+export def "creditcontrol-accounts-invoices-payments create-markaninvoiceas-paid" [
   credit_account_id: string
   invoice_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -509,21 +532,23 @@ export def "creditcontrol-accounts-invoices-payments post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({credit_account_id: $credit_account_id, invoice_id: $invoice_id} | format pattern "/api/creditcontrol/accounts/{credit_account_id}/invoices/{invoice_id}/payments"))
-  let body = {"value": $value} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({credit_account_id: (encode-path-segment $credit_account_id), invoice_id: (encode-path-segment $invoice_id)} | format pattern "/api/creditcontrol/accounts/{credit_account_id}/invoices/{invoice_id}/payments"))
+  let req_body = {"value": $value} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Postpone an invoice
 #
 # PUT /api/creditcontrol/accounts/{creditAccountId}/invoices/{invoiceId}/postponement
 # operationId: Postponeaninvoice
-export def "creditcontrol-accounts-invoices-postponement create-poneaninvoice" [
+export def "creditcontrol-accounts-invoices-postponement update-postponeaninvoice" [
   credit_account_id: string
   invoice_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -541,21 +566,23 @@ export def "creditcontrol-accounts-invoices-postponement create-poneaninvoice" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({credit_account_id: $credit_account_id, invoice_id: $invoice_id} | format pattern "/api/creditcontrol/accounts/{credit_account_id}/invoices/{invoice_id}/postponement"))
-  let body = {"dueDays": $due_days} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({credit_account_id: (encode-path-segment $credit_account_id), invoice_id: (encode-path-segment $invoice_id)} | format pattern "/api/creditcontrol/accounts/{credit_account_id}/invoices/{invoice_id}/postponement"))
+  let req_body = {"dueDays": $due_days} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Account statements
 #
 # GET /api/creditcontrol/accounts/{creditAccountId}/statements
 # operationId: Accountstatements
-export def "creditcontrol-accounts-statements get" [
+export def "creditcontrol-accounts-statements get-accountstatements" [
   credit_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -570,11 +597,11 @@ export def "creditcontrol-accounts-statements get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({credit_account_id: $credit_account_id} | format pattern "/api/creditcontrol/accounts/{credit_account_id}/statements"))
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({credit_account_id: (encode-path-segment $credit_account_id)} | format pattern "/api/creditcontrol/accounts/{credit_account_id}/statements"))
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -582,7 +609,7 @@ export def "creditcontrol-accounts-statements get" [
 #
 # PUT /api/creditcontrol/accounts/{creditAccountId}/statements/{statementId}
 # operationId: Decreasebalanceofanaccount
-export def "creditcontrol-accounts-statements put" [
+export def "creditcontrol-accounts-statements update-decreasebalanceofanaccount" [
   credit_account_id: string
   statement_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -600,21 +627,23 @@ export def "creditcontrol-accounts-statements put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({credit_account_id: $credit_account_id, statement_id: $statement_id} | format pattern "/api/creditcontrol/accounts/{credit_account_id}/statements/{statement_id}"))
-  let body = {"value": $value} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({credit_account_id: (encode-path-segment $credit_account_id), statement_id: (encode-path-segment $statement_id)} | format pattern "/api/creditcontrol/accounts/{credit_account_id}/statements/{statement_id}"))
+  let req_body = {"value": $value} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Change tolerance of an account
 #
 # PUT /api/creditcontrol/accounts/{creditAccountId}/tolerance
 # operationId: Changetoleranceofanaccount
-export def "creditcontrol-accounts-tolerance put" [
+export def "creditcontrol-accounts-tolerance update-changetoleranceofanaccount" [
   credit_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -631,21 +660,23 @@ export def "creditcontrol-accounts-tolerance put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({credit_account_id: $credit_account_id} | format pattern "/api/creditcontrol/accounts/{credit_account_id}/tolerance"))
-  let body = {"value": $value} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({credit_account_id: (encode-path-segment $credit_account_id)} | format pattern "/api/creditcontrol/accounts/{credit_account_id}/tolerance"))
+  let req_body = {"value": $value} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Create a Pre Authorization
 #
 # POST /api/creditcontrol/accounts/{creditAccountId}/transaction
 # operationId: CreateaPreAuthorization
-export def "creditcontrol-accounts-transaction create-a-pre-authorization" [
+export def "creditcontrol-accounts-transaction create-createa-pre-authorization" [
   credit_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -665,21 +696,23 @@ export def "creditcontrol-accounts-transaction create-a-pre-authorization" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({credit_account_id: $credit_account_id} | format pattern "/api/creditcontrol/accounts/{credit_account_id}/transaction"))
-  let body = {"expirationDate": $expiration_date, "installments": $installments, "settle": $settle, "value": $value} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({credit_account_id: (encode-path-segment $credit_account_id)} | format pattern "/api/creditcontrol/accounts/{credit_account_id}/transaction"))
+  let req_body = {"expirationDate": $expiration_date, "installments": $installments, "settle": $settle, "value": $value} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Cancel a Pre Authorization
 #
 # DELETE /api/creditcontrol/accounts/{creditAccountId}/transactions/{transactionId}
 # operationId: CancelaPreAuthorization
-export def "creditcontrol-accounts-transactions cancel-a-pre-authorization" [
+export def "creditcontrol-accounts-transactions delete-cancela-pre-authorization" [
   credit_account_id: string
   transaction_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -695,11 +728,11 @@ export def "creditcontrol-accounts-transactions cancel-a-pre-authorization" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({credit_account_id: $credit_account_id, transaction_id: $transaction_id} | format pattern "/api/creditcontrol/accounts/{credit_account_id}/transactions/{transaction_id}"))
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({credit_account_id: (encode-path-segment $credit_account_id), transaction_id: (encode-path-segment $transaction_id)} | format pattern "/api/creditcontrol/accounts/{credit_account_id}/transactions/{transaction_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -707,7 +740,7 @@ export def "creditcontrol-accounts-transactions cancel-a-pre-authorization" [
 #
 # PUT /api/creditcontrol/accounts/{creditAccountId}/transactions/{transactionId}
 # operationId: CreateaPreAuthorization(usingid)
-export def "creditcontrol-accounts-transactions create-a-pre-authorization-usingid" [
+export def "creditcontrol-accounts-transactions update-createa-pre-authorizationusingid" [
   credit_account_id: string
   transaction_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -728,21 +761,23 @@ export def "creditcontrol-accounts-transactions create-a-pre-authorization-using
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({credit_account_id: $credit_account_id, transaction_id: $transaction_id} | format pattern "/api/creditcontrol/accounts/{credit_account_id}/transactions/{transaction_id}"))
-  let body = {"expirationDate": $expiration_date, "installments": $installments, "settle": $settle, "value": $value} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({credit_account_id: (encode-path-segment $credit_account_id), transaction_id: (encode-path-segment $transaction_id)} | format pattern "/api/creditcontrol/accounts/{credit_account_id}/transactions/{transaction_id}"))
+  let req_body = {"expirationDate": $expiration_date, "installments": $installments, "settle": $settle, "value": $value} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Partial or Total Refund a Settlement
 #
 # POST /api/creditcontrol/accounts/{creditAccountId}/transactions/{transactionId}/refunds
 # operationId: PartialorTotalRefundaSettlement
-export def "creditcontrol-accounts-transactions-refunds post" [
+export def "creditcontrol-accounts-transactions-refunds create-partialor-total-refunda-settlement" [
   credit_account_id: string
   transaction_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -760,21 +795,23 @@ export def "creditcontrol-accounts-transactions-refunds post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({credit_account_id: $credit_account_id, transaction_id: $transaction_id} | format pattern "/api/creditcontrol/accounts/{credit_account_id}/transactions/{transaction_id}/refunds"))
-  let body = {"value": $value} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({credit_account_id: (encode-path-segment $credit_account_id), transaction_id: (encode-path-segment $transaction_id)} | format pattern "/api/creditcontrol/accounts/{credit_account_id}/transactions/{transaction_id}/refunds"))
+  let req_body = {"value": $value} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Create or Update Settlement
 #
 # PUT /api/creditcontrol/accounts/{creditAccountId}/transactions/{transactionId}/settlement
 # operationId: CreateorUpdateSettlement
-export def "creditcontrol-accounts-transactions-settlement create-or-update" [
+export def "creditcontrol-accounts-transactions-settlement update-createor" [
   credit_account_id: string
   transaction_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -792,21 +829,23 @@ export def "creditcontrol-accounts-transactions-settlement create-or-update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({credit_account_id: $credit_account_id, transaction_id: $transaction_id} | format pattern "/api/creditcontrol/accounts/{credit_account_id}/transactions/{transaction_id}/settlement"))
-  let body = {"value": $value} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({credit_account_id: (encode-path-segment $credit_account_id), transaction_id: (encode-path-segment $transaction_id)} | format pattern "/api/creditcontrol/accounts/{credit_account_id}/transactions/{transaction_id}/settlement"))
+  let req_body = {"value": $value} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Search all invoices
 #
 # GET /api/creditcontrol/invoices
 # operationId: Searchallinvoices
-export def "creditcontrol-invoices list-allinvoices" [
+export def "creditcontrol-invoices get-searchallinvoices" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -830,10 +869,10 @@ export def "creditcontrol-invoices list-allinvoices" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "createdDateFrom" $created_date_from "scalar") (serialize-qp "createdDateTo" $created_date_to "scalar") (serialize-qp "value" $value "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "friendlyId" $friendly_id "scalar") (serialize-qp "creditAccountId" $credit_account_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/creditcontrol/invoices" $qp)
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -841,7 +880,7 @@ export def "creditcontrol-invoices list-allinvoices" [
 #
 # GET /api/creditcontrol/storeconfig
 # operationId: Retrievestoreconfiguration
-export def "creditcontrol-storeconfig retrieve-storeconfiguration" [
+export def "creditcontrol-storeconfig get-retrievestoreconfiguration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -856,10 +895,10 @@ export def "creditcontrol-storeconfig retrieve-storeconfiguration" [
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/creditcontrol/storeconfig")
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -868,7 +907,7 @@ export def "creditcontrol-storeconfig retrieve-storeconfiguration" [
 # PUT /api/creditcontrol/storeconfig
 # operationId: Createorchangestoreconfiguration
 # --notificationsSettings shape: {daysAfter?: list, daysPrior?: list}
-export def "creditcontrol-storeconfig create-orchangestoreconfiguration" [
+export def "creditcontrol-storeconfig update-createorchangestoreconfiguration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -895,11 +934,13 @@ export def "creditcontrol-storeconfig create-orchangestoreconfiguration" [
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/creditcontrol/storeconfig")
-  let body = {"automaticCheckingAccountCreationEnabled": $automatic_checking_account_creation_enabled, "dailyInterestRate": $daily_interest_rate, "defaultCreditValue": $default_credit_value, "invoicePostponementLimit": $invoice_postponement_limit, "maxPostponementDays": $max_postponement_days, "maxPreAuthorizationGrowthRate": $max_pre_authorization_growth_rate, "myCreditsEnabled": $my_credits_enabled, "notificationsSettings": $notifications_settings, "postponementEnabled": $postponement_enabled, "taxRate": $tax_rate, "toleranceEnabled": $tolerance_enabled} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"automaticCheckingAccountCreationEnabled": $automatic_checking_account_creation_enabled, "dailyInterestRate": $daily_interest_rate, "defaultCreditValue": $default_credit_value, "invoicePostponementLimit": $invoice_postponement_limit, "maxPostponementDays": $max_postponement_days, "maxPreAuthorizationGrowthRate": $max_pre_authorization_growth_rate, "myCreditsEnabled": $my_credits_enabled, "notificationsSettings": $notifications_settings, "postponementEnabled": $postponement_enabled, "taxRate": $tax_rate, "toleranceEnabled": $tolerance_enabled} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }

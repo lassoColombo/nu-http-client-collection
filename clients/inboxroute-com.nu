@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -145,7 +154,7 @@ export def "contacts-lists get" [
 # POST /contacts/lists
 # --customfields item shape: {key: string, label: string, required?: bool, type: int}
 # --eventcustomizations item shape: {redirecturl?: string, type: int}
-export def "contacts-lists post" [
+export def "contacts-lists create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -162,11 +171,11 @@ export def "contacts-lists post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/contacts/lists")
-  let body = {"customfields": $customfields, "eventcustomizations": $eventcustomizations, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"customfields": $customfields, "eventcustomizations": $eventcustomizations, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete an existing contact list
@@ -185,7 +194,7 @@ export def "contacts-lists delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({listid: $listid} | format pattern "/contacts/lists/{listid}"))
+  let full_url = (build-url $base ({listid: (encode-path-segment $listid)} | format pattern "/contacts/lists/{listid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -196,7 +205,7 @@ export def "contacts-lists delete" [
 # PUT /contacts/lists/{listid}
 # --customfields item shape: {key: string, label: string, required?: bool, type: int}
 # --eventcustomizations item shape: {redirecturl?: string, type: int}
-export def "contacts-lists put" [
+export def "contacts-lists update" [
   listid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -213,12 +222,12 @@ export def "contacts-lists put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({listid: $listid} | format pattern "/contacts/lists/{listid}"))
-  let body = {"customfields": $customfields, "eventcustomizations": $eventcustomizations, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({listid: (encode-path-segment $listid)} | format pattern "/contacts/lists/{listid}"))
+  let req_body = {"customfields": $customfields, "eventcustomizations": $eventcustomizations, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete an existing contact
@@ -237,7 +246,7 @@ export def "contacts delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({contactid: $contactid} | format pattern "/contacts/{contactid}"))
+  let full_url = (build-url $base ({contactid: (encode-path-segment $contactid)} | format pattern "/contacts/{contactid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -246,7 +255,7 @@ export def "contacts delete" [
 # Update an existing contact
 #
 # PUT /contacts/{contactid}
-export def "contacts put" [
+export def "contacts update" [
   contactid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -260,23 +269,23 @@ export def "contacts put" [
   --customfields: any # Dictionnary of field key to value
   --email: string # Email address
   --ip: string # Subscriber's IP address when he/she confirmed list opt-in
-  --status: int # Status (   1- Active,   2- Unconfirmed,   3- Unsubscribed,   4- Deleted,   5- Cleaned because of hard bounce or spam complaint)
+  --status: int # Status ( 1- Active, 2- Unconfirmed, 3- Unsubscribed, 4- Deleted, 5- Cleaned because of hard bounce or spam complaint)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({contactid: $contactid} | format pattern "/contacts/{contactid}"))
-  let body = {"confirmed": $confirmed, "customfields": $customfields, "email": $email, "ip": $ip, "status": $status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({contactid: (encode-path-segment $contactid)} | format pattern "/contacts/{contactid}"))
+  let req_body = {"confirmed": $confirmed, "customfields": $customfields, "email": $email, "ip": $ip, "status": $status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-# Subscribe an email address to a list. This api call has the same behavior as a regular subscribe form. However, single opt-in is allowed for system integration purposes.  - If email address does not exist, a new contact will be added to the list. - If email address exists custom fields will be updated and status will be put   to unconfirmed or active depending of singleoptin value. - If current status if Active, this operation will only update the custom fields. - If singleoptin is true, no email confirmation will be sent. In that case,   you must provide the subscribe's origin ip and confirmation date-time.
+# Subscribe an email address to a list. This api call has the same behavior as a regular subscribe form. However, single opt-in is allowed for system integration purposes. - If email address does not exist, a new contact will be added to the list. - If email address exists custom fields will be updated and status will be put to unconfirmed or active depending of singleoptin value. - If current status if Active, this operation will only update the custom fields. - If singleoptin is true, no email confirmation will be sent. In that case, you must provide the subscribe's origin ip and confirmation date-time.
 #
 # POST /subscription/{listid}
-export def "subscription post" [
+export def "subscription create" [
   listid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -296,10 +305,10 @@ export def "subscription post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({listid: $listid} | format pattern "/subscription/{listid}"))
-  let body = {"confirmed": $confirmed, "email": $email, "fullname": $fullname, "ip": $ip, "lang": $lang, "singleoptin": $singleoptin} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({listid: (encode-path-segment $listid)} | format pattern "/subscription/{listid}"))
+  let req_body = {"confirmed": $confirmed, "email": $email, "fullname": $fullname, "ip": $ip, "lang": $lang, "singleoptin": $singleoptin} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

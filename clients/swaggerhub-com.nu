@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -111,10 +120,10 @@ export def "apis list" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # Free text query to match
-  --state: string@state-completer # Matches against published state of the spec: * UNPUBLISHED - spec is a draft, a work in progress * PUBLISHED - spec is a stable version ready for consuming from client applications * ANY - either PUBLISHED or UNPUBLISHED  (default: ALL)
+  --state: string@state-completer # Matches against published state of the spec: * UNPUBLISHED - spec is a draft, a work in progress * PUBLISHED - spec is a stable version ready for consuming from client applications * ANY - either PUBLISHED or UNPUBLISHED (default: ALL)
   --page: int # Page to return (format: int32, default: 0)
   --limit: int # Number of results per page (1 .. 100) (format: int32, default: 10)
-  --qp-sort: string@sort-completer # Sort criteria of result set: * NAME * UPDATED * CREATED * OWNER * BEST_MATCH - by relevance * TITLE - by `info.title`  (default: NAME)
+  --qp-sort: string@sort-completer # Sort criteria of result set: * NAME * UPDATED * CREATED * OWNER * BEST_MATCH - by relevance * TITLE - by `info.title` (default: NAME)
   --order: string@order-completer # Sort order (default: ASC)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -142,13 +151,13 @@ export def "apis get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page to return (format: int32, default: 0)
   --limit: int # Number of results per page (1 .. 100) (format: int32, default: 10)
-  --qp-sort: string@sort-completer # Sort criteria of result set: * NAME * UPDATED * CREATED * OWNER * BEST_MATCH - by relevance * TITLE - by `info.title`  (default: NAME)
+  --qp-sort: string@sort-completer # Sort criteria of result set: * NAME * UPDATED * CREATED * OWNER * BEST_MATCH - by relevance * TITLE - by `info.title` (default: NAME)
   --order: string@order-completer # Sort order (default: ASC)
 ]: nothing -> record<apis: table<description: string, name: string, properties: list, tags: list>, description: string, name: string, offset: int, totalCount: int, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({owner: $owner} | format pattern "/apis/{owner}") $qp)
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner)} | format pattern "/apis/{owner}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -172,7 +181,7 @@ export def "apis delete-by-owner-api" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, api: $api} | format pattern "/apis/{owner}/{api}"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), api: (encode-path-segment $api)} | format pattern "/apis/{owner}/{api}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -196,7 +205,7 @@ export def "apis get-versions" [
 ]: nothing -> record<apis: table<description: string, name: string, properties: list, tags: list>, description: string, name: string, offset: int, totalCount: int, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, api: $api} | format pattern "/apis/{owner}/{api}"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), api: (encode-path-segment $api)} | format pattern "/apis/{owner}/{api}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -206,7 +215,7 @@ export def "apis get-versions" [
 #
 # POST /apis/{owner}/{api}
 # operationId: saveDefinition
-export def "apis saveDefinition" [
+export def "apis create-save-definition" [
   owner: string
   api: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -218,7 +227,7 @@ export def "apis saveDefinition" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --is-private: oneof<nothing, bool> # Whether to make the API private (`true`) or public (`false`) (default: false)
-  --version: string # API version to create or update. If omitted, the version is extracted from the `info.version` field of the provided OpenAPI definition.  Either the `version` parameter or the `info.version` value must be specified, otherwise the request will be rejected. If both are specified, the `version` parameter overrides the `info.version` value.  If this API version already exists, it will be updated with the new definition (unless that version has been published - in this case the update will be rejected).
+  --version: string # API version to create or update. If omitted, the version is extracted from the `info.version` field of the provided OpenAPI definition. Either the `version` parameter or the `info.version` value must be specified, otherwise the request will be rejected. If both are specified, the `version` parameter overrides the `info.version` value. If this API version already exists, it will be updated with the new definition (unless that version has been published - in this case the update will be rejected).
   --force: oneof<nothing, bool> # Force update
   --body: record
 ]: any -> any {
@@ -226,11 +235,12 @@ export def "apis saveDefinition" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "isPrivate" $is_private "scalar") (serialize-qp "version" $version "scalar") (serialize-qp "force" $force "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({owner: $owner, api: $api} | format pattern "/apis/{owner}/{api}") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), api: (encode-path-segment $api)} | format pattern "/apis/{owner}/{api}") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Rename an API
@@ -253,7 +263,7 @@ export def "apis-rename rename" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "newName" $new_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({owner: $owner, api: $api} | format pattern "/apis/{owner}/{api}/rename") $qp)
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), api: (encode-path-segment $api)} | format pattern "/apis/{owner}/{api}/rename") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -263,7 +273,7 @@ export def "apis-rename rename" [
 #
 # GET /apis/{owner}/{api}/settings/default
 # operationId: getApiDefaultVersion
-export def "apis-settings-default get-default-version" [
+export def "apis-settings-default get-version" [
   owner: string
   api: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -277,7 +287,7 @@ export def "apis-settings-default get-default-version" [
 ]: nothing -> record<version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, api: $api} | format pattern "/apis/{owner}/{api}/settings/default"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), api: (encode-path-segment $api)} | format pattern "/apis/{owner}/{api}/settings/default"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -287,7 +297,7 @@ export def "apis-settings-default get-default-version" [
 #
 # PUT /apis/{owner}/{api}/settings/default
 # operationId: setApiDefaultVersion
-export def "apis-settings-default setApiDefaultVersion" [
+export def "apis-settings-default update-version" [
   owner: string
   api: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -303,12 +313,12 @@ export def "apis-settings-default setApiDefaultVersion" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, api: $api} | format pattern "/apis/{owner}/{api}/settings/default"))
-  let body = {"version": $version} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), api: (encode-path-segment $api)} | format pattern "/apis/{owner}/{api}/settings/default"))
+  let req_body = {"version": $version} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete an API version
@@ -330,7 +340,7 @@ export def "apis delete-by-owner-api-version" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, api: $api, version: $version} | format pattern "/apis/{owner}/{api}/{version}"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), api: (encode-path-segment $api), version: (encode-path-segment $version)} | format pattern "/apis/{owner}/{api}/{version}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -359,7 +369,7 @@ export def "apis get-definition" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "resolved" $resolved "scalar") (serialize-qp "flatten" $flatten "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({owner: $owner, api: $api, version: $version} | format pattern "/apis/{owner}/{api}/{version}") $qp)
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), api: (encode-path-segment $api), version: (encode-path-segment $version)} | format pattern "/apis/{owner}/{api}/{version}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -384,7 +394,7 @@ export def "apis-clone clone" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, api: $api, version: $version} | format pattern "/apis/{owner}/{api}/{version}/clone"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), api: (encode-path-segment $api), version: (encode-path-segment $version)} | format pattern "/apis/{owner}/{api}/{version}/clone"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -394,7 +404,7 @@ export def "apis-clone clone" [
 #
 # GET /apis/{owner}/{api}/{version}/comments
 # operationId: getApiCommentsV2
-export def "apis-comments get-comments-v2" [
+export def "apis-comments get" [
   owner: string
   api: string
   version: string
@@ -409,7 +419,7 @@ export def "apis-comments get-comments-v2" [
 ]: nothing -> table<body: string, created: string, id: string, modified: string, user: record<active: bool, id: string>, position: int, replies: list<record>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, api: $api, version: $version} | format pattern "/apis/{owner}/{api}/{version}/comments"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), api: (encode-path-segment $api), version: (encode-path-segment $version)} | format pattern "/apis/{owner}/{api}/{version}/comments"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -420,7 +430,7 @@ export def "apis-comments get-comments-v2" [
 # POST /apis/{owner}/{api}/{version}/comments
 # operationId: addApiCommentV2
 # --replies item shape: {body: string}
-export def "apis-comments create-comment-v2" [
+export def "apis-comments create" [
   owner: string
   api: string
   version: string
@@ -432,19 +442,19 @@ export def "apis-comments create-comment-v2" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-body: string
+  body: string
   position: int # format: int32
   --replies: list # item shape: {body: string}
 ]: any -> record<body: string, created: string, id: string, modified: string, user: record<active: bool, id: string>, position: int, replies: table<body: string, created: string, id: string, modified: string, user: record>, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, api: $api, version: $version} | format pattern "/apis/{owner}/{api}/{version}/comments"))
-  let body = {"body": $body_body, "position": $position, "replies": $replies} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), api: (encode-path-segment $api), version: (encode-path-segment $version)} | format pattern "/apis/{owner}/{api}/{version}/comments"))
+  let req_body = {"body": $body, "position": $position, "replies": $replies} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Bulk update comments
@@ -452,7 +462,7 @@ export def "apis-comments create-comment-v2" [
 # POST /apis/{owner}/{api}/{version}/comments/batch
 # operationId: updateApiCommentsV2
 # --addComment item shape: {body: string, position: int, replies?: list}
-export def "apis-comments-batch update-comments-v2" [
+export def "apis-comments-batch update" [
   owner: string
   api: string
   version: string
@@ -466,7 +476,7 @@ export def "apis-comments-batch update-comments-v2" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --add-comment: list # item shape: {body: string, position: int, replies?: list}
   --add-reply: record
-  --delete-comment: list
+  --delete-comment: list<string>
   --delete-reply: record
   --update-comment: record
   --update-reply: record
@@ -475,19 +485,19 @@ export def "apis-comments-batch update-comments-v2" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, api: $api, version: $version} | format pattern "/apis/{owner}/{api}/{version}/comments/batch"))
-  let body = {"addComment": $add_comment, "addReply": $add_reply, "deleteComment": $delete_comment, "deleteReply": $delete_reply, "updateComment": $update_comment, "updateReply": $update_reply, "updateStatus": $update_status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), api: (encode-path-segment $api), version: (encode-path-segment $version)} | format pattern "/apis/{owner}/{api}/{version}/comments/batch"))
+  let req_body = {"addComment": $add_comment, "addReply": $add_reply, "deleteComment": $delete_comment, "deleteReply": $delete_reply, "updateComment": $update_comment, "updateReply": $update_reply, "updateStatus": $update_status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a comment
 #
 # DELETE /apis/{owner}/{api}/{version}/comments/{comment}
 # operationId: deleteApiCommentV2
-export def "apis-comments delete-v2" [
+export def "apis-comments delete" [
   owner: string
   api: string
   version: string
@@ -503,7 +513,7 @@ export def "apis-comments delete-v2" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, api: $api, version: $version, comment: $comment} | format pattern "/apis/{owner}/{api}/{version}/comments/{comment}"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), api: (encode-path-segment $api), version: (encode-path-segment $version), comment: (encode-path-segment $comment)} | format pattern "/apis/{owner}/{api}/{version}/comments/{comment}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -513,7 +523,7 @@ export def "apis-comments delete-v2" [
 #
 # PATCH /apis/{owner}/{api}/{version}/comments/{comment}
 # operationId: updateApiCommentV2
-export def "apis-comments update-v2" [
+export def "apis-comments update" [
   owner: string
   api: string
   version: string
@@ -526,25 +536,25 @@ export def "apis-comments update-v2" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-body: string
+  --body: string
   --position: int # format: int32
 ]: any -> record<body: string, created: string, id: string, modified: string, user: record<active: bool, id: string>, position: int, replies: table<body: string, created: string, id: string, modified: string, user: record>, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, api: $api, version: $version, comment: $comment} | format pattern "/apis/{owner}/{api}/{version}/comments/{comment}"))
-  let body = {"body": $body_body, "position": $position} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), api: (encode-path-segment $api), version: (encode-path-segment $version), comment: (encode-path-segment $comment)} | format pattern "/apis/{owner}/{api}/{version}/comments/{comment}"))
+  let req_body = {"body": $body, "position": $position} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Reply to a comment
 #
 # POST /apis/{owner}/{api}/{version}/comments/{comment}/replies
 # operationId: addApiCommentReplyV2
-export def "apis-comments-replies create-reply-v2" [
+export def "apis-comments-replies create-reply" [
   owner: string
   api: string
   version: string
@@ -557,24 +567,24 @@ export def "apis-comments-replies create-reply-v2" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-body: string
+  body: string
 ]: any -> table<body: string, created: string, id: string, modified: string, user: record<active: bool, id: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, api: $api, version: $version, comment: $comment} | format pattern "/apis/{owner}/{api}/{version}/comments/{comment}/replies"))
-  let body = {"body": $body_body} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), api: (encode-path-segment $api), version: (encode-path-segment $version), comment: (encode-path-segment $comment)} | format pattern "/apis/{owner}/{api}/{version}/comments/{comment}/replies"))
+  let req_body = {"body": $body} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a comment reply
 #
 # DELETE /apis/{owner}/{api}/{version}/comments/{comment}/replies/{reply}
 # operationId: deleteApiCommentReplyV2
-export def "apis-comments-replies delete-v2" [
+export def "apis-comments-replies delete" [
   owner: string
   api: string
   version: string
@@ -591,7 +601,7 @@ export def "apis-comments-replies delete-v2" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, api: $api, version: $version, comment: $comment, reply: $reply} | format pattern "/apis/{owner}/{api}/{version}/comments/{comment}/replies/{reply}"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), api: (encode-path-segment $api), version: (encode-path-segment $version), comment: (encode-path-segment $comment), reply: (encode-path-segment $reply)} | format pattern "/apis/{owner}/{api}/{version}/comments/{comment}/replies/{reply}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -601,7 +611,7 @@ export def "apis-comments-replies delete-v2" [
 #
 # PATCH /apis/{owner}/{api}/{version}/comments/{comment}/replies/{reply}
 # operationId: updateApiCommentReplyV2
-export def "apis-comments-replies update-v2" [
+export def "apis-comments-replies update" [
   owner: string
   api: string
   version: string
@@ -615,24 +625,24 @@ export def "apis-comments-replies update-v2" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-body: string
+  --body: string
 ]: any -> record<body: string, created: string, id: string, modified: string, user: record<active: bool, id: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, api: $api, version: $version, comment: $comment, reply: $reply} | format pattern "/apis/{owner}/{api}/{version}/comments/{comment}/replies/{reply}"))
-  let body = {"body": $body_body} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), api: (encode-path-segment $api), version: (encode-path-segment $version), comment: (encode-path-segment $comment), reply: (encode-path-segment $reply)} | format pattern "/apis/{owner}/{api}/{version}/comments/{comment}/replies/{reply}"))
+  let req_body = {"body": $body} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Resolve or reopen a comment
 #
 # PUT /apis/{owner}/{api}/{version}/comments/{comment}/status/{status}
 # operationId: setApiCommentStatusV2
-export def "apis-comments-status setApiCommentStatusV2" [
+export def "apis-comments-status update" [
   owner: string
   api: string
   version: string
@@ -649,7 +659,7 @@ export def "apis-comments-status setApiCommentStatusV2" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, api: $api, version: $version, comment: $comment, status: $status} | format pattern "/apis/{owner}/{api}/{version}/comments/{comment}/status/{status}"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), api: (encode-path-segment $api), version: (encode-path-segment $version), comment: (encode-path-segment $comment), status: (encode-path-segment $status)} | format pattern "/apis/{owner}/{api}/{version}/comments/{comment}/status/{status}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -659,7 +669,7 @@ export def "apis-comments-status setApiCommentStatusV2" [
 #
 # POST /apis/{owner}/{api}/{version}/fork
 # operationId: forkApi
-export def "apis-fork forkApi" [
+export def "apis-fork create" [
   owner: string
   api: string
   version: string
@@ -680,12 +690,12 @@ export def "apis-fork forkApi" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, api: $api, version: $version} | format pattern "/apis/{owner}/{api}/{version}/fork"))
-  let body = {"name": $name, "owner": $body_owner, "private": $private, "project": $project, "version": $body_version} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), api: (encode-path-segment $api), version: (encode-path-segment $version)} | format pattern "/apis/{owner}/{api}/{version}/fork"))
+  let req_body = {"name": $name, "owner": $body_owner, "private": $private, "project": $project, "version": $body_version} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get all integrations configured for the specified API version
@@ -707,7 +717,7 @@ export def "apis-integrations list" [
 ]: nothing -> record<integrations: table<enabled: bool, id: string, name: string, configType: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, api: $api, version: $version} | format pattern "/apis/{owner}/{api}/{version}/integrations"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), api: (encode-path-segment $api), version: (encode-path-segment $version)} | format pattern "/apis/{owner}/{api}/{version}/integrations"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -732,7 +742,7 @@ export def "apis-integrations create" [
 ]: nothing -> record<enabled: bool, id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, api: $api, version: $version} | format pattern "/apis/{owner}/{api}/{version}/integrations"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), api: (encode-path-segment $api), version: (encode-path-segment $version)} | format pattern "/apis/{owner}/{api}/{version}/integrations"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -758,7 +768,7 @@ export def "apis-integrations delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, api: $api, version: $version, integration_id: $integration_id} | format pattern "/apis/{owner}/{api}/{version}/integrations/{integration_id}"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), api: (encode-path-segment $api), version: (encode-path-segment $version), integration_id: (encode-path-segment $integration_id)} | format pattern "/apis/{owner}/{api}/{version}/integrations/{integration_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -784,7 +794,7 @@ export def "apis-integrations get" [
 ]: nothing -> record<enabled: bool, id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, api: $api, version: $version, integration_id: $integration_id} | format pattern "/apis/{owner}/{api}/{version}/integrations/{integration_id}"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), api: (encode-path-segment $api), version: (encode-path-segment $version), integration_id: (encode-path-segment $integration_id)} | format pattern "/apis/{owner}/{api}/{version}/integrations/{integration_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -812,11 +822,12 @@ export def "apis-integrations update-by-owner-api-version-integrationId" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, api: $api, version: $version, integration_id: $integration_id} | format pattern "/apis/{owner}/{api}/{version}/integrations/{integration_id}"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), api: (encode-path-segment $api), version: (encode-path-segment $version), integration_id: (encode-path-segment $integration_id)} | format pattern "/apis/{owner}/{api}/{version}/integrations/{integration_id}"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update integration settings
@@ -839,7 +850,7 @@ export def "apis-integrations update-by-owner-api-version-integrationId-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, api: $api, version: $version, integration_id: $integration_id} | format pattern "/apis/{owner}/{api}/{version}/integrations/{integration_id}"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), api: (encode-path-segment $api), version: (encode-path-segment $version), integration_id: (encode-path-segment $integration_id)} | format pattern "/apis/{owner}/{api}/{version}/integrations/{integration_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -849,7 +860,7 @@ export def "apis-integrations update-by-owner-api-version-integrationId-1" [
 #
 # POST /apis/{owner}/{api}/{version}/integrations/{integrationId}/execute
 # operationId: executeIntegration
-export def "apis-integrations-execute exec-ute" [
+export def "apis-integrations-execute create" [
   owner: string
   api: string
   version: string
@@ -867,7 +878,7 @@ export def "apis-integrations-execute exec-ute" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "commitMessage" $commit_message "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({owner: $owner, api: $api, version: $version, integration_id: $integration_id} | format pattern "/apis/{owner}/{api}/{version}/integrations/{integration_id}/execute") $qp)
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), api: (encode-path-segment $api), version: (encode-path-segment $version), integration_id: (encode-path-segment $integration_id)} | format pattern "/apis/{owner}/{api}/{version}/integrations/{integration_id}/execute") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -892,7 +903,7 @@ export def "apis-settings-lifecycle get" [
 ]: nothing -> record<published: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, api: $api, version: $version} | format pattern "/apis/{owner}/{api}/{version}/settings/lifecycle"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), api: (encode-path-segment $api), version: (encode-path-segment $version)} | format pattern "/apis/{owner}/{api}/{version}/settings/lifecycle"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -902,7 +913,7 @@ export def "apis-settings-lifecycle get" [
 #
 # PUT /apis/{owner}/{api}/{version}/settings/lifecycle
 # operationId: setLifecycleSettings
-export def "apis-settings-lifecycle setLifecycleSettings" [
+export def "apis-settings-lifecycle update" [
   owner: string
   api: string
   version: string
@@ -919,7 +930,7 @@ export def "apis-settings-lifecycle setLifecycleSettings" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "force" $force "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({owner: $owner, api: $api, version: $version} | format pattern "/apis/{owner}/{api}/{version}/settings/lifecycle") $qp)
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), api: (encode-path-segment $api), version: (encode-path-segment $version)} | format pattern "/apis/{owner}/{api}/{version}/settings/lifecycle") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -944,7 +955,7 @@ export def "apis-settings-private get" [
 ]: nothing -> record<private: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, api: $api, version: $version} | format pattern "/apis/{owner}/{api}/{version}/settings/private"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), api: (encode-path-segment $api), version: (encode-path-segment $version)} | format pattern "/apis/{owner}/{api}/{version}/settings/private"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -954,7 +965,7 @@ export def "apis-settings-private get" [
 #
 # PUT /apis/{owner}/{api}/{version}/settings/private
 # operationId: setPrivateSettings
-export def "apis-settings-private setPrivateSettings" [
+export def "apis-settings-private update" [
   owner: string
   api: string
   version: string
@@ -969,7 +980,7 @@ export def "apis-settings-private setPrivateSettings" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, api: $api, version: $version} | format pattern "/apis/{owner}/{api}/{version}/settings/private"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), api: (encode-path-segment $api), version: (encode-path-segment $version)} | format pattern "/apis/{owner}/{api}/{version}/settings/private"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -979,7 +990,7 @@ export def "apis-settings-private setPrivateSettings" [
 #
 # GET /apis/{owner}/{api}/{version}/standardization
 # operationId: getStandardizationErrors
-export def "apis-standardization get-standardization-errors" [
+export def "apis-standardization get-errors" [
   owner: string
   api: string
   version: string
@@ -994,7 +1005,7 @@ export def "apis-standardization get-standardization-errors" [
 ]: nothing -> record<validation: table<description: string, line: int, severity: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, api: $api, version: $version} | format pattern "/apis/{owner}/{api}/{version}/standardization"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), api: (encode-path-segment $api), version: (encode-path-segment $version)} | format pattern "/apis/{owner}/{api}/{version}/standardization"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1004,7 +1015,7 @@ export def "apis-standardization get-standardization-errors" [
 #
 # GET /apis/{owner}/{api}/{version}/swagger.json
 # operationId: getJsonDefinition
-export def "apis-swaggerjson get-json-definition" [
+export def "apis-swagger-json get-definition" [
   owner: string
   api: string
   version: string
@@ -1022,7 +1033,7 @@ export def "apis-swaggerjson get-json-definition" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "resolved" $resolved "scalar") (serialize-qp "flatten" $flatten "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({owner: $owner, api: $api, version: $version} | format pattern "/apis/{owner}/{api}/{version}/swagger.json") $qp)
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), api: (encode-path-segment $api), version: (encode-path-segment $version)} | format pattern "/apis/{owner}/{api}/{version}/swagger.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1032,7 +1043,7 @@ export def "apis-swaggerjson get-json-definition" [
 #
 # GET /apis/{owner}/{api}/{version}/swagger.yaml
 # operationId: getYamlDefinition
-export def "apis-swaggeryaml get-yaml-definition" [
+export def "apis-swagger-yaml get-definition" [
   owner: string
   api: string
   version: string
@@ -1050,7 +1061,7 @@ export def "apis-swaggeryaml get-yaml-definition" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "resolved" $resolved "scalar") (serialize-qp "flatten" $flatten "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({owner: $owner, api: $api, version: $version} | format pattern "/apis/{owner}/{api}/{version}/swagger.yaml") $qp)
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), api: (encode-path-segment $api), version: (encode-path-segment $version)} | format pattern "/apis/{owner}/{api}/{version}/swagger.yaml") $qp)
   let accept_val = "application/yaml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1077,7 +1088,7 @@ export def "apis-validation get" [
 ]: nothing -> record<validation: table<description: string, line: int, severity: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, api: $api, version: $version} | format pattern "/apis/{owner}/{api}/{version}/validation"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), api: (encode-path-segment $api), version: (encode-path-segment $version)} | format pattern "/apis/{owner}/{api}/{version}/validation"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1097,10 +1108,10 @@ export def "domains list" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # Free text query to match
-  --state: string@state-completer # Matches against published state of the spec: * UNPUBLISHED - spec is a draft, a work in progress * PUBLISHED - spec is a stable version ready for consuming from client applications * ANY - either PUBLISHED or UNPUBLISHED  (default: ALL)
+  --state: string@state-completer # Matches against published state of the spec: * UNPUBLISHED - spec is a draft, a work in progress * PUBLISHED - spec is a stable version ready for consuming from client applications * ANY - either PUBLISHED or UNPUBLISHED (default: ALL)
   --page: int # Page to return (format: int32, default: 0)
   --limit: int # Number of results per page (1 .. 100) (format: int32, default: 10)
-  --qp-sort: string@sort-completer # Sort criteria of result set: * NAME * UPDATED * CREATED * OWNER * BEST_MATCH - by relevance * TITLE - by `info.title`  (default: NAME)
+  --qp-sort: string@sort-completer # Sort criteria of result set: * NAME * UPDATED * CREATED * OWNER * BEST_MATCH - by relevance * TITLE - by `info.title` (default: NAME)
   --order: string@order-completer # Sort order (default: ASC)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1128,13 +1139,13 @@ export def "domains get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page to return (format: int32, default: 0)
   --limit: int # Number of results per page (1 .. 100) (format: int32, default: 10)
-  --qp-sort: string@sort-completer # Sort criteria of result set: * NAME * UPDATED * CREATED * OWNER * BEST_MATCH - by relevance * TITLE - by `info.title`  (default: NAME)
+  --qp-sort: string@sort-completer # Sort criteria of result set: * NAME * UPDATED * CREATED * OWNER * BEST_MATCH - by relevance * TITLE - by `info.title` (default: NAME)
   --order: string@order-completer # Sort order (default: ASC)
 ]: nothing -> record<apis: table<description: string, name: string, properties: list, tags: list>, description: string, name: string, offset: int, totalCount: int, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({owner: $owner} | format pattern "/domains/{owner}") $qp)
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner)} | format pattern "/domains/{owner}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1160,7 +1171,7 @@ export def "domains delete-by-owner-domain" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "force" $force "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({owner: $owner, domain: $domain} | format pattern "/domains/{owner}/{domain}") $qp)
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), domain: (encode-path-segment $domain)} | format pattern "/domains/{owner}/{domain}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1184,7 +1195,7 @@ export def "domains get-versions" [
 ]: nothing -> record<apis: table<description: string, name: string, properties: list, tags: list>, description: string, name: string, offset: int, totalCount: int, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, domain: $domain} | format pattern "/domains/{owner}/{domain}"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), domain: (encode-path-segment $domain)} | format pattern "/domains/{owner}/{domain}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1194,7 +1205,7 @@ export def "domains get-versions" [
 #
 # POST /domains/{owner}/{domain}
 # operationId: saveDomainDefinition
-export def "domains saveDomainDefinition" [
+export def "domains create-save-definition" [
   owner: string
   domain: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1214,11 +1225,12 @@ export def "domains saveDomainDefinition" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "isPrivate" $is_private "scalar") (serialize-qp "version" $version "scalar") (serialize-qp "force" $force "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({owner: $owner, domain: $domain} | format pattern "/domains/{owner}/{domain}") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), domain: (encode-path-segment $domain)} | format pattern "/domains/{owner}/{domain}") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Rename a domain
@@ -1242,7 +1254,7 @@ export def "domains-rename rename" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "newName" $new_name "scalar") (serialize-qp "force" $force "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({owner: $owner, domain: $domain} | format pattern "/domains/{owner}/{domain}/rename") $qp)
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), domain: (encode-path-segment $domain)} | format pattern "/domains/{owner}/{domain}/rename") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1252,7 +1264,7 @@ export def "domains-rename rename" [
 #
 # GET /domains/{owner}/{domain}/settings/default
 # operationId: getDomainDefaultVersion
-export def "domains-settings-default get-default-version" [
+export def "domains-settings-default get-version" [
   owner: string
   domain: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1266,7 +1278,7 @@ export def "domains-settings-default get-default-version" [
 ]: nothing -> record<version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, domain: $domain} | format pattern "/domains/{owner}/{domain}/settings/default"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), domain: (encode-path-segment $domain)} | format pattern "/domains/{owner}/{domain}/settings/default"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1276,7 +1288,7 @@ export def "domains-settings-default get-default-version" [
 #
 # PUT /domains/{owner}/{domain}/settings/default
 # operationId: setDomainDefaultVersion
-export def "domains-settings-default setDomainDefaultVersion" [
+export def "domains-settings-default update-version" [
   owner: string
   domain: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1292,12 +1304,12 @@ export def "domains-settings-default setDomainDefaultVersion" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, domain: $domain} | format pattern "/domains/{owner}/{domain}/settings/default"))
-  let body = {"version": $version} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), domain: (encode-path-segment $domain)} | format pattern "/domains/{owner}/{domain}/settings/default"))
+  let req_body = {"version": $version} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a domain version
@@ -1321,7 +1333,7 @@ export def "domains delete-by-owner-domain-version" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "force" $force "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({owner: $owner, domain: $domain, version: $version} | format pattern "/domains/{owner}/{domain}/{version}") $qp)
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), domain: (encode-path-segment $domain), version: (encode-path-segment $version)} | format pattern "/domains/{owner}/{domain}/{version}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1347,7 +1359,7 @@ export def "domains get-definition" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, domain: $domain, version: $version} | format pattern "/domains/{owner}/{domain}/{version}"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), domain: (encode-path-segment $domain), version: (encode-path-segment $version)} | format pattern "/domains/{owner}/{domain}/{version}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1372,7 +1384,7 @@ export def "domains-clone clone" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, domain: $domain, version: $version} | format pattern "/domains/{owner}/{domain}/{version}/clone"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), domain: (encode-path-segment $domain), version: (encode-path-segment $version)} | format pattern "/domains/{owner}/{domain}/{version}/clone"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1382,7 +1394,7 @@ export def "domains-clone clone" [
 #
 # GET /domains/{owner}/{domain}/{version}/comments
 # operationId: getDomainCommentsV2
-export def "domains-comments get-comments-v2" [
+export def "domains-comments get" [
   owner: string
   domain: string
   version: string
@@ -1397,7 +1409,7 @@ export def "domains-comments get-comments-v2" [
 ]: nothing -> table<body: string, created: string, id: string, modified: string, user: record<active: bool, id: string>, position: int, replies: list<record>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, domain: $domain, version: $version} | format pattern "/domains/{owner}/{domain}/{version}/comments"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), domain: (encode-path-segment $domain), version: (encode-path-segment $version)} | format pattern "/domains/{owner}/{domain}/{version}/comments"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1408,7 +1420,7 @@ export def "domains-comments get-comments-v2" [
 # POST /domains/{owner}/{domain}/{version}/comments
 # operationId: addDomainCommentV2
 # --replies item shape: {body: string}
-export def "domains-comments create-comment-v2" [
+export def "domains-comments create" [
   owner: string
   domain: string
   version: string
@@ -1420,19 +1432,19 @@ export def "domains-comments create-comment-v2" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-body: string
+  body: string
   position: int # format: int32
   --replies: list # item shape: {body: string}
 ]: any -> record<body: string, created: string, id: string, modified: string, user: record<active: bool, id: string>, position: int, replies: table<body: string, created: string, id: string, modified: string, user: record>, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, domain: $domain, version: $version} | format pattern "/domains/{owner}/{domain}/{version}/comments"))
-  let body = {"body": $body_body, "position": $position, "replies": $replies} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), domain: (encode-path-segment $domain), version: (encode-path-segment $version)} | format pattern "/domains/{owner}/{domain}/{version}/comments"))
+  let req_body = {"body": $body, "position": $position, "replies": $replies} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Bulk update comments
@@ -1440,7 +1452,7 @@ export def "domains-comments create-comment-v2" [
 # POST /domains/{owner}/{domain}/{version}/comments/batch
 # operationId: updateDomainCommentsV2
 # --addComment item shape: {body: string, position: int, replies?: list}
-export def "domains-comments-batch update-comments-v2" [
+export def "domains-comments-batch update" [
   owner: string
   domain: string
   version: string
@@ -1454,7 +1466,7 @@ export def "domains-comments-batch update-comments-v2" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --add-comment: list # item shape: {body: string, position: int, replies?: list}
   --add-reply: record
-  --delete-comment: list
+  --delete-comment: list<string>
   --delete-reply: record
   --update-comment: record
   --update-reply: record
@@ -1463,19 +1475,19 @@ export def "domains-comments-batch update-comments-v2" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, domain: $domain, version: $version} | format pattern "/domains/{owner}/{domain}/{version}/comments/batch"))
-  let body = {"addComment": $add_comment, "addReply": $add_reply, "deleteComment": $delete_comment, "deleteReply": $delete_reply, "updateComment": $update_comment, "updateReply": $update_reply, "updateStatus": $update_status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), domain: (encode-path-segment $domain), version: (encode-path-segment $version)} | format pattern "/domains/{owner}/{domain}/{version}/comments/batch"))
+  let req_body = {"addComment": $add_comment, "addReply": $add_reply, "deleteComment": $delete_comment, "deleteReply": $delete_reply, "updateComment": $update_comment, "updateReply": $update_reply, "updateStatus": $update_status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a comment
 #
 # DELETE /domains/{owner}/{domain}/{version}/comments/{comment}
 # operationId: deleteDomainCommentV2
-export def "domains-comments delete-v2" [
+export def "domains-comments delete" [
   owner: string
   domain: string
   version: string
@@ -1491,7 +1503,7 @@ export def "domains-comments delete-v2" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, domain: $domain, version: $version, comment: $comment} | format pattern "/domains/{owner}/{domain}/{version}/comments/{comment}"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), domain: (encode-path-segment $domain), version: (encode-path-segment $version), comment: (encode-path-segment $comment)} | format pattern "/domains/{owner}/{domain}/{version}/comments/{comment}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1501,7 +1513,7 @@ export def "domains-comments delete-v2" [
 #
 # PATCH /domains/{owner}/{domain}/{version}/comments/{comment}
 # operationId: updateDomainCommentV2
-export def "domains-comments update-v2" [
+export def "domains-comments update" [
   owner: string
   domain: string
   version: string
@@ -1514,25 +1526,25 @@ export def "domains-comments update-v2" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-body: string
+  --body: string
   --position: int # format: int32
 ]: any -> record<body: string, created: string, id: string, modified: string, user: record<active: bool, id: string>, position: int, replies: table<body: string, created: string, id: string, modified: string, user: record>, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, domain: $domain, version: $version, comment: $comment} | format pattern "/domains/{owner}/{domain}/{version}/comments/{comment}"))
-  let body = {"body": $body_body, "position": $position} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), domain: (encode-path-segment $domain), version: (encode-path-segment $version), comment: (encode-path-segment $comment)} | format pattern "/domains/{owner}/{domain}/{version}/comments/{comment}"))
+  let req_body = {"body": $body, "position": $position} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Reply to a comment
 #
 # POST /domains/{owner}/{domain}/{version}/comments/{comment}/replies
 # operationId: addDomainCommentReplyV2
-export def "domains-comments-replies create-reply-v2" [
+export def "domains-comments-replies create-reply" [
   owner: string
   domain: string
   version: string
@@ -1545,24 +1557,24 @@ export def "domains-comments-replies create-reply-v2" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-body: string
+  body: string
 ]: any -> table<body: string, created: string, id: string, modified: string, user: record<active: bool, id: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, domain: $domain, version: $version, comment: $comment} | format pattern "/domains/{owner}/{domain}/{version}/comments/{comment}/replies"))
-  let body = {"body": $body_body} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), domain: (encode-path-segment $domain), version: (encode-path-segment $version), comment: (encode-path-segment $comment)} | format pattern "/domains/{owner}/{domain}/{version}/comments/{comment}/replies"))
+  let req_body = {"body": $body} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a comment reply
 #
 # DELETE /domains/{owner}/{domain}/{version}/comments/{comment}/replies/{reply}
 # operationId: deleteDomainCommentReplyV2
-export def "domains-comments-replies delete-v2" [
+export def "domains-comments-replies delete" [
   owner: string
   domain: string
   version: string
@@ -1579,7 +1591,7 @@ export def "domains-comments-replies delete-v2" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, domain: $domain, version: $version, comment: $comment, reply: $reply} | format pattern "/domains/{owner}/{domain}/{version}/comments/{comment}/replies/{reply}"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), domain: (encode-path-segment $domain), version: (encode-path-segment $version), comment: (encode-path-segment $comment), reply: (encode-path-segment $reply)} | format pattern "/domains/{owner}/{domain}/{version}/comments/{comment}/replies/{reply}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1589,7 +1601,7 @@ export def "domains-comments-replies delete-v2" [
 #
 # PATCH /domains/{owner}/{domain}/{version}/comments/{comment}/replies/{reply}
 # operationId: updateDomainCommentReplyV2
-export def "domains-comments-replies update-v2" [
+export def "domains-comments-replies update" [
   owner: string
   domain: string
   version: string
@@ -1603,24 +1615,24 @@ export def "domains-comments-replies update-v2" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-body: string
+  --body: string
 ]: any -> record<body: string, created: string, id: string, modified: string, user: record<active: bool, id: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, domain: $domain, version: $version, comment: $comment, reply: $reply} | format pattern "/domains/{owner}/{domain}/{version}/comments/{comment}/replies/{reply}"))
-  let body = {"body": $body_body} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), domain: (encode-path-segment $domain), version: (encode-path-segment $version), comment: (encode-path-segment $comment), reply: (encode-path-segment $reply)} | format pattern "/domains/{owner}/{domain}/{version}/comments/{comment}/replies/{reply}"))
+  let req_body = {"body": $body} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Resolve or reopen a comment
 #
 # PUT /domains/{owner}/{domain}/{version}/comments/{comment}/status/{status}
 # operationId: setDomainCommentStatusV2
-export def "domains-comments-status setDomainCommentStatusV2" [
+export def "domains-comments-status update" [
   owner: string
   domain: string
   version: string
@@ -1637,7 +1649,7 @@ export def "domains-comments-status setDomainCommentStatusV2" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, domain: $domain, version: $version, comment: $comment, status: $status} | format pattern "/domains/{owner}/{domain}/{version}/comments/{comment}/status/{status}"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), domain: (encode-path-segment $domain), version: (encode-path-segment $version), comment: (encode-path-segment $comment), status: (encode-path-segment $status)} | format pattern "/domains/{owner}/{domain}/{version}/comments/{comment}/status/{status}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1647,7 +1659,7 @@ export def "domains-comments-status setDomainCommentStatusV2" [
 #
 # GET /domains/{owner}/{domain}/{version}/domain.json
 # operationId: getDomainJsonDefinition
-export def "domains-domainjson get-json-definition" [
+export def "domains-domain-json get-definition" [
   owner: string
   domain: string
   version: string
@@ -1662,7 +1674,7 @@ export def "domains-domainjson get-json-definition" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, domain: $domain, version: $version} | format pattern "/domains/{owner}/{domain}/{version}/domain.json"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), domain: (encode-path-segment $domain), version: (encode-path-segment $version)} | format pattern "/domains/{owner}/{domain}/{version}/domain.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1672,7 +1684,7 @@ export def "domains-domainjson get-json-definition" [
 #
 # GET /domains/{owner}/{domain}/{version}/domain.yaml
 # operationId: getDomainYamlDefinition
-export def "domains-domainyaml get-yaml-definition" [
+export def "domains-domain-yaml get-definition" [
   owner: string
   domain: string
   version: string
@@ -1687,7 +1699,7 @@ export def "domains-domainyaml get-yaml-definition" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, domain: $domain, version: $version} | format pattern "/domains/{owner}/{domain}/{version}/domain.yaml"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), domain: (encode-path-segment $domain), version: (encode-path-segment $version)} | format pattern "/domains/{owner}/{domain}/{version}/domain.yaml"))
   let accept_val = "application/yaml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1697,7 +1709,7 @@ export def "domains-domainyaml get-yaml-definition" [
 #
 # POST /domains/{owner}/{domain}/{version}/fork
 # operationId: forkDomain
-export def "domains-fork forkDomain" [
+export def "domains-fork create" [
   owner: string
   domain: string
   version: string
@@ -1718,12 +1730,12 @@ export def "domains-fork forkDomain" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, domain: $domain, version: $version} | format pattern "/domains/{owner}/{domain}/{version}/fork"))
-  let body = {"name": $name, "owner": $body_owner, "private": $private, "project": $project, "version": $body_version} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), domain: (encode-path-segment $domain), version: (encode-path-segment $version)} | format pattern "/domains/{owner}/{domain}/{version}/fork"))
+  let req_body = {"name": $name, "owner": $body_owner, "private": $private, "project": $project, "version": $body_version} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get the published status for the specified domain and version
@@ -1745,7 +1757,7 @@ export def "domains-settings-lifecycle get" [
 ]: nothing -> record<published: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, domain: $domain, version: $version} | format pattern "/domains/{owner}/{domain}/{version}/settings/lifecycle"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), domain: (encode-path-segment $domain), version: (encode-path-segment $version)} | format pattern "/domains/{owner}/{domain}/{version}/settings/lifecycle"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1755,7 +1767,7 @@ export def "domains-settings-lifecycle get" [
 #
 # PUT /domains/{owner}/{domain}/{version}/settings/lifecycle
 # operationId: setDomainLifecycleSettings
-export def "domains-settings-lifecycle setDomainLifecycleSettings" [
+export def "domains-settings-lifecycle update" [
   owner: string
   domain: string
   version: string
@@ -1772,7 +1784,7 @@ export def "domains-settings-lifecycle setDomainLifecycleSettings" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "force" $force "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({owner: $owner, domain: $domain, version: $version} | format pattern "/domains/{owner}/{domain}/{version}/settings/lifecycle") $qp)
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), domain: (encode-path-segment $domain), version: (encode-path-segment $version)} | format pattern "/domains/{owner}/{domain}/{version}/settings/lifecycle") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1797,7 +1809,7 @@ export def "domains-settings-private get" [
 ]: nothing -> record<private: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, domain: $domain, version: $version} | format pattern "/domains/{owner}/{domain}/{version}/settings/private"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), domain: (encode-path-segment $domain), version: (encode-path-segment $version)} | format pattern "/domains/{owner}/{domain}/{version}/settings/private"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1807,7 +1819,7 @@ export def "domains-settings-private get" [
 #
 # PUT /domains/{owner}/{domain}/{version}/settings/private
 # operationId: setDomainPrivateSettings
-export def "domains-settings-private setDomainPrivateSettings" [
+export def "domains-settings-private update" [
   owner: string
   domain: string
   version: string
@@ -1824,7 +1836,7 @@ export def "domains-settings-private setDomainPrivateSettings" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "force" $force "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({owner: $owner, domain: $domain, version: $version} | format pattern "/domains/{owner}/{domain}/{version}/settings/private") $qp)
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), domain: (encode-path-segment $domain), version: (encode-path-segment $version)} | format pattern "/domains/{owner}/{domain}/{version}/settings/private") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1846,7 +1858,7 @@ export def "projects get-user" [
   --name-only: oneof<nothing, bool> # Return the project information excluding APIs and domains (default: false - DELETE)
   --page: int # Page to return (format: int32, default: 0)
   --limit: int # Number of results per page (1 .. 100) (format: int32, default: 10)
-  --qp-sort: string@sort-completer-1 # Sort criteria or result set: * NAME * OWNER  (default: NAME)
+  --qp-sort: string@sort-completer-1 # Sort criteria or result set: * NAME * OWNER (default: NAME)
   --order: string@order-completer # Sort order (default: ASC)
 ]: nothing -> record<offset: int, projects: table<apis: list, description: string, domains: list, name: string>, totalCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1862,7 +1874,7 @@ export def "projects get-user" [
 #
 # GET /projects/{owner}
 # operationId: getOrgProjectsV2
-export def "projects get-org-projects-v2" [
+export def "projects get-org" [
   owner: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1880,7 +1892,7 @@ export def "projects get-org-projects-v2" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nameOnly" $name_only "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({owner: $owner} | format pattern "/projects/{owner}") $qp)
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner)} | format pattern "/projects/{owner}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1903,7 +1915,7 @@ export def "projects create" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner} | format pattern "/projects/{owner}"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner)} | format pattern "/projects/{owner}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1913,7 +1925,7 @@ export def "projects create" [
 #
 # DELETE /projects/{owner}/{projectId}
 # operationId: deleteProjectV2
-export def "projects delete-project-v2" [
+export def "projects delete" [
   owner: string
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1927,7 +1939,7 @@ export def "projects delete-project-v2" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, project_id: $project_id} | format pattern "/projects/{owner}/{project_id}"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), project_id: (encode-path-segment $project_id)} | format pattern "/projects/{owner}/{project_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1937,7 +1949,7 @@ export def "projects delete-project-v2" [
 #
 # GET /projects/{owner}/{projectId}
 # operationId: getProjectV2
-export def "projects get-project-v2" [
+export def "projects get" [
   owner: string
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1951,7 +1963,7 @@ export def "projects get-project-v2" [
 ]: nothing -> record<apis: list<string>, description: string, domains: list<string>, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, project_id: $project_id} | format pattern "/projects/{owner}/{project_id}"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), project_id: (encode-path-segment $project_id)} | format pattern "/projects/{owner}/{project_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1961,7 +1973,7 @@ export def "projects get-project-v2" [
 #
 # PUT /projects/{owner}/{projectId}
 # operationId: saveProjectV2
-export def "projects saveProjectV2" [
+export def "projects update-save" [
   owner: any
   project_id: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -1975,7 +1987,7 @@ export def "projects saveProjectV2" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, project_id: $project_id} | format pattern "/projects/{owner}/{project_id}"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), project_id: (encode-path-segment $project_id)} | format pattern "/projects/{owner}/{project_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1985,7 +1997,7 @@ export def "projects saveProjectV2" [
 #
 # GET /projects/{owner}/{projectId}/members
 # operationId: getProjectMembersV2
-export def "projects-members get-project-members-v2" [
+export def "projects-members get" [
   owner: string
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1999,7 +2011,7 @@ export def "projects-members get-project-members-v2" [
 ]: nothing -> record<members: table<name: string, roles: list, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, project_id: $project_id} | format pattern "/projects/{owner}/{project_id}/members"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), project_id: (encode-path-segment $project_id)} | format pattern "/projects/{owner}/{project_id}/members"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2009,7 +2021,7 @@ export def "projects-members get-project-members-v2" [
 #
 # PUT /projects/{owner}/{projectId}/members
 # operationId: updateProjectMembersV2
-export def "projects-members update-project-members-v2" [
+export def "projects-members update" [
   owner: any
   project_id: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -2023,7 +2035,7 @@ export def "projects-members update-project-members-v2" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, project_id: $project_id} | format pattern "/projects/{owner}/{project_id}/members"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), project_id: (encode-path-segment $project_id)} | format pattern "/projects/{owner}/{project_id}/members"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2033,7 +2045,7 @@ export def "projects-members update-project-members-v2" [
 #
 # PUT /projects/{owner}/{projectId}/{specType}/{name}
 # operationId: addSpecToProjectV2
-export def "projects create-spec-to-project-v2" [
+export def "projects create-spec" [
   owner: string
   project_id: string
   spec_type: string
@@ -2049,7 +2061,7 @@ export def "projects create-spec-to-project-v2" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, project_id: $project_id, spec_type: $spec_type, name: $name} | format pattern "/projects/{owner}/{project_id}/{spec_type}/{name}"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), project_id: (encode-path-segment $project_id), spec_type: (encode-path-segment $spec_type), name: (encode-path-segment $name)} | format pattern "/projects/{owner}/{project_id}/{spec_type}/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2059,7 +2071,7 @@ export def "projects create-spec-to-project-v2" [
 #
 # GET /specs
 # operationId: searchApisAndDomains
-export def "specs list-apis-and-domains" [
+export def "specs list-and-domains" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2068,14 +2080,14 @@ export def "specs list-apis-and-domains" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --spec-type: string@spec-type-completer # Type of definitions to search: * API - APIs only * DOMAIN - domains only * TEMPLATE - templates only * ANY - APIs, domains, and templates  (default: ANY)
-  --visibility: string@visibility-completer # The visibility of a definition in SwaggerHub: * PUBLIC - can be viewed by anyone * PRIVATE - can only be viewed by you or your organization and those that you are collaborating with or have shared it with * ANY - either PUBLIC or PRIVATE  (default: ANY)
-  --state: string@state-completer # Matches against published state of the spec: * UNPUBLISHED - spec is a draft, a work in progress * PUBLISHED - spec is a stable version ready for consuming from client applications * ANY - either PUBLISHED or UNPUBLISHED  (default: ALL)
+  --spec-type: string@spec-type-completer # Type of definitions to search: * API - APIs only * DOMAIN - domains only * TEMPLATE - templates only * ANY - APIs, domains, and templates (default: ANY)
+  --visibility: string@visibility-completer # The visibility of a definition in SwaggerHub: * PUBLIC - can be viewed by anyone * PRIVATE - can only be viewed by you or your organization and those that you are collaborating with or have shared it with * ANY - either PUBLIC or PRIVATE (default: ANY)
+  --state: string@state-completer # Matches against published state of the spec: * UNPUBLISHED - spec is a draft, a work in progress * PUBLISHED - spec is a stable version ready for consuming from client applications * ANY - either PUBLISHED or UNPUBLISHED (default: ALL)
   --owner: string # API or domain owner. Can be username or organization name. Case-sensitive.
   --query: string # Free text query to match
   --page: int # Page to return (format: int32, default: 0)
   --limit: int # Number of results per page (1 .. 100) (format: int32, default: 10)
-  --qp-sort: string@sort-completer # Sort criteria of result set: * NAME * UPDATED * CREATED * OWNER * BEST_MATCH - by relevance * TITLE - by `info.title`  (default: NAME)
+  --qp-sort: string@sort-completer # Sort criteria of result set: * NAME * UPDATED * CREATED * OWNER * BEST_MATCH - by relevance * TITLE - by `info.title` (default: NAME)
   --order: string@order-completer # Sort order (default: ASC)
 ]: nothing -> record<apis: table<description: string, name: string, properties: list, tags: list>, description: string, name: string, offset: int, totalCount: int, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2129,7 +2141,7 @@ export def "templates delete-by-owner-templateId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, template_id: $template_id} | format pattern "/templates/{owner}/{template_id}"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), template_id: (encode-path-segment $template_id)} | format pattern "/templates/{owner}/{template_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2139,7 +2151,7 @@ export def "templates delete-by-owner-templateId" [
 #
 # GET /templates/{owner}/{templateId}
 # operationId: getTemplateVersions
-export def "templates get-template-versions" [
+export def "templates get-versions" [
   owner: string
   template_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2153,7 +2165,7 @@ export def "templates get-template-versions" [
 ]: nothing -> record<apis: table<description: string, name: string, properties: list, tags: list>, description: string, name: string, offset: int, totalCount: int, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, template_id: $template_id} | format pattern "/templates/{owner}/{template_id}"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), template_id: (encode-path-segment $template_id)} | format pattern "/templates/{owner}/{template_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2163,7 +2175,7 @@ export def "templates get-template-versions" [
 #
 # POST /templates/{owner}/{templateId}
 # operationId: saveTemplateDefinition
-export def "templates saveTemplateDefinition" [
+export def "templates create-save-definition" [
   owner: string
   template_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2184,11 +2196,12 @@ export def "templates saveTemplateDefinition" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "isPrivate" $is_private "scalar") (serialize-qp "version" $version "scalar") (serialize-qp "force" $force "scalar") (serialize-qp "projectName" $project_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({owner: $owner, template_id: $template_id} | format pattern "/templates/{owner}/{template_id}") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), template_id: (encode-path-segment $template_id)} | format pattern "/templates/{owner}/{template_id}") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Rename a template
@@ -2211,7 +2224,7 @@ export def "templates-rename rename" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "newName" $new_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({owner: $owner, template_id: $template_id} | format pattern "/templates/{owner}/{template_id}/rename") $qp)
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), template_id: (encode-path-segment $template_id)} | format pattern "/templates/{owner}/{template_id}/rename") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2236,7 +2249,7 @@ export def "templates delete-by-owner-templateId-version" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, template_id: $template_id, version: $version} | format pattern "/templates/{owner}/{template_id}/{version}"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), template_id: (encode-path-segment $template_id), version: (encode-path-segment $version)} | format pattern "/templates/{owner}/{template_id}/{version}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2246,7 +2259,7 @@ export def "templates delete-by-owner-templateId-version" [
 #
 # GET /templates/{owner}/{templateId}/{version}
 # operationId: getTemplateDefinition
-export def "templates get-template-definition" [
+export def "templates get-definition" [
   owner: string
   template_id: string
   version: string
@@ -2263,7 +2276,7 @@ export def "templates get-template-definition" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "flatten" $flatten "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({owner: $owner, template_id: $template_id, version: $version} | format pattern "/templates/{owner}/{template_id}/{version}") $qp)
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), template_id: (encode-path-segment $template_id), version: (encode-path-segment $version)} | format pattern "/templates/{owner}/{template_id}/{version}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2288,7 +2301,7 @@ export def "templates-comments get" [
 ]: nothing -> table<body: string, created: string, id: string, modified: string, user: record<active: bool, id: string>, position: int, replies: list<record>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, template_id: $template_id, version: $version} | format pattern "/templates/{owner}/{template_id}/{version}/comments"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), template_id: (encode-path-segment $template_id), version: (encode-path-segment $version)} | format pattern "/templates/{owner}/{template_id}/{version}/comments"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2313,7 +2326,7 @@ export def "templates-comments-batch update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --add-comment: list # item shape: {body: string, position: int, replies?: list}
   --add-reply: record
-  --delete-comment: list
+  --delete-comment: list<string>
   --delete-reply: record
   --update-comment: record
   --update-reply: record
@@ -2322,19 +2335,19 @@ export def "templates-comments-batch update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, template_id: $template_id, version: $version} | format pattern "/templates/{owner}/{template_id}/{version}/comments/batch"))
-  let body = {"addComment": $add_comment, "addReply": $add_reply, "deleteComment": $delete_comment, "deleteReply": $delete_reply, "updateComment": $update_comment, "updateReply": $update_reply, "updateStatus": $update_status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), template_id: (encode-path-segment $template_id), version: (encode-path-segment $version)} | format pattern "/templates/{owner}/{template_id}/{version}/comments/batch"))
+  let req_body = {"addComment": $add_comment, "addReply": $add_reply, "deleteComment": $delete_comment, "deleteReply": $delete_reply, "updateComment": $update_comment, "updateReply": $update_reply, "updateStatus": $update_status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create a fork for a template
 #
 # POST /templates/{owner}/{templateId}/{version}/fork
 # operationId: forkTemplate
-export def "templates-fork forkTemplate" [
+export def "templates-fork create" [
   owner: string
   template_id: string
   version: string
@@ -2355,12 +2368,12 @@ export def "templates-fork forkTemplate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, template_id: $template_id, version: $version} | format pattern "/templates/{owner}/{template_id}/{version}/fork"))
-  let body = {"name": $name, "owner": $body_owner, "private": $private, "project": $project, "version": $body_version} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), template_id: (encode-path-segment $template_id), version: (encode-path-segment $version)} | format pattern "/templates/{owner}/{template_id}/{version}/fork"))
+  let req_body = {"name": $name, "owner": $body_owner, "private": $private, "project": $project, "version": $body_version} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve lifecycle settings for a template
@@ -2382,7 +2395,7 @@ export def "templates-settings-lifecycle get" [
 ]: nothing -> record<published: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, template_id: $template_id, version: $version} | format pattern "/templates/{owner}/{template_id}/{version}/settings/lifecycle"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), template_id: (encode-path-segment $template_id), version: (encode-path-segment $version)} | format pattern "/templates/{owner}/{template_id}/{version}/settings/lifecycle"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2392,7 +2405,7 @@ export def "templates-settings-lifecycle get" [
 #
 # PUT /templates/{owner}/{templateId}/{version}/settings/lifecycle
 # operationId: setTemplateLifecycleSettings
-export def "templates-settings-lifecycle setTemplateLifecycleSettings" [
+export def "templates-settings-lifecycle update" [
   owner: string
   template_id: string
   version: string
@@ -2411,12 +2424,12 @@ export def "templates-settings-lifecycle setTemplateLifecycleSettings" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "force" $force "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({owner: $owner, template_id: $template_id, version: $version} | format pattern "/templates/{owner}/{template_id}/{version}/settings/lifecycle") $qp)
-  let body = {"published": $published} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), template_id: (encode-path-segment $template_id), version: (encode-path-segment $version)} | format pattern "/templates/{owner}/{template_id}/{version}/settings/lifecycle") $qp)
+  let req_body = {"published": $published} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve visibility settings for a template
@@ -2438,7 +2451,7 @@ export def "templates-settings-private get" [
 ]: nothing -> record<private: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, template_id: $template_id, version: $version} | format pattern "/templates/{owner}/{template_id}/{version}/settings/private"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), template_id: (encode-path-segment $template_id), version: (encode-path-segment $version)} | format pattern "/templates/{owner}/{template_id}/{version}/settings/private"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2448,7 +2461,7 @@ export def "templates-settings-private get" [
 #
 # PUT /templates/{owner}/{templateId}/{version}/settings/private
 # operationId: setTemplatePrivateSettings
-export def "templates-settings-private setTemplatePrivateSettings" [
+export def "templates-settings-private update" [
   owner: string
   template_id: string
   version: string
@@ -2465,10 +2478,10 @@ export def "templates-settings-private setTemplatePrivateSettings" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, template_id: $template_id, version: $version} | format pattern "/templates/{owner}/{template_id}/{version}/settings/private"))
-  let body = {"private": $private} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), template_id: (encode-path-segment $template_id), version: (encode-path-segment $version)} | format pattern "/templates/{owner}/{template_id}/{version}/settings/private"))
+  let req_body = {"private": $private} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

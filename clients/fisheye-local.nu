@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -68,7 +77,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "rest-service-fe-changeset-v1-list-changesets get-changesets-for-text" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "rest-service-fe-changeset-v1-list-changesets get-for-text" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -92,7 +101,7 @@ export def commands []: nothing -> table {
 #
 # GET /rest-service-fe/changeset-v1/listChangesets
 # operationId: getChangesetsForText
-export def "rest-service-fe-changeset-v1-list-changesets get-changesets-for-text" [
+export def "rest-service-fe-changeset-v1-list-changesets get-for-text" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -135,7 +144,7 @@ export def "rest-service-fe-commit-graph-v1-details get-changeset" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({repository: $repository} | format pattern "/rest-service-fe/commit-graph-v1/details/{repository}"))
+  let full_url = (build-url $base ({repository: (encode-path-segment $repository)} | format pattern "/rest-service-fe/commit-graph-v1/details/{repository}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -145,7 +154,7 @@ export def "rest-service-fe-commit-graph-v1-details get-changeset" [
 #
 # GET /rest-service-fe/commit-graph-v1/slice/{repository}
 # operationId: findSliceData
-export def "rest-service-fe-commit-graph-v1-slice findSliceData" [
+export def "rest-service-fe-commit-graph-v1-slice find-data" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -163,7 +172,7 @@ export def "rest-service-fe-commit-graph-v1-slice findSliceData" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "branch" $branch "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "size" $size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({repository: $repository} | format pattern "/rest-service-fe/commit-graph-v1/slice/{repository}") $qp)
+  let full_url = (build-url $base ({repository: (encode-path-segment $repository)} | format pattern "/rest-service-fe/commit-graph-v1/slice/{repository}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -173,7 +182,7 @@ export def "rest-service-fe-commit-graph-v1-slice findSliceData" [
 #
 # GET /rest-service-fe/repositories-v1
 # operationId: getAllRepositories
-export def "rest-service-fe-repositories-v1 get-all" [
+export def "rest-service-fe-repositories-v1 get-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -195,7 +204,7 @@ export def "rest-service-fe-repositories-v1 get-all" [
 #
 # GET /rest-service-fe/repositories-v1/{repository}
 # operationId: getRepositoryInfo
-export def "rest-service-fe-repositories-v1 get-info" [
+export def "rest-service-fe-repositories-v1 get-get" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -208,7 +217,7 @@ export def "rest-service-fe-repositories-v1 get-info" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({repository: $repository} | format pattern "/rest-service-fe/repositories-v1/{repository}"))
+  let full_url = (build-url $base ({repository: (encode-path-segment $repository)} | format pattern "/rest-service-fe/repositories-v1/{repository}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -231,7 +240,7 @@ export def "rest-service-fe-revision-data-v1-changeset get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({repository: $repository, csid: $csid} | format pattern "/rest-service-fe/revisionData-v1/changeset/{repository}/{csid}"))
+  let full_url = (build-url $base ({repository: (encode-path-segment $repository), csid: (encode-path-segment $csid)} | format pattern "/rest-service-fe/revisionData-v1/changeset/{repository}/{csid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -259,7 +268,7 @@ export def "rest-service-fe-revision-data-v1-changeset-list list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "path" $path "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "maxReturn" $max_return "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({repository: $repository} | format pattern "/rest-service-fe/revisionData-v1/changesetList/{repository}") $qp)
+  let full_url = (build-url $base ({repository: (encode-path-segment $repository)} | format pattern "/rest-service-fe/revisionData-v1/changesetList/{repository}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -284,7 +293,7 @@ export def "rest-service-fe-revision-data-v1-path-history list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "path" $path "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({repository: $repository} | format pattern "/rest-service-fe/revisionData-v1/pathHistory/{repository}") $qp)
+  let full_url = (build-url $base ({repository: (encode-path-segment $repository)} | format pattern "/rest-service-fe/revisionData-v1/pathHistory/{repository}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -309,7 +318,7 @@ export def "rest-service-fe-revision-data-v1-path-list get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "path" $path "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({repository: $repository} | format pattern "/rest-service-fe/revisionData-v1/pathList/{repository}") $qp)
+  let full_url = (build-url $base ({repository: (encode-path-segment $repository)} | format pattern "/rest-service-fe/revisionData-v1/pathList/{repository}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -334,7 +343,7 @@ export def "rest-service-fe-revision-data-v1-revision-info get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "path" $path "scalar") (serialize-qp "revision" $revision "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({repository: $repository} | format pattern "/rest-service-fe/revisionData-v1/revisionInfo/{repository}") $qp)
+  let full_url = (build-url $base ({repository: (encode-path-segment $repository)} | format pattern "/rest-service-fe/revisionData-v1/revisionInfo/{repository}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -343,7 +352,7 @@ export def "rest-service-fe-revision-data-v1-revision-info get" [
 # GET /rest-service-fe/revisionData-v1/revisionTags/{repository}
 #
 # operationId: listTagsForRevision
-export def "rest-service-fe-revision-data-v1-revision-tags list-tags-for" [
+export def "rest-service-fe-revision-data-v1-revision-tags list" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -359,7 +368,7 @@ export def "rest-service-fe-revision-data-v1-revision-tags list-tags-for" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "path" $path "scalar") (serialize-qp "revision" $revision "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({repository: $repository} | format pattern "/rest-service-fe/revisionData-v1/revisionTags/{repository}") $qp)
+  let full_url = (build-url $base ({repository: (encode-path-segment $repository)} | format pattern "/rest-service-fe/revisionData-v1/revisionTags/{repository}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -380,7 +389,7 @@ export def "rest-service-fe-search-v1-cross-repository-query get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # text to search for in commit message and p4 jobId. Must not be empty.
   --repository: string # restrict search to only these repositories (by their keys)
-  --expand: string # expand query parameter to specify the maximum number of results. Format is changesets[n:m].revisions[n:m],reviews         the default number of changesets returned is 30, the maximum returned is 100
+  --expand: string # expand query parameter to specify the maximum number of results. Format is changesets[n:m].revisions[n:m],reviews the default number of changesets returned is 30, the maximum returned is 100
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -406,12 +415,12 @@ export def "rest-service-fe-search-v1-query get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # FishEye query to execute
-  --max-return: string # maximum number of results (which can be left unspecified, but in that case,  the maximum number of results will set to 3000 results)
+  --max-return: string # maximum number of results (which can be left unspecified, but in that case, the maximum number of results will set to 3000 results)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "maxReturn" $max_return "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({repository: $repository} | format pattern "/rest-service-fe/search-v1/query/{repository}") $qp)
+  let full_url = (build-url $base ({repository: (encode-path-segment $repository)} | format pattern "/rest-service-fe/search-v1/query/{repository}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -432,12 +441,12 @@ export def "rest-service-fe-search-v1-query-as-rows get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # FishEye query to execute (which must contain a "return" statement)
-  --max-return: string # maximum number of results (which can be left unspecified, but in that case,  the maximum number of results will set to 3000 results)
+  --max-return: string # maximum number of results (which can be left unspecified, but in that case, the maximum number of results will set to 3000 results)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "maxReturn" $max_return "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({repository: $repository} | format pattern "/rest-service-fe/search-v1/queryAsRows/{repository}") $qp)
+  let full_url = (build-url $base ({repository: (encode-path-segment $repository)} | format pattern "/rest-service-fe/search-v1/queryAsRows/{repository}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -460,7 +469,7 @@ export def "rest-service-fe-search-v1-reviews-for-changeset get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({repository: $repository} | format pattern "/rest-service-fe/search-v1/reviewsForChangeset/{repository}"))
+  let full_url = (build-url $base ({repository: (encode-path-segment $repository)} | format pattern "/rest-service-fe/search-v1/reviewsForChangeset/{repository}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -483,7 +492,7 @@ export def "rest-service-fe-search-v1-reviews-for-changesets get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({repository: $repository} | format pattern "/rest-service-fe/search-v1/reviewsForChangesets/{repository}"))
+  let full_url = (build-url $base ({repository: (encode-path-segment $repository)} | format pattern "/rest-service-fe/search-v1/reviewsForChangesets/{repository}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -128,7 +137,7 @@ export def "namespaces get" [
 ]: nothing -> record<datasets: table<name: string, timespans: list, views: list>, extraRepos: list<string>, namespace: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({namespace: $namespace} | format pattern "/namespaces/{namespace}"))
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace)} | format pattern "/namespaces/{namespace}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -151,7 +160,7 @@ export def "namespaces-pulls-exports-years get" [
 ]: nothing -> record<years: table<year: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({namespace: $namespace} | format pattern "/namespaces/{namespace}/pulls/exports/years"))
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace)} | format pattern "/namespaces/{namespace}/pulls/exports/years"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -176,7 +185,7 @@ export def "namespaces-pulls-exports-years get-timespans" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({namespace: $namespace, year: $year, timespantype: $timespantype} | format pattern "/namespaces/{namespace}/pulls/exports/years/{year}/{timespantype}"))
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), year: (encode-path-segment $year), timespantype: (encode-path-segment $timespantype)} | format pattern "/namespaces/{namespace}/pulls/exports/years/{year}/{timespantype}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -202,7 +211,7 @@ export def "namespaces-pulls-exports-years get-metadata" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({namespace: $namespace, year: $year, timespantype: $timespantype, timespan: $timespan} | format pattern "/namespaces/{namespace}/pulls/exports/years/{year}/{timespantype}/{timespan}"))
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), year: (encode-path-segment $year), timespantype: (encode-path-segment $timespantype), timespan: (encode-path-segment $timespan)} | format pattern "/namespaces/{namespace}/pulls/exports/years/{year}/{timespantype}/{timespan}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -229,7 +238,7 @@ export def "namespaces-pulls-exports-years get-data" [
 ]: nothing -> record<data: table<size: int, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({namespace: $namespace, year: $year, timespantype: $timespantype, timespan: $timespan, dataview: $dataview} | format pattern "/namespaces/{namespace}/pulls/exports/years/{year}/{timespantype}/{timespan}/{dataview}"))
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), year: (encode-path-segment $year), timespantype: (encode-path-segment $timespantype), timespan: (encode-path-segment $timespan), dataview: (encode-path-segment $dataview)} | format pattern "/namespaces/{namespace}/pulls/exports/years/{year}/{timespantype}/{timespan}/{dataview}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -255,11 +264,11 @@ export def "users-2fa-login create-users2-fa" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://hub.docker.com")
   let full_url = (build-url $base "/v2/users/2fa-login")
-  let body = {"code": $code, "login_2fa_token": $login_2fa_token} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"code": $code, "login_2fa_token": $login_2fa_token} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create an authentication token
@@ -282,9 +291,9 @@ export def "users-login create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://hub.docker.com")
   let full_url = (build-url $base "/v2/users/login")
-  let body = {"password": $password, "username": $username} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"password": $password, "username": $username} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

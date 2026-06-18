@@ -36,6 +36,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -109,10 +118,10 @@ export def "pricing-config get" [
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default "https://api.vtex.com/{account}/pricing")
   let full_url = (build-url $base "/pricing/config")
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -135,10 +144,10 @@ export def "pricing-migration get-pricingv2-status" [
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default "https://api.vtex.com/{account}/pricing")
   let full_url = (build-url $base "/pricing/migration")
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -146,7 +155,7 @@ export def "pricing-migration get-pricingv2-status" [
 #
 # GET /pricing/pipeline/catalog
 # operationId: getallpricetablesandrules
-export def "pricing-pipeline-catalog get-allpricetablesandrules" [
+export def "pricing-pipeline-catalog get-getallpricetablesandrules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -161,10 +170,10 @@ export def "pricing-pipeline-catalog get-allpricetablesandrules" [
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default "https://api.vtex.com/{account}/pricing")
   let full_url = (build-url $base "/pricing/pipeline/catalog")
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -172,7 +181,7 @@ export def "pricing-pipeline-catalog get-allpricetablesandrules" [
 #
 # GET /pricing/pipeline/catalog/{priceTableId}
 # operationId: Getrulesforapricetable
-export def "pricing-pipeline-catalog get-rulesforapricetable" [
+export def "pricing-pipeline-catalog get-getrulesforapricetable" [
   price_table_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -187,11 +196,11 @@ export def "pricing-pipeline-catalog get-rulesforapricetable" [
 ]: nothing -> record<percentualModifier: int, rules: table<context: record, id: float>, tradePolicyId: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default "https://api.vtex.com/{account}/pricing")
-  let full_url = (build-url $base ({price_table_id: $price_table_id} | format pattern "/pricing/pipeline/catalog/{price_table_id}"))
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({price_table_id: (encode-path-segment $price_table_id)} | format pattern "/pricing/pipeline/catalog/{price_table_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -199,7 +208,7 @@ export def "pricing-pipeline-catalog get-rulesforapricetable" [
 #
 # PUT /pricing/pipeline/catalog/{priceTableId}
 # --rules item shape: {context: record, id: int, percentualModifier: float}
-export def "pricing-pipeline-catalog put" [
+export def "pricing-pipeline-catalog update" [
   price_table_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -216,14 +225,16 @@ export def "pricing-pipeline-catalog put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({price_table_id: $price_table_id} | format pattern "/pricing/pipeline/catalog/{price_table_id}"))
-  let body = {"rules": $rules} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({price_table_id: (encode-path-segment $price_table_id)} | format pattern "/pricing/pipeline/catalog/{price_table_id}"))
+  let req_body = {"rules": $rules} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Delete Price
@@ -245,11 +256,11 @@ export def "pricing-prices delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({item_id: $item_id} | format pattern "/pricing/prices/{item_id}"))
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/pricing/prices/{item_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -272,11 +283,11 @@ export def "pricing-prices get" [
 ]: nothing -> record<basePrice: int, costPrice: int, fixedPrices: table<dateRange: record, listPrice: float, minQuantity: int, tradePolicyId: string, value: float>, itemId: string, listPrice: int, markup: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({item_id: $item_id} | format pattern "/pricing/prices/{item_id}"))
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/pricing/prices/{item_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -285,7 +296,7 @@ export def "pricing-prices get" [
 # PUT /pricing/prices/{itemId}
 # operationId: CreateUpdatePriceOrFixedPrice
 # --fixedPrices item shape: {dateRange?: record, listPrice?: float, minQuantity: int, tradePolicyId: string, value: float}
-export def "pricing-prices create-update-price-or-fixed" [
+export def "pricing-prices create-update-or-fixed" [
   item_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -306,21 +317,23 @@ export def "pricing-prices create-update-price-or-fixed" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({item_id: $item_id} | format pattern "/pricing/prices/{item_id}"))
-  let body = {"basePrice": $base_price, "costPrice": $cost_price, "fixedPrices": $fixed_prices, "listPrice": $list_price, "markup": $markup} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/pricing/prices/{item_id}"))
+  let req_body = {"basePrice": $base_price, "costPrice": $cost_price, "fixedPrices": $fixed_prices, "listPrice": $list_price, "markup": $markup} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Get Computed Price by price table or trade policy
 #
 # GET /pricing/prices/{itemId}/computed/{priceTableId}
 # operationId: GetComputedPricebypricetable
-export def "pricing-prices-computed get-computed-pricebypricetable" [
+export def "pricing-prices-computed get-pricebypricetable" [
   item_id: int
   price_table_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -340,11 +353,11 @@ export def "pricing-prices-computed get-computed-pricebypricetable" [
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default "https://api.vtex.com/{account}/pricing")
   let qp = [(serialize-qp "categoryIds" $category_ids "scalar") (serialize-qp "brandId" $brand_id "scalar") (serialize-qp "quantity" $quantity "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({item_id: $item_id, price_table_id: $price_table_id} | format pattern "/pricing/prices/{item_id}/computed/{price_table_id}") $qp)
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({item_id: (encode-path-segment $item_id), price_table_id: (encode-path-segment $price_table_id)} | format pattern "/pricing/prices/{item_id}/computed/{price_table_id}") $qp)
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -367,11 +380,11 @@ export def "pricing-prices-fixed get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({item_id: $item_id} | format pattern "/pricing/prices/{item_id}/fixed"))
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/pricing/prices/{item_id}/fixed"))
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -379,7 +392,7 @@ export def "pricing-prices-fixed get" [
 #
 # DELETE /pricing/prices/{itemId}/fixed/{priceTableId}
 # operationId: Deletefixedpricesonapricetableortradepolicy
-export def "pricing-prices-fixed delete-fixedpricesonapricetableortradepolicy" [
+export def "pricing-prices-fixed delete-deletefixedpricesonapricetableortradepolicy" [
   item_id: int
   price_table_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -395,11 +408,11 @@ export def "pricing-prices-fixed delete-fixedpricesonapricetableortradepolicy" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({item_id: $item_id, price_table_id: $price_table_id} | format pattern "/pricing/prices/{item_id}/fixed/{price_table_id}"))
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({item_id: (encode-path-segment $item_id), price_table_id: (encode-path-segment $price_table_id)} | format pattern "/pricing/prices/{item_id}/fixed/{price_table_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -407,7 +420,7 @@ export def "pricing-prices-fixed delete-fixedpricesonapricetableortradepolicy" [
 #
 # GET /pricing/prices/{itemId}/fixed/{priceTableId}
 # operationId: GetFixedPricesonapricetable
-export def "pricing-prices-fixed get-fixed-pricesonapricetable" [
+export def "pricing-prices-fixed get-pricesonapricetable" [
   item_id: int
   price_table_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -423,11 +436,11 @@ export def "pricing-prices-fixed get-fixed-pricesonapricetable" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({item_id: $item_id, price_table_id: $price_table_id} | format pattern "/pricing/prices/{item_id}/fixed/{price_table_id}"))
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({item_id: (encode-path-segment $item_id), price_table_id: (encode-path-segment $price_table_id)} | format pattern "/pricing/prices/{item_id}/fixed/{price_table_id}"))
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -435,7 +448,7 @@ export def "pricing-prices-fixed get-fixed-pricesonapricetable" [
 #
 # POST /pricing/prices/{itemId}/fixed/{priceTableId}
 # operationId: createorupdatefixedpricesonpricetableortradepolicy
-export def "pricing-prices-fixed create-orupdatefixedpricesonpricetableortradepolicy" [
+export def "pricing-prices-fixed create-createorupdatefixedpricesonpricetableortradepolicy" [
   item_id: int
   price_table_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -453,20 +466,23 @@ export def "pricing-prices-fixed create-orupdatefixedpricesonpricetableortradepo
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({item_id: $item_id, price_table_id: $price_table_id} | format pattern "/pricing/prices/{item_id}/fixed/{price_table_id}"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({item_id: (encode-path-segment $item_id), price_table_id: (encode-path-segment $price_table_id)} | format pattern "/pricing/prices/{item_id}/fixed/{price_table_id}"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # List price tables
 #
 # GET /pricing/tables
 # operationId: Listpricetables
-export def "pricing-tables list-pricetables" [
+export def "pricing-tables get-listpricetables" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -481,9 +497,9 @@ export def "pricing-tables list-pricetables" [
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default "https://api.vtex.com/{account}/pricing")
   let full_url = (build-url $base "/pricing/tables")
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

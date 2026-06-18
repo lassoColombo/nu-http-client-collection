@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -103,14 +112,14 @@ export def "incidents list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --page: int # <p>Page of results to fetch.</p>  (format: int32, default: 1)
-  --per-page: int # <p>Number of results to return per page.</p>  (format: int32)
-  --occurred-before: int # <p>End of period</p>  (format: int32)
-  --occurred-after: int # <p>Start of period</p>  (format: int32)
-  --incident-type: string@incident-type-completer # <p>Only incidents of specific type</p>
-  --proximity: string # <p>Center of location for proximity search</p>
-  --proximity-square: int # <p>Size of the proximity search</p>  (format: int32, default: 100)
-  --query: string # <p>Full text search of incidents</p>
+  --page: int # Page of results to fetch. (format: int32, default: 1)
+  --per-page: int # Number of results to return per page. (format: int32)
+  --occurred-before: int # End of period (format: int32)
+  --occurred-after: int # Start of period (format: int32)
+  --incident-type: string@incident-type-completer # Only incidents of specific type
+  --proximity: string # Center of location for proximity search
+  --proximity-square: int # Size of the proximity search (format: int32, default: 100)
+  --query: string # Full text search of incidents
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -124,7 +133,7 @@ export def "incidents list" [
 # GET /v2/incidents/{id}
 #
 # operationId: GET--version-incidents--id---format-
-export def "incidents get" [
+export def "incidents get-version-format" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -137,7 +146,7 @@ export def "incidents get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v2/incidents/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/incidents/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -147,7 +156,7 @@ export def "incidents get" [
 #
 # GET /v2/locations
 # operationId: GET--version-locations---format-
-export def "locations get" [
+export def "locations get-version-format" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -156,14 +165,14 @@ export def "locations get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --occurred-before: int # <p>End of period</p>  (format: int32)
-  --occurred-after: int # <p>Start of period</p>  (format: int32)
-  --incident-type: string@incident-type-completer # <p>Only incidents of specific type</p>
-  --proximity: string # <p>Center of location for proximity search</p>
-  --proximity-square: int # <p>Size of the proximity search</p>  (format: int32, default: 100)
-  --query: string # <p>Full text search of incidents</p>
-  --limit: int # <p>Max number of results to return. Defaults to 100</p>  (format: int32)
-  --all: oneof<nothing, bool> # <p>Give ‘em all to me. Will ignore limit</p>
+  --occurred-before: int # End of period (format: int32)
+  --occurred-after: int # Start of period (format: int32)
+  --incident-type: string@incident-type-completer # Only incidents of specific type
+  --proximity: string # Center of location for proximity search
+  --proximity-square: int # Size of the proximity search (format: int32, default: 100)
+  --query: string # Full text search of incidents
+  --limit: int # Max number of results to return. Defaults to 100 (format: int32)
+  --all: oneof<nothing, bool> # Give ‘em all to me. Will ignore limit
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -178,7 +187,7 @@ export def "locations get" [
 #
 # GET /v2/locations/markers
 # operationId: GET--version-locations-markers---format-
-export def "locations-markers get" [
+export def "locations-markers get-version-format" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -187,14 +196,14 @@ export def "locations-markers get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --occurred-before: int # <p>End of period</p>  (format: int32)
-  --occurred-after: int # <p>Start of period</p>  (format: int32)
-  --incident-type: string@incident-type-completer # <p>Only incidents of specific type</p>
-  --proximity: string # <p>Center of location for proximity search</p>
-  --proximity-square: int # <p>Size of the proximity search</p>  (format: int32, default: 100)
-  --query: string # <p>Full text search of incidents</p>
-  --limit: int # <p>Max number of results to return. Defaults to 100</p>  (format: int32)
-  --all: oneof<nothing, bool> # <p>Give ‘em all to me. Will ignore limit</p>
+  --occurred-before: int # End of period (format: int32)
+  --occurred-after: int # Start of period (format: int32)
+  --incident-type: string@incident-type-completer # Only incidents of specific type
+  --proximity: string # Center of location for proximity search
+  --proximity-square: int # Size of the proximity search (format: int32, default: 100)
+  --query: string # Full text search of incidents
+  --limit: int # Max number of results to return. Defaults to 100 (format: int32)
+  --all: oneof<nothing, bool> # Give ‘em all to me. Will ignore limit
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

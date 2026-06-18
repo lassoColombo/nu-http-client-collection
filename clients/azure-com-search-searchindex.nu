@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -72,7 +81,7 @@ def autocomplete-mode-completer [] { ["oneTerm" "oneTermWithContext" "twoTerms"]
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "docs list-get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "docs list-documents-get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -97,7 +106,7 @@ export def commands []: nothing -> table {
 # GET /docs
 # Docs: https://docs.microsoft.com/rest/api/searchservice/Search-Documents
 # operationId: Documents_SearchGet
-export def "docs list-get" [
+export def "docs list-documents-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -108,19 +117,19 @@ export def "docs list-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # A full-text search query expression; Use "*" or omit this parameter to match all documents.
   --count: oneof<nothing, bool> # A value that specifies whether to fetch the total count of results. Default is false. Setting this value to true may have a performance impact. Note that the count returned is an approximation.
-  --facet: list # The list of facet expressions to apply to the search query. Each facet expression contains a field name, optionally followed by a comma-separated list of name:value pairs.
+  --facet: list<string> # The list of facet expressions to apply to the search query. Each facet expression contains a field name, optionally followed by a comma-separated list of name:value pairs.
   --filter: string # The OData $filter expression to apply to the search query.
-  --highlight: list # The list of field names to use for hit highlights. Only searchable fields can be used for hit highlighting.
-  --highlight-post-tag: string # A string tag that is appended to hit highlights. Must be set with highlightPreTag. Default is &lt;/em&gt;.
-  --highlight-pre-tag: string # A string tag that is prepended to hit highlights. Must be set with highlightPostTag. Default is &lt;em&gt;.
+  --highlight: list<string> # The list of field names to use for hit highlights. Only searchable fields can be used for hit highlighting.
+  --highlight-post-tag: string # A string tag that is appended to hit highlights. Must be set with highlightPreTag. Default is </em>.
+  --highlight-pre-tag: string # A string tag that is prepended to hit highlights. Must be set with highlightPostTag. Default is <em>.
   --minimum-coverage: float # A number between 0 and 100 indicating the percentage of the index that must be covered by a search query in order for the query to be reported as a success. This parameter can be useful for ensuring search availability even for services with only one replica. The default is 100. (format: double)
-  --orderby: list # The list of OData $orderby expressions by which to sort the results. Each expression can be either a field name or a call to either the geo.distance() or the search.score() functions. Each expression can be followed by asc to indicate ascending, and desc to indicate descending. The default is ascending order. Ties will be broken by the match scores of documents. If no OrderBy is specified, the default sort order is descending by document match score. There can be at most 32 $orderby clauses.
+  --orderby: list<string> # The list of OData $orderby expressions by which to sort the results. Each expression can be either a field name or a call to either the geo.distance() or the search.score() functions. Each expression can be followed by asc to indicate ascending, and desc to indicate descending. The default is ascending order. Ties will be broken by the match scores of documents. If no OrderBy is specified, the default sort order is descending by document match score. There can be at most 32 $orderby clauses.
   --query-type: string@query-type-completer # A value that specifies the syntax of the search query. The default is 'simple'. Use 'full' if your query uses the Lucene query syntax.
-  --scoring-parameter: list # The list of parameter values to be used in scoring functions (for example, referencePointParameter) using the format name-values. For example, if the scoring profile defines a function with a parameter called 'mylocation' the parameter string would be "mylocation--122.2,44.8" (without the quotes).
+  --scoring-parameter: list<string> # The list of parameter values to be used in scoring functions (for example, referencePointParameter) using the format name-values. For example, if the scoring profile defines a function with a parameter called 'mylocation' the parameter string would be "mylocation--122.2,44.8" (without the quotes).
   --scoring-profile: string # The name of a scoring profile to evaluate match scores for matching documents in order to sort the results.
-  --search-fields: list # The list of field names to which to scope the full-text search. When using fielded search (fieldName:searchExpression) in a full Lucene query, the field names of each fielded search expression take precedence over any field names listed in this parameter.
+  --search-fields: list<string> # The list of field names to which to scope the full-text search. When using fielded search (fieldName:searchExpression) in a full Lucene query, the field names of each fielded search expression take precedence over any field names listed in this parameter.
   --search-mode: string@search-mode-completer # A value that specifies whether any or all of the search terms must be matched in order to count the document as a match.
-  --select: list # The list of fields to retrieve. If unspecified, all fields marked as retrievable in the schema are included.
+  --select: list<string> # The list of fields to retrieve. If unspecified, all fields marked as retrievable in the schema are included.
   --skip: int # The number of search results to skip. This value cannot be greater than 100,000. If you need to scan documents in sequence, but cannot use $skip due to this limitation, consider using $orderby on a totally-ordered key and $filter with a range query instead. (format: int32)
   --top: int # The number of search results to retrieve. This can be used in conjunction with $skip to implement client-side paging of search results. If results are truncated due to server-side paging, the response will include a continuation token that can be used to issue another Search request for the next page of results. (format: int32)
   --api-version: string # Client Api Version.
@@ -130,10 +139,10 @@ export def "docs list-get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "$count" $count "scalar") (serialize-qp "facet" $facet "multi") (serialize-qp "$filter" $filter "scalar") (serialize-qp "highlight" $highlight "csv") (serialize-qp "highlightPostTag" $highlight_post_tag "scalar") (serialize-qp "highlightPreTag" $highlight_pre_tag "scalar") (serialize-qp "minimumCoverage" $minimum_coverage "scalar") (serialize-qp "$orderby" $orderby "csv") (serialize-qp "queryType" $query_type "scalar") (serialize-qp "scoringParameter" $scoring_parameter "multi") (serialize-qp "scoringProfile" $scoring_profile "scalar") (serialize-qp "searchFields" $search_fields "csv") (serialize-qp "searchMode" $search_mode "scalar") (serialize-qp "$select" $select "csv") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/docs" $qp)
-  let extra_headers = {"client-request-id": $client_request_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"client-request-id": $client_request_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -142,7 +151,7 @@ export def "docs list-get" [
 # GET /docs('{key}')
 # Docs: https://docs.microsoft.com/rest/api/searchservice/lookup-document
 # operationId: Documents_Get
-export def "docs get" [
+export def "docs get-documents" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -152,18 +161,18 @@ export def "docs get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --select: list # List of field names to retrieve for the document; Any field not retrieved will be missing from the returned document.
+  --select: list<string> # List of field names to retrieve for the document; Any field not retrieved will be missing from the returned document.
   --api-version: string # Client Api Version.
   --client-request-id: string # The tracking ID sent with the request to help with debugging.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$select" $select "csv") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({key: $key} | format pattern "/docs('{key}')") $qp)
-  let extra_headers = {"client-request-id": $client_request_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/docs('{key}')") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"client-request-id": $client_request_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -172,7 +181,7 @@ export def "docs get" [
 # GET /docs/$count
 # Docs: https://docs.microsoft.com/rest/api/searchservice/Count-Documents
 # operationId: Documents_Count
-export def "docs-count get" [
+export def "docs-count get-documents-count" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -188,10 +197,10 @@ export def "docs-count get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/docs/$count" $qp)
-  let extra_headers = {"client-request-id": $client_request_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"client-request-id": $client_request_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -200,7 +209,7 @@ export def "docs-count get" [
 # GET /docs/search.autocomplete
 # Docs: https://docs.microsoft.com/rest/api/searchservice/autocomplete
 # operationId: Documents_AutocompleteGet
-export def "docs-searchautocomplete get" [
+export def "docs-search-autocomplete get-documents" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -218,7 +227,7 @@ export def "docs-searchautocomplete get" [
   --highlight-post-tag: string # A string tag that is appended to hit highlights. Must be set with highlightPreTag. If omitted, hit highlighting is disabled.
   --highlight-pre-tag: string # A string tag that is prepended to hit highlights. Must be set with highlightPostTag. If omitted, hit highlighting is disabled.
   --minimum-coverage: float # A number between 0 and 100 indicating the percentage of the index that must be covered by an autocomplete query in order for the query to be reported as a success. This parameter can be useful for ensuring search availability even for services with only one replica. The default is 80. (format: double)
-  --search-fields: list # The list of field names to consider when querying for auto-completed terms. Target fields must be included in the specified suggester.
+  --search-fields: list<string> # The list of field names to consider when querying for auto-completed terms. Target fields must be included in the specified suggester.
   --top: int # The number of auto-completed terms to retrieve. This must be a value between 1 and 100. The default is 5. (format: int32)
   --client-request-id: string # The tracking ID sent with the request to help with debugging.
 ]: nothing -> record<value: table<queryPlusText: string, text: string>> {
@@ -226,10 +235,10 @@ export def "docs-searchautocomplete get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "suggesterName" $suggester_name "scalar") (serialize-qp "autocompleteMode" $autocomplete_mode "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "fuzzy" $fuzzy "scalar") (serialize-qp "highlightPostTag" $highlight_post_tag "scalar") (serialize-qp "highlightPreTag" $highlight_pre_tag "scalar") (serialize-qp "minimumCoverage" $minimum_coverage "scalar") (serialize-qp "searchFields" $search_fields "csv") (serialize-qp "$top" $top "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/docs/search.autocomplete" $qp)
-  let extra_headers = {"client-request-id": $client_request_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"client-request-id": $client_request_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -239,7 +248,7 @@ export def "docs-searchautocomplete get" [
 # Docs: https://docs.microsoft.com/rest/api/searchservice/addupdate-or-delete-documents
 # operationId: Documents_Index
 # --value item shape: {@search.action?: "upload"|"merge"|"mergeOrUpload"|"delete"}
-export def "docs-searchindex post" [
+export def "docs-search-index create-documents" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -257,13 +266,13 @@ export def "docs-searchindex post" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/docs/search.index" $qp)
-  let body = {"value": $value} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"client-request-id": $client_request_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"value": $value} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"client-request-id": $client_request_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Autocompletes incomplete query terms based on input text and matching terms in the index.
@@ -271,7 +280,7 @@ export def "docs-searchindex post" [
 # POST /docs/search.post.autocomplete
 # Docs: https://docs.microsoft.com/rest/api/searchservice/autocomplete
 # operationId: Documents_AutocompletePost
-export def "docs-searchpostautocomplete post" [
+export def "docs-search-post-autocomplete create-documents" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -298,13 +307,13 @@ export def "docs-searchpostautocomplete post" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/docs/search.post.autocomplete" $qp)
-  let body = {"autocompleteMode": $autocomplete_mode, "filter": $filter, "fuzzy": $fuzzy, "highlightPostTag": $highlight_post_tag, "highlightPreTag": $highlight_pre_tag, "minimumCoverage": $minimum_coverage, "search": $search, "searchFields": $search_fields, "suggesterName": $suggester_name, "top": $top} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"client-request-id": $client_request_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"autocompleteMode": $autocomplete_mode, "filter": $filter, "fuzzy": $fuzzy, "highlightPostTag": $highlight_post_tag, "highlightPreTag": $highlight_pre_tag, "minimumCoverage": $minimum_coverage, "search": $search, "searchFields": $search_fields, "suggesterName": $suggester_name, "top": $top} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"client-request-id": $client_request_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Searches for documents in the index.
@@ -312,7 +321,7 @@ export def "docs-searchpostautocomplete post" [
 # POST /docs/search.post.search
 # Docs: https://docs.microsoft.com/rest/api/searchservice/Search-Documents
 # operationId: Documents_SearchPost
-export def "docs-searchpostsearch list-post" [
+export def "docs-search-post-search list-documents" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -324,15 +333,15 @@ export def "docs-searchpostsearch list-post" [
   --api-version: string # Client Api Version.
   --client-request-id: string # The tracking ID sent with the request to help with debugging.
   --count: oneof<nothing, bool> # A value that specifies whether to fetch the total count of results. Default is false. Setting this value to true may have a performance impact. Note that the count returned is an approximation.
-  --facets: list # The list of facet expressions to apply to the search query. Each facet expression contains a field name, optionally followed by a comma-separated list of name:value pairs.
+  --facets: list<string> # The list of facet expressions to apply to the search query. Each facet expression contains a field name, optionally followed by a comma-separated list of name:value pairs.
   --filter: string # The OData $filter expression to apply to the search query.
   --highlight: string # The comma-separated list of field names to use for hit highlights. Only searchable fields can be used for hit highlighting.
-  --highlight-post-tag: string # A string tag that is appended to hit highlights. Must be set with highlightPreTag. Default is &lt;/em&gt;.
-  --highlight-pre-tag: string # A string tag that is prepended to hit highlights. Must be set with highlightPostTag. Default is &lt;em&gt;.
+  --highlight-post-tag: string # A string tag that is appended to hit highlights. Must be set with highlightPreTag. Default is </em>.
+  --highlight-pre-tag: string # A string tag that is prepended to hit highlights. Must be set with highlightPostTag. Default is <em>.
   --minimum-coverage: float # A number between 0 and 100 indicating the percentage of the index that must be covered by a search query in order for the query to be reported as a success. This parameter can be useful for ensuring search availability even for services with only one replica. The default is 100. (format: double)
   --orderby: string # The comma-separated list of OData $orderby expressions by which to sort the results. Each expression can be either a field name or a call to either the geo.distance() or the search.score() functions. Each expression can be followed by asc to indicate ascending, or desc to indicate descending. The default is ascending order. Ties will be broken by the match scores of documents. If no $orderby is specified, the default sort order is descending by document match score. There can be at most 32 $orderby clauses.
   --query-type: string@query-type-completer # Specifies the syntax of the search query. The default is 'simple'. Use 'full' if your query uses the Lucene query syntax.
-  --scoring-parameters: list # The list of parameter values to be used in scoring functions (for example, referencePointParameter) using the format name-values. For example, if the scoring profile defines a function with a parameter called 'mylocation' the parameter string would be "mylocation--122.2,44.8" (without the quotes).
+  --scoring-parameters: list<string> # The list of parameter values to be used in scoring functions (for example, referencePointParameter) using the format name-values. For example, if the scoring profile defines a function with a parameter called 'mylocation' the parameter string would be "mylocation--122.2,44.8" (without the quotes).
   --scoring-profile: string # The name of a scoring profile to evaluate match scores for matching documents in order to sort the results.
   --search: string # A full-text search query expression; Use "*" or omit this parameter to match all documents.
   --search-fields: string # The comma-separated list of field names to which to scope the full-text search. When using fielded search (fieldName:searchExpression) in a full Lucene query, the field names of each fielded search expression take precedence over any field names listed in this parameter.
@@ -346,13 +355,13 @@ export def "docs-searchpostsearch list-post" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/docs/search.post.search" $qp)
-  let body = {"count": $count, "facets": $facets, "filter": $filter, "highlight": $highlight, "highlightPostTag": $highlight_post_tag, "highlightPreTag": $highlight_pre_tag, "minimumCoverage": $minimum_coverage, "orderby": $orderby, "queryType": $query_type, "scoringParameters": $scoring_parameters, "scoringProfile": $scoring_profile, "search": $search, "searchFields": $search_fields, "searchMode": $search_mode, "select": $select, "skip": $skip, "top": $top} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"client-request-id": $client_request_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"count": $count, "facets": $facets, "filter": $filter, "highlight": $highlight, "highlightPostTag": $highlight_post_tag, "highlightPreTag": $highlight_pre_tag, "minimumCoverage": $minimum_coverage, "orderby": $orderby, "queryType": $query_type, "scoringParameters": $scoring_parameters, "scoringProfile": $scoring_profile, "search": $search, "searchFields": $search_fields, "searchMode": $search_mode, "select": $select, "skip": $skip, "top": $top} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"client-request-id": $client_request_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Suggests documents in the index that match the given partial query text.
@@ -360,7 +369,7 @@ export def "docs-searchpostsearch list-post" [
 # POST /docs/search.post.suggest
 # Docs: https://docs.microsoft.com/rest/api/searchservice/suggestions
 # operationId: Documents_SuggestPost
-export def "docs-searchpostsuggest post" [
+export def "docs-search-post-suggest create-documents" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -388,13 +397,13 @@ export def "docs-searchpostsuggest post" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/docs/search.post.suggest" $qp)
-  let body = {"filter": $filter, "fuzzy": $fuzzy, "highlightPostTag": $highlight_post_tag, "highlightPreTag": $highlight_pre_tag, "minimumCoverage": $minimum_coverage, "orderby": $orderby, "search": $search, "searchFields": $search_fields, "select": $select, "suggesterName": $suggester_name, "top": $top} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"client-request-id": $client_request_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"filter": $filter, "fuzzy": $fuzzy, "highlightPostTag": $highlight_post_tag, "highlightPreTag": $highlight_pre_tag, "minimumCoverage": $minimum_coverage, "orderby": $orderby, "search": $search, "searchFields": $search_fields, "select": $select, "suggesterName": $suggester_name, "top": $top} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"client-request-id": $client_request_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Suggests documents in the index that match the given partial query text.
@@ -402,7 +411,7 @@ export def "docs-searchpostsuggest post" [
 # GET /docs/search.suggest
 # Docs: https://docs.microsoft.com/rest/api/searchservice/suggestions
 # operationId: Documents_SuggestGet
-export def "docs-searchsuggest get" [
+export def "docs-search-suggest get-documents" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -418,9 +427,9 @@ export def "docs-searchsuggest get" [
   --highlight-post-tag: string # A string tag that is appended to hit highlights. Must be set with highlightPreTag. If omitted, hit highlighting of suggestions is disabled.
   --highlight-pre-tag: string # A string tag that is prepended to hit highlights. Must be set with highlightPostTag. If omitted, hit highlighting of suggestions is disabled.
   --minimum-coverage: float # A number between 0 and 100 indicating the percentage of the index that must be covered by a suggestions query in order for the query to be reported as a success. This parameter can be useful for ensuring search availability even for services with only one replica. The default is 80. (format: double)
-  --orderby: list # The list of OData $orderby expressions by which to sort the results. Each expression can be either a field name or a call to either the geo.distance() or the search.score() functions. Each expression can be followed by asc to indicate ascending, or desc to indicate descending. The default is ascending order. Ties will be broken by the match scores of documents. If no $orderby is specified, the default sort order is descending by document match score. There can be at most 32 $orderby clauses.
-  --search-fields: list # The list of field names to search for the specified search text. Target fields must be included in the specified suggester.
-  --select: list # The list of fields to retrieve. If unspecified, only the key field will be included in the results.
+  --orderby: list<string> # The list of OData $orderby expressions by which to sort the results. Each expression can be either a field name or a call to either the geo.distance() or the search.score() functions. Each expression can be followed by asc to indicate ascending, or desc to indicate descending. The default is ascending order. Ties will be broken by the match scores of documents. If no $orderby is specified, the default sort order is descending by document match score. There can be at most 32 $orderby clauses.
+  --search-fields: list<string> # The list of field names to search for the specified search text. Target fields must be included in the specified suggester.
+  --select: list<string> # The list of fields to retrieve. If unspecified, only the key field will be included in the results.
   --top: int # The number of suggestions to retrieve. The value must be a number between 1 and 100. The default is 5. (format: int32)
   --api-version: string # Client Api Version.
   --client-request-id: string # The tracking ID sent with the request to help with debugging.
@@ -429,9 +438,9 @@ export def "docs-searchsuggest get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "suggesterName" $suggester_name "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "fuzzy" $fuzzy "scalar") (serialize-qp "highlightPostTag" $highlight_post_tag "scalar") (serialize-qp "highlightPreTag" $highlight_pre_tag "scalar") (serialize-qp "minimumCoverage" $minimum_coverage "scalar") (serialize-qp "$orderby" $orderby "csv") (serialize-qp "searchFields" $search_fields "csv") (serialize-qp "$select" $select "csv") (serialize-qp "$top" $top "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/docs/search.suggest" $qp)
-  let extra_headers = {"client-request-id": $client_request_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"client-request-id": $client_request_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

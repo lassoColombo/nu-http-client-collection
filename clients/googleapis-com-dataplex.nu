@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -77,7 +86,7 @@ def type-completer-1 [] { ["CURATED" "RAW" "TYPE_UNSPECIFIED"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "projects dataplexprojectslocationsoperationsdelete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "projects delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -101,7 +110,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /v1/{name}
 # operationId: dataplex.projects.locations.operations.delete
-export def "projects dataplexprojectslocationsoperationsdelete" [
+export def "projects delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -127,7 +136,7 @@ export def "projects dataplexprojectslocationsoperationsdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "etag" $etag "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -137,7 +146,7 @@ export def "projects dataplexprojectslocationsoperationsdelete" [
 #
 # GET /v1/{name}
 # operationId: dataplex.projects.locations.operations.get
-export def "projects dataplexprojectslocationsoperationsget" [
+export def "projects get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -163,7 +172,7 @@ export def "projects dataplexprojectslocationsoperationsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -173,12 +182,12 @@ export def "projects dataplexprojectslocationsoperationsget" [
 #
 # PATCH /v1/{name}
 # operationId: dataplex.projects.locations.lakes.zones.assets.patch
-# --discoverySpec shape: {csvOptions?: record, enabled?: bool, excludePatterns?: list, includePatterns?: list, jsonOptions?: record, schedule?: string}
+# --discoverySpec shape: {csvOptions?: record, enabled?: bool, excludePatterns?: list<string>, includePatterns?: list<string>, jsonOptions?: record, schedule?: string}
 # --discoveryStatus shape: {lastRunDuration?: string, lastRunTime?: string, message?: string, state?: "STATE_UNSPECIFIED"|"SCHEDULED"|"IN_PROGRESS"|"PAUSED"|"DISABLED", stats?: record, updateTime?: string}
 # --resourceSpec shape: {name?: string, readAccessMode?: "ACCESS_MODE_UNSPECIFIED"|"DIRECT"|"MANAGED", type?: "TYPE_UNSPECIFIED"|"STORAGE_BUCKET"|"BIGQUERY_DATASET"}
 # --resourceStatus shape: {message?: string, state?: "STATE_UNSPECIFIED"|"READY"|"ERROR", updateTime?: string}
 # --securityStatus shape: {message?: string, state?: "STATE_UNSPECIFIED"|"READY"|"APPLYING"|"ERROR", updateTime?: string}
-export def "projects dataplexprojectslocationslakeszonesassetspatch" [
+export def "projects update-by-name" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -202,7 +211,7 @@ export def "projects dataplexprojectslocationslakeszonesassetspatch" [
   --update-mask: string # Required. Mask of fields to update.
   --validate-only: oneof<nothing, bool> # Optional. Only validate the request, but do not perform mutations. The default is false.
   --description: string # Optional. Description of the asset.
-  --discovery-spec: record # Settings to manage the metadata discovery and publishing for an asset. — shape: {csvOptions?: record, enabled?: bool, excludePatterns?: list, includePatterns?: list, jsonOptions?: record, schedule?: string}
+  --discovery-spec: record # Settings to manage the metadata discovery and publishing for an asset. — shape: {csvOptions?: record, enabled?: bool, excludePatterns?: list<string>, includePatterns?: list<string>, jsonOptions?: record, schedule?: string}
   --discovery-status: record # Status of discovery for an asset. — shape: {lastRunDuration?: string, lastRunTime?: string, message?: string, state?: "STATE_UNSPECIFIED"|"SCHEDULED"|"IN_PROGRESS"|"PAUSED"|"DISABLED", stats?: record, updateTime?: string}
   --display-name: string # Optional. User friendly display name.
   --labels: record # Optional. User defined labels for the asset.
@@ -214,12 +223,12 @@ export def "projects dataplexprojectslocationslakeszonesassetspatch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "updateMask" $update_mask "scalar") (serialize-qp "validateOnly" $validate_only "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}") $qp)
-  let body = {"description": $description, "discoverySpec": $discovery_spec, "discoveryStatus": $discovery_status, "displayName": $display_name, "labels": $labels, "resourceSpec": $resource_spec, "resourceStatus": $resource_status, "securityStatus": $security_status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}") $qp)
+  let req_body = {"description": $description, "discoverySpec": $discovery_spec, "discoveryStatus": $discovery_status, "displayName": $display_name, "labels": $labels, "resourceSpec": $resource_spec, "resourceStatus": $resource_status, "securityStatus": $security_status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update a metadata entity. Only supports full resource update.
@@ -229,7 +238,7 @@ export def "projects dataplexprojectslocationslakeszonesassetspatch" [
 # --compatibility shape: {bigquery?: record, hiveMetastore?: record}
 # --format shape: {compressionFormat?: "COMPRESSION_FORMAT_UNSPECIFIED"|"GZIP"|"BZIP2", csv?: record, iceberg?: record, json?: record, mimeType?: string}
 # --schema shape: {fields?: list, partitionFields?: list, partitionStyle?: "PARTITION_STYLE_UNSPECIFIED"|"HIVE_COMPATIBLE", userManaged?: bool}
-export def "projects dataplexprojectslocationslakeszonesentitiesupdate" [
+export def "projects update-by-name-1" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -269,19 +278,19 @@ export def "projects dataplexprojectslocationslakeszonesentitiesupdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "validateOnly" $validate_only "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}") $qp)
-  let body = {"access": $access, "asset": $asset, "compatibility": $compatibility, "dataPath": $data_path, "dataPathPattern": $data_path_pattern, "description": $description, "displayName": $display_name, "etag": $etag, "format": $format, "id": $id, "schema": $schema, "system": $system, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}") $qp)
+  let req_body = {"access": $access, "asset": $asset, "compatibility": $compatibility, "dataPath": $data_path, "dataPathPattern": $data_path_pattern, "description": $description, "displayName": $display_name, "etag": $etag, "format": $format, "id": $id, "schema": $schema, "system": $system, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists information about the supported locations for this service.
 #
 # GET /v1/{name}/locations
 # operationId: dataplex.projects.locations.list
-export def "locations dataplexprojectslocationslist" [
+export def "locations list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -309,7 +318,7 @@ export def "locations dataplexprojectslocationslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}/locations") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}/locations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -319,7 +328,7 @@ export def "locations dataplexprojectslocationslist" [
 #
 # GET /v1/{name}/operations
 # operationId: dataplex.projects.locations.operations.list
-export def "operations dataplexprojectslocationsoperationslist" [
+export def "operations list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -347,7 +356,7 @@ export def "operations dataplexprojectslocationsoperationslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}/operations") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}/operations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -357,7 +366,7 @@ export def "operations dataplexprojectslocationsoperationslist" [
 #
 # POST /v1/{name}:cancel
 # operationId: dataplex.projects.locations.operations.cancel
-export def "projects dataplexprojectslocationsoperationscancel" [
+export def "projects cancel" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -384,18 +393,19 @@ export def "projects dataplexprojectslocationsoperationscancel" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}:cancel") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}:cancel") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Run an on demand execution of a Task.
 #
 # POST /v1/{name}:run
 # operationId: dataplex.projects.locations.lakes.tasks.run
-export def "projects dataplexprojectslocationslakestasksrun" [
+export def "projects create-run" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -422,18 +432,19 @@ export def "projects dataplexprojectslocationslakestasksrun" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}:run") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}:run") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists action resources in an asset.
 #
 # GET /v1/{parent}/actions
 # operationId: dataplex.projects.locations.lakes.zones.assets.actions.list
-export def "actions dataplexprojectslocationslakeszonesassetsactionslist" [
+export def "actions list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -460,7 +471,7 @@ export def "actions dataplexprojectslocationslakeszonesassetsactionslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/actions") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/actions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -470,7 +481,7 @@ export def "actions dataplexprojectslocationslakeszonesassetsactionslist" [
 #
 # GET /v1/{parent}/assets
 # operationId: dataplex.projects.locations.lakes.zones.assets.list
-export def "assets dataplexprojectslocationslakeszonesassetslist" [
+export def "assets list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -499,7 +510,7 @@ export def "assets dataplexprojectslocationslakeszonesassetslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/assets") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/assets") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -509,12 +520,12 @@ export def "assets dataplexprojectslocationslakeszonesassetslist" [
 #
 # POST /v1/{parent}/assets
 # operationId: dataplex.projects.locations.lakes.zones.assets.create
-# --discoverySpec shape: {csvOptions?: record, enabled?: bool, excludePatterns?: list, includePatterns?: list, jsonOptions?: record, schedule?: string}
+# --discoverySpec shape: {csvOptions?: record, enabled?: bool, excludePatterns?: list<string>, includePatterns?: list<string>, jsonOptions?: record, schedule?: string}
 # --discoveryStatus shape: {lastRunDuration?: string, lastRunTime?: string, message?: string, state?: "STATE_UNSPECIFIED"|"SCHEDULED"|"IN_PROGRESS"|"PAUSED"|"DISABLED", stats?: record, updateTime?: string}
 # --resourceSpec shape: {name?: string, readAccessMode?: "ACCESS_MODE_UNSPECIFIED"|"DIRECT"|"MANAGED", type?: "TYPE_UNSPECIFIED"|"STORAGE_BUCKET"|"BIGQUERY_DATASET"}
 # --resourceStatus shape: {message?: string, state?: "STATE_UNSPECIFIED"|"READY"|"ERROR", updateTime?: string}
 # --securityStatus shape: {message?: string, state?: "STATE_UNSPECIFIED"|"READY"|"APPLYING"|"ERROR", updateTime?: string}
-export def "assets dataplexprojectslocationslakeszonesassetscreate" [
+export def "assets create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -538,7 +549,7 @@ export def "assets dataplexprojectslocationslakeszonesassetscreate" [
   --asset-id: string # Required. Asset identifier. This ID will be used to generate names such as table names when publishing metadata to Hive Metastore and BigQuery. * Must contain only lowercase letters, numbers and hyphens. * Must start with a letter. * Must end with a number or a letter. * Must be between 1-63 characters. * Must be unique within the zone.
   --validate-only: oneof<nothing, bool> # Optional. Only validate the request, but do not perform mutations. The default is false.
   --description: string # Optional. Description of the asset.
-  --discovery-spec: record # Settings to manage the metadata discovery and publishing for an asset. — shape: {csvOptions?: record, enabled?: bool, excludePatterns?: list, includePatterns?: list, jsonOptions?: record, schedule?: string}
+  --discovery-spec: record # Settings to manage the metadata discovery and publishing for an asset. — shape: {csvOptions?: record, enabled?: bool, excludePatterns?: list<string>, includePatterns?: list<string>, jsonOptions?: record, schedule?: string}
   --discovery-status: record # Status of discovery for an asset. — shape: {lastRunDuration?: string, lastRunTime?: string, message?: string, state?: "STATE_UNSPECIFIED"|"SCHEDULED"|"IN_PROGRESS"|"PAUSED"|"DISABLED", stats?: record, updateTime?: string}
   --display-name: string # Optional. User friendly display name.
   --labels: record # Optional. User defined labels for the asset.
@@ -550,19 +561,19 @@ export def "assets dataplexprojectslocationslakeszonesassetscreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "assetId" $asset_id "scalar") (serialize-qp "validateOnly" $validate_only "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/assets") $qp)
-  let body = {"description": $description, "discoverySpec": $discovery_spec, "discoveryStatus": $discovery_status, "displayName": $display_name, "labels": $labels, "resourceSpec": $resource_spec, "resourceStatus": $resource_status, "securityStatus": $security_status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/assets") $qp)
+  let req_body = {"description": $description, "discoverySpec": $discovery_spec, "discoveryStatus": $discovery_status, "displayName": $display_name, "labels": $labels, "resourceSpec": $resource_spec, "resourceStatus": $resource_status, "securityStatus": $security_status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists Data Attribute resources in a DataTaxonomy.
 #
 # GET /v1/{parent}/attributes
 # operationId: dataplex.projects.locations.dataTaxonomies.attributes.list
-export def "attributes dataplexprojectslocationsdataTaxonomiesattributeslist" [
+export def "attributes list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -591,7 +602,7 @@ export def "attributes dataplexprojectslocationsdataTaxonomiesattributeslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/attributes") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/attributes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -601,9 +612,9 @@ export def "attributes dataplexprojectslocationsdataTaxonomiesattributeslist" [
 #
 # POST /v1/{parent}/attributes
 # operationId: dataplex.projects.locations.dataTaxonomies.attributes.create
-# --dataAccessSpec shape: {readers?: list}
-# --resourceAccessSpec shape: {owners?: list, readers?: list, writers?: list}
-export def "attributes dataplexprojectslocationsdataTaxonomiesattributescreate" [
+# --dataAccessSpec shape: {readers?: list<string>}
+# --resourceAccessSpec shape: {owners?: list<string>, readers?: list<string>, writers?: list<string>}
+export def "attributes create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -626,31 +637,31 @@ export def "attributes dataplexprojectslocationsdataTaxonomiesattributescreate" 
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --data-attribute-id: string # Required. DataAttribute identifier. * Must contain only lowercase letters, numbers and hyphens. * Must start with a letter. * Must be between 1-63 characters. * Must end with a number or a letter. * Must be unique within the DataTaxonomy.
   --validate-only: oneof<nothing, bool> # Optional. Only validate the request, but do not perform mutations. The default is false.
-  --data-access-spec: record # DataAccessSpec holds the access control configuration to be enforced on data stored within resources (eg: rows, columns in BigQuery Tables). When associated with data, the data is only accessible to principals explicitly granted access through the DataAccessSpec. Principals with access to the containing resource are not implicitly granted access. — shape: {readers?: list}
+  --data-access-spec: record # DataAccessSpec holds the access control configuration to be enforced on data stored within resources (eg: rows, columns in BigQuery Tables). When associated with data, the data is only accessible to principals explicitly granted access through the DataAccessSpec. Principals with access to the containing resource are not implicitly granted access. — shape: {readers?: list<string>}
   --description: string # Optional. Description of the DataAttribute.
   --display-name: string # Optional. User friendly display name.
   --etag: string # This checksum is computed by the server based on the value of other fields, and may be sent on update and delete requests to ensure the client has an up-to-date value before proceeding.
   --labels: record # Optional. User-defined labels for the DataAttribute.
   --parent-id: string # Optional. The ID of the parent DataAttribute resource, should belong to the same data taxonomy. Circular dependency in parent chain is not valid. Maximum depth of the hierarchy allowed is 4. a -> b -> c -> d -> e, depth = 4
-  --resource-access-spec: record # ResourceAccessSpec holds the access control configuration to be enforced on the resources, for example, Cloud Storage bucket, BigQuery dataset, BigQuery table. — shape: {owners?: list, readers?: list, writers?: list}
+  --resource-access-spec: record # ResourceAccessSpec holds the access control configuration to be enforced on the resources, for example, Cloud Storage bucket, BigQuery dataset, BigQuery table. — shape: {owners?: list<string>, readers?: list<string>, writers?: list<string>}
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "dataAttributeId" $data_attribute_id "scalar") (serialize-qp "validateOnly" $validate_only "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/attributes") $qp)
-  let body = {"dataAccessSpec": $data_access_spec, "description": $description, "displayName": $display_name, "etag": $etag, "labels": $labels, "parentId": $parent_id, "resourceAccessSpec": $resource_access_spec} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/attributes") $qp)
+  let req_body = {"dataAccessSpec": $data_access_spec, "description": $description, "displayName": $display_name, "etag": $etag, "labels": $labels, "parentId": $parent_id, "resourceAccessSpec": $resource_access_spec} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List content.
 #
 # GET /v1/{parent}/content
 # operationId: dataplex.projects.locations.lakes.content.list
-export def "content dataplexprojectslocationslakescontentlist" [
+export def "content list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -678,7 +689,7 @@ export def "content dataplexprojectslocationslakescontentlist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/content") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/content") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -690,7 +701,7 @@ export def "content dataplexprojectslocationslakescontentlist" [
 # operationId: dataplex.projects.locations.lakes.content.create
 # --notebook shape: {kernelType?: "KERNEL_TYPE_UNSPECIFIED"|"PYTHON3"}
 # --sqlScript shape: {engine?: "QUERY_ENGINE_UNSPECIFIED"|"SPARK"}
-export def "content dataplexprojectslocationslakescontentcreate" [
+export def "content create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -723,19 +734,19 @@ export def "content dataplexprojectslocationslakescontentcreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "validateOnly" $validate_only "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/content") $qp)
-  let body = {"dataText": $data_text, "description": $description, "labels": $labels, "notebook": $notebook, "path": $path, "sqlScript": $sql_script} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/content") $qp)
+  let req_body = {"dataText": $data_text, "description": $description, "labels": $labels, "notebook": $notebook, "path": $path, "sqlScript": $sql_script} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List content.
 #
 # GET /v1/{parent}/contentitems
 # operationId: dataplex.projects.locations.lakes.contentitems.list
-export def "contentitems dataplexprojectslocationslakescontentitemslist" [
+export def "contentitems list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -763,7 +774,7 @@ export def "contentitems dataplexprojectslocationslakescontentitemslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/contentitems") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/contentitems") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -775,7 +786,7 @@ export def "contentitems dataplexprojectslocationslakescontentitemslist" [
 # operationId: dataplex.projects.locations.lakes.contentitems.create
 # --notebook shape: {kernelType?: "KERNEL_TYPE_UNSPECIFIED"|"PYTHON3"}
 # --sqlScript shape: {engine?: "QUERY_ENGINE_UNSPECIFIED"|"SPARK"}
-export def "contentitems dataplexprojectslocationslakescontentitemscreate" [
+export def "contentitems create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -808,19 +819,19 @@ export def "contentitems dataplexprojectslocationslakescontentitemscreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "validateOnly" $validate_only "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/contentitems") $qp)
-  let body = {"dataText": $data_text, "description": $description, "labels": $labels, "notebook": $notebook, "path": $path, "sqlScript": $sql_script} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/contentitems") $qp)
+  let req_body = {"dataText": $data_text, "description": $description, "labels": $labels, "notebook": $notebook, "path": $path, "sqlScript": $sql_script} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists DataAttributeBinding resources in a project and location.
 #
 # GET /v1/{parent}/dataAttributeBindings
 # operationId: dataplex.projects.locations.dataAttributeBindings.list
-export def "data-attribute-bindings dataplexprojectslocationsdataAttributeBindingslist" [
+export def "data-attribute-bindings list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -849,7 +860,7 @@ export def "data-attribute-bindings dataplexprojectslocationsdataAttributeBindin
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/dataAttributeBindings") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/dataAttributeBindings") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -859,8 +870,8 @@ export def "data-attribute-bindings dataplexprojectslocationsdataAttributeBindin
 #
 # POST /v1/{parent}/dataAttributeBindings
 # operationId: dataplex.projects.locations.dataAttributeBindings.create
-# --paths item shape: {attributes?: list, name?: string}
-export def "data-attribute-bindings dataplexprojectslocationsdataAttributeBindingscreate" [
+# --paths item shape: {attributes?: list<string>, name?: string}
+export def "data-attribute-bindings create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -883,31 +894,31 @@ export def "data-attribute-bindings dataplexprojectslocationsdataAttributeBindin
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --data-attribute-binding-id: string # Required. DataAttributeBinding identifier. * Must contain only lowercase letters, numbers and hyphens. * Must start with a letter. * Must be between 1-63 characters. * Must end with a number or a letter. * Must be unique within the Location.
   --validate-only: oneof<nothing, bool> # Optional. Only validate the request, but do not perform mutations. The default is false.
-  --attributes: list # Optional. List of attributes to be associated with the resource, provided in the form: projects/{project}/locations/{location}/dataTaxonomies/{dataTaxonomy}/attributes/{data_attribute_id}
+  --attributes: list<string> # Optional. List of attributes to be associated with the resource, provided in the form: projects/{project}/locations/{location}/dataTaxonomies/{dataTaxonomy}/attributes/{data_attribute_id}
   --description: string # Optional. Description of the DataAttributeBinding.
   --display-name: string # Optional. User friendly display name.
   --etag: string # This checksum is computed by the server based on the value of other fields, and may be sent on update and delete requests to ensure the client has an up-to-date value before proceeding. Etags must be used when calling the DeleteDataAttributeBinding and the UpdateDataAttributeBinding method.
   --labels: record # Optional. User-defined labels for the DataAttributeBinding.
-  --paths: list # Optional. The list of paths for items within the associated resource (eg. columns and partitions within a table) along with attribute bindings. — item shape: {attributes?: list, name?: string}
+  --paths: list # Optional. The list of paths for items within the associated resource (eg. columns and partitions within a table) along with attribute bindings. — item shape: {attributes?: list<string>, name?: string}
   --resource: string # Optional. Immutable. The resource name of the resource that is associated to attributes. Presently, only entity resource is supported in the form: projects/{project}/locations/{location}/lakes/{lake}/zones/{zone}/entities/{entity_id} Must belong in the same project and region as the attribute binding, and there can only exist one active binding for a resource.
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "dataAttributeBindingId" $data_attribute_binding_id "scalar") (serialize-qp "validateOnly" $validate_only "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/dataAttributeBindings") $qp)
-  let body = {"attributes": $attributes, "description": $description, "displayName": $display_name, "etag": $etag, "labels": $labels, "paths": $paths, "resource": $resource} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/dataAttributeBindings") $qp)
+  let req_body = {"attributes": $attributes, "description": $description, "displayName": $display_name, "etag": $etag, "labels": $labels, "paths": $paths, "resource": $resource} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists DataScans.
 #
 # GET /v1/{parent}/dataScans
 # operationId: dataplex.projects.locations.dataScans.list
-export def "data-scans dataplexprojectslocationsdataScanslist" [
+export def "data-scans list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -936,7 +947,7 @@ export def "data-scans dataplexprojectslocationsdataScanslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/dataScans") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/dataScans") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -952,7 +963,7 @@ export def "data-scans dataplexprojectslocationsdataScanslist" [
 # --dataQualitySpec shape: {rules?: list}
 # --executionSpec shape: {field?: string, trigger?: record}
 # --executionStatus shape: {latestJobEndTime?: string, latestJobStartTime?: string}
-export def "data-scans dataplexprojectslocationsdataScanscreate" [
+export def "data-scans create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -990,19 +1001,19 @@ export def "data-scans dataplexprojectslocationsdataScanscreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "dataScanId" $data_scan_id "scalar") (serialize-qp "validateOnly" $validate_only "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/dataScans") $qp)
-  let body = {"data": $data, "dataProfileResult": $data_profile_result, "dataProfileSpec": $data_profile_spec, "dataQualityResult": $data_quality_result, "dataQualitySpec": $data_quality_spec, "description": $description, "displayName": $display_name, "executionSpec": $execution_spec, "executionStatus": $execution_status, "labels": $labels} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/dataScans") $qp)
+  let req_body = {"data": $data, "dataProfileResult": $data_profile_result, "dataProfileSpec": $data_profile_spec, "dataQualityResult": $data_quality_result, "dataQualitySpec": $data_quality_spec, "description": $description, "displayName": $display_name, "executionSpec": $execution_spec, "executionStatus": $execution_status, "labels": $labels} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists DataTaxonomy resources in a project and location.
 #
 # GET /v1/{parent}/dataTaxonomies
 # operationId: dataplex.projects.locations.dataTaxonomies.list
-export def "data-taxonomies dataplexprojectslocationsdataTaxonomieslist" [
+export def "data-taxonomies list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1031,7 +1042,7 @@ export def "data-taxonomies dataplexprojectslocationsdataTaxonomieslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/dataTaxonomies") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/dataTaxonomies") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1041,7 +1052,7 @@ export def "data-taxonomies dataplexprojectslocationsdataTaxonomieslist" [
 #
 # POST /v1/{parent}/dataTaxonomies
 # operationId: dataplex.projects.locations.dataTaxonomies.create
-export def "data-taxonomies dataplexprojectslocationsdataTaxonomiescreate" [
+export def "data-taxonomies create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1073,19 +1084,19 @@ export def "data-taxonomies dataplexprojectslocationsdataTaxonomiescreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "dataTaxonomyId" $data_taxonomy_id "scalar") (serialize-qp "validateOnly" $validate_only "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/dataTaxonomies") $qp)
-  let body = {"description": $description, "displayName": $display_name, "etag": $etag, "labels": $labels} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/dataTaxonomies") $qp)
+  let req_body = {"description": $description, "displayName": $display_name, "etag": $etag, "labels": $labels} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List metadata entities in a zone.
 #
 # GET /v1/{parent}/entities
 # operationId: dataplex.projects.locations.lakes.zones.entities.list
-export def "entities dataplexprojectslocationslakeszonesentitieslist" [
+export def "entities list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1114,7 +1125,7 @@ export def "entities dataplexprojectslocationslakeszonesentitieslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/entities") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/entities") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1127,7 +1138,7 @@ export def "entities dataplexprojectslocationslakeszonesentitieslist" [
 # --compatibility shape: {bigquery?: record, hiveMetastore?: record}
 # --format shape: {compressionFormat?: "COMPRESSION_FORMAT_UNSPECIFIED"|"GZIP"|"BZIP2", csv?: record, iceberg?: record, json?: record, mimeType?: string}
 # --schema shape: {fields?: list, partitionFields?: list, partitionStyle?: "PARTITION_STYLE_UNSPECIFIED"|"HIVE_COMPATIBLE", userManaged?: bool}
-export def "entities dataplexprojectslocationslakeszonesentitiescreate" [
+export def "entities create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1167,19 +1178,19 @@ export def "entities dataplexprojectslocationslakeszonesentitiescreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "validateOnly" $validate_only "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/entities") $qp)
-  let body = {"access": $access, "asset": $asset, "compatibility": $compatibility, "dataPath": $data_path, "dataPathPattern": $data_path_pattern, "description": $description, "displayName": $display_name, "etag": $etag, "format": $format, "id": $id, "schema": $schema, "system": $system, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/entities") $qp)
+  let req_body = {"access": $access, "asset": $asset, "compatibility": $compatibility, "dataPath": $data_path, "dataPathPattern": $data_path_pattern, "description": $description, "displayName": $display_name, "etag": $etag, "format": $format, "id": $id, "schema": $schema, "system": $system, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists environments under the given lake.
 #
 # GET /v1/{parent}/environments
 # operationId: dataplex.projects.locations.lakes.environments.list
-export def "environments dataplexprojectslocationslakesenvironmentslist" [
+export def "environments list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1208,7 +1219,7 @@ export def "environments dataplexprojectslocationslakesenvironmentslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/environments") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/environments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1220,7 +1231,7 @@ export def "environments dataplexprojectslocationslakesenvironmentslist" [
 # operationId: dataplex.projects.locations.lakes.environments.create
 # --infrastructureSpec shape: {compute?: record, osImage?: record}
 # --sessionSpec shape: {enableFastStartup?: bool, maxIdleDuration?: string}
-export def "environments dataplexprojectslocationslakesenvironmentscreate" [
+export def "environments create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1255,19 +1266,19 @@ export def "environments dataplexprojectslocationslakesenvironmentscreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "environmentId" $environment_id "scalar") (serialize-qp "validateOnly" $validate_only "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/environments") $qp)
-  let body = {"description": $description, "displayName": $display_name, "endpoints": $endpoints, "infrastructureSpec": $infrastructure_spec, "labels": $labels, "sessionSpec": $session_spec, "sessionStatus": $session_status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/environments") $qp)
+  let req_body = {"description": $description, "displayName": $display_name, "endpoints": $endpoints, "infrastructureSpec": $infrastructure_spec, "labels": $labels, "sessionSpec": $session_spec, "sessionStatus": $session_status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists Jobs under the given task.
 #
 # GET /v1/{parent}/jobs
 # operationId: dataplex.projects.locations.lakes.tasks.jobs.list
-export def "jobs dataplexprojectslocationslakestasksjobslist" [
+export def "jobs list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1294,7 +1305,7 @@ export def "jobs dataplexprojectslocationslakestasksjobslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/jobs") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/jobs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1304,7 +1315,7 @@ export def "jobs dataplexprojectslocationslakestasksjobslist" [
 #
 # GET /v1/{parent}/lakes
 # operationId: dataplex.projects.locations.lakes.list
-export def "lakes dataplexprojectslocationslakeslist" [
+export def "lakes list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1333,7 +1344,7 @@ export def "lakes dataplexprojectslocationslakeslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/lakes") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/lakes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1346,7 +1357,7 @@ export def "lakes dataplexprojectslocationslakeslist" [
 # --assetStatus shape: {activeAssets?: int, securityPolicyApplyingAssets?: int, updateTime?: string}
 # --metastore shape: {service?: string}
 # --metastoreStatus shape: {endpoint?: string, message?: string, state?: "STATE_UNSPECIFIED"|"NONE"|"READY"|"UPDATING"|"ERROR", updateTime?: string}
-export def "lakes dataplexprojectslocationslakescreate" [
+export def "lakes create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1380,19 +1391,19 @@ export def "lakes dataplexprojectslocationslakescreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "lakeId" $lake_id "scalar") (serialize-qp "validateOnly" $validate_only "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/lakes") $qp)
-  let body = {"assetStatus": $asset_status, "description": $description, "displayName": $display_name, "labels": $labels, "metastore": $metastore, "metastoreStatus": $metastore_status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/lakes") $qp)
+  let req_body = {"assetStatus": $asset_status, "description": $description, "displayName": $display_name, "labels": $labels, "metastore": $metastore, "metastoreStatus": $metastore_status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List metadata partitions of an entity.
 #
 # GET /v1/{parent}/partitions
 # operationId: dataplex.projects.locations.lakes.zones.entities.partitions.list
-export def "partitions dataplexprojectslocationslakeszonesentitiespartitionslist" [
+export def "partitions list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1420,7 +1431,7 @@ export def "partitions dataplexprojectslocationslakeszonesentitiespartitionslist
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/partitions") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/partitions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1430,7 +1441,7 @@ export def "partitions dataplexprojectslocationslakeszonesentitiespartitionslist
 #
 # POST /v1/{parent}/partitions
 # operationId: dataplex.projects.locations.lakes.zones.entities.partitions.create
-export def "partitions dataplexprojectslocationslakeszonesentitiespartitionscreate" [
+export def "partitions create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1454,25 +1465,25 @@ export def "partitions dataplexprojectslocationslakeszonesentitiespartitionscrea
   --validate-only: oneof<nothing, bool> # Optional. Only validate the request, but do not perform mutations. The default is false.
   --etag: string # Optional. The etag for this partition.
   --location: string # Required. Immutable. The location of the entity data within the partition, for example, gs://bucket/path/to/entity/key1=value1/key2=value2. Or projects//datasets//tables/
-  --values: list # Required. Immutable. The set of values representing the partition, which correspond to the partition schema defined in the parent entity.
+  --values: list<string> # Required. Immutable. The set of values representing the partition, which correspond to the partition schema defined in the parent entity.
 ]: any -> record<etag: string, location: string, name: string, values: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "validateOnly" $validate_only "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/partitions") $qp)
-  let body = {"etag": $etag, "location": $location, "values": $values} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/partitions") $qp)
+  let req_body = {"etag": $etag, "location": $location, "values": $values} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists session resources in an environment.
 #
 # GET /v1/{parent}/sessions
 # operationId: dataplex.projects.locations.lakes.environments.sessions.list
-export def "sessions dataplexprojectslocationslakesenvironmentssessionslist" [
+export def "sessions list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1500,7 +1511,7 @@ export def "sessions dataplexprojectslocationslakesenvironmentssessionslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/sessions") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/sessions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1510,7 +1521,7 @@ export def "sessions dataplexprojectslocationslakesenvironmentssessionslist" [
 #
 # GET /v1/{parent}/tasks
 # operationId: dataplex.projects.locations.lakes.tasks.list
-export def "tasks dataplexprojectslocationslakestaskslist" [
+export def "tasks list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1539,7 +1550,7 @@ export def "tasks dataplexprojectslocationslakestaskslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/tasks") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/tasks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1551,10 +1562,10 @@ export def "tasks dataplexprojectslocationslakestaskslist" [
 # operationId: dataplex.projects.locations.lakes.tasks.create
 # --executionSpec shape: {args?: record, kmsKey?: string, maxJobExecutionLifetime?: string, project?: string, serviceAccount?: string}
 # --executionStatus shape: {latestJob?: record}
-# --notebook shape: {archiveUris?: list, fileUris?: list, infrastructureSpec?: record, notebook?: string}
-# --spark shape: {archiveUris?: list, fileUris?: list, infrastructureSpec?: record, mainClass?: string, mainJarFileUri?: string, pythonScriptFile?: string, sqlScript?: string, sqlScriptFile?: string}
+# --notebook shape: {archiveUris?: list<string>, fileUris?: list<string>, infrastructureSpec?: record, notebook?: string}
+# --spark shape: {archiveUris?: list<string>, fileUris?: list<string>, infrastructureSpec?: record, mainClass?: string, mainJarFileUri?: string, pythonScriptFile?: string, sqlScript?: string, sqlScriptFile?: string}
 # --triggerSpec shape: {disabled?: bool, maxRetries?: int, schedule?: string, startTime?: string, type?: "TYPE_UNSPECIFIED"|"ON_DEMAND"|"RECURRING"}
-export def "tasks dataplexprojectslocationslakestaskscreate" [
+export def "tasks create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1582,27 +1593,27 @@ export def "tasks dataplexprojectslocationslakestaskscreate" [
   --execution-spec: record # Execution related settings, like retry and service_account. — shape: {args?: record, kmsKey?: string, maxJobExecutionLifetime?: string, project?: string, serviceAccount?: string}
   --execution-status: record # Status of the task execution (e.g. Jobs). — shape: {latestJob?: record}
   --labels: record # Optional. User-defined labels for the task.
-  --notebook: record # Config for running scheduled notebooks. — shape: {archiveUris?: list, fileUris?: list, infrastructureSpec?: record, notebook?: string}
-  --spark: record # User-specified config for running a Spark task. — shape: {archiveUris?: list, fileUris?: list, infrastructureSpec?: record, mainClass?: string, mainJarFileUri?: string, pythonScriptFile?: string, sqlScript?: string, sqlScriptFile?: string}
+  --notebook: record # Config for running scheduled notebooks. — shape: {archiveUris?: list<string>, fileUris?: list<string>, infrastructureSpec?: record, notebook?: string}
+  --spark: record # User-specified config for running a Spark task. — shape: {archiveUris?: list<string>, fileUris?: list<string>, infrastructureSpec?: record, mainClass?: string, mainJarFileUri?: string, pythonScriptFile?: string, sqlScript?: string, sqlScriptFile?: string}
   --trigger-spec: record # Task scheduling and trigger settings. — shape: {disabled?: bool, maxRetries?: int, schedule?: string, startTime?: string, type?: "TYPE_UNSPECIFIED"|"ON_DEMAND"|"RECURRING"}
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "taskId" $task_id "scalar") (serialize-qp "validateOnly" $validate_only "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/tasks") $qp)
-  let body = {"description": $description, "displayName": $display_name, "executionSpec": $execution_spec, "executionStatus": $execution_status, "labels": $labels, "notebook": $notebook, "spark": $spark, "triggerSpec": $trigger_spec} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/tasks") $qp)
+  let req_body = {"description": $description, "displayName": $display_name, "executionSpec": $execution_spec, "executionStatus": $execution_status, "labels": $labels, "notebook": $notebook, "spark": $spark, "triggerSpec": $trigger_spec} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists zone resources in a lake.
 #
 # GET /v1/{parent}/zones
 # operationId: dataplex.projects.locations.lakes.zones.list
-export def "zones dataplexprojectslocationslakeszoneslist" [
+export def "zones list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1631,7 +1642,7 @@ export def "zones dataplexprojectslocationslakeszoneslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/zones") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/zones") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1642,9 +1653,9 @@ export def "zones dataplexprojectslocationslakeszoneslist" [
 # POST /v1/{parent}/zones
 # operationId: dataplex.projects.locations.lakes.zones.create
 # --assetStatus shape: {activeAssets?: int, securityPolicyApplyingAssets?: int, updateTime?: string}
-# --discoverySpec shape: {csvOptions?: record, enabled?: bool, excludePatterns?: list, includePatterns?: list, jsonOptions?: record, schedule?: string}
+# --discoverySpec shape: {csvOptions?: record, enabled?: bool, excludePatterns?: list<string>, includePatterns?: list<string>, jsonOptions?: record, schedule?: string}
 # --resourceSpec shape: {locationType?: "LOCATION_TYPE_UNSPECIFIED"|"SINGLE_REGION"|"MULTI_REGION"}
-export def "zones dataplexprojectslocationslakeszonescreate" [
+export def "zones create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1669,7 +1680,7 @@ export def "zones dataplexprojectslocationslakeszonescreate" [
   --zone-id: string # Required. Zone identifier. This ID will be used to generate names such as database and dataset names when publishing metadata to Hive Metastore and BigQuery. * Must contain only lowercase letters, numbers and hyphens. * Must start with a letter. * Must end with a number or a letter. * Must be between 1-63 characters. * Must be unique across all lakes from all locations in a project. * Must not be one of the reserved IDs (i.e. "default", "global-temp")
   --asset-status: record # Aggregated status of the underlying assets of a lake or zone. — shape: {activeAssets?: int, securityPolicyApplyingAssets?: int, updateTime?: string}
   --description: string # Optional. Description of the zone.
-  --discovery-spec: record # Settings to manage the metadata discovery and publishing in a zone. — shape: {csvOptions?: record, enabled?: bool, excludePatterns?: list, includePatterns?: list, jsonOptions?: record, schedule?: string}
+  --discovery-spec: record # Settings to manage the metadata discovery and publishing in a zone. — shape: {csvOptions?: record, enabled?: bool, excludePatterns?: list<string>, includePatterns?: list<string>, jsonOptions?: record, schedule?: string}
   --display-name: string # Optional. User friendly display name.
   --labels: record # Optional. User defined labels for the zone.
   --resource-spec: record # Settings for resources attached as assets within a zone. — shape: {locationType?: "LOCATION_TYPE_UNSPECIFIED"|"SINGLE_REGION"|"MULTI_REGION"}
@@ -1679,19 +1690,19 @@ export def "zones dataplexprojectslocationslakeszonescreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "validateOnly" $validate_only "scalar") (serialize-qp "zoneId" $zone_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/zones") $qp)
-  let body = {"assetStatus": $asset_status, "description": $description, "discoverySpec": $discovery_spec, "displayName": $display_name, "labels": $labels, "resourceSpec": $resource_spec, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/zones") $qp)
+  let req_body = {"assetStatus": $asset_status, "description": $description, "discoverySpec": $discovery_spec, "displayName": $display_name, "labels": $labels, "resourceSpec": $resource_spec, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets the access control policy for a resource. Returns an empty policy if the resource exists and does not have a policy set.
 #
 # GET /v1/{resource}:getIamPolicy
 # operationId: dataplex.projects.locations.lakes.zones.assets.getIamPolicy
-export def "projects dataplexprojectslocationslakeszonesassetsgetIamPolicy" [
+export def "projects get-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1717,7 +1728,7 @@ export def "projects dataplexprojectslocationslakeszonesassetsgetIamPolicy" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "options.requestedPolicyVersion" $options_requested_policy_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource: $resource} | format pattern "/v1/{resource}:getIamPolicy") $qp)
+  let full_url = (build-url $base ({resource: (encode-path-segment $resource)} | format pattern "/v1/{resource}:getIamPolicy") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1728,7 +1739,7 @@ export def "projects dataplexprojectslocationslakeszonesassetsgetIamPolicy" [
 # POST /v1/{resource}:setIamPolicy
 # operationId: dataplex.projects.locations.lakes.zones.assets.setIamPolicy
 # --policy shape: {auditConfigs?: list, bindings?: list, etag?: string, version?: int}
-export def "projects dataplexprojectslocationslakeszonesassetssetIamPolicy" [
+export def "projects update-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1756,19 +1767,19 @@ export def "projects dataplexprojectslocationslakeszonesassetssetIamPolicy" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource: $resource} | format pattern "/v1/{resource}:setIamPolicy") $qp)
-  let body = {"policy": $policy, "updateMask": $update_mask} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({resource: (encode-path-segment $resource)} | format pattern "/v1/{resource}:setIamPolicy") $qp)
+  let req_body = {"policy": $policy, "updateMask": $update_mask} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns permissions that a caller has on the specified resource. If the resource does not exist, this will return an empty set of permissions, not a NOT_FOUND error.Note: This operation is designed to be used for building permission-aware UIs and command-line tools, not for authorization checking. This operation may "fail open" without warning.
 #
 # POST /v1/{resource}:testIamPermissions
 # operationId: dataplex.projects.locations.lakes.zones.assets.testIamPermissions
-export def "projects dataplexprojectslocationslakeszonesassetstestIamPermissions" [
+export def "projects test-iam-permissions" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1789,16 +1800,16 @@ export def "projects dataplexprojectslocationslakeszonesassetstestIamPermissions
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --permissions: list # The set of permissions to check for the resource. Permissions with wildcards (such as * or storage.*) are not allowed. For more information see IAM Overview (https://cloud.google.com/iam/docs/overview#permissions).
+  --permissions: list<string> # The set of permissions to check for the resource. Permissions with wildcards (such as * or storage.*) are not allowed. For more information see IAM Overview (https://cloud.google.com/iam/docs/overview#permissions).
 ]: any -> record<permissions: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource: $resource} | format pattern "/v1/{resource}:testIamPermissions") $qp)
-  let body = {"permissions": $permissions} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({resource: (encode-path-segment $resource)} | format pattern "/v1/{resource}:testIamPermissions") $qp)
+  let req_body = {"permissions": $permissions} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

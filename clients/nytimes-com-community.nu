@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -69,7 +78,7 @@ def auth-scheme-completer [] { ["query-api-key"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "user-content-by-datejson user-content-by-date-json" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "user-content-by-date-json get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,7 +102,7 @@ export def commands []: nothing -> table {
 #
 # GET /user-content/by-date.json
 # operationId: GET_user-content-by-date-json
-export def "user-content-by-datejson user-content-by-date-json" [
+export def "user-content-by-date-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -117,7 +126,7 @@ export def "user-content-by-datejson user-content-by-date-json" [
 #
 # GET /user-content/recent.json
 # operationId: GET_user-content-recent-json
-export def "user-content-recentjson user-content-recent-json" [
+export def "user-content-recent-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -139,7 +148,7 @@ export def "user-content-recentjson user-content-recent-json" [
 #
 # GET /user-content/url.json
 # operationId: GET_user-content-url-json
-export def "user-content-urljson user-content-url-json" [
+export def "user-content-url-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -148,11 +157,11 @@ export def "user-content-urljson user-content-url-json" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-url: string
+  --url: string
 ]: nothing -> record<copyright: string, debug: record<version: float>, results: record<api_timestamp: string, callerID: any, comments: list<record>, depthLimit: int, filter: string, page: int, replyLimit: int, sort: string, totalCommentsFound: int, totalCommentsReturned: int, totalEditorsSelectionFound: int, totalEditorsSelectionReturned: int, totalParentCommentsFound: int, totalParentCommentsReturned: int, totalRecommendationsFound: int, totalRecommendationsReturned: int, totalReplyCommentsFound: int, totalReplyCommentsReturned: int, totalReporterReplyCommentsFound: int, totalReporterReplyCommentsReturned: int>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "url" $qp_url "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "url" $url "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/user-content/url.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -163,7 +172,7 @@ export def "user-content-urljson user-content-url-json" [
 #
 # GET /user-content/user.json
 # operationId: GET_user-content-user-json
-export def "user-content-userjson user-content-user-json" [
+export def "user-content-user-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

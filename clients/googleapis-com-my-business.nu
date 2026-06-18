@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -84,7 +93,7 @@ def media-format-completer [] { ["MEDIA_FORMAT_UNSPECIFIED" "PHOTO" "VIDEO"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accounts mybusinessaccountslist" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accounts list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -108,7 +117,7 @@ export def commands []: nothing -> table {
 #
 # GET /v4/accounts
 # operationId: mybusiness.accounts.list
-export def "accounts mybusinessaccountslist" [
+export def "accounts list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -142,13 +151,13 @@ export def "accounts mybusinessaccountslist" [
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Creates an account with the specified name and type under the given parent. - Personal accounts and Organizations cannot be created. - User Groups cannot be created with a Personal account as primary owner. - Location Groups cannot be created with a primary owner of a Personal account if the Personal account is in an Organization. - Location Groups cannot own Location Groups. 
+# Creates an account with the specified name and type under the given parent. - Personal accounts and Organizations cannot be created. - User Groups cannot be created with a Personal account as primary owner. - Location Groups cannot be created with a primary owner of a Personal account if the Personal account is in an Organization. - Location Groups cannot own Location Groups.
 #
 # POST /v4/accounts
 # operationId: mybusiness.accounts.create
 # --organizationInfo shape: {phoneNumber?: string, postalAddress?: record, registeredDomain?: string}
 # --state shape: {status?: "ACCOUNT_STATUS_UNSPECIFIED"|"VERIFIED"|"UNVERIFIED"|"VERIFICATION_REQUESTED"}
-export def "accounts mybusinessaccountscreate" [
+export def "accounts create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -183,18 +192,18 @@ export def "accounts mybusinessaccountscreate" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "primaryOwner" $primary_owner "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v4/accounts" $qp)
-  let body = {"accountName": $account_name, "accountNumber": $account_number, "name": $name, "organizationInfo": $organization_info, "permissionLevel": $permission_level, "role": $role, "state": $state, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"accountName": $account_name, "accountNumber": $account_number, "name": $name, "organizationInfo": $organization_info, "permissionLevel": $permission_level, "role": $role, "state": $state, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns the list of available attributes that would be available for a location with the given primary category and country.
 #
 # GET /v4/attributes
 # operationId: mybusiness.attributes.list
-export def "attributes mybusinessattributeslist" [
+export def "attributes list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -234,7 +243,7 @@ export def "attributes mybusinessattributeslist" [
 #
 # GET /v4/categories
 # operationId: mybusiness.categories.list
-export def "categories mybusinesscategorieslist" [
+export def "categories list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -274,7 +283,7 @@ export def "categories mybusinesscategorieslist" [
 #
 # GET /v4/categories:batchGet
 # operationId: mybusiness.categories.batchGet
-export def "categories-batch-get mybusinesscategoriesbatchGet" [
+export def "categories-batch-get get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -294,7 +303,7 @@ export def "categories-batch-get mybusinesscategoriesbatchGet" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --category-ids: list # Required. At least one name must be set. The GConcept ids the localized category names should be returned for.
+  --category-ids: list<string> # Required. At least one name must be set. The GConcept ids the localized category names should be returned for.
   --language-code: string # Required. The BCP 47 code of language that the category names should be returned in.
   --region-code: string # Optional. The ISO 3166-1 alpha-2 country code used to infer non-standard language.
   --view: string@view-completer # Required. Specifies which parts to the Category resource should be returned in the response.
@@ -312,7 +321,7 @@ export def "categories-batch-get mybusinesscategoriesbatchGet" [
 #
 # GET /v4/chains:search
 # operationId: mybusiness.chains.search
-export def "chains-search mybusinesschainssearch" [
+export def "chains-search list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -348,8 +357,8 @@ export def "chains-search mybusinesschainssearch" [
 #
 # POST /v4/googleLocations:search
 # operationId: mybusiness.googleLocations.search
-# --location shape: {adWordsLocationExtensions?: record, additionalCategories?: list, additionalPhones?: list, address?: record, attributes?: list, labels?: list, languageCode?: string, latlng?: record, locationKey?: record, locationName?: string, locationState?: record, metadata?: record, moreHours?: list, name?: string, openInfo?: record, priceLists?: list, primaryCategory?: record, primaryPhone?: string, profile?: record, regularHours?: record, relationshipData?: record, serviceArea?: record, specialHours?: record, storeCode?: string, websiteUrl?: string}
-export def "google-locations-search mybusinessgoogleLocationssearch" [
+# --location shape: {adWordsLocationExtensions?: record, additionalCategories?: list, additionalPhones?: list<string>, address?: record, attributes?: list, labels?: list<string>, languageCode?: string, latlng?: record, locationKey?: record, locationName?: string, locationState?: record, metadata?: record, moreHours?: list, name?: string, openInfo?: record, priceLists?: list, primaryCategory?: record, primaryPhone?: string, profile?: record, regularHours?: record, relationshipData?: record, serviceArea?: record, ... (3 more fields)}
+export def "google-locations-search list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -369,7 +378,7 @@ export def "google-locations-search mybusinessgoogleLocationssearch" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --location: record # A location. See the [help center article] (https://support.google.com/business/answer/3038177) for a detailed description of these fields, or the [category endpoint](/my-business/reference/rest/v4/categories) for a list of valid business categories. — shape: {adWordsLocationExtensions?: record, additionalCategories?: list, additionalPhones?: list, address?: record, attributes?: list, labels?: list, languageCode?: string, latlng?: record, locationKey?: record, locationName?: string, locationState?: record, metadata?: record, moreHours?: list, name?: string, openInfo?: record, priceLists?: list, primaryCategory?: record, primaryPhone?: string, profile?: record, regularHours?: record, relationshipData?: record, serviceArea?: record, specialHours?: record, storeCode?: string, websiteUrl?: string}
+  --location: record # A location. See the [help center article] (https://support.google.com/business/answer/3038177) for a detailed description of these fields, or the [category endpoint](/my-business/reference/rest/v4/categories) for a list of valid business categories. — shape: {adWordsLocationExtensions?: record, additionalCategories?: list, additionalPhones?: list<string>, address?: record, attributes?: list, labels?: list<string>, languageCode?: string, latlng?: record, locationKey?: record, locationName?: string, locationState?: record, metadata?: record, moreHours?: list, name?: string, openInfo?: record, priceLists?: list, primaryCategory?: record, primaryPhone?: string, profile?: record, regularHours?: record, relationshipData?: record, serviceArea?: record, ... (3 more fields)}
   --query: string # Text query to search for. The search results from a query string will be less accurate than if providing an exact location, but can provide more inexact matches.
   --result-count: int # The number of matches to return. The default value is 3, with a maximum of 10. Note that latency may increase if more are requested. There is no pagination. (format: int32)
 ]: any -> record<googleLocations: table<location: record, name: string, requestAdminRightsUrl: string>> {
@@ -378,18 +387,18 @@ export def "google-locations-search mybusinessgoogleLocationssearch" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v4/googleLocations:search" $qp)
-  let body = {"location": $location, "query": $query, "resultCount": $result_count} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"location": $location, "query": $query, "resultCount": $result_count} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes a specific question written by the current user.
 #
 # DELETE /v4/{name}
 # operationId: mybusiness.accounts.locations.questions.delete
-export def "accounts mybusinessaccountslocationsquestionsdelete" [
+export def "accounts delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -414,7 +423,7 @@ export def "accounts mybusinessaccountslocationsquestionsdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v4/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v4/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -424,7 +433,7 @@ export def "accounts mybusinessaccountslocationsquestionsdelete" [
 #
 # GET /v4/{name}
 # operationId: mybusiness.chains.get
-export def "chains mybusinesschainsget" [
+export def "chains get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -449,7 +458,7 @@ export def "chains mybusinesschainsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v4/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v4/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -461,7 +470,7 @@ export def "chains mybusinesschainsget" [
 # operationId: mybusiness.accounts.locations.questions.patch
 # --author shape: {displayName?: string, profilePhotoUrl?: string, type?: "AUTHOR_TYPE_UNSPECIFIED"|"REGULAR_USER"|"LOCAL_GUIDE"|"MERCHANT"}
 # --topAnswers item shape: {author?: record, createTime?: string, name?: string, text?: string, updateTime?: string, upvoteCount?: int}
-export def "accounts mybusinessaccountslocationsquestionspatch" [
+export def "accounts update" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -496,19 +505,19 @@ export def "accounts mybusinessaccountslocationsquestionspatch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v4/{name}") $qp)
-  let body = {"author": $author, "createTime": $create_time, "name": $body_name, "text": $text, "topAnswers": $top_answers, "totalAnswerCount": $total_answer_count, "updateTime": $update_time, "upvoteCount": $upvote_count} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v4/{name}") $qp)
+  let req_body = {"author": $author, "createTime": $create_time, "name": $body_name, "text": $text, "topAnswers": $top_answers, "totalAnswerCount": $total_answer_count, "updateTime": $update_time, "upvoteCount": $upvote_count} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Sets the pubsub notification settings for the account informing Business Profile which topic to send pubsub notifications for: - New reviews for locations administered by the account. - Updated reviews for locations administered by the account. - New `GoogleUpdates` for locations administered by the account. An account will only have one notification settings resource, and only one pubsub topic can be set.
 #
 # PUT /v4/{name}
 # operationId: mybusiness.accounts.updateNotifications
-export def "accounts mybusinessaccountsupdateNotifications" [
+export def "accounts update-notifications" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -530,19 +539,19 @@ export def "accounts mybusinessaccountsupdateNotifications" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body-name: string # Output only. The notifications resource name.
-  --notification-types: list # The types of notifications that will be sent to the Cloud Pub/Sub topic. At least one must be specified. To stop receiving notifications entirely, use DeleteNotifications.
+  --notification-types: list<string> # The types of notifications that will be sent to the Cloud Pub/Sub topic. At least one must be specified. To stop receiving notifications entirely, use DeleteNotifications.
   --topic-name: string # The Google Cloud Pub/Sub topic that will receive notifications when locations managed by this account are updated. If unset, no notifications will be posted. The account mybusiness-api-pubsub@system.gserviceaccount.com must have at least Publish permissions on the Cloud Pub/Sub topic.
 ]: any -> record<name: string, notificationTypes: list<string>, topicName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v4/{name}") $qp)
-  let body = {"name": $body_name, "notificationTypes": $notification_types, "topicName": $topic_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v4/{name}") $qp)
+  let req_body = {"name": $body_name, "notificationTypes": $notification_types, "topicName": $topic_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns insights for a set of local posts associated with a single listing. Which metrics and how they are reported are options specified in the request proto. *Note:* Insight reports are limited to 100 `local_post_names` per call.
@@ -550,7 +559,7 @@ export def "accounts mybusinessaccountsupdateNotifications" [
 # POST /v4/{name}/localPosts:reportInsights
 # operationId: mybusiness.accounts.locations.localPosts.reportInsights
 # --basicRequest shape: {metricRequests?: list, timeRange?: record}
-export def "local-posts-report-insights mybusinessaccountslocationslocalPostsreportInsights" [
+export def "local-posts-report-insights create" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -572,25 +581,25 @@ export def "local-posts-report-insights mybusinessaccountslocationslocalPostsrep
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --basic-request: record # A request for basic metric insights. — shape: {metricRequests?: list, timeRange?: record}
-  --local-post-names: list # Required. The list of posts for which to fetch insights data. All posts have to belong to the location whose name is specified in the `name` field.
+  --local-post-names: list<string> # Required. The list of posts for which to fetch insights data. All posts have to belong to the location whose name is specified in the `name` field.
 ]: any -> record<localPostMetrics: table<localPostName: string, metricValues: list>, name: string, timeZone: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v4/{name}/localPosts:reportInsights") $qp)
-  let body = {"basicRequest": $basic_request, "localPostNames": $local_post_names} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v4/{name}/localPosts:reportInsights") $qp)
+  let req_body = {"basicRequest": $basic_request, "localPostNames": $local_post_names} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets all of the specified locations in the given account.
 #
 # POST /v4/{name}/locations:batchGet
 # operationId: mybusiness.accounts.locations.batchGet
-export def "locations-batch-get mybusinessaccountslocationsbatchGet" [
+export def "locations-batch-get get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -611,25 +620,25 @@ export def "locations-batch-get mybusinessaccountslocationsbatchGet" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --location-names: list # A collection of locations to fetch, specified by their names.
+  --location-names: list<string> # A collection of locations to fetch, specified by their names.
 ]: any -> record<locations: table<adWordsLocationExtensions: record, additionalCategories: list, additionalPhones: list, address: record, attributes: list, labels: list, languageCode: string, latlng: record, locationKey: record, locationName: string, locationState: record, metadata: record, moreHours: list, name: string, openInfo: record, priceLists: list, primaryCategory: record, primaryPhone: string, profile: record, regularHours: record, relationshipData: record, serviceArea: record, specialHours: record, storeCode: string, websiteUrl: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v4/{name}/locations:batchGet") $qp)
-  let body = {"locationNames": $location_names} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v4/{name}/locations:batchGet") $qp)
+  let req_body = {"locationNames": $location_names} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns the paginated list of reviews for all specified locations. This operation is only valid if the specified locations are verified. *Note:* Reviews are limited to a batch size of 200 `location_names` per call.
 #
 # POST /v4/{name}/locations:batchGetReviews
 # operationId: mybusiness.accounts.locations.batchGetReviews
-export def "locations-batch-get-reviews mybusinessaccountslocationsbatchGetReviews" [
+export def "locations-batch-get-reviews get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -651,7 +660,7 @@ export def "locations-batch-get-reviews mybusinessaccountslocationsbatchGetRevie
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --ignore-rating-only-reviews: oneof<nothing, bool> # Whether to ignore rating-only reviews.
-  --location-names: list # A collection of locations to fetch reviews for, specified by their names.
+  --location-names: list<string> # A collection of locations to fetch reviews for, specified by their names.
   --order-by: string # Optional. Specifies the field to sort reviews by. If unspecified, the order of reviews returned will default to `update_time desc`. Valid orders to sort by are `rating`, `rating desc` and `update_time desc`. `rating` will return reviews in ascending order. `update_time`(i.e. ascending order) is not supported.
   --page-size: int # How many reviews to fetch per page. The default value is 200. (format: int32)
   --page-token: string # If specified, it fetches the next page of reviews.
@@ -660,12 +669,12 @@ export def "locations-batch-get-reviews mybusinessaccountslocationsbatchGetRevie
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v4/{name}/locations:batchGetReviews") $qp)
-  let body = {"ignoreRatingOnlyReviews": $ignore_rating_only_reviews, "locationNames": $location_names, "orderBy": $order_by, "pageSize": $page_size, "pageToken": $page_token} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v4/{name}/locations:batchGetReviews") $qp)
+  let req_body = {"ignoreRatingOnlyReviews": $ignore_rating_only_reviews, "locationNames": $location_names, "orderBy": $order_by, "pageSize": $page_size, "pageToken": $page_token} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns a report containing insights on one or more metrics by location. *Note:* Insight reports are limited to a batch size of 10 `location_names` per call.
@@ -674,7 +683,7 @@ export def "locations-batch-get-reviews mybusinessaccountslocationsbatchGetRevie
 # operationId: mybusiness.accounts.locations.reportInsights
 # --basicRequest shape: {metricRequests?: list, timeRange?: record}
 # --drivingDirectionsRequest shape: {languageCode?: string, numDays?: "SEVEN"|"THIRTY"|"NINETY"}
-export def "locations-report-insights mybusinessaccountslocationsreportInsights" [
+export def "locations-report-insights create" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -697,25 +706,25 @@ export def "locations-report-insights mybusinessaccountslocationsreportInsights"
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --basic-request: record # A request for basic metric insights. — shape: {metricRequests?: list, timeRange?: record}
   --driving-directions-request: record # A request for driving direction insights. — shape: {languageCode?: string, numDays?: "SEVEN"|"THIRTY"|"NINETY"}
-  --location-names: list # A collection of locations to fetch insights for, specified by their names.
+  --location-names: list<string> # A collection of locations to fetch insights for, specified by their names.
 ]: any -> record<locationDrivingDirectionMetrics: table<locationName: string, timeZone: string, topDirectionSources: list>, locationMetrics: table<locationName: string, metricValues: list, timeZone: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v4/{name}/locations:reportInsights") $qp)
-  let body = {"basicRequest": $basic_request, "drivingDirectionsRequest": $driving_directions_request, "locationNames": $location_names} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v4/{name}/locations:reportInsights") $qp)
+  let req_body = {"basicRequest": $basic_request, "drivingDirectionsRequest": $driving_directions_request, "locationNames": $location_names} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes the response to the specified review. This operation is only valid if the specified location is verified.
 #
 # DELETE /v4/{name}/reply
 # operationId: mybusiness.accounts.locations.reviews.deleteReply
-export def "reply mybusinessaccountslocationsreviewsdeleteReply" [
+export def "reply delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -740,7 +749,7 @@ export def "reply mybusinessaccountslocationsreviewsdeleteReply" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v4/{name}/reply") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v4/{name}/reply") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -750,7 +759,7 @@ export def "reply mybusinessaccountslocationsreviewsdeleteReply" [
 #
 # PUT /v4/{name}/reply
 # operationId: mybusiness.accounts.locations.reviews.updateReply
-export def "reply mybusinessaccountslocationsreviewsupdateReply" [
+export def "reply update" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -778,19 +787,19 @@ export def "reply mybusinessaccountslocationsreviewsupdateReply" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v4/{name}/reply") $qp)
-  let body = {"comment": $comment, "updateTime": $update_time} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v4/{name}/reply") $qp)
+  let req_body = {"comment": $comment, "updateTime": $update_time} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Accepts the specified invitation.
 #
 # POST /v4/{name}:accept
 # operationId: mybusiness.accounts.invitations.accept
-export def "accounts mybusinessaccountsinvitationsaccept" [
+export def "accounts create-accept" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -817,18 +826,19 @@ export def "accounts mybusinessaccountsinvitationsaccept" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v4/{name}:accept") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v4/{name}:accept") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Associates a location to a place ID. Any previous association is overwritten. This operation is only valid if the location is unverified. The association must be valid, that is, it appears in the list of `FindMatchingLocations`.
 #
 # POST /v4/{name}:associate
 # operationId: mybusiness.accounts.locations.associate
-export def "accounts mybusinessaccountslocationsassociate" [
+export def "accounts create-associate" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -855,19 +865,19 @@ export def "accounts mybusinessaccountslocationsassociate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v4/{name}:associate") $qp)
-  let body = {"placeId": $place_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v4/{name}:associate") $qp)
+  let req_body = {"placeId": $place_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Clears an association between a location and its place ID. This operation is only valid if the location is unverified.
 #
 # POST /v4/{name}:clearAssociation
 # operationId: mybusiness.accounts.locations.clearAssociation
-export def "accounts mybusinessaccountslocationsclearAssociation" [
+export def "accounts create-clear-association" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -894,18 +904,19 @@ export def "accounts mybusinessaccountslocationsclearAssociation" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v4/{name}:clearAssociation") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v4/{name}:clearAssociation") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Completes a `PENDING` verification. It is only necessary for non `AUTO` verification methods. `AUTO` verification request is instantly `VERIFIED` upon creation.
 #
 # POST /v4/{name}:complete
 # operationId: mybusiness.accounts.locations.verifications.complete
-export def "accounts mybusinessaccountslocationsverificationscomplete" [
+export def "accounts complete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -932,19 +943,19 @@ export def "accounts mybusinessaccountslocationsverificationscomplete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v4/{name}:complete") $qp)
-  let body = {"pin": $pin} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v4/{name}:complete") $qp)
+  let req_body = {"pin": $pin} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Declines the specified invitation.
 #
 # POST /v4/{name}:decline
 # operationId: mybusiness.accounts.invitations.decline
-export def "accounts mybusinessaccountsinvitationsdecline" [
+export def "accounts create-decline" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -971,11 +982,12 @@ export def "accounts mybusinessaccountsinvitationsdecline" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v4/{name}:decline") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v4/{name}:decline") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Reports all eligible verification options for a location in a specific language.
@@ -983,7 +995,7 @@ export def "accounts mybusinessaccountsinvitationsdecline" [
 # POST /v4/{name}:fetchVerificationOptions
 # operationId: mybusiness.accounts.locations.fetchVerificationOptions
 # --context shape: {address?: record}
-export def "accounts mybusinessaccountslocationsfetchVerificationOptions" [
+export def "accounts get-verification-options" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1011,19 +1023,19 @@ export def "accounts mybusinessaccountslocationsfetchVerificationOptions" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v4/{name}:fetchVerificationOptions") $qp)
-  let body = {"context": $context, "languageCode": $language_code} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v4/{name}:fetchVerificationOptions") $qp)
+  let req_body = {"context": $context, "languageCode": $language_code} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Finds all of the possible locations that are a match to the specified location. This operation is only valid if the location is unverified.
 #
 # POST /v4/{name}:findMatches
 # operationId: mybusiness.accounts.locations.findMatches
-export def "accounts mybusinessaccountslocationsfindMatches" [
+export def "accounts find-matches" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1052,19 +1064,19 @@ export def "accounts mybusinessaccountslocationsfindMatches" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v4/{name}:findMatches") $qp)
-  let body = {"languageCode": $language_code, "maxCacheDuration": $max_cache_duration, "numResults": $num_results} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v4/{name}:findMatches") $qp)
+  let req_body = {"languageCode": $language_code, "maxCacheDuration": $max_cache_duration, "numResults": $num_results} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Generates an account number for this account. The account number is not provisioned when an account is created. Use this request to create an account number when it is required.
 #
 # POST /v4/{name}:generateAccountNumber
 # operationId: mybusiness.accounts.generateAccountNumber
-export def "accounts mybusinessaccountsgenerateAccountNumber" [
+export def "accounts generate-number" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1091,18 +1103,19 @@ export def "accounts mybusinessaccountsgenerateAccountNumber" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v4/{name}:generateAccountNumber") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v4/{name}:generateAccountNumber") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns the Google updated Lodging of a specific location.
 #
 # GET /v4/{name}:getGoogleUpdated
 # operationId: mybusiness.accounts.locations.lodging.getGoogleUpdated
-export def "accounts mybusinessaccountslocationslodginggetGoogleUpdated" [
+export def "accounts get-google-updated-by-name" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1128,7 +1141,7 @@ export def "accounts mybusinessaccountslocationslodginggetGoogleUpdated" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "readMask" $read_mask "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v4/{name}:getGoogleUpdated") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v4/{name}:getGoogleUpdated") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1138,7 +1151,7 @@ export def "accounts mybusinessaccountslocationslodginggetGoogleUpdated" [
 #
 # GET /v4/{name}:googleUpdated
 # operationId: mybusiness.accounts.locations.getGoogleUpdated
-export def "accounts mybusinessaccountslocationsgetGoogleUpdated" [
+export def "accounts get-google-updated-by-name-1" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1163,7 +1176,7 @@ export def "accounts mybusinessaccountslocationsgetGoogleUpdated" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v4/{name}:googleUpdated") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v4/{name}:googleUpdated") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1173,7 +1186,7 @@ export def "accounts mybusinessaccountslocationsgetGoogleUpdated" [
 #
 # GET /v4/{name}:recommendGoogleLocations
 # operationId: mybusiness.accounts.listRecommendGoogleLocations
-export def "accounts mybusinessaccountslistRecommendGoogleLocations" [
+export def "accounts list-recommend-google-locations" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1200,7 +1213,7 @@ export def "accounts mybusinessaccountslistRecommendGoogleLocations" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v4/{name}:recommendGoogleLocations") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v4/{name}:recommendGoogleLocations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1210,7 +1223,7 @@ export def "accounts mybusinessaccountslistRecommendGoogleLocations" [
 #
 # POST /v4/{name}:report
 # operationId: mybusiness.googleLocations.report
-export def "google-locations mybusinessgoogleLocationsreport" [
+export def "google-locations create-report" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1241,19 +1254,19 @@ export def "google-locations mybusinessgoogleLocationsreport" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v4/{name}:report") $qp)
-  let body = {"locationGroupName": $location_group_name, "reportReasonBadLocation": $report_reason_bad_location, "reportReasonBadRecommendation": $report_reason_bad_recommendation, "reportReasonElaboration": $report_reason_elaboration, "reportReasonLanguageCode": $report_reason_language_code} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v4/{name}:report") $qp)
+  let req_body = {"locationGroupName": $location_group_name, "reportReasonBadLocation": $report_reason_bad_location, "reportReasonBadRecommendation": $report_reason_bad_recommendation, "reportReasonElaboration": $report_reason_elaboration, "reportReasonLanguageCode": $report_reason_language_code} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Moves a location from an account that the user owns to another account that the same user administers. The user must be an owner of the account the location is currently associated with and must also be at least a manager of the destination account. Returns the Location with its new resource name.
 #
 # POST /v4/{name}:transfer
 # operationId: mybusiness.accounts.locations.transfer
-export def "accounts mybusinessaccountslocationstransfer" [
+export def "accounts create-transfer" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1280,12 +1293,12 @@ export def "accounts mybusinessaccountslocationstransfer" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v4/{name}:transfer") $qp)
-  let body = {"toAccount": $to_account} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v4/{name}:transfer") $qp)
+  let req_body = {"toAccount": $to_account} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Starts the verification process for a location.
@@ -1296,7 +1309,7 @@ export def "accounts mybusinessaccountslocationstransfer" [
 # --context shape: {address?: record}
 # --emailInput shape: {emailAddress?: string}
 # --phoneInput shape: {phoneNumber?: string}
-export def "accounts mybusinessaccountslocationsverify" [
+export def "accounts verify" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1328,19 +1341,19 @@ export def "accounts mybusinessaccountslocationsverify" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v4/{name}:verify") $qp)
-  let body = {"addressInput": $address_input, "context": $context, "emailInput": $email_input, "languageCode": $language_code, "method": $method, "phoneInput": $phone_input} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v4/{name}:verify") $qp)
+  let req_body = {"addressInput": $address_input, "context": $context, "emailInput": $email_input, "languageCode": $language_code, "method": $method, "phoneInput": $phone_input} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists all of the admins for the specified location.
 #
 # GET /v4/{parent}/admins
 # operationId: mybusiness.accounts.locations.admins.list
-export def "admins mybusinessaccountslocationsadminslist" [
+export def "admins list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1365,7 +1378,7 @@ export def "admins mybusinessaccountslocationsadminslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v4/{parent}/admins") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v4/{parent}/admins") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1375,7 +1388,7 @@ export def "admins mybusinessaccountslocationsadminslist" [
 #
 # POST /v4/{parent}/admins
 # operationId: mybusiness.accounts.locations.admins.create
-export def "admins mybusinessaccountslocationsadminscreate" [
+export def "admins create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1405,19 +1418,19 @@ export def "admins mybusinessaccountslocationsadminscreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v4/{parent}/admins") $qp)
-  let body = {"adminName": $admin_name, "name": $name, "pendingInvitation": $pending_invitation, "role": $role} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v4/{parent}/admins") $qp)
+  let req_body = {"adminName": $admin_name, "name": $name, "pendingInvitation": $pending_invitation, "role": $role} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns the paginated list of answers for a specified question.
 #
 # GET /v4/{parent}/answers
 # operationId: mybusiness.accounts.locations.questions.answers.list
-export def "answers mybusinessaccountslocationsquestionsanswerslist" [
+export def "answers list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1445,7 +1458,7 @@ export def "answers mybusinessaccountslocationsquestionsanswerslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v4/{parent}/answers") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v4/{parent}/answers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1455,7 +1468,7 @@ export def "answers mybusinessaccountslocationsquestionsanswerslist" [
 #
 # DELETE /v4/{parent}/answers:delete
 # operationId: mybusiness.accounts.locations.questions.answers.delete
-export def "answers-delete mybusinessaccountslocationsquestionsanswersdelete" [
+export def "answers-delete delete" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1480,7 +1493,7 @@ export def "answers-delete mybusinessaccountslocationsquestionsanswersdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v4/{parent}/answers:delete") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v4/{parent}/answers:delete") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1491,7 +1504,7 @@ export def "answers-delete mybusinessaccountslocationsquestionsanswersdelete" [
 # POST /v4/{parent}/answers:upsert
 # operationId: mybusiness.accounts.locations.questions.answers.upsert
 # --answer shape: {author?: record, createTime?: string, name?: string, text?: string, updateTime?: string, upvoteCount?: int}
-export def "answers-upsert mybusinessaccountslocationsquestionsanswersupsert" [
+export def "answers-upsert update" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1518,19 +1531,19 @@ export def "answers-upsert mybusinessaccountslocationsquestionsanswersupsert" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v4/{parent}/answers:upsert") $qp)
-  let body = {"answer": $answer} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v4/{parent}/answers:upsert") $qp)
+  let req_body = {"answer": $answer} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns a list of all insurance networks supported by Google.
 #
 # GET /v4/{parent}/insuranceNetworks
 # operationId: mybusiness.accounts.locations.insuranceNetworks.list
-export def "insurance-networks mybusinessaccountslocationsinsuranceNetworkslist" [
+export def "insurance-networks list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1558,7 +1571,7 @@ export def "insurance-networks mybusinessaccountslocationsinsuranceNetworkslist"
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "languageCode" $language_code "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v4/{parent}/insuranceNetworks") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v4/{parent}/insuranceNetworks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1568,7 +1581,7 @@ export def "insurance-networks mybusinessaccountslocationsinsuranceNetworkslist"
 #
 # GET /v4/{parent}/invitations
 # operationId: mybusiness.accounts.invitations.list
-export def "invitations mybusinessaccountsinvitationslist" [
+export def "invitations list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1594,7 +1607,7 @@ export def "invitations mybusinessaccountsinvitationslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "targetType" $target_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v4/{parent}/invitations") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v4/{parent}/invitations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1604,7 +1617,7 @@ export def "invitations mybusinessaccountsinvitationslist" [
 #
 # GET /v4/{parent}/localPosts
 # operationId: mybusiness.accounts.locations.localPosts.list
-export def "local-posts mybusinessaccountslocationslocalPostslist" [
+export def "local-posts list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1631,7 +1644,7 @@ export def "local-posts mybusinessaccountslocationslocalPostslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v4/{parent}/localPosts") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v4/{parent}/localPosts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1645,7 +1658,7 @@ export def "local-posts mybusinessaccountslocationslocalPostslist" [
 # --event shape: {schedule?: record, title?: string}
 # --media item shape: {attribution?: record, createTime?: string, dataRef?: record, description?: string, dimensions?: record, googleUrl?: string, insights?: record, locationAssociation?: record, mediaFormat?: "MEDIA_FORMAT_UNSPECIFIED"|"PHOTO"|"VIDEO", name?: string, sourceUrl?: string, thumbnailUrl?: string}
 # --offer shape: {couponCode?: string, redeemOnlineUrl?: string, termsConditions?: string}
-export def "local-posts mybusinessaccountslocationslocalPostscreate" [
+export def "local-posts create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1684,19 +1697,19 @@ export def "local-posts mybusinessaccountslocationslocalPostscreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v4/{parent}/localPosts") $qp)
-  let body = {"alertType": $alert_type, "callToAction": $call_to_action, "createTime": $create_time, "event": $event, "languageCode": $language_code, "media": $media, "name": $name, "offer": $offer, "searchUrl": $search_url, "state": $state, "summary": $summary, "topicType": $topic_type, "updateTime": $update_time} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v4/{parent}/localPosts") $qp)
+  let req_body = {"alertType": $alert_type, "callToAction": $call_to_action, "createTime": $create_time, "event": $event, "languageCode": $language_code, "media": $media, "name": $name, "offer": $offer, "searchUrl": $search_url, "state": $state, "summary": $summary, "topicType": $topic_type, "updateTime": $update_time} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists the locations for the specified account.
 #
 # GET /v4/{parent}/locations
 # operationId: mybusiness.accounts.locations.list
-export def "locations mybusinessaccountslocationslist" [
+export def "locations list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1726,7 +1739,7 @@ export def "locations mybusinessaccountslocationslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "languageCode" $language_code "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v4/{parent}/locations") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v4/{parent}/locations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1738,7 +1751,7 @@ export def "locations mybusinessaccountslocationslist" [
 # operationId: mybusiness.accounts.locations.create
 # --adWordsLocationExtensions shape: {adPhone?: string}
 # --additionalCategories item shape: {categoryId?: string, displayName?: string, serviceTypes?: list}
-# --address shape: {addressLines?: list, administrativeArea?: string, languageCode?: string, locality?: string, organization?: string, postalCode?: string, recipients?: list, regionCode?: string, revision?: int, sortingCode?: string, sublocality?: string}
+# --address shape: {addressLines?: list<string>, administrativeArea?: string, languageCode?: string, locality?: string, organization?: string, postalCode?: string, recipients?: list<string>, regionCode?: string, revision?: int, sortingCode?: string, sublocality?: string}
 # --attributes item shape: {attributeId?: string, repeatedEnumValue?: record, urlValues?: list, valueType?: "ATTRIBUTE_VALUE_TYPE_UNSPECIFIED"|"BOOL"|"ENUM"|"URL"|"REPEATED_ENUM", values?: list}
 # --latlng shape: {latitude?: float, longitude?: float}
 # --locationKey shape: {explicitNoPlaceId?: bool, placeId?: string, plusPageId?: string, requestId?: string}
@@ -1753,7 +1766,7 @@ export def "locations mybusinessaccountslocationslist" [
 # --relationshipData shape: {parentChain?: string}
 # --serviceArea shape: {businessType?: "BUSINESS_TYPE_UNSPECIFIED"|"CUSTOMER_LOCATION_ONLY"|"CUSTOMER_AND_BUSINESS_LOCATION", places?: record, radius?: record}
 # --specialHours shape: {specialHourPeriods?: list}
-export def "locations mybusinessaccountslocationscreate" [
+export def "locations create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1778,10 +1791,10 @@ export def "locations mybusinessaccountslocationscreate" [
   --validate-only: oneof<nothing, bool> # If true, the request is validated without actually creating the location.
   --ad-words-location-extensions: record # Additional information that is surfaced in AdWords. — shape: {adPhone?: string}
   --additional-categories: list # Additional categories to describe your business. Categories help your customers find accurate, specific results for services they're interested in. To keep your business information accurate and live, make sure that you use as few categories as possible to describe your overall core business. Choose categories that are as specific as possible, but representative of your main business. — item shape: {categoryId?: string, displayName?: string, serviceTypes?: list}
-  --additional-phones: list # Up to two phone numbers (mobile or landline, no fax) at which your business can be called, in addition to your primary phone number.
-  --address: record # Represents a postal address, e.g. for postal delivery or payments addresses. Given a postal address, a postal service can deliver items to a premise, P.O. Box or similar. It is not intended to model geographical locations (roads, towns, mountains). In typical usage an address would be created via user input or from importing existing data, depending on the type of process. Advice on address input / editing: - Use an i18n-ready address widget such as https://github.com/google/libaddressinput) - Users should not be presented with UI elements for input or editing of fields outside countries where that field is used. For more guidance on how to use this schema, please see: https://support.google.com/business/answer/6397478 — shape: {addressLines?: list, administrativeArea?: string, languageCode?: string, locality?: string, organization?: string, postalCode?: string, recipients?: list, regionCode?: string, revision?: int, sortingCode?: string, sublocality?: string}
+  --additional-phones: list<string> # Up to two phone numbers (mobile or landline, no fax) at which your business can be called, in addition to your primary phone number.
+  --address: record # Represents a postal address, e.g. for postal delivery or payments addresses. Given a postal address, a postal service can deliver items to a premise, P.O. Box or similar. It is not intended to model geographical locations (roads, towns, mountains). In typical usage an address would be created via user input or from importing existing data, depending on the type of process. Advice on address input / editing: - Use an i18n-ready address widget such as https://github.com/google/libaddressinput) - Users should not be presented with UI elements for input or editing of fields outside countries where that field is used. For more guidance on how to use this schema, please see: https://support.google.com/business/answer/6397478 — shape: {addressLines?: list<string>, administrativeArea?: string, languageCode?: string, locality?: string, organization?: string, postalCode?: string, recipients?: list<string>, regionCode?: string, revision?: int, sortingCode?: string, sublocality?: string}
   --attributes: list # Attributes for this location. — item shape: {attributeId?: string, repeatedEnumValue?: record, urlValues?: list, valueType?: "ATTRIBUTE_VALUE_TYPE_UNSPECIFIED"|"BOOL"|"ENUM"|"URL"|"REPEATED_ENUM", values?: list}
-  --labels: list # A collection of free-form strings to allow you to tag your business. These labels are NOT user facing; only you can see them. Limited to 255 characters (per label).
+  --labels: list<string> # A collection of free-form strings to allow you to tag your business. These labels are NOT user facing; only you can see them. Limited to 255 characters (per label).
   --language-code: string # The language of the location. Set during creation and not updateable.
   --latlng: record # An object that represents a latitude/longitude pair. This is expressed as a pair of doubles to represent degrees latitude and degrees longitude. Unless specified otherwise, this must conform to the WGS84 standard. Values must be within normalized ranges. — shape: {latitude?: float, longitude?: float}
   --location-key: record # Alternate/surrogate key references for a location. — shape: {explicitNoPlaceId?: bool, placeId?: string, plusPageId?: string, requestId?: string}
@@ -1806,19 +1819,19 @@ export def "locations mybusinessaccountslocationscreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "requestId" $request_id "scalar") (serialize-qp "validateOnly" $validate_only "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v4/{parent}/locations") $qp)
-  let body = {"adWordsLocationExtensions": $ad_words_location_extensions, "additionalCategories": $additional_categories, "additionalPhones": $additional_phones, "address": $address, "attributes": $attributes, "labels": $labels, "languageCode": $language_code, "latlng": $latlng, "locationKey": $location_key, "locationName": $location_name, "locationState": $location_state, "metadata": $metadata, "moreHours": $more_hours, "name": $name, "openInfo": $open_info, "priceLists": $price_lists, "primaryCategory": $primary_category, "primaryPhone": $primary_phone, "profile": $profile, "regularHours": $regular_hours, "relationshipData": $relationship_data, "serviceArea": $service_area, "specialHours": $special_hours, "storeCode": $store_code, "websiteUrl": $website_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v4/{parent}/locations") $qp)
+  let req_body = {"adWordsLocationExtensions": $ad_words_location_extensions, "additionalCategories": $additional_categories, "additionalPhones": $additional_phones, "address": $address, "attributes": $attributes, "labels": $labels, "languageCode": $language_code, "latlng": $latlng, "locationKey": $location_key, "locationName": $location_name, "locationState": $location_state, "metadata": $metadata, "moreHours": $more_hours, "name": $name, "openInfo": $open_info, "priceLists": $price_lists, "primaryCategory": $primary_category, "primaryPhone": $primary_phone, "profile": $profile, "regularHours": $regular_hours, "relationshipData": $relationship_data, "serviceArea": $service_area, "specialHours": $special_hours, "storeCode": $store_code, "websiteUrl": $website_url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns a list of media items associated with a location.
 #
 # GET /v4/{parent}/media
 # operationId: mybusiness.accounts.locations.media.list
-export def "media mybusinessaccountslocationsmedialist" [
+export def "media list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1845,7 +1858,7 @@ export def "media mybusinessaccountslocationsmedialist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v4/{parent}/media") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v4/{parent}/media") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1860,7 +1873,7 @@ export def "media mybusinessaccountslocationsmedialist" [
 # --dimensions shape: {heightPixels?: int, widthPixels?: int}
 # --insights shape: {viewCount?: string}
 # --locationAssociation shape: {category?: "CATEGORY_UNSPECIFIED"|"COVER"|"PROFILE"|"LOGO"|"EXTERIOR"|"INTERIOR"|"PRODUCT"|"AT_WORK"|"FOOD_AND_DRINK"|"MENU"|"COMMON_AREA"|"ROOMS"|"TEAMS"|"ADDITIONAL", priceListItemId?: string}
-export def "media mybusinessaccountslocationsmediacreate" [
+export def "media create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1898,19 +1911,19 @@ export def "media mybusinessaccountslocationsmediacreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v4/{parent}/media") $qp)
-  let body = {"attribution": $attribution, "createTime": $create_time, "dataRef": $data_ref, "description": $description, "dimensions": $dimensions, "googleUrl": $google_url, "insights": $insights, "locationAssociation": $location_association, "mediaFormat": $media_format, "name": $name, "sourceUrl": $source_url, "thumbnailUrl": $thumbnail_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v4/{parent}/media") $qp)
+  let req_body = {"attribution": $attribution, "createTime": $create_time, "dataRef": $data_ref, "description": $description, "dimensions": $dimensions, "googleUrl": $google_url, "insights": $insights, "locationAssociation": $location_association, "mediaFormat": $media_format, "name": $name, "sourceUrl": $source_url, "thumbnailUrl": $thumbnail_url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns a list of media items associated with a location that have been contributed by customers.
 #
 # GET /v4/{parent}/media/customers
 # operationId: mybusiness.accounts.locations.media.customers.list
-export def "media-customers mybusinessaccountslocationsmediacustomerslist" [
+export def "media-customers list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1937,7 +1950,7 @@ export def "media-customers mybusinessaccountslocationsmediacustomerslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v4/{parent}/media/customers") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v4/{parent}/media/customers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1947,7 +1960,7 @@ export def "media-customers mybusinessaccountslocationsmediacustomerslist" [
 #
 # POST /v4/{parent}/media:startUpload
 # operationId: mybusiness.accounts.locations.media.startUpload
-export def "media-start-upload mybusinessaccountslocationsmediastartUpload" [
+export def "media-start-upload start" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1974,18 +1987,19 @@ export def "media-start-upload mybusinessaccountslocationsmediastartUpload" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v4/{parent}/media:startUpload") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v4/{parent}/media:startUpload") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns the paginated list of questions and some of its answers for a specified location.
 #
 # GET /v4/{parent}/questions
 # operationId: mybusiness.accounts.locations.questions.list
-export def "questions mybusinessaccountslocationsquestionslist" [
+export def "questions list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2015,7 +2029,7 @@ export def "questions mybusinessaccountslocationsquestionslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "answersPerQuestion" $answers_per_question "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v4/{parent}/questions") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v4/{parent}/questions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2027,7 +2041,7 @@ export def "questions mybusinessaccountslocationsquestionslist" [
 # operationId: mybusiness.accounts.locations.questions.create
 # --author shape: {displayName?: string, profilePhotoUrl?: string, type?: "AUTHOR_TYPE_UNSPECIFIED"|"REGULAR_USER"|"LOCAL_GUIDE"|"MERCHANT"}
 # --topAnswers item shape: {author?: record, createTime?: string, name?: string, text?: string, updateTime?: string, upvoteCount?: int}
-export def "questions mybusinessaccountslocationsquestionscreate" [
+export def "questions create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2061,19 +2075,19 @@ export def "questions mybusinessaccountslocationsquestionscreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v4/{parent}/questions") $qp)
-  let body = {"author": $author, "createTime": $create_time, "name": $name, "text": $text, "topAnswers": $top_answers, "totalAnswerCount": $total_answer_count, "updateTime": $update_time, "upvoteCount": $upvote_count} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v4/{parent}/questions") $qp)
+  let req_body = {"author": $author, "createTime": $create_time, "name": $name, "text": $text, "topAnswers": $top_answers, "totalAnswerCount": $total_answer_count, "updateTime": $update_time, "upvoteCount": $upvote_count} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns the paginated list of reviews for the specified location. This operation is only valid if the specified location is verified.
 #
 # GET /v4/{parent}/reviews
 # operationId: mybusiness.accounts.locations.reviews.list
-export def "reviews mybusinessaccountslocationsreviewslist" [
+export def "reviews list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2101,7 +2115,7 @@ export def "reviews mybusinessaccountslocationsreviewslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v4/{parent}/reviews") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v4/{parent}/reviews") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2111,7 +2125,7 @@ export def "reviews mybusinessaccountslocationsreviewslist" [
 #
 # GET /v4/{parent}/verifications
 # operationId: mybusiness.accounts.locations.verifications.list
-export def "verifications mybusinessaccountslocationsverificationslist" [
+export def "verifications list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2138,7 +2152,7 @@ export def "verifications mybusinessaccountslocationsverificationslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v4/{parent}/verifications") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v4/{parent}/verifications") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

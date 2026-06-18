@@ -13,6 +13,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   match $scheme {
     "x-api-key" => { {headers: {X-API-Key: $token_val}, query: ""} }
     "basic" => { {headers: {Authorization: $"Basic ($token_val)"}, query: ""} }
+    "basic-credentials" => { {headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: ""} }
     "none" => { {headers: {}, query: ""} }
     _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
   }
@@ -34,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
     "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
     _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -64,13 +74,13 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 }
 
 def base-url-completer [] { ["https://cal-test.adyen.com/cal/services/Hop/v6"] }
-def auth-scheme-completer [] { ["x-api-key" "basic"] }
+def auth-scheme-completer [] { ["x-api-key" "basic" "basic-credentials"] }
 
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-onboarding-url post-getOnboardingUrl" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-onboarding-url create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -96,7 +106,7 @@ export def commands []: nothing -> table {
 # operationId: post-getOnboardingUrl
 # --collectInformation shape: {bankDetails?: bool, businessDetails?: bool, individualDetails?: bool, legalArrangementDetails?: bool, pciQuestionnaire?: bool, shareholderDetails?: bool}
 # --showPages shape: {bankDetailsSummaryPage?: bool, bankVerificationPage?: bool, businessDetailsSummaryPage?: bool, checksOverviewPage?: bool, individualDetailsSummaryPage?: bool, legalArrangementsDetailsSummaryPage?: bool, manualBankAccountPage?: bool, shareholderDetailsSummaryPage?: bool, welcomePage?: bool}
-export def "get-onboarding-url post-getOnboardingUrl" [
+export def "get-onboarding-url create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -111,25 +121,25 @@ export def "get-onboarding-url post-getOnboardingUrl" [
   --mobile-o-auth-callback-url: string # The URL to which the account holder is redirected after completing an OAuth authentication with a bank through Trustly/PayMyBank.
   --platform-name: string # The platform name which will show up in the welcome page.
   --return-url: string # The URL where the account holder will be redirected back to after they complete the onboarding, or if their session times out. Maximum length of 500 characters. If you don't provide this, the account holder will be redirected back to the default return URL configured in your platform account.
-  --shopper-locale: string # The language to be used in the page, specified by a combination of a language and country code. For example, **pt-BR**.   If not specified in the request or if the language is not supported, the page uses the browser language. If the browser language is not supported, the page uses **en-US** by default.  For a list of supported languages, refer to [Change the page language](https://docs.adyen.com/marketplaces-and-platforms/classic/hosted-onboarding-page/customize-experience#change-page-language).
+  --shopper-locale: string # The language to be used in the page, specified by a combination of a language and country code. For example, **pt-BR**. If not specified in the request or if the language is not supported, the page uses the browser language. If the browser language is not supported, the page uses **en-US** by default. For a list of supported languages, refer to [Change the page language](https://docs.adyen.com/marketplaces-and-platforms/classic/hosted-onboarding-page/customize-experience#change-page-language).
   --show-pages: record # shape: {bankDetailsSummaryPage?: bool, bankVerificationPage?: bool, businessDetailsSummaryPage?: bool, checksOverviewPage?: bool, individualDetailsSummaryPage?: bool, legalArrangementsDetailsSummaryPage?: bool, manualBankAccountPage?: bool, shareholderDetailsSummaryPage?: bool, welcomePage?: bool}
 ]: any -> record<invalidFields: table<errorCode: int, errorDescription: string, fieldType: record>, pspReference: string, redirectUrl: string, resultCode: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/getOnboardingUrl")
-  let body = {"accountHolderCode": $account_holder_code, "collectInformation": $collect_information, "editMode": $edit_mode, "mobileOAuthCallbackUrl": $mobile_o_auth_callback_url, "platformName": $platform_name, "returnUrl": $return_url, "shopperLocale": $shopper_locale, "showPages": $show_pages} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"accountHolderCode": $account_holder_code, "collectInformation": $collect_information, "editMode": $edit_mode, "mobileOAuthCallbackUrl": $mobile_o_auth_callback_url, "platformName": $platform_name, "returnUrl": $return_url, "shopperLocale": $shopper_locale, "showPages": $show_pages} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get a link to a PCI compliance questionnaire
 #
 # POST /getPciQuestionnaireUrl
 # operationId: post-getPciQuestionnaireUrl
-export def "get-pci-questionnaire-url post-getPciQuestionnaireUrl" [
+export def "get-pci-questionnaire-url create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -145,9 +155,9 @@ export def "get-pci-questionnaire-url post-getPciQuestionnaireUrl" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/getPciQuestionnaireUrl")
-  let body = {"accountHolderCode": $account_holder_code, "returnUrl": $return_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"accountHolderCode": $account_holder_code, "returnUrl": $return_url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

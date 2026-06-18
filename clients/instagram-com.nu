@@ -36,6 +36,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -113,7 +122,7 @@ export def "geographies-media-recent get" [
   let auth = (build-auth $token ($auth_scheme | default "query-access_token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "count" $count "scalar") (serialize-qp "min_id" $min_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({geo_id: $geo_id} | format pattern "/geographies/{geo_id}/media/recent") $qp)
+  let full_url = (build-url $base ({geo_id: (encode-path-segment $geo_id)} | format pattern "/geographies/{geo_id}/media/recent") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -163,7 +172,7 @@ export def "locations get" [
 ]: nothing -> record<data: record<id: string, latitude: float, longitude: float, name: string>, meta: record<code: int>> {
   let auth = (build-auth $token ($auth_scheme | default "query-access_token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({location_id: $location_id} | format pattern "/locations/{location_id}"))
+  let full_url = (build-url $base ({location_id: (encode-path-segment $location_id)} | format pattern "/locations/{location_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -190,7 +199,7 @@ export def "locations-media-recent get" [
   let auth = (build-auth $token ($auth_scheme | default "query-access_token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "min_timestamp" $min_timestamp "scalar") (serialize-qp "max_timestamp" $max_timestamp "scalar") (serialize-qp "min_id" $min_id "scalar") (serialize-qp "max_id" $max_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({location_id: $location_id} | format pattern "/locations/{location_id}/media/recent") $qp)
+  let full_url = (build-url $base ({location_id: (encode-path-segment $location_id)} | format pattern "/locations/{location_id}/media/recent") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -262,7 +271,7 @@ export def "media-shortcode get" [
 ]: nothing -> record<data: record<attribution: string, caption: record<created_time: string, from: record, id: string, text: string>, comments: record<count: int, data: list>, created_time: string, filter: string, id: string, images: record<low_resolution: record, standard_resolution: record, thumbnail: record>, likes: record<count: int, data: list>, link: string, location: record<id: string, latitude: float, longitude: float, name: string>, tags: list<string>, type: string, user: record<full_name: string, id: string, profile_picture: string, username: string>, user_has_liked: bool, users_in_photo: list<record>, videos: record<low_resolution: record, standard_resolution: record>>, meta: record<code: int>> {
   let auth = (build-auth $token ($auth_scheme | default "query-access_token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({shortcode: $shortcode} | format pattern "/media/shortcode/{shortcode}"))
+  let full_url = (build-url $base ({shortcode: (encode-path-segment $shortcode)} | format pattern "/media/shortcode/{shortcode}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -284,7 +293,7 @@ export def "media get" [
 ]: nothing -> record<data: record<attribution: string, caption: record<created_time: string, from: record, id: string, text: string>, comments: record<count: int, data: list>, created_time: string, filter: string, id: string, images: record<low_resolution: record, standard_resolution: record, thumbnail: record>, likes: record<count: int, data: list>, link: string, location: record<id: string, latitude: float, longitude: float, name: string>, tags: list<string>, type: string, user: record<full_name: string, id: string, profile_picture: string, username: string>, user_has_liked: bool, users_in_photo: list<record>, videos: record<low_resolution: record, standard_resolution: record>>, meta: record<code: int>> {
   let auth = (build-auth $token ($auth_scheme | default "query-access_token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({media_id: $media_id} | format pattern "/media/{media_id}"))
+  let full_url = (build-url $base ({media_id: (encode-path-segment $media_id)} | format pattern "/media/{media_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -306,7 +315,7 @@ export def "media-comments get" [
 ]: nothing -> record<data: table<created_time: string, from: record, id: string, text: string>, meta: record<code: int>> {
   let auth = (build-auth $token ($auth_scheme | default "query-access_token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({media_id: $media_id} | format pattern "/media/{media_id}/comments"))
+  let full_url = (build-url $base ({media_id: (encode-path-segment $media_id)} | format pattern "/media/{media_id}/comments"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -315,7 +324,7 @@ export def "media-comments get" [
 # Create a comment on a media object.
 #
 # POST /media/{media-id}/comments
-export def "media-comments post" [
+export def "media-comments create" [
   media_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -330,7 +339,7 @@ export def "media-comments post" [
   let auth = (build-auth $token ($auth_scheme | default "query-access_token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({media_id: $media_id} | format pattern "/media/{media_id}/comments") $qp)
+  let full_url = (build-url $base ({media_id: (encode-path-segment $media_id)} | format pattern "/media/{media_id}/comments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -353,7 +362,7 @@ export def "media-comments delete" [
 ]: nothing -> record<data: string, meta: record<code: int>> {
   let auth = (build-auth $token ($auth_scheme | default "query-access_token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({media_id: $media_id, comment_id: $comment_id} | format pattern "/media/{media_id}/comments/{comment_id}"))
+  let full_url = (build-url $base ({media_id: (encode-path-segment $media_id), comment_id: (encode-path-segment $comment_id)} | format pattern "/media/{media_id}/comments/{comment_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -375,7 +384,7 @@ export def "media-likes delete" [
 ]: nothing -> record<data: string, meta: record<code: int>> {
   let auth = (build-auth $token ($auth_scheme | default "query-access_token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({media_id: $media_id} | format pattern "/media/{media_id}/likes"))
+  let full_url = (build-url $base ({media_id: (encode-path-segment $media_id)} | format pattern "/media/{media_id}/likes"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -397,7 +406,7 @@ export def "media-likes get" [
 ]: nothing -> record<data: table<full_name: string, id: string, profile_picture: string, username: string>, meta: record<code: int>> {
   let auth = (build-auth $token ($auth_scheme | default "query-access_token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({media_id: $media_id} | format pattern "/media/{media_id}/likes"))
+  let full_url = (build-url $base ({media_id: (encode-path-segment $media_id)} | format pattern "/media/{media_id}/likes"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -406,7 +415,7 @@ export def "media-likes get" [
 # Set a like on this media by the current user.
 #
 # POST /media/{media-id}/likes
-export def "media-likes post" [
+export def "media-likes create" [
   media_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -419,7 +428,7 @@ export def "media-likes post" [
 ]: nothing -> record<data: string, meta: record<code: int>> {
   let auth = (build-auth $token ($auth_scheme | default "query-access_token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({media_id: $media_id} | format pattern "/media/{media_id}/likes"))
+  let full_url = (build-url $base ({media_id: (encode-path-segment $media_id)} | format pattern "/media/{media_id}/likes"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -464,7 +473,7 @@ export def "tags get" [
 ]: nothing -> record<data: record<media_count: int, name: string>, meta: record<code: int>> {
   let auth = (build-auth $token ($auth_scheme | default "query-access_token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({tag_name: $tag_name} | format pattern "/tags/{tag_name}"))
+  let full_url = (build-url $base ({tag_name: (encode-path-segment $tag_name)} | format pattern "/tags/{tag_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -490,7 +499,7 @@ export def "tags-media-recent get" [
   let auth = (build-auth $token ($auth_scheme | default "query-access_token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "count" $count "scalar") (serialize-qp "min_tag_id" $min_tag_id "scalar") (serialize-qp "max_tag_id" $max_tag_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tag_name: $tag_name} | format pattern "/tags/{tag_name}/media/recent") $qp)
+  let full_url = (build-url $base ({tag_name: (encode-path-segment $tag_name)} | format pattern "/tags/{tag_name}/media/recent") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -608,7 +617,7 @@ export def "users get" [
 ]: nothing -> record<data: record<bio: string, counts: record<followed_by: int, follows: int, media: int>, full_name: string, id: string, profile_picture: string, username: string, website: string>, meta: record<code: int>> {
   let auth = (build-auth $token ($auth_scheme | default "query-access_token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -630,7 +639,7 @@ export def "users-followed-by get" [
 ]: nothing -> record<data: table<full_name: string, id: string, profile_picture: string, username: string>, meta: record<code: int>, pagination: record<next_cursor: string, next_url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-access_token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}/followed-by"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/followed-by"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -652,7 +661,7 @@ export def "users-follows get" [
 ]: nothing -> record<data: table<full_name: string, id: string, profile_picture: string, username: string>, meta: record<code: int>, pagination: record<next_cursor: string, next_url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-access_token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}/follows"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/follows"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -680,7 +689,7 @@ export def "users-media-recent get" [
   let auth = (build-auth $token ($auth_scheme | default "query-access_token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "count" $count "scalar") (serialize-qp "max_timestamp" $max_timestamp "scalar") (serialize-qp "min_timestamp" $min_timestamp "scalar") (serialize-qp "min_id" $min_id "scalar") (serialize-qp "max_id" $max_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}/media/recent") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/media/recent") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -702,7 +711,7 @@ export def "users-relationship get" [
 ]: nothing -> record<data: record<incoming_status: string, outgoing_status: string, target_user_is_private: bool>, meta: record<code: int>> {
   let auth = (build-auth $token ($auth_scheme | default "query-access_token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}/relationship"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/relationship"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -711,7 +720,7 @@ export def "users-relationship get" [
 # Modify the relationship between the current user and the target user.
 #
 # POST /users/{user-id}/relationship
-export def "users-relationship post" [
+export def "users-relationship create" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -726,7 +735,7 @@ export def "users-relationship post" [
   let auth = (build-auth $token ($auth_scheme | default "query-access_token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "action" $action "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}/relationship") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/relationship") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

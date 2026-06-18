@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -119,7 +128,7 @@ export def "accounts get" [
 # Return margin impact info
 #
 # POST /accounts/{account}/order_impact
-export def "accounts-order-impact post" [
+export def "accounts-order-impact create" [
   account: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -145,12 +154,12 @@ export def "accounts-order-impact post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "portal"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({account: $account} | format pattern "/accounts/{account}/order_impact"))
-  let body = {"Aux Price": $aux_price, "ContractId": $contract_id, "Currency": $currency, "CustomerOrderId": $customer_order_id, "InstrumentType": $instrument_type, "ListingExchange": $listing_exchange, "Order Type": $order_type, "Price": $price, "Quantity": $quantity, "Side": $side, "Ticker": $ticker, "Time in Force": $time_in_force} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account: (encode-path-segment $account)} | format pattern "/accounts/{account}/order_impact"))
+  let req_body = {"Aux Price": $aux_price, "ContractId": $contract_id, "Currency": $currency, "CustomerOrderId": $customer_order_id, "InstrumentType": $instrument_type, "ListingExchange": $listing_exchange, "Order Type": $order_type, "Price": $price, "Quantity": $quantity, "Side": $side, "Ticker": $ticker, "Time in Force": $time_in_force} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Open Orders
@@ -169,7 +178,7 @@ export def "accounts-orders list" [
 ]: nothing -> table<ContractId: float, CustomerOrderId: float, FilledQuantity: float, ListingExchange: string, OrderType: float, OutsideRTH: string, Price: float, RemainingQuantity: float, Side: string, Status: string, Ticker: string, TimeInForce: float, TransactionTime: string, Warning: string> {
   let auth = (build-auth $token ($auth_scheme | default "portal"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({account: $account} | format pattern "/accounts/{account}/orders"))
+  let full_url = (build-url $base ({account: (encode-path-segment $account)} | format pattern "/accounts/{account}/orders"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -178,7 +187,7 @@ export def "accounts-orders list" [
 # Place Order
 #
 # POST /accounts/{account}/orders
-export def "accounts-orders post" [
+export def "accounts-orders create" [
   account: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -200,7 +209,7 @@ export def "accounts-orders post" [
   --mifid2-execution-algo: string # This field permits specification of the user's preregistered (via account management) MiFID II short code for algos that are responsible for handling/routing of the order.
   --mifid2-execution-trader: string # This field permits specification of the user's preregistered (via account management) MiFID II person responsible for handling/routing of the order
   --order-type: float@order-type-completer # Market = '1' Limit = '2' Stop = '3' StopLimit = '4'
-  --order-restrictions: float # MultiValueString representing the restrictions associated with an order. If more than one restriction is applicable to an order, this field can contain multiple instructions separated by space.  '1' Program Trade '2' Index Arbitrage  '3' Non-Index Arbitrage
+  --order-restrictions: float # MultiValueString representing the restrictions associated with an order. If more than one restriction is applicable to an order, this field can contain multiple instructions separated by space. '1' Program Trade '2' Index Arbitrage '3' Non-Index Arbitrage
   --outside-rth: float # Indicates if order is active outside regular trading hours, where defined. 0 = no (default), 1 = yes
   --price: float # The order price
   --quantity: float # The number of units in the order; contracts or shares
@@ -211,12 +220,12 @@ export def "accounts-orders post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "portal"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({account: $account} | format pattern "/accounts/{account}/orders"))
-  let body = {"Aux Price": $aux_price, "ContractId": $contract_id, "Currency": $currency, "CustomerOrderId": $customer_order_id, "GermanHftAlgo": $german_hft_algo, "InstrumentType": $instrument_type, "ListingExchange": $listing_exchange, "Mifid2Algo": $mifid2_algo, "Mifid2DecisionMaker": $mifid2_decision_maker, "Mifid2ExecutionAlgo": $mifid2_execution_algo, "Mifid2ExecutionTrader": $mifid2_execution_trader, "Order Type": $order_type, "OrderRestrictions": $order_restrictions, "Outside RTH": $outside_rth, "Price": $price, "Quantity": $quantity, "Side": $side, "Ticker": $ticker, "Time in Force": $time_in_force} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account: (encode-path-segment $account)} | format pattern "/accounts/{account}/orders"))
+  let req_body = {"Aux Price": $aux_price, "ContractId": $contract_id, "Currency": $currency, "CustomerOrderId": $customer_order_id, "GermanHftAlgo": $german_hft_algo, "InstrumentType": $instrument_type, "ListingExchange": $listing_exchange, "Mifid2Algo": $mifid2_algo, "Mifid2DecisionMaker": $mifid2_decision_maker, "Mifid2ExecutionAlgo": $mifid2_execution_algo, "Mifid2ExecutionTrader": $mifid2_execution_trader, "Order Type": $order_type, "OrderRestrictions": $order_restrictions, "Outside RTH": $outside_rth, "Price": $price, "Quantity": $quantity, "Side": $side, "Ticker": $ticker, "Time in Force": $time_in_force} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Cancel Order
@@ -236,7 +245,7 @@ export def "accounts-orders delete" [
 ]: nothing -> table<CustomerOrderId: string, OrderQty: float, OrderType: float, Price: string, Side: float, Status: string, Symbol: float, Warning: string> {
   let auth = (build-auth $token ($auth_scheme | default "portal"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({account: $account, customer_order_id: $customer_order_id} | format pattern "/accounts/{account}/orders/{customer_order_id}"))
+  let full_url = (build-url $base ({account: (encode-path-segment $account), customer_order_id: (encode-path-segment $customer_order_id)} | format pattern "/accounts/{account}/orders/{customer_order_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -259,7 +268,7 @@ export def "accounts-orders get" [
 ]: nothing -> table<ContractId: float, CustomerOrderId: float, FilledQuantity: float, ListingExchange: string, OrderType: float, OutsideRTH: string, Price: float, RemainingQuantity: float, Side: string, Status: string, Ticker: string, TimeInForce: float, TransactionTime: string, Warning: string> {
   let auth = (build-auth $token ($auth_scheme | default "portal"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({account: $account, customer_order_id: $customer_order_id} | format pattern "/accounts/{account}/orders/{customer_order_id}"))
+  let full_url = (build-url $base ({account: (encode-path-segment $account), customer_order_id: (encode-path-segment $customer_order_id)} | format pattern "/accounts/{account}/orders/{customer_order_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -268,7 +277,7 @@ export def "accounts-orders get" [
 # Modify Order
 #
 # PUT /accounts/{account}/orders/{CustomerOrderId}
-export def "accounts-orders put" [
+export def "accounts-orders update" [
   account: string
   customer_order_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -297,12 +306,12 @@ export def "accounts-orders put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "portal"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({account: $account, customer_order_id: $customer_order_id} | format pattern "/accounts/{account}/orders/{customer_order_id}"))
-  let body = {"Aux Price": $aux_price, "CustomerOrderId": $body_customer_order_id, "GermanHftAlgo": $german_hft_algo, "Mifid2Algo": $mifid2_algo, "Mifid2DecisionMaker": $mifid2_decision_maker, "Mifid2ExecutionAlgo": $mifid2_execution_algo, "Mifid2ExecutionTrader": $mifid2_execution_trader, "Order Type": $order_type, "OrigCustomerOrderId": $orig_customer_order_id, "Outside RTH": $outside_rth, "Price": $price, "Quantity": $quantity, "Side": $side, "Time in Force": $time_in_force} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account: (encode-path-segment $account), customer_order_id: (encode-path-segment $customer_order_id)} | format pattern "/accounts/{account}/orders/{customer_order_id}"))
+  let req_body = {"Aux Price": $aux_price, "CustomerOrderId": $body_customer_order_id, "GermanHftAlgo": $german_hft_algo, "Mifid2Algo": $mifid2_algo, "Mifid2DecisionMaker": $mifid2_decision_maker, "Mifid2ExecutionAlgo": $mifid2_execution_algo, "Mifid2ExecutionTrader": $mifid2_execution_trader, "Order Type": $order_type, "OrigCustomerOrderId": $orig_customer_order_id, "Outside RTH": $outside_rth, "Price": $price, "Quantity": $quantity, "Side": $side, "Time in Force": $time_in_force} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Account Positions
@@ -321,7 +330,7 @@ export def "accounts-positions get" [
 ]: nothing -> table<AverageCost: float, ContractId: float, Position: float> {
   let auth = (build-auth $token ($auth_scheme | default "portal"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({account: $account} | format pattern "/accounts/{account}/positions"))
+  let full_url = (build-url $base ({account: (encode-path-segment $account)} | format pattern "/accounts/{account}/positions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -343,7 +352,7 @@ export def "accounts-summary get" [
 ]: nothing -> record<Info: record<AccountCode: string, AccountReady: string, AccountType: string, Cushion: string, DayTradesRemaining: string, DayTradesRemainingT: string, DayTradesRemainingT_2: string, DayTradesRemainingT_3: string, DayTradesRemainingT_4: string, HighestSeverity: string, Leverage_S: string, LookAheadNextChange: string, SegmentTitle_C: string, SegmentTitle_S: string, TradingType_S: string, WhatIfPMEnabled: string>, Ledger: table<CashBalance: float, CashBalanceFXSegment: float, CashCumQty: float, ExchangeRate: float, FutureOptionMarketValue: float, FuturePNL: float, NetDividend: float, NetInterest: float, NetLiquidation: float, OptionMarketValue: float, RealizedPNL: float, StockMarketValue: float, TotalCashBalance: float, UnrealizedPNL: float>, Summary: record<AccruedCash: float, AccruedCash_C: float, AccruedCash_S: float, AccruedDividend: float, AccruedDividend_C: float, AccruedDividend_S: float, AvailableFunds: float, AvailableFunds_C: float, AvailableFunds_S: float, Billable: float, Billable_C: float, Billable_S: float, BuyingPower: float, EquityWithLoanValue: float, EquityWithLoanValue_C: float, EquityWithLoanValue_S: float, ExcessLiquidity: float, ExcessLiquidity_C: float, ExcessLiquidity_S: float, FullAvailableFunds: float, FullAvailableFunds_C: float, FullAvailableFunds_S: float, FullExcessLiquidity: float, FullExcessLiquidity_C: float, FullExcessLiquidity_S: float, FullInitMarginReq: float, FullInitMarginReq_C: float, FullInitMarginReq_S: float, FullMaintMarginReq: float, FullMaintMarginReq_C: float, FullMaintMarginReq_S: float, GrossPositionValue: float, GrossPositionValue_C: float, GrossPositionValue_S: float, IndianStockHaircut: float, IndianStockHaircut_C: float, IndianStockHaircut_S: float, InitMarginReq: float, InitMarginReq_C: float, InitMarginReq_S: float, InsuredDeposit: float, InsuredDeposit_C: float, InsuredDeposit_S: float, LookAheadAvailableFunds: float, LookAheadAvailableFunds_C: float, LookAheadAvailableFunds_S: float, LookAheadExcessLiquidity: float, LookAheadExcessLiquidity_C: float, LookAheadExcessLiquidity_S: float, LookAheadInitMarginReq: float, LookAheadInitMarginReq_C: float, LookAheadInitMarginReq_S: float, LookAheadMaintMarginReq: float, LookAheadMaintMarginReq_C: float, LookAheadMaintMarginReq_S: float, MaintMarginReq: float, MaintMarginReq_C: float, MaintMarginReq_S: float, NetLiquidation: float, NetLiquidation_C: float, NetLiquidation_S: float, NetLiquidationUncertainty: float, PASharesValue: float, PASharesValue_C: float, PASharesValue_S: float, PostExpirationExcess: float, PostExpirationExcess_C: float, PostExpirationExcess_S: float, PostExpirationMargin: float, PostExpirationMargin_C: float, PostExpirationMargin_S: float, RegTEquity: float, RegTEquity_S: float, RegTMargin: float, RegTMargin_S: float, SMA: float, SMA_S: float, TotalCashValue: float, TotalCashValue_C: float, TotalCashValue_S: float>> {
   let auth = (build-auth $token ($auth_scheme | default "portal"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({account: $account} | format pattern "/accounts/{account}/summary"))
+  let full_url = (build-url $base ({account: (encode-path-segment $account)} | format pattern "/accounts/{account}/summary"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -367,11 +376,12 @@ export def "accounts-trades get" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "portal"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({account: $account} | format pattern "/accounts/{account}/trades"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account: (encode-path-segment $account)} | format pattern "/accounts/{account}/trades"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Exchange Components
@@ -413,16 +423,17 @@ export def "marketdata-snapshot get" [
   let auth = (build-auth $token ($auth_scheme | default "portal"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/marketdata/snapshot")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Obtain a access token
 #
 # POST /oauth/access_token
-export def "oauth-access-token post" [
+export def "oauth-access-token create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -443,17 +454,17 @@ export def "oauth-access-token post" [
   let auth = (build-auth $token ($auth_scheme | default "portal"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/oauth/access_token")
-  let body = {"oauth_consumer_key": $oauth_consumer_key, "oauth_nonce": $oauth_nonce, "oauth_signature": $oauth_signature, "oauth_signature_method": $oauth_signature_method, "oauth_timestamp": $oauth_timestamp, "oauth_token": $oauth_token, "oauth_verifier": $oauth_verifier} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"oauth_consumer_key": $oauth_consumer_key, "oauth_nonce": $oauth_nonce, "oauth_signature": $oauth_signature, "oauth_signature_method": $oauth_signature_method, "oauth_timestamp": $oauth_timestamp, "oauth_token": $oauth_token, "oauth_verifier": $oauth_verifier} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Obtain a live session token
 #
 # POST /oauth/live_session_token
-export def "oauth-live-session-token post" [
+export def "oauth-live-session-token create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -462,7 +473,7 @@ export def "oauth-live-session-token post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --diffie-hellman-challenge: string # Challenge value calculated using the Diffie-Hellman prime and generated provided during the registration process. See the "OAuth at Interactive Brokers" document for more details. 
+  --diffie-hellman-challenge: string # Challenge value calculated using the Diffie-Hellman prime and generated provided during the registration process. See the "OAuth at Interactive Brokers" document for more details.
   --oauth-consumer-key: string # The 25-character hexadecimal string that was obtained from Interactive Brokers during the OAuth consumer registration process.
   --oauth-nonce: string # A random string uniquely generated for each request.
   --oauth-signature: string # The signature for the request generated using the method specified in the oauth_signature_method parameter. See section 9 of the OAuth v1.0a specification for more details on signing requests.
@@ -474,17 +485,17 @@ export def "oauth-live-session-token post" [
   let auth = (build-auth $token ($auth_scheme | default "portal"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/oauth/live_session_token")
-  let body = {"diffie_hellman_challenge": $diffie_hellman_challenge, "oauth_consumer_key": $oauth_consumer_key, "oauth_nonce": $oauth_nonce, "oauth_signature": $oauth_signature, "oauth_signature_method": $oauth_signature_method, "oauth_timestamp": $oauth_timestamp, "oauth_token": $oauth_token} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"diffie_hellman_challenge": $diffie_hellman_challenge, "oauth_consumer_key": $oauth_consumer_key, "oauth_nonce": $oauth_nonce, "oauth_signature": $oauth_signature, "oauth_signature_method": $oauth_signature_method, "oauth_timestamp": $oauth_timestamp, "oauth_token": $oauth_token} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Obtain a request token
 #
 # POST /oauth/request_token
-export def "oauth-request-token post" [
+export def "oauth-request-token create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -493,7 +504,7 @@ export def "oauth-request-token post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --oauth-callback: string # An absolute URL to which IB will redirect the user. This URL is provided by the consumer during registration. This parameter must be set to 'oob'.  
+  --oauth-callback: string # An absolute URL to which IB will redirect the user. This URL is provided by the consumer during registration. This parameter must be set to 'oob'.
   --oauth-consumer-key: string # The 25-character hexadecimal string that was obtained from Interactive Brokers during the OAuth consumer registration process.
   --oauth-nonce: string # A random string uniquely generated for each request.
   --oauth-signature: string # The signature for the request generated using the method specified in the oauth_signature_method parameter. See section 9 of the OAuth v1.0a specification for more details on signing requests.
@@ -504,11 +515,11 @@ export def "oauth-request-token post" [
   let auth = (build-auth $token ($auth_scheme | default "portal"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/oauth/request_token")
-  let body = {"oauth_callback": $oauth_callback, "oauth_consumer_key": $oauth_consumer_key, "oauth_nonce": $oauth_nonce, "oauth_signature": $oauth_signature, "oauth_signature_method": $oauth_signature_method, "oauth_timestamp": $oauth_timestamp} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"oauth_callback": $oauth_callback, "oauth_consumer_key": $oauth_consumer_key, "oauth_nonce": $oauth_nonce, "oauth_signature": $oauth_signature, "oauth_signature_method": $oauth_signature_method, "oauth_timestamp": $oauth_timestamp} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get security definition
@@ -533,9 +544,9 @@ export def "secdef get" [
   let auth = (build-auth $token ($auth_scheme | default "portal"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/secdef")
-  let body = {"conid": $conid, "currency": $currency, "exchange": $exchange, "symbol": $symbol, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"conid": $conid, "currency": $currency, "exchange": $exchange, "symbol": $symbol, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

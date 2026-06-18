@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -72,7 +81,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "policies-files-upload-policy-file chromepolicymediaupload" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "policies-files-upload-policy-file upload" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -96,7 +105,7 @@ export def commands []: nothing -> table {
 #
 # POST /v1/{customer}/policies/files:uploadPolicyFile
 # operationId: chromepolicy.media.upload
-export def "policies-files-upload-policy-file chromepolicymediaupload" [
+export def "policies-files-upload-policy-file upload" [
   customer: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -123,11 +132,12 @@ export def "policies-files-upload-policy-file chromepolicymediaupload" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer: $customer} | format pattern "/v1/{customer}/policies/files:uploadPolicyFile") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({customer: (encode-path-segment $customer)} | format pattern "/v1/{customer}/policies/files:uploadPolicyFile") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/octet-stream" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/octet-stream" $req_body
 }
 
 # Delete multiple policy values that are applied to a specific group. All targets must have the same target format. That is to say that they must point to the same target resource and must have the same keys specified in `additionalTargetKeyNames`, though the values for those keys may be different. On failure the request will return the error details as part of the google.rpc.Status.
@@ -135,7 +145,7 @@ export def "policies-files-upload-policy-file chromepolicymediaupload" [
 # POST /v1/{customer}/policies/groups:batchDelete
 # operationId: chromepolicy.customers.policies.groups.batchDelete
 # --requests item shape: {policySchema?: string, policyTargetKey?: record}
-export def "policies-groups-batch-delete chromepolicycustomerspoliciesgroupsbatchDelete" [
+export def "policies-groups-batch-delete delete" [
   customer: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -156,18 +166,18 @@ export def "policies-groups-batch-delete chromepolicycustomerspoliciesgroupsbatc
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --requests: list # List of policies that will be deleted as defined by the `requests`. All requests in the list must follow these restrictions: 1. All schemas in the list must have the same root namespace. 2. All `policyTargetKey.targetResource` values must point to a group resource. 3. All `policyTargetKey` values must have the same `app_id` key name in the `additionalTargetKeys`. 4. No two modification requests can reference the same `policySchema` + ` policyTargetKey` pair.  — item shape: {policySchema?: string, policyTargetKey?: record}
+  --requests: list # List of policies that will be deleted as defined by the `requests`. All requests in the list must follow these restrictions: 1. All schemas in the list must have the same root namespace. 2. All `policyTargetKey.targetResource` values must point to a group resource. 3. All `policyTargetKey` values must have the same `app_id` key name in the `additionalTargetKeys`. 4. No two modification requests can reference the same `policySchema` + ` policyTargetKey` pair. — item shape: {policySchema?: string, policyTargetKey?: record}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer: $customer} | format pattern "/v1/{customer}/policies/groups:batchDelete") $qp)
-  let body = {"requests": $requests} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({customer: (encode-path-segment $customer)} | format pattern "/v1/{customer}/policies/groups:batchDelete") $qp)
+  let req_body = {"requests": $requests} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Modify multiple policy values that are applied to a specific group. All targets must have the same target format. That is to say that they must point to the same target resource and must have the same keys specified in `additionalTargetKeyNames`, though the values for those keys may be different. On failure the request will return the error details as part of the google.rpc.Status.
@@ -175,7 +185,7 @@ export def "policies-groups-batch-delete chromepolicycustomerspoliciesgroupsbatc
 # POST /v1/{customer}/policies/groups:batchModify
 # operationId: chromepolicy.customers.policies.groups.batchModify
 # --requests item shape: {policyTargetKey?: record, policyValue?: record, updateMask?: string}
-export def "policies-groups-batch-modify chromepolicycustomerspoliciesgroupsbatchModify" [
+export def "policies-groups-batch-modify create" [
   customer: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -196,18 +206,18 @@ export def "policies-groups-batch-modify chromepolicycustomerspoliciesgroupsbatc
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --requests: list # List of policies to modify as defined by the `requests`. All requests in the list must follow these restrictions: 1. All schemas in the list must have the same root namespace. 2. All `policyTargetKey.targetResource` values must point to a group resource. 3. All `policyTargetKey` values must have the same `app_id` key name in the `additionalTargetKeys`. 4. No two modification requests can reference the same `policySchema` + ` policyTargetKey` pair.  — item shape: {policyTargetKey?: record, policyValue?: record, updateMask?: string}
+  --requests: list # List of policies to modify as defined by the `requests`. All requests in the list must follow these restrictions: 1. All schemas in the list must have the same root namespace. 2. All `policyTargetKey.targetResource` values must point to a group resource. 3. All `policyTargetKey` values must have the same `app_id` key name in the `additionalTargetKeys`. 4. No two modification requests can reference the same `policySchema` + ` policyTargetKey` pair. — item shape: {policyTargetKey?: record, policyValue?: record, updateMask?: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer: $customer} | format pattern "/v1/{customer}/policies/groups:batchModify") $qp)
-  let body = {"requests": $requests} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({customer: (encode-path-segment $customer)} | format pattern "/v1/{customer}/policies/groups:batchModify") $qp)
+  let req_body = {"requests": $requests} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve a group priority ordering for an app. The target app must be supplied in `additionalTargetKeyNames` in the PolicyTargetKey. On failure the request will return the error details as part of the google.rpc.Status.
@@ -215,7 +225,7 @@ export def "policies-groups-batch-modify chromepolicycustomerspoliciesgroupsbatc
 # POST /v1/{customer}/policies/groups:listGroupPriorityOrdering
 # operationId: chromepolicy.customers.policies.groups.listGroupPriorityOrdering
 # --policyTargetKey shape: {additionalTargetKeys?: record, targetResource?: string}
-export def "policies-groups-list-group-priority-ordering chromepolicycustomerspoliciesgroupslistGroupPriorityOrdering" [
+export def "policies-groups-list-group-priority-ordering list" [
   customer: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -244,12 +254,12 @@ export def "policies-groups-list-group-priority-ordering chromepolicycustomerspo
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer: $customer} | format pattern "/v1/{customer}/policies/groups:listGroupPriorityOrdering") $qp)
-  let body = {"policyNamespace": $policy_namespace, "policySchema": $policy_schema, "policyTargetKey": $policy_target_key} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({customer: (encode-path-segment $customer)} | format pattern "/v1/{customer}/policies/groups:listGroupPriorityOrdering") $qp)
+  let req_body = {"policyNamespace": $policy_namespace, "policySchema": $policy_schema, "policyTargetKey": $policy_target_key} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update a group priority ordering for an app. The target app must be supplied in `additionalTargetKeyNames` in the PolicyTargetKey. On failure the request will return the error details as part of the google.rpc.Status.
@@ -257,7 +267,7 @@ export def "policies-groups-list-group-priority-ordering chromepolicycustomerspo
 # POST /v1/{customer}/policies/groups:updateGroupPriorityOrdering
 # operationId: chromepolicy.customers.policies.groups.updateGroupPriorityOrdering
 # --policyTargetKey shape: {additionalTargetKeys?: record, targetResource?: string}
-export def "policies-groups-update-group-priority-ordering chromepolicycustomerspoliciesgroupsupdateGroupPriorityOrdering" [
+export def "policies-groups-update-group-priority-ordering update" [
   customer: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -278,7 +288,7 @@ export def "policies-groups-update-group-priority-ordering chromepolicycustomers
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --group-ids: list # Required. The group IDs, in desired priority ordering.
+  --group-ids: list<string> # Required. The group IDs, in desired priority ordering.
   --policy-namespace: string # The namespace of the policy type for the request.
   --policy-schema: string # The schema name of the policy for the request.
   --policy-target-key: record # The key used to identify the target on which the policy will be applied. — shape: {additionalTargetKeys?: record, targetResource?: string}
@@ -287,12 +297,12 @@ export def "policies-groups-update-group-priority-ordering chromepolicycustomers
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer: $customer} | format pattern "/v1/{customer}/policies/groups:updateGroupPriorityOrdering") $qp)
-  let body = {"groupIds": $group_ids, "policyNamespace": $policy_namespace, "policySchema": $policy_schema, "policyTargetKey": $policy_target_key} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({customer: (encode-path-segment $customer)} | format pattern "/v1/{customer}/policies/groups:updateGroupPriorityOrdering") $qp)
+  let req_body = {"groupIds": $group_ids, "policyNamespace": $policy_namespace, "policySchema": $policy_schema, "policyTargetKey": $policy_target_key} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Creates a certificate at a specified OU for a customer.
@@ -300,7 +310,7 @@ export def "policies-groups-update-group-priority-ordering chromepolicycustomers
 # POST /v1/{customer}/policies/networks:defineCertificate
 # operationId: chromepolicy.customers.policies.networks.defineCertificate
 # --settings item shape: {policySchema?: string, value?: record}
-export def "policies-networks-define-certificate chromepolicycustomerspoliciesnetworksdefineCertificate" [
+export def "policies-networks-define-certificate create" [
   customer: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -330,12 +340,12 @@ export def "policies-networks-define-certificate chromepolicycustomerspoliciesne
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer: $customer} | format pattern "/v1/{customer}/policies/networks:defineCertificate") $qp)
-  let body = {"ceritificateName": $ceritificate_name, "certificate": $certificate, "settings": $settings, "targetResource": $target_resource} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({customer: (encode-path-segment $customer)} | format pattern "/v1/{customer}/policies/networks:defineCertificate") $qp)
+  let req_body = {"ceritificateName": $ceritificate_name, "certificate": $certificate, "settings": $settings, "targetResource": $target_resource} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Define a new network.
@@ -343,7 +353,7 @@ export def "policies-networks-define-certificate chromepolicycustomerspoliciesne
 # POST /v1/{customer}/policies/networks:defineNetwork
 # operationId: chromepolicy.customers.policies.networks.defineNetwork
 # --settings item shape: {policySchema?: string, value?: record}
-export def "policies-networks-define-network chromepolicycustomerspoliciesnetworksdefineNetwork" [
+export def "policies-networks-define-network create" [
   customer: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -372,19 +382,19 @@ export def "policies-networks-define-network chromepolicycustomerspoliciesnetwor
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer: $customer} | format pattern "/v1/{customer}/policies/networks:defineNetwork") $qp)
-  let body = {"name": $name, "settings": $settings, "targetResource": $target_resource} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({customer: (encode-path-segment $customer)} | format pattern "/v1/{customer}/policies/networks:defineNetwork") $qp)
+  let req_body = {"name": $name, "settings": $settings, "targetResource": $target_resource} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Remove an existing certificate by guid.
 #
 # POST /v1/{customer}/policies/networks:removeCertificate
 # operationId: chromepolicy.customers.policies.networks.removeCertificate
-export def "policies-networks-remove-certificate chromepolicycustomerspoliciesnetworksremoveCertificate" [
+export def "policies-networks-remove-certificate delete" [
   customer: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -412,19 +422,19 @@ export def "policies-networks-remove-certificate chromepolicycustomerspoliciesne
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer: $customer} | format pattern "/v1/{customer}/policies/networks:removeCertificate") $qp)
-  let body = {"networkId": $network_id, "targetResource": $target_resource} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({customer: (encode-path-segment $customer)} | format pattern "/v1/{customer}/policies/networks:removeCertificate") $qp)
+  let req_body = {"networkId": $network_id, "targetResource": $target_resource} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Remove an existing network by guid.
 #
 # POST /v1/{customer}/policies/networks:removeNetwork
 # operationId: chromepolicy.customers.policies.networks.removeNetwork
-export def "policies-networks-remove-network chromepolicycustomerspoliciesnetworksremoveNetwork" [
+export def "policies-networks-remove-network delete" [
   customer: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -452,12 +462,12 @@ export def "policies-networks-remove-network chromepolicycustomerspoliciesnetwor
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer: $customer} | format pattern "/v1/{customer}/policies/networks:removeNetwork") $qp)
-  let body = {"networkId": $network_id, "targetResource": $target_resource} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({customer: (encode-path-segment $customer)} | format pattern "/v1/{customer}/policies/networks:removeNetwork") $qp)
+  let req_body = {"networkId": $network_id, "targetResource": $target_resource} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Modify multiple policy values that are applied to a specific org unit so that they now inherit the value from a parent (if applicable). All targets must have the same target format. That is to say that they must point to the same target resource and must have the same keys specified in `additionalTargetKeyNames`, though the values for those keys may be different. On failure the request will return the error details as part of the google.rpc.Status.
@@ -465,7 +475,7 @@ export def "policies-networks-remove-network chromepolicycustomerspoliciesnetwor
 # POST /v1/{customer}/policies/orgunits:batchInherit
 # operationId: chromepolicy.customers.policies.orgunits.batchInherit
 # --requests item shape: {policySchema?: string, policyTargetKey?: record}
-export def "policies-orgunits-batch-inherit chromepolicycustomerspoliciesorgunitsbatchInherit" [
+export def "policies-orgunits-batch-inherit create" [
   customer: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -486,18 +496,18 @@ export def "policies-orgunits-batch-inherit chromepolicycustomerspoliciesorgunit
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --requests: list # List of policies that have to inherit their values as defined by the `requests`. All requests in the list must follow these restrictions: 1. All schemas in the list must have the same root namespace. 2. All `policyTargetKey.targetResource` values must point to an org unit resource. 3. All `policyTargetKey` values must have the same key names in the ` additionalTargetKeys`. This also means if one of the targets has an empty `additionalTargetKeys` map, all of the targets must have an empty `additionalTargetKeys` map. 4. No two modification requests can reference the same `policySchema` + ` policyTargetKey` pair.  — item shape: {policySchema?: string, policyTargetKey?: record}
+  --requests: list # List of policies that have to inherit their values as defined by the `requests`. All requests in the list must follow these restrictions: 1. All schemas in the list must have the same root namespace. 2. All `policyTargetKey.targetResource` values must point to an org unit resource. 3. All `policyTargetKey` values must have the same key names in the ` additionalTargetKeys`. This also means if one of the targets has an empty `additionalTargetKeys` map, all of the targets must have an empty `additionalTargetKeys` map. 4. No two modification requests can reference the same `policySchema` + ` policyTargetKey` pair. — item shape: {policySchema?: string, policyTargetKey?: record}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer: $customer} | format pattern "/v1/{customer}/policies/orgunits:batchInherit") $qp)
-  let body = {"requests": $requests} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({customer: (encode-path-segment $customer)} | format pattern "/v1/{customer}/policies/orgunits:batchInherit") $qp)
+  let req_body = {"requests": $requests} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Modify multiple policy values that are applied to a specific org unit. All targets must have the same target format. That is to say that they must point to the same target resource and must have the same keys specified in `additionalTargetKeyNames`, though the values for those keys may be different. On failure the request will return the error details as part of the google.rpc.Status.
@@ -505,7 +515,7 @@ export def "policies-orgunits-batch-inherit chromepolicycustomerspoliciesorgunit
 # POST /v1/{customer}/policies/orgunits:batchModify
 # operationId: chromepolicy.customers.policies.orgunits.batchModify
 # --requests item shape: {policyTargetKey?: record, policyValue?: record, updateMask?: string}
-export def "policies-orgunits-batch-modify chromepolicycustomerspoliciesorgunitsbatchModify" [
+export def "policies-orgunits-batch-modify create" [
   customer: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -526,18 +536,18 @@ export def "policies-orgunits-batch-modify chromepolicycustomerspoliciesorgunits
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --requests: list # List of policies to modify as defined by the `requests`. All requests in the list must follow these restrictions: 1. All schemas in the list must have the same root namespace. 2. All `policyTargetKey.targetResource` values must point to an org unit resource. 3. All `policyTargetKey` values must have the same key names in the ` additionalTargetKeys`. This also means if one of the targets has an empty `additionalTargetKeys` map, all of the targets must have an empty `additionalTargetKeys` map. 4. No two modification requests can reference the same `policySchema` + ` policyTargetKey` pair.  — item shape: {policyTargetKey?: record, policyValue?: record, updateMask?: string}
+  --requests: list # List of policies to modify as defined by the `requests`. All requests in the list must follow these restrictions: 1. All schemas in the list must have the same root namespace. 2. All `policyTargetKey.targetResource` values must point to an org unit resource. 3. All `policyTargetKey` values must have the same key names in the ` additionalTargetKeys`. This also means if one of the targets has an empty `additionalTargetKeys` map, all of the targets must have an empty `additionalTargetKeys` map. 4. No two modification requests can reference the same `policySchema` + ` policyTargetKey` pair. — item shape: {policyTargetKey?: record, policyValue?: record, updateMask?: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer: $customer} | format pattern "/v1/{customer}/policies/orgunits:batchModify") $qp)
-  let body = {"requests": $requests} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({customer: (encode-path-segment $customer)} | format pattern "/v1/{customer}/policies/orgunits:batchModify") $qp)
+  let req_body = {"requests": $requests} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets the resolved policy values for a list of policies that match a search query.
@@ -545,7 +555,7 @@ export def "policies-orgunits-batch-modify chromepolicycustomerspoliciesorgunits
 # POST /v1/{customer}/policies:resolve
 # operationId: chromepolicy.customers.policies.resolve
 # --policyTargetKey shape: {additionalTargetKeys?: record, targetResource?: string}
-export def "policies-resolve chromepolicycustomerspoliciesresolve" [
+export def "policies-resolve create" [
   customer: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -575,19 +585,19 @@ export def "policies-resolve chromepolicycustomerspoliciesresolve" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer: $customer} | format pattern "/v1/{customer}/policies:resolve") $qp)
-  let body = {"pageSize": $page_size, "pageToken": $page_token, "policySchemaFilter": $policy_schema_filter, "policyTargetKey": $policy_target_key} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({customer: (encode-path-segment $customer)} | format pattern "/v1/{customer}/policies:resolve") $qp)
+  let req_body = {"pageSize": $page_size, "pageToken": $page_token, "policySchemaFilter": $policy_schema_filter, "policyTargetKey": $policy_target_key} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get a specific policy schema for a customer by its resource name.
 #
 # GET /v1/{name}
 # operationId: chromepolicy.customers.policySchemas.get
-export def "customers chromepolicycustomerspolicySchemasget" [
+export def "customers get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -612,7 +622,7 @@ export def "customers chromepolicycustomerspolicySchemasget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -622,7 +632,7 @@ export def "customers chromepolicycustomerspolicySchemasget" [
 #
 # GET /v1/{parent}/policySchemas
 # operationId: chromepolicy.customers.policySchemas.list
-export def "policy-schemas chromepolicycustomerspolicySchemaslist" [
+export def "policy-schemas list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -650,7 +660,7 @@ export def "policy-schemas chromepolicycustomerspolicySchemaslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/policySchemas") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/policySchemas") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

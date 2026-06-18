@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -71,7 +80,7 @@ def alt-completer [] { ["json"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "sites webmasterssiteslist" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "sites list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,7 +104,7 @@ export def commands []: nothing -> table {
 #
 # GET /sites
 # operationId: webmasters.sites.list
-export def "sites webmasterssiteslist" [
+export def "sites list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -125,7 +134,7 @@ export def "sites webmasterssiteslist" [
 #
 # DELETE /sites/{siteUrl}
 # operationId: webmasters.sites.delete
-export def "sites webmasterssitesdelete" [
+export def "sites delete" [
   site_url: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -146,7 +155,7 @@ export def "sites webmasterssitesdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({site_url: $site_url} | format pattern "/sites/{site_url}") $qp)
+  let full_url = (build-url $base ({site_url: (encode-path-segment $site_url)} | format pattern "/sites/{site_url}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -156,7 +165,7 @@ export def "sites webmasterssitesdelete" [
 #
 # GET /sites/{siteUrl}
 # operationId: webmasters.sites.get
-export def "sites webmasterssitesget" [
+export def "sites get" [
   site_url: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -177,7 +186,7 @@ export def "sites webmasterssitesget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({site_url: $site_url} | format pattern "/sites/{site_url}") $qp)
+  let full_url = (build-url $base ({site_url: (encode-path-segment $site_url)} | format pattern "/sites/{site_url}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -187,7 +196,7 @@ export def "sites webmasterssitesget" [
 #
 # PUT /sites/{siteUrl}
 # operationId: webmasters.sites.add
-export def "sites webmasterssitesadd" [
+export def "sites create" [
   site_url: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -208,18 +217,18 @@ export def "sites webmasterssitesadd" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({site_url: $site_url} | format pattern "/sites/{site_url}") $qp)
+  let full_url = (build-url $base ({site_url: (encode-path-segment $site_url)} | format pattern "/sites/{site_url}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Query your data with filters and parameters that you define. Returns zero or more rows grouped by the row keys that you define. You must define a date range of one or more days.  When date is one of the group by values, any days without data are omitted from the result list. If you need to know which days have data, issue a broad date range query grouped by date for any metric, and see which day rows are returned.
+# Query your data with filters and parameters that you define. Returns zero or more rows grouped by the row keys that you define. You must define a date range of one or more days. When date is one of the group by values, any days without data are omitted from the result list. If you need to know which days have data, issue a broad date range query grouped by date for any metric, and see which day rows are returned.
 #
 # POST /sites/{siteUrl}/searchAnalytics/query
 # operationId: webmasters.searchanalytics.query
 # --dimensionFilterGroups item shape: {filters?: list, groupType?: string}
-export def "sites-search-analytics-query webmasterssearchanalyticsquery" [
+export def "sites-search-analytics-query list" [
   site_url: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -236,10 +245,10 @@ export def "sites-search-analytics-query webmasterssearchanalyticsquery" [
   --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --user-ip: string # Deprecated. Please use quotaUser instead.
-  --aggregation-type: string # [Optional; Default is "auto"] How data is aggregated. If aggregated by property, all data for the same property is aggregated; if aggregated by page, all data is aggregated by canonical URI. If you filter or group by page, choose AUTO; otherwise you can aggregate either by property or by page, depending on how you want your data calculated; see  the help documentation to learn how data is calculated differently by site versus by page.  Note: If you group or filter by page, you cannot aggregate by property.  If you specify any value other than AUTO, the aggregation type in the result will match the requested type, or if you request an invalid type, you will get an error. The API will never change your aggregation type if the requested type is invalid.
+  --aggregation-type: string # [Optional; Default is "auto"] How data is aggregated. If aggregated by property, all data for the same property is aggregated; if aggregated by page, all data is aggregated by canonical URI. If you filter or group by page, choose AUTO; otherwise you can aggregate either by property or by page, depending on how you want your data calculated; see the help documentation to learn how data is calculated differently by site versus by page. Note: If you group or filter by page, you cannot aggregate by property. If you specify any value other than AUTO, the aggregation type in the result will match the requested type, or if you request an invalid type, you will get an error. The API will never change your aggregation type if the requested type is invalid.
   --data-state: string # [Optional] If "all" (case-insensitive), data will include fresh data. If "final" (case-insensitive) or if this parameter is omitted, the returned data will include only finalized data.
   --dimension-filter-groups: list # [Optional] Zero or more filters to apply to the dimension grouping values; for example, 'query contains "buy"' to see only data where the query string contains the substring "buy" (not case-sensitive). You can filter by a dimension without grouping by it. — item shape: {filters?: list, groupType?: string}
-  --dimensions: list # [Optional] Zero or more dimensions to group results by. Dimensions are the group-by values in the Search Analytics page. Dimensions are combined to create a unique row key for each row. Results are grouped in the order that you supply these dimensions.
+  --dimensions: list<string> # [Optional] Zero or more dimensions to group results by. Dimensions are the group-by values in the Search Analytics page. Dimensions are combined to create a unique row key for each row. Results are grouped in the order that you supply these dimensions.
   --end-date: string # [Required] End date of the requested date range, in YYYY-MM-DD format, in PST (UTC - 8:00). Must be greater than or equal to the start date. This value is included in the range.
   --row-limit: int # [Optional; Default is 1000] The maximum number of rows to return. Must be a number from 1 to 5,000 (inclusive). (format: int32)
   --search-type: string # [Optional; Default is "web"] The search type to filter for.
@@ -250,19 +259,19 @@ export def "sites-search-analytics-query webmasterssearchanalyticsquery" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({site_url: $site_url} | format pattern "/sites/{site_url}/searchAnalytics/query") $qp)
-  let body = {"aggregationType": $aggregation_type, "dataState": $data_state, "dimensionFilterGroups": $dimension_filter_groups, "dimensions": $dimensions, "endDate": $end_date, "rowLimit": $row_limit, "searchType": $search_type, "startDate": $start_date, "startRow": $start_row} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({site_url: (encode-path-segment $site_url)} | format pattern "/sites/{site_url}/searchAnalytics/query") $qp)
+  let req_body = {"aggregationType": $aggregation_type, "dataState": $data_state, "dimensionFilterGroups": $dimension_filter_groups, "dimensions": $dimensions, "endDate": $end_date, "rowLimit": $row_limit, "searchType": $search_type, "startDate": $start_date, "startRow": $start_row} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists the sitemaps-entries submitted for this site, or included in the sitemap index file (if sitemapIndex is specified in the request).
 #
 # GET /sites/{siteUrl}/sitemaps
 # operationId: webmasters.sitemaps.list
-export def "sites-sitemaps webmasterssitemapslist" [
+export def "sites-sitemaps list" [
   site_url: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -284,7 +293,7 @@ export def "sites-sitemaps webmasterssitemapslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "sitemapIndex" $sitemap_index "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({site_url: $site_url} | format pattern "/sites/{site_url}/sitemaps") $qp)
+  let full_url = (build-url $base ({site_url: (encode-path-segment $site_url)} | format pattern "/sites/{site_url}/sitemaps") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -294,7 +303,7 @@ export def "sites-sitemaps webmasterssitemapslist" [
 #
 # DELETE /sites/{siteUrl}/sitemaps/{feedpath}
 # operationId: webmasters.sitemaps.delete
-export def "sites-sitemaps webmasterssitemapsdelete" [
+export def "sites-sitemaps delete" [
   site_url: string
   feedpath: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -316,7 +325,7 @@ export def "sites-sitemaps webmasterssitemapsdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({site_url: $site_url, feedpath: $feedpath} | format pattern "/sites/{site_url}/sitemaps/{feedpath}") $qp)
+  let full_url = (build-url $base ({site_url: (encode-path-segment $site_url), feedpath: (encode-path-segment $feedpath)} | format pattern "/sites/{site_url}/sitemaps/{feedpath}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -326,7 +335,7 @@ export def "sites-sitemaps webmasterssitemapsdelete" [
 #
 # GET /sites/{siteUrl}/sitemaps/{feedpath}
 # operationId: webmasters.sitemaps.get
-export def "sites-sitemaps webmasterssitemapsget" [
+export def "sites-sitemaps get" [
   site_url: string
   feedpath: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -348,7 +357,7 @@ export def "sites-sitemaps webmasterssitemapsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({site_url: $site_url, feedpath: $feedpath} | format pattern "/sites/{site_url}/sitemaps/{feedpath}") $qp)
+  let full_url = (build-url $base ({site_url: (encode-path-segment $site_url), feedpath: (encode-path-segment $feedpath)} | format pattern "/sites/{site_url}/sitemaps/{feedpath}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -358,7 +367,7 @@ export def "sites-sitemaps webmasterssitemapsget" [
 #
 # PUT /sites/{siteUrl}/sitemaps/{feedpath}
 # operationId: webmasters.sitemaps.submit
-export def "sites-sitemaps webmasterssitemapssubmit" [
+export def "sites-sitemaps submit" [
   site_url: string
   feedpath: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -380,7 +389,7 @@ export def "sites-sitemaps webmasterssitemapssubmit" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({site_url: $site_url, feedpath: $feedpath} | format pattern "/sites/{site_url}/sitemaps/{feedpath}") $qp)
+  let full_url = (build-url $base ({site_url: (encode-path-segment $site_url), feedpath: (encode-path-segment $feedpath)} | format pattern "/sites/{site_url}/sitemaps/{feedpath}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

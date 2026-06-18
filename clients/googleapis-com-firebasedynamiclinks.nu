@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -74,7 +83,7 @@ def visual-style-completer [] { ["CUSTOM_STYLE" "DEFAULT_STYLE" "UNKNOWN_VISUAL_
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "install-attribution firebasedynamiclinksinstallAttribution" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "install-attribution create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -99,7 +108,7 @@ export def commands []: nothing -> table {
 # POST /v1/installAttribution
 # operationId: firebasedynamiclinks.installAttribution
 # --device shape: {deviceModelName?: string, languageCode?: string, languageCodeFromWebview?: string, languageCodeRaw?: string, screenResolutionHeight?: string, screenResolutionWidth?: string, timezone?: string}
-export def "install-attribution firebasedynamiclinksinstallAttribution" [
+export def "install-attribution create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -133,11 +142,11 @@ export def "install-attribution firebasedynamiclinksinstallAttribution" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/installAttribution" $qp)
-  let body = {"appInstallationTime": $app_installation_time, "bundleId": $bundle_id, "device": $device, "iosVersion": $ios_version, "retrievalMethod": $retrieval_method, "sdkVersion": $sdk_version, "uniqueMatchLinkToCheck": $unique_match_link_to_check, "visualStyle": $visual_style} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"appInstallationTime": $app_installation_time, "bundleId": $bundle_id, "device": $device, "iosVersion": $ios_version, "retrievalMethod": $retrieval_method, "sdkVersion": $sdk_version, "uniqueMatchLinkToCheck": $unique_match_link_to_check, "visualStyle": $visual_style} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Creates a managed short Dynamic Link given either a valid long Dynamic Link or details such as Dynamic Link domain, Android and iOS app information. The created short Dynamic Link will not expire. This differs from CreateShortDynamicLink in the following ways: - The request will also contain a name for the link (non unique name for the front end). - The response must be authenticated with an auth token (generated with the admin service account). - The link will appear in the FDL list of links in the console front end. The Dynamic Link domain in the request must be owned by requester's Firebase project.
@@ -146,7 +155,7 @@ export def "install-attribution firebasedynamiclinksinstallAttribution" [
 # operationId: firebasedynamiclinks.managedShortLinks.create
 # --dynamicLinkInfo shape: {analyticsInfo?: record, androidInfo?: record, desktopInfo?: record, domainUriPrefix?: string, dynamicLinkDomain?: string, iosInfo?: record, link?: string, navigationInfo?: record, socialMetaTagInfo?: record}
 # --suffix shape: {customSuffix?: string, option?: "OPTION_UNSPECIFIED"|"UNGUESSABLE"|"SHORT"|"CUSTOM"}
-export def "managed-short-links-create firebasedynamiclinksmanagedShortLinkscreate" [
+export def "managed-short-links-create create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -177,18 +186,18 @@ export def "managed-short-links-create firebasedynamiclinksmanagedShortLinkscrea
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/managedShortLinks:create" $qp)
-  let body = {"dynamicLinkInfo": $dynamic_link_info, "longDynamicLink": $long_dynamic_link, "name": $name, "sdkVersion": $sdk_version, "suffix": $suffix} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"dynamicLinkInfo": $dynamic_link_info, "longDynamicLink": $long_dynamic_link, "name": $name, "sdkVersion": $sdk_version, "suffix": $suffix} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get iOS reopen attribution for app universal link open deeplinking.
 #
 # POST /v1/reopenAttribution
 # operationId: firebasedynamiclinks.reopenAttribution
-export def "reopen-attribution firebasedynamiclinksreopenAttribution" [
+export def "reopen-attribution create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -217,11 +226,11 @@ export def "reopen-attribution firebasedynamiclinksreopenAttribution" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/reopenAttribution" $qp)
-  let body = {"bundleId": $bundle_id, "requestedLink": $requested_link, "sdkVersion": $sdk_version} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"bundleId": $bundle_id, "requestedLink": $requested_link, "sdkVersion": $sdk_version} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Creates a short Dynamic Link given either a valid long Dynamic Link or details such as Dynamic Link domain, Android and iOS app information. The created short Dynamic Link will not expire. Repeated calls with the same long Dynamic Link or Dynamic Link information will produce the same short Dynamic Link. The Dynamic Link domain in the request must be owned by requester's Firebase project.
@@ -230,7 +239,7 @@ export def "reopen-attribution firebasedynamiclinksreopenAttribution" [
 # operationId: firebasedynamiclinks.shortLinks.create
 # --dynamicLinkInfo shape: {analyticsInfo?: record, androidInfo?: record, desktopInfo?: record, domainUriPrefix?: string, dynamicLinkDomain?: string, iosInfo?: record, link?: string, navigationInfo?: record, socialMetaTagInfo?: record}
 # --suffix shape: {customSuffix?: string, option?: "OPTION_UNSPECIFIED"|"UNGUESSABLE"|"SHORT"|"CUSTOM"}
-export def "short-links firebasedynamiclinksshortLinkscreate" [
+export def "short-links create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -260,18 +269,18 @@ export def "short-links firebasedynamiclinksshortLinkscreate" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/shortLinks" $qp)
-  let body = {"dynamicLinkInfo": $dynamic_link_info, "longDynamicLink": $long_dynamic_link, "sdkVersion": $sdk_version, "suffix": $suffix} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"dynamicLinkInfo": $dynamic_link_info, "longDynamicLink": $long_dynamic_link, "sdkVersion": $sdk_version, "suffix": $suffix} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Fetches analytics stats of a short Dynamic Link for a given duration. Metrics include number of clicks, redirects, installs, app first opens, and app reopens.
 #
 # GET /v1/{dynamicLink}/linkStats
 # operationId: firebasedynamiclinks.getLinkStats
-export def "link-stats firebasedynamiclinksgetLinkStats" [
+export def "link-stats get" [
   dynamic_link: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -298,7 +307,7 @@ export def "link-stats firebasedynamiclinksgetLinkStats" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "durationDays" $duration_days "scalar") (serialize-qp "sdkVersion" $sdk_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({dynamic_link: $dynamic_link} | format pattern "/v1/{dynamic_link}/linkStats") $qp)
+  let full_url = (build-url $base ({dynamic_link: (encode-path-segment $dynamic_link)} | format pattern "/v1/{dynamic_link}/linkStats") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

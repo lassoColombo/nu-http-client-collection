@@ -12,6 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
   match $scheme {
     "basic" => { {headers: {Authorization: $"Basic ($token_val)"}, query: ""} }
+    "basic-credentials" => { {headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: ""} }
     "none" => { {headers: {}, query: ""} }
     _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
   }
@@ -33,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
     "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
     _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -63,7 +73,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 }
 
 def base-url-completer [] { ["https://api.configcat.com"] }
-def auth-scheme-completer [] { ["basic"] }
+def auth-scheme-completer [] { ["basic" "basic-credentials"] }
 
 # Completers for enum parameters
 def accept-completer [] { ["application/hal+json" "application/json"] }
@@ -75,7 +85,7 @@ def comparator-completer [] { ["contains" "doesNotContain" "isNotOneOf" "isOneOf
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "code-references post" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "code-references create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -98,7 +108,7 @@ export def commands []: nothing -> table {
 # POST /v1/code-references
 #
 # --flagReferences item shape: {references: list, settingId: int}
-export def "code-references post" [
+export def "code-references create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -107,7 +117,7 @@ export def "code-references post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --active-branches: list # The currently active branches of the repository. Each previously uploaded report that belongs to a non-reported active branch is being deleted. (nullable)
+  --active-branches: list<string> # The currently active branches of the repository. Each previously uploaded report that belongs to a non-reported active branch is being deleted. (nullable)
   branch: string # The source control branch on where the scan was performed. (Source of the branch selector on the ConfigCat Dashboard)
   --commit-hash: string # The related commit's hash. (Appears on the ConfigCat Dashboard) (nullable)
   --commit-url: string # The related commit's URL. (Appears on the ConfigCat Dashboard) (nullable)
@@ -120,15 +130,15 @@ export def "code-references post" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/code-references")
-  let body = {"activeBranches": $active_branches, "branch": $branch, "commitHash": $commit_hash, "commitUrl": $commit_url, "configId": $config_id, "flagReferences": $flag_references, "repository": $repository, "uploader": $uploader} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"activeBranches": $active_branches, "branch": $branch, "commitHash": $commit_hash, "commitUrl": $commit_url, "configId": $config_id, "flagReferences": $flag_references, "repository": $repository, "uploader": $uploader} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /v1/code-references/delete-reports
-export def "code-references-delete-reports post" [
+export def "code-references-delete-reports create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -146,18 +156,18 @@ export def "code-references-delete-reports post" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/code-references/delete-reports")
-  let body = {"branch": $branch, "configId": $config_id, "repository": $repository, "settingId": $setting_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"branch": $branch, "configId": $config_id, "repository": $repository, "settingId": $setting_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete Config
 #
 # DELETE /v1/configs/{configId}
 # operationId: delete-config
-export def "configs delete-config" [
+export def "configs delete" [
   config_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -170,7 +180,7 @@ export def "configs delete-config" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({config_id: $config_id} | format pattern "/v1/configs/{config_id}"))
+  let full_url = (build-url $base ({config_id: (encode-path-segment $config_id)} | format pattern "/v1/configs/{config_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -180,7 +190,7 @@ export def "configs delete-config" [
 #
 # GET /v1/configs/{configId}
 # operationId: get-config
-export def "configs get-config" [
+export def "configs get" [
   config_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -194,7 +204,7 @@ export def "configs get-config" [
 ]: nothing -> record<configId: string, description: string, name: string, order: int, product: record<description: string, name: string, order: int, organization: record<name: string, organizationId: string>, productId: string, reasonRequired: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({config_id: $config_id} | format pattern "/v1/configs/{config_id}"))
+  let full_url = (build-url $base ({config_id: (encode-path-segment $config_id)} | format pattern "/v1/configs/{config_id}"))
   let accept_val = ($accept | default "application/hal+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -204,7 +214,7 @@ export def "configs get-config" [
 #
 # PUT /v1/configs/{configId}
 # operationId: update-config
-export def "configs update-config" [
+export def "configs update" [
   config_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -221,19 +231,19 @@ export def "configs update-config" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({config_id: $config_id} | format pattern "/v1/configs/{config_id}"))
-  let body = {"description": $description, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({config_id: (encode-path-segment $config_id)} | format pattern "/v1/configs/{config_id}"))
+  let req_body = {"description": $description, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/hal+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List Deleted Settings
 #
 # GET /v1/configs/{configId}/deleted-settings
 # operationId: get-deleted-settings
-export def "configs-deleted-settings get-deleted-settings" [
+export def "configs-deleted-settings get" [
   config_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -247,7 +257,7 @@ export def "configs-deleted-settings get-deleted-settings" [
 ]: nothing -> table<configId: string, configName: string, hint: string, key: string, name: string, order: int, settingId: int, settingType: string, tags: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({config_id: $config_id} | format pattern "/v1/configs/{config_id}/deleted-settings"))
+  let full_url = (build-url $base ({config_id: (encode-path-segment $config_id)} | format pattern "/v1/configs/{config_id}/deleted-settings"))
   let accept_val = ($accept | default "application/hal+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -272,7 +282,7 @@ export def "configs-environments get-sdk-keys" [
 ]: nothing -> record<primary: string, secondary: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({config_id: $config_id, environment_id: $environment_id} | format pattern "/v1/configs/{config_id}/environments/{environment_id}"))
+  let full_url = (build-url $base ({config_id: (encode-path-segment $config_id), environment_id: (encode-path-segment $environment_id)} | format pattern "/v1/configs/{config_id}/environments/{environment_id}"))
   let accept_val = ($accept | default "application/hal+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -282,7 +292,7 @@ export def "configs-environments get-sdk-keys" [
 #
 # GET /v1/configs/{configId}/environments/{environmentId}/values
 # operationId: get-setting-values
-export def "configs-environments-values get-setting-values" [
+export def "configs-environments-values get-setting" [
   config_id: string
   environment_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -297,7 +307,7 @@ export def "configs-environments-values get-setting-values" [
 ]: nothing -> record<config: record<configId: string, description: string, name: string, order: int, product: record<description: string, name: string, order: int, organization: record, productId: string, reasonRequired: bool>>, environment: record<color: string, description: string, environmentId: string, name: string, order: int, product: record<description: string, name: string, order: int, organization: record, productId: string, reasonRequired: bool>, reasonRequired: bool>, readOnly: bool, settingValues: table<integrationLinks: list, lastUpdaterUserEmail: string, lastUpdaterUserFullName: string, rolloutPercentageItems: list, rolloutRules: list, setting: record, settingTags: list, updatedAt: string, value: any>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({config_id: $config_id, environment_id: $environment_id} | format pattern "/v1/configs/{config_id}/environments/{environment_id}/values"))
+  let full_url = (build-url $base ({config_id: (encode-path-segment $config_id), environment_id: (encode-path-segment $environment_id)} | format pattern "/v1/configs/{config_id}/environments/{environment_id}/values"))
   let accept_val = ($accept | default "application/hal+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -307,7 +317,7 @@ export def "configs-environments-values get-setting-values" [
 #
 # GET /v1/configs/{configId}/settings
 # operationId: get-settings
-export def "configs-settings get-settings" [
+export def "configs-settings get" [
   config_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -321,7 +331,7 @@ export def "configs-settings get-settings" [
 ]: nothing -> table<configId: string, configName: string, hint: string, key: string, name: string, order: int, settingId: int, settingType: string, tags: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({config_id: $config_id} | format pattern "/v1/configs/{config_id}/settings"))
+  let full_url = (build-url $base ({config_id: (encode-path-segment $config_id)} | format pattern "/v1/configs/{config_id}/settings"))
   let accept_val = ($accept | default "application/hal+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -332,7 +342,7 @@ export def "configs-settings get-settings" [
 # POST /v1/configs/{configId}/settings
 # operationId: create-setting
 # --initialValues item shape: {environmentId?: string, value?: any}
-export def "configs-settings create-setting" [
+export def "configs-settings create" [
   config_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -348,24 +358,24 @@ export def "configs-settings create-setting" [
   key: string # The key of the setting.
   name: string # The name of the setting, shown on the Dashboard UI.
   setting_type: string@setting-type-completer
-  --tags: list # The IDs of the tags which are attached to the setting. (nullable)
+  --tags: list<int> # The IDs of the tags which are attached to the setting. (nullable)
 ]: any -> record<configId: string, configName: string, hint: string, key: string, name: string, order: int, settingId: int, settingType: string, tags: table<color: string, name: string, product: record, tagId: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({config_id: $config_id} | format pattern "/v1/configs/{config_id}/settings"))
-  let body = {"hint": $hint, "initialValues": $initial_values, "key": $key, "name": $name, "settingType": $setting_type, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({config_id: (encode-path-segment $config_id)} | format pattern "/v1/configs/{config_id}/settings"))
+  let req_body = {"hint": $hint, "initialValues": $initial_values, "key": $key, "name": $name, "settingType": $setting_type, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/hal+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete Environment
 #
 # DELETE /v1/environments/{environmentId}
 # operationId: delete-environment
-export def "environments delete-environment" [
+export def "environments delete" [
   environment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -378,7 +388,7 @@ export def "environments delete-environment" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({environment_id: $environment_id} | format pattern "/v1/environments/{environment_id}"))
+  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id)} | format pattern "/v1/environments/{environment_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -388,7 +398,7 @@ export def "environments delete-environment" [
 #
 # GET /v1/environments/{environmentId}
 # operationId: get-environment
-export def "environments get-environment" [
+export def "environments get" [
   environment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -402,7 +412,7 @@ export def "environments get-environment" [
 ]: nothing -> record<color: string, description: string, environmentId: string, name: string, order: int, product: record<description: string, name: string, order: int, organization: record<name: string, organizationId: string>, productId: string, reasonRequired: bool>, reasonRequired: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({environment_id: $environment_id} | format pattern "/v1/environments/{environment_id}"))
+  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id)} | format pattern "/v1/environments/{environment_id}"))
   let accept_val = ($accept | default "application/hal+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -412,7 +422,7 @@ export def "environments get-environment" [
 #
 # PUT /v1/environments/{environmentId}
 # operationId: update-environment
-export def "environments update-environment" [
+export def "environments update" [
   environment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -430,19 +440,19 @@ export def "environments update-environment" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({environment_id: $environment_id} | format pattern "/v1/environments/{environment_id}"))
-  let body = {"color": $color, "description": $description, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id)} | format pattern "/v1/environments/{environment_id}"))
+  let req_body = {"color": $color, "description": $description, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/hal+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete Integration link
 #
 # DELETE /v1/environments/{environmentId}/settings/{settingId}/integrationLinks/{integrationLinkType}/{key}
 # operationId: delete-integration-link
-export def "environments-settings-integration-links delete-integration-link" [
+export def "environments-settings-integration-links delete" [
   environment_id: string
   setting_id: int
   integration_link_type: string
@@ -459,7 +469,7 @@ export def "environments-settings-integration-links delete-integration-link" [
 ]: nothing -> record<hasRemainingIntegrationLink: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({environment_id: $environment_id, setting_id: $setting_id, integration_link_type: $integration_link_type, key: $key} | format pattern "/v1/environments/{environment_id}/settings/{setting_id}/integrationLinks/{integration_link_type}/{key}"))
+  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id), setting_id: (encode-path-segment $setting_id), integration_link_type: (encode-path-segment $integration_link_type), key: (encode-path-segment $key)} | format pattern "/v1/environments/{environment_id}/settings/{setting_id}/integrationLinks/{integration_link_type}/{key}"))
   let accept_val = ($accept | default "application/hal+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -469,7 +479,7 @@ export def "environments-settings-integration-links delete-integration-link" [
 #
 # POST /v1/environments/{environmentId}/settings/{settingId}/integrationLinks/{integrationLinkType}/{key}
 # operationId: add-or-update-integration-link
-export def "environments-settings-integration-links add-or-update-integration-link" [
+export def "environments-settings-integration-links create-or-update" [
   environment_id: string
   setting_id: int
   integration_link_type: string
@@ -484,24 +494,24 @@ export def "environments-settings-integration-links add-or-update-integration-li
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --description: string # nullable
-  --body-url: string # nullable
+  --url: string # nullable
 ]: any -> record<description: string, integrationLinkType: string, key: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({environment_id: $environment_id, setting_id: $setting_id, integration_link_type: $integration_link_type, key: $key} | format pattern "/v1/environments/{environment_id}/settings/{setting_id}/integrationLinks/{integration_link_type}/{key}"))
-  let body = {"description": $description, "url": $body_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id), setting_id: (encode-path-segment $setting_id), integration_link_type: (encode-path-segment $integration_link_type), key: (encode-path-segment $key)} | format pattern "/v1/environments/{environment_id}/settings/{setting_id}/integrationLinks/{integration_link_type}/{key}"))
+  let req_body = {"description": $description, "url": $url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/hal+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get value
 #
 # GET /v1/environments/{environmentId}/settings/{settingId}/value
 # operationId: get-setting-value
-export def "environments-settings-value get-setting-value" [
+export def "environments-settings-value get" [
   environment_id: string
   setting_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -516,7 +526,7 @@ export def "environments-settings-value get-setting-value" [
 ]: nothing -> record<config: record<configId: string, description: string, name: string, order: int, product: record<description: string, name: string, order: int, organization: record, productId: string, reasonRequired: bool>>, environment: record<color: string, description: string, environmentId: string, name: string, order: int, product: record<description: string, name: string, order: int, organization: record, productId: string, reasonRequired: bool>, reasonRequired: bool>, integrationLinks: table<description: string, integrationLinkType: string, key: string, url: string>, lastUpdaterUserEmail: string, lastUpdaterUserFullName: string, readOnly: bool, rolloutPercentageItems: table<percentage: int, value: any>, rolloutRules: table<comparator: string, comparisonAttribute: string, comparisonValue: string, segmentComparator: string, segmentId: string, value: any>, setting: record<createdAt: string, creatorEmail: string, creatorFullName: string, hint: string, isWatching: bool, key: string, name: string, order: int, settingId: int, settingType: string>, settingTags: table<color: string, name: string, settingTagId: int, tagId: int>, updatedAt: string, value: any> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({environment_id: $environment_id, setting_id: $setting_id} | format pattern "/v1/environments/{environment_id}/settings/{setting_id}/value"))
+  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id), setting_id: (encode-path-segment $setting_id)} | format pattern "/v1/environments/{environment_id}/settings/{setting_id}/value"))
   let accept_val = ($accept | default "application/hal+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -527,7 +537,7 @@ export def "environments-settings-value get-setting-value" [
 # PATCH /v1/environments/{environmentId}/settings/{settingId}/value
 # operationId: update-setting-value
 # --operations item shape: {from?: record, op?: "unknown"|"add"|"remove"|"replace"|"move"|"copy"|"test", path?: record, value?: record}
-export def "environments-settings-value update-setting-value" [
+export def "environments-settings-value update-by-environmentId-settingId" [
   environment_id: string
   setting_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -546,12 +556,12 @@ export def "environments-settings-value update-setting-value" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "reason" $reason "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({environment_id: $environment_id, setting_id: $setting_id} | format pattern "/v1/environments/{environment_id}/settings/{setting_id}/value") $qp)
-  let body = {"operations": $operations} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id), setting_id: (encode-path-segment $setting_id)} | format pattern "/v1/environments/{environment_id}/settings/{setting_id}/value") $qp)
+  let req_body = {"operations": $operations} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/hal+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Replace value
@@ -560,7 +570,7 @@ export def "environments-settings-value update-setting-value" [
 # operationId: replace-setting-value
 # --rolloutPercentageItems item shape: {percentage: int, value?: any}
 # --rolloutRules item shape: {comparator?: "isOneOf"|"isNotOneOf"|"contains"|"doesNotContain"|"semVerIsOneOf"|"semVerIsNotOneOf"|"semVerLess"|"semVerLessOrEquals"|"semVerGreater"|"semVerGreaterOrEquals"|"numberEquals"|"numberDoesNotEqual"|"numberLess"|"numberLessOrEquals"|"numberGreater"|"numberGreaterOrEquals"|"sensitiveIsOneOf"|"sensitiveIsNotOneOf", comparisonAttribute?: string, comparisonValue?: string, segmentComparator?: "isIn"|"isNotIn", segmentId?: string, value?: any}
-export def "environments-settings-value replace-setting-value" [
+export def "environments-settings-value update-by-environmentId-settingId-1" [
   environment_id: string
   setting_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -581,19 +591,19 @@ export def "environments-settings-value replace-setting-value" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "reason" $reason "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({environment_id: $environment_id, setting_id: $setting_id} | format pattern "/v1/environments/{environment_id}/settings/{setting_id}/value") $qp)
-  let body = {"rolloutPercentageItems": $rollout_percentage_items, "rolloutRules": $rollout_rules, "value": $value} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id), setting_id: (encode-path-segment $setting_id)} | format pattern "/v1/environments/{environment_id}/settings/{setting_id}/value") $qp)
+  let req_body = {"rolloutPercentageItems": $rollout_percentage_items, "rolloutRules": $rollout_rules, "value": $value} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/hal+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get Integration link
 #
 # GET /v1/integrationLink/{integrationLinkType}/{key}/details
 # operationId: get-integration-link-details
-export def "integration-link-details get-integration-link-details" [
+export def "integration-link-details get" [
   integration_link_type: string
   key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -608,14 +618,14 @@ export def "integration-link-details get-integration-link-details" [
 ]: nothing -> record<allIntegrationLinkCount: int, details: table<config: record, environment: record, product: record, readOnly: bool, setting: record, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({integration_link_type: $integration_link_type, key: $key} | format pattern "/v1/integrationLink/{integration_link_type}/{key}/details"))
+  let full_url = (build-url $base ({integration_link_type: (encode-path-segment $integration_link_type), key: (encode-path-segment $key)} | format pattern "/v1/integrationLink/{integration_link_type}/{key}/details"))
   let accept_val = ($accept | default "application/hal+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /v1/jira/Connect
-export def "jira-connect post" [
+export def "jira-connect create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -631,17 +641,17 @@ export def "jira-connect post" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/jira/Connect")
-  let body = {"clientKey": $client_key, "jiraJwtToken": $jira_jwt_token} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"clientKey": $client_key, "jiraJwtToken": $jira_jwt_token} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /v1/jira/environments/{environmentId}/settings/{settingId}/integrationLinks/{key}
 #
 # operationId: jira-add-or-update-integration-link
-export def "jira-environments-settings-integration-links jira-add-or-update-integration-link" [
+export def "jira-environments-settings-integration-links create-or-update" [
   environment_id: string
   setting_id: int
   key: string
@@ -657,24 +667,24 @@ export def "jira-environments-settings-integration-links jira-add-or-update-inte
   client_key: string
   --description: string # nullable
   jira_jwt_token: string
-  --body-url: string # nullable
+  --url: string # nullable
 ]: any -> record<description: string, integrationLinkType: string, key: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({environment_id: $environment_id, setting_id: $setting_id, key: $key} | format pattern "/v1/jira/environments/{environment_id}/settings/{setting_id}/integrationLinks/{key}"))
-  let body = {"clientKey": $client_key, "description": $description, "jiraJwtToken": $jira_jwt_token, "url": $body_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id), setting_id: (encode-path-segment $setting_id), key: (encode-path-segment $key)} | format pattern "/v1/jira/environments/{environment_id}/settings/{setting_id}/integrationLinks/{key}"))
+  let req_body = {"clientKey": $client_key, "description": $description, "jiraJwtToken": $jira_jwt_token, "url": $url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/hal+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get authenticated user details
 #
 # GET /v1/me
 # operationId: get-me
-export def "me get-me" [
+export def "me get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -697,7 +707,7 @@ export def "me get-me" [
 #
 # GET /v1/organizations
 # operationId: get-organizations
-export def "organizations get-organizations" [
+export def "organizations get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -720,7 +730,7 @@ export def "organizations get-organizations" [
 #
 # GET /v1/organizations/{organizationId}/auditlogs
 # operationId: get-organization-auditlogs
-export def "organizations-auditlogs get-organization-auditlogs" [
+export def "organizations-auditlogs get" [
   organization_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -741,7 +751,7 @@ export def "organizations-auditlogs get-organization-auditlogs" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "productId" $product_id "scalar") (serialize-qp "configId" $config_id "scalar") (serialize-qp "environmentId" $environment_id "scalar") (serialize-qp "auditLogType" $audit_log_type "scalar") (serialize-qp "fromUtcDateTime" $from_utc_date_time "scalar") (serialize-qp "toUtcDateTime" $to_utc_date_time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({organization_id: $organization_id} | format pattern "/v1/organizations/{organization_id}/auditlogs") $qp)
+  let full_url = (build-url $base ({organization_id: (encode-path-segment $organization_id)} | format pattern "/v1/organizations/{organization_id}/auditlogs") $qp)
   let accept_val = ($accept | default "application/hal+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -751,7 +761,7 @@ export def "organizations-auditlogs get-organization-auditlogs" [
 #
 # GET /v1/organizations/{organizationId}/members
 # operationId: get-organization-members
-export def "organizations-members get-organization-members" [
+export def "organizations-members get" [
   organization_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -765,7 +775,7 @@ export def "organizations-members get-organization-members" [
 ]: nothing -> table<email: string, fullName: string, userId: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({organization_id: $organization_id} | format pattern "/v1/organizations/{organization_id}/members"))
+  let full_url = (build-url $base ({organization_id: (encode-path-segment $organization_id)} | format pattern "/v1/organizations/{organization_id}/members"))
   let accept_val = ($accept | default "application/hal+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -775,7 +785,7 @@ export def "organizations-members get-organization-members" [
 #
 # DELETE /v1/organizations/{organizationId}/members/{userId}
 # operationId: delete-organization-member
-export def "organizations-members delete-organization-member" [
+export def "organizations-members delete" [
   organization_id: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -789,7 +799,7 @@ export def "organizations-members delete-organization-member" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({organization_id: $organization_id, user_id: $user_id} | format pattern "/v1/organizations/{organization_id}/members/{user_id}"))
+  let full_url = (build-url $base ({organization_id: (encode-path-segment $organization_id), user_id: (encode-path-segment $user_id)} | format pattern "/v1/organizations/{organization_id}/members/{user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -799,7 +809,7 @@ export def "organizations-members delete-organization-member" [
 #
 # POST /v1/organizations/{organizationId}/members/{userId}
 # operationId: add-member-to-group
-export def "organizations-members add-member-to-group" [
+export def "organizations-members create-to-group" [
   organization_id: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -810,24 +820,24 @@ export def "organizations-members add-member-to-group" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  permission_group_ids: list
+  permission_group_ids: list<int>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({organization_id: $organization_id, user_id: $user_id} | format pattern "/v1/organizations/{organization_id}/members/{user_id}"))
-  let body = {"permissionGroupIds": $permission_group_ids} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({organization_id: (encode-path-segment $organization_id), user_id: (encode-path-segment $user_id)} | format pattern "/v1/organizations/{organization_id}/members/{user_id}"))
+  let req_body = {"permissionGroupIds": $permission_group_ids} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create Product
 #
 # POST /v1/organizations/{organizationId}/products
 # operationId: create-product
-export def "organizations-products create-product" [
+export def "organizations-products create" [
   organization_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -844,19 +854,19 @@ export def "organizations-products create-product" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({organization_id: $organization_id} | format pattern "/v1/organizations/{organization_id}/products"))
-  let body = {"description": $description, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({organization_id: (encode-path-segment $organization_id)} | format pattern "/v1/organizations/{organization_id}/products"))
+  let req_body = {"description": $description, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/hal+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete Permission Group
 #
 # DELETE /v1/permissions/{permissionGroupId}
 # operationId: delete-permission-group
-export def "permissions delete-permission-group" [
+export def "permissions delete-group" [
   permission_group_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -869,7 +879,7 @@ export def "permissions delete-permission-group" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({permission_group_id: $permission_group_id} | format pattern "/v1/permissions/{permission_group_id}"))
+  let full_url = (build-url $base ({permission_group_id: (encode-path-segment $permission_group_id)} | format pattern "/v1/permissions/{permission_group_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -879,7 +889,7 @@ export def "permissions delete-permission-group" [
 #
 # GET /v1/permissions/{permissionGroupId}
 # operationId: get-permission-group
-export def "permissions get-permission-group" [
+export def "permissions get-group" [
   permission_group_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -893,7 +903,7 @@ export def "permissions get-permission-group" [
 ]: nothing -> record<accessType: string, canCreateOrUpdateConfig: bool, canCreateOrUpdateEnvironment: bool, canCreateOrUpdateSegments: bool, canCreateOrUpdateSetting: bool, canCreateOrUpdateTag: bool, canDeleteConfig: bool, canDeleteEnvironment: bool, canDeleteSegments: bool, canDeleteSetting: bool, canDeleteTag: bool, canManageIntegrations: bool, canManageMembers: bool, canManageProductPreferences: bool, canManageWebhook: bool, canRotateSdkKey: bool, canTagSetting: bool, canUseExportImport: bool, canViewProductAuditLog: bool, canViewProductStatistics: bool, canViewSdkKey: bool, environmentAccesses: table<color: string, description: string, environmentAccessType: string, environmentId: string, name: string, order: int, reasonRequired: bool>, name: string, newEnvironmentAccessType: string, permissionGroupId: int, product: record<description: string, name: string, order: int, organization: record<name: string, organizationId: string>, productId: string, reasonRequired: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({permission_group_id: $permission_group_id} | format pattern "/v1/permissions/{permission_group_id}"))
+  let full_url = (build-url $base ({permission_group_id: (encode-path-segment $permission_group_id)} | format pattern "/v1/permissions/{permission_group_id}"))
   let accept_val = ($accept | default "application/hal+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -904,7 +914,7 @@ export def "permissions get-permission-group" [
 # PUT /v1/permissions/{permissionGroupId}
 # operationId: update-permission-group
 # --environmentAccesses item shape: {color?: string, description?: string, environmentAccessType?: "full"|"readOnly"|"none", environmentId?: string, name?: string, order?: int, reasonRequired?: bool}
-export def "permissions update-permission-group" [
+export def "permissions update-group" [
   permission_group_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -943,19 +953,19 @@ export def "permissions update-permission-group" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({permission_group_id: $permission_group_id} | format pattern "/v1/permissions/{permission_group_id}"))
-  let body = {"accessType": $access_type, "canCreateOrUpdateConfig": $can_create_or_update_config, "canCreateOrUpdateEnvironment": $can_create_or_update_environment, "canCreateOrUpdateSegments": $can_create_or_update_segments, "canCreateOrUpdateSetting": $can_create_or_update_setting, "canCreateOrUpdateTag": $can_create_or_update_tag, "canDeleteConfig": $can_delete_config, "canDeleteEnvironment": $can_delete_environment, "canDeleteSegments": $can_delete_segments, "canDeleteSetting": $can_delete_setting, "canDeleteTag": $can_delete_tag, "canManageIntegrations": $can_manage_integrations, "canManageMembers": $can_manage_members, "canManageProductPreferences": $can_manage_product_preferences, "canManageWebhook": $can_manage_webhook, "canRotateSdkKey": $can_rotate_sdk_key, "canTagSetting": $can_tag_setting, "canUseExportImport": $can_use_export_import, "canViewProductAuditLog": $can_view_product_audit_log, "canViewProductStatistics": $can_view_product_statistics, "canViewSdkKey": $can_view_sdk_key, "environmentAccesses": $environment_accesses, "name": $name, "newEnvironmentAccessType": $new_environment_access_type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({permission_group_id: (encode-path-segment $permission_group_id)} | format pattern "/v1/permissions/{permission_group_id}"))
+  let req_body = {"accessType": $access_type, "canCreateOrUpdateConfig": $can_create_or_update_config, "canCreateOrUpdateEnvironment": $can_create_or_update_environment, "canCreateOrUpdateSegments": $can_create_or_update_segments, "canCreateOrUpdateSetting": $can_create_or_update_setting, "canCreateOrUpdateTag": $can_create_or_update_tag, "canDeleteConfig": $can_delete_config, "canDeleteEnvironment": $can_delete_environment, "canDeleteSegments": $can_delete_segments, "canDeleteSetting": $can_delete_setting, "canDeleteTag": $can_delete_tag, "canManageIntegrations": $can_manage_integrations, "canManageMembers": $can_manage_members, "canManageProductPreferences": $can_manage_product_preferences, "canManageWebhook": $can_manage_webhook, "canRotateSdkKey": $can_rotate_sdk_key, "canTagSetting": $can_tag_setting, "canUseExportImport": $can_use_export_import, "canViewProductAuditLog": $can_view_product_audit_log, "canViewProductStatistics": $can_view_product_statistics, "canViewSdkKey": $can_view_sdk_key, "environmentAccesses": $environment_accesses, "name": $name, "newEnvironmentAccessType": $new_environment_access_type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/hal+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List Products
 #
 # GET /v1/products
 # operationId: get-products
-export def "products get-products" [
+export def "products list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -978,7 +988,7 @@ export def "products get-products" [
 #
 # DELETE /v1/products/{productId}
 # operationId: delete-product
-export def "products delete-product" [
+export def "products delete" [
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -991,7 +1001,7 @@ export def "products delete-product" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({product_id: $product_id} | format pattern "/v1/products/{product_id}"))
+  let full_url = (build-url $base ({product_id: (encode-path-segment $product_id)} | format pattern "/v1/products/{product_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1001,7 +1011,7 @@ export def "products delete-product" [
 #
 # GET /v1/products/{productId}
 # operationId: get-product
-export def "products get-product" [
+export def "products get" [
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1015,7 +1025,7 @@ export def "products get-product" [
 ]: nothing -> record<description: string, name: string, order: int, organization: record<name: string, organizationId: string>, productId: string, reasonRequired: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({product_id: $product_id} | format pattern "/v1/products/{product_id}"))
+  let full_url = (build-url $base ({product_id: (encode-path-segment $product_id)} | format pattern "/v1/products/{product_id}"))
   let accept_val = ($accept | default "application/hal+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1025,7 +1035,7 @@ export def "products get-product" [
 #
 # PUT /v1/products/{productId}
 # operationId: update-product
-export def "products update-product" [
+export def "products update" [
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1042,19 +1052,19 @@ export def "products update-product" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({product_id: $product_id} | format pattern "/v1/products/{product_id}"))
-  let body = {"description": $description, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({product_id: (encode-path-segment $product_id)} | format pattern "/v1/products/{product_id}"))
+  let req_body = {"description": $description, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/hal+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List Audit log items for Product
 #
 # GET /v1/products/{productId}/auditlogs
 # operationId: get-auditlogs
-export def "products-auditlogs get-auditlogs" [
+export def "products-auditlogs get" [
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1074,7 +1084,7 @@ export def "products-auditlogs get-auditlogs" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "configId" $config_id "scalar") (serialize-qp "environmentId" $environment_id "scalar") (serialize-qp "auditLogType" $audit_log_type "scalar") (serialize-qp "fromUtcDateTime" $from_utc_date_time "scalar") (serialize-qp "toUtcDateTime" $to_utc_date_time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({product_id: $product_id} | format pattern "/v1/products/{product_id}/auditlogs") $qp)
+  let full_url = (build-url $base ({product_id: (encode-path-segment $product_id)} | format pattern "/v1/products/{product_id}/auditlogs") $qp)
   let accept_val = ($accept | default "application/hal+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1084,7 +1094,7 @@ export def "products-auditlogs get-auditlogs" [
 #
 # GET /v1/products/{productId}/configs
 # operationId: get-configs
-export def "products-configs get-configs" [
+export def "products-configs get" [
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1098,7 +1108,7 @@ export def "products-configs get-configs" [
 ]: nothing -> table<configId: string, description: string, name: string, order: int, product: record<description: string, name: string, order: int, organization: record, productId: string, reasonRequired: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({product_id: $product_id} | format pattern "/v1/products/{product_id}/configs"))
+  let full_url = (build-url $base ({product_id: (encode-path-segment $product_id)} | format pattern "/v1/products/{product_id}/configs"))
   let accept_val = ($accept | default "application/hal+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1108,7 +1118,7 @@ export def "products-configs get-configs" [
 #
 # POST /v1/products/{productId}/configs
 # operationId: create-config
-export def "products-configs create-config" [
+export def "products-configs create" [
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1125,19 +1135,19 @@ export def "products-configs create-config" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({product_id: $product_id} | format pattern "/v1/products/{product_id}/configs"))
-  let body = {"description": $description, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({product_id: (encode-path-segment $product_id)} | format pattern "/v1/products/{product_id}/configs"))
+  let req_body = {"description": $description, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/hal+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List Environments
 #
 # GET /v1/products/{productId}/environments
 # operationId: get-environments
-export def "products-environments get-environments" [
+export def "products-environments get" [
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1151,7 +1161,7 @@ export def "products-environments get-environments" [
 ]: nothing -> table<color: string, description: string, environmentId: string, name: string, order: int, product: record<description: string, name: string, order: int, organization: record, productId: string, reasonRequired: bool>, reasonRequired: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({product_id: $product_id} | format pattern "/v1/products/{product_id}/environments"))
+  let full_url = (build-url $base ({product_id: (encode-path-segment $product_id)} | format pattern "/v1/products/{product_id}/environments"))
   let accept_val = ($accept | default "application/hal+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1161,7 +1171,7 @@ export def "products-environments get-environments" [
 #
 # POST /v1/products/{productId}/environments
 # operationId: create-environment
-export def "products-environments create-environment" [
+export def "products-environments create" [
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1179,19 +1189,19 @@ export def "products-environments create-environment" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({product_id: $product_id} | format pattern "/v1/products/{product_id}/environments"))
-  let body = {"color": $color, "description": $description, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({product_id: (encode-path-segment $product_id)} | format pattern "/v1/products/{product_id}/environments"))
+  let req_body = {"color": $color, "description": $description, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/hal+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List Product Members
 #
 # GET /v1/products/{productId}/members
 # operationId: get-product-members
-export def "products-members get-product-members" [
+export def "products-members get" [
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1205,7 +1215,7 @@ export def "products-members get-product-members" [
 ]: nothing -> table<email: string, fullName: string, permissionGroupId: int, productId: string, userId: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({product_id: $product_id} | format pattern "/v1/products/{product_id}/members"))
+  let full_url = (build-url $base ({product_id: (encode-path-segment $product_id)} | format pattern "/v1/products/{product_id}/members"))
   let accept_val = ($accept | default "application/hal+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1215,7 +1225,7 @@ export def "products-members get-product-members" [
 #
 # POST /v1/products/{productId}/members/invite
 # operationId: invite-member
-export def "products-members-invite invite-member" [
+export def "products-members-invite create" [
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1225,25 +1235,25 @@ export def "products-members-invite invite-member" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  emails: list
+  emails: list<string>
   permission_group_id: int # format: int64
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({product_id: $product_id} | format pattern "/v1/products/{product_id}/members/invite"))
-  let body = {"emails": $emails, "permissionGroupId": $permission_group_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({product_id: (encode-path-segment $product_id)} | format pattern "/v1/products/{product_id}/members/invite"))
+  let req_body = {"emails": $emails, "permissionGroupId": $permission_group_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete Member from Product
 #
 # DELETE /v1/products/{productId}/members/{userId}
 # operationId: delete-product-member
-export def "products-members delete-product-member" [
+export def "products-members delete" [
   product_id: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1257,7 +1267,7 @@ export def "products-members delete-product-member" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({product_id: $product_id, user_id: $user_id} | format pattern "/v1/products/{product_id}/members/{user_id}"))
+  let full_url = (build-url $base ({product_id: (encode-path-segment $product_id), user_id: (encode-path-segment $user_id)} | format pattern "/v1/products/{product_id}/members/{user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1267,7 +1277,7 @@ export def "products-members delete-product-member" [
 #
 # GET /v1/products/{productId}/permissions
 # operationId: get-permission-groups
-export def "products-permissions get-permission-groups" [
+export def "products-permissions get-groups" [
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1281,7 +1291,7 @@ export def "products-permissions get-permission-groups" [
 ]: nothing -> table<accessType: string, canCreateOrUpdateConfig: bool, canCreateOrUpdateEnvironment: bool, canCreateOrUpdateSegments: bool, canCreateOrUpdateSetting: bool, canCreateOrUpdateTag: bool, canDeleteConfig: bool, canDeleteEnvironment: bool, canDeleteSegments: bool, canDeleteSetting: bool, canDeleteTag: bool, canManageIntegrations: bool, canManageMembers: bool, canManageProductPreferences: bool, canManageWebhook: bool, canRotateSdkKey: bool, canTagSetting: bool, canUseExportImport: bool, canViewProductAuditLog: bool, canViewProductStatistics: bool, canViewSdkKey: bool, environmentAccesses: list<record>, name: string, newEnvironmentAccessType: string, permissionGroupId: int, product: record<description: string, name: string, order: int, organization: record, productId: string, reasonRequired: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({product_id: $product_id} | format pattern "/v1/products/{product_id}/permissions"))
+  let full_url = (build-url $base ({product_id: (encode-path-segment $product_id)} | format pattern "/v1/products/{product_id}/permissions"))
   let accept_val = ($accept | default "application/hal+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1292,7 +1302,7 @@ export def "products-permissions get-permission-groups" [
 # POST /v1/products/{productId}/permissions
 # operationId: create-permission-group
 # --environmentAccesses item shape: {color?: string, description?: string, environmentAccessType?: "full"|"readOnly"|"none", environmentId?: string, name?: string, order?: int, reasonRequired?: bool}
-export def "products-permissions create-permission-group" [
+export def "products-permissions create-group" [
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1331,19 +1341,19 @@ export def "products-permissions create-permission-group" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({product_id: $product_id} | format pattern "/v1/products/{product_id}/permissions"))
-  let body = {"accessType": $access_type, "canCreateOrUpdateConfig": $can_create_or_update_config, "canCreateOrUpdateEnvironment": $can_create_or_update_environment, "canCreateOrUpdateSegments": $can_create_or_update_segments, "canCreateOrUpdateSetting": $can_create_or_update_setting, "canCreateOrUpdateTag": $can_create_or_update_tag, "canDeleteConfig": $can_delete_config, "canDeleteEnvironment": $can_delete_environment, "canDeleteSegments": $can_delete_segments, "canDeleteSetting": $can_delete_setting, "canDeleteTag": $can_delete_tag, "canManageIntegrations": $can_manage_integrations, "canManageMembers": $can_manage_members, "canManageProductPreferences": $can_manage_product_preferences, "canManageWebhook": $can_manage_webhook, "canRotateSdkKey": $can_rotate_sdk_key, "canTagSetting": $can_tag_setting, "canUseExportImport": $can_use_export_import, "canViewProductAuditLog": $can_view_product_audit_log, "canViewProductStatistics": $can_view_product_statistics, "canViewSdkKey": $can_view_sdk_key, "environmentAccesses": $environment_accesses, "name": $name, "newEnvironmentAccessType": $new_environment_access_type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({product_id: (encode-path-segment $product_id)} | format pattern "/v1/products/{product_id}/permissions"))
+  let req_body = {"accessType": $access_type, "canCreateOrUpdateConfig": $can_create_or_update_config, "canCreateOrUpdateEnvironment": $can_create_or_update_environment, "canCreateOrUpdateSegments": $can_create_or_update_segments, "canCreateOrUpdateSetting": $can_create_or_update_setting, "canCreateOrUpdateTag": $can_create_or_update_tag, "canDeleteConfig": $can_delete_config, "canDeleteEnvironment": $can_delete_environment, "canDeleteSegments": $can_delete_segments, "canDeleteSetting": $can_delete_setting, "canDeleteTag": $can_delete_tag, "canManageIntegrations": $can_manage_integrations, "canManageMembers": $can_manage_members, "canManageProductPreferences": $can_manage_product_preferences, "canManageWebhook": $can_manage_webhook, "canRotateSdkKey": $can_rotate_sdk_key, "canTagSetting": $can_tag_setting, "canUseExportImport": $can_use_export_import, "canViewProductAuditLog": $can_view_product_audit_log, "canViewProductStatistics": $can_view_product_statistics, "canViewSdkKey": $can_view_sdk_key, "environmentAccesses": $environment_accesses, "name": $name, "newEnvironmentAccessType": $new_environment_access_type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/hal+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List Segments
 #
 # GET /v1/products/{productId}/segments
 # operationId: get-segments
-export def "products-segments get-segments" [
+export def "products-segments get" [
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1357,7 +1367,7 @@ export def "products-segments get-segments" [
 ]: nothing -> table<createdAt: string, creatorEmail: string, creatorFullName: string, description: string, lastUpdaterEmail: string, lastUpdaterFullName: string, name: string, product: record<description: string, name: string, order: int, organization: record, productId: string, reasonRequired: bool>, segmentId: string, updatedAt: string, usage: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({product_id: $product_id} | format pattern "/v1/products/{product_id}/segments"))
+  let full_url = (build-url $base ({product_id: (encode-path-segment $product_id)} | format pattern "/v1/products/{product_id}/segments"))
   let accept_val = ($accept | default "application/hal+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1367,7 +1377,7 @@ export def "products-segments get-segments" [
 #
 # POST /v1/products/{productId}/segments
 # operationId: create-segment
-export def "products-segments create-segment" [
+export def "products-segments create" [
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1387,19 +1397,19 @@ export def "products-segments create-segment" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({product_id: $product_id} | format pattern "/v1/products/{product_id}/segments"))
-  let body = {"comparator": $comparator, "comparisonAttribute": $comparison_attribute, "comparisonValue": $comparison_value, "description": $description, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({product_id: (encode-path-segment $product_id)} | format pattern "/v1/products/{product_id}/segments"))
+  let req_body = {"comparator": $comparator, "comparisonAttribute": $comparison_attribute, "comparisonValue": $comparison_value, "description": $description, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/hal+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List Tags
 #
 # GET /v1/products/{productId}/tags
 # operationId: get-tags
-export def "products-tags get-tags" [
+export def "products-tags get" [
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1413,7 +1423,7 @@ export def "products-tags get-tags" [
 ]: nothing -> table<color: string, name: string, product: record<description: string, name: string, order: int, organization: record, productId: string, reasonRequired: bool>, tagId: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({product_id: $product_id} | format pattern "/v1/products/{product_id}/tags"))
+  let full_url = (build-url $base ({product_id: (encode-path-segment $product_id)} | format pattern "/v1/products/{product_id}/tags"))
   let accept_val = ($accept | default "application/hal+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1423,7 +1433,7 @@ export def "products-tags get-tags" [
 #
 # POST /v1/products/{productId}/tags
 # operationId: create-tag
-export def "products-tags create-tag" [
+export def "products-tags create" [
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1440,19 +1450,19 @@ export def "products-tags create-tag" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({product_id: $product_id} | format pattern "/v1/products/{product_id}/tags"))
-  let body = {"color": $color, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({product_id: (encode-path-segment $product_id)} | format pattern "/v1/products/{product_id}/tags"))
+  let req_body = {"color": $color, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/hal+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete Segment
 #
 # DELETE /v1/segments/{segmentId}
 # operationId: delete-segment
-export def "segments delete-segment" [
+export def "segments delete" [
   segment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1465,7 +1475,7 @@ export def "segments delete-segment" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({segment_id: $segment_id} | format pattern "/v1/segments/{segment_id}"))
+  let full_url = (build-url $base ({segment_id: (encode-path-segment $segment_id)} | format pattern "/v1/segments/{segment_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1475,7 +1485,7 @@ export def "segments delete-segment" [
 #
 # GET /v1/segments/{segmentId}
 # operationId: get-segment
-export def "segments get-segment" [
+export def "segments get" [
   segment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1489,7 +1499,7 @@ export def "segments get-segment" [
 ]: nothing -> record<comparator: string, comparisonAttribute: string, comparisonValue: string, createdAt: string, creatorEmail: string, creatorFullName: string, description: string, lastUpdaterEmail: string, lastUpdaterFullName: string, name: string, product: record<description: string, name: string, order: int, organization: record<name: string, organizationId: string>, productId: string, reasonRequired: bool>, segmentId: string, updatedAt: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({segment_id: $segment_id} | format pattern "/v1/segments/{segment_id}"))
+  let full_url = (build-url $base ({segment_id: (encode-path-segment $segment_id)} | format pattern "/v1/segments/{segment_id}"))
   let accept_val = ($accept | default "application/hal+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1499,7 +1509,7 @@ export def "segments get-segment" [
 #
 # PUT /v1/segments/{segmentId}
 # operationId: update-segment
-export def "segments update-segment" [
+export def "segments update" [
   segment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1519,19 +1529,19 @@ export def "segments update-segment" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({segment_id: $segment_id} | format pattern "/v1/segments/{segment_id}"))
-  let body = {"comparator": $comparator, "comparisonAttribute": $comparison_attribute, "comparisonValue": $comparison_value, "description": $description, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({segment_id: (encode-path-segment $segment_id)} | format pattern "/v1/segments/{segment_id}"))
+  let req_body = {"comparator": $comparator, "comparisonAttribute": $comparison_attribute, "comparisonValue": $comparison_value, "description": $description, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/hal+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete Flag
 #
 # DELETE /v1/settings/{settingId}
 # operationId: delete-setting
-export def "settings delete-setting" [
+export def "settings delete" [
   setting_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1544,7 +1554,7 @@ export def "settings delete-setting" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({setting_id: $setting_id} | format pattern "/v1/settings/{setting_id}"))
+  let full_url = (build-url $base ({setting_id: (encode-path-segment $setting_id)} | format pattern "/v1/settings/{setting_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1554,7 +1564,7 @@ export def "settings delete-setting" [
 #
 # GET /v1/settings/{settingId}
 # operationId: get-setting
-export def "settings get-setting" [
+export def "settings get" [
   setting_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1568,7 +1578,7 @@ export def "settings get-setting" [
 ]: nothing -> record<configId: string, configName: string, hint: string, key: string, name: string, order: int, settingId: int, settingType: string, tags: table<color: string, name: string, product: record, tagId: int>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({setting_id: $setting_id} | format pattern "/v1/settings/{setting_id}"))
+  let full_url = (build-url $base ({setting_id: (encode-path-segment $setting_id)} | format pattern "/v1/settings/{setting_id}"))
   let accept_val = ($accept | default "application/hal+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1579,7 +1589,7 @@ export def "settings get-setting" [
 # PATCH /v1/settings/{settingId}
 # operationId: update-setting
 # --operations item shape: {from?: record, op?: "unknown"|"add"|"remove"|"replace"|"move"|"copy"|"test", path?: record, value?: record}
-export def "settings update-setting" [
+export def "settings update" [
   setting_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1595,19 +1605,19 @@ export def "settings update-setting" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({setting_id: $setting_id} | format pattern "/v1/settings/{setting_id}"))
-  let body = {"operations": $operations} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({setting_id: (encode-path-segment $setting_id)} | format pattern "/v1/settings/{setting_id}"))
+  let req_body = {"operations": $operations} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/hal+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get value
 #
 # GET /v1/settings/{settingKeyOrId}/value
 # operationId: get-setting-value-by-sdkkey
-export def "settings-value get-setting-value-by-sdkkey" [
+export def "settings-value get-by-sdkkey" [
   setting_key_or_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1622,11 +1632,11 @@ export def "settings-value get-setting-value-by-sdkkey" [
 ]: nothing -> record<config: record<configId: string, description: string, name: string, order: int, product: record<description: string, name: string, order: int, organization: record, productId: string, reasonRequired: bool>>, environment: record<color: string, description: string, environmentId: string, name: string, order: int, product: record<description: string, name: string, order: int, organization: record, productId: string, reasonRequired: bool>, reasonRequired: bool>, integrationLinks: table<description: string, integrationLinkType: string, key: string, url: string>, lastUpdaterUserEmail: string, lastUpdaterUserFullName: string, readOnly: bool, rolloutPercentageItems: table<percentage: int, value: any>, rolloutRules: table<comparator: string, comparisonAttribute: string, comparisonValue: string, segmentComparator: string, segmentId: string, value: any>, setting: record<createdAt: string, creatorEmail: string, creatorFullName: string, hint: string, isWatching: bool, key: string, name: string, order: int, settingId: int, settingType: string>, settingTags: table<color: string, name: string, settingTagId: int, tagId: int>, updatedAt: string, value: any> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({setting_key_or_id: $setting_key_or_id} | format pattern "/v1/settings/{setting_key_or_id}/value"))
-  let extra_headers = {"X-CONFIGCAT-SDKKEY": $x_configcat_sdkkey} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({setting_key_or_id: (encode-path-segment $setting_key_or_id)} | format pattern "/v1/settings/{setting_key_or_id}/value"))
   let accept_val = ($accept | default "application/hal+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-CONFIGCAT-SDKKEY": $x_configcat_sdkkey} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1635,7 +1645,7 @@ export def "settings-value get-setting-value-by-sdkkey" [
 # PATCH /v1/settings/{settingKeyOrId}/value
 # operationId: update-setting-value-by-sdkkey
 # --operations item shape: {from?: record, op?: "unknown"|"add"|"remove"|"replace"|"move"|"copy"|"test", path?: record, value?: record}
-export def "settings-value update-setting-value-by-sdkkey" [
+export def "settings-value update-by-sdkkey-by-settingKeyOrId" [
   setting_key_or_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1654,14 +1664,14 @@ export def "settings-value update-setting-value-by-sdkkey" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "reason" $reason "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({setting_key_or_id: $setting_key_or_id} | format pattern "/v1/settings/{setting_key_or_id}/value") $qp)
-  let body = {"operations": $operations} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-CONFIGCAT-SDKKEY": $x_configcat_sdkkey} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({setting_key_or_id: (encode-path-segment $setting_key_or_id)} | format pattern "/v1/settings/{setting_key_or_id}/value") $qp)
+  let req_body = {"operations": $operations} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/hal+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-CONFIGCAT-SDKKEY": $x_configcat_sdkkey} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Replace value
@@ -1670,7 +1680,7 @@ export def "settings-value update-setting-value-by-sdkkey" [
 # operationId: replace-setting-value-by-sdkkey
 # --rolloutPercentageItems item shape: {percentage: int, value?: any}
 # --rolloutRules item shape: {comparator?: "isOneOf"|"isNotOneOf"|"contains"|"doesNotContain"|"semVerIsOneOf"|"semVerIsNotOneOf"|"semVerLess"|"semVerLessOrEquals"|"semVerGreater"|"semVerGreaterOrEquals"|"numberEquals"|"numberDoesNotEqual"|"numberLess"|"numberLessOrEquals"|"numberGreater"|"numberGreaterOrEquals"|"sensitiveIsOneOf"|"sensitiveIsNotOneOf", comparisonAttribute?: string, comparisonValue?: string, segmentComparator?: "isIn"|"isNotIn", segmentId?: string, value?: any}
-export def "settings-value replace-setting-value-by-sdkkey" [
+export def "settings-value update-by-sdkkey-by-settingKeyOrId-1" [
   setting_key_or_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1691,21 +1701,21 @@ export def "settings-value replace-setting-value-by-sdkkey" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "reason" $reason "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({setting_key_or_id: $setting_key_or_id} | format pattern "/v1/settings/{setting_key_or_id}/value") $qp)
-  let body = {"rolloutPercentageItems": $rollout_percentage_items, "rolloutRules": $rollout_rules, "value": $value} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-CONFIGCAT-SDKKEY": $x_configcat_sdkkey} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({setting_key_or_id: (encode-path-segment $setting_key_or_id)} | format pattern "/v1/settings/{setting_key_or_id}/value") $qp)
+  let req_body = {"rolloutPercentageItems": $rollout_percentage_items, "rolloutRules": $rollout_rules, "value": $value} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/hal+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-CONFIGCAT-SDKKEY": $x_configcat_sdkkey} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete Tag
 #
 # DELETE /v1/tags/{tagId}
 # operationId: delete-tag
-export def "tags delete-tag" [
+export def "tags delete" [
   tag_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1718,7 +1728,7 @@ export def "tags delete-tag" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({tag_id: $tag_id} | format pattern "/v1/tags/{tag_id}"))
+  let full_url = (build-url $base ({tag_id: (encode-path-segment $tag_id)} | format pattern "/v1/tags/{tag_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1728,7 +1738,7 @@ export def "tags delete-tag" [
 #
 # GET /v1/tags/{tagId}
 # operationId: get-tag
-export def "tags get-tag" [
+export def "tags get" [
   tag_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1742,7 +1752,7 @@ export def "tags get-tag" [
 ]: nothing -> record<color: string, name: string, product: record<description: string, name: string, order: int, organization: record<name: string, organizationId: string>, productId: string, reasonRequired: bool>, tagId: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({tag_id: $tag_id} | format pattern "/v1/tags/{tag_id}"))
+  let full_url = (build-url $base ({tag_id: (encode-path-segment $tag_id)} | format pattern "/v1/tags/{tag_id}"))
   let accept_val = ($accept | default "application/hal+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1752,7 +1762,7 @@ export def "tags get-tag" [
 #
 # PUT /v1/tags/{tagId}
 # operationId: update-tag
-export def "tags update-tag" [
+export def "tags update" [
   tag_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1769,19 +1779,19 @@ export def "tags update-tag" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({tag_id: $tag_id} | format pattern "/v1/tags/{tag_id}"))
-  let body = {"color": $color, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({tag_id: (encode-path-segment $tag_id)} | format pattern "/v1/tags/{tag_id}"))
+  let req_body = {"color": $color, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/hal+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List Settings by Tag
 #
 # GET /v1/tags/{tagId}/settings
 # operationId: get-settings-by-tag
-export def "tags-settings get-settings-by-tag" [
+export def "tags-settings get" [
   tag_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1795,7 +1805,7 @@ export def "tags-settings get-settings-by-tag" [
 ]: nothing -> table<configId: string, configName: string, hint: string, key: string, name: string, order: int, settingId: int, settingType: string, tags: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({tag_id: $tag_id} | format pattern "/v1/tags/{tag_id}/settings"))
+  let full_url = (build-url $base ({tag_id: (encode-path-segment $tag_id)} | format pattern "/v1/tags/{tag_id}/settings"))
   let accept_val = ($accept | default "application/hal+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

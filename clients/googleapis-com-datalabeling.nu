@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -76,7 +85,7 @@ def feature-completer-2 [] { ["CLASSIFICATION" "EVENT" "FEATURE_UNSPECIFIED" "OB
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1beta1 datalabelingprojectsoperationsdelete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1beta1 delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -100,7 +109,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /v1beta1/{name}
 # operationId: datalabeling.projects.operations.delete
-export def "v1beta1 datalabelingprojectsoperationsdelete" [
+export def "v1beta1 delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -125,7 +134,7 @@ export def "v1beta1 datalabelingprojectsoperationsdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1beta1/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta1/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -135,7 +144,7 @@ export def "v1beta1 datalabelingprojectsoperationsdelete" [
 #
 # GET /v1beta1/{name}
 # operationId: datalabeling.projects.operations.get
-export def "v1beta1 datalabelingprojectsoperationsget" [
+export def "v1beta1 get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -161,7 +170,7 @@ export def "v1beta1 datalabelingprojectsoperationsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1beta1/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta1/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -173,7 +182,7 @@ export def "v1beta1 datalabelingprojectsoperationsget" [
 # operationId: datalabeling.projects.evaluationJobs.patch
 # --attempts item shape: {attemptTime?: string, partialFailures?: list}
 # --evaluationJobConfig shape: {bigqueryImportKeys?: record, boundingPolyConfig?: record, evaluationConfig?: record, evaluationJobAlertConfig?: record, exampleCount?: int, exampleSamplePercentage?: float, humanAnnotationConfig?: record, imageClassificationConfig?: record, inputConfig?: record, textClassificationConfig?: record}
-export def "v1beta1 datalabelingprojectsevaluationJobspatch" [
+export def "v1beta1 update" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -210,19 +219,19 @@ export def "v1beta1 datalabelingprojectsevaluationJobspatch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1beta1/{name}") $qp)
-  let body = {"annotationSpecSet": $annotation_spec_set, "attempts": $attempts, "createTime": $create_time, "description": $description, "evaluationJobConfig": $evaluation_job_config, "labelMissingGroundTruth": $label_missing_ground_truth, "modelVersion": $model_version, "name": $body_name, "schedule": $schedule, "state": $state} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta1/{name}") $qp)
+  let req_body = {"annotationSpecSet": $annotation_spec_set, "attempts": $attempts, "createTime": $create_time, "description": $description, "evaluationJobConfig": $evaluation_job_config, "labelMissingGroundTruth": $label_missing_ground_truth, "modelVersion": $model_version, "name": $body_name, "schedule": $schedule, "state": $state} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists operations that match the specified filter in the request. If the server doesn't support this method, it returns `UNIMPLEMENTED`. NOTE: the `name` binding allows API services to override the binding to use different resource name schemes, such as `users/*/operations`. To override the binding, API services can add a binding such as `"/v1/{name=users/*}/operations"` to their service configuration. For backwards compatibility, the default name includes the operations collection id, however overriding users must ensure the name binding is the parent resource, without the operations collection id.
 #
 # GET /v1beta1/{name}/operations
 # operationId: datalabeling.projects.operations.list
-export def "v1beta1-operations datalabelingprojectsoperationslist" [
+export def "v1beta1-operations list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -250,7 +259,7 @@ export def "v1beta1-operations datalabelingprojectsoperationslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1beta1/{name}/operations") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta1/{name}/operations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -260,7 +269,7 @@ export def "v1beta1-operations datalabelingprojectsoperationslist" [
 #
 # GET /v1beta1/{name}:cancel
 # operationId: datalabeling.projects.operations.cancel
-export def "v1beta1 datalabelingprojectsoperationscancel" [
+export def "v1beta1 cancel" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -285,7 +294,7 @@ export def "v1beta1 datalabelingprojectsoperationscancel" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1beta1/{name}:cancel") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta1/{name}:cancel") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -296,7 +305,7 @@ export def "v1beta1 datalabelingprojectsoperationscancel" [
 # POST /v1beta1/{name}:exportData
 # operationId: datalabeling.projects.datasets.exportData
 # --outputConfig shape: {gcsDestination?: record, gcsFolderDestination?: record}
-export def "v1beta1 datalabelingprojectsdatasetsexportData" [
+export def "v1beta1 export-data" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -326,20 +335,20 @@ export def "v1beta1 datalabelingprojectsdatasetsexportData" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1beta1/{name}:exportData") $qp)
-  let body = {"annotatedDataset": $annotated_dataset, "filter": $filter, "outputConfig": $output_config, "userEmailAddress": $user_email_address} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta1/{name}:exportData") $qp)
+  let req_body = {"annotatedDataset": $annotated_dataset, "filter": $filter, "outputConfig": $output_config, "userEmailAddress": $user_email_address} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Imports data into dataset based on source locations defined in request. It can be called multiple times for the same dataset. Each dataset can only have one long running operation running on it. For example, no labeling task (also long running operation) can be started while importing is still ongoing. Vice versa.
 #
 # POST /v1beta1/{name}:importData
 # operationId: datalabeling.projects.datasets.importData
-# --inputConfig shape: {annotationType?: "ANNOTATION_TYPE_UNSPECIFIED"|"IMAGE_CLASSIFICATION_ANNOTATION"|"IMAGE_BOUNDING_BOX_ANNOTATION"|"IMAGE_ORIENTED_BOUNDING_BOX_ANNOTATION"|"IMAGE_BOUNDING_POLY_ANNOTATION"|"IMAGE_POLYLINE_ANNOTATION"|"IMAGE_SEGMENTATION_ANNOTATION"|"VIDEO_SHOTS_CLASSIFICATION_ANNOTATION"|"VIDEO_OBJECT_TRACKING_ANNOTATION"|"VIDEO_OBJECT_DETECTION_ANNOTATION"|"VIDEO_EVENT_ANNOTATION"|"TEXT_CLASSIFICATION_ANNOTATION"|"TEXT_ENTITY_EXTRACTION_ANNOTATION"|"GENERAL_CLASSIFICATION_ANNOTATION", bigquerySource?: record, classificationMetadata?: record, dataType?: "DATA_TYPE_UNSPECIFIED"|"IMAGE"|"VIDEO"|"TEXT"|"GENERAL_DATA", gcsSource?: record, textMetadata?: record}
-export def "v1beta1 datalabelingprojectsdatasetsimportData" [
+# --inputConfig shape: {annotationType?: "ANNOTATION_TYPE_UNSPECIFIED"|"IMAGE_CLASSIFICATION_ANNOTATION"|"IMAGE_BOUNDING_BOX_ANNOTATION"|"IMAGE_ORIENTED_BOUNDING_BOX_ANNOTATION"|"IMAGE_BOUNDING_POLY_ANNOTATION"|"IMAGE_POLYLINE_ANNOTATION"|"IMAGE_SEGMENTATION_ANNOTATION"|"VIDEO_SHOTS_CLASSIFICATION_ANNOTATION"|"VIDEO_OBJECT_TRACKING_ANNOTATION"|"VIDEO_OBJECT_DETECTION_ANNOTATION"|"VIDEO_EVENT_ANNOTATION"|"TEXT_CLASSIFICATION_ANNOTATION"|"TEXT_ENTITY_EXTRACTION_ANNOTATION"|"GENERAL_CLASSIFICATION_ANNOTATION", ... (5 more fields)}
+export def "v1beta1 import-data" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -360,26 +369,26 @@ export def "v1beta1 datalabelingprojectsdatasetsimportData" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --input-config: record # The configuration of input data, including data type, location, etc. — shape: {annotationType?: "ANNOTATION_TYPE_UNSPECIFIED"|"IMAGE_CLASSIFICATION_ANNOTATION"|"IMAGE_BOUNDING_BOX_ANNOTATION"|"IMAGE_ORIENTED_BOUNDING_BOX_ANNOTATION"|"IMAGE_BOUNDING_POLY_ANNOTATION"|"IMAGE_POLYLINE_ANNOTATION"|"IMAGE_SEGMENTATION_ANNOTATION"|"VIDEO_SHOTS_CLASSIFICATION_ANNOTATION"|"VIDEO_OBJECT_TRACKING_ANNOTATION"|"VIDEO_OBJECT_DETECTION_ANNOTATION"|"VIDEO_EVENT_ANNOTATION"|"TEXT_CLASSIFICATION_ANNOTATION"|"TEXT_ENTITY_EXTRACTION_ANNOTATION"|"GENERAL_CLASSIFICATION_ANNOTATION", bigquerySource?: record, classificationMetadata?: record, dataType?: "DATA_TYPE_UNSPECIFIED"|"IMAGE"|"VIDEO"|"TEXT"|"GENERAL_DATA", gcsSource?: record, textMetadata?: record}
+  --input-config: record # The configuration of input data, including data type, location, etc. — shape: {annotationType?: "ANNOTATION_TYPE_UNSPECIFIED"|"IMAGE_CLASSIFICATION_ANNOTATION"|"IMAGE_BOUNDING_BOX_ANNOTATION"|"IMAGE_ORIENTED_BOUNDING_BOX_ANNOTATION"|"IMAGE_BOUNDING_POLY_ANNOTATION"|"IMAGE_POLYLINE_ANNOTATION"|"IMAGE_SEGMENTATION_ANNOTATION"|"VIDEO_SHOTS_CLASSIFICATION_ANNOTATION"|"VIDEO_OBJECT_TRACKING_ANNOTATION"|"VIDEO_OBJECT_DETECTION_ANNOTATION"|"VIDEO_EVENT_ANNOTATION"|"TEXT_CLASSIFICATION_ANNOTATION"|"TEXT_ENTITY_EXTRACTION_ANNOTATION"|"GENERAL_CLASSIFICATION_ANNOTATION", ... (5 more fields)}
   --user-email-address: string # Email of the user who started the import task and should be notified by email. If empty no notification will be sent.
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1beta1/{name}:importData") $qp)
-  let body = {"inputConfig": $input_config, "userEmailAddress": $user_email_address} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta1/{name}:importData") $qp)
+  let req_body = {"inputConfig": $input_config, "userEmailAddress": $user_email_address} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Pauses an evaluation job. Pausing an evaluation job that is already in a `PAUSED` state is a no-op.
 #
 # POST /v1beta1/{name}:pause
 # operationId: datalabeling.projects.evaluationJobs.pause
-export def "v1beta1 datalabelingprojectsevaluationJobspause" [
+export def "v1beta1 pause" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -406,18 +415,19 @@ export def "v1beta1 datalabelingprojectsevaluationJobspause" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1beta1/{name}:pause") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta1/{name}:pause") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Resumes a paused evaluation job. A deleted evaluation job can't be resumed. Resuming a running or scheduled evaluation job is a no-op.
 #
 # POST /v1beta1/{name}:resume
 # operationId: datalabeling.projects.evaluationJobs.resume
-export def "v1beta1 datalabelingprojectsevaluationJobsresume" [
+export def "v1beta1 create-resume" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -444,18 +454,19 @@ export def "v1beta1 datalabelingprojectsevaluationJobsresume" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1beta1/{name}:resume") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta1/{name}:resume") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists annotated datasets for a dataset. Pagination is supported.
 #
 # GET /v1beta1/{parent}/annotatedDatasets
 # operationId: datalabeling.projects.datasets.annotatedDatasets.list
-export def "v1beta1-annotated-datasets datalabelingprojectsdatasetsannotatedDatasetslist" [
+export def "v1beta1-annotated-datasets list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -483,7 +494,7 @@ export def "v1beta1-annotated-datasets datalabelingprojectsdatasetsannotatedData
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta1/{parent}/annotatedDatasets") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta1/{parent}/annotatedDatasets") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -493,7 +504,7 @@ export def "v1beta1-annotated-datasets datalabelingprojectsdatasetsannotatedData
 #
 # GET /v1beta1/{parent}/annotationSpecSets
 # operationId: datalabeling.projects.annotationSpecSets.list
-export def "v1beta1-annotation-spec-sets datalabelingprojectsannotationSpecSetslist" [
+export def "v1beta1-annotation-spec-sets list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -521,7 +532,7 @@ export def "v1beta1-annotation-spec-sets datalabelingprojectsannotationSpecSetsl
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta1/{parent}/annotationSpecSets") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta1/{parent}/annotationSpecSets") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -531,8 +542,8 @@ export def "v1beta1-annotation-spec-sets datalabelingprojectsannotationSpecSetsl
 #
 # POST /v1beta1/{parent}/annotationSpecSets
 # operationId: datalabeling.projects.annotationSpecSets.create
-# --annotationSpecSet shape: {annotationSpecs?: list, blockingResources?: list, description?: string, displayName?: string, name?: string}
-export def "v1beta1-annotation-spec-sets datalabelingprojectsannotationSpecSetscreate" [
+# --annotationSpecSet shape: {annotationSpecs?: list, blockingResources?: list<string>, description?: string, displayName?: string, name?: string}
+export def "v1beta1-annotation-spec-sets create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -553,25 +564,25 @@ export def "v1beta1-annotation-spec-sets datalabelingprojectsannotationSpecSetsc
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --annotation-spec-set: record # An AnnotationSpecSet is a collection of label definitions. For example, in image classification tasks, you define a set of possible labels for images as an AnnotationSpecSet. An AnnotationSpecSet is immutable upon creation. — shape: {annotationSpecs?: list, blockingResources?: list, description?: string, displayName?: string, name?: string}
+  --annotation-spec-set: record # An AnnotationSpecSet is a collection of label definitions. For example, in image classification tasks, you define a set of possible labels for images as an AnnotationSpecSet. An AnnotationSpecSet is immutable upon creation. — shape: {annotationSpecs?: list, blockingResources?: list<string>, description?: string, displayName?: string, name?: string}
 ]: any -> record<annotationSpecs: table<description: string, displayName: string, index: int>, blockingResources: list<string>, description: string, displayName: string, name: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta1/{parent}/annotationSpecSets") $qp)
-  let body = {"annotationSpecSet": $annotation_spec_set} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta1/{parent}/annotationSpecSets") $qp)
+  let req_body = {"annotationSpecSet": $annotation_spec_set} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists data items in a dataset. This API can be called after data are imported into dataset. Pagination is supported.
 #
 # GET /v1beta1/{parent}/dataItems
 # operationId: datalabeling.projects.datasets.dataItems.list
-export def "v1beta1-data-items datalabelingprojectsdatasetsdataItemslist" [
+export def "v1beta1-data-items list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -599,7 +610,7 @@ export def "v1beta1-data-items datalabelingprojectsdatasetsdataItemslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta1/{parent}/dataItems") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta1/{parent}/dataItems") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -609,7 +620,7 @@ export def "v1beta1-data-items datalabelingprojectsdatasetsdataItemslist" [
 #
 # GET /v1beta1/{parent}/datasets
 # operationId: datalabeling.projects.datasets.list
-export def "v1beta1-datasets datalabelingprojectsdatasetslist" [
+export def "v1beta1-datasets list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -637,7 +648,7 @@ export def "v1beta1-datasets datalabelingprojectsdatasetslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta1/{parent}/datasets") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta1/{parent}/datasets") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -647,8 +658,8 @@ export def "v1beta1-datasets datalabelingprojectsdatasetslist" [
 #
 # POST /v1beta1/{parent}/datasets
 # operationId: datalabeling.projects.datasets.create
-# --dataset shape: {blockingResources?: list, createTime?: string, dataItemCount?: string, description?: string, displayName?: string, inputConfigs?: list, lastMigrateTime?: string, name?: string}
-export def "v1beta1-datasets datalabelingprojectsdatasetscreate" [
+# --dataset shape: {blockingResources?: list<string>, createTime?: string, dataItemCount?: string, description?: string, displayName?: string, inputConfigs?: list, lastMigrateTime?: string, name?: string}
+export def "v1beta1-datasets create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -669,25 +680,25 @@ export def "v1beta1-datasets datalabelingprojectsdatasetscreate" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --dataset: record # Dataset is the resource to hold your data. You can request multiple labeling tasks for a dataset while each one will generate an AnnotatedDataset. — shape: {blockingResources?: list, createTime?: string, dataItemCount?: string, description?: string, displayName?: string, inputConfigs?: list, lastMigrateTime?: string, name?: string}
+  --dataset: record # Dataset is the resource to hold your data. You can request multiple labeling tasks for a dataset while each one will generate an AnnotatedDataset. — shape: {blockingResources?: list<string>, createTime?: string, dataItemCount?: string, description?: string, displayName?: string, inputConfigs?: list, lastMigrateTime?: string, name?: string}
 ]: any -> record<blockingResources: list<string>, createTime: string, dataItemCount: string, description: string, displayName: string, inputConfigs: table<annotationType: string, bigquerySource: record, classificationMetadata: record, dataType: string, gcsSource: record, textMetadata: record>, lastMigrateTime: string, name: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta1/{parent}/datasets") $qp)
-  let body = {"dataset": $dataset} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta1/{parent}/datasets") $qp)
+  let req_body = {"dataset": $dataset} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists all evaluation jobs within a project with possible filters. Pagination is supported.
 #
 # GET /v1beta1/{parent}/evaluationJobs
 # operationId: datalabeling.projects.evaluationJobs.list
-export def "v1beta1-evaluation-jobs datalabelingprojectsevaluationJobslist" [
+export def "v1beta1-evaluation-jobs list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -715,7 +726,7 @@ export def "v1beta1-evaluation-jobs datalabelingprojectsevaluationJobslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta1/{parent}/evaluationJobs") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta1/{parent}/evaluationJobs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -726,7 +737,7 @@ export def "v1beta1-evaluation-jobs datalabelingprojectsevaluationJobslist" [
 # POST /v1beta1/{parent}/evaluationJobs
 # operationId: datalabeling.projects.evaluationJobs.create
 # --job shape: {annotationSpecSet?: string, attempts?: list, createTime?: string, description?: string, evaluationJobConfig?: record, labelMissingGroundTruth?: bool, modelVersion?: string, name?: string, schedule?: string, state?: "STATE_UNSPECIFIED"|"SCHEDULED"|"RUNNING"|"PAUSED"|"STOPPED"}
-export def "v1beta1-evaluation-jobs datalabelingprojectsevaluationJobscreate" [
+export def "v1beta1-evaluation-jobs create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -753,19 +764,19 @@ export def "v1beta1-evaluation-jobs datalabelingprojectsevaluationJobscreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta1/{parent}/evaluationJobs") $qp)
-  let body = {"job": $job} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta1/{parent}/evaluationJobs") $qp)
+  let req_body = {"job": $job} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Searches evaluations within a project.
 #
 # GET /v1beta1/{parent}/evaluations:search
 # operationId: datalabeling.projects.evaluations.search
-export def "v1beta1-evaluations-search datalabelingprojectsevaluationssearch" [
+export def "v1beta1-evaluations-search list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -793,7 +804,7 @@ export def "v1beta1-evaluations-search datalabelingprojectsevaluationssearch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta1/{parent}/evaluations:search") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta1/{parent}/evaluations:search") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -803,7 +814,7 @@ export def "v1beta1-evaluations-search datalabelingprojectsevaluationssearch" [
 #
 # POST /v1beta1/{parent}/exampleComparisons:search
 # operationId: datalabeling.projects.datasets.evaluations.exampleComparisons.search
-export def "v1beta1-example-comparisons-search datalabelingprojectsdatasetsevaluationsexampleComparisonssearch" [
+export def "v1beta1-example-comparisons-search list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -831,19 +842,19 @@ export def "v1beta1-example-comparisons-search datalabelingprojectsdatasetsevalu
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta1/{parent}/exampleComparisons:search") $qp)
-  let body = {"pageSize": $page_size, "pageToken": $page_token} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta1/{parent}/exampleComparisons:search") $qp)
+  let req_body = {"pageSize": $page_size, "pageToken": $page_token} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists examples in an annotated dataset. Pagination is supported.
 #
 # GET /v1beta1/{parent}/examples
 # operationId: datalabeling.projects.datasets.annotatedDatasets.examples.list
-export def "v1beta1-examples datalabelingprojectsdatasetsannotatedDatasetsexampleslist" [
+export def "v1beta1-examples list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -871,7 +882,7 @@ export def "v1beta1-examples datalabelingprojectsdatasetsannotatedDatasetsexampl
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta1/{parent}/examples") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta1/{parent}/examples") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -881,7 +892,7 @@ export def "v1beta1-examples datalabelingprojectsdatasetsannotatedDatasetsexampl
 #
 # GET /v1beta1/{parent}/feedbackMessages
 # operationId: datalabeling.projects.datasets.annotatedDatasets.feedbackThreads.feedbackMessages.list
-export def "v1beta1-feedback-messages datalabelingprojectsdatasetsannotatedDatasetsfeedbackThreadsfeedbackMessageslist" [
+export def "v1beta1-feedback-messages list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -908,7 +919,7 @@ export def "v1beta1-feedback-messages datalabelingprojectsdatasetsannotatedDatas
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta1/{parent}/feedbackMessages") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta1/{parent}/feedbackMessages") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -918,7 +929,7 @@ export def "v1beta1-feedback-messages datalabelingprojectsdatasetsannotatedDatas
 #
 # POST /v1beta1/{parent}/feedbackMessages
 # operationId: datalabeling.projects.datasets.annotatedDatasets.feedbackThreads.feedbackMessages.create
-export def "v1beta1-feedback-messages datalabelingprojectsdatasetsannotatedDatasetsfeedbackThreadsfeedbackMessagescreate" [
+export def "v1beta1-feedback-messages create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -939,7 +950,7 @@ export def "v1beta1-feedback-messages datalabelingprojectsdatasetsannotatedDatas
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --body-body: string # String content of the feedback. Maximum of 10000 characters.
+  --body: string # String content of the feedback. Maximum of 10000 characters.
   --create-time: string # Create time. (format: google-datetime)
   --image: string # The image storing this feedback if the feedback is an image representing operator's comments. (format: byte)
   --name: string # Name of the feedback message in a feedback thread. Format: 'project/{project_id}/datasets/{dataset_id}/annotatedDatasets/{annotated_dataset_id}/feedbackThreads/{feedback_thread_id}/feedbackMessage/{feedback_message_id}'
@@ -950,19 +961,19 @@ export def "v1beta1-feedback-messages datalabelingprojectsdatasetsannotatedDatas
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta1/{parent}/feedbackMessages") $qp)
-  let body = {"body": $body_body, "createTime": $create_time, "image": $image, "name": $name, "operatorFeedbackMetadata": $operator_feedback_metadata, "requesterFeedbackMetadata": $requester_feedback_metadata} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta1/{parent}/feedbackMessages") $qp)
+  let req_body = {"body": $body, "createTime": $create_time, "image": $image, "name": $name, "operatorFeedbackMetadata": $operator_feedback_metadata, "requesterFeedbackMetadata": $requester_feedback_metadata} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List FeedbackThreads with pagination.
 #
 # GET /v1beta1/{parent}/feedbackThreads
 # operationId: datalabeling.projects.datasets.annotatedDatasets.feedbackThreads.list
-export def "v1beta1-feedback-threads datalabelingprojectsdatasetsannotatedDatasetsfeedbackThreadslist" [
+export def "v1beta1-feedback-threads list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -989,7 +1000,7 @@ export def "v1beta1-feedback-threads datalabelingprojectsdatasetsannotatedDatase
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta1/{parent}/feedbackThreads") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta1/{parent}/feedbackThreads") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -999,12 +1010,12 @@ export def "v1beta1-feedback-threads datalabelingprojectsdatasetsannotatedDatase
 #
 # POST /v1beta1/{parent}/image:label
 # operationId: datalabeling.projects.datasets.image.label
-# --basicConfig shape: {annotatedDatasetDescription?: string, annotatedDatasetDisplayName?: string, contributorEmails?: list, instruction?: string, labelGroup?: string, languageCode?: string, questionDuration?: string, replicaCount?: int, userEmailAddress?: string}
+# --basicConfig shape: {annotatedDatasetDescription?: string, annotatedDatasetDisplayName?: string, contributorEmails?: list<string>, instruction?: string, labelGroup?: string, languageCode?: string, questionDuration?: string, replicaCount?: int, userEmailAddress?: string}
 # --boundingPolyConfig shape: {annotationSpecSet?: string, instructionMessage?: string}
 # --imageClassificationConfig shape: {allowMultiLabel?: bool, annotationSpecSet?: string, answerAggregationType?: "STRING_AGGREGATION_TYPE_UNSPECIFIED"|"MAJORITY_VOTE"|"UNANIMOUS_VOTE"|"NO_AGGREGATION"}
 # --polylineConfig shape: {annotationSpecSet?: string, instructionMessage?: string}
 # --segmentationConfig shape: {annotationSpecSet?: string, instructionMessage?: string}
-export def "v1beta1-image-label datalabelingprojectsdatasetsimagelabel" [
+export def "v1beta1-image-label create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1025,7 +1036,7 @@ export def "v1beta1-image-label datalabelingprojectsdatasetsimagelabel" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --basic-config: record # Configuration for how human labeling task should be done. — shape: {annotatedDatasetDescription?: string, annotatedDatasetDisplayName?: string, contributorEmails?: list, instruction?: string, labelGroup?: string, languageCode?: string, questionDuration?: string, replicaCount?: int, userEmailAddress?: string}
+  --basic-config: record # Configuration for how human labeling task should be done. — shape: {annotatedDatasetDescription?: string, annotatedDatasetDisplayName?: string, contributorEmails?: list<string>, instruction?: string, labelGroup?: string, languageCode?: string, questionDuration?: string, replicaCount?: int, userEmailAddress?: string}
   --bounding-poly-config: record # Config for image bounding poly (and bounding box) human labeling task. — shape: {annotationSpecSet?: string, instructionMessage?: string}
   --feature: string@feature-completer # Required. The type of image labeling task.
   --image-classification-config: record # Config for image classification human labeling task. — shape: {allowMultiLabel?: bool, annotationSpecSet?: string, answerAggregationType?: "STRING_AGGREGATION_TYPE_UNSPECIFIED"|"MAJORITY_VOTE"|"UNANIMOUS_VOTE"|"NO_AGGREGATION"}
@@ -1036,19 +1047,19 @@ export def "v1beta1-image-label datalabelingprojectsdatasetsimagelabel" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta1/{parent}/image:label") $qp)
-  let body = {"basicConfig": $basic_config, "boundingPolyConfig": $bounding_poly_config, "feature": $feature, "imageClassificationConfig": $image_classification_config, "polylineConfig": $polyline_config, "segmentationConfig": $segmentation_config} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta1/{parent}/image:label") $qp)
+  let req_body = {"basicConfig": $basic_config, "boundingPolyConfig": $bounding_poly_config, "feature": $feature, "imageClassificationConfig": $image_classification_config, "polylineConfig": $polyline_config, "segmentationConfig": $segmentation_config} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists instructions for a project. Pagination is supported.
 #
 # GET /v1beta1/{parent}/instructions
 # operationId: datalabeling.projects.instructions.list
-export def "v1beta1-instructions datalabelingprojectsinstructionslist" [
+export def "v1beta1-instructions list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1076,7 +1087,7 @@ export def "v1beta1-instructions datalabelingprojectsinstructionslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta1/{parent}/instructions") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta1/{parent}/instructions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1086,8 +1097,8 @@ export def "v1beta1-instructions datalabelingprojectsinstructionslist" [
 #
 # POST /v1beta1/{parent}/instructions
 # operationId: datalabeling.projects.instructions.create
-# --instruction shape: {blockingResources?: list, createTime?: string, csvInstruction?: record, dataType?: "DATA_TYPE_UNSPECIFIED"|"IMAGE"|"VIDEO"|"TEXT"|"GENERAL_DATA", description?: string, displayName?: string, name?: string, pdfInstruction?: record, updateTime?: string}
-export def "v1beta1-instructions datalabelingprojectsinstructionscreate" [
+# --instruction shape: {blockingResources?: list<string>, createTime?: string, csvInstruction?: record, dataType?: "DATA_TYPE_UNSPECIFIED"|"IMAGE"|"VIDEO"|"TEXT"|"GENERAL_DATA", description?: string, displayName?: string, name?: string, pdfInstruction?: record, updateTime?: string}
+export def "v1beta1-instructions create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1108,28 +1119,28 @@ export def "v1beta1-instructions datalabelingprojectsinstructionscreate" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --instruction: record # Instruction of how to perform the labeling task for human operators. Currently only PDF instruction is supported. — shape: {blockingResources?: list, createTime?: string, csvInstruction?: record, dataType?: "DATA_TYPE_UNSPECIFIED"|"IMAGE"|"VIDEO"|"TEXT"|"GENERAL_DATA", description?: string, displayName?: string, name?: string, pdfInstruction?: record, updateTime?: string}
+  --instruction: record # Instruction of how to perform the labeling task for human operators. Currently only PDF instruction is supported. — shape: {blockingResources?: list<string>, createTime?: string, csvInstruction?: record, dataType?: "DATA_TYPE_UNSPECIFIED"|"IMAGE"|"VIDEO"|"TEXT"|"GENERAL_DATA", description?: string, displayName?: string, name?: string, pdfInstruction?: record, updateTime?: string}
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta1/{parent}/instructions") $qp)
-  let body = {"instruction": $instruction} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta1/{parent}/instructions") $qp)
+  let req_body = {"instruction": $instruction} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Starts a labeling task for text. The type of text labeling task is configured by feature in the request.
 #
 # POST /v1beta1/{parent}/text:label
 # operationId: datalabeling.projects.datasets.text.label
-# --basicConfig shape: {annotatedDatasetDescription?: string, annotatedDatasetDisplayName?: string, contributorEmails?: list, instruction?: string, labelGroup?: string, languageCode?: string, questionDuration?: string, replicaCount?: int, userEmailAddress?: string}
+# --basicConfig shape: {annotatedDatasetDescription?: string, annotatedDatasetDisplayName?: string, contributorEmails?: list<string>, instruction?: string, labelGroup?: string, languageCode?: string, questionDuration?: string, replicaCount?: int, userEmailAddress?: string}
 # --textClassificationConfig shape: {allowMultiLabel?: bool, annotationSpecSet?: string, sentimentConfig?: record}
 # --textEntityExtractionConfig shape: {annotationSpecSet?: string}
-export def "v1beta1-text-label datalabelingprojectsdatasetstextlabel" [
+export def "v1beta1-text-label create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1150,7 +1161,7 @@ export def "v1beta1-text-label datalabelingprojectsdatasetstextlabel" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --basic-config: record # Configuration for how human labeling task should be done. — shape: {annotatedDatasetDescription?: string, annotatedDatasetDisplayName?: string, contributorEmails?: list, instruction?: string, labelGroup?: string, languageCode?: string, questionDuration?: string, replicaCount?: int, userEmailAddress?: string}
+  --basic-config: record # Configuration for how human labeling task should be done. — shape: {annotatedDatasetDescription?: string, annotatedDatasetDisplayName?: string, contributorEmails?: list<string>, instruction?: string, labelGroup?: string, languageCode?: string, questionDuration?: string, replicaCount?: int, userEmailAddress?: string}
   --feature: string@feature-completer-1 # Required. The type of text labeling task.
   --text-classification-config: record # Config for text classification human labeling task. — shape: {allowMultiLabel?: bool, annotationSpecSet?: string, sentimentConfig?: record}
   --text-entity-extraction-config: record # Config for text entity extraction human labeling task. — shape: {annotationSpecSet?: string}
@@ -1159,24 +1170,24 @@ export def "v1beta1-text-label datalabelingprojectsdatasetstextlabel" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta1/{parent}/text:label") $qp)
-  let body = {"basicConfig": $basic_config, "feature": $feature, "textClassificationConfig": $text_classification_config, "textEntityExtractionConfig": $text_entity_extraction_config} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta1/{parent}/text:label") $qp)
+  let req_body = {"basicConfig": $basic_config, "feature": $feature, "textClassificationConfig": $text_classification_config, "textEntityExtractionConfig": $text_entity_extraction_config} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Starts a labeling task for video. The type of video labeling task is configured by feature in the request.
 #
 # POST /v1beta1/{parent}/video:label
 # operationId: datalabeling.projects.datasets.video.label
-# --basicConfig shape: {annotatedDatasetDescription?: string, annotatedDatasetDisplayName?: string, contributorEmails?: list, instruction?: string, labelGroup?: string, languageCode?: string, questionDuration?: string, replicaCount?: int, userEmailAddress?: string}
-# --eventConfig shape: {annotationSpecSets?: list, clipLength?: int, overlapLength?: int}
+# --basicConfig shape: {annotatedDatasetDescription?: string, annotatedDatasetDisplayName?: string, contributorEmails?: list<string>, instruction?: string, labelGroup?: string, languageCode?: string, questionDuration?: string, replicaCount?: int, userEmailAddress?: string}
+# --eventConfig shape: {annotationSpecSets?: list<string>, clipLength?: int, overlapLength?: int}
 # --objectDetectionConfig shape: {annotationSpecSet?: string, extractionFrameRate?: float}
 # --objectTrackingConfig shape: {annotationSpecSet?: string, clipLength?: int, overlapLength?: int}
 # --videoClassificationConfig shape: {annotationSpecSetConfigs?: list, applyShotDetection?: bool}
-export def "v1beta1-video-label datalabelingprojectsdatasetsvideolabel" [
+export def "v1beta1-video-label create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1197,8 +1208,8 @@ export def "v1beta1-video-label datalabelingprojectsdatasetsvideolabel" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --basic-config: record # Configuration for how human labeling task should be done. — shape: {annotatedDatasetDescription?: string, annotatedDatasetDisplayName?: string, contributorEmails?: list, instruction?: string, labelGroup?: string, languageCode?: string, questionDuration?: string, replicaCount?: int, userEmailAddress?: string}
-  --event-config: record # Config for video event human labeling task. — shape: {annotationSpecSets?: list, clipLength?: int, overlapLength?: int}
+  --basic-config: record # Configuration for how human labeling task should be done. — shape: {annotatedDatasetDescription?: string, annotatedDatasetDisplayName?: string, contributorEmails?: list<string>, instruction?: string, labelGroup?: string, languageCode?: string, questionDuration?: string, replicaCount?: int, userEmailAddress?: string}
+  --event-config: record # Config for video event human labeling task. — shape: {annotationSpecSets?: list<string>, clipLength?: int, overlapLength?: int}
   --feature: string@feature-completer-2 # Required. The type of video labeling task.
   --object-detection-config: record # Config for video object detection human labeling task. Object detection will be conducted on the images extracted from the video, and those objects will be labeled with bounding boxes. User need to specify the number of images to be extracted per second as the extraction frame rate. — shape: {annotationSpecSet?: string, extractionFrameRate?: float}
   --object-tracking-config: record # Config for video object tracking human labeling task. — shape: {annotationSpecSet?: string, clipLength?: int, overlapLength?: int}
@@ -1208,10 +1219,10 @@ export def "v1beta1-video-label datalabelingprojectsdatasetsvideolabel" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta1/{parent}/video:label") $qp)
-  let body = {"basicConfig": $basic_config, "eventConfig": $event_config, "feature": $feature, "objectDetectionConfig": $object_detection_config, "objectTrackingConfig": $object_tracking_config, "videoClassificationConfig": $video_classification_config} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta1/{parent}/video:label") $qp)
+  let req_body = {"basicConfig": $basic_config, "eventConfig": $event_config, "feature": $feature, "objectDetectionConfig": $object_detection_config, "objectTrackingConfig": $object_tracking_config, "videoClassificationConfig": $video_classification_config} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -72,7 +81,7 @@ def order-by-completer [] { ["displayTime" "writeTime"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accounts mirroraccountsinsert" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accounts create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -98,7 +107,7 @@ export def commands []: nothing -> table {
 # operationId: mirror.accounts.insert
 # --authTokens item shape: {authToken?: string, type?: string}
 # --userData item shape: {key?: string, value?: string}
-export def "accounts mirroraccountsinsert" [
+export def "accounts create" [
   user_token: string
   account_type: string
   account_name: string
@@ -118,7 +127,7 @@ export def "accounts mirroraccountsinsert" [
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --auth-tokens: list # item shape: {authToken?: string, type?: string}
-  --features: list
+  --features: list<string>
   --password: string
   --user-data: list # item shape: {key?: string, value?: string}
 ]: any -> any {
@@ -126,19 +135,19 @@ export def "accounts mirroraccountsinsert" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_token: $user_token, account_type: $account_type, account_name: $account_name} | format pattern "/accounts/{user_token}/{account_type}/{account_name}") $qp)
-  let body = {"authTokens": $auth_tokens, "features": $features, "password": $password, "userData": $user_data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({user_token: (encode-path-segment $user_token), account_type: (encode-path-segment $account_type), account_name: (encode-path-segment $account_name)} | format pattern "/accounts/{user_token}/{account_type}/{account_name}") $qp)
+  let req_body = {"authTokens": $auth_tokens, "features": $features, "password": $password, "userData": $user_data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieves a list of contacts for the authenticated user.
 #
 # GET /contacts
 # operationId: mirror.contacts.list
-export def "contacts mirrorcontactslist" [
+export def "contacts list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -169,7 +178,7 @@ export def "contacts mirrorcontactslist" [
 # POST /contacts
 # operationId: mirror.contacts.insert
 # --acceptCommands item shape: {type?: string}
-export def "contacts mirrorcontactsinsert" [
+export def "contacts create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -186,35 +195,35 @@ export def "contacts mirrorcontactsinsert" [
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --accept-commands: list # A list of voice menu commands that a contact can handle. Glass shows up to three contacts for each voice menu command. If there are more than that, the three contacts with the highest priority are shown for that particular command. — item shape: {type?: string}
-  --accept-types: list # A list of MIME types that a contact supports. The contact will be shown to the user if any of its acceptTypes matches any of the types of the attachments on the item. If no acceptTypes are given, the contact will be shown for all items.
+  --accept-types: list<string> # A list of MIME types that a contact supports. The contact will be shown to the user if any of its acceptTypes matches any of the types of the attachments on the item. If no acceptTypes are given, the contact will be shown for all items.
   --display-name: string # The name to display for this contact.
   --id: string # An ID for this contact. This is generated by the application and is treated as an opaque token.
-  --image-urls: list # Set of image URLs to display for a contact. Most contacts will have a single image, but a "group" contact may include up to 8 image URLs and they will be resized and cropped into a mosaic on the client.
+  --image-urls: list<string> # Set of image URLs to display for a contact. Most contacts will have a single image, but a "group" contact may include up to 8 image URLs and they will be resized and cropped into a mosaic on the client.
   --kind: string # The type of resource. This is always mirror#contact. (default: mirror#contact)
   --phone-number: string # Primary phone number for the contact. This can be a fully-qualified number, with country calling code and area code, or a local number.
   --priority: int # Priority for the contact to determine ordering in a list of contacts. Contacts with higher priorities will be shown before ones with lower priorities. (format: uint32)
-  --sharing-features: list # A list of sharing features that a contact can handle. Allowed values are:   - ADD_CAPTION
+  --sharing-features: list<string> # A list of sharing features that a contact can handle. Allowed values are: - ADD_CAPTION
   --body-source: string # The ID of the application that created this contact. This is populated by the API
   --speakable-name: string # Name of this contact as it should be pronounced. If this contact's name must be spoken as part of a voice disambiguation menu, this name is used as the expected pronunciation. This is useful for contact names with unpronounceable characters or whose display spelling is otherwise not phonetic.
-  --type: string # The type for this contact. This is used for sorting in UIs. Allowed values are:   - INDIVIDUAL - Represents a single person. This is the default.  - GROUP - Represents more than a single person.
+  --type: string # The type for this contact. This is used for sorting in UIs. Allowed values are: - INDIVIDUAL - Represents a single person. This is the default. - GROUP - Represents more than a single person.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/contacts" $qp)
-  let body = {"acceptCommands": $accept_commands, "acceptTypes": $accept_types, "displayName": $display_name, "id": $id, "imageUrls": $image_urls, "kind": $kind, "phoneNumber": $phone_number, "priority": $priority, "sharingFeatures": $sharing_features, "source": $body_source, "speakableName": $speakable_name, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"acceptCommands": $accept_commands, "acceptTypes": $accept_types, "displayName": $display_name, "id": $id, "imageUrls": $image_urls, "kind": $kind, "phoneNumber": $phone_number, "priority": $priority, "sharingFeatures": $sharing_features, "source": $body_source, "speakableName": $speakable_name, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes a contact.
 #
 # DELETE /contacts/{id}
 # operationId: mirror.contacts.delete
-export def "contacts mirrorcontactsdelete" [
+export def "contacts delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -235,7 +244,7 @@ export def "contacts mirrorcontactsdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/contacts/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/contacts/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -245,7 +254,7 @@ export def "contacts mirrorcontactsdelete" [
 #
 # GET /contacts/{id}
 # operationId: mirror.contacts.get
-export def "contacts mirrorcontactsget" [
+export def "contacts get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -266,7 +275,7 @@ export def "contacts mirrorcontactsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/contacts/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/contacts/{id}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -277,7 +286,7 @@ export def "contacts mirrorcontactsget" [
 # PATCH /contacts/{id}
 # operationId: mirror.contacts.patch
 # --acceptCommands item shape: {type?: string}
-export def "contacts mirrorcontactspatch" [
+export def "contacts update-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -295,28 +304,28 @@ export def "contacts mirrorcontactspatch" [
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --accept-commands: list # A list of voice menu commands that a contact can handle. Glass shows up to three contacts for each voice menu command. If there are more than that, the three contacts with the highest priority are shown for that particular command. — item shape: {type?: string}
-  --accept-types: list # A list of MIME types that a contact supports. The contact will be shown to the user if any of its acceptTypes matches any of the types of the attachments on the item. If no acceptTypes are given, the contact will be shown for all items.
+  --accept-types: list<string> # A list of MIME types that a contact supports. The contact will be shown to the user if any of its acceptTypes matches any of the types of the attachments on the item. If no acceptTypes are given, the contact will be shown for all items.
   --display-name: string # The name to display for this contact.
   --body-id: string # An ID for this contact. This is generated by the application and is treated as an opaque token.
-  --image-urls: list # Set of image URLs to display for a contact. Most contacts will have a single image, but a "group" contact may include up to 8 image URLs and they will be resized and cropped into a mosaic on the client.
+  --image-urls: list<string> # Set of image URLs to display for a contact. Most contacts will have a single image, but a "group" contact may include up to 8 image URLs and they will be resized and cropped into a mosaic on the client.
   --kind: string # The type of resource. This is always mirror#contact. (default: mirror#contact)
   --phone-number: string # Primary phone number for the contact. This can be a fully-qualified number, with country calling code and area code, or a local number.
   --priority: int # Priority for the contact to determine ordering in a list of contacts. Contacts with higher priorities will be shown before ones with lower priorities. (format: uint32)
-  --sharing-features: list # A list of sharing features that a contact can handle. Allowed values are:   - ADD_CAPTION
+  --sharing-features: list<string> # A list of sharing features that a contact can handle. Allowed values are: - ADD_CAPTION
   --body-source: string # The ID of the application that created this contact. This is populated by the API
   --speakable-name: string # Name of this contact as it should be pronounced. If this contact's name must be spoken as part of a voice disambiguation menu, this name is used as the expected pronunciation. This is useful for contact names with unpronounceable characters or whose display spelling is otherwise not phonetic.
-  --type: string # The type for this contact. This is used for sorting in UIs. Allowed values are:   - INDIVIDUAL - Represents a single person. This is the default.  - GROUP - Represents more than a single person.
+  --type: string # The type for this contact. This is used for sorting in UIs. Allowed values are: - INDIVIDUAL - Represents a single person. This is the default. - GROUP - Represents more than a single person.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/contacts/{id}") $qp)
-  let body = {"acceptCommands": $accept_commands, "acceptTypes": $accept_types, "displayName": $display_name, "id": $body_id, "imageUrls": $image_urls, "kind": $kind, "phoneNumber": $phone_number, "priority": $priority, "sharingFeatures": $sharing_features, "source": $body_source, "speakableName": $speakable_name, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/contacts/{id}") $qp)
+  let req_body = {"acceptCommands": $accept_commands, "acceptTypes": $accept_types, "displayName": $display_name, "id": $body_id, "imageUrls": $image_urls, "kind": $kind, "phoneNumber": $phone_number, "priority": $priority, "sharingFeatures": $sharing_features, "source": $body_source, "speakableName": $speakable_name, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates a contact in place.
@@ -324,7 +333,7 @@ export def "contacts mirrorcontactspatch" [
 # PUT /contacts/{id}
 # operationId: mirror.contacts.update
 # --acceptCommands item shape: {type?: string}
-export def "contacts mirrorcontactsupdate" [
+export def "contacts update-by-id-1" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -342,35 +351,35 @@ export def "contacts mirrorcontactsupdate" [
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --accept-commands: list # A list of voice menu commands that a contact can handle. Glass shows up to three contacts for each voice menu command. If there are more than that, the three contacts with the highest priority are shown for that particular command. — item shape: {type?: string}
-  --accept-types: list # A list of MIME types that a contact supports. The contact will be shown to the user if any of its acceptTypes matches any of the types of the attachments on the item. If no acceptTypes are given, the contact will be shown for all items.
+  --accept-types: list<string> # A list of MIME types that a contact supports. The contact will be shown to the user if any of its acceptTypes matches any of the types of the attachments on the item. If no acceptTypes are given, the contact will be shown for all items.
   --display-name: string # The name to display for this contact.
   --body-id: string # An ID for this contact. This is generated by the application and is treated as an opaque token.
-  --image-urls: list # Set of image URLs to display for a contact. Most contacts will have a single image, but a "group" contact may include up to 8 image URLs and they will be resized and cropped into a mosaic on the client.
+  --image-urls: list<string> # Set of image URLs to display for a contact. Most contacts will have a single image, but a "group" contact may include up to 8 image URLs and they will be resized and cropped into a mosaic on the client.
   --kind: string # The type of resource. This is always mirror#contact. (default: mirror#contact)
   --phone-number: string # Primary phone number for the contact. This can be a fully-qualified number, with country calling code and area code, or a local number.
   --priority: int # Priority for the contact to determine ordering in a list of contacts. Contacts with higher priorities will be shown before ones with lower priorities. (format: uint32)
-  --sharing-features: list # A list of sharing features that a contact can handle. Allowed values are:   - ADD_CAPTION
+  --sharing-features: list<string> # A list of sharing features that a contact can handle. Allowed values are: - ADD_CAPTION
   --body-source: string # The ID of the application that created this contact. This is populated by the API
   --speakable-name: string # Name of this contact as it should be pronounced. If this contact's name must be spoken as part of a voice disambiguation menu, this name is used as the expected pronunciation. This is useful for contact names with unpronounceable characters or whose display spelling is otherwise not phonetic.
-  --type: string # The type for this contact. This is used for sorting in UIs. Allowed values are:   - INDIVIDUAL - Represents a single person. This is the default.  - GROUP - Represents more than a single person.
+  --type: string # The type for this contact. This is used for sorting in UIs. Allowed values are: - INDIVIDUAL - Represents a single person. This is the default. - GROUP - Represents more than a single person.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/contacts/{id}") $qp)
-  let body = {"acceptCommands": $accept_commands, "acceptTypes": $accept_types, "displayName": $display_name, "id": $body_id, "imageUrls": $image_urls, "kind": $kind, "phoneNumber": $phone_number, "priority": $priority, "sharingFeatures": $sharing_features, "source": $body_source, "speakableName": $speakable_name, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/contacts/{id}") $qp)
+  let req_body = {"acceptCommands": $accept_commands, "acceptTypes": $accept_types, "displayName": $display_name, "id": $body_id, "imageUrls": $image_urls, "kind": $kind, "phoneNumber": $phone_number, "priority": $priority, "sharingFeatures": $sharing_features, "source": $body_source, "speakableName": $speakable_name, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieves a list of locations for the user.
 #
 # GET /locations
 # operationId: mirror.locations.list
-export def "locations mirrorlocationslist" [
+export def "locations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -400,7 +409,7 @@ export def "locations mirrorlocationslist" [
 #
 # GET /locations/{id}
 # operationId: mirror.locations.get
-export def "locations mirrorlocationsget" [
+export def "locations get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -421,7 +430,7 @@ export def "locations mirrorlocationsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/locations/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/locations/{id}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -431,7 +440,7 @@ export def "locations mirrorlocationsget" [
 #
 # GET /settings/{id}
 # operationId: mirror.settings.get
-export def "settings mirrorsettingsget" [
+export def "settings get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -452,7 +461,7 @@ export def "settings mirrorsettingsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/settings/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/settings/{id}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -462,7 +471,7 @@ export def "settings mirrorsettingsget" [
 #
 # GET /subscriptions
 # operationId: mirror.subscriptions.list
-export def "subscriptions mirrorsubscriptionslist" [
+export def "subscriptions list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -493,7 +502,7 @@ export def "subscriptions mirrorsubscriptionslist" [
 # POST /subscriptions
 # operationId: mirror.subscriptions.insert
 # --notification shape: {collection?: string, itemId?: string, operation?: string, userActions?: list, userToken?: string, verifyToken?: string}
-export def "subscriptions mirrorsubscriptionsinsert" [
+export def "subscriptions create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -510,11 +519,11 @@ export def "subscriptions mirrorsubscriptionsinsert" [
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --callback-url: string # The URL where notifications should be delivered (must start with https://).
-  --collection: string # The collection to subscribe to. Allowed values are:   - timeline - Changes in the timeline including insertion, deletion, and updates.  - locations - Location updates.  - settings - Settings updates.
+  --collection: string # The collection to subscribe to. Allowed values are: - timeline - Changes in the timeline including insertion, deletion, and updates. - locations - Location updates. - settings - Settings updates.
   --id: string # The ID of the subscription.
   --kind: string # The type of resource. This is always mirror#subscription. (default: mirror#subscription)
   --notification: record # A notification delivered by the API. — shape: {collection?: string, itemId?: string, operation?: string, userActions?: list, userToken?: string, verifyToken?: string}
-  --operation: list # A list of operations that should be subscribed to. An empty list indicates that all operations on the collection should be subscribed to. Allowed values are:   - UPDATE - The item has been updated.  - INSERT - A new item has been inserted.  - DELETE - The item has been deleted.  - MENU_ACTION - A custom menu item has been triggered by the user.
+  --operation: list<string> # A list of operations that should be subscribed to. An empty list indicates that all operations on the collection should be subscribed to. Allowed values are: - UPDATE - The item has been updated. - INSERT - A new item has been inserted. - DELETE - The item has been deleted. - MENU_ACTION - A custom menu item has been triggered by the user.
   --updated: string # The time at which this subscription was last modified, formatted according to RFC 3339. (format: date-time)
   --user-token: string # An opaque token sent to the subscriber in notifications so that it can determine the ID of the user.
   --verify-token: string # A secret token sent to the subscriber in notifications so that it can verify that the notification was generated by Google.
@@ -524,18 +533,18 @@ export def "subscriptions mirrorsubscriptionsinsert" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/subscriptions" $qp)
-  let body = {"callbackUrl": $callback_url, "collection": $collection, "id": $id, "kind": $kind, "notification": $notification, "operation": $operation, "updated": $updated, "userToken": $user_token, "verifyToken": $verify_token} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"callbackUrl": $callback_url, "collection": $collection, "id": $id, "kind": $kind, "notification": $notification, "operation": $operation, "updated": $updated, "userToken": $user_token, "verifyToken": $verify_token} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes a subscription.
 #
 # DELETE /subscriptions/{id}
 # operationId: mirror.subscriptions.delete
-export def "subscriptions mirrorsubscriptionsdelete" [
+export def "subscriptions delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -556,7 +565,7 @@ export def "subscriptions mirrorsubscriptionsdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/subscriptions/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/subscriptions/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -567,7 +576,7 @@ export def "subscriptions mirrorsubscriptionsdelete" [
 # PUT /subscriptions/{id}
 # operationId: mirror.subscriptions.update
 # --notification shape: {collection?: string, itemId?: string, operation?: string, userActions?: list, userToken?: string, verifyToken?: string}
-export def "subscriptions mirrorsubscriptionsupdate" [
+export def "subscriptions update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -585,11 +594,11 @@ export def "subscriptions mirrorsubscriptionsupdate" [
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --callback-url: string # The URL where notifications should be delivered (must start with https://).
-  --collection: string # The collection to subscribe to. Allowed values are:   - timeline - Changes in the timeline including insertion, deletion, and updates.  - locations - Location updates.  - settings - Settings updates.
+  --collection: string # The collection to subscribe to. Allowed values are: - timeline - Changes in the timeline including insertion, deletion, and updates. - locations - Location updates. - settings - Settings updates.
   --body-id: string # The ID of the subscription.
   --kind: string # The type of resource. This is always mirror#subscription. (default: mirror#subscription)
   --notification: record # A notification delivered by the API. — shape: {collection?: string, itemId?: string, operation?: string, userActions?: list, userToken?: string, verifyToken?: string}
-  --operation: list # A list of operations that should be subscribed to. An empty list indicates that all operations on the collection should be subscribed to. Allowed values are:   - UPDATE - The item has been updated.  - INSERT - A new item has been inserted.  - DELETE - The item has been deleted.  - MENU_ACTION - A custom menu item has been triggered by the user.
+  --operation: list<string> # A list of operations that should be subscribed to. An empty list indicates that all operations on the collection should be subscribed to. Allowed values are: - UPDATE - The item has been updated. - INSERT - A new item has been inserted. - DELETE - The item has been deleted. - MENU_ACTION - A custom menu item has been triggered by the user.
   --updated: string # The time at which this subscription was last modified, formatted according to RFC 3339. (format: date-time)
   --user-token: string # An opaque token sent to the subscriber in notifications so that it can determine the ID of the user.
   --verify-token: string # A secret token sent to the subscriber in notifications so that it can verify that the notification was generated by Google.
@@ -598,19 +607,19 @@ export def "subscriptions mirrorsubscriptionsupdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/subscriptions/{id}") $qp)
-  let body = {"callbackUrl": $callback_url, "collection": $collection, "id": $body_id, "kind": $kind, "notification": $notification, "operation": $operation, "updated": $updated, "userToken": $user_token, "verifyToken": $verify_token} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/subscriptions/{id}") $qp)
+  let req_body = {"callbackUrl": $callback_url, "collection": $collection, "id": $body_id, "kind": $kind, "notification": $notification, "operation": $operation, "updated": $updated, "userToken": $user_token, "verifyToken": $verify_token} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieves a list of timeline items for the authenticated user.
 #
 # GET /timeline
 # operationId: mirror.timeline.list
-export def "timeline mirrortimelinelist" [
+export def "timeline list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -647,7 +656,7 @@ export def "timeline mirrortimelinelist" [
 #
 # POST /timeline
 # operationId: mirror.timeline.insert
-export def "timeline mirrortimelineinsert" [
+export def "timeline create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -670,17 +679,18 @@ export def "timeline mirrortimelineinsert" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/timeline" $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "audio/1d-interleaved-parityfec" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "audio/1d-interleaved-parityfec" $req_body
 }
 
 # Deletes a timeline item.
 #
 # DELETE /timeline/{id}
 # operationId: mirror.timeline.delete
-export def "timeline mirrortimelinedelete" [
+export def "timeline delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -701,7 +711,7 @@ export def "timeline mirrortimelinedelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/timeline/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/timeline/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -711,7 +721,7 @@ export def "timeline mirrortimelinedelete" [
 #
 # GET /timeline/{id}
 # operationId: mirror.timeline.get
-export def "timeline mirrortimelineget" [
+export def "timeline get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -732,7 +742,7 @@ export def "timeline mirrortimelineget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/timeline/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/timeline/{id}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -743,12 +753,12 @@ export def "timeline mirrortimelineget" [
 # PATCH /timeline/{id}
 # operationId: mirror.timeline.patch
 # --attachments item shape: {contentType?: string, contentUrl?: string, id?: string, isProcessingContent?: bool}
-# --creator shape: {acceptCommands?: list, acceptTypes?: list, displayName?: string, id?: string, imageUrls?: list, kind?: string, phoneNumber?: string, priority?: int, sharingFeatures?: list, source?: string, speakableName?: string, type?: string}
+# --creator shape: {acceptCommands?: list, acceptTypes?: list<string>, displayName?: string, id?: string, imageUrls?: list<string>, kind?: string, phoneNumber?: string, priority?: int, sharingFeatures?: list<string>, source?: string, speakableName?: string, type?: string}
 # --location shape: {accuracy?: float, address?: string, displayName?: string, id?: string, kind?: string, latitude?: float, longitude?: float, timestamp?: string}
 # --menuItems item shape: {action?: string, contextual_command?: string, id?: string, payload?: string, removeWhenSelected?: bool, values?: list}
 # --notification shape: {deliveryTime?: string, level?: string}
-# --recipients item shape: {acceptCommands?: list, acceptTypes?: list, displayName?: string, id?: string, imageUrls?: list, kind?: string, phoneNumber?: string, priority?: int, sharingFeatures?: list, source?: string, speakableName?: string, type?: string}
-export def "timeline mirrortimelinepatch" [
+# --recipients item shape: {acceptCommands?: list, acceptTypes?: list<string>, displayName?: string, id?: string, imageUrls?: list<string>, kind?: string, phoneNumber?: string, priority?: int, sharingFeatures?: list<string>, source?: string, speakableName?: string, type?: string}
+export def "timeline update-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -765,17 +775,17 @@ export def "timeline mirrortimelinepatch" [
   --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks. (default: true)
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --user-ip: string # Deprecated. Please use quotaUser instead.
-  --attachments: list # A list of media attachments associated with this item. As a convenience, you can refer to attachments in your HTML payloads with the attachment or cid scheme. For example:   - attachment: <img src="attachment:attachment_index"> where attachment_index is the 0-based index of this array.  - cid: <img src="cid:attachment_id"> where attachment_id is the ID of the attachment. — item shape: {contentType?: string, contentUrl?: string, id?: string, isProcessingContent?: bool}
+  --attachments: list # A list of media attachments associated with this item. As a convenience, you can refer to attachments in your HTML payloads with the attachment or cid scheme. For example: - attachment: where attachment_index is the 0-based index of this array. - cid: where attachment_id is the ID of the attachment. — item shape: {contentType?: string, contentUrl?: string, id?: string, isProcessingContent?: bool}
   --bundle-id: string # The bundle ID for this item. Services can specify a bundleId to group many items together. They appear under a single top-level item on the device.
   --canonical-url: string # A canonical URL pointing to the canonical/high quality version of the data represented by the timeline item.
   --created: string # The time at which this item was created, formatted according to RFC 3339. (format: date-time)
-  --creator: record # A person or group that can be used as a creator or a contact. — shape: {acceptCommands?: list, acceptTypes?: list, displayName?: string, id?: string, imageUrls?: list, kind?: string, phoneNumber?: string, priority?: int, sharingFeatures?: list, source?: string, speakableName?: string, type?: string}
+  --creator: record # A person or group that can be used as a creator or a contact. — shape: {acceptCommands?: list, acceptTypes?: list<string>, displayName?: string, id?: string, imageUrls?: list<string>, kind?: string, phoneNumber?: string, priority?: int, sharingFeatures?: list<string>, source?: string, speakableName?: string, type?: string}
   --display-time: string # The time that should be displayed when this item is viewed in the timeline, formatted according to RFC 3339. This user's timeline is sorted chronologically on display time, so this will also determine where the item is displayed in the timeline. If not set by the service, the display time defaults to the updated time. (format: date-time)
   --etag: string # ETag for this item.
-  --html: string # HTML content for this item. If both text and html are provided for an item, the html will be rendered in the timeline. Allowed HTML elements - You can use these elements in your timeline cards.   - Headers: h1, h2, h3, h4, h5, h6  - Images: img  - Lists: li, ol, ul  - HTML5 semantics: article, aside, details, figure, figcaption, footer, header, nav, section, summary, time  - Structural: blockquote, br, div, hr, p, span  - Style: b, big, center, em, i, u, s, small, strike, strong, style, sub, sup  - Tables: table, tbody, td, tfoot, th, thead, tr   Blocked HTML elements: These elements and their contents are removed from HTML payloads.   - Document headers: head, title  - Embeds: audio, embed, object, source, video  - Frames: frame, frameset  - Scripting: applet, script   Other elements: Any elements that aren't listed are removed, but their contents are preserved.
+  --html: string # HTML content for this item. If both text and html are provided for an item, the html will be rendered in the timeline. Allowed HTML elements - You can use these elements in your timeline cards. - Headers: h1, h2, h3, h4, h5, h6 - Images: img - Lists: li, ol, ul - HTML5 semantics: article, aside, details, figure, figcaption, footer, header, nav, section, summary, time - Structural: blockquote, br, div, hr, p, span - Style: b, big, center, em, i, u, s, small, strike, strong, style, sub, sup - Tables: table, tbody, td, tfoot, th, thead, tr Blocked HTML elements: These elements and their contents are removed from HTML payloads. - Document headers: head, title - Embeds: audio, embed, object, source, video - Frames: frame, frameset - Scripting: applet, script Other elements: Any elements that aren't listed are removed, but their contents are preserved.
   --body-id: string # The ID of the timeline item. This is unique within a user's timeline.
   --in-reply-to: string # If this item was generated as a reply to another item, this field will be set to the ID of the item being replied to. This can be used to attach a reply to the appropriate conversation or post.
-  --is-bundle-cover: oneof<nothing, bool> # Whether this item is a bundle cover.  If an item is marked as a bundle cover, it will be the entry point to the bundle of items that have the same bundleId as that item. It will be shown only on the main timeline — not within the opened bundle.  On the main timeline, items that are shown are:   - Items that have isBundleCover set to true   - Items that do not have a bundleId  In a bundle sub-timeline, items that are shown are:   - Items that have the bundleId in question AND isBundleCover set to false
+  --is-bundle-cover: oneof<nothing, bool> # Whether this item is a bundle cover. If an item is marked as a bundle cover, it will be the entry point to the bundle of items that have the same bundleId as that item. It will be shown only on the main timeline — not within the opened bundle. On the main timeline, items that are shown are: - Items that have isBundleCover set to true - Items that do not have a bundleId In a bundle sub-timeline, items that are shown are: - Items that have the bundleId in question AND isBundleCover set to false
   --is-deleted: oneof<nothing, bool> # When true, indicates this item is deleted, and only the ID property is set.
   --is-pinned: oneof<nothing, bool> # When true, indicates this item is pinned, which means it's grouped alongside "active" items like navigation and hangouts, on the opposite side of the home screen from historical (non-pinned) timeline items. You can allow the user to toggle the value of this property with the TOGGLE_PINNED built-in menu item.
   --kind: string # The type of resource. This is always mirror#timelineItem. (default: mirror#timelineItem)
@@ -783,11 +793,11 @@ export def "timeline mirrortimelinepatch" [
   --menu-items: list # A list of menu items that will be presented to the user when this item is selected in the timeline. — item shape: {action?: string, contextual_command?: string, id?: string, payload?: string, removeWhenSelected?: bool, values?: list}
   --notification: record # Controls how notifications for a timeline item are presented to the user. — shape: {deliveryTime?: string, level?: string}
   --pin-score: int # For pinned items, this determines the order in which the item is displayed in the timeline, with a higher score appearing closer to the clock. Note: setting this field is currently not supported. (format: int32)
-  --recipients: list # A list of users or groups that this item has been shared with. — item shape: {acceptCommands?: list, acceptTypes?: list, displayName?: string, id?: string, imageUrls?: list, kind?: string, phoneNumber?: string, priority?: int, sharingFeatures?: list, source?: string, speakableName?: string, type?: string}
+  --recipients: list # A list of users or groups that this item has been shared with. — item shape: {acceptCommands?: list, acceptTypes?: list<string>, displayName?: string, id?: string, imageUrls?: list<string>, kind?: string, phoneNumber?: string, priority?: int, sharingFeatures?: list<string>, source?: string, speakableName?: string, type?: string}
   --self-link: string # A URL that can be used to retrieve this item.
   --source-item-id: string # Opaque string you can use to map a timeline item to data in your own service.
-  --speakable-text: string # The speakable version of the content of this item. Along with the READ_ALOUD menu item, use this field to provide text that would be clearer when read aloud, or to provide extended information to what is displayed visually on Glass.  Glassware should also specify the speakableType field, which will be spoken before this text in cases where the additional context is useful, for example when the user requests that the item be read aloud following a notification.
-  --speakable-type: string # A speakable description of the type of this item. This will be announced to the user prior to reading the content of the item in cases where the additional context is useful, for example when the user requests that the item be read aloud following a notification.  This should be a short, simple noun phrase such as "Email", "Text message", or "Daily Planet News Update".  Glassware are encouraged to populate this field for every timeline item, even if the item does not contain speakableText or text so that the user can learn the type of the item without looking at the screen.
+  --speakable-text: string # The speakable version of the content of this item. Along with the READ_ALOUD menu item, use this field to provide text that would be clearer when read aloud, or to provide extended information to what is displayed visually on Glass. Glassware should also specify the speakableType field, which will be spoken before this text in cases where the additional context is useful, for example when the user requests that the item be read aloud following a notification.
+  --speakable-type: string # A speakable description of the type of this item. This will be announced to the user prior to reading the content of the item in cases where the additional context is useful, for example when the user requests that the item be read aloud following a notification. This should be a short, simple noun phrase such as "Email", "Text message", or "Daily Planet News Update". Glassware are encouraged to populate this field for every timeline item, even if the item does not contain speakableText or text so that the user can learn the type of the item without looking at the screen.
   --text: string # Text content of this item.
   --title: string # The title of this item.
   --updated: string # The time at which this item was last modified, formatted according to RFC 3339. (format: date-time)
@@ -796,19 +806,19 @@ export def "timeline mirrortimelinepatch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/timeline/{id}") $qp)
-  let body = {"attachments": $attachments, "bundleId": $bundle_id, "canonicalUrl": $canonical_url, "created": $created, "creator": $creator, "displayTime": $display_time, "etag": $etag, "html": $html, "id": $body_id, "inReplyTo": $in_reply_to, "isBundleCover": $is_bundle_cover, "isDeleted": $is_deleted, "isPinned": $is_pinned, "kind": $kind, "location": $location, "menuItems": $menu_items, "notification": $notification, "pinScore": $pin_score, "recipients": $recipients, "selfLink": $self_link, "sourceItemId": $source_item_id, "speakableText": $speakable_text, "speakableType": $speakable_type, "text": $text, "title": $title, "updated": $updated} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/timeline/{id}") $qp)
+  let req_body = {"attachments": $attachments, "bundleId": $bundle_id, "canonicalUrl": $canonical_url, "created": $created, "creator": $creator, "displayTime": $display_time, "etag": $etag, "html": $html, "id": $body_id, "inReplyTo": $in_reply_to, "isBundleCover": $is_bundle_cover, "isDeleted": $is_deleted, "isPinned": $is_pinned, "kind": $kind, "location": $location, "menuItems": $menu_items, "notification": $notification, "pinScore": $pin_score, "recipients": $recipients, "selfLink": $self_link, "sourceItemId": $source_item_id, "speakableText": $speakable_text, "speakableType": $speakable_type, "text": $text, "title": $title, "updated": $updated} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates a timeline item in place.
 #
 # PUT /timeline/{id}
 # operationId: mirror.timeline.update
-export def "timeline mirrortimelineupdate" [
+export def "timeline update-by-id-1" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -831,18 +841,19 @@ export def "timeline mirrortimelineupdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/timeline/{id}") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/timeline/{id}") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "audio/1d-interleaved-parityfec" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "audio/1d-interleaved-parityfec" $req_body
 }
 
 # Returns a list of attachments for a timeline item.
 #
 # GET /timeline/{itemId}/attachments
 # operationId: mirror.timeline.attachments.list
-export def "timeline-attachments mirrortimelineattachmentslist" [
+export def "timeline-attachments list" [
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -863,7 +874,7 @@ export def "timeline-attachments mirrortimelineattachmentslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({item_id: $item_id} | format pattern "/timeline/{item_id}/attachments") $qp)
+  let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/timeline/{item_id}/attachments") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -873,7 +884,7 @@ export def "timeline-attachments mirrortimelineattachmentslist" [
 #
 # POST /timeline/{itemId}/attachments
 # operationId: mirror.timeline.attachments.insert
-export def "timeline-attachments mirrortimelineattachmentsinsert" [
+export def "timeline-attachments create" [
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -894,7 +905,7 @@ export def "timeline-attachments mirrortimelineattachmentsinsert" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({item_id: $item_id} | format pattern "/timeline/{item_id}/attachments") $qp)
+  let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/timeline/{item_id}/attachments") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -904,7 +915,7 @@ export def "timeline-attachments mirrortimelineattachmentsinsert" [
 #
 # DELETE /timeline/{itemId}/attachments/{attachmentId}
 # operationId: mirror.timeline.attachments.delete
-export def "timeline-attachments mirrortimelineattachmentsdelete" [
+export def "timeline-attachments delete" [
   item_id: string
   attachment_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -926,7 +937,7 @@ export def "timeline-attachments mirrortimelineattachmentsdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({item_id: $item_id, attachment_id: $attachment_id} | format pattern "/timeline/{item_id}/attachments/{attachment_id}") $qp)
+  let full_url = (build-url $base ({item_id: (encode-path-segment $item_id), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/timeline/{item_id}/attachments/{attachment_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -936,7 +947,7 @@ export def "timeline-attachments mirrortimelineattachmentsdelete" [
 #
 # GET /timeline/{itemId}/attachments/{attachmentId}
 # operationId: mirror.timeline.attachments.get
-export def "timeline-attachments mirrortimelineattachmentsget" [
+export def "timeline-attachments get" [
   item_id: string
   attachment_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -958,7 +969,7 @@ export def "timeline-attachments mirrortimelineattachmentsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({item_id: $item_id, attachment_id: $attachment_id} | format pattern "/timeline/{item_id}/attachments/{attachment_id}") $qp)
+  let full_url = (build-url $base ({item_id: (encode-path-segment $item_id), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/timeline/{item_id}/attachments/{attachment_id}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

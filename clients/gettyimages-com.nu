@@ -36,6 +36,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -124,10 +133,10 @@ export def "affiliates-search-images get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "phrase" $phrase "scalar") (serialize-qp "style" $style "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/affiliates/search/images" $qp)
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -148,10 +157,10 @@ export def "affiliates-search-videos get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "phrase" $phrase "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/affiliates/search/videos" $qp)
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -177,10 +186,10 @@ export def "artists-images get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "artist_name" $artist_name "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/artists/images" $qp)
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -206,17 +215,17 @@ export def "artists-videos get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "artist_name" $artist_name "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/artists/videos" $qp)
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get asset change notifications.
 #
 # PUT /v3/asset-changes/change-sets
-export def "asset-changes-change-sets put" [
+export def "asset-changes-change-sets update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -253,7 +262,7 @@ export def "asset-changes-change-sets delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({change_set_id: $change_set_id} | format pattern "/v3/asset-changes/change-sets/{change_set_id}"))
+  let full_url = (build-url $base ({change_set_id: (encode-path-segment $change_set_id)} | format pattern "/v3/asset-changes/change-sets/{change_set_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -283,7 +292,7 @@ export def "asset-changes-channels get" [
 # Endpoint for acquiring extended licenses with iStock credits for an asset.
 #
 # POST /v3/asset-licensing/{assetId}
-export def "asset-licensing post" [
+export def "asset-licensing create" [
   asset_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -294,20 +303,20 @@ export def "asset-licensing post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string # Provide a header to specify the language of result values. Supported values: cs (iStock only), de, en-GB, en-US, es, fi (iStock only), fr, hu (iStock only), id (iStock only), it, ja, ko (creative assets only), nl, pl (creative assets only), pt-BR, pt-PT, ro (iStock only), ru (creative assets only), sv, th (iStock only), tr, uk (iStock only), vi (iStock only), zh-HK (creative assets only).
-  extended_licenses: list
+  extended_licenses: list<string>
   --use-team-credits: oneof<nothing, bool> # Defaults to false.
 ]: any -> record<acquired_licenses: list<string>, credits_used: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({asset_id: $asset_id} | format pattern "/v3/asset-licensing/{asset_id}"))
-  let body = {"extended_licenses": $extended_licenses, "use_team_credits": $use_team_credits} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({asset_id: (encode-path-segment $asset_id)} | format pattern "/v3/asset-licensing/{asset_id}"))
+  let req_body = {"extended_licenses": $extended_licenses, "use_team_credits": $use_team_credits} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /v3/asset-management/assets/send-events
@@ -329,10 +338,10 @@ export def "asset-management-assets-send-events get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "last_offset" $last_offset "scalar") (serialize-qp "event_count" $event_count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/asset-management/assets/send-events" $qp)
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -358,17 +367,17 @@ export def "boards list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "board_relationship" $board_relationship "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/boards" $qp)
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new board
 #
 # POST /v3/boards
-export def "boards post" [
+export def "boards create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -385,13 +394,13 @@ export def "boards post" [
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v3/boards")
-  let body = {"description": $description, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"description": $description, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a board
@@ -411,11 +420,11 @@ export def "boards delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({board_id: $board_id} | format pattern "/v3/boards/{board_id}"))
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({board_id: (encode-path-segment $board_id)} | format pattern "/v3/boards/{board_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -436,18 +445,18 @@ export def "boards get" [
 ]: nothing -> record<asset_count: int, assets: table<asset_type: string, date_added: string, display_sizes: list, id: string>, comment_count: int, date_created: string, date_last_updated: string, description: string, id: string, links: record<invitation: string, share: string>, name: string, permissions: record<can_add_assets: bool, can_delete_board: bool, can_invite_to_board: bool, can_remove_assets: bool, can_update_description: bool, can_update_name: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({board_id: $board_id} | format pattern "/v3/boards/{board_id}"))
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({board_id: (encode-path-segment $board_id)} | format pattern "/v3/boards/{board_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a board
 #
 # PUT /v3/boards/{board_id}
-export def "boards put" [
+export def "boards update" [
   board_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -464,14 +473,14 @@ export def "boards put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({board_id: $board_id} | format pattern "/v3/boards/{board_id}"))
-  let body = {"description": $description, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({board_id: (encode-path-segment $board_id)} | format pattern "/v3/boards/{board_id}"))
+  let req_body = {"description": $description, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Remove assets from a board
@@ -487,24 +496,24 @@ export def "boards-assets delete-by-board_id" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --asset-ids: list # List the assets to be removed from the board. (nullable)
+  --asset-ids: list<string> # List the assets to be removed from the board. (nullable)
   --accept-language: string # Provide a header to specify the language of result values. Supported values: cs (iStock only), de, en-GB, en-US, es, fi (iStock only), fr, hu (iStock only), id (iStock only), it, ja, ko (creative assets only), nl, pl (creative assets only), pt-BR, pt-PT, ro (iStock only), ru (creative assets only), sv, th (iStock only), tr, uk (iStock only), vi (iStock only), zh-HK (creative assets only).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "asset_ids" $asset_ids "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({board_id: $board_id} | format pattern "/v3/boards/{board_id}/assets") $qp)
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({board_id: (encode-path-segment $board_id)} | format pattern "/v3/boards/{board_id}/assets") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add assets to a board
 #
 # PUT /v3/boards/{board_id}/assets
-export def "boards-assets put-by-board_id" [
+export def "boards-assets update-by-board_id" [
   board_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -520,13 +529,14 @@ export def "boards-assets put-by-board_id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({board_id: $board_id} | format pattern "/v3/boards/{board_id}/assets"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({board_id: (encode-path-segment $board_id)} | format pattern "/v3/boards/{board_id}/assets"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Remove an asset from a board
@@ -547,18 +557,18 @@ export def "boards-assets delete-by-board_id-asset_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({board_id: $board_id, asset_id: $asset_id} | format pattern "/v3/boards/{board_id}/assets/{asset_id}"))
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({board_id: (encode-path-segment $board_id), asset_id: (encode-path-segment $asset_id)} | format pattern "/v3/boards/{board_id}/assets/{asset_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add an asset to a board
 #
 # PUT /v3/boards/{board_id}/assets/{asset_id}
-export def "boards-assets put-by-board_id-asset_id" [
+export def "boards-assets update-by-board_id-asset_id" [
   board_id: string
   asset_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -573,11 +583,11 @@ export def "boards-assets put-by-board_id-asset_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({board_id: $board_id, asset_id: $asset_id} | format pattern "/v3/boards/{board_id}/assets/{asset_id}"))
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({board_id: (encode-path-segment $board_id), asset_id: (encode-path-segment $asset_id)} | format pattern "/v3/boards/{board_id}/assets/{asset_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -598,18 +608,18 @@ export def "boards-comments get" [
 ]: nothing -> record<comments: table<created_by: record, date_created: string, id: string, permissions: record, text: string>, permissions: record<can_add_comment: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({board_id: $board_id} | format pattern "/v3/boards/{board_id}/comments"))
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({board_id: (encode-path-segment $board_id)} | format pattern "/v3/boards/{board_id}/comments"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a comment to a board
 #
 # POST /v3/boards/{board_id}/comments
-export def "boards-comments post" [
+export def "boards-comments create" [
   board_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -625,14 +635,14 @@ export def "boards-comments post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({board_id: $board_id} | format pattern "/v3/boards/{board_id}/comments"))
-  let body = {"text": $text} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({board_id: (encode-path-segment $board_id)} | format pattern "/v3/boards/{board_id}/comments"))
+  let req_body = {"text": $text} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a comment from a board
@@ -653,11 +663,11 @@ export def "boards-comments delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({board_id: $board_id, comment_id: $comment_id} | format pattern "/v3/boards/{board_id}/comments/{comment_id}"))
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({board_id: (encode-path-segment $board_id), comment_id: (encode-path-segment $comment_id)} | format pattern "/v3/boards/{board_id}/comments/{comment_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -678,10 +688,10 @@ export def "collections get" [
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v3/collections")
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -702,10 +712,10 @@ export def "countries get" [
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v3/countries")
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -726,10 +736,10 @@ export def "customers-current get" [
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v3/customers/current")
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -745,9 +755,9 @@ export def "downloads get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --date-from: string # If specified, selects assets downloaded on or after this date. Dates should be submitted in ISO 8601 format (i.e., YYYY-MM-DD).  Any hour, minute, second values in the request are not used, unless useTimePart parameter is included. Date/times in the response are UTC. Default is 30 days prior to date_to (nullable, format: date-time)
+  --date-from: string # If specified, selects assets downloaded on or after this date. Dates should be submitted in ISO 8601 format (i.e., YYYY-MM-DD). Any hour, minute, second values in the request are not used, unless useTimePart parameter is included. Date/times in the response are UTC. Default is 30 days prior to date_to (nullable, format: date-time)
   --date-to: string # If specified, selects assets downloaded on or before this date. Dates should be submitted in ISO 8601 format (i.e., YYYY-MM-DD) Any hour, minute, second values in the request are not used, unless useTimePart parameter is included. Date/times in the response are UTC. Default is current date or 30 days after specified start date, whichever one is earlier. (nullable, format: date-time)
-  --use-time: oneof<nothing, bool> # If specified, time values provided with date_to or date_from will be used. Time values should be appended to the date value in ISO 8601 format i.e.: 2019-09-19T19:30:37 or 2019-09-19 19:30:37.  Time zone can be specified as optional. Default value is false (default: false)
+  --use-time: oneof<nothing, bool> # If specified, time values provided with date_to or date_from will be used. Time values should be appended to the date value in ISO 8601 format i.e.: 2019-09-19T19:30:37 or 2019-09-19 19:30:37. Time zone can be specified as optional. Default value is false (default: false)
   --page: int # Identifies page to return. Default is 1. (format: int32, default: 1)
   --page-size: int # Specifies page size. Default is 30, maximum page_size is 100. (format: int32, default: 30)
   --product-type: string@product-type-completer # Specifies product type to be included in the previous download results. Product types easyaccess, editorialsubscription, imagepack, and premiumaccess are for GettyImages API keys. Product types royaltyfreesubscription and creditpack are for iStock API keys. To get previous iStockPhoto credit downloads, creditpack must be selected.
@@ -758,17 +768,17 @@ export def "downloads get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "date_from" $date_from "scalar") (serialize-qp "date_to" $date_to "scalar") (serialize-qp "use_time" $use_time "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "product_type" $product_type "scalar") (serialize-qp "company_downloads" $company_downloads "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/downloads" $qp)
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Download an image
 #
 # POST /v3/downloads/images/{id}
-export def "downloads-images post" [
+export def "downloads-images create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -778,11 +788,11 @@ export def "downloads-images post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --auto-download: oneof<nothing, bool> # <remarks>                     Specifies whether to auto-download the image. If true is specified, a 303 SeeOther status is returned with a                     Location header set to the location of the image.                     If false is specified, the download URI will be returned in the response message. Default is true.                 </remarks> (default: true)
-  --file-type: string@file-type-completer # <remarks>                     File Type expressed with three character file extension.                 </remarks>
-  --height: string # <remarks>                     Specifies the pixel height of the particular image to download.                     Available heights can be found in the images/{ids} response for the specific image.                     If left blank, it will return the largest available size.                 </remarks> (nullable)
-  --product-id: int # <remarks>                     Identifier of the instance for the selected product offering type.                 </remarks> (nullable, format: int32)
-  --product-type: string@product-type-completer # <remarks>                     Product types easyaccess, editorialsubscription, imagepack, and premiumaccess are for GettyImages API keys. Product types royaltyfreesubscription and creditpack are for iStock API keys. Default product type for iStock API keys is creditpack.                 </remarks>
+  --auto-download: oneof<nothing, bool> # Specifies whether to auto-download the image. If true is specified, a 303 SeeOther status is returned with a Location header set to the location of the image. If false is specified, the download URI will be returned in the response message. Default is true. (default: true)
+  --file-type: string@file-type-completer # File Type expressed with three character file extension.
+  --height: string # Specifies the pixel height of the particular image to download. Available heights can be found in the images/{ids} response for the specific image. If left blank, it will return the largest available size. (nullable)
+  --product-id: int # Identifier of the instance for the selected product offering type. (nullable, format: int32)
+  --product-type: string@product-type-completer # Product types easyaccess, editorialsubscription, imagepack, and premiumaccess are for GettyImages API keys. Product types royaltyfreesubscription and creditpack are for iStock API keys. Default product type for iStock API keys is creditpack.
   --use-team-credits: oneof<nothing, bool> # Specifies whether to download the image with iStock Team Credits. Only applicable to iStock API keys authenticated with a user that has Team Credits. Blank is the same as False. (nullable, default: false)
   --accept-language: string # Provide a header to specify the language of result values. Supported values: cs (iStock only), de, en-GB, en-US, es, fi (iStock only), fr, hu (iStock only), id (iStock only), it, ja, ko (creative assets only), nl, pl (creative assets only), pt-BR, pt-PT, ro (iStock only), ru (creative assets only), sv, th (iStock only), tr, uk (iStock only), vi (iStock only), zh-HK (creative assets only).
   --download-notes: string # nullable
@@ -792,20 +802,20 @@ export def "downloads-images post" [
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "auto_download" $auto_download "scalar") (serialize-qp "file_type" $file_type "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "product_id" $product_id "scalar") (serialize-qp "product_type" $product_type "scalar") (serialize-qp "use_team_credits" $use_team_credits "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v3/downloads/images/{id}") $qp)
-  let body = {"download_notes": $download_notes, "project_code": $project_code} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/downloads/images/{id}") $qp)
+  let req_body = {"download_notes": $download_notes, "project_code": $project_code} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Download a video
 #
 # POST /v3/downloads/videos/{id}
-export def "downloads-videos post" [
+export def "downloads-videos create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -815,10 +825,10 @@ export def "downloads-videos post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --auto-download: oneof<nothing, bool> # <remarks>                     Specifies whether to auto-download the video. If true is specified, a 303 SeeOther status is returned with a                     Location header set to the location of the video.                     If false is specified, the download URI will be returned in the response message. Default is false.                 </remarks> (default: false)
+  --auto-download: oneof<nothing, bool> # Specifies whether to auto-download the video. If true is specified, a 303 SeeOther status is returned with a Location header set to the location of the video. If false is specified, the download URI will be returned in the response message. Default is false. (default: false)
   --size: string # Specifies the size to be downloaded. (nullable)
-  --product-id: int # <remarks>                     Identifier of the instance for the selected product offering type.                 </remarks> (nullable, format: int32)
-  --product-type: string@product-type-completer # <remarks>                     Product types easyaccess, editorialsubscription, imagepack, and premiumaccess are for GettyImages API keys. Product types royaltyfreesubscription and creditpack are for iStock API keys. Default product type for iStock API keys is creditpack.                 </remarks>
+  --product-id: int # Identifier of the instance for the selected product offering type. (nullable, format: int32)
+  --product-type: string@product-type-completer # Product types easyaccess, editorialsubscription, imagepack, and premiumaccess are for GettyImages API keys. Product types royaltyfreesubscription and creditpack are for iStock API keys. Default product type for iStock API keys is creditpack.
   --use-team-credits: oneof<nothing, bool> # Specifies whether to download the image with iStock Team Credits. Only applicable to iStock API keys authenticated with a user that has Team Credits. Blank is the same as False. (nullable)
   --accept-language: string # Provide a header to specify the language of result values. Supported values: cs (iStock only), de, en-GB, en-US, es, fi (iStock only), fr, hu (iStock only), id (iStock only), it, ja, ko (creative assets only), nl, pl (creative assets only), pt-BR, pt-PT, ro (iStock only), ru (creative assets only), sv, th (iStock only), tr, uk (iStock only), vi (iStock only), zh-HK (creative assets only).
   --download-notes: string # nullable
@@ -828,14 +838,14 @@ export def "downloads-videos post" [
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "auto_download" $auto_download "scalar") (serialize-qp "size" $size "scalar") (serialize-qp "product_id" $product_id "scalar") (serialize-qp "product_type" $product_type "scalar") (serialize-qp "use_team_credits" $use_team_credits "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v3/downloads/videos/{id}") $qp)
-  let body = {"download_notes": $download_notes, "project_code": $project_code} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/downloads/videos/{id}") $qp)
+  let req_body = {"download_notes": $download_notes, "project_code": $project_code} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get metadata for multiple events
@@ -850,7 +860,7 @@ export def "events list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ids: list # A comma separated list of event ids. (nullable)
+  --ids: list<int> # A comma separated list of event ids. (nullable)
   --fields: list # A comma separated list of fields to return in the response. (nullable)
   --accept-language: string # Provide a header to specify the language of result values. Supported values: cs (iStock only), de, en-GB, en-US, es, fi (iStock only), fr, hu (iStock only), id (iStock only), it, ja, ko (creative assets only), nl, pl (creative assets only), pt-BR, pt-PT, ro (iStock only), ru (creative assets only), sv, th (iStock only), tr, uk (iStock only), vi (iStock only), zh-HK (creative assets only).
 ]: nothing -> any {
@@ -858,10 +868,10 @@ export def "events list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/events" $qp)
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -884,11 +894,11 @@ export def "events get" [
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v3/events/{id}") $qp)
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/events/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -904,7 +914,7 @@ export def "images list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ids: list # Specifies one or more image ids to return. Use comma delimiter when requesting multiple ids.  Maximum of 100 ids. (nullable)
+  --ids: list<string> # Specifies one or more image ids to return. Use comma delimiter when requesting multiple ids. Maximum of 100 ids. (nullable)
   --fields: list # Specifies fields to return. Defaults to 'summary_set'. NOTE: Bytes, height, and width returned by 'download_sizes' field are estimates. (nullable)
   --accept-language: string # Provide a header to specify the language of result values. Supported values: cs (iStock only), de, en-GB, en-US, es, fi (iStock only), fr, hu (iStock only), id (iStock only), it, ja, ko (creative assets only), nl, pl (creative assets only), pt-BR, pt-PT, ro (iStock only), ru (creative assets only), sv, th (iStock only), tr, uk (iStock only), vi (iStock only), zh-HK (creative assets only).
 ]: nothing -> record<images: any, images_not_found: list<string>> {
@@ -912,10 +922,10 @@ export def "images list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/images" $qp)
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -938,11 +948,11 @@ export def "images get" [
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v3/images/{id}") $qp)
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/images/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -959,17 +969,17 @@ export def "images-downloadhistory get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --company-downloads: oneof<nothing, bool> # If specified, returns the list of previously downloaded images for all users in your company.             Your account must be enabled for this functionality. Contact your Getty Images account rep for more information. Default is false.
+  --company-downloads: oneof<nothing, bool> # If specified, returns the list of previously downloaded images for all users in your company. Your account must be enabled for this functionality. Contact your Getty Images account rep for more information. Default is false.
   --accept-language: string # Provide a header to specify the language of result values. Supported values: cs (iStock only), de, en-GB, en-US, es, fi (iStock only), fr, hu (iStock only), id (iStock only), it, ja, ko (creative assets only), nl, pl (creative assets only), pt-BR, pt-PT, ro (iStock only), ru (creative assets only), sv, th (iStock only), tr, uk (iStock only), vi (iStock only), zh-HK (creative assets only).
 ]: nothing -> record<downloads: any, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "company_downloads" $company_downloads "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v3/images/{id}/downloadhistory") $qp)
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/images/{id}/downloadhistory") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -994,11 +1004,11 @@ export def "images-same-series get" [
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "csv") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v3/images/{id}/same-series") $qp)
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/images/{id}/same-series") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1023,11 +1033,11 @@ export def "images-similar get" [
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "csv") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v3/images/{id}/similar") $qp)
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/images/{id}/similar") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1048,11 +1058,11 @@ export def "orders get" [
 ]: nothing -> record<assets: table<id: string>, end_client: string, id: string, invoice_number: string, notes: record<licensee_name: string, ordered_by: string, project_title: string, purchase_order_number: string>, order_date: string> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v3/orders/{id}"))
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/orders/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1075,10 +1085,10 @@ export def "products get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/products" $qp)
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1105,17 +1115,17 @@ export def "purchased-assets get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "date_to" $date_to "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "date_from" $date_from "scalar") (serialize-qp "company_purchases" $company_purchases "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/purchased-assets" $qp)
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Upload image for use by the search creative images/videos operations
 #
 # PUT /v3/search/by-image/uploads/{file-name}
-export def "search-by-image-uploads put" [
+export def "search-by-image-uploads update" [
   file_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1130,11 +1140,12 @@ export def "search-by-image-uploads put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({file_name: $file_name} | format pattern "/v3/search/by-image/uploads/{file_name}"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({file_name: (encode-path-segment $file_name)} | format pattern "/v3/search/by-image/uploads/{file_name}"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "image/jpeg" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "image/jpeg" $req_body
 }
 
 # Search for events
@@ -1164,10 +1175,10 @@ export def "search-events get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "editorial_segment" $editorial_segment "scalar") (serialize-qp "date_from" $date_from "scalar") (serialize-qp "date_to" $date_to "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "phrase" $phrase "scalar") (serialize-qp "sort_order" $sort_order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/search/events" $qp)
-  let extra_headers = {"Accept-Language": $accept_language, "GI-Country-Code": $gi_country_code} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": $accept_language, "GI-Country-Code": $gi_country_code} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1185,13 +1196,13 @@ export def "search-images get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --age-of-people: list # Filter based on the age of individuals in an image. (nullable)
   --artists: string # Search for images by specific artists (free-text, comma-separated list of artists). (nullable)
-  --collection-codes: list # Filter by collection codes (comma-separated list). Include or exclude based on collections_filter_type. (nullable)
+  --collection-codes: list<string> # Filter by collection codes (comma-separated list). Include or exclude based on collections_filter_type. (nullable)
   --collections-filter-type: string@collections-filter-type-completer # Provides searching based on specified collection(s). The default is Include
   --color: string # Filter based on predominant color in an image. Use 6 character hexidecimal format (e.g., #002244). Note: when specified, results will not contain editorial images. (nullable)
   --compositions: list # Filter based on image composition. (nullable)
-  --download-product: string # Filters based on which product the asset will download against.                     Allowed values are easyaccess, editorialsubscription, imagepack, premiumaccess and royaltyfreesubscription.                     If you have more than one instance of a product, you may also include the ID of the product instance you wish to filter on.                      For example, some users may have more than one premiumaccess product, so the download_product value would be premiumaccess:1234.                      Product ID can be obtained from the GET /products response. (nullable)
+  --download-product: string # Filters based on which product the asset will download against. Allowed values are easyaccess, editorialsubscription, imagepack, premiumaccess and royaltyfreesubscription. If you have more than one instance of a product, you may also include the ID of the product instance you wish to filter on. For example, some users may have more than one premiumaccess product, so the download_product value would be premiumaccess:1234. Product ID can be obtained from the GET /products response. (nullable)
   --embed-content-only: oneof<nothing, bool> # Restrict search results to embeddable images. The default is false. (default: false)
-  --event-ids: list # Filter based on specific events (nullable)
+  --event-ids: list<int> # Filter based on specific events (nullable)
   --ethnicity: list # Filter search results based on the ethnicity of individuals in an image. (nullable)
   --exclude-nudity: oneof<nothing, bool> # Excludes images containing nudity. The default is false. (default: false)
   --fields: list # Specifies fields to return. Defaults to 'summary_set'. (nullable)
@@ -1199,15 +1210,15 @@ export def "search-images get" [
   --graphical-styles: list # Filter based on graphical style of the image. (nullable)
   --graphical-styles-filter-type: string@graphical-styles-filter-type-completer # Provides searching based on specified graphical style(s). The default is Include
   --include-related-searches: oneof<nothing, bool> # Specifies whether or not to include related searches in the response. The default is false. (default: false)
-  --keyword-ids: list # Return only images tagged with specific keyword(s). Specify using a comma-separated list of keyword Ids. If keyword Ids and phrase are both specified, only those images matching the query phrase which also contain the requested keyword(s) are returned. (nullable)
+  --keyword-ids: list<int> # Return only images tagged with specific keyword(s). Specify using a comma-separated list of keyword Ids. If keyword Ids and phrase are both specified, only those images matching the query phrase which also contain the requested keyword(s) are returned. (nullable)
   --minimum-size: string@minimum-size-completer # Filter based on minimum size requested. The default is x-small
   --number-of-people: list # Filter based on the number of people in the image. (nullable)
   --orientations: list # Return only images with selected aspect ratios. (nullable)
   --page: int # Request results starting at a page number (default is 1). (format: int32, default: 1)
   --page-size: int # Request number of images to return in each page. Default is 30, maximum page_size is 100. (format: int32, default: 30)
   --phrase: string # Search images using a search phrase. (nullable)
-  --sort-order: string@sort-order-completer-2 # Select sort order of results.  The default is best_match
-  --specific-people: list # Return only images associated with specific people (using a comma-delimited list). (nullable)
+  --sort-order: string@sort-order-completer-2 # Select sort order of results. The default is best_match
+  --specific-people: list<string> # Return only images associated with specific people (using a comma-delimited list). (nullable)
   --accept-language: string # Provide a header to specify the language of result values. Supported values: cs (iStock only), de, en-GB, en-US, es, fi (iStock only), fr, hu (iStock only), id (iStock only), it, ja, ko (creative assets only), nl, pl (creative assets only), pt-BR, pt-PT, ro (iStock only), ru (creative assets only), sv, th (iStock only), tr, uk (iStock only), vi (iStock only), zh-HK (creative assets only).
   --gi-country-code: string # Receive regionally relevant search results based on the value specified. Accepts only ISO Alpha-3 country codes. The Countries operation can be used to retrieve the codes.
 ]: nothing -> record<images: table<allowed_use: record, alternative_ids: record, artist: string, asset_family: string, call_for_image: bool, caption: string, collection_code: string, collection_id: int, collection_name: string, color_type: string, copyright: string, date_camera_shot: string, date_created: string, display_sizes: list, download_product: string, editorial_segments: list, event_ids: list, graphical_style: string, id: string, istock_licenses: list, keywords: list, largest_downloads: list, license_model: string, max_dimensions: record, orientation: string, people: list, product_types: list, quality_rank: int, referral_destinations: list, title: string, uri_oembed: string>, related_searches: table<phrase: string, url: string>, result_count: int> {
@@ -1215,10 +1226,10 @@ export def "search-images get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "age_of_people" $age_of_people "csv") (serialize-qp "artists" $artists "scalar") (serialize-qp "collection_codes" $collection_codes "csv") (serialize-qp "collections_filter_type" $collections_filter_type "scalar") (serialize-qp "color" $color "scalar") (serialize-qp "compositions" $compositions "csv") (serialize-qp "download_product" $download_product "scalar") (serialize-qp "embed_content_only" $embed_content_only "scalar") (serialize-qp "event_ids" $event_ids "csv") (serialize-qp "ethnicity" $ethnicity "csv") (serialize-qp "exclude_nudity" $exclude_nudity "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "file_types" $file_types "csv") (serialize-qp "graphical_styles" $graphical_styles "csv") (serialize-qp "graphical_styles_filter_type" $graphical_styles_filter_type "scalar") (serialize-qp "include_related_searches" $include_related_searches "scalar") (serialize-qp "keyword_ids" $keyword_ids "csv") (serialize-qp "minimum_size" $minimum_size "scalar") (serialize-qp "number_of_people" $number_of_people "csv") (serialize-qp "orientations" $orientations "csv") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "phrase" $phrase "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "specific_people" $specific_people "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/search/images" $qp)
-  let extra_headers = {"Accept-Language": $accept_language, "GI-Country-Code": $gi_country_code} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": $accept_language, "GI-Country-Code": $gi_country_code} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1236,14 +1247,14 @@ export def "search-images-creative get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --age-of-people: list # Filter based on the age of individuals in an image. (nullable)
   --artists: string # Search for images by specific artists (free-text, comma-separated list of artists). (nullable)
-  --collection-codes: list # Filter by collection codes (comma-separated list). Include or exclude based on collections_filter_type. (nullable)
+  --collection-codes: list<string> # Filter by collection codes (comma-separated list). Include or exclude based on collections_filter_type. (nullable)
   --collections-filter-type: string@collections-filter-type-completer # Use to include or exclude collections from search. The default is include
   --color: string # Filter based on predominant color in an image. Use 6 character hexadecimal format (e.g., #002244). (nullable)
   --compositions: list # Filter based on image composition. (nullable)
-  --download-product: string # Filters based on which product the asset will download against.                     Allowed values are easyaccess, editorialsubscription, imagepack, premiumaccess and royaltyfreesubscription.                     If you have more than one instance of a product, you may also include the ID of the product instance you wish to filter on.                      For example, some users may have more than one premiumaccess product, so the download_product value would be premiumaccess:1234.                      Product ID can be obtained from the GET /products response. (nullable)
+  --download-product: string # Filters based on which product the asset will download against. Allowed values are easyaccess, editorialsubscription, imagepack, premiumaccess and royaltyfreesubscription. If you have more than one instance of a product, you may also include the ID of the product instance you wish to filter on. For example, some users may have more than one premiumaccess product, so the download_product value would be premiumaccess:1234. Product ID can be obtained from the GET /products response. (nullable)
   --embed-content-only: oneof<nothing, bool> # Restrict search results to embeddable images. The default is false. (default: false)
   --ethnicity: list # Filter search results based on the ethnicity of individuals in an image. (nullable)
-  --exclude-keyword-ids: list # Return only images not tagged with specific keyword(s). Specify using a comma-separated list of keyword Ids. If keyword Ids and phrase are both specified, only those images matching the query phrase which also do not contain the requested keyword(s) are returned. (nullable)
+  --exclude-keyword-ids: list<int> # Return only images not tagged with specific keyword(s). Specify using a comma-separated list of keyword Ids. If keyword Ids and phrase are both specified, only those images matching the query phrase which also do not contain the requested keyword(s) are returned. (nullable)
   --exclude-nudity: oneof<nothing, bool> # Excludes images containing nudity. The default is false. (default: false)
   --exclude-editorial-use-only: oneof<nothing, bool> # Exclude images that are only available for editorial (non-commercial) use. Default value is false. (nullable)
   --fields: list # Specifies fields to return. Defaults to 'summary_set'. NOTE: Bytes, height, and width returned by 'download_sizes' field are estimates. (nullable)
@@ -1251,7 +1262,7 @@ export def "search-images-creative get" [
   --graphical-styles: list # Filter based on graphical style of the image. (nullable)
   --graphical-styles-filter-type: string@graphical-styles-filter-type-completer # Provides searching based on specified graphical style(s). The default is include.
   --include-related-searches: oneof<nothing, bool> # Specifies whether or not to include related searches in the response. The default is false. (default: false)
-  --keyword-ids: list # Return only images tagged with specific keyword(s). Specify using a comma-separated list of keyword Ids. If keyword Ids and phrase are both specified, only those images matching the query phrase which also contain the requested keyword(s) are returned. (nullable)
+  --keyword-ids: list<int> # Return only images tagged with specific keyword(s). Specify using a comma-separated list of keyword Ids. If keyword Ids and phrase are both specified, only those images matching the query phrase which also contain the requested keyword(s) are returned. (nullable)
   --minimum-size: string@minimum-size-completer # Filter based on minimum size requested. The default is x-small.
   --number-of-people: list # Filter based on the number of people in the image. (nullable)
   --orientations: list # Return only images with selected aspect ratios. (nullable)
@@ -1259,8 +1270,8 @@ export def "search-images-creative get" [
   --page-size: int # Request number of images to return in each page. Default is 30, maximum page_size is 100. (format: int32, default: 30)
   --phrase: string # Search images using a search phrase. (nullable, default: )
   --safe-search: oneof<nothing, bool> # Setting safe_search to "true" excludes images containing nudity, death, profanity, drugs and alcohol, suggestive content, and graphic content from the result set. The default is false. Because this is a keyword-based filter, it's possible that a small number of unsafe images may not be caught by the filter. Please direct feedback to your Getty Images Account or API support representative. (default: false)
-  --sort-order: string@sort-order-completer-2 # Select sort order of results.  The default is best_match
-  --facet-fields: list # Specifies the facets to return in the response. Facets provide additional search parameters to refine your results.                    The include_facets parameter must be set to "true" for facets to be returned. (nullable)
+  --sort-order: string@sort-order-completer-2 # Select sort order of results. The default is best_match
+  --facet-fields: list # Specifies the facets to return in the response. Facets provide additional search parameters to refine your results. The include_facets parameter must be set to "true" for facets to be returned. (nullable)
   --include-facets: oneof<nothing, bool> # Specifies whether or not to include facets in the result set. Default is "false". (nullable)
   --facet-max-count: int # Specifies the maximum number of facets to return per type. Default is 300. (format: int32, default: 300)
   --accept-language: string # Provide a header to specify the language of result values. Supported values: cs (iStock only), de, en-GB, en-US, es, fi (iStock only), fr, hu (iStock only), id (iStock only), it, ja, ko (creative assets only), nl, pl (creative assets only), pt-BR, pt-PT, ro (iStock only), ru (creative assets only), sv, th (iStock only), tr, uk (iStock only), vi (iStock only), zh-HK (creative assets only).
@@ -1270,10 +1281,10 @@ export def "search-images-creative get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "age_of_people" $age_of_people "csv") (serialize-qp "artists" $artists "scalar") (serialize-qp "collection_codes" $collection_codes "csv") (serialize-qp "collections_filter_type" $collections_filter_type "scalar") (serialize-qp "color" $color "scalar") (serialize-qp "compositions" $compositions "csv") (serialize-qp "download_product" $download_product "scalar") (serialize-qp "embed_content_only" $embed_content_only "scalar") (serialize-qp "ethnicity" $ethnicity "csv") (serialize-qp "exclude_keyword_ids" $exclude_keyword_ids "csv") (serialize-qp "exclude_nudity" $exclude_nudity "scalar") (serialize-qp "exclude_editorial_use_only" $exclude_editorial_use_only "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "file_types" $file_types "csv") (serialize-qp "graphical_styles" $graphical_styles "csv") (serialize-qp "graphical_styles_filter_type" $graphical_styles_filter_type "scalar") (serialize-qp "include_related_searches" $include_related_searches "scalar") (serialize-qp "keyword_ids" $keyword_ids "csv") (serialize-qp "minimum_size" $minimum_size "scalar") (serialize-qp "number_of_people" $number_of_people "csv") (serialize-qp "orientations" $orientations "csv") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "phrase" $phrase "scalar") (serialize-qp "safe_search" $safe_search "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "facet_fields" $facet_fields "csv") (serialize-qp "include_facets" $include_facets "scalar") (serialize-qp "facet_max_count" $facet_max_count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/search/images/creative" $qp)
-  let extra_headers = {"Accept-Language": $accept_language, "GI-Country-Code": $gi_country_code} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": $accept_language, "GI-Country-Code": $gi_country_code} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1291,14 +1302,14 @@ export def "search-images-creative-by-image get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --asset-id: string # Specifies the Getty image id to use in the search. (nullable)
   --exclude-editorial-use-only: oneof<nothing, bool> # Exclude images that are only available for editorial (non-commercial) use. Default value is false. (nullable)
-  --facet-fields: list # Specifies the facets to return in the response. Facets provide additional search parameters to refine your results.                     The include_facets parameter must be set to "true" for facets to be returned. (nullable)
+  --facet-fields: list # Specifies the facets to return in the response. Facets provide additional search parameters to refine your results. The include_facets parameter must be set to "true" for facets to be returned. (nullable)
   --facet-max-count: int # Specifies the maximum number of facets to return per type. Default is 300. (format: int32, default: 300)
   --fields: list # Specifies fields to return. Defaults to 'summary_set'. NOTE: Bytes, height, and width returned by 'download_sizes' field are estimates. (nullable)
   --image-url: string # Specifies the location of the image to use in the search. (nullable)
   --include-facets: oneof<nothing, bool> # Specifies whether or not to include facets in the result set. Default is "false". (nullable)
   --page: int # Request results starting at a page number (default is 1). (format: int32, default: 1)
   --page-size: int # Request number of images to return in each page. Default is 30, maximum page_size is 100. (format: int32, default: 30)
-  --product-types: list # Filter images to those from one of your product types.                      Allowed values are easyaccess, imagepack, premiumaccess and royaltyfreesubscription.                      If you have more than one instance of a product, you may also include the ID of the product instance you wish to filter on.                      For example, some users may have more than one premiumaccess product, so the product_types value would be premiumaccess:1234.                      Product ID can be obtained from the GET /products response. (nullable)
+  --product-types: list<string> # Filter images to those from one of your product types. Allowed values are easyaccess, imagepack, premiumaccess and royaltyfreesubscription. If you have more than one instance of a product, you may also include the ID of the product instance you wish to filter on. For example, some users may have more than one premiumaccess product, so the product_types value would be premiumaccess:1234. Product ID can be obtained from the GET /products response. (nullable)
   --accept-language: string # Provide a header to specify the language of result values. Supported values: cs (iStock only), de, en-GB, en-US, es, fi (iStock only), fr, hu (iStock only), id (iStock only), it, ja, ko (creative assets only), nl, pl (creative assets only), pt-BR, pt-PT, ro (iStock only), ru (creative assets only), sv, th (iStock only), tr, uk (iStock only), vi (iStock only), zh-HK (creative assets only).
   --gi-country-code: string # Receive regionally relevant search results based on the value specified. Accepts only ISO Alpha-3 country codes. The Countries operation can be used to retrieve the codes.
 ]: nothing -> record<auto_corrections: record<phrase: string>, facets: record<artists: list<record>, entertainment: list<record>, events: list<record>, locations: list<record>, specific_people: list<record>>, image_fingerprint: string, images: any, related_searches: table<phrase: string, url: string>, result_count: int> {
@@ -1306,10 +1317,10 @@ export def "search-images-creative-by-image get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "asset_id" $asset_id "scalar") (serialize-qp "exclude_editorial_use_only" $exclude_editorial_use_only "scalar") (serialize-qp "facet_fields" $facet_fields "csv") (serialize-qp "facet_max_count" $facet_max_count "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "image_url" $image_url "scalar") (serialize-qp "include_facets" $include_facets "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "product_types" $product_types "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/search/images/creative/by-image" $qp)
-  let extra_headers = {"Accept-Language": $accept_language, "GI-Country-Code": $gi_country_code} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": $accept_language, "GI-Country-Code": $gi_country_code} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1327,33 +1338,33 @@ export def "search-images-editorial get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --age-of-people: list # Filter based on the age of individuals in an image. (nullable)
   --artists: string # Search for images by specific artists (free-text, comma-separated list of artists). (nullable)
-  --collection-codes: list # Filter by collections (comma-separated list of collection codes). Include or exclude based on collections_filter_type. (nullable)
+  --collection-codes: list<string> # Filter by collections (comma-separated list of collection codes). Include or exclude based on collections_filter_type. (nullable)
   --collections-filter-type: string@collections-filter-type-completer # Use to include or exclude collections from search. The default is include
   --compositions: list # Filter based on image composition. (nullable)
   --date-from: string # Return only images that are created on or after this date. Use ISO 8601 format (e.g., 1999-12-31). (nullable, format: date-time)
   --date-to: string # Return only images that are created on or before this date. Use ISO 8601 format (e.g., 1999-12-31). (nullable, format: date-time)
-  --download-product: string # Filters based on which product the asset will download against.                     Allowed values are easyaccess, editorialsubscription, imagepack, premiumaccess and royaltyfreesubscription.                     If you have more than one instance of a product, you may also include the ID of the product instance you wish to filter on.                      For example, some users may have more than one premiumaccess product, so the download_product value would be premiumaccess:1234.                      Product ID can be obtained from the GET /products response. (nullable)
+  --download-product: string # Filters based on which product the asset will download against. Allowed values are easyaccess, editorialsubscription, imagepack, premiumaccess and royaltyfreesubscription. If you have more than one instance of a product, you may also include the ID of the product instance you wish to filter on. For example, some users may have more than one premiumaccess product, so the download_product value would be premiumaccess:1234. Product ID can be obtained from the GET /products response. (nullable)
   --editorial-segments: list # Return only events with a matching editorial segment. (nullable)
   --embed-content-only: oneof<nothing, bool> # Restrict search results to embeddable images. The default is false. (default: false)
   --ethnicity: list # Filter search results based on the ethnicity of individuals in an image. (nullable)
-  --event-ids: list # Filter based on specific events (nullable)
-  --exclude-keyword-ids: list # Return only images not tagged with specific keyword(s). Specify using a comma-separated list of keyword Ids. If keyword Ids and phrase are both specified, only those images matching the query phrase which also do not contain the requested keyword(s) are returned. (nullable)
+  --event-ids: list<int> # Filter based on specific events (nullable)
+  --exclude-keyword-ids: list<int> # Return only images not tagged with specific keyword(s). Specify using a comma-separated list of keyword Ids. If keyword Ids and phrase are both specified, only those images matching the query phrase which also do not contain the requested keyword(s) are returned. (nullable)
   --fields: list # Specifies fields to return. Defaults to 'summary_set'. NOTE: Bytes, height, and width returned by 'download_sizes' field are estimates. (nullable)
   --file-types: list # Return only images having a specific file type. (nullable)
   --graphical-styles: list # Filter based on graphical style of the image. (nullable)
   --graphical-styles-filter-type: string@graphical-styles-filter-type-completer # Provides searching based on specified graphical style(s). The default is include.
   --include-related-searches: oneof<nothing, bool> # Specifies whether or not to include related searches in the response. The default is false. (default: false)
-  --keyword-ids: list # Return only images tagged with specific keyword(s). Specify using a comma-separated list of keyword Ids. If keyword Ids and phrase are both specified, only those images matching the query phrase which also contain the requested keyword(s) are returned. (nullable)
+  --keyword-ids: list<int> # Return only images tagged with specific keyword(s). Specify using a comma-separated list of keyword Ids. If keyword Ids and phrase are both specified, only those images matching the query phrase which also contain the requested keyword(s) are returned. (nullable)
   --minimum-size: string@minimum-size-completer # Filter based on minimum size requested. The default is x-small.
   --number-of-people: list # Filter based on the number of people in the image. (nullable)
   --orientations: list # Return only images with selected aspect ratios. (nullable)
   --page: int # Request results starting at a page number (default is 1). (format: int32, default: 1)
   --page-size: int # Request number of images to return in each page. Default is 30, maximum page_size is 100. (format: int32, default: 30)
   --phrase: string # Search images using a search phrase. (nullable)
-  --sort-order: string@sort-order-completer-3 # Select sort order of results.  The default is best_match
-  --specific-people: list # Return only images associated with specific people (using a comma-delimited list). (nullable)
+  --sort-order: string@sort-order-completer-3 # Select sort order of results. The default is best_match
+  --specific-people: list<string> # Return only images associated with specific people (using a comma-delimited list). (nullable)
   --minimum-quality-rank: int # Filter search results based on minimum quality ranking. Possible values 1, 2, 3 with 1 being best. (nullable, format: int32)
-  --facet-fields: list # Specifies the facets to return in the response. Facets provide additional search parameters to refine your results.                    The include_facets parameter must be set to "true" for facets to be returned. (nullable)
+  --facet-fields: list # Specifies the facets to return in the response. Facets provide additional search parameters to refine your results. The include_facets parameter must be set to "true" for facets to be returned. (nullable)
   --include-facets: oneof<nothing, bool> # Specifies whether or not to include facets in the result set. Default is "false". (nullable)
   --facet-max-count: int # Specifies the maximum number of facets to return per type. Default is 300. (format: int32, default: 300)
   --accept-language: string # Provide a header to specify the language of result values. Supported values: cs (iStock only), de, en-GB, en-US, es, fi (iStock only), fr, hu (iStock only), id (iStock only), it, ja, ko (creative assets only), nl, pl (creative assets only), pt-BR, pt-PT, ro (iStock only), ru (creative assets only), sv, th (iStock only), tr, uk (iStock only), vi (iStock only), zh-HK (creative assets only).
@@ -1363,10 +1374,10 @@ export def "search-images-editorial get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "age_of_people" $age_of_people "csv") (serialize-qp "artists" $artists "scalar") (serialize-qp "collection_codes" $collection_codes "csv") (serialize-qp "collections_filter_type" $collections_filter_type "scalar") (serialize-qp "compositions" $compositions "csv") (serialize-qp "date_from" $date_from "scalar") (serialize-qp "date_to" $date_to "scalar") (serialize-qp "download_product" $download_product "scalar") (serialize-qp "editorial_segments" $editorial_segments "csv") (serialize-qp "embed_content_only" $embed_content_only "scalar") (serialize-qp "ethnicity" $ethnicity "csv") (serialize-qp "event_ids" $event_ids "csv") (serialize-qp "exclude_keyword_ids" $exclude_keyword_ids "csv") (serialize-qp "fields" $fields "csv") (serialize-qp "file_types" $file_types "csv") (serialize-qp "graphical_styles" $graphical_styles "csv") (serialize-qp "graphical_styles_filter_type" $graphical_styles_filter_type "scalar") (serialize-qp "include_related_searches" $include_related_searches "scalar") (serialize-qp "keyword_ids" $keyword_ids "csv") (serialize-qp "minimum_size" $minimum_size "scalar") (serialize-qp "number_of_people" $number_of_people "csv") (serialize-qp "orientations" $orientations "csv") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "phrase" $phrase "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "specific_people" $specific_people "csv") (serialize-qp "minimum_quality_rank" $minimum_quality_rank "scalar") (serialize-qp "facet_fields" $facet_fields "csv") (serialize-qp "include_facets" $include_facets "scalar") (serialize-qp "facet_max_count" $facet_max_count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/search/images/editorial" $qp)
-  let extra_headers = {"Accept-Language": $accept_language, "GI-Country-Code": $gi_country_code} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": $accept_language, "GI-Country-Code": $gi_country_code} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1385,19 +1396,19 @@ export def "search-videos-creative get" [
   --age-of-people: list # Provides filtering according to the age of individuals in a video. (nullable)
   --artists: string # Search for videos by specific artists (free-text, comma-separated list of artists). (nullable)
   --aspect-ratios: list # Search for videos by specific aspect ratios. (nullable)
-  --collection-codes: list # Provides filtering by collection code. (nullable)
+  --collection-codes: list<string> # Provides filtering by collection code. (nullable)
   --collections-filter-type: string@collections-filter-type-completer # Use to include or exclude collections from search. The default is include
   --compositions: list # Filter based on video composition. (nullable)
-  --download-product: string # Filters based on which product the asset will download against.                     Allowed values are easyaccess, editorialsubscription, imagepack, premiumaccess and royaltyfreesubscription.                     If you have more than one instance of a product, you may also include the ID of the product instance you wish to filter on.                      For example, some users may have more than one premiumaccess product, so the download_product value would be premiumaccess:1234.                      Product ID can be obtained from the GET /products response. (nullable)
+  --download-product: string # Filters based on which product the asset will download against. Allowed values are easyaccess, editorialsubscription, imagepack, premiumaccess and royaltyfreesubscription. If you have more than one instance of a product, you may also include the ID of the product instance you wish to filter on. For example, some users may have more than one premiumaccess product, so the download_product value would be premiumaccess:1234. Product ID can be obtained from the GET /products response. (nullable)
   --exclude-nudity: oneof<nothing, bool> # Excludes videos containing nudity. The default is false. (default: false)
   --exclude-editorial-use-only: oneof<nothing, bool> # Exclude videos that are only available for editorial (non-commercial) use. Default value is false. (nullable)
-  --exclude-keyword-ids: list # Return only videos not tagged with specific keyword(s). Specify using a comma-separated list of keyword Ids. If keyword Ids and phrase are both specified, only those videos matching the query phrase which also do not contain the requested keyword(s) are returned. (nullable)
+  --exclude-keyword-ids: list<int> # Return only videos not tagged with specific keyword(s). Specify using a comma-separated list of keyword Ids. If keyword Ids and phrase are both specified, only those videos matching the query phrase which also do not contain the requested keyword(s) are returned. (nullable)
   --fields: list # Specifies fields to return. Defaults to 'summary_set'. NOTE: Bytes returned by 'download_sizes' field is an estimate. (nullable)
   --format-available: string@format-available-completer # Filters according to the digital video format available on a film asset.
   --frame-rates: list # Provides filtering by video frame rate (frames/second). (nullable)
   --image-techniques: list # Filter based on image technique. (nullable)
   --include-related-searches: oneof<nothing, bool> # Specifies whether or not to include related searches in the response. The default is false. (default: false)
-  --keyword-ids: list # Return only videos tagged with specific keyword(s). Specify using a comma-separated list of keyword Ids. If keyword Ids and phrase are both specified, only those videos matching the query phrase which also contain the requested keyword(s) are returned. (nullable)
+  --keyword-ids: list<int> # Return only videos tagged with specific keyword(s). Specify using a comma-separated list of keyword Ids. If keyword Ids and phrase are both specified, only those videos matching the query phrase which also contain the requested keyword(s) are returned. (nullable)
   --license-models: list # Specifies the video licensing model(s). (nullable)
   --orientations: list # Return only videos with selected orientations. (nullable)
   --min-clip-length: int # Provides filtering by minimum length of video clip, in seconds (format: int32, default: 0)
@@ -1406,9 +1417,9 @@ export def "search-videos-creative get" [
   --page-size: int # Specifies page size. Default is 30, maximum page_size is 100. (format: int32, default: 30)
   --phrase: string # Free-text search query. (nullable, default: )
   --safe-search: oneof<nothing, bool> # Setting safe_search to "true" excludes images containing nudity, death, profanity, drugs and alcohol, suggestive content, and graphic content from the result set. The default is false. Because this is a keyword-based filter, it's possible that a small number of unsafe images may not be caught by the filter. Please direct feedback to your Getty Images Account or API support representative. (default: false)
-  --sort-order: string@sort-order-completer-2 # Select sort order of results.  The default is best_match
+  --sort-order: string@sort-order-completer-2 # Select sort order of results. The default is best_match
   --release-status: string@release-status-completer # Allows filtering by type of model release.
-  --facet-fields: list # Specifies the facets to return in the response. Facets provide additional search parameters to refine your results.                    The include_facets parameter must be set to "true" for facets to be returned. (nullable)
+  --facet-fields: list # Specifies the facets to return in the response. Facets provide additional search parameters to refine your results. The include_facets parameter must be set to "true" for facets to be returned. (nullable)
   --facet-max-count: int # Specifies the maximum number of facets to return per type. Default is 300. (format: int32, default: 300)
   --include-facets: oneof<nothing, bool> # Specifies whether or not to include facets in the result set. Default is "false". (nullable)
   --viewpoints: list # Filter based on viewpoint. (nullable)
@@ -1419,10 +1430,10 @@ export def "search-videos-creative get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "age_of_people" $age_of_people "csv") (serialize-qp "artists" $artists "scalar") (serialize-qp "aspect_ratios" $aspect_ratios "csv") (serialize-qp "collection_codes" $collection_codes "csv") (serialize-qp "collections_filter_type" $collections_filter_type "scalar") (serialize-qp "compositions" $compositions "csv") (serialize-qp "download_product" $download_product "scalar") (serialize-qp "exclude_nudity" $exclude_nudity "scalar") (serialize-qp "exclude_editorial_use_only" $exclude_editorial_use_only "scalar") (serialize-qp "exclude_keyword_ids" $exclude_keyword_ids "csv") (serialize-qp "fields" $fields "csv") (serialize-qp "format_available" $format_available "scalar") (serialize-qp "frame_rates" $frame_rates "csv") (serialize-qp "image_techniques" $image_techniques "csv") (serialize-qp "include_related_searches" $include_related_searches "scalar") (serialize-qp "keyword_ids" $keyword_ids "csv") (serialize-qp "license_models" $license_models "csv") (serialize-qp "orientations" $orientations "csv") (serialize-qp "min_clip_length" $min_clip_length "scalar") (serialize-qp "max_clip_length" $max_clip_length "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "phrase" $phrase "scalar") (serialize-qp "safe_search" $safe_search "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "release_status" $release_status "scalar") (serialize-qp "facet_fields" $facet_fields "csv") (serialize-qp "facet_max_count" $facet_max_count "scalar") (serialize-qp "include_facets" $include_facets "scalar") (serialize-qp "viewpoints" $viewpoints "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/search/videos/creative" $qp)
-  let extra_headers = {"Accept-Language": $accept_language, "GI-Country-Code": $gi_country_code} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": $accept_language, "GI-Country-Code": $gi_country_code} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1440,14 +1451,14 @@ export def "search-videos-creative-by-image get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --asset-id: string # Specifies the Getty video id to use in the search. (nullable)
   --exclude-editorial-use-only: oneof<nothing, bool> # Exclude videos that are only available for editorial (non-commercial) use. Default value is false. (nullable)
-  --facet-fields: list # Specifies the facets to return in the response. Facets provide additional search parameters to refine your results.                     The include_facets parameter must be set to "true" for facets to be returned. (nullable)
+  --facet-fields: list # Specifies the facets to return in the response. Facets provide additional search parameters to refine your results. The include_facets parameter must be set to "true" for facets to be returned. (nullable)
   --facet-max-count: int # Specifies the maximum number of facets to return per type. Default is 300. (format: int32, default: 300)
   --fields: list # Specifies fields to return. Defaults to 'summary_set'. NOTE: Bytes returned by 'download_sizes' field is an estimate. (nullable)
   --image-url: string # Specifies the location of the image to use in the search. (nullable)
   --include-facets: oneof<nothing, bool> # Specifies whether or not to include facets in the result set. Default is "false". (nullable)
   --page: int # Request results starting at a page number (default is 1). (format: int32, default: 1)
   --page-size: int # Request number of images to return in each page. Default is 30, maximum page_size is 100. (format: int32, default: 30)
-  --product-types: list # Filter images to those from one of your product types.                      Allowed values are easyaccess, imagepack, premiumaccess and royaltyfreesubscription.                      If you have more than one instance of a product, you may also include the ID of the product instance you wish to filter on.                      For example, some users may have more than one premiumaccess product, so the product_types value would be premiumaccess:1234.                      Product ID can be obtained from the GET /products response. (nullable)
+  --product-types: list<string> # Filter images to those from one of your product types. Allowed values are easyaccess, imagepack, premiumaccess and royaltyfreesubscription. If you have more than one instance of a product, you may also include the ID of the product instance you wish to filter on. For example, some users may have more than one premiumaccess product, so the product_types value would be premiumaccess:1234. Product ID can be obtained from the GET /products response. (nullable)
   --accept-language: string # Provide a header to specify the language of result values. Supported values: cs (iStock only), de, en-GB, en-US, es, fi (iStock only), fr, hu (iStock only), id (iStock only), it, ja, ko (creative assets only), nl, pl (creative assets only), pt-BR, pt-PT, ro (iStock only), ru (creative assets only), sv, th (iStock only), tr, uk (iStock only), vi (iStock only), zh-HK (creative assets only).
   --gi-country-code: string # Receive regionally relevant search results based on the value specified. Accepts only ISO Alpha-3 country codes. The Countries operation can be used to retrieve the codes.
 ]: nothing -> record<auto_corrections: record<phrase: string>, facets: record<artists: list<record>, entertainment: list<record>, events: list<record>, locations: list<record>, specific_people: list<record>>, related_searches: table<phrase: string, url: string>, result_count: int, videos: table<allowed_use: record, artist: string, asset_family: string, caption: string, clip_length: string, collection_code: string, collection_id: int, collection_name: string, color_type: string, copyright: string, date_created: string, display_sizes: list, download_product: string, era: string, event_ids: list, id: string, istock_licenses: list, keywords: list, largest_downloads: list, license_model: string, mastered_to: string, originally_shot_on: string, product_types: list, referral_destinations: list, shot_speed: string, title: string>> {
@@ -1455,10 +1466,10 @@ export def "search-videos-creative-by-image get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "asset_id" $asset_id "scalar") (serialize-qp "exclude_editorial_use_only" $exclude_editorial_use_only "scalar") (serialize-qp "facet_fields" $facet_fields "csv") (serialize-qp "facet_max_count" $facet_max_count "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "image_url" $image_url "scalar") (serialize-qp "include_facets" $include_facets "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "product_types" $product_types "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/search/videos/creative/by-image" $qp)
-  let extra_headers = {"Accept-Language": $accept_language, "GI-Country-Code": $gi_country_code} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": $accept_language, "GI-Country-Code": $gi_country_code} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1477,27 +1488,27 @@ export def "search-videos-editorial get" [
   --age-of-people: list # Provides filtering according to the age of individuals in a video. (nullable)
   --artists: string # Search for videos by specific artists (free-text, comma-separated list of artists). (nullable)
   --aspect-ratios: list # Search for videos by specific aspect ratios. (nullable)
-  --collection-codes: list # Provides filtering by collection code. (nullable)
+  --collection-codes: list<string> # Provides filtering by collection code. (nullable)
   --collections-filter-type: string@collections-filter-type-completer # Use to include or exclude collections from search. The default is include
   --compositions: list # Filter based on video composition. (nullable)
-  --download-product: string # Filters based on which product the asset will download against.                     Allowed values are easyaccess, editorialsubscription, imagepack, premiumaccess and royaltyfreesubscription.                     If you have more than one instance of a product, you may also include the ID of the product instance you wish to filter on.                      For example, some users may have more than one premiumaccess product, so the download_product value would be premiumaccess:1234.                      Product ID can be obtained from the GET /products response. (nullable)
+  --download-product: string # Filters based on which product the asset will download against. Allowed values are easyaccess, editorialsubscription, imagepack, premiumaccess and royaltyfreesubscription. If you have more than one instance of a product, you may also include the ID of the product instance you wish to filter on. For example, some users may have more than one premiumaccess product, so the download_product value would be premiumaccess:1234. Product ID can be obtained from the GET /products response. (nullable)
   --editorial-video-types: list # Allows filtering by types of video. (nullable)
   --fields: list # Specifies fields to return. Defaults to 'summary_set'. NOTE: Bytes returned by 'download_sizes' field is an estimate. (nullable)
   --format-available: string@format-available-completer # Filters according to the digital video format available on a film asset.
   --frame-rates: list # Provides filtering by video frame rate (frames/second). (nullable)
   --image-techniques: list # Filter based on image technique. (nullable)
   --include-related-searches: oneof<nothing, bool> # Specifies whether or not to include related searches in the response. The default is false. (default: false)
-  --keyword-ids: list # Return only videos tagged with specific keyword(s). Specify using a comma-separated list of keyword Ids. If keyword Ids and phrase are both specified, only those videos matching the query phrase which also contain the requested keyword(s) are returned. (nullable)
+  --keyword-ids: list<int> # Return only videos tagged with specific keyword(s). Specify using a comma-separated list of keyword Ids. If keyword Ids and phrase are both specified, only those videos matching the query phrase which also contain the requested keyword(s) are returned. (nullable)
   --min-clip-length: int # Provides filtering by minimum length of video clip, in seconds (format: int32, default: 0)
   --max-clip-length: int # Provides filtering by maximum length of video clip, in seconds (format: int32, default: 0)
   --orientations: list # Return only videos with selected orientations. (nullable)
   --page: int # Identifies page to return. Default is 1. (format: int32, default: 1)
   --page-size: int # Specifies page size. Default is 30, maximum page_size is 100. (format: int32, default: 30)
   --phrase: string # Free-text search query. (nullable, default: )
-  --sort-order: string@sort-order-completer-3 # Select sort order of results.  The default is best_match
-  --specific-people: list # Allows filtering by specific peoples' names. (nullable)
+  --sort-order: string@sort-order-completer-3 # Select sort order of results. The default is best_match
+  --specific-people: list<string> # Allows filtering by specific peoples' names. (nullable)
   --release-status: string@release-status-completer # Allows filtering by type of model release.
-  --facet-fields: list # Specifies the facets to return in the response. Facets provide additional search parameters to refine your results.                    The include_facets parameter must be set to "true" for facets to be returned. (nullable)
+  --facet-fields: list # Specifies the facets to return in the response. Facets provide additional search parameters to refine your results. The include_facets parameter must be set to "true" for facets to be returned. (nullable)
   --include-facets: oneof<nothing, bool> # Specifies whether or not to include facets in the result set. Default is "false". (nullable)
   --facet-max-count: int # Specifies the maximum number of facets to return per type. Default is 300. (format: int32, default: 300)
   --viewpoints: list # Filter based on viewpoint. (nullable)
@@ -1508,10 +1519,10 @@ export def "search-videos-editorial get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "age_of_people" $age_of_people "csv") (serialize-qp "artists" $artists "scalar") (serialize-qp "aspect_ratios" $aspect_ratios "csv") (serialize-qp "collection_codes" $collection_codes "csv") (serialize-qp "collections_filter_type" $collections_filter_type "scalar") (serialize-qp "compositions" $compositions "csv") (serialize-qp "download_product" $download_product "scalar") (serialize-qp "editorial_video_types" $editorial_video_types "csv") (serialize-qp "fields" $fields "csv") (serialize-qp "format_available" $format_available "scalar") (serialize-qp "frame_rates" $frame_rates "csv") (serialize-qp "image_techniques" $image_techniques "csv") (serialize-qp "include_related_searches" $include_related_searches "scalar") (serialize-qp "keyword_ids" $keyword_ids "csv") (serialize-qp "min_clip_length" $min_clip_length "scalar") (serialize-qp "max_clip_length" $max_clip_length "scalar") (serialize-qp "orientations" $orientations "csv") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "phrase" $phrase "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "specific_people" $specific_people "csv") (serialize-qp "release_status" $release_status "scalar") (serialize-qp "facet_fields" $facet_fields "csv") (serialize-qp "include_facets" $include_facets "scalar") (serialize-qp "facet_max_count" $facet_max_count "scalar") (serialize-qp "viewpoints" $viewpoints "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/search/videos/editorial" $qp)
-  let extra_headers = {"Accept-Language": $accept_language, "GI-Country-Code": $gi_country_code} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": $accept_language, "GI-Country-Code": $gi_country_code} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1519,7 +1530,7 @@ export def "search-videos-editorial get" [
 #
 # PUT /v3/usage-batches/{id}
 # --asset_usages item shape: {asset_id?: string, quantity?: int, usage_date?: string}
-export def "usage-batches put" [
+export def "usage-batches update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1534,12 +1545,12 @@ export def "usage-batches put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v3/usage-batches/{id}"))
-  let body = {"asset_usages": $asset_usages} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/usage-batches/{id}"))
+  let req_body = {"asset_usages": $asset_usages} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get metadata for multiple videos by supplying multiple video ids
@@ -1554,7 +1565,7 @@ export def "videos list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ids: list # Specifies one or more video ids to return. Use comma delimiter when requesting multiple ids.  Maximum of 100 ids. (nullable)
+  --ids: list<string> # Specifies one or more video ids to return. Use comma delimiter when requesting multiple ids. Maximum of 100 ids. (nullable)
   --fields: list # Specifies fields to return. Defaults to 'summary_set'. NOTE: Bytes returned by 'download_sizes' field is an estimate. (nullable)
   --accept-language: string # Provide a header to specify the language of result values. Supported values: cs (iStock only), de, en-GB, en-US, es, fi (iStock only), fr, hu (iStock only), id (iStock only), it, ja, ko (creative assets only), nl, pl (creative assets only), pt-BR, pt-PT, ro (iStock only), ru (creative assets only), sv, th (iStock only), tr, uk (iStock only), vi (iStock only), zh-HK (creative assets only).
 ]: nothing -> any {
@@ -1562,10 +1573,10 @@ export def "videos list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/videos" $qp)
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1588,11 +1599,11 @@ export def "videos get" [
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v3/videos/{id}") $qp)
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/videos/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1609,17 +1620,17 @@ export def "videos-downloadhistory get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --company-downloads: oneof<nothing, bool> # If specified, returns the list of previously downloaded videos for all users in your company.             Your account must be enabled for this functionality. Contact your Getty Images account rep for more information. Default is false.
+  --company-downloads: oneof<nothing, bool> # If specified, returns the list of previously downloaded videos for all users in your company. Your account must be enabled for this functionality. Contact your Getty Images account rep for more information. Default is false.
   --accept-language: string # Provide a header to specify the language of result values. Supported values: cs (iStock only), de, en-GB, en-US, es, fi (iStock only), fr, hu (iStock only), id (iStock only), it, ja, ko (creative assets only), nl, pl (creative assets only), pt-BR, pt-PT, ro (iStock only), ru (creative assets only), sv, th (iStock only), tr, uk (iStock only), vi (iStock only), zh-HK (creative assets only).
 ]: nothing -> record<downloads: any, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "company_downloads" $company_downloads "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v3/videos/{id}/downloadhistory") $qp)
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/videos/{id}/downloadhistory") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1644,11 +1655,11 @@ export def "videos-same-series get" [
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "csv") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v3/videos/{id}/same-series") $qp)
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/videos/{id}/same-series") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1673,10 +1684,10 @@ export def "videos-similar get" [
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "csv") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v3/videos/{id}/similar") $qp)
-  let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/videos/{id}/similar") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": $accept_language} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

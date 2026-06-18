@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -73,7 +82,7 @@ def type-completer [] { ["derived" "raw"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "data-sources fitnessusersdataSourceslist" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "data-sources list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -97,7 +106,7 @@ export def commands []: nothing -> table {
 #
 # GET /{userId}/dataSources
 # operationId: fitness.users.dataSources.list
-export def "data-sources fitnessusersdataSourceslist" [
+export def "data-sources list" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -118,12 +127,12 @@ export def "data-sources fitnessusersdataSourceslist" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --data-type-name: list # The names of data types to include in the list. If not specified, all data sources will be returned.
+  --data-type-name: list<string> # The names of data types to include in the list. If not specified, all data sources will be returned.
 ]: nothing -> record<dataSource: table<application: record, dataQualityStandard: list, dataStreamId: string, dataStreamName: string, dataType: record, device: record, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "dataTypeName" $data_type_name "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/{user_id}/dataSources") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/{user_id}/dataSources") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -136,7 +145,7 @@ export def "data-sources fitnessusersdataSourceslist" [
 # --application shape: {detailsUrl?: string, name?: string, packageName?: string, version?: string}
 # --dataType shape: {field?: list, name?: string}
 # --device shape: {manufacturer?: string, model?: string, type?: "unknown"|"phone"|"tablet"|"watch"|"chestStrap"|"scale"|"headMounted"|"smartDisplay", uid?: string, version?: string}
-export def "data-sources fitnessusersdataSourcescreate" [
+export def "data-sources create" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -158,11 +167,11 @@ export def "data-sources fitnessusersdataSourcescreate" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --application: record # shape: {detailsUrl?: string, name?: string, packageName?: string, version?: string}
-  --data-quality-standard: list # DO NOT POPULATE THIS FIELD. It is never populated in responses from the platform, and is ignored in queries. It will be removed in a future version entirely.
+  --data-quality-standard: list<string> # DO NOT POPULATE THIS FIELD. It is never populated in responses from the platform, and is ignored in queries. It will be removed in a future version entirely.
   --data-stream-id: string # A unique identifier for the data stream produced by this data source. The identifier includes: - The physical device's manufacturer, model, and serial number (UID). - The application's package name or name. Package name is used when the data source was created by an Android application. The developer project number is used when the data source was created by a REST client. - The data source's type. - The data source's stream name. Note that not all attributes of the data source are used as part of the stream identifier. In particular, the version of the hardware/the application isn't used. This allows us to preserve the same stream through version updates. This also means that two DataSource objects may represent the same data stream even if they're not equal. The exact format of the data stream ID created by an Android application is: type:dataType.name:application.packageName:device.manufacturer:device.model:device.uid:dataStreamName The exact format of the data stream ID created by a REST client is: type:dataType.name:developer project number:device.manufacturer:device.model:device.uid:dataStreamName When any of the optional fields that make up the data stream ID are absent, they will be omitted from the data stream ID. The minimum viable data stream ID would be: type:dataType.name:developer project number Finally, the developer project number and device UID are obfuscated when read by any REST or Android client that did not create the data source. Only the data source creator will see the developer project number in clear and normal form. This means a client will see a different set of data_stream_ids than another client with different credentials.
   --data-stream-name: string # The stream name uniquely identifies this particular data source among other data sources of the same type from the same underlying producer. Setting the stream name is optional, but should be done whenever an application exposes two streams for the same data type, or when a device has two equivalent sensors.
   --data-type: record # shape: {field?: list, name?: string}
-  --device: record # Representation of an integrated device (such as a phone or a wearable) that can hold sensors. Each sensor is exposed as a data source. The main purpose of the device information contained in this class is to identify the hardware of a particular data source. This can be useful in different ways, including: - Distinguishing two similar sensors on different devices (the step counter on two nexus 5 phones, for instance) - Display the source of data to the user (by using the device make / model) - Treat data differently depending on sensor type (accelerometers on a watch may give different patterns than those on a phone) - Build different analysis models for each device/version.  — shape: {manufacturer?: string, model?: string, type?: "unknown"|"phone"|"tablet"|"watch"|"chestStrap"|"scale"|"headMounted"|"smartDisplay", uid?: string, version?: string}
+  --device: record # Representation of an integrated device (such as a phone or a wearable) that can hold sensors. Each sensor is exposed as a data source. The main purpose of the device information contained in this class is to identify the hardware of a particular data source. This can be useful in different ways, including: - Distinguishing two similar sensors on different devices (the step counter on two nexus 5 phones, for instance) - Display the source of data to the user (by using the device make / model) - Treat data differently depending on sensor type (accelerometers on a watch may give different patterns than those on a phone) - Build different analysis models for each device/version. — shape: {manufacturer?: string, model?: string, type?: "unknown"|"phone"|"tablet"|"watch"|"chestStrap"|"scale"|"headMounted"|"smartDisplay", uid?: string, version?: string}
   --name: string # An end-user visible name for this data source.
   --type: string@type-completer # A constant describing the type of this data source. Indicates whether this data source produces raw or derived data.
 ]: any -> record<application: record<detailsUrl: string, name: string, packageName: string, version: string>, dataQualityStandard: list<string>, dataStreamId: string, dataStreamName: string, dataType: record<field: list<record>, name: string>, device: record<manufacturer: string, model: string, type: string, uid: string, version: string>, name: string, type: string> {
@@ -170,19 +179,19 @@ export def "data-sources fitnessusersdataSourcescreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/{user_id}/dataSources") $qp)
-  let body = {"application": $application, "dataQualityStandard": $data_quality_standard, "dataStreamId": $data_stream_id, "dataStreamName": $data_stream_name, "dataType": $data_type, "device": $device, "name": $name, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/{user_id}/dataSources") $qp)
+  let req_body = {"application": $application, "dataQualityStandard": $data_quality_standard, "dataStreamId": $data_stream_id, "dataStreamName": $data_stream_name, "dataType": $data_type, "device": $device, "name": $name, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes the specified data source. The request will fail if the data source contains any data points.
 #
 # DELETE /{userId}/dataSources/{dataSourceId}
 # operationId: fitness.users.dataSources.delete
-export def "data-sources fitnessusersdataSourcesdelete" [
+export def "data-sources delete" [
   user_id: string
   data_source_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -208,7 +217,7 @@ export def "data-sources fitnessusersdataSourcesdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id, data_source_id: $data_source_id} | format pattern "/{user_id}/dataSources/{data_source_id}") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), data_source_id: (encode-path-segment $data_source_id)} | format pattern "/{user_id}/dataSources/{data_source_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -218,7 +227,7 @@ export def "data-sources fitnessusersdataSourcesdelete" [
 #
 # GET /{userId}/dataSources/{dataSourceId}
 # operationId: fitness.users.dataSources.get
-export def "data-sources fitnessusersdataSourcesget" [
+export def "data-sources get" [
   user_id: string
   data_source_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -244,7 +253,7 @@ export def "data-sources fitnessusersdataSourcesget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id, data_source_id: $data_source_id} | format pattern "/{user_id}/dataSources/{data_source_id}") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), data_source_id: (encode-path-segment $data_source_id)} | format pattern "/{user_id}/dataSources/{data_source_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -257,7 +266,7 @@ export def "data-sources fitnessusersdataSourcesget" [
 # --application shape: {detailsUrl?: string, name?: string, packageName?: string, version?: string}
 # --dataType shape: {field?: list, name?: string}
 # --device shape: {manufacturer?: string, model?: string, type?: "unknown"|"phone"|"tablet"|"watch"|"chestStrap"|"scale"|"headMounted"|"smartDisplay", uid?: string, version?: string}
-export def "data-sources fitnessusersdataSourcesupdate" [
+export def "data-sources update" [
   user_id: string
   data_source_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -280,11 +289,11 @@ export def "data-sources fitnessusersdataSourcesupdate" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --application: record # shape: {detailsUrl?: string, name?: string, packageName?: string, version?: string}
-  --data-quality-standard: list # DO NOT POPULATE THIS FIELD. It is never populated in responses from the platform, and is ignored in queries. It will be removed in a future version entirely.
+  --data-quality-standard: list<string> # DO NOT POPULATE THIS FIELD. It is never populated in responses from the platform, and is ignored in queries. It will be removed in a future version entirely.
   --data-stream-id: string # A unique identifier for the data stream produced by this data source. The identifier includes: - The physical device's manufacturer, model, and serial number (UID). - The application's package name or name. Package name is used when the data source was created by an Android application. The developer project number is used when the data source was created by a REST client. - The data source's type. - The data source's stream name. Note that not all attributes of the data source are used as part of the stream identifier. In particular, the version of the hardware/the application isn't used. This allows us to preserve the same stream through version updates. This also means that two DataSource objects may represent the same data stream even if they're not equal. The exact format of the data stream ID created by an Android application is: type:dataType.name:application.packageName:device.manufacturer:device.model:device.uid:dataStreamName The exact format of the data stream ID created by a REST client is: type:dataType.name:developer project number:device.manufacturer:device.model:device.uid:dataStreamName When any of the optional fields that make up the data stream ID are absent, they will be omitted from the data stream ID. The minimum viable data stream ID would be: type:dataType.name:developer project number Finally, the developer project number and device UID are obfuscated when read by any REST or Android client that did not create the data source. Only the data source creator will see the developer project number in clear and normal form. This means a client will see a different set of data_stream_ids than another client with different credentials.
   --data-stream-name: string # The stream name uniquely identifies this particular data source among other data sources of the same type from the same underlying producer. Setting the stream name is optional, but should be done whenever an application exposes two streams for the same data type, or when a device has two equivalent sensors.
   --data-type: record # shape: {field?: list, name?: string}
-  --device: record # Representation of an integrated device (such as a phone or a wearable) that can hold sensors. Each sensor is exposed as a data source. The main purpose of the device information contained in this class is to identify the hardware of a particular data source. This can be useful in different ways, including: - Distinguishing two similar sensors on different devices (the step counter on two nexus 5 phones, for instance) - Display the source of data to the user (by using the device make / model) - Treat data differently depending on sensor type (accelerometers on a watch may give different patterns than those on a phone) - Build different analysis models for each device/version.  — shape: {manufacturer?: string, model?: string, type?: "unknown"|"phone"|"tablet"|"watch"|"chestStrap"|"scale"|"headMounted"|"smartDisplay", uid?: string, version?: string}
+  --device: record # Representation of an integrated device (such as a phone or a wearable) that can hold sensors. Each sensor is exposed as a data source. The main purpose of the device information contained in this class is to identify the hardware of a particular data source. This can be useful in different ways, including: - Distinguishing two similar sensors on different devices (the step counter on two nexus 5 phones, for instance) - Display the source of data to the user (by using the device make / model) - Treat data differently depending on sensor type (accelerometers on a watch may give different patterns than those on a phone) - Build different analysis models for each device/version. — shape: {manufacturer?: string, model?: string, type?: "unknown"|"phone"|"tablet"|"watch"|"chestStrap"|"scale"|"headMounted"|"smartDisplay", uid?: string, version?: string}
   --name: string # An end-user visible name for this data source.
   --type: string@type-completer # A constant describing the type of this data source. Indicates whether this data source produces raw or derived data.
 ]: any -> record<application: record<detailsUrl: string, name: string, packageName: string, version: string>, dataQualityStandard: list<string>, dataStreamId: string, dataStreamName: string, dataType: record<field: list<record>, name: string>, device: record<manufacturer: string, model: string, type: string, uid: string, version: string>, name: string, type: string> {
@@ -292,19 +301,19 @@ export def "data-sources fitnessusersdataSourcesupdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id, data_source_id: $data_source_id} | format pattern "/{user_id}/dataSources/{data_source_id}") $qp)
-  let body = {"application": $application, "dataQualityStandard": $data_quality_standard, "dataStreamId": $data_stream_id, "dataStreamName": $data_stream_name, "dataType": $data_type, "device": $device, "name": $name, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), data_source_id: (encode-path-segment $data_source_id)} | format pattern "/{user_id}/dataSources/{data_source_id}") $qp)
+  let req_body = {"application": $application, "dataQualityStandard": $data_quality_standard, "dataStreamId": $data_stream_id, "dataStreamName": $data_stream_name, "dataType": $data_type, "device": $device, "name": $name, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Queries for user's data point changes for a particular data source.
 #
 # GET /{userId}/dataSources/{dataSourceId}/dataPointChanges
 # operationId: fitness.users.dataSources.dataPointChanges.list
-export def "data-sources-data-point-changes fitnessusersdataSourcesdataPointChangeslist" [
+export def "data-sources-data-point-changes list" [
   user_id: string
   data_source_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -332,7 +341,7 @@ export def "data-sources-data-point-changes fitnessusersdataSourcesdataPointChan
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id, data_source_id: $data_source_id} | format pattern "/{user_id}/dataSources/{data_source_id}/dataPointChanges") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), data_source_id: (encode-path-segment $data_source_id)} | format pattern "/{user_id}/dataSources/{data_source_id}/dataPointChanges") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -342,7 +351,7 @@ export def "data-sources-data-point-changes fitnessusersdataSourcesdataPointChan
 #
 # DELETE /{userId}/dataSources/{dataSourceId}/datasets/{datasetId}
 # operationId: fitness.users.dataSources.datasets.delete
-export def "data-sources-datasets fitnessusersdataSourcesdatasetsdelete" [
+export def "data-sources-datasets delete" [
   user_id: string
   data_source_id: string
   dataset_id: string
@@ -369,7 +378,7 @@ export def "data-sources-datasets fitnessusersdataSourcesdatasetsdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id, data_source_id: $data_source_id, dataset_id: $dataset_id} | format pattern "/{user_id}/dataSources/{data_source_id}/datasets/{dataset_id}") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), data_source_id: (encode-path-segment $data_source_id), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/{user_id}/dataSources/{data_source_id}/datasets/{dataset_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -379,7 +388,7 @@ export def "data-sources-datasets fitnessusersdataSourcesdatasetsdelete" [
 #
 # GET /{userId}/dataSources/{dataSourceId}/datasets/{datasetId}
 # operationId: fitness.users.dataSources.datasets.get
-export def "data-sources-datasets fitnessusersdataSourcesdatasetsget" [
+export def "data-sources-datasets get" [
   user_id: string
   data_source_id: string
   dataset_id: string
@@ -408,7 +417,7 @@ export def "data-sources-datasets fitnessusersdataSourcesdatasetsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id, data_source_id: $data_source_id, dataset_id: $dataset_id} | format pattern "/{user_id}/dataSources/{data_source_id}/datasets/{dataset_id}") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), data_source_id: (encode-path-segment $data_source_id), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/{user_id}/dataSources/{data_source_id}/datasets/{dataset_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -419,7 +428,7 @@ export def "data-sources-datasets fitnessusersdataSourcesdatasetsget" [
 # PATCH /{userId}/dataSources/{dataSourceId}/datasets/{datasetId}
 # operationId: fitness.users.dataSources.datasets.patch
 # --point item shape: {computationTimeMillis?: string, dataTypeName?: string, endTimeNanos?: string, modifiedTimeMillis?: string, originDataSourceId?: string, rawTimestampNanos?: string, startTimeNanos?: string, value?: list}
-export def "data-sources-datasets fitnessusersdataSourcesdatasetspatch" [
+export def "data-sources-datasets update" [
   user_id: string
   data_source_id: string
   dataset_id: string
@@ -452,12 +461,12 @@ export def "data-sources-datasets fitnessusersdataSourcesdatasetspatch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id, data_source_id: $data_source_id, dataset_id: $dataset_id} | format pattern "/{user_id}/dataSources/{data_source_id}/datasets/{dataset_id}") $qp)
-  let body = {"dataSourceId": $body_data_source_id, "maxEndTimeNs": $max_end_time_ns, "minStartTimeNs": $min_start_time_ns, "nextPageToken": $next_page_token, "point": $point} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), data_source_id: (encode-path-segment $data_source_id), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/{user_id}/dataSources/{data_source_id}/datasets/{dataset_id}") $qp)
+  let req_body = {"dataSourceId": $body_data_source_id, "maxEndTimeNs": $max_end_time_ns, "minStartTimeNs": $min_start_time_ns, "nextPageToken": $next_page_token, "point": $point} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Aggregates data of a certain type or stream into buckets divided by a given type of boundary. Multiple data sets of multiple types and from multiple sources can be aggregated into exactly one bucket type per request.
@@ -469,7 +478,7 @@ export def "data-sources-datasets fitnessusersdataSourcesdatasetspatch" [
 # --bucketByActivityType shape: {activityDataSourceId?: string, minDurationMillis?: string}
 # --bucketBySession shape: {minDurationMillis?: string}
 # --bucketByTime shape: {durationMillis?: string, period?: record}
-export def "dataset-aggregate fitnessusersdatasetaggregate" [
+export def "dataset-aggregate create" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -496,26 +505,26 @@ export def "dataset-aggregate fitnessusersdatasetaggregate" [
   --bucket-by-session: record # shape: {minDurationMillis?: string}
   --bucket-by-time: record # shape: {durationMillis?: string, period?: record}
   --end-time-millis: string # The end of a window of time. Data that intersects with this time window will be aggregated. The time is in milliseconds since epoch, inclusive. The maximum allowed difference between start_time_millis // and end_time_millis is 7776000000 (roughly 90 days). (format: int64)
-  --filtered-data-quality-standard: list # DO NOT POPULATE THIS FIELD. It is ignored.
+  --filtered-data-quality-standard: list<string> # DO NOT POPULATE THIS FIELD. It is ignored.
   --start-time-millis: string # The start of a window of time. Data that intersects with this time window will be aggregated. The time is in milliseconds since epoch, inclusive. (format: int64)
 ]: any -> record<bucket: table<activity: int, dataset: list, endTimeMillis: string, session: record, startTimeMillis: string, type: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/{user_id}/dataset:aggregate") $qp)
-  let body = {"aggregateBy": $aggregate_by, "bucketByActivitySegment": $bucket_by_activity_segment, "bucketByActivityType": $bucket_by_activity_type, "bucketBySession": $bucket_by_session, "bucketByTime": $bucket_by_time, "endTimeMillis": $end_time_millis, "filteredDataQualityStandard": $filtered_data_quality_standard, "startTimeMillis": $start_time_millis} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/{user_id}/dataset:aggregate") $qp)
+  let req_body = {"aggregateBy": $aggregate_by, "bucketByActivitySegment": $bucket_by_activity_segment, "bucketByActivityType": $bucket_by_activity_type, "bucketBySession": $bucket_by_session, "bucketByTime": $bucket_by_time, "endTimeMillis": $end_time_millis, "filteredDataQualityStandard": $filtered_data_quality_standard, "startTimeMillis": $start_time_millis} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists sessions previously created.
 #
 # GET /{userId}/sessions
 # operationId: fitness.users.sessions.list
-export def "sessions fitnessuserssessionslist" [
+export def "sessions list" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -536,7 +545,7 @@ export def "sessions fitnessuserssessionslist" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --activity-type: list # If non-empty, only sessions with these activity types should be returned.
+  --activity-type: list<int> # If non-empty, only sessions with these activity types should be returned.
   --end-time: string # An RFC3339 timestamp. Only sessions ending between the start and end times will be included in the response. If this time is omitted but startTime is specified, all sessions from startTime to the end of time will be returned.
   --include-deleted: oneof<nothing, bool> # If true, and if both startTime and endTime are omitted, session deletions will be returned.
   --page-token: string # The continuation token, which is used for incremental syncing. To get the next batch of changes, set this parameter to the value of nextPageToken from the previous response. The page token is ignored if either start or end time is specified. If none of start time, end time, and the page token is specified, sessions modified in the last 30 days are returned.
@@ -545,7 +554,7 @@ export def "sessions fitnessuserssessionslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "activityType" $activity_type "multi") (serialize-qp "endTime" $end_time "scalar") (serialize-qp "includeDeleted" $include_deleted "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "startTime" $start_time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/{user_id}/sessions") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/{user_id}/sessions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -555,7 +564,7 @@ export def "sessions fitnessuserssessionslist" [
 #
 # DELETE /{userId}/sessions/{sessionId}
 # operationId: fitness.users.sessions.delete
-export def "sessions fitnessuserssessionsdelete" [
+export def "sessions delete" [
   user_id: string
   session_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -581,7 +590,7 @@ export def "sessions fitnessuserssessionsdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id, session_id: $session_id} | format pattern "/{user_id}/sessions/{session_id}") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), session_id: (encode-path-segment $session_id)} | format pattern "/{user_id}/sessions/{session_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -592,7 +601,7 @@ export def "sessions fitnessuserssessionsdelete" [
 # PUT /{userId}/sessions/{sessionId}
 # operationId: fitness.users.sessions.update
 # --application shape: {detailsUrl?: string, name?: string, packageName?: string, version?: string}
-export def "sessions fitnessuserssessionsupdate" [
+export def "sessions update" [
   user_id: string
   session_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -628,10 +637,10 @@ export def "sessions fitnessuserssessionsupdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id, session_id: $session_id} | format pattern "/{user_id}/sessions/{session_id}") $qp)
-  let body = {"activeTimeMillis": $active_time_millis, "activityType": $activity_type, "application": $application, "description": $description, "endTimeMillis": $end_time_millis, "id": $id, "modifiedTimeMillis": $modified_time_millis, "name": $name, "startTimeMillis": $start_time_millis} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), session_id: (encode-path-segment $session_id)} | format pattern "/{user_id}/sessions/{session_id}") $qp)
+  let req_body = {"activeTimeMillis": $active_time_millis, "activityType": $activity_type, "application": $application, "description": $description, "endTimeMillis": $end_time_millis, "id": $id, "modifiedTimeMillis": $modified_time_millis, "name": $name, "startTimeMillis": $start_time_millis} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

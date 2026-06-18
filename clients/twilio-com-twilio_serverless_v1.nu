@@ -12,6 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
   match $scheme {
     "basic" => { {headers: {Authorization: $"Basic ($token_val)"}, query: ""} }
+    "basic-credentials" => { {headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: ""} }
     "none" => { {headers: {}, query: ""} }
     _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
   }
@@ -33,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
     "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
     _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -63,7 +73,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 }
 
 def base-url-completer [] { ["https://serverless.twilio.com"] }
-def auth-scheme-completer [] { ["basic"] }
+def auth-scheme-completer [] { ["basic" "basic-credentials"] }
 
 
 # List all available API commands with their parameters
@@ -137,11 +147,12 @@ export def "services create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://serverless.twilio.com")
   let full_url = (build-url $base "/v1/Services")
-  let body = {"FriendlyName": $friendly_name, "IncludeCredentials": $include_credentials, "UiEditable": $ui_editable, "UniqueName": $unique_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"FriendlyName": $friendly_name, "IncludeCredentials": $include_credentials, "UiEditable": $ui_editable, "UniqueName": $unique_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Retrieve a list of all Assets.
@@ -165,7 +176,7 @@ export def "services-assets list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://serverless.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_sid: $service_sid} | format pattern "/v1/Services/{service_sid}/Assets") $qp)
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid)} | format pattern "/v1/Services/{service_sid}/Assets") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -190,12 +201,13 @@ export def "services-assets create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://serverless.twilio.com")
-  let full_url = (build-url $base ({service_sid: $service_sid} | format pattern "/v1/Services/{service_sid}/Assets"))
-  let body = {"FriendlyName": $friendly_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid)} | format pattern "/v1/Services/{service_sid}/Assets"))
+  let req_body = {"FriendlyName": $friendly_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Retrieve a list of all Asset Versions.
@@ -220,7 +232,7 @@ export def "services-assets-versions list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://serverless.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_sid: $service_sid, asset_sid: $asset_sid} | format pattern "/v1/Services/{service_sid}/Assets/{asset_sid}/Versions") $qp)
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), asset_sid: (encode-path-segment $asset_sid)} | format pattern "/v1/Services/{service_sid}/Assets/{asset_sid}/Versions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -245,7 +257,7 @@ export def "services-assets-versions get" [
 ]: nothing -> record<account_sid: string, asset_sid: string, date_created: string, path: string, service_sid: string, sid: string, url: string, visibility: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://serverless.twilio.com")
-  let full_url = (build-url $base ({service_sid: $service_sid, asset_sid: $asset_sid, sid: $sid} | format pattern "/v1/Services/{service_sid}/Assets/{asset_sid}/Versions/{sid}"))
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), asset_sid: (encode-path-segment $asset_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Services/{service_sid}/Assets/{asset_sid}/Versions/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -269,7 +281,7 @@ export def "services-assets delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://serverless.twilio.com")
-  let full_url = (build-url $base ({service_sid: $service_sid, sid: $sid} | format pattern "/v1/Services/{service_sid}/Assets/{sid}"))
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Services/{service_sid}/Assets/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -293,7 +305,7 @@ export def "services-assets get" [
 ]: nothing -> record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, links: record, service_sid: string, sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://serverless.twilio.com")
-  let full_url = (build-url $base ({service_sid: $service_sid, sid: $sid} | format pattern "/v1/Services/{service_sid}/Assets/{sid}"))
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Services/{service_sid}/Assets/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -319,12 +331,13 @@ export def "services-assets update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://serverless.twilio.com")
-  let full_url = (build-url $base ({service_sid: $service_sid, sid: $sid} | format pattern "/v1/Services/{service_sid}/Assets/{sid}"))
-  let body = {"FriendlyName": $friendly_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Services/{service_sid}/Assets/{sid}"))
+  let req_body = {"FriendlyName": $friendly_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Retrieve a list of all Builds.
@@ -348,7 +361,7 @@ export def "services-builds list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://serverless.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_sid: $service_sid} | format pattern "/v1/Services/{service_sid}/Builds") $qp)
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid)} | format pattern "/v1/Services/{service_sid}/Builds") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -368,20 +381,21 @@ export def "services-builds create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --asset-versions: list # The list of Asset Version resource SIDs to include in the Build.
+  --asset-versions: list<string> # The list of Asset Version resource SIDs to include in the Build.
   --dependencies: string # A list of objects that describe the Dependencies included in the Build. Each object contains the `name` and `version` of the dependency.
-  --function-versions: list # The list of the Function Version resource SIDs to include in the Build.
+  --function-versions: list<string> # The list of the Function Version resource SIDs to include in the Build.
   --runtime: string # The Runtime version that will be used to run the Build resource when it is deployed.
 ]: any -> record<account_sid: string, asset_versions: list<any>, date_created: string, date_updated: string, dependencies: list<any>, function_versions: list<any>, links: record, runtime: string, service_sid: string, sid: string, status: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://serverless.twilio.com")
-  let full_url = (build-url $base ({service_sid: $service_sid} | format pattern "/v1/Services/{service_sid}/Builds"))
-  let body = {"AssetVersions": $asset_versions, "Dependencies": $dependencies, "FunctionVersions": $function_versions, "Runtime": $runtime} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid)} | format pattern "/v1/Services/{service_sid}/Builds"))
+  let req_body = {"AssetVersions": $asset_versions, "Dependencies": $dependencies, "FunctionVersions": $function_versions, "Runtime": $runtime} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Delete a Build resource.
@@ -402,7 +416,7 @@ export def "services-builds delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://serverless.twilio.com")
-  let full_url = (build-url $base ({service_sid: $service_sid, sid: $sid} | format pattern "/v1/Services/{service_sid}/Builds/{sid}"))
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Services/{service_sid}/Builds/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -426,7 +440,7 @@ export def "services-builds get" [
 ]: nothing -> record<account_sid: string, asset_versions: list<any>, date_created: string, date_updated: string, dependencies: list<any>, function_versions: list<any>, links: record, runtime: string, service_sid: string, sid: string, status: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://serverless.twilio.com")
-  let full_url = (build-url $base ({service_sid: $service_sid, sid: $sid} | format pattern "/v1/Services/{service_sid}/Builds/{sid}"))
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Services/{service_sid}/Builds/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -450,7 +464,7 @@ export def "services-builds-status get" [
 ]: nothing -> record<account_sid: string, service_sid: string, sid: string, status: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://serverless.twilio.com")
-  let full_url = (build-url $base ({service_sid: $service_sid, sid: $sid} | format pattern "/v1/Services/{service_sid}/Builds/{sid}/Status"))
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Services/{service_sid}/Builds/{sid}/Status"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -477,7 +491,7 @@ export def "services-environments list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://serverless.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_sid: $service_sid} | format pattern "/v1/Services/{service_sid}/Environments") $qp)
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid)} | format pattern "/v1/Services/{service_sid}/Environments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -503,12 +517,13 @@ export def "services-environments create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://serverless.twilio.com")
-  let full_url = (build-url $base ({service_sid: $service_sid} | format pattern "/v1/Services/{service_sid}/Environments"))
-  let body = {"DomainSuffix": $domain_suffix, "UniqueName": $unique_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid)} | format pattern "/v1/Services/{service_sid}/Environments"))
+  let req_body = {"DomainSuffix": $domain_suffix, "UniqueName": $unique_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Retrieve a list of all Deployments.
@@ -533,7 +548,7 @@ export def "services-environments-deployments list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://serverless.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_sid: $service_sid, environment_sid: $environment_sid} | format pattern "/v1/Services/{service_sid}/Environments/{environment_sid}/Deployments") $qp)
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), environment_sid: (encode-path-segment $environment_sid)} | format pattern "/v1/Services/{service_sid}/Environments/{environment_sid}/Deployments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -559,12 +574,13 @@ export def "services-environments-deployments create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://serverless.twilio.com")
-  let full_url = (build-url $base ({service_sid: $service_sid, environment_sid: $environment_sid} | format pattern "/v1/Services/{service_sid}/Environments/{environment_sid}/Deployments"))
-  let body = {"BuildSid": $build_sid} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), environment_sid: (encode-path-segment $environment_sid)} | format pattern "/v1/Services/{service_sid}/Environments/{environment_sid}/Deployments"))
+  let req_body = {"BuildSid": $build_sid} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Retrieve a specific Deployment.
@@ -586,7 +602,7 @@ export def "services-environments-deployments get" [
 ]: nothing -> record<account_sid: string, build_sid: string, date_created: string, date_updated: string, environment_sid: string, service_sid: string, sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://serverless.twilio.com")
-  let full_url = (build-url $base ({service_sid: $service_sid, environment_sid: $environment_sid, sid: $sid} | format pattern "/v1/Services/{service_sid}/Environments/{environment_sid}/Deployments/{sid}"))
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), environment_sid: (encode-path-segment $environment_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Services/{service_sid}/Environments/{environment_sid}/Deployments/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -617,7 +633,7 @@ export def "services-environments-logs list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://serverless.twilio.com")
   let qp = [(serialize-qp "FunctionSid" $function_sid "scalar") (serialize-qp "StartDate" $start_date "scalar") (serialize-qp "EndDate" $end_date "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_sid: $service_sid, environment_sid: $environment_sid} | format pattern "/v1/Services/{service_sid}/Environments/{environment_sid}/Logs") $qp)
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), environment_sid: (encode-path-segment $environment_sid)} | format pattern "/v1/Services/{service_sid}/Environments/{environment_sid}/Logs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -642,7 +658,7 @@ export def "services-environments-logs get" [
 ]: nothing -> record<account_sid: string, build_sid: string, date_created: string, deployment_sid: string, environment_sid: string, function_sid: string, level: string, message: string, request_sid: string, service_sid: string, sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://serverless.twilio.com")
-  let full_url = (build-url $base ({service_sid: $service_sid, environment_sid: $environment_sid, sid: $sid} | format pattern "/v1/Services/{service_sid}/Environments/{environment_sid}/Logs/{sid}"))
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), environment_sid: (encode-path-segment $environment_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Services/{service_sid}/Environments/{environment_sid}/Logs/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -670,7 +686,7 @@ export def "services-environments-variables list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://serverless.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_sid: $service_sid, environment_sid: $environment_sid} | format pattern "/v1/Services/{service_sid}/Environments/{environment_sid}/Variables") $qp)
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), environment_sid: (encode-path-segment $environment_sid)} | format pattern "/v1/Services/{service_sid}/Environments/{environment_sid}/Variables") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -697,12 +713,13 @@ export def "services-environments-variables create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://serverless.twilio.com")
-  let full_url = (build-url $base ({service_sid: $service_sid, environment_sid: $environment_sid} | format pattern "/v1/Services/{service_sid}/Environments/{environment_sid}/Variables"))
-  let body = {"Key": $key, "Value": $value} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), environment_sid: (encode-path-segment $environment_sid)} | format pattern "/v1/Services/{service_sid}/Environments/{environment_sid}/Variables"))
+  let req_body = {"Key": $key, "Value": $value} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Delete a specific Variable.
@@ -724,7 +741,7 @@ export def "services-environments-variables delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://serverless.twilio.com")
-  let full_url = (build-url $base ({service_sid: $service_sid, environment_sid: $environment_sid, sid: $sid} | format pattern "/v1/Services/{service_sid}/Environments/{environment_sid}/Variables/{sid}"))
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), environment_sid: (encode-path-segment $environment_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Services/{service_sid}/Environments/{environment_sid}/Variables/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -749,7 +766,7 @@ export def "services-environments-variables get" [
 ]: nothing -> record<account_sid: string, date_created: string, date_updated: string, environment_sid: string, key: string, service_sid: string, sid: string, url: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://serverless.twilio.com")
-  let full_url = (build-url $base ({service_sid: $service_sid, environment_sid: $environment_sid, sid: $sid} | format pattern "/v1/Services/{service_sid}/Environments/{environment_sid}/Variables/{sid}"))
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), environment_sid: (encode-path-segment $environment_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Services/{service_sid}/Environments/{environment_sid}/Variables/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -777,12 +794,13 @@ export def "services-environments-variables update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://serverless.twilio.com")
-  let full_url = (build-url $base ({service_sid: $service_sid, environment_sid: $environment_sid, sid: $sid} | format pattern "/v1/Services/{service_sid}/Environments/{environment_sid}/Variables/{sid}"))
-  let body = {"Key": $key, "Value": $value} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), environment_sid: (encode-path-segment $environment_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Services/{service_sid}/Environments/{environment_sid}/Variables/{sid}"))
+  let req_body = {"Key": $key, "Value": $value} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Delete a specific environment.
@@ -803,7 +821,7 @@ export def "services-environments delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://serverless.twilio.com")
-  let full_url = (build-url $base ({service_sid: $service_sid, sid: $sid} | format pattern "/v1/Services/{service_sid}/Environments/{sid}"))
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Services/{service_sid}/Environments/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -827,7 +845,7 @@ export def "services-environments get" [
 ]: nothing -> record<account_sid: string, build_sid: string, date_created: string, date_updated: string, domain_name: string, domain_suffix: string, links: record, service_sid: string, sid: string, unique_name: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://serverless.twilio.com")
-  let full_url = (build-url $base ({service_sid: $service_sid, sid: $sid} | format pattern "/v1/Services/{service_sid}/Environments/{sid}"))
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Services/{service_sid}/Environments/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -854,7 +872,7 @@ export def "services-functions list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://serverless.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_sid: $service_sid} | format pattern "/v1/Services/{service_sid}/Functions") $qp)
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid)} | format pattern "/v1/Services/{service_sid}/Functions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -879,12 +897,13 @@ export def "services-functions create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://serverless.twilio.com")
-  let full_url = (build-url $base ({service_sid: $service_sid} | format pattern "/v1/Services/{service_sid}/Functions"))
-  let body = {"FriendlyName": $friendly_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid)} | format pattern "/v1/Services/{service_sid}/Functions"))
+  let req_body = {"FriendlyName": $friendly_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Retrieve a list of all Function Version resources.
@@ -909,7 +928,7 @@ export def "services-functions-versions list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://serverless.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_sid: $service_sid, function_sid: $function_sid} | format pattern "/v1/Services/{service_sid}/Functions/{function_sid}/Versions") $qp)
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), function_sid: (encode-path-segment $function_sid)} | format pattern "/v1/Services/{service_sid}/Functions/{function_sid}/Versions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -934,7 +953,7 @@ export def "services-functions-versions get" [
 ]: nothing -> record<account_sid: string, date_created: string, function_sid: string, links: record, path: string, service_sid: string, sid: string, url: string, visibility: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://serverless.twilio.com")
-  let full_url = (build-url $base ({service_sid: $service_sid, function_sid: $function_sid, sid: $sid} | format pattern "/v1/Services/{service_sid}/Functions/{function_sid}/Versions/{sid}"))
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), function_sid: (encode-path-segment $function_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Services/{service_sid}/Functions/{function_sid}/Versions/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -959,7 +978,7 @@ export def "services-functions-versions-content get" [
 ]: nothing -> record<account_sid: string, content: string, function_sid: string, service_sid: string, sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://serverless.twilio.com")
-  let full_url = (build-url $base ({service_sid: $service_sid, function_sid: $function_sid, sid: $sid} | format pattern "/v1/Services/{service_sid}/Functions/{function_sid}/Versions/{sid}/Content"))
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), function_sid: (encode-path-segment $function_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Services/{service_sid}/Functions/{function_sid}/Versions/{sid}/Content"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -983,7 +1002,7 @@ export def "services-functions delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://serverless.twilio.com")
-  let full_url = (build-url $base ({service_sid: $service_sid, sid: $sid} | format pattern "/v1/Services/{service_sid}/Functions/{sid}"))
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Services/{service_sid}/Functions/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1007,7 +1026,7 @@ export def "services-functions get" [
 ]: nothing -> record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, links: record, service_sid: string, sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://serverless.twilio.com")
-  let full_url = (build-url $base ({service_sid: $service_sid, sid: $sid} | format pattern "/v1/Services/{service_sid}/Functions/{sid}"))
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Services/{service_sid}/Functions/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1033,12 +1052,13 @@ export def "services-functions update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://serverless.twilio.com")
-  let full_url = (build-url $base ({service_sid: $service_sid, sid: $sid} | format pattern "/v1/Services/{service_sid}/Functions/{sid}"))
-  let body = {"FriendlyName": $friendly_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Services/{service_sid}/Functions/{sid}"))
+  let req_body = {"FriendlyName": $friendly_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Delete a Service resource.
@@ -1058,7 +1078,7 @@ export def "services delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://serverless.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/Services/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Services/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1081,7 +1101,7 @@ export def "services get" [
 ]: nothing -> record<account_sid: string, date_created: string, date_updated: string, domain_base: string, friendly_name: string, include_credentials: bool, links: record, sid: string, ui_editable: bool, unique_name: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://serverless.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/Services/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Services/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1108,10 +1128,11 @@ export def "services update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://serverless.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/Services/{sid}"))
-  let body = {"FriendlyName": $friendly_name, "IncludeCredentials": $include_credentials, "UiEditable": $ui_editable} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Services/{sid}"))
+  let req_body = {"FriendlyName": $friendly_name, "IncludeCredentials": $include_credentials, "UiEditable": $ui_editable} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }

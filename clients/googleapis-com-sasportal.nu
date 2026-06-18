@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -73,7 +82,7 @@ def state-completer [] { ["DEREGISTERED" "DEVICE_STATE_UNSPECIFIED" "REGISTERED"
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1alpha1-customers sasportalcustomerslist" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1alpha1-customers list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -97,7 +106,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1alpha1/customers
 # operationId: sasportal.customers.list
-export def "v1alpha1-customers sasportalcustomerslist" [
+export def "v1alpha1-customers list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -133,7 +142,7 @@ export def "v1alpha1-customers sasportalcustomerslist" [
 #
 # POST /v1alpha1/customers:provisionDeployment
 # operationId: sasportal.customers.provisionDeployment
-export def "v1alpha1-customers-provision-deployment sasportalcustomersprovisionDeployment" [
+export def "v1alpha1-customers-provision-deployment create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -161,18 +170,18 @@ export def "v1alpha1-customers-provision-deployment sasportalcustomersprovisionD
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1alpha1/customers:provisionDeployment" $qp)
-  let body = {"newDeploymentDisplayName": $new_deployment_display_name, "newOrganizationDisplayName": $new_organization_display_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"newDeploymentDisplayName": $new_deployment_display_name, "newOrganizationDisplayName": $new_organization_display_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Generates a secret to be used with the ValidateInstaller.
 #
 # POST /v1alpha1/installer:generateSecret
 # operationId: sasportal.installer.generateSecret
-export def "v1alpha1-installer-generate-secret sasportalinstallergenerateSecret" [
+export def "v1alpha1-installer-generate-secret generate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -199,17 +208,18 @@ export def "v1alpha1-installer-generate-secret sasportalinstallergenerateSecret"
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1alpha1/installer:generateSecret" $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Validates the identity of a Certified Professional Installer (CPI).
 #
 # POST /v1alpha1/installer:validate
 # operationId: sasportal.installer.validate
-export def "v1alpha1-installer-validate sasportalinstallervalidate" [
+export def "v1alpha1-installer-validate validate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -238,18 +248,18 @@ export def "v1alpha1-installer-validate sasportalinstallervalidate" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1alpha1/installer:validate" $qp)
-  let body = {"encodedSecret": $encoded_secret, "installerId": $installer_id, "secret": $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"encodedSecret": $encoded_secret, "installerId": $installer_id, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets the access control policy for a resource. Returns an empty policy if the resource exists and does not have a policy set.
 #
 # POST /v1alpha1/policies:get
 # operationId: sasportal.policies.get
-export def "v1alpha1-policies-get sasportalpoliciesget" [
+export def "v1alpha1-policies-get get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -276,11 +286,11 @@ export def "v1alpha1-policies-get sasportalpoliciesget" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1alpha1/policies:get" $qp)
-  let body = {"resource": $resource} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"resource": $resource} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Sets the access control policy on the specified resource. Replaces any existing policy.
@@ -288,7 +298,7 @@ export def "v1alpha1-policies-get sasportalpoliciesget" [
 # POST /v1alpha1/policies:set
 # operationId: sasportal.policies.set
 # --policy shape: {assignments?: list, etag?: string}
-export def "v1alpha1-policies-set sasportalpoliciesset" [
+export def "v1alpha1-policies-set update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -317,18 +327,18 @@ export def "v1alpha1-policies-set sasportalpoliciesset" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1alpha1/policies:set" $qp)
-  let body = {"disableNotification": $disable_notification, "policy": $policy, "resource": $resource} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"disableNotification": $disable_notification, "policy": $policy, "resource": $resource} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns permissions that a caller has on the specified resource.
 #
 # POST /v1alpha1/policies:test
 # operationId: sasportal.policies.test
-export def "v1alpha1-policies-test sasportalpoliciestest" [
+export def "v1alpha1-policies-test test" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -348,7 +358,7 @@ export def "v1alpha1-policies-test sasportalpoliciestest" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --permissions: list # The set of permissions to check for the `resource`.
+  --permissions: list<string> # The set of permissions to check for the `resource`.
   --resource: string # Required. The resource for which the permissions are being requested.
 ]: any -> record<permissions: list<string>> {
   let input = $in
@@ -356,18 +366,18 @@ export def "v1alpha1-policies-test sasportalpoliciestest" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1alpha1/policies:test" $qp)
-  let body = {"permissions": $permissions, "resource": $resource} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"permissions": $permissions, "resource": $resource} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes a node.
 #
 # DELETE /v1alpha1/{name}
 # operationId: sasportal.nodes.nodes.delete
-export def "v1alpha1 sasportalnodesnodesdelete" [
+export def "v1alpha1 delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -392,7 +402,7 @@ export def "v1alpha1 sasportalnodesnodesdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1alpha1/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1alpha1/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -402,7 +412,7 @@ export def "v1alpha1 sasportalnodesnodesdelete" [
 #
 # GET /v1alpha1/{name}
 # operationId: sasportal.nodes.nodes.get
-export def "v1alpha1 sasportalnodesnodesget" [
+export def "v1alpha1 get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -427,7 +437,7 @@ export def "v1alpha1 sasportalnodesnodesget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1alpha1/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1alpha1/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -437,7 +447,7 @@ export def "v1alpha1 sasportalnodesnodesget" [
 #
 # PATCH /v1alpha1/{name}
 # operationId: sasportal.nodes.nodes.patch
-export def "v1alpha1 sasportalnodesnodespatch" [
+export def "v1alpha1 update" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -461,25 +471,25 @@ export def "v1alpha1 sasportalnodesnodespatch" [
   --update-mask: string # Fields to be updated.
   --display-name: string # The node's display name.
   --body-name: string # Output only. Resource name.
-  --sas-user-ids: list # User ids used by the devices belonging to this node.
+  --sas-user-ids: list<string> # User ids used by the devices belonging to this node.
 ]: any -> record<displayName: string, name: string, sasUserIds: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1alpha1/{name}") $qp)
-  let body = {"displayName": $display_name, "name": $body_name, "sasUserIds": $sas_user_ids} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1alpha1/{name}") $qp)
+  let req_body = {"displayName": $display_name, "name": $body_name, "sasUserIds": $sas_user_ids} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Moves a node under another node or customer.
 #
 # POST /v1alpha1/{name}:move
 # operationId: sasportal.nodes.nodes.move
-export def "v1alpha1 sasportalnodesnodesmove" [
+export def "v1alpha1 move" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -506,12 +516,12 @@ export def "v1alpha1 sasportalnodesnodesmove" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1alpha1/{name}:move") $qp)
-  let body = {"destination": $destination} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1alpha1/{name}:move") $qp)
+  let req_body = {"destination": $destination} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Signs a device.
@@ -519,7 +529,7 @@ export def "v1alpha1 sasportalnodesnodesmove" [
 # POST /v1alpha1/{name}:signDevice
 # operationId: sasportal.nodes.devices.signDevice
 # --device shape: {activeConfig?: record, deviceMetadata?: record, displayName?: string, fccId?: string, grantRangeAllowlists?: list, grants?: list, name?: string, preloadedConfig?: record, serialNumber?: string, state?: "DEVICE_STATE_UNSPECIFIED"|"RESERVED"|"REGISTERED"|"DEREGISTERED"}
-export def "v1alpha1 sasportalnodesdevicessignDevice" [
+export def "v1alpha1 create-sign-device" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -546,19 +556,19 @@ export def "v1alpha1 sasportalnodesdevicessignDevice" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1alpha1/{name}:signDevice") $qp)
-  let body = {"device": $device} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1alpha1/{name}:signDevice") $qp)
+  let req_body = {"device": $device} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates a signed device.
 #
 # PATCH /v1alpha1/{name}:updateSigned
 # operationId: sasportal.nodes.devices.updateSigned
-export def "v1alpha1 sasportalnodesdevicesupdateSigned" [
+export def "v1alpha1 update-signed" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -586,19 +596,19 @@ export def "v1alpha1 sasportalnodesdevicesupdateSigned" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1alpha1/{name}:updateSigned") $qp)
-  let body = {"encodedDevice": $encoded_device, "installerId": $installer_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1alpha1/{name}:updateSigned") $qp)
+  let req_body = {"encodedDevice": $encoded_device, "installerId": $installer_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists deployments.
 #
 # GET /v1alpha1/{parent}/deployments
 # operationId: sasportal.nodes.nodes.deployments.list
-export def "v1alpha1-deployments sasportalnodesnodesdeploymentslist" [
+export def "v1alpha1-deployments list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -626,7 +636,7 @@ export def "v1alpha1-deployments sasportalnodesnodesdeploymentslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1alpha1/{parent}/deployments") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1alpha1/{parent}/deployments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -636,7 +646,7 @@ export def "v1alpha1-deployments sasportalnodesnodesdeploymentslist" [
 #
 # POST /v1alpha1/{parent}/deployments
 # operationId: sasportal.nodes.nodes.deployments.create
-export def "v1alpha1-deployments sasportalnodesnodesdeploymentscreate" [
+export def "v1alpha1-deployments create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -658,25 +668,25 @@ export def "v1alpha1-deployments sasportalnodesnodesdeploymentscreate" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --display-name: string # The deployment's display name.
-  --sas-user-ids: list # User ID used by the devices belonging to this deployment. Each deployment should be associated with one unique user ID.
+  --sas-user-ids: list<string> # User ID used by the devices belonging to this deployment. Each deployment should be associated with one unique user ID.
 ]: any -> record<displayName: string, frns: list<string>, name: string, sasUserIds: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1alpha1/{parent}/deployments") $qp)
-  let body = {"displayName": $display_name, "sasUserIds": $sas_user_ids} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1alpha1/{parent}/deployments") $qp)
+  let req_body = {"displayName": $display_name, "sasUserIds": $sas_user_ids} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists devices under a node or customer.
 #
 # GET /v1alpha1/{parent}/devices
 # operationId: sasportal.nodes.nodes.devices.list
-export def "v1alpha1-devices sasportalnodesnodesdeviceslist" [
+export def "v1alpha1-devices list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -704,7 +714,7 @@ export def "v1alpha1-devices sasportalnodesnodesdeviceslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1alpha1/{parent}/devices") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1alpha1/{parent}/devices") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -714,13 +724,13 @@ export def "v1alpha1-devices sasportalnodesnodesdeviceslist" [
 #
 # POST /v1alpha1/{parent}/devices
 # operationId: sasportal.nodes.nodes.devices.create
-# --activeConfig shape: {airInterface?: record, callSign?: string, category?: "DEVICE_CATEGORY_UNSPECIFIED"|"DEVICE_CATEGORY_A"|"DEVICE_CATEGORY_B", installationParams?: record, isSigned?: bool, measurementCapabilities?: list, model?: record, state?: "DEVICE_CONFIG_STATE_UNSPECIFIED"|"DRAFT"|"FINAL", updateTime?: string, userId?: string}
+# --activeConfig shape: {airInterface?: record, callSign?: string, category?: "DEVICE_CATEGORY_UNSPECIFIED"|"DEVICE_CATEGORY_A"|"DEVICE_CATEGORY_B", installationParams?: record, isSigned?: bool, measurementCapabilities?: list<string>, model?: record, state?: "DEVICE_CONFIG_STATE_UNSPECIFIED"|"DRAFT"|"FINAL", updateTime?: string, userId?: string}
 # --currentChannels item shape: {frequencyRange?: record, score?: float}
 # --deviceMetadata shape: {antennaModel?: string, commonChannelGroup?: string, interferenceCoordinationGroup?: string, nrqzValidation?: record}
 # --grantRangeAllowlists item shape: {highFrequencyMhz?: float, lowFrequencyMhz?: float}
-# --grants item shape: {channelType?: "CHANNEL_TYPE_UNSPECIFIED"|"CHANNEL_TYPE_GAA"|"CHANNEL_TYPE_PAL", expireTime?: string, frequencyRange?: record, grantId?: string, lastHeartbeatTransmitExpireTime?: string, maxEirp?: float, moveList?: list, state?: "GRANT_STATE_UNSPECIFIED"|"GRANT_STATE_GRANTED"|"GRANT_STATE_TERMINATED"|"GRANT_STATE_SUSPENDED"|"GRANT_STATE_AUTHORIZED"|"GRANT_STATE_EXPIRED", suspensionReason?: list}
-# --preloadedConfig shape: {airInterface?: record, callSign?: string, category?: "DEVICE_CATEGORY_UNSPECIFIED"|"DEVICE_CATEGORY_A"|"DEVICE_CATEGORY_B", installationParams?: record, isSigned?: bool, measurementCapabilities?: list, model?: record, state?: "DEVICE_CONFIG_STATE_UNSPECIFIED"|"DRAFT"|"FINAL", updateTime?: string, userId?: string}
-export def "v1alpha1-devices sasportalnodesnodesdevicescreate" [
+# --grants item shape: {channelType?: "CHANNEL_TYPE_UNSPECIFIED"|"CHANNEL_TYPE_GAA"|"CHANNEL_TYPE_PAL", expireTime?: string, frequencyRange?: record, grantId?: string, lastHeartbeatTransmitExpireTime?: string, maxEirp?: float, moveList?: list, state?: "GRANT_STATE_UNSPECIFIED"|"GRANT_STATE_GRANTED"|"GRANT_STATE_TERMINATED"|"GRANT_STATE_SUSPENDED"|"GRANT_STATE_AUTHORIZED"|"GRANT_STATE_EXPIRED", suspensionReason?: list<string>}
+# --preloadedConfig shape: {airInterface?: record, callSign?: string, category?: "DEVICE_CATEGORY_UNSPECIFIED"|"DEVICE_CATEGORY_A"|"DEVICE_CATEGORY_B", installationParams?: record, isSigned?: bool, measurementCapabilities?: list<string>, model?: record, state?: "DEVICE_CONFIG_STATE_UNSPECIFIED"|"DRAFT"|"FINAL", updateTime?: string, userId?: string}
+export def "v1alpha1-devices create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -741,14 +751,14 @@ export def "v1alpha1-devices sasportalnodesnodesdevicescreate" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --active-config: record # Information about the device configuration. — shape: {airInterface?: record, callSign?: string, category?: "DEVICE_CATEGORY_UNSPECIFIED"|"DEVICE_CATEGORY_A"|"DEVICE_CATEGORY_B", installationParams?: record, isSigned?: bool, measurementCapabilities?: list, model?: record, state?: "DEVICE_CONFIG_STATE_UNSPECIFIED"|"DRAFT"|"FINAL", updateTime?: string, userId?: string}
+  --active-config: record # Information about the device configuration. — shape: {airInterface?: record, callSign?: string, category?: "DEVICE_CATEGORY_UNSPECIFIED"|"DEVICE_CATEGORY_A"|"DEVICE_CATEGORY_B", installationParams?: record, isSigned?: bool, measurementCapabilities?: list<string>, model?: record, state?: "DEVICE_CONFIG_STATE_UNSPECIFIED"|"DRAFT"|"FINAL", updateTime?: string, userId?: string}
   --device-metadata: record # Device data overridable by both SAS Portal and registration requests. — shape: {antennaModel?: string, commonChannelGroup?: string, interferenceCoordinationGroup?: string, nrqzValidation?: record}
   --display-name: string # Device display name.
   --fcc-id: string # The FCC identifier of the device.
   --grant-range-allowlists: list # Only ranges that are within the allowlists are available for new grants. — item shape: {highFrequencyMhz?: float, lowFrequencyMhz?: float}
-  --grants: list # Output only. Grants held by the device. — item shape: {channelType?: "CHANNEL_TYPE_UNSPECIFIED"|"CHANNEL_TYPE_GAA"|"CHANNEL_TYPE_PAL", expireTime?: string, frequencyRange?: record, grantId?: string, lastHeartbeatTransmitExpireTime?: string, maxEirp?: float, moveList?: list, state?: "GRANT_STATE_UNSPECIFIED"|"GRANT_STATE_GRANTED"|"GRANT_STATE_TERMINATED"|"GRANT_STATE_SUSPENDED"|"GRANT_STATE_AUTHORIZED"|"GRANT_STATE_EXPIRED", suspensionReason?: list}
+  --grants: list # Output only. Grants held by the device. — item shape: {channelType?: "CHANNEL_TYPE_UNSPECIFIED"|"CHANNEL_TYPE_GAA"|"CHANNEL_TYPE_PAL", expireTime?: string, frequencyRange?: record, grantId?: string, lastHeartbeatTransmitExpireTime?: string, maxEirp?: float, moveList?: list, state?: "GRANT_STATE_UNSPECIFIED"|"GRANT_STATE_GRANTED"|"GRANT_STATE_TERMINATED"|"GRANT_STATE_SUSPENDED"|"GRANT_STATE_AUTHORIZED"|"GRANT_STATE_EXPIRED", suspensionReason?: list<string>}
   --name: string # Output only. The resource path name.
-  --preloaded-config: record # Information about the device configuration. — shape: {airInterface?: record, callSign?: string, category?: "DEVICE_CATEGORY_UNSPECIFIED"|"DEVICE_CATEGORY_A"|"DEVICE_CATEGORY_B", installationParams?: record, isSigned?: bool, measurementCapabilities?: list, model?: record, state?: "DEVICE_CONFIG_STATE_UNSPECIFIED"|"DRAFT"|"FINAL", updateTime?: string, userId?: string}
+  --preloaded-config: record # Information about the device configuration. — shape: {airInterface?: record, callSign?: string, category?: "DEVICE_CATEGORY_UNSPECIFIED"|"DEVICE_CATEGORY_A"|"DEVICE_CATEGORY_B", installationParams?: record, isSigned?: bool, measurementCapabilities?: list<string>, model?: record, state?: "DEVICE_CONFIG_STATE_UNSPECIFIED"|"DRAFT"|"FINAL", updateTime?: string, userId?: string}
   --serial-number: string # A serial number assigned to the device by the device manufacturer.
   --state: string@state-completer # Output only. Device state.
 ]: any -> record<activeConfig: record<airInterface: record<radioTechnology: string, supportedSpec: string>, callSign: string, category: string, installationParams: record<antennaAzimuth: int, antennaBeamwidth: int, antennaDowntilt: int, antennaGain: int, antennaGainNewField: float, antennaModel: string, cpeCbsdIndication: bool, eirpCapability: int, eirpCapabilityNewField: float, height: float, heightType: string, horizontalAccuracy: float, indoorDeployment: bool, latitude: float, longitude: float, verticalAccuracy: float>, isSigned: bool, measurementCapabilities: list<string>, model: record<firmwareVersion: string, hardwareVersion: string, name: string, softwareVersion: string, vendor: string>, state: string, updateTime: string, userId: string>, currentChannels: table<frequencyRange: record, score: float>, deviceMetadata: record<antennaModel: string, commonChannelGroup: string, interferenceCoordinationGroup: string, nrqzValidated: bool, nrqzValidation: record<caseId: string, cpiId: string, latitude: float, longitude: float, state: string>>, displayName: string, fccId: string, grantRangeAllowlists: table<highFrequencyMhz: float, lowFrequencyMhz: float>, grants: table<channelType: string, expireTime: string, frequencyRange: record, grantId: string, lastHeartbeatTransmitExpireTime: string, maxEirp: float, moveList: list, state: string, suspensionReason: list>, name: string, preloadedConfig: record<airInterface: record<radioTechnology: string, supportedSpec: string>, callSign: string, category: string, installationParams: record<antennaAzimuth: int, antennaBeamwidth: int, antennaDowntilt: int, antennaGain: int, antennaGainNewField: float, antennaModel: string, cpeCbsdIndication: bool, eirpCapability: int, eirpCapabilityNewField: float, height: float, heightType: string, horizontalAccuracy: float, indoorDeployment: bool, latitude: float, longitude: float, verticalAccuracy: float>, isSigned: bool, measurementCapabilities: list<string>, model: record<firmwareVersion: string, hardwareVersion: string, name: string, softwareVersion: string, vendor: string>, state: string, updateTime: string, userId: string>, serialNumber: string, state: string> {
@@ -756,19 +766,19 @@ export def "v1alpha1-devices sasportalnodesnodesdevicescreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1alpha1/{parent}/devices") $qp)
-  let body = {"activeConfig": $active_config, "deviceMetadata": $device_metadata, "displayName": $display_name, "fccId": $fcc_id, "grantRangeAllowlists": $grant_range_allowlists, "grants": $grants, "name": $name, "preloadedConfig": $preloaded_config, "serialNumber": $serial_number, "state": $state} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1alpha1/{parent}/devices") $qp)
+  let req_body = {"activeConfig": $active_config, "deviceMetadata": $device_metadata, "displayName": $display_name, "fccId": $fcc_id, "grantRangeAllowlists": $grant_range_allowlists, "grants": $grants, "name": $name, "preloadedConfig": $preloaded_config, "serialNumber": $serial_number, "state": $state} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Creates a signed device under a node or customer.
 #
 # POST /v1alpha1/{parent}/devices:createSigned
 # operationId: sasportal.nodes.nodes.devices.createSigned
-export def "v1alpha1-devices-create-signed sasportalnodesnodesdevicescreateSigned" [
+export def "v1alpha1-devices-create-signed create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -796,19 +806,19 @@ export def "v1alpha1-devices-create-signed sasportalnodesnodesdevicescreateSigne
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1alpha1/{parent}/devices:createSigned") $qp)
-  let body = {"encodedDevice": $encoded_device, "installerId": $installer_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1alpha1/{parent}/devices:createSigned") $qp)
+  let req_body = {"encodedDevice": $encoded_device, "installerId": $installer_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists nodes.
 #
 # GET /v1alpha1/{parent}/nodes
 # operationId: sasportal.nodes.nodes.nodes.list
-export def "v1alpha1-nodes sasportalnodesnodesnodeslist" [
+export def "v1alpha1-nodes list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -836,7 +846,7 @@ export def "v1alpha1-nodes sasportalnodesnodesnodeslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1alpha1/{parent}/nodes") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1alpha1/{parent}/nodes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -846,7 +856,7 @@ export def "v1alpha1-nodes sasportalnodesnodesnodeslist" [
 #
 # POST /v1alpha1/{parent}/nodes
 # operationId: sasportal.nodes.nodes.nodes.create
-export def "v1alpha1-nodes sasportalnodesnodesnodescreate" [
+export def "v1alpha1-nodes create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -869,16 +879,16 @@ export def "v1alpha1-nodes sasportalnodesnodesnodescreate" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --display-name: string # The node's display name.
   --name: string # Output only. Resource name.
-  --sas-user-ids: list # User ids used by the devices belonging to this node.
+  --sas-user-ids: list<string> # User ids used by the devices belonging to this node.
 ]: any -> record<displayName: string, name: string, sasUserIds: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1alpha1/{parent}/nodes") $qp)
-  let body = {"displayName": $display_name, "name": $name, "sasUserIds": $sas_user_ids} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1alpha1/{parent}/nodes") $qp)
+  let req_body = {"displayName": $display_name, "name": $name, "sasUserIds": $sas_user_ids} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

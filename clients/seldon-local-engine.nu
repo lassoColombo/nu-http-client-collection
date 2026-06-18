@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -69,7 +78,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "seldon-v10-feedback send" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "seldon-v1-0-feedback send" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,7 +104,7 @@ export def commands []: nothing -> table {
 # --request shape: {binData?: string, data?: record, meta?: record, status?: record, strData?: string}
 # --response shape: {binData?: string, data?: record, meta?: record, status?: record, strData?: string}
 # --truth shape: {binData?: string, data?: record, meta?: record, status?: record, strData?: string}
-export def "seldon-v10-feedback send" [
+export def "seldon-v1-0-feedback send" [
   namespace: string
   deployment: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -114,21 +123,21 @@ export def "seldon-v10-feedback send" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({namespace: $namespace, deployment: $deployment} | format pattern "/seldon/{namespace}/{deployment}/api/v1.0/feedback"))
-  let body = {"request": $request, "response": $response, "reward": $reward, "truth": $truth} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), deployment: (encode-path-segment $deployment)} | format pattern "/seldon/{namespace}/{deployment}/api/v1.0/feedback"))
+  let req_body = {"request": $request, "response": $response, "reward": $reward, "truth": $truth} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /seldon/{namespace}/{deployment}/api/v1.0/predictions
 #
 # operationId: Predict
-# --data shape: {names?: list, ndarray?: list, tensor?: record, tftensor?: record}
+# --data shape: {names?: list<string>, ndarray?: list, tensor?: record, tftensor?: record}
 # --meta shape: {metrics?: list, puid?: string, requestPath?: record, routing?: record, tags?: record}
 # --status shape: {code?: int, info?: string, reason?: string, status?: "SUCCESS"|"FAILURE"}
-export def "seldon-v10-predictions post" [
+export def "seldon-v1-0-predictions create-predict" [
   namespace: string
   deployment: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -140,7 +149,7 @@ export def "seldon-v10-predictions post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --bin-data: string # format: byte
-  --data: record # shape: {names?: list, ndarray?: list, tensor?: record, tftensor?: record}
+  --data: record # shape: {names?: list<string>, ndarray?: list, tensor?: record, tftensor?: record}
   --meta: record # shape: {metrics?: list, puid?: string, requestPath?: record, routing?: record, tags?: record}
   --status: record # shape: {code?: int, info?: string, reason?: string, status?: "SUCCESS"|"FAILURE"}
   --str-data: string
@@ -148,10 +157,10 @@ export def "seldon-v10-predictions post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({namespace: $namespace, deployment: $deployment} | format pattern "/seldon/{namespace}/{deployment}/api/v1.0/predictions"))
-  let body = {"binData": $bin_data, "data": $data, "meta": $meta, "status": $status, "strData": $str_data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), deployment: (encode-path-segment $deployment)} | format pattern "/seldon/{namespace}/{deployment}/api/v1.0/predictions"))
+  let req_body = {"binData": $bin_data, "data": $data, "meta": $meta, "status": $status, "strData": $str_data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -71,7 +80,7 @@ def accept-completer [] { ["application/json" "text/csv" "text/html" "text/javas
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "user-active-sessions sessions" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "user-active-sessions get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -91,11 +100,10 @@ export def commands []: nothing -> table {
   }
 }
 
-# &nbsp; <i class="fa fa-lg fa-unlock-alt"></i>
-#
 # GET /user/active/sessions
+#
 # operationId: active_sessions
-export def "user-active-sessions sessions" [
+export def "user-active-sessions get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -114,11 +122,10 @@ export def "user-active-sessions sessions" [
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# &nbsp; <i class="fa fa-lg fa-unlock-alt"></i>
-#
 # POST /user/active/terminate
+#
 # operationId: panic_terminate
-export def "user-active-terminate terminate" [
+export def "user-active-terminate create-panic" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -134,17 +141,18 @@ export def "user-active-terminate terminate" [
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user/active/terminate")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-# List organization multi-tests&nbsp; <i class="fa fa-lg fa-unlock-alt"></i>
+# List organization multi-tests
 #
 # GET /user/collections
 # operationId: retrieveCollections
-export def "user-collections retrieve" [
+export def "user-collections get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -166,11 +174,10 @@ export def "user-collections retrieve" [
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# &nbsp; <i class="fa fa-lg fa-unlock-alt"></i>
-#
 # GET /user/invites
+#
 # operationId: retrieveInvites
-export def "user-invites retrieve" [
+export def "user-invites get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -189,11 +196,11 @@ export def "user-invites retrieve" [
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Get user available locations&nbsp; <i class="fa fa-lg fa-unlock-alt"></i>
+# Get user available locations
 #
 # GET /user/locations
 # operationId: retrieveLocations
-export def "user-locations retrieve" [
+export def "user-locations get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -212,11 +219,11 @@ export def "user-locations retrieve" [
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# List user private masters&nbsp; <i class="fa fa-lg fa-unlock-alt"></i>
+# List user private masters
 #
 # GET /user/masters
 # operationId: retrieveMasters
-export def "user-masters retrieve" [
+export def "user-masters get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -238,10 +245,10 @@ export def "user-masters retrieve" [
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Update user name&nbsp; <i class="fa fa-lg fa-unlock-alt"></i>
+# Update user name
 #
 # PATCH /user/password
-export def "user-password patch" [
+export def "user-password update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -257,16 +264,17 @@ export def "user-password patch" [
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user/password")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-# Update user name&nbsp; <i class="fa fa-lg fa-unlock-alt"></i>
+# Update user name
 #
 # POST /user/password
-export def "user-password post" [
+export def "user-password create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -282,16 +290,17 @@ export def "user-password post" [
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user/password")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-# Update user name&nbsp; <i class="fa fa-lg fa-unlock-alt"></i>
+# Update user name
 #
 # PUT /user/password
-export def "user-password put" [
+export def "user-password update-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -307,17 +316,18 @@ export def "user-password put" [
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user/password")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-# Get user projects&nbsp; <i class="fa fa-lg fa-unlock-alt"></i>
+# Get user projects
 #
 # GET /user/projects
 # operationId: retrieveProjects
-export def "user-projects retrieve" [
+export def "user-projects get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -336,7 +346,7 @@ export def "user-projects retrieve" [
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Registration&nbsp; <i class="fa fa-lg fa-unlock-alt"></i>
+# Registration
 #
 # GET /user/register
 # operationId: register_retrieve
@@ -364,11 +374,11 @@ export def "user-register get" [
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Registration&nbsp; <i class="fa fa-lg fa-unlock-alt"></i>
+# Registration
 #
 # POST /user/register
 # operationId: register
-export def "user-register register" [
+export def "user-register create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -384,17 +394,18 @@ export def "user-register register" [
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user/register")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-# List user private tests&nbsp; <i class="fa fa-lg fa-unlock-alt"></i>
+# List user private tests
 #
 # GET /user/tests
 # operationId: retrieveTests
-export def "user-tests retrieve" [
+export def "user-tests get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -416,9 +427,8 @@ export def "user-tests retrieve" [
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# &nbsp; <i class="fa fa-lg fa-unlock-alt"></i>
-#
 # GET /user/top
+#
 # operationId: top
 export def "user-top top" [
   --base-url(-b): string@base-url-completer # API base URL

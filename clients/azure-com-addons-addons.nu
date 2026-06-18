@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -117,7 +126,7 @@ export def "providers-microsoft-addons-operations list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Addons/supportProviders/{providerName}/supportPlanTypes
 # operationId: CanonicalSupportPlanTypes_Get
-export def "subscriptions-providers-microsoft-addons-support-providers-support-plan-types list" [
+export def "subscriptions-providers-microsoft-addons-support-providers-support-plan-types get-canonical" [
   subscription_id: string
   provider_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -133,7 +142,7 @@ export def "subscriptions-providers-microsoft-addons-support-providers-support-p
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, provider_name: $provider_name} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Addons/supportProviders/{provider_name}/supportPlanTypes") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), provider_name: (encode-path-segment $provider_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Addons/supportProviders/{provider_name}/supportPlanTypes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -160,7 +169,7 @@ export def "subscriptions-providers-microsoft-addons-support-providers-support-p
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, provider_name: $provider_name, plan_type_name: $plan_type_name} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Addons/supportProviders/{provider_name}/supportPlanTypes/{plan_type_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), provider_name: (encode-path-segment $provider_name), plan_type_name: (encode-path-segment $plan_type_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Addons/supportProviders/{provider_name}/supportPlanTypes/{plan_type_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -187,7 +196,7 @@ export def "subscriptions-providers-microsoft-addons-support-providers-support-p
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, provider_name: $provider_name, plan_type_name: $plan_type_name} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Addons/supportProviders/{provider_name}/supportPlanTypes/{plan_type_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), provider_name: (encode-path-segment $provider_name), plan_type_name: (encode-path-segment $plan_type_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Addons/supportProviders/{provider_name}/supportPlanTypes/{plan_type_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -214,7 +223,7 @@ export def "subscriptions-providers-microsoft-addons-support-providers-support-p
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, provider_name: $provider_name, plan_type_name: $plan_type_name} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Addons/supportProviders/{provider_name}/supportPlanTypes/{plan_type_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), provider_name: (encode-path-segment $provider_name), plan_type_name: (encode-path-segment $plan_type_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Addons/supportProviders/{provider_name}/supportPlanTypes/{plan_type_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

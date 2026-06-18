@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -108,7 +117,7 @@ export def "apis list" [
   --query: string # free text query to match (default: )
   --limit: int # the maximum number of APIs to return (default: 10)
   --offset: int # the offset where to start from when fetching a limited number of APIs (default: 0)
-  --qp-sort: string@sort-completer # sort criteria or result set * NAME - * UPATED * CREATED * OWNER  (default: NAME)
+  --qp-sort: string@sort-completer # sort criteria or result set * NAME - * UPATED * CREATED * OWNER (default: NAME)
   --order: string@order-completer # sort order (default: ASC)
 ]: nothing -> table<created: string, description: string, modified: string, name: string, owner: string, swagger: record, url: string, versions: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -134,13 +143,13 @@ export def "apis get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-sort: string@sort-completer # sort criteria or result set * NAME - * UPATED * CREATED * OWNER  (default: NAME)
+  --qp-sort: string@sort-completer # sort criteria or result set * NAME - * UPATED * CREATED * OWNER (default: NAME)
   --order: string@order-completer # sort order (default: ASC)
 ]: nothing -> table<created: string, description: string, modified: string, name: string, owner: string, swagger: record, url: string, versions: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({owner: $owner} | format pattern "/apis/{owner}") $qp)
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner)} | format pattern "/apis/{owner}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -150,7 +159,7 @@ export def "apis get" [
 #
 # DELETE /apis/{owner}/{api}
 # operationId: delete_api
-export def "apis api" [
+export def "apis delete-by-owner-api" [
   owner: string
   api: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -164,7 +173,7 @@ export def "apis api" [
 ]: nothing -> table<created: string, description: string, modified: string, name: string, owner: string, swagger: record, url: string, versions: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, api: $api} | format pattern "/apis/{owner}/{api}"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), api: (encode-path-segment $api)} | format pattern "/apis/{owner}/{api}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -174,7 +183,7 @@ export def "apis api" [
 #
 # GET /apis/{owner}/{api}
 # operationId: get_api_versions
-export def "apis version-s" [
+export def "apis get-versions" [
   owner: string
   api: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -188,7 +197,7 @@ export def "apis version-s" [
 ]: nothing -> table<created: string, description: string, modified: string, name: string, owner: string, swagger: record, url: string, versions: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, api: $api} | format pattern "/apis/{owner}/{api}"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), api: (encode-path-segment $api)} | format pattern "/apis/{owner}/{api}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -198,7 +207,7 @@ export def "apis version-s" [
 #
 # POST /apis/{owner}/{api}
 # operationId: save_definition
-export def "apis definition" [
+export def "apis create-save-definition" [
   owner: string
   api: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -217,18 +226,19 @@ export def "apis definition" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "private" $private "scalar") (serialize-qp "force" $force "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({owner: $owner, api: $api} | format pattern "/apis/{owner}/{api}") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), api: (encode-path-segment $api)} | format pattern "/apis/{owner}/{api}") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes a particular version of the specified API
 #
 # DELETE /apis/{owner}/{api}/{version}
 # operationId: delete_api_version
-export def "apis version-by-owner-api-version" [
+export def "apis delete-by-owner-api-version" [
   owner: string
   api: string
   version: string
@@ -243,7 +253,7 @@ export def "apis version-by-owner-api-version" [
 ]: nothing -> record<created: string, description: string, modified: string, name: string, owner: string, swagger: record, url: string, versions: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, api: $api, version: $version} | format pattern "/apis/{owner}/{api}/{version}"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), api: (encode-path-segment $api), version: (encode-path-segment $version)} | format pattern "/apis/{owner}/{api}/{version}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -253,7 +263,7 @@ export def "apis version-by-owner-api-version" [
 #
 # POST /apis/{owner}/{api}/{version}
 # operationId: publish_api_version
-export def "apis version-by-owner-api-version-1" [
+export def "apis publish" [
   owner: string
   api: string
   version: string
@@ -268,7 +278,7 @@ export def "apis version-by-owner-api-version-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, api: $api, version: $version} | format pattern "/apis/{owner}/{api}/{version}"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), api: (encode-path-segment $api), version: (encode-path-segment $version)} | format pattern "/apis/{owner}/{api}/{version}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -278,7 +288,7 @@ export def "apis version-by-owner-api-version-1" [
 #
 # GET /apis/{owner}/{api}/{version}/swagger.json
 # operationId: get_json_definition
-export def "apis-swaggerjson definition" [
+export def "apis-swagger-json get-definition" [
   owner: string
   api: string
   version: string
@@ -293,7 +303,7 @@ export def "apis-swaggerjson definition" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, api: $api, version: $version} | format pattern "/apis/{owner}/{api}/{version}/swagger.json"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), api: (encode-path-segment $api), version: (encode-path-segment $version)} | format pattern "/apis/{owner}/{api}/{version}/swagger.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -303,7 +313,7 @@ export def "apis-swaggerjson definition" [
 #
 # GET /apis/{owner}/{api}/{version}/swagger.yaml
 # operationId: get_yaml_definition
-export def "apis-swaggeryaml definition" [
+export def "apis-swagger-yaml get-definition" [
   owner: string
   api: string
   version: string
@@ -318,7 +328,7 @@ export def "apis-swaggeryaml definition" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, api: $api, version: $version} | format pattern "/apis/{owner}/{api}/{version}/swagger.yaml"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), api: (encode-path-segment $api), version: (encode-path-segment $version)} | format pattern "/apis/{owner}/{api}/{version}/swagger.yaml"))
   let accept_val = "text/vnd.yaml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -328,7 +338,7 @@ export def "apis-swaggeryaml definition" [
 #
 # POST /auth/login
 # operationId: login
-export def "auth-login login" [
+export def "auth-login create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -344,18 +354,18 @@ export def "auth-login login" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/auth/login")
-  let body = {"password": $password, "username": $username} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"password": $password, "username": $username} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Log in to OpenAPI space using an APInf account
 #
 # POST /auth/login/apinf
 # operationId: login_apinf
-export def "auth-login-apinf apinf" [
+export def "auth-login-apinf create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -371,18 +381,18 @@ export def "auth-login-apinf apinf" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/auth/login/apinf")
-  let body = {"password": $password, "username": $username} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"password": $password, "username": $username} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Log in to OpenAPI space using an APInf authentication token
 #
 # POST /auth/login/apinf_token
 # operationId: login_apinf_token
-export def "auth-login-apinf-token token" [
+export def "auth-login-apinf-token create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -398,18 +408,18 @@ export def "auth-login-apinf-token token" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/auth/login/apinf_token")
-  let body = {"auth_token": $auth_token, "user_id": $user_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"auth_token": $auth_token, "user_id": $user_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Log out from OpenAPI space
 #
 # POST /auth/logout
 # operationId: logout
-export def "auth-logout logout" [
+export def "auth-logout create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -453,7 +463,7 @@ export def "auth-ping ping" [
 #
 # POST /auth/register
 # operationId: register
-export def "auth-register register" [
+export def "auth-register create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -470,9 +480,9 @@ export def "auth-register register" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/auth/register")
-  let body = {"password": $password, "username": $username, "email": $email} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"password": $password, "username": $username, "email": $email} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

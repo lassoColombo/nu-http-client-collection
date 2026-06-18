@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -76,7 +85,7 @@ def type-completer [] { ["DEPLOY" "ROLLBACK" "SITE_DISABLE" "TYPE_UNSPECIFIED"] 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1beta1 firebasehostingsitesversionsdelete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1beta1 delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -100,7 +109,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /v1beta1/{name}
 # operationId: firebasehosting.sites.versions.delete
-export def "v1beta1 firebasehostingsitesversionsdelete" [
+export def "v1beta1 delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -125,7 +134,7 @@ export def "v1beta1 firebasehostingsitesversionsdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1beta1/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta1/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -135,7 +144,7 @@ export def "v1beta1 firebasehostingsitesversionsdelete" [
 #
 # GET /v1beta1/{name}
 # operationId: firebasehosting.sites.versions.get
-export def "v1beta1 firebasehostingsitesversionsget" [
+export def "v1beta1 get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -160,13 +169,13 @@ export def "v1beta1 firebasehostingsitesversionsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1beta1/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta1/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-#  Updates the specified metadata for the specified version. This method will fail with `FAILED_PRECONDITION` in the event of an invalid state transition. The supported [state](../sites.versions#versionstatus) transitions for a version are from `CREATED` to `FINALIZED`. Use [`DeleteVersion`](delete) to set the status of a version to `DELETED`.
+# Updates the specified metadata for the specified version. This method will fail with `FAILED_PRECONDITION` in the event of an invalid state transition. The supported [state](../sites.versions#versionstatus) transitions for a version are from `CREATED` to `FINALIZED`. Use [`DeleteVersion`](delete) to set the status of a version to `DELETED`.
 #
 # PATCH /v1beta1/{name}
 # operationId: firebasehosting.sites.versions.patch
@@ -174,7 +183,7 @@ export def "v1beta1 firebasehostingsitesversionsget" [
 # --createUser shape: {email?: string, imageUrl?: string}
 # --deleteUser shape: {email?: string, imageUrl?: string}
 # --finalizeUser shape: {email?: string, imageUrl?: string}
-export def "v1beta1 firebasehostingsitesversionspatch" [
+export def "v1beta1 update-by-name" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -213,12 +222,12 @@ export def "v1beta1 firebasehostingsitesversionspatch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1beta1/{name}") $qp)
-  let body = {"config": $config, "createTime": $create_time, "createUser": $create_user, "deleteTime": $delete_time, "deleteUser": $delete_user, "fileCount": $file_count, "finalizeTime": $finalize_time, "finalizeUser": $finalize_user, "labels": $labels, "name": $body_name, "status": $status, "versionBytes": $version_bytes} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta1/{name}") $qp)
+  let req_body = {"config": $config, "createTime": $create_time, "createUser": $create_user, "deleteTime": $delete_time, "deleteUser": $delete_user, "fileCount": $file_count, "finalizeTime": $finalize_time, "finalizeUser": $finalize_user, "labels": $labels, "name": $body_name, "status": $status, "versionBytes": $version_bytes} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates the specified domain mapping, creating the mapping as if it does not exist.
@@ -226,8 +235,8 @@ export def "v1beta1 firebasehostingsitesversionspatch" [
 # PUT /v1beta1/{name}
 # operationId: firebasehosting.sites.domains.update
 # --domainRedirect shape: {domainName?: string, type?: "REDIRECT_TYPE_UNSPECIFIED"|"MOVED_PERMANENTLY"}
-# --provisioning shape: {certChallengeDiscoveredTxt?: list, certChallengeDns?: record, certChallengeHttp?: record, certStatus?: "CERT_STATUS_UNSPECIFIED"|"CERT_PENDING"|"CERT_MISSING"|"CERT_PROCESSING"|"CERT_PROPAGATING"|"CERT_ACTIVE"|"CERT_ERROR", discoveredIps?: list, dnsFetchTime?: string, dnsStatus?: "DNS_STATUS_UNSPECIFIED"|"DNS_PENDING"|"DNS_MISSING"|"DNS_PARTIAL_MATCH"|"DNS_MATCH"|"DNS_EXTRANEOUS_MATCH", expectedIps?: list}
-export def "v1beta1 firebasehostingsitesdomainsupdate" [
+# --provisioning shape: {certChallengeDiscoveredTxt?: list<string>, certChallengeDns?: record, certChallengeHttp?: record, certStatus?: "CERT_STATUS_UNSPECIFIED"|"CERT_PENDING"|"CERT_MISSING"|"CERT_PROCESSING"|"CERT_PROPAGATING"|"CERT_ACTIVE"|"CERT_ERROR", discoveredIps?: list<string>, dnsFetchTime?: string, dnsStatus?: "DNS_STATUS_UNSPECIFIED"|"DNS_PENDING"|"DNS_MISSING"|"DNS_PARTIAL_MATCH"|"DNS_MATCH"|"DNS_EXTRANEOUS_MATCH", expectedIps?: list<string>}
+export def "v1beta1 update-by-name-1" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -250,7 +259,7 @@ export def "v1beta1 firebasehostingsitesdomainsupdate" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --domain-name: string # Required. The domain name of the association.
   --domain-redirect: record # Defines the behavior of a domain-level redirect. Domain redirects preserve the path of the redirect but replace the requested domain with the one specified in the redirect configuration. — shape: {domainName?: string, type?: "REDIRECT_TYPE_UNSPECIFIED"|"MOVED_PERMANENTLY"}
-  --provisioning: record # The current certificate provisioning status information for a domain. — shape: {certChallengeDiscoveredTxt?: list, certChallengeDns?: record, certChallengeHttp?: record, certStatus?: "CERT_STATUS_UNSPECIFIED"|"CERT_PENDING"|"CERT_MISSING"|"CERT_PROCESSING"|"CERT_PROPAGATING"|"CERT_ACTIVE"|"CERT_ERROR", discoveredIps?: list, dnsFetchTime?: string, dnsStatus?: "DNS_STATUS_UNSPECIFIED"|"DNS_PENDING"|"DNS_MISSING"|"DNS_PARTIAL_MATCH"|"DNS_MATCH"|"DNS_EXTRANEOUS_MATCH", expectedIps?: list}
+  --provisioning: record # The current certificate provisioning status information for a domain. — shape: {certChallengeDiscoveredTxt?: list<string>, certChallengeDns?: record, certChallengeHttp?: record, certStatus?: "CERT_STATUS_UNSPECIFIED"|"CERT_PENDING"|"CERT_MISSING"|"CERT_PROCESSING"|"CERT_PROPAGATING"|"CERT_ACTIVE"|"CERT_ERROR", discoveredIps?: list<string>, dnsFetchTime?: string, dnsStatus?: "DNS_STATUS_UNSPECIFIED"|"DNS_PENDING"|"DNS_MISSING"|"DNS_PARTIAL_MATCH"|"DNS_MATCH"|"DNS_EXTRANEOUS_MATCH", expectedIps?: list<string>}
   --site: string # Required. The site name of the association.
   --status: string@status-completer-1 # Output only. Additional status of the domain association.
   --update-time: string # Output only. The time at which the domain was last updated. (format: google-datetime)
@@ -259,19 +268,19 @@ export def "v1beta1 firebasehostingsitesdomainsupdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1beta1/{name}") $qp)
-  let body = {"domainName": $domain_name, "domainRedirect": $domain_redirect, "provisioning": $provisioning, "site": $site, "status": $status, "updateTime": $update_time} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta1/{name}") $qp)
+  let req_body = {"domainName": $domain_name, "domainRedirect": $domain_redirect, "provisioning": $provisioning, "site": $site, "status": $status, "updateTime": $update_time} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists the channels for the specified site. All sites have a default `live` channel.
 #
 # GET /v1beta1/{parent}/channels
 # operationId: firebasehosting.sites.channels.list
-export def "v1beta1-channels firebasehostingsiteschannelslist" [
+export def "v1beta1-channels list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -298,7 +307,7 @@ export def "v1beta1-channels firebasehostingsiteschannelslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta1/{parent}/channels") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta1/{parent}/channels") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -309,7 +318,7 @@ export def "v1beta1-channels firebasehostingsiteschannelslist" [
 # POST /v1beta1/{parent}/channels
 # operationId: firebasehosting.sites.channels.create
 # --release shape: {message?: string, name?: string, releaseTime?: string, releaseUser?: record, type?: "TYPE_UNSPECIFIED"|"DEPLOY"|"ROLLBACK"|"SITE_DISABLE", version?: record}
-export def "v1beta1-channels firebasehostingsiteschannelscreate" [
+export def "v1beta1-channels create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -334,7 +343,7 @@ export def "v1beta1-channels firebasehostingsiteschannelscreate" [
   --expire-time: string # The time at which the channel will be automatically deleted. If null, the channel will not be automatically deleted. This field is present in the output whether it's set directly or via the `ttl` field. (format: google-datetime)
   --labels: record # Text labels used for extra metadata and/or filtering.
   --name: string # The fully-qualified resource name for the channel, in the format: sites/ SITE_ID/channels/CHANNEL_ID
-  --release: record #  A `Release` is a particular [collection of configurations and files](sites.versions) that is set to be public at a particular time. — shape: {message?: string, name?: string, releaseTime?: string, releaseUser?: record, type?: "TYPE_UNSPECIFIED"|"DEPLOY"|"ROLLBACK"|"SITE_DISABLE", version?: record}
+  --release: record # A `Release` is a particular [collection of configurations and files](sites.versions) that is set to be public at a particular time. — shape: {message?: string, name?: string, releaseTime?: string, releaseUser?: record, type?: "TYPE_UNSPECIFIED"|"DEPLOY"|"ROLLBACK"|"SITE_DISABLE", version?: record}
   --retained-release-count: int # The number of previous releases to retain on the channel for rollback or other purposes. Must be a number between 1-100. Defaults to 10 for new channels. (format: int32)
   --ttl: string # Input only. A time-to-live for this channel. Sets `expire_time` to the provided duration past the time of the request. (format: google-duration)
 ]: any -> record<createTime: string, expireTime: string, labels: record, name: string, release: record<message: string, name: string, releaseTime: string, releaseUser: record<email: string, imageUrl: string>, type: string, version: record<config: record, createTime: string, createUser: record, deleteTime: string, deleteUser: record, fileCount: string, finalizeTime: string, finalizeUser: record, labels: record, name: string, status: string, versionBytes: string>>, retainedReleaseCount: int, ttl: string, updateTime: string, url: string> {
@@ -342,19 +351,19 @@ export def "v1beta1-channels firebasehostingsiteschannelscreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "channelId" $channel_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta1/{parent}/channels") $qp)
-  let body = {"expireTime": $expire_time, "labels": $labels, "name": $name, "release": $release, "retainedReleaseCount": $retained_release_count, "ttl": $ttl} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta1/{parent}/channels") $qp)
+  let req_body = {"expireTime": $expire_time, "labels": $labels, "name": $name, "release": $release, "retainedReleaseCount": $retained_release_count, "ttl": $ttl} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists the domains for the specified site.
 #
 # GET /v1beta1/{parent}/domains
 # operationId: firebasehosting.sites.domains.list
-export def "v1beta1-domains firebasehostingsitesdomainslist" [
+export def "v1beta1-domains list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -381,7 +390,7 @@ export def "v1beta1-domains firebasehostingsitesdomainslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta1/{parent}/domains") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta1/{parent}/domains") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -392,8 +401,8 @@ export def "v1beta1-domains firebasehostingsitesdomainslist" [
 # POST /v1beta1/{parent}/domains
 # operationId: firebasehosting.sites.domains.create
 # --domainRedirect shape: {domainName?: string, type?: "REDIRECT_TYPE_UNSPECIFIED"|"MOVED_PERMANENTLY"}
-# --provisioning shape: {certChallengeDiscoveredTxt?: list, certChallengeDns?: record, certChallengeHttp?: record, certStatus?: "CERT_STATUS_UNSPECIFIED"|"CERT_PENDING"|"CERT_MISSING"|"CERT_PROCESSING"|"CERT_PROPAGATING"|"CERT_ACTIVE"|"CERT_ERROR", discoveredIps?: list, dnsFetchTime?: string, dnsStatus?: "DNS_STATUS_UNSPECIFIED"|"DNS_PENDING"|"DNS_MISSING"|"DNS_PARTIAL_MATCH"|"DNS_MATCH"|"DNS_EXTRANEOUS_MATCH", expectedIps?: list}
-export def "v1beta1-domains firebasehostingsitesdomainscreate" [
+# --provisioning shape: {certChallengeDiscoveredTxt?: list<string>, certChallengeDns?: record, certChallengeHttp?: record, certStatus?: "CERT_STATUS_UNSPECIFIED"|"CERT_PENDING"|"CERT_MISSING"|"CERT_PROCESSING"|"CERT_PROPAGATING"|"CERT_ACTIVE"|"CERT_ERROR", discoveredIps?: list<string>, dnsFetchTime?: string, dnsStatus?: "DNS_STATUS_UNSPECIFIED"|"DNS_PENDING"|"DNS_MISSING"|"DNS_PARTIAL_MATCH"|"DNS_MATCH"|"DNS_EXTRANEOUS_MATCH", expectedIps?: list<string>}
+export def "v1beta1-domains create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -416,7 +425,7 @@ export def "v1beta1-domains firebasehostingsitesdomainscreate" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --domain-name: string # Required. The domain name of the association.
   --domain-redirect: record # Defines the behavior of a domain-level redirect. Domain redirects preserve the path of the redirect but replace the requested domain with the one specified in the redirect configuration. — shape: {domainName?: string, type?: "REDIRECT_TYPE_UNSPECIFIED"|"MOVED_PERMANENTLY"}
-  --provisioning: record # The current certificate provisioning status information for a domain. — shape: {certChallengeDiscoveredTxt?: list, certChallengeDns?: record, certChallengeHttp?: record, certStatus?: "CERT_STATUS_UNSPECIFIED"|"CERT_PENDING"|"CERT_MISSING"|"CERT_PROCESSING"|"CERT_PROPAGATING"|"CERT_ACTIVE"|"CERT_ERROR", discoveredIps?: list, dnsFetchTime?: string, dnsStatus?: "DNS_STATUS_UNSPECIFIED"|"DNS_PENDING"|"DNS_MISSING"|"DNS_PARTIAL_MATCH"|"DNS_MATCH"|"DNS_EXTRANEOUS_MATCH", expectedIps?: list}
+  --provisioning: record # The current certificate provisioning status information for a domain. — shape: {certChallengeDiscoveredTxt?: list<string>, certChallengeDns?: record, certChallengeHttp?: record, certStatus?: "CERT_STATUS_UNSPECIFIED"|"CERT_PENDING"|"CERT_MISSING"|"CERT_PROCESSING"|"CERT_PROPAGATING"|"CERT_ACTIVE"|"CERT_ERROR", discoveredIps?: list<string>, dnsFetchTime?: string, dnsStatus?: "DNS_STATUS_UNSPECIFIED"|"DNS_PENDING"|"DNS_MISSING"|"DNS_PARTIAL_MATCH"|"DNS_MATCH"|"DNS_EXTRANEOUS_MATCH", expectedIps?: list<string>}
   --site: string # Required. The site name of the association.
   --status: string@status-completer-1 # Output only. Additional status of the domain association.
   --update-time: string # Output only. The time at which the domain was last updated. (format: google-datetime)
@@ -425,19 +434,19 @@ export def "v1beta1-domains firebasehostingsitesdomainscreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta1/{parent}/domains") $qp)
-  let body = {"domainName": $domain_name, "domainRedirect": $domain_redirect, "provisioning": $provisioning, "site": $site, "status": $status, "updateTime": $update_time} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta1/{parent}/domains") $qp)
+  let req_body = {"domainName": $domain_name, "domainRedirect": $domain_redirect, "provisioning": $provisioning, "site": $site, "status": $status, "updateTime": $update_time} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists the remaining files to be uploaded for the specified version.
 #
 # GET /v1beta1/{parent}/files
 # operationId: firebasehosting.sites.versions.files.list
-export def "v1beta1-files firebasehostingsitesversionsfileslist" [
+export def "v1beta1-files list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -460,12 +469,12 @@ export def "v1beta1-files firebasehostingsitesversionsfileslist" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # The maximum number of version files to return. The service may return a lower number if fewer version files exist than this maximum number. If unspecified, defaults to 1000.
   --page-token: string # A token from a previous call to `ListVersionFiles` that tells the server where to resume listing.
-  --status: string@status-completer-2 #  The type of files that should be listed for the specified version.
+  --status: string@status-completer-2 # The type of files that should be listed for the specified version.
 ]: nothing -> record<files: table<hash: string, path: string, status: string>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "status" $status "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta1/{parent}/files") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta1/{parent}/files") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -475,7 +484,7 @@ export def "v1beta1-files firebasehostingsitesversionsfileslist" [
 #
 # GET /v1beta1/{parent}/releases
 # operationId: firebasehosting.sites.releases.list
-export def "v1beta1-releases firebasehostingsitesreleaseslist" [
+export def "v1beta1-releases list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -502,7 +511,7 @@ export def "v1beta1-releases firebasehostingsitesreleaseslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta1/{parent}/releases") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta1/{parent}/releases") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -514,7 +523,7 @@ export def "v1beta1-releases firebasehostingsitesreleaseslist" [
 # operationId: firebasehosting.sites.releases.create
 # --releaseUser shape: {email?: string, imageUrl?: string}
 # --version shape: {config?: record, createTime?: string, createUser?: record, deleteTime?: string, deleteUser?: record, fileCount?: string, finalizeTime?: string, finalizeUser?: record, labels?: record, name?: string, status?: "VERSION_STATUS_UNSPECIFIED"|"CREATED"|"FINALIZED"|"DELETED"|"ABANDONED"|"EXPIRED"|"CLONING", versionBytes?: string}
-export def "v1beta1-releases firebasehostingsitesreleasescreate" [
+export def "v1beta1-releases create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -535,7 +544,7 @@ export def "v1beta1-releases firebasehostingsitesreleasescreate" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --version-name: string #  The unique identifier for a version, in the format: sites/SITE_ID/versions/ VERSION_ID The SITE_ID in this version identifier must match the SITE_ID in the `parent` parameter. This query parameter must be empty if the `type` field in the request body is `SITE_DISABLE`.
+  --version-name: string # The unique identifier for a version, in the format: sites/SITE_ID/versions/ VERSION_ID The SITE_ID in this version identifier must match the SITE_ID in the `parent` parameter. This query parameter must be empty if the `type` field in the request body is `SITE_DISABLE`.
   --message: string # The deploy description when the release was created. The value can be up to 512 characters.
   --name: string # Output only. The unique identifier for the release, in either of the following formats: - sites/SITE_ID/releases/RELEASE_ID - sites/SITE_ID/channels/CHANNEL_ID/releases/RELEASE_ID This name is provided in the response body when you call [`releases.create`](sites.releases/create) or [`channels.releases.create`](sites.channels.releases/create).
   --release-time: string # Output only. The time at which the version is set to be public. (format: google-datetime)
@@ -547,19 +556,19 @@ export def "v1beta1-releases firebasehostingsitesreleasescreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "versionName" $version_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta1/{parent}/releases") $qp)
-  let body = {"message": $message, "name": $name, "releaseTime": $release_time, "releaseUser": $release_user, "type": $type, "version": $version} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta1/{parent}/releases") $qp)
+  let req_body = {"message": $message, "name": $name, "releaseTime": $release_time, "releaseUser": $release_user, "type": $type, "version": $version} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists each Hosting Site associated with the specified parent Firebase project.
 #
 # GET /v1beta1/{parent}/sites
 # operationId: firebasehosting.projects.sites.list
-export def "v1beta1-sites firebasehostingprojectssiteslist" [
+export def "v1beta1-sites list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -586,7 +595,7 @@ export def "v1beta1-sites firebasehostingprojectssiteslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta1/{parent}/sites") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta1/{parent}/sites") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -596,7 +605,7 @@ export def "v1beta1-sites firebasehostingprojectssiteslist" [
 #
 # POST /v1beta1/{parent}/sites
 # operationId: firebasehosting.projects.sites.create
-export def "v1beta1-sites firebasehostingprojectssitescreate" [
+export def "v1beta1-sites create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -625,19 +634,19 @@ export def "v1beta1-sites firebasehostingprojectssitescreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "siteId" $site_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta1/{parent}/sites") $qp)
-  let body = {"appId": $app_id, "labels": $labels} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta1/{parent}/sites") $qp)
+  let req_body = {"appId": $app_id, "labels": $labels} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists the versions that have been created for the specified site. This list includes versions for both the default `live` channel and any active preview channels for the specified site.
 #
 # GET /v1beta1/{parent}/versions
 # operationId: firebasehosting.sites.versions.list
-export def "v1beta1-versions firebasehostingsitesversionslist" [
+export def "v1beta1-versions list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -665,7 +674,7 @@ export def "v1beta1-versions firebasehostingsitesversionslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta1/{parent}/versions") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta1/{parent}/versions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -679,7 +688,7 @@ export def "v1beta1-versions firebasehostingsitesversionslist" [
 # --createUser shape: {email?: string, imageUrl?: string}
 # --deleteUser shape: {email?: string, imageUrl?: string}
 # --finalizeUser shape: {email?: string, imageUrl?: string}
-export def "v1beta1-versions firebasehostingsitesversionscreate" [
+export def "v1beta1-versions create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -719,21 +728,21 @@ export def "v1beta1-versions firebasehostingsitesversionscreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "sizeBytes" $size_bytes "scalar") (serialize-qp "versionId" $version_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta1/{parent}/versions") $qp)
-  let body = {"config": $config, "createTime": $create_time, "createUser": $create_user, "deleteTime": $delete_time, "deleteUser": $delete_user, "fileCount": $file_count, "finalizeTime": $finalize_time, "finalizeUser": $finalize_user, "labels": $labels, "name": $name, "status": $status, "versionBytes": $version_bytes} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta1/{parent}/versions") $qp)
+  let req_body = {"config": $config, "createTime": $create_time, "createUser": $create_user, "deleteTime": $delete_time, "deleteUser": $delete_user, "fileCount": $file_count, "finalizeTime": $finalize_time, "finalizeUser": $finalize_user, "labels": $labels, "name": $name, "status": $status, "versionBytes": $version_bytes} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Creates a new version on the specified target site using the content of the specified version.
 #
 # POST /v1beta1/{parent}/versions:clone
 # operationId: firebasehosting.sites.versions.clone
-# --exclude shape: {regexes?: list}
-# --include shape: {regexes?: list}
-export def "v1beta1-versions-clone firebasehostingsitesversionsclone" [
+# --exclude shape: {regexes?: list<string>}
+# --include shape: {regexes?: list<string>}
+export def "v1beta1-versions-clone clone" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -754,28 +763,28 @@ export def "v1beta1-versions-clone firebasehostingsitesversionsclone" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --exclude: record # A representation of filter path. — shape: {regexes?: list}
+  --exclude: record # A representation of filter path. — shape: {regexes?: list<string>}
   --finalize: oneof<nothing, bool> # If true, the call to `CloneVersion` immediately finalizes the version after cloning is complete. If false, the cloned version will have a status of `CREATED`. Use [`UpdateVersion`](patch) to set the status of the version to `FINALIZED`.
-  --include: record # A representation of filter path. — shape: {regexes?: list}
+  --include: record # A representation of filter path. — shape: {regexes?: list<string>}
   --source-version: string # Required. The unique identifier for the version to be cloned, in the format: sites/SITE_ID/versions/VERSION_ID
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta1/{parent}/versions:clone") $qp)
-  let body = {"exclude": $exclude, "finalize": $finalize, "include": $include, "sourceVersion": $source_version} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta1/{parent}/versions:clone") $qp)
+  let req_body = {"exclude": $exclude, "finalize": $finalize, "include": $include, "sourceVersion": $source_version} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-#  Adds content files to the specified version. Each file must be under 2 GB.
+# Adds content files to the specified version. Each file must be under 2 GB.
 #
 # POST /v1beta1/{parent}:populateFiles
 # operationId: firebasehosting.sites.versions.populateFiles
-export def "v1beta1 firebasehostingsitesversionspopulateFiles" [
+export def "v1beta1 create-populate-files" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -802,10 +811,10 @@ export def "v1beta1 firebasehostingsitesversionspopulateFiles" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta1/{parent}:populateFiles") $qp)
-  let body = {"files": $files} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta1/{parent}:populateFiles") $qp)
+  let req_body = {"files": $files} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

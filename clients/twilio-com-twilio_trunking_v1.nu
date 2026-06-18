@@ -12,6 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
   match $scheme {
     "basic" => { {headers: {Authorization: $"Basic ($token_val)"}, query: ""} }
+    "basic-credentials" => { {headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: ""} }
     "none" => { {headers: {}, query: ""} }
     _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
   }
@@ -33,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
     "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
     _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -63,7 +73,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 }
 
 def base-url-completer [] { ["https://trunking.twilio.com"] }
-def auth-scheme-completer [] { ["basic"] }
+def auth-scheme-completer [] { ["basic" "basic-credentials"] }
 
 # Completers for enum parameters
 def disaster-recovery-method-completer [] { ["DELETE" "GET" "HEAD" "PATCH" "POST" "PUT"] }
@@ -145,11 +155,12 @@ export def "trunks create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trunking.twilio.com")
   let full_url = (build-url $base "/v1/Trunks")
-  let body = {"CnamLookupEnabled": $cnam_lookup_enabled, "DisasterRecoveryMethod": $disaster_recovery_method, "DisasterRecoveryUrl": $disaster_recovery_url, "DomainName": $domain_name, "FriendlyName": $friendly_name, "Secure": $secure, "TransferCallerId": $transfer_caller_id, "TransferMode": $transfer_mode} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"CnamLookupEnabled": $cnam_lookup_enabled, "DisasterRecoveryMethod": $disaster_recovery_method, "DisasterRecoveryUrl": $disaster_recovery_url, "DomainName": $domain_name, "FriendlyName": $friendly_name, "Secure": $secure, "TransferCallerId": $transfer_caller_id, "TransferMode": $transfer_mode} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # DELETE /v1/Trunks/{Sid}
@@ -168,7 +179,7 @@ export def "trunks delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trunking.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/Trunks/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Trunks/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -190,7 +201,7 @@ export def "trunks get" [
 ]: nothing -> record<account_sid: string, auth_type: string, auth_type_set: list<string>, cnam_lookup_enabled: bool, date_created: string, date_updated: string, disaster_recovery_method: string, disaster_recovery_url: string, domain_name: string, friendly_name: string, links: record, recording: any, secure: bool, sid: string, transfer_caller_id: string, transfer_mode: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trunking.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/Trunks/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Trunks/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -221,12 +232,13 @@ export def "trunks update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trunking.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/Trunks/{sid}"))
-  let body = {"CnamLookupEnabled": $cnam_lookup_enabled, "DisasterRecoveryMethod": $disaster_recovery_method, "DisasterRecoveryUrl": $disaster_recovery_url, "DomainName": $domain_name, "FriendlyName": $friendly_name, "Secure": $secure, "TransferCallerId": $transfer_caller_id, "TransferMode": $transfer_mode} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Trunks/{sid}"))
+  let req_body = {"CnamLookupEnabled": $cnam_lookup_enabled, "DisasterRecoveryMethod": $disaster_recovery_method, "DisasterRecoveryUrl": $disaster_recovery_url, "DomainName": $domain_name, "FriendlyName": $friendly_name, "Secure": $secure, "TransferCallerId": $transfer_caller_id, "TransferMode": $transfer_mode} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # GET /v1/Trunks/{TrunkSid}/CredentialLists
@@ -249,7 +261,7 @@ export def "trunks-credential-lists list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trunking.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({trunk_sid: $trunk_sid} | format pattern "/v1/Trunks/{trunk_sid}/CredentialLists") $qp)
+  let full_url = (build-url $base ({trunk_sid: (encode-path-segment $trunk_sid)} | format pattern "/v1/Trunks/{trunk_sid}/CredentialLists") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -273,12 +285,13 @@ export def "trunks-credential-lists create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trunking.twilio.com")
-  let full_url = (build-url $base ({trunk_sid: $trunk_sid} | format pattern "/v1/Trunks/{trunk_sid}/CredentialLists"))
-  let body = {"CredentialListSid": $credential_list_sid} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({trunk_sid: (encode-path-segment $trunk_sid)} | format pattern "/v1/Trunks/{trunk_sid}/CredentialLists"))
+  let req_body = {"CredentialListSid": $credential_list_sid} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # DELETE /v1/Trunks/{TrunkSid}/CredentialLists/{Sid}
@@ -298,7 +311,7 @@ export def "trunks-credential-lists delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trunking.twilio.com")
-  let full_url = (build-url $base ({trunk_sid: $trunk_sid, sid: $sid} | format pattern "/v1/Trunks/{trunk_sid}/CredentialLists/{sid}"))
+  let full_url = (build-url $base ({trunk_sid: (encode-path-segment $trunk_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Trunks/{trunk_sid}/CredentialLists/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -321,7 +334,7 @@ export def "trunks-credential-lists get" [
 ]: nothing -> record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sid: string, trunk_sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trunking.twilio.com")
-  let full_url = (build-url $base ({trunk_sid: $trunk_sid, sid: $sid} | format pattern "/v1/Trunks/{trunk_sid}/CredentialLists/{sid}"))
+  let full_url = (build-url $base ({trunk_sid: (encode-path-segment $trunk_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Trunks/{trunk_sid}/CredentialLists/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -348,7 +361,7 @@ export def "trunks-ip-access-control-lists list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trunking.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({trunk_sid: $trunk_sid} | format pattern "/v1/Trunks/{trunk_sid}/IpAccessControlLists") $qp)
+  let full_url = (build-url $base ({trunk_sid: (encode-path-segment $trunk_sid)} | format pattern "/v1/Trunks/{trunk_sid}/IpAccessControlLists") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -373,12 +386,13 @@ export def "trunks-ip-access-control-lists create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trunking.twilio.com")
-  let full_url = (build-url $base ({trunk_sid: $trunk_sid} | format pattern "/v1/Trunks/{trunk_sid}/IpAccessControlLists"))
-  let body = {"IpAccessControlListSid": $ip_access_control_list_sid} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({trunk_sid: (encode-path-segment $trunk_sid)} | format pattern "/v1/Trunks/{trunk_sid}/IpAccessControlLists"))
+  let req_body = {"IpAccessControlListSid": $ip_access_control_list_sid} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Remove an associated IP Access Control List from a Trunk
@@ -399,7 +413,7 @@ export def "trunks-ip-access-control-lists delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trunking.twilio.com")
-  let full_url = (build-url $base ({trunk_sid: $trunk_sid, sid: $sid} | format pattern "/v1/Trunks/{trunk_sid}/IpAccessControlLists/{sid}"))
+  let full_url = (build-url $base ({trunk_sid: (encode-path-segment $trunk_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Trunks/{trunk_sid}/IpAccessControlLists/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -422,7 +436,7 @@ export def "trunks-ip-access-control-lists get" [
 ]: nothing -> record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sid: string, trunk_sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trunking.twilio.com")
-  let full_url = (build-url $base ({trunk_sid: $trunk_sid, sid: $sid} | format pattern "/v1/Trunks/{trunk_sid}/IpAccessControlLists/{sid}"))
+  let full_url = (build-url $base ({trunk_sid: (encode-path-segment $trunk_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Trunks/{trunk_sid}/IpAccessControlLists/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -448,7 +462,7 @@ export def "trunks-origination-urls list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trunking.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({trunk_sid: $trunk_sid} | format pattern "/v1/Trunks/{trunk_sid}/OriginationUrls") $qp)
+  let full_url = (build-url $base ({trunk_sid: (encode-path-segment $trunk_sid)} | format pattern "/v1/Trunks/{trunk_sid}/OriginationUrls") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -476,12 +490,13 @@ export def "trunks-origination-urls create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trunking.twilio.com")
-  let full_url = (build-url $base ({trunk_sid: $trunk_sid} | format pattern "/v1/Trunks/{trunk_sid}/OriginationUrls"))
-  let body = {"Enabled": $enabled, "FriendlyName": $friendly_name, "Priority": $priority, "SipUrl": $sip_url, "Weight": $weight} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({trunk_sid: (encode-path-segment $trunk_sid)} | format pattern "/v1/Trunks/{trunk_sid}/OriginationUrls"))
+  let req_body = {"Enabled": $enabled, "FriendlyName": $friendly_name, "Priority": $priority, "SipUrl": $sip_url, "Weight": $weight} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # DELETE /v1/Trunks/{TrunkSid}/OriginationUrls/{Sid}
@@ -501,7 +516,7 @@ export def "trunks-origination-urls delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trunking.twilio.com")
-  let full_url = (build-url $base ({trunk_sid: $trunk_sid, sid: $sid} | format pattern "/v1/Trunks/{trunk_sid}/OriginationUrls/{sid}"))
+  let full_url = (build-url $base ({trunk_sid: (encode-path-segment $trunk_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Trunks/{trunk_sid}/OriginationUrls/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -524,7 +539,7 @@ export def "trunks-origination-urls get" [
 ]: nothing -> record<account_sid: string, date_created: string, date_updated: string, enabled: bool, friendly_name: string, priority: int, sid: string, sip_url: string, trunk_sid: string, url: string, weight: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trunking.twilio.com")
-  let full_url = (build-url $base ({trunk_sid: $trunk_sid, sid: $sid} | format pattern "/v1/Trunks/{trunk_sid}/OriginationUrls/{sid}"))
+  let full_url = (build-url $base ({trunk_sid: (encode-path-segment $trunk_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Trunks/{trunk_sid}/OriginationUrls/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -553,12 +568,13 @@ export def "trunks-origination-urls update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trunking.twilio.com")
-  let full_url = (build-url $base ({trunk_sid: $trunk_sid, sid: $sid} | format pattern "/v1/Trunks/{trunk_sid}/OriginationUrls/{sid}"))
-  let body = {"Enabled": $enabled, "FriendlyName": $friendly_name, "Priority": $priority, "SipUrl": $sip_url, "Weight": $weight} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({trunk_sid: (encode-path-segment $trunk_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Trunks/{trunk_sid}/OriginationUrls/{sid}"))
+  let req_body = {"Enabled": $enabled, "FriendlyName": $friendly_name, "Priority": $priority, "SipUrl": $sip_url, "Weight": $weight} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # GET /v1/Trunks/{TrunkSid}/PhoneNumbers
@@ -581,7 +597,7 @@ export def "trunks-phone-numbers list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trunking.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({trunk_sid: $trunk_sid} | format pattern "/v1/Trunks/{trunk_sid}/PhoneNumbers") $qp)
+  let full_url = (build-url $base ({trunk_sid: (encode-path-segment $trunk_sid)} | format pattern "/v1/Trunks/{trunk_sid}/PhoneNumbers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -605,12 +621,13 @@ export def "trunks-phone-numbers create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trunking.twilio.com")
-  let full_url = (build-url $base ({trunk_sid: $trunk_sid} | format pattern "/v1/Trunks/{trunk_sid}/PhoneNumbers"))
-  let body = {"PhoneNumberSid": $phone_number_sid} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({trunk_sid: (encode-path-segment $trunk_sid)} | format pattern "/v1/Trunks/{trunk_sid}/PhoneNumbers"))
+  let req_body = {"PhoneNumberSid": $phone_number_sid} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # DELETE /v1/Trunks/{TrunkSid}/PhoneNumbers/{Sid}
@@ -630,7 +647,7 @@ export def "trunks-phone-numbers delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trunking.twilio.com")
-  let full_url = (build-url $base ({trunk_sid: $trunk_sid, sid: $sid} | format pattern "/v1/Trunks/{trunk_sid}/PhoneNumbers/{sid}"))
+  let full_url = (build-url $base ({trunk_sid: (encode-path-segment $trunk_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Trunks/{trunk_sid}/PhoneNumbers/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -653,7 +670,7 @@ export def "trunks-phone-numbers get" [
 ]: nothing -> record<account_sid: string, address_requirements: string, api_version: string, beta: bool, capabilities: record, date_created: string, date_updated: string, friendly_name: string, links: record, phone_number: string, sid: string, sms_application_sid: string, sms_fallback_method: string, sms_fallback_url: string, sms_method: string, sms_url: string, status_callback: string, status_callback_method: string, trunk_sid: string, url: string, voice_application_sid: string, voice_caller_id_lookup: bool, voice_fallback_method: string, voice_fallback_url: string, voice_method: string, voice_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trunking.twilio.com")
-  let full_url = (build-url $base ({trunk_sid: $trunk_sid, sid: $sid} | format pattern "/v1/Trunks/{trunk_sid}/PhoneNumbers/{sid}"))
+  let full_url = (build-url $base ({trunk_sid: (encode-path-segment $trunk_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Trunks/{trunk_sid}/PhoneNumbers/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -675,7 +692,7 @@ export def "trunks-recording get" [
 ]: nothing -> record<mode: string, trim: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trunking.twilio.com")
-  let full_url = (build-url $base ({trunk_sid: $trunk_sid} | format pattern "/v1/Trunks/{trunk_sid}/Recording"))
+  let full_url = (build-url $base ({trunk_sid: (encode-path-segment $trunk_sid)} | format pattern "/v1/Trunks/{trunk_sid}/Recording"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -700,10 +717,11 @@ export def "trunks-recording update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trunking.twilio.com")
-  let full_url = (build-url $base ({trunk_sid: $trunk_sid} | format pattern "/v1/Trunks/{trunk_sid}/Recording"))
-  let body = {"Mode": $mode, "Trim": $trim} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({trunk_sid: (encode-path-segment $trunk_sid)} | format pattern "/v1/Trunks/{trunk_sid}/Recording"))
+  let req_body = {"Mode": $mode, "Trim": $trim} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }

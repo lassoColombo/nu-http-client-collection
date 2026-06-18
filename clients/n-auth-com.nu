@@ -36,6 +36,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -70,7 +79,7 @@ def auth-scheme-completer [] { ["x-apikey" "x-su"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "apikeys get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "apikeys get-keys" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -94,7 +103,7 @@ export def commands []: nothing -> table {
 #
 # GET /apikeys/
 # operationId: getApiKeys
-export def "apikeys get" [
+export def "apikeys get-keys" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -116,7 +125,7 @@ export def "apikeys get" [
 #
 # POST /apikeys/
 # operationId: createApiKey
-export def "apikeys create" [
+export def "apikeys create-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -184,31 +193,6 @@ export def "attributes get-global" [
 #
 # POST /attributes/
 # operationId: setGlobalAttributes
-export def "attributes setGlobalAttributes" [
-  --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
-  --insecure(-k) # Skip TLS verification
-  --max-time(-m): duration # Timeout
-  --raw(-r) # Fetch as text
-  --allow-errors(-e) # Return full response without error handling
-  --dry-run(-n) # Return the request that would be sent without executing it
-  --body: record
-]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/attributes/")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
-}
-
-# Update specified global attributes
-#
-# PUT /attributes/
-# operationId: updateGlobalAttributes
 export def "attributes update-global" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -224,10 +208,37 @@ export def "attributes update-global" [
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/attributes/")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
+}
+
+# Update specified global attributes
+#
+# PUT /attributes/
+# operationId: updateGlobalAttributes
+export def "attributes update-global-1" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --body: record
+]: any -> any {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/attributes/")
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete specific global attribute
@@ -247,7 +258,7 @@ export def "attributes delete-global-by-attributekey" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({attributekey: $attributekey} | format pattern "/attributes/{attributekey}"))
+  let full_url = (build-url $base ({attributekey: (encode-path-segment $attributekey)} | format pattern "/attributes/{attributekey}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -302,7 +313,7 @@ export def "servers create" [
   pin_timeout: int # Time (minutes) since the last time the user entered his PIN, that the user is not requested a PIN at login. -1 means that the user is never asked for a PIN before logging in, 0 means that the user is asked every time he wants to login
   pin_trans_timeout: int # Time (minutes) since the last time the user entered his PIN, that the user is not requested a PIN at transaction approval. -1 means that the user is never asked for a PIN before approving a transaction, 0 means that the user is asked every time he wants to approve a transaction
   ping_time: int # Time (seconds) that the nextAuth app has before it needs to reply to a ping request from the nextAuth server (continuous authentication)
-  server_flags: list # Server flags
+  server_flags: list<string> # Server flags
   server_name: string # Server name
   serverid: string # Base64 encoded id of the nextAuth server
   serverpk: string # Base64 encoded public key of the nextAuth server
@@ -313,11 +324,11 @@ export def "servers create" [
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/servers/")
-  let body = {"accountCount": $account_count, "appandroid": $appandroid, "appios": $appios, "appname": $appname, "appurl": $appurl, "lastLogin": $last_login, "logo": $logo, "owner": $owner, "pinTimeout": $pin_timeout, "pinTransTimeout": $pin_trans_timeout, "pingTime": $ping_time, "serverFlags": $server_flags, "serverName": $server_name, "serverid": $serverid, "serverpk": $serverpk, "siteurl": $siteurl, "wsurl": $wsurl} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"accountCount": $account_count, "appandroid": $appandroid, "appios": $appios, "appname": $appname, "appurl": $appurl, "lastLogin": $last_login, "logo": $logo, "owner": $owner, "pinTimeout": $pin_timeout, "pinTransTimeout": $pin_trans_timeout, "pingTime": $ping_time, "serverFlags": $server_flags, "serverName": $server_name, "serverid": $serverid, "serverpk": $serverpk, "siteurl": $siteurl, "wsurl": $wsurl} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Configuration of a specific server
@@ -337,7 +348,7 @@ export def "servers get" [
 ]: nothing -> record<accountCount: int, appandroid: string, appios: string, appname: string, appurl: string, lastLogin: int, logo: string, owner: int, pinTimeout: int, pinTransTimeout: int, pingTime: int, serverFlags: list<string>, serverName: string, serverid: string, serverpk: string, siteurl: string, wsurl: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({serverid: $serverid} | format pattern "/servers/{serverid}/"))
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -368,7 +379,7 @@ export def "servers update" [
   pin_timeout: int # Time (minutes) since the last time the user entered his PIN, that the user is not requested a PIN at login. -1 means that the user is never asked for a PIN before logging in, 0 means that the user is asked every time he wants to login
   pin_trans_timeout: int # Time (minutes) since the last time the user entered his PIN, that the user is not requested a PIN at transaction approval. -1 means that the user is never asked for a PIN before approving a transaction, 0 means that the user is asked every time he wants to approve a transaction
   ping_time: int # Time (seconds) that the nextAuth app has before it needs to reply to a ping request from the nextAuth server (continuous authentication)
-  server_flags: list # Server flags
+  server_flags: list<string> # Server flags
   server_name: string # Server name
   --body-serverid: string # Base64 encoded id of the nextAuth server
   serverpk: string # Base64 encoded public key of the nextAuth server
@@ -378,19 +389,19 @@ export def "servers update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({serverid: $serverid} | format pattern "/servers/{serverid}/"))
-  let body = {"accountCount": $account_count, "appandroid": $appandroid, "appios": $appios, "appname": $appname, "appurl": $appurl, "lastLogin": $last_login, "logo": $logo, "owner": $owner, "pinTimeout": $pin_timeout, "pinTransTimeout": $pin_trans_timeout, "pingTime": $ping_time, "serverFlags": $server_flags, "serverName": $server_name, "serverid": $body_serverid, "serverpk": $serverpk, "siteurl": $siteurl, "wsurl": $wsurl} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}/"))
+  let req_body = {"accountCount": $account_count, "appandroid": $appandroid, "appios": $appios, "appname": $appname, "appurl": $appurl, "lastLogin": $last_login, "logo": $logo, "owner": $owner, "pinTimeout": $pin_timeout, "pinTransTimeout": $pin_trans_timeout, "pingTime": $ping_time, "serverFlags": $server_flags, "serverName": $server_name, "serverid": $body_serverid, "serverpk": $serverpk, "siteurl": $siteurl, "wsurl": $wsurl} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get all accounts
 #
 # GET /servers/{serverid}/accounts/
 # operationId: getAllAccounts
-export def "servers-accounts get-all" [
+export def "servers-accounts get-list" [
   serverid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -408,7 +419,7 @@ export def "servers-accounts get-all" [
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "marker" $marker "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({serverid: $serverid} | format pattern "/servers/{serverid}/accounts/") $qp)
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}/accounts/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -432,7 +443,7 @@ export def "servers-accounts delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({serverid: $serverid, accountid: $accountid} | format pattern "/servers/{serverid}/accounts/{accountid}/"))
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid), accountid: (encode-path-segment $accountid)} | format pattern "/servers/{serverid}/accounts/{accountid}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -456,7 +467,7 @@ export def "servers-accounts get" [
 ]: nothing -> record<blocked: bool, clientVersion: string, created: int, description: string, id: int, lastlogin: int, lastprovoke: int, userid: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({serverid: $serverid, accountid: $accountid} | format pattern "/servers/{serverid}/accounts/{accountid}/"))
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid), accountid: (encode-path-segment $accountid)} | format pattern "/servers/{serverid}/accounts/{accountid}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -482,7 +493,7 @@ export def "servers-accounts update" [
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "blocked" $blocked "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({serverid: $serverid, accountid: $accountid} | format pattern "/servers/{serverid}/accounts/{accountid}/") $qp)
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid), accountid: (encode-path-segment $accountid)} | format pattern "/servers/{serverid}/accounts/{accountid}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -494,7 +505,7 @@ export def "servers-accounts update" [
 # operationId: provokeLoginOnAccount
 # --announceinfo shape: {info?: record, ip?: string, logo?: string, useragent?: string}
 # --sessioninfo shape: {info?: record, ip?: string, logo?: string, useragent?: string}
-export def "servers-accounts-provokelogin provokeLoginOnAccount" [
+export def "servers-accounts-provokelogin create-provoke-login" [
   serverid: string
   accountid: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -512,14 +523,14 @@ export def "servers-accounts-provokelogin provokeLoginOnAccount" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({serverid: $serverid, accountid: $accountid} | format pattern "/servers/{serverid}/accounts/{accountid}/provokelogin"))
-  let body = {"announceinfo": $announceinfo, "sessioninfo": $sessioninfo} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-nonce": $x_nonce} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid), accountid: (encode-path-segment $accountid)} | format pattern "/servers/{serverid}/accounts/{accountid}/provokelogin"))
+  let req_body = {"announceinfo": $announceinfo, "sessioninfo": $sessioninfo} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-nonce": $x_nonce} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update user of the given account.
@@ -542,7 +553,7 @@ export def "servers-accounts-user update" [
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "userid" $userid "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({serverid: $serverid, accountid: $accountid} | format pattern "/servers/{serverid}/accounts/{accountid}/user") $qp)
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid), accountid: (encode-path-segment $accountid)} | format pattern "/servers/{serverid}/accounts/{accountid}/user") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -565,7 +576,7 @@ export def "servers-attributes delete-by-serverid" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({serverid: $serverid} | format pattern "/servers/{serverid}/attributes/"))
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}/attributes/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -588,7 +599,7 @@ export def "servers-attributes get" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({serverid: $serverid} | format pattern "/servers/{serverid}/attributes/"))
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}/attributes/"))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -598,7 +609,7 @@ export def "servers-attributes get" [
 #
 # POST /servers/{serverid}/attributes/
 # operationId: setServerAttributes
-export def "servers-attributes setServerAttributes" [
+export def "servers-attributes update-by-serverid" [
   serverid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -613,18 +624,19 @@ export def "servers-attributes setServerAttributes" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({serverid: $serverid} | format pattern "/servers/{serverid}/attributes/"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}/attributes/"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update specified attributes of a specific server
 #
 # PUT /servers/{serverid}/attributes/
 # operationId: updateServerAttributes
-export def "servers-attributes update" [
+export def "servers-attributes update-by-serverid-1" [
   serverid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -639,11 +651,12 @@ export def "servers-attributes update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({serverid: $serverid} | format pattern "/servers/{serverid}/attributes/"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}/attributes/"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete specific attribute of a specific server
@@ -664,7 +677,7 @@ export def "servers-attributes delete-by-serverid-attributekey" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({serverid: $serverid, attributekey: $attributekey} | format pattern "/servers/{serverid}/attributes/{attributekey}"))
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid), attributekey: (encode-path-segment $attributekey)} | format pattern "/servers/{serverid}/attributes/{attributekey}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -674,7 +687,7 @@ export def "servers-attributes delete-by-serverid-attributekey" [
 #
 # GET /servers/{serverid}/permissions/
 # operationId: getAllPermissions
-export def "servers-permissions get-all" [
+export def "servers-permissions get-list" [
   serverid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -687,7 +700,7 @@ export def "servers-permissions get-all" [
 ]: nothing -> record<permissions: table<acl: string, role: string, server: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({serverid: $serverid} | format pattern "/servers/{serverid}/permissions/"))
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}/permissions/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -711,7 +724,7 @@ export def "servers-permissions delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({serverid: $serverid, roleid: $roleid} | format pattern "/servers/{serverid}/permissions/{roleid}"))
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid), roleid: (encode-path-segment $roleid)} | format pattern "/servers/{serverid}/permissions/{roleid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -735,7 +748,7 @@ export def "servers-permissions get" [
 ]: nothing -> record<permissions: table<acl: string, role: string, server: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({serverid: $serverid, roleid: $roleid} | format pattern "/servers/{serverid}/permissions/{roleid}"))
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid), roleid: (encode-path-segment $roleid)} | format pattern "/servers/{serverid}/permissions/{roleid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -745,7 +758,7 @@ export def "servers-permissions get" [
 #
 # POST /servers/{serverid}/permissions/{roleid}
 # operationId: grantPermissions
-export def "servers-permissions grantPermissions" [
+export def "servers-permissions create-grant" [
   serverid: string
   roleid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -761,18 +774,19 @@ export def "servers-permissions grantPermissions" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({serverid: $serverid, roleid: $roleid} | format pattern "/servers/{serverid}/permissions/{roleid}"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid), roleid: (encode-path-segment $roleid)} | format pattern "/servers/{serverid}/permissions/{roleid}"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete all privileged attributes of a specific server
 #
 # DELETE /servers/{serverid}/privilegedattributes/
 # operationId: deleteServerPrivilegedAttributes
-export def "servers-privilegedattributes delete-by-serverid" [
+export def "servers-privilegedattributes delete-privileged-attributes" [
   serverid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -785,7 +799,7 @@ export def "servers-privilegedattributes delete-by-serverid" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({serverid: $serverid} | format pattern "/servers/{serverid}/privilegedattributes/"))
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}/privilegedattributes/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -795,7 +809,7 @@ export def "servers-privilegedattributes delete-by-serverid" [
 #
 # GET /servers/{serverid}/privilegedattributes/
 # operationId: getServerPrivilegedAttributes
-export def "servers-privilegedattributes get" [
+export def "servers-privilegedattributes get-privileged-attributes" [
   serverid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -808,7 +822,7 @@ export def "servers-privilegedattributes get" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({serverid: $serverid} | format pattern "/servers/{serverid}/privilegedattributes/"))
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}/privilegedattributes/"))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -818,7 +832,7 @@ export def "servers-privilegedattributes get" [
 #
 # POST /servers/{serverid}/privilegedattributes/
 # operationId: setServerPrivilegedAttributes
-export def "servers-privilegedattributes setServerPrivilegedAttributes" [
+export def "servers-privilegedattributes update-privileged-attributes-by-serverid" [
   serverid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -833,18 +847,19 @@ export def "servers-privilegedattributes setServerPrivilegedAttributes" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({serverid: $serverid} | format pattern "/servers/{serverid}/privilegedattributes/"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}/privilegedattributes/"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update privileged specified attributes of a specific server
 #
 # PUT /servers/{serverid}/privilegedattributes/
 # operationId: updateServerPrivilegedAttributes
-export def "servers-privilegedattributes update" [
+export def "servers-privilegedattributes update-privileged-attributes-by-serverid-1" [
   serverid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -859,18 +874,19 @@ export def "servers-privilegedattributes update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({serverid: $serverid} | format pattern "/servers/{serverid}/privilegedattributes/"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}/privilegedattributes/"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete specific privileged attribute of a specific server
 #
 # DELETE /servers/{serverid}/privilegedattributes/{attributekey}
 # operationId: deleteServerPrivilegedAttribute
-export def "servers-privilegedattributes delete-by-serverid-attributekey" [
+export def "servers-privilegedattributes delete-privileged-attribute" [
   serverid: string
   attributekey: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -884,7 +900,7 @@ export def "servers-privilegedattributes delete-by-serverid-attributekey" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({serverid: $serverid, attributekey: $attributekey} | format pattern "/servers/{serverid}/privilegedattributes/{attributekey}"))
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid), attributekey: (encode-path-segment $attributekey)} | format pattern "/servers/{serverid}/privilegedattributes/{attributekey}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -908,11 +924,11 @@ export def "servers-sessions get" [
 ]: nothing -> record<accountid: int, canprovoke: bool, hsid: string, loggedin: bool, loginqrdata: string, pk: string, userid: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({serverid: $serverid} | format pattern "/servers/{serverid}/sessions/"))
-  let extra_headers = {"X-nonce": $x_nonce} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}/sessions/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-nonce": $x_nonce} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -937,11 +953,11 @@ export def "servers-sessions-html-enrol get" [
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "userid" $userid "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({serverid: $serverid} | format pattern "/servers/{serverid}/sessions/html/enrol") $qp)
-  let extra_headers = {"X-nonce": $x_nonce} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}/sessions/html/enrol") $qp)
   let accept_val = "text/html"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-nonce": $x_nonce} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -966,14 +982,14 @@ export def "servers-sessions-html-footer get" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({serverid: $serverid} | format pattern "/servers/{serverid}/sessions/html/footer"))
-  let body = {"sessions": $sessions} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-nonce": $x_nonce} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}/sessions/html/footer"))
+  let req_body = {"sessions": $sessions} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "text/html"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-nonce": $x_nonce} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Generate HTML for the login block
@@ -999,21 +1015,21 @@ export def "servers-sessions-html-login get" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({serverid: $serverid} | format pattern "/servers/{serverid}/sessions/html/login"))
-  let body = {"announceinfo": $announceinfo, "sessioninfo": $sessioninfo} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-nonce": $x_nonce} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}/sessions/html/login"))
+  let req_body = {"announceinfo": $announceinfo, "sessioninfo": $sessioninfo} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "text/html"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-nonce": $x_nonce} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Force a logout on the given session
 #
 # POST /servers/{serverid}/sessions/logout
 # operationId: logout
-export def "servers-sessions-logout logout" [
+export def "servers-sessions-logout create" [
   serverid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1027,11 +1043,11 @@ export def "servers-sessions-logout logout" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({serverid: $serverid} | format pattern "/servers/{serverid}/sessions/logout"))
-  let extra_headers = {"X-nonce": $x_nonce} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}/sessions/logout"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-nonce": $x_nonce} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1041,7 +1057,7 @@ export def "servers-sessions-logout logout" [
 # operationId: provokeLogin
 # --announceinfo shape: {info?: record, ip?: string, logo?: string, useragent?: string}
 # --sessioninfo shape: {info?: record, ip?: string, logo?: string, useragent?: string}
-export def "servers-sessions-provokelogin provokeLogin" [
+export def "servers-sessions-provokelogin create-provoke-login" [
   serverid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1058,14 +1074,14 @@ export def "servers-sessions-provokelogin provokeLogin" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({serverid: $serverid} | format pattern "/servers/{serverid}/sessions/provokelogin"))
-  let body = {"announceinfo": $announceinfo, "sessioninfo": $sessioninfo} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-nonce": $x_nonce} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}/sessions/provokelogin"))
+  let req_body = {"announceinfo": $announceinfo, "sessioninfo": $sessioninfo} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-nonce": $x_nonce} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Generate data for an enrol qr code
@@ -1091,11 +1107,11 @@ export def "servers-sessions-qr-enrol get" [
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "userid" $userid "scalar") (serialize-qp "img" $img "scalar") (serialize-qp "s" $s "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({serverid: $serverid} | format pattern "/servers/{serverid}/sessions/qr/enrol") $qp)
-  let extra_headers = {"X-nonce": $x_nonce} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}/sessions/qr/enrol") $qp)
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-nonce": $x_nonce} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1125,14 +1141,14 @@ export def "servers-sessions-qr-login get" [
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "img" $img "scalar") (serialize-qp "s" $s "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({serverid: $serverid} | format pattern "/servers/{serverid}/sessions/qr/login") $qp)
-  let body = {"announceinfo": $announceinfo, "sessioninfo": $sessioninfo} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-nonce": $x_nonce} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}/sessions/qr/login") $qp)
+  let req_body = {"announceinfo": $announceinfo, "sessioninfo": $sessioninfo} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-nonce": $x_nonce} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Register a userid for the currently logged in account.
@@ -1155,11 +1171,11 @@ export def "servers-sessions-registeruser create-user" [
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "userid" $userid "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({serverid: $serverid} | format pattern "/servers/{serverid}/sessions/registeruser") $qp)
-  let extra_headers = {"X-nonce": $x_nonce} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}/sessions/registeruser") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-nonce": $x_nonce} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1185,21 +1201,21 @@ export def "servers-sessions-transactions create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({serverid: $serverid} | format pattern "/servers/{serverid}/sessions/transactions"))
-  let body = {"amount": $amount, "benificiary": $benificiary, "description": $description} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-nonce": $x_nonce} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}/sessions/transactions"))
+  let req_body = {"amount": $amount, "benificiary": $benificiary, "description": $description} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-nonce": $x_nonce} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get transaction result for a given transaction.
 #
 # GET /servers/{serverid}/transactions/{transactionid}
 # operationId: getTransactionResult
-export def "servers-transactions get-transaction-result" [
+export def "servers-transactions get-result" [
   serverid: string
   transactionid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1213,7 +1229,7 @@ export def "servers-transactions get-transaction-result" [
 ]: nothing -> record<tstatus: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({serverid: $serverid, transactionid: $transactionid} | format pattern "/servers/{serverid}/transactions/{transactionid}"))
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid), transactionid: (encode-path-segment $transactionid)} | format pattern "/servers/{serverid}/transactions/{transactionid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1242,7 +1258,7 @@ export def "servers-users get" [
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "marker" $marker "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({serverid: $serverid} | format pattern "/servers/{serverid}/users/") $qp)
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}/users/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1266,7 +1282,7 @@ export def "servers-users delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({serverid: $serverid, userid: $userid} | format pattern "/servers/{serverid}/users/{userid}/"))
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid), userid: (encode-path-segment $userid)} | format pattern "/servers/{serverid}/users/{userid}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1290,7 +1306,7 @@ export def "servers-users-accounts delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({serverid: $serverid, userid: $userid} | format pattern "/servers/{serverid}/users/{userid}/accounts"))
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid), userid: (encode-path-segment $userid)} | format pattern "/servers/{serverid}/users/{userid}/accounts"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1318,7 +1334,7 @@ export def "servers-users-accounts get" [
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "marker" $marker "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({serverid: $serverid, userid: $userid} | format pattern "/servers/{serverid}/users/{userid}/accounts") $qp)
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid), userid: (encode-path-segment $userid)} | format pattern "/servers/{serverid}/users/{userid}/accounts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1342,7 +1358,7 @@ export def "servers-users-attributes delete-by-serverid-userid" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({serverid: $serverid, userid: $userid} | format pattern "/servers/{serverid}/users/{userid}/attributes/"))
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid), userid: (encode-path-segment $userid)} | format pattern "/servers/{serverid}/users/{userid}/attributes/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1366,7 +1382,7 @@ export def "servers-users-attributes get" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({serverid: $serverid, userid: $userid} | format pattern "/servers/{serverid}/users/{userid}/attributes/"))
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid), userid: (encode-path-segment $userid)} | format pattern "/servers/{serverid}/users/{userid}/attributes/"))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1376,7 +1392,7 @@ export def "servers-users-attributes get" [
 #
 # POST /servers/{serverid}/users/{userid}/attributes/
 # operationId: setUserAttributes
-export def "servers-users-attributes setUserAttributes" [
+export def "servers-users-attributes update-by-serverid-userid" [
   serverid: string
   userid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1392,18 +1408,19 @@ export def "servers-users-attributes setUserAttributes" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({serverid: $serverid, userid: $userid} | format pattern "/servers/{serverid}/users/{userid}/attributes/"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid), userid: (encode-path-segment $userid)} | format pattern "/servers/{serverid}/users/{userid}/attributes/"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update specified attributes of a specific user
 #
 # PUT /servers/{serverid}/users/{userid}/attributes/
 # operationId: updateUserAttributes
-export def "servers-users-attributes update" [
+export def "servers-users-attributes update-by-serverid-userid-1" [
   serverid: string
   userid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1419,11 +1436,12 @@ export def "servers-users-attributes update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({serverid: $serverid, userid: $userid} | format pattern "/servers/{serverid}/users/{userid}/attributes/"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid), userid: (encode-path-segment $userid)} | format pattern "/servers/{serverid}/users/{userid}/attributes/"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete specific attribute of a specific user
@@ -1445,7 +1463,7 @@ export def "servers-users-attributes delete-by-serverid-userid-attributekey" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({serverid: $serverid, userid: $userid, attributekey: $attributekey} | format pattern "/servers/{serverid}/users/{userid}/attributes/{attributekey}"))
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid), userid: (encode-path-segment $userid), attributekey: (encode-path-segment $attributekey)} | format pattern "/servers/{serverid}/users/{userid}/attributes/{attributekey}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1457,7 +1475,7 @@ export def "servers-users-attributes delete-by-serverid-userid-attributekey" [
 # operationId: provokeLoginOnUser
 # --announceinfo shape: {info?: record, ip?: string, logo?: string, useragent?: string}
 # --sessioninfo shape: {info?: record, ip?: string, logo?: string, useragent?: string}
-export def "servers-users-provokelogin provokeLoginOnUser" [
+export def "servers-users-provokelogin create-provoke-login" [
   serverid: string
   userid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1475,14 +1493,14 @@ export def "servers-users-provokelogin provokeLoginOnUser" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({serverid: $serverid, userid: $userid} | format pattern "/servers/{serverid}/users/{userid}/provokelogin"))
-  let body = {"announceinfo": $announceinfo, "sessioninfo": $sessioninfo} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-nonce": $x_nonce} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid), userid: (encode-path-segment $userid)} | format pattern "/servers/{serverid}/users/{userid}/provokelogin"))
+  let req_body = {"announceinfo": $announceinfo, "sessioninfo": $sessioninfo} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-nonce": $x_nonce} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get role for a specific user.
@@ -1503,7 +1521,7 @@ export def "servers-users-role get" [
 ]: nothing -> record<role: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({serverid: $serverid, userid: $userid} | format pattern "/servers/{serverid}/users/{userid}/role/"))
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid), userid: (encode-path-segment $userid)} | format pattern "/servers/{serverid}/users/{userid}/role/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1527,7 +1545,7 @@ export def "servers-users-role get-or-create" [
 ]: nothing -> record<role: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({serverid: $serverid, userid: $userid} | format pattern "/servers/{serverid}/users/{userid}/role/"))
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid), userid: (encode-path-segment $userid)} | format pattern "/servers/{serverid}/users/{userid}/role/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1550,7 +1568,7 @@ export def "servers-vash get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({serverid: $serverid} | format pattern "/servers/{serverid}/vash"))
+  let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}/vash"))
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

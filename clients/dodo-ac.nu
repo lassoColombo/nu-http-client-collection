@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -116,10 +125,10 @@ export def "nh-art list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "hasfake" $hasfake "scalar") (serialize-qp "excludedetails" $excludedetails "scalar") (serialize-qp "thumbsize" $thumbsize "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/nh/art" $qp)
-  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -143,11 +152,11 @@ export def "nh-art get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "thumbsize" $thumbsize "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({artwork: $artwork} | format pattern "/nh/art/{artwork}") $qp)
-  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({artwork: (encode-path-segment $artwork)} | format pattern "/nh/art/{artwork}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -173,10 +182,10 @@ export def "nh-bugs list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "month" $month "scalar") (serialize-qp "excludedetails" $excludedetails "scalar") (serialize-qp "thumbsize" $thumbsize "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/nh/bugs" $qp)
-  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -200,11 +209,11 @@ export def "nh-bugs get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "thumbsize" $thumbsize "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bug: $bug} | format pattern "/nh/bugs/{bug}") $qp)
-  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({bug: (encode-path-segment $bug)} | format pattern "/nh/bugs/{bug}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -221,8 +230,8 @@ export def "nh-clothing list" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --category: string@category-completer # Specify the category of clothing to return.
-  --color: list # Return clothing that matches the provided colors (may specify one or two colors). Colors are used for gifting villagers.
-  --style: list # Return clothing that matches the provided styles (may specify one or two styles). Styles are used for gifting villagers.
+  --color: list<string> # Return clothing that matches the provided colors (may specify one or two colors). Colors are used for gifting villagers.
+  --style: list<string> # Return clothing that matches the provided styles (may specify one or two styles). Styles are used for gifting villagers.
   --labeltheme: string@labeltheme-completer # Return clothing that have the specified Label theme. This is used for completing the requested outfit theme for [Label](https://nookipedia.com/wiki/Label) when she visits the player's island.
   --excludedetails: string # When set to `true`, only clothing names are returned. Instead of an array of objects with all details, the return will be an array of strings.
   --x-api-key: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API.
@@ -232,10 +241,10 @@ export def "nh-clothing list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "category" $category "scalar") (serialize-qp "color" $color "multi") (serialize-qp "style" $style "multi") (serialize-qp "labeltheme" $labeltheme "scalar") (serialize-qp "excludedetails" $excludedetails "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/nh/clothing" $qp)
-  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -259,11 +268,11 @@ export def "nh-clothing get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "thumbsize" $thumbsize "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({clothing: $clothing} | format pattern "/nh/clothing/{clothing}") $qp)
-  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({clothing: (encode-path-segment $clothing)} | format pattern "/nh/clothing/{clothing}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -290,10 +299,10 @@ export def "nh-events get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "date" $date "scalar") (serialize-qp "year" $year "scalar") (serialize-qp "month" $month "scalar") (serialize-qp "day" $day "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/nh/events" $qp)
-  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -319,10 +328,10 @@ export def "nh-fish list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "month" $month "scalar") (serialize-qp "excludedetails" $excludedetails "scalar") (serialize-qp "thumbsize" $thumbsize "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/nh/fish" $qp)
-  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -346,11 +355,11 @@ export def "nh-fish get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "thumbsize" $thumbsize "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({fish: $fish} | format pattern "/nh/fish/{fish}") $qp)
-  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({fish: (encode-path-segment $fish)} | format pattern "/nh/fish/{fish}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -374,10 +383,10 @@ export def "nh-fossils-all list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "thumbsize" $thumbsize "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/nh/fossils/all" $qp)
-  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -401,11 +410,11 @@ export def "nh-fossils-all get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "thumbsize" $thumbsize "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({fossil: $fossil} | format pattern "/nh/fossils/all/{fossil}") $qp)
-  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({fossil: (encode-path-segment $fossil)} | format pattern "/nh/fossils/all/{fossil}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -429,10 +438,10 @@ export def "nh-fossils-groups list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "thumbsize" $thumbsize "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/nh/fossils/groups" $qp)
-  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -456,11 +465,11 @@ export def "nh-fossils-groups get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "thumbsize" $thumbsize "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({fossil_group: $fossil_group} | format pattern "/nh/fossils/groups/{fossil_group}") $qp)
-  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({fossil_group: (encode-path-segment $fossil_group)} | format pattern "/nh/fossils/groups/{fossil_group}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -484,10 +493,10 @@ export def "nh-fossils-individuals list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "thumbsize" $thumbsize "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/nh/fossils/individuals" $qp)
-  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -511,11 +520,11 @@ export def "nh-fossils-individuals get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "thumbsize" $thumbsize "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({fossil: $fossil} | format pattern "/nh/fossils/individuals/{fossil}") $qp)
-  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({fossil: (encode-path-segment $fossil)} | format pattern "/nh/fossils/individuals/{fossil}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -532,7 +541,7 @@ export def "nh-furniture list" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --category: string@category-completer-1 # Specify the category of furniture to return (houswares, miscellaneous, or wall-mounted).
-  --color: list # Return furniture that matches the provided colors (may specify one or two colors).
+  --color: list<string> # Return furniture that matches the provided colors (may specify one or two colors).
   --excludedetails: string # When set to `true`, only furniture names are returned. Instead of an array of objects with all details, the return will be an array of strings.
   --x-api-key: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API.
   --accept-version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes.
@@ -541,10 +550,10 @@ export def "nh-furniture list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "category" $category "scalar") (serialize-qp "color" $color "multi") (serialize-qp "excludedetails" $excludedetails "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/nh/furniture" $qp)
-  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -568,11 +577,11 @@ export def "nh-furniture get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "thumbsize" $thumbsize "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({furniture: $furniture} | format pattern "/nh/furniture/{furniture}") $qp)
-  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({furniture: (encode-path-segment $furniture)} | format pattern "/nh/furniture/{furniture}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -588,7 +597,7 @@ export def "nh-interior list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --color: list # Return furniture that matches the provided colors (may specify one or two colors).
+  --color: list<string> # Return furniture that matches the provided colors (may specify one or two colors).
   --excludedetails: string # When set to `true`, only interior item names are returned. Instead of an array of objects with all details, the return will be an array of strings.
   --x-api-key: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API.
   --accept-version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes.
@@ -597,10 +606,10 @@ export def "nh-interior list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "color" $color "multi") (serialize-qp "excludedetails" $excludedetails "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/nh/interior" $qp)
-  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -617,7 +626,7 @@ export def "nh-interior get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --color: list # Return furniture that matches the provided colors (may specify one or two colors).
+  --color: list<string> # Return furniture that matches the provided colors (may specify one or two colors).
   --thumbsize: int # Specify the desired width of returned image URLs. When unspecified, the linked image(s) returned by the API will be full-resolution. Note that images can only be reduced in size; specifying a width greater than than the maximum size will return the default full-size image URL.
   --x-api-key: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API.
   --accept-version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes.
@@ -625,11 +634,11 @@ export def "nh-interior get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "color" $color "multi") (serialize-qp "thumbsize" $thumbsize "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({item: $item} | format pattern "/nh/interior/{item}") $qp)
-  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({item: (encode-path-segment $item)} | format pattern "/nh/interior/{item}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -653,10 +662,10 @@ export def "nh-items list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "excludedetails" $excludedetails "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/nh/items" $qp)
-  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -680,11 +689,11 @@ export def "nh-items get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "thumbsize" $thumbsize "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({item: $item} | format pattern "/nh/items/{item}") $qp)
-  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({item: (encode-path-segment $item)} | format pattern "/nh/items/{item}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -708,10 +717,10 @@ export def "nh-photos list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "excludedetails" $excludedetails "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/nh/photos" $qp)
-  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -735,11 +744,11 @@ export def "nh-photos get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "thumbsize" $thumbsize "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({item: $item} | format pattern "/nh/photos/{item}") $qp)
-  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({item: (encode-path-segment $item)} | format pattern "/nh/photos/{item}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -765,10 +774,10 @@ export def "nh-recipes list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "material" $material "scalar") (serialize-qp "excludedetails" $excludedetails "scalar") (serialize-qp "thumbsize" $thumbsize "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/nh/recipes" $qp)
-  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -792,11 +801,11 @@ export def "nh-recipes get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "thumbsize" $thumbsize "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({item: $item} | format pattern "/nh/recipes/{item}") $qp)
-  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({item: (encode-path-segment $item)} | format pattern "/nh/recipes/{item}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -822,10 +831,10 @@ export def "nh-sea list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "month" $month "scalar") (serialize-qp "excludedetails" $excludedetails "scalar") (serialize-qp "thumbsize" $thumbsize "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/nh/sea" $qp)
-  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -849,11 +858,11 @@ export def "nh-sea get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "thumbsize" $thumbsize "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({sea_creature: $sea_creature} | format pattern "/nh/sea/{sea_creature}") $qp)
-  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({sea_creature: (encode-path-segment $sea_creature)} | format pattern "/nh/sea/{sea_creature}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -877,10 +886,10 @@ export def "nh-tools list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "excludedetails" $excludedetails "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/nh/tools" $qp)
-  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -904,11 +913,11 @@ export def "nh-tools get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "thumbsize" $thumbsize "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tool: $tool} | format pattern "/nh/tools/{tool}") $qp)
-  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({tool: (encode-path-segment $tool)} | format pattern "/nh/tools/{tool}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -927,7 +936,7 @@ export def "villagers get" [
   --name: string # Villager name. For most names you will get back an array with one object, but note that names are not a unique identifier across the series, as there are 3 names that are shared by multiple villagers (Lulu, Petunia, Carmen). For those 3 names you will get back an array with 2 objects. How you disambiguate between these villagers is up to you.
   --species: string@species-completer # Retrieve villagers of a certain species.
   --personality: string@personality-completer # Retrieve villagers with a certain personality. For 'sisterly', note that the community often also calls it 'uchi' or 'big sister'.
-  --game: list # Retrieve villagers that appear in all listed games. For example, if you want only villagers that appear in both *New Horizons* and *Pocket Camp*, you would send in `?game=nh&game=pc`.
+  --game: list<string> # Retrieve villagers that appear in all listed games. For example, if you want only villagers that appear in both *New Horizons* and *Pocket Camp*, you would send in `?game=nh&game=pc`.
   --birthmonth: string # Retrieve villagers born in a specific month. Value may be the month's name (`jan`, `january`) or the integer representing the month (`01`, `1`).
   --birthday: string # Use with `birthmonth` to get villager(s) born on a specific day. Value should be an int, 1 through 31.
   --nhdetails: string # When set to `true`, an `nh_details` object will be included that contains *New Horizons* details about the villager. If the villager does not appear in *New Horizons*, the returned `nh_details` field will be set to null.
@@ -940,9 +949,9 @@ export def "villagers get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "species" $species "scalar") (serialize-qp "personality" $personality "scalar") (serialize-qp "game" $game "multi") (serialize-qp "birthmonth" $birthmonth "scalar") (serialize-qp "birthday" $birthday "scalar") (serialize-qp "nhdetails" $nhdetails "scalar") (serialize-qp "excludedetails" $excludedetails "scalar") (serialize-qp "thumbsize" $thumbsize "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/villagers" $qp)
-  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

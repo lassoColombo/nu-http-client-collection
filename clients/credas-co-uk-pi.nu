@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -124,13 +133,13 @@ export def "bank-accounts-verify verify" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/bank-accounts/verify")
-  let body = {"accountDetails": $account_details, "address": $address, "person": $person, "regEntryId": $reg_entry_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"apikey": $apikey} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"accountDetails": $account_details, "address": $address, "person": $person, "regEntryId": $reg_entry_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"apikey": $apikey} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Searches for a company based on its Company Number and returns its details.
@@ -154,10 +163,10 @@ export def "companies list-company" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "companyNumber" $company_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/companies" $qp)
-  let extra_headers = {"apikey": $apikey} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"apikey": $apikey} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -179,11 +188,11 @@ export def "companies get-company" [
 ]: nothing -> record<addressLine1: string, companyName: string, companyNumber: string, dateOfRegistration: string, duplicate: bool, id: string, locality: string, postCode: string, region: string, significantParentCompanies: list<any>, significantPeople: table<forename: string, id: string, regEntryId: string, surname: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({company_id: $company_id} | format pattern "/api/companies/{company_id}"))
-  let extra_headers = {"apikey": $apikey} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/api/companies/{company_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"apikey": $apikey} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -212,13 +221,13 @@ export def "credit-status-perform check" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/credit-status/perform")
-  let body = {"address": $address, "person": $person, "regEntryId": $reg_entry_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"apikey": $apikey} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"address": $address, "person": $person, "regEntryId": $reg_entry_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"apikey": $apikey} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Creates new data check against a specified registration.
@@ -227,7 +236,7 @@ export def "credit-status-perform check" [
 # operationId: AddDataCheck
 # --currentAddress shape: {addressLine1: string, addressLine2?: string, addressLine3?: string, city: string, country: string, county?: string, postcode: string}
 # --person shape: {dateOfBirth: string, forename: string, middleName?: string, surname: string}
-export def "datachecks create" [
+export def "datachecks create-data-check" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -238,7 +247,7 @@ export def "datachecks create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --apikey: string # ApiKey supplied.
-  check_type: int@check-type-completer # The value of checkType dictates what checks are performed. <br/>The StandardAml check (value = 1) will check DOB & Mortality. <br/>The InternationalPepSanctions check (value = 3) will check just International PEP & Sanctions. <br/>The EnhancedAml check (value = 2) will perform both these checks and is equivalent to making two calls with values of 1 then 3 and will be charged accordingly. <br />  values=> None = 0, StandardAml = 1, EnhancedAml = 2, InternationalPepSanctions = 3 (format: int32)
+  check_type: int@check-type-completer # The value of checkType dictates what checks are performed. The StandardAml check (value = 1) will check DOB & Mortality. The InternationalPepSanctions check (value = 3) will check just International PEP & Sanctions. The EnhancedAml check (value = 2) will perform both these checks and is equivalent to making two calls with values of 1 then 3 and will be charged accordingly. values=> None = 0, StandardAml = 1, EnhancedAml = 2, InternationalPepSanctions = 3 (format: int32)
   current_address: record # shape: {addressLine1: string, addressLine2?: string, addressLine3?: string, city: string, country: string, county?: string, postcode: string}
   person: record # shape: {dateOfBirth: string, forename: string, middleName?: string, surname: string}
   reg_entry_id: string # format: uuid
@@ -247,13 +256,13 @@ export def "datachecks create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/datachecks")
-  let body = {"checkType": $check_type, "currentAddress": $current_address, "person": $person, "regEntryId": $reg_entry_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"apikey": $apikey} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"checkType": $check_type, "currentAddress": $current_address, "person": $person, "regEntryId": $reg_entry_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"apikey": $apikey} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Add an id document image to the specified registration.
@@ -281,13 +290,13 @@ export def "images-id-document create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/images/id-document")
-  let body = {"documentParameters": $document_parameters, "documentType": $document_type, "imageData": $image_data, "registrationId": $registration_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"apikey": $apikey} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"documentParameters": $document_parameters, "documentType": $document_type, "imageData": $image_data, "registrationId": $registration_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"apikey": $apikey} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get all id document images associated with a registration.
@@ -309,11 +318,11 @@ export def "images-id-document get" [
 ]: nothing -> table<addressCity: string, addressFull: string, addressPostcode: string, country: string, countryCode: string, dateCreated: string, dateOfBirth: string, description: string, documentAnalysisResult: int, documentNumber: string, documentSide: int, expiryDate: string, facialMatch: bool, forename: string, fullName: string, hiResUrl: string, id: string, isUnderReview: bool, manuallyVerified: bool, middleName: string, mrz1: string, mrz2: string, mrz3: string, nameCheck: bool, nameCheckMethod: int, nfcCheck: bool, nfcFacialUrl: string, nfcReadStatus: int, primaryScanId: string, status: int, surname: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({registration_id: $registration_id} | format pattern "/api/images/id-document/{registration_id}"))
-  let extra_headers = {"apikey": $apikey} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({registration_id: (encode-path-segment $registration_id)} | format pattern "/api/images/id-document/{registration_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"apikey": $apikey} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -338,13 +347,13 @@ export def "images-liveness create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/images/liveness")
-  let body = {"imageData": $image_data, "registrationId": $registration_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"apikey": $apikey} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"imageData": $image_data, "registrationId": $registration_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"apikey": $apikey} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve the liveness performed image associated with a registration.
@@ -366,11 +375,11 @@ export def "images-liveness-performed get" [
 ]: nothing -> record<base64Data: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({registration_id: $registration_id} | format pattern "/api/images/liveness-performed/{registration_id}"))
-  let extra_headers = {"apikey": $apikey} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({registration_id: (encode-path-segment $registration_id)} | format pattern "/api/images/liveness-performed/{registration_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"apikey": $apikey} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -393,11 +402,11 @@ export def "images-liveness get" [
 ]: nothing -> record<description: string, id: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({registration_id: $registration_id} | format pattern "/api/images/liveness/{registration_id}"))
-  let extra_headers = {"apikey": $apikey} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({registration_id: (encode-path-segment $registration_id)} | format pattern "/api/images/liveness/{registration_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"apikey": $apikey} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -420,11 +429,11 @@ export def "images-scan-report-pdf get" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({scan_id: $scan_id} | format pattern "/api/images/scan-report-pdf/{scan_id}"))
-  let extra_headers = {"apikey": $apikey} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({scan_id: (encode-path-segment $scan_id)} | format pattern "/api/images/scan-report-pdf/{scan_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"apikey": $apikey} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -450,13 +459,13 @@ export def "images-selfie create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/images/selfie")
-  let body = {"imageData": $image_data, "registrationId": $registration_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"apikey": $apikey} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"imageData": $image_data, "registrationId": $registration_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"apikey": $apikey} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve the selfie image associated with a registration.
@@ -478,11 +487,11 @@ export def "images-selfie get" [
 ]: nothing -> record<base64Data: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({registration_id: $registration_id} | format pattern "/api/images/selfie/{registration_id}"))
-  let extra_headers = {"apikey": $apikey} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({registration_id: (encode-path-segment $registration_id)} | format pattern "/api/images/selfie/{registration_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"apikey": $apikey} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -492,7 +501,7 @@ export def "images-selfie get" [
 # operationId: AddPropertyRegisterCheck
 # --address shape: {addressLine1: string, addressLine2?: string, addressLine3?: string, city: string, country: string, county?: string, postcode: string}
 # --person shape: {forename: string, middleName?: string, surname: string}
-export def "property-register create-property-register-check" [
+export def "property-register create-check" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -511,20 +520,20 @@ export def "property-register create-property-register-check" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/property-register")
-  let body = {"address": $address, "person": $person, "regEntryId": $reg_entry_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"apikey": $apikey} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"address": $address, "person": $person, "regEntryId": $reg_entry_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"apikey": $apikey} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieves property registry check associated with the registration.
 #
 # GET /api/property-register/{id}
 # operationId: GetPropertyRegisterCheckResult
-export def "property-register get-property-register-check-result" [
+export def "property-register get-check-result" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -539,11 +548,11 @@ export def "property-register get-property-register-check-result" [
 ]: nothing -> record<checkStatus: int, hasBeenOverridden: bool, matchResult: int, matchResultText: string, propertyOwnership: int, propertyOwnershipText: string, titleNumber: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/property-register/{id}"))
-  let extra_headers = {"apikey": $apikey} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/property-register/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"apikey": $apikey} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -551,7 +560,7 @@ export def "property-register get-property-register-check-result" [
 #
 # GET /api/reg-types
 # operationId: GetAll
-export def "reg-types get-all" [
+export def "reg-types get-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -566,10 +575,10 @@ export def "reg-types get-all" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/reg-types")
-  let extra_headers = {"apikey": $apikey} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"apikey": $apikey} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -579,7 +588,7 @@ export def "reg-types get-all" [
 # operationId: AddRegistration
 # --parameters item shape: {key?: string, value?: string}
 # --returnUrls shape: {returnUrl?: string}
-# --settings shape: {capturePersonalDetails?: bool, nameMatchRoutine?: "1"|"2", requiredChecks?: list, skipEmailStep?: bool}
+# --settings shape: {capturePersonalDetails?: bool, nameMatchRoutine?: "1"|"2", requiredChecks?: list<int>, skipEmailStep?: bool}
 export def "registrations create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -604,7 +613,7 @@ export def "registrations create" [
   --return-urls: record # shape: {returnUrl?: string}
   --send-email: oneof<nothing, bool>
   --send-sms: oneof<nothing, bool>
-  --settings: record # shape: {capturePersonalDetails?: bool, nameMatchRoutine?: "1"|"2", requiredChecks?: list, skipEmailStep?: bool}
+  --settings: record # shape: {capturePersonalDetails?: bool, nameMatchRoutine?: "1"|"2", requiredChecks?: list<int>, skipEmailStep?: bool}
   --significant-person-id: string # format: uuid
   surname: string
 ]: any -> record<id: string, regCode: string, webJourneyUrl: record<url: string, validUntil: string>> {
@@ -612,13 +621,13 @@ export def "registrations create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/registrations")
-  let body = {"diallingCode": $dialling_code, "duplicateAcknowledgement": $duplicate_acknowledgement, "emailAddress": $email_address, "forename": $forename, "middleName": $middle_name, "parameters": $parameters, "phoneNumber": $phone_number, "provideWebJourneyLink": $provide_web_journey_link, "referenceId": $reference_id, "regTypeId": $reg_type_id, "returnUrls": $return_urls, "sendEmail": $send_email, "sendSms": $send_sms, "settings": $settings, "significantPersonId": $significant_person_id, "surname": $surname} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"apikey": $apikey} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"diallingCode": $dialling_code, "duplicateAcknowledgement": $duplicate_acknowledgement, "emailAddress": $email_address, "forename": $forename, "middleName": $middle_name, "parameters": $parameters, "phoneNumber": $phone_number, "provideWebJourneyLink": $provide_web_journey_link, "referenceId": $reference_id, "regTypeId": $reg_type_id, "returnUrls": $return_urls, "sendEmail": $send_email, "sendSms": $send_sms, "settings": $settings, "significantPersonId": $significant_person_id, "surname": $surname} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"apikey": $apikey} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Creates new registration record, adds an ID document and optional selfie image in one go.
@@ -654,20 +663,20 @@ export def "registrations-instant create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/registrations/instant")
-  let body = {"document": $document, "documentParameters": $document_parameters, "documentType": $document_type, "forename": $forename, "middleName": $middle_name, "parameters": $parameters, "referenceId": $reference_id, "regTypeId": $reg_type_id, "selfie": $selfie, "significantPersonId": $significant_person_id, "surname": $surname} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"apikey": $apikey} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"document": $document, "documentParameters": $document_parameters, "documentType": $document_type, "forename": $forename, "middleName": $middle_name, "parameters": $parameters, "referenceId": $reference_id, "regTypeId": $reg_type_id, "selfie": $selfie, "significantPersonId": $significant_person_id, "surname": $surname} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"apikey": $apikey} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Finds registrations by the ReferenceId.
 #
 # GET /api/registrations/referenceid/{referenceId}/summary
 # operationId: GetRegistrationSummariesByReferenceId
-export def "registrations-referenceid-summary get-registration-summaries" [
+export def "registrations-referenceid-summary get-summaries-by-reference" [
   reference_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -682,11 +691,11 @@ export def "registrations-referenceid-summary get-registration-summaries" [
 ]: nothing -> table<Comments: list<record>, DITFDate: string, DITFStatus: int, bankAccountChecks: list<record>, createdByAgencyUserId: string, creditStatusCheck: record<address: record, ccj: list, checkDate: string, companyDirector: list, hasBeenOverridden: bool, insolvency: list, person: record, status: int>, customTermsAccepted: bool, customTermsAcceptedDateTime: string, customTermsAcceptedVersion: int, dataCheckResult: int, dataCheckSources: list<record>, dataChecksPerformed: bool, dateCompleted: string, dateCreated: string, email: string, forename: string, hasLivenessPerformed: bool, hasSelfie: bool, id: string, idDocuments: list<record>, idVerification: record<checkStatus: int, hasBeenOverridden: bool>, isAgentLed: bool, livenessMethod: int, livenessStatus: int, livenessVerified: bool, middleName: string, personalDetails: record<address: record, dateOfBirth: string, forename: string, surname: string>, phoneNumber: string, proofOfOwnershipCheck: record<checkStatus: int, hasBeenOverridden: bool, matchResult: int, matchResultText: string, propertyOwnership: int, propertyOwnershipText: string, titleNumber: string>, referenceId: string, regCode: string, regTypeId: string, rightToRentCheck: record<checkStatus: int, hasBeenOverridden: bool, hasShareCodePdf: bool, shareCodeFacialMatchStatus: int, shareCodeNameCheckStatus: int>, rightToWorkCheck: record<checkStatus: int, hasBeenOverridden: bool, hasShareCodePdf: bool, shareCodeFacialMatchStatus: int, shareCodeNameCheckStatus: int>, rightToWorkDocumentsProvided: int, safeHarbourVerifiedDate: string, safeHarbourVerifiedStatus: int, status: int, surname: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({reference_id: $reference_id} | format pattern "/api/registrations/referenceid/{reference_id}/summary"))
-  let extra_headers = {"apikey": $apikey} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({reference_id: (encode-path-segment $reference_id)} | format pattern "/api/registrations/referenceid/{reference_id}/summary"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"apikey": $apikey} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -694,7 +703,7 @@ export def "registrations-referenceid-summary get-registration-summaries" [
 #
 # GET /api/registrations/regcode/{regCode}/summary
 # operationId: GetRegistrationSummaryByRegCode
-export def "registrations-regcode-summary get" [
+export def "registrations-regcode-summary get-by-reg-code" [
   reg_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -709,11 +718,11 @@ export def "registrations-regcode-summary get" [
 ]: nothing -> record<Comments: table<checkType: int, comment: string, dateCreated: string, id: string, name: string, type: int>, DITFDate: string, DITFStatus: int, bankAccountChecks: table<Address1: string, City: string, Forename: string, MiddleName: string, PostCode: string, Surname: string, accountNumber: string, accountNumberValidation: int, accountNumberValidationText: string, accountStatus: int, accountStatusText: string, accountValid: bool, addressValidation: int, addressValidationText: string, checkDate: string, checkId: string, checkStatus: int, error: bool, hasBeenOverridden: bool, nameValidation: int, nameValidationText: string, referenceId: string, sortcode: string, sortcodeValidation: int, sortcodeValidationText: string>, createdByAgencyUserId: string, creditStatusCheck: record<address: record<addressLine1: string, addressLine2: string, addressLine3: string, city: string, country: string, county: string, postcode: string>, ccj: list<record>, checkDate: string, companyDirector: list<record>, hasBeenOverridden: bool, insolvency: list<record>, person: record<dateOfBirth: string, forename: string, middleName: string, surname: string>, status: int>, customTermsAccepted: bool, customTermsAcceptedDateTime: string, customTermsAcceptedVersion: int, dataCheckResult: int, dataCheckSources: table<address: record, dateCreated: string, hasBeenOverridden: bool, hasPepSanctionsData: bool, label: string, pepSanctionsData: list, person: record, remarks: list, sourceType: int, status: int>, dataChecksPerformed: bool, dateCompleted: string, dateCreated: string, email: string, forename: string, hasLivenessPerformed: bool, hasSelfie: bool, id: string, idDocuments: table<addressCity: string, addressFull: string, addressPostcode: string, country: string, countryCode: string, dateCreated: string, dateOfBirth: string, description: string, documentAnalysisResult: int, documentNumber: string, documentSide: int, expiryDate: string, facialMatch: bool, forename: string, fullName: string, id: string, isUnderReview: bool, manuallyVerified: bool, middleName: string, mrz1: string, mrz2: string, mrz3: string, nameCheck: bool, nameCheckMethod: int, nfcCheck: bool, nfcReadStatus: int, primaryScanId: string, status: int, surname: string>, idVerification: record<checkStatus: int, hasBeenOverridden: bool>, isAgentLed: bool, livenessMethod: int, livenessStatus: int, livenessVerified: bool, middleName: string, personalDetails: record<address: record<addressLine1: string, addressLine2: string, addressLine3: string, city: string, country: string, county: string, postcode: string>, dateOfBirth: string, forename: string, surname: string>, phoneNumber: string, proofOfOwnershipCheck: record<checkStatus: int, hasBeenOverridden: bool, matchResult: int, matchResultText: string, propertyOwnership: int, propertyOwnershipText: string, titleNumber: string>, referenceId: string, regCode: string, regTypeId: string, rightToRentCheck: record<checkStatus: int, hasBeenOverridden: bool, hasShareCodePdf: bool, shareCodeFacialMatchStatus: int, shareCodeNameCheckStatus: int>, rightToWorkCheck: record<checkStatus: int, hasBeenOverridden: bool, hasShareCodePdf: bool, shareCodeFacialMatchStatus: int, shareCodeNameCheckStatus: int>, rightToWorkDocumentsProvided: int, safeHarbourVerifiedDate: string, safeHarbourVerifiedStatus: int, status: int, surname: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({reg_code: $reg_code} | format pattern "/api/registrations/regcode/{reg_code}/summary"))
-  let extra_headers = {"apikey": $apikey} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({reg_code: (encode-path-segment $reg_code)} | format pattern "/api/registrations/regcode/{reg_code}/summary"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"apikey": $apikey} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -743,10 +752,10 @@ export def "registrations-search get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pageNum" $page_num "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "forename" $forename "scalar") (serialize-qp "surname" $surname "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "dob" $dob "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/registrations/search" $qp)
-  let extra_headers = {"apikey": $apikey} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"apikey": $apikey} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -769,11 +778,11 @@ export def "registrations-check-submitted-id-documents check" [
 ]: nothing -> record<checkCode: int, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/registrations/{id}/check-submitted-id-documents"))
-  let extra_headers = {"apikey": $apikey} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/registrations/{id}/check-submitted-id-documents"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"apikey": $apikey} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -803,21 +812,21 @@ export def "registrations-contact-details update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/registrations/{id}/contact-details"))
-  let body = {"deliveryMethod": $delivery_method, "diallingCode": $dialling_code, "email": $email, "forename": $forename, "middleName": $middle_name, "phoneNumber": $phone_number, "surname": $surname} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"apikey": $apikey} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/registrations/{id}/contact-details"))
+  let req_body = {"deliveryMethod": $delivery_method, "diallingCode": $dialling_code, "email": $email, "forename": $forename, "middleName": $middle_name, "phoneNumber": $phone_number, "surname": $surname} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"apikey": $apikey} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Sets an override for a specific check on the registration.
 #
 # PUT /api/registrations/{id}/override-check-status
 # operationId: OverrideCheckStatus
-export def "registrations-override-check-status put" [
+export def "registrations-override-check-status check" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -835,14 +844,14 @@ export def "registrations-override-check-status put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/registrations/{id}/override-check-status"))
-  let body = {"checkType": $check_type, "comment": $comment, "status": $status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"apikey": $apikey} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/registrations/{id}/override-check-status"))
+  let req_body = {"checkType": $check_type, "comment": $comment, "status": $status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"apikey": $apikey} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns PDF export for a given registration.
@@ -864,11 +873,11 @@ export def "registrations-pdf-export get" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/registrations/{id}/pdf-export"))
-  let extra_headers = {"apikey": $apikey} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/registrations/{id}/pdf-export"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"apikey": $apikey} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -902,11 +911,11 @@ export def "registrations-pdf-export-sections get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "Comments" $comments "scalar") (serialize-qp "ContactDetails" $contact_details "scalar") (serialize-qp "StandardChecks" $standard_checks "scalar") (serialize-qp "PepSanctionChecks" $pep_sanction_checks "scalar") (serialize-qp "ProofOfOwnership" $proof_of_ownership "scalar") (serialize-qp "BankAccountCheck" $bank_account_check "scalar") (serialize-qp "CreditStatusCheck" $credit_status_check "scalar") (serialize-qp "Liveness" $liveness "scalar") (serialize-qp "ExcludeSelfie" $exclude_selfie "scalar") (serialize-qp "ExcludeIDDocuments" $exclude_id_documents "scalar") (serialize-qp "DIATFSection" $diatf_section "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/registrations/{id}/pdf-export-sections") $qp)
-  let extra_headers = {"apikey": $apikey} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/registrations/{id}/pdf-export-sections") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"apikey": $apikey} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -914,7 +923,7 @@ export def "registrations-pdf-export-sections get" [
 #
 # GET /api/registrations/{id}/pdf-settlement-status
 # operationId: GetShareCodePdfExport
-export def "registrations-pdf-settlement-status get-share-code-pdf-export" [
+export def "registrations-pdf-settlement-status get-share-code-export" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -929,11 +938,11 @@ export def "registrations-pdf-settlement-status get-share-code-pdf-export" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/registrations/{id}/pdf-settlement-status"))
-  let extra_headers = {"apikey": $apikey} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/registrations/{id}/pdf-settlement-status"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"apikey": $apikey} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -941,7 +950,7 @@ export def "registrations-pdf-settlement-status get-share-code-pdf-export" [
 #
 # POST /api/registrations/{id}/resend-invitation
 # operationId: ResendInvitation
-export def "registrations-resend-invitation post" [
+export def "registrations-resend-invitation resend" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -955,11 +964,11 @@ export def "registrations-resend-invitation post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/registrations/{id}/resend-invitation"))
-  let extra_headers = {"apikey": $apikey} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/registrations/{id}/resend-invitation"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"apikey": $apikey} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -981,11 +990,11 @@ export def "registrations-settings get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/registrations/{id}/settings"))
-  let extra_headers = {"apikey": $apikey} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/registrations/{id}/settings"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"apikey": $apikey} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1006,20 +1015,20 @@ export def "registrations-settings update" [
   --apikey: string # ApiKey supplied.
   --capture-personal-details: oneof<nothing, bool>
   --name-match-routine: int@name-match-routine-completer # Fuzzy = 1, Strict = 2 (format: int32)
-  --required-checks: list # The value of required checks determines what checks are performed. <br/>Unknown = 0,Id Documents = 1, Standard Checks = 2, International Sanctions and Pep = 3, Credit Status Check = 4, Bank Account Check = 5, Proof of Ownership = 6, Right to Work = 7, Right to Rent = 8<br />
+  --required-checks: list<int> # The value of required checks determines what checks are performed. Unknown = 0,Id Documents = 1, Standard Checks = 2, International Sanctions and Pep = 3, Credit Status Check = 4, Bank Account Check = 5, Proof of Ownership = 6, Right to Work = 7, Right to Rent = 8
   --skip-email-step: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/registrations/{id}/settings"))
-  let body = {"capturePersonalDetails": $capture_personal_details, "nameMatchRoutine": $name_match_routine, "requiredChecks": $required_checks, "skipEmailStep": $skip_email_step} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"apikey": $apikey} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/registrations/{id}/settings"))
+  let req_body = {"capturePersonalDetails": $capture_personal_details, "nameMatchRoutine": $name_match_routine, "requiredChecks": $required_checks, "skipEmailStep": $skip_email_step} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"apikey": $apikey} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates the status of the registration to one specified in the request.
@@ -1042,14 +1051,14 @@ export def "registrations-status update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/registrations/{id}/status"))
-  let body = {"status": $status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"apikey": $apikey} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/registrations/{id}/status"))
+  let req_body = {"status": $status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"apikey": $apikey} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Finds a registration by the Id.
@@ -1071,11 +1080,11 @@ export def "registrations-summary get" [
 ]: nothing -> record<Comments: table<checkType: int, comment: string, dateCreated: string, id: string, name: string, type: int>, DITFDate: string, DITFStatus: int, bankAccountChecks: table<Address1: string, City: string, Forename: string, MiddleName: string, PostCode: string, Surname: string, accountNumber: string, accountNumberValidation: int, accountNumberValidationText: string, accountStatus: int, accountStatusText: string, accountValid: bool, addressValidation: int, addressValidationText: string, checkDate: string, checkId: string, checkStatus: int, error: bool, hasBeenOverridden: bool, nameValidation: int, nameValidationText: string, referenceId: string, sortcode: string, sortcodeValidation: int, sortcodeValidationText: string>, createdByAgencyUserId: string, creditStatusCheck: record<address: record<addressLine1: string, addressLine2: string, addressLine3: string, city: string, country: string, county: string, postcode: string>, ccj: list<record>, checkDate: string, companyDirector: list<record>, hasBeenOverridden: bool, insolvency: list<record>, person: record<dateOfBirth: string, forename: string, middleName: string, surname: string>, status: int>, customTermsAccepted: bool, customTermsAcceptedDateTime: string, customTermsAcceptedVersion: int, dataCheckResult: int, dataCheckSources: table<address: record, dateCreated: string, hasBeenOverridden: bool, hasPepSanctionsData: bool, label: string, pepSanctionsData: list, person: record, remarks: list, sourceType: int, status: int>, dataChecksPerformed: bool, dateCompleted: string, dateCreated: string, email: string, forename: string, hasLivenessPerformed: bool, hasSelfie: bool, id: string, idDocuments: table<addressCity: string, addressFull: string, addressPostcode: string, country: string, countryCode: string, dateCreated: string, dateOfBirth: string, description: string, documentAnalysisResult: int, documentNumber: string, documentSide: int, expiryDate: string, facialMatch: bool, forename: string, fullName: string, id: string, isUnderReview: bool, manuallyVerified: bool, middleName: string, mrz1: string, mrz2: string, mrz3: string, nameCheck: bool, nameCheckMethod: int, nfcCheck: bool, nfcReadStatus: int, primaryScanId: string, status: int, surname: string>, idVerification: record<checkStatus: int, hasBeenOverridden: bool>, isAgentLed: bool, livenessMethod: int, livenessStatus: int, livenessVerified: bool, middleName: string, personalDetails: record<address: record<addressLine1: string, addressLine2: string, addressLine3: string, city: string, country: string, county: string, postcode: string>, dateOfBirth: string, forename: string, surname: string>, phoneNumber: string, proofOfOwnershipCheck: record<checkStatus: int, hasBeenOverridden: bool, matchResult: int, matchResultText: string, propertyOwnership: int, propertyOwnershipText: string, titleNumber: string>, referenceId: string, regCode: string, regTypeId: string, rightToRentCheck: record<checkStatus: int, hasBeenOverridden: bool, hasShareCodePdf: bool, shareCodeFacialMatchStatus: int, shareCodeNameCheckStatus: int>, rightToWorkCheck: record<checkStatus: int, hasBeenOverridden: bool, hasShareCodePdf: bool, shareCodeFacialMatchStatus: int, shareCodeNameCheckStatus: int>, rightToWorkDocumentsProvided: int, safeHarbourVerifiedDate: string, safeHarbourVerifiedStatus: int, status: int, surname: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/registrations/{id}/summary"))
-  let extra_headers = {"apikey": $apikey} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/registrations/{id}/summary"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"apikey": $apikey} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1098,11 +1107,11 @@ export def "registrations-supported-id-documents get" [
 ]: nothing -> record<name: string, type: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/registrations/{id}/supported-id-documents"))
-  let extra_headers = {"apikey": $apikey} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/registrations/{id}/supported-id-documents"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"apikey": $apikey} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1110,7 +1119,7 @@ export def "registrations-supported-id-documents get" [
 #
 # POST /api/report-view/by-referenceid
 # operationId: GetReportViewByReferenceId
-export def "report-view-by-referenceid get" [
+export def "report-view-by-referenceid get-reference" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1130,20 +1139,20 @@ export def "report-view-by-referenceid get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/report-view/by-referenceid")
-  let body = {"canChangeStatus": $can_change_status, "canVerify": $can_verify, "referenceId": $reference_id, "user": $user} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"apikey": $apikey} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"canChangeStatus": $can_change_status, "canVerify": $can_verify, "referenceId": $reference_id, "user": $user} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"apikey": $apikey} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieves secure link to registration details page searching by the Registration Id.
 #
 # POST /api/report-view/by-registrationid
 # operationId: GetReportViewByRegistrationId
-export def "report-view-by-registrationid get" [
+export def "report-view-by-registrationid get-registration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1163,13 +1172,13 @@ export def "report-view-by-registrationid get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/report-view/by-registrationid")
-  let body = {"canChangeStatus": $can_change_status, "canVerify": $can_verify, "registrationId": $registration_id, "user": $user} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"apikey": $apikey} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"canChangeStatus": $can_change_status, "canVerify": $can_verify, "registrationId": $registration_id, "user": $user} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"apikey": $apikey} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieves secure links to web verification pages searching by the Reference Id.
@@ -1177,7 +1186,7 @@ export def "report-view-by-registrationid get" [
 # POST /api/web-verifications/by-referenceid
 # operationId: GetWebVerificationsByReferenceId
 # --returnUrls shape: {returnUrl?: string}
-export def "web-verifications-by-referenceid get" [
+export def "web-verifications-by-referenceid get-reference" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1195,13 +1204,13 @@ export def "web-verifications-by-referenceid get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/web-verifications/by-referenceid")
-  let body = {"referenceId": $reference_id, "returnUrls": $return_urls} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"apikey": $apikey} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"referenceId": $reference_id, "returnUrls": $return_urls} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"apikey": $apikey} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieves secure link to web verification page searching by the Registration Id.
@@ -1209,7 +1218,7 @@ export def "web-verifications-by-referenceid get" [
 # POST /api/web-verifications/by-registrationid
 # operationId: GetWebVerificationsByRegistrationId
 # --returnUrls shape: {returnUrl?: string}
-export def "web-verifications-by-registrationid get" [
+export def "web-verifications-by-registrationid get-registration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1227,11 +1236,11 @@ export def "web-verifications-by-registrationid get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/web-verifications/by-registrationid")
-  let body = {"registrationId": $registration_id, "returnUrls": $return_urls} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"apikey": $apikey} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"registrationId": $registration_id, "returnUrls": $return_urls} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"apikey": $apikey} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

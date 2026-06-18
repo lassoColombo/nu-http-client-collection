@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -72,7 +81,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "games-v1management-achievements-reset gamesManagementachievementsresetAll" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "games-v1management-achievements-reset list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -96,7 +105,7 @@ export def commands []: nothing -> table {
 #
 # POST /games/v1management/achievements/reset
 # operationId: gamesManagement.achievements.resetAll
-export def "games-v1management-achievements-reset gamesManagementachievementsresetAll" [
+export def "games-v1management-achievements-reset list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -130,7 +139,7 @@ export def "games-v1management-achievements-reset gamesManagementachievementsres
 #
 # POST /games/v1management/achievements/resetAllForAllPlayers
 # operationId: gamesManagement.achievements.resetAllForAllPlayers
-export def "games-v1management-achievements-reset-all-for-all-players gamesManagementachievementsresetAllForAllPlayers" [
+export def "games-v1management-achievements-reset-all-for-all-players reset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -164,7 +173,7 @@ export def "games-v1management-achievements-reset-all-for-all-players gamesManag
 #
 # POST /games/v1management/achievements/resetMultipleForAllPlayers
 # operationId: gamesManagement.achievements.resetMultipleForAllPlayers
-export def "games-v1management-achievements-reset-multiple-for-all-players gamesManagementachievementsresetMultipleForAllPlayers" [
+export def "games-v1management-achievements-reset-multiple-for-all-players reset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -184,7 +193,7 @@ export def "games-v1management-achievements-reset-multiple-for-all-players games
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --achievement-ids: list # The IDs of achievements to reset.
+  --achievement-ids: list<string> # The IDs of achievements to reset.
   --kind: string # Uniquely identifies the type of this resource. Value is always the fixed string `gamesManagement#achievementResetMultipleForAllRequest`.
 ]: any -> any {
   let input = $in
@@ -192,18 +201,18 @@ export def "games-v1management-achievements-reset-multiple-for-all-players games
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/games/v1management/achievements/resetMultipleForAllPlayers" $qp)
-  let body = {"achievement_ids": $achievement_ids, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"achievement_ids": $achievement_ids, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Resets the achievement with the given ID for the currently authenticated player. This method is only accessible to whitelisted tester accounts for your application.
 #
 # POST /games/v1management/achievements/{achievementId}/reset
 # operationId: gamesManagement.achievements.reset
-export def "games-v1management-achievements-reset gamesManagementachievementsreset" [
+export def "games-v1management-achievements-reset reset" [
   achievement_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -228,7 +237,7 @@ export def "games-v1management-achievements-reset gamesManagementachievementsres
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({achievement_id: $achievement_id} | format pattern "/games/v1management/achievements/{achievement_id}/reset") $qp)
+  let full_url = (build-url $base ({achievement_id: (encode-path-segment $achievement_id)} | format pattern "/games/v1management/achievements/{achievement_id}/reset") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -238,7 +247,7 @@ export def "games-v1management-achievements-reset gamesManagementachievementsres
 #
 # POST /games/v1management/achievements/{achievementId}/resetForAllPlayers
 # operationId: gamesManagement.achievements.resetForAllPlayers
-export def "games-v1management-achievements-reset-for-all-players gamesManagementachievementsresetForAllPlayers" [
+export def "games-v1management-achievements-reset-for-all-players reset" [
   achievement_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -263,7 +272,7 @@ export def "games-v1management-achievements-reset-for-all-players gamesManagemen
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({achievement_id: $achievement_id} | format pattern "/games/v1management/achievements/{achievement_id}/resetForAllPlayers") $qp)
+  let full_url = (build-url $base ({achievement_id: (encode-path-segment $achievement_id)} | format pattern "/games/v1management/achievements/{achievement_id}/resetForAllPlayers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -273,7 +282,7 @@ export def "games-v1management-achievements-reset-for-all-players gamesManagemen
 #
 # GET /games/v1management/applications/{applicationId}/players/hidden
 # operationId: gamesManagement.applications.listHidden
-export def "games-v1management-applications-players-hidden gamesManagementapplicationslistHidden" [
+export def "games-v1management-applications-players-hidden list" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -300,7 +309,7 @@ export def "games-v1management-applications-players-hidden gamesManagementapplic
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({application_id: $application_id} | format pattern "/games/v1management/applications/{application_id}/players/hidden") $qp)
+  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/games/v1management/applications/{application_id}/players/hidden") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -310,7 +319,7 @@ export def "games-v1management-applications-players-hidden gamesManagementapplic
 #
 # DELETE /games/v1management/applications/{applicationId}/players/hidden/{playerId}
 # operationId: gamesManagement.players.unhide
-export def "games-v1management-applications-players-hidden gamesManagementplayersunhide" [
+export def "games-v1management-applications-players-hidden delete-unhide" [
   application_id: string
   player_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -336,7 +345,7 @@ export def "games-v1management-applications-players-hidden gamesManagementplayer
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({application_id: $application_id, player_id: $player_id} | format pattern "/games/v1management/applications/{application_id}/players/hidden/{player_id}") $qp)
+  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id), player_id: (encode-path-segment $player_id)} | format pattern "/games/v1management/applications/{application_id}/players/hidden/{player_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -346,7 +355,7 @@ export def "games-v1management-applications-players-hidden gamesManagementplayer
 #
 # POST /games/v1management/applications/{applicationId}/players/hidden/{playerId}
 # operationId: gamesManagement.players.hide
-export def "games-v1management-applications-players-hidden gamesManagementplayershide" [
+export def "games-v1management-applications-players-hidden create-hide" [
   application_id: string
   player_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -372,7 +381,7 @@ export def "games-v1management-applications-players-hidden gamesManagementplayer
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({application_id: $application_id, player_id: $player_id} | format pattern "/games/v1management/applications/{application_id}/players/hidden/{player_id}") $qp)
+  let full_url = (build-url $base ({application_id: (encode-path-segment $application_id), player_id: (encode-path-segment $player_id)} | format pattern "/games/v1management/applications/{application_id}/players/hidden/{player_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -382,7 +391,7 @@ export def "games-v1management-applications-players-hidden gamesManagementplayer
 #
 # POST /games/v1management/events/reset
 # operationId: gamesManagement.events.resetAll
-export def "games-v1management-events-reset gamesManagementeventsresetAll" [
+export def "games-v1management-events-reset list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -416,7 +425,7 @@ export def "games-v1management-events-reset gamesManagementeventsresetAll" [
 #
 # POST /games/v1management/events/resetAllForAllPlayers
 # operationId: gamesManagement.events.resetAllForAllPlayers
-export def "games-v1management-events-reset-all-for-all-players gamesManagementeventsresetAllForAllPlayers" [
+export def "games-v1management-events-reset-all-for-all-players reset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -450,7 +459,7 @@ export def "games-v1management-events-reset-all-for-all-players gamesManagemente
 #
 # POST /games/v1management/events/resetMultipleForAllPlayers
 # operationId: gamesManagement.events.resetMultipleForAllPlayers
-export def "games-v1management-events-reset-multiple-for-all-players gamesManagementeventsresetMultipleForAllPlayers" [
+export def "games-v1management-events-reset-multiple-for-all-players reset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -470,7 +479,7 @@ export def "games-v1management-events-reset-multiple-for-all-players gamesManage
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --event-ids: list # The IDs of events to reset.
+  --event-ids: list<string> # The IDs of events to reset.
   --kind: string # Uniquely identifies the type of this resource. Value is always the fixed string `gamesManagement#eventsResetMultipleForAllRequest`.
 ]: any -> any {
   let input = $in
@@ -478,18 +487,18 @@ export def "games-v1management-events-reset-multiple-for-all-players gamesManage
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/games/v1management/events/resetMultipleForAllPlayers" $qp)
-  let body = {"event_ids": $event_ids, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"event_ids": $event_ids, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Resets all player progress on the event with the given ID for the currently authenticated player. This method is only accessible to whitelisted tester accounts for your application.
 #
 # POST /games/v1management/events/{eventId}/reset
 # operationId: gamesManagement.events.reset
-export def "games-v1management-events-reset gamesManagementeventsreset" [
+export def "games-v1management-events-reset reset" [
   event_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -514,7 +523,7 @@ export def "games-v1management-events-reset gamesManagementeventsreset" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({event_id: $event_id} | format pattern "/games/v1management/events/{event_id}/reset") $qp)
+  let full_url = (build-url $base ({event_id: (encode-path-segment $event_id)} | format pattern "/games/v1management/events/{event_id}/reset") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -524,7 +533,7 @@ export def "games-v1management-events-reset gamesManagementeventsreset" [
 #
 # POST /games/v1management/events/{eventId}/resetForAllPlayers
 # operationId: gamesManagement.events.resetForAllPlayers
-export def "games-v1management-events-reset-for-all-players gamesManagementeventsresetForAllPlayers" [
+export def "games-v1management-events-reset-for-all-players reset" [
   event_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -549,7 +558,7 @@ export def "games-v1management-events-reset-for-all-players gamesManagementevent
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({event_id: $event_id} | format pattern "/games/v1management/events/{event_id}/resetForAllPlayers") $qp)
+  let full_url = (build-url $base ({event_id: (encode-path-segment $event_id)} | format pattern "/games/v1management/events/{event_id}/resetForAllPlayers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -559,7 +568,7 @@ export def "games-v1management-events-reset-for-all-players gamesManagementevent
 #
 # POST /games/v1management/leaderboards/{leaderboardId}/scores/reset
 # operationId: gamesManagement.scores.reset
-export def "games-v1management-leaderboards-scores-reset gamesManagementscoresreset" [
+export def "games-v1management-leaderboards-scores-reset reset" [
   leaderboard_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -584,7 +593,7 @@ export def "games-v1management-leaderboards-scores-reset gamesManagementscoresre
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({leaderboard_id: $leaderboard_id} | format pattern "/games/v1management/leaderboards/{leaderboard_id}/scores/reset") $qp)
+  let full_url = (build-url $base ({leaderboard_id: (encode-path-segment $leaderboard_id)} | format pattern "/games/v1management/leaderboards/{leaderboard_id}/scores/reset") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -594,7 +603,7 @@ export def "games-v1management-leaderboards-scores-reset gamesManagementscoresre
 #
 # POST /games/v1management/leaderboards/{leaderboardId}/scores/resetForAllPlayers
 # operationId: gamesManagement.scores.resetForAllPlayers
-export def "games-v1management-leaderboards-scores-reset-for-all-players gamesManagementscoresresetForAllPlayers" [
+export def "games-v1management-leaderboards-scores-reset-for-all-players reset" [
   leaderboard_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -619,7 +628,7 @@ export def "games-v1management-leaderboards-scores-reset-for-all-players gamesMa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({leaderboard_id: $leaderboard_id} | format pattern "/games/v1management/leaderboards/{leaderboard_id}/scores/resetForAllPlayers") $qp)
+  let full_url = (build-url $base ({leaderboard_id: (encode-path-segment $leaderboard_id)} | format pattern "/games/v1management/leaderboards/{leaderboard_id}/scores/resetForAllPlayers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -629,7 +638,7 @@ export def "games-v1management-leaderboards-scores-reset-for-all-players gamesMa
 #
 # POST /games/v1management/scores/reset
 # operationId: gamesManagement.scores.resetAll
-export def "games-v1management-scores-reset gamesManagementscoresresetAll" [
+export def "games-v1management-scores-reset list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -663,7 +672,7 @@ export def "games-v1management-scores-reset gamesManagementscoresresetAll" [
 #
 # POST /games/v1management/scores/resetAllForAllPlayers
 # operationId: gamesManagement.scores.resetAllForAllPlayers
-export def "games-v1management-scores-reset-all-for-all-players gamesManagementscoresresetAllForAllPlayers" [
+export def "games-v1management-scores-reset-all-for-all-players reset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -697,7 +706,7 @@ export def "games-v1management-scores-reset-all-for-all-players gamesManagements
 #
 # POST /games/v1management/scores/resetMultipleForAllPlayers
 # operationId: gamesManagement.scores.resetMultipleForAllPlayers
-export def "games-v1management-scores-reset-multiple-for-all-players gamesManagementscoresresetMultipleForAllPlayers" [
+export def "games-v1management-scores-reset-multiple-for-all-players reset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -718,16 +727,16 @@ export def "games-v1management-scores-reset-multiple-for-all-players gamesManage
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --kind: string # Uniquely identifies the type of this resource. Value is always the fixed string `gamesManagement#scoresResetMultipleForAllRequest`.
-  --leaderboard-ids: list # The IDs of leaderboards to reset.
+  --leaderboard-ids: list<string> # The IDs of leaderboards to reset.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/games/v1management/scores/resetMultipleForAllPlayers" $qp)
-  let body = {"kind": $kind, "leaderboard_ids": $leaderboard_ids} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"kind": $kind, "leaderboard_ids": $leaderboard_ids} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

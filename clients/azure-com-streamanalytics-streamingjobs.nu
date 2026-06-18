@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -119,7 +128,7 @@ export def "providers-microsoft-stream-analytics-operations list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.StreamAnalytics/streamingjobs
 # operationId: StreamingJobs_List
-export def "subscriptions-providers-microsoft-stream-analytics-streamingjobs list" [
+export def "subscriptions-providers-microsoft-stream-analytics-streamingjobs list-streaming-jobs" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -135,7 +144,7 @@ export def "subscriptions-providers-microsoft-stream-analytics-streamingjobs lis
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.StreamAnalytics/streamingjobs") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.StreamAnalytics/streamingjobs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -145,7 +154,7 @@ export def "subscriptions-providers-microsoft-stream-analytics-streamingjobs lis
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.StreamAnalytics/streamingjobs
 # operationId: StreamingJobs_ListByResourceGroup
-export def "subscriptions-resourcegroups-providers-microsoft-stream-analytics-streamingjobs list-by" [
+export def "subscriptions-resourcegroups-providers-microsoft-stream-analytics-streamingjobs list-streaming-jobs-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -162,7 +171,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-stream-analytics-st
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.StreamAnalytics/streamingjobs") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.StreamAnalytics/streamingjobs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -172,7 +181,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-stream-analytics-st
 #
 # DELETE /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.StreamAnalytics/streamingjobs/{jobName}
 # operationId: StreamingJobs_Delete
-export def "subscriptions-resourcegroups-providers-microsoft-stream-analytics-streamingjobs delete" [
+export def "subscriptions-resourcegroups-providers-microsoft-stream-analytics-streamingjobs delete-streaming-jobs" [
   subscription_id: string
   resource_group_name: string
   job_name: string
@@ -189,7 +198,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-stream-analytics-st
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, job_name: $job_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.StreamAnalytics/streamingjobs/{job_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), job_name: (encode-path-segment $job_name)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.StreamAnalytics/streamingjobs/{job_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -199,7 +208,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-stream-analytics-st
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.StreamAnalytics/streamingjobs/{jobName}
 # operationId: StreamingJobs_Get
-export def "subscriptions-resourcegroups-providers-microsoft-stream-analytics-streamingjobs get" [
+export def "subscriptions-resourcegroups-providers-microsoft-stream-analytics-streamingjobs get-streaming-jobs" [
   subscription_id: string
   resource_group_name: string
   job_name: string
@@ -217,7 +226,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-stream-analytics-st
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, job_name: $job_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.StreamAnalytics/streamingjobs/{job_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), job_name: (encode-path-segment $job_name)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.StreamAnalytics/streamingjobs/{job_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -228,7 +237,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-stream-analytics-st
 # PATCH /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.StreamAnalytics/streamingjobs/{jobName}
 # operationId: StreamingJobs_Update
 # --properties shape: {compatibilityLevel?: "1.0", dataLocale?: string, eventsLateArrivalMaxDelayInSeconds?: int, eventsOutOfOrderMaxDelayInSeconds?: int, eventsOutOfOrderPolicy?: "Adjust"|"Drop", functions?: list, inputs?: list, outputErrorPolicy?: "Stop"|"Drop", outputStartMode?: "JobStartTime"|"CustomTime"|"LastOutputEventTime", outputStartTime?: string, outputs?: list, sku?: any, transformation?: any}
-export def "subscriptions-resourcegroups-providers-microsoft-stream-analytics-streamingjobs update" [
+export def "subscriptions-resourcegroups-providers-microsoft-stream-analytics-streamingjobs update-streaming-jobs" [
   subscription_id: string
   resource_group_name: string
   job_name: string
@@ -250,14 +259,14 @@ export def "subscriptions-resourcegroups-providers-microsoft-stream-analytics-st
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, job_name: $job_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.StreamAnalytics/streamingjobs/{job_name}") $qp)
-  let body = {"properties": $properties, "location": $location, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"If-Match": $if_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), job_name: (encode-path-segment $job_name)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.StreamAnalytics/streamingjobs/{job_name}") $qp)
+  let req_body = {"properties": $properties, "location": $location, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"If-Match": $if_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Creates a streaming job or replaces an already existing streaming job.
@@ -265,7 +274,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-stream-analytics-st
 # PUT /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.StreamAnalytics/streamingjobs/{jobName}
 # operationId: StreamingJobs_CreateOrReplace
 # --properties shape: {compatibilityLevel?: "1.0", dataLocale?: string, eventsLateArrivalMaxDelayInSeconds?: int, eventsOutOfOrderMaxDelayInSeconds?: int, eventsOutOfOrderPolicy?: "Adjust"|"Drop", functions?: list, inputs?: list, outputErrorPolicy?: "Stop"|"Drop", outputStartMode?: "JobStartTime"|"CustomTime"|"LastOutputEventTime", outputStartTime?: string, outputs?: list, sku?: any, transformation?: any}
-export def "subscriptions-resourcegroups-providers-microsoft-stream-analytics-streamingjobs create-or-replace" [
+export def "subscriptions-resourcegroups-providers-microsoft-stream-analytics-streamingjobs create-streaming-jobs-or-update" [
   subscription_id: string
   resource_group_name: string
   job_name: string
@@ -288,21 +297,21 @@ export def "subscriptions-resourcegroups-providers-microsoft-stream-analytics-st
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, job_name: $job_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.StreamAnalytics/streamingjobs/{job_name}") $qp)
-  let body = {"properties": $properties, "location": $location, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"If-Match": $if_match, "If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), job_name: (encode-path-segment $job_name)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.StreamAnalytics/streamingjobs/{job_name}") $qp)
+  let req_body = {"properties": $properties, "location": $location, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"If-Match": $if_match, "If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Starts a streaming job. Once a job is started it will start processing input events and produce output.
 #
 # POST /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.StreamAnalytics/streamingjobs/{jobName}/start
 # operationId: StreamingJobs_Start
-export def "subscriptions-resourcegroups-providers-microsoft-stream-analytics-streamingjobs-start start" [
+export def "subscriptions-resourcegroups-providers-microsoft-stream-analytics-streamingjobs-start start-streaming-jobs" [
   subscription_id: string
   resource_group_name: string
   job_name: string
@@ -322,19 +331,19 @@ export def "subscriptions-resourcegroups-providers-microsoft-stream-analytics-st
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, job_name: $job_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.StreamAnalytics/streamingjobs/{job_name}/start") $qp)
-  let body = {"outputStartMode": $output_start_mode, "outputStartTime": $output_start_time} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), job_name: (encode-path-segment $job_name)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.StreamAnalytics/streamingjobs/{job_name}/start") $qp)
+  let req_body = {"outputStartMode": $output_start_mode, "outputStartTime": $output_start_time} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Stops a running streaming job. This will cause a running streaming job to stop processing input events and producing output.
 #
 # POST /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.StreamAnalytics/streamingjobs/{jobName}/stop
 # operationId: StreamingJobs_Stop
-export def "subscriptions-resourcegroups-providers-microsoft-stream-analytics-streamingjobs-stop stop" [
+export def "subscriptions-resourcegroups-providers-microsoft-stream-analytics-streamingjobs-stop stop-streaming-jobs" [
   subscription_id: string
   resource_group_name: string
   job_name: string
@@ -351,7 +360,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-stream-analytics-st
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, job_name: $job_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.StreamAnalytics/streamingjobs/{job_name}/stop") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), job_name: (encode-path-segment $job_name)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.StreamAnalytics/streamingjobs/{job_name}/stop") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

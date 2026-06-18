@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -120,7 +129,7 @@ export def "chart get" [
   --chxr: string # Axis data-range
   --chxp: string # axis label positions
   --chof: string # Image output format (default: .png)
-  --chs: string # Chart size (<width>x<height>)
+  --chs: string # Chart size (x)
   --chdl: string # Text for each series, to display in the legend (default: )
   --chdls: string # Chart legend text and style (default: 000000)
   --chg: string # Solid or dotted grid lines
@@ -137,7 +146,7 @@ export def "chart get" [
   --chma: string # chart margins
   --chdlp: string # Position of the legend and order of the legend entries (default: r)
   --chf: string # Background Fills (default: bg,s,FFFFFF)
-  --chbh: string # Bar Width and Spacing. (not supported)  You can optionally specify custom values for bar widths and spacing between bars and groups. You can only specify one set of width values for all bars. If you don't specify chbh, all bars will be 23 pixels wide, which means that the end bars can be clipped if the total bar + space width is wider than the chart width. (default: 10)
+  --chbh: string # Bar Width and Spacing. (not supported) You can optionally specify custom values for bar widths and spacing between bars and groups. You can only specify one set of width values for all bars. If you don't specify chbh, all bars will be 23 pixels wide, which means that the end bars can be clipped if the total bar + space width is wider than the chart width. (default: 10)
   --chbr: string # Bar corner radius. Display bars with rounded corner. (default: 0)
   --chan: string # gif configuration
   --chli: string # doughnut chart inside label
@@ -164,7 +173,7 @@ export def "chart get" [
 #
 # GET /chart.js/2.8.0
 # operationId: getChartjs280
-export def "chartjs-280 get-chartjs280" [
+export def "chart-js-2-8-0 get-chartjs280" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

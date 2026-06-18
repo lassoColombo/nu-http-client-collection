@@ -12,6 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
   match $scheme {
     "basic" => { {headers: {Authorization: $"Basic ($token_val)"}, query: ""} }
+    "basic-credentials" => { {headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: ""} }
     "none" => { {headers: {}, query: ""} }
     _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
   }
@@ -33,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
     "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
     _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -63,7 +73,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 }
 
 def base-url-completer [] { ["https://fax.twilio.com"] }
-def auth-scheme-completer [] { ["basic"] }
+def auth-scheme-completer [] { ["basic" "basic-credentials"] }
 
 
 # List all available API commands with their parameters
@@ -136,7 +146,7 @@ export def "faxes-media list-fax" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://fax.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({fax_sid: $fax_sid} | format pattern "/v1/Faxes/{fax_sid}/Media") $qp)
+  let full_url = (build-url $base ({fax_sid: (encode-path-segment $fax_sid)} | format pattern "/v1/Faxes/{fax_sid}/Media") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -160,7 +170,7 @@ export def "faxes-media delete-fax" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://fax.twilio.com")
-  let full_url = (build-url $base ({fax_sid: $fax_sid, sid: $sid} | format pattern "/v1/Faxes/{fax_sid}/Media/{sid}"))
+  let full_url = (build-url $base ({fax_sid: (encode-path-segment $fax_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Faxes/{fax_sid}/Media/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -184,7 +194,7 @@ export def "faxes-media get-fax" [
 ]: nothing -> record<account_sid: string, content_type: string, date_created: string, date_updated: string, fax_sid: string, sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://fax.twilio.com")
-  let full_url = (build-url $base ({fax_sid: $fax_sid, sid: $sid} | format pattern "/v1/Faxes/{fax_sid}/Media/{sid}"))
+  let full_url = (build-url $base ({fax_sid: (encode-path-segment $fax_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Faxes/{fax_sid}/Media/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -207,7 +217,7 @@ export def "faxes delete-fax" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://fax.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/Faxes/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Faxes/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -230,7 +240,7 @@ export def "faxes get-fax" [
 ]: nothing -> record<account_sid: string, api_version: string, date_created: string, date_updated: string, direction: string, duration: int, from: string, links: record, media_sid: string, media_url: string, num_pages: int, price: float, price_unit: string, quality: string, sid: string, status: string, to: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://fax.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/Faxes/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Faxes/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -73,7 +82,7 @@ def strategy-completer [] { ["DESKTOP" "MOBILE" "STRATEGY_UNSPECIFIED"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "pagespeedonline-run-pagespeed pagespeedonlinepagespeedapirunpagespeed" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "pagespeedonline-run-pagespeed get-runpagespeed" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -97,7 +106,7 @@ export def commands []: nothing -> table {
 #
 # GET /pagespeedonline/v5/runPagespeed
 # operationId: pagespeedonline.pagespeedapi.runpagespeed
-export def "pagespeedonline-run-pagespeed pagespeedonlinepagespeedapirunpagespeed" [
+export def "pagespeedonline-run-pagespeed get-runpagespeed" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -117,9 +126,9 @@ export def "pagespeedonline-run-pagespeed pagespeedonlinepagespeedapirunpagespee
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --qp-url: string # Required. The URL to fetch and analyze
+  --url: string # Required. The URL to fetch and analyze
   --captcha-token: string # The captcha token passed when filling out a captcha.
-  --category: list # A Lighthouse category to run; if none are given, only Performance category will be run
+  --category: list<string> # A Lighthouse category to run; if none are given, only Performance category will be run
   --locale: string # The locale used to localize formatted results
   --strategy: string@strategy-completer # The analysis strategy (desktop or mobile) to use, and desktop is the default
   --utm-campaign: string # Campaign name for analytics.
@@ -127,7 +136,7 @@ export def "pagespeedonline-run-pagespeed pagespeedonlinepagespeedapirunpagespee
 ]: nothing -> record<analysisUTCTimestamp: string, captchaResult: string, id: string, kind: string, lighthouseResult: record<audits: record, categories: record<accessibility: record, best_practices: record, performance: record, pwa: record, seo: record>, categoryGroups: record, configSettings: record<channel: string, emulatedFormFactor: string, formFactor: string, locale: string, onlyCategories: any>, entities: list<record>, environment: record<benchmarkIndex: float, credits: record, hostUserAgent: string, networkUserAgent: string>, fetchTime: string, finalDisplayedUrl: string, finalUrl: string, fullPageScreenshot: any, i18n: record<rendererFormattedStrings: record>, lighthouseVersion: string, mainDocumentUrl: string, requestedUrl: string, runWarnings: list<any>, runtimeError: record<code: string, message: string>, stackPacks: list<record>, timing: record<total: float>, userAgent: string>, loadingExperience: record<id: string, initial_url: string, metrics: record, origin_fallback: bool, overall_category: string>, originLoadingExperience: record<id: string, initial_url: string, metrics: record, origin_fallback: bool, overall_category: string>, version: record<major: string, minor: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "url" $qp_url "scalar") (serialize-qp "captchaToken" $captcha_token "scalar") (serialize-qp "category" $category "multi") (serialize-qp "locale" $locale "scalar") (serialize-qp "strategy" $strategy "scalar") (serialize-qp "utm_campaign" $utm_campaign "scalar") (serialize-qp "utm_source" $utm_source "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "url" $url "scalar") (serialize-qp "captchaToken" $captcha_token "scalar") (serialize-qp "category" $category "multi") (serialize-qp "locale" $locale "scalar") (serialize-qp "strategy" $strategy "scalar") (serialize-qp "utm_campaign" $utm_campaign "scalar") (serialize-qp "utm_source" $utm_source "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/pagespeedonline/v5/runPagespeed" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

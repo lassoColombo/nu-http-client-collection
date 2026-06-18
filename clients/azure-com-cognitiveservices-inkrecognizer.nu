@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -73,7 +82,7 @@ def unit-completer [] { ["cm" "in" "mm"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "recognize put" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "recognize update-ink-recognizer" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -99,7 +108,7 @@ export def commands []: nothing -> table {
 # operationId: InkRecognizer_Recognize
 # --inkPointValueAttributes item shape: {logicalMaximum?: float, logicalMinimum?: float, name?: string}
 # --strokes item shape: {drawingAttributes?: record, id: int, kind?: "inkDrawing"|"inkWriting", language?: string, points: list}
-export def "recognize put" [
+export def "recognize update-ink-recognizer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -115,17 +124,17 @@ export def "recognize put" [
   language: string # The IETF BCP 47 language code (for ex. en-US, en-GB, hi-IN etc.) of the expected language for the handwritten content in the ink strokes. The response will include results from this language. (e.g. en-US)
   strokes: list # This is the array of strokes sent for recognition. Best results are produced when the order of strokes added in the array matches the order in which the user created them. Changing the stroke order may produce unexpected results. — item shape: {drawingAttributes?: record, id: int, kind?: "inkDrawing"|"inkWriting", language?: string, points: list}
   --unit: string@unit-completer # This is the physical unit of the ink strokes. It is up to the application developer to decide how to convert the device specific units to physical units before calling the service. The conversion factor can be different based on the type of the device used.
-  --unit-multiple: float #  This is a scaling factor to be applied to the point coordinates when interpreting them in the physical units specified.
+  --unit-multiple: float # This is a scaling factor to be applied to the point coordinates when interpreting them in the physical units specified.
 ]: any -> record<language: string, recognitionUnits: table<alternates: list, boundingRectangle: record, category: string, center: record, childIds: list, class: string, confidence: float, id: int, parentId: int, points: list, recognizedObject: string, recognizedText: string, rotatedBoundingRectangle: list, rotationAngle: float, strokeIds: list>, unit: string, unitMultiple: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/recognize")
-  let body = {"applicationType": $application_type, "inkPointValueAttributes": $ink_point_value_attributes, "inputDeviceKind": $input_device_kind, "language": $language, "strokes": $strokes, "unit": $unit, "unitMultiple": $unit_multiple} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-ms-client-request-id": $x_ms_client_request_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"applicationType": $application_type, "inkPointValueAttributes": $ink_point_value_attributes, "inputDeviceKind": $input_device_kind, "language": $language, "strokes": $strokes, "unit": $unit, "unitMultiple": $unit_multiple} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"x-ms-client-request-id": $x_ms_client_request_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

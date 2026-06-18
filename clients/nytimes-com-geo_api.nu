@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -71,7 +80,7 @@ def facets-completer [] { ["0" "1"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "queryjson get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "query-json get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -94,7 +103,7 @@ export def commands []: nothing -> table {
 # Geographic API
 #
 # GET /query.json
-export def "queryjson get" [
+export def "query-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -107,12 +116,12 @@ export def "queryjson get" [
   --latitude: string # The latitude of the specified place.
   --longitude: string # The longitude of the specified place.
   --elevation: int # The elevation of the specified place, in meters.
-  --sw: string # Along with ne, forms a bounded box using the longitude and latitude coordinates specified as the southwest corner. The search results are limited to the resulting box. Two float values, separated by a comma `latitude,longitude` <br/> The ne parameter is required to use this parameter.
+  --sw: string # Along with ne, forms a bounded box using the longitude and latitude coordinates specified as the southwest corner. The search results are limited to the resulting box. Two float values, separated by a comma `latitude,longitude` The ne parameter is required to use this parameter.
   --query: string # Search keywords to perform a text search on the fields: web_description, event_name and venue_name. 'AND' searches can be performed by wrapping query terms in quotes. If you do not specify a query, all results will be returned.
-  --filter: string # Filters search results based on the facets provided.  For more information on the values you can filter on, see Facets.
+  --filter: string # Filters search results based on the facets provided. For more information on the values you can filter on, see Facets.
   --date-range: string # Start date to end date in the following format- YYYY-MM-DD:YYYY-MM-DD
   --facets: int@facets-completer # When facets is set to 1, a count of all facets will be included in the response. (default: 0)
-  --qp-sort: string # Sorts your results on the fields specified. <br/> `sort_value1+[asc | desc],sort_value2+[asc|desc],[...]`<br/> Appending +asc to a facet or response will sort results on that value in ascending order. Appending +desc to a facet or response  will sort results in descending order. You can sort on multiple fields. You can sort on any facet. For the list of responses you can sort on, see the Sortable Field column in the Response table. <br/><br/>If you are doing a spatial search with the ll parameter, you can also sort by the distance from the center of the search: dist+[asc | desc] <br/> **Note:** either +asc or +desc is required when using the sort parameter.
+  --qp-sort: string # Sorts your results on the fields specified. `sort_value1+[asc | desc],sort_value2+[asc|desc],[...]` Appending +asc to a facet or response will sort results on that value in ascending order. Appending +desc to a facet or response will sort results in descending order. You can sort on multiple fields. You can sort on any facet. For the list of responses you can sort on, see the Sortable Field column in the Response table. If you are doing a spatial search with the ll parameter, you can also sort by the distance from the center of the search: dist+[asc | desc] **Note:** either +asc or +desc is required when using the sort parameter.
   --limit: int # Limits the number of results returned (default: 20)
   --offset: int # Sets the starting point of the result set (default: 0)
 ]: nothing -> record<results: table<city: string, critic_name: string, event_detail_url: string, event_id: int, event_name: string, event_schedule_id: int, festival: bool, film_rating: bool, free: bool, kid_friendly: bool, last_chance: bool, last_modified: string, long_running_show: bool, previews_and_openings: bool, recur_days: list, recurring_start_date: string, state: string, times_pick: bool, web_description: string>> {

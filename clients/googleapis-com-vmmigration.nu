@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -75,7 +84,7 @@ def time-frame-completer [] { ["MONTH" "TIME_FRAME_UNSPECIFIED" "WEEK" "YEAR"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1alpha1 vmmigrationprojectslocationssourcesdatacenterConnectorsupgradeAppliance" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1alpha1 create-upgrade-appliance" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -99,7 +108,7 @@ export def commands []: nothing -> table {
 #
 # POST /v1alpha1/{datacenterConnector}:upgradeAppliance
 # operationId: vmmigration.projects.locations.sources.datacenterConnectors.upgradeAppliance
-export def "v1alpha1 vmmigrationprojectslocationssourcesdatacenterConnectorsupgradeAppliance" [
+export def "v1alpha1 create-upgrade-appliance" [
   datacenter_connector: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -126,19 +135,19 @@ export def "v1alpha1 vmmigrationprojectslocationssourcesdatacenterConnectorsupgr
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({datacenter_connector: $datacenter_connector} | format pattern "/v1alpha1/{datacenter_connector}:upgradeAppliance") $qp)
-  let body = {"requestId": $request_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({datacenter_connector: (encode-path-segment $datacenter_connector)} | format pattern "/v1alpha1/{datacenter_connector}:upgradeAppliance") $qp)
+  let req_body = {"requestId": $request_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Adds a MigratingVm to a Group.
 #
 # POST /v1alpha1/{group}:addGroupMigration
 # operationId: vmmigration.projects.locations.groups.addGroupMigration
-export def "v1alpha1 vmmigrationprojectslocationsgroupsaddGroupMigration" [
+export def "v1alpha1 create-migration" [
   group: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -165,19 +174,19 @@ export def "v1alpha1 vmmigrationprojectslocationsgroupsaddGroupMigration" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({group: $group} | format pattern "/v1alpha1/{group}:addGroupMigration") $qp)
-  let body = {"migratingVm": $migrating_vm} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({group: (encode-path-segment $group)} | format pattern "/v1alpha1/{group}:addGroupMigration") $qp)
+  let req_body = {"migratingVm": $migrating_vm} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Removes a MigratingVm from a Group.
 #
 # POST /v1alpha1/{group}:removeGroupMigration
 # operationId: vmmigration.projects.locations.groups.removeGroupMigration
-export def "v1alpha1 vmmigrationprojectslocationsgroupsremoveGroupMigration" [
+export def "v1alpha1 delete-migration" [
   group: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -204,19 +213,19 @@ export def "v1alpha1 vmmigrationprojectslocationsgroupsremoveGroupMigration" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({group: $group} | format pattern "/v1alpha1/{group}:removeGroupMigration") $qp)
-  let body = {"migratingVm": $migrating_vm} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({group: (encode-path-segment $group)} | format pattern "/v1alpha1/{group}:removeGroupMigration") $qp)
+  let req_body = {"migratingVm": $migrating_vm} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Marks a migration as completed, deleting migration resources that are no longer being used. Only applicable after cutover is done.
 #
 # POST /v1alpha1/{migratingVm}:finalizeMigration
 # operationId: vmmigration.projects.locations.sources.migratingVms.finalizeMigration
-export def "v1alpha1 vmmigrationprojectslocationssourcesmigratingVmsfinalizeMigration" [
+export def "v1alpha1 finalize-migration" [
   migrating_vm: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -243,18 +252,19 @@ export def "v1alpha1 vmmigrationprojectslocationssourcesmigratingVmsfinalizeMigr
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({migrating_vm: $migrating_vm} | format pattern "/v1alpha1/{migrating_vm}:finalizeMigration") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({migrating_vm: (encode-path-segment $migrating_vm)} | format pattern "/v1alpha1/{migrating_vm}:finalizeMigration") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Pauses a migration for a VM. If cycle tasks are running they will be cancelled, preserving source task data. Further replication cycles will not be triggered while the VM is paused.
 #
 # POST /v1alpha1/{migratingVm}:pauseMigration
 # operationId: vmmigration.projects.locations.sources.migratingVms.pauseMigration
-export def "v1alpha1 vmmigrationprojectslocationssourcesmigratingVmspauseMigration" [
+export def "v1alpha1 pause-migration" [
   migrating_vm: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -281,18 +291,19 @@ export def "v1alpha1 vmmigrationprojectslocationssourcesmigratingVmspauseMigrati
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({migrating_vm: $migrating_vm} | format pattern "/v1alpha1/{migrating_vm}:pauseMigration") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({migrating_vm: (encode-path-segment $migrating_vm)} | format pattern "/v1alpha1/{migrating_vm}:pauseMigration") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Resumes a migration for a VM. When called on a paused migration, will start the process of uploading data and creating snapshots; when called on a completed cut-over migration, will update the migration to active state and start the process of uploading data and creating snapshots.
 #
 # POST /v1alpha1/{migratingVm}:resumeMigration
 # operationId: vmmigration.projects.locations.sources.migratingVms.resumeMigration
-export def "v1alpha1 vmmigrationprojectslocationssourcesmigratingVmsresumeMigration" [
+export def "v1alpha1 create-resume-migration" [
   migrating_vm: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -319,18 +330,19 @@ export def "v1alpha1 vmmigrationprojectslocationssourcesmigratingVmsresumeMigrat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({migrating_vm: $migrating_vm} | format pattern "/v1alpha1/{migrating_vm}:resumeMigration") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({migrating_vm: (encode-path-segment $migrating_vm)} | format pattern "/v1alpha1/{migrating_vm}:resumeMigration") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Starts migration for a VM. Starts the process of uploading data and creating snapshots, in replication cycles scheduled by the policy.
 #
 # POST /v1alpha1/{migratingVm}:startMigration
 # operationId: vmmigration.projects.locations.sources.migratingVms.startMigration
-export def "v1alpha1 vmmigrationprojectslocationssourcesmigratingVmsstartMigration" [
+export def "v1alpha1 start-migration" [
   migrating_vm: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -357,18 +369,19 @@ export def "v1alpha1 vmmigrationprojectslocationssourcesmigratingVmsstartMigrati
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({migrating_vm: $migrating_vm} | format pattern "/v1alpha1/{migrating_vm}:startMigration") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({migrating_vm: (encode-path-segment $migrating_vm)} | format pattern "/v1alpha1/{migrating_vm}:startMigration") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes a single TargetProject. NOTE: TargetProject is a global resource; hence the only supported value for location is `global`.
 #
 # DELETE /v1alpha1/{name}
 # operationId: vmmigration.projects.locations.targetProjects.delete
-export def "v1alpha1 vmmigrationprojectslocationstargetProjectsdelete" [
+export def "v1alpha1 delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -394,7 +407,7 @@ export def "v1alpha1 vmmigrationprojectslocationstargetProjectsdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "requestId" $request_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1alpha1/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1alpha1/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -404,7 +417,7 @@ export def "v1alpha1 vmmigrationprojectslocationstargetProjectsdelete" [
 #
 # GET /v1alpha1/{name}
 # operationId: vmmigration.projects.locations.targetProjects.get
-export def "v1alpha1 vmmigrationprojectslocationstargetProjectsget" [
+export def "v1alpha1 get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -430,7 +443,7 @@ export def "v1alpha1 vmmigrationprojectslocationstargetProjectsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1alpha1/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1alpha1/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -440,7 +453,7 @@ export def "v1alpha1 vmmigrationprojectslocationstargetProjectsget" [
 #
 # PATCH /v1alpha1/{name}
 # operationId: vmmigration.projects.locations.targetProjects.patch
-export def "v1alpha1 vmmigrationprojectslocationstargetProjectspatch" [
+export def "v1alpha1 update" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -470,19 +483,19 @@ export def "v1alpha1 vmmigrationprojectslocationstargetProjectspatch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "requestId" $request_id "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1alpha1/{name}") $qp)
-  let body = {"description": $description, "project": $project} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1alpha1/{name}") $qp)
+  let req_body = {"description": $description, "project": $project} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists information about the supported locations for this service.
 #
 # GET /v1alpha1/{name}/locations
 # operationId: vmmigration.projects.locations.list
-export def "v1alpha1-locations vmmigrationprojectslocationslist" [
+export def "v1alpha1-locations list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -510,7 +523,7 @@ export def "v1alpha1-locations vmmigrationprojectslocationslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1alpha1/{name}/locations") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1alpha1/{name}/locations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -520,7 +533,7 @@ export def "v1alpha1-locations vmmigrationprojectslocationslist" [
 #
 # GET /v1alpha1/{name}/operations
 # operationId: vmmigration.projects.locations.operations.list
-export def "v1alpha1-operations vmmigrationprojectslocationsoperationslist" [
+export def "v1alpha1-operations list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -548,7 +561,7 @@ export def "v1alpha1-operations vmmigrationprojectslocationsoperationslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1alpha1/{name}/operations") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1alpha1/{name}/operations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -558,7 +571,7 @@ export def "v1alpha1-operations vmmigrationprojectslocationsoperationslist" [
 #
 # POST /v1alpha1/{name}:cancel
 # operationId: vmmigration.projects.locations.sources.migratingVms.cutoverJobs.cancel
-export def "v1alpha1 vmmigrationprojectslocationssourcesmigratingVmscutoverJobscancel" [
+export def "v1alpha1 cancel" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -585,18 +598,19 @@ export def "v1alpha1 vmmigrationprojectslocationssourcesmigratingVmscutoverJobsc
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1alpha1/{name}:cancel") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1alpha1/{name}:cancel") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists CloneJobs of a given migrating VM.
 #
 # GET /v1alpha1/{parent}/cloneJobs
 # operationId: vmmigration.projects.locations.sources.migratingVms.cloneJobs.list
-export def "v1alpha1-clone-jobs vmmigrationprojectslocationssourcesmigratingVmscloneJobslist" [
+export def "v1alpha1-clone-jobs list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -625,7 +639,7 @@ export def "v1alpha1-clone-jobs vmmigrationprojectslocationssourcesmigratingVmsc
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1alpha1/{parent}/cloneJobs") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1alpha1/{parent}/cloneJobs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -635,12 +649,12 @@ export def "v1alpha1-clone-jobs vmmigrationprojectslocationssourcesmigratingVmsc
 #
 # POST /v1alpha1/{parent}/cloneJobs
 # operationId: vmmigration.projects.locations.sources.migratingVms.cloneJobs.create
-# --computeEngineTargetDetails shape: {additionalLicenses?: list, appliedLicense?: record, bootOption?: "COMPUTE_ENGINE_BOOT_OPTION_UNSPECIFIED"|"COMPUTE_ENGINE_BOOT_OPTION_EFI"|"COMPUTE_ENGINE_BOOT_OPTION_BIOS", computeScheduling?: record, diskType?: "COMPUTE_ENGINE_DISK_TYPE_UNSPECIFIED"|"COMPUTE_ENGINE_DISK_TYPE_STANDARD"|"COMPUTE_ENGINE_DISK_TYPE_SSD"|"COMPUTE_ENGINE_DISK_TYPE_BALANCED", hostname?: string, labels?: record, licenseType?: "COMPUTE_ENGINE_LICENSE_TYPE_DEFAULT"|"COMPUTE_ENGINE_LICENSE_TYPE_PAYG"|"COMPUTE_ENGINE_LICENSE_TYPE_BYOL", machineType?: string, machineTypeSeries?: string, metadata?: record, networkInterfaces?: list, networkTags?: list, project?: string, secureBoot?: bool, serviceAccount?: string, vmName?: string, zone?: string}
-# --computeEngineVmDetails shape: {appliedLicense?: record, computeScheduling?: record, diskType?: "DISK_TYPE_UNSPECIFIED"|"STANDARD"|"BALANCED"|"SSD", externalIp?: string, internalIp?: string, labels?: record, licenseType?: "DEFAULT"|"PAYG"|"BYOL", machineType?: string, machineTypeSeries?: string, metadata?: record, name?: string, network?: string, networkInterfaces?: list, networkTags?: list, secureBoot?: bool, serviceAccount?: string, subnetwork?: string, targetProject?: string, zone?: string}
+# --computeEngineTargetDetails shape: {additionalLicenses?: list<string>, appliedLicense?: record, bootOption?: "COMPUTE_ENGINE_BOOT_OPTION_UNSPECIFIED"|"COMPUTE_ENGINE_BOOT_OPTION_EFI"|"COMPUTE_ENGINE_BOOT_OPTION_BIOS", computeScheduling?: record, diskType?: "COMPUTE_ENGINE_DISK_TYPE_UNSPECIFIED"|"COMPUTE_ENGINE_DISK_TYPE_STANDARD"|"COMPUTE_ENGINE_DISK_TYPE_SSD"|"COMPUTE_ENGINE_DISK_TYPE_BALANCED", hostname?: string, labels?: record, ... (11 more fields)}
+# --computeEngineVmDetails shape: {appliedLicense?: record, computeScheduling?: record, diskType?: "DISK_TYPE_UNSPECIFIED"|"STANDARD"|"BALANCED"|"SSD", externalIp?: string, internalIp?: string, labels?: record, licenseType?: "DEFAULT"|"PAYG"|"BYOL", machineType?: string, machineTypeSeries?: string, metadata?: record, name?: string, network?: string, networkInterfaces?: list, networkTags?: list<string>, secureBoot?: bool, serviceAccount?: string, subnetwork?: string, targetProject?: string, zone?: string}
 # --error shape: {code?: int, details?: list, message?: string}
 # --steps item shape: {adaptingOs?: record, endTime?: string, instantiatingMigratedVm?: record, preparingVmDisks?: record, startTime?: string}
-# --targetDetails shape: {appliedLicense?: record, computeScheduling?: record, diskType?: "DISK_TYPE_UNSPECIFIED"|"STANDARD"|"BALANCED"|"SSD", externalIp?: string, internalIp?: string, labels?: record, licenseType?: "DEFAULT"|"PAYG"|"BYOL", machineType?: string, machineTypeSeries?: string, metadata?: record, name?: string, network?: string, networkInterfaces?: list, networkTags?: list, secureBoot?: bool, serviceAccount?: string, subnetwork?: string, targetProject?: string, zone?: string}
-export def "v1alpha1-clone-jobs vmmigrationprojectslocationssourcesmigratingVmscloneJobscreate" [
+# --targetDetails shape: {appliedLicense?: record, computeScheduling?: record, diskType?: "DISK_TYPE_UNSPECIFIED"|"STANDARD"|"BALANCED"|"SSD", externalIp?: string, internalIp?: string, labels?: record, licenseType?: "DEFAULT"|"PAYG"|"BYOL", machineType?: string, machineTypeSeries?: string, metadata?: record, name?: string, network?: string, networkInterfaces?: list, networkTags?: list<string>, secureBoot?: bool, serviceAccount?: string, subnetwork?: string, targetProject?: string, zone?: string}
+export def "v1alpha1-clone-jobs create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -663,28 +677,28 @@ export def "v1alpha1-clone-jobs vmmigrationprojectslocationssourcesmigratingVmsc
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --clone-job-id: string # Required. The clone job identifier.
   --request-id: string # A request ID to identify requests. Specify a unique request ID so that if you must retry your request, the server will know to ignore the request if it has already been completed. The server will guarantee that for at least 60 minutes since the first request. For example, consider a situation where you make an initial request and the request times out. If you make the request again with the same request ID, the server can check if original operation with the same request ID was received, and if so, will ignore the second request. This prevents clients from accidentally creating duplicate commitments. The request ID must be a valid UUID with the exception that zero UUID is not supported (00000000-0000-0000-0000-000000000000).
-  --compute-engine-target-details: record # ComputeEngineTargetDetails is a collection of details for creating a VM in a target Compute Engine project. — shape: {additionalLicenses?: list, appliedLicense?: record, bootOption?: "COMPUTE_ENGINE_BOOT_OPTION_UNSPECIFIED"|"COMPUTE_ENGINE_BOOT_OPTION_EFI"|"COMPUTE_ENGINE_BOOT_OPTION_BIOS", computeScheduling?: record, diskType?: "COMPUTE_ENGINE_DISK_TYPE_UNSPECIFIED"|"COMPUTE_ENGINE_DISK_TYPE_STANDARD"|"COMPUTE_ENGINE_DISK_TYPE_SSD"|"COMPUTE_ENGINE_DISK_TYPE_BALANCED", hostname?: string, labels?: record, licenseType?: "COMPUTE_ENGINE_LICENSE_TYPE_DEFAULT"|"COMPUTE_ENGINE_LICENSE_TYPE_PAYG"|"COMPUTE_ENGINE_LICENSE_TYPE_BYOL", machineType?: string, machineTypeSeries?: string, metadata?: record, networkInterfaces?: list, networkTags?: list, project?: string, secureBoot?: bool, serviceAccount?: string, vmName?: string, zone?: string}
-  --compute-engine-vm-details: record # TargetVMDetails is a collection of details for creating a VM in a target Compute Engine project. — shape: {appliedLicense?: record, computeScheduling?: record, diskType?: "DISK_TYPE_UNSPECIFIED"|"STANDARD"|"BALANCED"|"SSD", externalIp?: string, internalIp?: string, labels?: record, licenseType?: "DEFAULT"|"PAYG"|"BYOL", machineType?: string, machineTypeSeries?: string, metadata?: record, name?: string, network?: string, networkInterfaces?: list, networkTags?: list, secureBoot?: bool, serviceAccount?: string, subnetwork?: string, targetProject?: string, zone?: string}
+  --compute-engine-target-details: record # ComputeEngineTargetDetails is a collection of details for creating a VM in a target Compute Engine project. — shape: {additionalLicenses?: list<string>, appliedLicense?: record, bootOption?: "COMPUTE_ENGINE_BOOT_OPTION_UNSPECIFIED"|"COMPUTE_ENGINE_BOOT_OPTION_EFI"|"COMPUTE_ENGINE_BOOT_OPTION_BIOS", computeScheduling?: record, diskType?: "COMPUTE_ENGINE_DISK_TYPE_UNSPECIFIED"|"COMPUTE_ENGINE_DISK_TYPE_STANDARD"|"COMPUTE_ENGINE_DISK_TYPE_SSD"|"COMPUTE_ENGINE_DISK_TYPE_BALANCED", hostname?: string, labels?: record, ... (11 more fields)}
+  --compute-engine-vm-details: record # TargetVMDetails is a collection of details for creating a VM in a target Compute Engine project. — shape: {appliedLicense?: record, computeScheduling?: record, diskType?: "DISK_TYPE_UNSPECIFIED"|"STANDARD"|"BALANCED"|"SSD", externalIp?: string, internalIp?: string, labels?: record, licenseType?: "DEFAULT"|"PAYG"|"BYOL", machineType?: string, machineTypeSeries?: string, metadata?: record, name?: string, network?: string, networkInterfaces?: list, networkTags?: list<string>, secureBoot?: bool, serviceAccount?: string, subnetwork?: string, targetProject?: string, zone?: string}
   --body-error: record # The `Status` type defines a logical error model that is suitable for different programming environments, including REST APIs and RPC APIs. It is used by [gRPC](https://github.com/grpc). Each `Status` message contains three pieces of data: error code, error message, and error details. You can find out more about this error model and how to work with it in the [API Design Guide](https://cloud.google.com/apis/design/errors). — shape: {code?: int, details?: list, message?: string}
-  --target-details: record # TargetVMDetails is a collection of details for creating a VM in a target Compute Engine project. — shape: {appliedLicense?: record, computeScheduling?: record, diskType?: "DISK_TYPE_UNSPECIFIED"|"STANDARD"|"BALANCED"|"SSD", externalIp?: string, internalIp?: string, labels?: record, licenseType?: "DEFAULT"|"PAYG"|"BYOL", machineType?: string, machineTypeSeries?: string, metadata?: record, name?: string, network?: string, networkInterfaces?: list, networkTags?: list, secureBoot?: bool, serviceAccount?: string, subnetwork?: string, targetProject?: string, zone?: string}
+  --target-details: record # TargetVMDetails is a collection of details for creating a VM in a target Compute Engine project. — shape: {appliedLicense?: record, computeScheduling?: record, diskType?: "DISK_TYPE_UNSPECIFIED"|"STANDARD"|"BALANCED"|"SSD", externalIp?: string, internalIp?: string, labels?: record, licenseType?: "DEFAULT"|"PAYG"|"BYOL", machineType?: string, machineTypeSeries?: string, metadata?: record, name?: string, network?: string, networkInterfaces?: list, networkTags?: list<string>, secureBoot?: bool, serviceAccount?: string, subnetwork?: string, targetProject?: string, zone?: string}
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "cloneJobId" $clone_job_id "scalar") (serialize-qp "requestId" $request_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1alpha1/{parent}/cloneJobs") $qp)
-  let body = {"computeEngineTargetDetails": $compute_engine_target_details, "computeEngineVmDetails": $compute_engine_vm_details, "error": $body_error, "targetDetails": $target_details} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1alpha1/{parent}/cloneJobs") $qp)
+  let req_body = {"computeEngineTargetDetails": $compute_engine_target_details, "computeEngineVmDetails": $compute_engine_vm_details, "error": $body_error, "targetDetails": $target_details} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists CutoverJobs of a given migrating VM.
 #
 # GET /v1alpha1/{parent}/cutoverJobs
 # operationId: vmmigration.projects.locations.sources.migratingVms.cutoverJobs.list
-export def "v1alpha1-cutover-jobs vmmigrationprojectslocationssourcesmigratingVmscutoverJobslist" [
+export def "v1alpha1-cutover-jobs list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -713,7 +727,7 @@ export def "v1alpha1-cutover-jobs vmmigrationprojectslocationssourcesmigratingVm
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1alpha1/{parent}/cutoverJobs") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1alpha1/{parent}/cutoverJobs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -723,12 +737,12 @@ export def "v1alpha1-cutover-jobs vmmigrationprojectslocationssourcesmigratingVm
 #
 # POST /v1alpha1/{parent}/cutoverJobs
 # operationId: vmmigration.projects.locations.sources.migratingVms.cutoverJobs.create
-# --computeEngineTargetDetails shape: {additionalLicenses?: list, appliedLicense?: record, bootOption?: "COMPUTE_ENGINE_BOOT_OPTION_UNSPECIFIED"|"COMPUTE_ENGINE_BOOT_OPTION_EFI"|"COMPUTE_ENGINE_BOOT_OPTION_BIOS", computeScheduling?: record, diskType?: "COMPUTE_ENGINE_DISK_TYPE_UNSPECIFIED"|"COMPUTE_ENGINE_DISK_TYPE_STANDARD"|"COMPUTE_ENGINE_DISK_TYPE_SSD"|"COMPUTE_ENGINE_DISK_TYPE_BALANCED", hostname?: string, labels?: record, licenseType?: "COMPUTE_ENGINE_LICENSE_TYPE_DEFAULT"|"COMPUTE_ENGINE_LICENSE_TYPE_PAYG"|"COMPUTE_ENGINE_LICENSE_TYPE_BYOL", machineType?: string, machineTypeSeries?: string, metadata?: record, networkInterfaces?: list, networkTags?: list, project?: string, secureBoot?: bool, serviceAccount?: string, vmName?: string, zone?: string}
-# --computeEngineVmDetails shape: {appliedLicense?: record, computeScheduling?: record, diskType?: "DISK_TYPE_UNSPECIFIED"|"STANDARD"|"BALANCED"|"SSD", externalIp?: string, internalIp?: string, labels?: record, licenseType?: "DEFAULT"|"PAYG"|"BYOL", machineType?: string, machineTypeSeries?: string, metadata?: record, name?: string, network?: string, networkInterfaces?: list, networkTags?: list, secureBoot?: bool, serviceAccount?: string, subnetwork?: string, targetProject?: string, zone?: string}
+# --computeEngineTargetDetails shape: {additionalLicenses?: list<string>, appliedLicense?: record, bootOption?: "COMPUTE_ENGINE_BOOT_OPTION_UNSPECIFIED"|"COMPUTE_ENGINE_BOOT_OPTION_EFI"|"COMPUTE_ENGINE_BOOT_OPTION_BIOS", computeScheduling?: record, diskType?: "COMPUTE_ENGINE_DISK_TYPE_UNSPECIFIED"|"COMPUTE_ENGINE_DISK_TYPE_STANDARD"|"COMPUTE_ENGINE_DISK_TYPE_SSD"|"COMPUTE_ENGINE_DISK_TYPE_BALANCED", hostname?: string, labels?: record, ... (11 more fields)}
+# --computeEngineVmDetails shape: {appliedLicense?: record, computeScheduling?: record, diskType?: "DISK_TYPE_UNSPECIFIED"|"STANDARD"|"BALANCED"|"SSD", externalIp?: string, internalIp?: string, labels?: record, licenseType?: "DEFAULT"|"PAYG"|"BYOL", machineType?: string, machineTypeSeries?: string, metadata?: record, name?: string, network?: string, networkInterfaces?: list, networkTags?: list<string>, secureBoot?: bool, serviceAccount?: string, subnetwork?: string, targetProject?: string, zone?: string}
 # --error shape: {code?: int, details?: list, message?: string}
 # --steps item shape: {endTime?: string, finalSync?: record, instantiatingMigratedVm?: record, preparingVmDisks?: record, previousReplicationCycle?: record, shuttingDownSourceVm?: record, startTime?: string}
-# --targetDetails shape: {appliedLicense?: record, computeScheduling?: record, diskType?: "DISK_TYPE_UNSPECIFIED"|"STANDARD"|"BALANCED"|"SSD", externalIp?: string, internalIp?: string, labels?: record, licenseType?: "DEFAULT"|"PAYG"|"BYOL", machineType?: string, machineTypeSeries?: string, metadata?: record, name?: string, network?: string, networkInterfaces?: list, networkTags?: list, secureBoot?: bool, serviceAccount?: string, subnetwork?: string, targetProject?: string, zone?: string}
-export def "v1alpha1-cutover-jobs vmmigrationprojectslocationssourcesmigratingVmscutoverJobscreate" [
+# --targetDetails shape: {appliedLicense?: record, computeScheduling?: record, diskType?: "DISK_TYPE_UNSPECIFIED"|"STANDARD"|"BALANCED"|"SSD", externalIp?: string, internalIp?: string, labels?: record, licenseType?: "DEFAULT"|"PAYG"|"BYOL", machineType?: string, machineTypeSeries?: string, metadata?: record, name?: string, network?: string, networkInterfaces?: list, networkTags?: list<string>, secureBoot?: bool, serviceAccount?: string, subnetwork?: string, targetProject?: string, zone?: string}
+export def "v1alpha1-cutover-jobs create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -751,28 +765,28 @@ export def "v1alpha1-cutover-jobs vmmigrationprojectslocationssourcesmigratingVm
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --cutover-job-id: string # Required. The cutover job identifier.
   --request-id: string # A request ID to identify requests. Specify a unique request ID so that if you must retry your request, the server will know to ignore the request if it has already been completed. The server will guarantee that for at least 60 minutes since the first request. For example, consider a situation where you make an initial request and the request times out. If you make the request again with the same request ID, the server can check if original operation with the same request ID was received, and if so, will ignore the second request. This prevents clients from accidentally creating duplicate commitments. The request ID must be a valid UUID with the exception that zero UUID is not supported (00000000-0000-0000-0000-000000000000).
-  --compute-engine-target-details: record # ComputeEngineTargetDetails is a collection of details for creating a VM in a target Compute Engine project. — shape: {additionalLicenses?: list, appliedLicense?: record, bootOption?: "COMPUTE_ENGINE_BOOT_OPTION_UNSPECIFIED"|"COMPUTE_ENGINE_BOOT_OPTION_EFI"|"COMPUTE_ENGINE_BOOT_OPTION_BIOS", computeScheduling?: record, diskType?: "COMPUTE_ENGINE_DISK_TYPE_UNSPECIFIED"|"COMPUTE_ENGINE_DISK_TYPE_STANDARD"|"COMPUTE_ENGINE_DISK_TYPE_SSD"|"COMPUTE_ENGINE_DISK_TYPE_BALANCED", hostname?: string, labels?: record, licenseType?: "COMPUTE_ENGINE_LICENSE_TYPE_DEFAULT"|"COMPUTE_ENGINE_LICENSE_TYPE_PAYG"|"COMPUTE_ENGINE_LICENSE_TYPE_BYOL", machineType?: string, machineTypeSeries?: string, metadata?: record, networkInterfaces?: list, networkTags?: list, project?: string, secureBoot?: bool, serviceAccount?: string, vmName?: string, zone?: string}
-  --compute-engine-vm-details: record # TargetVMDetails is a collection of details for creating a VM in a target Compute Engine project. — shape: {appliedLicense?: record, computeScheduling?: record, diskType?: "DISK_TYPE_UNSPECIFIED"|"STANDARD"|"BALANCED"|"SSD", externalIp?: string, internalIp?: string, labels?: record, licenseType?: "DEFAULT"|"PAYG"|"BYOL", machineType?: string, machineTypeSeries?: string, metadata?: record, name?: string, network?: string, networkInterfaces?: list, networkTags?: list, secureBoot?: bool, serviceAccount?: string, subnetwork?: string, targetProject?: string, zone?: string}
+  --compute-engine-target-details: record # ComputeEngineTargetDetails is a collection of details for creating a VM in a target Compute Engine project. — shape: {additionalLicenses?: list<string>, appliedLicense?: record, bootOption?: "COMPUTE_ENGINE_BOOT_OPTION_UNSPECIFIED"|"COMPUTE_ENGINE_BOOT_OPTION_EFI"|"COMPUTE_ENGINE_BOOT_OPTION_BIOS", computeScheduling?: record, diskType?: "COMPUTE_ENGINE_DISK_TYPE_UNSPECIFIED"|"COMPUTE_ENGINE_DISK_TYPE_STANDARD"|"COMPUTE_ENGINE_DISK_TYPE_SSD"|"COMPUTE_ENGINE_DISK_TYPE_BALANCED", hostname?: string, labels?: record, ... (11 more fields)}
+  --compute-engine-vm-details: record # TargetVMDetails is a collection of details for creating a VM in a target Compute Engine project. — shape: {appliedLicense?: record, computeScheduling?: record, diskType?: "DISK_TYPE_UNSPECIFIED"|"STANDARD"|"BALANCED"|"SSD", externalIp?: string, internalIp?: string, labels?: record, licenseType?: "DEFAULT"|"PAYG"|"BYOL", machineType?: string, machineTypeSeries?: string, metadata?: record, name?: string, network?: string, networkInterfaces?: list, networkTags?: list<string>, secureBoot?: bool, serviceAccount?: string, subnetwork?: string, targetProject?: string, zone?: string}
   --body-error: record # The `Status` type defines a logical error model that is suitable for different programming environments, including REST APIs and RPC APIs. It is used by [gRPC](https://github.com/grpc). Each `Status` message contains three pieces of data: error code, error message, and error details. You can find out more about this error model and how to work with it in the [API Design Guide](https://cloud.google.com/apis/design/errors). — shape: {code?: int, details?: list, message?: string}
-  --target-details: record # TargetVMDetails is a collection of details for creating a VM in a target Compute Engine project. — shape: {appliedLicense?: record, computeScheduling?: record, diskType?: "DISK_TYPE_UNSPECIFIED"|"STANDARD"|"BALANCED"|"SSD", externalIp?: string, internalIp?: string, labels?: record, licenseType?: "DEFAULT"|"PAYG"|"BYOL", machineType?: string, machineTypeSeries?: string, metadata?: record, name?: string, network?: string, networkInterfaces?: list, networkTags?: list, secureBoot?: bool, serviceAccount?: string, subnetwork?: string, targetProject?: string, zone?: string}
+  --target-details: record # TargetVMDetails is a collection of details for creating a VM in a target Compute Engine project. — shape: {appliedLicense?: record, computeScheduling?: record, diskType?: "DISK_TYPE_UNSPECIFIED"|"STANDARD"|"BALANCED"|"SSD", externalIp?: string, internalIp?: string, labels?: record, licenseType?: "DEFAULT"|"PAYG"|"BYOL", machineType?: string, machineTypeSeries?: string, metadata?: record, name?: string, network?: string, networkInterfaces?: list, networkTags?: list<string>, secureBoot?: bool, serviceAccount?: string, subnetwork?: string, targetProject?: string, zone?: string}
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "cutoverJobId" $cutover_job_id "scalar") (serialize-qp "requestId" $request_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1alpha1/{parent}/cutoverJobs") $qp)
-  let body = {"computeEngineTargetDetails": $compute_engine_target_details, "computeEngineVmDetails": $compute_engine_vm_details, "error": $body_error, "targetDetails": $target_details} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1alpha1/{parent}/cutoverJobs") $qp)
+  let req_body = {"computeEngineTargetDetails": $compute_engine_target_details, "computeEngineVmDetails": $compute_engine_vm_details, "error": $body_error, "targetDetails": $target_details} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists DatacenterConnectors in a given Source.
 #
 # GET /v1alpha1/{parent}/datacenterConnectors
 # operationId: vmmigration.projects.locations.sources.datacenterConnectors.list
-export def "v1alpha1-datacenter-connectors vmmigrationprojectslocationssourcesdatacenterConnectorslist" [
+export def "v1alpha1-datacenter-connectors list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -801,7 +815,7 @@ export def "v1alpha1-datacenter-connectors vmmigrationprojectslocationssourcesda
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1alpha1/{parent}/datacenterConnectors") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1alpha1/{parent}/datacenterConnectors") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -814,7 +828,7 @@ export def "v1alpha1-datacenter-connectors vmmigrationprojectslocationssourcesda
 # --availableVersions shape: {inPlaceUpdate?: record, newDeployableAppliance?: record}
 # --error shape: {code?: int, details?: list, message?: string}
 # --upgradeStatus shape: {error?: record, previousVersion?: string, startTime?: string, state?: "STATE_UNSPECIFIED"|"RUNNING"|"FAILED"|"SUCCEEDED", version?: string}
-export def "v1alpha1-datacenter-connectors vmmigrationprojectslocationssourcesdatacenterConnectorscreate" [
+export def "v1alpha1-datacenter-connectors create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -848,19 +862,19 @@ export def "v1alpha1-datacenter-connectors vmmigrationprojectslocationssourcesda
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "datacenterConnectorId" $datacenter_connector_id "scalar") (serialize-qp "requestId" $request_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1alpha1/{parent}/datacenterConnectors") $qp)
-  let body = {"availableVersions": $available_versions, "error": $body_error, "registrationId": $registration_id, "serviceAccount": $service_account, "upgradeStatus": $upgrade_status, "version": $version} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1alpha1/{parent}/datacenterConnectors") $qp)
+  let req_body = {"availableVersions": $available_versions, "error": $body_error, "registrationId": $registration_id, "serviceAccount": $service_account, "upgradeStatus": $upgrade_status, "version": $version} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists Groups in a given project and location.
 #
 # GET /v1alpha1/{parent}/groups
 # operationId: vmmigration.projects.locations.groups.list
-export def "v1alpha1-groups vmmigrationprojectslocationsgroupslist" [
+export def "v1alpha1-groups list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -889,7 +903,7 @@ export def "v1alpha1-groups vmmigrationprojectslocationsgroupslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1alpha1/{parent}/groups") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1alpha1/{parent}/groups") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -899,7 +913,7 @@ export def "v1alpha1-groups vmmigrationprojectslocationsgroupslist" [
 #
 # POST /v1alpha1/{parent}/groups
 # operationId: vmmigration.projects.locations.groups.create
-export def "v1alpha1-groups vmmigrationprojectslocationsgroupscreate" [
+export def "v1alpha1-groups create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -929,19 +943,19 @@ export def "v1alpha1-groups vmmigrationprojectslocationsgroupscreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "groupId" $group_id "scalar") (serialize-qp "requestId" $request_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1alpha1/{parent}/groups") $qp)
-  let body = {"description": $description, "displayName": $display_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1alpha1/{parent}/groups") $qp)
+  let req_body = {"description": $description, "displayName": $display_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists MigratingVms in a given Source.
 #
 # GET /v1alpha1/{parent}/migratingVms
 # operationId: vmmigration.projects.locations.sources.migratingVms.list
-export def "v1alpha1-migrating-vms vmmigrationprojectslocationssourcesmigratingVmslist" [
+export def "v1alpha1-migrating-vms list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -971,7 +985,7 @@ export def "v1alpha1-migrating-vms vmmigrationprojectslocationssourcesmigratingV
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1alpha1/{parent}/migratingVms") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1alpha1/{parent}/migratingVms") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -982,8 +996,8 @@ export def "v1alpha1-migrating-vms vmmigrationprojectslocationssourcesmigratingV
 # POST /v1alpha1/{parent}/migratingVms
 # operationId: vmmigration.projects.locations.sources.migratingVms.create
 # --awsSourceVmDetails shape: {committedStorageBytes?: string, firmware?: "FIRMWARE_UNSPECIFIED"|"EFI"|"BIOS"}
-# --computeEngineTargetDefaults shape: {additionalLicenses?: list, appliedLicense?: record, computeScheduling?: record, diskType?: "COMPUTE_ENGINE_DISK_TYPE_UNSPECIFIED"|"COMPUTE_ENGINE_DISK_TYPE_STANDARD"|"COMPUTE_ENGINE_DISK_TYPE_SSD"|"COMPUTE_ENGINE_DISK_TYPE_BALANCED", hostname?: string, labels?: record, licenseType?: "COMPUTE_ENGINE_LICENSE_TYPE_DEFAULT"|"COMPUTE_ENGINE_LICENSE_TYPE_PAYG"|"COMPUTE_ENGINE_LICENSE_TYPE_BYOL", machineType?: string, machineTypeSeries?: string, metadata?: record, networkInterfaces?: list, networkTags?: list, secureBoot?: bool, serviceAccount?: string, targetProject?: string, vmName?: string, zone?: string}
-# --computeEngineVmDefaults shape: {appliedLicense?: record, computeScheduling?: record, diskType?: "DISK_TYPE_UNSPECIFIED"|"STANDARD"|"BALANCED"|"SSD", externalIp?: string, internalIp?: string, labels?: record, licenseType?: "DEFAULT"|"PAYG"|"BYOL", machineType?: string, machineTypeSeries?: string, metadata?: record, name?: string, network?: string, networkInterfaces?: list, networkTags?: list, secureBoot?: bool, serviceAccount?: string, subnetwork?: string, targetProject?: string, zone?: string}
+# --computeEngineTargetDefaults shape: {additionalLicenses?: list<string>, appliedLicense?: record, computeScheduling?: record, diskType?: "COMPUTE_ENGINE_DISK_TYPE_UNSPECIFIED"|"COMPUTE_ENGINE_DISK_TYPE_STANDARD"|"COMPUTE_ENGINE_DISK_TYPE_SSD"|"COMPUTE_ENGINE_DISK_TYPE_BALANCED", hostname?: string, labels?: record, licenseType?: "COMPUTE_ENGINE_LICENSE_TYPE_DEFAULT"|"COMPUTE_ENGINE_LICENSE_TYPE_PAYG"|"COMPUTE_ENGINE_LICENSE_TYPE_BYOL", machineType?: string, machineTypeSeries?: string, metadata?: record, networkInterfaces?: list, ... (6 more fields)}
+# --computeEngineVmDefaults shape: {appliedLicense?: record, computeScheduling?: record, diskType?: "DISK_TYPE_UNSPECIFIED"|"STANDARD"|"BALANCED"|"SSD", externalIp?: string, internalIp?: string, labels?: record, licenseType?: "DEFAULT"|"PAYG"|"BYOL", machineType?: string, machineTypeSeries?: string, metadata?: record, name?: string, network?: string, networkInterfaces?: list, networkTags?: list<string>, secureBoot?: bool, serviceAccount?: string, subnetwork?: string, targetProject?: string, zone?: string}
 # --currentSyncInfo shape: {cycleNumber?: int, endTime?: string, error?: record, name?: string, progress?: int, progressPercent?: int, startTime?: string, state?: "STATE_UNSPECIFIED"|"RUNNING"|"PAUSED"|"FAILED"|"SUCCEEDED", steps?: list, totalPauseDuration?: string}
 # --error shape: {code?: int, details?: list, message?: string}
 # --lastReplicationCycle shape: {cycleNumber?: int, endTime?: string, error?: record, name?: string, progress?: int, progressPercent?: int, startTime?: string, state?: "STATE_UNSPECIFIED"|"RUNNING"|"PAUSED"|"FAILED"|"SUCCEEDED", steps?: list, totalPauseDuration?: string}
@@ -991,8 +1005,8 @@ export def "v1alpha1-migrating-vms vmmigrationprojectslocationssourcesmigratingV
 # --policy shape: {idleDuration?: string, skipOsAdaptation?: bool}
 # --recentCloneJobs item shape: {computeEngineTargetDetails?: record, computeEngineVmDetails?: record, error?: record, targetDetails?: record}
 # --recentCutoverJobs item shape: {computeEngineTargetDetails?: record, computeEngineVmDetails?: record, error?: record, targetDetails?: record}
-# --targetDefaults shape: {appliedLicense?: record, computeScheduling?: record, diskType?: "DISK_TYPE_UNSPECIFIED"|"STANDARD"|"BALANCED"|"SSD", externalIp?: string, internalIp?: string, labels?: record, licenseType?: "DEFAULT"|"PAYG"|"BYOL", machineType?: string, machineTypeSeries?: string, metadata?: record, name?: string, network?: string, networkInterfaces?: list, networkTags?: list, secureBoot?: bool, serviceAccount?: string, subnetwork?: string, targetProject?: string, zone?: string}
-export def "v1alpha1-migrating-vms vmmigrationprojectslocationssourcesmigratingVmscreate" [
+# --targetDefaults shape: {appliedLicense?: record, computeScheduling?: record, diskType?: "DISK_TYPE_UNSPECIFIED"|"STANDARD"|"BALANCED"|"SSD", externalIp?: string, internalIp?: string, labels?: record, licenseType?: "DEFAULT"|"PAYG"|"BYOL", machineType?: string, machineTypeSeries?: string, metadata?: record, name?: string, network?: string, networkInterfaces?: list, networkTags?: list<string>, secureBoot?: bool, serviceAccount?: string, subnetwork?: string, targetProject?: string, zone?: string}
+export def "v1alpha1-migrating-vms create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1016,8 +1030,8 @@ export def "v1alpha1-migrating-vms vmmigrationprojectslocationssourcesmigratingV
   --migrating-vm-id: string # Required. The migratingVm identifier.
   --request-id: string # A request ID to identify requests. Specify a unique request ID so that if you must retry your request, the server will know to ignore the request if it has already been completed. The server will guarantee that for at least 60 minutes since the first request. For example, consider a situation where you make an initial request and the request times out. If you make the request again with the same request ID, the server can check if original operation with the same request ID was received, and if so, will ignore the second request. This prevents clients from accidentally creating duplicate commitments. The request ID must be a valid UUID with the exception that zero UUID is not supported (00000000-0000-0000-0000-000000000000).
   --aws-source-vm-details: record # Represent the source AWS VM details. — shape: {committedStorageBytes?: string, firmware?: "FIRMWARE_UNSPECIFIED"|"EFI"|"BIOS"}
-  --compute-engine-target-defaults: record # ComputeEngineTargetDefaults is a collection of details for creating a VM in a target Compute Engine project. — shape: {additionalLicenses?: list, appliedLicense?: record, computeScheduling?: record, diskType?: "COMPUTE_ENGINE_DISK_TYPE_UNSPECIFIED"|"COMPUTE_ENGINE_DISK_TYPE_STANDARD"|"COMPUTE_ENGINE_DISK_TYPE_SSD"|"COMPUTE_ENGINE_DISK_TYPE_BALANCED", hostname?: string, labels?: record, licenseType?: "COMPUTE_ENGINE_LICENSE_TYPE_DEFAULT"|"COMPUTE_ENGINE_LICENSE_TYPE_PAYG"|"COMPUTE_ENGINE_LICENSE_TYPE_BYOL", machineType?: string, machineTypeSeries?: string, metadata?: record, networkInterfaces?: list, networkTags?: list, secureBoot?: bool, serviceAccount?: string, targetProject?: string, vmName?: string, zone?: string}
-  --compute-engine-vm-defaults: record # TargetVMDetails is a collection of details for creating a VM in a target Compute Engine project. — shape: {appliedLicense?: record, computeScheduling?: record, diskType?: "DISK_TYPE_UNSPECIFIED"|"STANDARD"|"BALANCED"|"SSD", externalIp?: string, internalIp?: string, labels?: record, licenseType?: "DEFAULT"|"PAYG"|"BYOL", machineType?: string, machineTypeSeries?: string, metadata?: record, name?: string, network?: string, networkInterfaces?: list, networkTags?: list, secureBoot?: bool, serviceAccount?: string, subnetwork?: string, targetProject?: string, zone?: string}
+  --compute-engine-target-defaults: record # ComputeEngineTargetDefaults is a collection of details for creating a VM in a target Compute Engine project. — shape: {additionalLicenses?: list<string>, appliedLicense?: record, computeScheduling?: record, diskType?: "COMPUTE_ENGINE_DISK_TYPE_UNSPECIFIED"|"COMPUTE_ENGINE_DISK_TYPE_STANDARD"|"COMPUTE_ENGINE_DISK_TYPE_SSD"|"COMPUTE_ENGINE_DISK_TYPE_BALANCED", hostname?: string, labels?: record, licenseType?: "COMPUTE_ENGINE_LICENSE_TYPE_DEFAULT"|"COMPUTE_ENGINE_LICENSE_TYPE_PAYG"|"COMPUTE_ENGINE_LICENSE_TYPE_BYOL", machineType?: string, machineTypeSeries?: string, metadata?: record, networkInterfaces?: list, ... (6 more fields)}
+  --compute-engine-vm-defaults: record # TargetVMDetails is a collection of details for creating a VM in a target Compute Engine project. — shape: {appliedLicense?: record, computeScheduling?: record, diskType?: "DISK_TYPE_UNSPECIFIED"|"STANDARD"|"BALANCED"|"SSD", externalIp?: string, internalIp?: string, labels?: record, licenseType?: "DEFAULT"|"PAYG"|"BYOL", machineType?: string, machineTypeSeries?: string, metadata?: record, name?: string, network?: string, networkInterfaces?: list, networkTags?: list<string>, secureBoot?: bool, serviceAccount?: string, subnetwork?: string, targetProject?: string, zone?: string}
   --current-sync-info: record # ReplicationCycle contains information about the current replication cycle status. — shape: {cycleNumber?: int, endTime?: string, error?: record, name?: string, progress?: int, progressPercent?: int, startTime?: string, state?: "STATE_UNSPECIFIED"|"RUNNING"|"PAUSED"|"FAILED"|"SUCCEEDED", steps?: list, totalPauseDuration?: string}
   --cutover-forecast: record # CutoverForecast holds information about future CutoverJobs of a MigratingVm.
   --description: string # The description attached to the migrating VM by the user.
@@ -1028,25 +1042,25 @@ export def "v1alpha1-migrating-vms vmmigrationprojectslocationssourcesmigratingV
   --last-sync: record # ReplicationSync contain information about the last replica sync to the cloud. — shape: {lastSyncTime?: string}
   --policy: record # A policy for scheduling replications. — shape: {idleDuration?: string, skipOsAdaptation?: bool}
   --source-vm-id: string # The unique ID of the VM in the source. The VM's name in vSphere can be changed, so this is not the VM's name but rather its moRef id. This id is of the form vm-.
-  --target-defaults: record # TargetVMDetails is a collection of details for creating a VM in a target Compute Engine project. — shape: {appliedLicense?: record, computeScheduling?: record, diskType?: "DISK_TYPE_UNSPECIFIED"|"STANDARD"|"BALANCED"|"SSD", externalIp?: string, internalIp?: string, labels?: record, licenseType?: "DEFAULT"|"PAYG"|"BYOL", machineType?: string, machineTypeSeries?: string, metadata?: record, name?: string, network?: string, networkInterfaces?: list, networkTags?: list, secureBoot?: bool, serviceAccount?: string, subnetwork?: string, targetProject?: string, zone?: string}
+  --target-defaults: record # TargetVMDetails is a collection of details for creating a VM in a target Compute Engine project. — shape: {appliedLicense?: record, computeScheduling?: record, diskType?: "DISK_TYPE_UNSPECIFIED"|"STANDARD"|"BALANCED"|"SSD", externalIp?: string, internalIp?: string, labels?: record, licenseType?: "DEFAULT"|"PAYG"|"BYOL", machineType?: string, machineTypeSeries?: string, metadata?: record, name?: string, network?: string, networkInterfaces?: list, networkTags?: list<string>, secureBoot?: bool, serviceAccount?: string, subnetwork?: string, targetProject?: string, zone?: string}
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "migratingVmId" $migrating_vm_id "scalar") (serialize-qp "requestId" $request_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1alpha1/{parent}/migratingVms") $qp)
-  let body = {"awsSourceVmDetails": $aws_source_vm_details, "computeEngineTargetDefaults": $compute_engine_target_defaults, "computeEngineVmDefaults": $compute_engine_vm_defaults, "currentSyncInfo": $current_sync_info, "cutoverForecast": $cutover_forecast, "description": $description, "displayName": $display_name, "error": $body_error, "labels": $labels, "lastReplicationCycle": $last_replication_cycle, "lastSync": $last_sync, "policy": $policy, "sourceVmId": $source_vm_id, "targetDefaults": $target_defaults} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1alpha1/{parent}/migratingVms") $qp)
+  let req_body = {"awsSourceVmDetails": $aws_source_vm_details, "computeEngineTargetDefaults": $compute_engine_target_defaults, "computeEngineVmDefaults": $compute_engine_vm_defaults, "currentSyncInfo": $current_sync_info, "cutoverForecast": $cutover_forecast, "description": $description, "displayName": $display_name, "error": $body_error, "labels": $labels, "lastReplicationCycle": $last_replication_cycle, "lastSync": $last_sync, "policy": $policy, "sourceVmId": $source_vm_id, "targetDefaults": $target_defaults} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists ReplicationCycles in a given MigratingVM.
 #
 # GET /v1alpha1/{parent}/replicationCycles
 # operationId: vmmigration.projects.locations.sources.migratingVms.replicationCycles.list
-export def "v1alpha1-replication-cycles vmmigrationprojectslocationssourcesmigratingVmsreplicationCycleslist" [
+export def "v1alpha1-replication-cycles list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1075,7 +1089,7 @@ export def "v1alpha1-replication-cycles vmmigrationprojectslocationssourcesmigra
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1alpha1/{parent}/replicationCycles") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1alpha1/{parent}/replicationCycles") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1085,7 +1099,7 @@ export def "v1alpha1-replication-cycles vmmigrationprojectslocationssourcesmigra
 #
 # GET /v1alpha1/{parent}/sources
 # operationId: vmmigration.projects.locations.sources.list
-export def "v1alpha1-sources vmmigrationprojectslocationssourceslist" [
+export def "v1alpha1-sources list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1114,7 +1128,7 @@ export def "v1alpha1-sources vmmigrationprojectslocationssourceslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1alpha1/{parent}/sources") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1alpha1/{parent}/sources") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1124,10 +1138,10 @@ export def "v1alpha1-sources vmmigrationprojectslocationssourceslist" [
 #
 # POST /v1alpha1/{parent}/sources
 # operationId: vmmigration.projects.locations.sources.create
-# --aws shape: {accessKeyCreds?: record, awsRegion?: string, error?: record, inventorySecurityGroupNames?: list, inventoryTagList?: list, migrationResourcesUserTags?: record}
+# --aws shape: {accessKeyCreds?: record, awsRegion?: string, error?: record, inventorySecurityGroupNames?: list<string>, inventoryTagList?: list, migrationResourcesUserTags?: record}
 # --error shape: {code?: int, details?: list, message?: string}
 # --vmware shape: {password?: string, thumbprint?: string, username?: string, vcenterIp?: string}
-export def "v1alpha1-sources vmmigrationprojectslocationssourcescreate" [
+export def "v1alpha1-sources create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1150,7 +1164,7 @@ export def "v1alpha1-sources vmmigrationprojectslocationssourcescreate" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --request-id: string # A request ID to identify requests. Specify a unique request ID so that if you must retry your request, the server will know to ignore the request if it has already been completed. The server will guarantee that for at least 60 minutes since the first request. For example, consider a situation where you make an initial request and the request times out. If you make the request again with the same request ID, the server can check if original operation with the same request ID was received, and if so, will ignore the second request. This prevents clients from accidentally creating duplicate commitments. The request ID must be a valid UUID with the exception that zero UUID is not supported (00000000-0000-0000-0000-000000000000).
   --source-id: string # Required. The source identifier.
-  --aws: record # AwsSourceDetails message describes a specific source details for the AWS source type. — shape: {accessKeyCreds?: record, awsRegion?: string, error?: record, inventorySecurityGroupNames?: list, inventoryTagList?: list, migrationResourcesUserTags?: record}
+  --aws: record # AwsSourceDetails message describes a specific source details for the AWS source type. — shape: {accessKeyCreds?: record, awsRegion?: string, error?: record, inventorySecurityGroupNames?: list<string>, inventoryTagList?: list, migrationResourcesUserTags?: record}
   --description: string # User-provided description of the source.
   --body-error: record # The `Status` type defines a logical error model that is suitable for different programming environments, including REST APIs and RPC APIs. It is used by [gRPC](https://github.com/grpc). Each `Status` message contains three pieces of data: error code, error message, and error details. You can find out more about this error model and how to work with it in the [API Design Guide](https://cloud.google.com/apis/design/errors). — shape: {code?: int, details?: list, message?: string}
   --labels: record # The labels of the source.
@@ -1160,19 +1174,19 @@ export def "v1alpha1-sources vmmigrationprojectslocationssourcescreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "requestId" $request_id "scalar") (serialize-qp "sourceId" $source_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1alpha1/{parent}/sources") $qp)
-  let body = {"aws": $aws, "description": $description, "error": $body_error, "labels": $labels, "vmware": $vmware} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1alpha1/{parent}/sources") $qp)
+  let req_body = {"aws": $aws, "description": $description, "error": $body_error, "labels": $labels, "vmware": $vmware} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists TargetProjects in a given project. NOTE: TargetProject is a global resource; hence the only supported value for location is `global`.
 #
 # GET /v1alpha1/{parent}/targetProjects
 # operationId: vmmigration.projects.locations.targetProjects.list
-export def "v1alpha1-target-projects vmmigrationprojectslocationstargetProjectslist" [
+export def "v1alpha1-target-projects list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1201,7 +1215,7 @@ export def "v1alpha1-target-projects vmmigrationprojectslocationstargetProjectsl
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1alpha1/{parent}/targetProjects") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1alpha1/{parent}/targetProjects") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1211,7 +1225,7 @@ export def "v1alpha1-target-projects vmmigrationprojectslocationstargetProjectsl
 #
 # POST /v1alpha1/{parent}/targetProjects
 # operationId: vmmigration.projects.locations.targetProjects.create
-export def "v1alpha1-target-projects vmmigrationprojectslocationstargetProjectscreate" [
+export def "v1alpha1-target-projects create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1241,19 +1255,19 @@ export def "v1alpha1-target-projects vmmigrationprojectslocationstargetProjectsc
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "requestId" $request_id "scalar") (serialize-qp "targetProjectId" $target_project_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1alpha1/{parent}/targetProjects") $qp)
-  let body = {"description": $description, "project": $project} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1alpha1/{parent}/targetProjects") $qp)
+  let req_body = {"description": $description, "project": $project} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists Utilization Reports of the given Source.
 #
 # GET /v1alpha1/{parent}/utilizationReports
 # operationId: vmmigration.projects.locations.sources.utilizationReports.list
-export def "v1alpha1-utilization-reports vmmigrationprojectslocationssourcesutilizationReportslist" [
+export def "v1alpha1-utilization-reports list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1283,7 +1297,7 @@ export def "v1alpha1-utilization-reports vmmigrationprojectslocationssourcesutil
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1alpha1/{parent}/utilizationReports") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1alpha1/{parent}/utilizationReports") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1295,7 +1309,7 @@ export def "v1alpha1-utilization-reports vmmigrationprojectslocationssourcesutil
 # operationId: vmmigration.projects.locations.sources.utilizationReports.create
 # --error shape: {code?: int, details?: list, message?: string}
 # --vms item shape: {utilization?: record, vmId?: string, vmwareVmDetails?: record}
-export def "v1alpha1-utilization-reports vmmigrationprojectslocationssourcesutilizationReportscreate" [
+export def "v1alpha1-utilization-reports create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1327,19 +1341,19 @@ export def "v1alpha1-utilization-reports vmmigrationprojectslocationssourcesutil
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "requestId" $request_id "scalar") (serialize-qp "utilizationReportId" $utilization_report_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1alpha1/{parent}/utilizationReports") $qp)
-  let body = {"displayName": $display_name, "error": $body_error, "timeFrame": $time_frame, "vms": $vms} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1alpha1/{parent}/utilizationReports") $qp)
+  let req_body = {"displayName": $display_name, "error": $body_error, "timeFrame": $time_frame, "vms": $vms} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List remote source's inventory of VMs. The remote source is the onprem vCenter (remote in the sense it's not in Compute Engine). The inventory describes the list of existing VMs in that source. Note that this operation lists the VMs on the remote source, as opposed to listing the MigratingVms resources in the vmmigration service.
 #
 # GET /v1alpha1/{source}:fetchInventory
 # operationId: vmmigration.projects.locations.sources.fetchInventory
-export def "v1alpha1 vmmigrationprojectslocationssourcesfetchInventory" [
+export def "v1alpha1 get-inventory" [
   source: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1367,7 +1381,7 @@ export def "v1alpha1 vmmigrationprojectslocationssourcesfetchInventory" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "forceRefresh" $force_refresh "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({source: $source} | format pattern "/v1alpha1/{source}:fetchInventory") $qp)
+  let full_url = (build-url $base ({source: (encode-path-segment $source)} | format pattern "/v1alpha1/{source}:fetchInventory") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

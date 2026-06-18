@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -135,8 +144,8 @@ export def "providers-microsoft-management-get-entities list" [
   --skip: int # Number of entities to skip over when retrieving results. Passing this in will override $skipToken.
   --top: int # Number of elements to return when retrieving results. Passing this in will override $skipToken.
   --select: string # This parameter specifies the fields to include in the response. Can include any combination of Name,DisplayName,Type,ParentDisplayNameChain,ParentChain, e.g. '$select=Name,DisplayName,Type,ParentDisplayNameChain,ParentNameChain'. When specified the $select parameter can override select in $skipToken.
-  --search: string@search-completer # The $search parameter is used in conjunction with the $filter parameter to return three different outputs depending on the parameter passed in. With $search=AllowedParents the API will return the entity info of all groups that the requested entity will be able to reparent to as determined by the user's permissions. With $search=AllowedChildren the API will return the entity info of all entities that can be added as children of the requested entity. With $search=ParentAndFirstLevelChildren the API will return the parent and  first level of children that the user has either direct access to or indirect access via one of their descendants.
-  --filter: string # The filter parameter allows you to filter on the name or display name fields. You can check for equality on the name field (e.g. name eq '{entityName}')  and you can check for substrings on either the name or display name fields(e.g. contains(name, '{substringToSearch}'), contains(displayName, '{substringToSearch')). Note that the '{entityName}' and '{substringToSearch}' fields are checked case insensitively.
+  --search: string@search-completer # The $search parameter is used in conjunction with the $filter parameter to return three different outputs depending on the parameter passed in. With $search=AllowedParents the API will return the entity info of all groups that the requested entity will be able to reparent to as determined by the user's permissions. With $search=AllowedChildren the API will return the entity info of all entities that can be added as children of the requested entity. With $search=ParentAndFirstLevelChildren the API will return the parent and first level of children that the user has either direct access to or indirect access via one of their descendants.
+  --filter: string # The filter parameter allows you to filter on the name or display name fields. You can check for equality on the name field (e.g. name eq '{entityName}') and you can check for substrings on either the name or display name fields(e.g. contains(name, '{substringToSearch}'), contains(displayName, '{substringToSearch')). Note that the '{entityName}' and '{substringToSearch}' fields are checked case insensitively.
   --view: string@view-completer # The view parameter allows clients to filter the type of data that is returned by the getEntities call.
   --group-name: string # A filter which allows the get entities call to focus on a particular group (i.e. "$filter=name eq 'groupName'")
   --cache-control: string # Indicates that the request shouldn't utilize any caches.
@@ -145,10 +154,10 @@ export def "providers-microsoft-management-get-entities list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$skiptoken" $skiptoken "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$search" $search "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$view" $view "scalar") (serialize-qp "groupName" $group_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.Management/getEntities" $qp)
-  let extra_headers = {"Cache-Control": $cache_control} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Cache-Control": $cache_control} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -173,10 +182,10 @@ export def "providers-microsoft-management-management-groups list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$skiptoken" $skiptoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.Management/managementGroups" $qp)
-  let extra_headers = {"Cache-Control": $cache_control} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Cache-Control": $cache_control} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -200,11 +209,11 @@ export def "providers-microsoft-management-management-groups delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/providers/Microsoft.Management/managementGroups/{group_id}") $qp)
-  let extra_headers = {"Cache-Control": $cache_control} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/providers/Microsoft.Management/managementGroups/{group_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Cache-Control": $cache_control} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -224,18 +233,18 @@ export def "providers-microsoft-management-management-groups get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2018-01-01-preview.
   --expand: string@expand-completer # The $expand=children query string parameter allows clients to request inclusion of children in the response payload.
-  --recurse: oneof<nothing, bool> # The $recurse=true query string parameter allows clients to request inclusion of entire hierarchy in the response payload. Note that  $expand=children must be passed up if $recurse is set to true.
+  --recurse: oneof<nothing, bool> # The $recurse=true query string parameter allows clients to request inclusion of entire hierarchy in the response payload. Note that $expand=children must be passed up if $recurse is set to true.
   --filter: string # A filter which allows the exclusion of subscriptions from results (i.e. '$filter=children.childType ne Subscription')
   --cache-control: string # Indicates that the request shouldn't utilize any caches.
 ]: nothing -> record<id: string, name: string, properties: record<children: list<record>, details: record<parent: record, updatedBy: string, updatedTime: string, version: float>, displayName: string, roles: list<string>, tenantId: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$expand" $expand "scalar") (serialize-qp "$recurse" $recurse "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/providers/Microsoft.Management/managementGroups/{group_id}") $qp)
-  let extra_headers = {"Cache-Control": $cache_control} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/providers/Microsoft.Management/managementGroups/{group_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Cache-Control": $cache_control} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -259,11 +268,11 @@ export def "providers-microsoft-management-management-groups update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/providers/Microsoft.Management/managementGroups/{group_id}") $qp)
-  let extra_headers = {"Cache-Control": $cache_control} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/providers/Microsoft.Management/managementGroups/{group_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Cache-Control": $cache_control} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -287,11 +296,11 @@ export def "providers-microsoft-management-management-groups create-or-update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/providers/Microsoft.Management/managementGroups/{group_id}") $qp)
-  let extra_headers = {"Cache-Control": $cache_control} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/providers/Microsoft.Management/managementGroups/{group_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Cache-Control": $cache_control} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -316,7 +325,7 @@ export def "providers-microsoft-management-management-groups-descendants get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$skiptoken" $skiptoken "scalar") (serialize-qp "$top" $top "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/providers/Microsoft.Management/managementGroups/{group_id}/descendants") $qp)
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/providers/Microsoft.Management/managementGroups/{group_id}/descendants") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -343,11 +352,11 @@ export def "providers-microsoft-management-management-groups-subscriptions delet
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({group_id: $group_id, subscription_id: $subscription_id} | format pattern "/providers/Microsoft.Management/managementGroups/{group_id}/subscriptions/{subscription_id}") $qp)
-  let extra_headers = {"Cache-Control": $cache_control} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), subscription_id: (encode-path-segment $subscription_id)} | format pattern "/providers/Microsoft.Management/managementGroups/{group_id}/subscriptions/{subscription_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Cache-Control": $cache_control} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -372,11 +381,11 @@ export def "providers-microsoft-management-management-groups-subscriptions creat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({group_id: $group_id, subscription_id: $subscription_id} | format pattern "/providers/Microsoft.Management/managementGroups/{group_id}/subscriptions/{subscription_id}") $qp)
-  let extra_headers = {"Cache-Control": $cache_control} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), subscription_id: (encode-path-segment $subscription_id)} | format pattern "/providers/Microsoft.Management/managementGroups/{group_id}/subscriptions/{subscription_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Cache-Control": $cache_control} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -432,7 +441,7 @@ export def "providers-microsoft-management-start-tenant-backfill start" [
 #
 # POST /providers/Microsoft.Management/tenantBackfillStatus
 # operationId: TenantBackfillStatus
-export def "providers-microsoft-management-tenant-backfill-status post" [
+export def "providers-microsoft-management-tenant-backfill-status create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

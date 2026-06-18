@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -171,11 +180,11 @@ export def "1-sandboxes create-sandbox" [
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/1/sandboxes")
-  let body = {"commitBaseTemplate": $commit_base_template, "description": $description, "name": $name, "ownerOrganisationName": $owner_organisation_name, "parentSandboxName": $parent_sandbox_name, "transportType": $transport_type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"commitBaseTemplate": $commit_base_template, "description": $description, "name": $name, "ownerOrganisationName": $owner_organisation_name, "parentSandboxName": $parent_sandbox_name, "transportType": $transport_type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # deleteSandbox
@@ -195,7 +204,7 @@ export def "1-sandboxes delete-sandbox" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({sandbox_name: $sandbox_name} | format pattern "/1/sandboxes/{sandbox_name}"))
+  let full_url = (build-url $base ({sandbox_name: (encode-path-segment $sandbox_name)} | format pattern "/1/sandboxes/{sandbox_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -218,7 +227,7 @@ export def "1-sandboxes get-sandbox" [
 ]: nothing -> record<apiDefinition: string, childSandboxes: list<any>, configuredRoutes: table<activeErrorOverride: bool, activeLatency: bool, defaultLatency: int, errorOverrideType: string, loadLatency: int, loadThreshold: int, method: string, path: string, properties: record, routeConfig: record, transport: string>, description: string, gitAccessToken: string, gitUrl: string, hasRepository: bool, id: string, ipWhitelist: list<string>, name: string, parentSandbox: any, properties: record, proxyStatus: string, runtimeVersion: string, sandboxUrl: string, stackType: string, transportType: string> {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({sandbox_name: $sandbox_name} | format pattern "/1/sandboxes/{sandbox_name}"))
+  let full_url = (build-url $base ({sandbox_name: (encode-path-segment $sandbox_name)} | format pattern "/1/sandboxes/{sandbox_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -228,9 +237,9 @@ export def "1-sandboxes get-sandbox" [
 #
 # PUT /1/sandboxes/{sandboxName}
 # operationId: updateSandbox
-# --childSandboxes item shape: {apiDefinition?: "None"|"Apiary"|"Swagger_V2_Json"|"RAML_V08"|"WSDL", childSandboxes?: list, configuredRoutes?: list, description?: string, gitAccessToken?: string, gitUrl?: string, hasRepository?: bool, id?: string, ipWhitelist?: list, name: string, parentSandbox?: record, properties?: record, proxyStatus?: "STARTED"|"STOPPED", runtimeVersion?: "VERSION_1"|"VERSION_2", sandboxUrl?: string, stackType?: "JavaScript", transportType?: "HTTP"}
+# --childSandboxes item shape: {apiDefinition?: "None"|"Apiary"|"Swagger_V2_Json"|"RAML_V08"|"WSDL", childSandboxes?: list, configuredRoutes?: list, description?: string, gitAccessToken?: string, gitUrl?: string, hasRepository?: bool, id?: string, ipWhitelist?: list<string>, name: string, parentSandbox?: record, properties?: record, proxyStatus?: "STARTED"|"STOPPED", runtimeVersion?: "VERSION_1"|"VERSION_2", sandboxUrl?: string, stackType?: "JavaScript", transportType?: "HTTP"}
 # --configuredRoutes item shape: {activeErrorOverride?: bool, activeLatency?: bool, defaultLatency?: int, errorOverrideType: "NONE"|"TIMEOUT"|"SERVICE_DOWN", loadLatency?: int, loadThreshold?: int, method?: string, path?: string, properties?: record, routeConfig?: record, transport?: string}
-# --parentSandbox shape: {apiDefinition?: "None"|"Apiary"|"Swagger_V2_Json"|"RAML_V08"|"WSDL", childSandboxes?: list, configuredRoutes?: list, description?: string, gitAccessToken?: string, gitUrl?: string, hasRepository?: bool, id?: string, ipWhitelist?: list, name: string, parentSandbox?: record, properties?: record, proxyStatus?: "STARTED"|"STOPPED", runtimeVersion?: "VERSION_1"|"VERSION_2", sandboxUrl?: string, stackType?: "JavaScript", transportType?: "HTTP"}
+# --parentSandbox shape: {apiDefinition?: "None"|"Apiary"|"Swagger_V2_Json"|"RAML_V08"|"WSDL", childSandboxes?: list, configuredRoutes?: list, description?: string, gitAccessToken?: string, gitUrl?: string, hasRepository?: bool, id?: string, ipWhitelist?: list<string>, name: string, parentSandbox?: record, properties?: record, proxyStatus?: "STARTED"|"STOPPED", runtimeVersion?: "VERSION_1"|"VERSION_2", sandboxUrl?: string, stackType?: "JavaScript", transportType?: "HTTP"}
 export def "1-sandboxes update-sandbox" [
   sandbox_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -242,16 +251,16 @@ export def "1-sandboxes update-sandbox" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-definition: string@api-definition-completer # The import source of this Sandbox.
-  --child-sandboxes: list # Clones of this Sandbox. — item shape: {apiDefinition?: "None"|"Apiary"|"Swagger_V2_Json"|"RAML_V08"|"WSDL", childSandboxes?: list, configuredRoutes?: list, description?: string, gitAccessToken?: string, gitUrl?: string, hasRepository?: bool, id?: string, ipWhitelist?: list, name: string, parentSandbox?: record, properties?: record, proxyStatus?: "STARTED"|"STOPPED", runtimeVersion?: "VERSION_1"|"VERSION_2", sandboxUrl?: string, stackType?: "JavaScript", transportType?: "HTTP"}
+  --child-sandboxes: list # Clones of this Sandbox. — item shape: {apiDefinition?: "None"|"Apiary"|"Swagger_V2_Json"|"RAML_V08"|"WSDL", childSandboxes?: list, configuredRoutes?: list, description?: string, gitAccessToken?: string, gitUrl?: string, hasRepository?: bool, id?: string, ipWhitelist?: list<string>, name: string, parentSandbox?: record, properties?: record, proxyStatus?: "STARTED"|"STOPPED", runtimeVersion?: "VERSION_1"|"VERSION_2", sandboxUrl?: string, stackType?: "JavaScript", transportType?: "HTTP"}
   --configured-routes: list # Extra configuration applied to some routes, delays, overrides etc. — item shape: {activeErrorOverride?: bool, activeLatency?: bool, defaultLatency?: int, errorOverrideType: "NONE"|"TIMEOUT"|"SERVICE_DOWN", loadLatency?: int, loadThreshold?: int, method?: string, path?: string, properties?: record, routeConfig?: record, transport?: string}
   --description: string
   --git-access-token: string
   --git-url: string # The git clone URL.
   --has-repository: oneof<nothing, bool> # Whether this Sandbox has a git repository or not.
   --id: string # The ID of the Sandbox.
-  --ip-whitelist: list # The list of IPs allowed to make requests, all allowed if omitted.
+  --ip-whitelist: list<string> # The list of IPs allowed to make requests, all allowed if omitted.
   name: string
-  --parent-sandbox: record # shape: {apiDefinition?: "None"|"Apiary"|"Swagger_V2_Json"|"RAML_V08"|"WSDL", childSandboxes?: list, configuredRoutes?: list, description?: string, gitAccessToken?: string, gitUrl?: string, hasRepository?: bool, id?: string, ipWhitelist?: list, name: string, parentSandbox?: record, properties?: record, proxyStatus?: "STARTED"|"STOPPED", runtimeVersion?: "VERSION_1"|"VERSION_2", sandboxUrl?: string, stackType?: "JavaScript", transportType?: "HTTP"}
+  --parent-sandbox: record # shape: {apiDefinition?: "None"|"Apiary"|"Swagger_V2_Json"|"RAML_V08"|"WSDL", childSandboxes?: list, configuredRoutes?: list, description?: string, gitAccessToken?: string, gitUrl?: string, hasRepository?: bool, id?: string, ipWhitelist?: list<string>, name: string, parentSandbox?: record, properties?: record, proxyStatus?: "STARTED"|"STOPPED", runtimeVersion?: "VERSION_1"|"VERSION_2", sandboxUrl?: string, stackType?: "JavaScript", transportType?: "HTTP"}
   --properties: record
   --proxy-status: string@proxy-status-completer # The listener status.
   --runtime-version: string@runtime-version-completer # The library version of this Sandbox.
@@ -262,19 +271,19 @@ export def "1-sandboxes update-sandbox" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({sandbox_name: $sandbox_name} | format pattern "/1/sandboxes/{sandbox_name}"))
-  let body = {"apiDefinition": $api_definition, "childSandboxes": $child_sandboxes, "configuredRoutes": $configured_routes, "description": $description, "gitAccessToken": $git_access_token, "gitUrl": $git_url, "hasRepository": $has_repository, "id": $id, "ipWhitelist": $ip_whitelist, "name": $name, "parentSandbox": $parent_sandbox, "properties": $properties, "proxyStatus": $proxy_status, "runtimeVersion": $runtime_version, "sandboxUrl": $sandbox_url, "stackType": $stack_type, "transportType": $transport_type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({sandbox_name: (encode-path-segment $sandbox_name)} | format pattern "/1/sandboxes/{sandbox_name}"))
+  let req_body = {"apiDefinition": $api_definition, "childSandboxes": $child_sandboxes, "configuredRoutes": $configured_routes, "description": $description, "gitAccessToken": $git_access_token, "gitUrl": $git_url, "hasRepository": $has_repository, "id": $id, "ipWhitelist": $ip_whitelist, "name": $name, "parentSandbox": $parent_sandbox, "properties": $properties, "proxyStatus": $proxy_status, "runtimeVersion": $runtime_version, "sandboxUrl": $sandbox_url, "stackType": $stack_type, "transportType": $transport_type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # forkSandbox
 #
 # GET /1/sandboxes/{sandboxName}/fork
 # operationId: forkSandbox
-export def "1-sandboxes-fork forkSandbox" [
+export def "1-sandboxes-fork get-sandbox" [
   sandbox_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -287,7 +296,7 @@ export def "1-sandboxes-fork forkSandbox" [
 ]: nothing -> record<apiDefinition: string, childSandboxes: list<any>, configuredRoutes: table<activeErrorOverride: bool, activeLatency: bool, defaultLatency: int, errorOverrideType: string, loadLatency: int, loadThreshold: int, method: string, path: string, properties: record, routeConfig: record, transport: string>, description: string, gitAccessToken: string, gitUrl: string, hasRepository: bool, id: string, ipWhitelist: list<string>, name: string, parentSandbox: any, properties: record, proxyStatus: string, runtimeVersion: string, sandboxUrl: string, stackType: string, transportType: string> {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({sandbox_name: $sandbox_name} | format pattern "/1/sandboxes/{sandbox_name}/fork"))
+  let full_url = (build-url $base ({sandbox_name: (encode-path-segment $sandbox_name)} | format pattern "/1/sandboxes/{sandbox_name}/fork"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -310,7 +319,7 @@ export def "1-sandboxes-state delete-sandbox" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({sandbox_name: $sandbox_name} | format pattern "/1/sandboxes/{sandbox_name}/state"))
+  let full_url = (build-url $base ({sandbox_name: (encode-path-segment $sandbox_name)} | format pattern "/1/sandboxes/{sandbox_name}/state"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -333,7 +342,7 @@ export def "1-sandboxes-state get-sandbox" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({sandbox_name: $sandbox_name} | format pattern "/1/sandboxes/{sandbox_name}/state"))
+  let full_url = (build-url $base ({sandbox_name: (encode-path-segment $sandbox_name)} | format pattern "/1/sandboxes/{sandbox_name}/state"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -97,7 +106,7 @@ export def commands []: nothing -> table {
 # POST /publish/v2/attractions
 # operationId: publishAttraction
 # --classifications item shape: {genre?: record, primary?: bool, segment?: record, subGenre?: record, subType?: record, type?: record}
-# --images item shape: {attribution?: string, domains?: list, fallback?: bool, height?: int, ratio?: "16_9"|"3_2"|"4_3", url?: string, width?: int}
+# --images item shape: {attribution?: string, domains?: list<string>, fallback?: bool, height?: int, ratio?: "16_9"|"3_2"|"4_3", url?: string, width?: int}
 # --source shape: {id?: string, name?: string}
 export def "publish-attractions publish" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -114,27 +123,27 @@ export def "publish-attractions publish" [
   --classifications: list # Attraction's classifications — item shape: {genre?: record, primary?: bool, segment?: record, subGenre?: record, subType?: record, type?: record}
   --descriptions: record # Descriptions of the entity - multi-lingual fields (e.g. en-us: description)
   --discoverable: oneof<nothing, bool> # True if the entity is dicoverable in discovery API (default: false)
-  --images: list # Images of the entity — item shape: {attribution?: string, domains?: list, fallback?: bool, height?: int, ratio?: "16_9"|"3_2"|"4_3", url?: string, width?: int}
+  --images: list # Images of the entity — item shape: {attribution?: string, domains?: list<string>, fallback?: bool, height?: int, ratio?: "16_9"|"3_2"|"4_3", url?: string, width?: int}
   --names: record # Names of the entity - multi-lingual fields (e.g. en-us: name)
   --references: record # References of this entity in an other system. Reference is the exact same entity (e.g. sourceName: id)
   --relationships: list # Relationships on the entity, like if the entity is a duplicate of another one
   --body-source: record # Source — shape: {id?: string, name?: string}
   --test: oneof<nothing, bool> # Indicate if this is a test entity, by default test entities won't appear in discovery API (default: false)
   type: string@type-completer # Type of the entity
-  --body-url: string # URL of a web site detail page of the entity
+  --url: string # URL of a web site detail page of the entity
   --version: int # Version of the entity. Version is to avoid updated an entity with an older version (format: int64)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/publish/v2/attractions")
-  let body = {"active": $active, "additionalInfos": $additional_infos, "classifications": $classifications, "descriptions": $descriptions, "discoverable": $discoverable, "images": $images, "names": $names, "references": $references, "relationships": $relationships, "source": $body_source, "test": $test, "type": $type, "url": $body_url, "version": $version} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"TMPS-Correlation-Id": $tmps_correlation_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"active": $active, "additionalInfos": $additional_infos, "classifications": $classifications, "descriptions": $descriptions, "discoverable": $discoverable, "images": $images, "names": $names, "references": $references, "relationships": $relationships, "source": $body_source, "test": $test, "type": $type, "url": $url, "version": $version} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"TMPS-Correlation-Id": $tmps_correlation_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Publish a patch on an attraction
@@ -158,19 +167,19 @@ export def "publish-attractions update" [
   related_entity_type: string@related-entity-type-completer # The type of the entity to apply the augmentation data.
   --score: float # The confidence (%) level of the accuracy of this augmention data. 100 is the better (format: float)
   --body-source: string # The source where the augementation data came from
-  version_number: int # Vesion of this augmentation data. This field is to avoid updating entity with old data.  (format: int64)
+  version_number: int # Vesion of this augmentation data. This field is to avoid updating entity with old data. (format: int64)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/publish/v2/attractions/{id}"))
-  let body = {"changes": $changes, "relatedEntityId": $related_entity_id, "relatedEntityType": $related_entity_type, "score": $score, "source": $body_source, "versionNumber": $version_number} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"TMPS-Correlation-Id": $tmps_correlation_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/publish/v2/attractions/{id}"))
+  let req_body = {"changes": $changes, "relatedEntityId": $related_entity_id, "relatedEntityType": $related_entity_type, "score": $score, "source": $body_source, "versionNumber": $version_number} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"TMPS-Correlation-Id": $tmps_correlation_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Publish a video on an attraction
@@ -193,19 +202,19 @@ export def "publish-attractions-videos publish" [
   --embed-url: string # The url of the embeded video
   licensing_information: record # This class defines an entitlement data on the Publish API — shape: {license: string, regionRestriction?: record}
   --body-source: record # Source — shape: {id?: string, name?: string}
-  --body-url: string # The url of the video
+  url: string # The url of the video
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/publish/v2/attractions/{id}/videos"))
-  let body = {"embedUrl": $embed_url, "licensingInformation": $licensing_information, "source": $body_source, "url": $body_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"TMPS-Correlation-Id": $tmps_correlation_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/publish/v2/attractions/{id}/videos"))
+  let req_body = {"embedUrl": $embed_url, "licensingInformation": $licensing_information, "source": $body_source, "url": $url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"TMPS-Correlation-Id": $tmps_correlation_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Publish entitlements on an entity
@@ -234,13 +243,13 @@ export def "publish-entitlements publish" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/publish/v2/entitlements")
-  let body = {"data": $data, "relatedEntityId": $related_entity_id, "relatedEntitySource": $related_entity_source, "relatedEntityType": $related_entity_type, "source": $body_source, "versionNumber": $version_number} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"TMPS-Correlation-Id": $tmps_correlation_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"data": $data, "relatedEntityId": $related_entity_id, "relatedEntitySource": $related_entity_source, "relatedEntityType": $related_entity_type, "source": $body_source, "versionNumber": $version_number} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"TMPS-Correlation-Id": $tmps_correlation_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Publish an event
@@ -250,7 +259,7 @@ export def "publish-entitlements publish" [
 # --attractions item shape: {active?: bool, additionalInfos?: record, classifications?: list, descriptions?: record, discoverable?: bool, images?: list, names?: record, references?: record, relationships?: list, source?: record, test?: bool, type: "event"|"venue"|"attraction", url?: string, version?: int}
 # --classifications item shape: {genre?: record, primary?: bool, segment?: record, subGenre?: record, subType?: record, type?: record}
 # --dates shape: {access?: record, end?: record, start?: record, status?: record, timezone?: string}
-# --images item shape: {attribution?: string, domains?: list, fallback?: bool, height?: int, ratio?: "16_9"|"3_2"|"4_3", url?: string, width?: int}
+# --images item shape: {attribution?: string, domains?: list<string>, fallback?: bool, height?: int, ratio?: "16_9"|"3_2"|"4_3", url?: string, width?: int}
 # --location shape: {latitude?: float, longitude?: float}
 # --place shape: {address?: record, area?: record, city?: record, country?: record, location?: record, names?: record, postalCode?: string, state?: record}
 # --priceRanges item shape: {currency?: string, max?: float, min?: float, type?: "standard"}
@@ -258,7 +267,7 @@ export def "publish-entitlements publish" [
 # --publicVisibility shape: {endDateTime?: string, startDateTime?: string, visible?: bool}
 # --sales shape: {presales?: list, public?: record}
 # --source shape: {id?: string, name?: string}
-# --venue shape: {accessibleSeatingDetails?: record, active?: bool, additionalInfos?: record, address?: record, boxOfficeInfo?: record, city?: record, country?: record, currency?: string, descriptions?: record, discoverable?: bool, distance?: float, dma?: list, generalInfo?: record, images?: list, location?: record, markets?: list, names?: record, parkingDetails?: record, postalCode?: string, references?: record, relationships?: list, social?: record, source?: record, state?: record, test?: bool, timezone?: string, type: "event"|"venue"|"attraction", units?: string, url?: string, version?: int}
+# --venue shape: {accessibleSeatingDetails?: record, active?: bool, additionalInfos?: record, address?: record, boxOfficeInfo?: record, city?: record, country?: record, currency?: string, descriptions?: record, discoverable?: bool, distance?: float, dma?: list, generalInfo?: record, images?: list, location?: record, markets?: list, names?: record, parkingDetails?: record, postalCode?: string, references?: record, relationships?: list, social?: record, source?: record, state?: record, test?: bool, ... (5 more fields)}
 export def "publish-events publish" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -277,7 +286,7 @@ export def "publish-events publish" [
   --descriptions: record # Descriptions of the entity - multi-lingual fields (e.g. en-us: description)
   --discoverable: oneof<nothing, bool> # True if the entity is dicoverable in discovery API (default: false)
   --distance: float # format: double
-  --images: list # Images of the entity — item shape: {attribution?: string, domains?: list, fallback?: bool, height?: int, ratio?: "16_9"|"3_2"|"4_3", url?: string, width?: int}
+  --images: list # Images of the entity — item shape: {attribution?: string, domains?: list<string>, fallback?: bool, height?: int, ratio?: "16_9"|"3_2"|"4_3", url?: string, width?: int}
   --infos: record # Any information related to the event - multi-lingual fields (e.g. en-us: info)
   --location: record # Location — shape: {latitude?: float, longitude?: float}
   --names: record # Names of the entity - multi-lingual fields (e.g. en-us: name)
@@ -293,21 +302,21 @@ export def "publish-events publish" [
   --test: oneof<nothing, bool> # Indicate if this is a test entity, by default test entities won't appear in discovery API (default: false)
   type: string@type-completer # Type of the entity
   --units: string
-  --body-url: string # URL of a web site detail page of the entity
-  --venue: record # Venue — shape: {accessibleSeatingDetails?: record, active?: bool, additionalInfos?: record, address?: record, boxOfficeInfo?: record, city?: record, country?: record, currency?: string, descriptions?: record, discoverable?: bool, distance?: float, dma?: list, generalInfo?: record, images?: list, location?: record, markets?: list, names?: record, parkingDetails?: record, postalCode?: string, references?: record, relationships?: list, social?: record, source?: record, state?: record, test?: bool, timezone?: string, type: "event"|"venue"|"attraction", units?: string, url?: string, version?: int}
+  --url: string # URL of a web site detail page of the entity
+  --venue: record # Venue — shape: {accessibleSeatingDetails?: record, active?: bool, additionalInfos?: record, address?: record, boxOfficeInfo?: record, city?: record, country?: record, currency?: string, descriptions?: record, discoverable?: bool, distance?: float, dma?: list, generalInfo?: record, images?: list, location?: record, markets?: list, names?: record, parkingDetails?: record, postalCode?: string, references?: record, relationships?: list, social?: record, source?: record, state?: record, test?: bool, ... (5 more fields)}
   --version: int # Version of the entity. Version is to avoid updated an entity with an older version (format: int64)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/publish/v2/events")
-  let body = {"active": $active, "additionalInfos": $additional_infos, "attractions": $attractions, "classifications": $classifications, "dates": $dates, "descriptions": $descriptions, "discoverable": $discoverable, "distance": $distance, "images": $images, "infos": $infos, "location": $location, "names": $names, "place": $place, "pleaseNotes": $please_notes, "priceRanges": $price_ranges, "promoter": $promoter, "publicVisibility": $public_visibility, "references": $references, "relationships": $relationships, "sales": $sales, "source": $body_source, "test": $test, "type": $type, "units": $units, "url": $body_url, "venue": $venue, "version": $version} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"TMPS-Correlation-Id": $tmps_correlation_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"active": $active, "additionalInfos": $additional_infos, "attractions": $attractions, "classifications": $classifications, "dates": $dates, "descriptions": $descriptions, "discoverable": $discoverable, "distance": $distance, "images": $images, "infos": $infos, "location": $location, "names": $names, "place": $place, "pleaseNotes": $please_notes, "priceRanges": $price_ranges, "promoter": $promoter, "publicVisibility": $public_visibility, "references": $references, "relationships": $relationships, "sales": $sales, "source": $body_source, "test": $test, "type": $type, "units": $units, "url": $url, "venue": $venue, "version": $version} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"TMPS-Correlation-Id": $tmps_correlation_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Publish a patch on an event
@@ -331,19 +340,19 @@ export def "publish-events update" [
   related_entity_type: string@related-entity-type-completer # The type of the entity to apply the augmentation data.
   --score: float # The confidence (%) level of the accuracy of this augmention data. 100 is the better (format: float)
   --body-source: string # The source where the augementation data came from
-  version_number: int # Vesion of this augmentation data. This field is to avoid updating entity with old data.  (format: int64)
+  version_number: int # Vesion of this augmentation data. This field is to avoid updating entity with old data. (format: int64)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/publish/v2/events/{id}"))
-  let body = {"changes": $changes, "relatedEntityId": $related_entity_id, "relatedEntityType": $related_entity_type, "score": $score, "source": $body_source, "versionNumber": $version_number} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"TMPS-Correlation-Id": $tmps_correlation_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/publish/v2/events/{id}"))
+  let req_body = {"changes": $changes, "relatedEntityId": $related_entity_id, "relatedEntityType": $related_entity_type, "score": $score, "source": $body_source, "versionNumber": $version_number} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"TMPS-Correlation-Id": $tmps_correlation_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Publish a video on an event
@@ -366,19 +375,19 @@ export def "publish-events-videos publish" [
   --embed-url: string # The url of the embeded video
   licensing_information: record # This class defines an entitlement data on the Publish API — shape: {license: string, regionRestriction?: record}
   --body-source: record # Source — shape: {id?: string, name?: string}
-  --body-url: string # The url of the video
+  url: string # The url of the video
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/publish/v2/events/{id}/videos"))
-  let body = {"embedUrl": $embed_url, "licensingInformation": $licensing_information, "source": $body_source, "url": $body_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"TMPS-Correlation-Id": $tmps_correlation_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/publish/v2/events/{id}/videos"))
+  let req_body = {"embedUrl": $embed_url, "licensingInformation": $licensing_information, "source": $body_source, "url": $url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"TMPS-Correlation-Id": $tmps_correlation_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Publish extension on an entity
@@ -408,13 +417,13 @@ export def "publish-extensions publish" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/publish/v2/extensions")
-  let body = {"data": $data, "relatedEntityId": $related_entity_id, "relatedEntitySource": $related_entity_source, "relatedEntityType": $related_entity_type, "source": $body_source, "type": $type, "versionNumber": $version_number} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"TMPS-Correlation-Id": $tmps_correlation_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"data": $data, "relatedEntityId": $related_entity_id, "relatedEntitySource": $related_entity_source, "relatedEntityType": $related_entity_type, "source": $body_source, "type": $type, "versionNumber": $version_number} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"TMPS-Correlation-Id": $tmps_correlation_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Publish a venue
@@ -427,7 +436,7 @@ export def "publish-extensions publish" [
 # --country shape: {countryCode?: string, names?: record}
 # --dma item shape: {id?: int}
 # --generalInfo shape: {childRules?: record, generalRules?: record}
-# --images item shape: {attribution?: string, domains?: list, fallback?: bool, height?: int, ratio?: "16_9"|"3_2"|"4_3", url?: string, width?: int}
+# --images item shape: {attribution?: string, domains?: list<string>, fallback?: bool, height?: int, ratio?: "16_9"|"3_2"|"4_3", url?: string, width?: int}
 # --location shape: {latitude?: float, longitude?: float}
 # --markets item shape: {id?: string}
 # --social shape: {twitter?: record}
@@ -456,7 +465,7 @@ export def "publish-venues publish" [
   --distance: float # format: double
   --dma: list # The list of associated DMAs (Designated Market Areas) of the venue — item shape: {id?: int}
   --general-info: record # Venue general information — shape: {childRules?: record, generalRules?: record}
-  --images: list # Images of the entity — item shape: {attribution?: string, domains?: list, fallback?: bool, height?: int, ratio?: "16_9"|"3_2"|"4_3", url?: string, width?: int}
+  --images: list # Images of the entity — item shape: {attribution?: string, domains?: list<string>, fallback?: bool, height?: int, ratio?: "16_9"|"3_2"|"4_3", url?: string, width?: int}
   --location: record # Location — shape: {latitude?: float, longitude?: float}
   --markets: list # Markets of the venue — item shape: {id?: string}
   --names: record # Names of the entity - multi-lingual fields (e.g. en-us: name)
@@ -471,20 +480,20 @@ export def "publish-venues publish" [
   --timezone: string # Timezone of the venue
   type: string@type-completer # Type of the entity
   --units: string
-  --body-url: string # URL of a web site detail page of the entity
+  --url: string # URL of a web site detail page of the entity
   --version: int # Version of the entity. Version is to avoid updated an entity with an older version (format: int64)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/publish/v2/venues")
-  let body = {"accessibleSeatingDetails": $accessible_seating_details, "active": $active, "additionalInfos": $additional_infos, "address": $address, "boxOfficeInfo": $box_office_info, "city": $city, "country": $country, "currency": $currency, "descriptions": $descriptions, "discoverable": $discoverable, "distance": $distance, "dma": $dma, "generalInfo": $general_info, "images": $images, "location": $location, "markets": $markets, "names": $names, "parkingDetails": $parking_details, "postalCode": $postal_code, "references": $references, "relationships": $relationships, "social": $social, "source": $body_source, "state": $state, "test": $test, "timezone": $timezone, "type": $type, "units": $units, "url": $body_url, "version": $version} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"TMPS-Correlation-Id": $tmps_correlation_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"accessibleSeatingDetails": $accessible_seating_details, "active": $active, "additionalInfos": $additional_infos, "address": $address, "boxOfficeInfo": $box_office_info, "city": $city, "country": $country, "currency": $currency, "descriptions": $descriptions, "discoverable": $discoverable, "distance": $distance, "dma": $dma, "generalInfo": $general_info, "images": $images, "location": $location, "markets": $markets, "names": $names, "parkingDetails": $parking_details, "postalCode": $postal_code, "references": $references, "relationships": $relationships, "social": $social, "source": $body_source, "state": $state, "test": $test, "timezone": $timezone, "type": $type, "units": $units, "url": $url, "version": $version} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"TMPS-Correlation-Id": $tmps_correlation_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Publish a patch on a venue
@@ -508,17 +517,17 @@ export def "publish-venues update" [
   related_entity_type: string@related-entity-type-completer # The type of the entity to apply the augmentation data.
   --score: float # The confidence (%) level of the accuracy of this augmention data. 100 is the better (format: float)
   --body-source: string # The source where the augementation data came from
-  version_number: int # Vesion of this augmentation data. This field is to avoid updating entity with old data.  (format: int64)
+  version_number: int # Vesion of this augmentation data. This field is to avoid updating entity with old data. (format: int64)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/publish/v2/venues/{id}"))
-  let body = {"changes": $changes, "relatedEntityId": $related_entity_id, "relatedEntityType": $related_entity_type, "score": $score, "source": $body_source, "versionNumber": $version_number} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"TMPS-Correlation-Id": $tmps_correlation_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/publish/v2/venues/{id}"))
+  let req_body = {"changes": $changes, "relatedEntityId": $related_entity_id, "relatedEntityType": $related_entity_type, "score": $score, "source": $body_source, "versionNumber": $version_number} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"TMPS-Correlation-Id": $tmps_correlation_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

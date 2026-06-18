@@ -36,6 +36,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -103,7 +112,7 @@ export def "storage-profile-system-profiles create-client" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ttl: int # This parameter sets the the Time To Live (TTL), in days, of the specific document being created or updated with this request. After this period of time from the moment of the request, the document is deleted. By sending this parameter you override the TTL set for the schema.  > Currently, the available default document schemas have no TTL. This means that documents are stored indefinitely, unless a TTL is sent when creating or updating. (e.g. 365)
+  --ttl: int # This parameter sets the the Time To Live (TTL), in days, of the specific document being created or updated with this request. After this period of time from the moment of the request, the document is deleted. By sending this parameter you override the TTL set for the schema. > Currently, the available default document schemas have no TTL. This means that documents are stored indefinitely, unless a TTL is sent when creating or updating. (e.g. 365)
   --content-type: string # Type of the content being sent. (e.g. application/json)
   --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
   --birth-date: string # Client's birth date in ISO 8601 format. (e.g. 1925-11-17)
@@ -118,13 +127,15 @@ export def "storage-profile-system-profiles create-client" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ttl" $ttl "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/storage/profile-system/profiles" $qp)
-  let body = {"birthDate": $birth_date, "document": $document, "documentType": $document_type, "email": $email, "firstName": $first_name, "lastName": $last_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"birthDate": $birth_date, "document": $document, "documentType": $document_type, "email": $email, "firstName": $first_name, "lastName": $last_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Create or update profile schema
@@ -146,7 +157,7 @@ export def "storage-profile-system-profiles-schema create-or-update" [
   description: string # Schema's human readable description. (e.g. This schema describes a b2c customer profile.)
   --document-ttl: int # Document time to live, in days. After this many days from its creation or update, any document cerated from this schema will be deleted. (e.g. 1825)
   properties: record # Object describing each field in your desired schema. In this object, each property is a new object, describing the field according to: `type` (string); `sensitive` (boolean); `pii` (boolean) and; `items.type` (if field is array). — shape: {{fieldName}?: record}
-  required: list # Schema required fields. (e.g. [firstName, lastName, email, document, documentType])
+  required: list<string> # Schema required fields. (e.g. [firstName, lastName, email, document, documentType])
   title: string # Schema title. (e.g. Client profile schema)
   type: string # Schema type. (e.g. object)
   --v-indexed: list # e.g. [email, document]
@@ -157,13 +168,15 @@ export def "storage-profile-system-profiles-schema create-or-update" [
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/storage/profile-system/profiles/schema")
-  let body = {"description": $description, "documentTTL": $document_ttl, "properties": $properties, "required": $required, "title": $title, "type": $type, "v-indexed": $v_indexed, "v-unique": $v_unique, "version": $version} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"description": $description, "documentTTL": $document_ttl, "properties": $properties, "required": $required, "title": $title, "type": $type, "v-indexed": $v_indexed, "v-unique": $v_unique, "version": $version} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Delete client profile
@@ -185,11 +198,11 @@ export def "storage-profile-system-profiles delete-client" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/api/storage/profile-system/profiles/{profile_id}"))
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/api/storage/profile-system/profiles/{profile_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -207,18 +220,18 @@ export def "storage-profile-system-profiles get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --alternative-key: string # The `profileId` path parameter may be substituted by other profile fields in this request. When making this request, send the `alternativeKey` parameter with a value equal to the key of the field you wish to use as `profileId`.  > Currently, there are two possible values for this parameter: `email` and `document`. (e.g. email)
+  --alternative-key: string # The `profileId` path parameter may be substituted by other profile fields in this request. When making this request, send the `alternativeKey` parameter with a value equal to the key of the field you wish to use as `profileId`. > Currently, there are two possible values for this parameter: `email` and `document`. (e.g. email)
   --content-type: string # Type of the content being sent. (e.g. application/json)
   --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
 ]: nothing -> list<any> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alternativeKey" $alternative_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/api/storage/profile-system/profiles/{profile_id}") $qp)
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/api/storage/profile-system/profiles/{profile_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -236,29 +249,31 @@ export def "storage-profile-system-profiles update-client" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --alternative-key: string # The `profileId` path parameter may be substituted by other profile fields in this request. When making this request, send the `alternativeKey` parameter with a value equal to the key of the field you wish to use as `profileId`.  > Currently, there are two possible values for this parameter: `email` and `document`. (e.g. email)
-  --ttl: int # This parameter sets the the Time To Live (TTL), in days, of the specific document being created or updated with this request. After this period of time from the moment of the request, the document is deleted. By sending this parameter you override the TTL set for the schema.  > Currently, the available default document schemas have no TTL. This means that documents are stored indefinitely, unless a TTL is sent when creating or updating. (e.g. 365)
+  --alternative-key: string # The `profileId` path parameter may be substituted by other profile fields in this request. When making this request, send the `alternativeKey` parameter with a value equal to the key of the field you wish to use as `profileId`. > Currently, there are two possible values for this parameter: `email` and `document`. (e.g. email)
+  --ttl: int # This parameter sets the the Time To Live (TTL), in days, of the specific document being created or updated with this request. After this period of time from the moment of the request, the document is deleted. By sending this parameter you override the TTL set for the schema. > Currently, the available default document schemas have no TTL. This means that documents are stored indefinitely, unless a TTL is sent when creating or updating. (e.g. 365)
   --content-type: string # Type of the content being sent. (e.g. application/json)
   --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
-  --birth-date: any
-  --document: any
-  --document-type: any
-  --email: any
-  --first-name: any
-  --last-name: any
+  --birth-date: string # Client's birth date in ISO 8601 format. (e.g. 1925-11-17)
+  --document: string # Client's document. (e.g. 12345678900)
+  --document-type: string # Type of document informed in `document`. (e.g. CPF)
+  --email: string # Client's email address. (e.g. john.doe@example.com)
+  --first-name: string # Client's first name. (e.g. John)
+  --last-name: string # Client's last name. (e.g. Doe)
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alternativeKey" $alternative_key "scalar") (serialize-qp "ttl" $ttl "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/api/storage/profile-system/profiles/{profile_id}") $qp)
-  let body = {"birthDate": $birth_date, "document": $document, "documentType": $document_type, "email": $email, "firstName": $first_name, "lastName": $last_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/api/storage/profile-system/profiles/{profile_id}") $qp)
+  let req_body = {"birthDate": $birth_date, "document": $document, "documentType": $document_type, "email": $email, "firstName": $first_name, "lastName": $last_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Get client addresses
@@ -275,18 +290,18 @@ export def "storage-profile-system-profiles-addresses get-client" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --alternative-key: string # The `profileId` path parameter may be substituted by other profile fields in this request. When making this request, send the `alternativeKey` parameter with a value equal to the key of the field you wish to use as `profileId`.  > Currently, there are two possible values for this parameter: `email` and `document`. (e.g. email)
+  --alternative-key: string # The `profileId` path parameter may be substituted by other profile fields in this request. When making this request, send the `alternativeKey` parameter with a value equal to the key of the field you wish to use as `profileId`. > Currently, there are two possible values for this parameter: `email` and `document`. (e.g. email)
   --content-type: string # Type of the content being sent. (e.g. application/json)
   --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
 ]: nothing -> list<any> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alternativeKey" $alternative_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/api/storage/profile-system/profiles/{profile_id}/addresses") $qp)
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/api/storage/profile-system/profiles/{profile_id}/addresses") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -304,7 +319,7 @@ export def "storage-profile-system-profiles-addresses create-client-address" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --alternative-key: string # The `profileId` path parameter may be substituted by other profile fields in this request. When making this request, send the `alternativeKey` parameter with a value equal to the key of the field you wish to use as `profileId`.  > Currently, there are two possible values for this parameter: `email` and `document`. (e.g. email)
+  --alternative-key: string # The `profileId` path parameter may be substituted by other profile fields in this request. When making this request, send the `alternativeKey` parameter with a value equal to the key of the field you wish to use as `profileId`. > Currently, there are two possible values for this parameter: `email` and `document`. (e.g. email)
   --content-type: string # Type of the content being sent. (e.g. application/json)
   --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
   administrative_area_level1: string # Name of administrative area, such as the state or province. (e.g. RJ)
@@ -320,14 +335,16 @@ export def "storage-profile-system-profiles-addresses create-client-address" [
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alternativeKey" $alternative_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/api/storage/profile-system/profiles/{profile_id}/addresses") $qp)
-  let body = {"administrativeAreaLevel1": $administrative_area_level1, "countryCode": $country_code, "countryName": $country_name, "locality": $locality, "localityAreaLevel1": $locality_area_level1, "postalCode": $postal_code, "route": $route, "streetNumber": $street_number} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/api/storage/profile-system/profiles/{profile_id}/addresses") $qp)
+  let req_body = {"administrativeAreaLevel1": $administrative_area_level1, "countryCode": $country_code, "countryName": $country_name, "locality": $locality, "localityAreaLevel1": $locality_area_level1, "postalCode": $postal_code, "route": $route, "streetNumber": $street_number} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Get unmasked client addresses
@@ -344,18 +361,18 @@ export def "storage-profile-system-profiles-addresses-unmask get-unmasked-client
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --alternative-key: string # The `profileId` path parameter may be substituted by other profile fields in this request. When making this request, send the `alternativeKey` parameter with a value equal to the key of the field you wish to use as `profileId`.  > Currently, there are two possible values for this parameter: `email` and `document`. (e.g. email)
+  --alternative-key: string # The `profileId` path parameter may be substituted by other profile fields in this request. When making this request, send the `alternativeKey` parameter with a value equal to the key of the field you wish to use as `profileId`. > Currently, there are two possible values for this parameter: `email` and `document`. (e.g. email)
   --content-type: string # Type of the content being sent. (e.g. application/json)
   --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
 ]: nothing -> list<record> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alternativeKey" $alternative_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/api/storage/profile-system/profiles/{profile_id}/addresses/unmask") $qp)
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/api/storage/profile-system/profiles/{profile_id}/addresses/unmask") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -374,18 +391,18 @@ export def "storage-profile-system-profiles-addresses delete-address" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --alternative-key: string # The `profileId` path parameter may be substituted by other profile fields in this request. When making this request, send the `alternativeKey` parameter with a value equal to the key of the field you wish to use as `profileId`.  > Currently, there are two possible values for this parameter: `email` and `document`. (e.g. email)
+  --alternative-key: string # The `profileId` path parameter may be substituted by other profile fields in this request. When making this request, send the `alternativeKey` parameter with a value equal to the key of the field you wish to use as `profileId`. > Currently, there are two possible values for this parameter: `email` and `document`. (e.g. email)
   --content-type: string # Type of the content being sent. (e.g. application/json)
   --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alternativeKey" $alternative_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id, address_id: $address_id} | format pattern "/api/storage/profile-system/profiles/{profile_id}/addresses/{address_id}") $qp)
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), address_id: (encode-path-segment $address_id)} | format pattern "/api/storage/profile-system/profiles/{profile_id}/addresses/{address_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -404,18 +421,18 @@ export def "storage-profile-system-profiles-addresses get-address" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --alternative-key: string # The `profileId` path parameter may be substituted by other profile fields in this request. When making this request, send the `alternativeKey` parameter with a value equal to the key of the field you wish to use as `profileId`.  > Currently, there are two possible values for this parameter: `email` and `document`. (e.g. email)
+  --alternative-key: string # The `profileId` path parameter may be substituted by other profile fields in this request. When making this request, send the `alternativeKey` parameter with a value equal to the key of the field you wish to use as `profileId`. > Currently, there are two possible values for this parameter: `email` and `document`. (e.g. email)
   --content-type: string # Type of the content being sent. (e.g. application/json)
   --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alternativeKey" $alternative_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id, address_id: $address_id} | format pattern "/api/storage/profile-system/profiles/{profile_id}/addresses/{address_id}") $qp)
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), address_id: (encode-path-segment $address_id)} | format pattern "/api/storage/profile-system/profiles/{profile_id}/addresses/{address_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -434,30 +451,32 @@ export def "storage-profile-system-profiles-addresses update-client-address" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --alternative-key: string # The `profileId` path parameter may be substituted by other profile fields in this request. When making this request, send the `alternativeKey` parameter with a value equal to the key of the field you wish to use as `profileId`.  > Currently, there are two possible values for this parameter: `email` and `document`. (e.g. email)
+  --alternative-key: string # The `profileId` path parameter may be substituted by other profile fields in this request. When making this request, send the `alternativeKey` parameter with a value equal to the key of the field you wish to use as `profileId`. > Currently, there are two possible values for this parameter: `email` and `document`. (e.g. email)
   --content-type: string # Type of the content being sent. (e.g. application/json)
   --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
-  --administrative-area-level1: any
-  --country-code: any
-  --country-name: any
-  --locality: any
-  --locality-area-level1: any
-  --postal-code: any
-  --route: any
-  --street-number: any
+  --administrative-area-level1: string # Name of administrative area, such as the state or province. (e.g. RJ)
+  --country-code: string # Two letter country code. (e.g. BR)
+  --country-name: string # Name of the address country. (e.g. Brasil)
+  --locality: string # Name of address locality, such as the city. (e.g. Locality)
+  --locality-area-level1: string # Name of the address locality area, such as the neighborhood or district. (e.g. Locality area)
+  --postal-code: string # Address postal code. (e.g. 20200-000)
+  --route: string # Name of the address country. (e.g. Brasil)
+  --street-number: string # Name of the address country. (e.g. Brasil)
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alternativeKey" $alternative_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id, address_id: $address_id} | format pattern "/api/storage/profile-system/profiles/{profile_id}/addresses/{address_id}") $qp)
-  let body = {"administrativeAreaLevel1": $administrative_area_level1, "countryCode": $country_code, "countryName": $country_name, "locality": $locality, "localityAreaLevel1": $locality_area_level1, "postalCode": $postal_code, "route": $route, "streetNumber": $street_number} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), address_id: (encode-path-segment $address_id)} | format pattern "/api/storage/profile-system/profiles/{profile_id}/addresses/{address_id}") $qp)
+  let req_body = {"administrativeAreaLevel1": $administrative_area_level1, "countryCode": $country_code, "countryName": $country_name, "locality": $locality, "localityAreaLevel1": $locality_area_level1, "postalCode": $postal_code, "route": $route, "streetNumber": $street_number} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Get unmasked address
@@ -476,18 +495,18 @@ export def "storage-profile-system-profiles-addresses-unmask get-unmasked-addres
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --reason: string # Reason for requesting unmasked data. (e.g. data-validation)
-  --alternative-key: string # The `profileId` path parameter may be substituted by other profile fields in this request. When making this request, send the `alternativeKey` parameter with a value equal to the key of the field you wish to use as `profileId`.  > Currently, there are two possible values for this parameter: `email` and `document`. (e.g. email)
+  --alternative-key: string # The `profileId` path parameter may be substituted by other profile fields in this request. When making this request, send the `alternativeKey` parameter with a value equal to the key of the field you wish to use as `profileId`. > Currently, there are two possible values for this parameter: `email` and `document`. (e.g. email)
   --content-type: string # Type of the content being sent. (e.g. application/json)
   --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "reason" $reason "scalar") (serialize-qp "alternativeKey" $alternative_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id, address_id: $address_id} | format pattern "/api/storage/profile-system/profiles/{profile_id}/addresses/{address_id}/unmask") $qp)
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), address_id: (encode-path-segment $address_id)} | format pattern "/api/storage/profile-system/profiles/{profile_id}/addresses/{address_id}/unmask") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -508,18 +527,18 @@ export def "storage-profile-system-profiles-addresses-versions get-address" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --reason: string # Reason for requesting unmasked data. (e.g. data-validation)
-  --alternative-key: string # The `profileId` path parameter may be substituted by other profile fields in this request. When making this request, send the `alternativeKey` parameter with a value equal to the key of the field you wish to use as `profileId`.  > Currently, there are two possible values for this parameter: `email` and `document`. (e.g. email)
+  --alternative-key: string # The `profileId` path parameter may be substituted by other profile fields in this request. When making this request, send the `alternativeKey` parameter with a value equal to the key of the field you wish to use as `profileId`. > Currently, there are two possible values for this parameter: `email` and `document`. (e.g. email)
   --content-type: string # Type of the content being sent. (e.g. application/json)
   --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "reason" $reason "scalar") (serialize-qp "alternativeKey" $alternative_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id, address_id: $address_id, address_version_id: $address_version_id} | format pattern "/api/storage/profile-system/profiles/{profile_id}/addresses/{address_id}/versions/{address_version_id}") $qp)
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), address_id: (encode-path-segment $address_id), address_version_id: (encode-path-segment $address_version_id)} | format pattern "/api/storage/profile-system/profiles/{profile_id}/addresses/{address_id}/versions/{address_version_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -540,18 +559,18 @@ export def "storage-profile-system-profiles-addresses-versions-unmask get-unmask
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --reason: string # Reason for requesting unmasked data. (e.g. data-validation)
-  --alternative-key: string # The `profileId` path parameter may be substituted by other profile fields in this request. When making this request, send the `alternativeKey` parameter with a value equal to the key of the field you wish to use as `profileId`.  > Currently, there are two possible values for this parameter: `email` and `document`. (e.g. email)
+  --alternative-key: string # The `profileId` path parameter may be substituted by other profile fields in this request. When making this request, send the `alternativeKey` parameter with a value equal to the key of the field you wish to use as `profileId`. > Currently, there are two possible values for this parameter: `email` and `document`. (e.g. email)
   --content-type: string # Type of the content being sent. (e.g. application/json)
   --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "reason" $reason "scalar") (serialize-qp "alternativeKey" $alternative_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id, address_id: $address_id, address_version_id: $address_version_id} | format pattern "/api/storage/profile-system/profiles/{profile_id}/addresses/{address_id}/versions/{address_version_id}/unmask") $qp)
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), address_id: (encode-path-segment $address_id), address_version_id: (encode-path-segment $address_version_id)} | format pattern "/api/storage/profile-system/profiles/{profile_id}/addresses/{address_id}/versions/{address_version_id}/unmask") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -559,7 +578,7 @@ export def "storage-profile-system-profiles-addresses-versions-unmask get-unmask
 #
 # DELETE /api/storage/profile-system/profiles/{profileId}/purchase-info
 # operationId: DeletePurchaseInformation
-export def "storage-profile-system-profiles-purchase-info delete-purchase-information" [
+export def "storage-profile-system-profiles-purchase-info delete-information" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -569,18 +588,18 @@ export def "storage-profile-system-profiles-purchase-info delete-purchase-inform
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --alternative-key: string # The `profileId` path parameter may be substituted by other profile fields in this request. When making this request, send the `alternativeKey` parameter with a value equal to the key of the field you wish to use as `profileId`.  > Currently, there are two possible values for this parameter: `email` and `document`. (e.g. email)
+  --alternative-key: string # The `profileId` path parameter may be substituted by other profile fields in this request. When making this request, send the `alternativeKey` parameter with a value equal to the key of the field you wish to use as `profileId`. > Currently, there are two possible values for this parameter: `email` and `document`. (e.g. email)
   --content-type: string # Type of the content being sent. (e.g. application/json)
   --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alternativeKey" $alternative_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/api/storage/profile-system/profiles/{profile_id}/purchase-info") $qp)
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/api/storage/profile-system/profiles/{profile_id}/purchase-info") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -588,7 +607,7 @@ export def "storage-profile-system-profiles-purchase-info delete-purchase-inform
 #
 # GET /api/storage/profile-system/profiles/{profileId}/purchase-info
 # operationId: GetPurchaseInformation
-export def "storage-profile-system-profiles-purchase-info get-purchase-information" [
+export def "storage-profile-system-profiles-purchase-info get-information" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -598,18 +617,18 @@ export def "storage-profile-system-profiles-purchase-info get-purchase-informati
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --alternative-key: string # The `profileId` path parameter may be substituted by other profile fields in this request. When making this request, send the `alternativeKey` parameter with a value equal to the key of the field you wish to use as `profileId`.  > Currently, there are two possible values for this parameter: `email` and `document`. (e.g. email)
+  --alternative-key: string # The `profileId` path parameter may be substituted by other profile fields in this request. When making this request, send the `alternativeKey` parameter with a value equal to the key of the field you wish to use as `profileId`. > Currently, there are two possible values for this parameter: `email` and `document`. (e.g. email)
   --content-type: string # Type of the content being sent. (e.g. application/json)
   --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
 ]: nothing -> list<any> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alternativeKey" $alternative_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/api/storage/profile-system/profiles/{profile_id}/purchase-info") $qp)
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/api/storage/profile-system/profiles/{profile_id}/purchase-info") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -617,7 +636,7 @@ export def "storage-profile-system-profiles-purchase-info get-purchase-informati
 #
 # PATCH /api/storage/profile-system/profiles/{profileId}/purchase-info
 # operationId: UpdatePurchaseInformation
-export def "storage-profile-system-profiles-purchase-info update-purchase-information" [
+export def "storage-profile-system-profiles-purchase-info update-information" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -627,7 +646,7 @@ export def "storage-profile-system-profiles-purchase-info update-purchase-inform
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --alternative-key: string # The `profileId` path parameter may be substituted by other profile fields in this request. When making this request, send the `alternativeKey` parameter with a value equal to the key of the field you wish to use as `profileId`.  > Currently, there are two possible values for this parameter: `email` and `document`. (e.g. email)
+  --alternative-key: string # The `profileId` path parameter may be substituted by other profile fields in this request. When making this request, send the `alternativeKey` parameter with a value equal to the key of the field you wish to use as `profileId`. > Currently, there are two possible values for this parameter: `email` and `document`. (e.g. email)
   --content-type: string # Type of the content being sent. (e.g. application/json)
   --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
   --body: record
@@ -636,20 +655,23 @@ export def "storage-profile-system-profiles-purchase-info update-purchase-inform
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alternativeKey" $alternative_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/api/storage/profile-system/profiles/{profile_id}/purchase-info") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/api/storage/profile-system/profiles/{profile_id}/purchase-info") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Create purchase information
 #
 # POST /api/storage/profile-system/profiles/{profileId}/purchase-info
 # operationId: CreatePurchaseInformation
-export def "storage-profile-system-profiles-purchase-info create-purchase-information" [
+export def "storage-profile-system-profiles-purchase-info create-information" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -659,7 +681,7 @@ export def "storage-profile-system-profiles-purchase-info create-purchase-inform
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --alternative-key: string # The `profileId` path parameter may be substituted by other profile fields in this request. When making this request, send the `alternativeKey` parameter with a value equal to the key of the field you wish to use as `profileId`.  > Currently, there are two possible values for this parameter: `email` and `document`. (e.g. email)
+  --alternative-key: string # The `profileId` path parameter may be substituted by other profile fields in this request. When making this request, send the `alternativeKey` parameter with a value equal to the key of the field you wish to use as `profileId`. > Currently, there are two possible values for this parameter: `email` and `document`. (e.g. email)
   --content-type: string # Type of the content being sent. (e.g. application/json)
   --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
   --body: record
@@ -668,20 +690,23 @@ export def "storage-profile-system-profiles-purchase-info create-purchase-inform
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alternativeKey" $alternative_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/api/storage/profile-system/profiles/{profile_id}/purchase-info") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/api/storage/profile-system/profiles/{profile_id}/purchase-info") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Get unmasked purchase information
 #
 # GET /api/storage/profile-system/profiles/{profileId}/purchase-info/unmask
 # operationId: GetUnmaskedPurchaseInformation
-export def "storage-profile-system-profiles-purchase-info-unmask get-unmasked-purchase-information" [
+export def "storage-profile-system-profiles-purchase-info-unmask get-unmasked-information" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -696,11 +721,11 @@ export def "storage-profile-system-profiles-purchase-info-unmask get-unmasked-pu
 ]: nothing -> list<record> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/api/storage/profile-system/profiles/{profile_id}/purchase-info/unmask"))
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/api/storage/profile-system/profiles/{profile_id}/purchase-info/unmask"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -719,18 +744,18 @@ export def "storage-profile-system-profiles-unmask get-unmasked" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --reason: string # Reason for requesting unmasked data. (e.g. data-validation)
-  --alternative-key: string # The `profileId` path parameter may be substituted by other profile fields in this request. When making this request, send the `alternativeKey` parameter with a value equal to the key of the field you wish to use as `profileId`.  > Currently, there are two possible values for this parameter: `email` and `document`. (e.g. email)
+  --alternative-key: string # The `profileId` path parameter may be substituted by other profile fields in this request. When making this request, send the `alternativeKey` parameter with a value equal to the key of the field you wish to use as `profileId`. > Currently, there are two possible values for this parameter: `email` and `document`. (e.g. email)
   --content-type: string # Type of the content being sent. (e.g. application/json)
   --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
 ]: nothing -> list<any> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "reason" $reason "scalar") (serialize-qp "alternativeKey" $alternative_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/api/storage/profile-system/profiles/{profile_id}/unmask") $qp)
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/api/storage/profile-system/profiles/{profile_id}/unmask") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -754,11 +779,11 @@ export def "storage-profile-system-profiles-versions get" [
 ]: nothing -> list<any> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({profile_id: $profile_id, profile_version_id: $profile_version_id} | format pattern "/api/storage/profile-system/profiles/{profile_id}/versions/{profile_version_id}"))
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), profile_version_id: (encode-path-segment $profile_version_id)} | format pattern "/api/storage/profile-system/profiles/{profile_id}/versions/{profile_version_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -784,11 +809,11 @@ export def "storage-profile-system-profiles-versions-unmask get-unmasked" [
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "reason" $reason "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id, profile_version_id: $profile_version_id} | format pattern "/api/storage/profile-system/profiles/{profile_id}/versions/{profile_version_id}/unmask") $qp)
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), profile_version_id: (encode-path-segment $profile_version_id)} | format pattern "/api/storage/profile-system/profiles/{profile_id}/versions/{profile_version_id}/unmask") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -813,12 +838,15 @@ export def "storage-profile-system-prospects create" [
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/storage/profile-system/prospects")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Delete prospect
@@ -840,11 +868,11 @@ export def "storage-profile-system-prospects delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({prospect_id: $prospect_id} | format pattern "/api/storage/profile-system/prospects/{prospect_id}"))
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({prospect_id: (encode-path-segment $prospect_id)} | format pattern "/api/storage/profile-system/prospects/{prospect_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -867,11 +895,11 @@ export def "storage-profile-system-prospects get" [
 ]: nothing -> list<any> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({prospect_id: $prospect_id} | format pattern "/api/storage/profile-system/prospects/{prospect_id}"))
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({prospect_id: (encode-path-segment $prospect_id)} | format pattern "/api/storage/profile-system/prospects/{prospect_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -896,13 +924,16 @@ export def "storage-profile-system-prospects update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({prospect_id: $prospect_id} | format pattern "/api/storage/profile-system/prospects/{prospect_id}"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({prospect_id: (encode-path-segment $prospect_id)} | format pattern "/api/storage/profile-system/prospects/{prospect_id}"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Get unmasked prospect
@@ -926,10 +957,10 @@ export def "storage-profile-system-prospects-unmask get-unmasked" [
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "reason" $reason "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({prospect_id: $prospect_id} | format pattern "/api/storage/profile-system/prospects/{prospect_id}/unmask") $qp)
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({prospect_id: (encode-path-segment $prospect_id)} | format pattern "/api/storage/profile-system/prospects/{prospect_id}/unmask") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

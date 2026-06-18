@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -59,6 +68,33 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   }
   if ($method in ["head" "options"]) { return $resp }
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+}
+
+# Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
+# the field names whose value should be read from disk as bytes; every
+# other field is sent as a text part (records/lists JSON-stringified).
+# Returns {content_type, body} ready to pass to `do-request`.
+def build-multipart-body [parts: record, file_fields: list<string>]: nothing -> record {
+  let boundary = $"----nu-(random chars --length 24)"
+  let crlf = "\r\n"
+  let chunks = ($parts | transpose k v | where {|p| $p.v != null} | each {|p|
+    let name = $p.k
+    let val = $p.v
+    if $name in $file_fields {
+      let filename = ($val | path basename)
+      let bytes = (open --raw $val | into binary | collect)
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"; filename=\"($filename)\"($crlf)Content-Type: application/octet-stream($crlf)($crlf)" | into binary)
+      $head ++ $bytes ++ ($crlf | into binary)
+    } else {
+      let dt = ($val | describe)
+      let s = if (($dt | str starts-with "record") or ($dt | str starts-with "list") or ($dt | str starts-with "table")) { ($val | to json --raw) } else { ($val | into string) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"($crlf)($crlf)" | into binary)
+      $head ++ ($"($s)($crlf)" | into binary)
+    }
+  })
+  let trailer = ($"--($boundary)--($crlf)" | into binary)
+  let body = ($chunks | reduce --fold (0x[] | into binary) {|chunk, acc| $acc ++ $chunk }) ++ $trailer
+  {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
 }
 
 def base-url-completer [] { ["https://api.openalpr.com/v3"] }
@@ -118,7 +154,7 @@ export def "config get" [
 #
 # POST /recognize
 # operationId: recognizeFile
-export def "recognize recognizeFile" [
+export def "recognize create-file" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -127,12 +163,12 @@ export def "recognize recognizeFile" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --secret-key: string # The secret key used to authenticate your account.  You can view your  secret key by visiting  https://cloud.openalpr.com/
-  --recognize-vehicle: int@recognize-vehicle-completer # If set to 1, the vehicle will also be recognized in the image This requires an additional credit per request  (default: 0)
-  --country: string # Defines the training data used by OpenALPR.  "us" analyzes  North-American style plates.  "eu" analyzes European-style plates.  This field is required if using the "plate" task
-  --return-image: int@return-image-completer # If set to 1, the image you uploaded will be encoded in base64 and  sent back along with the response  (default: 0)
-  --topn: int # The number of results you would like to be returned for plate  candidates and vehicle classifications  (default: 10)
-  --is-cropped: int@is-cropped-completer # When providing a plate or vehicle that is already cropped,   this performs a recognition against the full crop and does not  attempt to localize the plate/vehicle  (default: 0)
+  --secret-key: string # The secret key used to authenticate your account. You can view your secret key by visiting https://cloud.openalpr.com/
+  --recognize-vehicle: int@recognize-vehicle-completer # If set to 1, the vehicle will also be recognized in the image This requires an additional credit per request (default: 0)
+  --country: string # Defines the training data used by OpenALPR. "us" analyzes North-American style plates. "eu" analyzes European-style plates. This field is required if using the "plate" task
+  --return-image: int@return-image-completer # If set to 1, the image you uploaded will be encoded in base64 and sent back along with the response (default: 0)
+  --topn: int # The number of results you would like to be returned for plate candidates and vehicle classifications (default: 10)
+  --is-cropped: int@is-cropped-completer # When providing a plate or vehicle that is already cropped, this performs a recognition against the full crop and does not attempt to localize the plate/vehicle (default: 0)
   image: path # The image file that you wish to analyze
 ]: any -> any {
   let input = $in
@@ -140,19 +176,19 @@ export def "recognize recognizeFile" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "secret_key" $secret_key "scalar") (serialize-qp "recognize_vehicle" $recognize_vehicle "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "return_image" $return_image "scalar") (serialize-qp "topn" $topn "scalar") (serialize-qp "is_cropped" $is_cropped "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recognize" $qp)
-  let body = {"image": $image} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"image": $image} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let body = if ($image | is-not-empty) { $body | upsert image (open -r $image) } else { $body }
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body ["image"])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # Send an image for OpenALPR to analyze and provide metadata back The image is sent as base64 encoded bytes.
 #
 # POST /recognize_bytes
 # operationId: recognizeBytes
-export def "recognize-bytes recognizeBytes" [
+export def "recognize-bytes create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -161,11 +197,11 @@ export def "recognize-bytes recognizeBytes" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --secret-key: string # The secret key used to authenticate your account.  You can view your  secret key by visiting  https://cloud.openalpr.com/
-  --recognize-vehicle: int@recognize-vehicle-completer # If set to 1, the vehicle will also be recognized in the image This requires an additional credit per request  (default: 0)
-  --country: string # Defines the training data used by OpenALPR.  "us" analyzes  North-American style plates.  "eu" analyzes European-style plates.  This field is required if using the "plate" task
-  --return-image: int@return-image-completer # If set to 1, the image you uploaded will be encoded in base64 and  sent back along with the response  (default: 0)
-  --topn: int # The number of results you would like to be returned for plate  candidates and vehicle classifications  (default: 10)
+  --secret-key: string # The secret key used to authenticate your account. You can view your secret key by visiting https://cloud.openalpr.com/
+  --recognize-vehicle: int@recognize-vehicle-completer # If set to 1, the vehicle will also be recognized in the image This requires an additional credit per request (default: 0)
+  --country: string # Defines the training data used by OpenALPR. "us" analyzes North-American style plates. "eu" analyzes European-style plates. This field is required if using the "plate" task
+  --return-image: int@return-image-completer # If set to 1, the image you uploaded will be encoded in base64 and sent back along with the response (default: 0)
+  --topn: int # The number of results you would like to be returned for plate candidates and vehicle classifications (default: 10)
   --body: record
 ]: any -> any {
   let input = $in
@@ -173,17 +209,18 @@ export def "recognize-bytes recognizeBytes" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "secret_key" $secret_key "scalar") (serialize-qp "recognize_vehicle" $recognize_vehicle "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "return_image" $return_image "scalar") (serialize-qp "topn" $topn "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recognize_bytes" $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-# Send an image for OpenALPR to analyze and provide metadata back The image is sent as a URL.  The OpenALPR service will download the image  and process it
+# Send an image for OpenALPR to analyze and provide metadata back The image is sent as a URL. The OpenALPR service will download the image and process it
 #
 # POST /recognize_url
 # operationId: recognizeUrl
-export def "recognize-url recognizeUrl" [
+export def "recognize-url create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -193,11 +230,11 @@ export def "recognize-url recognizeUrl" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --image-url: string # A URL to an image that you wish to analyze
-  --secret-key: string # The secret key used to authenticate your account.  You can view your  secret key by visiting  https://cloud.openalpr.com/
-  --recognize-vehicle: int@recognize-vehicle-completer # If set to 1, the vehicle will also be recognized in the image This requires an additional credit per request  (default: 0)
-  --country: string # Defines the training data used by OpenALPR.  "us" analyzes  North-American style plates.  "eu" analyzes European-style plates.  This field is required if using the "plate" task
-  --return-image: int@return-image-completer # If set to 1, the image you uploaded will be encoded in base64 and  sent back along with the response  (default: 0)
-  --topn: int # The number of results you would like to be returned for plate  candidates and vehicle classifications  (default: 10)
+  --secret-key: string # The secret key used to authenticate your account. You can view your secret key by visiting https://cloud.openalpr.com/
+  --recognize-vehicle: int@recognize-vehicle-completer # If set to 1, the vehicle will also be recognized in the image This requires an additional credit per request (default: 0)
+  --country: string # Defines the training data used by OpenALPR. "us" analyzes North-American style plates. "eu" analyzes European-style plates. This field is required if using the "plate" task
+  --return-image: int@return-image-completer # If set to 1, the image you uploaded will be encoded in base64 and sent back along with the response (default: 0)
+  --topn: int # The number of results you would like to be returned for plate candidates and vehicle classifications (default: 10)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

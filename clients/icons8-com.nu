@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -68,7 +77,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "iconsets-categories-platform-platform-language-language get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "iconsets-categories-platform-platform-language-language get-categories" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -92,7 +101,7 @@ export def commands []: nothing -> table {
 #
 # GET /api/iconsets/v3/categories?platform={platform}&language={language}
 # operationId: Categories
-export def "iconsets-categories-platform-platform-language-language get" [
+export def "iconsets-categories-platform-platform-language-language get-categories" [
   platform: string
   language: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -106,7 +115,7 @@ export def "iconsets-categories-platform-platform-language-language get" [
 ]: nothing -> record<parameters: record<language: string, platform: string>, result: record<categories: list<any>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({platform: $platform, language: $language} | format pattern "/api/iconsets/v3/categories?platform={platform}&language={language}"))
+  let full_url = (build-url $base ({platform: (encode-path-segment $platform), language: (encode-path-segment $language)} | format pattern "/api/iconsets/v3/categories?platform={platform}&language={language}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -134,7 +143,7 @@ export def "iconsets-category-category-category-subcategory-subcategory-amount-a
 ]: nothing -> record<parameters: record<amount: float, category: string, language: string, offset: string, platform: string, subcategory: string>, result: record<category: list<any>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({category: $category, subcategory: $subcategory, amount: $amount, offset: $offset, platform: $platform, language: $language} | format pattern "/api/iconsets/v3/category?category={category}&subcategory={subcategory}&amount={amount}&offset={offset}&platform={platform}&language={language}"))
+  let full_url = (build-url $base ({category: (encode-path-segment $category), subcategory: (encode-path-segment $subcategory), amount: (encode-path-segment $amount), offset: (encode-path-segment $offset), platform: (encode-path-segment $platform), language: (encode-path-segment $language)} | format pattern "/api/iconsets/v3/category?category={category}&subcategory={subcategory}&amount={amount}&offset={offset}&platform={platform}&language={language}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -144,7 +153,7 @@ export def "iconsets-category-category-category-subcategory-subcategory-amount-a
 #
 # GET /api/iconsets/v3/latest?term={term}&amount={amount}&offset={offset}&platform={platform}&language={language}
 # operationId: Latest
-export def "iconsets-latest-term-term-amount-amount-offset-offset-platform-platform-language-language get" [
+export def "iconsets-latest-term-term-amount-amount-offset-offset-platform-platform-language-language get-latest" [
   term: any
   amount: float
   offset: float
@@ -161,7 +170,7 @@ export def "iconsets-latest-term-term-amount-amount-offset-offset-platform-platf
 ]: nothing -> record<parameters: record<amount: float, language: string, offset: string, platform: string, term: string>, result: record<latest: list<any>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({term: $term, amount: $amount, offset: $offset, platform: $platform, language: $language} | format pattern "/api/iconsets/v3/latest?term={term}&amount={amount}&offset={offset}&platform={platform}&language={language}"))
+  let full_url = (build-url $base ({term: (encode-path-segment $term), amount: (encode-path-segment $amount), offset: (encode-path-segment $offset), platform: (encode-path-segment $platform), language: (encode-path-segment $language)} | format pattern "/api/iconsets/v3/latest?term={term}&amount={amount}&offset={offset}&platform={platform}&language={language}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -171,7 +180,7 @@ export def "iconsets-latest-term-term-amount-amount-offset-offset-platform-platf
 #
 # GET /api/iconsets/v3/search?term={term}&amount={amount}&offset={offset}&platform={platform}&language={language}&exact_amount={exact_amount}
 # operationId: By Keyword v3
-export def "iconsets-search-term-term-amount-amount-offset-offset-platform-platform-language-language-exact-amount-exact-amount get-by-term-amount-offset-platform-language-exact_amount" [
+export def "iconsets-search-term-term-amount-amount-offset-offset-platform-platform-language-language-exact-amount-exact-amount get-by-keyword-by-term-amount-offset-platform-language-exact_amount" [
   term: string
   amount: float
   offset: float
@@ -189,7 +198,7 @@ export def "iconsets-search-term-term-amount-amount-offset-offset-platform-platf
 ]: nothing -> record<parameters: record<amount: float, language: string, offset: string, platform: string, term: string>, result: record<search: list<any>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({term: $term, amount: $amount, offset: $offset, platform: $platform, language: $language, exact_amount: $exact_amount} | format pattern "/api/iconsets/v3/search?term={term}&amount={amount}&offset={offset}&platform={platform}&language={language}&exact_amount={exact_amount}"))
+  let full_url = (build-url $base ({term: (encode-path-segment $term), amount: (encode-path-segment $amount), offset: (encode-path-segment $offset), platform: (encode-path-segment $platform), language: (encode-path-segment $language), exact_amount: (encode-path-segment $exact_amount)} | format pattern "/api/iconsets/v3/search?term={term}&amount={amount}&offset={offset}&platform={platform}&language={language}&exact_amount={exact_amount}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -199,7 +208,7 @@ export def "iconsets-search-term-term-amount-amount-offset-offset-platform-platf
 #
 # GET /api/iconsets/v3/total?since={since}
 # operationId: Totals
-export def "iconsets-total-since-since get" [
+export def "iconsets-total-since-since get-totals" [
   since: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -212,7 +221,7 @@ export def "iconsets-total-since-since get" [
 ]: nothing -> record<parameters: record<since: string>, result: record<total: list<any>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({since: $since} | format pattern "/api/iconsets/v3/total?since={since}"))
+  let full_url = (build-url $base ({since: (encode-path-segment $since)} | format pattern "/api/iconsets/v3/total?since={since}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -222,7 +231,7 @@ export def "iconsets-total-since-since get" [
 #
 # GET /api/iconsets/v4/search?term={term}&amount={amount}&offset={offset}&platform={platform}&language={language}&exact_amount={exact_amount}
 # operationId: By Keyword v4
-export def "iconsets-search-term-term-amount-amount-offset-offset-platform-platform-language-language-exact-amount-exact-amount get-by-term-amount-offset-platform-language-exact_amount-1" [
+export def "iconsets-search-term-term-amount-amount-offset-offset-platform-platform-language-language-exact-amount-exact-amount get-by-keyword-by-term-amount-offset-platform-language-exact_amount-1" [
   term: string
   amount: float
   offset: float
@@ -240,7 +249,7 @@ export def "iconsets-search-term-term-amount-amount-offset-offset-platform-platf
 ]: nothing -> record<icons: list<any>, parameters: record<amount__50_: string, language: string, offset: string, platform: string, term: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({term: $term, amount: $amount, offset: $offset, platform: $platform, language: $language, exact_amount: $exact_amount} | format pattern "/api/iconsets/v4/search?term={term}&amount={amount}&offset={offset}&platform={platform}&language={language}&exact_amount={exact_amount}"))
+  let full_url = (build-url $base ({term: (encode-path-segment $term), amount: (encode-path-segment $amount), offset: (encode-path-segment $offset), platform: (encode-path-segment $platform), language: (encode-path-segment $language), exact_amount: (encode-path-segment $exact_amount)} | format pattern "/api/iconsets/v4/search?term={term}&amount={amount}&offset={offset}&platform={platform}&language={language}&exact_amount={exact_amount}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -252,7 +261,7 @@ export def "iconsets-search-term-term-amount-amount-offset-offset-platform-platf
 # operationId: From a Collection
 # --auth shape: {hash: string}
 # --task shape: {arguments?: record}
-export def "task-web-font-collection post" [
+export def "task-web-font-collection create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -268,11 +277,11 @@ export def "task-web-font-collection post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/task/web-font/collection")
-  let body = {"auth": $body_auth, "task": $task} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"auth": $body_auth, "task": $task} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # From Separate Icons
@@ -281,7 +290,7 @@ export def "task-web-font-collection post" [
 # operationId: From Separate Icons
 # --auth shape: {hash: string}
 # --task shape: {arguments?: record}
-export def "task-web-font-icons post" [
+export def "task-web-font-icons create-from-separate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -297,9 +306,9 @@ export def "task-web-font-icons post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/task/web-font/icons")
-  let body = {"auth": $body_auth, "task": $task} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"auth": $body_auth, "task": $task} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

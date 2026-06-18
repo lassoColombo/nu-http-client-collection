@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -156,7 +165,7 @@ export def "providers-microsoft-alerts-management-operations list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.AlertsManagement/actionRules
 # operationId: ActionRules_ListBySubscription
-export def "subscriptions-providers-microsoft-alerts-management-action-rules list-by" [
+export def "subscriptions-providers-microsoft-alerts-management-action-rules list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -169,7 +178,7 @@ export def "subscriptions-providers-microsoft-alerts-management-action-rules lis
   --target-resource-group: string # Filter by target resource group name. Default value is select all.
   --target-resource-type: string # Filter by target resource type. Default value is select all.
   --target-resource: string # Filter by target resource( which is full ARM ID) Default value is select all.
-  --severity: string@severity-completer # Filter by severity.  Default value is select all.
+  --severity: string@severity-completer # Filter by severity. Default value is select all.
   --monitor-service: string@monitor-service-completer # Filter by monitor service which generates the alert instance. Default value is select all.
   --impacted-scope: string # filter by impacted/target scope (provide comma separated list for multiple scopes). The value should be an well constructed ARM id of the scope.
   --description: string # filter by alert rule description
@@ -181,17 +190,17 @@ export def "subscriptions-providers-microsoft-alerts-management-action-rules lis
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "targetResourceGroup" $target_resource_group "scalar") (serialize-qp "targetResourceType" $target_resource_type "scalar") (serialize-qp "targetResource" $target_resource "scalar") (serialize-qp "severity" $severity "scalar") (serialize-qp "monitorService" $monitor_service "scalar") (serialize-qp "impactedScope" $impacted_scope "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "alertRuleId" $alert_rule_id "scalar") (serialize-qp "actionGroup" $action_group "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.AlertsManagement/actionRules") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.AlertsManagement/actionRules") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# List all existing alerts, where the results can be filtered on the basis of multiple parameters (e.g. time range). The results can then be sorted on the basis specific fields, with the default being lastModifiedDateTime. 
+# List all existing alerts, where the results can be filtered on the basis of multiple parameters (e.g. time range). The results can then be sorted on the basis specific fields, with the default being lastModifiedDateTime.
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.AlertsManagement/alerts
 # operationId: Alerts_GetAll
-export def "subscriptions-providers-microsoft-alerts-management-alerts get-all" [
+export def "subscriptions-providers-microsoft-alerts-management-alerts get-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -206,24 +215,24 @@ export def "subscriptions-providers-microsoft-alerts-management-alerts get-all" 
   --target-resource-group: string # Filter by target resource group name. Default value is select all.
   --monitor-service: string@monitor-service-completer # Filter by monitor service which generates the alert instance. Default value is select all.
   --monitor-condition: string@monitor-condition-completer # Filter by monitor condition which is either 'Fired' or 'Resolved'. Default value is to select all.
-  --severity: string@severity-completer # Filter by severity.  Default value is select all.
+  --severity: string@severity-completer # Filter by severity. Default value is select all.
   --alert-state: string@alert-state-completer # Filter by state of the alert instance. Default value is to select all.
-  --alert-rule: string # Filter by specific alert rule.  Default value is to select all.
+  --alert-rule: string # Filter by specific alert rule. Default value is to select all.
   --smart-group-id: string # Filter the alerts list by the Smart Group Id. Default value is none.
   --include-context: oneof<nothing, bool> # Include context which has contextual data specific to the monitor service. Default value is false'
-  --include-egress-config: oneof<nothing, bool> # Include egress config which would be used for displaying the content in portal.  Default value is 'false'.
-  --page-count: int # Determines number of alerts returned per page in response. Permissible value is between 1 to 250. When the "includeContent"  filter is selected, maximum value allowed is 25. Default value is 25.
-  --sort-by: string@sort-by-completer # Sort the query results by input field,  Default value is 'lastModifiedDateTime'.
-  --sort-order: string@sort-order-completer # Sort the query results order in either ascending or descending.  Default value is 'desc' for time fields and 'asc' for others.
-  --select: string # This filter allows to selection of the fields(comma separated) which would  be part of the essential section. This would allow to project only the  required fields rather than getting entire content.  Default is to fetch all the fields in the essentials section.
+  --include-egress-config: oneof<nothing, bool> # Include egress config which would be used for displaying the content in portal. Default value is 'false'.
+  --page-count: int # Determines number of alerts returned per page in response. Permissible value is between 1 to 250. When the "includeContent" filter is selected, maximum value allowed is 25. Default value is 25.
+  --sort-by: string@sort-by-completer # Sort the query results by input field, Default value is 'lastModifiedDateTime'.
+  --sort-order: string@sort-order-completer # Sort the query results order in either ascending or descending. Default value is 'desc' for time fields and 'asc' for others.
+  --select: string # This filter allows to selection of the fields(comma separated) which would be part of the essential section. This would allow to project only the required fields rather than getting entire content. Default is to fetch all the fields in the essentials section.
   --time-range: string@time-range-completer # Filter by time range by below listed values. Default value is 1 day.
-  --custom-time-range: string # Filter by custom time range in the format <start-time>/<end-time>  where time is in (ISO-8601 format)'. Permissible values is within 30 days from  query time. Either timeRange or customTimeRange could be used but not both. Default is none.
+  --custom-time-range: string # Filter by custom time range in the format <start-time>/<end-time> where time is in (ISO-8601 format)'. Permissible values is within 30 days from query time. Either timeRange or customTimeRange could be used but not both. Default is none.
   --api-version: string@api-version-completer # client API version
 ]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "targetResource" $target_resource "scalar") (serialize-qp "targetResourceType" $target_resource_type "scalar") (serialize-qp "targetResourceGroup" $target_resource_group "scalar") (serialize-qp "monitorService" $monitor_service "scalar") (serialize-qp "monitorCondition" $monitor_condition "scalar") (serialize-qp "severity" $severity "scalar") (serialize-qp "alertState" $alert_state "scalar") (serialize-qp "alertRule" $alert_rule "scalar") (serialize-qp "smartGroupId" $smart_group_id "scalar") (serialize-qp "includeContext" $include_context "scalar") (serialize-qp "includeEgressConfig" $include_egress_config "scalar") (serialize-qp "pageCount" $page_count "scalar") (serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "select" $select "scalar") (serialize-qp "timeRange" $time_range "scalar") (serialize-qp "customTimeRange" $custom_time_range "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.AlertsManagement/alerts") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.AlertsManagement/alerts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -233,7 +242,7 @@ export def "subscriptions-providers-microsoft-alerts-management-alerts get-all" 
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.AlertsManagement/alerts/{alertId}
 # operationId: Alerts_GetById
-export def "subscriptions-providers-microsoft-alerts-management-alerts get-by" [
+export def "subscriptions-providers-microsoft-alerts-management-alerts get" [
   subscription_id: string
   alert_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -249,7 +258,7 @@ export def "subscriptions-providers-microsoft-alerts-management-alerts get-by" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, alert_id: $alert_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.AlertsManagement/alerts/{alert_id}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), alert_id: (encode-path-segment $alert_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.AlertsManagement/alerts/{alert_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -259,7 +268,7 @@ export def "subscriptions-providers-microsoft-alerts-management-alerts get-by" [
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.AlertsManagement/alerts/{alertId}/changestate
 # operationId: Alerts_ChangeState
-export def "subscriptions-providers-microsoft-alerts-management-alerts-changestate changes-tate" [
+export def "subscriptions-providers-microsoft-alerts-management-alerts-changestate create-change-state" [
   subscription_id: string
   alert_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -276,7 +285,7 @@ export def "subscriptions-providers-microsoft-alerts-management-alerts-changesta
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "newState" $new_state "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, alert_id: $alert_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.AlertsManagement/alerts/{alert_id}/changestate") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), alert_id: (encode-path-segment $alert_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.AlertsManagement/alerts/{alert_id}/changestate") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -302,7 +311,7 @@ export def "subscriptions-providers-microsoft-alerts-management-alerts-history g
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, alert_id: $alert_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.AlertsManagement/alerts/{alert_id}/history") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), alert_id: (encode-path-segment $alert_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.AlertsManagement/alerts/{alert_id}/history") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -329,17 +338,17 @@ export def "subscriptions-providers-microsoft-alerts-management-alerts-summary g
   --target-resource-group: string # Filter by target resource group name. Default value is select all.
   --monitor-service: string@monitor-service-completer # Filter by monitor service which generates the alert instance. Default value is select all.
   --monitor-condition: string@monitor-condition-completer # Filter by monitor condition which is either 'Fired' or 'Resolved'. Default value is to select all.
-  --severity: string@severity-completer # Filter by severity.  Default value is select all.
+  --severity: string@severity-completer # Filter by severity. Default value is select all.
   --alert-state: string@alert-state-completer # Filter by state of the alert instance. Default value is to select all.
-  --alert-rule: string # Filter by specific alert rule.  Default value is to select all.
+  --alert-rule: string # Filter by specific alert rule. Default value is to select all.
   --time-range: string@time-range-completer # Filter by time range by below listed values. Default value is 1 day.
-  --custom-time-range: string # Filter by custom time range in the format <start-time>/<end-time>  where time is in (ISO-8601 format)'. Permissible values is within 30 days from  query time. Either timeRange or customTimeRange could be used but not both. Default is none.
+  --custom-time-range: string # Filter by custom time range in the format <start-time>/<end-time> where time is in (ISO-8601 format)'. Permissible values is within 30 days from query time. Either timeRange or customTimeRange could be used but not both. Default is none.
   --api-version: string@api-version-completer # client API version
 ]: nothing -> record<properties: record<groupedby: string, smartGroupsCount: int, total: int, values: list<record>>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "groupby" $groupby "scalar") (serialize-qp "includeSmartGroupsCount" $include_smart_groups_count "scalar") (serialize-qp "targetResource" $target_resource "scalar") (serialize-qp "targetResourceType" $target_resource_type "scalar") (serialize-qp "targetResourceGroup" $target_resource_group "scalar") (serialize-qp "monitorService" $monitor_service "scalar") (serialize-qp "monitorCondition" $monitor_condition "scalar") (serialize-qp "severity" $severity "scalar") (serialize-qp "alertState" $alert_state "scalar") (serialize-qp "alertRule" $alert_rule "scalar") (serialize-qp "timeRange" $time_range "scalar") (serialize-qp "customTimeRange" $custom_time_range "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.AlertsManagement/alertsSummary") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.AlertsManagement/alertsSummary") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -349,7 +358,7 @@ export def "subscriptions-providers-microsoft-alerts-management-alerts-summary g
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.AlertsManagement/smartGroups
 # operationId: SmartGroups_GetAll
-export def "subscriptions-providers-microsoft-alerts-management-smart-groups get-all" [
+export def "subscriptions-providers-microsoft-alerts-management-smart-groups get-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -364,18 +373,18 @@ export def "subscriptions-providers-microsoft-alerts-management-smart-groups get
   --target-resource-type: string # Filter by target resource type. Default value is select all.
   --monitor-service: string@monitor-service-completer # Filter by monitor service which generates the alert instance. Default value is select all.
   --monitor-condition: string@monitor-condition-completer # Filter by monitor condition which is either 'Fired' or 'Resolved'. Default value is to select all.
-  --severity: string@severity-completer # Filter by severity.  Default value is select all.
+  --severity: string@severity-completer # Filter by severity. Default value is select all.
   --smart-group-state: string@smart-group-state-completer # Filter by state of the smart group. Default value is to select all.
   --time-range: string@time-range-completer # Filter by time range by below listed values. Default value is 1 day.
-  --page-count: int # Determines number of alerts returned per page in response. Permissible value is between 1 to 250. When the "includeContent"  filter is selected, maximum value allowed is 25. Default value is 25.
+  --page-count: int # Determines number of alerts returned per page in response. Permissible value is between 1 to 250. When the "includeContent" filter is selected, maximum value allowed is 25. Default value is 25.
   --sort-by: string@sort-by-completer-1 # Sort the query results by input field. Default value is sort by 'lastModifiedDateTime'.
-  --sort-order: string@sort-order-completer # Sort the query results order in either ascending or descending.  Default value is 'desc' for time fields and 'asc' for others.
+  --sort-order: string@sort-order-completer # Sort the query results order in either ascending or descending. Default value is 'desc' for time fields and 'asc' for others.
   --api-version: string@api-version-completer # client API version
 ]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "targetResource" $target_resource "scalar") (serialize-qp "targetResourceGroup" $target_resource_group "scalar") (serialize-qp "targetResourceType" $target_resource_type "scalar") (serialize-qp "monitorService" $monitor_service "scalar") (serialize-qp "monitorCondition" $monitor_condition "scalar") (serialize-qp "severity" $severity "scalar") (serialize-qp "smartGroupState" $smart_group_state "scalar") (serialize-qp "timeRange" $time_range "scalar") (serialize-qp "pageCount" $page_count "scalar") (serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.AlertsManagement/smartGroups") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.AlertsManagement/smartGroups") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -385,7 +394,7 @@ export def "subscriptions-providers-microsoft-alerts-management-smart-groups get
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.AlertsManagement/smartGroups/{smartGroupId}
 # operationId: SmartGroups_GetById
-export def "subscriptions-providers-microsoft-alerts-management-smart-groups get-by" [
+export def "subscriptions-providers-microsoft-alerts-management-smart-groups get" [
   subscription_id: string
   smart_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -401,7 +410,7 @@ export def "subscriptions-providers-microsoft-alerts-management-smart-groups get
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, smart_group_id: $smart_group_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.AlertsManagement/smartGroups/{smart_group_id}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), smart_group_id: (encode-path-segment $smart_group_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.AlertsManagement/smartGroups/{smart_group_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -411,7 +420,7 @@ export def "subscriptions-providers-microsoft-alerts-management-smart-groups get
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.AlertsManagement/smartGroups/{smartGroupId}/changeState
 # operationId: SmartGroups_ChangeState
-export def "subscriptions-providers-microsoft-alerts-management-smart-groups-change-state changes-tate" [
+export def "subscriptions-providers-microsoft-alerts-management-smart-groups-change-state create" [
   subscription_id: string
   smart_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -428,7 +437,7 @@ export def "subscriptions-providers-microsoft-alerts-management-smart-groups-cha
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "newState" $new_state "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, smart_group_id: $smart_group_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.AlertsManagement/smartGroups/{smart_group_id}/changeState") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), smart_group_id: (encode-path-segment $smart_group_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.AlertsManagement/smartGroups/{smart_group_id}/changeState") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -454,7 +463,7 @@ export def "subscriptions-providers-microsoft-alerts-management-smart-groups-his
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, smart_group_id: $smart_group_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.AlertsManagement/smartGroups/{smart_group_id}/history") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), smart_group_id: (encode-path-segment $smart_group_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.AlertsManagement/smartGroups/{smart_group_id}/history") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -464,7 +473,7 @@ export def "subscriptions-providers-microsoft-alerts-management-smart-groups-his
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AlertsManagement/actionRules
 # operationId: ActionRules_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-alerts-management-action-rules list-by" [
+export def "subscriptions-resource-groups-providers-microsoft-alerts-management-action-rules list" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -478,7 +487,7 @@ export def "subscriptions-resource-groups-providers-microsoft-alerts-management-
   --target-resource-group: string # Filter by target resource group name. Default value is select all.
   --target-resource-type: string # Filter by target resource type. Default value is select all.
   --target-resource: string # Filter by target resource( which is full ARM ID) Default value is select all.
-  --severity: string@severity-completer # Filter by severity.  Default value is select all.
+  --severity: string@severity-completer # Filter by severity. Default value is select all.
   --monitor-service: string@monitor-service-completer # Filter by monitor service which generates the alert instance. Default value is select all.
   --impacted-scope: string # filter by impacted/target scope (provide comma separated list for multiple scopes). The value should be an well constructed ARM id of the scope.
   --description: string # filter by alert rule description
@@ -490,7 +499,7 @@ export def "subscriptions-resource-groups-providers-microsoft-alerts-management-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "targetResourceGroup" $target_resource_group "scalar") (serialize-qp "targetResourceType" $target_resource_type "scalar") (serialize-qp "targetResource" $target_resource "scalar") (serialize-qp "severity" $severity "scalar") (serialize-qp "monitorService" $monitor_service "scalar") (serialize-qp "impactedScope" $impacted_scope "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "alertRuleId" $alert_rule_id "scalar") (serialize-qp "actionGroup" $action_group "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.AlertsManagement/actionRules") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.AlertsManagement/actionRules") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -517,7 +526,7 @@ export def "subscriptions-resource-groups-providers-microsoft-alerts-management-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, action_rule_name: $action_rule_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.AlertsManagement/actionRules/{action_rule_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), action_rule_name: (encode-path-segment $action_rule_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.AlertsManagement/actionRules/{action_rule_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -544,7 +553,7 @@ export def "subscriptions-resource-groups-providers-microsoft-alerts-management-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, action_rule_name: $action_rule_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.AlertsManagement/actionRules/{action_rule_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), action_rule_name: (encode-path-segment $action_rule_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.AlertsManagement/actionRules/{action_rule_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -575,12 +584,12 @@ export def "subscriptions-resource-groups-providers-microsoft-alerts-management-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, action_rule_name: $action_rule_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.AlertsManagement/actionRules/{action_rule_name}") $qp)
-  let body = {"properties": $properties, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), action_rule_name: (encode-path-segment $action_rule_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.AlertsManagement/actionRules/{action_rule_name}") $qp)
+  let req_body = {"properties": $properties, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create/update an action rule
@@ -609,10 +618,10 @@ export def "subscriptions-resource-groups-providers-microsoft-alerts-management-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, action_rule_name: $action_rule_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.AlertsManagement/actionRules/{action_rule_name}") $qp)
-  let body = {"properties": $properties, "location": $location, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), action_rule_name: (encode-path-segment $action_rule_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.AlertsManagement/actionRules/{action_rule_name}") $qp)
+  let req_body = {"properties": $properties, "location": $location, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

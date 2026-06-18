@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -72,7 +81,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "doubleclicksearch-agency-advertiser-engine-conversion doubleclicksearchconversionget" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "doubleclicksearch-agency-advertiser-engine-conversion get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -96,7 +105,7 @@ export def commands []: nothing -> table {
 #
 # GET /doubleclicksearch/v2/agency/{agencyId}/advertiser/{advertiserId}/engine/{engineAccountId}/conversion
 # operationId: doubleclicksearch.conversion.get
-export def "doubleclicksearch-agency-advertiser-engine-conversion doubleclicksearchconversionget" [
+export def "doubleclicksearch-agency-advertiser-engine-conversion get" [
   agency_id: string
   advertiser_id: string
   engine_account_id: string
@@ -132,7 +141,7 @@ export def "doubleclicksearch-agency-advertiser-engine-conversion doubleclicksea
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "rowCount" $row_count "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "startRow" $start_row "scalar") (serialize-qp "adGroupId" $ad_group_id "scalar") (serialize-qp "adId" $ad_id "scalar") (serialize-qp "campaignId" $campaign_id "scalar") (serialize-qp "criterionId" $criterion_id "scalar") (serialize-qp "customerId" $customer_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({agency_id: $agency_id, advertiser_id: $advertiser_id, engine_account_id: $engine_account_id} | format pattern "/doubleclicksearch/v2/agency/{agency_id}/advertiser/{advertiser_id}/engine/{engine_account_id}/conversion") $qp)
+  let full_url = (build-url $base ({agency_id: (encode-path-segment $agency_id), advertiser_id: (encode-path-segment $advertiser_id), engine_account_id: (encode-path-segment $engine_account_id)} | format pattern "/doubleclicksearch/v2/agency/{agency_id}/advertiser/{advertiser_id}/engine/{engine_account_id}/conversion") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -142,7 +151,7 @@ export def "doubleclicksearch-agency-advertiser-engine-conversion doubleclicksea
 #
 # GET /doubleclicksearch/v2/agency/{agencyId}/advertiser/{advertiserId}/idmapping
 # operationId: doubleclicksearch.reports.getIdMappingFile
-export def "doubleclicksearch-agency-advertiser-idmapping doubleclicksearchreportsgetIdMappingFile" [
+export def "doubleclicksearch-agency-advertiser-idmapping get-mapping-file" [
   agency_id: string
   advertiser_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -168,7 +177,7 @@ export def "doubleclicksearch-agency-advertiser-idmapping doubleclicksearchrepor
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({agency_id: $agency_id, advertiser_id: $advertiser_id} | format pattern "/doubleclicksearch/v2/agency/{agency_id}/advertiser/{advertiser_id}/idmapping") $qp)
+  let full_url = (build-url $base ({agency_id: (encode-path-segment $agency_id), advertiser_id: (encode-path-segment $advertiser_id)} | format pattern "/doubleclicksearch/v2/agency/{agency_id}/advertiser/{advertiser_id}/idmapping") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -178,7 +187,7 @@ export def "doubleclicksearch-agency-advertiser-idmapping doubleclicksearchrepor
 #
 # GET /doubleclicksearch/v2/agency/{agencyId}/advertiser/{advertiserId}/savedcolumns
 # operationId: doubleclicksearch.savedColumns.list
-export def "doubleclicksearch-agency-advertiser-savedcolumns doubleclicksearchsavedColumnslist" [
+export def "doubleclicksearch-agency-advertiser-savedcolumns list" [
   agency_id: string
   advertiser_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -204,7 +213,7 @@ export def "doubleclicksearch-agency-advertiser-savedcolumns doubleclicksearchsa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({agency_id: $agency_id, advertiser_id: $advertiser_id} | format pattern "/doubleclicksearch/v2/agency/{agency_id}/advertiser/{advertiser_id}/savedcolumns") $qp)
+  let full_url = (build-url $base ({agency_id: (encode-path-segment $agency_id), advertiser_id: (encode-path-segment $advertiser_id)} | format pattern "/doubleclicksearch/v2/agency/{agency_id}/advertiser/{advertiser_id}/savedcolumns") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -214,8 +223,8 @@ export def "doubleclicksearch-agency-advertiser-savedcolumns doubleclicksearchsa
 #
 # POST /doubleclicksearch/v2/conversion
 # operationId: doubleclicksearch.conversion.insert
-# --conversion item shape: {adGroupId?: string, adId?: string, advertiserId?: string, agencyId?: string, attributionModel?: string, campaignId?: string, channel?: string, clickId?: string, conversionId?: string, conversionModifiedTimestamp?: string, conversionTimestamp?: string, countMillis?: string, criterionId?: string, currencyCode?: string, customDimension?: list, customMetric?: list, customerId?: string, deviceType?: string, dsConversionId?: string, engineAccountId?: string, floodlightOrderId?: string, inventoryAccountId?: string, productCountry?: string, productGroupId?: string, productId?: string, productLanguage?: string, quantityMillis?: string, revenueMicros?: string, segmentationId?: string, segmentationName?: string, segmentationType?: string, state?: string, storeId?: string, type?: string}
-export def "doubleclicksearch-conversion doubleclicksearchconversioninsert" [
+# --conversion item shape: {adGroupId?: string, adId?: string, advertiserId?: string, agencyId?: string, attributionModel?: string, campaignId?: string, channel?: string, clickId?: string, conversionId?: string, conversionModifiedTimestamp?: string, conversionTimestamp?: string, countMillis?: string, criterionId?: string, currencyCode?: string, customDimension?: list, customMetric?: list, customerId?: string, deviceType?: string, dsConversionId?: string, engineAccountId?: string, floodlightOrderId?: string, ... (13 more fields)}
+export def "doubleclicksearch-conversion create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -235,7 +244,7 @@ export def "doubleclicksearch-conversion doubleclicksearchconversioninsert" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --conversion: list # The conversions being requested. — item shape: {adGroupId?: string, adId?: string, advertiserId?: string, agencyId?: string, attributionModel?: string, campaignId?: string, channel?: string, clickId?: string, conversionId?: string, conversionModifiedTimestamp?: string, conversionTimestamp?: string, countMillis?: string, criterionId?: string, currencyCode?: string, customDimension?: list, customMetric?: list, customerId?: string, deviceType?: string, dsConversionId?: string, engineAccountId?: string, floodlightOrderId?: string, inventoryAccountId?: string, productCountry?: string, productGroupId?: string, productId?: string, productLanguage?: string, quantityMillis?: string, revenueMicros?: string, segmentationId?: string, segmentationName?: string, segmentationType?: string, state?: string, storeId?: string, type?: string}
+  --conversion: list # The conversions being requested. — item shape: {adGroupId?: string, adId?: string, advertiserId?: string, agencyId?: string, attributionModel?: string, campaignId?: string, channel?: string, clickId?: string, conversionId?: string, conversionModifiedTimestamp?: string, conversionTimestamp?: string, countMillis?: string, criterionId?: string, currencyCode?: string, customDimension?: list, customMetric?: list, customerId?: string, deviceType?: string, dsConversionId?: string, engineAccountId?: string, floodlightOrderId?: string, ... (13 more fields)}
   --kind: string # Identifies this as a ConversionList resource. Value: the fixed string doubleclicksearch#conversionList.
 ]: any -> record<conversion: table<adGroupId: string, adId: string, advertiserId: string, agencyId: string, attributionModel: string, campaignId: string, channel: string, clickId: string, conversionId: string, conversionModifiedTimestamp: string, conversionTimestamp: string, countMillis: string, criterionId: string, currencyCode: string, customDimension: list, customMetric: list, customerId: string, deviceType: string, dsConversionId: string, engineAccountId: string, floodlightOrderId: string, inventoryAccountId: string, productCountry: string, productGroupId: string, productId: string, productLanguage: string, quantityMillis: string, revenueMicros: string, segmentationId: string, segmentationName: string, segmentationType: string, state: string, storeId: string, type: string>, kind: string> {
   let input = $in
@@ -243,19 +252,19 @@ export def "doubleclicksearch-conversion doubleclicksearchconversioninsert" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/doubleclicksearch/v2/conversion" $qp)
-  let body = {"conversion": $conversion, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"conversion": $conversion, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates a batch of conversions in DoubleClick Search.
 #
 # PUT /doubleclicksearch/v2/conversion
 # operationId: doubleclicksearch.conversion.update
-# --conversion item shape: {adGroupId?: string, adId?: string, advertiserId?: string, agencyId?: string, attributionModel?: string, campaignId?: string, channel?: string, clickId?: string, conversionId?: string, conversionModifiedTimestamp?: string, conversionTimestamp?: string, countMillis?: string, criterionId?: string, currencyCode?: string, customDimension?: list, customMetric?: list, customerId?: string, deviceType?: string, dsConversionId?: string, engineAccountId?: string, floodlightOrderId?: string, inventoryAccountId?: string, productCountry?: string, productGroupId?: string, productId?: string, productLanguage?: string, quantityMillis?: string, revenueMicros?: string, segmentationId?: string, segmentationName?: string, segmentationType?: string, state?: string, storeId?: string, type?: string}
-export def "doubleclicksearch-conversion doubleclicksearchconversionupdate" [
+# --conversion item shape: {adGroupId?: string, adId?: string, advertiserId?: string, agencyId?: string, attributionModel?: string, campaignId?: string, channel?: string, clickId?: string, conversionId?: string, conversionModifiedTimestamp?: string, conversionTimestamp?: string, countMillis?: string, criterionId?: string, currencyCode?: string, customDimension?: list, customMetric?: list, customerId?: string, deviceType?: string, dsConversionId?: string, engineAccountId?: string, floodlightOrderId?: string, ... (13 more fields)}
+export def "doubleclicksearch-conversion update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -275,7 +284,7 @@ export def "doubleclicksearch-conversion doubleclicksearchconversionupdate" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --conversion: list # The conversions being requested. — item shape: {adGroupId?: string, adId?: string, advertiserId?: string, agencyId?: string, attributionModel?: string, campaignId?: string, channel?: string, clickId?: string, conversionId?: string, conversionModifiedTimestamp?: string, conversionTimestamp?: string, countMillis?: string, criterionId?: string, currencyCode?: string, customDimension?: list, customMetric?: list, customerId?: string, deviceType?: string, dsConversionId?: string, engineAccountId?: string, floodlightOrderId?: string, inventoryAccountId?: string, productCountry?: string, productGroupId?: string, productId?: string, productLanguage?: string, quantityMillis?: string, revenueMicros?: string, segmentationId?: string, segmentationName?: string, segmentationType?: string, state?: string, storeId?: string, type?: string}
+  --conversion: list # The conversions being requested. — item shape: {adGroupId?: string, adId?: string, advertiserId?: string, agencyId?: string, attributionModel?: string, campaignId?: string, channel?: string, clickId?: string, conversionId?: string, conversionModifiedTimestamp?: string, conversionTimestamp?: string, countMillis?: string, criterionId?: string, currencyCode?: string, customDimension?: list, customMetric?: list, customerId?: string, deviceType?: string, dsConversionId?: string, engineAccountId?: string, floodlightOrderId?: string, ... (13 more fields)}
   --kind: string # Identifies this as a ConversionList resource. Value: the fixed string doubleclicksearch#conversionList.
 ]: any -> record<conversion: table<adGroupId: string, adId: string, advertiserId: string, agencyId: string, attributionModel: string, campaignId: string, channel: string, clickId: string, conversionId: string, conversionModifiedTimestamp: string, conversionTimestamp: string, countMillis: string, criterionId: string, currencyCode: string, customDimension: list, customMetric: list, customerId: string, deviceType: string, dsConversionId: string, engineAccountId: string, floodlightOrderId: string, inventoryAccountId: string, productCountry: string, productGroupId: string, productId: string, productLanguage: string, quantityMillis: string, revenueMicros: string, segmentationId: string, segmentationName: string, segmentationType: string, state: string, storeId: string, type: string>, kind: string> {
   let input = $in
@@ -283,11 +292,11 @@ export def "doubleclicksearch-conversion doubleclicksearchconversionupdate" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/doubleclicksearch/v2/conversion" $qp)
-  let body = {"conversion": $conversion, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"conversion": $conversion, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates the availabilities of a batch of floodlight activities in DoubleClick Search.
@@ -295,7 +304,7 @@ export def "doubleclicksearch-conversion doubleclicksearchconversionupdate" [
 # POST /doubleclicksearch/v2/conversion/updateAvailability
 # operationId: doubleclicksearch.conversion.updateAvailability
 # --availabilities item shape: {advertiserId?: string, agencyId?: string, availabilityTimestamp?: string, customerId?: string, segmentationId?: string, segmentationName?: string, segmentationType?: string}
-export def "doubleclicksearch-conversion-update-availability doubleclicksearchconversionupdateAvailability" [
+export def "doubleclicksearch-conversion-update-availability update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -322,18 +331,18 @@ export def "doubleclicksearch-conversion-update-availability doubleclicksearchco
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/doubleclicksearch/v2/conversion/updateAvailability" $qp)
-  let body = {"availabilities": $availabilities} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"availabilities": $availabilities} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieves a list of conversions from a DoubleClick Search engine account.
 #
 # GET /doubleclicksearch/v2/customer/{customerId}/conversion
 # operationId: doubleclicksearch.conversion.getByCustomerId
-export def "doubleclicksearch-customer-conversion doubleclicksearchconversiongetByCustomerId" [
+export def "doubleclicksearch-customer-conversion get" [
   customer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -369,7 +378,7 @@ export def "doubleclicksearch-customer-conversion doubleclicksearchconversionget
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "rowCount" $row_count "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "startRow" $start_row "scalar") (serialize-qp "adGroupId" $ad_group_id "scalar") (serialize-qp "adId" $ad_id "scalar") (serialize-qp "advertiserId" $advertiser_id "scalar") (serialize-qp "agencyId" $agency_id "scalar") (serialize-qp "campaignId" $campaign_id "scalar") (serialize-qp "criterionId" $criterion_id "scalar") (serialize-qp "engineAccountId" $engine_account_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer_id: $customer_id} | format pattern "/doubleclicksearch/v2/customer/{customer_id}/conversion") $qp)
+  let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id)} | format pattern "/doubleclicksearch/v2/customer/{customer_id}/conversion") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -384,7 +393,7 @@ export def "doubleclicksearch-customer-conversion doubleclicksearchconversionget
 # --orderBy item shape: {column?: record, sortOrder?: string}
 # --reportScope shape: {adGroupId?: string, adId?: string, advertiserId?: string, agencyId?: string, campaignId?: string, engineAccountId?: string, keywordId?: string}
 # --timeRange shape: {changedAttributesSinceTimestamp?: string, changedMetricsSinceTimestamp?: string, endDate?: string, startDate?: string}
-export def "doubleclicksearch-reports doubleclicksearchreportsrequest" [
+export def "doubleclicksearch-reports request" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -424,11 +433,11 @@ export def "doubleclicksearch-reports doubleclicksearchreportsrequest" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/doubleclicksearch/v2/reports" $qp)
-  let body = {"columns": $columns, "downloadFormat": $download_format, "filters": $filters, "includeDeletedEntities": $include_deleted_entities, "includeRemovedEntities": $include_removed_entities, "maxRowsPerFile": $max_rows_per_file, "orderBy": $order_by, "reportScope": $report_scope, "reportType": $report_type, "rowCount": $row_count, "startRow": $start_row, "statisticsCurrency": $statistics_currency, "timeRange": $time_range, "verifySingleTimeZone": $verify_single_time_zone} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"columns": $columns, "downloadFormat": $download_format, "filters": $filters, "includeDeletedEntities": $include_deleted_entities, "includeRemovedEntities": $include_removed_entities, "maxRowsPerFile": $max_rows_per_file, "orderBy": $order_by, "reportScope": $report_scope, "reportType": $report_type, "rowCount": $row_count, "startRow": $start_row, "statisticsCurrency": $statistics_currency, "timeRange": $time_range, "verifySingleTimeZone": $verify_single_time_zone} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Generates and returns a report immediately.
@@ -440,7 +449,7 @@ export def "doubleclicksearch-reports doubleclicksearchreportsrequest" [
 # --orderBy item shape: {column?: record, sortOrder?: string}
 # --reportScope shape: {adGroupId?: string, adId?: string, advertiserId?: string, agencyId?: string, campaignId?: string, engineAccountId?: string, keywordId?: string}
 # --timeRange shape: {changedAttributesSinceTimestamp?: string, changedMetricsSinceTimestamp?: string, endDate?: string, startDate?: string}
-export def "doubleclicksearch-reports-generate doubleclicksearchreportsgenerate" [
+export def "doubleclicksearch-reports-generate generate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -480,18 +489,18 @@ export def "doubleclicksearch-reports-generate doubleclicksearchreportsgenerate"
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/doubleclicksearch/v2/reports/generate" $qp)
-  let body = {"columns": $columns, "downloadFormat": $download_format, "filters": $filters, "includeDeletedEntities": $include_deleted_entities, "includeRemovedEntities": $include_removed_entities, "maxRowsPerFile": $max_rows_per_file, "orderBy": $order_by, "reportScope": $report_scope, "reportType": $report_type, "rowCount": $row_count, "startRow": $start_row, "statisticsCurrency": $statistics_currency, "timeRange": $time_range, "verifySingleTimeZone": $verify_single_time_zone} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"columns": $columns, "downloadFormat": $download_format, "filters": $filters, "includeDeletedEntities": $include_deleted_entities, "includeRemovedEntities": $include_removed_entities, "maxRowsPerFile": $max_rows_per_file, "orderBy": $order_by, "reportScope": $report_scope, "reportType": $report_type, "rowCount": $row_count, "startRow": $start_row, "statisticsCurrency": $statistics_currency, "timeRange": $time_range, "verifySingleTimeZone": $verify_single_time_zone} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Polls for the status of a report request.
 #
 # GET /doubleclicksearch/v2/reports/{reportId}
 # operationId: doubleclicksearch.reports.get
-export def "doubleclicksearch-reports doubleclicksearchreportsget" [
+export def "doubleclicksearch-reports get" [
   report_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -516,7 +525,7 @@ export def "doubleclicksearch-reports doubleclicksearchreportsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({report_id: $report_id} | format pattern "/doubleclicksearch/v2/reports/{report_id}") $qp)
+  let full_url = (build-url $base ({report_id: (encode-path-segment $report_id)} | format pattern "/doubleclicksearch/v2/reports/{report_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -526,7 +535,7 @@ export def "doubleclicksearch-reports doubleclicksearchreportsget" [
 #
 # GET /doubleclicksearch/v2/reports/{reportId}/files/{reportFragment}
 # operationId: doubleclicksearch.reports.getFile
-export def "doubleclicksearch-reports-files doubleclicksearchreportsgetFile" [
+export def "doubleclicksearch-reports-files get" [
   report_id: string
   report_fragment: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -552,7 +561,7 @@ export def "doubleclicksearch-reports-files doubleclicksearchreportsgetFile" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({report_id: $report_id, report_fragment: $report_fragment} | format pattern "/doubleclicksearch/v2/reports/{report_id}/files/{report_fragment}") $qp)
+  let full_url = (build-url $base ({report_id: (encode-path-segment $report_id), report_fragment: (encode-path-segment $report_fragment)} | format pattern "/doubleclicksearch/v2/reports/{report_id}/files/{report_fragment}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

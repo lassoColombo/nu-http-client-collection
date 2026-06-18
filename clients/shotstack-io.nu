@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -108,7 +117,7 @@ export def "assets-render get" [
 ]: nothing -> record<data: table<attributes: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/assets/render/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/assets/render/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -131,7 +140,7 @@ export def "assets delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/assets/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/assets/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -154,7 +163,7 @@ export def "assets get" [
 ]: nothing -> record<data: record<attributes: record<created: string, filename: string, id: string, owner: string, region: string, renderId: string, status: string, updated: string, url: string>, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/assets/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/assets/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -175,8 +184,8 @@ export def "render create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --callback: string # An optional webhook callback URL used to receive status notifications when a render completes or fails. See [webhooks](https://shotstack.gitbook.io/docs/guides/architecting-an-application/webhooks) for  more details. (e.g. https://my-server.com/callback.php)
-  --disk: string@disk-completer # The disk type to use for storing footage and assets for each render. See [disk types](https://shotstack.gitbook.io/docs/guides/architecting-an-application/disk-types) for more details. <ul>   <li>`local` - optimized for high speed rendering with up to 512MB storage</li>   <li>`mount` - optimized for larger file sizes and longer videos with 5GB for source footage and 512MB for output render</li> </ul> (default: local)
+  --callback: string # An optional webhook callback URL used to receive status notifications when a render completes or fails. See [webhooks](https://shotstack.gitbook.io/docs/guides/architecting-an-application/webhooks) for more details. (e.g. https://my-server.com/callback.php)
+  --disk: string@disk-completer # The disk type to use for storing footage and assets for each render. See [disk types](https://shotstack.gitbook.io/docs/guides/architecting-an-application/disk-types) for more details. `local` - optimized for high speed rendering with up to 512MB storage `mount` - optimized for larger file sizes and longer videos with 5GB for source footage and 512MB for output render (default: local)
   output: record # The output format, render range and type of media to generate. — shape: {aspectRatio?: "16:9"|"9:16"|"1:1"|"4:5"|"4:3", destinations?: list, format: "mp4"|"gif"|"mp3"|"jpg"|"png"|"bmp", fps?: "12"|"15"|"24"|"25"|"30", poster?: record, quality?: "low"|"medium"|"high", range?: record, resolution?: "preview"|"mobile"|"sd"|"hd"|"1080", scaleTo?: "preview"|"mobile"|"sd"|"hd"|"1080", size?: record, thumbnail?: record}
   timeline: record # A timeline represents the contents of a video edit over time, an audio edit over time, in seconds, or an image layout. A timeline consists of layers called tracks. Tracks are composed of titles, images, audio, html or video segments referred to as clips which are placed along the track at specific starting point and lasting for a specific amount of time. — shape: {background?: string, cache?: bool, fonts?: list, soundtrack?: record, tracks: list}
 ]: any -> record<message: string, response: record<id: string, message: string>, success: bool> {
@@ -184,11 +193,11 @@ export def "render create" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/render")
-  let body = {"callback": $callback, "disk": $disk, "output": $output, "timeline": $timeline} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"callback": $callback, "disk": $disk, "output": $output, "timeline": $timeline} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get Render Status
@@ -208,7 +217,7 @@ export def "render get" [
 ]: nothing -> record<message: string, response: record<created: string, data: record<callback: string, disk: string, output: record, timeline: record>, duration: float, error: string, id: string, owner: string, plan: string, poster: string, renderTime: float, status: string, thumbnail: string, updated: string, url: string>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/render/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/render/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

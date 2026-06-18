@@ -36,6 +36,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -111,11 +120,11 @@ export def "catalog-system-pub-facets-category get" [
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "_from" $qp_from "scalar") (serialize-qp "_to" $qp_to "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({category_id: $category_id} | format pattern "/api/catalog_system/pub/facets/category/{category_id}") $qp)
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({category_id: (encode-path-segment $category_id)} | format pattern "/api/catalog_system/pub/facets/category/{category_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -123,7 +132,7 @@ export def "catalog-system-pub-facets-category get" [
 #
 # GET /api/catalog_system/pub/facets/search/{term}
 # operationId: Facetscategory
-export def "catalog-system-pub-facets-search get" [
+export def "catalog-system-pub-facets-search get-facetscategory" [
   term: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -142,11 +151,11 @@ export def "catalog-system-pub-facets-search get" [
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "map" $map "scalar") (serialize-qp "_from" $qp_from "scalar") (serialize-qp "_to" $qp_to "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({term: $term} | format pattern "/api/catalog_system/pub/facets/search/{term}") $qp)
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({term: (encode-path-segment $term)} | format pattern "/api/catalog_system/pub/facets/search/{term}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -154,7 +163,7 @@ export def "catalog-system-pub-facets-search get" [
 #
 # GET /api/catalog_system/pub/products/crossselling/accessories/{productId}
 # operationId: ProductSearchAccessories
-export def "catalog-system-pub-products-crossselling-accessories get" [
+export def "catalog-system-pub-products-crossselling-accessories list" [
   product_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -169,11 +178,11 @@ export def "catalog-system-pub-products-crossselling-accessories get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default "https://entelperu.{environment}.com.br/api/catalog_system/pub/products/crossselling/accessories")
-  let full_url = (build-url $base ({product_id: $product_id} | format pattern "/api/catalog_system/pub/products/crossselling/accessories/{product_id}"))
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({product_id: (encode-path-segment $product_id)} | format pattern "/api/catalog_system/pub/products/crossselling/accessories/{product_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -181,7 +190,7 @@ export def "catalog-system-pub-products-crossselling-accessories get" [
 #
 # GET /api/catalog_system/pub/products/crossselling/showtogether/{productId}
 # operationId: ProductSearchShowTogether
-export def "catalog-system-pub-products-crossselling-showtogether get" [
+export def "catalog-system-pub-products-crossselling-showtogether list-show-together" [
   product_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -196,11 +205,11 @@ export def "catalog-system-pub-products-crossselling-showtogether get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default "https://entelperu.{environment}.com.br/api/catalog_system/pub/products/crossselling/accessories")
-  let full_url = (build-url $base ({product_id: $product_id} | format pattern "/api/catalog_system/pub/products/crossselling/showtogether/{product_id}"))
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({product_id: (encode-path-segment $product_id)} | format pattern "/api/catalog_system/pub/products/crossselling/showtogether/{product_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -208,7 +217,7 @@ export def "catalog-system-pub-products-crossselling-showtogether get" [
 #
 # GET /api/catalog_system/pub/products/crossselling/similars/{productId}
 # operationId: ProductSearchSimilars
-export def "catalog-system-pub-products-crossselling-similars get" [
+export def "catalog-system-pub-products-crossselling-similars list" [
   product_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -223,11 +232,11 @@ export def "catalog-system-pub-products-crossselling-similars get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default "http://example.com/.{environment}.com.br")
-  let full_url = (build-url $base ({product_id: $product_id} | format pattern "/api/catalog_system/pub/products/crossselling/similars/{product_id}"))
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({product_id: (encode-path-segment $product_id)} | format pattern "/api/catalog_system/pub/products/crossselling/similars/{product_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -235,7 +244,7 @@ export def "catalog-system-pub-products-crossselling-similars get" [
 #
 # GET /api/catalog_system/pub/products/crossselling/suggestions/{productId}
 # operationId: ProductSearchSuggestions
-export def "catalog-system-pub-products-crossselling-suggestions get" [
+export def "catalog-system-pub-products-crossselling-suggestions list" [
   product_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -250,11 +259,11 @@ export def "catalog-system-pub-products-crossselling-suggestions get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default "http://example.com/.{environment}.com.br")
-  let full_url = (build-url $base ({product_id: $product_id} | format pattern "/api/catalog_system/pub/products/crossselling/suggestions/{product_id}"))
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({product_id: (encode-path-segment $product_id)} | format pattern "/api/catalog_system/pub/products/crossselling/suggestions/{product_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -262,7 +271,7 @@ export def "catalog-system-pub-products-crossselling-suggestions get" [
 #
 # GET /api/catalog_system/pub/products/crossselling/whoboughtalsobought/{productId}
 # operationId: ProductSearchWhoBoughtAlsoBought
-export def "catalog-system-pub-products-crossselling-whoboughtalsobought get" [
+export def "catalog-system-pub-products-crossselling-whoboughtalsobought list-who-bought-also-bought" [
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -277,11 +286,11 @@ export def "catalog-system-pub-products-crossselling-whoboughtalsobought get" [
 ]: nothing -> table<allSpecifications: list<string>, allSpecificationsGroups: list<string>, brand: string, brandId: int, brandImageUrl: string, categories: list<any>, categoriesIds: list<any>, categoryId: string, clusterHighlights: record, description: string, items: list<record>, link: string, linkText: string, metaTagDescription: string, productClusters: record, productId: string, productName: string, productReference: string, productReferenceCode: int, productTitle: string, releaseDate: string, searchableClusters: record> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default "http://example.com/.{environment}.com.br")
-  let full_url = (build-url $base ({product_id: $product_id} | format pattern "/api/catalog_system/pub/products/crossselling/whoboughtalsobought/{product_id}"))
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({product_id: (encode-path-segment $product_id)} | format pattern "/api/catalog_system/pub/products/crossselling/whoboughtalsobought/{product_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -289,7 +298,7 @@ export def "catalog-system-pub-products-crossselling-whoboughtalsobought get" [
 #
 # GET /api/catalog_system/pub/products/crossselling/whosawalsobought/{productId}
 # operationId: ProductSearchWhoSawAlsoBought
-export def "catalog-system-pub-products-crossselling-whosawalsobought get" [
+export def "catalog-system-pub-products-crossselling-whosawalsobought list-who-saw-also-bought" [
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -304,11 +313,11 @@ export def "catalog-system-pub-products-crossselling-whosawalsobought get" [
 ]: nothing -> table<allSpecifications: list<string>, allSpecificationsGroups: list<string>, brand: string, brandId: int, brandImageUrl: string, categories: list<any>, categoriesIds: list<any>, categoryId: string, clusterHighlights: record, description: string, items: list<record>, link: string, linkText: string, metaTagDescription: string, productClusters: record, productId: string, productName: string, productReference: string, productReferenceCode: int, productTitle: string, releaseDate: string, searchableClusters: record> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default "http://example.com/.{environment}.com.br")
-  let full_url = (build-url $base ({product_id: $product_id} | format pattern "/api/catalog_system/pub/products/crossselling/whosawalsobought/{product_id}"))
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({product_id: (encode-path-segment $product_id)} | format pattern "/api/catalog_system/pub/products/crossselling/whosawalsobought/{product_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -316,7 +325,7 @@ export def "catalog-system-pub-products-crossselling-whosawalsobought get" [
 #
 # GET /api/catalog_system/pub/products/crossselling/whosawalsosaw/{productId}
 # operationId: ProductSearchWhoSawAlsoSaw
-export def "catalog-system-pub-products-crossselling-whosawalsosaw get" [
+export def "catalog-system-pub-products-crossselling-whosawalsosaw list-who-saw-also-saw" [
   product_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -331,11 +340,11 @@ export def "catalog-system-pub-products-crossselling-whosawalsosaw get" [
 ]: nothing -> table<allSpecifications: list<string>, allSpecificationsGroups: list<string>, brand: string, brandId: int, brandImageUrl: string, categories: list<any>, categoriesIds: list<any>, categoryId: string, clusterHighlights: record, description: string, items: list<record>, link: string, linkText: string, metaTagDescription: string, productClusters: record, productId: string, productName: string, productReference: string, productReferenceCode: int, productTitle: string, releaseDate: string, searchableClusters: record> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default "http://example.com/.{environment}.com.br")
-  let full_url = (build-url $base ({product_id: $product_id} | format pattern "/api/catalog_system/pub/products/crossselling/whosawalsosaw/{product_id}"))
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({product_id: (encode-path-segment $product_id)} | format pattern "/api/catalog_system/pub/products/crossselling/whosawalsosaw/{product_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -357,11 +366,11 @@ export def "catalog-system-pub-products-offers get" [
 ]: nothing -> table<EanId: string, IsActive: bool, LastModified: string, MainImage: record<ImageId: string, ImageLabel: string, ImagePath: string, ImageTag: string, ImageText: string, IsMain: bool, IsZoomSize: bool, LastModified: string>, Name: string, NameComplete: string, Offers: list<record>, ProductId: string, RefId: string, SkuId: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({product_id: $product_id} | format pattern "/api/catalog_system/pub/products/offers/{product_id}"))
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({product_id: (encode-path-segment $product_id)} | format pattern "/api/catalog_system/pub/products/offers/{product_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -384,11 +393,11 @@ export def "catalog-system-pub-products-offers-sku get" [
 ]: nothing -> table<EanId: string, IsActive: bool, LastModified: string, MainImage: record<ImageId: string, ImageLabel: string, ImagePath: string, ImageTag: string, ImageText: string, IsMain: bool, IsZoomSize: bool, LastModified: string>, Name: string, NameComplete: string, Offers: list<record>, ProductId: string, RefId: string, SkuId: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({product_id: $product_id, sku_id: $sku_id} | format pattern "/api/catalog_system/pub/products/offers/{product_id}/sku/{sku_id}"))
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({product_id: (encode-path-segment $product_id), sku_id: (encode-path-segment $sku_id)} | format pattern "/api/catalog_system/pub/products/offers/{product_id}/sku/{sku_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -396,7 +405,7 @@ export def "catalog-system-pub-products-offers-sku get" [
 #
 # GET /api/catalog_system/pub/products/search
 # operationId: ProductSearchFilteredandOrdered
-export def "catalog-system-pub-products-search get" [
+export def "catalog-system-pub-products-search list-filteredand-ordered" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -408,7 +417,7 @@ export def "catalog-system-pub-products-search get" [
   --qp-from: string # Starter page range. These parameters allow the API to be paginated. Take into account that the initial and final pages cannot have a separation superior to 50 pages. Thus, it will be displayed 50 items per page. (e.g. 1)
   --qp-to: string # Finisher page range. These parameters allow the API to be paginated. Take into account that the initial and final pages cannot have a separation superior to 50 pages. Thus, it will be displayed 50 items per page. (e.g. 50)
   --ft: string # Filter by full text. The form is`ft={searchWord}` (e.g. television)
-  --fq: string # General filter. It can be by category (`fq=C:/{a}/{b}`), by specification (`fq=specificationFilter_{a}:{b}`),  by price range (`fq=P:[{a} TO {b}]`), by collection (`fq=productClusterIds:{{productClusterId}}`), by product ID (`fq=productId:{{productId}}`),  by SKU ID (`fq=skuId:{{skuId}}`), by Reference ID (`fq=alternateIds_RefId:{{referenceId}}`), by EAN13 (`fq=alternateIds_Ean:{{ean13}}`), by availability at a specific sales channel (`fq=isAvailablePerSalesChannel_{{sc}}:{{bool}}`), by available at a specific seller (`fq=sellerId:{{sellerId}}`) (e.g. C:/1000041/1000049/)
+  --fq: string # General filter. It can be by category (`fq=C:/{a}/{b}`), by specification (`fq=specificationFilter_{a}:{b}`), by price range (`fq=P:[{a} TO {b}]`), by collection (`fq=productClusterIds:{{productClusterId}}`), by product ID (`fq=productId:{{productId}}`), by SKU ID (`fq=skuId:{{skuId}}`), by Reference ID (`fq=alternateIds_RefId:{{referenceId}}`), by EAN13 (`fq=alternateIds_Ean:{{ean13}}`), by availability at a specific sales channel (`fq=isAvailablePerSalesChannel_{{sc}}:{{bool}}`), by available at a specific seller (`fq=sellerId:{{sellerId}}`) (e.g. C:/1000041/1000049/)
   --o: string # Sorting method. It can be by Price (`O=OrderByPriceDESC` or `O=OrderByPriceASC`), by Top Selling Products (`O=OrderByTopSaleDESC`), by Best Reviews (`O=OrderByReviewRateDESC`), by Name (`O=OrderByNameASC` or `O=OrderByNameDESC`), by Release Date (`O=OrderByReleaseDateDESC`), by Best Discounts (`O=OrderByBestDiscountDESC`), by Score (`O=OrderByScoreDESC`) (e.g. OrderByNameASC)
   --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (e.g. application/json)
   --content-type: string # Describes the type of the content being sent. (e.g. application/json)
@@ -417,10 +426,10 @@ export def "catalog-system-pub-products-search get" [
   let base = ($base_url | default "http://example.com/.{environment}.com.br")
   let qp = [(serialize-qp "_from" $qp_from "scalar") (serialize-qp "_to" $qp_to "scalar") (serialize-qp "ft" $ft "scalar") (serialize-qp "fq" $fq "scalar") (serialize-qp "O" $o "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/catalog_system/pub/products/search" $qp)
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -428,7 +437,7 @@ export def "catalog-system-pub-products-search get" [
 #
 # GET /api/catalog_system/pub/products/search/{product-text-link}/p
 # operationId: Searchbyproducturl
-export def "catalog-system-pub-products-search-p list-byproducturl" [
+export def "catalog-system-pub-products-search-p get-searchbyproducturl" [
   product_text_link: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -443,11 +452,11 @@ export def "catalog-system-pub-products-search-p list-byproducturl" [
 ]: nothing -> table<allSpecifications: list<string>, allSpecificationsGroups: list<string>, brand: string, brandId: int, brandImageUrl: string, categories: list<any>, categoriesIds: list<any>, categoryId: string, clusterHighlights: record, description: string, items: list<record>, link: string, linkText: string, metaTagDescription: string, productClusters: record, productId: string, productName: string, productReference: string, productReferenceCode: int, productTitle: string, releaseDate: string, searchableClusters: record> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default "http://example.com/.{environment}.com.br")
-  let full_url = (build-url $base ({product_text_link: $product_text_link} | format pattern "/api/catalog_system/pub/products/search/{product_text_link}/p"))
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({product_text_link: (encode-path-segment $product_text_link)} | format pattern "/api/catalog_system/pub/products/search/{product_text_link}/p"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -470,11 +479,11 @@ export def "catalog-system-pub-products-search list" [
 ]: nothing -> table<allSpecifications: list<string>, allSpecificationsGroups: list<string>, brand: string, brandId: int, brandImageUrl: string, categories: list<any>, categoriesIds: list<any>, categoryId: string, clusterHighlights: record, description: string, items: list<record>, link: string, linkText: string, metaTagDescription: string, productClusters: record, productId: string, productName: string, productReference: string, productReferenceCode: int, productTitle: string, releaseDate: string, searchableClusters: record> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default "http://example.com/.{environment}.com.br")
-  let full_url = (build-url $base ({search: $search} | format pattern "/api/catalog_system/pub/products/search/{search}"))
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({search: (encode-path-segment $search)} | format pattern "/api/catalog_system/pub/products/search/{search}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -482,7 +491,7 @@ export def "catalog-system-pub-products-search list" [
 #
 # GET /buscaautocomplete
 # operationId: AutoComplete
-export def "buscaautocomplete get" [
+export def "buscaautocomplete complete-auto" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -493,15 +502,15 @@ export def "buscaautocomplete get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --product-name-contains: string # Part of the string that will be searched. (e.g. jeans)
   --content-type: string # Type of the content being sent (e.g. application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand  (e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand (e.g. application/json)
 ]: nothing -> record<itemsReturned: table<criteria: string, href: string, items: list, name: string, thumb: string, thumbUrl: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default "http://example.com/.{environment}.com.br")
   let qp = [(serialize-qp "productNameContains" $product_name_contains "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/buscaautocomplete" $qp)
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -113,7 +122,7 @@ export def "get-arrivals-and-departures-by-crs get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "apiKey" $api_key "scalar") (serialize-qp "numServices" $num_services "scalar") (serialize-qp "timeOffset" $time_offset "scalar") (serialize-qp "timeWindow" $time_window "scalar") (serialize-qp "serviceDetails" $service_details "scalar") (serialize-qp "filterStation" $filter_station "scalar") (serialize-qp "filterType" $filter_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({crs: $crs} | format pattern "/getArrivalsAndDeparturesByCRS/{crs}") $qp)
+  let full_url = (build-url $base ({crs: (encode-path-segment $crs)} | format pattern "/getArrivalsAndDeparturesByCRS/{crs}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -143,7 +152,7 @@ export def "get-arrivals-by-crs get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "apiKey" $api_key "scalar") (serialize-qp "numServices" $num_services "scalar") (serialize-qp "timeOffset" $time_offset "scalar") (serialize-qp "timeWindow" $time_window "scalar") (serialize-qp "serviceDetails" $service_details "scalar") (serialize-qp "filterStation" $filter_station "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({crs: $crs} | format pattern "/getArrivalsByCRS/{crs}") $qp)
+  let full_url = (build-url $base ({crs: (encode-path-segment $crs)} | format pattern "/getArrivalsByCRS/{crs}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -173,7 +182,7 @@ export def "get-departures-by-crs get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "apiKey" $api_key "scalar") (serialize-qp "numServices" $num_services "scalar") (serialize-qp "timeOffset" $time_offset "scalar") (serialize-qp "timeWindow" $time_window "scalar") (serialize-qp "serviceDetails" $service_details "scalar") (serialize-qp "filterStation" $filter_station "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({crs: $crs} | format pattern "/getDeparturesByCRS/{crs}") $qp)
+  let full_url = (build-url $base ({crs: (encode-path-segment $crs)} | format pattern "/getDeparturesByCRS/{crs}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -202,7 +211,7 @@ export def "get-fastest-departures-by-crs get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "apiKey" $api_key "scalar") (serialize-qp "filterList" $filter_list "scalar") (serialize-qp "timeOffset" $time_offset "scalar") (serialize-qp "timeWindow" $time_window "scalar") (serialize-qp "serviceDetails" $service_details "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({crs: $crs} | format pattern "/getFastestDeparturesByCRS/{crs}") $qp)
+  let full_url = (build-url $base ({crs: (encode-path-segment $crs)} | format pattern "/getFastestDeparturesByCRS/{crs}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -231,7 +240,7 @@ export def "get-next-departures-by-crs get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "apiKey" $api_key "scalar") (serialize-qp "filterList" $filter_list "scalar") (serialize-qp "timeOffset" $time_offset "scalar") (serialize-qp "timeWindow" $time_window "scalar") (serialize-qp "serviceDetails" $service_details "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({crs: $crs} | format pattern "/getNextDeparturesByCRS/{crs}") $qp)
+  let full_url = (build-url $base ({crs: (encode-path-segment $crs)} | format pattern "/getNextDeparturesByCRS/{crs}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -256,7 +265,7 @@ export def "get-service-details-by-id get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "apiKey" $api_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_id: $service_id} | format pattern "/getServiceDetailsByID/{service_id}") $qp)
+  let full_url = (build-url $base ({service_id: (encode-path-segment $service_id)} | format pattern "/getServiceDetailsByID/{service_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

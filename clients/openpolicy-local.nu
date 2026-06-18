@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -109,10 +118,11 @@ export def "query-api create-simple" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pretty" $pretty "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Health
@@ -129,7 +139,7 @@ export def "health get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --bundles: oneof<nothing, bool> # Reports on bundle activation status (useful for 'ready' checks at startup).  This includes any discovery bundles or bundles defined in the loaded discovery configuration. (e.g. true)
+  --bundles: oneof<nothing, bool> # Reports on bundle activation status (useful for 'ready' checks at startup). This includes any discovery bundles or bundles defined in the loaded discovery configuration. (e.g. true)
   --plugins: oneof<nothing, bool> # Reports on plugin status (e.g. false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -162,11 +172,12 @@ export def "data get-document-with-web-hook" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pretty" $pretty "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({path: $path} | format pattern "/v0/data/{path}") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({path: (encode-path-segment $path)} | format pattern "/v0/data/{path}") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-yaml" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-yaml" $req_body
 }
 
 # Compile
@@ -186,7 +197,7 @@ export def "compile create" [
   --pretty: oneof<nothing, bool> # If true, response will be in a human-readable format. (e.g. true)
   --explain: string # If set to *full*, response will include query explanations in addition to the result. (e.g. full)
   --metrics: oneof<nothing, bool> # If true, compiler performance metrics will be returned in the response. (e.g. false)
-  --instrument: oneof<nothing, bool> # If true, response will return additional performance metrics in addition to the result and the standard metrics.  **Caution:** This can add significant overhead to query evaluation. The recommendation is to only use this parameter if you are debugging a performance problem. (e.g. false)
+  --instrument: oneof<nothing, bool> # If true, response will return additional performance metrics in addition to the result and the standard metrics. **Caution:** This can add significant overhead to query evaluation. The recommendation is to only use this parameter if you are debugging a performance problem. (e.g. false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -194,10 +205,11 @@ export def "compile create" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pretty" $pretty "scalar") (serialize-qp "explain" $explain "scalar") (serialize-qp "metrics" $metrics "scalar") (serialize-qp "instrument" $instrument "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/compile" $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get configurations
@@ -241,7 +253,7 @@ export def "data delete-document" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({path: $path} | format pattern "/v1/data/{path}"))
+  let full_url = (build-url $base ({path: (encode-path-segment $path)} | format pattern "/v1/data/{path}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -251,7 +263,7 @@ export def "data delete-document" [
 #
 # GET /v1/data/{path}
 # operationId: getDocument
-export def "data get-document" [
+export def "data get-document-by-path" [
   path: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -266,12 +278,12 @@ export def "data get-document" [
   --provenance: oneof<nothing, bool> # If true, response will include build and version information in addition to the result. (e.g. false)
   --explain: string # If set to *full*, response will include query explanations in addition to the result. (e.g. full)
   --metrics: oneof<nothing, bool> # If true, compiler performance metrics will be returned in the response. (e.g. false)
-  --instrument: oneof<nothing, bool> # If true, response will return additional performance metrics in addition to the result and the standard metrics.  **Caution:** This can add significant overhead to query evaluation. The recommendation is to only use this parameter if you are debugging a performance problem. (e.g. false)
+  --instrument: oneof<nothing, bool> # If true, response will return additional performance metrics in addition to the result and the standard metrics. **Caution:** This can add significant overhead to query evaluation. The recommendation is to only use this parameter if you are debugging a performance problem. (e.g. false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "input" $input "multi") (serialize-qp "pretty" $pretty "scalar") (serialize-qp "provenance" $provenance "scalar") (serialize-qp "explain" $explain "scalar") (serialize-qp "metrics" $metrics "scalar") (serialize-qp "instrument" $instrument "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({path: $path} | format pattern "/v1/data/{path}") $qp)
+  let full_url = (build-url $base ({path: (encode-path-segment $path)} | format pattern "/v1/data/{path}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -296,18 +308,19 @@ export def "data update-document-by-path" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({path: $path} | format pattern "/v1/data/{path}"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({path: (encode-path-segment $path)} | format pattern "/v1/data/{path}"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get a document (with input)
 #
 # POST /v1/data/{path}
 # operationId: getDocumentWithPath
-export def "data get-document-with" [
+export def "data get-document-by-path-1" [
   path: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -321,18 +334,19 @@ export def "data get-document-with" [
   --provenance: oneof<nothing, bool> # If true, response will include build and version information in addition to the result. (e.g. false)
   --explain: string # If set to *full*, response will include query explanations in addition to the result. (e.g. full)
   --metrics: oneof<nothing, bool> # If true, compiler performance metrics will be returned in the response. (e.g. false)
-  --instrument: oneof<nothing, bool> # If true, response will return additional performance metrics in addition to the result and the standard metrics.  **Caution:** This can add significant overhead to query evaluation. The recommendation is to only use this parameter if you are debugging a performance problem. (e.g. false)
+  --instrument: oneof<nothing, bool> # If true, response will return additional performance metrics in addition to the result and the standard metrics. **Caution:** This can add significant overhead to query evaluation. The recommendation is to only use this parameter if you are debugging a performance problem. (e.g. false)
   --body: record
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pretty" $pretty "scalar") (serialize-qp "provenance" $provenance "scalar") (serialize-qp "explain" $explain "scalar") (serialize-qp "metrics" $metrics "scalar") (serialize-qp "instrument" $instrument "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({path: $path} | format pattern "/v1/data/{path}") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({path: (encode-path-segment $path)} | format pattern "/v1/data/{path}") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-yaml" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-yaml" $req_body
 }
 
 # Create or overwrite a document
@@ -355,13 +369,14 @@ export def "data update-document-by-path-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({path: $path} | format pattern "/v1/data/{path}"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({path: (encode-path-segment $path)} | format pattern "/v1/data/{path}"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List policies
@@ -407,7 +422,7 @@ export def "policies delete-policy-module" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pretty" $pretty "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/policies/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/policies/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -432,7 +447,7 @@ export def "policies get-policy-module" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pretty" $pretty "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/policies/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/policies/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -460,11 +475,12 @@ export def "policies update-policy-module" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pretty" $pretty "scalar") (serialize-qp "metrics" $metrics "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/policies/{id}") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/policies/{id}") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "text/plain" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "text/plain" $req_body
 }
 
 # Execute an ad-hoc query (simple)
@@ -517,8 +533,9 @@ export def "query create" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pretty" $pretty "scalar") (serialize-qp "explain" $explain "scalar") (serialize-qp "metrics" $metrics "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/query" $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-yaml" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-yaml" $req_body
 }

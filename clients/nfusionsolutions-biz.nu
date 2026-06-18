@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -108,9 +117,9 @@ export def "currencies-history get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --pairs: string # comma separated list of currency pairs. For example: USD/CAD,USD/EUR,USD/AUD
-  --start: string # start date of time period. format is <i>yyyy-mm-dd</i> (format: date-time)
-  --end: string # end date of time period. format is <i>yyyy-mm-dd</i>. Default is current date. (format: date-time)
-  --interval: string # aggregation interval. Composed of an optional integer value (which defaults to 1 when not specified),  followed by a type string which must be one of the following values: y=year, m=month, w=week, d=day, h=hour, mi=minute  For example, a yearly interval can be specified as "y" and 6 month interval as "6m".   If not specified the interval parameter default is 1 Day.
+  --start: string # start date of time period. format is yyyy-mm-dd (format: date-time)
+  --end: string # end date of time period. format is yyyy-mm-dd. Default is current date. (format: date-time)
+  --interval: string # aggregation interval. Composed of an optional integer value (which defaults to 1 when not specified), followed by a type string which must be one of the following values: y=year, m=month, w=week, d=day, h=hour, mi=minute For example, a yearly interval can be specified as "y" and 6 month interval as "6m". If not specified the interval parameter default is 1 Day.
   --format: string@format-completer # to override content negotiation specify a value of json or xml
 ]: nothing -> table<data: record<baseCurrency: string, intervals: list, name: string, symbol: string>, error: string, requestedCurrency: string, requestedSymbol: string, requestedUnitOfMeasure: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
@@ -264,9 +273,9 @@ export def "metals-benchmark-history get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --metals: string # comma separated list of metals
-  --start: string # start date of time period. format is <i>yyyy-mm-dd</i> (format: date-time)
-  --end: string # end date of time period. format is <i>yyyy-mm-dd</i>. Default is current date. (format: date-time)
-  --interval: string # aggregation interval. Composed of an optional integer value (which defaults to 1 when not specified),  followed by a type string which must be one of the following values: y=year, m=month, w=week, d=day, h=hour, mi=minute  For example, a yearly interval can be specified as "y" and 6 month interval as "6m".   If not specified the interval parameter default is 1 Day.
+  --start: string # start date of time period. format is yyyy-mm-dd (format: date-time)
+  --end: string # end date of time period. format is yyyy-mm-dd. Default is current date. (format: date-time)
+  --interval: string # aggregation interval. Composed of an optional integer value (which defaults to 1 when not specified), followed by a type string which must be one of the following values: y=year, m=month, w=week, d=day, h=hour, mi=minute For example, a yearly interval can be specified as "y" and 6 month interval as "6m". If not specified the interval parameter default is 1 Day.
   --historicalfx: oneof<nothing, bool> # if true use historical currency rates otherwise current currency rates. Defaults to true.
   --currency: string # comma separated list of conversion currencies, defaults to USD
   --unitofmeasure: string@unitofmeasure-completer # unit of meaure, defaults to troy ounces. allowed values are: mg=milligram g=gram kg=kilogram gr=grain oz=ounce toz=troy ounce ct=carat dwt=pennyweight
@@ -349,9 +358,9 @@ export def "metals-spot-history get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --metals: string # comma separated list of metals
-  --start: string # start date of time period. format is <i>yyyy-mm-dd</i> (format: date-time)
-  --end: string # end date of time period. format is <i>yyyy-mm-dd</i>. Default is current date. (format: date-time)
-  --interval: string # aggregation interval. Composed of an optional integer value (which defaults to 1 when not specified),  followed by a type string which must be one of the following values: y=year, m=month, w=week, d=day, h=hour, mi=minute  For example, a yearly interval can be specified as "y" and 6 month interval as "6m".   If not specified the interval parameter default is 1 Day.
+  --start: string # start date of time period. format is yyyy-mm-dd (format: date-time)
+  --end: string # end date of time period. format is yyyy-mm-dd. Default is current date. (format: date-time)
+  --interval: string # aggregation interval. Composed of an optional integer value (which defaults to 1 when not specified), followed by a type string which must be one of the following values: y=year, m=month, w=week, d=day, h=hour, mi=minute For example, a yearly interval can be specified as "y" and 6 month interval as "6m". If not specified the interval parameter default is 1 Day.
   --historicalfx: oneof<nothing, bool> # if true use historical currency rates otherwise current currency rates. Defaults to true.
   --currency: string # comma separated list of conversion currencies, defaults to USD
   --unitofmeasure: string@unitofmeasure-completer # unit of meaure, defaults to troy ounces. allowed values are: mg=milligram g=gram kg=kilogram gr=grain oz=ounce toz=troy ounce ct=carat dwt=pennyweight
@@ -370,7 +379,7 @@ export def "metals-spot-history get" [
 #
 # GET /api/v1/Metals/spot/performance
 # operationId: Metals_SpotHistoricalPerformance_GET
-export def "metals-spot-performance get" [
+export def "metals-spot-performance get-historical" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -398,7 +407,7 @@ export def "metals-spot-performance get" [
 #
 # GET /api/v1/Metals/spot/performance/annual
 # operationId: Metals_SpotAnnualHistoricalPerformance_GET
-export def "metals-spot-performance-annual get" [
+export def "metals-spot-performance-annual get-historical" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -438,9 +447,9 @@ export def "metals-spot-ratio-history get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --pairs: string # comma separated list of metals
-  --start: string # start date of time period. format is <i>yyyy-mm-dd</i> (format: date-time)
-  --end: string # end date of time period. format is <i>yyyy-mm-dd</i>. Default is current date. (format: date-time)
-  --interval: string # aggregation interval. Composed of an optional integer value (which defaults to 1 when not specified),  followed by a type string which must be one of the following values: y=year, m=month, w=week, d=day, h=hour, mi=minute  For example, a yearly interval can be specified as "y" and 6 month interval as "6m".   If not specified the interval parameter default is 1 Day.
+  --start: string # start date of time period. format is yyyy-mm-dd (format: date-time)
+  --end: string # end date of time period. format is yyyy-mm-dd. Default is current date. (format: date-time)
+  --interval: string # aggregation interval. Composed of an optional integer value (which defaults to 1 when not specified), followed by a type string which must be one of the following values: y=year, m=month, w=week, d=day, h=hour, mi=minute For example, a yearly interval can be specified as "y" and 6 month interval as "6m". If not specified the interval parameter default is 1 Day.
   --format: string@format-completer # to override content negotiation specify a value of json or xml
 ]: nothing -> table<data: record<baseCurrency: string, intervals: list, name: string, symbol: string>, error: string, requestedCurrency: string, requestedSymbol: string, requestedUnitOfMeasure: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
@@ -535,7 +544,7 @@ export def "metals-spot-supported get" [
 #
 # GET /api/v1/Metals/supported/currency
 # operationId: Metals_SupportedCurrencies_Metals_GET
-export def "metals-supported-currency get" [
+export def "metals-supported-currency get-currencies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

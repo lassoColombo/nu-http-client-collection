@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -75,7 +84,7 @@ def mode-completer-1 [] { ["CreateNew"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "detect post" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "detect create-face-with-url" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,11 +104,11 @@ export def commands []: nothing -> table {
   }
 }
 
-# Detect human faces in an image, return face rectangles, and optionally with faceIds, landmarks, and attributes.<br /> * No image will be stored. Only the extracted face feature will be stored on server. The faceId is an identifier of the face feature and will be used in [Face - Identify](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f30395239), [Face - Verify](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f3039523a), and [Face - Find Similar](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f30395237). The stored face feature(s) will expire and be deleted 24 hours after the original detection call. * Optional parameters include faceId, landmarks, and attributes. Attributes include age, gender, headPose, smile, facialHair, glasses, emotion, hair, makeup, occlusion, accessories, blur, exposure and noise. Some of the results returned for specific attributes may not be highly accurate. * JPEG, PNG, GIF (the first frame), and BMP format are supported. The allowed image file size is from 1KB to 6MB. * Up to 100 faces can be returned for an image. Faces are ranked by face rectangle size from large to small. * For optimal results when querying [Face - Identify](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f30395239), [Face - Verify](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f3039523a), and [Face - Find Similar](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f30395237) ('returnFaceId' is true), please use faces that are: frontal, clear, and with a minimum size of 200x200 pixels (100 pixels between eyes). * The minimum detectable face size is 36x36 pixels in an image no larger than 1920x1080 pixels. Images with dimensions higher than 1920x1080 pixels will need a proportionally larger minimum face size. * Different 'detectionModel' values can be provided. To use and compare different detection models, please refer to [How to specify a detection model](https://docs.microsoft.com/en-us/azure/cognitive-services/face/face-api-how-to-topics/specify-detection-model)   | Model | Recommended use-case(s) |   | ---------- | -------- |   | 'detection_01': | The default detection model for [Face - Detect](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f30395236). Recommend for near frontal face detection. For scenarios with exceptionally large angle (head-pose) faces, occluded faces or wrong image orientation, the faces in such cases may not be detected. |   | 'detection_02': | Detection model released in 2019 May with improved accuracy especially on small, side and blurry faces. |  * Different 'recognitionModel' values are provided. If follow-up operations like Verify, Identify, Find Similar are needed, please specify the recognition model with 'recognitionModel' parameter. The default value for 'recognitionModel' is 'recognition_01', if latest model needed, please explicitly specify the model you need in this parameter. Once specified, the detected faceIds will be associated with the specified recognition model. More details, please refer to [How to specify a recognition model](https://docs.microsoft.com/en-us/azure/cognitive-services/face/face-api-how-to-topics/specify-recognition-model)   | Model | Recommended use-case(s) |   | ---------- | -------- |   | 'recognition_01': | The default recognition model for [Face - Detect](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f30395236). All those faceIds created before 2019 March are bonded with this recognition model. |   | 'recognition_02': | Recognition model released in 2019 March. 'recognition_02' is recommended since its overall accuracy is improved compared with 'recognition_01'. |
+# Detect human faces in an image, return face rectangles, and optionally with faceIds, landmarks, and attributes. * No image will be stored. Only the extracted face feature will be stored on server. The faceId is an identifier of the face feature and will be used in [Face - Identify](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f30395239), [Face - Verify](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f3039523a), and [Face - Find Similar](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f30395237). The stored face feature(s) will expire and be deleted 24 hours after the original detection call. * Optional parameters include faceId, landmarks, and attributes. Attributes include age, gender, headPose, smile, facialHair, glasses, emotion, hair, makeup, occlusion, accessories, blur, exposure and noise. Some of the results returned for specific attributes may not be highly accurate. * JPEG, PNG, GIF (the first frame), and BMP format are supported. The allowed image file size is from 1KB to 6MB. * Up to 100 faces can be returned for an image. Faces are ranked by face rectangle size from large to small. * For optimal results when querying [Face - Identify](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f30395239), [Face - Verify](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f3039523a), and [Face - Find Similar](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f30395237) ('returnFaceId' is true), please use faces that are: frontal, clear, and with a minimum size of 200x200 pixels (100 pixels between eyes). * The minimum detectable face size is 36x36 pixels in an image no larger than 1920x1080 pixels. Images with dimensions higher than 1920x1080 pixels will need a proportionally larger minimum face size. * Different 'detectionModel' values can be provided. To use and compare different detection models, please refer to [How to specify a detection model](https://docs.microsoft.com/en-us/azure/cognitive-services/face/face-api-how-to-topics/specify-detection-model) | Model | Recommended use-case(s) | | ---------- | -------- | | 'detection_01': | The default detection model for [Face - Detect](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f30395236). Recommend for near frontal face detection. For scenarios with exceptionally large angle (head-pose) faces, occluded faces or wrong image orientation, the faces in such cases may not be detected. | | 'detection_02': | Detection model released in 2019 May with improved accuracy especially on small, side and blurry faces. | * Different 'recognitionModel' values are provided. If follow-up operations like Verify, Identify, Find Similar are needed, please specify the recognition model with 'recognitionModel' parameter. The default value for 'recognitionModel' is 'recognition_01', if latest model needed, please explicitly specify the model you need in this parameter. Once specified, the detected faceIds will be associated with the specified recognition model. More details, please refer to [How to specify a recognition model](https://docs.microsoft.com/en-us/azure/cognitive-services/face/face-api-how-to-topics/specify-recognition-model) | Model | Recommended use-case(s) | | ---------- | -------- | | 'recognition_01': | The default recognition model for [Face - Detect](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f30395236). All those faceIds created before 2019 March are bonded with this recognition model. | | 'recognition_02': | Recognition model released in 2019 March. 'recognition_02' is recommended since its overall accuracy is improved compared with 'recognition_01'. |
 #
 # POST /detect
 # operationId: Face_DetectWithUrl
-export def "detect post" [
+export def "detect create-face-with-url" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -110,29 +119,29 @@ export def "detect post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --return-face-id: oneof<nothing, bool> # A value indicating whether the operation should return faceIds of detected faces. (default: true)
   --return-face-landmarks: oneof<nothing, bool> # A value indicating whether the operation should return landmarks of the detected faces. (default: false)
-  --return-face-attributes: list # Analyze and return the one or more specified face attributes in the comma-separated string like "returnFaceAttributes=age,gender". Supported face attributes include age, gender, headPose, smile, facialHair, glasses and emotion. Note that each face attribute analysis has additional computational and time cost.
+  --return-face-attributes: list<string> # Analyze and return the one or more specified face attributes in the comma-separated string like "returnFaceAttributes=age,gender". Supported face attributes include age, gender, headPose, smile, facialHair, glasses and emotion. Note that each face attribute analysis has additional computational and time cost.
   --recognition-model: string@recognition-model-completer # Name of recognition model. Recognition model is used when the face features are extracted and associated with detected faceIds, (Large)FaceList or (Large)PersonGroup. A recognition model name can be provided when performing Face - Detect or (Large)FaceList - Create or (Large)PersonGroup - Create. The default value is 'recognition_01', if latest model needed, please explicitly specify the model you need. (default: recognition_01)
   --return-recognition-model: oneof<nothing, bool> # A value indicating whether the operation should return 'recognitionModel' in response. (default: false)
   --detection-model: string@detection-model-completer # Name of detection model. Detection model is used to detect faces in the submitted image. A detection model name can be provided when performing Face - Detect or (Large)FaceList - Add Face or (Large)PersonGroup - Add Face. The default value is 'detection_01', if another model is needed, please explicitly specify it. (default: detection_01)
-  --body-url: string # Publicly reachable URL of an image
+  url: string # Publicly reachable URL of an image
 ]: any -> table<faceAttributes: record<accessories: list, age: float, blur: record, emotion: record, exposure: record, facialHair: record, gender: string, glasses: string, hair: record, headPose: record, makeup: record, noise: record, occlusion: record, smile: float>, faceId: string, faceLandmarks: record<eyeLeftBottom: record, eyeLeftInner: record, eyeLeftOuter: record, eyeLeftTop: record, eyeRightBottom: record, eyeRightInner: record, eyeRightOuter: record, eyeRightTop: record, eyebrowLeftInner: record, eyebrowLeftOuter: record, eyebrowRightInner: record, eyebrowRightOuter: record, mouthLeft: record, mouthRight: record, noseLeftAlarOutTip: record, noseLeftAlarTop: record, noseRightAlarOutTip: record, noseRightAlarTop: record, noseRootLeft: record, noseRootRight: record, noseTip: record, pupilLeft: record, pupilRight: record, underLipBottom: record, underLipTop: record, upperLipBottom: record, upperLipTop: record>, faceRectangle: record<height: int, left: int, top: int, width: int>, recognitionModel: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "returnFaceId" $return_face_id "scalar") (serialize-qp "returnFaceLandmarks" $return_face_landmarks "scalar") (serialize-qp "returnFaceAttributes" $return_face_attributes "csv") (serialize-qp "recognitionModel" $recognition_model "scalar") (serialize-qp "returnRecognitionModel" $return_recognition_model "scalar") (serialize-qp "detectionModel" $detection_model "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/detect" $qp)
-  let body = {"url": $body_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"url": $url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-# List face lists’ faceListId, name, userData and recognitionModel. <br />  To get face information inside faceList use [FaceList - Get](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f3039524c)
+# List face lists’ faceListId, name, userData and recognitionModel. To get face information inside faceList use [FaceList - Get](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f3039524c)
 #
 # GET /facelists
 # operationId: FaceList_List
-export def "facelists list" [
+export def "facelists list-face-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -156,7 +165,7 @@ export def "facelists list" [
 #
 # DELETE /facelists/{faceListId}
 # operationId: FaceList_Delete
-export def "facelists delete" [
+export def "facelists list-face-delete" [
   face_list_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -169,7 +178,7 @@ export def "facelists delete" [
 ]: nothing -> record<error: record<code: string, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({face_list_id: $face_list_id} | format pattern "/facelists/{face_list_id}"))
+  let full_url = (build-url $base ({face_list_id: (encode-path-segment $face_list_id)} | format pattern "/facelists/{face_list_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -179,7 +188,7 @@ export def "facelists delete" [
 #
 # GET /facelists/{faceListId}
 # operationId: FaceList_Get
-export def "facelists get" [
+export def "facelists list-face-get" [
   face_list_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -194,7 +203,7 @@ export def "facelists get" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "returnRecognitionModel" $return_recognition_model "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({face_list_id: $face_list_id} | format pattern "/facelists/{face_list_id}") $qp)
+  let full_url = (build-url $base ({face_list_id: (encode-path-segment $face_list_id)} | format pattern "/facelists/{face_list_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -204,7 +213,7 @@ export def "facelists get" [
 #
 # PATCH /facelists/{faceListId}
 # operationId: FaceList_Update
-export def "facelists update" [
+export def "facelists list-face-update" [
   face_list_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -220,19 +229,19 @@ export def "facelists update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({face_list_id: $face_list_id} | format pattern "/facelists/{face_list_id}"))
-  let body = {"name": $name, "userData": $user_data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({face_list_id: (encode-path-segment $face_list_id)} | format pattern "/facelists/{face_list_id}"))
+  let req_body = {"name": $name, "userData": $user_data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-# Create an empty face list with user-specified faceListId, name, an optional userData and recognitionModel. Up to 64 face lists are allowed in one subscription. <br /> Face list is a list of faces, up to 1,000 faces, and used by [Face - Find Similar](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f30395237). <br /> After creation, user should use [FaceList - Add Face](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f30395250) to import the faces. No image will be stored. Only the extracted face features are stored on server until [FaceList - Delete](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f3039524f) is called. <br /> Find Similar is used for scenario like finding celebrity-like faces, similar face filtering, or as a light way face identification. But if the actual use is to identify person, please use [PersonGroup](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f30395244) / [LargePersonGroup](/docs/services/563879b61984550e40cbbe8d/operations/599acdee6ac60f11b48b5a9d) and [Face - Identify](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f30395239). <br /> Please consider [LargeFaceList](/docs/services/563879b61984550e40cbbe8d/operations/5a157b68d2de3616c086f2cc) when the face number is large. It can support up to 1,000,000 faces. <br />'recognitionModel' should be specified to associate with this face list. The default value for 'recognitionModel' is 'recognition_01', if the latest model needed, please explicitly specify the model you need in this parameter. New faces that are added to an existing face list will use the recognition model that's already associated with the collection. Existing face features in a face list can't be updated to features extracted by another version of recognition model. * 'recognition_01': The default recognition model for [FaceList- Create](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f3039524b). All those face lists created before 2019 March are bonded with this recognition model. * 'recognition_02': Recognition model released in 2019 March. 'recognition_02' is recommended since its overall accuracy is improved compared with 'recognition_01'.
+# Create an empty face list with user-specified faceListId, name, an optional userData and recognitionModel. Up to 64 face lists are allowed in one subscription. Face list is a list of faces, up to 1,000 faces, and used by [Face - Find Similar](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f30395237). After creation, user should use [FaceList - Add Face](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f30395250) to import the faces. No image will be stored. Only the extracted face features are stored on server until [FaceList - Delete](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f3039524f) is called. Find Similar is used for scenario like finding celebrity-like faces, similar face filtering, or as a light way face identification. But if the actual use is to identify person, please use [PersonGroup](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f30395244) / [LargePersonGroup](/docs/services/563879b61984550e40cbbe8d/operations/599acdee6ac60f11b48b5a9d) and [Face - Identify](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f30395239). Please consider [LargeFaceList](/docs/services/563879b61984550e40cbbe8d/operations/5a157b68d2de3616c086f2cc) when the face number is large. It can support up to 1,000,000 faces. 'recognitionModel' should be specified to associate with this face list. The default value for 'recognitionModel' is 'recognition_01', if the latest model needed, please explicitly specify the model you need in this parameter. New faces that are added to an existing face list will use the recognition model that's already associated with the collection. Existing face features in a face list can't be updated to features extracted by another version of recognition model. * 'recognition_01': The default recognition model for [FaceList- Create](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f3039524b). All those face lists created before 2019 March are bonded with this recognition model. * 'recognition_02': Recognition model released in 2019 March. 'recognition_02' is recommended since its overall accuracy is improved compared with 'recognition_01'.
 #
 # PUT /facelists/{faceListId}
 # operationId: FaceList_Create
-export def "facelists create" [
+export def "facelists list-face-create" [
   face_list_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -249,19 +258,19 @@ export def "facelists create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({face_list_id: $face_list_id} | format pattern "/facelists/{face_list_id}"))
-  let body = {"recognitionModel": $recognition_model, "name": $name, "userData": $user_data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({face_list_id: (encode-path-segment $face_list_id)} | format pattern "/facelists/{face_list_id}"))
+  let req_body = {"recognitionModel": $recognition_model, "name": $name, "userData": $user_data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-# Add a face to a specified face list, up to 1,000 faces. <br /> To deal with an image contains multiple faces, input face can be specified as an image with a targetFace rectangle. It returns a persistedFaceId representing the added face. No image will be stored. Only the extracted face feature will be stored on server until [FaceList - Delete Face](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f30395251) or [FaceList - Delete](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f3039524f) is called. <br /> Note persistedFaceId is different from faceId generated by [Face - Detect](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f30395236). * Higher face image quality means better detection and recognition precision. Please consider high-quality faces: frontal, clear, and face size is 200x200 pixels (100 pixels between eyes) or bigger. * JPEG, PNG, GIF (the first frame), and BMP format are supported. The allowed image file size is from 1KB to 6MB. * "targetFace" rectangle should contain one face. Zero or multiple faces will be regarded as an error. If the provided "targetFace" rectangle is not returned from [Face - Detect](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f30395236), there’s no guarantee to detect and add the face successfully. * Out of detectable face size (36x36 - 4096x4096 pixels), large head-pose, or large occlusions will cause failures. * Adding/deleting faces to/from a same face list are processed sequentially and to/from different face lists are in parallel. * The minimum detectable face size is 36x36 pixels in an image no larger than 1920x1080 pixels. Images with dimensions higher than 1920x1080 pixels will need a proportionally larger minimum face size. * Different 'detectionModel' values can be provided. To use and compare different detection models, please refer to [How to specify a detection model](https://docs.microsoft.com/en-us/azure/cognitive-services/face/face-api-how-to-topics/specify-detection-model)   | Model | Recommended use-case(s) |   | ---------- | -------- |   | 'detection_01': | The default detection model for [FaceList - Add Face](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f30395250). Recommend for near frontal face detection. For scenarios with exceptionally large angle (head-pose) faces, occluded faces or wrong image orientation, the faces in such cases may not be detected. |   | 'detection_02': | Detection model released in 2019 May with improved accuracy especially on small, side and blurry faces. |
+# Add a face to a specified face list, up to 1,000 faces. To deal with an image contains multiple faces, input face can be specified as an image with a targetFace rectangle. It returns a persistedFaceId representing the added face. No image will be stored. Only the extracted face feature will be stored on server until [FaceList - Delete Face](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f30395251) or [FaceList - Delete](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f3039524f) is called. Note persistedFaceId is different from faceId generated by [Face - Detect](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f30395236). * Higher face image quality means better detection and recognition precision. Please consider high-quality faces: frontal, clear, and face size is 200x200 pixels (100 pixels between eyes) or bigger. * JPEG, PNG, GIF (the first frame), and BMP format are supported. The allowed image file size is from 1KB to 6MB. * "targetFace" rectangle should contain one face. Zero or multiple faces will be regarded as an error. If the provided "targetFace" rectangle is not returned from [Face - Detect](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f30395236), there’s no guarantee to detect and add the face successfully. * Out of detectable face size (36x36 - 4096x4096 pixels), large head-pose, or large occlusions will cause failures. * Adding/deleting faces to/from a same face list are processed sequentially and to/from different face lists are in parallel. * The minimum detectable face size is 36x36 pixels in an image no larger than 1920x1080 pixels. Images with dimensions higher than 1920x1080 pixels will need a proportionally larger minimum face size. * Different 'detectionModel' values can be provided. To use and compare different detection models, please refer to [How to specify a detection model](https://docs.microsoft.com/en-us/azure/cognitive-services/face/face-api-how-to-topics/specify-detection-model) | Model | Recommended use-case(s) | | ---------- | -------- | | 'detection_01': | The default detection model for [FaceList - Add Face](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f30395250). Recommend for near frontal face detection. For scenarios with exceptionally large angle (head-pose) faces, occluded faces or wrong image orientation, the faces in such cases may not be detected. | | 'detection_02': | Detection model released in 2019 May with improved accuracy especially on small, side and blurry faces. |
 #
 # POST /facelists/{faceListId}/persistedfaces
 # operationId: FaceList_AddFaceFromUrl
-export def "facelists-persistedfaces create-face-from-url" [
+export def "facelists-persistedfaces list-face-create-face-from-url" [
   face_list_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -272,27 +281,27 @@ export def "facelists-persistedfaces create-face-from-url" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --user-data: string # User-specified data about the face for any purpose. The maximum length is 1KB.
-  --target-face: list # A face rectangle to specify the target face to be added to a person in the format of "targetFace=left,top,width,height". E.g. "targetFace=10,10,100,100". If there is more than one face in the image, targetFace is required to specify which face to add. No targetFace means there is only one face detected in the entire image.
+  --target-face: list<int> # A face rectangle to specify the target face to be added to a person in the format of "targetFace=left,top,width,height". E.g. "targetFace=10,10,100,100". If there is more than one face in the image, targetFace is required to specify which face to add. No targetFace means there is only one face detected in the entire image.
   --detection-model: string@detection-model-completer # Name of detection model. Detection model is used to detect faces in the submitted image. A detection model name can be provided when performing Face - Detect or (Large)FaceList - Add Face or (Large)PersonGroup - Add Face. The default value is 'detection_01', if another model is needed, please explicitly specify it. (default: detection_01)
-  --body-url: string # Publicly reachable URL of an image
+  url: string # Publicly reachable URL of an image
 ]: any -> record<persistedFaceId: string, userData: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "userData" $user_data "scalar") (serialize-qp "targetFace" $target_face "csv") (serialize-qp "detectionModel" $detection_model "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({face_list_id: $face_list_id} | format pattern "/facelists/{face_list_id}/persistedfaces") $qp)
-  let body = {"url": $body_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({face_list_id: (encode-path-segment $face_list_id)} | format pattern "/facelists/{face_list_id}/persistedfaces") $qp)
+  let req_body = {"url": $url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-# Delete a face from a face list by specified faceListId and persistedFaceId. <br /> Adding/deleting faces to/from a same face list are processed sequentially and to/from different face lists are in parallel.
+# Delete a face from a face list by specified faceListId and persistedFaceId. Adding/deleting faces to/from a same face list are processed sequentially and to/from different face lists are in parallel.
 #
 # DELETE /facelists/{faceListId}/persistedfaces/{persistedFaceId}
 # operationId: FaceList_DeleteFace
-export def "facelists-persistedfaces delete-face" [
+export def "facelists-persistedfaces list-face-delete-face" [
   face_list_id: string
   persisted_face_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -306,17 +315,17 @@ export def "facelists-persistedfaces delete-face" [
 ]: nothing -> record<error: record<code: string, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({face_list_id: $face_list_id, persisted_face_id: $persisted_face_id} | format pattern "/facelists/{face_list_id}/persistedfaces/{persisted_face_id}"))
+  let full_url = (build-url $base ({face_list_id: (encode-path-segment $face_list_id), persisted_face_id: (encode-path-segment $persisted_face_id)} | format pattern "/facelists/{face_list_id}/persistedfaces/{persisted_face_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Given query face's faceId, to search the similar-looking faces from a faceId array, a face list or a large face list. faceId array contains the faces created by [Face - Detect](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f30395236), which will expire 24 hours after creation. A "faceListId" is created by [FaceList - Create](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f3039524b) containing persistedFaceIds that will not expire. And a "largeFaceListId" is created by [LargeFaceList - Create](/docs/services/563879b61984550e40cbbe8d/operations/5a157b68d2de3616c086f2cc) containing persistedFaceIds that will also not expire. Depending on the input the returned similar faces list contains faceIds or persistedFaceIds ranked by similarity. <br/>Find similar has two working modes, "matchPerson" and "matchFace". "matchPerson" is the default mode that it tries to find faces of the same person as possible by using internal same-person thresholds. It is useful to find a known person's other photos. Note that an empty list will be returned if no faces pass the internal thresholds. "matchFace" mode ignores same-person thresholds and returns ranked similar faces anyway, even the similarity is low. It can be used in the cases like searching celebrity-looking faces. <br/>The 'recognitionModel' associated with the query face's faceId should be the same as the 'recognitionModel' used by the target faceId array, face list or large face list.
+# Given query face's faceId, to search the similar-looking faces from a faceId array, a face list or a large face list. faceId array contains the faces created by [Face - Detect](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f30395236), which will expire 24 hours after creation. A "faceListId" is created by [FaceList - Create](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f3039524b) containing persistedFaceIds that will not expire. And a "largeFaceListId" is created by [LargeFaceList - Create](/docs/services/563879b61984550e40cbbe8d/operations/5a157b68d2de3616c086f2cc) containing persistedFaceIds that will also not expire. Depending on the input the returned similar faces list contains faceIds or persistedFaceIds ranked by similarity. Find similar has two working modes, "matchPerson" and "matchFace". "matchPerson" is the default mode that it tries to find faces of the same person as possible by using internal same-person thresholds. It is useful to find a known person's other photos. Note that an empty list will be returned if no faces pass the internal thresholds. "matchFace" mode ignores same-person thresholds and returns ranked similar faces anyway, even the similarity is low. It can be used in the cases like searching celebrity-looking faces. The 'recognitionModel' associated with the query face's faceId should be the same as the 'recognitionModel' used by the target faceId array, face list or large face list.
 #
 # POST /findsimilars
 # operationId: Face_FindSimilar
-export def "findsimilars post" [
+export def "findsimilars find-face-similar" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -326,7 +335,7 @@ export def "findsimilars post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   face_id: string # FaceId of the query face. User needs to call Face - Detect first to get a valid faceId. Note that this faceId is not persisted and will expire 24 hours after the detection call (format: uuid)
-  --face-ids: list # An array of candidate faceIds. All of them are created by Face - Detect and the faceIds will expire 24 hours after the detection call. The number of faceIds is limited to 1000. Parameter faceListId, largeFaceListId and faceIds should not be provided at the same time.
+  --face-ids: list<string> # An array of candidate faceIds. All of them are created by Face - Detect and the faceIds will expire 24 hours after the detection call. The number of faceIds is limited to 1000. Parameter faceListId, largeFaceListId and faceIds should not be provided at the same time.
   --face-list-id: string # An existing user-specified unique candidate face list, created in Face List - Create a Face List. Face list contains a set of persistedFaceIds which are persisted and will never expire. Parameter faceListId, largeFaceListId and faceIds should not be provided at the same time.
   --large-face-list-id: string # An existing user-specified unique candidate large face list, created in LargeFaceList - Create. Large face list contains a set of persistedFaceIds which are persisted and will never expire. Parameter faceListId, largeFaceListId and faceIds should not be provided at the same time.
   --max-num-of-candidates-returned: int # The number of top similar faces returned. The valid range is [1, 1000]. (default: 20)
@@ -336,18 +345,18 @@ export def "findsimilars post" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/findsimilars")
-  let body = {"faceId": $face_id, "faceIds": $face_ids, "faceListId": $face_list_id, "largeFaceListId": $large_face_list_id, "maxNumOfCandidatesReturned": $max_num_of_candidates_returned, "mode": $mode} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"faceId": $face_id, "faceIds": $face_ids, "faceListId": $face_list_id, "largeFaceListId": $large_face_list_id, "maxNumOfCandidatesReturned": $max_num_of_candidates_returned, "mode": $mode} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-# Divide candidate faces into groups based on face similarity.<br /> * The output is one or more disjointed face groups and a messyGroup. A face group contains faces that have similar looking, often of the same person. Face groups are ranked by group size, i.e. number of faces. Notice that faces belonging to a same person might be split into several groups in the result. * MessyGroup is a special face group containing faces that cannot find any similar counterpart face from original faces. The messyGroup will not appear in the result if all faces found their counterparts. * Group API needs at least 2 candidate faces and 1000 at most. We suggest to try [Face - Verify](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f3039523a) when you only have 2 candidate faces. * The 'recognitionModel' associated with the query faces' faceIds should be the same.
+# Divide candidate faces into groups based on face similarity. * The output is one or more disjointed face groups and a messyGroup. A face group contains faces that have similar looking, often of the same person. Face groups are ranked by group size, i.e. number of faces. Notice that faces belonging to a same person might be split into several groups in the result. * MessyGroup is a special face group containing faces that cannot find any similar counterpart face from original faces. The messyGroup will not appear in the result if all faces found their counterparts. * Group API needs at least 2 candidate faces and 1000 at most. We suggest to try [Face - Verify](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f3039523a) when you only have 2 candidate faces. * The 'recognitionModel' associated with the query faces' faceIds should be the same.
 #
 # POST /group
 # operationId: Face_Group
-export def "group post" [
+export def "group create-face" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -356,24 +365,24 @@ export def "group post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  face_ids: list # Array of candidate faceId created by Face - Detect. The maximum is 1000 faces
+  face_ids: list<string> # Array of candidate faceId created by Face - Detect. The maximum is 1000 faces
 ]: any -> record<groups: list<list<string>>, messyGroup: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/group")
-  let body = {"faceIds": $face_ids} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"faceIds": $face_ids} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-# 1-to-many identification to find the closest matches of the specific query person face from a person group or large person group. <br/> For each face in the faceIds array, Face Identify will compute similarities between the query face and all the faces in the person group (given by personGroupId) or large person group (given by largePersonGroupId), and return candidate person(s) for that face ranked by similarity confidence. The person group/large person group should be trained to make it ready for identification. See more in [PersonGroup - Train](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f30395249) and [LargePersonGroup - Train](/docs/services/563879b61984550e40cbbe8d/operations/599ae2d16ac60f11b48b5aa4). <br/>   Remarks:<br /> * The algorithm allows more than one face to be identified independently at the same request, but no more than 10 faces. * Each person in the person group/large person group could have more than one face, but no more than 248 faces. * Higher face image quality means better identification precision. Please consider high-quality faces: frontal, clear, and face size is 200x200 pixels (100 pixels between eyes) or bigger. * Number of candidates returned is restricted by maxNumOfCandidatesReturned and confidenceThreshold. If no person is identified, the returned candidates will be an empty array. * Try [Face - Find Similar](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f30395237) when you need to find similar faces from a face list/large face list instead of a person group/large person group. * The 'recognitionModel' associated with the query faces' faceIds should be the same as the 'recognitionModel' used by the target person group or large person group.
+# 1-to-many identification to find the closest matches of the specific query person face from a person group or large person group. For each face in the faceIds array, Face Identify will compute similarities between the query face and all the faces in the person group (given by personGroupId) or large person group (given by largePersonGroupId), and return candidate person(s) for that face ranked by similarity confidence. The person group/large person group should be trained to make it ready for identification. See more in [PersonGroup - Train](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f30395249) and [LargePersonGroup - Train](/docs/services/563879b61984550e40cbbe8d/operations/599ae2d16ac60f11b48b5aa4). Remarks: * The algorithm allows more than one face to be identified independently at the same request, but no more than 10 faces. * Each person in the person group/large person group could have more than one face, but no more than 248 faces. * Higher face image quality means better identification precision. Please consider high-quality faces: frontal, clear, and face size is 200x200 pixels (100 pixels between eyes) or bigger. * Number of candidates returned is restricted by maxNumOfCandidatesReturned and confidenceThreshold. If no person is identified, the returned candidates will be an empty array. * Try [Face - Find Similar](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f30395237) when you need to find similar faces from a face list/large face list instead of a person group/large person group. * The 'recognitionModel' associated with the query faces' faceIds should be the same as the 'recognitionModel' used by the target person group or large person group.
 #
 # POST /identify
 # operationId: Face_Identify
-export def "identify post" [
+export def "identify create-face" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -383,7 +392,7 @@ export def "identify post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --confidence-threshold: float # A number ranging from 0 to 1 indicating a level of confidence associated with a property.
-  face_ids: list # Array of query faces faceIds, created by the Face - Detect. Each of the faces are identified independently. The valid number of faceIds is between [1, 10].
+  face_ids: list<string> # Array of query faces faceIds, created by the Face - Detect. Each of the faces are identified independently. The valid number of faceIds is between [1, 10].
   --large-person-group-id: string # LargePersonGroupId of the target large person group, created by LargePersonGroup - Create. Parameter personGroupId and largePersonGroupId should not be provided at the same time.
   --max-num-of-candidates-returned: int # The range of maxNumOfCandidatesReturned is between 1 and 5 (default is 1). (default: 1)
   --person-group-id: string # PersonGroupId of the target person group, created by PersonGroup - Create. Parameter personGroupId and largePersonGroupId should not be provided at the same time.
@@ -392,18 +401,18 @@ export def "identify post" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/identify")
-  let body = {"confidenceThreshold": $confidence_threshold, "faceIds": $face_ids, "largePersonGroupId": $large_person_group_id, "maxNumOfCandidatesReturned": $max_num_of_candidates_returned, "personGroupId": $person_group_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"confidenceThreshold": $confidence_threshold, "faceIds": $face_ids, "largePersonGroupId": $large_person_group_id, "maxNumOfCandidatesReturned": $max_num_of_candidates_returned, "personGroupId": $person_group_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-# List large face lists’ information of largeFaceListId, name, userData and recognitionModel. <br />  To get face information inside largeFaceList use [LargeFaceList Face - Get](/docs/services/563879b61984550e40cbbe8d/operations/5a158cf2d2de3616c086f2d5)<br /> * Large face lists are stored in alphabetical order of largeFaceListId. * "start" parameter (string, optional) is a user-provided largeFaceListId value that returned entries have larger ids by string comparison. "start" set to empty to indicate return from the first item. * "top" parameter (int, optional) specifies the number of entries to return. A maximal of 1000 entries can be returned in one call. To fetch more, you can specify "start" with the last returned entry’s Id of the current call. <br /> For example, total 5 large person lists: "list1", ..., "list5". <br /> "start=&top=" will return all 5 lists. <br /> "start=&top=2" will return "list1", "list2". <br /> "start=list2&top=3" will return "list3", "list4", "list5".
+# List large face lists’ information of largeFaceListId, name, userData and recognitionModel. To get face information inside largeFaceList use [LargeFaceList Face - Get](/docs/services/563879b61984550e40cbbe8d/operations/5a158cf2d2de3616c086f2d5) * Large face lists are stored in alphabetical order of largeFaceListId. * "start" parameter (string, optional) is a user-provided largeFaceListId value that returned entries have larger ids by string comparison. "start" set to empty to indicate return from the first item. * "top" parameter (int, optional) specifies the number of entries to return. A maximal of 1000 entries can be returned in one call. To fetch more, you can specify "start" with the last returned entry’s Id of the current call. For example, total 5 large person lists: "list1", ..., "list5". "start=&top=" will return all 5 lists. "start=&top=2" will return "list1", "list2". "start=list2&top=3" will return "list3", "list4", "list5".
 #
 # GET /largefacelists
 # operationId: LargeFaceList_List
-export def "largefacelists list" [
+export def "largefacelists list-large-face-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -427,7 +436,7 @@ export def "largefacelists list" [
 #
 # DELETE /largefacelists/{largeFaceListId}
 # operationId: LargeFaceList_Delete
-export def "largefacelists delete" [
+export def "largefacelists list-large-face-delete" [
   large_face_list_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -440,7 +449,7 @@ export def "largefacelists delete" [
 ]: nothing -> record<error: record<code: string, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({large_face_list_id: $large_face_list_id} | format pattern "/largefacelists/{large_face_list_id}"))
+  let full_url = (build-url $base ({large_face_list_id: (encode-path-segment $large_face_list_id)} | format pattern "/largefacelists/{large_face_list_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -450,7 +459,7 @@ export def "largefacelists delete" [
 #
 # GET /largefacelists/{largeFaceListId}
 # operationId: LargeFaceList_Get
-export def "largefacelists get" [
+export def "largefacelists list-large-face-get" [
   large_face_list_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -465,7 +474,7 @@ export def "largefacelists get" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "returnRecognitionModel" $return_recognition_model "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({large_face_list_id: $large_face_list_id} | format pattern "/largefacelists/{large_face_list_id}") $qp)
+  let full_url = (build-url $base ({large_face_list_id: (encode-path-segment $large_face_list_id)} | format pattern "/largefacelists/{large_face_list_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -475,7 +484,7 @@ export def "largefacelists get" [
 #
 # PATCH /largefacelists/{largeFaceListId}
 # operationId: LargeFaceList_Update
-export def "largefacelists update" [
+export def "largefacelists list-large-face-update" [
   large_face_list_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -491,19 +500,19 @@ export def "largefacelists update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({large_face_list_id: $large_face_list_id} | format pattern "/largefacelists/{large_face_list_id}"))
-  let body = {"name": $name, "userData": $user_data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({large_face_list_id: (encode-path-segment $large_face_list_id)} | format pattern "/largefacelists/{large_face_list_id}"))
+  let req_body = {"name": $name, "userData": $user_data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-# Create an empty large face list with user-specified largeFaceListId, name, an optional userData and recognitionModel. <br /> Large face list is a list of faces, up to 1,000,000 faces, and used by [Face - Find Similar](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f30395237). <br /> After creation, user should use [LargeFaceList Face - Add](/docs/services/563879b61984550e40cbbe8d/operations/5a158c10d2de3616c086f2d3) to import the faces and [LargeFaceList - Train](/docs/services/563879b61984550e40cbbe8d/operations/5a158422d2de3616c086f2d1) to make it ready for [Face - Find Similar](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f30395237). No image will be stored. Only the extracted face features are stored on server until [LargeFaceList - Delete](/docs/services/563879b61984550e40cbbe8d/operations/5a1580d5d2de3616c086f2cd) is called. <br /> Find Similar is used for scenario like finding celebrity-like faces, similar face filtering, or as a light way face identification. But if the actual use is to identify person, please use [PersonGroup](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f30395244) / [LargePersonGroup](/docs/services/563879b61984550e40cbbe8d/operations/599acdee6ac60f11b48b5a9d) and [Face - Identify](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f30395239). <br/>'recognitionModel' should be specified to associate with this large face list. The default value for 'recognitionModel' is 'recognition_01', if the latest model needed, please explicitly specify the model you need in this parameter. New faces that are added to an existing large face list will use the recognition model that's already associated with the collection. Existing face features in a large face list can't be updated to features extracted by another version of recognition model. * 'recognition_01': The default recognition model for [LargeFaceList- Create](/docs/services/563879b61984550e40cbbe8d/operations/5a157b68d2de3616c086f2cc). All those large face lists created before 2019 March are bonded with this recognition model. * 'recognition_02': Recognition model released in 2019 March. 'recognition_02' is recommended since its overall accuracy is improved compared with 'recognition_01'.  Large face list quota: * Free-tier subscription quota: 64 large face lists. * S0-tier subscription quota: 1,000,000 large face lists.
+# Create an empty large face list with user-specified largeFaceListId, name, an optional userData and recognitionModel. Large face list is a list of faces, up to 1,000,000 faces, and used by [Face - Find Similar](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f30395237). After creation, user should use [LargeFaceList Face - Add](/docs/services/563879b61984550e40cbbe8d/operations/5a158c10d2de3616c086f2d3) to import the faces and [LargeFaceList - Train](/docs/services/563879b61984550e40cbbe8d/operations/5a158422d2de3616c086f2d1) to make it ready for [Face - Find Similar](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f30395237). No image will be stored. Only the extracted face features are stored on server until [LargeFaceList - Delete](/docs/services/563879b61984550e40cbbe8d/operations/5a1580d5d2de3616c086f2cd) is called. Find Similar is used for scenario like finding celebrity-like faces, similar face filtering, or as a light way face identification. But if the actual use is to identify person, please use [PersonGroup](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f30395244) / [LargePersonGroup](/docs/services/563879b61984550e40cbbe8d/operations/599acdee6ac60f11b48b5a9d) and [Face - Identify](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f30395239). 'recognitionModel' should be specified to associate with this large face list. The default value for 'recognitionModel' is 'recognition_01', if the latest model needed, please explicitly specify the model you need in this parameter. New faces that are added to an existing large face list will use the recognition model that's already associated with the collection. Existing face features in a large face list can't be updated to features extracted by another version of recognition model. * 'recognition_01': The default recognition model for [LargeFaceList- Create](/docs/services/563879b61984550e40cbbe8d/operations/5a157b68d2de3616c086f2cc). All those large face lists created before 2019 March are bonded with this recognition model. * 'recognition_02': Recognition model released in 2019 March. 'recognition_02' is recommended since its overall accuracy is improved compared with 'recognition_01'. Large face list quota: * Free-tier subscription quota: 64 large face lists. * S0-tier subscription quota: 1,000,000 large face lists.
 #
 # PUT /largefacelists/{largeFaceListId}
 # operationId: LargeFaceList_Create
-export def "largefacelists create" [
+export def "largefacelists list-large-face-create" [
   large_face_list_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -520,19 +529,19 @@ export def "largefacelists create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({large_face_list_id: $large_face_list_id} | format pattern "/largefacelists/{large_face_list_id}"))
-  let body = {"recognitionModel": $recognition_model, "name": $name, "userData": $user_data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({large_face_list_id: (encode-path-segment $large_face_list_id)} | format pattern "/largefacelists/{large_face_list_id}"))
+  let req_body = {"recognitionModel": $recognition_model, "name": $name, "userData": $user_data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List all faces in a large face list, and retrieve face information (including userData and persistedFaceIds of registered faces of the face).
 #
 # GET /largefacelists/{largeFaceListId}/persistedfaces
 # operationId: LargeFaceList_ListFaces
-export def "largefacelists-persistedfaces list-faces" [
+export def "largefacelists-persistedfaces list-large-face-list-faces" [
   large_face_list_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -548,17 +557,17 @@ export def "largefacelists-persistedfaces list-faces" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "top" $top "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({large_face_list_id: $large_face_list_id} | format pattern "/largefacelists/{large_face_list_id}/persistedfaces") $qp)
+  let full_url = (build-url $base ({large_face_list_id: (encode-path-segment $large_face_list_id)} | format pattern "/largefacelists/{large_face_list_id}/persistedfaces") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Add a face to a specified large face list, up to 1,000,000 faces. <br /> To deal with an image contains multiple faces, input face can be specified as an image with a targetFace rectangle. It returns a persistedFaceId representing the added face. No image will be stored. Only the extracted face feature will be stored on server until [LargeFaceList Face - Delete](/docs/services/563879b61984550e40cbbe8d/operations/5a158c8ad2de3616c086f2d4) or [LargeFaceList - Delete](/docs/services/563879b61984550e40cbbe8d/operations/5a1580d5d2de3616c086f2cd) is called. <br /> Note persistedFaceId is different from faceId generated by [Face - Detect](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f30395236). * Higher face image quality means better recognition precision. Please consider high-quality faces: frontal, clear, and face size is 200x200 pixels (100 pixels between eyes) or bigger. * JPEG, PNG, GIF (the first frame), and BMP format are supported. The allowed image file size is from 1KB to 6MB. * "targetFace" rectangle should contain one face. Zero or multiple faces will be regarded as an error. If the provided "targetFace" rectangle is not returned from [Face - Detect](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f30395236), there’s no guarantee to detect and add the face successfully. * Out of detectable face size (36x36 - 4096x4096 pixels), large head-pose, or large occlusions will cause failures. * Adding/deleting faces to/from a same face list are processed sequentially and to/from different face lists are in parallel. * The minimum detectable face size is 36x36 pixels in an image no larger than 1920x1080 pixels. Images with dimensions higher than 1920x1080 pixels will need a proportionally larger minimum face size. * Different 'detectionModel' values can be provided. To use and compare different detection models, please refer to [How to specify a detection model](https://docs.microsoft.com/en-us/azure/cognitive-services/face/face-api-how-to-topics/specify-detection-model)   | Model | Recommended use-case(s) |   | ---------- | -------- |   | 'detection_01': | The default detection model for [LargeFaceList - Add Face](/docs/services/563879b61984550e40cbbe8d/operations/5a158c10d2de3616c086f2d3). Recommend for near frontal face detection. For scenarios with exceptionally large angle (head-pose) faces, occluded faces or wrong image orientation, the faces in such cases may not be detected. |   | 'detection_02': | Detection model released in 2019 May with improved accuracy especially on small, side and blurry faces. |  Quota: * Free-tier subscription quota: 1,000 faces per large face list. * S0-tier subscription quota: 1,000,000 faces per large face list.
+# Add a face to a specified large face list, up to 1,000,000 faces. To deal with an image contains multiple faces, input face can be specified as an image with a targetFace rectangle. It returns a persistedFaceId representing the added face. No image will be stored. Only the extracted face feature will be stored on server until [LargeFaceList Face - Delete](/docs/services/563879b61984550e40cbbe8d/operations/5a158c8ad2de3616c086f2d4) or [LargeFaceList - Delete](/docs/services/563879b61984550e40cbbe8d/operations/5a1580d5d2de3616c086f2cd) is called. Note persistedFaceId is different from faceId generated by [Face - Detect](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f30395236). * Higher face image quality means better recognition precision. Please consider high-quality faces: frontal, clear, and face size is 200x200 pixels (100 pixels between eyes) or bigger. * JPEG, PNG, GIF (the first frame), and BMP format are supported. The allowed image file size is from 1KB to 6MB. * "targetFace" rectangle should contain one face. Zero or multiple faces will be regarded as an error. If the provided "targetFace" rectangle is not returned from [Face - Detect](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f30395236), there’s no guarantee to detect and add the face successfully. * Out of detectable face size (36x36 - 4096x4096 pixels), large head-pose, or large occlusions will cause failures. * Adding/deleting faces to/from a same face list are processed sequentially and to/from different face lists are in parallel. * The minimum detectable face size is 36x36 pixels in an image no larger than 1920x1080 pixels. Images with dimensions higher than 1920x1080 pixels will need a proportionally larger minimum face size. * Different 'detectionModel' values can be provided. To use and compare different detection models, please refer to [How to specify a detection model](https://docs.microsoft.com/en-us/azure/cognitive-services/face/face-api-how-to-topics/specify-detection-model) | Model | Recommended use-case(s) | | ---------- | -------- | | 'detection_01': | The default detection model for [LargeFaceList - Add Face](/docs/services/563879b61984550e40cbbe8d/operations/5a158c10d2de3616c086f2d3). Recommend for near frontal face detection. For scenarios with exceptionally large angle (head-pose) faces, occluded faces or wrong image orientation, the faces in such cases may not be detected. | | 'detection_02': | Detection model released in 2019 May with improved accuracy especially on small, side and blurry faces. | Quota: * Free-tier subscription quota: 1,000 faces per large face list. * S0-tier subscription quota: 1,000,000 faces per large face list.
 #
 # POST /largefacelists/{largeFaceListId}/persistedfaces
 # operationId: LargeFaceList_AddFaceFromUrl
-export def "largefacelists-persistedfaces create-face-from-url" [
+export def "largefacelists-persistedfaces list-large-face-create-face-from-url" [
   large_face_list_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -569,27 +578,27 @@ export def "largefacelists-persistedfaces create-face-from-url" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --user-data: string # User-specified data about the face for any purpose. The maximum length is 1KB.
-  --target-face: list # A face rectangle to specify the target face to be added to a person in the format of "targetFace=left,top,width,height". E.g. "targetFace=10,10,100,100". If there is more than one face in the image, targetFace is required to specify which face to add. No targetFace means there is only one face detected in the entire image.
+  --target-face: list<int> # A face rectangle to specify the target face to be added to a person in the format of "targetFace=left,top,width,height". E.g. "targetFace=10,10,100,100". If there is more than one face in the image, targetFace is required to specify which face to add. No targetFace means there is only one face detected in the entire image.
   --detection-model: string@detection-model-completer # Name of detection model. Detection model is used to detect faces in the submitted image. A detection model name can be provided when performing Face - Detect or (Large)FaceList - Add Face or (Large)PersonGroup - Add Face. The default value is 'detection_01', if another model is needed, please explicitly specify it. (default: detection_01)
-  --body-url: string # Publicly reachable URL of an image
+  url: string # Publicly reachable URL of an image
 ]: any -> record<persistedFaceId: string, userData: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "userData" $user_data "scalar") (serialize-qp "targetFace" $target_face "csv") (serialize-qp "detectionModel" $detection_model "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({large_face_list_id: $large_face_list_id} | format pattern "/largefacelists/{large_face_list_id}/persistedfaces") $qp)
-  let body = {"url": $body_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({large_face_list_id: (encode-path-segment $large_face_list_id)} | format pattern "/largefacelists/{large_face_list_id}/persistedfaces") $qp)
+  let req_body = {"url": $url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-# Delete a face from a large face list by specified largeFaceListId and persistedFaceId. <br /> Adding/deleting faces to/from a same large face list are processed sequentially and to/from different large face lists are in parallel.
+# Delete a face from a large face list by specified largeFaceListId and persistedFaceId. Adding/deleting faces to/from a same large face list are processed sequentially and to/from different large face lists are in parallel.
 #
 # DELETE /largefacelists/{largeFaceListId}/persistedfaces/{persistedFaceId}
 # operationId: LargeFaceList_DeleteFace
-export def "largefacelists-persistedfaces delete-face" [
+export def "largefacelists-persistedfaces list-large-face-delete-face" [
   large_face_list_id: string
   persisted_face_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -603,7 +612,7 @@ export def "largefacelists-persistedfaces delete-face" [
 ]: nothing -> record<error: record<code: string, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({large_face_list_id: $large_face_list_id, persisted_face_id: $persisted_face_id} | format pattern "/largefacelists/{large_face_list_id}/persistedfaces/{persisted_face_id}"))
+  let full_url = (build-url $base ({large_face_list_id: (encode-path-segment $large_face_list_id), persisted_face_id: (encode-path-segment $persisted_face_id)} | format pattern "/largefacelists/{large_face_list_id}/persistedfaces/{persisted_face_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -613,7 +622,7 @@ export def "largefacelists-persistedfaces delete-face" [
 #
 # GET /largefacelists/{largeFaceListId}/persistedfaces/{persistedFaceId}
 # operationId: LargeFaceList_GetFace
-export def "largefacelists-persistedfaces get-face" [
+export def "largefacelists-persistedfaces list-large-face-get-face" [
   large_face_list_id: string
   persisted_face_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -627,7 +636,7 @@ export def "largefacelists-persistedfaces get-face" [
 ]: nothing -> record<persistedFaceId: string, userData: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({large_face_list_id: $large_face_list_id, persisted_face_id: $persisted_face_id} | format pattern "/largefacelists/{large_face_list_id}/persistedfaces/{persisted_face_id}"))
+  let full_url = (build-url $base ({large_face_list_id: (encode-path-segment $large_face_list_id), persisted_face_id: (encode-path-segment $persisted_face_id)} | format pattern "/largefacelists/{large_face_list_id}/persistedfaces/{persisted_face_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -637,7 +646,7 @@ export def "largefacelists-persistedfaces get-face" [
 #
 # PATCH /largefacelists/{largeFaceListId}/persistedfaces/{persistedFaceId}
 # operationId: LargeFaceList_UpdateFace
-export def "largefacelists-persistedfaces update-face" [
+export def "largefacelists-persistedfaces list-large-face-update-face" [
   large_face_list_id: string
   persisted_face_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -653,19 +662,19 @@ export def "largefacelists-persistedfaces update-face" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({large_face_list_id: $large_face_list_id, persisted_face_id: $persisted_face_id} | format pattern "/largefacelists/{large_face_list_id}/persistedfaces/{persisted_face_id}"))
-  let body = {"userData": $user_data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({large_face_list_id: (encode-path-segment $large_face_list_id), persisted_face_id: (encode-path-segment $persisted_face_id)} | format pattern "/largefacelists/{large_face_list_id}/persistedfaces/{persisted_face_id}"))
+  let req_body = {"userData": $user_data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Queue a large face list training task, the training task may not be started immediately.
 #
 # POST /largefacelists/{largeFaceListId}/train
 # operationId: LargeFaceList_Train
-export def "largefacelists-train post" [
+export def "largefacelists-train list-large-face" [
   large_face_list_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -678,7 +687,7 @@ export def "largefacelists-train post" [
 ]: nothing -> record<error: record<code: string, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({large_face_list_id: $large_face_list_id} | format pattern "/largefacelists/{large_face_list_id}/train"))
+  let full_url = (build-url $base ({large_face_list_id: (encode-path-segment $large_face_list_id)} | format pattern "/largefacelists/{large_face_list_id}/train"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -688,7 +697,7 @@ export def "largefacelists-train post" [
 #
 # GET /largefacelists/{largeFaceListId}/training
 # operationId: LargeFaceList_GetTrainingStatus
-export def "largefacelists-training get-training-status" [
+export def "largefacelists-training list-large-face-get-status" [
   large_face_list_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -701,17 +710,17 @@ export def "largefacelists-training get-training-status" [
 ]: nothing -> record<createdDateTime: string, lastActionDateTime: string, lastSuccessfulTrainingDateTime: string, message: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({large_face_list_id: $large_face_list_id} | format pattern "/largefacelists/{large_face_list_id}/training"))
+  let full_url = (build-url $base ({large_face_list_id: (encode-path-segment $large_face_list_id)} | format pattern "/largefacelists/{large_face_list_id}/training"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# List all existing large person groups’ largePersonGroupId, name, userData and recognitionModel.<br /> * Large person groups are stored in alphabetical order of largePersonGroupId. * "start" parameter (string, optional) is a user-provided largePersonGroupId value that returned entries have larger ids by string comparison. "start" set to empty to indicate return from the first item. * "top" parameter (int, optional) specifies the number of entries to return. A maximal of 1000 entries can be returned in one call. To fetch more, you can specify "start" with the last returned entry’s Id of the current call. <br /> For example, total 5 large person groups: "group1", ..., "group5". <br /> "start=&top=" will return all 5 groups. <br /> "start=&top=2" will return "group1", "group2". <br /> "start=group2&top=3" will return "group3", "group4", "group5".
+# List all existing large person groups’ largePersonGroupId, name, userData and recognitionModel. * Large person groups are stored in alphabetical order of largePersonGroupId. * "start" parameter (string, optional) is a user-provided largePersonGroupId value that returned entries have larger ids by string comparison. "start" set to empty to indicate return from the first item. * "top" parameter (int, optional) specifies the number of entries to return. A maximal of 1000 entries can be returned in one call. To fetch more, you can specify "start" with the last returned entry’s Id of the current call. For example, total 5 large person groups: "group1", ..., "group5". "start=&top=" will return all 5 groups. "start=&top=2" will return "group1", "group2". "start=group2&top=3" will return "group3", "group4", "group5".
 #
 # GET /largepersongroups
 # operationId: LargePersonGroup_List
-export def "largepersongroups list" [
+export def "largepersongroups list-large-person-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -737,7 +746,7 @@ export def "largepersongroups list" [
 #
 # DELETE /largepersongroups/{largePersonGroupId}
 # operationId: LargePersonGroup_Delete
-export def "largepersongroups delete" [
+export def "largepersongroups delete-large-person-group" [
   large_person_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -750,7 +759,7 @@ export def "largepersongroups delete" [
 ]: nothing -> record<error: record<code: string, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({large_person_group_id: $large_person_group_id} | format pattern "/largepersongroups/{large_person_group_id}"))
+  let full_url = (build-url $base ({large_person_group_id: (encode-path-segment $large_person_group_id)} | format pattern "/largepersongroups/{large_person_group_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -760,7 +769,7 @@ export def "largepersongroups delete" [
 #
 # GET /largepersongroups/{largePersonGroupId}
 # operationId: LargePersonGroup_Get
-export def "largepersongroups get" [
+export def "largepersongroups get-large-person-group" [
   large_person_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -775,7 +784,7 @@ export def "largepersongroups get" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "returnRecognitionModel" $return_recognition_model "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({large_person_group_id: $large_person_group_id} | format pattern "/largepersongroups/{large_person_group_id}") $qp)
+  let full_url = (build-url $base ({large_person_group_id: (encode-path-segment $large_person_group_id)} | format pattern "/largepersongroups/{large_person_group_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -785,7 +794,7 @@ export def "largepersongroups get" [
 #
 # PATCH /largepersongroups/{largePersonGroupId}
 # operationId: LargePersonGroup_Update
-export def "largepersongroups update" [
+export def "largepersongroups update-large-person-group" [
   large_person_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -801,19 +810,19 @@ export def "largepersongroups update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({large_person_group_id: $large_person_group_id} | format pattern "/largepersongroups/{large_person_group_id}"))
-  let body = {"name": $name, "userData": $user_data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({large_person_group_id: (encode-path-segment $large_person_group_id)} | format pattern "/largepersongroups/{large_person_group_id}"))
+  let req_body = {"name": $name, "userData": $user_data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-# Create a new large person group with user-specified largePersonGroupId, name, an optional userData and recognitionModel. <br /> A large person group is the container of the uploaded person data, including face recognition feature, and up to 1,000,000 people. <br /> After creation, use [LargePersonGroup Person - Create](/docs/services/563879b61984550e40cbbe8d/operations/599adcba3a7b9412a4d53f40) to add person into the group, and call [LargePersonGroup - Train](/docs/services/563879b61984550e40cbbe8d/operations/599ae2d16ac60f11b48b5aa4) to get this group ready for [Face - Identify](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f30395239). <br /> No image will be stored. Only the person's extracted face features and userData will be stored on server until [LargePersonGroup Person - Delete](/docs/services/563879b61984550e40cbbe8d/operations/599ade5c6ac60f11b48b5aa2) or [LargePersonGroup - Delete](/docs/services/563879b61984550e40cbbe8d/operations/599adc216ac60f11b48b5a9f) is called. <br/>'recognitionModel' should be specified to associate with this large person group. The default value for 'recognitionModel' is 'recognition_01', if the latest model needed, please explicitly specify the model you need in this parameter. New faces that are added to an existing large person group will use the recognition model that's already associated with the collection. Existing face features in a large person group can't be updated to features extracted by another version of recognition model. * 'recognition_01': The default recognition model for [LargePersonGroup - Create](/docs/services/563879b61984550e40cbbe8d/operations/599acdee6ac60f11b48b5a9d). All those large person groups created before 2019 March are bonded with this recognition model. * 'recognition_02': Recognition model released in 2019 March. 'recognition_02' is recommended since its overall accuracy is improved compared with 'recognition_01'.  Large person group quota: * Free-tier subscription quota: 1,000 large person groups. * S0-tier subscription quota: 1,000,000 large person groups.
+# Create a new large person group with user-specified largePersonGroupId, name, an optional userData and recognitionModel. A large person group is the container of the uploaded person data, including face recognition feature, and up to 1,000,000 people. After creation, use [LargePersonGroup Person - Create](/docs/services/563879b61984550e40cbbe8d/operations/599adcba3a7b9412a4d53f40) to add person into the group, and call [LargePersonGroup - Train](/docs/services/563879b61984550e40cbbe8d/operations/599ae2d16ac60f11b48b5aa4) to get this group ready for [Face - Identify](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f30395239). No image will be stored. Only the person's extracted face features and userData will be stored on server until [LargePersonGroup Person - Delete](/docs/services/563879b61984550e40cbbe8d/operations/599ade5c6ac60f11b48b5aa2) or [LargePersonGroup - Delete](/docs/services/563879b61984550e40cbbe8d/operations/599adc216ac60f11b48b5a9f) is called. 'recognitionModel' should be specified to associate with this large person group. The default value for 'recognitionModel' is 'recognition_01', if the latest model needed, please explicitly specify the model you need in this parameter. New faces that are added to an existing large person group will use the recognition model that's already associated with the collection. Existing face features in a large person group can't be updated to features extracted by another version of recognition model. * 'recognition_01': The default recognition model for [LargePersonGroup - Create](/docs/services/563879b61984550e40cbbe8d/operations/599acdee6ac60f11b48b5a9d). All those large person groups created before 2019 March are bonded with this recognition model. * 'recognition_02': Recognition model released in 2019 March. 'recognition_02' is recommended since its overall accuracy is improved compared with 'recognition_01'. Large person group quota: * Free-tier subscription quota: 1,000 large person groups. * S0-tier subscription quota: 1,000,000 large person groups.
 #
 # PUT /largepersongroups/{largePersonGroupId}
 # operationId: LargePersonGroup_Create
-export def "largepersongroups create" [
+export def "largepersongroups create-large-person-group" [
   large_person_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -830,19 +839,19 @@ export def "largepersongroups create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({large_person_group_id: $large_person_group_id} | format pattern "/largepersongroups/{large_person_group_id}"))
-  let body = {"recognitionModel": $recognition_model, "name": $name, "userData": $user_data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({large_person_group_id: (encode-path-segment $large_person_group_id)} | format pattern "/largepersongroups/{large_person_group_id}"))
+  let req_body = {"recognitionModel": $recognition_model, "name": $name, "userData": $user_data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List all persons in a large person group, and retrieve person information (including personId, name, userData and persistedFaceIds of registered faces of the person).
 #
 # GET /largepersongroups/{largePersonGroupId}/persons
 # operationId: LargePersonGroupPerson_List
-export def "largepersongroups-persons list" [
+export def "largepersongroups-persons list-large-group" [
   large_person_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -858,7 +867,7 @@ export def "largepersongroups-persons list" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "top" $top "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({large_person_group_id: $large_person_group_id} | format pattern "/largepersongroups/{large_person_group_id}/persons") $qp)
+  let full_url = (build-url $base ({large_person_group_id: (encode-path-segment $large_person_group_id)} | format pattern "/largepersongroups/{large_person_group_id}/persons") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -868,7 +877,7 @@ export def "largepersongroups-persons list" [
 #
 # POST /largepersongroups/{largePersonGroupId}/persons
 # operationId: LargePersonGroupPerson_Create
-export def "largepersongroups-persons create" [
+export def "largepersongroups-persons create-large-group" [
   large_person_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -884,19 +893,19 @@ export def "largepersongroups-persons create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({large_person_group_id: $large_person_group_id} | format pattern "/largepersongroups/{large_person_group_id}/persons"))
-  let body = {"name": $name, "userData": $user_data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({large_person_group_id: (encode-path-segment $large_person_group_id)} | format pattern "/largepersongroups/{large_person_group_id}/persons"))
+  let req_body = {"name": $name, "userData": $user_data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete an existing person from a large person group. The persistedFaceId, userData, person name and face feature in the person entry will all be deleted.
 #
 # DELETE /largepersongroups/{largePersonGroupId}/persons/{personId}
 # operationId: LargePersonGroupPerson_Delete
-export def "largepersongroups-persons delete" [
+export def "largepersongroups-persons delete-large-group" [
   large_person_group_id: string
   person_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -910,7 +919,7 @@ export def "largepersongroups-persons delete" [
 ]: nothing -> record<error: record<code: string, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({large_person_group_id: $large_person_group_id, person_id: $person_id} | format pattern "/largepersongroups/{large_person_group_id}/persons/{person_id}"))
+  let full_url = (build-url $base ({large_person_group_id: (encode-path-segment $large_person_group_id), person_id: (encode-path-segment $person_id)} | format pattern "/largepersongroups/{large_person_group_id}/persons/{person_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -920,7 +929,7 @@ export def "largepersongroups-persons delete" [
 #
 # GET /largepersongroups/{largePersonGroupId}/persons/{personId}
 # operationId: LargePersonGroupPerson_Get
-export def "largepersongroups-persons get" [
+export def "largepersongroups-persons get-large-group" [
   large_person_group_id: string
   person_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -934,7 +943,7 @@ export def "largepersongroups-persons get" [
 ]: nothing -> record<persistedFaceIds: list<string>, personId: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({large_person_group_id: $large_person_group_id, person_id: $person_id} | format pattern "/largepersongroups/{large_person_group_id}/persons/{person_id}"))
+  let full_url = (build-url $base ({large_person_group_id: (encode-path-segment $large_person_group_id), person_id: (encode-path-segment $person_id)} | format pattern "/largepersongroups/{large_person_group_id}/persons/{person_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -944,7 +953,7 @@ export def "largepersongroups-persons get" [
 #
 # PATCH /largepersongroups/{largePersonGroupId}/persons/{personId}
 # operationId: LargePersonGroupPerson_Update
-export def "largepersongroups-persons update" [
+export def "largepersongroups-persons update-large-group" [
   large_person_group_id: string
   person_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -961,19 +970,19 @@ export def "largepersongroups-persons update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({large_person_group_id: $large_person_group_id, person_id: $person_id} | format pattern "/largepersongroups/{large_person_group_id}/persons/{person_id}"))
-  let body = {"name": $name, "userData": $user_data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({large_person_group_id: (encode-path-segment $large_person_group_id), person_id: (encode-path-segment $person_id)} | format pattern "/largepersongroups/{large_person_group_id}/persons/{person_id}"))
+  let req_body = {"name": $name, "userData": $user_data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-# Add a face to a person into a large person group for face identification or verification. To deal with an image contains multiple faces, input face can be specified as an image with a targetFace rectangle. It returns a persistedFaceId representing the added face. No image will be stored. Only the extracted face feature will be stored on server until [LargePersonGroup PersonFace - Delete](/docs/services/563879b61984550e40cbbe8d/operations/599ae2966ac60f11b48b5aa3), [LargePersonGroup Person - Delete](/docs/services/563879b61984550e40cbbe8d/operations/599ade5c6ac60f11b48b5aa2) or [LargePersonGroup - Delete](/docs/services/563879b61984550e40cbbe8d/operations/599adc216ac60f11b48b5a9f) is called. <br /> Note persistedFaceId is different from faceId generated by [Face - Detect](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f30395236). * Higher face image quality means better recognition precision. Please consider high-quality faces: frontal, clear, and face size is 200x200 pixels (100 pixels between eyes) or bigger. * Each person entry can hold up to 248 faces. * JPEG, PNG, GIF (the first frame), and BMP format are supported. The allowed image file size is from 1KB to 6MB. * "targetFace" rectangle should contain one face. Zero or multiple faces will be regarded as an error. If the provided "targetFace" rectangle is not returned from [Face - Detect](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f30395236), there’s no guarantee to detect and add the face successfully. * Out of detectable face size (36x36 - 4096x4096 pixels), large head-pose, or large occlusions will cause failures. * Adding/deleting faces to/from a same person will be processed sequentially. Adding/deleting faces to/from different persons are processed in parallel. * The minimum detectable face size is 36x36 pixels in an image no larger than 1920x1080 pixels. Images with dimensions higher than 1920x1080 pixels will need a proportionally larger minimum face size. * Different 'detectionModel' values can be provided. To use and compare different detection models, please refer to [How to specify a detection model](https://docs.microsoft.com/en-us/azure/cognitive-services/face/face-api-how-to-topics/specify-detection-model)   | Model | Recommended use-case(s) |   | ---------- | -------- |   | 'detection_01': | The default detection model for [LargePersonGroup Person - Add Face](/docs/services/563879b61984550e40cbbe8d/operations/599adf2a3a7b9412a4d53f42). Recommend for near frontal face detection. For scenarios with exceptionally large angle (head-pose) faces, occluded faces or wrong image orientation, the faces in such cases may not be detected. |   | 'detection_02': | Detection model released in 2019 May with improved accuracy especially on small, side and blurry faces. |
+# Add a face to a person into a large person group for face identification or verification. To deal with an image contains multiple faces, input face can be specified as an image with a targetFace rectangle. It returns a persistedFaceId representing the added face. No image will be stored. Only the extracted face feature will be stored on server until [LargePersonGroup PersonFace - Delete](/docs/services/563879b61984550e40cbbe8d/operations/599ae2966ac60f11b48b5aa3), [LargePersonGroup Person - Delete](/docs/services/563879b61984550e40cbbe8d/operations/599ade5c6ac60f11b48b5aa2) or [LargePersonGroup - Delete](/docs/services/563879b61984550e40cbbe8d/operations/599adc216ac60f11b48b5a9f) is called. Note persistedFaceId is different from faceId generated by [Face - Detect](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f30395236). * Higher face image quality means better recognition precision. Please consider high-quality faces: frontal, clear, and face size is 200x200 pixels (100 pixels between eyes) or bigger. * Each person entry can hold up to 248 faces. * JPEG, PNG, GIF (the first frame), and BMP format are supported. The allowed image file size is from 1KB to 6MB. * "targetFace" rectangle should contain one face. Zero or multiple faces will be regarded as an error. If the provided "targetFace" rectangle is not returned from [Face - Detect](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f30395236), there’s no guarantee to detect and add the face successfully. * Out of detectable face size (36x36 - 4096x4096 pixels), large head-pose, or large occlusions will cause failures. * Adding/deleting faces to/from a same person will be processed sequentially. Adding/deleting faces to/from different persons are processed in parallel. * The minimum detectable face size is 36x36 pixels in an image no larger than 1920x1080 pixels. Images with dimensions higher than 1920x1080 pixels will need a proportionally larger minimum face size. * Different 'detectionModel' values can be provided. To use and compare different detection models, please refer to [How to specify a detection model](https://docs.microsoft.com/en-us/azure/cognitive-services/face/face-api-how-to-topics/specify-detection-model) | Model | Recommended use-case(s) | | ---------- | -------- | | 'detection_01': | The default detection model for [LargePersonGroup Person - Add Face](/docs/services/563879b61984550e40cbbe8d/operations/599adf2a3a7b9412a4d53f42). Recommend for near frontal face detection. For scenarios with exceptionally large angle (head-pose) faces, occluded faces or wrong image orientation, the faces in such cases may not be detected. | | 'detection_02': | Detection model released in 2019 May with improved accuracy especially on small, side and blurry faces. |
 #
 # POST /largepersongroups/{largePersonGroupId}/persons/{personId}/persistedfaces
 # operationId: LargePersonGroupPerson_AddFaceFromUrl
-export def "largepersongroups-persons-persistedfaces create-face-from-url" [
+export def "largepersongroups-persons-persistedfaces create-large-group-face-from-url" [
   large_person_group_id: string
   person_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -985,27 +994,27 @@ export def "largepersongroups-persons-persistedfaces create-face-from-url" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --user-data: string # User-specified data about the face for any purpose. The maximum length is 1KB.
-  --target-face: list # A face rectangle to specify the target face to be added to a person in the format of "targetFace=left,top,width,height". E.g. "targetFace=10,10,100,100". If there is more than one face in the image, targetFace is required to specify which face to add. No targetFace means there is only one face detected in the entire image.
+  --target-face: list<int> # A face rectangle to specify the target face to be added to a person in the format of "targetFace=left,top,width,height". E.g. "targetFace=10,10,100,100". If there is more than one face in the image, targetFace is required to specify which face to add. No targetFace means there is only one face detected in the entire image.
   --detection-model: string@detection-model-completer # Name of detection model. Detection model is used to detect faces in the submitted image. A detection model name can be provided when performing Face - Detect or (Large)FaceList - Add Face or (Large)PersonGroup - Add Face. The default value is 'detection_01', if another model is needed, please explicitly specify it. (default: detection_01)
-  --body-url: string # Publicly reachable URL of an image
+  url: string # Publicly reachable URL of an image
 ]: any -> record<persistedFaceId: string, userData: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "userData" $user_data "scalar") (serialize-qp "targetFace" $target_face "csv") (serialize-qp "detectionModel" $detection_model "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({large_person_group_id: $large_person_group_id, person_id: $person_id} | format pattern "/largepersongroups/{large_person_group_id}/persons/{person_id}/persistedfaces") $qp)
-  let body = {"url": $body_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({large_person_group_id: (encode-path-segment $large_person_group_id), person_id: (encode-path-segment $person_id)} | format pattern "/largepersongroups/{large_person_group_id}/persons/{person_id}/persistedfaces") $qp)
+  let req_body = {"url": $url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-# Delete a face from a person in a large person group by specified largePersonGroupId, personId and persistedFaceId. <br /> Adding/deleting faces to/from a same person will be processed sequentially. Adding/deleting faces to/from different persons are processed in parallel.
+# Delete a face from a person in a large person group by specified largePersonGroupId, personId and persistedFaceId. Adding/deleting faces to/from a same person will be processed sequentially. Adding/deleting faces to/from different persons are processed in parallel.
 #
 # DELETE /largepersongroups/{largePersonGroupId}/persons/{personId}/persistedfaces/{persistedFaceId}
 # operationId: LargePersonGroupPerson_DeleteFace
-export def "largepersongroups-persons-persistedfaces delete-face" [
+export def "largepersongroups-persons-persistedfaces delete-large-group-face" [
   large_person_group_id: string
   person_id: string
   persisted_face_id: string
@@ -1020,7 +1029,7 @@ export def "largepersongroups-persons-persistedfaces delete-face" [
 ]: nothing -> record<error: record<code: string, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({large_person_group_id: $large_person_group_id, person_id: $person_id, persisted_face_id: $persisted_face_id} | format pattern "/largepersongroups/{large_person_group_id}/persons/{person_id}/persistedfaces/{persisted_face_id}"))
+  let full_url = (build-url $base ({large_person_group_id: (encode-path-segment $large_person_group_id), person_id: (encode-path-segment $person_id), persisted_face_id: (encode-path-segment $persisted_face_id)} | format pattern "/largepersongroups/{large_person_group_id}/persons/{person_id}/persistedfaces/{persisted_face_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1030,7 +1039,7 @@ export def "largepersongroups-persons-persistedfaces delete-face" [
 #
 # GET /largepersongroups/{largePersonGroupId}/persons/{personId}/persistedfaces/{persistedFaceId}
 # operationId: LargePersonGroupPerson_GetFace
-export def "largepersongroups-persons-persistedfaces get-face" [
+export def "largepersongroups-persons-persistedfaces get-large-group-face" [
   large_person_group_id: string
   person_id: string
   persisted_face_id: string
@@ -1045,7 +1054,7 @@ export def "largepersongroups-persons-persistedfaces get-face" [
 ]: nothing -> record<persistedFaceId: string, userData: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({large_person_group_id: $large_person_group_id, person_id: $person_id, persisted_face_id: $persisted_face_id} | format pattern "/largepersongroups/{large_person_group_id}/persons/{person_id}/persistedfaces/{persisted_face_id}"))
+  let full_url = (build-url $base ({large_person_group_id: (encode-path-segment $large_person_group_id), person_id: (encode-path-segment $person_id), persisted_face_id: (encode-path-segment $persisted_face_id)} | format pattern "/largepersongroups/{large_person_group_id}/persons/{person_id}/persistedfaces/{persisted_face_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1055,7 +1064,7 @@ export def "largepersongroups-persons-persistedfaces get-face" [
 #
 # PATCH /largepersongroups/{largePersonGroupId}/persons/{personId}/persistedfaces/{persistedFaceId}
 # operationId: LargePersonGroupPerson_UpdateFace
-export def "largepersongroups-persons-persistedfaces update-face" [
+export def "largepersongroups-persons-persistedfaces update-large-group-face" [
   large_person_group_id: string
   person_id: string
   persisted_face_id: string
@@ -1072,19 +1081,19 @@ export def "largepersongroups-persons-persistedfaces update-face" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({large_person_group_id: $large_person_group_id, person_id: $person_id, persisted_face_id: $persisted_face_id} | format pattern "/largepersongroups/{large_person_group_id}/persons/{person_id}/persistedfaces/{persisted_face_id}"))
-  let body = {"userData": $user_data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({large_person_group_id: (encode-path-segment $large_person_group_id), person_id: (encode-path-segment $person_id), persisted_face_id: (encode-path-segment $persisted_face_id)} | format pattern "/largepersongroups/{large_person_group_id}/persons/{person_id}/persistedfaces/{persisted_face_id}"))
+  let req_body = {"userData": $user_data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Queue a large person group training task, the training task may not be started immediately.
 #
 # POST /largepersongroups/{largePersonGroupId}/train
 # operationId: LargePersonGroup_Train
-export def "largepersongroups-train post" [
+export def "largepersongroups-train create-large-person-group" [
   large_person_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1097,7 +1106,7 @@ export def "largepersongroups-train post" [
 ]: nothing -> record<error: record<code: string, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({large_person_group_id: $large_person_group_id} | format pattern "/largepersongroups/{large_person_group_id}/train"))
+  let full_url = (build-url $base ({large_person_group_id: (encode-path-segment $large_person_group_id)} | format pattern "/largepersongroups/{large_person_group_id}/train"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1107,7 +1116,7 @@ export def "largepersongroups-train post" [
 #
 # GET /largepersongroups/{largePersonGroupId}/training
 # operationId: LargePersonGroup_GetTrainingStatus
-export def "largepersongroups-training get-training-status" [
+export def "largepersongroups-training get-large-person-group-status" [
   large_person_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1120,7 +1129,7 @@ export def "largepersongroups-training get-training-status" [
 ]: nothing -> record<createdDateTime: string, lastActionDateTime: string, lastSuccessfulTrainingDateTime: string, message: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({large_person_group_id: $large_person_group_id} | format pattern "/largepersongroups/{large_person_group_id}/training"))
+  let full_url = (build-url $base ({large_person_group_id: (encode-path-segment $large_person_group_id)} | format pattern "/largepersongroups/{large_person_group_id}/training"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1130,7 +1139,7 @@ export def "largepersongroups-training get-training-status" [
 #
 # GET /operations/{operationId}
 # operationId: Snapshot_GetOperationStatus
-export def "operations get-operation-status" [
+export def "operations get-snapshot-status" [
   operation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1143,17 +1152,17 @@ export def "operations get-operation-status" [
 ]: nothing -> record<createdTime: string, lastActionTime: string, message: string, resourceLocation: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({operation_id: $operation_id} | format pattern "/operations/{operation_id}"))
+  let full_url = (build-url $base ({operation_id: (encode-path-segment $operation_id)} | format pattern "/operations/{operation_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# List person groups’ personGroupId, name, userData and recognitionModel.<br /> * Person groups are stored in alphabetical order of personGroupId. * "start" parameter (string, optional) is a user-provided personGroupId value that returned entries have larger ids by string comparison. "start" set to empty to indicate return from the first item. * "top" parameter (int, optional) specifies the number of entries to return. A maximal of 1000 entries can be returned in one call. To fetch more, you can specify "start" with the last returned entry’s Id of the current call. <br /> For example, total 5 person groups: "group1", ..., "group5". <br /> "start=&top=" will return all 5 groups. <br /> "start=&top=2" will return "group1", "group2". <br /> "start=group2&top=3" will return "group3", "group4", "group5".
+# List person groups’ personGroupId, name, userData and recognitionModel. * Person groups are stored in alphabetical order of personGroupId. * "start" parameter (string, optional) is a user-provided personGroupId value that returned entries have larger ids by string comparison. "start" set to empty to indicate return from the first item. * "top" parameter (int, optional) specifies the number of entries to return. A maximal of 1000 entries can be returned in one call. To fetch more, you can specify "start" with the last returned entry’s Id of the current call. For example, total 5 person groups: "group1", ..., "group5". "start=&top=" will return all 5 groups. "start=&top=2" will return "group1", "group2". "start=group2&top=3" will return "group3", "group4", "group5".
 #
 # GET /persongroups
 # operationId: PersonGroup_List
-export def "persongroups list" [
+export def "persongroups list-person-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1179,7 +1188,7 @@ export def "persongroups list" [
 #
 # DELETE /persongroups/{personGroupId}
 # operationId: PersonGroup_Delete
-export def "persongroups delete" [
+export def "persongroups delete-person-group" [
   person_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1192,7 +1201,7 @@ export def "persongroups delete" [
 ]: nothing -> record<error: record<code: string, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({person_group_id: $person_group_id} | format pattern "/persongroups/{person_group_id}"))
+  let full_url = (build-url $base ({person_group_id: (encode-path-segment $person_group_id)} | format pattern "/persongroups/{person_group_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1202,7 +1211,7 @@ export def "persongroups delete" [
 #
 # GET /persongroups/{personGroupId}
 # operationId: PersonGroup_Get
-export def "persongroups get" [
+export def "persongroups get-person-group" [
   person_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1217,7 +1226,7 @@ export def "persongroups get" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "returnRecognitionModel" $return_recognition_model "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({person_group_id: $person_group_id} | format pattern "/persongroups/{person_group_id}") $qp)
+  let full_url = (build-url $base ({person_group_id: (encode-path-segment $person_group_id)} | format pattern "/persongroups/{person_group_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1227,7 +1236,7 @@ export def "persongroups get" [
 #
 # PATCH /persongroups/{personGroupId}
 # operationId: PersonGroup_Update
-export def "persongroups update" [
+export def "persongroups update-person-group" [
   person_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1243,19 +1252,19 @@ export def "persongroups update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({person_group_id: $person_group_id} | format pattern "/persongroups/{person_group_id}"))
-  let body = {"name": $name, "userData": $user_data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({person_group_id: (encode-path-segment $person_group_id)} | format pattern "/persongroups/{person_group_id}"))
+  let req_body = {"name": $name, "userData": $user_data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-# Create a new person group with specified personGroupId, name, user-provided userData and recognitionModel. <br /> A person group is the container of the uploaded person data, including face recognition features. <br /> After creation, use [PersonGroup Person - Create](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f3039523c) to add persons into the group, and then call [PersonGroup - Train](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f30395249) to get this group ready for [Face - Identify](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f30395239). <br /> No image will be stored. Only the person's extracted face features and userData will be stored on server until [PersonGroup Person - Delete](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f3039523d) or [PersonGroup - Delete](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f30395245) is called. <br/>'recognitionModel' should be specified to associate with this person group. The default value for 'recognitionModel' is 'recognition_01', if the latest model needed, please explicitly specify the model you need in this parameter. New faces that are added to an existing person group will use the recognition model that's already associated with the collection. Existing face features in a person group can't be updated to features extracted by another version of recognition model. * 'recognition_01': The default recognition model for [PersonGroup - Create](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f30395244). All those person groups created before 2019 March are bonded with this recognition model. * 'recognition_02': Recognition model released in 2019 March. 'recognition_02' is recommended since its overall accuracy is improved compared with 'recognition_01'.  Person group quota: * Free-tier subscription quota: 1,000 person groups. Each holds up to 1,000 persons. * S0-tier subscription quota: 1,000,000 person groups. Each holds up to 10,000 persons. * to handle larger scale face identification problem, please consider using [LargePersonGroup](/docs/services/563879b61984550e40cbbe8d/operations/599acdee6ac60f11b48b5a9d).
+# Create a new person group with specified personGroupId, name, user-provided userData and recognitionModel. A person group is the container of the uploaded person data, including face recognition features. After creation, use [PersonGroup Person - Create](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f3039523c) to add persons into the group, and then call [PersonGroup - Train](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f30395249) to get this group ready for [Face - Identify](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f30395239). No image will be stored. Only the person's extracted face features and userData will be stored on server until [PersonGroup Person - Delete](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f3039523d) or [PersonGroup - Delete](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f30395245) is called. 'recognitionModel' should be specified to associate with this person group. The default value for 'recognitionModel' is 'recognition_01', if the latest model needed, please explicitly specify the model you need in this parameter. New faces that are added to an existing person group will use the recognition model that's already associated with the collection. Existing face features in a person group can't be updated to features extracted by another version of recognition model. * 'recognition_01': The default recognition model for [PersonGroup - Create](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f30395244). All those person groups created before 2019 March are bonded with this recognition model. * 'recognition_02': Recognition model released in 2019 March. 'recognition_02' is recommended since its overall accuracy is improved compared with 'recognition_01'. Person group quota: * Free-tier subscription quota: 1,000 person groups. Each holds up to 1,000 persons. * S0-tier subscription quota: 1,000,000 person groups. Each holds up to 10,000 persons. * to handle larger scale face identification problem, please consider using [LargePersonGroup](/docs/services/563879b61984550e40cbbe8d/operations/599acdee6ac60f11b48b5a9d).
 #
 # PUT /persongroups/{personGroupId}
 # operationId: PersonGroup_Create
-export def "persongroups create" [
+export def "persongroups create-person-group" [
   person_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1272,19 +1281,19 @@ export def "persongroups create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({person_group_id: $person_group_id} | format pattern "/persongroups/{person_group_id}"))
-  let body = {"recognitionModel": $recognition_model, "name": $name, "userData": $user_data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({person_group_id: (encode-path-segment $person_group_id)} | format pattern "/persongroups/{person_group_id}"))
+  let req_body = {"recognitionModel": $recognition_model, "name": $name, "userData": $user_data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List all persons in a person group, and retrieve person information (including personId, name, userData and persistedFaceIds of registered faces of the person).
 #
 # GET /persongroups/{personGroupId}/persons
 # operationId: PersonGroupPerson_List
-export def "persongroups-persons list" [
+export def "persongroups-persons list-group" [
   person_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1300,7 +1309,7 @@ export def "persongroups-persons list" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "top" $top "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({person_group_id: $person_group_id} | format pattern "/persongroups/{person_group_id}/persons") $qp)
+  let full_url = (build-url $base ({person_group_id: (encode-path-segment $person_group_id)} | format pattern "/persongroups/{person_group_id}/persons") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1310,7 +1319,7 @@ export def "persongroups-persons list" [
 #
 # POST /persongroups/{personGroupId}/persons
 # operationId: PersonGroupPerson_Create
-export def "persongroups-persons create" [
+export def "persongroups-persons create-group" [
   person_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1326,19 +1335,19 @@ export def "persongroups-persons create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({person_group_id: $person_group_id} | format pattern "/persongroups/{person_group_id}/persons"))
-  let body = {"name": $name, "userData": $user_data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({person_group_id: (encode-path-segment $person_group_id)} | format pattern "/persongroups/{person_group_id}/persons"))
+  let req_body = {"name": $name, "userData": $user_data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete an existing person from a person group. The persistedFaceId, userData, person name and face feature in the person entry will all be deleted.
 #
 # DELETE /persongroups/{personGroupId}/persons/{personId}
 # operationId: PersonGroupPerson_Delete
-export def "persongroups-persons delete" [
+export def "persongroups-persons delete-group" [
   person_group_id: string
   person_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1352,7 +1361,7 @@ export def "persongroups-persons delete" [
 ]: nothing -> record<error: record<code: string, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({person_group_id: $person_group_id, person_id: $person_id} | format pattern "/persongroups/{person_group_id}/persons/{person_id}"))
+  let full_url = (build-url $base ({person_group_id: (encode-path-segment $person_group_id), person_id: (encode-path-segment $person_id)} | format pattern "/persongroups/{person_group_id}/persons/{person_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1362,7 +1371,7 @@ export def "persongroups-persons delete" [
 #
 # GET /persongroups/{personGroupId}/persons/{personId}
 # operationId: PersonGroupPerson_Get
-export def "persongroups-persons get" [
+export def "persongroups-persons get-group" [
   person_group_id: string
   person_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1376,7 +1385,7 @@ export def "persongroups-persons get" [
 ]: nothing -> record<persistedFaceIds: list<string>, personId: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({person_group_id: $person_group_id, person_id: $person_id} | format pattern "/persongroups/{person_group_id}/persons/{person_id}"))
+  let full_url = (build-url $base ({person_group_id: (encode-path-segment $person_group_id), person_id: (encode-path-segment $person_id)} | format pattern "/persongroups/{person_group_id}/persons/{person_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1386,7 +1395,7 @@ export def "persongroups-persons get" [
 #
 # PATCH /persongroups/{personGroupId}/persons/{personId}
 # operationId: PersonGroupPerson_Update
-export def "persongroups-persons update" [
+export def "persongroups-persons update-group" [
   person_group_id: string
   person_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1403,19 +1412,19 @@ export def "persongroups-persons update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({person_group_id: $person_group_id, person_id: $person_id} | format pattern "/persongroups/{person_group_id}/persons/{person_id}"))
-  let body = {"name": $name, "userData": $user_data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({person_group_id: (encode-path-segment $person_group_id), person_id: (encode-path-segment $person_id)} | format pattern "/persongroups/{person_group_id}/persons/{person_id}"))
+  let req_body = {"name": $name, "userData": $user_data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-# Add a face to a person into a person group for face identification or verification. To deal with an image contains multiple faces, input face can be specified as an image with a targetFace rectangle. It returns a persistedFaceId representing the added face. No image will be stored. Only the extracted face feature will be stored on server until [PersonGroup PersonFace - Delete](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f3039523e), [PersonGroup Person - Delete](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f3039523d) or [PersonGroup - Delete](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f30395245) is called. <br /> Note persistedFaceId is different from faceId generated by [Face - Detect](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f30395236). *   Higher face image quality means better recognition precision. Please consider high-quality faces: frontal, clear, and face size is 200x200 pixels (100 pixels between eyes) or bigger. *   Each person entry can hold up to 248 faces. *   JPEG, PNG, GIF (the first frame), and BMP format are supported. The allowed image file size is from 1KB to 6MB. *   "targetFace" rectangle should contain one face. Zero or multiple faces will be regarded as an error. If the provided "targetFace" rectangle is not returned from [Face - Detect](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f30395236), there’s no guarantee to detect and add the face successfully. *   Out of detectable face size (36x36 - 4096x4096 pixels), large head-pose, or large occlusions will cause failures. *   Adding/deleting faces to/from a same person will be processed sequentially. Adding/deleting faces to/from different persons are processed in parallel. * The minimum detectable face size is 36x36 pixels in an image no larger than 1920x1080 pixels. Images with dimensions higher than 1920x1080 pixels will need a proportionally larger minimum face size. * Different 'detectionModel' values can be provided. To use and compare different detection models, please refer to [How to specify a detection model](https://docs.microsoft.com/en-us/azure/cognitive-services/face/face-api-how-to-topics/specify-detection-model)   | Model | Recommended use-case(s) |   | ---------- | -------- |   | 'detection_01': | The default detection model for [PersonGroup Person - Add Face](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f3039523b). Recommend for near frontal face detection. For scenarios with exceptionally large angle (head-pose) faces, occluded faces or wrong image orientation, the faces in such cases may not be detected. |   | 'detection_02': | Detection model released in 2019 May with improved accuracy especially on small, side and blurry faces. |
+# Add a face to a person into a person group for face identification or verification. To deal with an image contains multiple faces, input face can be specified as an image with a targetFace rectangle. It returns a persistedFaceId representing the added face. No image will be stored. Only the extracted face feature will be stored on server until [PersonGroup PersonFace - Delete](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f3039523e), [PersonGroup Person - Delete](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f3039523d) or [PersonGroup - Delete](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f30395245) is called. Note persistedFaceId is different from faceId generated by [Face - Detect](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f30395236). * Higher face image quality means better recognition precision. Please consider high-quality faces: frontal, clear, and face size is 200x200 pixels (100 pixels between eyes) or bigger. * Each person entry can hold up to 248 faces. * JPEG, PNG, GIF (the first frame), and BMP format are supported. The allowed image file size is from 1KB to 6MB. * "targetFace" rectangle should contain one face. Zero or multiple faces will be regarded as an error. If the provided "targetFace" rectangle is not returned from [Face - Detect](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f30395236), there’s no guarantee to detect and add the face successfully. * Out of detectable face size (36x36 - 4096x4096 pixels), large head-pose, or large occlusions will cause failures. * Adding/deleting faces to/from a same person will be processed sequentially. Adding/deleting faces to/from different persons are processed in parallel. * The minimum detectable face size is 36x36 pixels in an image no larger than 1920x1080 pixels. Images with dimensions higher than 1920x1080 pixels will need a proportionally larger minimum face size. * Different 'detectionModel' values can be provided. To use and compare different detection models, please refer to [How to specify a detection model](https://docs.microsoft.com/en-us/azure/cognitive-services/face/face-api-how-to-topics/specify-detection-model) | Model | Recommended use-case(s) | | ---------- | -------- | | 'detection_01': | The default detection model for [PersonGroup Person - Add Face](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f3039523b). Recommend for near frontal face detection. For scenarios with exceptionally large angle (head-pose) faces, occluded faces or wrong image orientation, the faces in such cases may not be detected. | | 'detection_02': | Detection model released in 2019 May with improved accuracy especially on small, side and blurry faces. |
 #
 # POST /persongroups/{personGroupId}/persons/{personId}/persistedfaces
 # operationId: PersonGroupPerson_AddFaceFromUrl
-export def "persongroups-persons-persistedfaces create-face-from-url" [
+export def "persongroups-persons-persistedfaces create-group-face-from-url" [
   person_group_id: string
   person_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1427,27 +1436,27 @@ export def "persongroups-persons-persistedfaces create-face-from-url" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --user-data: string # User-specified data about the face for any purpose. The maximum length is 1KB.
-  --target-face: list # A face rectangle to specify the target face to be added to a person in the format of "targetFace=left,top,width,height". E.g. "targetFace=10,10,100,100". If there is more than one face in the image, targetFace is required to specify which face to add. No targetFace means there is only one face detected in the entire image.
+  --target-face: list<int> # A face rectangle to specify the target face to be added to a person in the format of "targetFace=left,top,width,height". E.g. "targetFace=10,10,100,100". If there is more than one face in the image, targetFace is required to specify which face to add. No targetFace means there is only one face detected in the entire image.
   --detection-model: string@detection-model-completer # Name of detection model. Detection model is used to detect faces in the submitted image. A detection model name can be provided when performing Face - Detect or (Large)FaceList - Add Face or (Large)PersonGroup - Add Face. The default value is 'detection_01', if another model is needed, please explicitly specify it. (default: detection_01)
-  --body-url: string # Publicly reachable URL of an image
+  url: string # Publicly reachable URL of an image
 ]: any -> record<persistedFaceId: string, userData: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "userData" $user_data "scalar") (serialize-qp "targetFace" $target_face "csv") (serialize-qp "detectionModel" $detection_model "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({person_group_id: $person_group_id, person_id: $person_id} | format pattern "/persongroups/{person_group_id}/persons/{person_id}/persistedfaces") $qp)
-  let body = {"url": $body_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({person_group_id: (encode-path-segment $person_group_id), person_id: (encode-path-segment $person_id)} | format pattern "/persongroups/{person_group_id}/persons/{person_id}/persistedfaces") $qp)
+  let req_body = {"url": $url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-# Delete a face from a person in a person group by specified personGroupId, personId and persistedFaceId. <br /> Adding/deleting faces to/from a same person will be processed sequentially. Adding/deleting faces to/from different persons are processed in parallel.
+# Delete a face from a person in a person group by specified personGroupId, personId and persistedFaceId. Adding/deleting faces to/from a same person will be processed sequentially. Adding/deleting faces to/from different persons are processed in parallel.
 #
 # DELETE /persongroups/{personGroupId}/persons/{personId}/persistedfaces/{persistedFaceId}
 # operationId: PersonGroupPerson_DeleteFace
-export def "persongroups-persons-persistedfaces delete-face" [
+export def "persongroups-persons-persistedfaces delete-group-face" [
   person_group_id: string
   person_id: string
   persisted_face_id: string
@@ -1462,7 +1471,7 @@ export def "persongroups-persons-persistedfaces delete-face" [
 ]: nothing -> record<error: record<code: string, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({person_group_id: $person_group_id, person_id: $person_id, persisted_face_id: $persisted_face_id} | format pattern "/persongroups/{person_group_id}/persons/{person_id}/persistedfaces/{persisted_face_id}"))
+  let full_url = (build-url $base ({person_group_id: (encode-path-segment $person_group_id), person_id: (encode-path-segment $person_id), persisted_face_id: (encode-path-segment $persisted_face_id)} | format pattern "/persongroups/{person_group_id}/persons/{person_id}/persistedfaces/{persisted_face_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1472,7 +1481,7 @@ export def "persongroups-persons-persistedfaces delete-face" [
 #
 # GET /persongroups/{personGroupId}/persons/{personId}/persistedfaces/{persistedFaceId}
 # operationId: PersonGroupPerson_GetFace
-export def "persongroups-persons-persistedfaces get-face" [
+export def "persongroups-persons-persistedfaces get-group-face" [
   person_group_id: string
   person_id: string
   persisted_face_id: string
@@ -1487,17 +1496,17 @@ export def "persongroups-persons-persistedfaces get-face" [
 ]: nothing -> record<persistedFaceId: string, userData: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({person_group_id: $person_group_id, person_id: $person_id, persisted_face_id: $persisted_face_id} | format pattern "/persongroups/{person_group_id}/persons/{person_id}/persistedfaces/{persisted_face_id}"))
+  let full_url = (build-url $base ({person_group_id: (encode-path-segment $person_group_id), person_id: (encode-path-segment $person_id), persisted_face_id: (encode-path-segment $persisted_face_id)} | format pattern "/persongroups/{person_group_id}/persons/{person_id}/persistedfaces/{persisted_face_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Add a face to a person into a person group for face identification or verification. To deal with an image contains multiple faces, input face can be specified as an image with a targetFace rectangle. It returns a persistedFaceId representing the added face. No image will be stored. Only the extracted face feature will be stored on server until [PersonGroup PersonFace - Delete](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f3039523e), [PersonGroup Person - Delete](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f3039523d) or [PersonGroup - Delete](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f30395245) is called. <br /> Note persistedFaceId is different from faceId generated by [Face - Detect](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f30395236). * Higher face image quality means better recognition precision. Please consider high-quality faces: frontal, clear, and face size is 200x200 pixels (100 pixels between eyes) or bigger. * Each person entry can hold up to 248 faces. * JPEG, PNG, GIF (the first frame), and BMP format are supported. The allowed image file size is from 1KB to 6MB. * "targetFace" rectangle should contain one face. Zero or multiple faces will be regarded as an error. If the provided "targetFace" rectangle is not returned from [Face - Detect](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f30395236), there’s no guarantee to detect and add the face successfully. * Out of detectable face size (36x36 - 4096x4096 pixels), large head-pose, or large occlusions will cause failures. * Adding/deleting faces to/from a same person will be processed sequentially. Adding/deleting faces to/from different persons are processed in parallel.
+# Add a face to a person into a person group for face identification or verification. To deal with an image contains multiple faces, input face can be specified as an image with a targetFace rectangle. It returns a persistedFaceId representing the added face. No image will be stored. Only the extracted face feature will be stored on server until [PersonGroup PersonFace - Delete](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f3039523e), [PersonGroup Person - Delete](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f3039523d) or [PersonGroup - Delete](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f30395245) is called. Note persistedFaceId is different from faceId generated by [Face - Detect](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f30395236). * Higher face image quality means better recognition precision. Please consider high-quality faces: frontal, clear, and face size is 200x200 pixels (100 pixels between eyes) or bigger. * Each person entry can hold up to 248 faces. * JPEG, PNG, GIF (the first frame), and BMP format are supported. The allowed image file size is from 1KB to 6MB. * "targetFace" rectangle should contain one face. Zero or multiple faces will be regarded as an error. If the provided "targetFace" rectangle is not returned from [Face - Detect](/docs/services/563879b61984550e40cbbe8d/operations/563879b61984550f30395236), there’s no guarantee to detect and add the face successfully. * Out of detectable face size (36x36 - 4096x4096 pixels), large head-pose, or large occlusions will cause failures. * Adding/deleting faces to/from a same person will be processed sequentially. Adding/deleting faces to/from different persons are processed in parallel.
 #
 # PATCH /persongroups/{personGroupId}/persons/{personId}/persistedfaces/{persistedFaceId}
 # operationId: PersonGroupPerson_UpdateFace
-export def "persongroups-persons-persistedfaces update-face" [
+export def "persongroups-persons-persistedfaces update-group-face" [
   person_group_id: string
   person_id: string
   persisted_face_id: string
@@ -1514,19 +1523,19 @@ export def "persongroups-persons-persistedfaces update-face" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({person_group_id: $person_group_id, person_id: $person_id, persisted_face_id: $persisted_face_id} | format pattern "/persongroups/{person_group_id}/persons/{person_id}/persistedfaces/{persisted_face_id}"))
-  let body = {"userData": $user_data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({person_group_id: (encode-path-segment $person_group_id), person_id: (encode-path-segment $person_id), persisted_face_id: (encode-path-segment $persisted_face_id)} | format pattern "/persongroups/{person_group_id}/persons/{person_id}/persistedfaces/{persisted_face_id}"))
+  let req_body = {"userData": $user_data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Queue a person group training task, the training task may not be started immediately.
 #
 # POST /persongroups/{personGroupId}/train
 # operationId: PersonGroup_Train
-export def "persongroups-train post" [
+export def "persongroups-train create-person-group" [
   person_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1539,7 +1548,7 @@ export def "persongroups-train post" [
 ]: nothing -> record<error: record<code: string, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({person_group_id: $person_group_id} | format pattern "/persongroups/{person_group_id}/train"))
+  let full_url = (build-url $base ({person_group_id: (encode-path-segment $person_group_id)} | format pattern "/persongroups/{person_group_id}/train"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1549,7 +1558,7 @@ export def "persongroups-train post" [
 #
 # GET /persongroups/{personGroupId}/training
 # operationId: PersonGroup_GetTrainingStatus
-export def "persongroups-training get-training-status" [
+export def "persongroups-training get-person-group-status" [
   person_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1562,7 +1571,7 @@ export def "persongroups-training get-training-status" [
 ]: nothing -> record<createdDateTime: string, lastActionDateTime: string, lastSuccessfulTrainingDateTime: string, message: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({person_group_id: $person_group_id} | format pattern "/persongroups/{person_group_id}/training"))
+  let full_url = (build-url $base ({person_group_id: (encode-path-segment $person_group_id)} | format pattern "/persongroups/{person_group_id}/training"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1582,7 +1591,7 @@ export def "snapshots list" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --type: string@type-completer # User specified object type as a search filter.
-  --apply-scope: list # User specified snapshot apply scopes as a search filter. ApplyScope is an array of the target Azure subscription ids for the snapshot, specified by the user who created the snapshot by Snapshot - Take.
+  --apply-scope: list<string> # User specified snapshot apply scopes as a search filter. ApplyScope is an array of the target Azure subscription ids for the snapshot, specified by the user who created the snapshot by Snapshot - Take.
 ]: nothing -> table<account: string, applyScope: list<string>, createdTime: string, id: string, lastUpdateTime: string, type: string, userData: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1593,11 +1602,11 @@ export def "snapshots list" [
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Submit an operation to take a snapshot of face list, large face list, person group or large person group, with user-specified snapshot type, source object id, apply scope and an optional user data.<br /> The snapshot interfaces are for users to backup and restore their face data from one face subscription to another, inside same region or across regions. The workflow contains two phases, user first calls Snapshot - Take to create a copy of the source object and store it as a snapshot, then calls Snapshot - Apply to paste the snapshot to target subscription. The snapshots are stored in a centralized location (per Azure instance), so that they can be applied cross accounts and regions.<br /> Taking snapshot is an asynchronous operation. An operation id can be obtained from the "Operation-Location" field in response header, to be used in OperationStatus - Get for tracking the progress of creating the snapshot. The snapshot id will be included in the "resourceLocation" field in OperationStatus - Get response when the operation status is "succeeded".<br /> Snapshot taking time depends on the number of person and face entries in the source object. It could be in seconds, or up to several hours for 1,000,000 persons with multiple faces.<br /> Snapshots will be automatically expired and cleaned in 48 hours after it is created by Snapshot - Take. User can delete the snapshot using Snapshot - Delete by themselves any time before expiration.<br /> Taking snapshot for a certain object will not block any other operations against the object. All read-only operations (Get/List and Identify/FindSimilar/Verify) can be conducted as usual. For all writable operations, including Add/Update/Delete the source object or its persons/faces and Train, they are not blocked but not recommended because writable updates may not be reflected on the snapshot during its taking. After snapshot taking is completed, all readable and writable operations can work as normal. Snapshot will also include the training results of the source object, which means target subscription the snapshot applied to does not need re-train the target object before calling Identify/FindSimilar.<br /> * Free-tier subscription quota: 100 take operations per month. * S0-tier subscription quota: 100 take operations per day.
+# Submit an operation to take a snapshot of face list, large face list, person group or large person group, with user-specified snapshot type, source object id, apply scope and an optional user data. The snapshot interfaces are for users to backup and restore their face data from one face subscription to another, inside same region or across regions. The workflow contains two phases, user first calls Snapshot - Take to create a copy of the source object and store it as a snapshot, then calls Snapshot - Apply to paste the snapshot to target subscription. The snapshots are stored in a centralized location (per Azure instance), so that they can be applied cross accounts and regions. Taking snapshot is an asynchronous operation. An operation id can be obtained from the "Operation-Location" field in response header, to be used in OperationStatus - Get for tracking the progress of creating the snapshot. The snapshot id will be included in the "resourceLocation" field in OperationStatus - Get response when the operation status is "succeeded". Snapshot taking time depends on the number of person and face entries in the source object. It could be in seconds, or up to several hours for 1,000,000 persons with multiple faces. Snapshots will be automatically expired and cleaned in 48 hours after it is created by Snapshot - Take. User can delete the snapshot using Snapshot - Delete by themselves any time before expiration. Taking snapshot for a certain object will not block any other operations against the object. All read-only operations (Get/List and Identify/FindSimilar/Verify) can be conducted as usual. For all writable operations, including Add/Update/Delete the source object or its persons/faces and Train, they are not blocked but not recommended because writable updates may not be reflected on the snapshot during its taking. After snapshot taking is completed, all readable and writable operations can work as normal. Snapshot will also include the training results of the source object, which means target subscription the snapshot applied to does not need re-train the target object before calling Identify/FindSimilar. * Free-tier subscription quota: 100 take operations per month. * S0-tier subscription quota: 100 take operations per day.
 #
 # POST /snapshots
 # operationId: Snapshot_Take
-export def "snapshots post" [
+export def "snapshots create-take" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1606,7 +1615,7 @@ export def "snapshots post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  apply_scope: list # Array of the target Face subscription ids for the snapshot, specified by the user who created the snapshot when calling Snapshot - Take. For each snapshot, only subscriptions included in the applyScope of Snapshot - Take can apply it.
+  apply_scope: list<string> # Array of the target Face subscription ids for the snapshot, specified by the user who created the snapshot when calling Snapshot - Take. For each snapshot, only subscriptions included in the applyScope of Snapshot - Take can apply it.
   object_id: string # User specified source object id to take snapshot from.
   type: string@type-completer # User specified type for the source object to take snapshot from. Currently FaceList, PersonGroup, LargeFaceList and LargePersonGroup are supported.
   --user-data: string # User specified data about the snapshot for any purpose. Length should not exceed 16KB.
@@ -1615,11 +1624,11 @@ export def "snapshots post" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/snapshots")
-  let body = {"applyScope": $apply_scope, "objectId": $object_id, "type": $type, "userData": $user_data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"applyScope": $apply_scope, "objectId": $object_id, "type": $type, "userData": $user_data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete an existing snapshot according to the snapshotId. All object data and information in the snapshot will also be deleted. Only the source subscription who took the snapshot can delete the snapshot. If the user does not delete a snapshot with this API, the snapshot will still be automatically deleted in 48 hours after creation.
@@ -1639,7 +1648,7 @@ export def "snapshots delete" [
 ]: nothing -> record<error: record<code: string, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({snapshot_id: $snapshot_id} | format pattern "/snapshots/{snapshot_id}"))
+  let full_url = (build-url $base ({snapshot_id: (encode-path-segment $snapshot_id)} | format pattern "/snapshots/{snapshot_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1662,7 +1671,7 @@ export def "snapshots get" [
 ]: nothing -> record<account: string, applyScope: list<string>, createdTime: string, id: string, lastUpdateTime: string, type: string, userData: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({snapshot_id: $snapshot_id} | format pattern "/snapshots/{snapshot_id}"))
+  let full_url = (build-url $base ({snapshot_id: (encode-path-segment $snapshot_id)} | format pattern "/snapshots/{snapshot_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1682,25 +1691,25 @@ export def "snapshots update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apply-scope: list # Array of the target Face subscription ids for the snapshot, specified by the user who created the snapshot when calling Snapshot - Take. For each snapshot, only subscriptions included in the applyScope of Snapshot - Take can apply it.
+  --apply-scope: list<string> # Array of the target Face subscription ids for the snapshot, specified by the user who created the snapshot when calling Snapshot - Take. For each snapshot, only subscriptions included in the applyScope of Snapshot - Take can apply it.
   --user-data: string # User specified data about the snapshot for any purpose. Length should not exceed 16KB.
 ]: any -> record<error: record<code: string, message: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({snapshot_id: $snapshot_id} | format pattern "/snapshots/{snapshot_id}"))
-  let body = {"applyScope": $apply_scope, "userData": $user_data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({snapshot_id: (encode-path-segment $snapshot_id)} | format pattern "/snapshots/{snapshot_id}"))
+  let req_body = {"applyScope": $apply_scope, "userData": $user_data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-# Submit an operation to apply a snapshot to current subscription. For each snapshot, only subscriptions included in the applyScope of Snapshot - Take can apply it.<br /> The snapshot interfaces are for users to backup and restore their face data from one face subscription to another, inside same region or across regions. The workflow contains two phases, user first calls Snapshot - Take to create a copy of the source object and store it as a snapshot, then calls Snapshot - Apply to paste the snapshot to target subscription. The snapshots are stored in a centralized location (per Azure instance), so that they can be applied cross accounts and regions.<br /> Applying snapshot is an asynchronous operation. An operation id can be obtained from the "Operation-Location" field in response header, to be used in OperationStatus - Get for tracking the progress of applying the snapshot. The target object id will be included in the "resourceLocation" field in OperationStatus - Get response when the operation status is "succeeded".<br /> Snapshot applying time depends on the number of person and face entries in the snapshot object. It could be in seconds, or up to 1 hour for 1,000,000 persons with multiple faces.<br /> Snapshots will be automatically expired and cleaned in 48 hours after it is created by Snapshot - Take. So the target subscription is required to apply the snapshot in 48 hours since its creation.<br /> Applying a snapshot will not block any other operations against the target object, however it is not recommended because the correctness cannot be guaranteed during snapshot applying. After snapshot applying is completed, all operations towards the target object can work as normal. Snapshot also includes the training results of the source object, which means target subscription the snapshot applied to does not need re-train the target object before calling Identify/FindSimilar.<br /> One snapshot can be applied multiple times in parallel, while currently only CreateNew apply mode is supported, which means the apply operation will fail if target subscription already contains an object of same type and using the same objectId. Users can specify the "objectId" in request body to avoid such conflicts.<br /> * Free-tier subscription quota: 100 apply operations per month. * S0-tier subscription quota: 100 apply operations per day.
+# Submit an operation to apply a snapshot to current subscription. For each snapshot, only subscriptions included in the applyScope of Snapshot - Take can apply it. The snapshot interfaces are for users to backup and restore their face data from one face subscription to another, inside same region or across regions. The workflow contains two phases, user first calls Snapshot - Take to create a copy of the source object and store it as a snapshot, then calls Snapshot - Apply to paste the snapshot to target subscription. The snapshots are stored in a centralized location (per Azure instance), so that they can be applied cross accounts and regions. Applying snapshot is an asynchronous operation. An operation id can be obtained from the "Operation-Location" field in response header, to be used in OperationStatus - Get for tracking the progress of applying the snapshot. The target object id will be included in the "resourceLocation" field in OperationStatus - Get response when the operation status is "succeeded". Snapshot applying time depends on the number of person and face entries in the snapshot object. It could be in seconds, or up to 1 hour for 1,000,000 persons with multiple faces. Snapshots will be automatically expired and cleaned in 48 hours after it is created by Snapshot - Take. So the target subscription is required to apply the snapshot in 48 hours since its creation. Applying a snapshot will not block any other operations against the target object, however it is not recommended because the correctness cannot be guaranteed during snapshot applying. After snapshot applying is completed, all operations towards the target object can work as normal. Snapshot also includes the training results of the source object, which means target subscription the snapshot applied to does not need re-train the target object before calling Identify/FindSimilar. One snapshot can be applied multiple times in parallel, while currently only CreateNew apply mode is supported, which means the apply operation will fail if target subscription already contains an object of same type and using the same objectId. Users can specify the "objectId" in request body to avoid such conflicts. * Free-tier subscription quota: 100 apply operations per month. * S0-tier subscription quota: 100 apply operations per day.
 #
 # POST /snapshots/{snapshotId}/apply
 # operationId: Snapshot_Apply
-export def "snapshots-apply post" [
+export def "snapshots-apply create" [
   snapshot_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1716,19 +1725,19 @@ export def "snapshots-apply post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({snapshot_id: $snapshot_id} | format pattern "/snapshots/{snapshot_id}/apply"))
-  let body = {"mode": $mode, "objectId": $object_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({snapshot_id: (encode-path-segment $snapshot_id)} | format pattern "/snapshots/{snapshot_id}/apply"))
+  let req_body = {"mode": $mode, "objectId": $object_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-# Verify whether two faces belong to a same person or whether one face belongs to a person. <br/> Remarks:<br /> * Higher face image quality means better identification precision. Please consider high-quality faces: frontal, clear, and face size is 200x200 pixels (100 pixels between eyes) or bigger. * For the scenarios that are sensitive to accuracy please make your own judgment. * The 'recognitionModel' associated with the query faces' faceIds should be the same as the 'recognitionModel' used by the target face, person group or large person group.
+# Verify whether two faces belong to a same person or whether one face belongs to a person. Remarks: * Higher face image quality means better identification precision. Please consider high-quality faces: frontal, clear, and face size is 200x200 pixels (100 pixels between eyes) or bigger. * For the scenarios that are sensitive to accuracy please make your own judgment. * The 'recognitionModel' associated with the query faces' faceIds should be the same as the 'recognitionModel' used by the target face, person group or large person group.
 #
 # POST /verify
 # operationId: Face_VerifyFaceToFace
-export def "verify verify-face-to-face" [
+export def "verify verify-face-face-to-face" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1744,9 +1753,9 @@ export def "verify verify-face-to-face" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/verify")
-  let body = {"faceId1": $face_id1, "faceId2": $face_id2} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"faceId1": $face_id1, "faceId2": $face_id2} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

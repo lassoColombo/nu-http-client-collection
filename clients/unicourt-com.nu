@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -116,7 +125,7 @@ export def "attorney get" [
 ]: nothing -> record<attorneyId: string, attorneyLawFirmArray: table<attorneyLawFirmId: string, firstFetchDate: string, isVisible: bool, lastFetchDate: string, name: string, object: string>, attorneyType: record<attorneyTypeId: string, createdDate: string, name: string, object: string>, barNumber: string, contact: record<addressArray: list<record>, emailArray: list<record>, object: string, phoneNumberArray: list<record>>, firstFetchDate: string, firstName: string, isVisible: bool, lastFetchDate: string, lastName: string, middleName: string, name: string, namePrefix: string, nameSuffix: string, object: string, partyAttorneyAssociations: record<nextPageAPI: string, object: string, pageNumber: int, partyAttorneyAssociationArray: list<record>, totalCount: int, totalPages: int>, partyRoleGroupIdArray: list<string>, partyRoleIdArray: list<string>, possibleNormAttorneyArray: table<associatedNormJudgesAPI: string, associatedNormLawFirmsAPI: string, associatedNormPartiesAPI: string, bestMatch: bool, caseCountAnalyticsByNormAttorneyAPI: string, caseCountAnalyticsByOpposingNormAttorneyAPI: string, confidenceScore: float, normAttorneyAPI: string, normAttorneyId: string, normAttorneyName: string, object: string, scoreConstituents: record>, possibleNormLawFirmArray: table<associatedNormAttorneyAPI: string, associatedNormJudgeAPI: string, associatedNormPartiesAPI: string, bestMatch: bool, caseCountAnalyticsByNormLawFirmAPI: string, caseCountAnalyticsByOpposingNormLawFirmAPI: string, confidenceScore: float, normLawFirmAPI: string, normLawFirmId: string, normLawFirmName: string, object: string, scoreConstituents: record, sourceDetails: record>, sourceAttorneyType: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({attorney_id: $attorney_id} | format pattern "/attorney/{attorney_id}"))
+  let full_url = (build-url $base ({attorney_id: (encode-path-segment $attorney_id)} | format pattern "/attorney/{attorney_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -141,7 +150,7 @@ export def "attorney-associated-parties get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({attorney_id: $attorney_id} | format pattern "/attorney/{attorney_id}/associatedParties") $qp)
+  let full_url = (build-url $base ({attorney_id: (encode-path-segment $attorney_id)} | format pattern "/attorney/{attorney_id}/associatedParties") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -164,7 +173,7 @@ export def "billing-cycle-usage get" [
 ]: nothing -> record<apiCallsBillable: record<count: int, lastUpdated: string>, apiCallsCredited: record<count: int, lastUpdated: string>, apiCallsMade: record<count: int, lastUpdated: string>, apiUsage: record, billingCycle: record<endDate: string, startDate: string>, days: record, object: string, totalCasesTracked: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({billing_cycle: $billing_cycle} | format pattern "/billingCycleUsage/{billing_cycle}"))
+  let full_url = (build-url $base ({billing_cycle: (encode-path-segment $billing_cycle)} | format pattern "/billingCycleUsage/{billing_cycle}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -234,7 +243,7 @@ export def "case get" [
 ]: nothing -> record<attorneys: record<attorneyArray: list<record>, nextPageAPI: string, object: string, pageNumber: int, totalCount: int, totalPages: int>, caseDocuments: record<caseDocumentArray: list<record>, nextPageAPI: string, object: string, pageNumber: int, totalCount: int, totalPages: int>, caseId: string, caseName: string, caseNumber: string, caseStats: record<allCaseDocumentCount: int, attorneyCount: int, caseDocumentInLibraryCount: int, docketEntryCount: int, freeCaseDocumentCount: int, hearingCount: int, judgeCount: int, object: string, paidCaseDocumentCount: int, partyCount: int, relatedCaseCount: int>, caseStatus: record<caseClassArray: list<string>, caseStatusGroup: string, caseStatusGroupId: string, caseStatusId: string, createdDate: string, name: string, object: string>, caseType: record<areaOfLaw: string, areaOfLawId: string, caseClass: string, caseClassId: string, caseTypeGroup: string, caseTypeGroupId: string, caseTypeId: string, caseTypeTag: string, createdDate: string, name: string, object: string, saliCode: string>, causeOfActionArray: table<causeOfAction: record, causeOfActionAdditionalDataArray: list, object: string>, chargeArray: table<charge: record, chargeAdditionalDataArray: list, chargeDegree: record, chargeSeverity: record, object: string>, court: record<additionalLevels: record<level1: string, level2: string, level3: string, level4: string, object: string>, appealCourtsForCourtAPI: string, container: string, containerType: string, courtId: string, courtLocationsForCourtAPI: string, courtServiceStatusAPI: string, courtSystemId: string, courtTypeId: string, createdDate: string, jurisdictionGeoForCourtAPI: string, name: string, nameAka: string, object: string, system: string, type: string>, courtLocation: record<city: string, courtLocationId: string, courtServiceStatusAPI: string, courtsForCourtLocationAPI: string, createdDate: string, name: string, object: string, stateName: string, streetAddress1: string, streetAddress2: string>, courtServiceStatusAPI: string, courtServiceStatusId: string, docketEntries: record<docketEntryArray: list<record>, nextPageAPI: string, object: string, pageNumber: int, totalCount: int, totalPages: int>, exportAPI: string, filedDate: string, firstFetchDate: string, hasDocumentsWithPreview: bool, hasOnlyMetaInfo: bool, hearings: record<hearingArray: list<record>, nextPageAPI: string, object: string, pageNumber: int, totalCount: int, totalPages: int>, judges: record<judgeArray: list<record>, nextPageAPI: string, object: string, pageNumber: int, totalCount: int, totalPages: int>, lastFetchDate: string, lastFetchDateWithUpdates: string, object: string, participantsLastFetchDate: string, parties: record<nextPageAPI: string, object: string, pageNumber: int, partyArray: list<record>, totalCount: int, totalPages: int>, relatedCases: record<nextPageAPI: string, object: string, pageNumber: int, relatedCaseArray: list<record>, totalCount: int, totalPages: int>, sourceCaseData: record<natureOfSuitArray: list<record>, object: string, sourceCaseStatus: string, sourceCaseType: string, sourceCauseOfActionArray: list<record>, sourceChargeArray: list<record>, sourceCourt: string, sourcePageData: list<record>>, sourceDataStatus: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({case_id: $case_id} | format pattern "/case/{case_id}"))
+  let full_url = (build-url $base ({case_id: (encode-path-segment $case_id)} | format pattern "/case/{case_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -260,7 +269,7 @@ export def "case-attorneys get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "isVisible" $is_visible "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({case_id: $case_id} | format pattern "/case/{case_id}/attorneys") $qp)
+  let full_url = (build-url $base ({case_id: (encode-path-segment $case_id)} | format pattern "/case/{case_id}/attorneys") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -287,7 +296,7 @@ export def "case-docket-entries get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "docketNumber" $docket_number "scalar") (serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({case_id: $case_id} | format pattern "/case/{case_id}/docketEntries") $qp)
+  let full_url = (build-url $base ({case_id: (encode-path-segment $case_id)} | format pattern "/case/{case_id}/docketEntries") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -297,7 +306,7 @@ export def "case-docket-entries get" [
 #
 # GET /case/{caseId}/docketEntries/primaryDocuments
 # operationId: getPrimaryDocumentsForDocketEntries
-export def "case-docket-entries-primary-documents get-primary-documents-for" [
+export def "case-docket-entries-primary-documents get" [
   case_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -316,7 +325,7 @@ export def "case-docket-entries-primary-documents get-primary-documents-for" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "docketNumber" $docket_number "scalar") (serialize-qp "inLibrary" $in_library "scalar") (serialize-qp "afterFirstFetchDate" $after_first_fetch_date "scalar") (serialize-qp "libraryDate" $library_date "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({case_id: $case_id} | format pattern "/case/{case_id}/docketEntries/primaryDocuments") $qp)
+  let full_url = (build-url $base ({case_id: (encode-path-segment $case_id)} | format pattern "/case/{case_id}/docketEntries/primaryDocuments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -326,7 +335,7 @@ export def "case-docket-entries-primary-documents get-primary-documents-for" [
 #
 # GET /case/{caseId}/docketEntries/secondaryDocuments
 # operationId: getSecondaryDocumentsForDocketEntries
-export def "case-docket-entries-secondary-documents get-secondary-documents-for" [
+export def "case-docket-entries-secondary-documents get" [
   case_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -345,7 +354,7 @@ export def "case-docket-entries-secondary-documents get-secondary-documents-for"
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "docketNumber" $docket_number "scalar") (serialize-qp "inLibrary" $in_library "scalar") (serialize-qp "afterFirstFetchDate" $after_first_fetch_date "scalar") (serialize-qp "libraryDate" $library_date "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({case_id: $case_id} | format pattern "/case/{case_id}/docketEntries/secondaryDocuments") $qp)
+  let full_url = (build-url $base ({case_id: (encode-path-segment $case_id)} | format pattern "/case/{case_id}/docketEntries/secondaryDocuments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -375,7 +384,7 @@ export def "case-documents get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "inLibrary" $in_library "scalar") (serialize-qp "afterFirstFetchDate" $after_first_fetch_date "scalar") (serialize-qp "libraryDate" $library_date "scalar") (serialize-qp "firstFetchDate" $first_fetch_date "scalar") (serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({case_id: $case_id} | format pattern "/case/{case_id}/documents") $qp)
+  let full_url = (build-url $base ({case_id: (encode-path-segment $case_id)} | format pattern "/case/{case_id}/documents") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -401,7 +410,7 @@ export def "case-hearings get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({case_id: $case_id} | format pattern "/case/{case_id}/hearings") $qp)
+  let full_url = (build-url $base ({case_id: (encode-path-segment $case_id)} | format pattern "/case/{case_id}/hearings") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -427,7 +436,7 @@ export def "case-judges get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "isVisible" $is_visible "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({case_id: $case_id} | format pattern "/case/{case_id}/judges") $qp)
+  let full_url = (build-url $base ({case_id: (encode-path-segment $case_id)} | format pattern "/case/{case_id}/judges") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -457,7 +466,7 @@ export def "case-parties get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "isVisible" $is_visible "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "partyRoleId" $party_role_id "scalar") (serialize-qp "partyRoleGroupId" $party_role_group_id "scalar") (serialize-qp "attorneyRepresentationTypeId" $attorney_representation_type_id "scalar") (serialize-qp "partyClassificationType" $party_classification_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({case_id: $case_id} | format pattern "/case/{case_id}/parties") $qp)
+  let full_url = (build-url $base ({case_id: (encode-path-segment $case_id)} | format pattern "/case/{case_id}/parties") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -482,7 +491,7 @@ export def "case-related-cases get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({case_id: $case_id} | format pattern "/case/{case_id}/relatedCases") $qp)
+  let full_url = (build-url $base ({case_id: (encode-path-segment $case_id)} | format pattern "/case/{case_id}/relatedCases") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -906,7 +915,7 @@ export def "case-document get" [
 ]: nothing -> record<addedToLibraryDate: string, caseDocumentId: string, childDocumentIdArray: list<string>, description: string, documentFiledDate: string, downloadAPI: string, estimatedOrderDuration: string, firstFetchDate: string, inLibrary: bool, isPreviewAvailable: bool, name: string, object: string, pages: int, parentDocumentId: string, previewDocument: record<addedToLibraryDate: string, downloadAPI: string, inLibrary: bool, object: string>, price: float, sortOrder: int, sourceDataStatus: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({case_document_id: $case_document_id} | format pattern "/caseDocument/{case_document_id}"))
+  let full_url = (build-url $base ({case_document_id: (encode-path-segment $case_document_id)} | format pattern "/caseDocument/{case_document_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -931,7 +940,7 @@ export def "case-document-download get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "isPreviewDocument" $is_preview_document "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({case_document_id: $case_document_id} | format pattern "/caseDocumentDownload/{case_document_id}") $qp)
+  let full_url = (build-url $base ({case_document_id: (encode-path-segment $case_document_id)} | format pattern "/caseDocumentDownload/{case_document_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -942,7 +951,7 @@ export def "case-document-download get" [
 # PUT /caseDocumentOrder
 # operationId: orderCaseDocument
 # --pacerOptions shape: {pacerClientCode?: string, pacerUserId: string}
-export def "case-document-order orderCaseDocument" [
+export def "case-document-order update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -959,11 +968,11 @@ export def "case-document-order orderCaseDocument" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/caseDocumentOrder")
-  let body = {"caseDocumentId": $case_document_id, "isPreviewOnly": $is_preview_only, "pacerOptions": $pacer_options} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"caseDocumentId": $case_document_id, "isPreviewOnly": $is_preview_only, "pacerOptions": $pacer_options} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get Case Document Order Callback list for a requested Date.
@@ -981,7 +990,7 @@ export def "case-document-order-callbacks list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --date: string # Date for which fetch the Case Document Order Callback list. By default, the date will be set to current date. (format: date-time)
   --status: string@status-completer # Status of Document Order callbacks. Default status will fetch all callbacks.
-  --page-number: int # Page to fetch the Case Document Order Callback list.<br>   - Minimum: 1  (default: 1)
+  --page-number: int # Page to fetch the Case Document Order Callback list. - Minimum: 1 (default: 1)
 ]: nothing -> record<callbackArray: table<callbackGeneratedDate: string, caseDocument: record, caseDocumentId: string, caseDocumentOrderCallbackAPI: string, caseDocumentOrderCallbackId: string, exception: record, file: record, object: string, status: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1009,7 +1018,7 @@ export def "case-document-order-callbacks get" [
 ]: nothing -> record<callbackGeneratedDate: string, caseDocument: record<addedToLibraryDate: string, caseDocumentId: string, childDocumentIdArray: list<string>, description: string, documentFiledDate: string, downloadAPI: string, estimatedOrderDuration: string, firstFetchDate: string, inLibrary: bool, isPreviewAvailable: bool, name: string, object: string, pages: int, parentDocumentId: string, previewDocument: record<addedToLibraryDate: string, downloadAPI: string, inLibrary: bool, object: string>, price: float, sortOrder: int, sourceDataStatus: string>, caseDocumentId: string, caseDocumentOrderCallbackAPI: string, caseDocumentOrderCallbackId: string, exception: record<code: string, details: string, message: string, object: string>, file: record<expiryDate: string, fileUrl: string, name: string, object: string>, object: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({case_document_order_callback_id: $case_document_order_callback_id} | format pattern "/caseDocumentOrder/callbacks/{case_document_order_callback_id}"))
+  let full_url = (build-url $base ({case_document_order_callback_id: (encode-path-segment $case_document_order_callback_id)} | format pattern "/caseDocumentOrder/callbacks/{case_document_order_callback_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1030,7 +1039,7 @@ export def "case-export-callbacks list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --date: string # The date for which callbacks are to be retrieved. (format: date-time, e.g. 2022-03-08T10:17:56+00:00)
   --status: string@status-completer # The status code of the callbacks to be retrieved.
-  --page-number: int # The page number of the callbacks to be retrieved.<br>   - Minimum: 1  (default: 1, e.g. 1)
+  --page-number: int # The page number of the callbacks to be retrieved. - Minimum: 1 (default: 1, e.g. 1)
 ]: nothing -> record<callbackArray: table<callbackGeneratedDate: string, caseExportCallbackAPI: string, caseExportCallbackId: string, caseId: string, exception: record, file: record, object: string, status: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1058,7 +1067,7 @@ export def "case-export-callbacks get" [
 ]: nothing -> record<callbackGeneratedDate: string, caseExportCallbackAPI: string, caseExportCallbackId: string, caseId: string, exception: record<code: string, details: string, message: string, object: string>, file: record<expiryDate: string, fileUrl: string, name: string, object: string>, object: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({case_export_callback_id: $case_export_callback_id} | format pattern "/caseExport/callbacks/{case_export_callback_id}"))
+  let full_url = (build-url $base ({case_export_callback_id: (encode-path-segment $case_export_callback_id)} | format pattern "/caseExport/callbacks/{case_export_callback_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1081,7 +1090,7 @@ export def "case-export export" [
 ]: nothing -> record<callbackGeneratedDate: string, caseExportCallbackAPI: string, caseExportCallbackId: string, caseId: string, exception: record<code: string, details: string, message: string, object: string>, file: record<expiryDate: string, fileUrl: string, name: string, object: string>, object: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({case_id: $case_id} | format pattern "/caseExport/{case_id}"))
+  let full_url = (build-url $base ({case_id: (encode-path-segment $case_id)} | format pattern "/caseExport/{case_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1100,10 +1109,10 @@ export def "case-search list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --q: string # Query parameter for keyword expressions.</a>
+  --q: string # Query parameter for keyword expressions.
   --qp-sort: string@sort-completer # Query parameter specifying how results are to be sorted. Results can be sorted according to filedDate or relevancy. (default: filedDate, e.g. filedDate)
   --order: string@order-completer # Query parameter specifying whether search result are sorted in ascending or descending order. (default: desc, e.g. desc)
-  --page-number: int # Query parameter specifying the page number of the search results to be retrieved. - Minimum: 1 - Maximum: 1000  (e.g. 1)
+  --page-number: int # Query parameter specifying the page number of the search results to be retrieved. - Minimum: 1 - Maximum: 1000 (e.g. 1)
 ]: nothing -> record<caseSearchId: string, caseSearchResultArray: table<caseAPI: string, caseId: string, caseName: string, caseNumber: string, caseStatus: record, caseType: record, court: record, courtLocation: record, filedDate: string, firstFetchDate: string, lastFetchDate: string, lastFetchDateWithUpdates: string, matchedObjectArray: list, object: string, participantsLastFetchDate: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, q: string, totalCount: int, totalPages: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1128,12 +1137,12 @@ export def "case-search list-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --page-number: int # Query parameter specifying the page number of the search results to be retrieved. - Minimum: 1 - Maximum: 1000  (e.g. 1)
+  --page-number: int # Query parameter specifying the page number of the search results to be retrieved. - Minimum: 1 - Maximum: 1000 (e.g. 1)
 ]: nothing -> record<caseSearchId: string, caseSearchResultArray: table<caseAPI: string, caseId: string, caseName: string, caseNumber: string, caseStatus: record, caseType: record, court: record, courtLocation: record, filedDate: string, firstFetchDate: string, lastFetchDate: string, lastFetchDateWithUpdates: string, matchedObjectArray: list, object: string, participantsLastFetchDate: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, q: string, totalCount: int, totalPages: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({case_search_id: $case_search_id} | format pattern "/caseSearch/{case_search_id}") $qp)
+  let full_url = (build-url $base ({case_search_id: (encode-path-segment $case_search_id)} | format pattern "/caseSearch/{case_search_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1144,8 +1153,8 @@ export def "case-search list-1" [
 # PUT /caseTrack
 # operationId: trackCase
 # --caseTrackParams shape: {caseId: string, pacerOptions?: record}
-# --schedule shape: {days: list, type: "daily"|"weekly"|"monthly"}
-export def "case-track trackCase" [
+# --schedule shape: {days: list<int>, type: "daily"|"weekly"|"monthly"}
+export def "case-track update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1155,17 +1164,17 @@ export def "case-track trackCase" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   case_track_params: record # shape: {caseId: string, pacerOptions?: record}
-  schedule: record # shape: {days: list, type: "daily"|"weekly"|"monthly"}
+  schedule: record # shape: {days: list<int>, type: "daily"|"weekly"|"monthly"}
 ]: any -> record<message: string, object: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/caseTrack")
-  let body = {"caseTrackParams": $case_track_params, "schedule": $schedule} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"caseTrackParams": $case_track_params, "schedule": $schedule} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Remove Case Track for a specific Case Id.
@@ -1185,7 +1194,7 @@ export def "case-track delete" [
 ]: nothing -> record<message: string, object: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({case_id: $case_id} | format pattern "/caseTrack/{case_id}"))
+  let full_url = (build-url $base ({case_id: (encode-path-segment $case_id)} | format pattern "/caseTrack/{case_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1208,7 +1217,7 @@ export def "case-track get" [
 ]: nothing -> record<case: record<attorneys: record<attorneyArray: list, nextPageAPI: string, object: string, pageNumber: int, totalCount: int, totalPages: int>, caseDocuments: record<caseDocumentArray: list, nextPageAPI: string, object: string, pageNumber: int, totalCount: int, totalPages: int>, caseId: string, caseName: string, caseNumber: string, caseStats: record<allCaseDocumentCount: int, attorneyCount: int, caseDocumentInLibraryCount: int, docketEntryCount: int, freeCaseDocumentCount: int, hearingCount: int, judgeCount: int, object: string, paidCaseDocumentCount: int, partyCount: int, relatedCaseCount: int>, caseStatus: record<caseClassArray: list, caseStatusGroup: string, caseStatusGroupId: string, caseStatusId: string, createdDate: string, name: string, object: string>, caseType: record<areaOfLaw: string, areaOfLawId: string, caseClass: string, caseClassId: string, caseTypeGroup: string, caseTypeGroupId: string, caseTypeId: string, caseTypeTag: string, createdDate: string, name: string, object: string, saliCode: string>, causeOfActionArray: list<record>, chargeArray: list<record>, court: record<additionalLevels: record, appealCourtsForCourtAPI: string, container: string, containerType: string, courtId: string, courtLocationsForCourtAPI: string, courtServiceStatusAPI: string, courtSystemId: string, courtTypeId: string, createdDate: string, jurisdictionGeoForCourtAPI: string, name: string, nameAka: string, object: string, system: string, type: string>, courtLocation: record<city: string, courtLocationId: string, courtServiceStatusAPI: string, courtsForCourtLocationAPI: string, createdDate: string, name: string, object: string, stateName: string, streetAddress1: string, streetAddress2: string>, courtServiceStatusAPI: string, courtServiceStatusId: string, docketEntries: record<docketEntryArray: list, nextPageAPI: string, object: string, pageNumber: int, totalCount: int, totalPages: int>, exportAPI: string, filedDate: string, firstFetchDate: string, hasDocumentsWithPreview: bool, hasOnlyMetaInfo: bool, hearings: record<hearingArray: list, nextPageAPI: string, object: string, pageNumber: int, totalCount: int, totalPages: int>, judges: record<judgeArray: list, nextPageAPI: string, object: string, pageNumber: int, totalCount: int, totalPages: int>, lastFetchDate: string, lastFetchDateWithUpdates: string, object: string, participantsLastFetchDate: string, parties: record<nextPageAPI: string, object: string, pageNumber: int, partyArray: list, totalCount: int, totalPages: int>, relatedCases: record<nextPageAPI: string, object: string, pageNumber: int, relatedCaseArray: list, totalCount: int, totalPages: int>, sourceCaseData: record<natureOfSuitArray: list, object: string, sourceCaseStatus: string, sourceCaseType: string, sourceCauseOfActionArray: list, sourceChargeArray: list, sourceCourt: string, sourcePageData: list>, sourceDataStatus: string, url: string>, caseAPI: string, caseId: string, lastFetchDate: string, lastFetchDateWithUpdates: string, lastTrackedDetails: record<lastTrackDate: string, lastTrackException: record<code: string, details: string, message: string, object: string>, object: string, pacerOptions: record<additionalPageArray: list, fetchParticipantsIfOlderThanDays: int, object: string, pacerClientCode: string, pacerUserId: string, refreshType: string>>, object: string, pacerOptions: record<additionalPageArray: list<record>, fetchParticipantsIfOlderThanDays: int, object: string, pacerClientCode: string, pacerUserId: string, refreshType: string>, schedule: record<days: list<int>, object: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({case_id: $case_id} | format pattern "/caseTrack/{case_id}"))
+  let full_url = (build-url $base ({case_id: (encode-path-segment $case_id)} | format pattern "/caseTrack/{case_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1227,9 +1236,9 @@ export def "case-tracks get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --last-fetch-date: string # The lastFetchDate value of the tracked case. The date value should be entered in the format YYYY-MM-DDTHH:MM:SS+ZZ:zz.  (format: date-time, e.g. 2022-03-08T10:17:56+00:00)
-  --last-fetch-date-with-updates: string # The date on which changes were last found in the case information.  (format: date-time, e.g. 2022-03-08T10:17:56+00:00)
-  --page-number: int # The page number of the results to be retrieved.<br>   - Minimum: 1  (e.g. 1)
+  --last-fetch-date: string # The lastFetchDate value of the tracked case. The date value should be entered in the format YYYY-MM-DDTHH:MM:SS+ZZ:zz. (format: date-time, e.g. 2022-03-08T10:17:56+00:00)
+  --last-fetch-date-with-updates: string # The date on which changes were last found in the case information. (format: date-time, e.g. 2022-03-08T10:17:56+00:00)
+  --page-number: int # The page number of the results to be retrieved. - Minimum: 1 (e.g. 1)
 ]: nothing -> record<caseTrackPreviewArray: table<caseAPI: string, caseId: string, lastFetchDate: string, lastFetchDateWithUpdates: string, lastTrackedDetails: record, object: string, pacerOptions: record, schedule: record>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1261,11 +1270,11 @@ export def "case-update update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/caseUpdate")
-  let body = {"caseId": $case_id, "pacerOptions": $pacer_options} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"caseId": $case_id, "pacerOptions": $pacer_options} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get Case Updates for a requested CaseId.
@@ -1285,13 +1294,13 @@ export def "case-update get" [
 ]: nothing -> record<case: record<attorneys: record<attorneyArray: list, nextPageAPI: string, object: string, pageNumber: int, totalCount: int, totalPages: int>, caseDocuments: record<caseDocumentArray: list, nextPageAPI: string, object: string, pageNumber: int, totalCount: int, totalPages: int>, caseId: string, caseName: string, caseNumber: string, caseStats: record<allCaseDocumentCount: int, attorneyCount: int, caseDocumentInLibraryCount: int, docketEntryCount: int, freeCaseDocumentCount: int, hearingCount: int, judgeCount: int, object: string, paidCaseDocumentCount: int, partyCount: int, relatedCaseCount: int>, caseStatus: record<caseClassArray: list, caseStatusGroup: string, caseStatusGroupId: string, caseStatusId: string, createdDate: string, name: string, object: string>, caseType: record<areaOfLaw: string, areaOfLawId: string, caseClass: string, caseClassId: string, caseTypeGroup: string, caseTypeGroupId: string, caseTypeId: string, caseTypeTag: string, createdDate: string, name: string, object: string, saliCode: string>, causeOfActionArray: list<record>, chargeArray: list<record>, court: record<additionalLevels: record, appealCourtsForCourtAPI: string, container: string, containerType: string, courtId: string, courtLocationsForCourtAPI: string, courtServiceStatusAPI: string, courtSystemId: string, courtTypeId: string, createdDate: string, jurisdictionGeoForCourtAPI: string, name: string, nameAka: string, object: string, system: string, type: string>, courtLocation: record<city: string, courtLocationId: string, courtServiceStatusAPI: string, courtsForCourtLocationAPI: string, createdDate: string, name: string, object: string, stateName: string, streetAddress1: string, streetAddress2: string>, courtServiceStatusAPI: string, courtServiceStatusId: string, docketEntries: record<docketEntryArray: list, nextPageAPI: string, object: string, pageNumber: int, totalCount: int, totalPages: int>, exportAPI: string, filedDate: string, firstFetchDate: string, hasDocumentsWithPreview: bool, hasOnlyMetaInfo: bool, hearings: record<hearingArray: list, nextPageAPI: string, object: string, pageNumber: int, totalCount: int, totalPages: int>, judges: record<judgeArray: list, nextPageAPI: string, object: string, pageNumber: int, totalCount: int, totalPages: int>, lastFetchDate: string, lastFetchDateWithUpdates: string, object: string, participantsLastFetchDate: string, parties: record<nextPageAPI: string, object: string, pageNumber: int, partyArray: list, totalCount: int, totalPages: int>, relatedCases: record<nextPageAPI: string, object: string, pageNumber: int, relatedCaseArray: list, totalCount: int, totalPages: int>, sourceCaseData: record<natureOfSuitArray: list, object: string, sourceCaseStatus: string, sourceCaseType: string, sourceCauseOfActionArray: list, sourceChargeArray: list, sourceCourt: string, sourcePageData: list>, sourceDataStatus: string, url: string>, caseAPI: string, caseId: string, exception: record<code: string, details: string, message: string, object: string>, object: string, pacerOptions: record<additionalPageArray: list<record>, fetchParticipantsIfOlderThanDays: int, object: string, pacerClientCode: string, pacerUserId: string, refreshType: string>, requestedDate: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({case_id: $case_id} | format pattern "/caseUpdate/{case_id}"))
+  let full_url = (build-url $base ({case_id: (encode-path-segment $case_id)} | format pattern "/caseUpdate/{case_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Get Case Update  list for a requested Date.
+# Get Case Update list for a requested Date.
 #
 # GET /caseUpdates
 # operationId: getCaseUpdates
@@ -1307,7 +1316,7 @@ export def "case-updates get" [
   --case-id: string # The caseId value of the case for which updates should be retrieved.
   --requested-date: string # The date for which case updates are to be retrieved. (format: date-time)
   --status: string@status-completer # Status of the case updates to be retrieved.
-  --page-number: int # The page number of the callbacks to be retrieved.<br>   - Minimum: 1  (default: 1, e.g. 1)
+  --page-number: int # The page number of the callbacks to be retrieved. - Minimum: 1 (default: 1, e.g. 1)
 ]: nothing -> record<caseUpdatePreviewArray: table<caseAPI: string, caseId: string, exception: record, object: string, pacerOptions: record, requestedDate: string, status: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1335,7 +1344,7 @@ export def "court-coverage get" [
 ]: nothing -> record<caseClassCoverageArray: table<caseClass: record, caseCount: int, caseDocumentInLibraryCount: int, caseDocumentInLibraryInLastThirtyDaysCount: int, casesInLastThirtyDaysCount: int, courtServiceStatusAPI: string, freeCaseDocumentCount: int, freeCaseDocumentsInLastThirtyDaysCount: int, object: string, paidCaseDocumentCount: int, paidCaseDocumentsInLastThirtyDaysCount: int>, court: record<additionalLevels: record<level1: string, level2: string, level3: string, level4: string, object: string>, appealCourtsForCourtAPI: string, container: string, containerType: string, courtId: string, courtLocationsForCourtAPI: string, courtServiceStatusAPI: string, courtSystemId: string, courtTypeId: string, createdDate: string, jurisdictionGeoForCourtAPI: string, name: string, nameAka: string, object: string, system: string, type: string>, lastUpdateCountDate: string, object: string, totalCaseCount: int, totalCaseDocumentInLibraryCount: int, totalCaseDocumentInLibraryInLastThirtyDaysCount: int, totalCasesInLastThirtyDaysCount: int, totalFreeCaseDocumentCount: int, totalFreeCaseDocumentsInLastThirtyDaysCount: int, totalPaidCaseDocumentCount: int, totalPaidCaseDocumentsInLastThirtyDaysCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({court_id: $court_id} | format pattern "/courtCoverage/{court_id}"))
+  let full_url = (build-url $base ({court_id: (encode-path-segment $court_id)} | format pattern "/courtCoverage/{court_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1358,7 +1367,7 @@ export def "daily-usage get" [
 ]: nothing -> record<apiCallsBillable: record<count: int, lastUpdated: string>, apiCallsCredited: record<count: int, lastUpdated: string>, apiCallsMade: record<count: int, lastUpdated: string>, apiUsage: record, object: string, usageEndTime: string, usageStartTime: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({date: $date} | format pattern "/dailyUsage/{date}"))
+  let full_url = (build-url $base ({date: (encode-path-segment $date)} | format pattern "/dailyUsage/{date}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1368,7 +1377,7 @@ export def "daily-usage get" [
 #
 # POST /generateNewToken
 # operationId: generateNewToken
-export def "generate-new-token generateNewToken" [
+export def "generate-new-token generate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1384,18 +1393,18 @@ export def "generate-new-token generateNewToken" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/generateNewToken")
-  let body = {"clientId": $client_id, "clientSecret": $client_secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"clientId": $client_id, "clientSecret": $client_secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # API to invalidate all access tokens.
 #
 # PUT /invalidateAllTokens
 # operationId: invalidateAllTokens
-export def "invalidate-all-tokens invalidateAllTokens" [
+export def "invalidate-all-tokens list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1411,18 +1420,18 @@ export def "invalidate-all-tokens invalidateAllTokens" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/invalidateAllTokens")
-  let body = {"clientId": $client_id, "clientSecret": $client_secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"clientId": $client_id, "clientSecret": $client_secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # API to invalidate the access token.
 #
 # PUT /invalidateToken
 # operationId: invalidateToken
-export def "invalidate-token invalidateToken" [
+export def "invalidate-token update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1439,11 +1448,11 @@ export def "invalidate-token invalidateToken" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/invalidateToken")
-  let body = {"clientId": $client_id, "clientSecret": $client_secret, "tokenId": $token_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"clientId": $client_id, "clientSecret": $client_secret, "tokenId": $token_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets details for a requested Judge ID.
@@ -1463,7 +1472,7 @@ export def "judge get" [
 ]: nothing -> record<contact: record<addressArray: list<record>, emailArray: list<record>, object: string, phoneNumberArray: list<record>>, firstFetchDate: string, firstName: string, isVisible: bool, judgeId: string, judgeType: record<createdDate: string, judgeTypeId: string, name: string, object: string>, lastFetchDate: string, lastName: string, middleName: string, name: string, namePrefix: string, nameSuffix: string, object: string, possibleNormJudgeArray: table<associatedNormAttorneysAPI: string, associatedNormLawFirmsAPI: string, associatedNormPartiesAPI: string, bestMatch: bool, caseCountAnalyticsByNormJudgeAPI: string, confidenceScore: float, normJudgeAPI: string, normJudgeId: string, normJudgeName: string, object: string, scoreConstituents: record>, sourceJudgeType: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({judge_id: $judge_id} | format pattern "/judge/{judge_id}"))
+  let full_url = (build-url $base ({judge_id: (encode-path-segment $judge_id)} | format pattern "/judge/{judge_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1489,11 +1498,11 @@ export def "list-all-token-ids list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/listAllTokenIds")
-  let body = {"clientId": $client_id, "clientSecret": $client_secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"clientId": $client_id, "clientSecret": $client_secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # AreaOfLaw Object.
@@ -1509,8 +1518,8 @@ export def "master-data-area-of-law list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.</a>
-  --page-number: int # Page number. - minimum: 1 - maximum: 100  (e.g. 1)
+  --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.
+  --page-number: int # Page number. - minimum: 1 - maximum: 100 (e.g. 1)
   --qp-sort: string@sort-completer-1 # Sort field. (default: name, e.g. name)
   --order: string@order-completer # Sort order. (default: asc, e.g. asc)
 ]: nothing -> record<areaOfLawArray: table<areaOfLawId: string, caseClass: string, caseClassId: string, createdDate: string, name: string, object: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int> {
@@ -1540,7 +1549,7 @@ export def "master-data-area-of-law get" [
 ]: nothing -> record<areaOfLawId: string, caseClass: string, caseClassId: string, createdDate: string, name: string, object: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({area_of_law_id: $area_of_law_id} | format pattern "/masterData/areaOfLaw/{area_of_law_id}"))
+  let full_url = (build-url $base ({area_of_law_id: (encode-path-segment $area_of_law_id)} | format pattern "/masterData/areaOfLaw/{area_of_law_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1559,8 +1568,8 @@ export def "master-data-attorney-representation-type list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.</a>
-  --page-number: int # Page number. - minimum: 1 - maximum: 100  (e.g. 1)
+  --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.
+  --page-number: int # Page number. - minimum: 1 - maximum: 100 (e.g. 1)
   --qp-sort: string@sort-completer-1 # Sort field. (default: name, e.g. name)
   --order: string@order-completer # Sort order. (default: asc, e.g. asc)
 ]: nothing -> record<attorneyRepresentationTypeArray: table<attorneyRepresentationTypeId: string, createdDate: string, name: string, object: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int> {
@@ -1590,7 +1599,7 @@ export def "master-data-attorney-representation-type get" [
 ]: nothing -> record<attorneyRepresentationTypeId: string, createdDate: string, name: string, object: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({attorney_representation_type_id: $attorney_representation_type_id} | format pattern "/masterData/attorneyRepresentationType/{attorney_representation_type_id}"))
+  let full_url = (build-url $base ({attorney_representation_type_id: (encode-path-segment $attorney_representation_type_id)} | format pattern "/masterData/attorneyRepresentationType/{attorney_representation_type_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1609,8 +1618,8 @@ export def "master-data-attorney-type list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.</a>
-  --page-number: int # Page number. - minimum: 1 - maximum: 100  (e.g. 1)
+  --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.
+  --page-number: int # Page number. - minimum: 1 - maximum: 100 (e.g. 1)
   --qp-sort: string@sort-completer-1 # Sort field. (default: name, e.g. name)
   --order: string@order-completer # Sort order. (default: asc, e.g. asc)
 ]: nothing -> record<attorneyTypeArray: table<attorneyTypeId: string, createdDate: string, name: string, object: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int> {
@@ -1640,7 +1649,7 @@ export def "master-data-attorney-type get" [
 ]: nothing -> record<attorneyTypeId: string, createdDate: string, name: string, object: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({attorney_type_id: $attorney_type_id} | format pattern "/masterData/attorneyType/{attorney_type_id}"))
+  let full_url = (build-url $base ({attorney_type_id: (encode-path-segment $attorney_type_id)} | format pattern "/masterData/attorneyType/{attorney_type_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1659,8 +1668,8 @@ export def "master-data-case-class list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.</a>
-  --page-number: int # Page number. - minimum: 1 - maximum: 100  (e.g. 1)
+  --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.
+  --page-number: int # Page number. - minimum: 1 - maximum: 100 (e.g. 1)
   --qp-sort: string@sort-completer-1 # Sort field. (default: name, e.g. name)
   --order: string@order-completer # Sort order. (default: asc, e.g. asc)
 ]: nothing -> record<caseClassArray: table<caseClassId: string, createdDate: string, name: string, object: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int> {
@@ -1690,7 +1699,7 @@ export def "master-data-case-class get" [
 ]: nothing -> record<caseClassId: string, createdDate: string, name: string, object: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({case_class_id: $case_class_id} | format pattern "/masterData/caseClass/{case_class_id}"))
+  let full_url = (build-url $base ({case_class_id: (encode-path-segment $case_class_id)} | format pattern "/masterData/caseClass/{case_class_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1709,8 +1718,8 @@ export def "master-data-case-relationship-type list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.</a>
-  --page-number: int # Page number. - minimum: 1 - maximum: 100  (e.g. 1)
+  --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.
+  --page-number: int # Page number. - minimum: 1 - maximum: 100 (e.g. 1)
   --qp-sort: string@sort-completer-1 # Sort field. (default: name, e.g. name)
   --order: string@order-completer # Sort order. (default: asc, e.g. asc)
 ]: nothing -> record<caseRelationshipTypeArray: table<caseRelationshipTypeId: string, createdDate: string, name: string, object: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int> {
@@ -1740,7 +1749,7 @@ export def "master-data-case-relationship-type get" [
 ]: nothing -> record<caseRelationshipTypeId: string, createdDate: string, name: string, object: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({case_relationship_type_id: $case_relationship_type_id} | format pattern "/masterData/caseRelationshipType/{case_relationship_type_id}"))
+  let full_url = (build-url $base ({case_relationship_type_id: (encode-path-segment $case_relationship_type_id)} | format pattern "/masterData/caseRelationshipType/{case_relationship_type_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1759,8 +1768,8 @@ export def "master-data-case-status list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.</a>
-  --page-number: int # Page number. - minimum: 1 - maximum: 100  (e.g. 1)
+  --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.
+  --page-number: int # Page number. - minimum: 1 - maximum: 100 (e.g. 1)
   --qp-sort: string@sort-completer-1 # Sort field. (default: name, e.g. name)
   --order: string@order-completer # Sort order. (default: asc, e.g. asc)
 ]: nothing -> record<caseStatusArray: table<caseClassArray: list, caseStatusGroup: string, caseStatusGroupId: string, caseStatusId: string, createdDate: string, name: string, object: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int> {
@@ -1790,7 +1799,7 @@ export def "master-data-case-status get" [
 ]: nothing -> record<caseClassArray: list<string>, caseStatusGroup: string, caseStatusGroupId: string, caseStatusId: string, createdDate: string, name: string, object: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({case_status_id: $case_status_id} | format pattern "/masterData/caseStatus/{case_status_id}"))
+  let full_url = (build-url $base ({case_status_id: (encode-path-segment $case_status_id)} | format pattern "/masterData/caseStatus/{case_status_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1809,8 +1818,8 @@ export def "master-data-case-status-group list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.</a>
-  --page-number: int # Page number. - minimum: 1 - maximum: 100  (e.g. 1)
+  --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.
+  --page-number: int # Page number. - minimum: 1 - maximum: 100 (e.g. 1)
   --qp-sort: string@sort-completer-1 # Sort field. (default: name, e.g. name)
   --order: string@order-completer # Sort order. (default: asc, e.g. asc)
 ]: nothing -> record<caseStatusGroupArray: table<caseStatusGroupId: string, createdDate: string, name: string, object: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int> {
@@ -1840,7 +1849,7 @@ export def "master-data-case-status-group get" [
 ]: nothing -> record<caseStatusGroupId: string, createdDate: string, name: string, object: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({case_status_group_id: $case_status_group_id} | format pattern "/masterData/caseStatusGroup/{case_status_group_id}"))
+  let full_url = (build-url $base ({case_status_group_id: (encode-path-segment $case_status_group_id)} | format pattern "/masterData/caseStatusGroup/{case_status_group_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1859,8 +1868,8 @@ export def "master-data-case-type list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.</a>
-  --page-number: int # Page number. - minimum: 1 - maximum: 100  (e.g. 1)
+  --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.
+  --page-number: int # Page number. - minimum: 1 - maximum: 100 (e.g. 1)
   --qp-sort: string@sort-completer-1 # Sort field. (default: name, e.g. name)
   --order: string@order-completer # Sort order. (default: asc, e.g. asc)
 ]: nothing -> record<caseTypeArray: table<areaOfLaw: string, areaOfLawId: string, caseClass: string, caseClassId: string, caseTypeGroup: string, caseTypeGroupId: string, caseTypeId: string, caseTypeTag: string, createdDate: string, name: string, object: string, saliCode: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int> {
@@ -1890,7 +1899,7 @@ export def "master-data-case-type get" [
 ]: nothing -> record<areaOfLaw: string, areaOfLawId: string, caseClass: string, caseClassId: string, caseTypeGroup: string, caseTypeGroupId: string, caseTypeId: string, caseTypeTag: string, createdDate: string, name: string, object: string, saliCode: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({case_type_id: $case_type_id} | format pattern "/masterData/caseType/{case_type_id}"))
+  let full_url = (build-url $base ({case_type_id: (encode-path-segment $case_type_id)} | format pattern "/masterData/caseType/{case_type_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1909,8 +1918,8 @@ export def "master-data-case-type-group list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.</a>
-  --page-number: int # Page number. - minimum: 1 - maximum: 100  (e.g. 1)
+  --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.
+  --page-number: int # Page number. - minimum: 1 - maximum: 100 (e.g. 1)
   --qp-sort: string@sort-completer-1 # Sort field. (default: name, e.g. name)
   --order: string@order-completer # Sort order. (default: asc, e.g. asc)
 ]: nothing -> record<caseTypeGroupArray: table<areaOfLaw: string, areaOfLawId: string, caseClass: string, caseClassId: string, caseTypeGroupId: string, createdDate: string, name: string, object: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int> {
@@ -1940,7 +1949,7 @@ export def "master-data-case-type-group get" [
 ]: nothing -> record<areaOfLaw: string, areaOfLawId: string, caseClass: string, caseClassId: string, caseTypeGroupId: string, createdDate: string, name: string, object: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({case_type_group_id: $case_type_group_id} | format pattern "/masterData/caseTypeGroup/{case_type_group_id}"))
+  let full_url = (build-url $base ({case_type_group_id: (encode-path-segment $case_type_group_id)} | format pattern "/masterData/caseTypeGroup/{case_type_group_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1959,8 +1968,8 @@ export def "master-data-cause-of-action list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.</a>
-  --page-number: int # Page number. - minimum: 1 - maximum: 100  (e.g. 1)
+  --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.
+  --page-number: int # Page number. - minimum: 1 - maximum: 100 (e.g. 1)
   --qp-sort: string@sort-completer-1 # Sort field. (default: name, e.g. name)
   --order: string@order-completer # Sort order. (default: asc, e.g. asc)
 ]: nothing -> record<causeOfActionArray: table<causeOfActionGroup: string, causeOfActionGroupId: string, causeOfActionId: string, createdDate: string, name: string, object: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int> {
@@ -1990,7 +1999,7 @@ export def "master-data-cause-of-action get" [
 ]: nothing -> record<causeOfActionGroup: string, causeOfActionGroupId: string, causeOfActionId: string, createdDate: string, name: string, object: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({cause_of_action_id: $cause_of_action_id} | format pattern "/masterData/causeOfAction/{cause_of_action_id}"))
+  let full_url = (build-url $base ({cause_of_action_id: (encode-path-segment $cause_of_action_id)} | format pattern "/masterData/causeOfAction/{cause_of_action_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2009,8 +2018,8 @@ export def "master-data-cause-of-action-additional-data list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.</a>
-  --page-number: int # Page number. - minimum: 1 - maximum: 100  (e.g. 1)
+  --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.
+  --page-number: int # Page number. - minimum: 1 - maximum: 100 (e.g. 1)
   --qp-sort: string@sort-completer-1 # Sort field. (default: name, e.g. name)
   --order: string@order-completer # Sort order. (default: asc, e.g. asc)
 ]: nothing -> record<causeOfActionAdditionalDataArray: table<causeOfActionAdditionalDataId: string, createdDate: string, object: string, type: string, value: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int> {
@@ -2040,7 +2049,7 @@ export def "master-data-cause-of-action-additional-data get" [
 ]: nothing -> record<causeOfActionAdditionalDataId: string, createdDate: string, object: string, type: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({cause_of_action_additional_data_id: $cause_of_action_additional_data_id} | format pattern "/masterData/causeOfActionAdditionalData/{cause_of_action_additional_data_id}"))
+  let full_url = (build-url $base ({cause_of_action_additional_data_id: (encode-path-segment $cause_of_action_additional_data_id)} | format pattern "/masterData/causeOfActionAdditionalData/{cause_of_action_additional_data_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2059,8 +2068,8 @@ export def "master-data-cause-of-action-group list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.</a>
-  --page-number: int # Page number. - minimum: 1 - maximum: 100  (e.g. 1)
+  --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.
+  --page-number: int # Page number. - minimum: 1 - maximum: 100 (e.g. 1)
   --qp-sort: string@sort-completer-1 # Sort field. (default: name, e.g. name)
   --order: string@order-completer # Sort order. (default: asc, e.g. asc)
 ]: nothing -> record<causeOfActionGroupArray: table<causeOfActionGroupId: string, createdDate: string, name: string, object: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int> {
@@ -2090,7 +2099,7 @@ export def "master-data-cause-of-action-group get" [
 ]: nothing -> record<causeOfActionGroupId: string, createdDate: string, name: string, object: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({cause_of_action_group_id: $cause_of_action_group_id} | format pattern "/masterData/causeOfActionGroup/{cause_of_action_group_id}"))
+  let full_url = (build-url $base ({cause_of_action_group_id: (encode-path-segment $cause_of_action_group_id)} | format pattern "/masterData/causeOfActionGroup/{cause_of_action_group_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2109,8 +2118,8 @@ export def "master-data-charge list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.</a>
-  --page-number: int # Page number. - minimum: 1 - maximum: 100  (e.g. 1)
+  --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.
+  --page-number: int # Page number. - minimum: 1 - maximum: 100 (e.g. 1)
   --qp-sort: string@sort-completer-1 # Sort field. (default: name, e.g. name)
   --order: string@order-completer # Sort order. (default: asc, e.g. asc)
 ]: nothing -> record<chargeArray: table<chargeGroup: string, chargeGroupId: string, chargeId: string, createdDate: string, name: string, object: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int> {
@@ -2140,7 +2149,7 @@ export def "master-data-charge get" [
 ]: nothing -> record<chargeGroup: string, chargeGroupId: string, chargeId: string, createdDate: string, name: string, object: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({charge_id: $charge_id} | format pattern "/masterData/charge/{charge_id}"))
+  let full_url = (build-url $base ({charge_id: (encode-path-segment $charge_id)} | format pattern "/masterData/charge/{charge_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2159,8 +2168,8 @@ export def "master-data-charge-additional-data list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.</a>
-  --page-number: int # Page number. - minimum: 1 - maximum: 100  (e.g. 1)
+  --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.
+  --page-number: int # Page number. - minimum: 1 - maximum: 100 (e.g. 1)
   --qp-sort: string@sort-completer-1 # Sort field. (default: name, e.g. name)
   --order: string@order-completer # Sort order. (default: asc, e.g. asc)
 ]: nothing -> record<chargeAdditionalDataArray: table<chargeAdditionalDataId: string, createdDate: string, object: string, type: string, value: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int> {
@@ -2190,7 +2199,7 @@ export def "master-data-charge-additional-data get" [
 ]: nothing -> record<chargeAdditionalDataId: string, createdDate: string, object: string, type: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({charge_additional_data_id: $charge_additional_data_id} | format pattern "/masterData/chargeAdditionalData/{charge_additional_data_id}"))
+  let full_url = (build-url $base ({charge_additional_data_id: (encode-path-segment $charge_additional_data_id)} | format pattern "/masterData/chargeAdditionalData/{charge_additional_data_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2209,8 +2218,8 @@ export def "master-data-charge-degree list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.</a>
-  --page-number: int # Page number. - minimum: 1 - maximum: 100  (e.g. 1)
+  --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.
+  --page-number: int # Page number. - minimum: 1 - maximum: 100 (e.g. 1)
   --qp-sort: string@sort-completer-1 # Sort field. (default: name, e.g. name)
   --order: string@order-completer # Sort order. (default: asc, e.g. asc)
 ]: nothing -> record<chargeDegreeArray: table<chargeDegreeId: string, createdDate: string, name: string, object: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int> {
@@ -2240,7 +2249,7 @@ export def "master-data-charge-degree get" [
 ]: nothing -> record<chargeDegreeId: string, createdDate: string, name: string, object: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({charge_degree_id: $charge_degree_id} | format pattern "/masterData/chargeDegree/{charge_degree_id}"))
+  let full_url = (build-url $base ({charge_degree_id: (encode-path-segment $charge_degree_id)} | format pattern "/masterData/chargeDegree/{charge_degree_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2259,8 +2268,8 @@ export def "master-data-charge-group list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.</a>
-  --page-number: int # Page number. - minimum: 1 - maximum: 100  (e.g. 1)
+  --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.
+  --page-number: int # Page number. - minimum: 1 - maximum: 100 (e.g. 1)
   --qp-sort: string@sort-completer-1 # Sort field. (default: name, e.g. name)
   --order: string@order-completer # Sort order. (default: asc, e.g. asc)
 ]: nothing -> record<chargeGroupArray: table<chargeGroupId: string, createdDate: string, name: string, object: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int> {
@@ -2290,7 +2299,7 @@ export def "master-data-charge-group get" [
 ]: nothing -> record<chargeGroupId: string, createdDate: string, name: string, object: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({charge_group_id: $charge_group_id} | format pattern "/masterData/chargeGroup/{charge_group_id}"))
+  let full_url = (build-url $base ({charge_group_id: (encode-path-segment $charge_group_id)} | format pattern "/masterData/chargeGroup/{charge_group_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2309,8 +2318,8 @@ export def "master-data-charge-severity list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.</a>
-  --page-number: int # Page number. - minimum: 1 - maximum: 100  (e.g. 1)
+  --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.
+  --page-number: int # Page number. - minimum: 1 - maximum: 100 (e.g. 1)
   --qp-sort: string@sort-completer-1 # Sort field. (default: name, e.g. name)
   --order: string@order-completer # Sort order. (default: asc, e.g. asc)
 ]: nothing -> record<chargeSeverityArray: table<chargeSeverityId: string, createdDate: string, name: string, object: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int> {
@@ -2340,7 +2349,7 @@ export def "master-data-charge-severity get" [
 ]: nothing -> record<chargeSeverityId: string, createdDate: string, name: string, object: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({charge_severity_id: $charge_severity_id} | format pattern "/masterData/chargeSeverity/{charge_severity_id}"))
+  let full_url = (build-url $base ({charge_severity_id: (encode-path-segment $charge_severity_id)} | format pattern "/masterData/chargeSeverity/{charge_severity_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2359,8 +2368,8 @@ export def "master-data-court list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.</a>
-  --page-number: int # Page number. - minimum: 1 - maximum: 100  (e.g. 1)
+  --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.
+  --page-number: int # Page number. - minimum: 1 - maximum: 100 (e.g. 1)
   --qp-sort: string@sort-completer-1 # Sort field. (default: name, e.g. name)
   --order: string@order-completer # Sort order. (default: asc, e.g. asc)
 ]: nothing -> record<courtArray: table<additionalLevels: record, appealCourtsForCourtAPI: string, container: string, containerType: string, courtId: string, courtLocationsForCourtAPI: string, courtServiceStatusAPI: string, courtSystemId: string, courtTypeId: string, createdDate: string, jurisdictionGeoForCourtAPI: string, name: string, nameAka: string, object: string, system: string, type: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int> {
@@ -2390,7 +2399,7 @@ export def "master-data-court get" [
 ]: nothing -> record<additionalLevels: record<level1: string, level2: string, level3: string, level4: string, object: string>, appealCourtsForCourtAPI: string, container: string, containerType: string, courtId: string, courtLocationsForCourtAPI: string, courtServiceStatusAPI: string, courtSystemId: string, courtTypeId: string, createdDate: string, jurisdictionGeoForCourtAPI: string, name: string, nameAka: string, object: string, system: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({court_id: $court_id} | format pattern "/masterData/court/{court_id}"))
+  let full_url = (build-url $base ({court_id: (encode-path-segment $court_id)} | format pattern "/masterData/court/{court_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2400,7 +2409,7 @@ export def "master-data-court get" [
 #
 # GET /masterData/court/{courtId}/appealCourts
 # operationId: getAppealCourtsForCourt
-export def "master-data-court-appeal-courts get-appeal-courts-for" [
+export def "master-data-court-appeal-courts get" [
   court_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2410,14 +2419,14 @@ export def "master-data-court-appeal-courts get-appeal-courts-for" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --page-number: int # Page number. - minimum: 1 - maximum: 100  (e.g. 1)
+  --page-number: int # Page number. - minimum: 1 - maximum: 100 (e.g. 1)
   --qp-sort: string@sort-completer-1 # Sort field. (default: name, e.g. name)
   --order: string@order-completer # Sort order. (default: asc, e.g. asc)
 ]: nothing -> record<courtArray: table<additionalLevels: record, appealCourtsForCourtAPI: string, container: string, containerType: string, courtId: string, courtLocationsForCourtAPI: string, courtServiceStatusAPI: string, courtSystemId: string, courtTypeId: string, createdDate: string, jurisdictionGeoForCourtAPI: string, name: string, nameAka: string, object: string, system: string, type: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({court_id: $court_id} | format pattern "/masterData/court/{court_id}/appealCourts") $qp)
+  let full_url = (build-url $base ({court_id: (encode-path-segment $court_id)} | format pattern "/masterData/court/{court_id}/appealCourts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2427,7 +2436,7 @@ export def "master-data-court-appeal-courts get-appeal-courts-for" [
 #
 # GET /masterData/court/{courtId}/courtLocations
 # operationId: getCourtLocationsForCourt
-export def "master-data-court-court-locations get-court-locations-for" [
+export def "master-data-court-court-locations get" [
   court_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2437,14 +2446,14 @@ export def "master-data-court-court-locations get-court-locations-for" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --page-number: int # Page number. - minimum: 1 - maximum: 100  (e.g. 1)
+  --page-number: int # Page number. - minimum: 1 - maximum: 100 (e.g. 1)
   --qp-sort: string@sort-completer-1 # Sort field. (default: name, e.g. name)
   --order: string@order-completer # Sort order. (default: asc, e.g. asc)
 ]: nothing -> record<courtLocationArray: table<city: string, courtLocationId: string, courtServiceStatusAPI: string, courtsForCourtLocationAPI: string, createdDate: string, name: string, object: string, stateName: string, streetAddress1: string, streetAddress2: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({court_id: $court_id} | format pattern "/masterData/court/{court_id}/courtLocations") $qp)
+  let full_url = (build-url $base ({court_id: (encode-path-segment $court_id)} | format pattern "/masterData/court/{court_id}/courtLocations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2454,7 +2463,7 @@ export def "master-data-court-court-locations get-court-locations-for" [
 #
 # GET /masterData/court/{courtId}/jurisdictionGeo
 # operationId: getJurisdictionGeoForCourt
-export def "master-data-court-jurisdiction-geo get-jurisdiction-geo-for" [
+export def "master-data-court-jurisdiction-geo get" [
   court_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2464,14 +2473,14 @@ export def "master-data-court-jurisdiction-geo get-jurisdiction-geo-for" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --page-number: int # Page number. - minimum: 1 - maximum: 100  (e.g. 1)
+  --page-number: int # Page number. - minimum: 1 - maximum: 100 (e.g. 1)
   --qp-sort: string@sort-completer-2 # Sort field. (default: state, e.g. state)
   --order: string@order-completer # Sort order. (default: asc, e.g. asc)
 ]: nothing -> record<jurisdictionGeoArray: table<city: string, country: string, county: string, courtsForJurisdictionGeoAPI: string, createdDate: string, fipsCode: string, jurisdictionGeoId: string, object: string, state: string, zipCodeArray: list>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({court_id: $court_id} | format pattern "/masterData/court/{court_id}/jurisdictionGeo") $qp)
+  let full_url = (build-url $base ({court_id: (encode-path-segment $court_id)} | format pattern "/masterData/court/{court_id}/jurisdictionGeo") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2490,8 +2499,8 @@ export def "master-data-court-location list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.</a>
-  --page-number: int # Page number. - minimum: 1 - maximum: 100  (e.g. 1)
+  --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.
+  --page-number: int # Page number. - minimum: 1 - maximum: 100 (e.g. 1)
   --qp-sort: string@sort-completer-1 # Sort field. (default: name, e.g. name)
   --order: string@order-completer # Sort order. (default: asc, e.g. asc)
 ]: nothing -> record<courtLocationArray: table<city: string, courtLocationId: string, courtServiceStatusAPI: string, courtsForCourtLocationAPI: string, createdDate: string, name: string, object: string, stateName: string, streetAddress1: string, streetAddress2: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int> {
@@ -2521,7 +2530,7 @@ export def "master-data-court-location get" [
 ]: nothing -> record<city: string, courtLocationId: string, courtServiceStatusAPI: string, courtsForCourtLocationAPI: string, createdDate: string, name: string, object: string, stateName: string, streetAddress1: string, streetAddress2: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({court_location_id: $court_location_id} | format pattern "/masterData/courtLocation/{court_location_id}"))
+  let full_url = (build-url $base ({court_location_id: (encode-path-segment $court_location_id)} | format pattern "/masterData/courtLocation/{court_location_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2531,7 +2540,7 @@ export def "master-data-court-location get" [
 #
 # GET /masterData/courtLocation/{courtLocationId}/courts
 # operationId: getCourtsForCourtLocation
-export def "master-data-court-location-courts get-courts-for" [
+export def "master-data-court-location-courts get" [
   court_location_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2541,14 +2550,14 @@ export def "master-data-court-location-courts get-courts-for" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --page-number: int # Page number. - minimum: 1 - maximum: 100  (e.g. 1)
+  --page-number: int # Page number. - minimum: 1 - maximum: 100 (e.g. 1)
   --qp-sort: string@sort-completer-1 # Sort field. (default: name, e.g. name)
   --order: string@order-completer # Sort order. (default: asc, e.g. asc)
 ]: nothing -> record<courtArray: table<additionalLevels: record, appealCourtsForCourtAPI: string, container: string, containerType: string, courtId: string, courtLocationsForCourtAPI: string, courtServiceStatusAPI: string, courtSystemId: string, courtTypeId: string, createdDate: string, jurisdictionGeoForCourtAPI: string, name: string, nameAka: string, object: string, system: string, type: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({court_location_id: $court_location_id} | format pattern "/masterData/courtLocation/{court_location_id}/courts") $qp)
+  let full_url = (build-url $base ({court_location_id: (encode-path-segment $court_location_id)} | format pattern "/masterData/courtLocation/{court_location_id}/courts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2567,8 +2576,8 @@ export def "master-data-court-service-status list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.</a>
-  --page-number: int # Page number. - minimum: 1 - maximum: 100  (e.g. 1)
+  --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.
+  --page-number: int # Page number. - minimum: 1 - maximum: 100 (e.g. 1)
   --qp-sort: string@sort-completer-1 # Sort field. (default: name, e.g. name)
   --order: string@order-completer # Sort order. (default: asc, e.g. asc)
 ]: nothing -> record<courtServiceStatusArray: table<caseClassIdArray: list, caseDocumentOrderServiceStatus: record, caseTrackServiceStatus: record, caseUpdateServiceStatus: record, courtIdArray: list, courtLocationIdArray: list, courtServiceStatusId: string, object: string, serviceStatusAsOn: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int> {
@@ -2598,7 +2607,7 @@ export def "master-data-court-service-status get" [
 ]: nothing -> record<caseClassIdArray: list<string>, caseDocumentOrderServiceStatus: record<object: string, serviceDetails: string, serviceStatusDownDetails: record<details: string, eta: string, object: string, reason: string>, serviceUp: bool>, caseTrackServiceStatus: record<object: string, serviceDetails: string, serviceStatusDownDetails: record<details: string, eta: string, object: string, reason: string>, serviceUp: bool>, caseUpdateServiceStatus: record<object: string, serviceDetails: string, serviceStatusDownDetails: record<details: string, eta: string, object: string, reason: string>, serviceUp: bool>, courtIdArray: list<string>, courtLocationIdArray: list<string>, courtServiceStatusId: string, object: string, serviceStatusAsOn: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({court_service_status_id: $court_service_status_id} | format pattern "/masterData/courtServiceStatus/{court_service_status_id}"))
+  let full_url = (build-url $base ({court_service_status_id: (encode-path-segment $court_service_status_id)} | format pattern "/masterData/courtServiceStatus/{court_service_status_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2617,8 +2626,8 @@ export def "master-data-court-system list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.</a>
-  --page-number: int # Page number. - minimum: 1 - maximum: 100  (e.g. 1)
+  --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.
+  --page-number: int # Page number. - minimum: 1 - maximum: 100 (e.g. 1)
   --qp-sort: string@sort-completer-1 # Sort field. (default: name, e.g. name)
   --order: string@order-completer # Sort order. (default: asc, e.g. asc)
 ]: nothing -> record<courtSystemArray: table<courtSystemId: string, courtType: string, courtTypeId: string, createdDate: string, name: string, object: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int> {
@@ -2648,7 +2657,7 @@ export def "master-data-court-system get" [
 ]: nothing -> record<courtSystemId: string, courtType: string, courtTypeId: string, createdDate: string, name: string, object: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({court_system_id: $court_system_id} | format pattern "/masterData/courtSystem/{court_system_id}"))
+  let full_url = (build-url $base ({court_system_id: (encode-path-segment $court_system_id)} | format pattern "/masterData/courtSystem/{court_system_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2667,8 +2676,8 @@ export def "master-data-court-type list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.</a>
-  --page-number: int # Page number. - minimum: 1 - maximum: 100  (e.g. 1)
+  --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.
+  --page-number: int # Page number. - minimum: 1 - maximum: 100 (e.g. 1)
   --qp-sort: string@sort-completer-1 # Sort field. (default: name, e.g. name)
   --order: string@order-completer # Sort order. (default: asc, e.g. asc)
 ]: nothing -> record<courtTypeArray: table<courtTypeId: string, createdDate: string, name: string, object: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int> {
@@ -2698,7 +2707,7 @@ export def "master-data-court-type get" [
 ]: nothing -> record<courtTypeId: string, createdDate: string, name: string, object: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({court_type_id: $court_type_id} | format pattern "/masterData/courtType/{court_type_id}"))
+  let full_url = (build-url $base ({court_type_id: (encode-path-segment $court_type_id)} | format pattern "/masterData/courtType/{court_type_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2717,8 +2726,8 @@ export def "master-data-judge-type list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.</a>
-  --page-number: int # Page number. - minimum: 1 - maximum: 100  (e.g. 1)
+  --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.
+  --page-number: int # Page number. - minimum: 1 - maximum: 100 (e.g. 1)
   --qp-sort: string@sort-completer-1 # Sort field. (default: name, e.g. name)
   --order: string@order-completer # Sort order. (default: asc, e.g. asc)
 ]: nothing -> record<judgeTypeArray: table<createdDate: string, judgeTypeId: string, name: string, object: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int> {
@@ -2748,7 +2757,7 @@ export def "master-data-judge-type get" [
 ]: nothing -> record<createdDate: string, judgeTypeId: string, name: string, object: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({judge_type_id: $judge_type_id} | format pattern "/masterData/judgeType/{judge_type_id}"))
+  let full_url = (build-url $base ({judge_type_id: (encode-path-segment $judge_type_id)} | format pattern "/masterData/judgeType/{judge_type_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2767,8 +2776,8 @@ export def "master-data-jurisdiction-geo list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.</a>
-  --page-number: int # Page number. - minimum: 1 - maximum: 100  (e.g. 1)
+  --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.
+  --page-number: int # Page number. - minimum: 1 - maximum: 100 (e.g. 1)
   --qp-sort: string@sort-completer-2 # Sort field. (default: state, e.g. state)
   --order: string@order-completer # Sort order. (default: asc, e.g. asc)
 ]: nothing -> record<jurisdictionGeoArray: table<city: string, country: string, county: string, courtsForJurisdictionGeoAPI: string, createdDate: string, fipsCode: string, jurisdictionGeoId: string, object: string, state: string, zipCodeArray: list>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int> {
@@ -2798,7 +2807,7 @@ export def "master-data-jurisdiction-geo get" [
 ]: nothing -> record<city: string, country: string, county: string, courtsForJurisdictionGeoAPI: string, createdDate: string, fipsCode: string, jurisdictionGeoId: string, object: string, state: string, zipCodeArray: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({jurisdiction_geo_id: $jurisdiction_geo_id} | format pattern "/masterData/jurisdictionGeo/{jurisdiction_geo_id}"))
+  let full_url = (build-url $base ({jurisdiction_geo_id: (encode-path-segment $jurisdiction_geo_id)} | format pattern "/masterData/jurisdictionGeo/{jurisdiction_geo_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2808,7 +2817,7 @@ export def "master-data-jurisdiction-geo get" [
 #
 # GET /masterData/jurisdictionGeo/{jurisdictionGeoId}/courts
 # operationId: getCourtsForJurisdictionGeo
-export def "master-data-jurisdiction-geo-courts get-courts-for" [
+export def "master-data-jurisdiction-geo-courts get" [
   jurisdiction_geo_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2818,14 +2827,14 @@ export def "master-data-jurisdiction-geo-courts get-courts-for" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --page-number: int # Page number. - minimum: 1 - maximum: 100  (e.g. 1)
+  --page-number: int # Page number. - minimum: 1 - maximum: 100 (e.g. 1)
   --qp-sort: string@sort-completer-1 # Sort field. (default: name, e.g. name)
   --order: string@order-completer # Sort order. (default: asc, e.g. asc)
 ]: nothing -> record<courtArray: table<additionalLevels: record, appealCourtsForCourtAPI: string, container: string, containerType: string, courtId: string, courtLocationsForCourtAPI: string, courtServiceStatusAPI: string, courtSystemId: string, courtTypeId: string, createdDate: string, jurisdictionGeoForCourtAPI: string, name: string, nameAka: string, object: string, system: string, type: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({jurisdiction_geo_id: $jurisdiction_geo_id} | format pattern "/masterData/jurisdictionGeo/{jurisdiction_geo_id}/courts") $qp)
+  let full_url = (build-url $base ({jurisdiction_geo_id: (encode-path-segment $jurisdiction_geo_id)} | format pattern "/masterData/jurisdictionGeo/{jurisdiction_geo_id}/courts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2844,8 +2853,8 @@ export def "master-data-party-role list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.</a>
-  --page-number: int # Page number. - minimum: 1 - maximum: 100  (e.g. 1)
+  --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.
+  --page-number: int # Page number. - minimum: 1 - maximum: 100 (e.g. 1)
   --qp-sort: string@sort-completer-1 # Sort field. (default: name, e.g. name)
   --order: string@order-completer # Sort order. (default: asc, e.g. asc)
 ]: nothing -> record<nextPageAPI: string, object: string, pageNumber: int, partyRoleArray: table<createdDate: string, description: string, name: string, object: string, partyRoleGroup: string, partyRoleGroupId: string, partyRoleId: string>, previousPageAPI: string, totalCount: int, totalPages: int> {
@@ -2875,7 +2884,7 @@ export def "master-data-party-role get" [
 ]: nothing -> record<createdDate: string, description: string, name: string, object: string, partyRoleGroup: string, partyRoleGroupId: string, partyRoleId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({party_role_id: $party_role_id} | format pattern "/masterData/partyRole/{party_role_id}"))
+  let full_url = (build-url $base ({party_role_id: (encode-path-segment $party_role_id)} | format pattern "/masterData/partyRole/{party_role_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2894,8 +2903,8 @@ export def "master-data-party-role-group list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.</a>
-  --page-number: int # Page number. - minimum: 1 - maximum: 100  (e.g. 1)
+  --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.
+  --page-number: int # Page number. - minimum: 1 - maximum: 100 (e.g. 1)
   --qp-sort: string@sort-completer-1 # Sort field. (default: name, e.g. name)
   --order: string@order-completer # Sort order. (default: asc, e.g. asc)
 ]: nothing -> record<nextPageAPI: string, object: string, pageNumber: int, partyRoleGroupArray: table<createdDate: string, description: string, name: string, object: string, partyRoleGroupId: string>, previousPageAPI: string, totalCount: int, totalPages: int> {
@@ -2925,7 +2934,7 @@ export def "master-data-party-role-group get" [
 ]: nothing -> record<createdDate: string, description: string, name: string, object: string, partyRoleGroupId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({party_role_group_id: $party_role_group_id} | format pattern "/masterData/partyRoleGroup/{party_role_group_id}"))
+  let full_url = (build-url $base ({party_role_group_id: (encode-path-segment $party_role_group_id)} | format pattern "/masterData/partyRoleGroup/{party_role_group_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2948,7 +2957,7 @@ export def "norm-attorney get" [
 ]: nothing -> record<attorneyAnalyticsAPI: record<associatedNormJudgesAPI: string, associatedNormLawFirmsAPI: string, associatedNormPartiesAPI: string, caseCountAnalyticsByOpposingNormAttorneyAPI: string, caseCountAnalyticsByOpposingNormLawFirmAPI: string, caseCountAnalyticsByOpposingNormPartyAPI: string, normAttorneyAPI: string, object: string>, barRecordArray: table<admittedDate: string, barNumber: string, barSourceData: record, barSourceType: string, contact: record, firstFetchDate: string, inactivationDate: string, lastFetchDate: string, lastFetchDateWithUpdates: string, object: string, stateCode: string, status: string>, caseAnalyticsAPI: record<caseCountAnalyticsByAreaOfLawAPI: string, caseCountAnalyticsByCaseClassAPI: string, caseCountAnalyticsByCaseTypeAPI: string, caseCountAnalyticsByCaseTypeGroupAPI: string, caseCountAnalyticsByCourtAPI: string, caseCountAnalyticsByCourtLocationAPI: string, caseCountAnalyticsByCourtSystemAPI: string, caseCountAnalyticsByCourtTypeAPI: string, caseCountAnalyticsByJurisdictionGeoAPI: string, caseCountAnalyticsByPartyRoleAPI: string, caseCountAnalyticsByPartyRoleGroupAPI: string, object: string, totalCases: int>, caseSearchAPI: string, firstName: string, hasAssociatedPublicData: bool, lastName: string, middleName: string, name: string, normAttorneyId: string, object: string, similarNormAttorneyArray: table<barRecordPreviewArray: list, name: string, normAttorneyAPI: string, normAttorneyId: string, normAttorneySimilarityScore: float, object: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({norm_attorney_id: $norm_attorney_id} | format pattern "/normAttorney/{norm_attorney_id}"))
+  let full_url = (build-url $base ({norm_attorney_id: (encode-path-segment $norm_attorney_id)} | format pattern "/normAttorney/{norm_attorney_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2958,7 +2967,7 @@ export def "norm-attorney get" [
 #
 # GET /normAttorney/{normAttorneyId}/associatedNormJudges
 # operationId: getNormJudgesAssociatedWithNormAttorney
-export def "norm-attorney-associated-norm-judges get-norm-judges-associated-with" [
+export def "norm-attorney-associated-norm-judges get" [
   norm_attorney_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2974,7 +2983,7 @@ export def "norm-attorney-associated-norm-judges get-norm-judges-associated-with
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({norm_attorney_id: $norm_attorney_id} | format pattern "/normAttorney/{norm_attorney_id}/associatedNormJudges") $qp)
+  let full_url = (build-url $base ({norm_attorney_id: (encode-path-segment $norm_attorney_id)} | format pattern "/normAttorney/{norm_attorney_id}/associatedNormJudges") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2984,7 +2993,7 @@ export def "norm-attorney-associated-norm-judges get-norm-judges-associated-with
 #
 # GET /normAttorney/{normAttorneyId}/associatedNormLawFirms
 # operationId: getNormLawFirmsAssociatedWithNormAttorney
-export def "norm-attorney-associated-norm-law-firms get-norm-law-firms-associated-with" [
+export def "norm-attorney-associated-norm-law-firms get" [
   norm_attorney_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3000,7 +3009,7 @@ export def "norm-attorney-associated-norm-law-firms get-norm-law-firms-associate
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({norm_attorney_id: $norm_attorney_id} | format pattern "/normAttorney/{norm_attorney_id}/associatedNormLawFirms") $qp)
+  let full_url = (build-url $base ({norm_attorney_id: (encode-path-segment $norm_attorney_id)} | format pattern "/normAttorney/{norm_attorney_id}/associatedNormLawFirms") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3010,7 +3019,7 @@ export def "norm-attorney-associated-norm-law-firms get-norm-law-firms-associate
 #
 # GET /normAttorney/{normAttorneyId}/associatedNormParties
 # operationId: getNormPartiesAssociatedWithNormAttorney
-export def "norm-attorney-associated-norm-parties get-norm-parties-associated-with" [
+export def "norm-attorney-associated-norm-parties get" [
   norm_attorney_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3026,7 +3035,7 @@ export def "norm-attorney-associated-norm-parties get-norm-parties-associated-wi
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({norm_attorney_id: $norm_attorney_id} | format pattern "/normAttorney/{norm_attorney_id}/associatedNormParties") $qp)
+  let full_url = (build-url $base ({norm_attorney_id: (encode-path-segment $norm_attorney_id)} | format pattern "/normAttorney/{norm_attorney_id}/associatedNormParties") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3052,7 +3061,7 @@ export def "norm-attorney-case-count-analytics-by-opposing-norm-attorney get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({norm_attorney_id: $norm_attorney_id} | format pattern "/normAttorney/{norm_attorney_id}/caseCountAnalyticsByOpposingNormAttorney") $qp)
+  let full_url = (build-url $base ({norm_attorney_id: (encode-path-segment $norm_attorney_id)} | format pattern "/normAttorney/{norm_attorney_id}/caseCountAnalyticsByOpposingNormAttorney") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3071,8 +3080,8 @@ export def "norm-attorney-search list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters.</a>
-  --page-number: int # Query parameter specifying the page number of the search results to be retrieved. - Minimum: 1 - Maximum: 1000  (e.g. 1)
+  --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters.
+  --page-number: int # Query parameter specifying the page number of the search results to be retrieved. - Minimum: 1 - Maximum: 1000 (e.g. 1)
 ]: nothing -> record<nextPageAPI: string, normAttorneySearchId: string, normAttorneySearchResultArray: table<firstFetchDate: string, hasAssociatedPublicData: bool, lastFetchDate: string, matchedObjectArray: list, name: string, normAttorneyDetailsAPI: string, normAttorneyId: string, object: string>, object: string, pageNumber: int, previousPageAPI: string, q: string, totalCount: int, totalPages: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3097,12 +3106,12 @@ export def "norm-attorney-search list-normalized" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --page-number: int # Query parameter specifying the page number of the search results to be retrieved. - Minimum: 1 - Maximum: 1000  (e.g. 1)
+  --page-number: int # Query parameter specifying the page number of the search results to be retrieved. - Minimum: 1 - Maximum: 1000 (e.g. 1)
 ]: nothing -> record<nextPageAPI: string, normAttorneySearchId: string, normAttorneySearchResultArray: table<firstFetchDate: string, hasAssociatedPublicData: bool, lastFetchDate: string, matchedObjectArray: list, name: string, normAttorneyDetailsAPI: string, normAttorneyId: string, object: string>, object: string, pageNumber: int, previousPageAPI: string, q: string, totalCount: int, totalPages: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({norm_attorney_search_id: $norm_attorney_search_id} | format pattern "/normAttorneySearch/{norm_attorney_search_id}") $qp)
+  let full_url = (build-url $base ({norm_attorney_search_id: (encode-path-segment $norm_attorney_search_id)} | format pattern "/normAttorneySearch/{norm_attorney_search_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3125,7 +3134,7 @@ export def "norm-judge get" [
 ]: nothing -> record<caseAnalyticsAPI: record<caseCountAnalyticsByAreaOfLawAPI: string, caseCountAnalyticsByCaseClassAPI: string, caseCountAnalyticsByCaseTypeAPI: string, caseCountAnalyticsByCaseTypeGroupAPI: string, caseCountAnalyticsByCourtAPI: string, caseCountAnalyticsByCourtLocationAPI: string, caseCountAnalyticsByCourtSystemAPI: string, caseCountAnalyticsByCourtTypeAPI: string, caseCountAnalyticsByJurisdictionGeoAPI: string, caseCountAnalyticsByPartyRoleAPI: string, caseCountAnalyticsByPartyRoleGroupAPI: string, object: string, totalCases: int>, caseSearchAPI: string, firstName: string, hasAssociatedPublicData: bool, judgeAnalyticsAPI: record<associatedNormAttorneysAPI: string, associatedNormLawFirmsAPI: string, associatedNormPartiesAPI: string, normJudgeAPI: string, object: string>, judicialDataArray: table<abaRatings: record, aliasArray: list, bio: record, contact: record, educationArray: list, firstFetchDate: string, judicialSource: record, judicialStatus: string, lastFetchDate: string, lastFetchDateWithUpdates: string, nameHistoryArray: list, object: string, professionalCareerArray: list, serviceHistoryArray: list>, lastName: string, middleName: string, name: string, normJudgeId: string, object: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({norm_judge_id: $norm_judge_id} | format pattern "/normJudge/{norm_judge_id}"))
+  let full_url = (build-url $base ({norm_judge_id: (encode-path-segment $norm_judge_id)} | format pattern "/normJudge/{norm_judge_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3135,7 +3144,7 @@ export def "norm-judge get" [
 #
 # GET /normJudge/{normJudgeId}/associatedNormAttorneys
 # operationId: getNormAttorneysAssociatedWithNormJudge
-export def "norm-judge-associated-norm-attorneys get-norm-attorneys-associated-with" [
+export def "norm-judge-associated-norm-attorneys get" [
   norm_judge_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3151,7 +3160,7 @@ export def "norm-judge-associated-norm-attorneys get-norm-attorneys-associated-w
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({norm_judge_id: $norm_judge_id} | format pattern "/normJudge/{norm_judge_id}/associatedNormAttorneys") $qp)
+  let full_url = (build-url $base ({norm_judge_id: (encode-path-segment $norm_judge_id)} | format pattern "/normJudge/{norm_judge_id}/associatedNormAttorneys") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3161,7 +3170,7 @@ export def "norm-judge-associated-norm-attorneys get-norm-attorneys-associated-w
 #
 # GET /normJudge/{normJudgeId}/associatedNormLawFirms
 # operationId: getNormLawFirmsAssociatedWithNormJudge
-export def "norm-judge-associated-norm-law-firms get-norm-law-firms-associated-with" [
+export def "norm-judge-associated-norm-law-firms get" [
   norm_judge_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3177,7 +3186,7 @@ export def "norm-judge-associated-norm-law-firms get-norm-law-firms-associated-w
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({norm_judge_id: $norm_judge_id} | format pattern "/normJudge/{norm_judge_id}/associatedNormLawFirms") $qp)
+  let full_url = (build-url $base ({norm_judge_id: (encode-path-segment $norm_judge_id)} | format pattern "/normJudge/{norm_judge_id}/associatedNormLawFirms") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3187,7 +3196,7 @@ export def "norm-judge-associated-norm-law-firms get-norm-law-firms-associated-w
 #
 # GET /normJudge/{normJudgeId}/associatedNormParties
 # operationId: getNormPartiesAssociatedWithNormJudge
-export def "norm-judge-associated-norm-parties get-norm-parties-associated-with" [
+export def "norm-judge-associated-norm-parties get" [
   norm_judge_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3203,7 +3212,7 @@ export def "norm-judge-associated-norm-parties get-norm-parties-associated-with"
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({norm_judge_id: $norm_judge_id} | format pattern "/normJudge/{norm_judge_id}/associatedNormParties") $qp)
+  let full_url = (build-url $base ({norm_judge_id: (encode-path-segment $norm_judge_id)} | format pattern "/normJudge/{norm_judge_id}/associatedNormParties") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3222,8 +3231,8 @@ export def "norm-judge-search list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters.</a>
-  --page-number: int # Query parameter specifying the page number of the search results to be retrieved. - Minimum: 1 - Maximum: 1000  (e.g. 1)
+  --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters.
+  --page-number: int # Query parameter specifying the page number of the search results to be retrieved. - Minimum: 1 - Maximum: 1000 (e.g. 1)
 ]: nothing -> record<nextPageAPI: string, normJudgeSearchId: string, normJudgeSearchResultArray: table<firstFetchDate: string, lastFetchDate: string, matchedObjectArray: list, name: string, normJudgeDetailsAPI: string, normJudgeId: string, object: string>, object: string, pageNumber: int, previousPageAPI: string, q: string, totalCount: int, totalPages: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3248,12 +3257,12 @@ export def "norm-judge-search list-normalized" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --page-number: int # Query parameter specifying the page number of the search results to be retrieved. - Minimum: 1 - Maximum: 1000  (e.g. 1)
+  --page-number: int # Query parameter specifying the page number of the search results to be retrieved. - Minimum: 1 - Maximum: 1000 (e.g. 1)
 ]: nothing -> record<nextPageAPI: string, normJudgeSearchId: string, normJudgeSearchResultArray: table<firstFetchDate: string, lastFetchDate: string, matchedObjectArray: list, name: string, normJudgeDetailsAPI: string, normJudgeId: string, object: string>, object: string, pageNumber: int, previousPageAPI: string, q: string, totalCount: int, totalPages: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({norm_judge_search_id: $norm_judge_search_id} | format pattern "/normJudgeSearch/{norm_judge_search_id}") $qp)
+  let full_url = (build-url $base ({norm_judge_search_id: (encode-path-segment $norm_judge_search_id)} | format pattern "/normJudgeSearch/{norm_judge_search_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3276,7 +3285,7 @@ export def "norm-law-firm get" [
 ]: nothing -> record<caseAnalyticsAPI: record<caseCountAnalyticsByAreaOfLawAPI: string, caseCountAnalyticsByCaseClassAPI: string, caseCountAnalyticsByCaseTypeAPI: string, caseCountAnalyticsByCaseTypeGroupAPI: string, caseCountAnalyticsByCourtAPI: string, caseCountAnalyticsByCourtLocationAPI: string, caseCountAnalyticsByCourtSystemAPI: string, caseCountAnalyticsByCourtTypeAPI: string, caseCountAnalyticsByJurisdictionGeoAPI: string, caseCountAnalyticsByPartyRoleAPI: string, caseCountAnalyticsByPartyRoleGroupAPI: string, object: string, totalCases: int>, caseSearchAPI: string, lawFirmAnalyticsAPI: record<associatedNormAttorneyAPI: string, associatedNormJudgeAPI: string, associatedNormPartiesAPI: string, caseCountAnalyticsByOpposingNormAttorneyAPI: string, caseCountAnalyticsByOpposingNormLawFirmAPI: string, caseCountAnalyticsByOpposingNormPartyAPI: string, normLawFirmAPI: string, object: string>, name: string, normLawFirmId: string, normOrganizationData: record<cik: string, isInvolvedInLitigation: bool, lei: string, naics: string, naicsDescription: string, name: string, normCorporateGroupArray: list<record>, normOrganizationId: string, normPartyAPI: string, object: string, organizationType: string, sic: string, sicDescription: string, sosDataArray: list<record>, tickerArray: list<record>>, object: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({norm_law_firm_id: $norm_law_firm_id} | format pattern "/normLawFirm/{norm_law_firm_id}"))
+  let full_url = (build-url $base ({norm_law_firm_id: (encode-path-segment $norm_law_firm_id)} | format pattern "/normLawFirm/{norm_law_firm_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3286,7 +3295,7 @@ export def "norm-law-firm get" [
 #
 # GET /normLawFirm/{normLawFirmId}/associatedNormAttorneys
 # operationId: getNormAttorneysAssociatedWithNormLawFirm
-export def "norm-law-firm-associated-norm-attorneys get-norm-attorneys-associated-with" [
+export def "norm-law-firm-associated-norm-attorneys get" [
   norm_law_firm_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3302,7 +3311,7 @@ export def "norm-law-firm-associated-norm-attorneys get-norm-attorneys-associate
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({norm_law_firm_id: $norm_law_firm_id} | format pattern "/normLawFirm/{norm_law_firm_id}/associatedNormAttorneys") $qp)
+  let full_url = (build-url $base ({norm_law_firm_id: (encode-path-segment $norm_law_firm_id)} | format pattern "/normLawFirm/{norm_law_firm_id}/associatedNormAttorneys") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3312,7 +3321,7 @@ export def "norm-law-firm-associated-norm-attorneys get-norm-attorneys-associate
 #
 # GET /normLawFirm/{normLawFirmId}/associatedNormJudges
 # operationId: getNormJudgesAssociatedWithNormLawFirm
-export def "norm-law-firm-associated-norm-judges get-norm-judges-associated-with" [
+export def "norm-law-firm-associated-norm-judges get" [
   norm_law_firm_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3328,7 +3337,7 @@ export def "norm-law-firm-associated-norm-judges get-norm-judges-associated-with
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({norm_law_firm_id: $norm_law_firm_id} | format pattern "/normLawFirm/{norm_law_firm_id}/associatedNormJudges") $qp)
+  let full_url = (build-url $base ({norm_law_firm_id: (encode-path-segment $norm_law_firm_id)} | format pattern "/normLawFirm/{norm_law_firm_id}/associatedNormJudges") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3338,7 +3347,7 @@ export def "norm-law-firm-associated-norm-judges get-norm-judges-associated-with
 #
 # GET /normLawFirm/{normLawFirmId}/associatedNormParties
 # operationId: getNormPartiesAssociatedWithNormLawFirm
-export def "norm-law-firm-associated-norm-parties get-norm-parties-associated-with" [
+export def "norm-law-firm-associated-norm-parties get" [
   norm_law_firm_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3354,7 +3363,7 @@ export def "norm-law-firm-associated-norm-parties get-norm-parties-associated-wi
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({norm_law_firm_id: $norm_law_firm_id} | format pattern "/normLawFirm/{norm_law_firm_id}/associatedNormParties") $qp)
+  let full_url = (build-url $base ({norm_law_firm_id: (encode-path-segment $norm_law_firm_id)} | format pattern "/normLawFirm/{norm_law_firm_id}/associatedNormParties") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3380,7 +3389,7 @@ export def "norm-law-firm-case-count-analytics-by-opposing-norm-law-firm get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({norm_law_firm_id: $norm_law_firm_id} | format pattern "/normLawFirm/{norm_law_firm_id}/caseCountAnalyticsByOpposingNormLawFirm") $qp)
+  let full_url = (build-url $base ({norm_law_firm_id: (encode-path-segment $norm_law_firm_id)} | format pattern "/normLawFirm/{norm_law_firm_id}/caseCountAnalyticsByOpposingNormLawFirm") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3399,8 +3408,8 @@ export def "norm-law-firm-search list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters.</a>
-  --page-number: int # Query parameter specifying the page number of the search results to be retrieved. - Minimum: 1 - Maximum: 1000  (e.g. 1)
+  --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters.
+  --page-number: int # Query parameter specifying the page number of the search results to be retrieved. - Minimum: 1 - Maximum: 1000 (e.g. 1)
 ]: nothing -> record<nextPageAPI: string, normLawFirmSearchId: string, normLawFirmSearchResultArray: table<firstFetchDate: string, lastFetchDate: string, matchedObjectArray: list, name: string, normLawFirmDetailsAPI: string, normLawFirmId: string, object: string>, object: string, pageNumber: int, previousPageAPI: string, q: string, totalCount: int, totalPages: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3425,12 +3434,12 @@ export def "norm-law-firm-search list-normalized" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --page-number: int # Query parameter specifying the page number of the search results to be retrieved. - Minimum: 1 - Maximum: 1000  (e.g. 1)
+  --page-number: int # Query parameter specifying the page number of the search results to be retrieved. - Minimum: 1 - Maximum: 1000 (e.g. 1)
 ]: nothing -> record<nextPageAPI: string, normLawFirmSearchId: string, normLawFirmSearchResultArray: table<firstFetchDate: string, lastFetchDate: string, matchedObjectArray: list, name: string, normLawFirmDetailsAPI: string, normLawFirmId: string, object: string>, object: string, pageNumber: int, previousPageAPI: string, q: string, totalCount: int, totalPages: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({norm_law_firm_search_id: $norm_law_firm_search_id} | format pattern "/normLawFirmSearch/{norm_law_firm_search_id}") $qp)
+  let full_url = (build-url $base ({norm_law_firm_search_id: (encode-path-segment $norm_law_firm_search_id)} | format pattern "/normLawFirmSearch/{norm_law_firm_search_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3453,7 +3462,7 @@ export def "norm-party get" [
 ]: nothing -> record<caseAnalyticsAPI: record<caseCountAnalyticsByAreaOfLawAPI: string, caseCountAnalyticsByCaseClassAPI: string, caseCountAnalyticsByCaseTypeAPI: string, caseCountAnalyticsByCaseTypeGroupAPI: string, caseCountAnalyticsByCourtAPI: string, caseCountAnalyticsByCourtLocationAPI: string, caseCountAnalyticsByCourtSystemAPI: string, caseCountAnalyticsByCourtTypeAPI: string, caseCountAnalyticsByJurisdictionGeoAPI: string, caseCountAnalyticsByPartyRoleAPI: string, caseCountAnalyticsByPartyRoleGroupAPI: string, object: string, totalCases: int>, caseSearchAPI: string, individualData: record<firstName: string, lastName: string, middleName: string, name: string>, name: string, normOrganizationData: record<cik: string, isInvolvedInLitigation: bool, lei: string, naics: string, naicsDescription: string, name: string, normCorporateGroupArray: list<record>, normOrganizationId: string, normPartyAPI: string, object: string, organizationType: string, sic: string, sicDescription: string, sosDataArray: list<record>, tickerArray: list<record>>, normPartyId: string, object: string, partyAnalyticsAPI: record<associatedNormAttorneysAPI: string, associatedNormJudgesAPI: string, associatedNormLawFirmsAPI: string, caseCountAnalyticsByOpposingNormAttorneyAPI: string, caseCountAnalyticsByOpposingNormLawFirmAPI: string, caseCountAnalyticsByOpposingNormPartyAPI: string, normPartyAPI: string, object: string>, partyClassificationType: string, relatedNormPartyArray: table<normPartyId: string, object: string, relationshipType: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({norm_party_id: $norm_party_id} | format pattern "/normParty/{norm_party_id}"))
+  let full_url = (build-url $base ({norm_party_id: (encode-path-segment $norm_party_id)} | format pattern "/normParty/{norm_party_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3463,7 +3472,7 @@ export def "norm-party get" [
 #
 # GET /normParty/{normPartyId}/associatedNormAttorneys
 # operationId: getNormAttorneysAssociatedWithNormParty
-export def "norm-party-associated-norm-attorneys get-norm-attorneys-associated-with" [
+export def "norm-party-associated-norm-attorneys get" [
   norm_party_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3479,7 +3488,7 @@ export def "norm-party-associated-norm-attorneys get-norm-attorneys-associated-w
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({norm_party_id: $norm_party_id} | format pattern "/normParty/{norm_party_id}/associatedNormAttorneys") $qp)
+  let full_url = (build-url $base ({norm_party_id: (encode-path-segment $norm_party_id)} | format pattern "/normParty/{norm_party_id}/associatedNormAttorneys") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3489,7 +3498,7 @@ export def "norm-party-associated-norm-attorneys get-norm-attorneys-associated-w
 #
 # GET /normParty/{normPartyId}/associatedNormJudges
 # operationId: getNormJudgesAssociatedWithNormParty
-export def "norm-party-associated-norm-judges get-norm-judges-associated-with" [
+export def "norm-party-associated-norm-judges get" [
   norm_party_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3505,7 +3514,7 @@ export def "norm-party-associated-norm-judges get-norm-judges-associated-with" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({norm_party_id: $norm_party_id} | format pattern "/normParty/{norm_party_id}/associatedNormJudges") $qp)
+  let full_url = (build-url $base ({norm_party_id: (encode-path-segment $norm_party_id)} | format pattern "/normParty/{norm_party_id}/associatedNormJudges") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3515,7 +3524,7 @@ export def "norm-party-associated-norm-judges get-norm-judges-associated-with" [
 #
 # GET /normParty/{normPartyId}/associatedNormLawFirms
 # operationId: getNormLawFirmsAssociatedWithNormParty
-export def "norm-party-associated-norm-law-firms get-norm-law-firms-associated-with" [
+export def "norm-party-associated-norm-law-firms get" [
   norm_party_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3531,7 +3540,7 @@ export def "norm-party-associated-norm-law-firms get-norm-law-firms-associated-w
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({norm_party_id: $norm_party_id} | format pattern "/normParty/{norm_party_id}/associatedNormLawFirms") $qp)
+  let full_url = (build-url $base ({norm_party_id: (encode-path-segment $norm_party_id)} | format pattern "/normParty/{norm_party_id}/associatedNormLawFirms") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3557,7 +3566,7 @@ export def "norm-party-case-count-analytics-by-opposing-norm-party get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({norm_party_id: $norm_party_id} | format pattern "/normParty/{norm_party_id}/caseCountAnalyticsByOpposingNormParty") $qp)
+  let full_url = (build-url $base ({norm_party_id: (encode-path-segment $norm_party_id)} | format pattern "/normParty/{norm_party_id}/caseCountAnalyticsByOpposingNormParty") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3576,8 +3585,8 @@ export def "norm-party-search list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters.</a>
-  --page-number: int # Query parameter specifying the page number of the search results to be retrieved. - Minimum: 1 - Maximum: 1000  (e.g. 1)
+  --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters.
+  --page-number: int # Query parameter specifying the page number of the search results to be retrieved. - Minimum: 1 - Maximum: 1000 (e.g. 1)
 ]: nothing -> record<nextPageAPI: string, normPartySearchId: string, normPartySearchResultArray: table<firstFetchDate: string, lastFetchDate: string, matchedObjectArray: list, name: string, normPartyDetailsAPI: string, normPartyId: string, object: string, partyClassificationType: string>, object: string, pageNumber: int, previousPageAPI: string, q: string, totalCount: int, totalPages: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3602,12 +3611,12 @@ export def "norm-party-search list-normalized-parties" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --page-number: int # Query parameter specifying the page number of the search results to be retrieved. - Minimum: 1 - Maximum: 1000  (e.g. 1)
+  --page-number: int # Query parameter specifying the page number of the search results to be retrieved. - Minimum: 1 - Maximum: 1000 (e.g. 1)
 ]: nothing -> record<nextPageAPI: string, normPartySearchId: string, normPartySearchResultArray: table<firstFetchDate: string, lastFetchDate: string, matchedObjectArray: list, name: string, normPartyDetailsAPI: string, normPartyId: string, object: string, partyClassificationType: string>, object: string, pageNumber: int, previousPageAPI: string, q: string, totalCount: int, totalPages: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({norm_party_search_id: $norm_party_search_id} | format pattern "/normPartySearch/{norm_party_search_id}") $qp)
+  let full_url = (build-url $base ({norm_party_search_id: (encode-path-segment $norm_party_search_id)} | format pattern "/normPartySearch/{norm_party_search_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3655,19 +3664,19 @@ export def "pacer-case-locator-case-search-all-courts list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --pacer-user-id: string # User ID or User Name of the PACER Account used while signing in to PACER. (e.g. johndoe)
   --pacer-client-code: string # Client Code used while signing in to PACER account. (e.g. john)
-  --case-number: string # If the court type is selected as All or if you need data for a specific case number format, then you need to use this option. Case numbers may be entered in each of the following formats:   	yy-nnnnn   	yy-tp-nnnnn   	yy tp nnnnn   	yytpnnnnn   	o:yy-nnnnn   	o:yy-tp-nnnnn   	o:yy tp nnnnn   	o:yytpnnnnn   where:   yy  case year (may be 2 or 4 digits)   nnnnn  case number (up to 5 digits)   tp  case type (up to 2 characters)   o  office where the case was filed (1 digit). (nullable, e.g. 12-1234)
+  --case-number: string # If the court type is selected as All or if you need data for a specific case number format, then you need to use this option. Case numbers may be entered in each of the following formats: yy-nnnnn yy-tp-nnnnn yy tp nnnnn yytpnnnnn o:yy-nnnnn o:yy-tp-nnnnn o:yy tp nnnnn o:yytpnnnnn where: yy case year (may be 2 or 4 digits) nnnnn case number (up to 5 digits) tp case type (up to 2 characters) o office where the case was filed (1 digit). (nullable, e.g. 12-1234)
   --pacer-case-id: int # Sequentially generated number that identifies the case in PACER system.
-  --case-title: string # You can search using the case name even if you know one party.   	Examples:   	A search for case title john doe v will result in all cases with the case title John Doe v.   	A search for case title Acme, Inc. will result in all case titles starting with Acme, Inc. (nullable)
+  --case-title: string # You can search using the case name even if you know one party. Examples: A search for case title john doe v will result in all cases with the case title John Doe v. A search for case title Acme, Inc. will result in all case titles starting with Acme, Inc. (nullable)
   --case-office: int # The divisional office in which the case was filed.
   --case-sequence-number: int # The sequence number of a given case. Ex 12345
   --case-year: int # The two digits or four digits of the year in which the case was filed. (nullable)
-  --case-type-array: list # Search can be narrowed down by passing caseTypes. Please use the <a href='https://docs.unicourt.com/pacer-glossary/appendix-a-case-types'>APPENDIX A: Case Types</a> mentioned in the API Documentation.   	Scenario: When mulitple case types needs to be requested.   	Imagine for a given case number 12-1234 I would like to search only with the case type civil(cv) and criminal(cr), My query in the request will look like the example mentioned below.   	Example: caseTypeArray=cv&caseTypeArray=cr
-  --court-region-id-array: list # Search can be narrowed down by passing courtRegionId. Please use the <a href='https://docs.unicourt.com/pacer-glossary/appendix-b-court-regions'>APPENDIX B: Court Regions</a> mentioned in the API Documentation.   	Scenario: When mulitple court region ids needs to be requested.   	Imagine for a given case number 12-1234 I would like to search in the court regions California Central (cac) and California Eastern (cae), My query in the request will look like the example mentioned below.   	Example: courtRegionIdArray=cac&courtRegionIdArray=cae
+  --case-type-array: list<string> # Search can be narrowed down by passing caseTypes. Please use the APPENDIX A: Case Types mentioned in the API Documentation. Scenario: When mulitple case types needs to be requested. Imagine for a given case number 12-1234 I would like to search only with the case type civil(cv) and criminal(cr), My query in the request will look like the example mentioned below. Example: caseTypeArray=cv&caseTypeArray=cr
+  --court-region-id-array: list<string> # Search can be narrowed down by passing courtRegionId. Please use the APPENDIX B: Court Regions mentioned in the API Documentation. Scenario: When mulitple court region ids needs to be requested. Imagine for a given case number 12-1234 I would like to search in the court regions California Central (cac) and California Eastern (cae), My query in the request will look like the example mentioned below. Example: courtRegionIdArray=cac&courtRegionIdArray=cae
   --case-filed-start-date: string # Narrowing the search by limiting the cases which matches the criteria for case filed start date on or after the given date. Format: YYYY-MM-DDTHH:MM:SS+ZZ:zz, Ex: 2017-12-20T12:54:24+00:00 (nullable, format: date-time)
   --case-filed-end-date: string # Narrowing the search by limiting the cases which matches the criteria for case filed end date on or before the given date. Format: YYYY-MM-DDTHH:MM:SS+ZZ:zz, Ex: 2017-12-20T12:54:24+00:00 (nullable, format: date-time)
   --case-terminated-start-date: string # Narrowing the search by limiting the cases which matches the criteria for case terminated start date on or after the given date. Format: YYYY-MM-DDTHH:MM:SS+ZZ:zz, Ex: 2017-12-20T12:54:24+00:00 (nullable, format: date-time)
   --case-terminated-end-date: string # Narrowing the search by limiting the cases which matches the criteria for case terminated end date on or before the given date. Format: YYYY-MM-DDTHH:MM:SS+ZZ:zz, Ex: 2017-12-20T12:54:24+00:00 (nullable, format: date-time)
-  --sort-parameter-query: string # The criteria based on which the search results are to be sorted. Please use the <a href='https://docs.unicourt.com/pacer-glossary/appendix-c-sort-parameter'>APPENDIX C: Sort Parameter - Sortable Case Parameters</a> mentioned in the API Documentation. The fields can be sorted either ASC or DESC.   	Scenario: When mulitple sort paramters needs to be requested.   	Imagine for a given case number 12-1234 I would like to sort the results in the Ascending order of courtId and caseId, My query in the request will look like the example mentioned below.   	Example: sortParameterQuery=courtId,ASC&caseId,ASC (nullable, default: sort=caseYear,DESC)
+  --sort-parameter-query: string # The criteria based on which the search results are to be sorted. Please use the APPENDIX C: Sort Parameter - Sortable Case Parameters mentioned in the API Documentation. The fields can be sorted either ASC or DESC. Scenario: When mulitple sort paramters needs to be requested. Imagine for a given case number 12-1234 I would like to sort the results in the Ascending order of courtId and caseId, My query in the request will look like the example mentioned below. Example: sortParameterQuery=courtId,ASC&caseId,ASC (nullable, default: sort=caseYear,DESC)
   --case-status: string@case-status-completer # Status of a case. 'closed' for a Terminated case, 'open' for Pending cases. If this parameter is not sent both cases that fall in open and closed will be queried. (nullable)
   --page-number: int # Page Number for a given Job ID or for the search your going to make.
 ]: nothing -> record<nextPageAPI: string, object: string, pacerPageInfo: record<first: bool, last: bool, number: int, numberOfElements: int, object: string, size: int, totalElements: int, totalPages: int>, pacerReceipt: record<billablePages: int, clientCode: string, csoId: int, description: string, firmId: string, loginId: string, object: string, reportId: string, search: string, searchFee: string, transactionDate: string>, pacerSearchResultsArray: table<hasOnlyMetaInfo: bool, object: string, pacerContent: record, uniCourtContent: record>, pageNumber: int, totalCount: int, totalPages: int> {
@@ -3695,20 +3704,20 @@ export def "pacer-case-locator-case-search-appeal-courts list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --pacer-user-id: string # User ID or User Name of the PACER Account used while signing in to PACER. (e.g. johndoe)
   --pacer-client-code: string # Client Code used while signing in to PACER account. (e.g. john)
-  --case-number: string # If the court type is selected as All or if you need data for a specific case number format, then you need to use this option. Case numbers may be entered in each of the following formats:   	yy-nnnnn    where:   yy  case year (may be 2 or 4 digits)   nnnnn  case number (up to 5 digits). (nullable, e.g. 12-1234)
+  --case-number: string # If the court type is selected as All or if you need data for a specific case number format, then you need to use this option. Case numbers may be entered in each of the following formats: yy-nnnnn where: yy case year (may be 2 or 4 digits) nnnnn case number (up to 5 digits). (nullable, e.g. 12-1234)
   --pacer-case-id: int # Sequentially generated number that identifies the case in PACER system.
-  --case-title: string # You can search using the case name even if you know one party.   	Examples:   	A search for case title john doe v will result in all cases with the case title John Doe v.   	A search for case title Acme, Inc. will result in all case titles starting with Acme, Inc. (nullable)
+  --case-title: string # You can search using the case name even if you know one party. Examples: A search for case title john doe v will result in all cases with the case title John Doe v. A search for case title Acme, Inc. will result in all case titles starting with Acme, Inc. (nullable)
   --case-office: int # The divisional office in which the case was filed. (nullable)
   --case-sequence-number: int # The sequence number of a given case. Ex 12345
   --case-year: int # The two digits or four digits of the year in which the case was filed.
-  --case-type-array: list # Search can be narrowed down by passing caseTypes. Please use the <a href='https://docs.unicourt.com/pacer-glossary/appendix-a-case-types'>APPENDIX A: Case Types</a> mentioned in the API Documentation.   	Scenario: When mulitple case types needs to be requested.   	Imagine for a given case number 12-1234 I would like to search only with the case type civil(cv) and criminal(cr), My query in the request will look like the example mentioned below.   	Example: caseTypeArray=cv&caseTypeArray=cr
-  --nature-of-suits-array: list # Search can be narrowed down by passing Nature Of Suits. Please use the <a href='https://docs.unicourt.com/pacer-glossary/appendix-e-nature-of-suits'>APPENDIX E - Appellate Nature Of Suits</a> mentioned in the API Documentation.   	Scenario: When mulitple nature of suits needs to be requested.   	Imagine for a given case number 12-1234 I would like to search with the nature of suit 1110 (Insurance) and 1150 (Overpayments & Enforc. of Judgments), My query in the request will look like the example mentioned below.   	Example: natureOfSuitsArray=1110&natureOfSuitsArray=1150
-  --court-region-id-array: list # Search can be narrowed down by passing courtRegionId. Please use the <a href='https://docs.unicourt.com/pacer-glossary/appendix-b-court-regions'>APPENDIX B: Court Regions</a> mentioned in the API Documentation.   	Scenario: When mulitple court region ids needs to be requested.   	Imagine for a given case number 12-1234 I would like to search in the court regions California Central (cac) and California Eastern (cae), My query in the request will look like the example mentioned below.   	Example: courtRegionIdArray=cac&courtRegionIdArray=cae
+  --case-type-array: list<string> # Search can be narrowed down by passing caseTypes. Please use the APPENDIX A: Case Types mentioned in the API Documentation. Scenario: When mulitple case types needs to be requested. Imagine for a given case number 12-1234 I would like to search only with the case type civil(cv) and criminal(cr), My query in the request will look like the example mentioned below. Example: caseTypeArray=cv&caseTypeArray=cr
+  --nature-of-suits-array: list<string> # Search can be narrowed down by passing Nature Of Suits. Please use the APPENDIX E - Appellate Nature Of Suits mentioned in the API Documentation. Scenario: When mulitple nature of suits needs to be requested. Imagine for a given case number 12-1234 I would like to search with the nature of suit 1110 (Insurance) and 1150 (Overpayments & Enforc. of Judgments), My query in the request will look like the example mentioned below. Example: natureOfSuitsArray=1110&natureOfSuitsArray=1150
+  --court-region-id-array: list<string> # Search can be narrowed down by passing courtRegionId. Please use the APPENDIX B: Court Regions mentioned in the API Documentation. Scenario: When mulitple court region ids needs to be requested. Imagine for a given case number 12-1234 I would like to search in the court regions California Central (cac) and California Eastern (cae), My query in the request will look like the example mentioned below. Example: courtRegionIdArray=cac&courtRegionIdArray=cae
   --case-filed-start-date: string # Narrowing the search by limiting the cases which matches the criteria for case filed start date on or after the given date. Format: YYYY-MM-DDTHH:MM:SS+ZZ:zz, Ex: 2017-12-20T12:54:24+00:00 (nullable, format: date-time)
   --case-filed-end-date: string # Narrowing the search by limiting the cases which matches the criteria for case filed end date on or before the given date. Format: YYYY-MM-DDTHH:MM:SS+ZZ:zz, Ex: 2017-12-20T12:54:24+00:00 (nullable, format: date-time)
   --case-terminated-start-date: string # Narrowing the search by limiting the cases which matches the criteria for case terminated start date on or after the given date. Format: YYYY-MM-DDTHH:MM:SS+ZZ:zz, Ex: 2017-12-20T12:54:24+00:00 (nullable, format: date-time)
   --case-terminated-end-date: string # Narrowing the search by limiting the cases which matches the criteria for case terminated end date on or before the given date. Format: YYYY-MM-DDTHH:MM:SS+ZZ:zz, Ex: 2017-12-20T12:54:24+00:00 (nullable, format: date-time)
-  --sort-parameter-query: string # The criteria based on which the search results are to be sorted. Please use the <a href='https://docs.unicourt.com/pacer-glossary/appendix-c-sort-parameter'>APPENDIX C: Sort Parameter - Sortable Case Parameters</a> mentioned in the API Documentation. The fields can be sorted either ASC or DESC.   	Scenario: When mulitple sort paramters needs to be requested.   	Imagine for a given case number 12-1234 I would like to sort the results in the Ascending order of courtId and caseId, My query in the request will look like the example mentioned below.   	Example: sortParameterQuery=courtId,ASC&caseId,ASC (nullable, default: sort=caseYear,DESC)
+  --sort-parameter-query: string # The criteria based on which the search results are to be sorted. Please use the APPENDIX C: Sort Parameter - Sortable Case Parameters mentioned in the API Documentation. The fields can be sorted either ASC or DESC. Scenario: When mulitple sort paramters needs to be requested. Imagine for a given case number 12-1234 I would like to sort the results in the Ascending order of courtId and caseId, My query in the request will look like the example mentioned below. Example: sortParameterQuery=courtId,ASC&caseId,ASC (nullable, default: sort=caseYear,DESC)
   --case-status: string@case-status-completer # Status of a case. 'closed' for a Terminated case, 'open' for Pending cases. If this parameter is not sent both cases that fall in open and closed will be queried. (nullable)
   --page-number: int # Page Number for a given Job ID or for the search your going to make. (e.g. 1)
 ]: nothing -> record<nextPageAPI: string, object: string, pacerPageInfo: record<first: bool, last: bool, number: int, numberOfElements: int, object: string, size: int, totalElements: int, totalPages: int>, pacerReceipt: record<billablePages: int, clientCode: string, csoId: int, description: string, firmId: string, loginId: string, object: string, reportId: string, search: string, searchFee: string, transactionDate: string>, pacerSearchResultsArray: table<hasOnlyMetaInfo: bool, object: string, pacerContent: record, uniCourtContent: record>, pageNumber: int, totalCount: int, totalPages: int> {
@@ -3736,24 +3745,24 @@ export def "pacer-case-locator-case-search-bankruptcy-courts list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --pacer-user-id: string # User ID or User Name of the PACER Account used while signing in to PACER. (e.g. johndoe)
   --pacer-client-code: string # Client Code used while signing in to PACER account. (e.g. john)
-  --case-number: string # If the court type is selected as All or if you need data for a specific case number format, then you need to use this option. Case numbers may be entered in each of the following formats:   	yy-nnnnn   	yy-tp-nnnnn   	yy tp nnnnn   	yytpnnnnn   	o:yy-nnnnn   	o:yy-tp-nnnnn   	o:yy tp nnnnn   	o:yytpnnnnn   where:   yy  case year (may be 2 or 4 digits)   nnnnn  case number (up to 5 digits)   tp  case type (up to 2 characters)   o  office where the case was filed (1 digit). (nullable, e.g. 12-1234)
+  --case-number: string # If the court type is selected as All or if you need data for a specific case number format, then you need to use this option. Case numbers may be entered in each of the following formats: yy-nnnnn yy-tp-nnnnn yy tp nnnnn yytpnnnnn o:yy-nnnnn o:yy-tp-nnnnn o:yy tp nnnnn o:yytpnnnnn where: yy case year (may be 2 or 4 digits) nnnnn case number (up to 5 digits) tp case type (up to 2 characters) o office where the case was filed (1 digit). (nullable, e.g. 12-1234)
   --pacer-case-id: int # Sequentially generated number that identifies the case in PACER system.
-  --case-title: string # You can search using the case name even if you know one party.   	Examples:   	A search for case title john doe v will result in all cases with the case title John Doe v.   	A search for case title Acme, Inc. will result in all case titles starting with Acme, Inc. (nullable)
+  --case-title: string # You can search using the case name even if you know one party. Examples: A search for case title john doe v will result in all cases with the case title John Doe v. A search for case title Acme, Inc. will result in all case titles starting with Acme, Inc. (nullable)
   --case-office: int # The divisional office in which the case was filed.
   --case-sequence-number: int # The sequence number of a given case. Ex 12345
   --case-year: int # The two digits or four digits of the year in which the case was filed.
-  --case-type-array: list # Search can be narrowed down by passing caseTypes. Please use the <a href='https://docs.unicourt.com/pacer-glossary/appendix-a-case-types'>APPENDIX A: Case Types</a> mentioned in the API Documentation.   	Scenario: When mulitple case types needs to be requested.   	Imagine for a given case number 12-1234 I would like to search only with the case type civil(cv) and criminal(cr), My query in the request will look like the example mentioned below.   	Example: caseTypeArray=cv&caseTypeArray=cr
-  --federal-bankruptcy-chapter-array: list # Search can be narrowed down by passing Federal Bankruptcy Chapters. Please use the <a href='https://docs.unicourt.com/pacer-glossary/appendix-d-bankruptcy-chapters'>APPENDIX D: Bankruptcy Chapters</a> mentioned in the API Documentation.   	Scenario: When mulitple Federal Bankruptcy Chapters needs to be requested.   	Imagine for a given case number 12-1234 I would like to search with the Federal Bankruptcy Chapters 7 (Chapter 7) and 11 (Chapter 11), My query in the request will look like the example mentioned below.   	Example: federalBankruptcyChapterArray=7&federalBankruptcyChapterArray=11
-  --court-region-id-array: list # Search can be narrowed down by passing courtRegionId. Please use the <a href='https://docs.unicourt.com/pacer-glossary/appendix-b-court-regions'>APPENDIX B: Court Regions</a> mentioned in the API Documentation.   	Scenario: When mulitple court region ids needs to be requested.   	Imagine for a given case number 12-1234 I would like to search in the court regions California Central (cac) and California Eastern (cae), My query in the request will look like the example mentioned below.   	Example: courtRegionIdArray=cac&courtRegionIdArray=cae
+  --case-type-array: list<string> # Search can be narrowed down by passing caseTypes. Please use the APPENDIX A: Case Types mentioned in the API Documentation. Scenario: When mulitple case types needs to be requested. Imagine for a given case number 12-1234 I would like to search only with the case type civil(cv) and criminal(cr), My query in the request will look like the example mentioned below. Example: caseTypeArray=cv&caseTypeArray=cr
+  --federal-bankruptcy-chapter-array: list<string> # Search can be narrowed down by passing Federal Bankruptcy Chapters. Please use the APPENDIX D: Bankruptcy Chapters mentioned in the API Documentation. Scenario: When mulitple Federal Bankruptcy Chapters needs to be requested. Imagine for a given case number 12-1234 I would like to search with the Federal Bankruptcy Chapters 7 (Chapter 7) and 11 (Chapter 11), My query in the request will look like the example mentioned below. Example: federalBankruptcyChapterArray=7&federalBankruptcyChapterArray=11
+  --court-region-id-array: list<string> # Search can be narrowed down by passing courtRegionId. Please use the APPENDIX B: Court Regions mentioned in the API Documentation. Scenario: When mulitple court region ids needs to be requested. Imagine for a given case number 12-1234 I would like to search in the court regions California Central (cac) and California Eastern (cae), My query in the request will look like the example mentioned below. Example: courtRegionIdArray=cac&courtRegionIdArray=cae
   --case-filed-start-date: string # Narrowing the search by limiting the cases which matches the criteria for case filed start date on or after the given date. Format: YYYY-MM-DDTHH:MM:SS+ZZ:zz, Ex: 2017-12-20T12:54:24+00:00 (nullable, format: date-time)
   --case-filed-end-date: string # Narrowing the search by limiting the cases which matches the criteria for case filed end date on or before the given date. Format: YYYY-MM-DDTHH:MM:SS+ZZ:zz, Ex: 2017-12-20T12:54:24+00:00 (nullable, format: date-time)
   --case-terminated-start-date: string # Narrowing the search by limiting the cases which matches the criteria for case terminated start date on or after the given date. Format: YYYY-MM-DDTHH:MM:SS+ZZ:zz, Ex: 2017-12-20T12:54:24+00:00 (nullable, format: date-time)
   --case-terminated-end-date: string # Narrowing the search by limiting the cases which matches the criteria for case terminated end date on or before the given date. Format: YYYY-MM-DDTHH:MM:SS+ZZ:zz, Ex: 2017-12-20T12:54:24+00:00 (nullable, format: date-time)
-  --case-discharged-start-date: string # Narrowing the search for bankruptcy cases by limiting the cases which matches the criteria for case discharged start date on or after the given date. Format: YYYY-MM-DDTHH:MM:SS+ZZ:zz, Ex: 2017-12-20T12:54:24+00:00   	Note: This parameter is applicable since we only perform this search for Bankruptcy Court type. (nullable, format: date-time)
-  --case-discharged-end-date: string # Narrowing the search for bankruptcy cases by limiting the cases which matches the criteria for case discharged end date on or before the given date. Format: YYYY-MM-DDTHH:MM:SS+ZZ:zz, Ex: 2017-12-20T12:54:24+00:00   	Note: This parameter is applicable since we only perform this search for Bankruptcy Court type. (nullable, format: date-time)
-  --case-dismissed-start-date: string # Narrowing the search for bankruptcy cases by limiting the cases which matches the criteria for case dismissed start date on or after the given date. Format: YYYY-MM-DDTHH:MM:SS+ZZ:zz, Ex: 2017-12-20T12:54:24+00:00   	Note: This parameter is applicable since we only perform this search for Bankruptcy Court type. (nullable, format: date-time)
+  --case-discharged-start-date: string # Narrowing the search for bankruptcy cases by limiting the cases which matches the criteria for case discharged start date on or after the given date. Format: YYYY-MM-DDTHH:MM:SS+ZZ:zz, Ex: 2017-12-20T12:54:24+00:00 Note: This parameter is applicable since we only perform this search for Bankruptcy Court type. (nullable, format: date-time)
+  --case-discharged-end-date: string # Narrowing the search for bankruptcy cases by limiting the cases which matches the criteria for case discharged end date on or before the given date. Format: YYYY-MM-DDTHH:MM:SS+ZZ:zz, Ex: 2017-12-20T12:54:24+00:00 Note: This parameter is applicable since we only perform this search for Bankruptcy Court type. (nullable, format: date-time)
+  --case-dismissed-start-date: string # Narrowing the search for bankruptcy cases by limiting the cases which matches the criteria for case dismissed start date on or after the given date. Format: YYYY-MM-DDTHH:MM:SS+ZZ:zz, Ex: 2017-12-20T12:54:24+00:00 Note: This parameter is applicable since we only perform this search for Bankruptcy Court type. (nullable, format: date-time)
   --case-dismissed-end-date: string # Narrowing the search by limiting the cases which matches the criteria for case terminated end date on or before the given date. Format: YYYY-MM-DDTHH:MM:SS+ZZ:zz, Ex: 2017-12-20T12:54:24+00:00 (nullable, format: date-time)
-  --sort-parameter-query: string # The criteria based on which the search results are to be sorted. Please use the <a href='https://docs.unicourt.com/pacer-glossary/appendix-c-sort-parameter'>APPENDIX C: Sort Parameter - Sortable Case Parameters</a> mentioned in the API Documentation. The fields can be sorted either ASC or DESC.   	Scenario: When mulitple sort paramters needs to be requested.   	Imagine for a given case number 12-1234 I would like to sort the results in the Ascending order of courtId and caseId, My query in the request will look like the example mentioned below.   	Example: sortParameterQuery=courtId,ASC&caseId,ASC (nullable, default: sort=caseYear,DESC)
+  --sort-parameter-query: string # The criteria based on which the search results are to be sorted. Please use the APPENDIX C: Sort Parameter - Sortable Case Parameters mentioned in the API Documentation. The fields can be sorted either ASC or DESC. Scenario: When mulitple sort paramters needs to be requested. Imagine for a given case number 12-1234 I would like to sort the results in the Ascending order of courtId and caseId, My query in the request will look like the example mentioned below. Example: sortParameterQuery=courtId,ASC&caseId,ASC (nullable, default: sort=caseYear,DESC)
   --case-status: string@case-status-completer # Status of a case. 'closed' for a Terminated case, 'open' for Pending cases. If this parameter is not sent both cases that fall in open and closed will be queried. (nullable)
   --page-number: int # Page Number for a given Job ID or for the search your going to make.
 ]: nothing -> record<nextPageAPI: string, object: string, pacerPageInfo: record<first: bool, last: bool, number: int, numberOfElements: int, object: string, size: int, totalElements: int, totalPages: int>, pacerReceipt: record<billablePages: int, clientCode: string, csoId: int, description: string, firmId: string, loginId: string, object: string, reportId: string, search: string, searchFee: string, transactionDate: string>, pacerSearchResultsArray: table<hasOnlyMetaInfo: bool, object: string, pacerContent: record, uniCourtContent: record>, pageNumber: int, totalCount: int, totalPages: int> {
@@ -3781,20 +3790,20 @@ export def "pacer-case-locator-case-search-civil-courts list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --pacer-user-id: string # User ID or User Name of the PACER Account used while signing in to PACER. (e.g. johndoe)
   --pacer-client-code: string # Client Code used while signing in to PACER account. (e.g. john)
-  --case-number: string # If the court type is selected as All or if you need data for a specific case number format, then you need to use this option. Case numbers may be entered in each of the following formats:   	yy-nnnnn   	yy-tp-nnnnn   	yy tp nnnnn   	yytpnnnnn   	o:yy-nnnnn   	o:yy-tp-nnnnn   	o:yy tp nnnnn   	o:yytpnnnnn   where:   yy  case year (may be 2 or 4 digits)   nnnnn  case number (up to 5 digits)   tp  case type (up to 2 characters)   o  office where the case was filed (1 digit). (nullable, e.g. 12-1234)
+  --case-number: string # If the court type is selected as All or if you need data for a specific case number format, then you need to use this option. Case numbers may be entered in each of the following formats: yy-nnnnn yy-tp-nnnnn yy tp nnnnn yytpnnnnn o:yy-nnnnn o:yy-tp-nnnnn o:yy tp nnnnn o:yytpnnnnn where: yy case year (may be 2 or 4 digits) nnnnn case number (up to 5 digits) tp case type (up to 2 characters) o office where the case was filed (1 digit). (nullable, e.g. 12-1234)
   --pacer-case-id: int # Sequentially generated number that identifies the case in PACER system.
-  --case-title: string # You can search using the case name even if you know one party.   	Examples:   	A search for case title john doe v will result in all cases with the case title John Doe v.   	A search for case title Acme, Inc. will result in all case titles starting with Acme, Inc. (nullable)
+  --case-title: string # You can search using the case name even if you know one party. Examples: A search for case title john doe v will result in all cases with the case title John Doe v. A search for case title Acme, Inc. will result in all case titles starting with Acme, Inc. (nullable)
   --case-office: int # The divisional office in which the case was filed.
   --case-sequence-number: int # The sequence number of a given case. Ex 12345
   --case-year: int # The two digits or four digits of the year in which the case was filed.
-  --case-type-array: list # Search can be narrowed down by passing caseTypes. Please use the <a href='https://docs.unicourt.com/pacer-glossary/appendix-a-case-types'>APPENDIX A: Case Types</a> mentioned in the API Documentation.   	Scenario: When mulitple case types needs to be requested.   	Imagine for a given case number 12-1234 I would like to search only with the case type civil(cv) and criminal(cr), My query in the request will look like the example mentioned below.   	Example: caseTypeArray=cv&caseTypeArray=cr
-  --nature-of-suits-array: list # Search can be narrowed down by passing Nature Of Suits. Please use the <a href='https://docs.unicourt.com/pacer-glossary/appendix-e-nature-of-suits'>APPENDIX E - Civil Nature Of Suits</a> mentioned in the API Documentation.   	Scenario: When mulitple nature of suits needs to be requested.   	Imagine for a given case number 12-1234 I would like to search with the nature of suit 110 (Insurance) and 140 (Negotiable Instrument), My query in the request will look like the example mentioned below.   	Example: natureOfSuitsArray=110&natureOfSuitsArray=140
-  --court-region-id-array: list # Search can be narrowed down by passing courtRegionId. Please use the <a href='https://docs.unicourt.com/pacer-glossary/appendix-b-court-regions'>APPENDIX B: Court Regions</a> mentioned in the API Documentation.   	Scenario: When mulitple court region ids needs to be requested.   	Imagine for a given case number 12-1234 I would like to search in the court regions California Central (cac) and California Eastern (cae), My query in the request will look like the example mentioned below.   	Example: courtRegionIdArray=cac&courtRegionIdArray=cae
+  --case-type-array: list<string> # Search can be narrowed down by passing caseTypes. Please use the APPENDIX A: Case Types mentioned in the API Documentation. Scenario: When mulitple case types needs to be requested. Imagine for a given case number 12-1234 I would like to search only with the case type civil(cv) and criminal(cr), My query in the request will look like the example mentioned below. Example: caseTypeArray=cv&caseTypeArray=cr
+  --nature-of-suits-array: list<string> # Search can be narrowed down by passing Nature Of Suits. Please use the APPENDIX E - Civil Nature Of Suits mentioned in the API Documentation. Scenario: When mulitple nature of suits needs to be requested. Imagine for a given case number 12-1234 I would like to search with the nature of suit 110 (Insurance) and 140 (Negotiable Instrument), My query in the request will look like the example mentioned below. Example: natureOfSuitsArray=110&natureOfSuitsArray=140
+  --court-region-id-array: list<string> # Search can be narrowed down by passing courtRegionId. Please use the APPENDIX B: Court Regions mentioned in the API Documentation. Scenario: When mulitple court region ids needs to be requested. Imagine for a given case number 12-1234 I would like to search in the court regions California Central (cac) and California Eastern (cae), My query in the request will look like the example mentioned below. Example: courtRegionIdArray=cac&courtRegionIdArray=cae
   --case-filed-start-date: string # Narrowing the search by limiting the cases which matches the criteria for case filed start date on or after the given date. Format: YYYY-MM-DDTHH:MM:SS+ZZ:zz, Ex: 2017-12-20T12:54:24+00:00 (nullable, format: date-time)
   --case-filed-end-date: string # Narrowing the search by limiting the cases which matches the criteria for case filed end date on or before the given date. Format: YYYY-MM-DDTHH:MM:SS+ZZ:zz, Ex: 2017-12-20T12:54:24+00:00 (nullable, format: date-time)
   --case-terminated-start-date: string # Narrowing the search by limiting the cases which matches the criteria for case terminated start date on or after the given date. Format: YYYY-MM-DDTHH:MM:SS+ZZ:zz, Ex: 2017-12-20T12:54:24+00:00 (nullable, format: date-time)
   --case-terminated-end-date: string # Narrowing the search by limiting the cases which matches the criteria for case terminated end date on or before the given date. Format: YYYY-MM-DDTHH:MM:SS+ZZ:zz, Ex: 2017-12-20T12:54:24+00:00 (nullable, format: date-time)
-  --sort-parameter-query: string # The criteria based on which the search results are to be sorted. Please use the <a href='https://docs.unicourt.com/pacer-glossary/appendix-c-sort-parameter'>APPENDIX C: Sort Parameter - Sortable Case Parameters</a> mentioned in the API Documentation. The fields can be sorted either ASC or DESC.   	Scenario: When mulitple sort paramters needs to be requested.   	Imagine for a given case number 12-1234 I would like to sort the results in the Ascending order of courtId and caseId, My query in the request will look like the example mentioned below.   	Example: sortParameterQuery=courtId,ASC&caseId,ASC (nullable, default: sort=caseYear,DESC)
+  --sort-parameter-query: string # The criteria based on which the search results are to be sorted. Please use the APPENDIX C: Sort Parameter - Sortable Case Parameters mentioned in the API Documentation. The fields can be sorted either ASC or DESC. Scenario: When mulitple sort paramters needs to be requested. Imagine for a given case number 12-1234 I would like to sort the results in the Ascending order of courtId and caseId, My query in the request will look like the example mentioned below. Example: sortParameterQuery=courtId,ASC&caseId,ASC (nullable, default: sort=caseYear,DESC)
   --case-status: string@case-status-completer # Status of a case. 'closed' for a Terminated case, 'open' for Pending cases. If this parameter is not sent both cases that fall in open and closed will be queried. (nullable)
   --page-number: int # Page Number for a given Job ID or for the search your going to make.
 ]: nothing -> record<nextPageAPI: string, object: string, pacerPageInfo: record<first: bool, last: bool, number: int, numberOfElements: int, object: string, size: int, totalElements: int, totalPages: int>, pacerReceipt: record<billablePages: int, clientCode: string, csoId: int, description: string, firmId: string, loginId: string, object: string, reportId: string, search: string, searchFee: string, transactionDate: string>, pacerSearchResultsArray: table<hasOnlyMetaInfo: bool, object: string, pacerContent: record, uniCourtContent: record>, pageNumber: int, totalCount: int, totalPages: int> {
@@ -3822,19 +3831,19 @@ export def "pacer-case-locator-case-search-criminal-courts list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --pacer-user-id: string # User ID or User Name of the PACER Account used while signing in to PACER. (e.g. johndoe)
   --pacer-client-code: string # Client Code used while signing in to PACER account. (e.g. john)
-  --case-number: string # If the court type is selected as All or if you need data for a specific case number format, then you need to use this option. Case numbers may be entered in each of the following formats:   	yy-nnnnn   	yy-tp-nnnnn   	yy tp nnnnn   	yytpnnnnn   	o:yy-nnnnn   	o:yy-tp-nnnnn   	o:yy tp nnnnn   	o:yytpnnnnn   where:   yy  case year (may be 2 or 4 digits)   nnnnn  case number (up to 5 digits)   tp  case type (up to 2 characters)   o  office where the case was filed (1 digit). (nullable, e.g. 12-1234)
+  --case-number: string # If the court type is selected as All or if you need data for a specific case number format, then you need to use this option. Case numbers may be entered in each of the following formats: yy-nnnnn yy-tp-nnnnn yy tp nnnnn yytpnnnnn o:yy-nnnnn o:yy-tp-nnnnn o:yy tp nnnnn o:yytpnnnnn where: yy case year (may be 2 or 4 digits) nnnnn case number (up to 5 digits) tp case type (up to 2 characters) o office where the case was filed (1 digit). (nullable, e.g. 12-1234)
   --pacer-case-id: int # Sequentially generated number that identifies the case in PACER system.
-  --case-title: string # You can search using the case name even if you know one party.   	Examples:   	A search for case title john doe v will result in all cases with the case title John Doe v.   	A search for case title Acme, Inc. will result in all case titles starting with Acme, Inc. (nullable)
+  --case-title: string # You can search using the case name even if you know one party. Examples: A search for case title john doe v will result in all cases with the case title John Doe v. A search for case title Acme, Inc. will result in all case titles starting with Acme, Inc. (nullable)
   --case-office: int # The divisional office in which the case was filed.
   --case-sequence-number: int # The sequence number of a given case. Ex 12345
   --case-year: int # The two digits or four digits of the year in which the case was filed.
-  --case-type-array: list # Search can be narrowed down by passing caseTypes. Please use the <a href='https://docs.unicourt.com/pacer-glossary/appendix-a-case-types'>APPENDIX A: Case Types</a> mentioned in the API Documentation.   	Scenario: When mulitple case types needs to be requested.   	Imagine for a given case number 12-1234 I would like to search only with the case type civil(cv) and criminal(cr), My query in the request will look like the example mentioned below.   	Example: caseTypeArray=cv&caseTypeArray=cr
-  --court-region-id-array: list # Search can be narrowed down by passing courtRegionId. Please use the <a href='https://docs.unicourt.com/pacer-glossary/appendix-b-court-regions'>APPENDIX B: Court Regions</a> mentioned in the API Documentation.   	Scenario: When mulitple court region ids needs to be requested.   	Imagine for a given case number 12-1234 I would like to search in the court regions California Central (cac) and California Eastern (cae), My query in the request will look like the example mentioned below.   	Example: courtRegionIdArray=cac&courtRegionIdArray=cae
+  --case-type-array: list<string> # Search can be narrowed down by passing caseTypes. Please use the APPENDIX A: Case Types mentioned in the API Documentation. Scenario: When mulitple case types needs to be requested. Imagine for a given case number 12-1234 I would like to search only with the case type civil(cv) and criminal(cr), My query in the request will look like the example mentioned below. Example: caseTypeArray=cv&caseTypeArray=cr
+  --court-region-id-array: list<string> # Search can be narrowed down by passing courtRegionId. Please use the APPENDIX B: Court Regions mentioned in the API Documentation. Scenario: When mulitple court region ids needs to be requested. Imagine for a given case number 12-1234 I would like to search in the court regions California Central (cac) and California Eastern (cae), My query in the request will look like the example mentioned below. Example: courtRegionIdArray=cac&courtRegionIdArray=cae
   --case-filed-start-date: string # Narrowing the search by limiting the cases which matches the criteria for case filed start date on or after the given date. Format: YYYY-MM-DDTHH:MM:SS+ZZ:zz, Ex: 2017-12-20T12:54:24+00:00 (nullable, format: date-time)
   --case-filed-end-date: string # Narrowing the search by limiting the cases which matches the criteria for case filed end date on or before the given date. Format: YYYY-MM-DDTHH:MM:SS+ZZ:zz, Ex: 2017-12-20T12:54:24+00:00 (nullable, format: date-time)
   --case-terminated-start-date: string # Narrowing the search by limiting the cases which matches the criteria for case terminated start date on or after the given date. Format: YYYY-MM-DDTHH:MM:SS+ZZ:zz, Ex: 2017-12-20T12:54:24+00:00 (nullable, format: date-time)
   --case-terminated-end-date: string # Narrowing the search by limiting the cases which matches the criteria for case terminated end date on or before the given date. Format: YYYY-MM-DDTHH:MM:SS+ZZ:zz, Ex: 2017-12-20T12:54:24+00:00 (nullable, format: date-time)
-  --sort-parameter-query: string # The criteria based on which the search results are to be sorted. Please use the <a href='https://docs.unicourt.com/pacer-glossary/appendix-c-sort-parameter'>APPENDIX C: Sort Parameter - Sortable Case Parameters</a> mentioned in the API Documentation. The fields can be sorted either ASC or DESC.   	Scenario: When mulitple sort paramters needs to be requested.   	Imagine for a given case number 12-1234 I would like to sort the results in the Ascending order of courtId and caseId, My query in the request will look like the example mentioned below.   	Example: sortParameterQuery=courtId,ASC&caseId,ASC (nullable, default: sort=caseYear,DESC)
+  --sort-parameter-query: string # The criteria based on which the search results are to be sorted. Please use the APPENDIX C: Sort Parameter - Sortable Case Parameters mentioned in the API Documentation. The fields can be sorted either ASC or DESC. Scenario: When mulitple sort paramters needs to be requested. Imagine for a given case number 12-1234 I would like to sort the results in the Ascending order of courtId and caseId, My query in the request will look like the example mentioned below. Example: sortParameterQuery=courtId,ASC&caseId,ASC (nullable, default: sort=caseYear,DESC)
   --case-status: string@case-status-completer # Status of a case. 'closed' for a Terminated case, 'open' for Pending cases. If this parameter is not sent both cases that fall in open and closed will be queried. (nullable)
   --page-number: int # Page Number for a given Job ID or for the search your going to make.
 ]: nothing -> record<nextPageAPI: string, object: string, pacerPageInfo: record<first: bool, last: bool, number: int, numberOfElements: int, object: string, size: int, totalElements: int, totalPages: int>, pacerReceipt: record<billablePages: int, clientCode: string, csoId: int, description: string, firmId: string, loginId: string, object: string, reportId: string, search: string, searchFee: string, transactionDate: string>, pacerSearchResultsArray: table<hasOnlyMetaInfo: bool, object: string, pacerContent: record, uniCourtContent: record>, pageNumber: int, totalCount: int, totalPages: int> {
@@ -3862,20 +3871,20 @@ export def "pacer-case-locator-case-search-multi-district-courts list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --pacer-user-id: string # User ID or User Name of the PACER Account used while signing in to PACER. (e.g. johndoe)
   --pacer-client-code: string # Client Code used while signing in to PACER account. (e.g. john)
-  --case-number: string # If the court type is selected as All or if you need data for a specific case number format, then you need to use this option. Case numbers may be entered in each of the following formats:   	yy-nnnnn   	yy-tp-nnnnn   	yy tp nnnnn   	yytpnnnnn   	o:yy-nnnnn   	o:yy-tp-nnnnn   	o:yy tp nnnnn   	o:yytpnnnnn   where:   yy  case year (may be 2 or 4 digits)   nnnnn  case number (up to 5 digits)   tp  case type (up to 2 characters)   o  office where the case was filed (1 digit). (nullable, e.g. 12-1234)
+  --case-number: string # If the court type is selected as All or if you need data for a specific case number format, then you need to use this option. Case numbers may be entered in each of the following formats: yy-nnnnn yy-tp-nnnnn yy tp nnnnn yytpnnnnn o:yy-nnnnn o:yy-tp-nnnnn o:yy tp nnnnn o:yytpnnnnn where: yy case year (may be 2 or 4 digits) nnnnn case number (up to 5 digits) tp case type (up to 2 characters) o office where the case was filed (1 digit). (nullable, e.g. 12-1234)
   --jpml-number: int # Master JPML Case Number.
   --pacer-case-id: int # Sequentially generated number that identifies the case in PACER system.
-  --case-title: string # You can search using the case name even if you know one party.   	Examples:   	A search for case title john doe v will result in all cases with the case title John Doe v.   	A search for case title Acme, Inc. will result in all case titles starting with Acme, Inc. (nullable)
+  --case-title: string # You can search using the case name even if you know one party. Examples: A search for case title john doe v will result in all cases with the case title John Doe v. A search for case title Acme, Inc. will result in all case titles starting with Acme, Inc. (nullable)
   --case-office: int # The divisional office in which the case was filed.
   --case-sequence-number: int # The sequence number of a given case. Ex 12345
   --case-year: int # The two digits or four digits of the year in which the case was filed.
-  --case-type-array: list # Search can be narrowed down by passing caseTypes. Please use the <a href='https://docs.unicourt.com/pacer-glossary/appendix-a-case-types'>APPENDIX A: Case Types</a> mentioned in the API Documentation.   	Scenario: When mulitple case types needs to be requested.   	Imagine for a given case number 12-1234 I would like to search only with the case type civil(cv) and criminal(cr), My query in the request will look like the example mentioned below.   	Example: caseTypeArray=cv&caseTypeArray=cr
-  --court-region-id-array: list # Search can be narrowed down by passing courtRegionId. Please use the <a href='https://docs.unicourt.com/pacer-glossary/appendix-b-court-regions'>APPENDIX B: Court Regions</a> mentioned in the API Documentation.   	Scenario: When mulitple court region ids needs to be requested.   	Imagine for a given case number 12-1234 I would like to search in the court regions California Central (cac) and California Eastern (cae), My query in the request will look like the example mentioned below.   	Example: courtRegionIdArray=cac&courtRegionIdArray=cae
+  --case-type-array: list<string> # Search can be narrowed down by passing caseTypes. Please use the APPENDIX A: Case Types mentioned in the API Documentation. Scenario: When mulitple case types needs to be requested. Imagine for a given case number 12-1234 I would like to search only with the case type civil(cv) and criminal(cr), My query in the request will look like the example mentioned below. Example: caseTypeArray=cv&caseTypeArray=cr
+  --court-region-id-array: list<string> # Search can be narrowed down by passing courtRegionId. Please use the APPENDIX B: Court Regions mentioned in the API Documentation. Scenario: When mulitple court region ids needs to be requested. Imagine for a given case number 12-1234 I would like to search in the court regions California Central (cac) and California Eastern (cae), My query in the request will look like the example mentioned below. Example: courtRegionIdArray=cac&courtRegionIdArray=cae
   --case-filed-start-date: string # Narrowing the search by limiting the cases which matches the criteria for case filed start date on or after the given date. Format: YYYY-MM-DDTHH:MM:SS+ZZ:zz, Ex: 2017-12-20T12:54:24+00:00 (nullable, format: date-time)
   --case-filed-end-date: string # Narrowing the search by limiting the cases which matches the criteria for case filed end date on or before the given date. Format: YYYY-MM-DDTHH:MM:SS+ZZ:zz, Ex: 2017-12-20T12:54:24+00:00 (nullable, format: date-time)
   --case-terminated-start-date: string # Narrowing the search by limiting the cases which matches the criteria for case terminated start date on or after the given date. Format: YYYY-MM-DDTHH:MM:SS+ZZ:zz, Ex: 2017-12-20T12:54:24+00:00 (nullable, format: date-time)
   --case-terminated-end-date: string # Narrowing the search by limiting the cases which matches the criteria for case terminated end date on or before the given date. Format: YYYY-MM-DDTHH:MM:SS+ZZ:zz, Ex: 2017-12-20T12:54:24+00:00 (nullable, format: date-time)
-  --sort-parameter-query: string # The criteria based on which the search results are to be sorted. Please use the <a href='https://docs.unicourt.com/pacer-glossary/appendix-c-sort-parameter'>APPENDIX C: Sort Parameter - Sortable Case Parameters</a> mentioned in the API Documentation. The fields can be sorted either ASC or DESC.   	Scenario: When mulitple sort paramters needs to be requested.   	Imagine for a given case number 12-1234 I would like to sort the results in the Ascending order of courtId and caseId, My query in the request will look like the example mentioned below.   	Example: sortParameterQuery=courtId,ASC&caseId,ASC (nullable, default: sort=caseYear,DESC)
+  --sort-parameter-query: string # The criteria based on which the search results are to be sorted. Please use the APPENDIX C: Sort Parameter - Sortable Case Parameters mentioned in the API Documentation. The fields can be sorted either ASC or DESC. Scenario: When mulitple sort paramters needs to be requested. Imagine for a given case number 12-1234 I would like to sort the results in the Ascending order of courtId and caseId, My query in the request will look like the example mentioned below. Example: sortParameterQuery=courtId,ASC&caseId,ASC (nullable, default: sort=caseYear,DESC)
   --case-status: string@case-status-completer # Status of a case. 'closed' for a Terminated case, 'open' for Pending cases. If this parameter is not sent both cases that fall in open and closed will be queried. (nullable)
   --page-number: int # Page Number for a given Job ID or for the search your going to make.
 ]: nothing -> record<nextPageAPI: string, object: string, pacerPageInfo: record<first: bool, last: bool, number: int, numberOfElements: int, object: string, size: int, totalElements: int, totalPages: int>, pacerReceipt: record<billablePages: int, clientCode: string, csoId: int, description: string, firmId: string, loginId: string, object: string, reportId: string, search: string, searchFee: string, transactionDate: string>, pacerSearchResultsArray: table<hasOnlyMetaInfo: bool, object: string, pacerContent: record, uniCourtContent: record>, pageNumber: int, totalCount: int, totalPages: int> {
@@ -3903,7 +3912,7 @@ export def "pacer-case-locator-party-search-all-courts list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --pacer-user-id: string # User ID or User Name of the PACER Account used while signing in to PACER. (e.g. johndoe)
   --pacer-client-code: string # Client Code used while signing in to PACER account. (e.g. john)
-  --case-number: string # If the court type is selected as All or if you need data for a specific case number format, then you need to use this option. Case numbers may be entered in each of the following formats:   	yy-nnnnn   	yy-tp-nnnnn   	yy tp nnnnn   	yytpnnnnn   	o:yy-nnnnn   	o:yy-tp-nnnnn   	o:yy tp nnnnn   	o:yytpnnnnn   where:   yy  case year (may be 2 or 4 digits)   nnnnn  case number (up to 5 digits)   tp  case type (up to 2 characters)   o  office where the case was filed (1 digit). (nullable, e.g. 12-1234)
+  --case-number: string # If the court type is selected as All or if you need data for a specific case number format, then you need to use this option. Case numbers may be entered in each of the following formats: yy-nnnnn yy-tp-nnnnn yy tp nnnnn yytpnnnnn o:yy-nnnnn o:yy-tp-nnnnn o:yy tp nnnnn o:yytpnnnnn where: yy case year (may be 2 or 4 digits) nnnnn case number (up to 5 digits) tp case type (up to 2 characters) o office where the case was filed (1 digit). (nullable, e.g. 12-1234)
   --pacer-case-id: int # Sequentially generated number that identifies the case in PACER system.
   --last-name: string # The last name of a party to search. This can be person or non person entity. (nullable, e.g. John)
   --first-name: string # The first name of a party to search. (nullable, e.g. John)
@@ -3911,20 +3920,20 @@ export def "pacer-case-locator-party-search-all-courts list" [
   --generation: string # The name suffix (e.g., III, MD). (nullable, e.g. III)
   --party-type: string # The court-assigned party type for a party involved in a case. Party type codes are created and assigned by individual courts, and as such, their meanings can vary from court to court. (nullable, e.g. ptf)
   --party-exact-name-match: oneof<nothing, bool> # When set to true this field will search the party with an exact match of the name provided.
-  --party-role-array: list # The court-assigned role for a party to a case. Party role codes are created and assigned by individual courts, and as such, their meanings can vary from court to court.
-  --case-title: string # You can search using the case name even if you know one party.   	Examples:   	A search for case title john doe v will result in all cases with the case title John Doe v.   	A search for case title Acme, Inc. will result in all case titles starting with Acme, Inc. (nullable)
+  --party-role-array: list<string> # The court-assigned role for a party to a case. Party role codes are created and assigned by individual courts, and as such, their meanings can vary from court to court.
+  --case-title: string # You can search using the case name even if you know one party. Examples: A search for case title john doe v will result in all cases with the case title John Doe v. A search for case title Acme, Inc. will result in all case titles starting with Acme, Inc. (nullable)
   --case-office: int # The divisional office in which the case was filed.
   --case-sequence-number: int # The sequence number of a given case. Ex 12345
   --case-year: int # The two digits or four digits of the year in which the case was filed.
-  --case-type-array: list # Search can be narrowed down by passing caseTypes. Please use the <a href='https://docs.unicourt.com/pacer-glossary/appendix-a-case-types'>APPENDIX A: Case Types</a> mentioned in the API Documentation.   	Scenario: When mulitple case types needs to be requested.   	Imagine for a given case number 12-1234 I would like to search only with the case type civil(cv) and criminal(cr), My query in the request will look like the example mentioned below.   	Example: caseTypeArray=cv&caseTypeArray=cr
-  --court-region-id-array: list # Search can be narrowed down by passing courtRegionId. Please use the <a href='https://docs.unicourt.com/pacer-glossary/appendix-b-court-regions'>APPENDIX B: Court Regions</a> mentioned in the API Documentation.   	Scenario: When mulitple court region ids needs to be requested.   	Imagine for a given case number 12-1234 I would like to search in the court regions California Central (cac) and California Eastern (cae), My query in the request will look like the example mentioned below.   	Example: courtRegionIdArray=cac&courtRegionIdArray=cae
+  --case-type-array: list<string> # Search can be narrowed down by passing caseTypes. Please use the APPENDIX A: Case Types mentioned in the API Documentation. Scenario: When mulitple case types needs to be requested. Imagine for a given case number 12-1234 I would like to search only with the case type civil(cv) and criminal(cr), My query in the request will look like the example mentioned below. Example: caseTypeArray=cv&caseTypeArray=cr
+  --court-region-id-array: list<string> # Search can be narrowed down by passing courtRegionId. Please use the APPENDIX B: Court Regions mentioned in the API Documentation. Scenario: When mulitple court region ids needs to be requested. Imagine for a given case number 12-1234 I would like to search in the court regions California Central (cac) and California Eastern (cae), My query in the request will look like the example mentioned below. Example: courtRegionIdArray=cac&courtRegionIdArray=cae
   --case-year-from: int # Limit the results of the search to those cases from the year specified or later
   --case-year-to: int # Limit the results of the search to those cases from the year specified or earlier
   --case-filed-start-date: string # Narrowing the search by limiting the cases which matches the criteria for case filed start date on or after the given date. Format: YYYY-MM-DDTHH:MM:SS+ZZ:zz, Ex: 2017-12-20T12:54:24+00:00 (nullable, format: date-time)
   --case-filed-end-date: string # Narrowing the search by limiting the cases which matches the criteria for case filed end date on or before the given date. Format: YYYY-MM-DDTHH:MM:SS+ZZ:zz, Ex: 2017-12-20T12:54:24+00:00 (nullable, format: date-time)
   --case-terminated-start-date: string # Narrowing the search by limiting the cases which matches the criteria for case terminated start date on or after the given date. Format: YYYY-MM-DDTHH:MM:SS+ZZ:zz, Ex: 2017-12-20T12:54:24+00:00 (nullable, format: date-time)
   --case-terminated-end-date: string # Narrowing the search by limiting the cases which matches the criteria for case terminated end date on or before the given date. Format: YYYY-MM-DDTHH:MM:SS+ZZ:zz, Ex: 2017-12-20T12:54:24+00:00 (nullable, format: date-time)
-  --sort-parameter-query: string # The criteria based on which the search results are to be sorted. Please use the <a href='https://docs.unicourt.com/pacer-glossary/appendix-c-sort-parameter'>APPENDIX C: Sort Parameter - Sortable Party Parameters</a> mentioned in the API Documentation. The fields can be sorted either ASC or DESC.   	Scenario 1: When mulitple sort paramters needs to be requested.   	Imagine for a given case number 12-1234 I would like to sort the results in the Ascending order of courtId and caseId, My query in the request will look like the example mentioned below.   	Example: sortParameterQuery=courtId,ASC&caseId,ASC   	Scenario 2: When you want to sort the response using the case parameters in the party search.   	Imagine for a given case number 12-1234 I would like to sort the results in the Ascending order of caseOffice and descending order of caseId, My query in the request will look like the example mentioned below.   	Example: sortParameterQuery=courtCase.caseOffice,ASC&caseid,DESC (nullable, default: sort=caseYear,DESC)
+  --sort-parameter-query: string # The criteria based on which the search results are to be sorted. Please use the APPENDIX C: Sort Parameter - Sortable Party Parameters mentioned in the API Documentation. The fields can be sorted either ASC or DESC. Scenario 1: When mulitple sort paramters needs to be requested. Imagine for a given case number 12-1234 I would like to sort the results in the Ascending order of courtId and caseId, My query in the request will look like the example mentioned below. Example: sortParameterQuery=courtId,ASC&caseId,ASC Scenario 2: When you want to sort the response using the case parameters in the party search. Imagine for a given case number 12-1234 I would like to sort the results in the Ascending order of caseOffice and descending order of caseId, My query in the request will look like the example mentioned below. Example: sortParameterQuery=courtCase.caseOffice,ASC&caseid,DESC (nullable, default: sort=caseYear,DESC)
   --case-status: string@case-status-completer # Status of a case. 'closed' for a Terminated case, 'open' for Pending cases. If this parameter is not sent both cases that fall in open and closed will be queried. (nullable)
   --page-number: int # Page Number for a given Job ID or for the search your going to make.
 ]: nothing -> record<nextPageAPI: string, object: string, pacerPageInfo: record<first: bool, last: bool, number: int, numberOfElements: int, object: string, size: int, totalElements: int, totalPages: int>, pacerReceipt: record<billablePages: int, clientCode: string, csoId: int, description: string, firmId: string, loginId: string, object: string, reportId: string, search: string, searchFee: string, transactionDate: string>, pacerSearchResultsArray: table<hasOnlyMetaInfo: bool, object: string, pacerContent: record, uniCourtContent: record>, pageNumber: int, totalCount: int, totalPages: int> {
@@ -3952,7 +3961,7 @@ export def "pacer-case-locator-party-search-appeal-courts list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --pacer-user-id: string # User ID or User Name of the PACER Account used while signing in to PACER. (e.g. johndoe)
   --pacer-client-code: string # Client Code used while signing in to PACER account. (e.g. john)
-  --case-number: string # If the court type is selected as All or if you need data for a specific case number format, then you need to use this option. Case numbers may be entered in each of the following formats:   	yy-nnnnn   	yy-tp-nnnnn   	yy tp nnnnn   	yytpnnnnn   	o:yy-nnnnn   	o:yy-tp-nnnnn   	o:yy tp nnnnn   	o:yytpnnnnn   where:   yy  case year (may be 2 or 4 digits)   nnnnn  case number (up to 5 digits)   tp  case type (up to 2 characters)   o  office where the case was filed (1 digit). (nullable, e.g. 12-1234)
+  --case-number: string # If the court type is selected as All or if you need data for a specific case number format, then you need to use this option. Case numbers may be entered in each of the following formats: yy-nnnnn yy-tp-nnnnn yy tp nnnnn yytpnnnnn o:yy-nnnnn o:yy-tp-nnnnn o:yy tp nnnnn o:yytpnnnnn where: yy case year (may be 2 or 4 digits) nnnnn case number (up to 5 digits) tp case type (up to 2 characters) o office where the case was filed (1 digit). (nullable, e.g. 12-1234)
   --pacer-case-id: int # Sequentially generated number that identifies the case in PACER system.
   --last-name: string # The last name of a party to search. This can be person or non person entity. (nullable, e.g. John)
   --first-name: string # The first name of a party to search. (nullable, e.g. John)
@@ -3960,20 +3969,20 @@ export def "pacer-case-locator-party-search-appeal-courts list" [
   --generation: string # The name suffix (e.g., III, MD). (nullable, e.g. III)
   --party-type: string # The court-assigned party type for a party involved in a case. Party type codes are created and assigned by individual courts, and as such, their meanings can vary from court to court. (nullable, e.g. ptf)
   --party-exact-name-match: oneof<nothing, bool> # When set to true this field will search the party with an exact match of the name provided.
-  --party-role-array: list # The court-assigned role for a party to a case. Party role codes are created and assigned by individual courts, and as such, their meanings can vary from court to court.
-  --case-title: string # You can search using the case name even if you know one party.   	Examples:   	A search for case title john doe v will result in all cases with the case title John Doe v.   	A search for case title Acme, Inc. will result in all case titles starting with Acme, Inc. (nullable)
+  --party-role-array: list<string> # The court-assigned role for a party to a case. Party role codes are created and assigned by individual courts, and as such, their meanings can vary from court to court.
+  --case-title: string # You can search using the case name even if you know one party. Examples: A search for case title john doe v will result in all cases with the case title John Doe v. A search for case title Acme, Inc. will result in all case titles starting with Acme, Inc. (nullable)
   --case-office: int # The divisional office in which the case was filed.
   --case-sequence-number: int # The sequence number of a given case. Ex 12345
   --case-year: int # The two digits or four digits of the year in which the case was filed.
-  --case-type-array: list # Search can be narrowed down by passing caseTypes. Please use the <a href='https://docs.unicourt.com/pacer-glossary/appendix-a-case-types'>APPENDIX A: Case Types</a> mentioned in the API Documentation.   	Scenario: When mulitple case types needs to be requested.   	Imagine for a given case number 12-1234 I would like to search only with the case type civil(cv) and criminal(cr), My query in the request will look like the example mentioned below.   	Example: caseTypeArray=cv&caseTypeArray=cr
-  --court-region-id-array: list # Search can be narrowed down by passing courtRegionId. Please use the <a href='https://docs.unicourt.com/pacer-glossary/appendix-b-court-regions'>APPENDIX B: Court Regions</a> mentioned in the API Documentation.   	Scenario: When mulitple court region ids needs to be requested.   	Imagine for a given case number 12-1234 I would like to search in the court regions California Central (cac) and California Eastern (cae), My query in the request will look like the example mentioned below.   	Example: courtRegionIdArray=cac&courtRegionIdArray=cae
+  --case-type-array: list<string> # Search can be narrowed down by passing caseTypes. Please use the APPENDIX A: Case Types mentioned in the API Documentation. Scenario: When mulitple case types needs to be requested. Imagine for a given case number 12-1234 I would like to search only with the case type civil(cv) and criminal(cr), My query in the request will look like the example mentioned below. Example: caseTypeArray=cv&caseTypeArray=cr
+  --court-region-id-array: list<string> # Search can be narrowed down by passing courtRegionId. Please use the APPENDIX B: Court Regions mentioned in the API Documentation. Scenario: When mulitple court region ids needs to be requested. Imagine for a given case number 12-1234 I would like to search in the court regions California Central (cac) and California Eastern (cae), My query in the request will look like the example mentioned below. Example: courtRegionIdArray=cac&courtRegionIdArray=cae
   --case-year-from: int # Limit the results of the search to those cases from the year specified or later
   --case-year-to: int # Limit the results of the search to those cases from the year specified or earlier
   --case-filed-start-date: string # Narrowing the search by limiting the cases which matches the criteria for case filed start date on or after the given date. Format: YYYY-MM-DDTHH:MM:SS+ZZ:zz, Ex: 2017-12-20T12:54:24+00:00 (nullable, format: date-time)
   --case-filed-end-date: string # Narrowing the search by limiting the cases which matches the criteria for case filed end date on or before the given date. Format: YYYY-MM-DDTHH:MM:SS+ZZ:zz, Ex: 2017-12-20T12:54:24+00:00 (nullable, format: date-time)
   --case-terminated-start-date: string # Narrowing the search by limiting the cases which matches the criteria for case terminated start date on or after the given date. Format: YYYY-MM-DDTHH:MM:SS+ZZ:zz, Ex: 2017-12-20T12:54:24+00:00 (nullable, format: date-time)
   --case-terminated-end-date: string # Narrowing the search by limiting the cases which matches the criteria for case terminated end date on or before the given date. Format: YYYY-MM-DDTHH:MM:SS+ZZ:zz, Ex: 2017-12-20T12:54:24+00:00 (nullable, format: date-time)
-  --sort-parameter-query: string # The criteria based on which the search results are to be sorted. Please use the <a href='https://docs.unicourt.com/pacer-glossary/appendix-c-sort-parameter'>APPENDIX C: Sort Parameter - Sortable Party Parameters</a> mentioned in the API Documentation. The fields can be sorted either ASC or DESC.   	Scenario 1: When mulitple sort paramters needs to be requested.   	Imagine for a given case number 12-1234 I would like to sort the results in the Ascending order of courtId and caseId, My query in the request will look like the example mentioned below.   	Example: sortParameterQuery=courtId,ASC&caseId,ASC   	Scenario 2: When you want to sort the response using the case parameters in the party search.   	Imagine for a given case number 12-1234 I would like to sort the results in the Ascending order of caseOffice and descending order of caseId, My query in the request will look like the example mentioned below.   	Example: sortParameterQuery=courtCase.caseOffice,ASC&caseid,DESC (nullable, default: sort=caseYear,DESC)
+  --sort-parameter-query: string # The criteria based on which the search results are to be sorted. Please use the APPENDIX C: Sort Parameter - Sortable Party Parameters mentioned in the API Documentation. The fields can be sorted either ASC or DESC. Scenario 1: When mulitple sort paramters needs to be requested. Imagine for a given case number 12-1234 I would like to sort the results in the Ascending order of courtId and caseId, My query in the request will look like the example mentioned below. Example: sortParameterQuery=courtId,ASC&caseId,ASC Scenario 2: When you want to sort the response using the case parameters in the party search. Imagine for a given case number 12-1234 I would like to sort the results in the Ascending order of caseOffice and descending order of caseId, My query in the request will look like the example mentioned below. Example: sortParameterQuery=courtCase.caseOffice,ASC&caseid,DESC (nullable, default: sort=caseYear,DESC)
   --case-status: string@case-status-completer # Status of a case. 'closed' for a Terminated case, 'open' for Pending cases. If this parameter is not sent both cases that fall in open and closed will be queried. (nullable)
   --page-number: int # Page Number for a given Job ID or for the search your going to make.
 ]: nothing -> record<nextPageAPI: string, object: string, pacerPageInfo: record<first: bool, last: bool, number: int, numberOfElements: int, object: string, size: int, totalElements: int, totalPages: int>, pacerReceipt: record<billablePages: int, clientCode: string, csoId: int, description: string, firmId: string, loginId: string, object: string, reportId: string, search: string, searchFee: string, transactionDate: string>, pacerSearchResultsArray: table<hasOnlyMetaInfo: bool, object: string, pacerContent: record, uniCourtContent: record>, pageNumber: int, totalCount: int, totalPages: int> {
@@ -4001,7 +4010,7 @@ export def "pacer-case-locator-party-search-bankruptcy-courts list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --pacer-user-id: string # User ID or User Name of the PACER Account used while signing in to PACER. (e.g. johndoe)
   --pacer-client-code: string # Client Code used while signing in to PACER account. (e.g. john)
-  --case-number: string # If the court type is selected as All or if you need data for a specific case number format, then you need to use this option. Case numbers may be entered in each of the following formats:   	yy-nnnnn   	yy-tp-nnnnn   	yy tp nnnnn   	yytpnnnnn   	o:yy-nnnnn   	o:yy-tp-nnnnn   	o:yy tp nnnnn   	o:yytpnnnnn   where:   yy  case year (may be 2 or 4 digits)   nnnnn  case number (up to 5 digits)   tp  case type (up to 2 characters)   o  office where the case was filed (1 digit). (nullable, e.g. 12-1234)
+  --case-number: string # If the court type is selected as All or if you need data for a specific case number format, then you need to use this option. Case numbers may be entered in each of the following formats: yy-nnnnn yy-tp-nnnnn yy tp nnnnn yytpnnnnn o:yy-nnnnn o:yy-tp-nnnnn o:yy tp nnnnn o:yytpnnnnn where: yy case year (may be 2 or 4 digits) nnnnn case number (up to 5 digits) tp case type (up to 2 characters) o office where the case was filed (1 digit). (nullable, e.g. 12-1234)
   --pacer-case-id: int # Sequentially generated number that identifies the case in PACER system.
   --last-name: string # The last name of a party to search. This can be person or non person entity. (nullable, e.g. John)
   --first-name: string # The first name of a party to search. (nullable, e.g. John)
@@ -4009,26 +4018,26 @@ export def "pacer-case-locator-party-search-bankruptcy-courts list" [
   --generation: string # The name suffix (e.g., III, MD). (nullable, e.g. III)
   --party-type: string # The court-assigned party type for a party involved in a case. Party type codes are created and assigned by individual courts, and as such, their meanings can vary from court to court. (nullable, e.g. ptf)
   --party-exact-name-match: oneof<nothing, bool> # When set to true this field will search the party with an exact match of the name provided.
-  --party-role-array: list # The court-assigned role for a party to a case. Party role codes are created and assigned by individual courts, and as such, their meanings can vary from court to court.
-  --case-title: string # You can search using the case name even if you know one party.   	Examples:   	A search for case title john doe v will result in all cases with the case title John Doe v.   	A search for case title Acme, Inc. will result in all case titles starting with Acme, Inc. (nullable)
+  --party-role-array: list<string> # The court-assigned role for a party to a case. Party role codes are created and assigned by individual courts, and as such, their meanings can vary from court to court.
+  --case-title: string # You can search using the case name even if you know one party. Examples: A search for case title john doe v will result in all cases with the case title John Doe v. A search for case title Acme, Inc. will result in all case titles starting with Acme, Inc. (nullable)
   --case-office: int # The divisional office in which the case was filed.
   --case-sequence-number: int # The sequence number of a given case. Ex 12345
   --case-year: int # The two digits or four digits of the year in which the case was filed.
-  --case-type-array: list # Search can be narrowed down by passing caseTypes. Please use the <a href='https://docs.unicourt.com/pacer-glossary/appendix-a-case-types'>APPENDIX A: Case Types</a> mentioned in the API Documentation.   	Scenario: When mulitple case types needs to be requested.   	Imagine for a given case number 12-1234 I would like to search only with the case type civil(cv) and criminal(cr), My query in the request will look like the example mentioned below.   	Example: caseTypeArray=cv&caseTypeArray=cr
-  --court-region-id-array: list # Search can be narrowed down by passing courtRegionId. Please use the <a href='https://docs.unicourt.com/pacer-glossary/appendix-b-court-regions'>APPENDIX B: Court Regions</a> mentioned in the API Documentation.   	Scenario: When mulitple court region ids needs to be requested.   	Imagine for a given case number 12-1234 I would like to search in the court regions California Central (cac) and California Eastern (cae), My query in the request will look like the example mentioned below.   	Example: courtRegionIdArray=cac&courtRegionIdArray=cae
+  --case-type-array: list<string> # Search can be narrowed down by passing caseTypes. Please use the APPENDIX A: Case Types mentioned in the API Documentation. Scenario: When mulitple case types needs to be requested. Imagine for a given case number 12-1234 I would like to search only with the case type civil(cv) and criminal(cr), My query in the request will look like the example mentioned below. Example: caseTypeArray=cv&caseTypeArray=cr
+  --court-region-id-array: list<string> # Search can be narrowed down by passing courtRegionId. Please use the APPENDIX B: Court Regions mentioned in the API Documentation. Scenario: When mulitple court region ids needs to be requested. Imagine for a given case number 12-1234 I would like to search in the court regions California Central (cac) and California Eastern (cae), My query in the request will look like the example mentioned below. Example: courtRegionIdArray=cac&courtRegionIdArray=cae
   --case-year-from: int # Limit the results of the search to those cases from the year specified or later
   --case-year-to: int # Limit the results of the search to those cases from the year specified or earlier
   --ssn-or-ein: string # The 9 digit Social Security number or Federal Tax ID can be used in this search. The delimiter dash (-) can be used as the input to this API but wont be used during the search. A search for SSN 123-45-6789 or 12-3456789 will yield the same results as a search for 123456789. (nullable)
-  --four-digit-ssn: string # Search for parties whose SSN ends with a specified four digits.  	Note: When specified, a last name/entity name must also be specified. (nullable)
+  --four-digit-ssn: string # Search for parties whose SSN ends with a specified four digits. Note: When specified, a last name/entity name must also be specified. (nullable)
   --case-filed-start-date: string # Narrowing the search by limiting the cases which matches the criteria for case filed start date on or after the given date. Format: YYYY-MM-DDTHH:MM:SS+ZZ:zz, Ex: 2017-12-20T12:54:24+00:00 (nullable, format: date-time)
   --case-filed-end-date: string # Narrowing the search by limiting the cases which matches the criteria for case filed end date on or before the given date. Format: YYYY-MM-DDTHH:MM:SS+ZZ:zz, Ex: 2017-12-20T12:54:24+00:00 (nullable, format: date-time)
   --case-terminated-start-date: string # Narrowing the search by limiting the cases which matches the criteria for case terminated start date on or after the given date. Format: YYYY-MM-DDTHH:MM:SS+ZZ:zz, Ex: 2017-12-20T12:54:24+00:00 (nullable, format: date-time)
   --case-terminated-end-date: string # Narrowing the search by limiting the cases which matches the criteria for case terminated end date on or before the given date. Format: YYYY-MM-DDTHH:MM:SS+ZZ:zz, Ex: 2017-12-20T12:54:24+00:00 (nullable, format: date-time)
-  --case-discharged-start-date: string # Narrowing the search for bankruptcy cases by limiting the cases which matches the criteria for case discharged start date on or after the given date. Format: YYYY-MM-DDTHH:MM:SS+ZZ:zz, Ex: 2017-12-20T12:54:24+00:00   	Note: This parameter is applicable since we only perform this search for Bankruptcy Court type. (nullable, format: date-time)
-  --case-discharged-end-date: string # Narrowing the search for bankruptcy cases by limiting the cases which matches the criteria for case discharged end date on or before the given date. Format: YYYY-MM-DDTHH:MM:SS+ZZ:zz, Ex: 2017-12-20T12:54:24+00:00   	Note: This parameter is applicable since we only perform this search for Bankruptcy Court type. (nullable, format: date-time)
-  --case-dismissed-start-date: string # Narrowing the search for bankruptcy cases by limiting the cases which matches the criteria for case dismissed start date on or after the given date. Format: YYYY-MM-DDTHH:MM:SS+ZZ:zz, Ex: 2017-12-20T12:54:24+00:00   	Note: This parameter is applicable since we only perform this search for Bankruptcy Court type. (nullable, format: date-time)
+  --case-discharged-start-date: string # Narrowing the search for bankruptcy cases by limiting the cases which matches the criteria for case discharged start date on or after the given date. Format: YYYY-MM-DDTHH:MM:SS+ZZ:zz, Ex: 2017-12-20T12:54:24+00:00 Note: This parameter is applicable since we only perform this search for Bankruptcy Court type. (nullable, format: date-time)
+  --case-discharged-end-date: string # Narrowing the search for bankruptcy cases by limiting the cases which matches the criteria for case discharged end date on or before the given date. Format: YYYY-MM-DDTHH:MM:SS+ZZ:zz, Ex: 2017-12-20T12:54:24+00:00 Note: This parameter is applicable since we only perform this search for Bankruptcy Court type. (nullable, format: date-time)
+  --case-dismissed-start-date: string # Narrowing the search for bankruptcy cases by limiting the cases which matches the criteria for case dismissed start date on or after the given date. Format: YYYY-MM-DDTHH:MM:SS+ZZ:zz, Ex: 2017-12-20T12:54:24+00:00 Note: This parameter is applicable since we only perform this search for Bankruptcy Court type. (nullable, format: date-time)
   --case-dismissed-end-date: string # Narrowing the search by limiting the cases which matches the criteria for case terminated end date on or before the given date. Format: YYYY-MM-DDTHH:MM:SS+ZZ:zz, Ex: 2017-12-20T12:54:24+00:00 (nullable, format: date-time)
-  --sort-parameter-query: string # The criteria based on which the search results are to be sorted. Please use the <a href='https://docs.unicourt.com/pacer-glossary/appendix-c-sort-parameter'>APPENDIX C: Sort Parameter - Sortable Party Parameters</a> mentioned in the API Documentation. The fields can be sorted either ASC or DESC.   	Scenario 1: When mulitple sort paramters needs to be requested.   	Imagine for a given case number 12-1234 I would like to sort the results in the Ascending order of courtId and caseId, My query in the request will look like the example mentioned below.   	Example: sortParameterQuery=courtId,ASC&caseId,ASC   	Scenario 2: When you want to sort the response using the case parameters in the party search.   	Imagine for a given case number 12-1234 I would like to sort the results in the Ascending order of caseOffice and descending order of caseId, My query in the request will look like the example mentioned below.   	Example: sortParameterQuery=courtCase.caseOffice,ASC&caseid,DESC (nullable, default: sort=caseYear,DESC)
+  --sort-parameter-query: string # The criteria based on which the search results are to be sorted. Please use the APPENDIX C: Sort Parameter - Sortable Party Parameters mentioned in the API Documentation. The fields can be sorted either ASC or DESC. Scenario 1: When mulitple sort paramters needs to be requested. Imagine for a given case number 12-1234 I would like to sort the results in the Ascending order of courtId and caseId, My query in the request will look like the example mentioned below. Example: sortParameterQuery=courtId,ASC&caseId,ASC Scenario 2: When you want to sort the response using the case parameters in the party search. Imagine for a given case number 12-1234 I would like to sort the results in the Ascending order of caseOffice and descending order of caseId, My query in the request will look like the example mentioned below. Example: sortParameterQuery=courtCase.caseOffice,ASC&caseid,DESC (nullable, default: sort=caseYear,DESC)
   --case-status: string@case-status-completer # Status of a case. 'closed' for a Terminated case, 'open' for Pending cases. If this parameter is not sent both cases that fall in open and closed will be queried. (nullable)
   --page-number: int # Page Number for a given Job ID or for the search your going to make.
 ]: nothing -> record<nextPageAPI: string, object: string, pacerPageInfo: record<first: bool, last: bool, number: int, numberOfElements: int, object: string, size: int, totalElements: int, totalPages: int>, pacerReceipt: record<billablePages: int, clientCode: string, csoId: int, description: string, firmId: string, loginId: string, object: string, reportId: string, search: string, searchFee: string, transactionDate: string>, pacerSearchResultsArray: table<hasOnlyMetaInfo: bool, object: string, pacerContent: record, uniCourtContent: record>, pageNumber: int, totalCount: int, totalPages: int> {
@@ -4056,7 +4065,7 @@ export def "pacer-case-locator-party-search-civil-courts list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --pacer-user-id: string # User ID or User Name of the PACER Account used while signing in to PACER. (e.g. johndoe)
   --pacer-client-code: string # Client Code used while signing in to PACER account. (e.g. john)
-  --case-number: string # If the court type is selected as All or if you need data for a specific case number format, then you need to use this option. Case numbers may be entered in each of the following formats:   	yy-nnnnn   	yy-tp-nnnnn   	yy tp nnnnn   	yytpnnnnn   	o:yy-nnnnn   	o:yy-tp-nnnnn   	o:yy tp nnnnn   	o:yytpnnnnn   where:   yy  case year (may be 2 or 4 digits)   nnnnn  case number (up to 5 digits)   tp  case type (up to 2 characters)   o  office where the case was filed (1 digit). (nullable, e.g. 12-1234)
+  --case-number: string # If the court type is selected as All or if you need data for a specific case number format, then you need to use this option. Case numbers may be entered in each of the following formats: yy-nnnnn yy-tp-nnnnn yy tp nnnnn yytpnnnnn o:yy-nnnnn o:yy-tp-nnnnn o:yy tp nnnnn o:yytpnnnnn where: yy case year (may be 2 or 4 digits) nnnnn case number (up to 5 digits) tp case type (up to 2 characters) o office where the case was filed (1 digit). (nullable, e.g. 12-1234)
   --pacer-case-id: int # Sequentially generated number that identifies the case in PACER system.
   --last-name: string # The last name of a party to search. This can be person or non person entity. (nullable, e.g. John)
   --first-name: string # The first name of a party to search. (nullable, e.g. John)
@@ -4064,20 +4073,20 @@ export def "pacer-case-locator-party-search-civil-courts list" [
   --generation: string # The name suffix (e.g., III, MD). (nullable, e.g. III)
   --party-type: string # The court-assigned party type for a party involved in a case. Party type codes are created and assigned by individual courts, and as such, their meanings can vary from court to court. (nullable, e.g. ptf)
   --party-exact-name-match: oneof<nothing, bool> # When set to true this field will search the party with an exact match of the name provided.
-  --party-role-array: list # The court-assigned role for a party to a case. Party role codes are created and assigned by individual courts, and as such, their meanings can vary from court to court.
-  --case-title: string # You can search using the case name even if you know one party.   	Examples:   	A search for case title john doe v will result in all cases with the case title John Doe v.   	A search for case title Acme, Inc. will result in all case titles starting with Acme, Inc. (nullable)
+  --party-role-array: list<string> # The court-assigned role for a party to a case. Party role codes are created and assigned by individual courts, and as such, their meanings can vary from court to court.
+  --case-title: string # You can search using the case name even if you know one party. Examples: A search for case title john doe v will result in all cases with the case title John Doe v. A search for case title Acme, Inc. will result in all case titles starting with Acme, Inc. (nullable)
   --case-office: int # The divisional office in which the case was filed.
   --case-sequence-number: int # The sequence number of a given case. Ex 12345
   --case-year: int # The two digits or four digits of the year in which the case was filed.
-  --case-type-array: list # Search can be narrowed down by passing caseTypes. Please use the <a href='https://docs.unicourt.com/pacer-glossary/appendix-a-case-types'>APPENDIX A: Case Types</a> mentioned in the API Documentation.   	Scenario: When mulitple case types needs to be requested.   	Imagine for a given case number 12-1234 I would like to search only with the case type civil(cv) and criminal(cr), My query in the request will look like the example mentioned below.   	Example: caseTypeArray=cv&caseTypeArray=cr
-  --court-region-id-array: list # Search can be narrowed down by passing courtRegionId. Please use the <a href='https://docs.unicourt.com/pacer-glossary/appendix-b-court-regions'>APPENDIX B: Court Regions</a> mentioned in the API Documentation.   	Scenario: When mulitple court region ids needs to be requested.   	Imagine for a given case number 12-1234 I would like to search in the court regions California Central (cac) and California Eastern (cae), My query in the request will look like the example mentioned below.   	Example: courtRegionIdArray=cac&courtRegionIdArray=cae
+  --case-type-array: list<string> # Search can be narrowed down by passing caseTypes. Please use the APPENDIX A: Case Types mentioned in the API Documentation. Scenario: When mulitple case types needs to be requested. Imagine for a given case number 12-1234 I would like to search only with the case type civil(cv) and criminal(cr), My query in the request will look like the example mentioned below. Example: caseTypeArray=cv&caseTypeArray=cr
+  --court-region-id-array: list<string> # Search can be narrowed down by passing courtRegionId. Please use the APPENDIX B: Court Regions mentioned in the API Documentation. Scenario: When mulitple court region ids needs to be requested. Imagine for a given case number 12-1234 I would like to search in the court regions California Central (cac) and California Eastern (cae), My query in the request will look like the example mentioned below. Example: courtRegionIdArray=cac&courtRegionIdArray=cae
   --case-year-from: int # Limit the results of the search to those cases from the year specified or later
   --case-year-to: int # Limit the results of the search to those cases from the year specified or earlier
   --case-filed-start-date: string # Narrowing the search by limiting the cases which matches the criteria for case filed start date on or after the given date. Format: YYYY-MM-DDTHH:MM:SS+ZZ:zz, Ex: 2017-12-20T12:54:24+00:00 (nullable, format: date-time)
   --case-filed-end-date: string # Narrowing the search by limiting the cases which matches the criteria for case filed end date on or before the given date. Format: YYYY-MM-DDTHH:MM:SS+ZZ:zz, Ex: 2017-12-20T12:54:24+00:00 (nullable, format: date-time)
   --case-terminated-start-date: string # Narrowing the search by limiting the cases which matches the criteria for case terminated start date on or after the given date. Format: YYYY-MM-DDTHH:MM:SS+ZZ:zz, Ex: 2017-12-20T12:54:24+00:00 (nullable, format: date-time)
   --case-terminated-end-date: string # Narrowing the search by limiting the cases which matches the criteria for case terminated end date on or before the given date. Format: YYYY-MM-DDTHH:MM:SS+ZZ:zz, Ex: 2017-12-20T12:54:24+00:00 (nullable, format: date-time)
-  --sort-parameter-query: string # The criteria based on which the search results are to be sorted. Please use the <a href='https://docs.unicourt.com/pacer-glossary/appendix-c-sort-parameter'>APPENDIX C: Sort Parameter - Sortable Party Parameters</a> mentioned in the API Documentation. The fields can be sorted either ASC or DESC.   	Scenario 1: When mulitple sort paramters needs to be requested.   	Imagine for a given case number 12-1234 I would like to sort the results in the Ascending order of courtId and caseId, My query in the request will look like the example mentioned below.   	Example: sortParameterQuery=courtId,ASC&caseId,ASC   	Scenario 2: When you want to sort the response using the case parameters in the party search.   	Imagine for a given case number 12-1234 I would like to sort the results in the Ascending order of caseOffice and descending order of caseId, My query in the request will look like the example mentioned below.   	Example: sortParameterQuery=courtCase.caseOffice,ASC&caseid,DESC (nullable, default: sort=caseYear,DESC)
+  --sort-parameter-query: string # The criteria based on which the search results are to be sorted. Please use the APPENDIX C: Sort Parameter - Sortable Party Parameters mentioned in the API Documentation. The fields can be sorted either ASC or DESC. Scenario 1: When mulitple sort paramters needs to be requested. Imagine for a given case number 12-1234 I would like to sort the results in the Ascending order of courtId and caseId, My query in the request will look like the example mentioned below. Example: sortParameterQuery=courtId,ASC&caseId,ASC Scenario 2: When you want to sort the response using the case parameters in the party search. Imagine for a given case number 12-1234 I would like to sort the results in the Ascending order of caseOffice and descending order of caseId, My query in the request will look like the example mentioned below. Example: sortParameterQuery=courtCase.caseOffice,ASC&caseid,DESC (nullable, default: sort=caseYear,DESC)
   --case-status: string@case-status-completer # Status of a case. 'closed' for a Terminated case, 'open' for Pending cases. If this parameter is not sent both cases that fall in open and closed will be queried. (nullable)
   --page-number: int # Page Number for a given Job ID or for the search your going to make.
 ]: nothing -> record<nextPageAPI: string, object: string, pacerPageInfo: record<first: bool, last: bool, number: int, numberOfElements: int, object: string, size: int, totalElements: int, totalPages: int>, pacerReceipt: record<billablePages: int, clientCode: string, csoId: int, description: string, firmId: string, loginId: string, object: string, reportId: string, search: string, searchFee: string, transactionDate: string>, pacerSearchResultsArray: table<hasOnlyMetaInfo: bool, object: string, pacerContent: record, uniCourtContent: record>, pageNumber: int, totalCount: int, totalPages: int> {
@@ -4105,7 +4114,7 @@ export def "pacer-case-locator-party-search-criminal-courts list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --pacer-user-id: string # User ID or User Name of the PACER Account used while signing in to PACER. (e.g. johndoe)
   --pacer-client-code: string # Client Code used while signing in to PACER account. (e.g. john)
-  --case-number: string # If the court type is selected as All or if you need data for a specific case number format, then you need to use this option. Case numbers may be entered in each of the following formats:   	yy-nnnnn   	yy-tp-nnnnn   	yy tp nnnnn   	yytpnnnnn   	o:yy-nnnnn   	o:yy-tp-nnnnn   	o:yy tp nnnnn   	o:yytpnnnnn   where:   yy  case year (may be 2 or 4 digits)   nnnnn  case number (up to 5 digits)   tp  case type (up to 2 characters)   o  office where the case was filed (1 digit). (nullable, e.g. 12-1234)
+  --case-number: string # If the court type is selected as All or if you need data for a specific case number format, then you need to use this option. Case numbers may be entered in each of the following formats: yy-nnnnn yy-tp-nnnnn yy tp nnnnn yytpnnnnn o:yy-nnnnn o:yy-tp-nnnnn o:yy tp nnnnn o:yytpnnnnn where: yy case year (may be 2 or 4 digits) nnnnn case number (up to 5 digits) tp case type (up to 2 characters) o office where the case was filed (1 digit). (nullable, e.g. 12-1234)
   --pacer-case-id: int # Sequentially generated number that identifies the case in PACER system.
   --last-name: string # The last name of a party to search. This can be person or non person entity. (nullable, e.g. John)
   --first-name: string # The first name of a party to search. (nullable, e.g. John)
@@ -4113,20 +4122,20 @@ export def "pacer-case-locator-party-search-criminal-courts list" [
   --generation: string # The name suffix (e.g., III, MD). (nullable, e.g. III)
   --party-type: string # The court-assigned party type for a party involved in a case. Party type codes are created and assigned by individual courts, and as such, their meanings can vary from court to court. (nullable, e.g. ptf)
   --party-exact-name-match: oneof<nothing, bool> # When set to true this field will search the party with an exact match of the name provided.
-  --party-role-array: list # The court-assigned role for a party to a case. Party role codes are created and assigned by individual courts, and as such, their meanings can vary from court to court.
-  --case-title: string # You can search using the case name even if you know one party.   	Examples:   	A search for case title john doe v will result in all cases with the case title John Doe v.   	A search for case title Acme, Inc. will result in all case titles starting with Acme, Inc. (nullable)
+  --party-role-array: list<string> # The court-assigned role for a party to a case. Party role codes are created and assigned by individual courts, and as such, their meanings can vary from court to court.
+  --case-title: string # You can search using the case name even if you know one party. Examples: A search for case title john doe v will result in all cases with the case title John Doe v. A search for case title Acme, Inc. will result in all case titles starting with Acme, Inc. (nullable)
   --case-office: int # The divisional office in which the case was filed.
   --case-sequence-number: int # The sequence number of a given case. Ex 12345
   --case-year: int # The two digits or four digits of the year in which the case was filed.
-  --case-type-array: list # Search can be narrowed down by passing caseTypes. Please use the <a href='https://docs.unicourt.com/pacer-glossary/appendix-a-case-types'>APPENDIX A: Case Types</a> mentioned in the API Documentation.   	Scenario: When mulitple case types needs to be requested.   	Imagine for a given case number 12-1234 I would like to search only with the case type civil(cv) and criminal(cr), My query in the request will look like the example mentioned below.   	Example: caseTypeArray=cv&caseTypeArray=cr
-  --court-region-id-array: list # Search can be narrowed down by passing courtRegionId. Please use the <a href='https://docs.unicourt.com/pacer-glossary/appendix-b-court-regions'>APPENDIX B: Court Regions</a> mentioned in the API Documentation.   	Scenario: When mulitple court region ids needs to be requested.   	Imagine for a given case number 12-1234 I would like to search in the court regions California Central (cac) and California Eastern (cae), My query in the request will look like the example mentioned below.   	Example: courtRegionIdArray=cac&courtRegionIdArray=cae
+  --case-type-array: list<string> # Search can be narrowed down by passing caseTypes. Please use the APPENDIX A: Case Types mentioned in the API Documentation. Scenario: When mulitple case types needs to be requested. Imagine for a given case number 12-1234 I would like to search only with the case type civil(cv) and criminal(cr), My query in the request will look like the example mentioned below. Example: caseTypeArray=cv&caseTypeArray=cr
+  --court-region-id-array: list<string> # Search can be narrowed down by passing courtRegionId. Please use the APPENDIX B: Court Regions mentioned in the API Documentation. Scenario: When mulitple court region ids needs to be requested. Imagine for a given case number 12-1234 I would like to search in the court regions California Central (cac) and California Eastern (cae), My query in the request will look like the example mentioned below. Example: courtRegionIdArray=cac&courtRegionIdArray=cae
   --case-year-from: int # Limit the results of the search to those cases from the year specified or later
   --case-year-to: int # Limit the results of the search to those cases from the year specified or earlier
   --case-filed-start-date: string # Narrowing the search by limiting the cases which matches the criteria for case filed start date on or after the given date. Format: YYYY-MM-DDTHH:MM:SS+ZZ:zz, Ex: 2017-12-20T12:54:24+00:00 (nullable, format: date-time)
   --case-filed-end-date: string # Narrowing the search by limiting the cases which matches the criteria for case filed end date on or before the given date. Format: YYYY-MM-DDTHH:MM:SS+ZZ:zz, Ex: 2017-12-20T12:54:24+00:00 (nullable, format: date-time)
   --case-terminated-start-date: string # Narrowing the search by limiting the cases which matches the criteria for case terminated start date on or after the given date. Format: YYYY-MM-DDTHH:MM:SS+ZZ:zz, Ex: 2017-12-20T12:54:24+00:00 (nullable, format: date-time)
   --case-terminated-end-date: string # Narrowing the search by limiting the cases which matches the criteria for case terminated end date on or before the given date. Format: YYYY-MM-DDTHH:MM:SS+ZZ:zz, Ex: 2017-12-20T12:54:24+00:00 (nullable, format: date-time)
-  --sort-parameter-query: string # The criteria based on which the search results are to be sorted. Please use the <a href='https://docs.unicourt.com/pacer-glossary/appendix-c-sort-parameter'>APPENDIX C: Sort Parameter - Sortable Party Parameters</a> mentioned in the API Documentation. The fields can be sorted either ASC or DESC.   	Scenario 1: When mulitple sort paramters needs to be requested.   	Imagine for a given case number 12-1234 I would like to sort the results in the Ascending order of courtId and caseId, My query in the request will look like the example mentioned below.   	Example: sortParameterQuery=courtId,ASC&caseId,ASC   	Scenario 2: When you want to sort the response using the case parameters in the party search.   	Imagine for a given case number 12-1234 I would like to sort the results in the Ascending order of caseOffice and descending order of caseId, My query in the request will look like the example mentioned below.   	Example: sortParameterQuery=courtCase.caseOffice,ASC&caseid,DESC (nullable, default: sort=caseYear,DESC)
+  --sort-parameter-query: string # The criteria based on which the search results are to be sorted. Please use the APPENDIX C: Sort Parameter - Sortable Party Parameters mentioned in the API Documentation. The fields can be sorted either ASC or DESC. Scenario 1: When mulitple sort paramters needs to be requested. Imagine for a given case number 12-1234 I would like to sort the results in the Ascending order of courtId and caseId, My query in the request will look like the example mentioned below. Example: sortParameterQuery=courtId,ASC&caseId,ASC Scenario 2: When you want to sort the response using the case parameters in the party search. Imagine for a given case number 12-1234 I would like to sort the results in the Ascending order of caseOffice and descending order of caseId, My query in the request will look like the example mentioned below. Example: sortParameterQuery=courtCase.caseOffice,ASC&caseid,DESC (nullable, default: sort=caseYear,DESC)
   --case-status: string@case-status-completer # Status of a case. 'closed' for a Terminated case, 'open' for Pending cases. If this parameter is not sent both cases that fall in open and closed will be queried. (nullable)
   --page-number: int # Page Number for a given Job ID or for the search your going to make.
 ]: nothing -> record<nextPageAPI: string, object: string, pacerPageInfo: record<first: bool, last: bool, number: int, numberOfElements: int, object: string, size: int, totalElements: int, totalPages: int>, pacerReceipt: record<billablePages: int, clientCode: string, csoId: int, description: string, firmId: string, loginId: string, object: string, reportId: string, search: string, searchFee: string, transactionDate: string>, pacerSearchResultsArray: table<hasOnlyMetaInfo: bool, object: string, pacerContent: record, uniCourtContent: record>, pageNumber: int, totalCount: int, totalPages: int> {
@@ -4154,7 +4163,7 @@ export def "pacer-case-locator-party-search-multi-district-courts list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --pacer-user-id: string # User ID or User Name of the PACER Account used while signing in to PACER. (e.g. johndoe)
   --pacer-client-code: string # Client Code used while signing in to PACER account. (e.g. john)
-  --case-number: string # If the court type is selected as All or if you need data for a specific case number format, then you need to use this option. Case numbers may be entered in each of the following formats:   	yy-nnnnn   	yy-tp-nnnnn   	yy tp nnnnn   	yytpnnnnn   	o:yy-nnnnn   	o:yy-tp-nnnnn   	o:yy tp nnnnn   	o:yytpnnnnn   where:   yy  case year (may be 2 or 4 digits)   nnnnn  case number (up to 5 digits)   tp  case type (up to 2 characters)   o  office where the case was filed (1 digit). (nullable, e.g. 12-1234)
+  --case-number: string # If the court type is selected as All or if you need data for a specific case number format, then you need to use this option. Case numbers may be entered in each of the following formats: yy-nnnnn yy-tp-nnnnn yy tp nnnnn yytpnnnnn o:yy-nnnnn o:yy-tp-nnnnn o:yy tp nnnnn o:yytpnnnnn where: yy case year (may be 2 or 4 digits) nnnnn case number (up to 5 digits) tp case type (up to 2 characters) o office where the case was filed (1 digit). (nullable, e.g. 12-1234)
   --jpml-number: int # Master JPML Case Number.
   --pacer-case-id: int # Sequentially generated number that identifies the case in PACER system.
   --last-name: string # The last name of a party to search. This can be person or non person entity. (nullable, e.g. John)
@@ -4163,20 +4172,20 @@ export def "pacer-case-locator-party-search-multi-district-courts list" [
   --generation: string # The name suffix (e.g., III, MD). (nullable, e.g. III)
   --party-type: string # The court-assigned party type for a party involved in a case. Party type codes are created and assigned by individual courts, and as such, their meanings can vary from court to court. (nullable, e.g. ptf)
   --party-exact-name-match: oneof<nothing, bool> # When set to true this field will search the party with an exact match of the name provided.
-  --party-role-array: list # The court-assigned role for a party to a case. Party role codes are created and assigned by individual courts, and as such, their meanings can vary from court to court.
-  --case-title: string # You can search using the case name even if you know one party.   	Examples:   	A search for case title john doe v will result in all cases with the case title John Doe v.   	A search for case title Acme, Inc. will result in all case titles starting with Acme, Inc. (nullable)
+  --party-role-array: list<string> # The court-assigned role for a party to a case. Party role codes are created and assigned by individual courts, and as such, their meanings can vary from court to court.
+  --case-title: string # You can search using the case name even if you know one party. Examples: A search for case title john doe v will result in all cases with the case title John Doe v. A search for case title Acme, Inc. will result in all case titles starting with Acme, Inc. (nullable)
   --case-office: int # The divisional office in which the case was filed.
   --case-sequence-number: int # The sequence number of a given case. Ex 12345
   --case-year: int # The two digits or four digits of the year in which the case was filed.
-  --case-type-array: list # Search can be narrowed down by passing caseTypes. Please use the <a href='https://docs.unicourt.com/pacer-glossary/appendix-a-case-types'>APPENDIX A: Case Types</a> mentioned in the API Documentation.   	Scenario: When mulitple case types needs to be requested.   	Imagine for a given case number 12-1234 I would like to search only with the case type civil(cv) and criminal(cr), My query in the request will look like the example mentioned below.   	Example: caseTypeArray=cv&caseTypeArray=cr
-  --court-region-id-array: list # Search can be narrowed down by passing courtRegionId. Please use the <a href='https://docs.unicourt.com/pacer-glossary/appendix-b-court-regions'>APPENDIX B: Court Regions</a> mentioned in the API Documentation.   	Scenario: When mulitple court region ids needs to be requested.   	Imagine for a given case number 12-1234 I would like to search in the court regions California Central (cac) and California Eastern (cae), My query in the request will look like the example mentioned below.   	Example: courtRegionIdArray=cac&courtRegionIdArray=cae
+  --case-type-array: list<string> # Search can be narrowed down by passing caseTypes. Please use the APPENDIX A: Case Types mentioned in the API Documentation. Scenario: When mulitple case types needs to be requested. Imagine for a given case number 12-1234 I would like to search only with the case type civil(cv) and criminal(cr), My query in the request will look like the example mentioned below. Example: caseTypeArray=cv&caseTypeArray=cr
+  --court-region-id-array: list<string> # Search can be narrowed down by passing courtRegionId. Please use the APPENDIX B: Court Regions mentioned in the API Documentation. Scenario: When mulitple court region ids needs to be requested. Imagine for a given case number 12-1234 I would like to search in the court regions California Central (cac) and California Eastern (cae), My query in the request will look like the example mentioned below. Example: courtRegionIdArray=cac&courtRegionIdArray=cae
   --case-year-from: int # Limit the results of the search to those cases from the year specified or later
   --case-year-to: int # Limit the results of the search to those cases from the year specified or earlier
   --case-filed-start-date: string # Narrowing the search by limiting the cases which matches the criteria for case filed start date on or after the given date. Format: YYYY-MM-DDTHH:MM:SS+ZZ:zz, Ex: 2017-12-20T12:54:24+00:00 (nullable, format: date-time)
   --case-filed-end-date: string # Narrowing the search by limiting the cases which matches the criteria for case filed end date on or before the given date. Format: YYYY-MM-DDTHH:MM:SS+ZZ:zz, Ex: 2017-12-20T12:54:24+00:00 (nullable, format: date-time)
   --case-terminated-start-date: string # Narrowing the search by limiting the cases which matches the criteria for case terminated start date on or after the given date. Format: YYYY-MM-DDTHH:MM:SS+ZZ:zz, Ex: 2017-12-20T12:54:24+00:00 (nullable, format: date-time)
   --case-terminated-end-date: string # Narrowing the search by limiting the cases which matches the criteria for case terminated end date on or before the given date. Format: YYYY-MM-DDTHH:MM:SS+ZZ:zz, Ex: 2017-12-20T12:54:24+00:00 (nullable, format: date-time)
-  --sort-parameter-query: string # The criteria based on which the search results are to be sorted. Please use the <a href='https://docs.unicourt.com/pacer-glossary/appendix-c-sort-parameter'>APPENDIX C: Sort Parameter - Sortable Party Parameters</a> mentioned in the API Documentation. The fields can be sorted either ASC or DESC.   	Scenario 1: When mulitple sort paramters needs to be requested.   	Imagine for a given case number 12-1234 I would like to sort the results in the Ascending order of courtId and caseId, My query in the request will look like the example mentioned below.   	Example: sortParameterQuery=courtId,ASC&caseId,ASC   	Scenario 2: When you want to sort the response using the case parameters in the party search.   	Imagine for a given case number 12-1234 I would like to sort the results in the Ascending order of caseOffice and descending order of caseId, My query in the request will look like the example mentioned below.   	Example: sortParameterQuery=courtCase.caseOffice,ASC&caseid,DESC (nullable, default: sort=caseYear,DESC)
+  --sort-parameter-query: string # The criteria based on which the search results are to be sorted. Please use the APPENDIX C: Sort Parameter - Sortable Party Parameters mentioned in the API Documentation. The fields can be sorted either ASC or DESC. Scenario 1: When mulitple sort paramters needs to be requested. Imagine for a given case number 12-1234 I would like to sort the results in the Ascending order of courtId and caseId, My query in the request will look like the example mentioned below. Example: sortParameterQuery=courtId,ASC&caseId,ASC Scenario 2: When you want to sort the response using the case parameters in the party search. Imagine for a given case number 12-1234 I would like to sort the results in the Ascending order of caseOffice and descending order of caseId, My query in the request will look like the example mentioned below. Example: sortParameterQuery=courtCase.caseOffice,ASC&caseid,DESC (nullable, default: sort=caseYear,DESC)
   --case-status: string@case-status-completer # Status of a case. 'closed' for a Terminated case, 'open' for Pending cases. If this parameter is not sent both cases that fall in open and closed will be queried. (nullable)
   --page-number: int # Page Number for a given Job ID or for the search your going to make.
 ]: nothing -> record<nextPageAPI: string, object: string, pacerPageInfo: record<first: bool, last: bool, number: int, numberOfElements: int, object: string, size: int, totalElements: int, totalPages: int>, pacerReceipt: record<billablePages: int, clientCode: string, csoId: int, description: string, firmId: string, loginId: string, object: string, reportId: string, search: string, searchFee: string, transactionDate: string>, pacerSearchResultsArray: table<hasOnlyMetaInfo: bool, object: string, pacerContent: record, uniCourtContent: record>, pageNumber: int, totalCount: int, totalPages: int> {
@@ -4202,7 +4211,7 @@ export def "pacer-credential list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --page-number: int # The page number of the PACER credentials to be retrieved.<br>   - Minimum: 1  (e.g. 1)
+  --page-number: int # The page number of the PACER credentials to be retrieved. - Minimum: 1 (e.g. 1)
 ]: nothing -> record<nextPageAPI: string, object: string, pacerCredentialArray: table<defaultPacerClientCode: string, object: string, pacerUserId: string>, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4234,11 +4243,11 @@ export def "pacer-credential create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/pacerCredential")
-  let body = {"defaultPacerClientCode": $default_pacer_client_code, "pacerUserId": $pacer_user_id, "password": $password} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"defaultPacerClientCode": $default_pacer_client_code, "pacerUserId": $pacer_user_id, "password": $password} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Remove Pacer credential for a specific Pacer User Id.
@@ -4258,7 +4267,7 @@ export def "pacer-credential delete" [
 ]: nothing -> record<message: string, object: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({pacer_user_id: $pacer_user_id} | format pattern "/pacerCredential/{pacer_user_id}"))
+  let full_url = (build-url $base ({pacer_user_id: (encode-path-segment $pacer_user_id)} | format pattern "/pacerCredential/{pacer_user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4281,7 +4290,7 @@ export def "pacer-credential get" [
 ]: nothing -> record<defaultPacerClientCode: string, object: string, pacerUserId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({pacer_user_id: $pacer_user_id} | format pattern "/pacerCredential/{pacer_user_id}"))
+  let full_url = (build-url $base ({pacer_user_id: (encode-path-segment $pacer_user_id)} | format pattern "/pacerCredential/{pacer_user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4304,7 +4313,7 @@ export def "party get" [
 ]: nothing -> record<attorneyRepresentationType: record<attorneyRepresentationTypeId: string, createdDate: string, name: string, object: string>, contact: record<addressArray: list<record>, emailArray: list<record>, object: string, phoneNumberArray: list<record>>, firstFetchDate: string, firstName: string, isVisible: bool, lastFetchDate: string, lastName: string, middleName: string, name: string, namePrefix: string, nameSuffix: string, object: string, partyAttorneyAssociations: record<nextPageAPI: string, object: string, pageNumber: int, partyAttorneyAssociationArray: list<record>, totalCount: int, totalPages: int>, partyClassificationType: string, partyId: string, partyRole: record<createdDate: string, description: string, name: string, object: string, partyRoleGroup: string, partyRoleGroupId: string, partyRoleId: string>, possibleNormPartyArray: table<associatedNormAttorneysAPI: string, associatedNormJudgesAPI: string, associatedNormLawFirmsAPI: string, bestMatch: bool, caseCountAnalyticsByNormPartyAPI: string, caseCountAnalyticsByOpposingNormPartyAPI: string, confidenceScore: float, normPartyAPI: string, normPartyId: string, normPartyName: string, object: string, scoreConstituents: record>, sourcePartyRole: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({party_id: $party_id} | format pattern "/party/{party_id}"))
+  let full_url = (build-url $base ({party_id: (encode-path-segment $party_id)} | format pattern "/party/{party_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4329,7 +4338,7 @@ export def "party-associated-attorneys get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({party_id: $party_id} | format pattern "/party/{party_id}/associatedAttorneys") $qp)
+  let full_url = (build-url $base ({party_id: (encode-path-segment $party_id)} | format pattern "/party/{party_id}/associatedAttorneys") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

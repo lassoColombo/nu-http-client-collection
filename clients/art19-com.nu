@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -106,15 +115,15 @@ export def "classification-inclusions list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ids: list # The list of IDs to filter by. Repeat this parameter for each ID you want to include in the filter. The brackets *MUST* be percent-encoded, per the requirements in [RFC 3986 § 3.4](https://tools.ietf.org/html/rfc3986#section-3.4).
-  --page-number: int # Select which page number to receive results for. Pages are numbered starting at 1. 
-  --page-size: int # Indicate how many records to return per page. The maximum is 100. 
+  --ids: list<string> # The list of IDs to filter by. Repeat this parameter for each ID you want to include in the filter. The brackets *MUST* be percent-encoded, per the requirements in [RFC 3986 § 3.4](https://tools.ietf.org/html/rfc3986#section-3.4).
+  --page-number: int # Select which page number to receive results for. Pages are numbered starting at 1.
+  --page-size: int # Indicate how many records to return per page. The maximum is 100.
   --classification-id: string # Limit the result to classification inclusions linked to a classification with this ID. (format: uuid, e.g. a90609c0-9f0c-48fd-8a41-83eb8414bedb)
   --classification-type: string@classification-type-completer # The type of classification that the classification inclusions are linked to. Depending on the permissions of your credential, only a subset of these types are usable.
-  --classified-id: string # Limit the result to classification inclusions linked to a resource with this ID. You will have to use this filter together with either `classified_type` or `classification_type`.  (format: uuid, e.g. fee1976e-f1bc-48a9-9ee8-58800f4d3462)
+  --classified-id: string # Limit the result to classification inclusions linked to a resource with this ID. You will have to use this filter together with either `classified_type` or `classification_type`. (format: uuid, e.g. fee1976e-f1bc-48a9-9ee8-58800f4d3462)
   --classified-type: string@classified-type-completer # Limit the result to classification inclusions linked to this type of entity.
   --q: string # Limit the result to classification inclusions linked to a classification containing the parameter value disregarding case.
-  --qp-sort: list # Specify how to sort the result. Please refer to either the top section or the [JSON:API specification](https://jsonapi.org/format/#fetching-sorting) on how sorting works in general.  (default: created_at)
+  --qp-sort: list<string> # Specify how to sort the result. Please refer to either the top section or the [JSON:API specification](https://jsonapi.org/format/#fetching-sorting) on how sorting works in general. (default: created_at)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -141,7 +150,7 @@ export def "classification-inclusions get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/classification_inclusions/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/classification_inclusions/{id}"))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -159,13 +168,13 @@ export def "classifications list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ids: list # The list of IDs to filter by. Repeat this parameter for each ID you want to include in the filter. The brackets *MUST* be percent-encoded, per the requirements in [RFC 3986 § 3.4](https://tools.ietf.org/html/rfc3986#section-3.4).
-  --page-number: int # Select which page number to receive results for. Pages are numbered starting at 1. 
-  --page-size: int # Indicate how many records to return per page. The maximum is 100. 
-  --type: string@type-completer # Limit the result to classifications of this type. The possible values for types depends on the privileges of the provided credential.  (e.g. Genre)
+  --ids: list<string> # The list of IDs to filter by. Repeat this parameter for each ID you want to include in the filter. The brackets *MUST* be percent-encoded, per the requirements in [RFC 3986 § 3.4](https://tools.ietf.org/html/rfc3986#section-3.4).
+  --page-number: int # Select which page number to receive results for. Pages are numbered starting at 1.
+  --page-size: int # Indicate how many records to return per page. The maximum is 100.
+  --type: string@type-completer # Limit the result to classifications of this type. The possible values for types depends on the privileges of the provided credential. (e.g. Genre)
   --q: string # Limit the result to classifications with a value containing the parameter value disregarding case.
-  --is-country: string # If this parameter is provided and not empty, limit the result to classifications of type `Geography` representing countries. The credential must have at least one privilege with a network, series, or advertiser profile.  (e.g. true)
-  --qp-sort: list # Specify how to sort the result. Please refer to either the top section or the [JSON:API specification](https://jsonapi.org/format/#fetching-sorting) on how sorting works in general.  (default: value)
+  --is-country: string # If this parameter is provided and not empty, limit the result to classifications of type `Geography` representing countries. The credential must have at least one privilege with a network, series, or advertiser profile. (e.g. true)
+  --qp-sort: list<string> # Specify how to sort the result. Please refer to either the top section or the [JSON:API specification](https://jsonapi.org/format/#fetching-sorting) on how sorting works in general. (default: value)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -192,7 +201,7 @@ export def "classifications get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/classifications/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/classifications/{id}"))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -210,12 +219,12 @@ export def "credits list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ids: list # The list of IDs to filter by. Repeat this parameter for each ID you want to include in the filter. The brackets *MUST* be percent-encoded, per the requirements in [RFC 3986 § 3.4](https://tools.ietf.org/html/rfc3986#section-3.4).
-  --page-number: int # Select which page number to receive results for. Pages are numbered starting at 1. 
-  --page-size: int # Indicate how many records to return per page. The maximum is 100. 
-  --creditable-id: string # Limit the result to credits for the entity with this ID only. If the entity is not published, the credential needs to have the right privilege to list the credits for it.  (format: uuid, e.g. 76654e16-76ce-4945-92e9-e0a381917853)
+  --ids: list<string> # The list of IDs to filter by. Repeat this parameter for each ID you want to include in the filter. The brackets *MUST* be percent-encoded, per the requirements in [RFC 3986 § 3.4](https://tools.ietf.org/html/rfc3986#section-3.4).
+  --page-number: int # Select which page number to receive results for. Pages are numbered starting at 1.
+  --page-size: int # Indicate how many records to return per page. The maximum is 100.
+  --creditable-id: string # Limit the result to credits for the entity with this ID only. If the entity is not published, the credential needs to have the right privilege to list the credits for it. (format: uuid, e.g. 76654e16-76ce-4945-92e9-e0a381917853)
   --creditable-type: string@creditable-type-completer # Limit the result to credits linked to this type of entity only. Depending on the privileges of the credential, this list might be further reduced to only published entities.
-  --qp-sort: list # Specify how to sort the result. Please refer to either the top section or the [JSON:API specification](https://jsonapi.org/format/#fetching-sorting) on how sorting works in general.  (default: position)
+  --qp-sort: list<string> # Specify how to sort the result. Please refer to either the top section or the [JSON:API specification](https://jsonapi.org/format/#fetching-sorting) on how sorting works in general. (default: position)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -242,7 +251,7 @@ export def "credits get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/credits/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/credits/{id}"))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -260,9 +269,9 @@ export def "episodes list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ids: list # The list of IDs to filter by. Repeat this parameter for each ID you want to include in the filter. The brackets *MUST* be percent-encoded, per the requirements in [RFC 3986 § 3.4](https://tools.ietf.org/html/rfc3986#section-3.4).
-  --page-number: int # Select which page number to receive results for. Pages are numbered starting at 1. 
-  --page-size: int # Indicate how many records to return per page. The maximum is 100. 
+  --ids: list<string> # The list of IDs to filter by. Repeat this parameter for each ID you want to include in the filter. The brackets *MUST* be percent-encoded, per the requirements in [RFC 3986 § 3.4](https://tools.ietf.org/html/rfc3986#section-3.4).
+  --page-number: int # Select which page number to receive results for. Pages are numbered starting at 1.
+  --page-size: int # Indicate how many records to return per page. The maximum is 100.
   --included-in-inventory-calendar: string # Limit the result to episodes usable with an inventory management calendar for the provided AdDeal ID. (format: uuid, e.g. b97239ef-1776-489a-a1df-5f70a8407148)
   --month: string # Limit the result to episodes released in this month.
   --published: oneof<nothing, bool> # If `true`, limit the result to published episodes only. If `false`, limit the result to _unpublished_ episodes only.
@@ -272,7 +281,7 @@ export def "episodes list" [
   --rss: oneof<nothing, bool> # If `true`, limit the result to published and released episodes holding an available media file. If this is `true`, it also changes the default sort order to `-released_at`.
   --season-id: string # Limit result to episodes linked to this season. (format: uuid, e.g. 30e7b568-d099-486b-9a8e-51b7594cab7d)
   --series-id: string # Limit the result to episodes linked to this series. (format: uuid, e.g. d0ceb1ff-b95b-4c1e-a7e5-a36ed7b4d3b7)
-  --qp-sort: list # Specify how to sort the result. Please refer to either the top section or the [JSON:API specification](https://jsonapi.org/format/#fetching-sorting) on how sorting works in general.  (default: sort_title)
+  --qp-sort: list<string> # Specify how to sort the result. Please refer to either the top section or the [JSON:API specification](https://jsonapi.org/format/#fetching-sorting) on how sorting works in general. (default: sort_title)
   --year: string # Limit the result to episodes released in this year.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -300,7 +309,7 @@ export def "episodes get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/episodes/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/episodes/{id}"))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -324,7 +333,7 @@ export def "episodes-next-sibling get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "rss" $rss "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/episodes/{id}/next_sibling") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/episodes/{id}/next_sibling") $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -348,7 +357,7 @@ export def "episodes-previous-sibling get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "rss" $rss "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/episodes/{id}/previous_sibling") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/episodes/{id}/previous_sibling") $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -366,7 +375,7 @@ export def "images list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ids: list # The list of IDs to filter by. Repeat this parameter for each ID you want to include in the filter. The brackets *MUST* be percent-encoded, per the requirements in [RFC 3986 § 3.4](https://tools.ietf.org/html/rfc3986#section-3.4).
+  --ids: list<string> # The list of IDs to filter by. Repeat this parameter for each ID you want to include in the filter. The brackets *MUST* be percent-encoded, per the requirements in [RFC 3986 § 3.4](https://tools.ietf.org/html/rfc3986#section-3.4).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -393,7 +402,7 @@ export def "images get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/images/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/images/{id}"))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -411,7 +420,7 @@ export def "media-assets list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ids: list # The list of IDs to filter by. Repeat this parameter for each ID you want to include in the filter. The brackets *MUST* be percent-encoded, per the requirements in [RFC 3986 § 3.4](https://tools.ietf.org/html/rfc3986#section-3.4).
+  --ids: list<string> # The list of IDs to filter by. Repeat this parameter for each ID you want to include in the filter. The brackets *MUST* be percent-encoded, per the requirements in [RFC 3986 § 3.4](https://tools.ietf.org/html/rfc3986#section-3.4).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -438,7 +447,7 @@ export def "media-assets get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/media_assets/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/media_assets/{id}"))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -456,13 +465,13 @@ export def "networks list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ids: list # The list of IDs to filter by. Repeat this parameter for each ID you want to include in the filter. The brackets *MUST* be percent-encoded, per the requirements in [RFC 3986 § 3.4](https://tools.ietf.org/html/rfc3986#section-3.4).
-  --page-number: int # Select which page number to receive results for. Pages are numbered starting at 1. 
-  --page-size: int # Indicate how many records to return per page. The maximum is 100. 
+  --ids: list<string> # The list of IDs to filter by. Repeat this parameter for each ID you want to include in the filter. The brackets *MUST* be percent-encoded, per the requirements in [RFC 3986 § 3.4](https://tools.ietf.org/html/rfc3986#section-3.4).
+  --page-number: int # Select which page number to receive results for. Pages are numbered starting at 1.
+  --page-size: int # Indicate how many records to return per page. The maximum is 100.
   --q: string # Limit the result to networks with a name containing this parameter in a case-insensitive way.
-  --ad-rep-account-id: string # Limit the result to networks containing at least one series with an ad deal of this Ad Ops profile.  (format: uuid)
-  --ad-deal-status: list # Limit the result to networks containing at least one series with an ad deal matching one of the values in this parameter.
-  --qp-sort: list # Specify how to sort the result. Please refer to either the top section or the [JSON:API specification](https://jsonapi.org/format/#fetching-sorting) on how sorting works in general.  (default: name)
+  --ad-rep-account-id: string # Limit the result to networks containing at least one series with an ad deal of this Ad Ops profile. (format: uuid)
+  --ad-deal-status: list<string> # Limit the result to networks containing at least one series with an ad deal matching one of the values in this parameter.
+  --qp-sort: list<string> # Specify how to sort the result. Please refer to either the top section or the [JSON:API specification](https://jsonapi.org/format/#fetching-sorting) on how sorting works in general. (default: name)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -489,7 +498,7 @@ export def "networks get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/networks/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/networks/{id}"))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -507,11 +516,11 @@ export def "people list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ids: list # The list of IDs to filter by. Repeat this parameter for each ID you want to include in the filter. The brackets *MUST* be percent-encoded, per the requirements in [RFC 3986 § 3.4](https://tools.ietf.org/html/rfc3986#section-3.4).
-  --page-number: int # Select which page number to receive results for. Pages are numbered starting at 1. 
-  --page-size: int # Indicate how many records to return per page. The maximum is 100. 
+  --ids: list<string> # The list of IDs to filter by. Repeat this parameter for each ID you want to include in the filter. The brackets *MUST* be percent-encoded, per the requirements in [RFC 3986 § 3.4](https://tools.ietf.org/html/rfc3986#section-3.4).
+  --page-number: int # Select which page number to receive results for. Pages are numbered starting at 1.
+  --page-size: int # Indicate how many records to return per page. The maximum is 100.
   --q: string # Limit the result to people with a full name containing this parameter in a case-insensitive way.
-  --qp-sort: list # Specify how to sort the result. Please refer to either the top section or the [JSON:API specification](https://jsonapi.org/format/#fetching-sorting) on how sorting works in general.  (default: last_name,first_name)
+  --qp-sort: list<string> # Specify how to sort the result. Please refer to either the top section or the [JSON:API specification](https://jsonapi.org/format/#fetching-sorting) on how sorting works in general. (default: last_name,first_name)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -538,7 +547,7 @@ export def "people get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/people/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/people/{id}"))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -556,12 +565,12 @@ export def "seasons list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ids: list # The list of IDs to filter by. Repeat this parameter for each ID you want to include in the filter. The brackets *MUST* be percent-encoded, per the requirements in [RFC 3986 § 3.4](https://tools.ietf.org/html/rfc3986#section-3.4).
-  --page-number: int # Select which page number to receive results for. Pages are numbered starting at 1. 
-  --page-size: int # Indicate how many records to return per page. The maximum is 100. 
+  --ids: list<string> # The list of IDs to filter by. Repeat this parameter for each ID you want to include in the filter. The brackets *MUST* be percent-encoded, per the requirements in [RFC 3986 § 3.4](https://tools.ietf.org/html/rfc3986#section-3.4).
+  --page-number: int # Select which page number to receive results for. Pages are numbered starting at 1.
+  --page-size: int # Indicate how many records to return per page. The maximum is 100.
   --series-id: string # Limit the result to seasons owned by this series. (format: uuid, e.g. 7ebd702d-07c8-4da9-a7a8-cf18ec414d5c)
   --q: string # Limit the result to seasons with a title containing this parameter in a case-insensitive way.
-  --qp-sort: list # Specify how to sort the result. Please refer to either the top section or the [JSON:API specification](https://jsonapi.org/format/#fetching-sorting) on how sorting works in general.  (default: sort_title)
+  --qp-sort: list<string> # Specify how to sort the result. Please refer to either the top section or the [JSON:API specification](https://jsonapi.org/format/#fetching-sorting) on how sorting works in general. (default: sort_title)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -588,7 +597,7 @@ export def "seasons get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/seasons/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/seasons/{id}"))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -606,13 +615,13 @@ export def "series list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ids: list # The list of IDs to filter by. Repeat this parameter for each ID you want to include in the filter. The brackets *MUST* be percent-encoded, per the requirements in [RFC 3986 § 3.4](https://tools.ietf.org/html/rfc3986#section-3.4).
-  --page-number: int # Select which page number to receive results for. Pages are numbered starting at 1. 
-  --page-size: int # Indicate how many records to return per page. The maximum is 100. 
-  --ad-rep-account-id: string # Limit the result to series with an ad deal of this Ad Ops profile.  (format: uuid, e.g. 35eb02fc-54db-4650-98e0-4695b101b71d)
+  --ids: list<string> # The list of IDs to filter by. Repeat this parameter for each ID you want to include in the filter. The brackets *MUST* be percent-encoded, per the requirements in [RFC 3986 § 3.4](https://tools.ietf.org/html/rfc3986#section-3.4).
+  --page-number: int # Select which page number to receive results for. Pages are numbered starting at 1.
+  --page-size: int # Indicate how many records to return per page. The maximum is 100.
+  --ad-rep-account-id: string # Limit the result to series with an ad deal of this Ad Ops profile. (format: uuid, e.g. 35eb02fc-54db-4650-98e0-4695b101b71d)
   --network-id: string # Limit the result to series owned by this network. (format: uuid, e.g. 5317358a-527e-4365-a343-361854286cc7)
   --q: string # Limit the result to series with a title or slug containing this parameter in a case-insensitive way.
-  --qp-sort: list # Specify how to sort the result. Please refer to either the top section or the [JSON:API specification](https://jsonapi.org/format/#fetching-sorting) on how sorting works in general.  (default: sort_title)
+  --qp-sort: list<string> # Specify how to sort the result. Please refer to either the top section or the [JSON:API specification](https://jsonapi.org/format/#fetching-sorting) on how sorting works in general. (default: sort_title)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -639,7 +648,7 @@ export def "series get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/series/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/series/{id}"))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

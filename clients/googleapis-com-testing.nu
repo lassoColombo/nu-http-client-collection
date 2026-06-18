@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -75,7 +84,7 @@ def state-completer [] { ["CANCELLED" "ERROR" "FINISHED" "INCOMPATIBLE_ARCHITECT
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "application-detail-service-get-apk-details test-ing" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "application-detail-service-get-apk-details get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -99,7 +108,7 @@ export def commands []: nothing -> table {
 #
 # POST /v1/applicationDetailService/getApkDetails
 # operationId: testing.applicationDetailService.getApkDetails
-export def "application-detail-service-get-apk-details test-ing" [
+export def "application-detail-service-get-apk-details get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -126,11 +135,11 @@ export def "application-detail-service-get-apk-details test-ing" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/applicationDetailService/getApkDetails" $qp)
-  let body = {"gcsPath": $gcs_path} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"gcsPath": $gcs_path} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Creates and runs a matrix of tests according to the given specifications. Unsupported environments will be returned in the state UNSUPPORTED. A test matrix is limited to use at most 2000 devices in parallel. The returned matrix will not yet contain the executions that will be created for this matrix. That happens later on and will require a call to GetTestMatrix. May return any of the following canonical error codes: - PERMISSION_DENIED - if the user is not authorized to write to project - INVALID_ARGUMENT - if the request is malformed or if the matrix tries to use too many simultaneous devices.
@@ -142,7 +151,7 @@ export def "application-detail-service-get-apk-details test-ing" [
 # --resultStorage shape: {googleCloudStorage?: record, resultsUrl?: string, toolResultsExecution?: record, toolResultsHistory?: record}
 # --testExecutions item shape: {environment?: record, id?: string, matrixId?: string, projectId?: string, shard?: record, state?: "TEST_STATE_UNSPECIFIED"|"VALIDATING"|"PENDING"|"RUNNING"|"FINISHED"|"ERROR"|"UNSUPPORTED_ENVIRONMENT"|"INCOMPATIBLE_ENVIRONMENT"|"INCOMPATIBLE_ARCHITECTURE"|"CANCELLED"|"INVALID", testDetails?: record, testSpecification?: record, timestamp?: string, toolResultsStep?: record}
 # --testSpecification shape: {androidInstrumentationTest?: record, androidRoboTest?: record, androidTestLoop?: record, disablePerformanceMetrics?: bool, disableVideoRecording?: bool, iosTestLoop?: record, iosTestSetup?: record, iosXcTest?: record, testSetup?: record, testTimeout?: string}
-export def "projects-test-matrices test-ing-projects-test-matrices-create" [
+export def "projects-test-matrices create" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -182,19 +191,19 @@ export def "projects-test-matrices test-ing-projects-test-matrices-create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "requestId" $request_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/v1/projects/{project_id}/testMatrices") $qp)
-  let body = {"clientInfo": $client_info, "environmentMatrix": $environment_matrix, "failFast": $fail_fast, "flakyTestAttempts": $flaky_test_attempts, "invalidMatrixDetails": $invalid_matrix_details, "outcomeSummary": $outcome_summary, "projectId": $body_project_id, "resultStorage": $result_storage, "state": $state, "testExecutions": $test_executions, "testMatrixId": $test_matrix_id, "testSpecification": $test_specification, "timestamp": $timestamp} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/v1/projects/{project_id}/testMatrices") $qp)
+  let req_body = {"clientInfo": $client_info, "environmentMatrix": $environment_matrix, "failFast": $fail_fast, "flakyTestAttempts": $flaky_test_attempts, "invalidMatrixDetails": $invalid_matrix_details, "outcomeSummary": $outcome_summary, "projectId": $body_project_id, "resultStorage": $result_storage, "state": $state, "testExecutions": $test_executions, "testMatrixId": $test_matrix_id, "testSpecification": $test_specification, "timestamp": $timestamp} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Checks the status of a test matrix and the executions once they are created. The test matrix will contain the list of test executions to run if and only if the resultStorage.toolResultsExecution fields have been populated. Note: Flaky test executions may still be added to the matrix at a later stage. May return any of the following canonical error codes: - PERMISSION_DENIED - if the user is not authorized to read project - INVALID_ARGUMENT - if the request is malformed - NOT_FOUND - if the Test Matrix does not exist
 #
 # GET /v1/projects/{projectId}/testMatrices/{testMatrixId}
 # operationId: testing.projects.testMatrices.get
-export def "projects-test-matrices test-ing-projects-test-matrices-get" [
+export def "projects-test-matrices get" [
   project_id: string
   test_matrix_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -220,7 +229,7 @@ export def "projects-test-matrices test-ing-projects-test-matrices-get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id, test_matrix_id: $test_matrix_id} | format pattern "/v1/projects/{project_id}/testMatrices/{test_matrix_id}") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), test_matrix_id: (encode-path-segment $test_matrix_id)} | format pattern "/v1/projects/{project_id}/testMatrices/{test_matrix_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -230,7 +239,7 @@ export def "projects-test-matrices test-ing-projects-test-matrices-get" [
 #
 # POST /v1/projects/{projectId}/testMatrices/{testMatrixId}:cancel
 # operationId: testing.projects.testMatrices.cancel
-export def "projects-test-matrices test-ing-projects-test-matrices-cancel" [
+export def "projects-test-matrices cancel" [
   project_id: string
   test_matrix_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -256,7 +265,7 @@ export def "projects-test-matrices test-ing-projects-test-matrices-cancel" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id, test_matrix_id: $test_matrix_id} | format pattern "/v1/projects/{project_id}/testMatrices/{test_matrix_id}:cancel") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), test_matrix_id: (encode-path-segment $test_matrix_id)} | format pattern "/v1/projects/{project_id}/testMatrices/{test_matrix_id}:cancel") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -266,7 +275,7 @@ export def "projects-test-matrices test-ing-projects-test-matrices-cancel" [
 #
 # GET /v1/testEnvironmentCatalog/{environmentType}
 # operationId: testing.testEnvironmentCatalog.get
-export def "test-environment-catalog test-ing-test-environment-catalog-get" [
+export def "test-environment-catalog get" [
   environment_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -292,7 +301,7 @@ export def "test-environment-catalog test-ing-test-environment-catalog-get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "projectId" $project_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({environment_type: $environment_type} | format pattern "/v1/testEnvironmentCatalog/{environment_type}") $qp)
+  let full_url = (build-url $base ({environment_type: (encode-path-segment $environment_type)} | format pattern "/v1/testEnvironmentCatalog/{environment_type}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

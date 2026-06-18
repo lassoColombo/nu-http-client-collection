@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -93,7 +102,7 @@ export def commands []: nothing -> table {
   }
 }
 
-# Complaints: Free service (with registration), providing community and government complaint lookup by phone number for up to 2,000 queries per month.  Details include number complaint rates from (FTC, FCC, IRS, Indiana Attorney  General) and key entity tag extractions from complaints.
+# Complaints: Free service (with registration), providing community and government complaint lookup by phone number for up to 2,000 queries per month. Details include number complaint rates from (FTC, FCC, IRS, Indiana Attorney General) and key entity tag extractions from complaints.
 #
 # GET /api/2015-11-01/Complaints/{phoneNumber}
 # operationId: Complaints_Complaints
@@ -111,13 +120,13 @@ export def "2015-11-01-complaints get" [
 ]: nothing -> record<ComplaintsByEntity: record, LastComplaintDate: string, ReportedCallerName: string, Tags: list<string>, TotalNumberOfComplaints: int> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({phone_number: $phone_number} | format pattern "/api/2015-11-01/Complaints/{phone_number}"))
+  let full_url = (build-url $base ({phone_number: (encode-path-segment $phone_number)} | format pattern "/api/2015-11-01/Complaints/{phone_number}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Enterprise  GET: GetUser Returns the current information from the user;  try 12066194123 as demo
+# Enterprise GET: GetUser Returns the current information from the user; try 12066194123 as demo
 #
 # GET /api/2015-11-01/Enterprise/GetUser/{phoneNumber}
 # operationId: EnterpriseApi_GetUser
@@ -135,13 +144,13 @@ export def "2015-11-01-enterprise-get-user get" [
 ]: nothing -> record<Age: int, BlackList: list<string>, BlockBehavior: string, BreakThroughQhWithMultipleCalls: bool, Email: string, FirstName: string, Gender: string, LastName: string, MiddleName: string, PhoneNumbeRegion: string, PhoneNumber: string, QuietHourList: table<DayOfWeekList: list, DurationMin: int, StartHourLocal: int, StartMinLocal: int, TimeZoneName: string>, Salutation: string, Suffix: string, UseCommunityBlacklist: bool, WhiteList: list<string>, WhiteListBreaksQh: bool> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({phone_number: $phone_number} | format pattern "/api/2015-11-01/Enterprise/GetUser/{phone_number}"))
+  let full_url = (build-url $base ({phone_number: (encode-path-segment $phone_number)} | format pattern "/api/2015-11-01/Enterprise/GetUser/{phone_number}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Enterprise  GET: ShouldBlock Simple Enteprise which returns a call block proceed decision.
+# Enterprise GET: ShouldBlock Simple Enteprise which returns a call block proceed decision.
 #
 # GET /api/2015-11-01/Enterprise/ShouldBlock/{phoneNumber}/{userPhoneNumber}
 # operationId: EnterpriseApi_ShouldBlock
@@ -160,7 +169,7 @@ export def "2015-11-01-enterprise-should-block get" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({phone_number: $phone_number, user_phone_number: $user_phone_number} | format pattern "/api/2015-11-01/Enterprise/ShouldBlock/{phone_number}/{user_phone_number}"))
+  let full_url = (build-url $base ({phone_number: (encode-path-segment $phone_number), user_phone_number: (encode-path-segment $user_phone_number)} | format pattern "/api/2015-11-01/Enterprise/ShouldBlock/{phone_number}/{user_phone_number}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -170,7 +179,7 @@ export def "2015-11-01-enterprise-should-block get" [
 #
 # POST /api/2015-11-01/Enterprise/UpsertUser
 # operationId: EnterpriseApi_UpsertUser
-# --QuietHourList item shape: {DayOfWeekList?: list, DurationMin?: int, StartHourLocal?: int, StartMinLocal?: int, TimeZoneName?: string}
+# --QuietHourList item shape: {DayOfWeekList?: list<string>, DurationMin?: int, StartHourLocal?: int, StartMinLocal?: int, TimeZoneName?: string}
 export def "2015-11-01-enterprise-upsert-user update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -182,7 +191,7 @@ export def "2015-11-01-enterprise-upsert-user update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --age: int # format: int32
-  --black-list: list
+  --black-list: list<string>
   --block-behavior: string@block-behavior-completer
   --break-through-qh-with-multiple-calls: oneof<nothing, bool>
   --email: string
@@ -192,29 +201,29 @@ export def "2015-11-01-enterprise-upsert-user update" [
   --middle-name: string
   --phone-numbe-region: string
   --phone-number: string
-  --quiet-hour-list: list # item shape: {DayOfWeekList?: list, DurationMin?: int, StartHourLocal?: int, StartMinLocal?: int, TimeZoneName?: string}
+  --quiet-hour-list: list # item shape: {DayOfWeekList?: list<string>, DurationMin?: int, StartHourLocal?: int, StartMinLocal?: int, TimeZoneName?: string}
   --salutation: string
   --suffix: string
   --use-community-blacklist: oneof<nothing, bool>
-  --white-list: list
+  --white-list: list<string>
   --white-list-breaks-qh: oneof<nothing, bool>
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/2015-11-01/Enterprise/UpsertUser")
-  let body = {"Age": $age, "BlackList": $black_list, "BlockBehavior": $block_behavior, "BreakThroughQhWithMultipleCalls": $break_through_qh_with_multiple_calls, "Email": $email, "FirstName": $first_name, "Gender": $gender, "LastName": $last_name, "MiddleName": $middle_name, "PhoneNumbeRegion": $phone_numbe_region, "PhoneNumber": $phone_number, "QuietHourList": $quiet_hour_list, "Salutation": $salutation, "Suffix": $suffix, "UseCommunityBlacklist": $use_community_blacklist, "WhiteList": $white_list, "WhiteListBreaksQh": $white_list_breaks_qh} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"Age": $age, "BlackList": $black_list, "BlockBehavior": $block_behavior, "BreakThroughQhWithMultipleCalls": $break_through_qh_with_multiple_calls, "Email": $email, "FirstName": $first_name, "Gender": $gender, "LastName": $last_name, "MiddleName": $middle_name, "PhoneNumbeRegion": $phone_numbe_region, "PhoneNumber": $phone_number, "QuietHourList": $quiet_hour_list, "Salutation": $salutation, "Suffix": $suffix, "UseCommunityBlacklist": $use_community_blacklist, "WhiteList": $white_list, "WhiteListBreaksQh": $white_list_breaks_qh} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Report: report spam calls received to better tune our algorithms based upon spam calls you receive
 #
 # POST /api/2015-11-01/Report
 # operationId: Reputation_Report
-export def "2015-11-01-report post" [
+export def "2015-11-01-report create-reputation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -240,11 +249,11 @@ export def "2015-11-01-report post" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/2015-11-01/Report")
-  let body = {"CallTime": $call_time, "CallerType": $caller_type, "Comment": $comment, "IpAddress": $ip_address, "Latitude": $latitude, "Longitude": $longitude, "PhoneNumber": $phone_number, "ReportedCallerId": $reported_caller_id, "ReportedCallerName": $reported_caller_name, "Reporter": $reporter, "UnwantedCall": $unwanted_call} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"CallTime": $call_time, "CallerType": $caller_type, "Comment": $comment, "IpAddress": $ip_address, "Latitude": $latitude, "Longitude": $longitude, "PhoneNumber": $phone_number, "ReportedCallerId": $reported_caller_id, "ReportedCallerName": $reported_caller_name, "Reporter": $reporter, "UnwantedCall": $unwanted_call} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Reputation: Premium service which returns a reputation informaiton of a phone number via API.
@@ -265,7 +274,7 @@ export def "2015-11-01-reputation get" [
 ]: nothing -> record<CallType: string, Confidence: int, IsSpam: bool, LastComplaintDate: string, ReportedCallerName: string, Tags: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({phone_number: $phone_number} | format pattern "/api/2015-11-01/Reputation/{phone_number}"))
+  let full_url = (build-url $base ({phone_number: (encode-path-segment $phone_number)} | format pattern "/api/2015-11-01/Reputation/{phone_number}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

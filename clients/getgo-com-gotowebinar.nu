@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -71,7 +80,7 @@ def type-completer [] { ["Hybrid" "PSTN" "Private" "VOIP"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accounts-webinars get-all" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accounts-webinars get-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,7 +104,7 @@ export def commands []: nothing -> table {
 #
 # GET /accounts/{accountKey}/webinars
 # operationId: getAllAccountWebinars
-export def "accounts-webinars get-all" [
+export def "accounts-webinars get-list" [
   account_key: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -114,11 +123,11 @@ export def "accounts-webinars get-all" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fromTime" $from_time "scalar") (serialize-qp "toTime" $to_time "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "size" $size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_key: $account_key} | format pattern "/accounts/{account_key}/webinars") $qp)
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({account_key: (encode-path-segment $account_key)} | format pattern "/accounts/{account_key}/webinars") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -143,11 +152,11 @@ export def "organizers-historical-webinars get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fromTime" $from_time "scalar") (serialize-qp "toTime" $to_time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({organizer_key: $organizer_key} | format pattern "/organizers/{organizer_key}/historicalWebinars") $qp)
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key)} | format pattern "/organizers/{organizer_key}/historicalWebinars") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -172,11 +181,11 @@ export def "organizers-sessions get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fromTime" $from_time "scalar") (serialize-qp "toTime" $to_time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({organizer_key: $organizer_key} | format pattern "/organizers/{organizer_key}/sessions") $qp)
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key)} | format pattern "/organizers/{organizer_key}/sessions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -198,11 +207,11 @@ export def "organizers-upcoming-webinars get" [
 ]: nothing -> table<description: string, inSession: bool, organizerKey: int, registrationUrl: string, subject: string, timeZone: string, times: list<record>, webinarID: string, webinarKey: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({organizer_key: $organizer_key} | format pattern "/organizers/{organizer_key}/upcomingWebinars"))
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key)} | format pattern "/organizers/{organizer_key}/upcomingWebinars"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -210,7 +219,7 @@ export def "organizers-upcoming-webinars get" [
 #
 # GET /organizers/{organizerKey}/webinars
 # operationId: getAllWebinars
-export def "organizers-webinars get-all" [
+export def "organizers-webinars get-list" [
   organizer_key: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -224,11 +233,11 @@ export def "organizers-webinars get-all" [
 ]: nothing -> table<description: string, inSession: bool, numberOfRegistrants: int, organizerKey: int, registrationUrl: string, subject: string, timeZone: string, times: list<record>, webinarID: string, webinarKey: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({organizer_key: $organizer_key} | format pattern "/organizers/{organizer_key}/webinars"))
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key)} | format pattern "/organizers/{organizer_key}/webinars"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -253,19 +262,19 @@ export def "organizers-webinars create" [
   subject: string # The name/subject of the webinar (128 characters maximum)
   --time-zone: string # The time zone where the webinar is taking place (must be a valid time zone ID, see https://goto-developer.logmein.com/time-zones). If this parameter is not passed, the timezone of the organizer's profile will be used
   times: list # Array with startTime and endTime for webinar. Since this call creates single session webinars, the array can only contain a single pair of startTime and endTime — item shape: {endTime: string, startTime: string}
-  --type: string # Specifies the webinar type. The default type value is "single_session", which is used to create a single webinar session. The possible values are "single_session", "series", "sequence". If type is set to "single_session", a single webinar session is created. If type is set to "series", a webinar series is created. In this case 2 or more timeframes must be specified for each webinar. Example: "times": [{"startTime": "...", "endTime": "..."},{"startTime": "...", "endTime": "..."},{"startTime": "...", "endTime": "..."}. If type is set to "sequence" a sequence of webinars is created. The times object in the body must be replaced by the "recurrenceStart" object. Example: "recurrenceStart": {"startTime":"2012-06-12T16:00:00Z", "endTime": "2012-06-12T17:00:00Z" }.  The "recurrenceEnd" and "recurrencePattern" body parameter must be specified. Example: , "recurrenceEnd": "2012-07-10", "recurrencePattern": "daily". (default: single_session)
+  --type: string # Specifies the webinar type. The default type value is "single_session", which is used to create a single webinar session. The possible values are "single_session", "series", "sequence". If type is set to "single_session", a single webinar session is created. If type is set to "series", a webinar series is created. In this case 2 or more timeframes must be specified for each webinar. Example: "times": [{"startTime": "...", "endTime": "..."},{"startTime": "...", "endTime": "..."},{"startTime": "...", "endTime": "..."}. If type is set to "sequence" a sequence of webinars is created. The times object in the body must be replaced by the "recurrenceStart" object. Example: "recurrenceStart": {"startTime":"2012-06-12T16:00:00Z", "endTime": "2012-06-12T17:00:00Z" }. The "recurrenceEnd" and "recurrencePattern" body parameter must be specified. Example: , "recurrenceEnd": "2012-07-10", "recurrencePattern": "daily". (default: single_session)
 ]: any -> record<webinarKey: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({organizer_key: $organizer_key} | format pattern "/organizers/{organizer_key}/webinars"))
-  let body = {"description": $description, "isPasswordProtected": $is_password_protected, "subject": $subject, "timeZone": $time_zone, "times": $times, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key)} | format pattern "/organizers/{organizer_key}/webinars"))
+  let req_body = {"description": $description, "isPasswordProtected": $is_password_protected, "subject": $subject, "timeZone": $time_zone, "times": $times, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Cancel webinar
@@ -289,11 +298,11 @@ export def "organizers-webinars cancel" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sendCancellationEmails" $send_cancellation_emails "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({organizer_key: $organizer_key, webinar_key: $webinar_key} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}") $qp)
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key), webinar_key: (encode-path-segment $webinar_key)} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -316,11 +325,11 @@ export def "organizers-webinars get" [
 ]: nothing -> record<description: string, inSession: bool, numberOfOpenedInvitations: int, numberOfRegistrants: int, numberOfRegistrationLinkClicks: int, organizerKey: int, registrationUrl: string, subject: string, timeZone: string, times: table<endTime: string, startTime: string>, webinarID: string, webinarKey: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({organizer_key: $organizer_key, webinar_key: $webinar_key} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}"))
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key), webinar_key: (encode-path-segment $webinar_key)} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -352,21 +361,21 @@ export def "organizers-webinars update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "notifyParticipants" $notify_participants "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({organizer_key: $organizer_key, webinar_key: $webinar_key} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}") $qp)
-  let body = {"description": $description, "locale": $locale, "subject": $subject, "timeZone": $time_zone, "times": $times} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key), webinar_key: (encode-path-segment $webinar_key)} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}") $qp)
+  let req_body = {"description": $description, "locale": $locale, "subject": $subject, "timeZone": $time_zone, "times": $times} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get attendees for all webinar sessions
 #
 # GET /organizers/{organizerKey}/webinars/{webinarKey}/attendees
 # operationId: getAttendeesForAllWebinarSessions
-export def "organizers-webinars-attendees get-attendees-for-all-webinar-sessions" [
+export def "organizers-webinars-attendees get-for-list-sessions" [
   organizer_key: int
   webinar_key: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -381,11 +390,11 @@ export def "organizers-webinars-attendees get-attendees-for-all-webinar-sessions
 ]: nothing -> table<attendance: list<record>, attendanceTimeInSeconds: int, email: string, firstName: string, lastName: string, registrantKey: int, sessionKey: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({organizer_key: $organizer_key, webinar_key: $webinar_key} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}/attendees"))
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key), webinar_key: (encode-path-segment $webinar_key)} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}/attendees"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -393,7 +402,7 @@ export def "organizers-webinars-attendees get-attendees-for-all-webinar-sessions
 #
 # GET /organizers/{organizerKey}/webinars/{webinarKey}/audio
 # operationId: getAudioInformation
-export def "organizers-webinars-audio get-audio-information" [
+export def "organizers-webinars-audio get-information" [
   organizer_key: int
   webinar_key: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -408,11 +417,11 @@ export def "organizers-webinars-audio get-audio-information" [
 ]: nothing -> record<confCallNumbers: record, privateInfo: record<attendee: string, organizer: string, panelist: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({organizer_key: $organizer_key, webinar_key: $webinar_key} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}/audio"))
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key), webinar_key: (encode-path-segment $webinar_key)} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}/audio"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -421,8 +430,8 @@ export def "organizers-webinars-audio get-audio-information" [
 # POST /organizers/{organizerKey}/webinars/{webinarKey}/audio
 # operationId: updateAudioInformation
 # --privateInfo shape: {attendee: string, organizer?: string, panelist?: string}
-# --pstnInfo shape: {tollCountries?: list, tollFreeCountries?: list}
-export def "organizers-webinars-audio update-audio-information" [
+# --pstnInfo shape: {tollCountries?: list<string>, tollFreeCountries?: list<string>}
+export def "organizers-webinars-audio update-information" [
   organizer_key: int
   webinar_key: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -436,21 +445,21 @@ export def "organizers-webinars-audio update-audio-information" [
   --notify-participants: oneof<nothing, bool> # Defines whether to send notifications to participants
   --authorization: string # Access token
   --private-info: any # Defines the audio data for an own conferencing system — shape: {attendee: string, organizer?: string, panelist?: string}
-  --pstn-info: any # Defines the audio/conferencing settings for the specified webinar. It required to pass 'tollFreeCountries' or 'tollCountries' or both. — shape: {tollCountries?: list, tollFreeCountries?: list}
+  --pstn-info: any # Defines the audio/conferencing settings for the specified webinar. It required to pass 'tollFreeCountries' or 'tollCountries' or both. — shape: {tollCountries?: list<string>, tollFreeCountries?: list<string>}
   type: string@type-completer # How to connect to the webinar's audio conference
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "notifyParticipants" $notify_participants "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({organizer_key: $organizer_key, webinar_key: $webinar_key} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}/audio") $qp)
-  let body = {"privateInfo": $private_info, "pstnInfo": $pstn_info, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key), webinar_key: (encode-path-segment $webinar_key)} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}/audio") $qp)
+  let req_body = {"privateInfo": $private_info, "pstnInfo": $pstn_info, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get co-organizers
@@ -472,11 +481,11 @@ export def "organizers-webinars-coorganizers get" [
 ]: nothing -> table<email: string, external: bool, givenName: string, joinLink: string, memberKey: string, surname: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({organizer_key: $organizer_key, webinar_key: $webinar_key} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}/coorganizers"))
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key), webinar_key: (encode-path-segment $webinar_key)} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}/coorganizers"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -501,13 +510,14 @@ export def "organizers-webinars-coorganizers create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({organizer_key: $organizer_key, webinar_key: $webinar_key} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}/coorganizers"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key), webinar_key: (encode-path-segment $webinar_key)} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}/coorganizers"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete co-organizer
@@ -532,11 +542,11 @@ export def "organizers-webinars-coorganizers delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "external" $external "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({organizer_key: $organizer_key, webinar_key: $webinar_key, coorganizer_key: $coorganizer_key} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}/coorganizers/{coorganizer_key}") $qp)
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key), webinar_key: (encode-path-segment $webinar_key), coorganizer_key: (encode-path-segment $coorganizer_key)} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}/coorganizers/{coorganizer_key}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -544,7 +554,7 @@ export def "organizers-webinars-coorganizers delete" [
 #
 # POST /organizers/{organizerKey}/webinars/{webinarKey}/coorganizers/{coorganizerKey}/resendInvitation
 # operationId: resendCoorganizerInvitation
-export def "organizers-webinars-coorganizers-resend-invitation resendCoorganizerInvitation" [
+export def "organizers-webinars-coorganizers-resend-invitation resend" [
   organizer_key: int
   webinar_key: int
   coorganizer_key: int
@@ -562,11 +572,11 @@ export def "organizers-webinars-coorganizers-resend-invitation resendCoorganizer
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "external" $external "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({organizer_key: $organizer_key, webinar_key: $webinar_key, coorganizer_key: $coorganizer_key} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}/coorganizers/{coorganizer_key}/resendInvitation") $qp)
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key), webinar_key: (encode-path-segment $webinar_key), coorganizer_key: (encode-path-segment $coorganizer_key)} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}/coorganizers/{coorganizer_key}/resendInvitation") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -574,7 +584,7 @@ export def "organizers-webinars-coorganizers-resend-invitation resendCoorganizer
 #
 # GET /organizers/{organizerKey}/webinars/{webinarKey}/meetingtimes
 # operationId: getWebinarMeetingTimes
-export def "organizers-webinars-meetingtimes get" [
+export def "organizers-webinars-meetingtimes get-meeting-times" [
   organizer_key: int
   webinar_key: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -589,11 +599,11 @@ export def "organizers-webinars-meetingtimes get" [
 ]: nothing -> table<endTime: string, startTime: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({organizer_key: $organizer_key, webinar_key: $webinar_key} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}/meetingtimes"))
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key), webinar_key: (encode-path-segment $webinar_key)} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}/meetingtimes"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -616,11 +626,11 @@ export def "organizers-webinars-panelists get" [
 ]: nothing -> table<email: string, firstName: string, joinLink: string, lastName: string, name: string, panelistId: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({organizer_key: $organizer_key, webinar_key: $webinar_key} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}/panelists"))
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key), webinar_key: (encode-path-segment $webinar_key)} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}/panelists"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -645,13 +655,14 @@ export def "organizers-webinars-panelists create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({organizer_key: $organizer_key, webinar_key: $webinar_key} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}/panelists"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key), webinar_key: (encode-path-segment $webinar_key)} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}/panelists"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete webinar panelist
@@ -674,11 +685,11 @@ export def "organizers-webinars-panelists delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({organizer_key: $organizer_key, webinar_key: $webinar_key, panelist_key: $panelist_key} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}/panelists/{panelist_key}"))
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key), webinar_key: (encode-path-segment $webinar_key), panelist_key: (encode-path-segment $panelist_key)} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}/panelists/{panelist_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -686,7 +697,7 @@ export def "organizers-webinars-panelists delete" [
 #
 # POST /organizers/{organizerKey}/webinars/{webinarKey}/panelists/{panelistKey}/resendInvitation
 # operationId: resendPanelistInvitation
-export def "organizers-webinars-panelists-resend-invitation resendPanelistInvitation" [
+export def "organizers-webinars-panelists-resend-invitation resend" [
   organizer_key: int
   webinar_key: int
   panelist_key: int
@@ -702,11 +713,11 @@ export def "organizers-webinars-panelists-resend-invitation resendPanelistInvita
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({organizer_key: $organizer_key, webinar_key: $webinar_key, panelist_key: $panelist_key} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}/panelists/{panelist_key}/resendInvitation"))
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key), webinar_key: (encode-path-segment $webinar_key), panelist_key: (encode-path-segment $panelist_key)} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}/panelists/{panelist_key}/resendInvitation"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -714,7 +725,7 @@ export def "organizers-webinars-panelists-resend-invitation resendPanelistInvita
 #
 # GET /organizers/{organizerKey}/webinars/{webinarKey}/performance
 # operationId: getPerformanceForAllWebinarSessions
-export def "organizers-webinars-performance get-performance-for-all-webinar-sessions" [
+export def "organizers-webinars-performance get-for-list-sessions" [
   organizer_key: int
   webinar_key: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -729,11 +740,11 @@ export def "organizers-webinars-performance get-performance-for-all-webinar-sess
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({organizer_key: $organizer_key, webinar_key: $webinar_key} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}/performance"))
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key), webinar_key: (encode-path-segment $webinar_key)} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}/performance"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -741,7 +752,7 @@ export def "organizers-webinars-performance get-performance-for-all-webinar-sess
 #
 # GET /organizers/{organizerKey}/webinars/{webinarKey}/registrants
 # operationId: getAllRegistrantsForWebinar
-export def "organizers-webinars-registrants get-all-registrants-for" [
+export def "organizers-webinars-registrants get-list" [
   organizer_key: int
   webinar_key: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -756,11 +767,11 @@ export def "organizers-webinars-registrants get-all-registrants-for" [
 ]: nothing -> table<email: string, firstName: string, joinUrl: string, lastName: string, registrantKey: int, registrationDate: string, status: string, timeZone: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({organizer_key: $organizer_key, webinar_key: $webinar_key} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}/registrants"))
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key), webinar_key: (encode-path-segment $webinar_key)} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}/registrants"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -806,14 +817,14 @@ export def "organizers-webinars-registrants create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "resendConfirmation" $resend_confirmation "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({organizer_key: $organizer_key, webinar_key: $webinar_key} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}/registrants") $qp)
-  let body = {"address": $address, "city": $city, "country": $country, "email": $email, "firstName": $first_name, "industry": $industry, "jobTitle": $job_title, "lastName": $last_name, "numberOfEmployees": $number_of_employees, "organization": $organization, "phone": $phone, "purchasingRole": $purchasing_role, "purchasingTimeFrame": $purchasing_time_frame, "questionsAndComments": $questions_and_comments, "responses": $responses, "source": $body_source, "state": $state, "zipCode": $zip_code} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key), webinar_key: (encode-path-segment $webinar_key)} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}/registrants") $qp)
+  let req_body = {"address": $address, "city": $city, "country": $country, "email": $email, "firstName": $first_name, "industry": $industry, "jobTitle": $job_title, "lastName": $last_name, "numberOfEmployees": $number_of_employees, "organization": $organization, "phone": $phone, "purchasingRole": $purchasing_role, "purchasingTimeFrame": $purchasing_time_frame, "questionsAndComments": $questions_and_comments, "responses": $responses, "source": $body_source, "state": $state, "zipCode": $zip_code} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get registration fields
@@ -835,11 +846,11 @@ export def "organizers-webinars-registrants-fields get-registration" [
 ]: nothing -> record<fields: table<answers: list, field: string, maxSize: int, required: bool>, questions: table<answers: list, maxSize: int, question: string, questionKey: int, required: bool, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({organizer_key: $organizer_key, webinar_key: $webinar_key} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}/registrants/fields"))
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key), webinar_key: (encode-path-segment $webinar_key)} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}/registrants/fields"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -863,11 +874,11 @@ export def "organizers-webinars-registrants delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({organizer_key: $organizer_key, webinar_key: $webinar_key, registrant_key: $registrant_key} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}/registrants/{registrant_key}"))
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key), webinar_key: (encode-path-segment $webinar_key), registrant_key: (encode-path-segment $registrant_key)} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}/registrants/{registrant_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -891,11 +902,11 @@ export def "organizers-webinars-registrants get" [
 ]: nothing -> record<address: string, city: string, country: string, email: string, employeeCount: string, firstName: string, implementationTimeFrame: string, industry: string, jobTitle: string, joinUrl: string, lastName: string, numberOfEmployees: string, organization: string, phone: string, purchasingRole: string, purchasingTimeFrame: string, questionsAndComments: string, registrantKey: int, registrationDate: string, responses: table<answer: string, question: string>, source: string, state: string, status: string, timeZone: string, type: string, unsubscribed: bool, zipCode: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({organizer_key: $organizer_key, webinar_key: $webinar_key, registrant_key: $registrant_key} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}/registrants/{registrant_key}"))
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key), webinar_key: (encode-path-segment $webinar_key), registrant_key: (encode-path-segment $registrant_key)} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}/registrants/{registrant_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -903,7 +914,7 @@ export def "organizers-webinars-registrants get" [
 #
 # GET /organizers/{organizerKey}/webinars/{webinarKey}/sessions
 # operationId: getAllSessions
-export def "organizers-webinars-sessions get-all" [
+export def "organizers-webinars-sessions get-list" [
   organizer_key: int
   webinar_key: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -918,11 +929,11 @@ export def "organizers-webinars-sessions get-all" [
 ]: nothing -> table<endTime: string, registrantsAttended: int, sessionKey: int, startTime: string, webinarID: string, webinarKey: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({organizer_key: $organizer_key, webinar_key: $webinar_key} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}/sessions"))
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key), webinar_key: (encode-path-segment $webinar_key)} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}/sessions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -946,11 +957,11 @@ export def "organizers-webinars-sessions get" [
 ]: nothing -> table<attendance: list<record>, attendanceTimeInSeconds: int, email: string, firstName: string, lastName: string, registrantKey: int, sessionKey: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({organizer_key: $organizer_key, webinar_key: $webinar_key, session_key: $session_key} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}/sessions/{session_key}"))
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key), webinar_key: (encode-path-segment $webinar_key), session_key: (encode-path-segment $session_key)} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}/sessions/{session_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -974,11 +985,11 @@ export def "organizers-webinars-sessions-attendees list" [
 ]: nothing -> table<attendance: list<record>, attendanceTimeInSeconds: int, email: string, firstName: string, lastName: string, registrantKey: int, sessionKey: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({organizer_key: $organizer_key, webinar_key: $webinar_key, session_key: $session_key} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}/sessions/{session_key}/attendees"))
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key), webinar_key: (encode-path-segment $webinar_key), session_key: (encode-path-segment $session_key)} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}/sessions/{session_key}/attendees"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1003,11 +1014,11 @@ export def "organizers-webinars-sessions-attendees get" [
 ]: nothing -> record<email: string, firstName: string, joinUrl: string, lastName: string, registrantKey: int, registrationDate: string, status: string, timeZone: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({organizer_key: $organizer_key, webinar_key: $webinar_key, session_key: $session_key, registrant_key: $registrant_key} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}/sessions/{session_key}/attendees/{registrant_key}"))
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key), webinar_key: (encode-path-segment $webinar_key), session_key: (encode-path-segment $session_key), registrant_key: (encode-path-segment $registrant_key)} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}/sessions/{session_key}/attendees/{registrant_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1015,7 +1026,7 @@ export def "organizers-webinars-sessions-attendees get" [
 #
 # GET /organizers/{organizerKey}/webinars/{webinarKey}/sessions/{sessionKey}/attendees/{registrantKey}/polls
 # operationId: getAttendeePollAnswers
-export def "organizers-webinars-sessions-attendees-polls get-attendee-poll-answers" [
+export def "organizers-webinars-sessions-attendees-polls get-answers" [
   organizer_key: int
   webinar_key: int
   session_key: int
@@ -1032,11 +1043,11 @@ export def "organizers-webinars-sessions-attendees-polls get-attendee-poll-answe
 ]: nothing -> table<answer: string, question: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({organizer_key: $organizer_key, webinar_key: $webinar_key, session_key: $session_key, registrant_key: $registrant_key} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}/sessions/{session_key}/attendees/{registrant_key}/polls"))
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key), webinar_key: (encode-path-segment $webinar_key), session_key: (encode-path-segment $session_key), registrant_key: (encode-path-segment $registrant_key)} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}/sessions/{session_key}/attendees/{registrant_key}/polls"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1061,11 +1072,11 @@ export def "organizers-webinars-sessions-attendees-questions get" [
 ]: nothing -> table<answers: list<record>, askedBy: string, question: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({organizer_key: $organizer_key, webinar_key: $webinar_key, session_key: $session_key, registrant_key: $registrant_key} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}/sessions/{session_key}/attendees/{registrant_key}/questions"))
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key), webinar_key: (encode-path-segment $webinar_key), session_key: (encode-path-segment $session_key), registrant_key: (encode-path-segment $registrant_key)} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}/sessions/{session_key}/attendees/{registrant_key}/questions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1073,7 +1084,7 @@ export def "organizers-webinars-sessions-attendees-questions get" [
 #
 # GET /organizers/{organizerKey}/webinars/{webinarKey}/sessions/{sessionKey}/attendees/{registrantKey}/surveys
 # operationId: getAttendeeSurveyAnswers
-export def "organizers-webinars-sessions-attendees-surveys get-attendee-survey-answers" [
+export def "organizers-webinars-sessions-attendees-surveys get-answers" [
   organizer_key: int
   webinar_key: int
   session_key: int
@@ -1090,11 +1101,11 @@ export def "organizers-webinars-sessions-attendees-surveys get-attendee-survey-a
 ]: nothing -> table<answer: string, question: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({organizer_key: $organizer_key, webinar_key: $webinar_key, session_key: $session_key, registrant_key: $registrant_key} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}/sessions/{session_key}/attendees/{registrant_key}/surveys"))
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key), webinar_key: (encode-path-segment $webinar_key), session_key: (encode-path-segment $session_key), registrant_key: (encode-path-segment $registrant_key)} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}/sessions/{session_key}/attendees/{registrant_key}/surveys"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1118,11 +1129,11 @@ export def "organizers-webinars-sessions-performance get" [
 ]: nothing -> record<attendance: record<averageAttendanceTimeSeconds: float, averageAttentiveness: float, averageInterestRating: float, percentageAttendance: float, registrantCount: int>, pollsAndSurveys: record<percentagePollsCompleted: float, percentageSurveysCompleted: float, pollCount: int, questionsAsked: int, surveyCount: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({organizer_key: $organizer_key, webinar_key: $webinar_key, session_key: $session_key} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}/sessions/{session_key}/performance"))
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key), webinar_key: (encode-path-segment $webinar_key), session_key: (encode-path-segment $session_key)} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}/sessions/{session_key}/performance"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1146,11 +1157,11 @@ export def "organizers-webinars-sessions-polls get" [
 ]: nothing -> table<numberOfResponses: int, question: string, responses: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({organizer_key: $organizer_key, webinar_key: $webinar_key, session_key: $session_key} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}/sessions/{session_key}/polls"))
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key), webinar_key: (encode-path-segment $webinar_key), session_key: (encode-path-segment $session_key)} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}/sessions/{session_key}/polls"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1174,11 +1185,11 @@ export def "organizers-webinars-sessions-questions get" [
 ]: nothing -> table<answers: list<record>, askedBy: string, question: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({organizer_key: $organizer_key, webinar_key: $webinar_key, session_key: $session_key} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}/sessions/{session_key}/questions"))
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key), webinar_key: (encode-path-segment $webinar_key), session_key: (encode-path-segment $session_key)} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}/sessions/{session_key}/questions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1202,10 +1213,10 @@ export def "organizers-webinars-sessions-surveys get" [
 ]: nothing -> table<numberOfResponses: int, question: string, responses: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({organizer_key: $organizer_key, webinar_key: $webinar_key, session_key: $session_key} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}/sessions/{session_key}/surveys"))
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key), webinar_key: (encode-path-segment $webinar_key), session_key: (encode-path-segment $session_key)} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}/sessions/{session_key}/surveys"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

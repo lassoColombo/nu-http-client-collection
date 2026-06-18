@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -72,7 +81,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1alpha1-comments-analyze commentanalyzercommentsanalyze" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1alpha1-comments-analyze create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -98,7 +107,7 @@ export def commands []: nothing -> table {
 # operationId: commentanalyzer.comments.analyze
 # --comment shape: {text?: string, type?: "TEXT_TYPE_UNSPECIFIED"|"PLAIN_TEXT"|"HTML"}
 # --context shape: {articleAndParentComment?: record, entries?: list}
-export def "v1alpha1-comments-analyze commentanalyzercommentsanalyze" [
+export def "v1alpha1-comments-analyze create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -124,7 +133,7 @@ export def "v1alpha1-comments-analyze commentanalyzercommentsanalyze" [
   --context: record # Context is typically something that a Comment is referencing or replying to (such as an article, or previous comment). Note: Populate only ONE OF the following fields. The oneof syntax cannot be used because that would require nesting entries inside another message and breaking backwards compatibility. The server will return an error if more than one of the following fields is present. — shape: {articleAndParentComment?: record, entries?: list}
   --do-not-store: oneof<nothing, bool> # Do not store the comment or context sent in this request. By default, the service may store comments/context for debugging purposes.
   --drop-unsupported-attributes: oneof<nothing, bool> # If specified, any requested attribute that is requested but not supported for the language detected will be dropped from the returned scores instead of returning an error.
-  --languages: list # The language(s) of the comment and context. If none are specified, we attempt to automatically detect the language. Specifying multiple languages means the text contains multiple lanugages. Both ISO and BCP-47 language codes are accepted. The server returns an error if no language was specified and language detection fails. The server also returns an error if the languages (either specified by the caller, or auto-detected) are not *all* supported by the service.
+  --languages: list<string> # The language(s) of the comment and context. If none are specified, we attempt to automatically detect the language. Specifying multiple languages means the text contains multiple lanugages. Both ISO and BCP-47 language codes are accepted. The server returns an error if no language was specified and language detection fails. The server also returns an error if the languages (either specified by the caller, or auto-detected) are not *all* supported by the service.
   --requested-attributes: record # Specification of requested attributes. The AttributeParameters serve as configuration for each associated attribute. The map keys are attribute names. The available attributes may be different on each RFE installation, and can be seen by calling ListAttributes (see above). For the prod installation, known as Perspective API, see https://developers.perspectiveapi.com/s/about-the-api-model-cards.
   --session-id: string # Session ID. Used to join related RPCs into a single session. For example, an interactive tool that calls both the AnalyzeComment and SuggestCommentScore RPCs should set all invocations of both RPCs to the same Session ID, typically a random 64-bit integer.
   --span-annotations: oneof<nothing, bool> # An advisory parameter that will return span annotations if the model is capable of providing scores with sub-comment resolution. This will likely increase the size of the returned message.
@@ -134,11 +143,11 @@ export def "v1alpha1-comments-analyze commentanalyzercommentsanalyze" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1alpha1/comments:analyze" $qp)
-  let body = {"clientToken": $client_token, "comment": $comment, "communityId": $community_id, "context": $context, "doNotStore": $do_not_store, "dropUnsupportedAttributes": $drop_unsupported_attributes, "languages": $languages, "requestedAttributes": $requested_attributes, "sessionId": $session_id, "spanAnnotations": $span_annotations} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"clientToken": $client_token, "comment": $comment, "communityId": $community_id, "context": $context, "doNotStore": $do_not_store, "dropUnsupportedAttributes": $drop_unsupported_attributes, "languages": $languages, "requestedAttributes": $requested_attributes, "sessionId": $session_id, "spanAnnotations": $span_annotations} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Suggest comment scores as training data.
@@ -147,7 +156,7 @@ export def "v1alpha1-comments-analyze commentanalyzercommentsanalyze" [
 # operationId: commentanalyzer.comments.suggestscore
 # --comment shape: {text?: string, type?: "TEXT_TYPE_UNSPECIFIED"|"PLAIN_TEXT"|"HTML"}
 # --context shape: {articleAndParentComment?: record, entries?: list}
-export def "v1alpha1-comments-suggestscore commentanalyzercommentssuggestscore" [
+export def "v1alpha1-comments-suggestscore create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -172,7 +181,7 @@ export def "v1alpha1-comments-suggestscore commentanalyzercommentssuggestscore" 
   --comment: record # Represents a body of text. — shape: {text?: string, type?: "TEXT_TYPE_UNSPECIFIED"|"PLAIN_TEXT"|"HTML"}
   --community-id: string # Optional identifier associating this comment score suggestion with a particular sub-community. Different communities may have different norms and rules. Specifying this value enables training community-specific models.
   --context: record # Context is typically something that a Comment is referencing or replying to (such as an article, or previous comment). Note: Populate only ONE OF the following fields. The oneof syntax cannot be used because that would require nesting entries inside another message and breaking backwards compatibility. The server will return an error if more than one of the following fields is present. — shape: {articleAndParentComment?: record, entries?: list}
-  --languages: list # The language(s) of the comment and context. If none are specified, we attempt to automatically detect the language. Both ISO and BCP-47 language codes are accepted.
+  --languages: list<string> # The language(s) of the comment and context. If none are specified, we attempt to automatically detect the language. Both ISO and BCP-47 language codes are accepted.
   --session-id: string # Session ID. Used to join related RPCs into a single session. For example, an interactive tool that calls both the AnalyzeComment and SuggestCommentScore RPCs should set all invocations of both RPCs to the same Session ID, typically a random 64-bit integer.
 ]: any -> record<clientToken: string, detectedLanguages: list<string>, requestedLanguages: list<string>> {
   let input = $in
@@ -180,9 +189,9 @@ export def "v1alpha1-comments-suggestscore commentanalyzercommentssuggestscore" 
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1alpha1/comments:suggestscore" $qp)
-  let body = {"attributeScores": $attribute_scores, "clientToken": $client_token, "comment": $comment, "communityId": $community_id, "context": $context, "languages": $languages, "sessionId": $session_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"attributeScores": $attribute_scores, "clientToken": $client_token, "comment": $comment, "communityId": $community_id, "context": $context, "languages": $languages, "sessionId": $session_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

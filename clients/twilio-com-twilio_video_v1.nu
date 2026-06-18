@@ -12,6 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
   match $scheme {
     "basic" => { {headers: {Authorization: $"Basic ($token_val)"}, query: ""} }
+    "basic-credentials" => { {headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: ""} }
     "none" => { {headers: {}, query: ""} }
     _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
   }
@@ -33,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
     "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
     _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -63,7 +73,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 }
 
 def base-url-completer [] { ["https://video.twilio.com"] }
-def auth-scheme-completer [] { ["basic"] }
+def auth-scheme-completer [] { ["basic" "basic-credentials"] }
 
 # Completers for enum parameters
 def format-completer [] { ["mp4" "webm"] }
@@ -140,12 +150,12 @@ export def "composition-hooks create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --audio-sources: list # An array of track names from the same group room to merge into the compositions created by the composition hook. Can include zero or more track names. A composition triggered by the composition hook includes all audio sources specified in `audio_sources` except those specified in `audio_sources_excluded`. The track names in this parameter can include an asterisk as a wild card character, which matches zero or more characters in a track name. For example, `student*` includes tracks named `student` as well as `studentTeam`.
-  --audio-sources-excluded: list # An array of track names to exclude. A composition triggered by the composition hook includes all audio sources specified in `audio_sources` except for those specified in `audio_sources_excluded`. The track names in this parameter can include an asterisk as a wild card character, which matches zero or more characters in a track name. For example, `student*` excludes `student` as well as `studentTeam`. This parameter can also be empty.
+  --audio-sources: list<string> # An array of track names from the same group room to merge into the compositions created by the composition hook. Can include zero or more track names. A composition triggered by the composition hook includes all audio sources specified in `audio_sources` except those specified in `audio_sources_excluded`. The track names in this parameter can include an asterisk as a wild card character, which matches zero or more characters in a track name. For example, `student*` includes tracks named `student` as well as `studentTeam`.
+  --audio-sources-excluded: list<string> # An array of track names to exclude. A composition triggered by the composition hook includes all audio sources specified in `audio_sources` except for those specified in `audio_sources_excluded`. The track names in this parameter can include an asterisk as a wild card character, which matches zero or more characters in a track name. For example, `student*` excludes `student` as well as `studentTeam`. This parameter can also be empty.
   --enabled: oneof<nothing, bool> # Whether the composition hook is active. When `true`, the composition hook will be triggered for every completed Group Room in the account. When `false`, the composition hook will never be triggered.
   --format: string@format-completer
-  friendly_name: string # A descriptive string that you create to describe the resource. It can be up to  100 characters long and it must be unique within the account.
-  --resolution: string # A string that describes the columns (width) and rows (height) of the generated composed video in pixels. Defaults to `640x480`.  The string's format is `{width}x{height}` where:   * 16 <= `{width}` <= 1280 * 16 <= `{height}` <= 1280 * `{width}` * `{height}` <= 921,600  Typical values are:   * HD = `1280x720` * PAL = `1024x576` * VGA = `640x480` * CIF = `320x240`  Note that the `resolution` imposes an aspect ratio to the resulting composition. When the original video tracks are constrained by the aspect ratio, they are scaled to fit. See [Specifying Video Layouts](https://www.twilio.com/docs/video/api/compositions-resource#specifying-video-layouts) for more info.
+  friendly_name: string # A descriptive string that you create to describe the resource. It can be up to 100 characters long and it must be unique within the account.
+  --resolution: string # A string that describes the columns (width) and rows (height) of the generated composed video in pixels. Defaults to `640x480`. The string's format is `{width}x{height}` where: * 16 <= `{width}` <= 1280 * 16 <= `{height}` <= 1280 * `{width}` * `{height}` <= 921,600 Typical values are: * HD = `1280x720` * PAL = `1024x576` * VGA = `640x480` * CIF = `320x240` Note that the `resolution` imposes an aspect ratio to the resulting composition. When the original video tracks are constrained by the aspect ratio, they are scaled to fit. See [Specifying Video Layouts](https://www.twilio.com/docs/video/api/compositions-resource#specifying-video-layouts) for more info.
   --status-callback: string # The URL we should call using the `status_callback_method` to send status information to your application on every composition event. If not provided, status callback events will not be dispatched. (format: uri)
   --status-callback-method: string@status-callback-method-completer # The HTTP method we should use to call `status_callback`. Can be: `POST` or `GET` and the default is `POST`. (format: http-method)
   --trim: oneof<nothing, bool> # Whether to clip the intervals where there is no active media in the Compositions triggered by the composition hook. The default is `true`. Compositions with `trim` enabled are shorter when the Room is created and no Participant joins for a while as well as if all the Participants leave the room and join later, because those gaps will be removed. See [Specifying Video Layouts](https://www.twilio.com/docs/video/api/compositions-resource#specifying-video-layouts) for more info.
@@ -155,11 +165,12 @@ export def "composition-hooks create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://video.twilio.com")
   let full_url = (build-url $base "/v1/CompositionHooks")
-  let body = {"AudioSources": $audio_sources, "AudioSourcesExcluded": $audio_sources_excluded, "Enabled": $enabled, "Format": $format, "FriendlyName": $friendly_name, "Resolution": $resolution, "StatusCallback": $status_callback, "StatusCallbackMethod": $status_callback_method, "Trim": $trim, "VideoLayout": $video_layout} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"AudioSources": $audio_sources, "AudioSourcesExcluded": $audio_sources_excluded, "Enabled": $enabled, "Format": $format, "FriendlyName": $friendly_name, "Resolution": $resolution, "StatusCallback": $status_callback, "StatusCallbackMethod": $status_callback_method, "Trim": $trim, "VideoLayout": $video_layout} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Delete a Recording CompositionHook resource identified by a `CompositionHook SID`.
@@ -179,7 +190,7 @@ export def "composition-hooks delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://video.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/CompositionHooks/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/CompositionHooks/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -202,7 +213,7 @@ export def "composition-hooks get" [
 ]: nothing -> record<account_sid: string, audio_sources: list<string>, audio_sources_excluded: list<string>, date_created: string, date_updated: string, enabled: bool, format: string, friendly_name: string, resolution: string, sid: string, status_callback: string, status_callback_method: string, trim: bool, url: string, video_layout: any> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://video.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/CompositionHooks/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/CompositionHooks/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -221,12 +232,12 @@ export def "composition-hooks update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --audio-sources: list # An array of track names from the same group room to merge into the compositions created by the composition hook. Can include zero or more track names. A composition triggered by the composition hook includes all audio sources specified in `audio_sources` except those specified in `audio_sources_excluded`. The track names in this parameter can include an asterisk as a wild card character, which matches zero or more characters in a track name. For example, `student*` includes tracks named `student` as well as `studentTeam`.
-  --audio-sources-excluded: list # An array of track names to exclude. A composition triggered by the composition hook includes all audio sources specified in `audio_sources` except for those specified in `audio_sources_excluded`. The track names in this parameter can include an asterisk as a wild card character, which matches zero or more characters in a track name. For example, `student*` excludes `student` as well as `studentTeam`. This parameter can also be empty.
+  --audio-sources: list<string> # An array of track names from the same group room to merge into the compositions created by the composition hook. Can include zero or more track names. A composition triggered by the composition hook includes all audio sources specified in `audio_sources` except those specified in `audio_sources_excluded`. The track names in this parameter can include an asterisk as a wild card character, which matches zero or more characters in a track name. For example, `student*` includes tracks named `student` as well as `studentTeam`.
+  --audio-sources-excluded: list<string> # An array of track names to exclude. A composition triggered by the composition hook includes all audio sources specified in `audio_sources` except for those specified in `audio_sources_excluded`. The track names in this parameter can include an asterisk as a wild card character, which matches zero or more characters in a track name. For example, `student*` excludes `student` as well as `studentTeam`. This parameter can also be empty.
   --enabled: oneof<nothing, bool> # Whether the composition hook is active. When `true`, the composition hook will be triggered for every completed Group Room in the account. When `false`, the composition hook never triggers.
   --format: string@format-completer
-  friendly_name: string # A descriptive string that you create to describe the resource. It can be up to  100 characters long and it must be unique within the account.
-  --resolution: string # A string that describes the columns (width) and rows (height) of the generated composed video in pixels. Defaults to `640x480`.  The string's format is `{width}x{height}` where:   * 16 <= `{width}` <= 1280 * 16 <= `{height}` <= 1280 * `{width}` * `{height}` <= 921,600  Typical values are:   * HD = `1280x720` * PAL = `1024x576` * VGA = `640x480` * CIF = `320x240`  Note that the `resolution` imposes an aspect ratio to the resulting composition. When the original video tracks are constrained by the aspect ratio, they are scaled to fit. See [Specifying Video Layouts](https://www.twilio.com/docs/video/api/compositions-resource#specifying-video-layouts) for more info.
+  friendly_name: string # A descriptive string that you create to describe the resource. It can be up to 100 characters long and it must be unique within the account.
+  --resolution: string # A string that describes the columns (width) and rows (height) of the generated composed video in pixels. Defaults to `640x480`. The string's format is `{width}x{height}` where: * 16 <= `{width}` <= 1280 * 16 <= `{height}` <= 1280 * `{width}` * `{height}` <= 921,600 Typical values are: * HD = `1280x720` * PAL = `1024x576` * VGA = `640x480` * CIF = `320x240` Note that the `resolution` imposes an aspect ratio to the resulting composition. When the original video tracks are constrained by the aspect ratio, they are scaled to fit. See [Specifying Video Layouts](https://www.twilio.com/docs/video/api/compositions-resource#specifying-video-layouts) for more info.
   --status-callback: string # The URL we should call using the `status_callback_method` to send status information to your application on every composition event. If not provided, status callback events will not be dispatched. (format: uri)
   --status-callback-method: string@status-callback-method-completer # The HTTP method we should use to call `status_callback`. Can be: `POST` or `GET` and the default is `POST`. (format: http-method)
   --trim: oneof<nothing, bool> # Whether to clip the intervals where there is no active media in the compositions triggered by the composition hook. The default is `true`. Compositions with `trim` enabled are shorter when the Room is created and no Participant joins for a while as well as if all the Participants leave the room and join later, because those gaps will be removed. See [Specifying Video Layouts](https://www.twilio.com/docs/video/api/compositions-resource#specifying-video-layouts) for more info.
@@ -235,12 +246,13 @@ export def "composition-hooks update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://video.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/CompositionHooks/{sid}"))
-  let body = {"AudioSources": $audio_sources, "AudioSourcesExcluded": $audio_sources_excluded, "Enabled": $enabled, "Format": $format, "FriendlyName": $friendly_name, "Resolution": $resolution, "StatusCallback": $status_callback, "StatusCallbackMethod": $status_callback_method, "Trim": $trim, "VideoLayout": $video_layout} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/CompositionHooks/{sid}"))
+  let req_body = {"AudioSources": $audio_sources, "AudioSourcesExcluded": $audio_sources_excluded, "Enabled": $enabled, "Format": $format, "FriendlyName": $friendly_name, "Resolution": $resolution, "StatusCallback": $status_callback, "StatusCallbackMethod": $status_callback_method, "Trim": $trim, "VideoLayout": $video_layout} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # GET /v1/CompositionSettings/Default
@@ -277,7 +289,7 @@ export def "composition-settings-default create" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --aws-credentials-sid: string # The SID of the stored Credential resource.
-  --aws-s3-url: string # The URL of the AWS S3 bucket where the compositions should be stored. We only support DNS-compliant URLs like `https://documentation-example-twilio-bucket/compositions`, where `compositions` is the path in which you want the compositions to be stored. This URL accepts only URI-valid characters, as described in the <a href='https://tools.ietf.org/html/rfc3986#section-2'>RFC 3986</a>. (format: uri)
+  --aws-s3-url: string # The URL of the AWS S3 bucket where the compositions should be stored. We only support DNS-compliant URLs like `https://documentation-example-twilio-bucket/compositions`, where `compositions` is the path in which you want the compositions to be stored. This URL accepts only URI-valid characters, as described in the RFC 3986. (format: uri)
   --aws-storage-enabled: oneof<nothing, bool> # Whether all compositions should be written to the `aws_s3_url`. When `false`, all compositions are stored in our cloud.
   --encryption-enabled: oneof<nothing, bool> # Whether all compositions should be stored in an encrypted form. The default is `false`.
   --encryption-key-sid: string # The SID of the Public Key resource to use for encryption.
@@ -287,11 +299,12 @@ export def "composition-settings-default create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://video.twilio.com")
   let full_url = (build-url $base "/v1/CompositionSettings/Default")
-  let body = {"AwsCredentialsSid": $aws_credentials_sid, "AwsS3Url": $aws_s3_url, "AwsStorageEnabled": $aws_storage_enabled, "EncryptionEnabled": $encryption_enabled, "EncryptionKeySid": $encryption_key_sid, "FriendlyName": $friendly_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"AwsCredentialsSid": $aws_credentials_sid, "AwsS3Url": $aws_s3_url, "AwsStorageEnabled": $aws_storage_enabled, "EncryptionEnabled": $encryption_enabled, "EncryptionKeySid": $encryption_key_sid, "FriendlyName": $friendly_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # List of all Recording compositions.
@@ -336,10 +349,10 @@ export def "compositions create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --audio-sources: list # An array of track names from the same group room to merge into the new composition. Can include zero or more track names. The new composition includes all audio sources specified in `audio_sources` except for those specified in `audio_sources_excluded`. The track names in this parameter can include an asterisk as a wild card character, which will match zero or more characters in a track name. For example, `student*` includes `student` as well as `studentTeam`. Please, be aware that either video_layout or audio_sources have to be provided to get a valid creation request
-  --audio-sources-excluded: list # An array of track names to exclude. The new composition includes all audio sources specified in `audio_sources` except for those specified in `audio_sources_excluded`. The track names in this parameter can include an asterisk as a wild card character, which will match zero or more characters in a track name. For example, `student*` excludes `student` as well as `studentTeam`. This parameter can also be empty.
+  --audio-sources: list<string> # An array of track names from the same group room to merge into the new composition. Can include zero or more track names. The new composition includes all audio sources specified in `audio_sources` except for those specified in `audio_sources_excluded`. The track names in this parameter can include an asterisk as a wild card character, which will match zero or more characters in a track name. For example, `student*` includes `student` as well as `studentTeam`. Please, be aware that either video_layout or audio_sources have to be provided to get a valid creation request
+  --audio-sources-excluded: list<string> # An array of track names to exclude. The new composition includes all audio sources specified in `audio_sources` except for those specified in `audio_sources_excluded`. The track names in this parameter can include an asterisk as a wild card character, which will match zero or more characters in a track name. For example, `student*` excludes `student` as well as `studentTeam`. This parameter can also be empty.
   --format: string@format-completer
-  --resolution: string # A string that describes the columns (width) and rows (height) of the generated composed video in pixels. Defaults to `640x480`.  The string's format is `{width}x{height}` where:   * 16 <= `{width}` <= 1280 * 16 <= `{height}` <= 1280 * `{width}` * `{height}` <= 921,600  Typical values are:   * HD = `1280x720` * PAL = `1024x576` * VGA = `640x480` * CIF = `320x240`  Note that the `resolution` imposes an aspect ratio to the resulting composition. When the original video tracks are constrained by the aspect ratio, they are scaled to fit. See [Specifying Video Layouts](https://www.twilio.com/docs/video/api/compositions-resource#specifying-video-layouts) for more info.
+  --resolution: string # A string that describes the columns (width) and rows (height) of the generated composed video in pixels. Defaults to `640x480`. The string's format is `{width}x{height}` where: * 16 <= `{width}` <= 1280 * 16 <= `{height}` <= 1280 * `{width}` * `{height}` <= 921,600 Typical values are: * HD = `1280x720` * PAL = `1024x576` * VGA = `640x480` * CIF = `320x240` Note that the `resolution` imposes an aspect ratio to the resulting composition. When the original video tracks are constrained by the aspect ratio, they are scaled to fit. See [Specifying Video Layouts](https://www.twilio.com/docs/video/api/compositions-resource#specifying-video-layouts) for more info.
   room_sid: string # The SID of the Group Room with the media tracks to be used as composition sources.
   --status-callback: string # The URL we should call using the `status_callback_method` to send status information to your application on every composition event. If not provided, status callback events will not be dispatched. (format: uri)
   --status-callback-method: string@status-callback-method-completer # The HTTP method we should use to call `status_callback`. Can be: `POST` or `GET` and the default is `POST`. (format: http-method)
@@ -350,11 +363,12 @@ export def "compositions create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://video.twilio.com")
   let full_url = (build-url $base "/v1/Compositions")
-  let body = {"AudioSources": $audio_sources, "AudioSourcesExcluded": $audio_sources_excluded, "Format": $format, "Resolution": $resolution, "RoomSid": $room_sid, "StatusCallback": $status_callback, "StatusCallbackMethod": $status_callback_method, "Trim": $trim, "VideoLayout": $video_layout} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"AudioSources": $audio_sources, "AudioSourcesExcluded": $audio_sources_excluded, "Format": $format, "Resolution": $resolution, "RoomSid": $room_sid, "StatusCallback": $status_callback, "StatusCallbackMethod": $status_callback_method, "Trim": $trim, "VideoLayout": $video_layout} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Delete a Recording Composition resource identified by a Composition SID.
@@ -374,7 +388,7 @@ export def "compositions delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://video.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/Compositions/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Compositions/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -397,7 +411,7 @@ export def "compositions get" [
 ]: nothing -> record<account_sid: string, audio_sources: list<string>, audio_sources_excluded: list<string>, bitrate: int, date_completed: string, date_created: string, date_deleted: string, duration: int, format: string, links: record, media_external_location: string, resolution: string, room_sid: string, sid: string, size: int, status: string, status_callback: string, status_callback_method: string, trim: bool, url: string, video_layout: any> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://video.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/Compositions/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Compositions/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -437,7 +451,7 @@ export def "recording-settings-default create" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --aws-credentials-sid: string # The SID of the stored Credential resource.
-  --aws-s3-url: string # The URL of the AWS S3 bucket where the recordings should be stored. We only support DNS-compliant URLs like `https://documentation-example-twilio-bucket/recordings`, where `recordings` is the path in which you want the recordings to be stored. This URL accepts only URI-valid characters, as described in the <a href='https://tools.ietf.org/html/rfc3986#section-2'>RFC 3986</a>. (format: uri)
+  --aws-s3-url: string # The URL of the AWS S3 bucket where the recordings should be stored. We only support DNS-compliant URLs like `https://documentation-example-twilio-bucket/recordings`, where `recordings` is the path in which you want the recordings to be stored. This URL accepts only URI-valid characters, as described in the RFC 3986. (format: uri)
   --aws-storage-enabled: oneof<nothing, bool> # Whether all recordings should be written to the `aws_s3_url`. When `false`, all recordings are stored in our cloud.
   --encryption-enabled: oneof<nothing, bool> # Whether all recordings should be stored in an encrypted form. The default is `false`.
   --encryption-key-sid: string # The SID of the Public Key resource to use for encryption.
@@ -447,11 +461,12 @@ export def "recording-settings-default create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://video.twilio.com")
   let full_url = (build-url $base "/v1/RecordingSettings/Default")
-  let body = {"AwsCredentialsSid": $aws_credentials_sid, "AwsS3Url": $aws_s3_url, "AwsStorageEnabled": $aws_storage_enabled, "EncryptionEnabled": $encryption_enabled, "EncryptionKeySid": $encryption_key_sid, "FriendlyName": $friendly_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"AwsCredentialsSid": $aws_credentials_sid, "AwsS3Url": $aws_s3_url, "AwsStorageEnabled": $aws_storage_enabled, "EncryptionEnabled": $encryption_enabled, "EncryptionKeySid": $encryption_key_sid, "FriendlyName": $friendly_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # List of all Track recordings.
@@ -469,7 +484,7 @@ export def "recordings list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --status: string@status-completer-1 # Read only the recordings that have this status. Can be: `processing`, `completed`, or `deleted`.
   --source-sid: string # Read only the recordings that have this `source_sid`.
-  --grouping-sid: list # Read only recordings with this `grouping_sid`, which may include a `participant_sid` and/or a `room_sid`.
+  --grouping-sid: list<string> # Read only recordings with this `grouping_sid`, which may include a `participant_sid` and/or a `room_sid`.
   --date-created-after: string # Read only recordings that started on or after this [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) date-time with time zone. (format: date-time)
   --date-created-before: string # Read only recordings that started before this [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) date-time with time zone, given as `YYYY-MM-DDThh:mm:ss+|-hh:mm` or `YYYY-MM-DDThh:mm:ssZ`. (format: date-time)
   --media-type: string@media-type-completer # Read only recordings that have this media type. Can be either `audio` or `video`.
@@ -503,7 +518,7 @@ export def "recordings delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://video.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/Recordings/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Recordings/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -526,7 +541,7 @@ export def "recordings get" [
 ]: nothing -> record<account_sid: string, codec: string, container_format: string, date_created: string, duration: int, grouping_sids: any, links: record, media_external_location: string, offset: int, sid: string, size: int, source_sid: string, status: string, status_callback: string, status_callback_method: string, track_name: string, type: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://video.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/Recordings/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Recordings/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -579,7 +594,7 @@ export def "rooms create" [
   --large-room: oneof<nothing, bool> # When set to true, indicated that this is the large room.
   --max-participant-duration: int # The maximum number of seconds a Participant can be connected to the room. The maximum possible value is 86400 seconds (24 hours). The default is 14400 seconds (4 hours).
   --max-participants: int # The maximum number of concurrent Participants allowed in the room. Peer-to-peer rooms can have up to 10 Participants. Small Group rooms can have up to 4 Participants. Group rooms can have up to 50 Participants.
-  --media-region: string # The region for the media server in Group Rooms.  Can be: one of the [available Media Regions](https://www.twilio.com/docs/video/ip-address-whitelisting#group-rooms-media-servers). ***This feature is not available in `peer-to-peer` rooms.***
+  --media-region: string # The region for the media server in Group Rooms. Can be: one of the [available Media Regions](https://www.twilio.com/docs/video/ip-address-whitelisting#group-rooms-media-servers). ***This feature is not available in `peer-to-peer` rooms.***
   --record-participants-on-connect: oneof<nothing, bool> # Whether to start recording when Participants connect. ***This feature is not available in `peer-to-peer` rooms.***
   --recording-rules: any # A collection of Recording Rules that describe how to include or exclude matching tracks for recording
   --status-callback: string # The URL we should call using the `status_callback_method` to send status information to your application on every room event. See [Status Callbacks](https://www.twilio.com/docs/video/api/status-callbacks) for more info. (format: uri)
@@ -587,17 +602,18 @@ export def "rooms create" [
   --type: string@type-completer
   --unique-name: string # An application-defined string that uniquely identifies the resource. It can be used as a `room_sid` in place of the resource's `sid` in the URL to address the resource, assuming it does not contain any [reserved characters](https://tools.ietf.org/html/rfc3986#section-2.2) that would need to be URL encoded. This value is unique for `in-progress` rooms. SDK clients can use this name to connect to the room. REST API clients can use this name in place of the Room SID to interact with the room as long as the room is `in-progress`.
   --unused-room-timeout: int # Configures how long (in minutes) a room will remain active if no one joins. Valid values range from 1 to 60 minutes (no fractions).
-  --video-codecs: list # An array of the video codecs that are supported when publishing a track in the room.  Can be: `VP8` and `H264`.  ***This feature is not available in `peer-to-peer` rooms***
+  --video-codecs: list<string> # An array of the video codecs that are supported when publishing a track in the room. Can be: `VP8` and `H264`. ***This feature is not available in `peer-to-peer` rooms***
 ]: any -> record<account_sid: string, audio_only: bool, date_created: string, date_updated: string, duration: int, empty_room_timeout: int, enable_turn: bool, end_time: string, large_room: bool, links: record, max_concurrent_published_tracks: int, max_participant_duration: int, max_participants: int, media_region: string, record_participants_on_connect: bool, sid: string, status: string, status_callback: string, status_callback_method: string, type: string, unique_name: string, unused_room_timeout: int, url: string, video_codecs: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://video.twilio.com")
   let full_url = (build-url $base "/v1/Rooms")
-  let body = {"AudioOnly": $audio_only, "EmptyRoomTimeout": $empty_room_timeout, "EnableTurn": $enable_turn, "LargeRoom": $large_room, "MaxParticipantDuration": $max_participant_duration, "MaxParticipants": $max_participants, "MediaRegion": $media_region, "RecordParticipantsOnConnect": $record_participants_on_connect, "RecordingRules": $recording_rules, "StatusCallback": $status_callback, "StatusCallbackMethod": $status_callback_method, "Type": $type, "UniqueName": $unique_name, "UnusedRoomTimeout": $unused_room_timeout, "VideoCodecs": $video_codecs} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"AudioOnly": $audio_only, "EmptyRoomTimeout": $empty_room_timeout, "EnableTurn": $enable_turn, "LargeRoom": $large_room, "MaxParticipantDuration": $max_participant_duration, "MaxParticipants": $max_participants, "MediaRegion": $media_region, "RecordParticipantsOnConnect": $record_participants_on_connect, "RecordingRules": $recording_rules, "StatusCallback": $status_callback, "StatusCallbackMethod": $status_callback_method, "Type": $type, "UniqueName": $unique_name, "UnusedRoomTimeout": $unused_room_timeout, "VideoCodecs": $video_codecs} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # GET /v1/Rooms/{RoomSid}/Participants
@@ -624,7 +640,7 @@ export def "rooms-participants list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://video.twilio.com")
   let qp = [(serialize-qp "Status" $status "scalar") (serialize-qp "Identity" $identity "scalar") (serialize-qp "DateCreatedAfter" $date_created_after "scalar") (serialize-qp "DateCreatedBefore" $date_created_before "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({room_sid: $room_sid} | format pattern "/v1/Rooms/{room_sid}/Participants") $qp)
+  let full_url = (build-url $base ({room_sid: (encode-path-segment $room_sid)} | format pattern "/v1/Rooms/{room_sid}/Participants") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -652,7 +668,7 @@ export def "rooms-participants-published-tracks list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://video.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({room_sid: $room_sid, participant_sid: $participant_sid} | format pattern "/v1/Rooms/{room_sid}/Participants/{participant_sid}/PublishedTracks") $qp)
+  let full_url = (build-url $base ({room_sid: (encode-path-segment $room_sid), participant_sid: (encode-path-segment $participant_sid)} | format pattern "/v1/Rooms/{room_sid}/Participants/{participant_sid}/PublishedTracks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -677,7 +693,7 @@ export def "rooms-participants-published-tracks get" [
 ]: nothing -> record<date_created: string, date_updated: string, enabled: bool, kind: string, name: string, participant_sid: string, room_sid: string, sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://video.twilio.com")
-  let full_url = (build-url $base ({room_sid: $room_sid, participant_sid: $participant_sid, sid: $sid} | format pattern "/v1/Rooms/{room_sid}/Participants/{participant_sid}/PublishedTracks/{sid}"))
+  let full_url = (build-url $base ({room_sid: (encode-path-segment $room_sid), participant_sid: (encode-path-segment $participant_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Rooms/{room_sid}/Participants/{participant_sid}/PublishedTracks/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -701,7 +717,7 @@ export def "rooms-participants-subscribe-rules get" [
 ]: nothing -> record<date_created: string, date_updated: string, participant_sid: string, room_sid: string, rules: table<all: bool, kind: string, priority: string, publisher: string, track: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://video.twilio.com")
-  let full_url = (build-url $base ({room_sid: $room_sid, participant_sid: $participant_sid} | format pattern "/v1/Rooms/{room_sid}/Participants/{participant_sid}/SubscribeRules"))
+  let full_url = (build-url $base ({room_sid: (encode-path-segment $room_sid), participant_sid: (encode-path-segment $participant_sid)} | format pattern "/v1/Rooms/{room_sid}/Participants/{participant_sid}/SubscribeRules"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -727,12 +743,13 @@ export def "rooms-participants-subscribe-rules update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://video.twilio.com")
-  let full_url = (build-url $base ({room_sid: $room_sid, participant_sid: $participant_sid} | format pattern "/v1/Rooms/{room_sid}/Participants/{participant_sid}/SubscribeRules"))
-  let body = {"Rules": $rules} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({room_sid: (encode-path-segment $room_sid), participant_sid: (encode-path-segment $participant_sid)} | format pattern "/v1/Rooms/{room_sid}/Participants/{participant_sid}/SubscribeRules"))
+  let req_body = {"Rules": $rules} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Returns a list of tracks that are subscribed for the participant.
@@ -757,13 +774,13 @@ export def "rooms-participants-subscribed-tracks list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://video.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({room_sid: $room_sid, participant_sid: $participant_sid} | format pattern "/v1/Rooms/{room_sid}/Participants/{participant_sid}/SubscribedTracks") $qp)
+  let full_url = (build-url $base ({room_sid: (encode-path-segment $room_sid), participant_sid: (encode-path-segment $participant_sid)} | format pattern "/v1/Rooms/{room_sid}/Participants/{participant_sid}/SubscribedTracks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Returns a single Track resource represented by `track_sid`.  Note: This is one resource with the Video API that requires a SID, be Track Name on the subscriber side is not guaranteed to be unique.
+# Returns a single Track resource represented by `track_sid`. Note: This is one resource with the Video API that requires a SID, be Track Name on the subscriber side is not guaranteed to be unique.
 #
 # GET /v1/Rooms/{RoomSid}/Participants/{ParticipantSid}/SubscribedTracks/{Sid}
 # operationId: FetchRoomParticipantSubscribedTrack
@@ -782,7 +799,7 @@ export def "rooms-participants-subscribed-tracks get" [
 ]: nothing -> record<date_created: string, date_updated: string, enabled: bool, kind: string, name: string, participant_sid: string, publisher_sid: string, room_sid: string, sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://video.twilio.com")
-  let full_url = (build-url $base ({room_sid: $room_sid, participant_sid: $participant_sid, sid: $sid} | format pattern "/v1/Rooms/{room_sid}/Participants/{participant_sid}/SubscribedTracks/{sid}"))
+  let full_url = (build-url $base ({room_sid: (encode-path-segment $room_sid), participant_sid: (encode-path-segment $participant_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Rooms/{room_sid}/Participants/{participant_sid}/SubscribedTracks/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -805,7 +822,7 @@ export def "rooms-participants get" [
 ]: nothing -> record<account_sid: string, date_created: string, date_updated: string, duration: int, end_time: string, identity: string, links: record, room_sid: string, sid: string, start_time: string, status: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://video.twilio.com")
-  let full_url = (build-url $base ({room_sid: $room_sid, sid: $sid} | format pattern "/v1/Rooms/{room_sid}/Participants/{sid}"))
+  let full_url = (build-url $base ({room_sid: (encode-path-segment $room_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Rooms/{room_sid}/Participants/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -830,12 +847,13 @@ export def "rooms-participants update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://video.twilio.com")
-  let full_url = (build-url $base ({room_sid: $room_sid, sid: $sid} | format pattern "/v1/Rooms/{room_sid}/Participants/{sid}"))
-  let body = {"Status": $status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({room_sid: (encode-path-segment $room_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Rooms/{room_sid}/Participants/{sid}"))
+  let req_body = {"Status": $status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # POST /v1/Rooms/{RoomSid}/Participants/{Sid}/Anonymize
@@ -855,7 +873,7 @@ export def "rooms-participants-anonymize update" [
 ]: nothing -> record<account_sid: string, date_created: string, date_updated: string, duration: int, end_time: string, identity: string, room_sid: string, sid: string, start_time: string, status: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://video.twilio.com")
-  let full_url = (build-url $base ({room_sid: $room_sid, sid: $sid} | format pattern "/v1/Rooms/{room_sid}/Participants/{sid}/Anonymize"))
+  let full_url = (build-url $base ({room_sid: (encode-path-segment $room_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Rooms/{room_sid}/Participants/{sid}/Anonymize"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -878,7 +896,7 @@ export def "rooms-recording-rules get" [
 ]: nothing -> record<date_created: string, date_updated: string, room_sid: string, rules: table<all: bool, kind: string, publisher: string, track: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://video.twilio.com")
-  let full_url = (build-url $base ({room_sid: $room_sid} | format pattern "/v1/Rooms/{room_sid}/RecordingRules"))
+  let full_url = (build-url $base ({room_sid: (encode-path-segment $room_sid)} | format pattern "/v1/Rooms/{room_sid}/RecordingRules"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -903,12 +921,13 @@ export def "rooms-recording-rules update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://video.twilio.com")
-  let full_url = (build-url $base ({room_sid: $room_sid} | format pattern "/v1/Rooms/{room_sid}/RecordingRules"))
-  let body = {"Rules": $rules} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({room_sid: (encode-path-segment $room_sid)} | format pattern "/v1/Rooms/{room_sid}/RecordingRules"))
+  let req_body = {"Rules": $rules} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # GET /v1/Rooms/{RoomSid}/Recordings
@@ -935,7 +954,7 @@ export def "rooms-recordings list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://video.twilio.com")
   let qp = [(serialize-qp "Status" $status "scalar") (serialize-qp "SourceSid" $source_sid "scalar") (serialize-qp "DateCreatedAfter" $date_created_after "scalar") (serialize-qp "DateCreatedBefore" $date_created_before "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({room_sid: $room_sid} | format pattern "/v1/Rooms/{room_sid}/Recordings") $qp)
+  let full_url = (build-url $base ({room_sid: (encode-path-segment $room_sid)} | format pattern "/v1/Rooms/{room_sid}/Recordings") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -958,7 +977,7 @@ export def "rooms-recordings delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://video.twilio.com")
-  let full_url = (build-url $base ({room_sid: $room_sid, sid: $sid} | format pattern "/v1/Rooms/{room_sid}/Recordings/{sid}"))
+  let full_url = (build-url $base ({room_sid: (encode-path-segment $room_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Rooms/{room_sid}/Recordings/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -981,7 +1000,7 @@ export def "rooms-recordings get" [
 ]: nothing -> record<account_sid: string, codec: string, container_format: string, date_created: string, duration: int, grouping_sids: any, links: record, media_external_location: string, offset: int, room_sid: string, sid: string, size: int, source_sid: string, status: string, track_name: string, type: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://video.twilio.com")
-  let full_url = (build-url $base ({room_sid: $room_sid, sid: $sid} | format pattern "/v1/Rooms/{room_sid}/Recordings/{sid}"))
+  let full_url = (build-url $base ({room_sid: (encode-path-segment $room_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Rooms/{room_sid}/Recordings/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1003,7 +1022,7 @@ export def "rooms get" [
 ]: nothing -> record<account_sid: string, audio_only: bool, date_created: string, date_updated: string, duration: int, empty_room_timeout: int, enable_turn: bool, end_time: string, large_room: bool, links: record, max_concurrent_published_tracks: int, max_participant_duration: int, max_participants: int, media_region: string, record_participants_on_connect: bool, sid: string, status: string, status_callback: string, status_callback_method: string, type: string, unique_name: string, unused_room_timeout: int, url: string, video_codecs: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://video.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/Rooms/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Rooms/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1027,10 +1046,11 @@ export def "rooms update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://video.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/Rooms/{sid}"))
-  let body = {"Status": $status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Rooms/{sid}"))
+  let req_body = {"Status": $status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }

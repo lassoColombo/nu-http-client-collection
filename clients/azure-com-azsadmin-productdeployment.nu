@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -108,7 +117,7 @@ export def "subscriptions-providers-microsoft-deployment-admin-locations-global-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Deployment.Admin/locations/global/productDeployments") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Deployment.Admin/locations/global/productDeployments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -134,7 +143,7 @@ export def "subscriptions-providers-microsoft-deployment-admin-locations-global-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, product_id: $product_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Deployment.Admin/locations/global/productDeployments/{product_id}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), product_id: (encode-path-segment $product_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Deployment.Admin/locations/global/productDeployments/{product_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -144,7 +153,7 @@ export def "subscriptions-providers-microsoft-deployment-admin-locations-global-
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.Deployment.Admin/locations/global/productDeployments/{productId}/bootstrap
 # operationId: ProductDeployments_BootStrap
-export def "subscriptions-providers-microsoft-deployment-admin-locations-global-product-deployments-bootstrap post" [
+export def "subscriptions-providers-microsoft-deployment-admin-locations-global-product-deployments-bootstrap create-boot-strap" [
   subscription_id: string
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -162,19 +171,19 @@ export def "subscriptions-providers-microsoft-deployment-admin-locations-global-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, product_id: $product_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Deployment.Admin/locations/global/productDeployments/{product_id}/bootstrap") $qp)
-  let body = {"version": $version} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), product_id: (encode-path-segment $product_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Deployment.Admin/locations/global/productDeployments/{product_id}/bootstrap") $qp)
+  let req_body = {"version": $version} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Invokes deploy action on the product
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.Deployment.Admin/locations/global/productDeployments/{productId}/deploy
 # operationId: ProductDeployments_Deploy
-export def "subscriptions-providers-microsoft-deployment-admin-locations-global-product-deployments-deploy post" [
+export def "subscriptions-providers-microsoft-deployment-admin-locations-global-product-deployments-deploy create" [
   subscription_id: string
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -193,12 +202,12 @@ export def "subscriptions-providers-microsoft-deployment-admin-locations-global-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, product_id: $product_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Deployment.Admin/locations/global/productDeployments/{product_id}/deploy") $qp)
-  let body = {"parameters": $parameters, "version": $version} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), product_id: (encode-path-segment $product_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Deployment.Admin/locations/global/productDeployments/{product_id}/deploy") $qp)
+  let req_body = {"parameters": $parameters, "version": $version} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # locks the product subscription
@@ -221,7 +230,7 @@ export def "subscriptions-providers-microsoft-deployment-admin-locations-global-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, product_id: $product_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Deployment.Admin/locations/global/productDeployments/{product_id}/lock") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), product_id: (encode-path-segment $product_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Deployment.Admin/locations/global/productDeployments/{product_id}/lock") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -247,7 +256,7 @@ export def "subscriptions-providers-microsoft-deployment-admin-locations-global-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, product_id: $product_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Deployment.Admin/locations/global/productDeployments/{product_id}/remove") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), product_id: (encode-path-segment $product_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Deployment.Admin/locations/global/productDeployments/{product_id}/remove") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -257,7 +266,7 @@ export def "subscriptions-providers-microsoft-deployment-admin-locations-global-
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.Deployment.Admin/locations/global/productDeployments/{productId}/rotateSecrets
 # operationId: ProductDeployments_RotateSecrets
-export def "subscriptions-providers-microsoft-deployment-admin-locations-global-product-deployments-rotate-secrets post" [
+export def "subscriptions-providers-microsoft-deployment-admin-locations-global-product-deployments-rotate-secrets create" [
   subscription_id: string
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -273,7 +282,7 @@ export def "subscriptions-providers-microsoft-deployment-admin-locations-global-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, product_id: $product_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Deployment.Admin/locations/global/productDeployments/{product_id}/rotateSecrets") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), product_id: (encode-path-segment $product_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Deployment.Admin/locations/global/productDeployments/{product_id}/rotateSecrets") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -301,10 +310,10 @@ export def "subscriptions-providers-microsoft-deployment-admin-locations-global-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, product_id: $product_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Deployment.Admin/locations/global/productDeployments/{product_id}/unlock") $qp)
-  let body = {"duration": $duration} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), product_id: (encode-path-segment $product_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Deployment.Admin/locations/global/productDeployments/{product_id}/unlock") $qp)
+  let req_body = {"duration": $duration} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

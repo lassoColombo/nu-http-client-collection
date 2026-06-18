@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -79,7 +88,7 @@ def insert-data-option-completer [] { ["INSERT_ROWS" "OVERWRITE"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "spreadsheets sheetsspreadsheetscreate" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "spreadsheets create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -109,7 +118,7 @@ export def commands []: nothing -> table {
 # --namedRanges item shape: {name?: string, namedRangeId?: string, range?: record}
 # --properties shape: {autoRecalc?: "RECALCULATION_INTERVAL_UNSPECIFIED"|"ON_CHANGE"|"MINUTE"|"HOUR", defaultFormat?: record, iterativeCalculationSettings?: record, locale?: string, spreadsheetTheme?: record, timeZone?: string, title?: string}
 # --sheets item shape: {bandedRanges?: list, basicFilter?: record, charts?: list, columnGroups?: list, conditionalFormats?: list, data?: list, developerMetadata?: list, filterViews?: list, merges?: list, properties?: record, protectedRanges?: list, rowGroups?: list, slicers?: list}
-export def "spreadsheets sheetsspreadsheetscreate" [
+export def "spreadsheets create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -142,18 +151,18 @@ export def "spreadsheets sheetsspreadsheetscreate" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v4/spreadsheets" $qp)
-  let body = {"dataSources": $data_sources, "developerMetadata": $developer_metadata, "namedRanges": $named_ranges, "properties": $properties, "sheets": $sheets, "spreadsheetId": $spreadsheet_id, "spreadsheetUrl": $spreadsheet_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"dataSources": $data_sources, "developerMetadata": $developer_metadata, "namedRanges": $named_ranges, "properties": $properties, "sheets": $sheets, "spreadsheetId": $spreadsheet_id, "spreadsheetUrl": $spreadsheet_url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns the spreadsheet at the given ID. The caller must specify the spreadsheet ID. By default, data within grids is not returned. You can include grid data in one of 2 ways: * Specify a [field mask](https://developers.google.com/sheets/api/guides/field-masks) listing your desired fields using the `fields` URL parameter in HTTP * Set the includeGridData URL parameter to true. If a field mask is set, the `includeGridData` parameter is ignored For large spreadsheets, as a best practice, retrieve only the specific spreadsheet fields that you want. To retrieve only subsets of spreadsheet data, use the ranges URL parameter. Ranges are specified using [A1 notation](/sheets/api/guides/concepts#cell). You can define a single cell (for example, `A1`) or multiple cells (for example, `A1:D5`). You can also get cells from other sheets within the same spreadsheet (for example, `Sheet2!A1:C4`) or retrieve multiple ranges at once (for example, `?ranges=A1:D5&ranges=Sheet2!A1:C4`). Limiting the range returns only the portions of the spreadsheet that intersect the requested ranges.
 #
 # GET /v4/spreadsheets/{spreadsheetId}
 # operationId: sheets.spreadsheets.get
-export def "spreadsheets sheetsspreadsheetsget" [
+export def "spreadsheets get" [
   spreadsheet_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -175,12 +184,12 @@ export def "spreadsheets sheetsspreadsheetsget" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --include-grid-data: oneof<nothing, bool> # True if grid data should be returned. This parameter is ignored if a field mask was set in the request.
-  --ranges: list # The ranges to retrieve from the spreadsheet.
+  --ranges: list<string> # The ranges to retrieve from the spreadsheet.
 ]: nothing -> record<dataSourceSchedules: table<dailySchedule: record, enabled: bool, monthlySchedule: record, nextRun: record, refreshScope: string, weeklySchedule: record>, dataSources: table<calculatedColumns: list, dataSourceId: string, sheetId: int, spec: record>, developerMetadata: table<location: record, metadataId: int, metadataKey: string, metadataValue: string, visibility: string>, namedRanges: table<name: string, namedRangeId: string, range: record>, properties: record<autoRecalc: string, defaultFormat: record<backgroundColor: record, backgroundColorStyle: record, borders: record, horizontalAlignment: string, hyperlinkDisplayType: string, numberFormat: record, padding: record, textDirection: string, textFormat: record, textRotation: record, verticalAlignment: string, wrapStrategy: string>, iterativeCalculationSettings: record<convergenceThreshold: float, maxIterations: int>, locale: string, spreadsheetTheme: record<primaryFontFamily: string, themeColors: list>, timeZone: string, title: string>, sheets: table<bandedRanges: list, basicFilter: record, charts: list, columnGroups: list, conditionalFormats: list, data: list, developerMetadata: list, filterViews: list, merges: list, properties: record, protectedRanges: list, rowGroups: list, slicers: list>, spreadsheetId: string, spreadsheetUrl: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "includeGridData" $include_grid_data "scalar") (serialize-qp "ranges" $ranges "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({spreadsheet_id: $spreadsheet_id} | format pattern "/v4/spreadsheets/{spreadsheet_id}") $qp)
+  let full_url = (build-url $base ({spreadsheet_id: (encode-path-segment $spreadsheet_id)} | format pattern "/v4/spreadsheets/{spreadsheet_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -190,7 +199,7 @@ export def "spreadsheets sheetsspreadsheetsget" [
 #
 # GET /v4/spreadsheets/{spreadsheetId}/developerMetadata/{metadataId}
 # operationId: sheets.spreadsheets.developerMetadata.get
-export def "spreadsheets-developer-metadata sheetsspreadsheetsdeveloperMetadataget" [
+export def "spreadsheets-developer-metadata get" [
   spreadsheet_id: string
   metadata_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -216,7 +225,7 @@ export def "spreadsheets-developer-metadata sheetsspreadsheetsdeveloperMetadatag
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({spreadsheet_id: $spreadsheet_id, metadata_id: $metadata_id} | format pattern "/v4/spreadsheets/{spreadsheet_id}/developerMetadata/{metadata_id}") $qp)
+  let full_url = (build-url $base ({spreadsheet_id: (encode-path-segment $spreadsheet_id), metadata_id: (encode-path-segment $metadata_id)} | format pattern "/v4/spreadsheets/{spreadsheet_id}/developerMetadata/{metadata_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -227,7 +236,7 @@ export def "spreadsheets-developer-metadata sheetsspreadsheetsdeveloperMetadatag
 # POST /v4/spreadsheets/{spreadsheetId}/developerMetadata:search
 # operationId: sheets.spreadsheets.developerMetadata.search
 # --dataFilters item shape: {a1Range?: string, developerMetadataLookup?: record, gridRange?: record}
-export def "spreadsheets-developer-metadata-search sheetsspreadsheetsdeveloperMetadatasearch" [
+export def "spreadsheets-developer-metadata-search list" [
   spreadsheet_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -254,19 +263,19 @@ export def "spreadsheets-developer-metadata-search sheetsspreadsheetsdeveloperMe
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({spreadsheet_id: $spreadsheet_id} | format pattern "/v4/spreadsheets/{spreadsheet_id}/developerMetadata:search") $qp)
-  let body = {"dataFilters": $data_filters} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({spreadsheet_id: (encode-path-segment $spreadsheet_id)} | format pattern "/v4/spreadsheets/{spreadsheet_id}/developerMetadata:search") $qp)
+  let req_body = {"dataFilters": $data_filters} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Copies a single sheet from a spreadsheet to another spreadsheet. Returns the properties of the newly created sheet.
 #
 # POST /v4/spreadsheets/{spreadsheetId}/sheets/{sheetId}:copyTo
 # operationId: sheets.spreadsheets.sheets.copyTo
-export def "spreadsheets-sheets sheetsspreadsheetssheetscopyTo" [
+export def "spreadsheets-sheets copy" [
   spreadsheet_id: string
   sheet_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -294,19 +303,19 @@ export def "spreadsheets-sheets sheetsspreadsheetssheetscopyTo" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({spreadsheet_id: $spreadsheet_id, sheet_id: $sheet_id} | format pattern "/v4/spreadsheets/{spreadsheet_id}/sheets/{sheet_id}:copyTo") $qp)
-  let body = {"destinationSpreadsheetId": $destination_spreadsheet_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({spreadsheet_id: (encode-path-segment $spreadsheet_id), sheet_id: (encode-path-segment $sheet_id)} | format pattern "/v4/spreadsheets/{spreadsheet_id}/sheets/{sheet_id}:copyTo") $qp)
+  let req_body = {"destinationSpreadsheetId": $destination_spreadsheet_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns a range of values from a spreadsheet. The caller must specify the spreadsheet ID and a range.
 #
 # GET /v4/spreadsheets/{spreadsheetId}/values/{range}
 # operationId: sheets.spreadsheets.values.get
-export def "spreadsheets-values sheetsspreadsheetsvaluesget" [
+export def "spreadsheets-values get" [
   spreadsheet_id: string
   range: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -335,7 +344,7 @@ export def "spreadsheets-values sheetsspreadsheetsvaluesget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "dateTimeRenderOption" $date_time_render_option "scalar") (serialize-qp "majorDimension" $major_dimension "scalar") (serialize-qp "valueRenderOption" $value_render_option "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({spreadsheet_id: $spreadsheet_id, range: $range} | format pattern "/v4/spreadsheets/{spreadsheet_id}/values/{range}") $qp)
+  let full_url = (build-url $base ({spreadsheet_id: (encode-path-segment $spreadsheet_id), range: (encode-path-segment $range)} | format pattern "/v4/spreadsheets/{spreadsheet_id}/values/{range}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -345,7 +354,7 @@ export def "spreadsheets-values sheetsspreadsheetsvaluesget" [
 #
 # PUT /v4/spreadsheets/{spreadsheetId}/values/{range}
 # operationId: sheets.spreadsheets.values.update
-export def "spreadsheets-values sheetsspreadsheetsvaluesupdate" [
+export def "spreadsheets-values update" [
   spreadsheet_id: string
   range: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -379,19 +388,19 @@ export def "spreadsheets-values sheetsspreadsheetsvaluesupdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "includeValuesInResponse" $include_values_in_response "scalar") (serialize-qp "responseDateTimeRenderOption" $response_date_time_render_option "scalar") (serialize-qp "responseValueRenderOption" $response_value_render_option "scalar") (serialize-qp "valueInputOption" $value_input_option "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({spreadsheet_id: $spreadsheet_id, range: $range} | format pattern "/v4/spreadsheets/{spreadsheet_id}/values/{range}") $qp)
-  let body = {"majorDimension": $major_dimension, "range": $body_range, "values": $values} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({spreadsheet_id: (encode-path-segment $spreadsheet_id), range: (encode-path-segment $range)} | format pattern "/v4/spreadsheets/{spreadsheet_id}/values/{range}") $qp)
+  let req_body = {"majorDimension": $major_dimension, "range": $body_range, "values": $values} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Appends values to a spreadsheet. The input range is used to search for existing data and find a "table" within that range. Values will be appended to the next row of the table, starting with the first column of the table. See the [guide](/sheets/api/guides/values#appending_values) and [sample code](/sheets/api/samples/writing#append_values) for specific details of how tables are detected and data is appended. The caller must specify the spreadsheet ID, range, and a valueInputOption. The `valueInputOption` only controls how the input data will be added to the sheet (column-wise or row-wise), it does not influence what cell the data starts being written to.
 #
 # POST /v4/spreadsheets/{spreadsheetId}/values/{range}:append
 # operationId: sheets.spreadsheets.values.append
-export def "spreadsheets-values sheetsspreadsheetsvaluesappend" [
+export def "spreadsheets-values create" [
   spreadsheet_id: string
   range: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -426,19 +435,19 @@ export def "spreadsheets-values sheetsspreadsheetsvaluesappend" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "includeValuesInResponse" $include_values_in_response "scalar") (serialize-qp "insertDataOption" $insert_data_option "scalar") (serialize-qp "responseDateTimeRenderOption" $response_date_time_render_option "scalar") (serialize-qp "responseValueRenderOption" $response_value_render_option "scalar") (serialize-qp "valueInputOption" $value_input_option "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({spreadsheet_id: $spreadsheet_id, range: $range} | format pattern "/v4/spreadsheets/{spreadsheet_id}/values/{range}:append") $qp)
-  let body = {"majorDimension": $major_dimension, "range": $body_range, "values": $values} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({spreadsheet_id: (encode-path-segment $spreadsheet_id), range: (encode-path-segment $range)} | format pattern "/v4/spreadsheets/{spreadsheet_id}/values/{range}:append") $qp)
+  let req_body = {"majorDimension": $major_dimension, "range": $body_range, "values": $values} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Clears values from a spreadsheet. The caller must specify the spreadsheet ID and range. Only values are cleared -- all other properties of the cell (such as formatting, data validation, etc..) are kept.
 #
 # POST /v4/spreadsheets/{spreadsheetId}/values/{range}:clear
 # operationId: sheets.spreadsheets.values.clear
-export def "spreadsheets-values sheetsspreadsheetsvaluesclear" [
+export def "spreadsheets-values create-clear" [
   spreadsheet_id: string
   range: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -466,18 +475,19 @@ export def "spreadsheets-values sheetsspreadsheetsvaluesclear" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({spreadsheet_id: $spreadsheet_id, range: $range} | format pattern "/v4/spreadsheets/{spreadsheet_id}/values/{range}:clear") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({spreadsheet_id: (encode-path-segment $spreadsheet_id), range: (encode-path-segment $range)} | format pattern "/v4/spreadsheets/{spreadsheet_id}/values/{range}:clear") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Clears one or more ranges of values from a spreadsheet. The caller must specify the spreadsheet ID and one or more ranges. Only values are cleared -- all other properties of the cell (such as formatting and data validation) are kept.
 #
 # POST /v4/spreadsheets/{spreadsheetId}/values:batchClear
 # operationId: sheets.spreadsheets.values.batchClear
-export def "spreadsheets-values-batch-clear sheetsspreadsheetsvaluesbatchClear" [
+export def "spreadsheets-values-batch-clear create" [
   spreadsheet_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -498,18 +508,18 @@ export def "spreadsheets-values-batch-clear sheetsspreadsheetsvaluesbatchClear" 
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --ranges: list # The ranges to clear, in [A1 notation or R1C1 notation](/sheets/api/guides/concepts#cell).
+  --ranges: list<string> # The ranges to clear, in [A1 notation or R1C1 notation](/sheets/api/guides/concepts#cell).
 ]: any -> record<clearedRanges: list<string>, spreadsheetId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({spreadsheet_id: $spreadsheet_id} | format pattern "/v4/spreadsheets/{spreadsheet_id}/values:batchClear") $qp)
-  let body = {"ranges": $ranges} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({spreadsheet_id: (encode-path-segment $spreadsheet_id)} | format pattern "/v4/spreadsheets/{spreadsheet_id}/values:batchClear") $qp)
+  let req_body = {"ranges": $ranges} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Clears one or more ranges of values from a spreadsheet. The caller must specify the spreadsheet ID and one or more DataFilters. Ranges matching any of the specified data filters will be cleared. Only values are cleared -- all other properties of the cell (such as formatting, data validation, etc..) are kept.
@@ -517,7 +527,7 @@ export def "spreadsheets-values-batch-clear sheetsspreadsheetsvaluesbatchClear" 
 # POST /v4/spreadsheets/{spreadsheetId}/values:batchClearByDataFilter
 # operationId: sheets.spreadsheets.values.batchClearByDataFilter
 # --dataFilters item shape: {a1Range?: string, developerMetadataLookup?: record, gridRange?: record}
-export def "spreadsheets-values-batch-clear-by-data-filter sheetsspreadsheetsvaluesbatchClearByDataFilter" [
+export def "spreadsheets-values-batch-clear-by-data-filter create" [
   spreadsheet_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -544,19 +554,19 @@ export def "spreadsheets-values-batch-clear-by-data-filter sheetsspreadsheetsval
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({spreadsheet_id: $spreadsheet_id} | format pattern "/v4/spreadsheets/{spreadsheet_id}/values:batchClearByDataFilter") $qp)
-  let body = {"dataFilters": $data_filters} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({spreadsheet_id: (encode-path-segment $spreadsheet_id)} | format pattern "/v4/spreadsheets/{spreadsheet_id}/values:batchClearByDataFilter") $qp)
+  let req_body = {"dataFilters": $data_filters} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns one or more ranges of values from a spreadsheet. The caller must specify the spreadsheet ID and one or more ranges.
 #
 # GET /v4/spreadsheets/{spreadsheetId}/values:batchGet
 # operationId: sheets.spreadsheets.values.batchGet
-export def "spreadsheets-values-batch-get sheetsspreadsheetsvaluesbatchGet" [
+export def "spreadsheets-values-batch-get get" [
   spreadsheet_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -579,13 +589,13 @@ export def "spreadsheets-values-batch-get sheetsspreadsheetsvaluesbatchGet" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --date-time-render-option: string@date-time-render-option-completer # How dates, times, and durations should be represented in the output. This is ignored if value_render_option is FORMATTED_VALUE. The default dateTime render option is SERIAL_NUMBER.
   --major-dimension: string@major-dimension-completer # The major dimension that results should use. For example, if the spreadsheet data is: `A1=1,B1=2,A2=3,B2=4`, then requesting `ranges=["A1:B2"],majorDimension=ROWS` returns `[[1,2],[3,4]]`, whereas requesting `ranges=["A1:B2"],majorDimension=COLUMNS` returns `[[1,3],[2,4]]`.
-  --ranges: list # The [A1 notation or R1C1 notation](/sheets/api/guides/concepts#cell) of the range to retrieve values from.
+  --ranges: list<string> # The [A1 notation or R1C1 notation](/sheets/api/guides/concepts#cell) of the range to retrieve values from.
   --value-render-option: string@value-render-option-completer # How values should be represented in the output. The default render option is ValueRenderOption.FORMATTED_VALUE.
 ]: nothing -> record<spreadsheetId: string, valueRanges: table<majorDimension: string, range: string, values: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "dateTimeRenderOption" $date_time_render_option "scalar") (serialize-qp "majorDimension" $major_dimension "scalar") (serialize-qp "ranges" $ranges "multi") (serialize-qp "valueRenderOption" $value_render_option "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({spreadsheet_id: $spreadsheet_id} | format pattern "/v4/spreadsheets/{spreadsheet_id}/values:batchGet") $qp)
+  let full_url = (build-url $base ({spreadsheet_id: (encode-path-segment $spreadsheet_id)} | format pattern "/v4/spreadsheets/{spreadsheet_id}/values:batchGet") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -596,7 +606,7 @@ export def "spreadsheets-values-batch-get sheetsspreadsheetsvaluesbatchGet" [
 # POST /v4/spreadsheets/{spreadsheetId}/values:batchGetByDataFilter
 # operationId: sheets.spreadsheets.values.batchGetByDataFilter
 # --dataFilters item shape: {a1Range?: string, developerMetadataLookup?: record, gridRange?: record}
-export def "spreadsheets-values-batch-get-by-data-filter sheetsspreadsheetsvaluesbatchGetByDataFilter" [
+export def "spreadsheets-values-batch-get-by-data-filter get" [
   spreadsheet_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -626,12 +636,12 @@ export def "spreadsheets-values-batch-get-by-data-filter sheetsspreadsheetsvalue
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({spreadsheet_id: $spreadsheet_id} | format pattern "/v4/spreadsheets/{spreadsheet_id}/values:batchGetByDataFilter") $qp)
-  let body = {"dataFilters": $data_filters, "dateTimeRenderOption": $date_time_render_option, "majorDimension": $major_dimension, "valueRenderOption": $value_render_option} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({spreadsheet_id: (encode-path-segment $spreadsheet_id)} | format pattern "/v4/spreadsheets/{spreadsheet_id}/values:batchGetByDataFilter") $qp)
+  let req_body = {"dataFilters": $data_filters, "dateTimeRenderOption": $date_time_render_option, "majorDimension": $major_dimension, "valueRenderOption": $value_render_option} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Sets values in one or more ranges of a spreadsheet. The caller must specify the spreadsheet ID, a valueInputOption, and one or more ValueRanges.
@@ -639,7 +649,7 @@ export def "spreadsheets-values-batch-get-by-data-filter sheetsspreadsheetsvalue
 # POST /v4/spreadsheets/{spreadsheetId}/values:batchUpdate
 # operationId: sheets.spreadsheets.values.batchUpdate
 # --data item shape: {majorDimension?: "DIMENSION_UNSPECIFIED"|"ROWS"|"COLUMNS", range?: string, values?: list}
-export def "spreadsheets-values-batch-update sheetsspreadsheetsvaluesbatchUpdate" [
+export def "spreadsheets-values-batch-update update" [
   spreadsheet_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -670,12 +680,12 @@ export def "spreadsheets-values-batch-update sheetsspreadsheetsvaluesbatchUpdate
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({spreadsheet_id: $spreadsheet_id} | format pattern "/v4/spreadsheets/{spreadsheet_id}/values:batchUpdate") $qp)
-  let body = {"data": $data, "includeValuesInResponse": $include_values_in_response, "responseDateTimeRenderOption": $response_date_time_render_option, "responseValueRenderOption": $response_value_render_option, "valueInputOption": $value_input_option} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({spreadsheet_id: (encode-path-segment $spreadsheet_id)} | format pattern "/v4/spreadsheets/{spreadsheet_id}/values:batchUpdate") $qp)
+  let req_body = {"data": $data, "includeValuesInResponse": $include_values_in_response, "responseDateTimeRenderOption": $response_date_time_render_option, "responseValueRenderOption": $response_value_render_option, "valueInputOption": $value_input_option} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Sets values in one or more ranges of a spreadsheet. The caller must specify the spreadsheet ID, a valueInputOption, and one or more DataFilterValueRanges.
@@ -683,7 +693,7 @@ export def "spreadsheets-values-batch-update sheetsspreadsheetsvaluesbatchUpdate
 # POST /v4/spreadsheets/{spreadsheetId}/values:batchUpdateByDataFilter
 # operationId: sheets.spreadsheets.values.batchUpdateByDataFilter
 # --data item shape: {dataFilter?: record, majorDimension?: "DIMENSION_UNSPECIFIED"|"ROWS"|"COLUMNS", values?: list}
-export def "spreadsheets-values-batch-update-by-data-filter sheetsspreadsheetsvaluesbatchUpdateByDataFilter" [
+export def "spreadsheets-values-batch-update-by-data-filter update" [
   spreadsheet_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -714,20 +724,20 @@ export def "spreadsheets-values-batch-update-by-data-filter sheetsspreadsheetsva
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({spreadsheet_id: $spreadsheet_id} | format pattern "/v4/spreadsheets/{spreadsheet_id}/values:batchUpdateByDataFilter") $qp)
-  let body = {"data": $data, "includeValuesInResponse": $include_values_in_response, "responseDateTimeRenderOption": $response_date_time_render_option, "responseValueRenderOption": $response_value_render_option, "valueInputOption": $value_input_option} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({spreadsheet_id: (encode-path-segment $spreadsheet_id)} | format pattern "/v4/spreadsheets/{spreadsheet_id}/values:batchUpdateByDataFilter") $qp)
+  let req_body = {"data": $data, "includeValuesInResponse": $include_values_in_response, "responseDateTimeRenderOption": $response_date_time_render_option, "responseValueRenderOption": $response_value_render_option, "valueInputOption": $value_input_option} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Applies one or more updates to the spreadsheet. Each request is validated before being applied. If any request is not valid then the entire request will fail and nothing will be applied. Some requests have replies to give you some information about how they are applied. The replies will mirror the requests. For example, if you applied 4 updates and the 3rd one had a reply, then the response will have 2 empty replies, the actual reply, and another empty reply, in that order. Due to the collaborative nature of spreadsheets, it is not guaranteed that the spreadsheet will reflect exactly your changes after this completes, however it is guaranteed that the updates in the request will be applied together atomically. Your changes may be altered with respect to collaborator changes. If there are no collaborators, the spreadsheet should reflect your changes.
 #
 # POST /v4/spreadsheets/{spreadsheetId}:batchUpdate
 # operationId: sheets.spreadsheets.batchUpdate
-# --requests item shape: {addBanding?: record, addChart?: record, addConditionalFormatRule?: record, addDataSource?: record, addDimensionGroup?: record, addFilterView?: record, addNamedRange?: record, addProtectedRange?: record, addSheet?: record, addSlicer?: record, appendCells?: record, appendDimension?: record, autoFill?: record, autoResizeDimensions?: record, clearBasicFilter?: record, copyPaste?: record, createDeveloperMetadata?: record, cutPaste?: record, deleteBanding?: record, deleteConditionalFormatRule?: record, deleteDataSource?: record, deleteDeveloperMetadata?: record, deleteDimension?: record, deleteDimensionGroup?: record, deleteDuplicates?: record, deleteEmbeddedObject?: record, deleteFilterView?: record, deleteNamedRange?: record, deleteProtectedRange?: record, deleteRange?: record, deleteSheet?: record, duplicateFilterView?: record, duplicateSheet?: record, findReplace?: record, insertDimension?: record, insertRange?: record, mergeCells?: record, moveDimension?: record, pasteData?: record, randomizeRange?: record, refreshDataSource?: record, repeatCell?: record, setBasicFilter?: record, setDataValidation?: record, sortRange?: record, textToColumns?: record, trimWhitespace?: record, unmergeCells?: record, updateBanding?: record, updateBorders?: record, updateCells?: record, updateChartSpec?: record, updateConditionalFormatRule?: record, updateDataSource?: record, updateDeveloperMetadata?: record, updateDimensionGroup?: record, updateDimensionProperties?: record, updateEmbeddedObjectBorder?: record, updateEmbeddedObjectPosition?: record, updateFilterView?: record, updateNamedRange?: record, updateProtectedRange?: record, updateSheetProperties?: record, updateSlicerSpec?: record, updateSpreadsheetProperties?: record}
-export def "spreadsheets sheetsspreadsheetsbatchUpdate" [
+# --requests item shape: {addBanding?: record, addChart?: record, addConditionalFormatRule?: record, addDataSource?: record, addDimensionGroup?: record, addFilterView?: record, addNamedRange?: record, addProtectedRange?: record, addSheet?: record, addSlicer?: record, appendCells?: record, appendDimension?: record, autoFill?: record, autoResizeDimensions?: record, clearBasicFilter?: record, copyPaste?: record, createDeveloperMetadata?: record, cutPaste?: record, deleteBanding?: record, deleteConditionalFormatRule?: record, ... (45 more fields)}
+export def "spreadsheets update-batch" [
   spreadsheet_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -749,20 +759,20 @@ export def "spreadsheets sheetsspreadsheetsbatchUpdate" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --include-spreadsheet-in-response: oneof<nothing, bool> # Determines if the update response should include the spreadsheet resource.
-  --requests: list # A list of updates to apply to the spreadsheet. Requests will be applied in the order they are specified. If any request is not valid, no requests will be applied. — item shape: {addBanding?: record, addChart?: record, addConditionalFormatRule?: record, addDataSource?: record, addDimensionGroup?: record, addFilterView?: record, addNamedRange?: record, addProtectedRange?: record, addSheet?: record, addSlicer?: record, appendCells?: record, appendDimension?: record, autoFill?: record, autoResizeDimensions?: record, clearBasicFilter?: record, copyPaste?: record, createDeveloperMetadata?: record, cutPaste?: record, deleteBanding?: record, deleteConditionalFormatRule?: record, deleteDataSource?: record, deleteDeveloperMetadata?: record, deleteDimension?: record, deleteDimensionGroup?: record, deleteDuplicates?: record, deleteEmbeddedObject?: record, deleteFilterView?: record, deleteNamedRange?: record, deleteProtectedRange?: record, deleteRange?: record, deleteSheet?: record, duplicateFilterView?: record, duplicateSheet?: record, findReplace?: record, insertDimension?: record, insertRange?: record, mergeCells?: record, moveDimension?: record, pasteData?: record, randomizeRange?: record, refreshDataSource?: record, repeatCell?: record, setBasicFilter?: record, setDataValidation?: record, sortRange?: record, textToColumns?: record, trimWhitespace?: record, unmergeCells?: record, updateBanding?: record, updateBorders?: record, updateCells?: record, updateChartSpec?: record, updateConditionalFormatRule?: record, updateDataSource?: record, updateDeveloperMetadata?: record, updateDimensionGroup?: record, updateDimensionProperties?: record, updateEmbeddedObjectBorder?: record, updateEmbeddedObjectPosition?: record, updateFilterView?: record, updateNamedRange?: record, updateProtectedRange?: record, updateSheetProperties?: record, updateSlicerSpec?: record, updateSpreadsheetProperties?: record}
+  --requests: list # A list of updates to apply to the spreadsheet. Requests will be applied in the order they are specified. If any request is not valid, no requests will be applied. — item shape: {addBanding?: record, addChart?: record, addConditionalFormatRule?: record, addDataSource?: record, addDimensionGroup?: record, addFilterView?: record, addNamedRange?: record, addProtectedRange?: record, addSheet?: record, addSlicer?: record, appendCells?: record, appendDimension?: record, autoFill?: record, autoResizeDimensions?: record, clearBasicFilter?: record, copyPaste?: record, createDeveloperMetadata?: record, cutPaste?: record, deleteBanding?: record, deleteConditionalFormatRule?: record, ... (45 more fields)}
   --response-include-grid-data: oneof<nothing, bool> # True if grid data should be returned. Meaningful only if include_spreadsheet_in_response is 'true'. This parameter is ignored if a field mask was set in the request.
-  --response-ranges: list # Limits the ranges included in the response spreadsheet. Meaningful only if include_spreadsheet_in_response is 'true'.
+  --response-ranges: list<string> # Limits the ranges included in the response spreadsheet. Meaningful only if include_spreadsheet_in_response is 'true'.
 ]: any -> record<replies: table<addBanding: record, addChart: record, addDataSource: record, addDimensionGroup: record, addFilterView: record, addNamedRange: record, addProtectedRange: record, addSheet: record, addSlicer: record, createDeveloperMetadata: record, deleteConditionalFormatRule: record, deleteDeveloperMetadata: record, deleteDimensionGroup: record, deleteDuplicates: record, duplicateFilterView: record, duplicateSheet: record, findReplace: record, refreshDataSource: record, trimWhitespace: record, updateConditionalFormatRule: record, updateDataSource: record, updateDeveloperMetadata: record, updateEmbeddedObjectPosition: record>, spreadsheetId: string, updatedSpreadsheet: record<dataSourceSchedules: list<record>, dataSources: list<record>, developerMetadata: list<record>, namedRanges: list<record>, properties: record<autoRecalc: string, defaultFormat: record, iterativeCalculationSettings: record, locale: string, spreadsheetTheme: record, timeZone: string, title: string>, sheets: list<record>, spreadsheetId: string, spreadsheetUrl: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({spreadsheet_id: $spreadsheet_id} | format pattern "/v4/spreadsheets/{spreadsheet_id}:batchUpdate") $qp)
-  let body = {"includeSpreadsheetInResponse": $include_spreadsheet_in_response, "requests": $requests, "responseIncludeGridData": $response_include_grid_data, "responseRanges": $response_ranges} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({spreadsheet_id: (encode-path-segment $spreadsheet_id)} | format pattern "/v4/spreadsheets/{spreadsheet_id}:batchUpdate") $qp)
+  let req_body = {"includeSpreadsheetInResponse": $include_spreadsheet_in_response, "requests": $requests, "responseIncludeGridData": $response_include_grid_data, "responseRanges": $response_ranges} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns the spreadsheet at the given ID. The caller must specify the spreadsheet ID. This method differs from GetSpreadsheet in that it allows selecting which subsets of spreadsheet data to return by specifying a dataFilters parameter. Multiple DataFilters can be specified. Specifying one or more data filters returns the portions of the spreadsheet that intersect ranges matched by any of the filters. By default, data within grids is not returned. You can include grid data one of 2 ways: * Specify a [field mask](https://developers.google.com/sheets/api/guides/field-masks) listing your desired fields using the `fields` URL parameter in HTTP * Set the includeGridData parameter to true. If a field mask is set, the `includeGridData` parameter is ignored For large spreadsheets, as a best practice, retrieve only the specific spreadsheet fields that you want.
@@ -770,7 +780,7 @@ export def "spreadsheets sheetsspreadsheetsbatchUpdate" [
 # POST /v4/spreadsheets/{spreadsheetId}:getByDataFilter
 # operationId: sheets.spreadsheets.getByDataFilter
 # --dataFilters item shape: {a1Range?: string, developerMetadataLookup?: record, gridRange?: record}
-export def "spreadsheets sheetsspreadsheetsgetByDataFilter" [
+export def "spreadsheets get-by-data-filter" [
   spreadsheet_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -798,10 +808,10 @@ export def "spreadsheets sheetsspreadsheetsgetByDataFilter" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({spreadsheet_id: $spreadsheet_id} | format pattern "/v4/spreadsheets/{spreadsheet_id}:getByDataFilter") $qp)
-  let body = {"dataFilters": $data_filters, "includeGridData": $include_grid_data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({spreadsheet_id: (encode-path-segment $spreadsheet_id)} | format pattern "/v4/spreadsheets/{spreadsheet_id}:getByDataFilter") $qp)
+  let req_body = {"dataFilters": $data_filters, "includeGridData": $include_grid_data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

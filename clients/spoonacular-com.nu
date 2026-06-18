@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -78,7 +87,7 @@ def normalize-completer [] { ["false" "true"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "food-converse talkToChatbot" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "food-converse get-talk-to-chatbot" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -103,7 +112,7 @@ export def commands []: nothing -> table {
 # GET /food/converse
 # Docs: https://spoonacular.com/food-api/docs#Talk-to-Chatbot — Read entire docs
 # operationId: talkToChatbot
-export def "food-converse talkToChatbot" [
+export def "food-converse get-talk-to-chatbot" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -184,7 +193,7 @@ export def "food-custom-foods-search list" [
 # POST /food/detect
 # Docs: https://spoonacular.com/food-api/docs#Detect-Food-in-Text — Read entire docs
 # operationId: detectFoodInText
-export def "food-detect detectFoodInText" [
+export def "food-detect create-in-text" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -200,12 +209,15 @@ export def "food-detect detectFoodInText" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/food/detect")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/x-www-form-urlencoded")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Image Analysis by URL
@@ -213,7 +225,7 @@ export def "food-detect detectFoodInText" [
 # GET /food/images/analyze
 # Docs: https://spoonacular.com/food-api/docs#Image-Analysis-by-URL — Read entire docs
 # operationId: imageAnalysisByURL
-export def "food-images-analyze imageAnalysisByURL" [
+export def "food-images-analyze get-analysis-by-url" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -238,7 +250,7 @@ export def "food-images-analyze imageAnalysisByURL" [
 # GET /food/images/classify
 # Docs: https://spoonacular.com/food-api/docs#Image-Classification-by-URL — Read entire docs
 # operationId: imageClassificationByURL
-export def "food-images-classify imageClassificationByURL" [
+export def "food-images-classify get-classification-by-url" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -263,7 +275,7 @@ export def "food-images-classify imageClassificationByURL" [
 # GET /food/ingredients/autocomplete
 # Docs: https://spoonacular.com/food-api/docs#Autocomplete-Ingredient-Search — Read entire docs
 # operationId: autocompleteIngredientSearch
-export def "food-ingredients-autocomplete autocompleteIngredientSearch" [
+export def "food-ingredients-autocomplete list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -292,7 +304,7 @@ export def "food-ingredients-autocomplete autocompleteIngredientSearch" [
 # POST /food/ingredients/glycemicLoad
 # Docs: https://spoonacular.com/food-api/docs#Compute-Glycemic-Load — Read entire docs
 # operationId: computeGlycemicLoad
-export def "food-ingredients-glycemic-load computeGlycemicLoad" [
+export def "food-ingredients-glycemic-load create-compute" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -302,18 +314,18 @@ export def "food-ingredients-glycemic-load computeGlycemicLoad" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --language: string@language-completer # The language of the input. Either 'en' or 'de'. (e.g. en)
-  ingredients: list
+  ingredients: list<string>
 ]: any -> record<ingredients: table<glycemicIndex: float, glycemicLoad: float, id: int, original: string>, totalGlycemicLoad: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "language" $language "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/food/ingredients/glycemicLoad" $qp)
-  let body = {"ingredients": $ingredients} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"ingredients": $ingredients} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Map Ingredients to Grocery Products
@@ -321,7 +333,7 @@ export def "food-ingredients-glycemic-load computeGlycemicLoad" [
 # POST /food/ingredients/map
 # Docs: https://spoonacular.com/food-api/docs#Map-Ingredients-to-Grocery-Products — Read entire docs
 # operationId: mapIngredientsToGroceryProducts
-export def "food-ingredients-map mapIngredientsToGroceryProducts" [
+export def "food-ingredients-map create-to-grocery-products" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -330,18 +342,18 @@ export def "food-ingredients-map mapIngredientsToGroceryProducts" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  ingredients: list
+  ingredients: list<string>
   servings: float
 ]: any -> table<ingredientImage: string, meta: list<string>, original: string, originalName: string, products: list<record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/food/ingredients/map")
-  let body = {"ingredients": $ingredients, "servings": $servings} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"ingredients": $ingredients, "servings": $servings} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Ingredient Search
@@ -349,7 +361,7 @@ export def "food-ingredients-map mapIngredientsToGroceryProducts" [
 # GET /food/ingredients/search
 # Docs: https://spoonacular.com/food-api/docs#Ingredient-Search — Read entire docs
 # operationId: ingredientSearch
-export def "food-ingredients-search ingredientSearch" [
+export def "food-ingredients-search list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -413,7 +425,7 @@ export def "food-ingredients-substitutes get" [
 # GET /food/ingredients/{id}/amount
 # Docs: https://spoonacular.com/food-api/docs#Compute-Ingredient-Amount — Read entire docs
 # operationId: computeIngredientAmount
-export def "food-ingredients-amount computeIngredientAmount" [
+export def "food-ingredients-amount get-compute" [
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -430,7 +442,7 @@ export def "food-ingredients-amount computeIngredientAmount" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nutrient" $nutrient "scalar") (serialize-qp "target" $target "scalar") (serialize-qp "unit" $unit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/food/ingredients/{id}/amount") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/food/ingredients/{id}/amount") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -458,7 +470,7 @@ export def "food-ingredients-information get" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "amount" $amount "scalar") (serialize-qp "unit" $unit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id, id: $id} | format pattern "/food/ingredients/{id}/information") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id), id: (encode-path-segment $id)} | format pattern "/food/ingredients/{id}/information") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -483,7 +495,7 @@ export def "food-ingredients-substitutes get-by-id-id" [
 ]: nothing -> record<ingredient: string, message: string, substitutes: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, id: $id} | format pattern "/food/ingredients/{id}/substitutes"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), id: (encode-path-segment $id)} | format pattern "/food/ingredients/{id}/substitutes"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -553,7 +565,7 @@ export def "food-menu-items-search list" [
 # GET /food/menuItems/suggest
 # Docs: https://spoonacular.com/food-api/docs#Autocomplete-Menu-Item-Search — Read entire docs
 # operationId: autocompleteMenuItemSearch
-export def "food-menu-items-suggest autocompleteMenuItemSearch" [
+export def "food-menu-items-suggest list-autocomplete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -579,7 +591,7 @@ export def "food-menu-items-suggest autocompleteMenuItemSearch" [
 # GET /food/menuItems/{id}
 # Docs: https://spoonacular.com/food-api/docs#Get-Menu-Item-Information — Read entire docs
 # operationId: getMenuItemInformation
-export def "food-menu-items get-menu-item-information" [
+export def "food-menu-items get-information" [
   id: int
   id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -593,7 +605,7 @@ export def "food-menu-items get-menu-item-information" [
 ]: nothing -> record<badges: list<string>, breadcrumbs: list<string>, generatedText: string, id: int, imageType: string, likes: float, nutrition: record<caloricBreakdown: record<percentCarbs: float, percentFat: float, percentProtein: float>, nutrients: list<record>>, price: float, restaurantChain: string, servings: record<number: float, size: float, unit: string>, spoonacularScore: float, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, id: $id} | format pattern "/food/menuItems/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), id: (encode-path-segment $id)} | format pattern "/food/menuItems/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -604,7 +616,7 @@ export def "food-menu-items get-menu-item-information" [
 # GET /food/menuItems/{id}/nutritionLabel
 # Docs: https://spoonacular.com/food-api/docs#Menu-Item-Nutrition-Label-Widget — Read entire docs
 # operationId: menuItemNutritionLabelWidget
-export def "food-menu-items-nutrition-label menuItemNutritionLabelWidget" [
+export def "food-menu-items-nutrition-label get-widget" [
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -622,7 +634,7 @@ export def "food-menu-items-nutrition-label menuItemNutritionLabelWidget" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "defaultCss" $default_css "scalar") (serialize-qp "showOptionalNutrients" $show_optional_nutrients "scalar") (serialize-qp "showZeroValues" $show_zero_values "scalar") (serialize-qp "showIngredients" $show_ingredients "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/food/menuItems/{id}/nutritionLabel") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/food/menuItems/{id}/nutritionLabel") $qp)
   let accept_val = "text/html"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -633,7 +645,7 @@ export def "food-menu-items-nutrition-label menuItemNutritionLabelWidget" [
 # GET /food/menuItems/{id}/nutritionLabel.png
 # Docs: https://spoonacular.com/food-api/docs#Menu-Item-Nutrition-Label-Image — Read entire docs
 # operationId: menuItemNutritionLabelImage
-export def "food-menu-items-nutrition-labelpng menuItemNutritionLabelImage" [
+export def "food-menu-items-nutrition-label-png get-image" [
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -650,7 +662,7 @@ export def "food-menu-items-nutrition-labelpng menuItemNutritionLabelImage" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "showOptionalNutrients" $show_optional_nutrients "scalar") (serialize-qp "showZeroValues" $show_zero_values "scalar") (serialize-qp "showIngredients" $show_ingredients "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/food/menuItems/{id}/nutritionLabel.png") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/food/menuItems/{id}/nutritionLabel.png") $qp)
   let accept_val = "image/png"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -661,7 +673,7 @@ export def "food-menu-items-nutrition-labelpng menuItemNutritionLabelImage" [
 # GET /food/menuItems/{id}/nutritionWidget
 # Docs: https://spoonacular.com/food-api/docs#Menu-Item-Nutrition-by-ID-Widget — Read entire docs
 # operationId: visualizeMenuItemNutritionByID
-export def "food-menu-items-nutrition-widget visualizeMenuItemNutritionByID" [
+export def "food-menu-items-nutrition-widget get-visualize" [
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -677,11 +689,11 @@ export def "food-menu-items-nutrition-widget visualizeMenuItemNutritionByID" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "defaultCss" $default_css "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/food/menuItems/{id}/nutritionWidget") $qp)
-  let extra_headers = {"Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/food/menuItems/{id}/nutritionWidget") $qp)
   let accept_val = "text/html"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -690,7 +702,7 @@ export def "food-menu-items-nutrition-widget visualizeMenuItemNutritionByID" [
 # GET /food/menuItems/{id}/nutritionWidget.png
 # Docs: https://spoonacular.com/food-api/docs#Menu-Item-Nutrition-by-ID-Image — Read entire docs
 # operationId: menuItemNutritionByIDImage
-export def "food-menu-items-nutrition-widgetpng menuItemNutritionByIDImage" [
+export def "food-menu-items-nutrition-widget-png get-by-image" [
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -703,7 +715,7 @@ export def "food-menu-items-nutrition-widgetpng menuItemNutritionByIDImage" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/food/menuItems/{id}/nutritionWidget.png"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/food/menuItems/{id}/nutritionWidget.png"))
   let accept_val = "image/png"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -714,7 +726,7 @@ export def "food-menu-items-nutrition-widgetpng menuItemNutritionByIDImage" [
 # POST /food/products/classify
 # Docs: https://spoonacular.com/food-api/docs#Classify-Grocery-Product — Read entire docs
 # operationId: classifyGroceryProduct
-export def "food-products-classify classifyGroceryProduct" [
+export def "food-products-classify create-grocery" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -733,11 +745,11 @@ export def "food-products-classify classifyGroceryProduct" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "locale" $locale "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/food/products/classify" $qp)
-  let body = {"plu_code": $plu_code, "title": $title, "upc": $upc} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"plu_code": $plu_code, "title": $title, "upc": $upc} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Classify Grocery Product Bulk
@@ -745,7 +757,7 @@ export def "food-products-classify classifyGroceryProduct" [
 # POST /food/products/classifyBatch
 # Docs: https://spoonacular.com/food-api/docs#Classify-Grocery-Product-Bulk — Read entire docs
 # operationId: classifyGroceryProductBulk
-export def "food-products-classify-batch classifyGroceryProductBulk" [
+export def "food-products-classify-batch create-grocery-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -762,10 +774,11 @@ export def "food-products-classify-batch classifyGroceryProductBulk" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "locale" $locale "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/food/products/classifyBatch" $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Search Grocery Products
@@ -809,7 +822,7 @@ export def "food-products-search list-grocery" [
 # GET /food/products/suggest
 # Docs: https://spoonacular.com/food-api/docs#Autocomplete-Product-Search — Read entire docs
 # operationId: autocompleteProductSearch
-export def "food-products-suggest autocompleteProductSearch" [
+export def "food-products-suggest list-autocomplete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -848,7 +861,7 @@ export def "food-products-upc list-grocery" [
 ]: nothing -> record<badges: list<string>, breadcrumbs: list<string>, generatedText: string, id: int, imageType: string, importantBadges: list<string>, ingredientCount: int, ingredientList: string, ingredients: table<description: any, name: string, safety_level: any>, likes: float, nutrition: record<caloricBreakdown: record<percentCarbs: float, percentFat: float, percentProtein: float>, nutrients: list<record>>, price: float, servings: record<number: float, size: float, unit: string>, spoonacularScore: float, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({upc: $upc} | format pattern "/food/products/upc/{upc}"))
+  let full_url = (build-url $base ({upc: (encode-path-segment $upc)} | format pattern "/food/products/upc/{upc}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -872,7 +885,7 @@ export def "food-products-upc-comparable get" [
 ]: nothing -> record<comparableProducts: record<calories: list<record>, likes: list<record>, price: list<record>, protein: list<record>, spoonacularScore: list<record>, sugar: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({upc: $upc} | format pattern "/food/products/upc/{upc}/comparable"))
+  let full_url = (build-url $base ({upc: (encode-path-segment $upc)} | format pattern "/food/products/upc/{upc}/comparable"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -883,7 +896,7 @@ export def "food-products-upc-comparable get" [
 # GET /food/products/{id}
 # Docs: https://spoonacular.com/food-api/docs#Get-Product-Information — Read entire docs
 # operationId: getProductInformation
-export def "food-products get-product-information" [
+export def "food-products get-information" [
   id: int
   id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -897,7 +910,7 @@ export def "food-products get-product-information" [
 ]: nothing -> record<aisle: string, badges: list<string>, breadcrumbs: list<string>, generatedText: any, id: int, imageType: string, importantBadges: list<string>, ingredientCount: int, ingredientList: string, ingredients: table<description: any, name: string, safety_level: any>, likes: float, nutrition: record<caloricBreakdown: record<percentCarbs: float, percentFat: float, percentProtein: float>, nutrients: list<record>>, price: float, servings: record<number: float, size: float, unit: string>, spoonacularScore: float, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, id: $id} | format pattern "/food/products/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), id: (encode-path-segment $id)} | format pattern "/food/products/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -908,7 +921,7 @@ export def "food-products get-product-information" [
 # GET /food/products/{id}/nutritionLabel
 # Docs: https://spoonacular.com/food-api/docs#Product-Nutrition-Label-Widget — Read entire docs
 # operationId: productNutritionLabelWidget
-export def "food-products-nutrition-label productNutritionLabelWidget" [
+export def "food-products-nutrition-label get-widget" [
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -926,7 +939,7 @@ export def "food-products-nutrition-label productNutritionLabelWidget" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "defaultCss" $default_css "scalar") (serialize-qp "showOptionalNutrients" $show_optional_nutrients "scalar") (serialize-qp "showZeroValues" $show_zero_values "scalar") (serialize-qp "showIngredients" $show_ingredients "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/food/products/{id}/nutritionLabel") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/food/products/{id}/nutritionLabel") $qp)
   let accept_val = "text/html"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -937,7 +950,7 @@ export def "food-products-nutrition-label productNutritionLabelWidget" [
 # GET /food/products/{id}/nutritionLabel.png
 # Docs: https://spoonacular.com/food-api/docs#Product-Nutrition-Label-Image — Read entire docs
 # operationId: productNutritionLabelImage
-export def "food-products-nutrition-labelpng productNutritionLabelImage" [
+export def "food-products-nutrition-label-png get-image" [
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -954,7 +967,7 @@ export def "food-products-nutrition-labelpng productNutritionLabelImage" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "showOptionalNutrients" $show_optional_nutrients "scalar") (serialize-qp "showZeroValues" $show_zero_values "scalar") (serialize-qp "showIngredients" $show_ingredients "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/food/products/{id}/nutritionLabel.png") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/food/products/{id}/nutritionLabel.png") $qp)
   let accept_val = "image/png"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -965,7 +978,7 @@ export def "food-products-nutrition-labelpng productNutritionLabelImage" [
 # GET /food/products/{id}/nutritionWidget
 # Docs: https://spoonacular.com/food-api/docs#Product-Nutrition-by-ID-Widget — Read entire docs
 # operationId: visualizeProductNutritionByID
-export def "food-products-nutrition-widget visualizeProductNutritionByID" [
+export def "food-products-nutrition-widget get-visualize" [
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -981,11 +994,11 @@ export def "food-products-nutrition-widget visualizeProductNutritionByID" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "defaultCss" $default_css "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/food/products/{id}/nutritionWidget") $qp)
-  let extra_headers = {"Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/food/products/{id}/nutritionWidget") $qp)
   let accept_val = "text/html"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -994,7 +1007,7 @@ export def "food-products-nutrition-widget visualizeProductNutritionByID" [
 # GET /food/products/{id}/nutritionWidget.png
 # Docs: https://spoonacular.com/food-api/docs#Product-Nutrition-by-ID-Image — Read entire docs
 # operationId: productNutritionByIDImage
-export def "food-products-nutrition-widgetpng productNutritionByIDImage" [
+export def "food-products-nutrition-widget-png get-by-image" [
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1007,7 +1020,7 @@ export def "food-products-nutrition-widgetpng productNutritionByIDImage" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/food/products/{id}/nutritionWidget.png"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/food/products/{id}/nutritionWidget.png"))
   let accept_val = "image/png"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1052,7 +1065,7 @@ export def "food-restaurants-search list" [
 # GET /food/search
 # Docs: https://spoonacular.com/food-api/docs#Search-All-Food — Read entire docs
 # operationId: searchAllFood
-export def "food-search list-all" [
+export def "food-search list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1079,7 +1092,7 @@ export def "food-search list-all" [
 # GET /food/site/search
 # Docs: https://spoonacular.com/food-api/docs#Search-Site-Content — Read entire docs
 # operationId: searchSiteContent
-export def "food-site-search list-site-content" [
+export def "food-site-search list-content" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1186,7 +1199,7 @@ export def "food-wine-description get" [
 # GET /food/wine/dishes
 # Docs: https://spoonacular.com/food-api/docs#Dish-Pairing-for-Wine — Read entire docs
 # operationId: getDishPairingForWine
-export def "food-wine-dishes get-dish-pairing-for" [
+export def "food-wine-dishes get-dish-pairing" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1265,7 +1278,7 @@ export def "food-wine-recommendation get" [
 # GET /mealplanner/generate
 # Docs: https://spoonacular.com/food-api/docs#Generate-Meal-Plan — Read entire docs
 # operationId: generateMealPlan
-export def "mealplanner-generate generateMealPlan" [
+export def "mealplanner-generate generate-meal-plan" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1293,7 +1306,7 @@ export def "mealplanner-generate generateMealPlan" [
 # DELETE /mealplanner/{username}/day/{date}
 # Docs: https://spoonacular.com/food-api/docs#Clear-Meal-Plan-Day — Read entire docs
 # operationId: clearMealPlanDay
-export def "mealplanner-day clearMealPlanDay" [
+export def "mealplanner-day delete-clear-meal-plan" [
   username: string
   date: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1311,11 +1324,12 @@ export def "mealplanner-day clearMealPlanDay" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "hash" $hash "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({username: $username, date: $date} | format pattern "/mealplanner/{username}/day/{date}") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({username: (encode-path-segment $username), date: (encode-path-segment $date)} | format pattern "/mealplanner/{username}/day/{date}") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "" $req_body
 }
 
 # Add to Meal Plan
@@ -1345,12 +1359,12 @@ export def "mealplanner-items create-to-meal-plan" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "hash" $hash "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({username: $username} | format pattern "/mealplanner/{username}/items") $qp)
-  let body = {"date": $date, "position": $position, "slot": $slot, "type": $type, "value": $value} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/mealplanner/{username}/items") $qp)
+  let req_body = {"date": $date, "position": $position, "slot": $slot, "type": $type, "value": $value} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete from Meal Plan
@@ -1376,11 +1390,12 @@ export def "mealplanner-items delete-from-meal-plan" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "hash" $hash "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({username: $username, id: $id} | format pattern "/mealplanner/{username}/items/{id}") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({username: (encode-path-segment $username), id: (encode-path-segment $id)} | format pattern "/mealplanner/{username}/items/{id}") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "" $req_body
 }
 
 # Get Shopping List
@@ -1403,7 +1418,7 @@ export def "mealplanner-shopping-list get" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "hash" $hash "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({username: $username} | format pattern "/mealplanner/{username}/shopping-list") $qp)
+  let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/mealplanner/{username}/shopping-list") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1414,7 +1429,7 @@ export def "mealplanner-shopping-list get" [
 # POST /mealplanner/{username}/shopping-list/items
 # Docs: https://spoonacular.com/food-api/docs#Add-to-Shopping-List — Read entire docs
 # operationId: addToShoppingList
-export def "mealplanner-shopping-list-items create-to" [
+export def "mealplanner-shopping-list-items create" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1433,12 +1448,12 @@ export def "mealplanner-shopping-list-items create-to" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "hash" $hash "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({username: $username} | format pattern "/mealplanner/{username}/shopping-list/items") $qp)
-  let body = {"aisle": $aisle, "item": $item, "parse": $parse} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/mealplanner/{username}/shopping-list/items") $qp)
+  let req_body = {"aisle": $aisle, "item": $item, "parse": $parse} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete from Shopping List
@@ -1446,7 +1461,7 @@ export def "mealplanner-shopping-list-items create-to" [
 # DELETE /mealplanner/{username}/shopping-list/items/{id}
 # Docs: https://spoonacular.com/food-api/docs#Delete-from-Shopping-List — Read entire docs
 # operationId: deleteFromShoppingList
-export def "mealplanner-shopping-list-items delete-from" [
+export def "mealplanner-shopping-list-items delete" [
   username: string
   id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -1464,11 +1479,12 @@ export def "mealplanner-shopping-list-items delete-from" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "hash" $hash "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({username: $username, id: $id} | format pattern "/mealplanner/{username}/shopping-list/items/{id}") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({username: (encode-path-segment $username), id: (encode-path-segment $id)} | format pattern "/mealplanner/{username}/shopping-list/items/{id}") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "" $req_body
 }
 
 # Generate Shopping List
@@ -1476,7 +1492,7 @@ export def "mealplanner-shopping-list-items delete-from" [
 # POST /mealplanner/{username}/shopping-list/{start-date}/{end-date}
 # Docs: https://spoonacular.com/food-api/docs#Generate-Shopping-List — Read entire docs
 # operationId: generateShoppingList
-export def "mealplanner-shopping-list generateShoppingList" [
+export def "mealplanner-shopping-list generate" [
   username: string
   start_date: string
   end_date: string
@@ -1495,11 +1511,12 @@ export def "mealplanner-shopping-list generateShoppingList" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "hash" $hash "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({username: $username, start_date: $start_date, end_date: $end_date} | format pattern "/mealplanner/{username}/shopping-list/{start_date}/{end_date}") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({username: (encode-path-segment $username), start_date: (encode-path-segment $start_date), end_date: (encode-path-segment $end_date)} | format pattern "/mealplanner/{username}/shopping-list/{start_date}/{end_date}") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "" $req_body
 }
 
 # Get Meal Plan Templates
@@ -1522,7 +1539,7 @@ export def "mealplanner-templates list" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "hash" $hash "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({username: $username} | format pattern "/mealplanner/{username}/templates") $qp)
+  let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/mealplanner/{username}/templates") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1551,11 +1568,12 @@ export def "mealplanner-templates create-meal-plan" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "hash" $hash "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({username: $username, username: $username} | format pattern "/mealplanner/{username}/templates") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({username: (encode-path-segment $username), username: (encode-path-segment $username)} | format pattern "/mealplanner/{username}/templates") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "" $req_body
 }
 
 # Delete Meal Plan Template
@@ -1583,11 +1601,12 @@ export def "mealplanner-templates delete-meal-plan" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "hash" $hash "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({username: $username, username: $username, id: $id, id: $id} | format pattern "/mealplanner/{username}/templates/{id}") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({username: (encode-path-segment $username), username: (encode-path-segment $username), id: (encode-path-segment $id), id: (encode-path-segment $id)} | format pattern "/mealplanner/{username}/templates/{id}") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "" $req_body
 }
 
 # Get Meal Plan Template
@@ -1611,7 +1630,7 @@ export def "mealplanner-templates get-meal-plan" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "hash" $hash "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({username: $username, id: $id} | format pattern "/mealplanner/{username}/templates/{id}") $qp)
+  let full_url = (build-url $base ({username: (encode-path-segment $username), id: (encode-path-segment $id)} | format pattern "/mealplanner/{username}/templates/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1638,7 +1657,7 @@ export def "mealplanner-week get-meal-plan" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "hash" $hash "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({username: $username, start_date: $start_date} | format pattern "/mealplanner/{username}/week/{start_date}") $qp)
+  let full_url = (build-url $base ({username: (encode-path-segment $username), start_date: (encode-path-segment $start_date)} | format pattern "/mealplanner/{username}/week/{start_date}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1649,7 +1668,7 @@ export def "mealplanner-week get-meal-plan" [
 # POST /recipes/analyze
 # Docs: https://spoonacular.com/food-api/docs#Analyze-Recipe — Read entire docs
 # operationId: analyzeRecipe
-export def "recipes-analyze analyzeRecipe" [
+export def "recipes-analyze create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1661,7 +1680,7 @@ export def "recipes-analyze analyzeRecipe" [
   --language: string # The input language, either "en" or "de". (e.g. en)
   --include-nutrition: oneof<nothing, bool> # Whether nutrition data should be added to correctly parsed ingredients. (e.g. false)
   --include-taste: oneof<nothing, bool> # Whether taste data should be added to correctly parsed ingredients. (e.g. false)
-  --ingredients: list
+  --ingredients: list<string>
   --instructions: string
   --servings: int
   --title: string
@@ -1671,11 +1690,11 @@ export def "recipes-analyze analyzeRecipe" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "language" $language "scalar") (serialize-qp "includeNutrition" $include_nutrition "scalar") (serialize-qp "includeTaste" $include_taste "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recipes/analyze" $qp)
-  let body = {"ingredients": $ingredients, "instructions": $instructions, "servings": $servings, "title": $title} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"ingredients": $ingredients, "instructions": $instructions, "servings": $servings, "title": $title} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Analyze Recipe Instructions
@@ -1683,7 +1702,7 @@ export def "recipes-analyze analyzeRecipe" [
 # POST /recipes/analyzeInstructions
 # Docs: https://spoonacular.com/food-api/docs#Analyze-Recipe-Instructions — Read entire docs
 # operationId: analyzeRecipeInstructions
-export def "recipes-analyze-instructions analyzeRecipeInstructions" [
+export def "recipes-analyze-instructions create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1699,12 +1718,15 @@ export def "recipes-analyze-instructions analyzeRecipeInstructions" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/recipes/analyzeInstructions")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/x-www-form-urlencoded")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Autocomplete Recipe Search
@@ -1712,7 +1734,7 @@ export def "recipes-analyze-instructions analyzeRecipeInstructions" [
 # GET /recipes/autocomplete
 # Docs: https://spoonacular.com/food-api/docs#Autocomplete-Recipe-Search — Read entire docs
 # operationId: autocompleteRecipeSearch
-export def "recipes-autocomplete autocompleteRecipeSearch" [
+export def "recipes-autocomplete list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1858,7 +1880,7 @@ export def "recipes-complex-search list" [
 # GET /recipes/convert
 # Docs: https://spoonacular.com/food-api/docs#Convert-Amounts — Read entire docs
 # operationId: convertAmounts
-export def "recipes-convert convertAmounts" [
+export def "recipes-convert get-amounts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1886,7 +1908,7 @@ export def "recipes-convert convertAmounts" [
 # POST /recipes/cuisine
 # Docs: https://spoonacular.com/food-api/docs#Classify-Cuisine — Read entire docs
 # operationId: classifyCuisine
-export def "recipes-cuisine classifyCuisine" [
+export def "recipes-cuisine create-classify" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1902,12 +1924,15 @@ export def "recipes-cuisine classifyCuisine" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/recipes/cuisine")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/x-www-form-urlencoded")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Extract Recipe from Website
@@ -1915,7 +1940,7 @@ export def "recipes-cuisine classifyCuisine" [
 # GET /recipes/extract
 # Docs: https://spoonacular.com/food-api/docs#Extract-Recipe-from-Website — Read entire docs
 # operationId: extractRecipeFromWebsite
-export def "recipes-extract extractRecipeFromWebsite" [
+export def "recipes-extract get-from-website" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1924,7 +1949,7 @@ export def "recipes-extract extractRecipeFromWebsite" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-url: string # The URL of the recipe page. (e.g. https://foodista.com/recipe/ZHK4KPB6/chocolate-crinkle-cookies)
+  --url: string # The URL of the recipe page. (e.g. https://foodista.com/recipe/ZHK4KPB6/chocolate-crinkle-cookies)
   --force-extraction: oneof<nothing, bool> # If true, the extraction will be triggered whether we already know the recipe or not. Use this only if information is missing as this operation is slower. (e.g. true)
   --analyze: oneof<nothing, bool> # If true, the recipe will be analyzed and classified resolving in more data such as cuisines, dish types, and more. (e.g. false)
   --include-nutrition: oneof<nothing, bool> # Include nutrition data in the recipe information. Nutrition data is per serving. If you want the nutrition data for the entire recipe, just multiply by the number of servings. (default: false)
@@ -1932,7 +1957,7 @@ export def "recipes-extract extractRecipeFromWebsite" [
 ]: nothing -> record<aggregateLikes: int, analyzedInstructions: list<record>, cheap: bool, creditsText: string, cuisines: list<string>, dairyFree: bool, diets: list<string>, dishTypes: list<string>, extendedIngredients: table<aisle: string, amount: float, consitency: string, id: int, image: string, measures: record, meta: list, name: string, original: string, originalName: string, unit: string>, gaps: string, glutenFree: bool, healthScore: float, id: int, image: string, imageType: string, instructions: string, ketogenic: bool, license: string, lowFodmap: bool, occasions: list<string>, pricePerServing: float, readyInMinutes: int, servings: float, sourceName: string, sourceUrl: string, spoonacularScore: float, spoonacularSourceUrl: string, summary: string, sustainable: bool, title: string, vegan: bool, vegetarian: bool, veryHealthy: bool, veryPopular: bool, weightWatcherSmartPoints: float, whole30: bool, winePairing: record<pairedWines: list<string>, pairingText: string, productMatches: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "url" $qp_url "scalar") (serialize-qp "forceExtraction" $force_extraction "scalar") (serialize-qp "analyze" $analyze "scalar") (serialize-qp "includeNutrition" $include_nutrition "scalar") (serialize-qp "includeTaste" $include_taste "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "url" $url "scalar") (serialize-qp "forceExtraction" $force_extraction "scalar") (serialize-qp "analyze" $analyze "scalar") (serialize-qp "includeNutrition" $include_nutrition "scalar") (serialize-qp "includeTaste" $include_taste "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recipes/extract" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2073,7 +2098,7 @@ export def "recipes-find-by-nutrients list" [
 # GET /recipes/guessNutrition
 # Docs: https://spoonacular.com/food-api/docs#Guess-Nutrition-by-Dish-Name — Read entire docs
 # operationId: guessNutritionByDishName
-export def "recipes-guess-nutrition guessNutritionByDishName" [
+export def "recipes-guess-nutrition get-by-dish-name" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2124,7 +2149,7 @@ export def "recipes-information-bulk get" [
 # POST /recipes/parseIngredients
 # Docs: https://spoonacular.com/food-api/docs#Parse-Ingredients — Read entire docs
 # operationId: parseIngredients
-export def "recipes-parse-ingredients parseIngredients" [
+export def "recipes-parse-ingredients create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2142,12 +2167,15 @@ export def "recipes-parse-ingredients parseIngredients" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "language" $language "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recipes/parseIngredients" $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/x-www-form-urlencoded")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Analyze a Recipe Search Query
@@ -2155,7 +2183,7 @@ export def "recipes-parse-ingredients parseIngredients" [
 # GET /recipes/queries/analyze
 # Docs: https://spoonacular.com/food-api/docs#Analyze-a-Recipe-Search-Query — Read entire docs
 # operationId: analyzeARecipeSearchQuery
-export def "recipes-queries-analyze analyzeARecipeSearchQuery" [
+export def "recipes-queries-analyze list-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2180,7 +2208,7 @@ export def "recipes-queries-analyze analyzeARecipeSearchQuery" [
 # GET /recipes/quickAnswer
 # Docs: https://spoonacular.com/food-api/docs#Quick-Answer — Read entire docs
 # operationId: quickAnswer
-export def "recipes-quick-answer quickAnswer" [
+export def "recipes-quick-answer get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2232,7 +2260,7 @@ export def "recipes-random get" [
 # POST /recipes/visualizeEquipment
 # Docs: https://spoonacular.com/food-api/docs#Equipment-Widget — Read entire docs
 # operationId: visualizeEquipment
-export def "recipes-visualize-equipment visualizeEquipment" [
+export def "recipes-visualize-equipment create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2249,12 +2277,15 @@ export def "recipes-visualize-equipment visualizeEquipment" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/recipes/visualizeEquipment")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "text/html"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/x-www-form-urlencoded")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Ingredients Widget
@@ -2262,7 +2293,7 @@ export def "recipes-visualize-equipment visualizeEquipment" [
 # POST /recipes/visualizeIngredients
 # Docs: https://spoonacular.com/food-api/docs#Ingredients-Widget — Read entire docs
 # operationId: visualizeIngredients
-export def "recipes-visualize-ingredients visualizeIngredients" [
+export def "recipes-visualize-ingredients create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2281,12 +2312,15 @@ export def "recipes-visualize-ingredients visualizeIngredients" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "language" $language "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recipes/visualizeIngredients" $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "text/html"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/x-www-form-urlencoded")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Recipe Nutrition Widget
@@ -2294,7 +2328,7 @@ export def "recipes-visualize-ingredients visualizeIngredients" [
 # POST /recipes/visualizeNutrition
 # Docs: https://spoonacular.com/food-api/docs#Recipe-Nutrition-Widget — Read entire docs
 # operationId: visualizeRecipeNutrition
-export def "recipes-visualize-nutrition visualizeRecipeNutrition" [
+export def "recipes-visualize-nutrition create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2313,12 +2347,15 @@ export def "recipes-visualize-nutrition visualizeRecipeNutrition" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "language" $language "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recipes/visualizeNutrition" $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "text/html"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/x-www-form-urlencoded")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Price Breakdown Widget
@@ -2326,7 +2363,7 @@ export def "recipes-visualize-nutrition visualizeRecipeNutrition" [
 # POST /recipes/visualizePriceEstimator
 # Docs: https://spoonacular.com/food-api/docs#Price-Breakdown-Widget — Read entire docs
 # operationId: visualizePriceBreakdown
-export def "recipes-visualize-price-estimator visualizePriceBreakdown" [
+export def "recipes-visualize-price-estimator create-breakdown" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2345,12 +2382,15 @@ export def "recipes-visualize-price-estimator visualizePriceBreakdown" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "language" $language "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recipes/visualizePriceEstimator" $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "text/html"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/x-www-form-urlencoded")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Create Recipe Card
@@ -2358,7 +2398,7 @@ export def "recipes-visualize-price-estimator visualizePriceBreakdown" [
 # POST /recipes/visualizeRecipe
 # Docs: https://spoonacular.com/food-api/docs#Create-Recipe-Card — Read entire docs
 # operationId: createRecipeCard
-export def "recipes-visualize-recipe create-recipe-card" [
+export def "recipes-visualize-recipe create-card" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2374,12 +2414,15 @@ export def "recipes-visualize-recipe create-recipe-card" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/recipes/visualizeRecipe")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let extra_headers = {"Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "multipart/form-data")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Recipe Taste Widget
@@ -2387,7 +2430,7 @@ export def "recipes-visualize-recipe create-recipe-card" [
 # POST /recipes/visualizeTaste
 # Docs: https://spoonacular.com/food-api/docs#Recipe-Taste-Widget — Read entire docs
 # operationId: visualizeRecipeTaste
-export def "recipes-visualize-taste visualizeRecipeTaste" [
+export def "recipes-visualize-taste create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2408,12 +2451,15 @@ export def "recipes-visualize-taste visualizeRecipeTaste" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "language" $language "scalar") (serialize-qp "normalize" $normalize "scalar") (serialize-qp "rgb" $rgb "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recipes/visualizeTaste" $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "text/html"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/x-www-form-urlencoded")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Get Analyzed Recipe Instructions
@@ -2437,7 +2483,7 @@ export def "recipes-analyzed-instructions get" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "stepBreakdown" $step_breakdown "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id, id: $id} | format pattern "/recipes/{id}/analyzedInstructions") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id), id: (encode-path-segment $id)} | format pattern "/recipes/{id}/analyzedInstructions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2448,7 +2494,7 @@ export def "recipes-analyzed-instructions get" [
 # GET /recipes/{id}/card
 # Docs: https://spoonacular.com/food-api/docs#Create-Recipe-Card — Read entire docs
 # operationId: createRecipeCardGet
-export def "recipes-card create-recipe-card-get" [
+export def "recipes-card create-get" [
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2466,7 +2512,7 @@ export def "recipes-card create-recipe-card-get" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "mask" $mask "scalar") (serialize-qp "backgroundImage" $background_image "scalar") (serialize-qp "backgroundColor" $background_color "scalar") (serialize-qp "fontColor" $font_color "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/recipes/{id}/card") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/recipes/{id}/card") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2477,7 +2523,7 @@ export def "recipes-card create-recipe-card-get" [
 # GET /recipes/{id}/equipmentWidget
 # Docs: https://spoonacular.com/food-api/docs#Equipment-by-ID-Widget — Read entire docs
 # operationId: visualizeRecipeEquipmentByID
-export def "recipes-equipment-widget visualizeRecipeEquipmentByID" [
+export def "recipes-equipment-widget get-visualize" [
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2492,7 +2538,7 @@ export def "recipes-equipment-widget visualizeRecipeEquipmentByID" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "defaultCss" $default_css "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/recipes/{id}/equipmentWidget") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/recipes/{id}/equipmentWidget") $qp)
   let accept_val = "text/html"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2503,7 +2549,7 @@ export def "recipes-equipment-widget visualizeRecipeEquipmentByID" [
 # GET /recipes/{id}/equipmentWidget.json
 # Docs: https://spoonacular.com/food-api/docs#Equipment-by-ID — Read entire docs
 # operationId: getRecipeEquipmentByID
-export def "recipes-equipment-widgetjson get" [
+export def "recipes-equipment-widget-json get" [
   id: int
   id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -2517,7 +2563,7 @@ export def "recipes-equipment-widgetjson get" [
 ]: nothing -> record<equipment: table<image: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, id: $id} | format pattern "/recipes/{id}/equipmentWidget.json"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), id: (encode-path-segment $id)} | format pattern "/recipes/{id}/equipmentWidget.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2528,7 +2574,7 @@ export def "recipes-equipment-widgetjson get" [
 # GET /recipes/{id}/equipmentWidget.png
 # Docs: https://spoonacular.com/food-api/docs#Equipment-by-ID-Image — Read entire docs
 # operationId: equipmentByIDImage
-export def "recipes-equipment-widgetpng equipmentByIDImage" [
+export def "recipes-equipment-widget-png get-by-image" [
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2541,7 +2587,7 @@ export def "recipes-equipment-widgetpng equipmentByIDImage" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/recipes/{id}/equipmentWidget.png"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/recipes/{id}/equipmentWidget.png"))
   let accept_val = "image/png"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2567,7 +2613,7 @@ export def "recipes-information get" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "includeNutrition" $include_nutrition "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/recipes/{id}/information") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/recipes/{id}/information") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2578,7 +2624,7 @@ export def "recipes-information get" [
 # GET /recipes/{id}/ingredientWidget
 # Docs: https://spoonacular.com/food-api/docs#Ingredients-by-ID-Widget — Read entire docs
 # operationId: visualizeRecipeIngredientsByID
-export def "recipes-ingredient-widget visualizeRecipeIngredientsByID" [
+export def "recipes-ingredient-widget get-visualize" [
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2594,7 +2640,7 @@ export def "recipes-ingredient-widget visualizeRecipeIngredientsByID" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "defaultCss" $default_css "scalar") (serialize-qp "measure" $measure "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/recipes/{id}/ingredientWidget") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/recipes/{id}/ingredientWidget") $qp)
   let accept_val = "text/html"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2605,7 +2651,7 @@ export def "recipes-ingredient-widget visualizeRecipeIngredientsByID" [
 # GET /recipes/{id}/ingredientWidget.json
 # Docs: https://spoonacular.com/food-api/docs#Ingredients-by-ID — Read entire docs
 # operationId: getRecipeIngredientsByID
-export def "recipes-ingredient-widgetjson get" [
+export def "recipes-ingredient-widget-json get" [
   id: int
   id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -2619,7 +2665,7 @@ export def "recipes-ingredient-widgetjson get" [
 ]: nothing -> record<ingredients: table<amount: record, image: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, id: $id} | format pattern "/recipes/{id}/ingredientWidget.json"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), id: (encode-path-segment $id)} | format pattern "/recipes/{id}/ingredientWidget.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2630,7 +2676,7 @@ export def "recipes-ingredient-widgetjson get" [
 # GET /recipes/{id}/ingredientWidget.png
 # Docs: https://spoonacular.com/food-api/docs#Ingredients-by-ID-Image — Read entire docs
 # operationId: ingredientsByIDImage
-export def "recipes-ingredient-widgetpng ingredientsByIDImage" [
+export def "recipes-ingredient-widget-png get-by-image" [
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2645,7 +2691,7 @@ export def "recipes-ingredient-widgetpng ingredientsByIDImage" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "measure" $measure "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/recipes/{id}/ingredientWidget.png") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/recipes/{id}/ingredientWidget.png") $qp)
   let accept_val = "image/png"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2656,7 +2702,7 @@ export def "recipes-ingredient-widgetpng ingredientsByIDImage" [
 # GET /recipes/{id}/nutritionLabel
 # Docs: https://spoonacular.com/food-api/docs#Recipe-Nutrition-Label-Widget — Read entire docs
 # operationId: recipeNutritionLabelWidget
-export def "recipes-nutrition-label recipeNutritionLabelWidget" [
+export def "recipes-nutrition-label get-widget" [
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2674,7 +2720,7 @@ export def "recipes-nutrition-label recipeNutritionLabelWidget" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "defaultCss" $default_css "scalar") (serialize-qp "showOptionalNutrients" $show_optional_nutrients "scalar") (serialize-qp "showZeroValues" $show_zero_values "scalar") (serialize-qp "showIngredients" $show_ingredients "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/recipes/{id}/nutritionLabel") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/recipes/{id}/nutritionLabel") $qp)
   let accept_val = "text/html"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2685,7 +2731,7 @@ export def "recipes-nutrition-label recipeNutritionLabelWidget" [
 # GET /recipes/{id}/nutritionLabel.png
 # Docs: https://spoonacular.com/food-api/docs#Recipe-Nutrition-Label-Image — Read entire docs
 # operationId: recipeNutritionLabelImage
-export def "recipes-nutrition-labelpng recipeNutritionLabelImage" [
+export def "recipes-nutrition-label-png get-image" [
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2702,7 +2748,7 @@ export def "recipes-nutrition-labelpng recipeNutritionLabelImage" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "showOptionalNutrients" $show_optional_nutrients "scalar") (serialize-qp "showZeroValues" $show_zero_values "scalar") (serialize-qp "showIngredients" $show_ingredients "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/recipes/{id}/nutritionLabel.png") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/recipes/{id}/nutritionLabel.png") $qp)
   let accept_val = "image/png"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2713,7 +2759,7 @@ export def "recipes-nutrition-labelpng recipeNutritionLabelImage" [
 # GET /recipes/{id}/nutritionWidget
 # Docs: https://spoonacular.com/food-api/docs#Recipe-Nutrition-by-ID-Widget — Read entire docs
 # operationId: visualizeRecipeNutritionByID
-export def "recipes-nutrition-widget visualizeRecipeNutritionByID" [
+export def "recipes-nutrition-widget get-visualize" [
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2729,11 +2775,11 @@ export def "recipes-nutrition-widget visualizeRecipeNutritionByID" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "defaultCss" $default_css "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/recipes/{id}/nutritionWidget") $qp)
-  let extra_headers = {"Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/recipes/{id}/nutritionWidget") $qp)
   let accept_val = "text/html"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2742,7 +2788,7 @@ export def "recipes-nutrition-widget visualizeRecipeNutritionByID" [
 # GET /recipes/{id}/nutritionWidget.json
 # Docs: https://spoonacular.com/food-api/docs#Nutrition-by-ID — Read entire docs
 # operationId: getRecipeNutritionWidgetByID
-export def "recipes-nutrition-widgetjson get-recipe-nutrition-widget" [
+export def "recipes-nutrition-widget-json get" [
   id: int
   id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -2756,7 +2802,7 @@ export def "recipes-nutrition-widgetjson get-recipe-nutrition-widget" [
 ]: nothing -> record<bad: table<amount: string, indented: bool, name: string, percentOfDailyNeeds: float>, calories: string, carbs: string, fat: string, good: table<amount: string, indented: bool, name: string, percentOfDailyNeeds: float>, protein: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, id: $id} | format pattern "/recipes/{id}/nutritionWidget.json"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), id: (encode-path-segment $id)} | format pattern "/recipes/{id}/nutritionWidget.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2767,7 +2813,7 @@ export def "recipes-nutrition-widgetjson get-recipe-nutrition-widget" [
 # GET /recipes/{id}/nutritionWidget.png
 # Docs: https://spoonacular.com/food-api/docs#Recipe-Nutrition-by-ID-Image — Read entire docs
 # operationId: recipeNutritionByIDImage
-export def "recipes-nutrition-widgetpng recipeNutritionByIDImage" [
+export def "recipes-nutrition-widget-png get-by-image" [
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2780,7 +2826,7 @@ export def "recipes-nutrition-widgetpng recipeNutritionByIDImage" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/recipes/{id}/nutritionWidget.png"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/recipes/{id}/nutritionWidget.png"))
   let accept_val = "image/png"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2791,7 +2837,7 @@ export def "recipes-nutrition-widgetpng recipeNutritionByIDImage" [
 # GET /recipes/{id}/priceBreakdownWidget
 # Docs: https://spoonacular.com/food-api/docs#Price-Breakdown-by-ID-Widget — Read entire docs
 # operationId: visualizeRecipePriceBreakdownByID
-export def "recipes-price-breakdown-widget visualizeRecipePriceBreakdownByID" [
+export def "recipes-price-breakdown-widget get-visualize" [
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2806,7 +2852,7 @@ export def "recipes-price-breakdown-widget visualizeRecipePriceBreakdownByID" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "defaultCss" $default_css "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/recipes/{id}/priceBreakdownWidget") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/recipes/{id}/priceBreakdownWidget") $qp)
   let accept_val = "text/html"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2817,7 +2863,7 @@ export def "recipes-price-breakdown-widget visualizeRecipePriceBreakdownByID" [
 # GET /recipes/{id}/priceBreakdownWidget.json
 # Docs: https://spoonacular.com/food-api/docs#Price-Breakdown-by-ID — Read entire docs
 # operationId: getRecipePriceBreakdownByID
-export def "recipes-price-breakdown-widgetjson get" [
+export def "recipes-price-breakdown-widget-json get" [
   id: int
   id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -2831,7 +2877,7 @@ export def "recipes-price-breakdown-widgetjson get" [
 ]: nothing -> record<ingredients: table<amount: record, image: string, name: string, price: float>, totalCost: float, totalCostPerServing: float> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, id: $id} | format pattern "/recipes/{id}/priceBreakdownWidget.json"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), id: (encode-path-segment $id)} | format pattern "/recipes/{id}/priceBreakdownWidget.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2842,7 +2888,7 @@ export def "recipes-price-breakdown-widgetjson get" [
 # GET /recipes/{id}/priceBreakdownWidget.png
 # Docs: https://spoonacular.com/food-api/docs#Price-Breakdown-by-ID-Image — Read entire docs
 # operationId: priceBreakdownByIDImage
-export def "recipes-price-breakdown-widgetpng priceBreakdownByIDImage" [
+export def "recipes-price-breakdown-widget-png get-by-image" [
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2855,7 +2901,7 @@ export def "recipes-price-breakdown-widgetpng priceBreakdownByIDImage" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/recipes/{id}/priceBreakdownWidget.png"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/recipes/{id}/priceBreakdownWidget.png"))
   let accept_val = "image/png"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2882,7 +2928,7 @@ export def "recipes-similar get" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "number" $number "scalar") (serialize-qp "limitLicense" $limit_license "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/recipes/{id}/similar") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/recipes/{id}/similar") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2893,7 +2939,7 @@ export def "recipes-similar get" [
 # GET /recipes/{id}/summary
 # Docs: https://spoonacular.com/food-api/docs#Summarize-Recipe — Read entire docs
 # operationId: summarizeRecipe
-export def "recipes-summary summarizeRecipe" [
+export def "recipes-summary get-summarize" [
   id: int
   id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -2907,7 +2953,7 @@ export def "recipes-summary summarizeRecipe" [
 ]: nothing -> record<id: int, summary: string, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, id: $id} | format pattern "/recipes/{id}/summary"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), id: (encode-path-segment $id)} | format pattern "/recipes/{id}/summary"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2918,7 +2964,7 @@ export def "recipes-summary summarizeRecipe" [
 # GET /recipes/{id}/tasteWidget
 # Docs: https://spoonacular.com/food-api/docs#Recipe-Taste-by-ID-Widget — Read entire docs
 # operationId: visualizeRecipeTasteByID
-export def "recipes-taste-widget visualizeRecipeTasteByID" [
+export def "recipes-taste-widget get-visualize" [
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2934,7 +2980,7 @@ export def "recipes-taste-widget visualizeRecipeTasteByID" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "normalize" $normalize "scalar") (serialize-qp "rgb" $rgb "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/recipes/{id}/tasteWidget") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/recipes/{id}/tasteWidget") $qp)
   let accept_val = "text/html"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2945,7 +2991,7 @@ export def "recipes-taste-widget visualizeRecipeTasteByID" [
 # GET /recipes/{id}/tasteWidget.json
 # Docs: https://spoonacular.com/food-api/docs#Taste-by-ID — Read entire docs
 # operationId: getRecipeTasteByID
-export def "recipes-taste-widgetjson get" [
+export def "recipes-taste-widget-json get" [
   id: int
   id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -2961,7 +3007,7 @@ export def "recipes-taste-widgetjson get" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "normalize" $normalize "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id, id: $id} | format pattern "/recipes/{id}/tasteWidget.json") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id), id: (encode-path-segment $id)} | format pattern "/recipes/{id}/tasteWidget.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2972,7 +3018,7 @@ export def "recipes-taste-widgetjson get" [
 # GET /recipes/{id}/tasteWidget.png
 # Docs: https://spoonacular.com/food-api/docs#Recipe-Taste-by-ID-Image — Read entire docs
 # operationId: recipeTasteByIDImage
-export def "recipes-taste-widgetpng recipeTasteByIDImage" [
+export def "recipes-taste-widget-png get-by-image" [
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2988,7 +3034,7 @@ export def "recipes-taste-widgetpng recipeTasteByIDImage" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "normalize" $normalize "scalar") (serialize-qp "rgb" $rgb "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/recipes/{id}/tasteWidget.png") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/recipes/{id}/tasteWidget.png") $qp)
   let accept_val = "image/png"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2999,7 +3045,7 @@ export def "recipes-taste-widgetpng recipeTasteByIDImage" [
 # POST /users/connect
 # Docs: https://spoonacular.com/food-api/docs#Connect-User — Read entire docs
 # operationId: connectUser
-export def "users-connect connectUser" [
+export def "users-connect create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3017,9 +3063,9 @@ export def "users-connect connectUser" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/users/connect")
-  let body = {"email": $email, "firstName": $first_name, "lastName": $last_name, "username": $username} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"email": $email, "firstName": $first_name, "lastName": $last_name, "username": $username} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

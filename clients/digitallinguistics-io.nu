@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -112,10 +121,10 @@ export def "languages list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "deleted" $deleted "scalar") (serialize-qp "public" $public "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/languages" $qp)
-  let extra_headers = {"continuation": $continuation, "ifModifiedSince": $if_modified_since, "maxItemCount": $max_item_count} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"continuation": $continuation, "ifModifiedSince": $if_modified_since, "maxItemCount": $max_item_count} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -138,10 +147,11 @@ export def "languages create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/languages")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Upsert (create or replace) a Language
@@ -164,12 +174,13 @@ export def "languages update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/languages")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"ifMatch": $if_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"ifMatch": $if_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a Language by ID
@@ -190,11 +201,11 @@ export def "languages delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({language_id: $language_id} | format pattern "/languages/{language_id}"))
-  let extra_headers = {"ifMatch": $if_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({language_id: (encode-path-segment $language_id)} | format pattern "/languages/{language_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ifMatch": $if_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -218,11 +229,11 @@ export def "languages get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "deleted" $deleted "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({language_id: $language_id} | format pattern "/languages/{language_id}") $qp)
-  let extra_headers = {"ifNoneMatch": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({language_id: (encode-path-segment $language_id)} | format pattern "/languages/{language_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ifNoneMatch": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -246,13 +257,14 @@ export def "languages update-by-languageID" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({language_id: $language_id} | format pattern "/languages/{language_id}"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"ifMatch": $if_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({language_id: (encode-path-segment $language_id)} | format pattern "/languages/{language_id}"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"ifMatch": $if_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get all Lexemes for a Language
@@ -278,11 +290,11 @@ export def "languages-lexemes list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "deleted" $deleted "scalar") (serialize-qp "public" $public "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({language_id: $language_id} | format pattern "/languages/{language_id}/lexemes") $qp)
-  let extra_headers = {"continuation": $continuation, "ifModifiedSince": $if_modified_since, "maxItemCount": $max_item_count} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({language_id: (encode-path-segment $language_id)} | format pattern "/languages/{language_id}/lexemes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"continuation": $continuation, "ifModifiedSince": $if_modified_since, "maxItemCount": $max_item_count} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -303,7 +315,7 @@ export def "languages-lexemes create" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({language_id: $language_id} | format pattern "/languages/{language_id}/lexemes"))
+  let full_url = (build-url $base ({language_id: (encode-path-segment $language_id)} | format pattern "/languages/{language_id}/lexemes"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -327,11 +339,11 @@ export def "languages-lexemes update-by-languageID" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({language_id: $language_id} | format pattern "/languages/{language_id}/lexemes"))
-  let extra_headers = {"ifMatch": $if_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({language_id: (encode-path-segment $language_id)} | format pattern "/languages/{language_id}/lexemes"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ifMatch": $if_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -354,11 +366,11 @@ export def "languages-lexemes delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({language_id: $language_id, lexeme_id: $lexeme_id} | format pattern "/languages/{language_id}/lexemes/{lexeme_id}"))
-  let extra_headers = {"ifMatch": $if_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({language_id: (encode-path-segment $language_id), lexeme_id: (encode-path-segment $lexeme_id)} | format pattern "/languages/{language_id}/lexemes/{lexeme_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ifMatch": $if_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -383,11 +395,11 @@ export def "languages-lexemes get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "deleted" $deleted "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({language_id: $language_id, lexeme_id: $lexeme_id} | format pattern "/languages/{language_id}/lexemes/{lexeme_id}") $qp)
-  let extra_headers = {"ifNoneMatch": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({language_id: (encode-path-segment $language_id), lexeme_id: (encode-path-segment $lexeme_id)} | format pattern "/languages/{language_id}/lexemes/{lexeme_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ifNoneMatch": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -410,11 +422,11 @@ export def "languages-lexemes update-by-languageID-lexemeID" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({language_id: $language_id, lexeme_id: $lexeme_id} | format pattern "/languages/{language_id}/lexemes/{lexeme_id}"))
-  let extra_headers = {"ifMatch": $if_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({language_id: (encode-path-segment $language_id), lexeme_id: (encode-path-segment $lexeme_id)} | format pattern "/languages/{language_id}/lexemes/{lexeme_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ifMatch": $if_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -442,10 +454,10 @@ export def "lexemes list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "deleted" $deleted "scalar") (serialize-qp "languageID" $language_id "scalar") (serialize-qp "public" $public "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/lexemes" $qp)
-  let extra_headers = {"continuation": $continuation, "ifModifiedSince": $if_modified_since, "maxItemCount": $max_item_count} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"continuation": $continuation, "ifModifiedSince": $if_modified_since, "maxItemCount": $max_item_count} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -493,10 +505,10 @@ export def "lexemes update" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "languageID" $language_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/lexemes" $qp)
-  let extra_headers = {"ifMatch": $if_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ifMatch": $if_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -518,11 +530,11 @@ export def "lexemes delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({lexeme_id: $lexeme_id} | format pattern "/lexemes/{lexeme_id}"))
-  let extra_headers = {"ifMatch": $if_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({lexeme_id: (encode-path-segment $lexeme_id)} | format pattern "/lexemes/{lexeme_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ifMatch": $if_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -546,11 +558,11 @@ export def "lexemes get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "deleted" $deleted "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({lexeme_id: $lexeme_id} | format pattern "/lexemes/{lexeme_id}") $qp)
-  let extra_headers = {"ifNoneMatch": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({lexeme_id: (encode-path-segment $lexeme_id)} | format pattern "/lexemes/{lexeme_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ifNoneMatch": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -572,10 +584,10 @@ export def "lexemes update-by-lexemeID" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({lexeme_id: $lexeme_id} | format pattern "/lexemes/{lexeme_id}"))
-  let extra_headers = {"ifMatch": $if_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({lexeme_id: (encode-path-segment $lexeme_id)} | format pattern "/lexemes/{lexeme_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"ifMatch": $if_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

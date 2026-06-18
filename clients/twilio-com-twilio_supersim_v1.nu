@@ -12,6 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
   match $scheme {
     "basic" => { {headers: {Authorization: $"Basic ($token_val)"}, query: ""} }
+    "basic-credentials" => { {headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: ""} }
     "none" => { {headers: {}, query: ""} }
     _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
   }
@@ -33,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
     "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
     _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -63,7 +73,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 }
 
 def base-url-completer [] { ["https://supersim.twilio.com"] }
-def auth-scheme-completer [] { ["basic"] }
+def auth-scheme-completer [] { ["basic" "basic-credentials"] }
 
 # Completers for enum parameters
 def status-completer [] { ["available" "downloaded" "failed" "installed" "new" "reserving"] }
@@ -154,11 +164,12 @@ export def "e-sim-profiles create-esim" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://supersim.twilio.com")
   let full_url = (build-url $base "/v1/ESimProfiles")
-  let body = {"CallbackMethod": $callback_method, "CallbackUrl": $callback_url, "Eid": $eid, "GenerateMatchingId": $generate_matching_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"CallbackMethod": $callback_method, "CallbackUrl": $callback_url, "Eid": $eid, "GenerateMatchingId": $generate_matching_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Fetch an eSIM Profile.
@@ -178,7 +189,7 @@ export def "e-sim-profiles get-esim" [
 ]: nothing -> record<account_sid: string, activation_code: string, date_created: string, date_updated: string, eid: string, error_code: string, error_message: string, iccid: string, matching_id: string, sid: string, sim_sid: string, smdp_plus_address: string, status: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://supersim.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/ESimProfiles/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/ESimProfiles/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -238,11 +249,12 @@ export def "fleets create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://supersim.twilio.com")
   let full_url = (build-url $base "/v1/Fleets")
-  let body = {"DataEnabled": $data_enabled, "DataLimit": $data_limit, "IpCommandsMethod": $ip_commands_method, "IpCommandsUrl": $ip_commands_url, "NetworkAccessProfile": $network_access_profile, "SmsCommandsEnabled": $sms_commands_enabled, "SmsCommandsMethod": $sms_commands_method, "SmsCommandsUrl": $sms_commands_url, "UniqueName": $unique_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"DataEnabled": $data_enabled, "DataLimit": $data_limit, "IpCommandsMethod": $ip_commands_method, "IpCommandsUrl": $ip_commands_url, "NetworkAccessProfile": $network_access_profile, "SmsCommandsEnabled": $sms_commands_enabled, "SmsCommandsMethod": $sms_commands_method, "SmsCommandsUrl": $sms_commands_url, "UniqueName": $unique_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Fetch a Fleet instance from your account.
@@ -262,7 +274,7 @@ export def "fleets get" [
 ]: nothing -> record<account_sid: string, data_enabled: bool, data_limit: int, data_metering: string, date_created: string, date_updated: string, ip_commands_method: string, ip_commands_url: string, network_access_profile_sid: string, sid: string, sms_commands_enabled: bool, sms_commands_method: string, sms_commands_url: string, unique_name: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://supersim.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/Fleets/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Fleets/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -293,12 +305,13 @@ export def "fleets update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://supersim.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/Fleets/{sid}"))
-  let body = {"DataLimit": $data_limit, "IpCommandsMethod": $ip_commands_method, "IpCommandsUrl": $ip_commands_url, "NetworkAccessProfile": $network_access_profile, "SmsCommandsMethod": $sms_commands_method, "SmsCommandsUrl": $sms_commands_url, "UniqueName": $unique_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Fleets/{sid}"))
+  let req_body = {"DataLimit": $data_limit, "IpCommandsMethod": $ip_commands_method, "IpCommandsUrl": $ip_commands_url, "NetworkAccessProfile": $network_access_profile, "SmsCommandsMethod": $sms_commands_method, "SmsCommandsUrl": $sms_commands_url, "UniqueName": $unique_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Retrieve a list of IP Commands from your account.
@@ -355,11 +368,12 @@ export def "ip-commands create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://supersim.twilio.com")
   let full_url = (build-url $base "/v1/IpCommands")
-  let body = {"CallbackMethod": $callback_method, "CallbackUrl": $callback_url, "DevicePort": $device_port, "Payload": $payload, "PayloadType": $payload_type, "Sim": $sim} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"CallbackMethod": $callback_method, "CallbackUrl": $callback_url, "DevicePort": $device_port, "Payload": $payload, "PayloadType": $payload_type, "Sim": $sim} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Fetch IP Command instance from your account.
@@ -379,7 +393,7 @@ export def "ip-commands get" [
 ]: nothing -> record<account_sid: string, date_created: string, date_updated: string, device_ip: string, device_port: int, direction: string, payload: string, payload_type: string, sid: string, sim_iccid: string, sim_sid: string, status: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://supersim.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/IpCommands/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/IpCommands/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -424,18 +438,19 @@ export def "network-access-profiles create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --networks: list # List of Network SIDs that this Network Access Profile will allow connections to.
+  --networks: list<string> # List of Network SIDs that this Network Access Profile will allow connections to.
   --unique-name: string # An application-defined string that uniquely identifies the resource. It can be used in place of the resource's `sid` in the URL to address the resource.
 ]: any -> record<account_sid: string, date_created: string, date_updated: string, links: record, sid: string, unique_name: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://supersim.twilio.com")
   let full_url = (build-url $base "/v1/NetworkAccessProfiles")
-  let body = {"Networks": $networks, "UniqueName": $unique_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"Networks": $networks, "UniqueName": $unique_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Retrieve a list of Network Access Profile resource's Network resource.
@@ -459,7 +474,7 @@ export def "network-access-profiles-networks list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://supersim.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({network_access_profile_sid: $network_access_profile_sid} | format pattern "/v1/NetworkAccessProfiles/{network_access_profile_sid}/Networks") $qp)
+  let full_url = (build-url $base ({network_access_profile_sid: (encode-path-segment $network_access_profile_sid)} | format pattern "/v1/NetworkAccessProfiles/{network_access_profile_sid}/Networks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -484,12 +499,13 @@ export def "network-access-profiles-networks create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://supersim.twilio.com")
-  let full_url = (build-url $base ({network_access_profile_sid: $network_access_profile_sid} | format pattern "/v1/NetworkAccessProfiles/{network_access_profile_sid}/Networks"))
-  let body = {"Network": $network} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({network_access_profile_sid: (encode-path-segment $network_access_profile_sid)} | format pattern "/v1/NetworkAccessProfiles/{network_access_profile_sid}/Networks"))
+  let req_body = {"Network": $network} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Remove a Network resource from the Network Access Profile resource's.
@@ -510,7 +526,7 @@ export def "network-access-profiles-networks delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://supersim.twilio.com")
-  let full_url = (build-url $base ({network_access_profile_sid: $network_access_profile_sid, sid: $sid} | format pattern "/v1/NetworkAccessProfiles/{network_access_profile_sid}/Networks/{sid}"))
+  let full_url = (build-url $base ({network_access_profile_sid: (encode-path-segment $network_access_profile_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/NetworkAccessProfiles/{network_access_profile_sid}/Networks/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -534,7 +550,7 @@ export def "network-access-profiles-networks get" [
 ]: nothing -> record<friendly_name: string, identifiers: list<any>, iso_country: string, network_access_profile_sid: string, sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://supersim.twilio.com")
-  let full_url = (build-url $base ({network_access_profile_sid: $network_access_profile_sid, sid: $sid} | format pattern "/v1/NetworkAccessProfiles/{network_access_profile_sid}/Networks/{sid}"))
+  let full_url = (build-url $base ({network_access_profile_sid: (encode-path-segment $network_access_profile_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/NetworkAccessProfiles/{network_access_profile_sid}/Networks/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -557,7 +573,7 @@ export def "network-access-profiles get" [
 ]: nothing -> record<account_sid: string, date_created: string, date_updated: string, links: record, sid: string, unique_name: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://supersim.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/NetworkAccessProfiles/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/NetworkAccessProfiles/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -582,12 +598,13 @@ export def "network-access-profiles update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://supersim.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/NetworkAccessProfiles/{sid}"))
-  let body = {"UniqueName": $unique_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/NetworkAccessProfiles/{sid}"))
+  let req_body = {"UniqueName": $unique_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Retrieve a list of Network resources.
@@ -636,7 +653,7 @@ export def "networks get" [
 ]: nothing -> record<friendly_name: string, identifiers: list<any>, iso_country: string, sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://supersim.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/Networks/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Networks/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -719,11 +736,12 @@ export def "sims create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://supersim.twilio.com")
   let full_url = (build-url $base "/v1/Sims")
-  let body = {"Iccid": $iccid, "RegistrationCode": $registration_code} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"Iccid": $iccid, "RegistrationCode": $registration_code} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Fetch a Super SIM instance from your account.
@@ -743,7 +761,7 @@ export def "sims get" [
 ]: nothing -> record<account_sid: string, date_created: string, date_updated: string, fleet_sid: string, iccid: string, links: record, sid: string, status: string, unique_name: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://supersim.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/Sims/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Sims/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -773,12 +791,13 @@ export def "sims update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://supersim.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/Sims/{sid}"))
-  let body = {"AccountSid": $account_sid, "CallbackMethod": $callback_method, "CallbackUrl": $callback_url, "Fleet": $fleet, "Status": $status, "UniqueName": $unique_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Sims/{sid}"))
+  let req_body = {"AccountSid": $account_sid, "CallbackMethod": $callback_method, "CallbackUrl": $callback_url, "Fleet": $fleet, "Status": $status, "UniqueName": $unique_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Retrieve a list of Billing Periods for a Super SIM.
@@ -802,7 +821,7 @@ export def "sims-billing-periods list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://supersim.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({sim_sid: $sim_sid} | format pattern "/v1/Sims/{sim_sid}/BillingPeriods") $qp)
+  let full_url = (build-url $base ({sim_sid: (encode-path-segment $sim_sid)} | format pattern "/v1/Sims/{sim_sid}/BillingPeriods") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -812,7 +831,7 @@ export def "sims-billing-periods list" [
 #
 # GET /v1/Sims/{SimSid}/IpAddresses
 # operationId: ListSimIpAddress
-export def "sims-ip-addresses list-sim-ip-address" [
+export def "sims-ip-addresses list-address" [
   sim_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -829,7 +848,7 @@ export def "sims-ip-addresses list-sim-ip-address" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://supersim.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({sim_sid: $sim_sid} | format pattern "/v1/Sims/{sim_sid}/IpAddresses") $qp)
+  let full_url = (build-url $base ({sim_sid: (encode-path-segment $sim_sid)} | format pattern "/v1/Sims/{sim_sid}/IpAddresses") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -886,11 +905,12 @@ export def "sms-commands create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://supersim.twilio.com")
   let full_url = (build-url $base "/v1/SmsCommands")
-  let body = {"CallbackMethod": $callback_method, "CallbackUrl": $callback_url, "Payload": $payload, "Sim": $sim} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"CallbackMethod": $callback_method, "CallbackUrl": $callback_url, "Payload": $payload, "Sim": $sim} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Fetch SMS Command instance from your account.
@@ -910,7 +930,7 @@ export def "sms-commands get" [
 ]: nothing -> record<account_sid: string, date_created: string, date_updated: string, direction: string, payload: string, sid: string, sim_sid: string, status: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://supersim.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/SmsCommands/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/SmsCommands/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

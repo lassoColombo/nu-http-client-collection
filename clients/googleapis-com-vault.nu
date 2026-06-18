@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -78,7 +87,7 @@ def view-completer-2 [] { ["ALL" "COUNT_RESULT_VIEW_UNSPECIFIED" "TOTAL_COUNT"] 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "matters vaultmatterslist" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "matters list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -102,7 +111,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/matters
 # operationId: vault.matters.list
-export def "matters vaultmatterslist" [
+export def "matters list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -141,7 +150,7 @@ export def "matters vaultmatterslist" [
 # POST /v1/matters
 # operationId: vault.matters.create
 # --matterPermissions item shape: {accountId?: string, role?: "ROLE_UNSPECIFIED"|"COLLABORATOR"|"OWNER"}
-export def "matters vaultmatterscreate" [
+export def "matters create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -172,18 +181,18 @@ export def "matters vaultmatterscreate" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/matters" $qp)
-  let body = {"description": $description, "matterId": $matter_id, "matterPermissions": $matter_permissions, "name": $name, "state": $state} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"description": $description, "matterId": $matter_id, "matterPermissions": $matter_permissions, "name": $name, "state": $state} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes the specified matter. Returns the matter with updated state.
 #
 # DELETE /v1/matters/{matterId}
 # operationId: vault.matters.delete
-export def "matters vaultmattersdelete" [
+export def "matters delete" [
   matter_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -208,7 +217,7 @@ export def "matters vaultmattersdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({matter_id: $matter_id} | format pattern "/v1/matters/{matter_id}") $qp)
+  let full_url = (build-url $base ({matter_id: (encode-path-segment $matter_id)} | format pattern "/v1/matters/{matter_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -218,7 +227,7 @@ export def "matters vaultmattersdelete" [
 #
 # GET /v1/matters/{matterId}
 # operationId: vault.matters.get
-export def "matters vaultmattersget" [
+export def "matters get" [
   matter_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -244,7 +253,7 @@ export def "matters vaultmattersget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({matter_id: $matter_id} | format pattern "/v1/matters/{matter_id}") $qp)
+  let full_url = (build-url $base ({matter_id: (encode-path-segment $matter_id)} | format pattern "/v1/matters/{matter_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -255,7 +264,7 @@ export def "matters vaultmattersget" [
 # PUT /v1/matters/{matterId}
 # operationId: vault.matters.update
 # --matterPermissions item shape: {accountId?: string, role?: "ROLE_UNSPECIFIED"|"COLLABORATOR"|"OWNER"}
-export def "matters vaultmattersupdate" [
+export def "matters update" [
   matter_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -286,19 +295,19 @@ export def "matters vaultmattersupdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({matter_id: $matter_id} | format pattern "/v1/matters/{matter_id}") $qp)
-  let body = {"description": $description, "matterId": $body_matter_id, "matterPermissions": $matter_permissions, "name": $name, "state": $state} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({matter_id: (encode-path-segment $matter_id)} | format pattern "/v1/matters/{matter_id}") $qp)
+  let req_body = {"description": $description, "matterId": $body_matter_id, "matterPermissions": $matter_permissions, "name": $name, "state": $state} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists details about the exports in the specified matter.
 #
 # GET /v1/matters/{matterId}/exports
 # operationId: vault.matters.exports.list
-export def "matters-exports vaultmattersexportslist" [
+export def "matters-exports list" [
   matter_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -325,7 +334,7 @@ export def "matters-exports vaultmattersexportslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({matter_id: $matter_id} | format pattern "/v1/matters/{matter_id}/exports") $qp)
+  let full_url = (build-url $base ({matter_id: (encode-path-segment $matter_id)} | format pattern "/v1/matters/{matter_id}/exports") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -337,10 +346,10 @@ export def "matters-exports vaultmattersexportslist" [
 # operationId: vault.matters.exports.create
 # --cloudStorageSink shape: {files?: list}
 # --exportOptions shape: {driveOptions?: record, groupsOptions?: record, hangoutsChatOptions?: record, mailOptions?: record, region?: "EXPORT_REGION_UNSPECIFIED"|"ANY"|"US"|"EUROPE", voiceOptions?: record}
-# --query shape: {accountInfo?: record, corpus?: "CORPUS_TYPE_UNSPECIFIED"|"DRIVE"|"MAIL"|"GROUPS"|"HANGOUTS_CHAT"|"VOICE", dataScope?: "DATA_SCOPE_UNSPECIFIED"|"ALL_DATA"|"HELD_DATA"|"UNPROCESSED_DATA", driveOptions?: record, endTime?: string, hangoutsChatInfo?: record, hangoutsChatOptions?: record, mailOptions?: record, method?: "SEARCH_METHOD_UNSPECIFIED"|"ACCOUNT"|"ORG_UNIT"|"TEAM_DRIVE"|"ENTIRE_ORG"|"ROOM"|"SITES_URL"|"SHARED_DRIVE", orgUnitInfo?: record, searchMethod?: "SEARCH_METHOD_UNSPECIFIED"|"ACCOUNT"|"ORG_UNIT"|"TEAM_DRIVE"|"ENTIRE_ORG"|"ROOM"|"SITES_URL"|"SHARED_DRIVE", sharedDriveInfo?: record, sitesUrlInfo?: record, startTime?: string, teamDriveInfo?: record, terms?: string, timeZone?: string, voiceOptions?: record}
+# --query shape: {accountInfo?: record, corpus?: "CORPUS_TYPE_UNSPECIFIED"|"DRIVE"|"MAIL"|"GROUPS"|"HANGOUTS_CHAT"|"VOICE", dataScope?: "DATA_SCOPE_UNSPECIFIED"|"ALL_DATA"|"HELD_DATA"|"UNPROCESSED_DATA", driveOptions?: record, endTime?: string, hangoutsChatInfo?: record, hangoutsChatOptions?: record, mailOptions?: record, method?: "SEARCH_METHOD_UNSPECIFIED"|"ACCOUNT"|"ORG_UNIT"|"TEAM_DRIVE"|"ENTIRE_ORG"|"ROOM"|"SITES_URL"|"SHARED_DRIVE", orgUnitInfo?: record, ... (8 more fields)}
 # --requester shape: {displayName?: string, email?: string}
 # --stats shape: {exportedArtifactCount?: string, sizeInBytes?: string, totalArtifactCount?: string}
-export def "matters-exports vaultmattersexportscreate" [
+export def "matters-exports create" [
   matter_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -367,7 +376,7 @@ export def "matters-exports vaultmattersexportscreate" [
   --id: string # Output only. The generated export ID.
   --body-matter-id: string # Output only. The matter ID.
   --name: string # The export name. Don't use special characters (~!$'(),;@:/?) in the name, they can prevent you from downloading exports.
-  --query: record # The query definition used for search and export. — shape: {accountInfo?: record, corpus?: "CORPUS_TYPE_UNSPECIFIED"|"DRIVE"|"MAIL"|"GROUPS"|"HANGOUTS_CHAT"|"VOICE", dataScope?: "DATA_SCOPE_UNSPECIFIED"|"ALL_DATA"|"HELD_DATA"|"UNPROCESSED_DATA", driveOptions?: record, endTime?: string, hangoutsChatInfo?: record, hangoutsChatOptions?: record, mailOptions?: record, method?: "SEARCH_METHOD_UNSPECIFIED"|"ACCOUNT"|"ORG_UNIT"|"TEAM_DRIVE"|"ENTIRE_ORG"|"ROOM"|"SITES_URL"|"SHARED_DRIVE", orgUnitInfo?: record, searchMethod?: "SEARCH_METHOD_UNSPECIFIED"|"ACCOUNT"|"ORG_UNIT"|"TEAM_DRIVE"|"ENTIRE_ORG"|"ROOM"|"SITES_URL"|"SHARED_DRIVE", sharedDriveInfo?: record, sitesUrlInfo?: record, startTime?: string, teamDriveInfo?: record, terms?: string, timeZone?: string, voiceOptions?: record}
+  --query: record # The query definition used for search and export. — shape: {accountInfo?: record, corpus?: "CORPUS_TYPE_UNSPECIFIED"|"DRIVE"|"MAIL"|"GROUPS"|"HANGOUTS_CHAT"|"VOICE", dataScope?: "DATA_SCOPE_UNSPECIFIED"|"ALL_DATA"|"HELD_DATA"|"UNPROCESSED_DATA", driveOptions?: record, endTime?: string, hangoutsChatInfo?: record, hangoutsChatOptions?: record, mailOptions?: record, method?: "SEARCH_METHOD_UNSPECIFIED"|"ACCOUNT"|"ORG_UNIT"|"TEAM_DRIVE"|"ENTIRE_ORG"|"ROOM"|"SITES_URL"|"SHARED_DRIVE", orgUnitInfo?: record, ... (8 more fields)}
   --requester: record # User's information. — shape: {displayName?: string, email?: string}
   --stats: record # Progress information for an export. — shape: {exportedArtifactCount?: string, sizeInBytes?: string, totalArtifactCount?: string}
   --status: string@status-completer # Output only. The status of the export.
@@ -376,19 +385,19 @@ export def "matters-exports vaultmattersexportscreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({matter_id: $matter_id} | format pattern "/v1/matters/{matter_id}/exports") $qp)
-  let body = {"cloudStorageSink": $cloud_storage_sink, "createTime": $create_time, "exportOptions": $export_options, "id": $id, "matterId": $body_matter_id, "name": $name, "query": $query, "requester": $requester, "stats": $stats, "status": $status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({matter_id: (encode-path-segment $matter_id)} | format pattern "/v1/matters/{matter_id}/exports") $qp)
+  let req_body = {"cloudStorageSink": $cloud_storage_sink, "createTime": $create_time, "exportOptions": $export_options, "id": $id, "matterId": $body_matter_id, "name": $name, "query": $query, "requester": $requester, "stats": $stats, "status": $status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes an export.
 #
 # DELETE /v1/matters/{matterId}/exports/{exportId}
 # operationId: vault.matters.exports.delete
-export def "matters-exports vaultmattersexportsdelete" [
+export def "matters-exports delete" [
   matter_id: string
   export_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -414,7 +423,7 @@ export def "matters-exports vaultmattersexportsdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({matter_id: $matter_id, export_id: $export_id} | format pattern "/v1/matters/{matter_id}/exports/{export_id}") $qp)
+  let full_url = (build-url $base ({matter_id: (encode-path-segment $matter_id), export_id: (encode-path-segment $export_id)} | format pattern "/v1/matters/{matter_id}/exports/{export_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -424,7 +433,7 @@ export def "matters-exports vaultmattersexportsdelete" [
 #
 # GET /v1/matters/{matterId}/exports/{exportId}
 # operationId: vault.matters.exports.get
-export def "matters-exports vaultmattersexportsget" [
+export def "matters-exports get" [
   matter_id: string
   export_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -450,7 +459,7 @@ export def "matters-exports vaultmattersexportsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({matter_id: $matter_id, export_id: $export_id} | format pattern "/v1/matters/{matter_id}/exports/{export_id}") $qp)
+  let full_url = (build-url $base ({matter_id: (encode-path-segment $matter_id), export_id: (encode-path-segment $export_id)} | format pattern "/v1/matters/{matter_id}/exports/{export_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -460,7 +469,7 @@ export def "matters-exports vaultmattersexportsget" [
 #
 # GET /v1/matters/{matterId}/holds
 # operationId: vault.matters.holds.list
-export def "matters-holds vaultmattersholdslist" [
+export def "matters-holds list" [
   matter_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -488,7 +497,7 @@ export def "matters-holds vaultmattersholdslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({matter_id: $matter_id} | format pattern "/v1/matters/{matter_id}/holds") $qp)
+  let full_url = (build-url $base ({matter_id: (encode-path-segment $matter_id)} | format pattern "/v1/matters/{matter_id}/holds") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -501,7 +510,7 @@ export def "matters-holds vaultmattersholdslist" [
 # --accounts item shape: {accountId?: string, email?: string, firstName?: string, holdTime?: string, lastName?: string}
 # --orgUnit shape: {holdTime?: string, orgUnitId?: string}
 # --query shape: {driveQuery?: record, groupsQuery?: record, hangoutsChatQuery?: record, mailQuery?: record, voiceQuery?: record}
-export def "matters-holds vaultmattersholdscreate" [
+export def "matters-holds create" [
   matter_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -534,19 +543,19 @@ export def "matters-holds vaultmattersholdscreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({matter_id: $matter_id} | format pattern "/v1/matters/{matter_id}/holds") $qp)
-  let body = {"accounts": $accounts, "corpus": $corpus, "holdId": $hold_id, "name": $name, "orgUnit": $org_unit, "query": $query, "updateTime": $update_time} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({matter_id: (encode-path-segment $matter_id)} | format pattern "/v1/matters/{matter_id}/holds") $qp)
+  let req_body = {"accounts": $accounts, "corpus": $corpus, "holdId": $hold_id, "name": $name, "orgUnit": $org_unit, "query": $query, "updateTime": $update_time} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Removes the specified hold and releases the accounts or organizational unit covered by the hold. If the data is not preserved by another hold or retention rule, it might be purged.
 #
 # DELETE /v1/matters/{matterId}/holds/{holdId}
 # operationId: vault.matters.holds.delete
-export def "matters-holds vaultmattersholdsdelete" [
+export def "matters-holds delete" [
   matter_id: string
   hold_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -572,7 +581,7 @@ export def "matters-holds vaultmattersholdsdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({matter_id: $matter_id, hold_id: $hold_id} | format pattern "/v1/matters/{matter_id}/holds/{hold_id}") $qp)
+  let full_url = (build-url $base ({matter_id: (encode-path-segment $matter_id), hold_id: (encode-path-segment $hold_id)} | format pattern "/v1/matters/{matter_id}/holds/{hold_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -582,7 +591,7 @@ export def "matters-holds vaultmattersholdsdelete" [
 #
 # GET /v1/matters/{matterId}/holds/{holdId}
 # operationId: vault.matters.holds.get
-export def "matters-holds vaultmattersholdsget" [
+export def "matters-holds get" [
   matter_id: string
   hold_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -609,7 +618,7 @@ export def "matters-holds vaultmattersholdsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({matter_id: $matter_id, hold_id: $hold_id} | format pattern "/v1/matters/{matter_id}/holds/{hold_id}") $qp)
+  let full_url = (build-url $base ({matter_id: (encode-path-segment $matter_id), hold_id: (encode-path-segment $hold_id)} | format pattern "/v1/matters/{matter_id}/holds/{hold_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -622,7 +631,7 @@ export def "matters-holds vaultmattersholdsget" [
 # --accounts item shape: {accountId?: string, email?: string, firstName?: string, holdTime?: string, lastName?: string}
 # --orgUnit shape: {holdTime?: string, orgUnitId?: string}
 # --query shape: {driveQuery?: record, groupsQuery?: record, hangoutsChatQuery?: record, mailQuery?: record, voiceQuery?: record}
-export def "matters-holds vaultmattersholdsupdate" [
+export def "matters-holds update" [
   matter_id: string
   hold_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -656,19 +665,19 @@ export def "matters-holds vaultmattersholdsupdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({matter_id: $matter_id, hold_id: $hold_id} | format pattern "/v1/matters/{matter_id}/holds/{hold_id}") $qp)
-  let body = {"accounts": $accounts, "corpus": $corpus, "holdId": $body_hold_id, "name": $name, "orgUnit": $org_unit, "query": $query, "updateTime": $update_time} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({matter_id: (encode-path-segment $matter_id), hold_id: (encode-path-segment $hold_id)} | format pattern "/v1/matters/{matter_id}/holds/{hold_id}") $qp)
+  let req_body = {"accounts": $accounts, "corpus": $corpus, "holdId": $body_hold_id, "name": $name, "orgUnit": $org_unit, "query": $query, "updateTime": $update_time} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists the accounts covered by a hold. This can list only individually-specified accounts covered by the hold. If the hold covers an organizational unit, use the [Admin SDK](https://developers.google.com/admin-sdk/). to list the members of the organizational unit on hold.
 #
 # GET /v1/matters/{matterId}/holds/{holdId}/accounts
 # operationId: vault.matters.holds.accounts.list
-export def "matters-holds-accounts vaultmattersholdsaccountslist" [
+export def "matters-holds-accounts list" [
   matter_id: string
   hold_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -694,7 +703,7 @@ export def "matters-holds-accounts vaultmattersholdsaccountslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({matter_id: $matter_id, hold_id: $hold_id} | format pattern "/v1/matters/{matter_id}/holds/{hold_id}/accounts") $qp)
+  let full_url = (build-url $base ({matter_id: (encode-path-segment $matter_id), hold_id: (encode-path-segment $hold_id)} | format pattern "/v1/matters/{matter_id}/holds/{hold_id}/accounts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -704,7 +713,7 @@ export def "matters-holds-accounts vaultmattersholdsaccountslist" [
 #
 # POST /v1/matters/{matterId}/holds/{holdId}/accounts
 # operationId: vault.matters.holds.accounts.create
-export def "matters-holds-accounts vaultmattersholdsaccountscreate" [
+export def "matters-holds-accounts create" [
   matter_id: string
   hold_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -736,19 +745,19 @@ export def "matters-holds-accounts vaultmattersholdsaccountscreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({matter_id: $matter_id, hold_id: $hold_id} | format pattern "/v1/matters/{matter_id}/holds/{hold_id}/accounts") $qp)
-  let body = {"accountId": $account_id, "email": $email, "firstName": $first_name, "holdTime": $hold_time, "lastName": $last_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({matter_id: (encode-path-segment $matter_id), hold_id: (encode-path-segment $hold_id)} | format pattern "/v1/matters/{matter_id}/holds/{hold_id}/accounts") $qp)
+  let req_body = {"accountId": $account_id, "email": $email, "firstName": $first_name, "holdTime": $hold_time, "lastName": $last_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Removes an account from a hold.
 #
 # DELETE /v1/matters/{matterId}/holds/{holdId}/accounts/{accountId}
 # operationId: vault.matters.holds.accounts.delete
-export def "matters-holds-accounts vaultmattersholdsaccountsdelete" [
+export def "matters-holds-accounts delete" [
   matter_id: string
   hold_id: string
   account_id: string
@@ -775,7 +784,7 @@ export def "matters-holds-accounts vaultmattersholdsaccountsdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({matter_id: $matter_id, hold_id: $hold_id, account_id: $account_id} | format pattern "/v1/matters/{matter_id}/holds/{hold_id}/accounts/{account_id}") $qp)
+  let full_url = (build-url $base ({matter_id: (encode-path-segment $matter_id), hold_id: (encode-path-segment $hold_id), account_id: (encode-path-segment $account_id)} | format pattern "/v1/matters/{matter_id}/holds/{hold_id}/accounts/{account_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -785,7 +794,7 @@ export def "matters-holds-accounts vaultmattersholdsaccountsdelete" [
 #
 # POST /v1/matters/{matterId}/holds/{holdId}:addHeldAccounts
 # operationId: vault.matters.holds.addHeldAccounts
-export def "matters-holds vaultmattersholdsaddHeldAccounts" [
+export def "matters-holds create-held-accounts" [
   matter_id: string
   hold_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -807,26 +816,26 @@ export def "matters-holds vaultmattersholdsaddHeldAccounts" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --account-ids: list # A comma-separated list of the account IDs of the accounts to add to the hold. Specify either **emails** or **account_ids**, but not both.
-  --emails: list # A comma-separated list of the emails of the accounts to add to the hold. Specify either **emails** or **account_ids**, but not both.
+  --account-ids: list<string> # A comma-separated list of the account IDs of the accounts to add to the hold. Specify either **emails** or **account_ids**, but not both.
+  --emails: list<string> # A comma-separated list of the emails of the accounts to add to the hold. Specify either **emails** or **account_ids**, but not both.
 ]: any -> record<responses: table<account: record, status: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({matter_id: $matter_id, hold_id: $hold_id} | format pattern "/v1/matters/{matter_id}/holds/{hold_id}:addHeldAccounts") $qp)
-  let body = {"accountIds": $account_ids, "emails": $emails} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({matter_id: (encode-path-segment $matter_id), hold_id: (encode-path-segment $hold_id)} | format pattern "/v1/matters/{matter_id}/holds/{hold_id}:addHeldAccounts") $qp)
+  let req_body = {"accountIds": $account_ids, "emails": $emails} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Removes the specified accounts from a hold. Returns a list of statuses in the same order as the request.
 #
 # POST /v1/matters/{matterId}/holds/{holdId}:removeHeldAccounts
 # operationId: vault.matters.holds.removeHeldAccounts
-export def "matters-holds vaultmattersholdsremoveHeldAccounts" [
+export def "matters-holds delete-held-accounts" [
   matter_id: string
   hold_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -848,25 +857,25 @@ export def "matters-holds vaultmattersholdsremoveHeldAccounts" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --account-ids: list # The account IDs of the accounts to remove from the hold.
+  --account-ids: list<string> # The account IDs of the accounts to remove from the hold.
 ]: any -> record<statuses: table<code: int, details: list, message: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({matter_id: $matter_id, hold_id: $hold_id} | format pattern "/v1/matters/{matter_id}/holds/{hold_id}:removeHeldAccounts") $qp)
-  let body = {"accountIds": $account_ids} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({matter_id: (encode-path-segment $matter_id), hold_id: (encode-path-segment $hold_id)} | format pattern "/v1/matters/{matter_id}/holds/{hold_id}:removeHeldAccounts") $qp)
+  let req_body = {"accountIds": $account_ids} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists the saved queries in a matter.
 #
 # GET /v1/matters/{matterId}/savedQueries
 # operationId: vault.matters.savedQueries.list
-export def "matters-saved-queries vaultmatterssavedQuerieslist" [
+export def "matters-saved-queries list" [
   matter_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -893,7 +902,7 @@ export def "matters-saved-queries vaultmatterssavedQuerieslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({matter_id: $matter_id} | format pattern "/v1/matters/{matter_id}/savedQueries") $qp)
+  let full_url = (build-url $base ({matter_id: (encode-path-segment $matter_id)} | format pattern "/v1/matters/{matter_id}/savedQueries") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -903,8 +912,8 @@ export def "matters-saved-queries vaultmatterssavedQuerieslist" [
 #
 # POST /v1/matters/{matterId}/savedQueries
 # operationId: vault.matters.savedQueries.create
-# --query shape: {accountInfo?: record, corpus?: "CORPUS_TYPE_UNSPECIFIED"|"DRIVE"|"MAIL"|"GROUPS"|"HANGOUTS_CHAT"|"VOICE", dataScope?: "DATA_SCOPE_UNSPECIFIED"|"ALL_DATA"|"HELD_DATA"|"UNPROCESSED_DATA", driveOptions?: record, endTime?: string, hangoutsChatInfo?: record, hangoutsChatOptions?: record, mailOptions?: record, method?: "SEARCH_METHOD_UNSPECIFIED"|"ACCOUNT"|"ORG_UNIT"|"TEAM_DRIVE"|"ENTIRE_ORG"|"ROOM"|"SITES_URL"|"SHARED_DRIVE", orgUnitInfo?: record, searchMethod?: "SEARCH_METHOD_UNSPECIFIED"|"ACCOUNT"|"ORG_UNIT"|"TEAM_DRIVE"|"ENTIRE_ORG"|"ROOM"|"SITES_URL"|"SHARED_DRIVE", sharedDriveInfo?: record, sitesUrlInfo?: record, startTime?: string, teamDriveInfo?: record, terms?: string, timeZone?: string, voiceOptions?: record}
-export def "matters-saved-queries vaultmatterssavedQueriescreate" [
+# --query shape: {accountInfo?: record, corpus?: "CORPUS_TYPE_UNSPECIFIED"|"DRIVE"|"MAIL"|"GROUPS"|"HANGOUTS_CHAT"|"VOICE", dataScope?: "DATA_SCOPE_UNSPECIFIED"|"ALL_DATA"|"HELD_DATA"|"UNPROCESSED_DATA", driveOptions?: record, endTime?: string, hangoutsChatInfo?: record, hangoutsChatOptions?: record, mailOptions?: record, method?: "SEARCH_METHOD_UNSPECIFIED"|"ACCOUNT"|"ORG_UNIT"|"TEAM_DRIVE"|"ENTIRE_ORG"|"ROOM"|"SITES_URL"|"SHARED_DRIVE", orgUnitInfo?: record, ... (8 more fields)}
+export def "matters-saved-queries create" [
   matter_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -928,26 +937,26 @@ export def "matters-saved-queries vaultmatterssavedQueriescreate" [
   --create-time: string # Output only. The server-generated timestamp when the saved query was created. (format: google-datetime)
   --display-name: string # The name of the saved query.
   --body-matter-id: string # Output only. The matter ID of the matter the saved query is saved in. The server does not use this field during create and always uses matter ID in the URL.
-  --query: record # The query definition used for search and export. — shape: {accountInfo?: record, corpus?: "CORPUS_TYPE_UNSPECIFIED"|"DRIVE"|"MAIL"|"GROUPS"|"HANGOUTS_CHAT"|"VOICE", dataScope?: "DATA_SCOPE_UNSPECIFIED"|"ALL_DATA"|"HELD_DATA"|"UNPROCESSED_DATA", driveOptions?: record, endTime?: string, hangoutsChatInfo?: record, hangoutsChatOptions?: record, mailOptions?: record, method?: "SEARCH_METHOD_UNSPECIFIED"|"ACCOUNT"|"ORG_UNIT"|"TEAM_DRIVE"|"ENTIRE_ORG"|"ROOM"|"SITES_URL"|"SHARED_DRIVE", orgUnitInfo?: record, searchMethod?: "SEARCH_METHOD_UNSPECIFIED"|"ACCOUNT"|"ORG_UNIT"|"TEAM_DRIVE"|"ENTIRE_ORG"|"ROOM"|"SITES_URL"|"SHARED_DRIVE", sharedDriveInfo?: record, sitesUrlInfo?: record, startTime?: string, teamDriveInfo?: record, terms?: string, timeZone?: string, voiceOptions?: record}
+  --query: record # The query definition used for search and export. — shape: {accountInfo?: record, corpus?: "CORPUS_TYPE_UNSPECIFIED"|"DRIVE"|"MAIL"|"GROUPS"|"HANGOUTS_CHAT"|"VOICE", dataScope?: "DATA_SCOPE_UNSPECIFIED"|"ALL_DATA"|"HELD_DATA"|"UNPROCESSED_DATA", driveOptions?: record, endTime?: string, hangoutsChatInfo?: record, hangoutsChatOptions?: record, mailOptions?: record, method?: "SEARCH_METHOD_UNSPECIFIED"|"ACCOUNT"|"ORG_UNIT"|"TEAM_DRIVE"|"ENTIRE_ORG"|"ROOM"|"SITES_URL"|"SHARED_DRIVE", orgUnitInfo?: record, ... (8 more fields)}
   --saved-query-id: string # A unique identifier for the saved query.
 ]: any -> record<createTime: string, displayName: string, matterId: string, query: record<accountInfo: record<emails: list>, corpus: string, dataScope: string, driveOptions: record<clientSideEncryptedOption: string, includeSharedDrives: bool, includeTeamDrives: bool, versionDate: string>, endTime: string, hangoutsChatInfo: record<roomId: list>, hangoutsChatOptions: record<includeRooms: bool>, mailOptions: record<clientSideEncryptedOption: string, excludeDrafts: bool>, method: string, orgUnitInfo: record<orgUnitId: string>, searchMethod: string, sharedDriveInfo: record<sharedDriveIds: list>, sitesUrlInfo: record<urls: list>, startTime: string, teamDriveInfo: record<teamDriveIds: list>, terms: string, timeZone: string, voiceOptions: record<coveredData: list>>, savedQueryId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({matter_id: $matter_id} | format pattern "/v1/matters/{matter_id}/savedQueries") $qp)
-  let body = {"createTime": $create_time, "displayName": $display_name, "matterId": $body_matter_id, "query": $query, "savedQueryId": $saved_query_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({matter_id: (encode-path-segment $matter_id)} | format pattern "/v1/matters/{matter_id}/savedQueries") $qp)
+  let req_body = {"createTime": $create_time, "displayName": $display_name, "matterId": $body_matter_id, "query": $query, "savedQueryId": $saved_query_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes the specified saved query.
 #
 # DELETE /v1/matters/{matterId}/savedQueries/{savedQueryId}
 # operationId: vault.matters.savedQueries.delete
-export def "matters-saved-queries vaultmatterssavedQueriesdelete" [
+export def "matters-saved-queries delete" [
   matter_id: string
   saved_query_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -973,7 +982,7 @@ export def "matters-saved-queries vaultmatterssavedQueriesdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({matter_id: $matter_id, saved_query_id: $saved_query_id} | format pattern "/v1/matters/{matter_id}/savedQueries/{saved_query_id}") $qp)
+  let full_url = (build-url $base ({matter_id: (encode-path-segment $matter_id), saved_query_id: (encode-path-segment $saved_query_id)} | format pattern "/v1/matters/{matter_id}/savedQueries/{saved_query_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -983,7 +992,7 @@ export def "matters-saved-queries vaultmatterssavedQueriesdelete" [
 #
 # GET /v1/matters/{matterId}/savedQueries/{savedQueryId}
 # operationId: vault.matters.savedQueries.get
-export def "matters-saved-queries vaultmatterssavedQueriesget" [
+export def "matters-saved-queries get" [
   matter_id: string
   saved_query_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1009,7 +1018,7 @@ export def "matters-saved-queries vaultmatterssavedQueriesget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({matter_id: $matter_id, saved_query_id: $saved_query_id} | format pattern "/v1/matters/{matter_id}/savedQueries/{saved_query_id}") $qp)
+  let full_url = (build-url $base ({matter_id: (encode-path-segment $matter_id), saved_query_id: (encode-path-segment $saved_query_id)} | format pattern "/v1/matters/{matter_id}/savedQueries/{saved_query_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1020,7 +1029,7 @@ export def "matters-saved-queries vaultmatterssavedQueriesget" [
 # POST /v1/matters/{matterId}:addPermissions
 # operationId: vault.matters.addPermissions
 # --matterPermission shape: {accountId?: string, role?: "ROLE_UNSPECIFIED"|"COLLABORATOR"|"OWNER"}
-export def "matters vaultmattersaddPermissions" [
+export def "matters create-permissions" [
   matter_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1049,19 +1058,19 @@ export def "matters vaultmattersaddPermissions" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({matter_id: $matter_id} | format pattern "/v1/matters/{matter_id}:addPermissions") $qp)
-  let body = {"ccMe": $cc_me, "matterPermission": $matter_permission, "sendEmails": $send_emails} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({matter_id: (encode-path-segment $matter_id)} | format pattern "/v1/matters/{matter_id}:addPermissions") $qp)
+  let req_body = {"ccMe": $cc_me, "matterPermission": $matter_permission, "sendEmails": $send_emails} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Closes the specified matter. Returns the matter with updated state.
 #
 # POST /v1/matters/{matterId}:close
 # operationId: vault.matters.close
-export def "matters vaultmattersclose" [
+export def "matters close" [
   matter_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1088,19 +1097,20 @@ export def "matters vaultmattersclose" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({matter_id: $matter_id} | format pattern "/v1/matters/{matter_id}:close") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({matter_id: (encode-path-segment $matter_id)} | format pattern "/v1/matters/{matter_id}:close") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Counts the accounts processed by the specified query.
 #
 # POST /v1/matters/{matterId}:count
 # operationId: vault.matters.count
-# --query shape: {accountInfo?: record, corpus?: "CORPUS_TYPE_UNSPECIFIED"|"DRIVE"|"MAIL"|"GROUPS"|"HANGOUTS_CHAT"|"VOICE", dataScope?: "DATA_SCOPE_UNSPECIFIED"|"ALL_DATA"|"HELD_DATA"|"UNPROCESSED_DATA", driveOptions?: record, endTime?: string, hangoutsChatInfo?: record, hangoutsChatOptions?: record, mailOptions?: record, method?: "SEARCH_METHOD_UNSPECIFIED"|"ACCOUNT"|"ORG_UNIT"|"TEAM_DRIVE"|"ENTIRE_ORG"|"ROOM"|"SITES_URL"|"SHARED_DRIVE", orgUnitInfo?: record, searchMethod?: "SEARCH_METHOD_UNSPECIFIED"|"ACCOUNT"|"ORG_UNIT"|"TEAM_DRIVE"|"ENTIRE_ORG"|"ROOM"|"SITES_URL"|"SHARED_DRIVE", sharedDriveInfo?: record, sitesUrlInfo?: record, startTime?: string, teamDriveInfo?: record, terms?: string, timeZone?: string, voiceOptions?: record}
-export def "matters vaultmatterscount" [
+# --query shape: {accountInfo?: record, corpus?: "CORPUS_TYPE_UNSPECIFIED"|"DRIVE"|"MAIL"|"GROUPS"|"HANGOUTS_CHAT"|"VOICE", dataScope?: "DATA_SCOPE_UNSPECIFIED"|"ALL_DATA"|"HELD_DATA"|"UNPROCESSED_DATA", driveOptions?: record, endTime?: string, hangoutsChatInfo?: record, hangoutsChatOptions?: record, mailOptions?: record, method?: "SEARCH_METHOD_UNSPECIFIED"|"ACCOUNT"|"ORG_UNIT"|"TEAM_DRIVE"|"ENTIRE_ORG"|"ROOM"|"SITES_URL"|"SHARED_DRIVE", orgUnitInfo?: record, ... (8 more fields)}
+export def "matters create-count" [
   matter_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1121,26 +1131,26 @@ export def "matters vaultmatterscount" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --query: record # The query definition used for search and export. — shape: {accountInfo?: record, corpus?: "CORPUS_TYPE_UNSPECIFIED"|"DRIVE"|"MAIL"|"GROUPS"|"HANGOUTS_CHAT"|"VOICE", dataScope?: "DATA_SCOPE_UNSPECIFIED"|"ALL_DATA"|"HELD_DATA"|"UNPROCESSED_DATA", driveOptions?: record, endTime?: string, hangoutsChatInfo?: record, hangoutsChatOptions?: record, mailOptions?: record, method?: "SEARCH_METHOD_UNSPECIFIED"|"ACCOUNT"|"ORG_UNIT"|"TEAM_DRIVE"|"ENTIRE_ORG"|"ROOM"|"SITES_URL"|"SHARED_DRIVE", orgUnitInfo?: record, searchMethod?: "SEARCH_METHOD_UNSPECIFIED"|"ACCOUNT"|"ORG_UNIT"|"TEAM_DRIVE"|"ENTIRE_ORG"|"ROOM"|"SITES_URL"|"SHARED_DRIVE", sharedDriveInfo?: record, sitesUrlInfo?: record, startTime?: string, teamDriveInfo?: record, terms?: string, timeZone?: string, voiceOptions?: record}
+  --query: record # The query definition used for search and export. — shape: {accountInfo?: record, corpus?: "CORPUS_TYPE_UNSPECIFIED"|"DRIVE"|"MAIL"|"GROUPS"|"HANGOUTS_CHAT"|"VOICE", dataScope?: "DATA_SCOPE_UNSPECIFIED"|"ALL_DATA"|"HELD_DATA"|"UNPROCESSED_DATA", driveOptions?: record, endTime?: string, hangoutsChatInfo?: record, hangoutsChatOptions?: record, mailOptions?: record, method?: "SEARCH_METHOD_UNSPECIFIED"|"ACCOUNT"|"ORG_UNIT"|"TEAM_DRIVE"|"ENTIRE_ORG"|"ROOM"|"SITES_URL"|"SHARED_DRIVE", orgUnitInfo?: record, ... (8 more fields)}
   --view: string@view-completer-2 # Sets the granularity of the count results.
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({matter_id: $matter_id} | format pattern "/v1/matters/{matter_id}:count") $qp)
-  let body = {"query": $query, "view": $view} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({matter_id: (encode-path-segment $matter_id)} | format pattern "/v1/matters/{matter_id}:count") $qp)
+  let req_body = {"query": $query, "view": $view} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Removes an account as a matter collaborator.
 #
 # POST /v1/matters/{matterId}:removePermissions
 # operationId: vault.matters.removePermissions
-export def "matters vaultmattersremovePermissions" [
+export def "matters delete-permissions" [
   matter_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1167,19 +1177,19 @@ export def "matters vaultmattersremovePermissions" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({matter_id: $matter_id} | format pattern "/v1/matters/{matter_id}:removePermissions") $qp)
-  let body = {"accountId": $account_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({matter_id: (encode-path-segment $matter_id)} | format pattern "/v1/matters/{matter_id}:removePermissions") $qp)
+  let req_body = {"accountId": $account_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Reopens the specified matter. Returns the matter with updated state.
 #
 # POST /v1/matters/{matterId}:reopen
 # operationId: vault.matters.reopen
-export def "matters vaultmattersreopen" [
+export def "matters create-reopen" [
   matter_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1206,18 +1216,19 @@ export def "matters vaultmattersreopen" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({matter_id: $matter_id} | format pattern "/v1/matters/{matter_id}:reopen") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({matter_id: (encode-path-segment $matter_id)} | format pattern "/v1/matters/{matter_id}:reopen") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Undeletes the specified matter. Returns the matter with updated state.
 #
 # POST /v1/matters/{matterId}:undelete
 # operationId: vault.matters.undelete
-export def "matters vaultmattersundelete" [
+export def "matters create-undelete" [
   matter_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1244,18 +1255,19 @@ export def "matters vaultmattersundelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({matter_id: $matter_id} | format pattern "/v1/matters/{matter_id}:undelete") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({matter_id: (encode-path-segment $matter_id)} | format pattern "/v1/matters/{matter_id}:undelete") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes a long-running operation. This method indicates that the client is no longer interested in the operation result. It does not cancel the operation. If the server doesn't support this method, it returns `google.rpc.Code.UNIMPLEMENTED`.
 #
 # DELETE /v1/{name}
 # operationId: vault.operations.delete
-export def "operations vaultoperationsdelete" [
+export def "operations delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1280,7 +1292,7 @@ export def "operations vaultoperationsdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1290,7 +1302,7 @@ export def "operations vaultoperationsdelete" [
 #
 # GET /v1/{name}
 # operationId: vault.operations.list
-export def "operations vaultoperationslist" [
+export def "operations list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1318,7 +1330,7 @@ export def "operations vaultoperationslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1328,7 +1340,7 @@ export def "operations vaultoperationslist" [
 #
 # POST /v1/{name}:cancel
 # operationId: vault.operations.cancel
-export def "operations vaultoperationscancel" [
+export def "operations cancel" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1355,9 +1367,10 @@ export def "operations vaultoperationscancel" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}:cancel") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}:cancel") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

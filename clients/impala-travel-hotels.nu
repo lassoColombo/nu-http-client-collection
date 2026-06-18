@@ -36,6 +36,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -148,11 +157,11 @@ export def "bookings create" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/bookings")
-  let body = {"bookingContact": $booking_contact, "end": $end, "notes": $notes, "paymentType": $payment_type, "rooms": $rooms, "start": $start} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"bookingContact": $booking_contact, "end": $end, "notes": $notes, "paymentType": $payment_type, "rooms": $rooms, "start": $start} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Cancel a booking
@@ -172,7 +181,7 @@ export def "bookings cancel" [
 ]: nothing -> record<bookedRooms: table<adults: float, notes: record, rate: record, roomType: record, sellerToImpalaPayment: record>, bookingId: string, cancellation: record<fee: record<count: float, price: record, type: string>>, contact: record, createdAt: string, end: string, hotel: record<address: record<city: string, country: string, countryName: string, line1: string, line2: string, postalCode: string, region: string>, checkIn: record<from: string, to: string>, checkOut: record<from: string, to: string>, emails: list<string>, hotelId: string, href: string, images: list<record>, location: record<latitude: float, longitude: float>, name: string, phoneNumbers: list<string>, starRating: float, timezone: string>, hotelConfirmationCode: string, notes: record<fromGuest: string, fromSeller: string>, paymentBearerToken: string, paymentClientSecret: string, start: string, status: string, updatedAt: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({booking_id: $booking_id} | format pattern "/bookings/{booking_id}"))
+  let full_url = (build-url $base ({booking_id: (encode-path-segment $booking_id)} | format pattern "/bookings/{booking_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -182,7 +191,7 @@ export def "bookings cancel" [
 #
 # GET /bookings/{bookingId}
 # operationId: retrieveBooking
-export def "bookings retrieve" [
+export def "bookings get" [
   booking_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -195,7 +204,7 @@ export def "bookings retrieve" [
 ]: nothing -> record<bookedRooms: table<adults: float, notes: record, rate: record, roomType: record, sellerToImpalaPayment: record>, bookingId: string, cancellation: record<fee: record<count: float, price: record, type: string>>, contact: record, createdAt: string, end: string, hotel: record<address: record<city: string, country: string, countryName: string, line1: string, line2: string, postalCode: string, region: string>, checkIn: record<from: string, to: string>, checkOut: record<from: string, to: string>, emails: list<string>, hotelId: string, href: string, images: list<record>, location: record<latitude: float, longitude: float>, name: string, phoneNumbers: list<string>, starRating: float, timezone: string>, hotelConfirmationCode: string, notes: record<fromGuest: string, fromSeller: string>, paymentBearerToken: string, paymentClientSecret: string, start: string, status: string, updatedAt: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({booking_id: $booking_id} | format pattern "/bookings/{booking_id}"))
+  let full_url = (build-url $base ({booking_id: (encode-path-segment $booking_id)} | format pattern "/bookings/{booking_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -228,12 +237,12 @@ export def "bookings update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({booking_id: $booking_id} | format pattern "/bookings/{booking_id}"))
-  let body = {"bookingContact": $booking_contact, "end": $end, "notes": $notes, "paymentType": $payment_type, "rooms": $rooms, "start": $start, "updateBookingVersionAtTimestamp": $update_booking_version_at_timestamp} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({booking_id: (encode-path-segment $booking_id)} | format pattern "/bookings/{booking_id}"))
+  let req_body = {"bookingContact": $booking_contact, "end": $end, "notes": $notes, "paymentType": $payment_type, "rooms": $rooms, "start": $start, "updateBookingVersionAtTimestamp": $update_booking_version_at_timestamp} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Change a booking contact
@@ -257,12 +266,12 @@ export def "bookings-booking-contact update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({booking_id: $booking_id} | format pattern "/bookings/{booking_id}/booking-contact"))
-  let body = {"bookingContact": $booking_contact, "updateBookingVersionAtTimestamp": $update_booking_version_at_timestamp} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({booking_id: (encode-path-segment $booking_id)} | format pattern "/bookings/{booking_id}/booking-contact"))
+  let req_body = {"bookingContact": $booking_contact, "updateBookingVersionAtTimestamp": $update_booking_version_at_timestamp} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List all hotels
@@ -286,7 +295,7 @@ export def "hotels list" [
   --latitude: float # The WGS 84 latitude of the location to search around (e.g. `58.386186`). (format: double, e.g. 58.386186)
   --longitude: float # The WGS 84 longitude of the location to search around (e.g. `-9.952549`). (format: double, e.g. -9.952549)
   --radius: int # The distance (in meters) to search around the specified location (e.g. `10000` for 10 km). (format: int32, e.g. 25000)
-  --hotel-ids: list # A comma-separated list of hotel ids you wish to filter by (e.g. `60a06628-2c71-44bf-9685-efbd2df4179e,60a06628-2c71-44bf-9685-efbd2df4179e`). (e.g. [0e25533a-2db2-4894-9db1-4c1ff92d798c,77c272b6-18e6-4036-b9c3-7fc5454e3f6a])
+  --hotel-ids: list<string> # A comma-separated list of hotel ids you wish to filter by (e.g. `60a06628-2c71-44bf-9685-efbd2df4179e,60a06628-2c71-44bf-9685-efbd2df4179e`). (e.g. [0e25533a-2db2-4894-9db1-4c1ff92d798c,77c272b6-18e6-4036-b9c3-7fc5454e3f6a])
   --created: record # Allows for filtering based on the date and time when this hotel was first added to the Impala platform, in ISO 8601 format (e.g. `2020-11-04T17:37:37Z`) and UTC timezone. Available modifiers include less than (`lt`), greater than (`gt`), lower than or equal to (`lte`), greater than or equal to (`gte`) and equal to (`eq`). Usage example: `?created[lte]=2020-11-04T19:37:37Z&created[gte]=2020-11-04T15:56:37.000Z` (e.g. {eq: 2020-11-04T15:56:37.000Z, gt: 2020-11-04T15:56:37.000Z, gte: 2020-11-04T15:56:37.000Z, lt: 2020-11-04T15:56:37.000Z, lte: 2020-11-04T15:56:37.000Z})
   --updated: record # Allows for filtering based on the date and time the content of this hotel was last updated, in ISO 8601 format (e.g. `2020-11-04T17:37:37Z`) and UTC timezone. Available modifiers include less than (`lt`), greater than (`gt`), lower than or equal to (`lte`), greater than or equal to (`gte`) and equal to (`eq`). Usage example: `?updated[lte]=2020-11-04T19:37:37Z&updated[gte]=2020-11-04T15:56:37.000Z` (e.g. {eq: 2020-11-04T15:56:37.000Z, gt: 2020-11-04T15:56:37.000Z, gte: 2020-11-04T15:56:37.000Z, lt: 2020-11-04T15:56:37.000Z, lte: 2020-11-04T15:56:37.000Z})
   --size: float # Number of hotels returned on a given page (pagination). (format: int32, default: 25, e.g. 40)
@@ -306,7 +315,7 @@ export def "hotels list" [
 #
 # GET /hotels/{hotelId}
 # operationId: retrieveHotel
-export def "hotels retrieve" [
+export def "hotels get" [
   hotel_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -322,7 +331,7 @@ export def "hotels retrieve" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({hotel_id: $hotel_id} | format pattern "/hotels/{hotel_id}") $qp)
+  let full_url = (build-url $base ({hotel_id: (encode-path-segment $hotel_id)} | format pattern "/hotels/{hotel_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -332,7 +341,7 @@ export def "hotels retrieve" [
 #
 # GET /hotels/{hotelId}/rate-plans
 # operationId: listRatePlansForHotel
-export def "hotels-rate-plans list-rate-plans-for" [
+export def "hotels-rate-plans list" [
   hotel_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -352,7 +361,7 @@ export def "hotels-rate-plans list-rate-plans-for" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "updatedAt" $updated_at "deepObject") (serialize-qp "size" $size "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "roomId" $room_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({hotel_id: $hotel_id} | format pattern "/hotels/{hotel_id}/rate-plans") $qp)
+  let full_url = (build-url $base ({hotel_id: (encode-path-segment $hotel_id)} | format pattern "/hotels/{hotel_id}/rate-plans") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -362,7 +371,7 @@ export def "hotels-rate-plans list-rate-plans-for" [
 #
 # GET /hotels/{hotelId}/rate-plans/{ratePlanId}
 # operationId: listRatePlanForHotelForRatePlanId
-export def "hotels-rate-plans list-rate-plan-for-hotel-for" [
+export def "hotels-rate-plans list-for" [
   hotel_id: string
   rate_plan_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -383,7 +392,7 @@ export def "hotels-rate-plans list-rate-plan-for-hotel-for" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "updatedAt" $updated_at "deepObject") (serialize-qp "size" $size "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "roomTypeId" $room_type_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({hotel_id: $hotel_id, rate_plan_id: $rate_plan_id} | format pattern "/hotels/{hotel_id}/rate-plans/{rate_plan_id}") $qp)
+  let full_url = (build-url $base ({hotel_id: (encode-path-segment $hotel_id), rate_plan_id: (encode-path-segment $rate_plan_id)} | format pattern "/hotels/{hotel_id}/rate-plans/{rate_plan_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -120,7 +129,7 @@ export def "providers-microsoft-features-operations list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Features/features
 # operationId: Features_ListAll
-export def "subscriptions-providers-microsoft-features-features list-all" [
+export def "subscriptions-providers-microsoft-features-features list-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -136,7 +145,7 @@ export def "subscriptions-providers-microsoft-features-features list-all" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Features/features") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Features/features") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -163,7 +172,7 @@ export def "subscriptions-providers-microsoft-features-providers-features list" 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_provider_namespace: $resource_provider_namespace} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Features/providers/{resource_provider_namespace}/features") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_provider_namespace: (encode-path-segment $resource_provider_namespace)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Features/providers/{resource_provider_namespace}/features") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -191,7 +200,7 @@ export def "subscriptions-providers-microsoft-features-providers-features get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_provider_namespace: $resource_provider_namespace, feature_name: $feature_name} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Features/providers/{resource_provider_namespace}/features/{feature_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_provider_namespace: (encode-path-segment $resource_provider_namespace), feature_name: (encode-path-segment $feature_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Features/providers/{resource_provider_namespace}/features/{feature_name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -219,7 +228,7 @@ export def "subscriptions-providers-microsoft-features-providers-features-regist
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_provider_namespace: $resource_provider_namespace, feature_name: $feature_name} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Features/providers/{resource_provider_namespace}/features/{feature_name}/register") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_provider_namespace: (encode-path-segment $resource_provider_namespace), feature_name: (encode-path-segment $feature_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Features/providers/{resource_provider_namespace}/features/{feature_name}/register") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

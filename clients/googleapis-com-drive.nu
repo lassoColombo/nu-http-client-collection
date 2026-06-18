@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -72,7 +81,7 @@ def corpus-completer [] { ["domain" "user"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "about driveaboutget" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "about get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -96,7 +105,7 @@ export def commands []: nothing -> table {
 #
 # GET /about
 # operationId: drive.about.get
-export def "about driveaboutget" [
+export def "about get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -126,7 +135,7 @@ export def "about driveaboutget" [
 #
 # GET /changes
 # operationId: drive.changes.list
-export def "changes drivechangeslist" [
+export def "changes list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -170,7 +179,7 @@ export def "changes drivechangeslist" [
 #
 # GET /changes/startPageToken
 # operationId: drive.changes.getStartPageToken
-export def "changes-start-page-token drivechangesgetStartPageToken" [
+export def "changes-start-page-token get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -204,7 +213,7 @@ export def "changes-start-page-token drivechangesgetStartPageToken" [
 #
 # POST /changes/watch
 # operationId: drive.changes.watch
-export def "changes-watch drivechangeswatch" [
+export def "changes-watch watch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -250,18 +259,18 @@ export def "changes-watch drivechangeswatch" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "driveId" $drive_id "scalar") (serialize-qp "includeCorpusRemovals" $include_corpus_removals "scalar") (serialize-qp "includeItemsFromAllDrives" $include_items_from_all_drives "scalar") (serialize-qp "includeLabels" $include_labels "scalar") (serialize-qp "includePermissionsForView" $include_permissions_for_view "scalar") (serialize-qp "includeRemoved" $include_removed "scalar") (serialize-qp "includeTeamDriveItems" $include_team_drive_items "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "restrictToMyDrive" $restrict_to_my_drive "scalar") (serialize-qp "spaces" $spaces "scalar") (serialize-qp "supportsAllDrives" $supports_all_drives "scalar") (serialize-qp "supportsTeamDrives" $supports_team_drives "scalar") (serialize-qp "teamDriveId" $team_drive_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/changes/watch" $qp)
-  let body = {"address": $address, "expiration": $expiration, "id": $id, "kind": $kind, "params": $params, "payload": $payload, "resourceId": $resource_id, "resourceUri": $resource_uri, "token": $body_token, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"address": $address, "expiration": $expiration, "id": $id, "kind": $kind, "params": $params, "payload": $payload, "resourceId": $resource_id, "resourceUri": $resource_uri, "token": $body_token, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Stop watching resources through this channel
 #
 # POST /channels/stop
 # operationId: drive.channels.stop
-export def "channels-stop drivechannelsstop" [
+export def "channels-stop stop" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -293,18 +302,18 @@ export def "channels-stop drivechannelsstop" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/channels/stop" $qp)
-  let body = {"address": $address, "expiration": $expiration, "id": $id, "kind": $kind, "params": $params, "payload": $payload, "resourceId": $resource_id, "resourceUri": $resource_uri, "token": $body_token, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"address": $address, "expiration": $expiration, "id": $id, "kind": $kind, "params": $params, "payload": $payload, "resourceId": $resource_id, "resourceUri": $resource_uri, "token": $body_token, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists the user's shared drives.
 #
 # GET /drives
 # operationId: drive.drives.list
-export def "drives drivedriveslist" [
+export def "drives list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -339,9 +348,9 @@ export def "drives drivedriveslist" [
 # POST /drives
 # operationId: drive.drives.create
 # --backgroundImageFile shape: {id?: string, width?: float, xCoordinate?: float, yCoordinate?: float}
-# --capabilities shape: {canAddChildren?: bool, canChangeCopyRequiresWriterPermissionRestriction?: bool, canChangeDomainUsersOnlyRestriction?: bool, canChangeDriveBackground?: bool, canChangeDriveMembersOnlyRestriction?: bool, canChangeSharingFoldersRequiresOrganizerPermissionRestriction?: bool, canComment?: bool, canCopy?: bool, canDeleteChildren?: bool, canDeleteDrive?: bool, canDownload?: bool, canEdit?: bool, canListChildren?: bool, canManageMembers?: bool, canReadRevisions?: bool, canRename?: bool, canRenameDrive?: bool, canResetDriveRestrictions?: bool, canShare?: bool, canTrashChildren?: bool}
+# --capabilities shape: {canAddChildren?: bool, canChangeCopyRequiresWriterPermissionRestriction?: bool, canChangeDomainUsersOnlyRestriction?: bool, canChangeDriveBackground?: bool, canChangeDriveMembersOnlyRestriction?: bool, canChangeSharingFoldersRequiresOrganizerPermissionRestriction?: bool, canComment?: bool, canCopy?: bool, canDeleteChildren?: bool, canDeleteDrive?: bool, canDownload?: bool, canEdit?: bool, canListChildren?: bool, canManageMembers?: bool, canReadRevisions?: bool, canRename?: bool, ... (4 more fields)}
 # --restrictions shape: {adminManagedRestrictions?: bool, copyRequiresWriterPermission?: bool, domainUsersOnly?: bool, driveMembersOnly?: bool, sharingFoldersRequiresOrganizerPermission?: bool}
-export def "drives drivedrivescreate" [
+export def "drives create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -360,7 +369,7 @@ export def "drives drivedrivescreate" [
   --request-id: string # An ID, such as a random UUID, which uniquely identifies this user's request for idempotent creation of a shared drive. A repeated request by the same user and with the same request ID will avoid creating duplicates by attempting to create the same shared drive. If the shared drive already exists a 409 error will be returned.
   --background-image-file: record # An image file and cropping parameters from which a background image for this shared drive is set. This is a write-only field; it can only be set on drive.drives.update requests that don't set themeId. When specified, all fields of the backgroundImageFile must be set. — shape: {id?: string, width?: float, xCoordinate?: float, yCoordinate?: float}
   --background-image-link: string # A short-lived link to this shared drive's background image.
-  --capabilities: record # Capabilities the current user has on this shared drive. — shape: {canAddChildren?: bool, canChangeCopyRequiresWriterPermissionRestriction?: bool, canChangeDomainUsersOnlyRestriction?: bool, canChangeDriveBackground?: bool, canChangeDriveMembersOnlyRestriction?: bool, canChangeSharingFoldersRequiresOrganizerPermissionRestriction?: bool, canComment?: bool, canCopy?: bool, canDeleteChildren?: bool, canDeleteDrive?: bool, canDownload?: bool, canEdit?: bool, canListChildren?: bool, canManageMembers?: bool, canReadRevisions?: bool, canRename?: bool, canRenameDrive?: bool, canResetDriveRestrictions?: bool, canShare?: bool, canTrashChildren?: bool}
+  --capabilities: record # Capabilities the current user has on this shared drive. — shape: {canAddChildren?: bool, canChangeCopyRequiresWriterPermissionRestriction?: bool, canChangeDomainUsersOnlyRestriction?: bool, canChangeDriveBackground?: bool, canChangeDriveMembersOnlyRestriction?: bool, canChangeSharingFoldersRequiresOrganizerPermissionRestriction?: bool, canComment?: bool, canCopy?: bool, canDeleteChildren?: bool, canDeleteDrive?: bool, canDownload?: bool, canEdit?: bool, canListChildren?: bool, canManageMembers?: bool, canReadRevisions?: bool, canRename?: bool, ... (4 more fields)}
   --color-rgb: string # The color of this shared drive as an RGB hex string. It can only be set on drive.drives.update requests that don't set themeId.
   --created-time: string # The time at which the shared drive was created (RFC 3339 date-time). (format: date-time)
   --hidden: oneof<nothing, bool> # Whether the shared drive is hidden from default view.
@@ -376,18 +385,18 @@ export def "drives drivedrivescreate" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "requestId" $request_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/drives" $qp)
-  let body = {"backgroundImageFile": $background_image_file, "backgroundImageLink": $background_image_link, "capabilities": $capabilities, "colorRgb": $color_rgb, "createdTime": $created_time, "hidden": $hidden, "id": $id, "kind": $kind, "name": $name, "orgUnitId": $org_unit_id, "restrictions": $restrictions, "themeId": $theme_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"backgroundImageFile": $background_image_file, "backgroundImageLink": $background_image_link, "capabilities": $capabilities, "colorRgb": $color_rgb, "createdTime": $created_time, "hidden": $hidden, "id": $id, "kind": $kind, "name": $name, "orgUnitId": $org_unit_id, "restrictions": $restrictions, "themeId": $theme_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Permanently deletes a shared drive for which the user is an organizer. The shared drive cannot contain any untrashed items.
 #
 # DELETE /drives/{driveId}
 # operationId: drive.drives.delete
-export def "drives drivedrivesdelete" [
+export def "drives delete" [
   drive_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -410,7 +419,7 @@ export def "drives drivedrivesdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "allowItemDeletion" $allow_item_deletion "scalar") (serialize-qp "useDomainAdminAccess" $use_domain_admin_access "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({drive_id: $drive_id} | format pattern "/drives/{drive_id}") $qp)
+  let full_url = (build-url $base ({drive_id: (encode-path-segment $drive_id)} | format pattern "/drives/{drive_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -420,7 +429,7 @@ export def "drives drivedrivesdelete" [
 #
 # GET /drives/{driveId}
 # operationId: drive.drives.get
-export def "drives drivedrivesget" [
+export def "drives get" [
   drive_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -442,7 +451,7 @@ export def "drives drivedrivesget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "useDomainAdminAccess" $use_domain_admin_access "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({drive_id: $drive_id} | format pattern "/drives/{drive_id}") $qp)
+  let full_url = (build-url $base ({drive_id: (encode-path-segment $drive_id)} | format pattern "/drives/{drive_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -453,9 +462,9 @@ export def "drives drivedrivesget" [
 # PATCH /drives/{driveId}
 # operationId: drive.drives.update
 # --backgroundImageFile shape: {id?: string, width?: float, xCoordinate?: float, yCoordinate?: float}
-# --capabilities shape: {canAddChildren?: bool, canChangeCopyRequiresWriterPermissionRestriction?: bool, canChangeDomainUsersOnlyRestriction?: bool, canChangeDriveBackground?: bool, canChangeDriveMembersOnlyRestriction?: bool, canChangeSharingFoldersRequiresOrganizerPermissionRestriction?: bool, canComment?: bool, canCopy?: bool, canDeleteChildren?: bool, canDeleteDrive?: bool, canDownload?: bool, canEdit?: bool, canListChildren?: bool, canManageMembers?: bool, canReadRevisions?: bool, canRename?: bool, canRenameDrive?: bool, canResetDriveRestrictions?: bool, canShare?: bool, canTrashChildren?: bool}
+# --capabilities shape: {canAddChildren?: bool, canChangeCopyRequiresWriterPermissionRestriction?: bool, canChangeDomainUsersOnlyRestriction?: bool, canChangeDriveBackground?: bool, canChangeDriveMembersOnlyRestriction?: bool, canChangeSharingFoldersRequiresOrganizerPermissionRestriction?: bool, canComment?: bool, canCopy?: bool, canDeleteChildren?: bool, canDeleteDrive?: bool, canDownload?: bool, canEdit?: bool, canListChildren?: bool, canManageMembers?: bool, canReadRevisions?: bool, canRename?: bool, ... (4 more fields)}
 # --restrictions shape: {adminManagedRestrictions?: bool, copyRequiresWriterPermission?: bool, domainUsersOnly?: bool, driveMembersOnly?: bool, sharingFoldersRequiresOrganizerPermission?: bool}
-export def "drives drivedrivesupdate" [
+export def "drives update" [
   drive_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -475,7 +484,7 @@ export def "drives drivedrivesupdate" [
   --use-domain-admin-access: oneof<nothing, bool> # Issue the request as a domain administrator. If set to true, then the requester is granted access if they're an administrator of the domain to which the shared drive belongs.
   --background-image-file: record # An image file and cropping parameters from which a background image for this shared drive is set. This is a write-only field; it can only be set on drive.drives.update requests that don't set themeId. When specified, all fields of the backgroundImageFile must be set. — shape: {id?: string, width?: float, xCoordinate?: float, yCoordinate?: float}
   --background-image-link: string # A short-lived link to this shared drive's background image.
-  --capabilities: record # Capabilities the current user has on this shared drive. — shape: {canAddChildren?: bool, canChangeCopyRequiresWriterPermissionRestriction?: bool, canChangeDomainUsersOnlyRestriction?: bool, canChangeDriveBackground?: bool, canChangeDriveMembersOnlyRestriction?: bool, canChangeSharingFoldersRequiresOrganizerPermissionRestriction?: bool, canComment?: bool, canCopy?: bool, canDeleteChildren?: bool, canDeleteDrive?: bool, canDownload?: bool, canEdit?: bool, canListChildren?: bool, canManageMembers?: bool, canReadRevisions?: bool, canRename?: bool, canRenameDrive?: bool, canResetDriveRestrictions?: bool, canShare?: bool, canTrashChildren?: bool}
+  --capabilities: record # Capabilities the current user has on this shared drive. — shape: {canAddChildren?: bool, canChangeCopyRequiresWriterPermissionRestriction?: bool, canChangeDomainUsersOnlyRestriction?: bool, canChangeDriveBackground?: bool, canChangeDriveMembersOnlyRestriction?: bool, canChangeSharingFoldersRequiresOrganizerPermissionRestriction?: bool, canComment?: bool, canCopy?: bool, canDeleteChildren?: bool, canDeleteDrive?: bool, canDownload?: bool, canEdit?: bool, canListChildren?: bool, canManageMembers?: bool, canReadRevisions?: bool, canRename?: bool, ... (4 more fields)}
   --color-rgb: string # The color of this shared drive as an RGB hex string. It can only be set on drive.drives.update requests that don't set themeId.
   --created-time: string # The time at which the shared drive was created (RFC 3339 date-time). (format: date-time)
   --hidden: oneof<nothing, bool> # Whether the shared drive is hidden from default view.
@@ -490,19 +499,19 @@ export def "drives drivedrivesupdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "useDomainAdminAccess" $use_domain_admin_access "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({drive_id: $drive_id} | format pattern "/drives/{drive_id}") $qp)
-  let body = {"backgroundImageFile": $background_image_file, "backgroundImageLink": $background_image_link, "capabilities": $capabilities, "colorRgb": $color_rgb, "createdTime": $created_time, "hidden": $hidden, "id": $id, "kind": $kind, "name": $name, "orgUnitId": $org_unit_id, "restrictions": $restrictions, "themeId": $theme_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({drive_id: (encode-path-segment $drive_id)} | format pattern "/drives/{drive_id}") $qp)
+  let req_body = {"backgroundImageFile": $background_image_file, "backgroundImageLink": $background_image_link, "capabilities": $capabilities, "colorRgb": $color_rgb, "createdTime": $created_time, "hidden": $hidden, "id": $id, "kind": $kind, "name": $name, "orgUnitId": $org_unit_id, "restrictions": $restrictions, "themeId": $theme_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Hides a shared drive from the default view.
 #
 # POST /drives/{driveId}/hide
 # operationId: drive.drives.hide
-export def "drives-hide drivedriveshide" [
+export def "drives-hide create" [
   drive_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -523,7 +532,7 @@ export def "drives-hide drivedriveshide" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({drive_id: $drive_id} | format pattern "/drives/{drive_id}/hide") $qp)
+  let full_url = (build-url $base ({drive_id: (encode-path-segment $drive_id)} | format pattern "/drives/{drive_id}/hide") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -533,7 +542,7 @@ export def "drives-hide drivedriveshide" [
 #
 # POST /drives/{driveId}/unhide
 # operationId: drive.drives.unhide
-export def "drives-unhide drivedrivesunhide" [
+export def "drives-unhide create" [
   drive_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -554,7 +563,7 @@ export def "drives-unhide drivedrivesunhide" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({drive_id: $drive_id} | format pattern "/drives/{drive_id}/unhide") $qp)
+  let full_url = (build-url $base ({drive_id: (encode-path-segment $drive_id)} | format pattern "/drives/{drive_id}/unhide") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -564,7 +573,7 @@ export def "drives-unhide drivedrivesunhide" [
 #
 # GET /files
 # operationId: drive.files.list
-export def "files drivefileslist" [
+export def "files list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -609,7 +618,7 @@ export def "files drivefileslist" [
 #
 # POST /files
 # operationId: drive.files.create
-export def "files drivefilescreate" [
+export def "files create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -641,17 +650,18 @@ export def "files drivefilescreate" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "enforceSingleParent" $enforce_single_parent "scalar") (serialize-qp "ignoreDefaultVisibility" $ignore_default_visibility "scalar") (serialize-qp "includeLabels" $include_labels "scalar") (serialize-qp "includePermissionsForView" $include_permissions_for_view "scalar") (serialize-qp "keepRevisionForever" $keep_revision_forever "scalar") (serialize-qp "ocrLanguage" $ocr_language "scalar") (serialize-qp "supportsAllDrives" $supports_all_drives "scalar") (serialize-qp "supportsTeamDrives" $supports_team_drives "scalar") (serialize-qp "useContentAsIndexableText" $use_content_as_indexable_text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/files" $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/octet-stream" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/octet-stream" $req_body
 }
 
 # Generates a set of file IDs which can be provided in create or copy requests.
 #
 # GET /files/generateIds
 # operationId: drive.files.generateIds
-export def "files-generate-ids drivefilesgenerateIds" [
+export def "files-generate-ids generate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -684,7 +694,7 @@ export def "files-generate-ids drivefilesgenerateIds" [
 #
 # DELETE /files/trash
 # operationId: drive.files.emptyTrash
-export def "files-trash drivefilesemptyTrash" [
+export def "files-trash delete-empty" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -716,7 +726,7 @@ export def "files-trash drivefilesemptyTrash" [
 #
 # DELETE /files/{fileId}
 # operationId: drive.files.delete
-export def "files drivefilesdelete" [
+export def "files delete" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -740,7 +750,7 @@ export def "files drivefilesdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "enforceSingleParent" $enforce_single_parent "scalar") (serialize-qp "supportsAllDrives" $supports_all_drives "scalar") (serialize-qp "supportsTeamDrives" $supports_team_drives "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({file_id: $file_id} | format pattern "/files/{file_id}") $qp)
+  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/files/{file_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -750,7 +760,7 @@ export def "files drivefilesdelete" [
 #
 # GET /files/{fileId}
 # operationId: drive.files.get
-export def "files drivefilesget" [
+export def "files get" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -776,7 +786,7 @@ export def "files drivefilesget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "acknowledgeAbuse" $acknowledge_abuse "scalar") (serialize-qp "includeLabels" $include_labels "scalar") (serialize-qp "includePermissionsForView" $include_permissions_for_view "scalar") (serialize-qp "supportsAllDrives" $supports_all_drives "scalar") (serialize-qp "supportsTeamDrives" $supports_team_drives "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({file_id: $file_id} | format pattern "/files/{file_id}") $qp)
+  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/files/{file_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -786,7 +796,7 @@ export def "files drivefilesget" [
 #
 # PATCH /files/{fileId}
 # operationId: drive.files.update
-export def "files drivefilesupdate" [
+export def "files update" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -819,18 +829,19 @@ export def "files drivefilesupdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "addParents" $add_parents "scalar") (serialize-qp "enforceSingleParent" $enforce_single_parent "scalar") (serialize-qp "includeLabels" $include_labels "scalar") (serialize-qp "includePermissionsForView" $include_permissions_for_view "scalar") (serialize-qp "keepRevisionForever" $keep_revision_forever "scalar") (serialize-qp "ocrLanguage" $ocr_language "scalar") (serialize-qp "removeParents" $remove_parents "scalar") (serialize-qp "supportsAllDrives" $supports_all_drives "scalar") (serialize-qp "supportsTeamDrives" $supports_team_drives "scalar") (serialize-qp "useContentAsIndexableText" $use_content_as_indexable_text "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({file_id: $file_id} | format pattern "/files/{file_id}") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/files/{file_id}") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/octet-stream" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/octet-stream" $req_body
 }
 
 # Lists a file's comments.
 #
 # GET /files/{fileId}/comments
 # operationId: drive.comments.list
-export def "files-comments drivecommentslist" [
+export def "files-comments list" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -855,7 +866,7 @@ export def "files-comments drivecommentslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "includeDeleted" $include_deleted "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "startModifiedTime" $start_modified_time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({file_id: $file_id} | format pattern "/files/{file_id}/comments") $qp)
+  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/files/{file_id}/comments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -868,7 +879,7 @@ export def "files-comments drivecommentslist" [
 # --author shape: {displayName?: string, emailAddress?: string, kind?: string, me?: bool, permissionId?: string, photoLink?: string}
 # --quotedFileContent shape: {mimeType?: string, value?: string}
 # --replies item shape: {action?: string, author?: record, content?: string, createdTime?: string, deleted?: bool, htmlContent?: string, id?: string, kind?: string, modifiedTime?: string}
-export def "files-comments drivecommentscreate" [
+export def "files-comments create" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -885,7 +896,7 @@ export def "files-comments drivecommentscreate" [
   --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --user-ip: string # Deprecated. Please use quotaUser instead.
-  --anchor: string # A region of the document represented as a JSON string. For details on defining anchor properties, refer to  Add comments and replies.
+  --anchor: string # A region of the document represented as a JSON string. For details on defining anchor properties, refer to Add comments and replies.
   --author: record # Information about a Drive user. — shape: {displayName?: string, emailAddress?: string, kind?: string, me?: bool, permissionId?: string, photoLink?: string}
   --content: string # The plain text content of the comment. This field is used for setting the content, while htmlContent should be displayed.
   --created-time: string # The time at which the comment was created (RFC 3339 date-time). (format: date-time)
@@ -902,19 +913,19 @@ export def "files-comments drivecommentscreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({file_id: $file_id} | format pattern "/files/{file_id}/comments") $qp)
-  let body = {"anchor": $anchor, "author": $author, "content": $content, "createdTime": $created_time, "deleted": $deleted, "htmlContent": $html_content, "id": $id, "kind": $kind, "modifiedTime": $modified_time, "quotedFileContent": $quoted_file_content, "replies": $replies, "resolved": $resolved} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/files/{file_id}/comments") $qp)
+  let req_body = {"anchor": $anchor, "author": $author, "content": $content, "createdTime": $created_time, "deleted": $deleted, "htmlContent": $html_content, "id": $id, "kind": $kind, "modifiedTime": $modified_time, "quotedFileContent": $quoted_file_content, "replies": $replies, "resolved": $resolved} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes a comment.
 #
 # DELETE /files/{fileId}/comments/{commentId}
 # operationId: drive.comments.delete
-export def "files-comments drivecommentsdelete" [
+export def "files-comments delete" [
   file_id: string
   comment_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -936,7 +947,7 @@ export def "files-comments drivecommentsdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({file_id: $file_id, comment_id: $comment_id} | format pattern "/files/{file_id}/comments/{comment_id}") $qp)
+  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id), comment_id: (encode-path-segment $comment_id)} | format pattern "/files/{file_id}/comments/{comment_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -946,7 +957,7 @@ export def "files-comments drivecommentsdelete" [
 #
 # GET /files/{fileId}/comments/{commentId}
 # operationId: drive.comments.get
-export def "files-comments drivecommentsget" [
+export def "files-comments get" [
   file_id: string
   comment_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -969,7 +980,7 @@ export def "files-comments drivecommentsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "includeDeleted" $include_deleted "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({file_id: $file_id, comment_id: $comment_id} | format pattern "/files/{file_id}/comments/{comment_id}") $qp)
+  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id), comment_id: (encode-path-segment $comment_id)} | format pattern "/files/{file_id}/comments/{comment_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -982,7 +993,7 @@ export def "files-comments drivecommentsget" [
 # --author shape: {displayName?: string, emailAddress?: string, kind?: string, me?: bool, permissionId?: string, photoLink?: string}
 # --quotedFileContent shape: {mimeType?: string, value?: string}
 # --replies item shape: {action?: string, author?: record, content?: string, createdTime?: string, deleted?: bool, htmlContent?: string, id?: string, kind?: string, modifiedTime?: string}
-export def "files-comments drivecommentsupdate" [
+export def "files-comments update" [
   file_id: string
   comment_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1000,7 +1011,7 @@ export def "files-comments drivecommentsupdate" [
   --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --user-ip: string # Deprecated. Please use quotaUser instead.
-  --anchor: string # A region of the document represented as a JSON string. For details on defining anchor properties, refer to  Add comments and replies.
+  --anchor: string # A region of the document represented as a JSON string. For details on defining anchor properties, refer to Add comments and replies.
   --author: record # Information about a Drive user. — shape: {displayName?: string, emailAddress?: string, kind?: string, me?: bool, permissionId?: string, photoLink?: string}
   --content: string # The plain text content of the comment. This field is used for setting the content, while htmlContent should be displayed.
   --created-time: string # The time at which the comment was created (RFC 3339 date-time). (format: date-time)
@@ -1017,19 +1028,19 @@ export def "files-comments drivecommentsupdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({file_id: $file_id, comment_id: $comment_id} | format pattern "/files/{file_id}/comments/{comment_id}") $qp)
-  let body = {"anchor": $anchor, "author": $author, "content": $content, "createdTime": $created_time, "deleted": $deleted, "htmlContent": $html_content, "id": $id, "kind": $kind, "modifiedTime": $modified_time, "quotedFileContent": $quoted_file_content, "replies": $replies, "resolved": $resolved} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id), comment_id: (encode-path-segment $comment_id)} | format pattern "/files/{file_id}/comments/{comment_id}") $qp)
+  let req_body = {"anchor": $anchor, "author": $author, "content": $content, "createdTime": $created_time, "deleted": $deleted, "htmlContent": $html_content, "id": $id, "kind": $kind, "modifiedTime": $modified_time, "quotedFileContent": $quoted_file_content, "replies": $replies, "resolved": $resolved} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists a comment's replies.
 #
 # GET /files/{fileId}/comments/{commentId}/replies
 # operationId: drive.replies.list
-export def "files-comments-replies drivereplieslist" [
+export def "files-comments-replies list" [
   file_id: string
   comment_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1054,7 +1065,7 @@ export def "files-comments-replies drivereplieslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "includeDeleted" $include_deleted "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({file_id: $file_id, comment_id: $comment_id} | format pattern "/files/{file_id}/comments/{comment_id}/replies") $qp)
+  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id), comment_id: (encode-path-segment $comment_id)} | format pattern "/files/{file_id}/comments/{comment_id}/replies") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1065,7 +1076,7 @@ export def "files-comments-replies drivereplieslist" [
 # POST /files/{fileId}/comments/{commentId}/replies
 # operationId: drive.replies.create
 # --author shape: {displayName?: string, emailAddress?: string, kind?: string, me?: bool, permissionId?: string, photoLink?: string}
-export def "files-comments-replies driverepliescreate" [
+export def "files-comments-replies create" [
   file_id: string
   comment_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1083,7 +1094,7 @@ export def "files-comments-replies driverepliescreate" [
   --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --user-ip: string # Deprecated. Please use quotaUser instead.
-  --action: string # The action the reply performed to the parent comment. Valid values are:   - resolve  - reopen
+  --action: string # The action the reply performed to the parent comment. Valid values are: - resolve - reopen
   --author: record # Information about a Drive user. — shape: {displayName?: string, emailAddress?: string, kind?: string, me?: bool, permissionId?: string, photoLink?: string}
   --content: string # The plain text content of the reply. This field is used for setting the content, while htmlContent should be displayed. This is required on creates if no action is specified.
   --created-time: string # The time at which the reply was created (RFC 3339 date-time). (format: date-time)
@@ -1097,19 +1108,19 @@ export def "files-comments-replies driverepliescreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({file_id: $file_id, comment_id: $comment_id} | format pattern "/files/{file_id}/comments/{comment_id}/replies") $qp)
-  let body = {"action": $action, "author": $author, "content": $content, "createdTime": $created_time, "deleted": $deleted, "htmlContent": $html_content, "id": $id, "kind": $kind, "modifiedTime": $modified_time} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id), comment_id: (encode-path-segment $comment_id)} | format pattern "/files/{file_id}/comments/{comment_id}/replies") $qp)
+  let req_body = {"action": $action, "author": $author, "content": $content, "createdTime": $created_time, "deleted": $deleted, "htmlContent": $html_content, "id": $id, "kind": $kind, "modifiedTime": $modified_time} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes a reply.
 #
 # DELETE /files/{fileId}/comments/{commentId}/replies/{replyId}
 # operationId: drive.replies.delete
-export def "files-comments-replies driverepliesdelete" [
+export def "files-comments-replies delete" [
   file_id: string
   comment_id: string
   reply_id: string
@@ -1132,7 +1143,7 @@ export def "files-comments-replies driverepliesdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({file_id: $file_id, comment_id: $comment_id, reply_id: $reply_id} | format pattern "/files/{file_id}/comments/{comment_id}/replies/{reply_id}") $qp)
+  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id), comment_id: (encode-path-segment $comment_id), reply_id: (encode-path-segment $reply_id)} | format pattern "/files/{file_id}/comments/{comment_id}/replies/{reply_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1142,7 +1153,7 @@ export def "files-comments-replies driverepliesdelete" [
 #
 # GET /files/{fileId}/comments/{commentId}/replies/{replyId}
 # operationId: drive.replies.get
-export def "files-comments-replies driverepliesget" [
+export def "files-comments-replies get" [
   file_id: string
   comment_id: string
   reply_id: string
@@ -1166,7 +1177,7 @@ export def "files-comments-replies driverepliesget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "includeDeleted" $include_deleted "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({file_id: $file_id, comment_id: $comment_id, reply_id: $reply_id} | format pattern "/files/{file_id}/comments/{comment_id}/replies/{reply_id}") $qp)
+  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id), comment_id: (encode-path-segment $comment_id), reply_id: (encode-path-segment $reply_id)} | format pattern "/files/{file_id}/comments/{comment_id}/replies/{reply_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1177,7 +1188,7 @@ export def "files-comments-replies driverepliesget" [
 # PATCH /files/{fileId}/comments/{commentId}/replies/{replyId}
 # operationId: drive.replies.update
 # --author shape: {displayName?: string, emailAddress?: string, kind?: string, me?: bool, permissionId?: string, photoLink?: string}
-export def "files-comments-replies driverepliesupdate" [
+export def "files-comments-replies update" [
   file_id: string
   comment_id: string
   reply_id: string
@@ -1196,7 +1207,7 @@ export def "files-comments-replies driverepliesupdate" [
   --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --user-ip: string # Deprecated. Please use quotaUser instead.
-  --action: string # The action the reply performed to the parent comment. Valid values are:   - resolve  - reopen
+  --action: string # The action the reply performed to the parent comment. Valid values are: - resolve - reopen
   --author: record # Information about a Drive user. — shape: {displayName?: string, emailAddress?: string, kind?: string, me?: bool, permissionId?: string, photoLink?: string}
   --content: string # The plain text content of the reply. This field is used for setting the content, while htmlContent should be displayed. This is required on creates if no action is specified.
   --created-time: string # The time at which the reply was created (RFC 3339 date-time). (format: date-time)
@@ -1210,19 +1221,19 @@ export def "files-comments-replies driverepliesupdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({file_id: $file_id, comment_id: $comment_id, reply_id: $reply_id} | format pattern "/files/{file_id}/comments/{comment_id}/replies/{reply_id}") $qp)
-  let body = {"action": $action, "author": $author, "content": $content, "createdTime": $created_time, "deleted": $deleted, "htmlContent": $html_content, "id": $id, "kind": $kind, "modifiedTime": $modified_time} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id), comment_id: (encode-path-segment $comment_id), reply_id: (encode-path-segment $reply_id)} | format pattern "/files/{file_id}/comments/{comment_id}/replies/{reply_id}") $qp)
+  let req_body = {"action": $action, "author": $author, "content": $content, "createdTime": $created_time, "deleted": $deleted, "htmlContent": $html_content, "id": $id, "kind": $kind, "modifiedTime": $modified_time} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Creates a copy of a file and applies any requested updates with patch semantics. Folders cannot be copied.
 #
 # POST /files/{fileId}/copy
 # operationId: drive.files.copy
-# --capabilities shape: {canAcceptOwnership?: bool, canAddChildren?: bool, canAddFolderFromAnotherDrive?: bool, canAddMyDriveParent?: bool, canChangeCopyRequiresWriterPermission?: bool, canChangeSecurityUpdateEnabled?: bool, canChangeViewersCanCopyContent?: bool, canComment?: bool, canCopy?: bool, canDelete?: bool, canDeleteChildren?: bool, canDownload?: bool, canEdit?: bool, canListChildren?: bool, canModifyContent?: bool, canModifyContentRestriction?: bool, canModifyLabels?: bool, canMoveChildrenOutOfDrive?: bool, canMoveChildrenOutOfTeamDrive?: bool, canMoveChildrenWithinDrive?: bool, canMoveChildrenWithinTeamDrive?: bool, canMoveItemIntoTeamDrive?: bool, canMoveItemOutOfDrive?: bool, canMoveItemOutOfTeamDrive?: bool, canMoveItemWithinDrive?: bool, canMoveItemWithinTeamDrive?: bool, canMoveTeamDriveItem?: bool, canReadDrive?: bool, canReadLabels?: bool, canReadRevisions?: bool, canReadTeamDrive?: bool, canRemoveChildren?: bool, canRemoveMyDriveParent?: bool, canRename?: bool, canShare?: bool, canTrash?: bool, canTrashChildren?: bool, canUntrash?: bool}
+# --capabilities shape: {canAcceptOwnership?: bool, canAddChildren?: bool, canAddFolderFromAnotherDrive?: bool, canAddMyDriveParent?: bool, canChangeCopyRequiresWriterPermission?: bool, canChangeSecurityUpdateEnabled?: bool, canChangeViewersCanCopyContent?: bool, canComment?: bool, canCopy?: bool, canDelete?: bool, canDeleteChildren?: bool, canDownload?: bool, canEdit?: bool, canListChildren?: bool, canModifyContent?: bool, canModifyContentRestriction?: bool, canModifyLabels?: bool, canMoveChildrenOutOfDrive?: bool, ... (20 more fields)}
 # --contentHints shape: {indexableText?: string, thumbnail?: record}
 # --contentRestrictions item shape: {readOnly?: bool, reason?: string, restrictingUser?: record, restrictionTime?: string, type?: string}
 # --imageMediaMetadata shape: {aperture?: float, cameraMake?: string, cameraModel?: string, colorSpace?: string, exposureBias?: float, exposureMode?: string, exposureTime?: float, flashUsed?: bool, focalLength?: float, height?: int, isoSpeed?: int, lens?: string, location?: record, maxApertureValue?: float, meteringMode?: string, rotation?: int, sensor?: string, subjectDistance?: int, time?: string, whiteBalance?: string, width?: int}
@@ -1235,7 +1246,7 @@ export def "files-comments-replies driverepliesupdate" [
 # --shortcutDetails shape: {targetId?: string, targetMimeType?: string, targetResourceKey?: string}
 # --trashingUser shape: {displayName?: string, emailAddress?: string, kind?: string, me?: bool, permissionId?: string, photoLink?: string}
 # --videoMediaMetadata shape: {durationMillis?: string, height?: int, width?: int}
-export def "files-copy drivefilescopy" [
+export def "files-copy copy" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1261,7 +1272,7 @@ export def "files-copy drivefilescopy" [
   --supports-all-drives: oneof<nothing, bool> # Whether the requesting application supports both My Drives and shared drives.
   --supports-team-drives: oneof<nothing, bool> # Deprecated use supportsAllDrives instead.
   --app-properties: record # A collection of arbitrary key-value pairs that are private to the requesting app. Entries with null values are cleared in update and copy requests. These properties can only be retrieved using an authenticated request. An authenticated request uses an access token obtained with an OAuth 2 client ID. You cannot use an API key to retrieve private properties.
-  --capabilities: record # Capabilities the current user has on this file. Each capability corresponds to a fine-grained action that a user can take. — shape: {canAcceptOwnership?: bool, canAddChildren?: bool, canAddFolderFromAnotherDrive?: bool, canAddMyDriveParent?: bool, canChangeCopyRequiresWriterPermission?: bool, canChangeSecurityUpdateEnabled?: bool, canChangeViewersCanCopyContent?: bool, canComment?: bool, canCopy?: bool, canDelete?: bool, canDeleteChildren?: bool, canDownload?: bool, canEdit?: bool, canListChildren?: bool, canModifyContent?: bool, canModifyContentRestriction?: bool, canModifyLabels?: bool, canMoveChildrenOutOfDrive?: bool, canMoveChildrenOutOfTeamDrive?: bool, canMoveChildrenWithinDrive?: bool, canMoveChildrenWithinTeamDrive?: bool, canMoveItemIntoTeamDrive?: bool, canMoveItemOutOfDrive?: bool, canMoveItemOutOfTeamDrive?: bool, canMoveItemWithinDrive?: bool, canMoveItemWithinTeamDrive?: bool, canMoveTeamDriveItem?: bool, canReadDrive?: bool, canReadLabels?: bool, canReadRevisions?: bool, canReadTeamDrive?: bool, canRemoveChildren?: bool, canRemoveMyDriveParent?: bool, canRename?: bool, canShare?: bool, canTrash?: bool, canTrashChildren?: bool, canUntrash?: bool}
+  --capabilities: record # Capabilities the current user has on this file. Each capability corresponds to a fine-grained action that a user can take. — shape: {canAcceptOwnership?: bool, canAddChildren?: bool, canAddFolderFromAnotherDrive?: bool, canAddMyDriveParent?: bool, canChangeCopyRequiresWriterPermission?: bool, canChangeSecurityUpdateEnabled?: bool, canChangeViewersCanCopyContent?: bool, canComment?: bool, canCopy?: bool, canDelete?: bool, canDeleteChildren?: bool, canDownload?: bool, canEdit?: bool, canListChildren?: bool, canModifyContent?: bool, canModifyContentRestriction?: bool, canModifyLabels?: bool, canMoveChildrenOutOfDrive?: bool, ... (20 more fields)}
   --content-hints: record # Additional information about the content of the file. These fields are never populated in responses. — shape: {indexableText?: string, thumbnail?: record}
   --content-restrictions: list # Restrictions for accessing the content of the file. Only populated if such a restriction exists. — item shape: {readOnly?: bool, reason?: string, restrictingUser?: record, restrictionTime?: string, type?: string}
   --copy-requires-writer-permission: oneof<nothing, bool> # Whether the options to copy, print, or download this file, should be disabled for readers and commenters.
@@ -1292,8 +1303,8 @@ export def "files-copy drivefilescopy" [
   --original-filename: string # The original filename of the uploaded content if available, or else the original value of the name field. This is only available for files with binary content in Google Drive.
   --owned-by-me: oneof<nothing, bool> # Whether the user owns the file. Not populated for items in shared drives.
   --owners: list # The owner of this file. Only certain legacy files might have more than one owner. This field isn't populated for items in shared drives. — item shape: {displayName?: string, emailAddress?: string, kind?: string, me?: bool, permissionId?: string, photoLink?: string}
-  --parents: list # The IDs of the parent folders that contain the file. If not specified as part of a create request, the file will be placed directly in the user's My Drive folder. If not specified as part of a copy request, the file will inherit any discoverable parents of the source file. Update requests must use the addParents and removeParents parameters to modify the parents list.
-  --permission-ids: list # List of permission IDs for users with access to this file.
+  --parents: list<string> # The IDs of the parent folders that contain the file. If not specified as part of a create request, the file will be placed directly in the user's My Drive folder. If not specified as part of a copy request, the file will inherit any discoverable parents of the source file. Update requests must use the addParents and removeParents parameters to modify the parents list.
+  --permission-ids: list<string> # List of permission IDs for users with access to this file.
   --permissions: list # The full list of permissions for the file. This is only available if the requesting user can share the file. Not populated for items in shared drives. — item shape: {allowFileDiscovery?: bool, deleted?: bool, displayName?: string, domain?: string, emailAddress?: string, expirationTime?: string, id?: string, kind?: string, pendingOwner?: bool, photoLink?: string, role?: string, type?: string, view?: string}
   --properties: record # A collection of arbitrary key-value pairs that are visible to all apps. Entries with null values are cleared in update and copy requests.
   --quota-bytes-used: string # The number of storage quota bytes used by the file. This includes the head revision as well as previous revisions with keepForever enabled. (format: int64)
@@ -1305,7 +1316,7 @@ export def "files-copy drivefilescopy" [
   --sharing-user: record # Information about a Drive user. — shape: {displayName?: string, emailAddress?: string, kind?: string, me?: bool, permissionId?: string, photoLink?: string}
   --shortcut-details: record # Shortcut file details. Only populated for shortcut files, which have the mimeType field set to application/vnd.google-apps.shortcut. — shape: {targetId?: string, targetMimeType?: string, targetResourceKey?: string}
   --size: string # The size of the file's content in bytes. This field is populated for files with binary content stored in Google Drive and for Docs Editors files; it's not populated for shortcuts or folders. (format: int64)
-  --spaces: list # The list of spaces that contain the file. The currently supported values are 'drive', 'appDataFolder' and 'photos'.
+  --spaces: list<string> # The list of spaces that contain the file. The currently supported values are 'drive', 'appDataFolder' and 'photos'.
   --starred: oneof<nothing, bool> # Whether the user has starred the file.
   --team-drive-id: string # Deprecated - use driveId instead.
   --thumbnail-link: string # A short-lived link to the file's thumbnail, if available. Typically lasts on the order of hours. Only populated when the requesting app can access the file's content. If the file isn't shared publicly, the URL returned in Files.thumbnailLink must be fetched using a credentialed request.
@@ -1326,19 +1337,19 @@ export def "files-copy drivefilescopy" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "enforceSingleParent" $enforce_single_parent "scalar") (serialize-qp "ignoreDefaultVisibility" $ignore_default_visibility "scalar") (serialize-qp "includeLabels" $include_labels "scalar") (serialize-qp "includePermissionsForView" $include_permissions_for_view "scalar") (serialize-qp "keepRevisionForever" $keep_revision_forever "scalar") (serialize-qp "ocrLanguage" $ocr_language "scalar") (serialize-qp "supportsAllDrives" $supports_all_drives "scalar") (serialize-qp "supportsTeamDrives" $supports_team_drives "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({file_id: $file_id} | format pattern "/files/{file_id}/copy") $qp)
-  let body = {"appProperties": $app_properties, "capabilities": $capabilities, "contentHints": $content_hints, "contentRestrictions": $content_restrictions, "copyRequiresWriterPermission": $copy_requires_writer_permission, "createdTime": $created_time, "description": $description, "driveId": $drive_id, "explicitlyTrashed": $explicitly_trashed, "fileExtension": $file_extension, "folderColorRgb": $folder_color_rgb, "fullFileExtension": $full_file_extension, "hasAugmentedPermissions": $has_augmented_permissions, "hasThumbnail": $has_thumbnail, "headRevisionId": $head_revision_id, "iconLink": $icon_link, "id": $id, "imageMediaMetadata": $image_media_metadata, "isAppAuthorized": $is_app_authorized, "kind": $kind, "labelInfo": $label_info, "lastModifyingUser": $last_modifying_user, "linkShareMetadata": $link_share_metadata, "md5Checksum": $md5_checksum, "mimeType": $mime_type, "modifiedByMe": $modified_by_me, "modifiedByMeTime": $modified_by_me_time, "modifiedTime": $modified_time, "name": $name, "originalFilename": $original_filename, "ownedByMe": $owned_by_me, "owners": $owners, "parents": $parents, "permissionIds": $permission_ids, "permissions": $permissions, "properties": $properties, "quotaBytesUsed": $quota_bytes_used, "resourceKey": $resource_key, "sha1Checksum": $sha1_checksum, "sha256Checksum": $sha256_checksum, "shared": $shared, "sharedWithMeTime": $shared_with_me_time, "sharingUser": $sharing_user, "shortcutDetails": $shortcut_details, "size": $size, "spaces": $spaces, "starred": $starred, "teamDriveId": $team_drive_id, "thumbnailLink": $thumbnail_link, "thumbnailVersion": $thumbnail_version, "trashed": $trashed, "trashedTime": $trashed_time, "trashingUser": $trashing_user, "version": $version, "videoMediaMetadata": $video_media_metadata, "viewedByMe": $viewed_by_me, "viewedByMeTime": $viewed_by_me_time, "viewersCanCopyContent": $viewers_can_copy_content, "webContentLink": $web_content_link, "webViewLink": $web_view_link, "writersCanShare": $writers_can_share} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/files/{file_id}/copy") $qp)
+  let req_body = {"appProperties": $app_properties, "capabilities": $capabilities, "contentHints": $content_hints, "contentRestrictions": $content_restrictions, "copyRequiresWriterPermission": $copy_requires_writer_permission, "createdTime": $created_time, "description": $description, "driveId": $drive_id, "explicitlyTrashed": $explicitly_trashed, "fileExtension": $file_extension, "folderColorRgb": $folder_color_rgb, "fullFileExtension": $full_file_extension, "hasAugmentedPermissions": $has_augmented_permissions, "hasThumbnail": $has_thumbnail, "headRevisionId": $head_revision_id, "iconLink": $icon_link, "id": $id, "imageMediaMetadata": $image_media_metadata, "isAppAuthorized": $is_app_authorized, "kind": $kind, "labelInfo": $label_info, "lastModifyingUser": $last_modifying_user, "linkShareMetadata": $link_share_metadata, "md5Checksum": $md5_checksum, "mimeType": $mime_type, "modifiedByMe": $modified_by_me, "modifiedByMeTime": $modified_by_me_time, "modifiedTime": $modified_time, "name": $name, "originalFilename": $original_filename, "ownedByMe": $owned_by_me, "owners": $owners, "parents": $parents, "permissionIds": $permission_ids, "permissions": $permissions, "properties": $properties, "quotaBytesUsed": $quota_bytes_used, "resourceKey": $resource_key, "sha1Checksum": $sha1_checksum, "sha256Checksum": $sha256_checksum, "shared": $shared, "sharedWithMeTime": $shared_with_me_time, "sharingUser": $sharing_user, "shortcutDetails": $shortcut_details, "size": $size, "spaces": $spaces, "starred": $starred, "teamDriveId": $team_drive_id, "thumbnailLink": $thumbnail_link, "thumbnailVersion": $thumbnail_version, "trashed": $trashed, "trashedTime": $trashed_time, "trashingUser": $trashing_user, "version": $version, "videoMediaMetadata": $video_media_metadata, "viewedByMe": $viewed_by_me, "viewedByMeTime": $viewed_by_me_time, "viewersCanCopyContent": $viewers_can_copy_content, "webContentLink": $web_content_link, "webViewLink": $web_view_link, "writersCanShare": $writers_can_share} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Exports a Google Workspace document to the requested MIME type and returns exported byte content. Note that the exported content is limited to 10MB.
 #
 # GET /files/{fileId}/export
 # operationId: drive.files.export
-export def "files-export drivefilesexport" [
+export def "files-export export" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1360,7 +1371,7 @@ export def "files-export drivefilesexport" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "mimeType" $mime_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({file_id: $file_id} | format pattern "/files/{file_id}/export") $qp)
+  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/files/{file_id}/export") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1370,7 +1381,7 @@ export def "files-export drivefilesexport" [
 #
 # GET /files/{fileId}/listLabels
 # operationId: drive.files.listLabels
-export def "files-list-labels drivefileslistLabels" [
+export def "files-list-labels list" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1393,7 +1404,7 @@ export def "files-list-labels drivefileslistLabels" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({file_id: $file_id} | format pattern "/files/{file_id}/listLabels") $qp)
+  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/files/{file_id}/listLabels") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1404,7 +1415,7 @@ export def "files-list-labels drivefileslistLabels" [
 # POST /files/{fileId}/modifyLabels
 # operationId: drive.files.modifyLabels
 # --labelModifications item shape: {fieldModifications?: list, kind?: string, labelId?: string, removeLabel?: bool}
-export def "files-modify-labels drivefilesmodifyLabels" [
+export def "files-modify-labels create" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1428,19 +1439,19 @@ export def "files-modify-labels drivefilesmodifyLabels" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({file_id: $file_id} | format pattern "/files/{file_id}/modifyLabels") $qp)
-  let body = {"kind": $kind, "labelModifications": $label_modifications} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/files/{file_id}/modifyLabels") $qp)
+  let req_body = {"kind": $kind, "labelModifications": $label_modifications} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists a file's or shared drive's permissions.
 #
 # GET /files/{fileId}/permissions
 # operationId: drive.permissions.list
-export def "files-permissions drivepermissionslist" [
+export def "files-permissions list" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1467,7 +1478,7 @@ export def "files-permissions drivepermissionslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "includePermissionsForView" $include_permissions_for_view "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "supportsAllDrives" $supports_all_drives "scalar") (serialize-qp "supportsTeamDrives" $supports_team_drives "scalar") (serialize-qp "useDomainAdminAccess" $use_domain_admin_access "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({file_id: $file_id} | format pattern "/files/{file_id}/permissions") $qp)
+  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/files/{file_id}/permissions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1479,7 +1490,7 @@ export def "files-permissions drivepermissionslist" [
 # operationId: drive.permissions.create
 # --permissionDetails item shape: {inherited?: bool, inheritedFrom?: string, permissionType?: string, role?: string}
 # --teamDrivePermissionDetails item shape: {inherited?: bool, inheritedFrom?: string, role?: string, teamDrivePermissionType?: string}
-export def "files-permissions drivepermissionscreate" [
+export def "files-permissions create" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1506,35 +1517,35 @@ export def "files-permissions drivepermissionscreate" [
   --use-domain-admin-access: oneof<nothing, bool> # Issue the request as a domain administrator; if set to true, then the requester will be granted access if the file ID parameter refers to a shared drive and the requester is an administrator of the domain to which the shared drive belongs.
   --allow-file-discovery: oneof<nothing, bool> # Whether the permission allows the file to be discovered through search. This is only applicable for permissions of type domain or anyone.
   --deleted: oneof<nothing, bool> # Whether the account associated with this permission has been deleted. This field only pertains to user and group permissions.
-  --display-name: string # The "pretty" name of the value of the permission. The following is a list of examples for each type of permission:   - user - User's full name, as defined for their Google Account, such as "Joe Smith."  - group - Name of the Google Group, such as "The Company Administrators."  - domain - String domain name, such as "your-company.com."  - anyone - No displayName is present.
-  --domain: string # The domain to which this permission refers. The following options are currently allowed:   - The entire domain, such as "your-company.com."  - A target audience, such as "ID.audience.googledomains.com."
+  --display-name: string # The "pretty" name of the value of the permission. The following is a list of examples for each type of permission: - user - User's full name, as defined for their Google Account, such as "Joe Smith." - group - Name of the Google Group, such as "The Company Administrators." - domain - String domain name, such as "your-company.com." - anyone - No displayName is present.
+  --domain: string # The domain to which this permission refers. The following options are currently allowed: - The entire domain, such as "your-company.com." - A target audience, such as "ID.audience.googledomains.com."
   --email-address: string # The email address of the user or group to which this permission refers.
-  --expiration-time: string # The time at which this permission will expire (RFC 3339 date-time). Expiration times have the following restrictions:   - They cannot be set on shared drive items.  - They can only be set on user and group permissions.  - The time must be in the future.  - The time cannot be more than one year in the future. (format: date-time)
+  --expiration-time: string # The time at which this permission will expire (RFC 3339 date-time). Expiration times have the following restrictions: - They cannot be set on shared drive items. - They can only be set on user and group permissions. - The time must be in the future. - The time cannot be more than one year in the future. (format: date-time)
   --id: string # The ID of this permission. This is a unique identifier for the grantee, and is published in User resources as permissionId. IDs should be treated as opaque values.
   --kind: string # Identifies what kind of resource this is. Value: the fixed string "drive#permission". (default: drive#permission)
   --pending-owner: oneof<nothing, bool> # Whether the account associated with this permission is a pending owner. Only populated for user type permissions for files that aren't in a shared drive.
   --photo-link: string # A link to the user's profile photo, if available.
-  --role: string # The role granted by this permission. While new values may be supported in the future, the following are currently allowed:   - owner  - organizer  - fileOrganizer  - writer  - commenter  - reader
-  --type: string # The type of the grantee. Valid values are:   - user  - group  - domain  - anyone  When creating a permission, if type is user or group, you must provide an emailAddress for the user or group. When type is domain, you must provide a domain. There isn't extra information required for the anyone type.
+  --role: string # The role granted by this permission. While new values may be supported in the future, the following are currently allowed: - owner - organizer - fileOrganizer - writer - commenter - reader
+  --type: string # The type of the grantee. Valid values are: - user - group - domain - anyone When creating a permission, if type is user or group, you must provide an emailAddress for the user or group. When type is domain, you must provide a domain. There isn't extra information required for the anyone type.
   --view: string # Indicates the view for this permission. Only populated for permissions that belong to a view. published is the only supported value.
 ]: any -> record<allowFileDiscovery: bool, deleted: bool, displayName: string, domain: string, emailAddress: string, expirationTime: string, id: string, kind: string, pendingOwner: bool, permissionDetails: table<inherited: bool, inheritedFrom: string, permissionType: string, role: string>, photoLink: string, role: string, teamDrivePermissionDetails: table<inherited: bool, inheritedFrom: string, role: string, teamDrivePermissionType: string>, type: string, view: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "emailMessage" $email_message "scalar") (serialize-qp "enforceSingleParent" $enforce_single_parent "scalar") (serialize-qp "moveToNewOwnersRoot" $move_to_new_owners_root "scalar") (serialize-qp "sendNotificationEmail" $send_notification_email "scalar") (serialize-qp "supportsAllDrives" $supports_all_drives "scalar") (serialize-qp "supportsTeamDrives" $supports_team_drives "scalar") (serialize-qp "transferOwnership" $transfer_ownership "scalar") (serialize-qp "useDomainAdminAccess" $use_domain_admin_access "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({file_id: $file_id} | format pattern "/files/{file_id}/permissions") $qp)
-  let body = {"allowFileDiscovery": $allow_file_discovery, "deleted": $deleted, "displayName": $display_name, "domain": $domain, "emailAddress": $email_address, "expirationTime": $expiration_time, "id": $id, "kind": $kind, "pendingOwner": $pending_owner, "photoLink": $photo_link, "role": $role, "type": $type, "view": $view} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/files/{file_id}/permissions") $qp)
+  let req_body = {"allowFileDiscovery": $allow_file_discovery, "deleted": $deleted, "displayName": $display_name, "domain": $domain, "emailAddress": $email_address, "expirationTime": $expiration_time, "id": $id, "kind": $kind, "pendingOwner": $pending_owner, "photoLink": $photo_link, "role": $role, "type": $type, "view": $view} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes a permission.
 #
 # DELETE /files/{fileId}/permissions/{permissionId}
 # operationId: drive.permissions.delete
-export def "files-permissions drivepermissionsdelete" [
+export def "files-permissions delete" [
   file_id: string
   permission_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1559,7 +1570,7 @@ export def "files-permissions drivepermissionsdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "supportsAllDrives" $supports_all_drives "scalar") (serialize-qp "supportsTeamDrives" $supports_team_drives "scalar") (serialize-qp "useDomainAdminAccess" $use_domain_admin_access "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({file_id: $file_id, permission_id: $permission_id} | format pattern "/files/{file_id}/permissions/{permission_id}") $qp)
+  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id), permission_id: (encode-path-segment $permission_id)} | format pattern "/files/{file_id}/permissions/{permission_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1569,7 +1580,7 @@ export def "files-permissions drivepermissionsdelete" [
 #
 # GET /files/{fileId}/permissions/{permissionId}
 # operationId: drive.permissions.get
-export def "files-permissions drivepermissionsget" [
+export def "files-permissions get" [
   file_id: string
   permission_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1594,7 +1605,7 @@ export def "files-permissions drivepermissionsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "supportsAllDrives" $supports_all_drives "scalar") (serialize-qp "supportsTeamDrives" $supports_team_drives "scalar") (serialize-qp "useDomainAdminAccess" $use_domain_admin_access "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({file_id: $file_id, permission_id: $permission_id} | format pattern "/files/{file_id}/permissions/{permission_id}") $qp)
+  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id), permission_id: (encode-path-segment $permission_id)} | format pattern "/files/{file_id}/permissions/{permission_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1606,7 +1617,7 @@ export def "files-permissions drivepermissionsget" [
 # operationId: drive.permissions.update
 # --permissionDetails item shape: {inherited?: bool, inheritedFrom?: string, permissionType?: string, role?: string}
 # --teamDrivePermissionDetails item shape: {inherited?: bool, inheritedFrom?: string, role?: string, teamDrivePermissionType?: string}
-export def "files-permissions drivepermissionsupdate" [
+export def "files-permissions update" [
   file_id: string
   permission_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1631,35 +1642,35 @@ export def "files-permissions drivepermissionsupdate" [
   --use-domain-admin-access: oneof<nothing, bool> # Issue the request as a domain administrator; if set to true, then the requester will be granted access if the file ID parameter refers to a shared drive and the requester is an administrator of the domain to which the shared drive belongs.
   --allow-file-discovery: oneof<nothing, bool> # Whether the permission allows the file to be discovered through search. This is only applicable for permissions of type domain or anyone.
   --deleted: oneof<nothing, bool> # Whether the account associated with this permission has been deleted. This field only pertains to user and group permissions.
-  --display-name: string # The "pretty" name of the value of the permission. The following is a list of examples for each type of permission:   - user - User's full name, as defined for their Google Account, such as "Joe Smith."  - group - Name of the Google Group, such as "The Company Administrators."  - domain - String domain name, such as "your-company.com."  - anyone - No displayName is present.
-  --domain: string # The domain to which this permission refers. The following options are currently allowed:   - The entire domain, such as "your-company.com."  - A target audience, such as "ID.audience.googledomains.com."
+  --display-name: string # The "pretty" name of the value of the permission. The following is a list of examples for each type of permission: - user - User's full name, as defined for their Google Account, such as "Joe Smith." - group - Name of the Google Group, such as "The Company Administrators." - domain - String domain name, such as "your-company.com." - anyone - No displayName is present.
+  --domain: string # The domain to which this permission refers. The following options are currently allowed: - The entire domain, such as "your-company.com." - A target audience, such as "ID.audience.googledomains.com."
   --email-address: string # The email address of the user or group to which this permission refers.
-  --expiration-time: string # The time at which this permission will expire (RFC 3339 date-time). Expiration times have the following restrictions:   - They cannot be set on shared drive items.  - They can only be set on user and group permissions.  - The time must be in the future.  - The time cannot be more than one year in the future. (format: date-time)
+  --expiration-time: string # The time at which this permission will expire (RFC 3339 date-time). Expiration times have the following restrictions: - They cannot be set on shared drive items. - They can only be set on user and group permissions. - The time must be in the future. - The time cannot be more than one year in the future. (format: date-time)
   --id: string # The ID of this permission. This is a unique identifier for the grantee, and is published in User resources as permissionId. IDs should be treated as opaque values.
   --kind: string # Identifies what kind of resource this is. Value: the fixed string "drive#permission". (default: drive#permission)
   --pending-owner: oneof<nothing, bool> # Whether the account associated with this permission is a pending owner. Only populated for user type permissions for files that aren't in a shared drive.
   --photo-link: string # A link to the user's profile photo, if available.
-  --role: string # The role granted by this permission. While new values may be supported in the future, the following are currently allowed:   - owner  - organizer  - fileOrganizer  - writer  - commenter  - reader
-  --type: string # The type of the grantee. Valid values are:   - user  - group  - domain  - anyone  When creating a permission, if type is user or group, you must provide an emailAddress for the user or group. When type is domain, you must provide a domain. There isn't extra information required for the anyone type.
+  --role: string # The role granted by this permission. While new values may be supported in the future, the following are currently allowed: - owner - organizer - fileOrganizer - writer - commenter - reader
+  --type: string # The type of the grantee. Valid values are: - user - group - domain - anyone When creating a permission, if type is user or group, you must provide an emailAddress for the user or group. When type is domain, you must provide a domain. There isn't extra information required for the anyone type.
   --view: string # Indicates the view for this permission. Only populated for permissions that belong to a view. published is the only supported value.
 ]: any -> record<allowFileDiscovery: bool, deleted: bool, displayName: string, domain: string, emailAddress: string, expirationTime: string, id: string, kind: string, pendingOwner: bool, permissionDetails: table<inherited: bool, inheritedFrom: string, permissionType: string, role: string>, photoLink: string, role: string, teamDrivePermissionDetails: table<inherited: bool, inheritedFrom: string, role: string, teamDrivePermissionType: string>, type: string, view: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "removeExpiration" $remove_expiration "scalar") (serialize-qp "supportsAllDrives" $supports_all_drives "scalar") (serialize-qp "supportsTeamDrives" $supports_team_drives "scalar") (serialize-qp "transferOwnership" $transfer_ownership "scalar") (serialize-qp "useDomainAdminAccess" $use_domain_admin_access "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({file_id: $file_id, permission_id: $permission_id} | format pattern "/files/{file_id}/permissions/{permission_id}") $qp)
-  let body = {"allowFileDiscovery": $allow_file_discovery, "deleted": $deleted, "displayName": $display_name, "domain": $domain, "emailAddress": $email_address, "expirationTime": $expiration_time, "id": $id, "kind": $kind, "pendingOwner": $pending_owner, "photoLink": $photo_link, "role": $role, "type": $type, "view": $view} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id), permission_id: (encode-path-segment $permission_id)} | format pattern "/files/{file_id}/permissions/{permission_id}") $qp)
+  let req_body = {"allowFileDiscovery": $allow_file_discovery, "deleted": $deleted, "displayName": $display_name, "domain": $domain, "emailAddress": $email_address, "expirationTime": $expiration_time, "id": $id, "kind": $kind, "pendingOwner": $pending_owner, "photoLink": $photo_link, "role": $role, "type": $type, "view": $view} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists a file's revisions.
 #
 # GET /files/{fileId}/revisions
 # operationId: drive.revisions.list
-export def "files-revisions driverevisionslist" [
+export def "files-revisions list" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1682,7 +1693,7 @@ export def "files-revisions driverevisionslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({file_id: $file_id} | format pattern "/files/{file_id}/revisions") $qp)
+  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/files/{file_id}/revisions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1692,7 +1703,7 @@ export def "files-revisions driverevisionslist" [
 #
 # DELETE /files/{fileId}/revisions/{revisionId}
 # operationId: drive.revisions.delete
-export def "files-revisions driverevisionsdelete" [
+export def "files-revisions delete" [
   file_id: string
   revision_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1714,7 +1725,7 @@ export def "files-revisions driverevisionsdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({file_id: $file_id, revision_id: $revision_id} | format pattern "/files/{file_id}/revisions/{revision_id}") $qp)
+  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id), revision_id: (encode-path-segment $revision_id)} | format pattern "/files/{file_id}/revisions/{revision_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1724,7 +1735,7 @@ export def "files-revisions driverevisionsdelete" [
 #
 # GET /files/{fileId}/revisions/{revisionId}
 # operationId: drive.revisions.get
-export def "files-revisions driverevisionsget" [
+export def "files-revisions get" [
   file_id: string
   revision_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1747,7 +1758,7 @@ export def "files-revisions driverevisionsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "acknowledgeAbuse" $acknowledge_abuse "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({file_id: $file_id, revision_id: $revision_id} | format pattern "/files/{file_id}/revisions/{revision_id}") $qp)
+  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id), revision_id: (encode-path-segment $revision_id)} | format pattern "/files/{file_id}/revisions/{revision_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1758,7 +1769,7 @@ export def "files-revisions driverevisionsget" [
 # PATCH /files/{fileId}/revisions/{revisionId}
 # operationId: drive.revisions.update
 # --lastModifyingUser shape: {displayName?: string, emailAddress?: string, kind?: string, me?: bool, permissionId?: string, photoLink?: string}
-export def "files-revisions driverevisionsupdate" [
+export def "files-revisions update" [
   file_id: string
   revision_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1795,19 +1806,19 @@ export def "files-revisions driverevisionsupdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({file_id: $file_id, revision_id: $revision_id} | format pattern "/files/{file_id}/revisions/{revision_id}") $qp)
-  let body = {"exportLinks": $export_links, "id": $id, "keepForever": $keep_forever, "kind": $kind, "lastModifyingUser": $last_modifying_user, "md5Checksum": $md5_checksum, "mimeType": $mime_type, "modifiedTime": $modified_time, "originalFilename": $original_filename, "publishAuto": $publish_auto, "published": $published, "publishedLink": $published_link, "publishedOutsideDomain": $published_outside_domain, "size": $size} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id), revision_id: (encode-path-segment $revision_id)} | format pattern "/files/{file_id}/revisions/{revision_id}") $qp)
+  let req_body = {"exportLinks": $export_links, "id": $id, "keepForever": $keep_forever, "kind": $kind, "lastModifyingUser": $last_modifying_user, "md5Checksum": $md5_checksum, "mimeType": $mime_type, "modifiedTime": $modified_time, "originalFilename": $original_filename, "publishAuto": $publish_auto, "published": $published, "publishedLink": $published_link, "publishedOutsideDomain": $published_outside_domain, "size": $size} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Subscribes to changes to a file.
 #
 # POST /files/{fileId}/watch
 # operationId: drive.files.watch
-export def "files-watch drivefileswatch" [
+export def "files-watch watch" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1844,19 +1855,19 @@ export def "files-watch drivefileswatch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "acknowledgeAbuse" $acknowledge_abuse "scalar") (serialize-qp "includeLabels" $include_labels "scalar") (serialize-qp "includePermissionsForView" $include_permissions_for_view "scalar") (serialize-qp "supportsAllDrives" $supports_all_drives "scalar") (serialize-qp "supportsTeamDrives" $supports_team_drives "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({file_id: $file_id} | format pattern "/files/{file_id}/watch") $qp)
-  let body = {"address": $address, "expiration": $expiration, "id": $id, "kind": $kind, "params": $params, "payload": $payload, "resourceId": $resource_id, "resourceUri": $resource_uri, "token": $body_token, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/files/{file_id}/watch") $qp)
+  let req_body = {"address": $address, "expiration": $expiration, "id": $id, "kind": $kind, "params": $params, "payload": $payload, "resourceId": $resource_id, "resourceUri": $resource_uri, "token": $body_token, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deprecated use drives.list instead.
 #
 # GET /teamdrives
 # operationId: drive.teamdrives.list
-export def "teamdrives driveteamdriveslist" [
+export def "teamdrives list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1891,9 +1902,9 @@ export def "teamdrives driveteamdriveslist" [
 # POST /teamdrives
 # operationId: drive.teamdrives.create
 # --backgroundImageFile shape: {id?: string, width?: float, xCoordinate?: float, yCoordinate?: float}
-# --capabilities shape: {canAddChildren?: bool, canChangeCopyRequiresWriterPermissionRestriction?: bool, canChangeDomainUsersOnlyRestriction?: bool, canChangeSharingFoldersRequiresOrganizerPermissionRestriction?: bool, canChangeTeamDriveBackground?: bool, canChangeTeamMembersOnlyRestriction?: bool, canComment?: bool, canCopy?: bool, canDeleteChildren?: bool, canDeleteTeamDrive?: bool, canDownload?: bool, canEdit?: bool, canListChildren?: bool, canManageMembers?: bool, canReadRevisions?: bool, canRemoveChildren?: bool, canRename?: bool, canRenameTeamDrive?: bool, canResetTeamDriveRestrictions?: bool, canShare?: bool, canTrashChildren?: bool}
+# --capabilities shape: {canAddChildren?: bool, canChangeCopyRequiresWriterPermissionRestriction?: bool, canChangeDomainUsersOnlyRestriction?: bool, canChangeSharingFoldersRequiresOrganizerPermissionRestriction?: bool, canChangeTeamDriveBackground?: bool, canChangeTeamMembersOnlyRestriction?: bool, canComment?: bool, canCopy?: bool, canDeleteChildren?: bool, canDeleteTeamDrive?: bool, canDownload?: bool, canEdit?: bool, canListChildren?: bool, canManageMembers?: bool, canReadRevisions?: bool, canRemoveChildren?: bool, ... (5 more fields)}
 # --restrictions shape: {adminManagedRestrictions?: bool, copyRequiresWriterPermission?: bool, domainUsersOnly?: bool, sharingFoldersRequiresOrganizerPermission?: bool, teamMembersOnly?: bool}
-export def "teamdrives driveteamdrivescreate" [
+export def "teamdrives create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1912,7 +1923,7 @@ export def "teamdrives driveteamdrivescreate" [
   --request-id: string # An ID, such as a random UUID, which uniquely identifies this user's request for idempotent creation of a Team Drive. A repeated request by the same user and with the same request ID will avoid creating duplicates by attempting to create the same Team Drive. If the Team Drive already exists a 409 error will be returned.
   --background-image-file: record # An image file and cropping parameters from which a background image for this Team Drive is set. This is a write only field; it can only be set on drive.teamdrives.update requests that don't set themeId. When specified, all fields of the backgroundImageFile must be set. — shape: {id?: string, width?: float, xCoordinate?: float, yCoordinate?: float}
   --background-image-link: string # A short-lived link to this Team Drive's background image.
-  --capabilities: record # Capabilities the current user has on this Team Drive. — shape: {canAddChildren?: bool, canChangeCopyRequiresWriterPermissionRestriction?: bool, canChangeDomainUsersOnlyRestriction?: bool, canChangeSharingFoldersRequiresOrganizerPermissionRestriction?: bool, canChangeTeamDriveBackground?: bool, canChangeTeamMembersOnlyRestriction?: bool, canComment?: bool, canCopy?: bool, canDeleteChildren?: bool, canDeleteTeamDrive?: bool, canDownload?: bool, canEdit?: bool, canListChildren?: bool, canManageMembers?: bool, canReadRevisions?: bool, canRemoveChildren?: bool, canRename?: bool, canRenameTeamDrive?: bool, canResetTeamDriveRestrictions?: bool, canShare?: bool, canTrashChildren?: bool}
+  --capabilities: record # Capabilities the current user has on this Team Drive. — shape: {canAddChildren?: bool, canChangeCopyRequiresWriterPermissionRestriction?: bool, canChangeDomainUsersOnlyRestriction?: bool, canChangeSharingFoldersRequiresOrganizerPermissionRestriction?: bool, canChangeTeamDriveBackground?: bool, canChangeTeamMembersOnlyRestriction?: bool, canComment?: bool, canCopy?: bool, canDeleteChildren?: bool, canDeleteTeamDrive?: bool, canDownload?: bool, canEdit?: bool, canListChildren?: bool, canManageMembers?: bool, canReadRevisions?: bool, canRemoveChildren?: bool, ... (5 more fields)}
   --color-rgb: string # The color of this Team Drive as an RGB hex string. It can only be set on a drive.teamdrives.update request that does not set themeId.
   --created-time: string # The time at which the Team Drive was created (RFC 3339 date-time). (format: date-time)
   --id: string # The ID of this Team Drive which is also the ID of the top level folder of this Team Drive.
@@ -1927,18 +1938,18 @@ export def "teamdrives driveteamdrivescreate" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "requestId" $request_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/teamdrives" $qp)
-  let body = {"backgroundImageFile": $background_image_file, "backgroundImageLink": $background_image_link, "capabilities": $capabilities, "colorRgb": $color_rgb, "createdTime": $created_time, "id": $id, "kind": $kind, "name": $name, "orgUnitId": $org_unit_id, "restrictions": $restrictions, "themeId": $theme_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"backgroundImageFile": $background_image_file, "backgroundImageLink": $background_image_link, "capabilities": $capabilities, "colorRgb": $color_rgb, "createdTime": $created_time, "id": $id, "kind": $kind, "name": $name, "orgUnitId": $org_unit_id, "restrictions": $restrictions, "themeId": $theme_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deprecated use drives.delete instead.
 #
 # DELETE /teamdrives/{teamDriveId}
 # operationId: drive.teamdrives.delete
-export def "teamdrives driveteamdrivesdelete" [
+export def "teamdrives delete" [
   team_drive_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1959,7 +1970,7 @@ export def "teamdrives driveteamdrivesdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({team_drive_id: $team_drive_id} | format pattern "/teamdrives/{team_drive_id}") $qp)
+  let full_url = (build-url $base ({team_drive_id: (encode-path-segment $team_drive_id)} | format pattern "/teamdrives/{team_drive_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1969,7 +1980,7 @@ export def "teamdrives driveteamdrivesdelete" [
 #
 # GET /teamdrives/{teamDriveId}
 # operationId: drive.teamdrives.get
-export def "teamdrives driveteamdrivesget" [
+export def "teamdrives get" [
   team_drive_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1991,7 +2002,7 @@ export def "teamdrives driveteamdrivesget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "useDomainAdminAccess" $use_domain_admin_access "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({team_drive_id: $team_drive_id} | format pattern "/teamdrives/{team_drive_id}") $qp)
+  let full_url = (build-url $base ({team_drive_id: (encode-path-segment $team_drive_id)} | format pattern "/teamdrives/{team_drive_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2002,9 +2013,9 @@ export def "teamdrives driveteamdrivesget" [
 # PATCH /teamdrives/{teamDriveId}
 # operationId: drive.teamdrives.update
 # --backgroundImageFile shape: {id?: string, width?: float, xCoordinate?: float, yCoordinate?: float}
-# --capabilities shape: {canAddChildren?: bool, canChangeCopyRequiresWriterPermissionRestriction?: bool, canChangeDomainUsersOnlyRestriction?: bool, canChangeSharingFoldersRequiresOrganizerPermissionRestriction?: bool, canChangeTeamDriveBackground?: bool, canChangeTeamMembersOnlyRestriction?: bool, canComment?: bool, canCopy?: bool, canDeleteChildren?: bool, canDeleteTeamDrive?: bool, canDownload?: bool, canEdit?: bool, canListChildren?: bool, canManageMembers?: bool, canReadRevisions?: bool, canRemoveChildren?: bool, canRename?: bool, canRenameTeamDrive?: bool, canResetTeamDriveRestrictions?: bool, canShare?: bool, canTrashChildren?: bool}
+# --capabilities shape: {canAddChildren?: bool, canChangeCopyRequiresWriterPermissionRestriction?: bool, canChangeDomainUsersOnlyRestriction?: bool, canChangeSharingFoldersRequiresOrganizerPermissionRestriction?: bool, canChangeTeamDriveBackground?: bool, canChangeTeamMembersOnlyRestriction?: bool, canComment?: bool, canCopy?: bool, canDeleteChildren?: bool, canDeleteTeamDrive?: bool, canDownload?: bool, canEdit?: bool, canListChildren?: bool, canManageMembers?: bool, canReadRevisions?: bool, canRemoveChildren?: bool, ... (5 more fields)}
 # --restrictions shape: {adminManagedRestrictions?: bool, copyRequiresWriterPermission?: bool, domainUsersOnly?: bool, sharingFoldersRequiresOrganizerPermission?: bool, teamMembersOnly?: bool}
-export def "teamdrives driveteamdrivesupdate" [
+export def "teamdrives update" [
   team_drive_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2024,7 +2035,7 @@ export def "teamdrives driveteamdrivesupdate" [
   --use-domain-admin-access: oneof<nothing, bool> # Issue the request as a domain administrator; if set to true, then the requester will be granted access if they are an administrator of the domain to which the Team Drive belongs.
   --background-image-file: record # An image file and cropping parameters from which a background image for this Team Drive is set. This is a write only field; it can only be set on drive.teamdrives.update requests that don't set themeId. When specified, all fields of the backgroundImageFile must be set. — shape: {id?: string, width?: float, xCoordinate?: float, yCoordinate?: float}
   --background-image-link: string # A short-lived link to this Team Drive's background image.
-  --capabilities: record # Capabilities the current user has on this Team Drive. — shape: {canAddChildren?: bool, canChangeCopyRequiresWriterPermissionRestriction?: bool, canChangeDomainUsersOnlyRestriction?: bool, canChangeSharingFoldersRequiresOrganizerPermissionRestriction?: bool, canChangeTeamDriveBackground?: bool, canChangeTeamMembersOnlyRestriction?: bool, canComment?: bool, canCopy?: bool, canDeleteChildren?: bool, canDeleteTeamDrive?: bool, canDownload?: bool, canEdit?: bool, canListChildren?: bool, canManageMembers?: bool, canReadRevisions?: bool, canRemoveChildren?: bool, canRename?: bool, canRenameTeamDrive?: bool, canResetTeamDriveRestrictions?: bool, canShare?: bool, canTrashChildren?: bool}
+  --capabilities: record # Capabilities the current user has on this Team Drive. — shape: {canAddChildren?: bool, canChangeCopyRequiresWriterPermissionRestriction?: bool, canChangeDomainUsersOnlyRestriction?: bool, canChangeSharingFoldersRequiresOrganizerPermissionRestriction?: bool, canChangeTeamDriveBackground?: bool, canChangeTeamMembersOnlyRestriction?: bool, canComment?: bool, canCopy?: bool, canDeleteChildren?: bool, canDeleteTeamDrive?: bool, canDownload?: bool, canEdit?: bool, canListChildren?: bool, canManageMembers?: bool, canReadRevisions?: bool, canRemoveChildren?: bool, ... (5 more fields)}
   --color-rgb: string # The color of this Team Drive as an RGB hex string. It can only be set on a drive.teamdrives.update request that does not set themeId.
   --created-time: string # The time at which the Team Drive was created (RFC 3339 date-time). (format: date-time)
   --id: string # The ID of this Team Drive which is also the ID of the top level folder of this Team Drive.
@@ -2038,10 +2049,10 @@ export def "teamdrives driveteamdrivesupdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "useDomainAdminAccess" $use_domain_admin_access "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({team_drive_id: $team_drive_id} | format pattern "/teamdrives/{team_drive_id}") $qp)
-  let body = {"backgroundImageFile": $background_image_file, "backgroundImageLink": $background_image_link, "capabilities": $capabilities, "colorRgb": $color_rgb, "createdTime": $created_time, "id": $id, "kind": $kind, "name": $name, "orgUnitId": $org_unit_id, "restrictions": $restrictions, "themeId": $theme_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({team_drive_id: (encode-path-segment $team_drive_id)} | format pattern "/teamdrives/{team_drive_id}") $qp)
+  let req_body = {"backgroundImageFile": $background_image_file, "backgroundImageLink": $background_image_link, "capabilities": $capabilities, "colorRgb": $color_rgb, "createdTime": $created_time, "id": $id, "kind": $kind, "name": $name, "orgUnitId": $org_unit_id, "restrictions": $restrictions, "themeId": $theme_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

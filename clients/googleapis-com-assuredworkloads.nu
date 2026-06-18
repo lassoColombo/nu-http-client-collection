@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -75,7 +84,7 @@ def restriction-type-completer [] { ["ALLOW_ALL_GCP_RESOURCES" "ALLOW_COMPLIANT_
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1beta1 assuredworkloadsorganizationslocationsworkloadsdelete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1beta1 delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -99,7 +108,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /v1beta1/{name}
 # operationId: assuredworkloads.organizations.locations.workloads.delete
-export def "v1beta1 assuredworkloadsorganizationslocationsworkloadsdelete" [
+export def "v1beta1 delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -125,7 +134,7 @@ export def "v1beta1 assuredworkloadsorganizationslocationsworkloadsdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "etag" $etag "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1beta1/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta1/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -135,7 +144,7 @@ export def "v1beta1 assuredworkloadsorganizationslocationsworkloadsdelete" [
 #
 # GET /v1beta1/{name}
 # operationId: assuredworkloads.organizations.locations.workloads.violations.get
-export def "v1beta1 assuredworkloadsorganizationslocationsworkloadsviolationsget" [
+export def "v1beta1 get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -160,7 +169,7 @@ export def "v1beta1 assuredworkloadsorganizationslocationsworkloadsviolationsget
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1beta1/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta1/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -172,15 +181,15 @@ export def "v1beta1 assuredworkloadsorganizationslocationsworkloadsviolationsget
 # operationId: assuredworkloads.organizations.locations.workloads.patch
 # --cjisSettings shape: {kmsSettings?: record}
 # --complianceStatus shape: {acknowledgedViolationCount?: int, activeViolationCount?: int}
-# --ekmProvisioningResponse shape: {ekmProvisioningErrorDomain?: "EKM_PROVISIONING_ERROR_DOMAIN_UNSPECIFIED"|"UNSPECIFIED_ERROR"|"GOOGLE_SERVER_ERROR"|"EXTERNAL_USER_ERROR"|"EXTERNAL_PARTNER_ERROR"|"TIMEOUT_ERROR", ekmProvisioningErrorMapping?: "EKM_PROVISIONING_ERROR_MAPPING_UNSPECIFIED"|"INVALID_SERVICE_ACCOUNT"|"MISSING_METRICS_SCOPE_ADMIN_PERMISSION"|"MISSING_EKM_CONNECTION_ADMIN_PERMISSION", ekmProvisioningState?: "EKM_PROVISIONING_STATE_UNSPECIFIED"|"EKM_PROVISIONING_STATE_PENDING"|"EKM_PROVISIONING_STATE_FAILED"|"EKM_PROVISIONING_STATE_COMPLETED"}
+# --ekmProvisioningResponse shape: {ekmProvisioningErrorDomain?: "EKM_PROVISIONING_ERROR_DOMAIN_UNSPECIFIED"|"UNSPECIFIED_ERROR"|"GOOGLE_SERVER_ERROR"|"EXTERNAL_USER_ERROR"|"EXTERNAL_PARTNER_ERROR"|"TIMEOUT_ERROR", ekmProvisioningErrorMapping?: "EKM_PROVISIONING_ERROR_MAPPING_UNSPECIFIED"|"INVALID_SERVICE_ACCOUNT"|"MISSING_METRICS_SCOPE_ADMIN_PERMISSION"|"MISSING_EKM_CONNECTION_ADMIN_PERMISSION", ... (1 more fields)}
 # --fedrampHighSettings shape: {kmsSettings?: record}
 # --fedrampModerateSettings shape: {kmsSettings?: record}
 # --il4Settings shape: {kmsSettings?: record}
 # --kmsSettings shape: {nextRotationTime?: string, rotationPeriod?: string}
 # --resourceSettings item shape: {displayName?: string, resourceId?: string, resourceType?: "RESOURCE_TYPE_UNSPECIFIED"|"CONSUMER_PROJECT"|"CONSUMER_FOLDER"|"ENCRYPTION_KEYS_PROJECT"|"KEYRING"}
 # --resources item shape: {resourceId?: string, resourceType?: "RESOURCE_TYPE_UNSPECIFIED"|"CONSUMER_PROJECT"|"CONSUMER_FOLDER"|"ENCRYPTION_KEYS_PROJECT"|"KEYRING"}
-# --saaEnrollmentResponse shape: {setupErrors?: list, setupStatus?: "SETUP_STATE_UNSPECIFIED"|"STATUS_PENDING"|"STATUS_COMPLETE"}
-export def "v1beta1 assuredworkloadsorganizationslocationsworkloadspatch" [
+# --saaEnrollmentResponse shape: {setupErrors?: list<string>, setupStatus?: "SETUP_STATE_UNSPECIFIED"|"STATUS_PENDING"|"STATUS_COMPLETE"}
+export def "v1beta1 update" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -207,7 +216,7 @@ export def "v1beta1 assuredworkloadsorganizationslocationsworkloadspatch" [
   --compliance-regime: string@compliance-regime-completer # Required. Immutable. Compliance Regime associated with this workload.
   --compliance-status: record # Represents the Compliance Status of this workload — shape: {acknowledgedViolationCount?: int, activeViolationCount?: int}
   --display-name: string # Required. The user-assigned display name of the Workload. When present it must be between 4 to 30 characters. Allowed characters are: lowercase and uppercase letters, numbers, hyphen, and spaces. Example: My Workload
-  --ekm-provisioning-response: record # External key management systems(EKM) Provisioning response — shape: {ekmProvisioningErrorDomain?: "EKM_PROVISIONING_ERROR_DOMAIN_UNSPECIFIED"|"UNSPECIFIED_ERROR"|"GOOGLE_SERVER_ERROR"|"EXTERNAL_USER_ERROR"|"EXTERNAL_PARTNER_ERROR"|"TIMEOUT_ERROR", ekmProvisioningErrorMapping?: "EKM_PROVISIONING_ERROR_MAPPING_UNSPECIFIED"|"INVALID_SERVICE_ACCOUNT"|"MISSING_METRICS_SCOPE_ADMIN_PERMISSION"|"MISSING_EKM_CONNECTION_ADMIN_PERMISSION", ekmProvisioningState?: "EKM_PROVISIONING_STATE_UNSPECIFIED"|"EKM_PROVISIONING_STATE_PENDING"|"EKM_PROVISIONING_STATE_FAILED"|"EKM_PROVISIONING_STATE_COMPLETED"}
+  --ekm-provisioning-response: record # External key management systems(EKM) Provisioning response — shape: {ekmProvisioningErrorDomain?: "EKM_PROVISIONING_ERROR_DOMAIN_UNSPECIFIED"|"UNSPECIFIED_ERROR"|"GOOGLE_SERVER_ERROR"|"EXTERNAL_USER_ERROR"|"EXTERNAL_PARTNER_ERROR"|"TIMEOUT_ERROR", ekmProvisioningErrorMapping?: "EKM_PROVISIONING_ERROR_MAPPING_UNSPECIFIED"|"INVALID_SERVICE_ACCOUNT"|"MISSING_METRICS_SCOPE_ADMIN_PERMISSION"|"MISSING_EKM_CONNECTION_ADMIN_PERMISSION", ... (1 more fields)}
   --enable-sovereign-controls: oneof<nothing, bool> # Optional. Indicates the sovereignty status of the given workload. Currently meant to be used by Europe/Canada customers.
   --etag: string # Optional. ETag of the workload, it is calculated on the basis of the Workload contents. It will be used in Update & Delete operations.
   --fedramp-high-settings: record # Settings specific to resources needed for FedRAMP High. — shape: {kmsSettings?: record}
@@ -219,26 +228,26 @@ export def "v1beta1 assuredworkloadsorganizationslocationsworkloadspatch" [
   --partner: string@partner-completer # Optional. Partner regime associated with this workload.
   --provisioned-resources-parent: string # Input only. The parent resource for the resources managed by this Assured Workload. May be either empty or a folder resource which is a child of the Workload parent. If not specified all resources are created under the parent organization. Format: folders/{folder_id}
   --resource-settings: list # Input only. Resource properties that are used to customize workload resources. These properties (such as custom project id) will be used to create workload resources if possible. This field is optional. — item shape: {displayName?: string, resourceId?: string, resourceType?: "RESOURCE_TYPE_UNSPECIFIED"|"CONSUMER_PROJECT"|"CONSUMER_FOLDER"|"ENCRYPTION_KEYS_PROJECT"|"KEYRING"}
-  --saa-enrollment-response: record # Signed Access Approvals (SAA) enrollment response. — shape: {setupErrors?: list, setupStatus?: "SETUP_STATE_UNSPECIFIED"|"STATUS_PENDING"|"STATUS_COMPLETE"}
+  --saa-enrollment-response: record # Signed Access Approvals (SAA) enrollment response. — shape: {setupErrors?: list<string>, setupStatus?: "SETUP_STATE_UNSPECIFIED"|"STATUS_PENDING"|"STATUS_COMPLETE"}
   --violation-notifications-enabled: oneof<nothing, bool> # Optional. Indicates whether the e-mail notification for a violation is enabled for a workload. This value will be by default True, and if not present will be considered as true. This should only be updated via updateWorkload call. Any Changes to this field during the createWorkload call will not be honored. This will always be true while creating the workload.
 ]: any -> record<billingAccount: string, cjisSettings: record<kmsSettings: record<nextRotationTime: string, rotationPeriod: string>>, complianceRegime: string, complianceStatus: record<acknowledgedViolationCount: int, activeViolationCount: int>, compliantButDisallowedServices: list<string>, createTime: string, displayName: string, ekmProvisioningResponse: record<ekmProvisioningErrorDomain: string, ekmProvisioningErrorMapping: string, ekmProvisioningState: string>, enableSovereignControls: bool, etag: string, fedrampHighSettings: record<kmsSettings: record<nextRotationTime: string, rotationPeriod: string>>, fedrampModerateSettings: record<kmsSettings: record<nextRotationTime: string, rotationPeriod: string>>, il4Settings: record<kmsSettings: record<nextRotationTime: string, rotationPeriod: string>>, kajEnrollmentState: string, kmsSettings: record<nextRotationTime: string, rotationPeriod: string>, labels: record, name: string, partner: string, provisionedResourcesParent: string, resourceSettings: table<displayName: string, resourceId: string, resourceType: string>, resources: table<resourceId: string, resourceType: string>, saaEnrollmentResponse: record<setupErrors: list<string>, setupStatus: string>, violationNotificationsEnabled: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1beta1/{name}") $qp)
-  let body = {"billingAccount": $billing_account, "cjisSettings": $cjis_settings, "complianceRegime": $compliance_regime, "complianceStatus": $compliance_status, "displayName": $display_name, "ekmProvisioningResponse": $ekm_provisioning_response, "enableSovereignControls": $enable_sovereign_controls, "etag": $etag, "fedrampHighSettings": $fedramp_high_settings, "fedrampModerateSettings": $fedramp_moderate_settings, "il4Settings": $il4_settings, "kmsSettings": $kms_settings, "labels": $labels, "name": $body_name, "partner": $partner, "provisionedResourcesParent": $provisioned_resources_parent, "resourceSettings": $resource_settings, "saaEnrollmentResponse": $saa_enrollment_response, "violationNotificationsEnabled": $violation_notifications_enabled} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta1/{name}") $qp)
+  let req_body = {"billingAccount": $billing_account, "cjisSettings": $cjis_settings, "complianceRegime": $compliance_regime, "complianceStatus": $compliance_status, "displayName": $display_name, "ekmProvisioningResponse": $ekm_provisioning_response, "enableSovereignControls": $enable_sovereign_controls, "etag": $etag, "fedrampHighSettings": $fedramp_high_settings, "fedrampModerateSettings": $fedramp_moderate_settings, "il4Settings": $il4_settings, "kmsSettings": $kms_settings, "labels": $labels, "name": $body_name, "partner": $partner, "provisionedResourcesParent": $provisioned_resources_parent, "resourceSettings": $resource_settings, "saaEnrollmentResponse": $saa_enrollment_response, "violationNotificationsEnabled": $violation_notifications_enabled} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists operations that match the specified filter in the request. If the server doesn't support this method, it returns `UNIMPLEMENTED`.
 #
 # GET /v1beta1/{name}/operations
 # operationId: assuredworkloads.organizations.locations.operations.list
-export def "v1beta1-operations assuredworkloadsorganizationslocationsoperationslist" [
+export def "v1beta1-operations list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -266,7 +275,7 @@ export def "v1beta1-operations assuredworkloadsorganizationslocationsoperationsl
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1beta1/{name}/operations") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta1/{name}/operations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -276,7 +285,7 @@ export def "v1beta1-operations assuredworkloadsorganizationslocationsoperationsl
 #
 # POST /v1beta1/{name}:acknowledge
 # operationId: assuredworkloads.organizations.locations.workloads.violations.acknowledge
-export def "v1beta1 assuredworkloadsorganizationslocationsworkloadsviolationsacknowledge" [
+export def "v1beta1 create-acknowledge" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -304,19 +313,19 @@ export def "v1beta1 assuredworkloadsorganizationslocationsworkloadsviolationsack
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1beta1/{name}:acknowledge") $qp)
-  let body = {"comment": $comment, "nonCompliantOrgPolicy": $non_compliant_org_policy} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta1/{name}:acknowledge") $qp)
+  let req_body = {"comment": $comment, "nonCompliantOrgPolicy": $non_compliant_org_policy} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Restrict the list of resources allowed in the Workload environment. The current list of allowed products can be found at https://cloud.google.com/assured-workloads/docs/supported-products In addition to assuredworkloads.workload.update permission, the user should also have orgpolicy.policy.set permission on the folder resource to use this functionality.
 #
 # POST /v1beta1/{name}:restrictAllowedResources
 # operationId: assuredworkloads.organizations.locations.workloads.restrictAllowedResources
-export def "v1beta1 assuredworkloadsorganizationslocationsworkloadsrestrictAllowedResources" [
+export def "v1beta1 create-restrict-allowed-resources" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -343,19 +352,19 @@ export def "v1beta1 assuredworkloadsorganizationslocationsworkloadsrestrictAllow
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1beta1/{name}:restrictAllowedResources") $qp)
-  let body = {"restrictionType": $restriction_type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta1/{name}:restrictAllowedResources") $qp)
+  let req_body = {"restrictionType": $restriction_type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists the Violations in the AssuredWorkload Environment. Callers may also choose to read across multiple Workloads as per [AIP-159](https://google.aip.dev/159) by using '-' (the hyphen or dash character) as a wildcard character instead of workload-id in the parent. Format `organizations/{org_id}/locations/{location}/workloads/-`
 #
 # GET /v1beta1/{parent}/violations
 # operationId: assuredworkloads.organizations.locations.workloads.violations.list
-export def "v1beta1-violations assuredworkloadsorganizationslocationsworkloadsviolationslist" [
+export def "v1beta1-violations list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -385,7 +394,7 @@ export def "v1beta1-violations assuredworkloadsorganizationslocationsworkloadsvi
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "interval.endTime" $interval_end_time "scalar") (serialize-qp "interval.startTime" $interval_start_time "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta1/{parent}/violations") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta1/{parent}/violations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -395,7 +404,7 @@ export def "v1beta1-violations assuredworkloadsorganizationslocationsworkloadsvi
 #
 # GET /v1beta1/{parent}/workloads
 # operationId: assuredworkloads.organizations.locations.workloads.list
-export def "v1beta1-workloads assuredworkloadsorganizationslocationsworkloadslist" [
+export def "v1beta1-workloads list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -423,7 +432,7 @@ export def "v1beta1-workloads assuredworkloadsorganizationslocationsworkloadslis
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta1/{parent}/workloads") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta1/{parent}/workloads") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -435,15 +444,15 @@ export def "v1beta1-workloads assuredworkloadsorganizationslocationsworkloadslis
 # operationId: assuredworkloads.organizations.locations.workloads.create
 # --cjisSettings shape: {kmsSettings?: record}
 # --complianceStatus shape: {acknowledgedViolationCount?: int, activeViolationCount?: int}
-# --ekmProvisioningResponse shape: {ekmProvisioningErrorDomain?: "EKM_PROVISIONING_ERROR_DOMAIN_UNSPECIFIED"|"UNSPECIFIED_ERROR"|"GOOGLE_SERVER_ERROR"|"EXTERNAL_USER_ERROR"|"EXTERNAL_PARTNER_ERROR"|"TIMEOUT_ERROR", ekmProvisioningErrorMapping?: "EKM_PROVISIONING_ERROR_MAPPING_UNSPECIFIED"|"INVALID_SERVICE_ACCOUNT"|"MISSING_METRICS_SCOPE_ADMIN_PERMISSION"|"MISSING_EKM_CONNECTION_ADMIN_PERMISSION", ekmProvisioningState?: "EKM_PROVISIONING_STATE_UNSPECIFIED"|"EKM_PROVISIONING_STATE_PENDING"|"EKM_PROVISIONING_STATE_FAILED"|"EKM_PROVISIONING_STATE_COMPLETED"}
+# --ekmProvisioningResponse shape: {ekmProvisioningErrorDomain?: "EKM_PROVISIONING_ERROR_DOMAIN_UNSPECIFIED"|"UNSPECIFIED_ERROR"|"GOOGLE_SERVER_ERROR"|"EXTERNAL_USER_ERROR"|"EXTERNAL_PARTNER_ERROR"|"TIMEOUT_ERROR", ekmProvisioningErrorMapping?: "EKM_PROVISIONING_ERROR_MAPPING_UNSPECIFIED"|"INVALID_SERVICE_ACCOUNT"|"MISSING_METRICS_SCOPE_ADMIN_PERMISSION"|"MISSING_EKM_CONNECTION_ADMIN_PERMISSION", ... (1 more fields)}
 # --fedrampHighSettings shape: {kmsSettings?: record}
 # --fedrampModerateSettings shape: {kmsSettings?: record}
 # --il4Settings shape: {kmsSettings?: record}
 # --kmsSettings shape: {nextRotationTime?: string, rotationPeriod?: string}
 # --resourceSettings item shape: {displayName?: string, resourceId?: string, resourceType?: "RESOURCE_TYPE_UNSPECIFIED"|"CONSUMER_PROJECT"|"CONSUMER_FOLDER"|"ENCRYPTION_KEYS_PROJECT"|"KEYRING"}
 # --resources item shape: {resourceId?: string, resourceType?: "RESOURCE_TYPE_UNSPECIFIED"|"CONSUMER_PROJECT"|"CONSUMER_FOLDER"|"ENCRYPTION_KEYS_PROJECT"|"KEYRING"}
-# --saaEnrollmentResponse shape: {setupErrors?: list, setupStatus?: "SETUP_STATE_UNSPECIFIED"|"STATUS_PENDING"|"STATUS_COMPLETE"}
-export def "v1beta1-workloads assuredworkloadsorganizationslocationsworkloadscreate" [
+# --saaEnrollmentResponse shape: {setupErrors?: list<string>, setupStatus?: "SETUP_STATE_UNSPECIFIED"|"STATUS_PENDING"|"STATUS_COMPLETE"}
+export def "v1beta1-workloads create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -470,7 +479,7 @@ export def "v1beta1-workloads assuredworkloadsorganizationslocationsworkloadscre
   --compliance-regime: string@compliance-regime-completer # Required. Immutable. Compliance Regime associated with this workload.
   --compliance-status: record # Represents the Compliance Status of this workload — shape: {acknowledgedViolationCount?: int, activeViolationCount?: int}
   --display-name: string # Required. The user-assigned display name of the Workload. When present it must be between 4 to 30 characters. Allowed characters are: lowercase and uppercase letters, numbers, hyphen, and spaces. Example: My Workload
-  --ekm-provisioning-response: record # External key management systems(EKM) Provisioning response — shape: {ekmProvisioningErrorDomain?: "EKM_PROVISIONING_ERROR_DOMAIN_UNSPECIFIED"|"UNSPECIFIED_ERROR"|"GOOGLE_SERVER_ERROR"|"EXTERNAL_USER_ERROR"|"EXTERNAL_PARTNER_ERROR"|"TIMEOUT_ERROR", ekmProvisioningErrorMapping?: "EKM_PROVISIONING_ERROR_MAPPING_UNSPECIFIED"|"INVALID_SERVICE_ACCOUNT"|"MISSING_METRICS_SCOPE_ADMIN_PERMISSION"|"MISSING_EKM_CONNECTION_ADMIN_PERMISSION", ekmProvisioningState?: "EKM_PROVISIONING_STATE_UNSPECIFIED"|"EKM_PROVISIONING_STATE_PENDING"|"EKM_PROVISIONING_STATE_FAILED"|"EKM_PROVISIONING_STATE_COMPLETED"}
+  --ekm-provisioning-response: record # External key management systems(EKM) Provisioning response — shape: {ekmProvisioningErrorDomain?: "EKM_PROVISIONING_ERROR_DOMAIN_UNSPECIFIED"|"UNSPECIFIED_ERROR"|"GOOGLE_SERVER_ERROR"|"EXTERNAL_USER_ERROR"|"EXTERNAL_PARTNER_ERROR"|"TIMEOUT_ERROR", ekmProvisioningErrorMapping?: "EKM_PROVISIONING_ERROR_MAPPING_UNSPECIFIED"|"INVALID_SERVICE_ACCOUNT"|"MISSING_METRICS_SCOPE_ADMIN_PERMISSION"|"MISSING_EKM_CONNECTION_ADMIN_PERMISSION", ... (1 more fields)}
   --enable-sovereign-controls: oneof<nothing, bool> # Optional. Indicates the sovereignty status of the given workload. Currently meant to be used by Europe/Canada customers.
   --etag: string # Optional. ETag of the workload, it is calculated on the basis of the Workload contents. It will be used in Update & Delete operations.
   --fedramp-high-settings: record # Settings specific to resources needed for FedRAMP High. — shape: {kmsSettings?: record}
@@ -482,26 +491,26 @@ export def "v1beta1-workloads assuredworkloadsorganizationslocationsworkloadscre
   --partner: string@partner-completer # Optional. Partner regime associated with this workload.
   --provisioned-resources-parent: string # Input only. The parent resource for the resources managed by this Assured Workload. May be either empty or a folder resource which is a child of the Workload parent. If not specified all resources are created under the parent organization. Format: folders/{folder_id}
   --resource-settings: list # Input only. Resource properties that are used to customize workload resources. These properties (such as custom project id) will be used to create workload resources if possible. This field is optional. — item shape: {displayName?: string, resourceId?: string, resourceType?: "RESOURCE_TYPE_UNSPECIFIED"|"CONSUMER_PROJECT"|"CONSUMER_FOLDER"|"ENCRYPTION_KEYS_PROJECT"|"KEYRING"}
-  --saa-enrollment-response: record # Signed Access Approvals (SAA) enrollment response. — shape: {setupErrors?: list, setupStatus?: "SETUP_STATE_UNSPECIFIED"|"STATUS_PENDING"|"STATUS_COMPLETE"}
+  --saa-enrollment-response: record # Signed Access Approvals (SAA) enrollment response. — shape: {setupErrors?: list<string>, setupStatus?: "SETUP_STATE_UNSPECIFIED"|"STATUS_PENDING"|"STATUS_COMPLETE"}
   --violation-notifications-enabled: oneof<nothing, bool> # Optional. Indicates whether the e-mail notification for a violation is enabled for a workload. This value will be by default True, and if not present will be considered as true. This should only be updated via updateWorkload call. Any Changes to this field during the createWorkload call will not be honored. This will always be true while creating the workload.
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "externalId" $external_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta1/{parent}/workloads") $qp)
-  let body = {"billingAccount": $billing_account, "cjisSettings": $cjis_settings, "complianceRegime": $compliance_regime, "complianceStatus": $compliance_status, "displayName": $display_name, "ekmProvisioningResponse": $ekm_provisioning_response, "enableSovereignControls": $enable_sovereign_controls, "etag": $etag, "fedrampHighSettings": $fedramp_high_settings, "fedrampModerateSettings": $fedramp_moderate_settings, "il4Settings": $il4_settings, "kmsSettings": $kms_settings, "labels": $labels, "name": $name, "partner": $partner, "provisionedResourcesParent": $provisioned_resources_parent, "resourceSettings": $resource_settings, "saaEnrollmentResponse": $saa_enrollment_response, "violationNotificationsEnabled": $violation_notifications_enabled} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta1/{parent}/workloads") $qp)
+  let req_body = {"billingAccount": $billing_account, "cjisSettings": $cjis_settings, "complianceRegime": $compliance_regime, "complianceStatus": $compliance_status, "displayName": $display_name, "ekmProvisioningResponse": $ekm_provisioning_response, "enableSovereignControls": $enable_sovereign_controls, "etag": $etag, "fedrampHighSettings": $fedramp_high_settings, "fedrampModerateSettings": $fedramp_moderate_settings, "il4Settings": $il4_settings, "kmsSettings": $kms_settings, "labels": $labels, "name": $name, "partner": $partner, "provisionedResourcesParent": $provisioned_resources_parent, "resourceSettings": $resource_settings, "saaEnrollmentResponse": $saa_enrollment_response, "violationNotificationsEnabled": $violation_notifications_enabled} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Analyzes a hypothetical move of a source project or project-based workload to a target (destination) folder-based workload.
 #
 # GET /v1beta1/{project}/{target}:analyzeWorkloadMove
 # operationId: assuredworkloads.projects.organizations.locations.workloads.analyzeWorkloadMove
-export def "v1beta1 assuredworkloadsprojectsorganizationslocationsworkloadsanalyzeWorkloadMove" [
+export def "v1beta1 move-analyze-workload-by-project-target" [
   project: string
   target: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -528,7 +537,7 @@ export def "v1beta1 assuredworkloadsprojectsorganizationslocationsworkloadsanaly
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "source" $qp_source "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project: $project, target: $target} | format pattern "/v1beta1/{project}/{target}:analyzeWorkloadMove") $qp)
+  let full_url = (build-url $base ({project: (encode-path-segment $project), target: (encode-path-segment $target)} | format pattern "/v1beta1/{project}/{target}:analyzeWorkloadMove") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -538,7 +547,7 @@ export def "v1beta1 assuredworkloadsprojectsorganizationslocationsworkloadsanaly
 #
 # GET /v1beta1/{source}/{target}:analyzeWorkloadMove
 # operationId: assuredworkloads.organizations.locations.workloads.organizations.locations.workloads.analyzeWorkloadMove
-export def "v1beta1 assuredworkloadsorganizationslocationsworkloadsorganizationslocationsworkloadsanalyzeWorkloadMove" [
+export def "v1beta1 move-analyze-workload-by-source-target" [
   source: string
   target: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -565,7 +574,7 @@ export def "v1beta1 assuredworkloadsorganizationslocationsworkloadsorganizations
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "project" $project "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({source: $source, target: $target} | format pattern "/v1beta1/{source}/{target}:analyzeWorkloadMove") $qp)
+  let full_url = (build-url $base ({source: (encode-path-segment $source), target: (encode-path-segment $target)} | format pattern "/v1beta1/{source}/{target}:analyzeWorkloadMove") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

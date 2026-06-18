@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -82,7 +91,7 @@ def region-completer [] { ["1001 (SouthAfricaNorth)" "1002 (SouthAfricaWest)" "1
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "agent-telemetry post" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "agent-telemetry create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -103,7 +112,7 @@ export def commands []: nothing -> table {
 }
 
 # POST /api/v1/AgentTelemetry
-export def "agent-telemetry post" [
+export def "agent-telemetry create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -118,14 +127,15 @@ export def "agent-telemetry post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/AgentTelemetry")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /api/v1/AgentTelemetry/standalone
-export def "agent-telemetry-standalone post" [
+export def "agent-telemetry-standalone create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -140,10 +150,11 @@ export def "agent-telemetry-standalone post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/AgentTelemetry/standalone")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /api/v1/Agents/{family}
@@ -161,7 +172,7 @@ export def "agents get" [
 ]: nothing -> record<assetUri: string, family: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({family: $family} | format pattern "/api/v1/Agents/{family}"))
+  let full_url = (build-url $base ({family: (encode-path-segment $family)} | format pattern "/api/v1/Agents/{family}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -194,17 +205,17 @@ export def "environments get" [
 # POST /api/v1/Environments
 #
 # --billableOwner shape: {id?: string, login?: string, type?: "0 (User)"|"1 (Organization)"}
-# --connection shape: {connectionServiceUri?: string, connectionSessionId?: string, connectionSessionPath?: string, hostPublicKeys?: list, relayEndpoint?: string, relaySasToken?: string, sessionToken?: string, tunnelProperties?: record}
+# --connection shape: {connectionServiceUri?: string, connectionSessionId?: string, connectionSessionPath?: string, hostPublicKeys?: list<string>, relayEndpoint?: string, relaySasToken?: string, sessionToken?: string, tunnelProperties?: record}
 # --experimentalFeatures shape: {enableDynamicHttpsDetection?: bool, queueResourceAllocation?: bool, usePrebuildFastPathIfAvailable?: bool, usePrebuiltImages?: bool, useStorageV2?: bool}
 # --identity shape: {displayName?: string, id?: string, userName?: string}
 # --netmonCorrelationData shape: {billableOwnerCreatedAt?: string, billableOwnerDatabaseId?: string, billableOwnerGlobalRelayId?: string, billableOwnerPlan?: string, ownerCreatedAt?: string, ownerDatabaseId?: string, ownerGlobalRelayId?: string, ownerPlan?: string, repositoryCreatedAt?: string, repositoryDatabaseId?: string, repositoryGlobalRelayId?: string, repositoryPrivate?: bool}
 # --personalization shape: {dotfilesInstallCommand?: string, dotfilesRepository?: string, dotfilesTargetPath?: string}
-# --runtimeConstraints shape: {allowedPortPrivacySettings?: list, imageAllowList?: list}
+# --runtimeConstraints shape: {allowedPortPrivacySettings?: list<int>, imageAllowList?: list<string>}
 # --secrets item shape: {name?: string, type?: "1 (EnvironmentVariable)"|"2 (ContainerRegistry)", value?: string}
 # --seed shape: {cloneUrl?: string, gitConfig?: record, recurseClone?: bool, repository?: record, seedMoniker?: string, seedType?: string}
 @deprecated --flag location
 @deprecated --flag platform
-export def "environments post" [
+export def "environments create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -218,7 +229,7 @@ export def "environments post" [
   --analytics-tracking-id: string # nullable
   --auto-shutdown-delay-minutes: int # format: int32
   --billable-owner: record # shape: {id?: string, login?: string, type?: "0 (User)"|"1 (Organization)"}
-  --connection: record # shape: {connectionServiceUri?: string, connectionSessionId?: string, connectionSessionPath?: string, hostPublicKeys?: list, relayEndpoint?: string, relaySasToken?: string, sessionToken?: string, tunnelProperties?: record}
+  --connection: record # shape: {connectionServiceUri?: string, connectionSessionId?: string, connectionSessionPath?: string, hostPublicKeys?: list<string>, relayEndpoint?: string, relaySasToken?: string, sessionToken?: string, tunnelProperties?: record}
   --container-image: string # nullable
   --create-as-prebuild: oneof<nothing, bool>
   --dev-container-json: string # nullable
@@ -238,7 +249,7 @@ export def "environments post" [
   --personalization: record # shape: {dotfilesInstallCommand?: string, dotfilesRepository?: string, dotfilesTargetPath?: string}
   --plan-id: string # nullable
   --platform: string # DEPRECATED, nullable
-  --runtime-constraints: record # shape: {allowedPortPrivacySettings?: list, imageAllowList?: list}
+  --runtime-constraints: record # shape: {allowedPortPrivacySettings?: list<int>, imageAllowList?: list<string>}
   --secrets: list # nullable — item shape: {name?: string, type?: "1 (EnvironmentVariable)"|"2 (ContainerRegistry)", value?: string}
   --seed: record # shape: {cloneUrl?: string, gitConfig?: record, recurseClone?: bool, repository?: record, seedMoniker?: string, seedType?: string}
   --sku-name: string # nullable
@@ -252,11 +263,11 @@ export def "environments post" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "access" $access "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/Environments" $qp)
-  let body = {"analyticsTrackingId": $analytics_tracking_id, "autoShutdownDelayMinutes": $auto_shutdown_delay_minutes, "billableOwner": $billable_owner, "connection": $connection, "containerImage": $container_image, "createAsPrebuild": $create_as_prebuild, "devContainerJson": $dev_container_json, "devContainerPath": $dev_container_path, "experimentalFeatures": $experimental_features, "features": $features, "friendlyName": $friendly_name, "gitHubApiUrl": $git_hub_api_url, "gitHubAppUrl": $git_hub_app_url, "gitHubPfsAuthEndpoint": $git_hub_pfs_auth_endpoint, "githubEnvironmentEndpoint": $github_environment_endpoint, "hasDevcontainerJson": $has_devcontainer_json, "identity": $identity, "label": $label, "location": $location, "netmonCorrelationData": $netmon_correlation_data, "personalization": $personalization, "planId": $plan_id, "platform": $platform, "runtimeConstraints": $runtime_constraints, "secrets": $secrets, "seed": $seed, "skuName": $sku_name, "testAccount": $test_account, "type": $type, "userTier": $user_tier, "workingDirectory": $working_directory} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"analyticsTrackingId": $analytics_tracking_id, "autoShutdownDelayMinutes": $auto_shutdown_delay_minutes, "billableOwner": $billable_owner, "connection": $connection, "containerImage": $container_image, "createAsPrebuild": $create_as_prebuild, "devContainerJson": $dev_container_json, "devContainerPath": $dev_container_path, "experimentalFeatures": $experimental_features, "features": $features, "friendlyName": $friendly_name, "gitHubApiUrl": $git_hub_api_url, "gitHubAppUrl": $git_hub_app_url, "gitHubPfsAuthEndpoint": $git_hub_pfs_auth_endpoint, "githubEnvironmentEndpoint": $github_environment_endpoint, "hasDevcontainerJson": $has_devcontainer_json, "identity": $identity, "label": $label, "location": $location, "netmonCorrelationData": $netmon_correlation_data, "personalization": $personalization, "planId": $plan_id, "platform": $platform, "runtimeConstraints": $runtime_constraints, "secrets": $secrets, "seed": $seed, "skuName": $sku_name, "testAccount": $test_account, "type": $type, "userTier": $user_tier, "workingDirectory": $working_directory} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DELETE /api/v1/Environments/{environmentId}
@@ -273,7 +284,7 @@ export def "environments delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({environment_id: $environment_id} | format pattern "/api/v1/Environments/{environment_id}"))
+  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id)} | format pattern "/api/v1/Environments/{environment_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -282,7 +293,7 @@ export def "environments delete" [
 # GET /api/v1/Environments/{environmentId}
 #
 # operationId: GetEnvironmentRoute
-export def "environments get-environment-route" [
+export def "environments get-route" [
   environment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -300,7 +311,7 @@ export def "environments get-environment-route" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "connect" $connect "scalar") (serialize-qp "pfConnect" $pf_connect "scalar") (serialize-qp "deleted" $deleted "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({environment_id: $environment_id} | format pattern "/api/v1/Environments/{environment_id}") $qp)
+  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id)} | format pattern "/api/v1/Environments/{environment_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -308,8 +319,8 @@ export def "environments get-environment-route" [
 
 # PATCH /api/v1/Environments/{environmentId}
 #
-# --failoverDetails shape: {failoverEnabled?: bool, failoverRegion?: "101 (EastAsia)"|"102 (SouthEastAsia)"|"201 (AustraliaCentral)"|"202 (AustraliaCentral2)"|"203 (AustraliaEast)"|"205 (AustraliaSouthEast)"|"301 (BrazilSouth)"|"401 (CanadaCentral)"|"402 (CanadaEast)"|"501 (NorthEurope)"|"502 (WestEurope)"|"601 (FranceCentral)"|"602 (FranceSouth)"|"701 (CentralIndia)"|"702 (SouthIndia)"|"703 (WestIndia)"|"801 (JapanEast)"|"802 (JapanWest)"|"901 (KoreaCentral)"|"902 (KoreaSouth)"|"1001 (SouthAfricaNorth)"|"1002 (SouthAfricaWest)"|"1201 (UaeCentral)"|"1202 (UaeNorth)"|"1401 (UkSouth)"|"1402 (UkWest)"|"1501 (CentralUs)"|"1502 (EastUs)"|"1503 (EastUs2)"|"1504 (NorthCentralUs)"|"1505 (SouthCentralUs)"|"1506 (WestCentralUs)"|"1507 (WestUs)"|"1508 (WestUs2)"|"1509 (WestUs3)"|"1601 (CentralUsEuap)"|"1602 (EastUs2Euap)"|"1701 (SwitzerlandNorth)"|"1702 (SwitzerlandWest)"|"1801 (GermanyNorth)"|"1802 (GermanyWestCentral)"|"1901 (NorwayWest)"|"1902 (NorwayEast)"}
-export def "environments patch" [
+# --failoverDetails shape: {failoverEnabled?: bool, ... (1 more fields)}
+export def "environments update" [
   environment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -321,7 +332,7 @@ export def "environments patch" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --auto-shutdown-delay-minutes: int # nullable, format: int32
-  --failover-details: record # shape: {failoverEnabled?: bool, failoverRegion?: "101 (EastAsia)"|"102 (SouthEastAsia)"|"201 (AustraliaCentral)"|"202 (AustraliaCentral2)"|"203 (AustraliaEast)"|"205 (AustraliaSouthEast)"|"301 (BrazilSouth)"|"401 (CanadaCentral)"|"402 (CanadaEast)"|"501 (NorthEurope)"|"502 (WestEurope)"|"601 (FranceCentral)"|"602 (FranceSouth)"|"701 (CentralIndia)"|"702 (SouthIndia)"|"703 (WestIndia)"|"801 (JapanEast)"|"802 (JapanWest)"|"901 (KoreaCentral)"|"902 (KoreaSouth)"|"1001 (SouthAfricaNorth)"|"1002 (SouthAfricaWest)"|"1201 (UaeCentral)"|"1202 (UaeNorth)"|"1401 (UkSouth)"|"1402 (UkWest)"|"1501 (CentralUs)"|"1502 (EastUs)"|"1503 (EastUs2)"|"1504 (NorthCentralUs)"|"1505 (SouthCentralUs)"|"1506 (WestCentralUs)"|"1507 (WestUs)"|"1508 (WestUs2)"|"1509 (WestUs3)"|"1601 (CentralUsEuap)"|"1602 (EastUs2Euap)"|"1701 (SwitzerlandNorth)"|"1702 (SwitzerlandWest)"|"1801 (GermanyNorth)"|"1802 (GermanyWestCentral)"|"1901 (NorwayWest)"|"1902 (NorwayEast)"}
+  --failover-details: record # shape: {failoverEnabled?: bool, ... (1 more fields)}
   --friendly-name: string # nullable
   --plan-access-token: string # nullable
   --plan-id: string # nullable
@@ -330,19 +341,19 @@ export def "environments patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({environment_id: $environment_id} | format pattern "/api/v1/Environments/{environment_id}"))
-  let body = {"autoShutdownDelayMinutes": $auto_shutdown_delay_minutes, "failoverDetails": $failover_details, "friendlyName": $friendly_name, "planAccessToken": $plan_access_token, "planId": $plan_id, "skuName": $sku_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id)} | format pattern "/api/v1/Environments/{environment_id}"))
+  let req_body = {"autoShutdownDelayMinutes": $auto_shutdown_delay_minutes, "failoverDetails": $failover_details, "friendlyName": $friendly_name, "planAccessToken": $plan_access_token, "planId": $plan_id, "skuName": $sku_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /api/v1/Environments/{environmentId}/_callback
 #
 # operationId: UpdateEnvironmentRoute
 # --payload shape: {sessionId?: string, sessionPath?: string}
-export def "environments-callback update-environment-route" [
+export def "environments-callback update-route" [
   environment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -359,12 +370,12 @@ export def "environments-callback update-environment-route" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({environment_id: $environment_id} | format pattern "/api/v1/Environments/{environment_id}/_callback"))
-  let body = {"payload": $payload, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id)} | format pattern "/api/v1/Environments/{environment_id}/_callback"))
+  let req_body = {"payload": $payload, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /api/v1/Environments/{environmentId}/archive
@@ -382,14 +393,14 @@ export def "environments-archive get" [
 ]: nothing -> record<accessToken: string, active: string, autoShutdownDelayMinutes: int, billableOwnerType: int, clientUsage: record<sessionId: string, usageData: record>, connection: record<connectionServiceUri: string, connectionSessionId: string, connectionSessionPath: string, hostPublicKeys: list<string>, relayEndpoint: string, relaySasToken: string, sessionToken: string, tunnelProperties: record<clusterId: string, connectAccessToken: string, domain: string, managePortsAccessToken: string, serviceUri: string, tunnelId: string, tunnelName: string>>, container: record<id: string, schemaVersion: string>, containerImage: string, createFromPrebuild: bool, created: string, displayStorageUtilizationInKb: bool, exportedBlobUrl: string, failoverDetails: record<failoverEnabled: bool, failoverRegion: int>, features: record, friendlyName: string, gitStatus: record<ahead: int, behind: int, branch: string, commit: string, hasUncommittedChanges: bool, hasUnpushedChanges: bool, noGitRepo: bool>, id: string, lastStateUpdateReason: string, lastUsed: string, location: string, organizationId: string, ownerId: string, planId: string, platform: string, portForwardingConnection: record<connectionServiceUri: string, connectionSessionId: string, connectionSessionPath: string, hostPublicKeys: list<string>, relayEndpoint: string, relaySasToken: string, sessionToken: string, tunnelProperties: record<clusterId: string, connectAccessToken: string, domain: string, managePortsAccessToken: string, serviceUri: string, tunnelId: string, tunnelName: string>>, prebuildType: string, recentFolders: list<string>, resourceTier: int, runtimeConstraints: record<allowedPortPrivacySettings: list<int>, imageAllowList: list<string>>, seed: record<cloneUrl: string, gitConfig: record<userEmail: string, userName: string>, recurseClone: bool, repository: record<branchName: string, commitId: string, createType: string, diskUsage: string, name: string, owner: string, prebuildHash: string, repoId: int, url: string>, seedMoniker: string, seedType: string>, skuDisplayName: string, skuName: string, state: string, storageUtilizationInKb: int, subscriptionData: record<computeQuota: int, computeUsage: int, subscriptionId: string, subscriptionState: string>, templateStatus: string, type: string, updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({environment_id: $environment_id} | format pattern "/api/v1/Environments/{environment_id}/archive"))
+  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id)} | format pattern "/api/v1/Environments/{environment_id}/archive"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /api/v1/Environments/{environmentId}/archive
-export def "environments-archive post" [
+export def "environments-archive create" [
   environment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -403,14 +414,14 @@ export def "environments-archive post" [
 ]: nothing -> record<accessToken: string, active: string, autoShutdownDelayMinutes: int, billableOwnerType: int, clientUsage: record<sessionId: string, usageData: record>, connection: record<connectionServiceUri: string, connectionSessionId: string, connectionSessionPath: string, hostPublicKeys: list<string>, relayEndpoint: string, relaySasToken: string, sessionToken: string, tunnelProperties: record<clusterId: string, connectAccessToken: string, domain: string, managePortsAccessToken: string, serviceUri: string, tunnelId: string, tunnelName: string>>, container: record<id: string, schemaVersion: string>, containerImage: string, createFromPrebuild: bool, created: string, displayStorageUtilizationInKb: bool, exportedBlobUrl: string, failoverDetails: record<failoverEnabled: bool, failoverRegion: int>, features: record, friendlyName: string, gitStatus: record<ahead: int, behind: int, branch: string, commit: string, hasUncommittedChanges: bool, hasUnpushedChanges: bool, noGitRepo: bool>, id: string, lastStateUpdateReason: string, lastUsed: string, location: string, organizationId: string, ownerId: string, planId: string, platform: string, portForwardingConnection: record<connectionServiceUri: string, connectionSessionId: string, connectionSessionPath: string, hostPublicKeys: list<string>, relayEndpoint: string, relaySasToken: string, sessionToken: string, tunnelProperties: record<clusterId: string, connectAccessToken: string, domain: string, managePortsAccessToken: string, serviceUri: string, tunnelId: string, tunnelName: string>>, prebuildType: string, recentFolders: list<string>, resourceTier: int, runtimeConstraints: record<allowedPortPrivacySettings: list<int>, imageAllowList: list<string>>, seed: record<cloneUrl: string, gitConfig: record<userEmail: string, userName: string>, recurseClone: bool, repository: record<branchName: string, commitId: string, createType: string, diskUsage: string, name: string, owner: string, prebuildHash: string, repoId: int, url: string>, seedMoniker: string, seedType: string>, skuDisplayName: string, skuName: string, state: string, storageUtilizationInKb: int, subscriptionData: record<computeQuota: int, computeUsage: int, subscriptionId: string, subscriptionState: string>, templateStatus: string, type: string, updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({environment_id: $environment_id} | format pattern "/api/v1/Environments/{environment_id}/archive"))
+  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id)} | format pattern "/api/v1/Environments/{environment_id}/archive"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /api/v1/Environments/{environmentId}/export
-export def "environments-export post" [
+export def "environments-export create" [
   environment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -424,14 +435,14 @@ export def "environments-export post" [
 ]: nothing -> record<accessToken: string, active: string, autoShutdownDelayMinutes: int, billableOwnerType: int, clientUsage: record<sessionId: string, usageData: record>, connection: record<connectionServiceUri: string, connectionSessionId: string, connectionSessionPath: string, hostPublicKeys: list<string>, relayEndpoint: string, relaySasToken: string, sessionToken: string, tunnelProperties: record<clusterId: string, connectAccessToken: string, domain: string, managePortsAccessToken: string, serviceUri: string, tunnelId: string, tunnelName: string>>, container: record<id: string, schemaVersion: string>, containerImage: string, createFromPrebuild: bool, created: string, displayStorageUtilizationInKb: bool, exportedBlobUrl: string, failoverDetails: record<failoverEnabled: bool, failoverRegion: int>, features: record, friendlyName: string, gitStatus: record<ahead: int, behind: int, branch: string, commit: string, hasUncommittedChanges: bool, hasUnpushedChanges: bool, noGitRepo: bool>, id: string, lastStateUpdateReason: string, lastUsed: string, location: string, organizationId: string, ownerId: string, planId: string, platform: string, portForwardingConnection: record<connectionServiceUri: string, connectionSessionId: string, connectionSessionPath: string, hostPublicKeys: list<string>, relayEndpoint: string, relaySasToken: string, sessionToken: string, tunnelProperties: record<clusterId: string, connectAccessToken: string, domain: string, managePortsAccessToken: string, serviceUri: string, tunnelId: string, tunnelName: string>>, prebuildType: string, recentFolders: list<string>, resourceTier: int, runtimeConstraints: record<allowedPortPrivacySettings: list<int>, imageAllowList: list<string>>, seed: record<cloneUrl: string, gitConfig: record<userEmail: string, userName: string>, recurseClone: bool, repository: record<branchName: string, commitId: string, createType: string, diskUsage: string, name: string, owner: string, prebuildHash: string, repoId: int, url: string>, seedMoniker: string, seedType: string>, skuDisplayName: string, skuName: string, state: string, storageUtilizationInKb: int, subscriptionData: record<computeQuota: int, computeUsage: int, subscriptionId: string, subscriptionState: string>, templateStatus: string, type: string, updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({environment_id: $environment_id} | format pattern "/api/v1/Environments/{environment_id}/export"))
+  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id)} | format pattern "/api/v1/Environments/{environment_id}/export"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # PATCH /api/v1/Environments/{environmentId}/folder
-export def "environments-folder patch" [
+export def "environments-folder update" [
   environment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -442,17 +453,17 @@ export def "environments-folder patch" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --recent-folder-paths: list # nullable
+  --recent-folder-paths: list<string> # nullable
 ]: any -> record<accessToken: string, active: string, autoShutdownDelayMinutes: int, billableOwnerType: int, clientUsage: record<sessionId: string, usageData: record>, connection: record<connectionServiceUri: string, connectionSessionId: string, connectionSessionPath: string, hostPublicKeys: list<string>, relayEndpoint: string, relaySasToken: string, sessionToken: string, tunnelProperties: record<clusterId: string, connectAccessToken: string, domain: string, managePortsAccessToken: string, serviceUri: string, tunnelId: string, tunnelName: string>>, container: record<id: string, schemaVersion: string>, containerImage: string, createFromPrebuild: bool, created: string, displayStorageUtilizationInKb: bool, exportedBlobUrl: string, failoverDetails: record<failoverEnabled: bool, failoverRegion: int>, features: record, friendlyName: string, gitStatus: record<ahead: int, behind: int, branch: string, commit: string, hasUncommittedChanges: bool, hasUnpushedChanges: bool, noGitRepo: bool>, id: string, lastStateUpdateReason: string, lastUsed: string, location: string, organizationId: string, ownerId: string, planId: string, platform: string, portForwardingConnection: record<connectionServiceUri: string, connectionSessionId: string, connectionSessionPath: string, hostPublicKeys: list<string>, relayEndpoint: string, relaySasToken: string, sessionToken: string, tunnelProperties: record<clusterId: string, connectAccessToken: string, domain: string, managePortsAccessToken: string, serviceUri: string, tunnelId: string, tunnelName: string>>, prebuildType: string, recentFolders: list<string>, resourceTier: int, runtimeConstraints: record<allowedPortPrivacySettings: list<int>, imageAllowList: list<string>>, seed: record<cloneUrl: string, gitConfig: record<userEmail: string, userName: string>, recurseClone: bool, repository: record<branchName: string, commitId: string, createType: string, diskUsage: string, name: string, owner: string, prebuildHash: string, repoId: int, url: string>, seedMoniker: string, seedType: string>, skuDisplayName: string, skuName: string, state: string, storageUtilizationInKb: int, subscriptionData: record<computeQuota: int, computeUsage: int, subscriptionId: string, subscriptionState: string>, templateStatus: string, type: string, updated: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({environment_id: $environment_id} | format pattern "/api/v1/Environments/{environment_id}/folder"))
-  let body = {"recentFolderPaths": $recent_folder_paths} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id)} | format pattern "/api/v1/Environments/{environment_id}/folder"))
+  let req_body = {"recentFolderPaths": $recent_folder_paths} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /api/v1/Environments/{environmentId}/heartbeattoken
@@ -470,14 +481,14 @@ export def "environments-heartbeattoken get" [
 ]: nothing -> record<accessToken: string, active: string, autoShutdownDelayMinutes: int, billableOwnerType: int, clientUsage: record<sessionId: string, usageData: record>, connection: record<connectionServiceUri: string, connectionSessionId: string, connectionSessionPath: string, hostPublicKeys: list<string>, relayEndpoint: string, relaySasToken: string, sessionToken: string, tunnelProperties: record<clusterId: string, connectAccessToken: string, domain: string, managePortsAccessToken: string, serviceUri: string, tunnelId: string, tunnelName: string>>, container: record<id: string, schemaVersion: string>, containerImage: string, createFromPrebuild: bool, created: string, displayStorageUtilizationInKb: bool, exportedBlobUrl: string, failoverDetails: record<failoverEnabled: bool, failoverRegion: int>, features: record, friendlyName: string, gitStatus: record<ahead: int, behind: int, branch: string, commit: string, hasUncommittedChanges: bool, hasUnpushedChanges: bool, noGitRepo: bool>, id: string, lastStateUpdateReason: string, lastUsed: string, location: string, organizationId: string, ownerId: string, planId: string, platform: string, portForwardingConnection: record<connectionServiceUri: string, connectionSessionId: string, connectionSessionPath: string, hostPublicKeys: list<string>, relayEndpoint: string, relaySasToken: string, sessionToken: string, tunnelProperties: record<clusterId: string, connectAccessToken: string, domain: string, managePortsAccessToken: string, serviceUri: string, tunnelId: string, tunnelName: string>>, prebuildType: string, recentFolders: list<string>, resourceTier: int, runtimeConstraints: record<allowedPortPrivacySettings: list<int>, imageAllowList: list<string>>, seed: record<cloneUrl: string, gitConfig: record<userEmail: string, userName: string>, recurseClone: bool, repository: record<branchName: string, commitId: string, createType: string, diskUsage: string, name: string, owner: string, prebuildHash: string, repoId: int, url: string>, seedMoniker: string, seedType: string>, skuDisplayName: string, skuName: string, state: string, storageUtilizationInKb: int, subscriptionData: record<computeQuota: int, computeUsage: int, subscriptionId: string, subscriptionState: string>, templateStatus: string, type: string, updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({environment_id: $environment_id} | format pattern "/api/v1/Environments/{environment_id}/heartbeattoken"))
+  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id)} | format pattern "/api/v1/Environments/{environment_id}/heartbeattoken"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /api/v1/Environments/{environmentId}/notify
-export def "environments-notify post" [
+export def "environments-notify create" [
   environment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -496,12 +507,12 @@ export def "environments-notify post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({environment_id: $environment_id} | format pattern "/api/v1/Environments/{environment_id}/notify"))
-  let body = {"details": $details, "displayMode": $display_mode, "message": $message, "modal": $modal} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id)} | format pattern "/api/v1/Environments/{environment_id}/notify"))
+  let req_body = {"details": $details, "displayMode": $display_mode, "message": $message, "modal": $modal} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DELETE /api/v1/Environments/{environmentId}/ports/{port}
@@ -519,14 +530,14 @@ export def "environments-ports delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({environment_id: $environment_id, port: $port} | format pattern "/api/v1/Environments/{environment_id}/ports/{port}"))
+  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id), port: (encode-path-segment $port)} | format pattern "/api/v1/Environments/{environment_id}/ports/{port}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # PUT /api/v1/Environments/{environmentId}/ports/{port}
-export def "environments-ports put" [
+export def "environments-ports update" [
   environment_id: string
   port: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -543,16 +554,16 @@ export def "environments-ports put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({environment_id: $environment_id, port: $port} | format pattern "/api/v1/Environments/{environment_id}/ports/{port}"))
-  let body = {"privacy": $privacy, "tunnelType": $tunnel_type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id), port: (encode-path-segment $port)} | format pattern "/api/v1/Environments/{environment_id}/ports/{port}"))
+  let req_body = {"privacy": $privacy, "tunnelType": $tunnel_type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # PATCH /api/v1/Environments/{environmentId}/restore
-export def "environments-restore patch" [
+export def "environments-restore update" [
   environment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -565,7 +576,7 @@ export def "environments-restore patch" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({environment_id: $environment_id} | format pattern "/api/v1/Environments/{environment_id}/restore"))
+  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id)} | format pattern "/api/v1/Environments/{environment_id}/restore"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -574,7 +585,7 @@ export def "environments-restore patch" [
 # PUT /api/v1/Environments/{environmentId}/secrets
 #
 # --secrets item shape: {name?: string, type?: "1 (EnvironmentVariable)"|"2 (ContainerRegistry)", value?: string}
-export def "environments-secrets put" [
+export def "environments-secrets update" [
   environment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -590,16 +601,16 @@ export def "environments-secrets put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({environment_id: $environment_id} | format pattern "/api/v1/Environments/{environment_id}/secrets"))
-  let body = {"secrets": $secrets} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id)} | format pattern "/api/v1/Environments/{environment_id}/secrets"))
+  let req_body = {"secrets": $secrets} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /api/v1/Environments/{environmentId}/shutdown
-export def "environments-shutdown post" [
+export def "environments-shutdown create" [
   environment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -613,14 +624,14 @@ export def "environments-shutdown post" [
 ]: nothing -> record<accessToken: string, active: string, autoShutdownDelayMinutes: int, billableOwnerType: int, clientUsage: record<sessionId: string, usageData: record>, connection: record<connectionServiceUri: string, connectionSessionId: string, connectionSessionPath: string, hostPublicKeys: list<string>, relayEndpoint: string, relaySasToken: string, sessionToken: string, tunnelProperties: record<clusterId: string, connectAccessToken: string, domain: string, managePortsAccessToken: string, serviceUri: string, tunnelId: string, tunnelName: string>>, container: record<id: string, schemaVersion: string>, containerImage: string, createFromPrebuild: bool, created: string, displayStorageUtilizationInKb: bool, exportedBlobUrl: string, failoverDetails: record<failoverEnabled: bool, failoverRegion: int>, features: record, friendlyName: string, gitStatus: record<ahead: int, behind: int, branch: string, commit: string, hasUncommittedChanges: bool, hasUnpushedChanges: bool, noGitRepo: bool>, id: string, lastStateUpdateReason: string, lastUsed: string, location: string, organizationId: string, ownerId: string, planId: string, platform: string, portForwardingConnection: record<connectionServiceUri: string, connectionSessionId: string, connectionSessionPath: string, hostPublicKeys: list<string>, relayEndpoint: string, relaySasToken: string, sessionToken: string, tunnelProperties: record<clusterId: string, connectAccessToken: string, domain: string, managePortsAccessToken: string, serviceUri: string, tunnelId: string, tunnelName: string>>, prebuildType: string, recentFolders: list<string>, resourceTier: int, runtimeConstraints: record<allowedPortPrivacySettings: list<int>, imageAllowList: list<string>>, seed: record<cloneUrl: string, gitConfig: record<userEmail: string, userName: string>, recurseClone: bool, repository: record<branchName: string, commitId: string, createType: string, diskUsage: string, name: string, owner: string, prebuildHash: string, repoId: int, url: string>, seedMoniker: string, seedType: string>, skuDisplayName: string, skuName: string, state: string, storageUtilizationInKb: int, subscriptionData: record<computeQuota: int, computeUsage: int, subscriptionId: string, subscriptionState: string>, templateStatus: string, type: string, updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({environment_id: $environment_id} | format pattern "/api/v1/Environments/{environment_id}/shutdown"))
+  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id)} | format pattern "/api/v1/Environments/{environment_id}/shutdown"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /api/v1/Environments/{environmentId}/start
-export def "environments-start post" [
+export def "environments-start create" [
   environment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -636,7 +647,7 @@ export def "environments-start post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "access" $access "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({environment_id: $environment_id} | format pattern "/api/v1/Environments/{environment_id}/start") $qp)
+  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id)} | format pattern "/api/v1/Environments/{environment_id}/start") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -656,7 +667,7 @@ export def "environments-state get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({environment_id: $environment_id} | format pattern "/api/v1/Environments/{environment_id}/state"))
+  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id)} | format pattern "/api/v1/Environments/{environment_id}/state"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -677,14 +688,14 @@ export def "environments-updates get" [
 ]: nothing -> record<accessToken: string, active: string, autoShutdownDelayMinutes: int, billableOwnerType: int, clientUsage: record<sessionId: string, usageData: record>, connection: record<connectionServiceUri: string, connectionSessionId: string, connectionSessionPath: string, hostPublicKeys: list<string>, relayEndpoint: string, relaySasToken: string, sessionToken: string, tunnelProperties: record<clusterId: string, connectAccessToken: string, domain: string, managePortsAccessToken: string, serviceUri: string, tunnelId: string, tunnelName: string>>, container: record<id: string, schemaVersion: string>, containerImage: string, createFromPrebuild: bool, created: string, displayStorageUtilizationInKb: bool, exportedBlobUrl: string, failoverDetails: record<failoverEnabled: bool, failoverRegion: int>, features: record, friendlyName: string, gitStatus: record<ahead: int, behind: int, branch: string, commit: string, hasUncommittedChanges: bool, hasUnpushedChanges: bool, noGitRepo: bool>, id: string, lastStateUpdateReason: string, lastUsed: string, location: string, organizationId: string, ownerId: string, planId: string, platform: string, portForwardingConnection: record<connectionServiceUri: string, connectionSessionId: string, connectionSessionPath: string, hostPublicKeys: list<string>, relayEndpoint: string, relaySasToken: string, sessionToken: string, tunnelProperties: record<clusterId: string, connectAccessToken: string, domain: string, managePortsAccessToken: string, serviceUri: string, tunnelId: string, tunnelName: string>>, prebuildType: string, recentFolders: list<string>, resourceTier: int, runtimeConstraints: record<allowedPortPrivacySettings: list<int>, imageAllowList: list<string>>, seed: record<cloneUrl: string, gitConfig: record<userEmail: string, userName: string>, recurseClone: bool, repository: record<branchName: string, commitId: string, createType: string, diskUsage: string, name: string, owner: string, prebuildHash: string, repoId: int, url: string>, seedMoniker: string, seedType: string>, skuDisplayName: string, skuName: string, state: string, storageUtilizationInKb: int, subscriptionData: record<computeQuota: int, computeUsage: int, subscriptionId: string, subscriptionState: string>, templateStatus: string, type: string, updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({environment_id: $environment_id} | format pattern "/api/v1/Environments/{environment_id}/updates"))
+  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id)} | format pattern "/api/v1/Environments/{environment_id}/updates"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /api/v1/GenevaActions/Billing/resend
-export def "geneva-actions-billing-resend post" [
+export def "geneva-actions-billing-resend create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -701,11 +712,11 @@ export def "geneva-actions-billing-resend post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/GenevaActions/Billing/resend")
-  let body = {"endTime": $end_time, "startTime": $start_time} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"endTime": $end_time, "startTime": $start_time} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /api/v1/GenevaActions/Billing/{environmentId}
@@ -726,7 +737,7 @@ export def "geneva-actions-billing get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "startTime" $start_time "scalar") (serialize-qp "endTime" $end_time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({environment_id: $environment_id} | format pattern "/api/v1/GenevaActions/Billing/{environment_id}") $qp)
+  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id)} | format pattern "/api/v1/GenevaActions/Billing/{environment_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -747,14 +758,14 @@ export def "geneva-actions-billing-state-changes get" [
 ]: nothing -> record<environment: record<id: string, name: string, sku: record<name: string, tier: string>, userId: string>, id: string, newValue: int, oldValue: int, partitionKey: string, time: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({environment_id: $environment_id} | format pattern "/api/v1/GenevaActions/Billing/{environment_id}/state-changes"))
+  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id)} | format pattern "/api/v1/GenevaActions/Billing/{environment_id}/state-changes"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /api/v1/GenevaActions/Billing/{environmentId}/state-changes
-export def "geneva-actions-billing-state-changes post" [
+export def "geneva-actions-billing-state-changes create" [
   environment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -772,16 +783,16 @@ export def "geneva-actions-billing-state-changes post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({environment_id: $environment_id} | format pattern "/api/v1/GenevaActions/Billing/{environment_id}/state-changes"))
-  let body = {"newValue": $new_value, "oldValue": $old_value, "time": $time} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id)} | format pattern "/api/v1/GenevaActions/Billing/{environment_id}/state-changes"))
+  let req_body = {"newValue": $new_value, "oldValue": $old_value, "time": $time} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /api/v1/GenevaActions/Configuration/{target}
-export def "geneva-actions-configuration post" [
+export def "geneva-actions-configuration create" [
   target: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -799,12 +810,12 @@ export def "geneva-actions-configuration post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({target: $target} | format pattern "/api/v1/GenevaActions/Configuration/{target}"))
-  let body = {"comment": $comment, "key": $key, "value": $value} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({target: (encode-path-segment $target)} | format pattern "/api/v1/GenevaActions/Configuration/{target}"))
+  let req_body = {"comment": $comment, "key": $key, "value": $value} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DELETE /api/v1/GenevaActions/Configuration/{target}/{key}
@@ -822,7 +833,7 @@ export def "geneva-actions-configuration delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({target: $target, key: $key} | format pattern "/api/v1/GenevaActions/Configuration/{target}/{key}"))
+  let full_url = (build-url $base ({target: (encode-path-segment $target), key: (encode-path-segment $key)} | format pattern "/api/v1/GenevaActions/Configuration/{target}/{key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -844,7 +855,7 @@ export def "geneva-actions-configuration get" [
 ]: nothing -> record<comment: string, key: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({target: $target, key: $key} | format pattern "/api/v1/GenevaActions/Configuration/{target}/{key}"))
+  let full_url = (build-url $base ({target: (encode-path-segment $target), key: (encode-path-segment $key)} | format pattern "/api/v1/GenevaActions/Configuration/{target}/{key}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -866,7 +877,7 @@ export def "geneva-actions-environments delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "deletionType" $deletion_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({environment_id: $environment_id} | format pattern "/api/v1/GenevaActions/Environments/{environment_id}") $qp)
+  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id)} | format pattern "/api/v1/GenevaActions/Environments/{environment_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -887,14 +898,14 @@ export def "geneva-actions-environments get" [
 ]: nothing -> record<accessToken: string, active: string, autoShutdownDelayMinutes: int, billableOwnerType: int, clientUsage: record<sessionId: string, usageData: record>, connection: record<connectionServiceUri: string, connectionSessionId: string, connectionSessionPath: string, hostPublicKeys: list<string>, relayEndpoint: string, relaySasToken: string, sessionToken: string, tunnelProperties: record<clusterId: string, connectAccessToken: string, domain: string, managePortsAccessToken: string, serviceUri: string, tunnelId: string, tunnelName: string>>, container: record<id: string, schemaVersion: string>, containerImage: string, createFromPrebuild: bool, created: string, displayStorageUtilizationInKb: bool, exportedBlobUrl: string, failoverDetails: record<failoverEnabled: bool, failoverRegion: int>, features: record, friendlyName: string, gitStatus: record<ahead: int, behind: int, branch: string, commit: string, hasUncommittedChanges: bool, hasUnpushedChanges: bool, noGitRepo: bool>, id: string, lastStateUpdateReason: string, lastUsed: string, location: string, organizationId: string, ownerId: string, planId: string, platform: string, portForwardingConnection: record<connectionServiceUri: string, connectionSessionId: string, connectionSessionPath: string, hostPublicKeys: list<string>, relayEndpoint: string, relaySasToken: string, sessionToken: string, tunnelProperties: record<clusterId: string, connectAccessToken: string, domain: string, managePortsAccessToken: string, serviceUri: string, tunnelId: string, tunnelName: string>>, prebuildType: string, recentFolders: list<string>, resourceTier: int, runtimeConstraints: record<allowedPortPrivacySettings: list<int>, imageAllowList: list<string>>, seed: record<cloneUrl: string, gitConfig: record<userEmail: string, userName: string>, recurseClone: bool, repository: record<branchName: string, commitId: string, createType: string, diskUsage: string, name: string, owner: string, prebuildHash: string, repoId: int, url: string>, seedMoniker: string, seedType: string>, skuDisplayName: string, skuName: string, state: string, storageUtilizationInKb: int, subscriptionData: record<computeQuota: int, computeUsage: int, subscriptionId: string, subscriptionState: string>, templateStatus: string, type: string, updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({environment_id: $environment_id} | format pattern "/api/v1/GenevaActions/Environments/{environment_id}"))
+  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id)} | format pattern "/api/v1/GenevaActions/Environments/{environment_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # PUT /api/v1/GenevaActions/Environments/{environmentId}/archive
-export def "geneva-actions-environments-archive put" [
+export def "geneva-actions-environments-archive update" [
   environment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -908,7 +919,7 @@ export def "geneva-actions-environments-archive put" [
 ]: nothing -> record<accessToken: string, active: string, autoShutdownDelayMinutes: int, billableOwnerType: int, clientUsage: record<sessionId: string, usageData: record>, connection: record<connectionServiceUri: string, connectionSessionId: string, connectionSessionPath: string, hostPublicKeys: list<string>, relayEndpoint: string, relaySasToken: string, sessionToken: string, tunnelProperties: record<clusterId: string, connectAccessToken: string, domain: string, managePortsAccessToken: string, serviceUri: string, tunnelId: string, tunnelName: string>>, container: record<id: string, schemaVersion: string>, containerImage: string, createFromPrebuild: bool, created: string, displayStorageUtilizationInKb: bool, exportedBlobUrl: string, failoverDetails: record<failoverEnabled: bool, failoverRegion: int>, features: record, friendlyName: string, gitStatus: record<ahead: int, behind: int, branch: string, commit: string, hasUncommittedChanges: bool, hasUnpushedChanges: bool, noGitRepo: bool>, id: string, lastStateUpdateReason: string, lastUsed: string, location: string, organizationId: string, ownerId: string, planId: string, platform: string, portForwardingConnection: record<connectionServiceUri: string, connectionSessionId: string, connectionSessionPath: string, hostPublicKeys: list<string>, relayEndpoint: string, relaySasToken: string, sessionToken: string, tunnelProperties: record<clusterId: string, connectAccessToken: string, domain: string, managePortsAccessToken: string, serviceUri: string, tunnelId: string, tunnelName: string>>, prebuildType: string, recentFolders: list<string>, resourceTier: int, runtimeConstraints: record<allowedPortPrivacySettings: list<int>, imageAllowList: list<string>>, seed: record<cloneUrl: string, gitConfig: record<userEmail: string, userName: string>, recurseClone: bool, repository: record<branchName: string, commitId: string, createType: string, diskUsage: string, name: string, owner: string, prebuildHash: string, repoId: int, url: string>, seedMoniker: string, seedType: string>, skuDisplayName: string, skuName: string, state: string, storageUtilizationInKb: int, subscriptionData: record<computeQuota: int, computeUsage: int, subscriptionId: string, subscriptionState: string>, templateStatus: string, type: string, updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({environment_id: $environment_id} | format pattern "/api/v1/GenevaActions/Environments/{environment_id}/archive"))
+  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id)} | format pattern "/api/v1/GenevaActions/Environments/{environment_id}/archive"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -930,14 +941,14 @@ export def "geneva-actions-environments-archived-storage-sas get" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({environment_id: $environment_id, target_blob: $target_blob} | format pattern "/api/v1/GenevaActions/Environments/{environment_id}/archived_storage_sas/{target_blob}"))
+  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id), target_blob: (encode-path-segment $target_blob)} | format pattern "/api/v1/GenevaActions/Environments/{environment_id}/archived_storage_sas/{target_blob}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # PUT /api/v1/GenevaActions/Environments/{environmentId}/shutdown
-export def "geneva-actions-environments-shutdown put" [
+export def "geneva-actions-environments-shutdown update" [
   environment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -951,14 +962,14 @@ export def "geneva-actions-environments-shutdown put" [
 ]: nothing -> record<accessToken: string, active: string, autoShutdownDelayMinutes: int, billableOwnerType: int, clientUsage: record<sessionId: string, usageData: record>, connection: record<connectionServiceUri: string, connectionSessionId: string, connectionSessionPath: string, hostPublicKeys: list<string>, relayEndpoint: string, relaySasToken: string, sessionToken: string, tunnelProperties: record<clusterId: string, connectAccessToken: string, domain: string, managePortsAccessToken: string, serviceUri: string, tunnelId: string, tunnelName: string>>, container: record<id: string, schemaVersion: string>, containerImage: string, createFromPrebuild: bool, created: string, displayStorageUtilizationInKb: bool, exportedBlobUrl: string, failoverDetails: record<failoverEnabled: bool, failoverRegion: int>, features: record, friendlyName: string, gitStatus: record<ahead: int, behind: int, branch: string, commit: string, hasUncommittedChanges: bool, hasUnpushedChanges: bool, noGitRepo: bool>, id: string, lastStateUpdateReason: string, lastUsed: string, location: string, organizationId: string, ownerId: string, planId: string, platform: string, portForwardingConnection: record<connectionServiceUri: string, connectionSessionId: string, connectionSessionPath: string, hostPublicKeys: list<string>, relayEndpoint: string, relaySasToken: string, sessionToken: string, tunnelProperties: record<clusterId: string, connectAccessToken: string, domain: string, managePortsAccessToken: string, serviceUri: string, tunnelId: string, tunnelName: string>>, prebuildType: string, recentFolders: list<string>, resourceTier: int, runtimeConstraints: record<allowedPortPrivacySettings: list<int>, imageAllowList: list<string>>, seed: record<cloneUrl: string, gitConfig: record<userEmail: string, userName: string>, recurseClone: bool, repository: record<branchName: string, commitId: string, createType: string, diskUsage: string, name: string, owner: string, prebuildHash: string, repoId: int, url: string>, seedMoniker: string, seedType: string>, skuDisplayName: string, skuName: string, state: string, storageUtilizationInKb: int, subscriptionData: record<computeQuota: int, computeUsage: int, subscriptionId: string, subscriptionState: string>, templateStatus: string, type: string, updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({environment_id: $environment_id} | format pattern "/api/v1/GenevaActions/Environments/{environment_id}/shutdown"))
+  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id)} | format pattern "/api/v1/GenevaActions/Environments/{environment_id}/shutdown"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /api/v1/GenevaActions/Environments/{environmentId}/upload/running/vm/logs
-export def "geneva-actions-environments-upload-running-vm-logs post" [
+export def "geneva-actions-environments-upload-running-vm-logs create" [
   environment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -972,14 +983,14 @@ export def "geneva-actions-environments-upload-running-vm-logs post" [
 ]: nothing -> record<containerName: string, message: string, pathInContainer: string, storageUri: string, vmResourceId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({environment_id: $environment_id} | format pattern "/api/v1/GenevaActions/Environments/{environment_id}/upload/running/vm/logs"))
+  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id)} | format pattern "/api/v1/GenevaActions/Environments/{environment_id}/upload/running/vm/logs"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /api/v1/GenevaActions/Pools/change-resource-deletion-setting
-export def "geneva-actions-pools-change-resource-deletion-setting post" [
+export def "geneva-actions-pools-change-resource-deletion-setting create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -999,15 +1010,15 @@ export def "geneva-actions-pools-change-resource-deletion-setting post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/GenevaActions/Pools/change-resource-deletion-setting")
-  let body = {"comment": $comment, "enabled": $enabled, "poolCode": $pool_code, "poolType": $pool_type, "region": $region} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"comment": $comment, "enabled": $enabled, "poolCode": $pool_code, "poolType": $pool_type, "region": $region} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /api/v1/GenevaActions/Pools/{poolCode}/rotate-pool
-export def "geneva-actions-pools-rotate-pool post" [
+export def "geneva-actions-pools-rotate-pool create" [
   pool_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1020,14 +1031,14 @@ export def "geneva-actions-pools-rotate-pool post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({pool_code: $pool_code} | format pattern "/api/v1/GenevaActions/Pools/{pool_code}/rotate-pool"))
+  let full_url = (build-url $base ({pool_code: (encode-path-segment $pool_code)} | format pattern "/api/v1/GenevaActions/Pools/{pool_code}/rotate-pool"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /api/v1/GenevaActions/Pools/{target}
-export def "geneva-actions-pools post" [
+export def "geneva-actions-pools create" [
   target: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1049,18 +1060,18 @@ export def "geneva-actions-pools post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({target: $target} | format pattern "/api/v1/GenevaActions/Pools/{target}"))
-  let body = {"comment": $comment, "maxTargetCount": $max_target_count, "minTargetCount": $min_target_count, "poolCode": $pool_code, "poolType": $pool_type, "region": $region, "targetCount": $target_count} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({target: (encode-path-segment $target)} | format pattern "/api/v1/GenevaActions/Pools/{target}"))
+  let req_body = {"comment": $comment, "maxTargetCount": $max_target_count, "minTargetCount": $min_target_count, "poolCode": $pool_code, "poolType": $pool_type, "region": $region, "targetCount": $target_count} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /api/v1/GenevaActions/Prebuilds/pools/createorupdatesettings
 #
 # --pools item shape: {poolType?: "0 (None)"|"1 (Blob)"|"2 (CodespacePool)"|"3 (StoragePool)"|"4 (CodespaceAndStoragePool)", skuName?: string, targetCount?: int}
-export def "geneva-actions-prebuilds-pools-createorupdatesettings post" [
+export def "geneva-actions-prebuilds-pools-createorupdatesettings create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1079,17 +1090,17 @@ export def "geneva-actions-prebuilds-pools-createorupdatesettings post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/GenevaActions/Prebuilds/pools/createorupdatesettings")
-  let body = {"branchName": $branch_name, "devContainerPath": $dev_container_path, "pools": $pools, "repoId": $repo_id, "storageType": $storage_type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"branchName": $branch_name, "devContainerPath": $dev_container_path, "pools": $pools, "repoId": $repo_id, "storageType": $storage_type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /api/v1/GenevaActions/Prebuilds/pools/delete
 #
 # --pools item shape: {poolType?: "0 (None)"|"1 (Blob)"|"2 (CodespacePool)"|"3 (StoragePool)"|"4 (CodespaceAndStoragePool)", skuName?: string, targetCount?: int}
-export def "geneva-actions-prebuilds-pools-delete post" [
+export def "geneva-actions-prebuilds-pools-delete create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1108,15 +1119,15 @@ export def "geneva-actions-prebuilds-pools-delete post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/GenevaActions/Prebuilds/pools/delete")
-  let body = {"branchName": $branch_name, "devContainerPath": $dev_container_path, "pools": $pools, "repoId": $repo_id, "storageType": $storage_type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"branchName": $branch_name, "devContainerPath": $dev_container_path, "pools": $pools, "repoId": $repo_id, "storageType": $storage_type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /api/v1/GenevaActions/Privacy/refresh-profile-telemetry-properties
-export def "geneva-actions-privacy-refresh-profile-telemetry-properties post" [
+export def "geneva-actions-privacy-refresh-profile-telemetry-properties create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1134,15 +1145,15 @@ export def "geneva-actions-privacy-refresh-profile-telemetry-properties post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/GenevaActions/Privacy/refresh-profile-telemetry-properties")
-  let body = {"partner": $partner, "tenantId": $tenant_id, "userIds": $user_ids} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"partner": $partner, "tenantId": $tenant_id, "userIds": $user_ids} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /api/v1/GenevaActions/Resources/{resourceId}/under-investigation
-export def "geneva-actions-resources-under-investigation post" [
+export def "geneva-actions-resources-under-investigation create" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1156,7 +1167,7 @@ export def "geneva-actions-resources-under-investigation post" [
 ]: nothing -> record<investigationStarted: string, resourceId: string, underInvestigation: bool, updated: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({resource_id: $resource_id} | format pattern "/api/v1/GenevaActions/Resources/{resource_id}/under-investigation"))
+  let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/api/v1/GenevaActions/Resources/{resource_id}/under-investigation"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1175,7 +1186,7 @@ export def "geneva-actions-vnet-pool-definitions delete" [
   dimensions: record
   --is-enabled: oneof<nothing, bool>
   location: int@location-completer # format: int32
-  --logical-skus: list # nullable
+  --logical-skus: list<string> # nullable
   subtype: int@subtype-completer # format: int32
   target_count: int # format: int32
   type: int@type-completer # format: int32
@@ -1184,15 +1195,15 @@ export def "geneva-actions-vnet-pool-definitions delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/GenevaActions/VnetPoolDefinitions")
-  let body = {"dimensions": $dimensions, "isEnabled": $is_enabled, "location": $location, "logicalSkus": $logical_skus, "subtype": $subtype, "targetCount": $target_count, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"dimensions": $dimensions, "isEnabled": $is_enabled, "location": $location, "logicalSkus": $logical_skus, "subtype": $subtype, "targetCount": $target_count, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /api/v1/GenevaActions/VnetPoolDefinitions
-export def "geneva-actions-vnet-pool-definitions post" [
+export def "geneva-actions-vnet-pool-definitions create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1204,7 +1215,7 @@ export def "geneva-actions-vnet-pool-definitions post" [
   dimensions: record
   --is-enabled: oneof<nothing, bool>
   location: int@location-completer # format: int32
-  --logical-skus: list # nullable
+  --logical-skus: list<string> # nullable
   subtype: int@subtype-completer # format: int32
   target_count: int # format: int32
   type: int@type-completer # format: int32
@@ -1213,17 +1224,17 @@ export def "geneva-actions-vnet-pool-definitions post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/GenevaActions/VnetPoolDefinitions")
-  let body = {"dimensions": $dimensions, "isEnabled": $is_enabled, "location": $location, "logicalSkus": $logical_skus, "subtype": $subtype, "targetCount": $target_count, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"dimensions": $dimensions, "isEnabled": $is_enabled, "location": $location, "logicalSkus": $logical_skus, "subtype": $subtype, "targetCount": $target_count, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /api/v1/HeartBeat
 #
 # --collectedDataList item shape: {environmentId?: string, name?: string, parentActivityId?: string, timestamp?: string}
-export def "heart-beat post" [
+export def "heart-beat create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1242,11 +1253,11 @@ export def "heart-beat post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/HeartBeat")
-  let body = {"agentVersion": $agent_version, "collectedDataList": $collected_data_list, "environmentId": $environment_id, "resourceId": $resource_id, "timeStamp": $time_stamp} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"agentVersion": $agent_version, "collectedDataList": $collected_data_list, "environmentId": $environment_id, "resourceId": $resource_id, "timeStamp": $time_stamp} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /api/v1/Locations
@@ -1286,7 +1297,7 @@ export def "locations get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({location: $location} | format pattern "/api/v1/Locations/{location}") $qp)
+  let full_url = (build-url $base ({location: (encode-path-segment $location)} | format pattern "/api/v1/Locations/{location}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1296,7 +1307,7 @@ export def "locations get" [
 #
 # --environmentOptions shape: {correlationId?: string}
 # --secrets item shape: {name?: string, type?: "1 (EnvironmentVariable)"|"2 (ContainerRegistry)", value?: string}
-export def "prebuilds-pools-instances post" [
+export def "prebuilds-pools-instances create" [
   pool_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1312,19 +1323,19 @@ export def "prebuilds-pools-instances post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({pool_id: $pool_id} | format pattern "/api/v1/Prebuilds/pools/{pool_id}/instances"))
-  let body = {"environmentOptions": $environment_options, "secrets": $secrets} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id)} | format pattern "/api/v1/Prebuilds/pools/{pool_id}/instances"))
+  let req_body = {"environmentOptions": $environment_options, "secrets": $secrets} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # PUT /api/v1/Prebuilds/pools/{poolId}/instances
 #
 # --environmentOptions shape: {correlationId?: string}
 # --secrets item shape: {name?: string, type?: "1 (EnvironmentVariable)"|"2 (ContainerRegistry)", value?: string}
-export def "prebuilds-pools-instances put" [
+export def "prebuilds-pools-instances update" [
   pool_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1340,18 +1351,18 @@ export def "prebuilds-pools-instances put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({pool_id: $pool_id} | format pattern "/api/v1/Prebuilds/pools/{pool_id}/instances"))
-  let body = {"environmentOptions": $environment_options, "secrets": $secrets} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id)} | format pattern "/api/v1/Prebuilds/pools/{pool_id}/instances"))
+  let req_body = {"environmentOptions": $environment_options, "secrets": $secrets} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /api/v1/Prebuilds/template/{environmentId}
 #
 # operationId: GetTemplateInfoRoute
-export def "prebuilds-template get-template-info-route" [
+export def "prebuilds-template get-get-route" [
   environment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1365,7 +1376,7 @@ export def "prebuilds-template get-template-info-route" [
 ]: nothing -> record<branchName: string, commitId: string, id: string, isPrebuild: bool, lastUsedTime: string, logicalSkus: list<string>, prebuildHash: string, repoId: int, templateStatus: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({environment_id: $environment_id} | format pattern "/api/v1/Prebuilds/template/{environment_id}"))
+  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id)} | format pattern "/api/v1/Prebuilds/template/{environment_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1374,7 +1385,7 @@ export def "prebuilds-template get-template-info-route" [
 # GET /api/v1/Prebuilds/templates/repo/{repoId}/branch/{branchName}/hash/{prebuildHash}/location/{location}/skus
 #
 # operationId: GetPrebuildReadinessRoute
-export def "prebuilds-templates-repo-branch-hash-location-skus get-prebuild-readiness-route" [
+export def "prebuilds-templates-repo-branch-hash-location-skus get-readiness-route" [
   repo_id: string
   branch_name: string
   prebuild_hash: string
@@ -1393,7 +1404,7 @@ export def "prebuilds-templates-repo-branch-hash-location-skus get-prebuild-read
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "storageType" $storage_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({repo_id: $repo_id, branch_name: $branch_name, prebuild_hash: $prebuild_hash, location: $location} | format pattern "/api/v1/Prebuilds/templates/repo/{repo_id}/branch/{branch_name}/hash/{prebuild_hash}/location/{location}/skus") $qp)
+  let full_url = (build-url $base ({repo_id: (encode-path-segment $repo_id), branch_name: (encode-path-segment $branch_name), prebuild_hash: (encode-path-segment $prebuild_hash), location: (encode-path-segment $location)} | format pattern "/api/v1/Prebuilds/templates/repo/{repo_id}/branch/{branch_name}/hash/{prebuild_hash}/location/{location}/skus") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1444,7 +1455,7 @@ export def "secrets get" [
 # POST /api/v1/Secrets
 #
 # --filters item shape: {type?: "1 (GitRepo)"|"2 (CodespaceName)", value?: string}
-export def "secrets post" [
+export def "secrets create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1467,11 +1478,11 @@ export def "secrets post" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/Secrets" $qp)
-  let body = {"filters": $filters, "notes": $notes, "scope": $scope, "secretName": $secret_name, "type": $type, "value": $value} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"filters": $filters, "notes": $notes, "scope": $scope, "secretName": $secret_name, "type": $type, "value": $value} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DELETE /api/v1/Secrets/{secretId}
@@ -1491,7 +1502,7 @@ export def "secrets delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "planId" $plan_id "scalar") (serialize-qp "scope" $scope "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({secret_id: $secret_id} | format pattern "/api/v1/Secrets/{secret_id}") $qp)
+  let full_url = (build-url $base ({secret_id: (encode-path-segment $secret_id)} | format pattern "/api/v1/Secrets/{secret_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1500,7 +1511,7 @@ export def "secrets delete" [
 # PUT /api/v1/Secrets/{secretId}
 #
 # --filters item shape: {type?: "1 (GitRepo)"|"2 (CodespaceName)", value?: string}
-export def "secrets put" [
+export def "secrets update" [
   secret_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1522,12 +1533,12 @@ export def "secrets put" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({secret_id: $secret_id} | format pattern "/api/v1/Secrets/{secret_id}") $qp)
-  let body = {"filters": $filters, "notes": $notes, "scope": $scope, "secretName": $secret_name, "value": $value} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({secret_id: (encode-path-segment $secret_id)} | format pattern "/api/v1/Secrets/{secret_id}") $qp)
+  let req_body = {"filters": $filters, "notes": $notes, "scope": $scope, "secretName": $secret_name, "value": $value} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DELETE /api/v1/Tenant/{tenantId}
@@ -1544,7 +1555,7 @@ export def "tenant delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({tenant_id: $tenant_id} | format pattern "/api/v1/Tenant/{tenant_id}"))
+  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id)} | format pattern "/api/v1/Tenant/{tenant_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1565,14 +1576,14 @@ export def "tenant get" [
 ]: nothing -> record<id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({tenant_id: $tenant_id} | format pattern "/api/v1/Tenant/{tenant_id}"))
+  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id)} | format pattern "/api/v1/Tenant/{tenant_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # PUT /api/v1/Tenant/{tenantId}
-export def "tenant put" [
+export def "tenant update" [
   tenant_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1585,14 +1596,14 @@ export def "tenant put" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({tenant_id: $tenant_id} | format pattern "/api/v1/Tenant/{tenant_id}"))
+  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id)} | format pattern "/api/v1/Tenant/{tenant_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /api/v1/Tokens/plans/{planName}/deleteAllCodespaces
-export def "tokens-plans-delete-all-codespaces post" [
+export def "tokens-plans-delete-all-codespaces create" [
   plan_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1608,16 +1619,16 @@ export def "tokens-plans-delete-all-codespaces post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expiration" $expiration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({plan_name: $plan_name} | format pattern "/api/v1/Tokens/plans/{plan_name}/deleteAllCodespaces") $qp)
-  let extra_headers = {"x-subscription-id": $x_subscription_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({plan_name: (encode-path-segment $plan_name)} | format pattern "/api/v1/Tokens/plans/{plan_name}/deleteAllCodespaces") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-subscription-id": $x_subscription_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /api/v1/Tokens/plans/{planName}/readAllCodespaces
-export def "tokens-plans-read-all-codespaces post" [
+export def "tokens-plans-read-all-codespaces create" [
   plan_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1633,16 +1644,16 @@ export def "tokens-plans-read-all-codespaces post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expiration" $expiration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({plan_name: $plan_name} | format pattern "/api/v1/Tokens/plans/{plan_name}/readAllCodespaces") $qp)
-  let extra_headers = {"x-subscription-id": $x_subscription_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({plan_name: (encode-path-segment $plan_name)} | format pattern "/api/v1/Tokens/plans/{plan_name}/readAllCodespaces") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-subscription-id": $x_subscription_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /api/v1/Tokens/plans/{planName}/writeCodespaces
-export def "tokens-plans-write-codespaces post" [
+export def "tokens-plans-write-codespaces create" [
   plan_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1658,18 +1669,18 @@ export def "tokens-plans-write-codespaces post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expiration" $expiration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({plan_name: $plan_name} | format pattern "/api/v1/Tokens/plans/{plan_name}/writeCodespaces") $qp)
-  let extra_headers = {"x-subscription-id": $x_subscription_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({plan_name: (encode-path-segment $plan_name)} | format pattern "/api/v1/Tokens/plans/{plan_name}/writeCodespaces") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-subscription-id": $x_subscription_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /api/v1/Tokens/plans/{planName}/writeDelegates
 #
 # --identity shape: {displayName?: string, id?: string, username?: string}
-export def "tokens-plans-write-delegates post" [
+export def "tokens-plans-write-delegates create" [
   plan_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1680,30 +1691,30 @@ export def "tokens-plans-write-delegates post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-subscription-id: string
-  --environment-ids: list # nullable
+  --environment-ids: list<string> # nullable
   --expiration: string # nullable, format: date-time
   --identity: record # shape: {displayName?: string, id?: string, username?: string}
-  --port-numbers: list # nullable
+  --port-numbers: list<int> # nullable
   --scope: string # nullable
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({plan_name: $plan_name} | format pattern "/api/v1/Tokens/plans/{plan_name}/writeDelegates"))
-  let body = {"environmentIds": $environment_ids, "expiration": $expiration, "identity": $identity, "portNumbers": $port_numbers, "scope": $scope} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-subscription-id": $x_subscription_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({plan_name: (encode-path-segment $plan_name)} | format pattern "/api/v1/Tokens/plans/{plan_name}/writeDelegates"))
+  let req_body = {"environmentIds": $environment_ids, "expiration": $expiration, "identity": $identity, "portNumbers": $port_numbers, "scope": $scope} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"x-subscription-id": $x_subscription_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # PUT /api/v1/Tokens/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/{providerNamespace}/plans/{resourceName}
 #
 # --identity shape: {principalId?: string, tenantId?: string, type?: string}
 # --properties shape: {defaultCodespaceSku?: string, defaultEnvironmentSku?: string, encryption?: record, userId?: string, vnetProperties?: record}
-export def "tokens-subscriptions-resource-groups-providers-plans put" [
+export def "tokens-subscriptions-resource-groups-providers-plans update" [
   subscription_id: string
   resource_group: string
   provider_namespace: string
@@ -1729,18 +1740,18 @@ export def "tokens-subscriptions-resource-groups-providers-plans put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, provider_namespace: $provider_namespace, resource_name: $resource_name} | format pattern "/api/v1/Tokens/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/{provider_namespace}/plans/{resource_name}"))
-  let body = {"id": $id, "identity": $identity, "location": $location, "name": $name, "properties": $properties, "provisioningState": $provisioning_state, "tags": $tags, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"headers": $headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), provider_namespace: (encode-path-segment $provider_namespace), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/Tokens/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/{provider_namespace}/plans/{resource_name}"))
+  let req_body = {"id": $id, "identity": $identity, "location": $location, "name": $name, "properties": $properties, "provisioningState": $provisioning_state, "tags": $tags, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"headers": $headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /api/v1/Tokens/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/{providerNamespace}/plans/{resourceName}/deleteAllCodespaces
-export def "tokens-subscriptions-resource-groups-providers-plans-delete-all-codespaces post" [
+export def "tokens-subscriptions-resource-groups-providers-plans-delete-all-codespaces create" [
   subscription_id: string
   resource_group: string
   provider_namespace: string
@@ -1758,14 +1769,14 @@ export def "tokens-subscriptions-resource-groups-providers-plans-delete-all-code
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expiration" $expiration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, provider_namespace: $provider_namespace, resource_name: $resource_name} | format pattern "/api/v1/Tokens/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/{provider_namespace}/plans/{resource_name}/deleteAllCodespaces") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), provider_namespace: (encode-path-segment $provider_namespace), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/Tokens/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/{provider_namespace}/plans/{resource_name}/deleteAllCodespaces") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /api/v1/Tokens/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/{providerNamespace}/plans/{resourceName}/deleteAllEnvironments
-export def "tokens-subscriptions-resource-groups-providers-plans-delete-all-environments post" [
+export def "tokens-subscriptions-resource-groups-providers-plans-delete-all-environments create" [
   subscription_id: string
   resource_group: string
   provider_namespace: string
@@ -1783,14 +1794,14 @@ export def "tokens-subscriptions-resource-groups-providers-plans-delete-all-envi
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expiration" $expiration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, provider_namespace: $provider_namespace, resource_name: $resource_name} | format pattern "/api/v1/Tokens/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/{provider_namespace}/plans/{resource_name}/deleteAllEnvironments") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), provider_namespace: (encode-path-segment $provider_namespace), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/Tokens/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/{provider_namespace}/plans/{resource_name}/deleteAllEnvironments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /api/v1/Tokens/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/{providerNamespace}/plans/{resourceName}/readAllCodespaces
-export def "tokens-subscriptions-resource-groups-providers-plans-read-all-codespaces post" [
+export def "tokens-subscriptions-resource-groups-providers-plans-read-all-codespaces create" [
   subscription_id: string
   resource_group: string
   provider_namespace: string
@@ -1808,14 +1819,14 @@ export def "tokens-subscriptions-resource-groups-providers-plans-read-all-codesp
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expiration" $expiration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, provider_namespace: $provider_namespace, resource_name: $resource_name} | format pattern "/api/v1/Tokens/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/{provider_namespace}/plans/{resource_name}/readAllCodespaces") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), provider_namespace: (encode-path-segment $provider_namespace), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/Tokens/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/{provider_namespace}/plans/{resource_name}/readAllCodespaces") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /api/v1/Tokens/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/{providerNamespace}/plans/{resourceName}/readAllEnvironments
-export def "tokens-subscriptions-resource-groups-providers-plans-read-all-environments post" [
+export def "tokens-subscriptions-resource-groups-providers-plans-read-all-environments create" [
   subscription_id: string
   resource_group: string
   provider_namespace: string
@@ -1833,14 +1844,14 @@ export def "tokens-subscriptions-resource-groups-providers-plans-read-all-enviro
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expiration" $expiration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, provider_namespace: $provider_namespace, resource_name: $resource_name} | format pattern "/api/v1/Tokens/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/{provider_namespace}/plans/{resource_name}/readAllEnvironments") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), provider_namespace: (encode-path-segment $provider_namespace), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/Tokens/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/{provider_namespace}/plans/{resource_name}/readAllEnvironments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /api/v1/Tokens/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/{providerNamespace}/plans/{resourceName}/writeCodespaces
-export def "tokens-subscriptions-resource-groups-providers-plans-write-codespaces post" [
+export def "tokens-subscriptions-resource-groups-providers-plans-write-codespaces create" [
   subscription_id: string
   resource_group: string
   provider_namespace: string
@@ -1858,7 +1869,7 @@ export def "tokens-subscriptions-resource-groups-providers-plans-write-codespace
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expiration" $expiration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, provider_namespace: $provider_namespace, resource_name: $resource_name} | format pattern "/api/v1/Tokens/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/{provider_namespace}/plans/{resource_name}/writeCodespaces") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), provider_namespace: (encode-path-segment $provider_namespace), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/Tokens/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/{provider_namespace}/plans/{resource_name}/writeCodespaces") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1867,7 +1878,7 @@ export def "tokens-subscriptions-resource-groups-providers-plans-write-codespace
 # POST /api/v1/Tokens/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/{providerNamespace}/plans/{resourceName}/writeDelegates
 #
 # --identity shape: {displayName?: string, id?: string, username?: string}
-export def "tokens-subscriptions-resource-groups-providers-plans-write-delegates post" [
+export def "tokens-subscriptions-resource-groups-providers-plans-write-delegates create" [
   subscription_id: string
   resource_group: string
   provider_namespace: string
@@ -1880,25 +1891,25 @@ export def "tokens-subscriptions-resource-groups-providers-plans-write-delegates
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --environment-ids: list # nullable
+  --environment-ids: list<string> # nullable
   --expiration: string # nullable, format: date-time
   --identity: record # shape: {displayName?: string, id?: string, username?: string}
-  --port-numbers: list # nullable
+  --port-numbers: list<int> # nullable
   --scope: string # nullable
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, provider_namespace: $provider_namespace, resource_name: $resource_name} | format pattern "/api/v1/Tokens/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/{provider_namespace}/plans/{resource_name}/writeDelegates"))
-  let body = {"environmentIds": $environment_ids, "expiration": $expiration, "identity": $identity, "portNumbers": $port_numbers, "scope": $scope} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), provider_namespace: (encode-path-segment $provider_namespace), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/Tokens/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/{provider_namespace}/plans/{resource_name}/writeDelegates"))
+  let req_body = {"environmentIds": $environment_ids, "expiration": $expiration, "identity": $identity, "portNumbers": $port_numbers, "scope": $scope} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /api/v1/Tokens/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/{providerNamespace}/plans/{resourceName}/writeEnvironments
-export def "tokens-subscriptions-resource-groups-providers-plans-write-environments post" [
+export def "tokens-subscriptions-resource-groups-providers-plans-write-environments create" [
   subscription_id: string
   resource_group: string
   provider_namespace: string
@@ -1916,7 +1927,7 @@ export def "tokens-subscriptions-resource-groups-providers-plans-write-environme
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expiration" $expiration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, provider_namespace: $provider_namespace, resource_name: $resource_name} | format pattern "/api/v1/Tokens/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/{provider_namespace}/plans/{resource_name}/writeEnvironments") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), provider_namespace: (encode-path-segment $provider_namespace), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/Tokens/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/{provider_namespace}/plans/{resource_name}/writeEnvironments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1939,7 +1950,7 @@ export def "tunnel-port-info get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "portNumber" $port_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({environment_id: $environment_id} | format pattern "/api/v1/Tunnel/{environment_id}/portInfo") $qp)
+  let full_url = (build-url $base ({environment_id: (encode-path-segment $environment_id)} | format pattern "/api/v1/Tunnel/{environment_id}/portInfo") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1967,7 +1978,7 @@ export def "user-subscriptions delete" [
 }
 
 # POST /api/v1/UserSubscriptions
-export def "user-subscriptions post" [
+export def "user-subscriptions create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1998,7 +2009,7 @@ export def "pools-default get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --sku-name: list
+  --sku-name: list<string>
 ]: nothing -> table<allWithLatestVersion: bool, isEnvironmentPool: bool, location: string, poolCode: string, readyUnassignedCount: int, readyUnassignedLatestVersionCount: int, readyUnassignedNotLatestVersionAndIdleCount: int, readyUnassignedNotLatestVersionCount: int, resourceType: string, sku: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2012,7 +2023,7 @@ export def "pools-default get" [
 # PUT /api/v1/subscriptions/{subscriptionId}/providers/GitHub.Network/{resourceType}/SubscriptionLifeCycleNotification
 #
 # --properties shape: {accountOwner?: record, additionalProperties?: record, locationPlacementId?: string, managedByTenants?: list, quotaId?: string, registeredFeatures?: list, tenantId?: string}
-export def "subscriptions-providers-git-hub-network-subscription-life-cycle-notification put" [
+export def "subscriptions-providers-git-hub-network-subscription-life-cycle-notification update" [
   subscription_id: string
   resource_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2030,18 +2041,18 @@ export def "subscriptions-providers-git-hub-network-subscription-life-cycle-noti
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_type: $resource_type} | format pattern "/api/v1/subscriptions/{subscription_id}/providers/GitHub.Network/{resource_type}/SubscriptionLifeCycleNotification"))
-  let body = {"properties": $properties, "registrationDate": $registration_date, "state": $state} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_type: (encode-path-segment $resource_type)} | format pattern "/api/v1/subscriptions/{subscription_id}/providers/GitHub.Network/{resource_type}/SubscriptionLifeCycleNotification"))
+  let req_body = {"properties": $properties, "registrationDate": $registration_date, "state": $state} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/providers/GitHub.Network/{resourceType}/resourceReadBegin
 #
 # --value item shape: {id?: string, location?: string, name?: string, properties?: record, provisioningState?: string, tags?: record, type?: string}
-export def "subscriptions-providers-git-hub-network-resource-read-begin post" [
+export def "subscriptions-providers-git-hub-network-resource-read-begin create" [
   subscription_id: string
   resource_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2057,18 +2068,18 @@ export def "subscriptions-providers-git-hub-network-resource-read-begin post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_type: $resource_type} | format pattern "/api/v1/subscriptions/{subscription_id}/providers/GitHub.Network/{resource_type}/resourceReadBegin"))
-  let body = {"value": $value} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_type: (encode-path-segment $resource_type)} | format pattern "/api/v1/subscriptions/{subscription_id}/providers/GitHub.Network/{resource_type}/resourceReadBegin"))
+  let req_body = {"value": $value} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # PUT /api/v1/subscriptions/{subscriptionId}/providers/Microsoft.Codespaces/plans/SubscriptionLifeCycleNotification
 #
 # --properties shape: {accountOwner?: record, additionalProperties?: record, locationPlacementId?: string, managedByTenants?: list, quotaId?: string, registeredFeatures?: list, tenantId?: string}
-export def "subscriptions-providers-microsoft-codespaces-plans-subscription-life-cycle-notification put" [
+export def "subscriptions-providers-microsoft-codespaces-plans-subscription-life-cycle-notification update" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2085,18 +2096,18 @@ export def "subscriptions-providers-microsoft-codespaces-plans-subscription-life
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/api/v1/subscriptions/{subscription_id}/providers/Microsoft.Codespaces/plans/SubscriptionLifeCycleNotification"))
-  let body = {"properties": $properties, "registrationDate": $registration_date, "state": $state} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/api/v1/subscriptions/{subscription_id}/providers/Microsoft.Codespaces/plans/SubscriptionLifeCycleNotification"))
+  let req_body = {"properties": $properties, "registrationDate": $registration_date, "state": $state} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/providers/Microsoft.Codespaces/plans/resourceReadBegin
 #
 # --value item shape: {id?: string, identity?: record, location?: string, name?: string, properties?: record, provisioningState?: string, tags?: record, type?: string}
-export def "subscriptions-providers-microsoft-codespaces-plans-resource-read-begin post" [
+export def "subscriptions-providers-microsoft-codespaces-plans-resource-read-begin create" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2111,18 +2122,18 @@ export def "subscriptions-providers-microsoft-codespaces-plans-resource-read-beg
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/api/v1/subscriptions/{subscription_id}/providers/Microsoft.Codespaces/plans/resourceReadBegin"))
-  let body = {"value": $value} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/api/v1/subscriptions/{subscription_id}/providers/Microsoft.Codespaces/plans/resourceReadBegin"))
+  let req_body = {"value": $value} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # PUT /api/v1/subscriptions/{subscriptionId}/providers/Microsoft.VSOnline/plans/SubscriptionLifeCycleNotification
 #
 # --properties shape: {accountOwner?: record, additionalProperties?: record, locationPlacementId?: string, managedByTenants?: list, quotaId?: string, registeredFeatures?: list, tenantId?: string}
-export def "subscriptions-providers-microsoft-vs-online-plans-subscription-life-cycle-notification put" [
+export def "subscriptions-providers-microsoft-vs-online-plans-subscription-life-cycle-notification update" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2139,18 +2150,18 @@ export def "subscriptions-providers-microsoft-vs-online-plans-subscription-life-
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/api/v1/subscriptions/{subscription_id}/providers/Microsoft.VSOnline/plans/SubscriptionLifeCycleNotification"))
-  let body = {"properties": $properties, "registrationDate": $registration_date, "state": $state} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/api/v1/subscriptions/{subscription_id}/providers/Microsoft.VSOnline/plans/SubscriptionLifeCycleNotification"))
+  let req_body = {"properties": $properties, "registrationDate": $registration_date, "state": $state} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/providers/Microsoft.VSOnline/plans/resourceReadBegin
 #
 # --value item shape: {id?: string, identity?: record, location?: string, name?: string, properties?: record, provisioningState?: string, tags?: record, type?: string}
-export def "subscriptions-providers-microsoft-vs-online-plans-resource-read-begin post" [
+export def "subscriptions-providers-microsoft-vs-online-plans-resource-read-begin create" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2165,18 +2176,18 @@ export def "subscriptions-providers-microsoft-vs-online-plans-resource-read-begi
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/api/v1/subscriptions/{subscription_id}/providers/Microsoft.VSOnline/plans/resourceReadBegin"))
-  let body = {"value": $value} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/api/v1/subscriptions/{subscription_id}/providers/Microsoft.VSOnline/plans/resourceReadBegin"))
+  let req_body = {"value": $value} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/GitHub.Network/{resourceType}/resourceReadBegin
 #
 # --value item shape: {id?: string, location?: string, name?: string, properties?: record, provisioningState?: string, tags?: record, type?: string}
-export def "subscriptions-resource-groups-providers-git-hub-network-resource-read-begin post-by-subscriptionId-resourceGroup-resourceType" [
+export def "subscriptions-resource-groups-providers-git-hub-network-resource-read-begin create-by-subscriptionId-resourceGroup-resourceType" [
   subscription_id: string
   resource_group: string
   resource_type: string
@@ -2193,12 +2204,12 @@ export def "subscriptions-resource-groups-providers-git-hub-network-resource-rea
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, resource_type: $resource_type} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/GitHub.Network/{resource_type}/resourceReadBegin"))
-  let body = {"value": $value} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_type: (encode-path-segment $resource_type)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/GitHub.Network/{resource_type}/resourceReadBegin"))
+  let req_body = {"value": $value} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DELETE /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/GitHub.Network/{resourceType}/{resourceName}
@@ -2228,18 +2239,18 @@ export def "subscriptions-resource-groups-providers-git-hub-network delete" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, resource_type: $resource_type, resource_name: $resource_name} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/GitHub.Network/{resource_type}/{resource_name}"))
-  let body = {"id": $id, "location": $location, "name": $name, "properties": $properties, "provisioningState": $provisioning_state, "tags": $tags, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_type: (encode-path-segment $resource_type), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/GitHub.Network/{resource_type}/{resource_name}"))
+  let req_body = {"id": $id, "location": $location, "name": $name, "properties": $properties, "provisioningState": $provisioning_state, "tags": $tags, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # PATCH /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/GitHub.Network/{resourceType}/{resourceName}
 #
 # --properties shape: {subnetId?: string}
-export def "subscriptions-resource-groups-providers-git-hub-network patch" [
+export def "subscriptions-resource-groups-providers-git-hub-network update-by-subscriptionId-resourceGroup-resourceType-resourceName" [
   subscription_id: string
   resource_group: string
   resource_type: string
@@ -2263,18 +2274,18 @@ export def "subscriptions-resource-groups-providers-git-hub-network patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, resource_type: $resource_type, resource_name: $resource_name} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/GitHub.Network/{resource_type}/{resource_name}"))
-  let body = {"id": $id, "location": $location, "name": $name, "properties": $properties, "provisioningState": $provisioning_state, "tags": $tags, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_type: (encode-path-segment $resource_type), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/GitHub.Network/{resource_type}/{resource_name}"))
+  let req_body = {"id": $id, "location": $location, "name": $name, "properties": $properties, "provisioningState": $provisioning_state, "tags": $tags, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # PUT /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/GitHub.Network/{resourceType}/{resourceName}
 #
 # --properties shape: {subnetId?: string}
-export def "subscriptions-resource-groups-providers-git-hub-network put" [
+export def "subscriptions-resource-groups-providers-git-hub-network update-by-subscriptionId-resourceGroup-resourceType-resourceName-1" [
   subscription_id: string
   resource_group: string
   resource_type: string
@@ -2298,16 +2309,16 @@ export def "subscriptions-resource-groups-providers-git-hub-network put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, resource_type: $resource_type, resource_name: $resource_name} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/GitHub.Network/{resource_type}/{resource_name}"))
-  let body = {"id": $id, "location": $location, "name": $name, "properties": $properties, "provisioningState": $provisioning_state, "tags": $tags, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_type: (encode-path-segment $resource_type), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/GitHub.Network/{resource_type}/{resource_name}"))
+  let req_body = {"id": $id, "location": $location, "name": $name, "properties": $properties, "provisioningState": $provisioning_state, "tags": $tags, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/GitHub.Network/{resourceType}/{resourceName}/resourceCreationCompleted
-export def "subscriptions-resource-groups-providers-git-hub-network-resource-creation-completed post" [
+export def "subscriptions-resource-groups-providers-git-hub-network-resource-creation-completed create" [
   subscription_id: string
   resource_group: string
   resource_type: string
@@ -2323,7 +2334,7 @@ export def "subscriptions-resource-groups-providers-git-hub-network-resource-cre
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, resource_type: $resource_type, resource_name: $resource_name} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/GitHub.Network/{resource_type}/{resource_name}/resourceCreationCompleted"))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_type: (encode-path-segment $resource_type), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/GitHub.Network/{resource_type}/{resource_name}/resourceCreationCompleted"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2332,7 +2343,7 @@ export def "subscriptions-resource-groups-providers-git-hub-network-resource-cre
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/GitHub.Network/{resourceType}/{resourceName}/resourceCreationValidate
 #
 # --properties shape: {subnetId?: string}
-export def "subscriptions-resource-groups-providers-git-hub-network-resource-creation-validate post" [
+export def "subscriptions-resource-groups-providers-git-hub-network-resource-creation-validate create" [
   subscription_id: string
   resource_group: string
   resource_type: string
@@ -2356,16 +2367,16 @@ export def "subscriptions-resource-groups-providers-git-hub-network-resource-cre
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, resource_type: $resource_type, resource_name: $resource_name} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/GitHub.Network/{resource_type}/{resource_name}/resourceCreationValidate"))
-  let body = {"id": $id, "location": $location, "name": $name, "properties": $properties, "provisioningState": $provisioning_state, "tags": $tags, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_type: (encode-path-segment $resource_type), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/GitHub.Network/{resource_type}/{resource_name}/resourceCreationValidate"))
+  let req_body = {"id": $id, "location": $location, "name": $name, "properties": $properties, "provisioningState": $provisioning_state, "tags": $tags, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/GitHub.Network/{resourceType}/{resourceName}/resourceDeletionCompleted
-export def "subscriptions-resource-groups-providers-git-hub-network-resource-deletion-completed post" [
+export def "subscriptions-resource-groups-providers-git-hub-network-resource-deletion-completed create" [
   subscription_id: string
   resource_group: string
   resource_type: string
@@ -2381,7 +2392,7 @@ export def "subscriptions-resource-groups-providers-git-hub-network-resource-del
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, resource_type: $resource_type, resource_name: $resource_name} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/GitHub.Network/{resource_type}/{resource_name}/resourceDeletionCompleted"))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_type: (encode-path-segment $resource_type), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/GitHub.Network/{resource_type}/{resource_name}/resourceDeletionCompleted"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2390,7 +2401,7 @@ export def "subscriptions-resource-groups-providers-git-hub-network-resource-del
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/GitHub.Network/{resourceType}/{resourceName}/resourceDeletionValidate
 #
 # --properties shape: {subnetId?: string}
-export def "subscriptions-resource-groups-providers-git-hub-network-resource-deletion-validate post" [
+export def "subscriptions-resource-groups-providers-git-hub-network-resource-deletion-validate create" [
   subscription_id: string
   resource_group: string
   resource_type: string
@@ -2414,16 +2425,16 @@ export def "subscriptions-resource-groups-providers-git-hub-network-resource-del
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, resource_type: $resource_type, resource_name: $resource_name} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/GitHub.Network/{resource_type}/{resource_name}/resourceDeletionValidate"))
-  let body = {"id": $id, "location": $location, "name": $name, "properties": $properties, "provisioningState": $provisioning_state, "tags": $tags, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_type: (encode-path-segment $resource_type), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/GitHub.Network/{resource_type}/{resource_name}/resourceDeletionValidate"))
+  let req_body = {"id": $id, "location": $location, "name": $name, "properties": $properties, "provisioningState": $provisioning_state, "tags": $tags, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/GitHub.Network/{resourceType}/{resourceName}/resourcePatchCompleted
-export def "subscriptions-resource-groups-providers-git-hub-network-resource-patch-completed post" [
+export def "subscriptions-resource-groups-providers-git-hub-network-resource-patch-completed create" [
   subscription_id: string
   resource_group: string
   resource_type: string
@@ -2439,7 +2450,7 @@ export def "subscriptions-resource-groups-providers-git-hub-network-resource-pat
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, resource_type: $resource_type, resource_name: $resource_name} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/GitHub.Network/{resource_type}/{resource_name}/resourcePatchCompleted"))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_type: (encode-path-segment $resource_type), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/GitHub.Network/{resource_type}/{resource_name}/resourcePatchCompleted"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2448,7 +2459,7 @@ export def "subscriptions-resource-groups-providers-git-hub-network-resource-pat
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/GitHub.Network/{resourceType}/{resourceName}/resourcePatchValidate
 #
 # --properties shape: {subnetId?: string}
-export def "subscriptions-resource-groups-providers-git-hub-network-resource-patch-validate post" [
+export def "subscriptions-resource-groups-providers-git-hub-network-resource-patch-validate create" [
   subscription_id: string
   resource_group: string
   resource_type: string
@@ -2472,18 +2483,18 @@ export def "subscriptions-resource-groups-providers-git-hub-network-resource-pat
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, resource_type: $resource_type, resource_name: $resource_name} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/GitHub.Network/{resource_type}/{resource_name}/resourcePatchValidate"))
-  let body = {"id": $id, "location": $location, "name": $name, "properties": $properties, "provisioningState": $provisioning_state, "tags": $tags, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_type: (encode-path-segment $resource_type), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/GitHub.Network/{resource_type}/{resource_name}/resourcePatchValidate"))
+  let req_body = {"id": $id, "location": $location, "name": $name, "properties": $properties, "provisioningState": $provisioning_state, "tags": $tags, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/GitHub.Network/{resourceType}/{resourceName}/resourceReadBegin
 #
 # --properties shape: {subnetId?: string}
-export def "subscriptions-resource-groups-providers-git-hub-network-resource-read-begin post-by-subscriptionId-resourceGroup-resourceType-resourceName" [
+export def "subscriptions-resource-groups-providers-git-hub-network-resource-read-begin create-by-subscriptionId-resourceGroup-resourceType-resourceName" [
   subscription_id: string
   resource_group: string
   resource_type: string
@@ -2507,18 +2518,18 @@ export def "subscriptions-resource-groups-providers-git-hub-network-resource-rea
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, resource_type: $resource_type, resource_name: $resource_name} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/GitHub.Network/{resource_type}/{resource_name}/resourceReadBegin"))
-  let body = {"id": $id, "location": $location, "name": $name, "properties": $properties, "provisioningState": $provisioning_state, "tags": $tags, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_type: (encode-path-segment $resource_type), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/GitHub.Network/{resource_type}/{resource_name}/resourceReadBegin"))
+  let req_body = {"id": $id, "location": $location, "name": $name, "properties": $properties, "provisioningState": $provisioning_state, "tags": $tags, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.Codespaces/plans/resourceReadBegin
 #
 # --value item shape: {id?: string, identity?: record, location?: string, name?: string, properties?: record, provisioningState?: string, tags?: record, type?: string}
-export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-resource-read-begin post-by-subscriptionId-resourceGroup" [
+export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-resource-read-begin create-by-subscriptionId-resourceGroup" [
   subscription_id: string
   resource_group: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2534,19 +2545,19 @@ export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-r
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Codespaces/plans/resourceReadBegin"))
-  let body = {"value": $value} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Codespaces/plans/resourceReadBegin"))
+  let req_body = {"value": $value} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # PUT /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.Codespaces/plans/{resourceName}
 #
 # --identity shape: {principalId?: string, tenantId?: string, type?: string}
 # --properties shape: {defaultCodespaceSku?: string, defaultEnvironmentSku?: string, encryption?: record, userId?: string, vnetProperties?: record}
-export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans put" [
+export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans update" [
   subscription_id: string
   resource_group: string
   resource_name: string
@@ -2571,18 +2582,18 @@ export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans p
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, resource_name: $resource_name} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Codespaces/plans/{resource_name}"))
-  let body = {"id": $id, "identity": $identity, "location": $location, "name": $name, "properties": $properties, "provisioningState": $provisioning_state, "tags": $tags, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"headers": $headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Codespaces/plans/{resource_name}"))
+  let req_body = {"id": $id, "identity": $identity, "location": $location, "name": $name, "properties": $properties, "provisioningState": $provisioning_state, "tags": $tags, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"headers": $headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.Codespaces/plans/{resourceName}/deleteAllCodespaces
-export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-delete-all-codespaces post" [
+export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-delete-all-codespaces create" [
   subscription_id: string
   resource_group: string
   resource_name: string
@@ -2599,14 +2610,14 @@ export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-d
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expiration" $expiration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, resource_name: $resource_name} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Codespaces/plans/{resource_name}/deleteAllCodespaces") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Codespaces/plans/{resource_name}/deleteAllCodespaces") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.Codespaces/plans/{resourceName}/deleteAllEnvironments
-export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-delete-all-environments post" [
+export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-delete-all-environments create" [
   subscription_id: string
   resource_group: string
   resource_name: string
@@ -2623,14 +2634,14 @@ export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-d
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expiration" $expiration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, resource_name: $resource_name} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Codespaces/plans/{resource_name}/deleteAllEnvironments") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Codespaces/plans/{resource_name}/deleteAllEnvironments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.Codespaces/plans/{resourceName}/readAllCodespaces
-export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-read-all-codespaces post" [
+export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-read-all-codespaces create" [
   subscription_id: string
   resource_group: string
   resource_name: string
@@ -2647,14 +2658,14 @@ export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-r
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expiration" $expiration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, resource_name: $resource_name} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Codespaces/plans/{resource_name}/readAllCodespaces") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Codespaces/plans/{resource_name}/readAllCodespaces") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.Codespaces/plans/{resourceName}/readAllEnvironments
-export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-read-all-environments post" [
+export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-read-all-environments create" [
   subscription_id: string
   resource_group: string
   resource_name: string
@@ -2671,14 +2682,14 @@ export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-r
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expiration" $expiration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, resource_name: $resource_name} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Codespaces/plans/{resource_name}/readAllEnvironments") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Codespaces/plans/{resource_name}/readAllEnvironments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.Codespaces/plans/{resourceName}/readDelegates
-export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-read-delegates post" [
+export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-read-delegates create" [
   subscription_id: string
   resource_group: string
   resource_name: string
@@ -2693,14 +2704,14 @@ export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-r
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, resource_name: $resource_name} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Codespaces/plans/{resource_name}/readDelegates"))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Codespaces/plans/{resource_name}/readDelegates"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.Codespaces/plans/{resourceName}/resourceCreationCompleted
-export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-resource-creation-completed post" [
+export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-resource-creation-completed create" [
   subscription_id: string
   resource_group: string
   resource_name: string
@@ -2715,7 +2726,7 @@ export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-r
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, resource_name: $resource_name} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Codespaces/plans/{resource_name}/resourceCreationCompleted"))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Codespaces/plans/{resource_name}/resourceCreationCompleted"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2725,7 +2736,7 @@ export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-r
 #
 # --identity shape: {principalId?: string, tenantId?: string, type?: string}
 # --properties shape: {defaultCodespaceSku?: string, defaultEnvironmentSku?: string, encryption?: record, userId?: string, vnetProperties?: record}
-export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-resource-creation-validate post" [
+export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-resource-creation-validate create" [
   subscription_id: string
   resource_group: string
   resource_name: string
@@ -2749,16 +2760,16 @@ export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-r
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, resource_name: $resource_name} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Codespaces/plans/{resource_name}/resourceCreationValidate"))
-  let body = {"id": $id, "identity": $identity, "location": $location, "name": $name, "properties": $properties, "provisioningState": $provisioning_state, "tags": $tags, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Codespaces/plans/{resource_name}/resourceCreationValidate"))
+  let req_body = {"id": $id, "identity": $identity, "location": $location, "name": $name, "properties": $properties, "provisioningState": $provisioning_state, "tags": $tags, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.Codespaces/plans/{resourceName}/resourceDeletionValidate
-export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-resource-deletion-validate post" [
+export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-resource-deletion-validate create" [
   subscription_id: string
   resource_group: string
   resource_name: string
@@ -2773,7 +2784,7 @@ export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-r
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, resource_name: $resource_name} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Codespaces/plans/{resource_name}/resourceDeletionValidate"))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Codespaces/plans/{resource_name}/resourceDeletionValidate"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2783,7 +2794,7 @@ export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-r
 #
 # --identity shape: {principalId?: string, tenantId?: string, type?: string}
 # --properties shape: {defaultCodespaceSku?: string, defaultEnvironmentSku?: string, encryption?: record, userId?: string, vnetProperties?: record}
-export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-resource-patch-completed post" [
+export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-resource-patch-completed create" [
   subscription_id: string
   resource_group: string
   resource_name: string
@@ -2802,21 +2813,21 @@ export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-r
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, resource_name: $resource_name} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Codespaces/plans/{resource_name}/resourcePatchCompleted"))
-  let body = {"identity": $identity, "properties": $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"headers": $headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Codespaces/plans/{resource_name}/resourcePatchCompleted"))
+  let req_body = {"identity": $identity, "properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"headers": $headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.Codespaces/plans/{resourceName}/resourcePatchValidate
 #
 # --identity shape: {principalId?: string, tenantId?: string, type?: string}
 # --properties shape: {defaultCodespaceSku?: string, defaultEnvironmentSku?: string, encryption?: record, userId?: string, vnetProperties?: record}
-export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-resource-patch-validate post" [
+export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-resource-patch-validate create" [
   subscription_id: string
   resource_group: string
   resource_name: string
@@ -2834,19 +2845,19 @@ export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-r
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, resource_name: $resource_name} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Codespaces/plans/{resource_name}/resourcePatchValidate"))
-  let body = {"identity": $identity, "properties": $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Codespaces/plans/{resource_name}/resourcePatchValidate"))
+  let req_body = {"identity": $identity, "properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.Codespaces/plans/{resourceName}/resourceReadBegin
 #
 # --identity shape: {principalId?: string, tenantId?: string, type?: string}
 # --properties shape: {defaultCodespaceSku?: string, defaultEnvironmentSku?: string, encryption?: record, userId?: string, vnetProperties?: record}
-export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-resource-read-begin post-by-subscriptionId-resourceGroup-resourceName" [
+export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-resource-read-begin create-by-subscriptionId-resourceGroup-resourceName" [
   subscription_id: string
   resource_group: string
   resource_name: string
@@ -2870,16 +2881,16 @@ export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-r
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, resource_name: $resource_name} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Codespaces/plans/{resource_name}/resourceReadBegin"))
-  let body = {"id": $id, "identity": $identity, "location": $location, "name": $name, "properties": $properties, "provisioningState": $provisioning_state, "tags": $tags, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Codespaces/plans/{resource_name}/resourceReadBegin"))
+  let req_body = {"id": $id, "identity": $identity, "location": $location, "name": $name, "properties": $properties, "provisioningState": $provisioning_state, "tags": $tags, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.Codespaces/plans/{resourceName}/writeCodespaces
-export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-write-codespaces post" [
+export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-write-codespaces create" [
   subscription_id: string
   resource_group: string
   resource_name: string
@@ -2896,7 +2907,7 @@ export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-w
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expiration" $expiration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, resource_name: $resource_name} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Codespaces/plans/{resource_name}/writeCodespaces") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Codespaces/plans/{resource_name}/writeCodespaces") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2905,7 +2916,7 @@ export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-w
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.Codespaces/plans/{resourceName}/writeDelegates
 #
 # --identity shape: {displayName?: string, id?: string, username?: string}
-export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-write-delegates post" [
+export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-write-delegates create" [
   subscription_id: string
   resource_group: string
   resource_name: string
@@ -2917,25 +2928,25 @@ export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-w
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --environment-ids: list # nullable
+  --environment-ids: list<string> # nullable
   --expiration: string # nullable, format: date-time
   --identity: record # shape: {displayName?: string, id?: string, username?: string}
-  --port-numbers: list # nullable
+  --port-numbers: list<int> # nullable
   --scope: string # nullable
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, resource_name: $resource_name} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Codespaces/plans/{resource_name}/writeDelegates"))
-  let body = {"environmentIds": $environment_ids, "expiration": $expiration, "identity": $identity, "portNumbers": $port_numbers, "scope": $scope} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Codespaces/plans/{resource_name}/writeDelegates"))
+  let req_body = {"environmentIds": $environment_ids, "expiration": $expiration, "identity": $identity, "portNumbers": $port_numbers, "scope": $scope} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.Codespaces/plans/{resourceName}/writeEnvironments
-export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-write-environments post" [
+export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-write-environments create" [
   subscription_id: string
   resource_group: string
   resource_name: string
@@ -2952,7 +2963,7 @@ export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-w
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expiration" $expiration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, resource_name: $resource_name} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Codespaces/plans/{resource_name}/writeEnvironments") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Codespaces/plans/{resource_name}/writeEnvironments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2961,7 +2972,7 @@ export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-w
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.VSOnline/plans/resourceReadBegin
 #
 # --value item shape: {id?: string, identity?: record, location?: string, name?: string, properties?: record, provisioningState?: string, tags?: record, type?: string}
-export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-resource-read-begin post-by-subscriptionId-resourceGroup" [
+export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-resource-read-begin create-by-subscriptionId-resourceGroup" [
   subscription_id: string
   resource_group: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2977,19 +2988,19 @@ export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-re
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.VSOnline/plans/resourceReadBegin"))
-  let body = {"value": $value} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.VSOnline/plans/resourceReadBegin"))
+  let req_body = {"value": $value} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # PUT /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.VSOnline/plans/{resourceName}
 #
 # --identity shape: {principalId?: string, tenantId?: string, type?: string}
 # --properties shape: {defaultCodespaceSku?: string, defaultEnvironmentSku?: string, encryption?: record, userId?: string, vnetProperties?: record}
-export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans put" [
+export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans update" [
   subscription_id: string
   resource_group: string
   resource_name: string
@@ -3014,18 +3025,18 @@ export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans pu
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, resource_name: $resource_name} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.VSOnline/plans/{resource_name}"))
-  let body = {"id": $id, "identity": $identity, "location": $location, "name": $name, "properties": $properties, "provisioningState": $provisioning_state, "tags": $tags, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"headers": $headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.VSOnline/plans/{resource_name}"))
+  let req_body = {"id": $id, "identity": $identity, "location": $location, "name": $name, "properties": $properties, "provisioningState": $provisioning_state, "tags": $tags, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"headers": $headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.VSOnline/plans/{resourceName}/deleteAllCodespaces
-export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-delete-all-codespaces post" [
+export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-delete-all-codespaces create" [
   subscription_id: string
   resource_group: string
   resource_name: string
@@ -3042,14 +3053,14 @@ export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-de
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expiration" $expiration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, resource_name: $resource_name} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.VSOnline/plans/{resource_name}/deleteAllCodespaces") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.VSOnline/plans/{resource_name}/deleteAllCodespaces") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.VSOnline/plans/{resourceName}/deleteAllEnvironments
-export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-delete-all-environments post" [
+export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-delete-all-environments create" [
   subscription_id: string
   resource_group: string
   resource_name: string
@@ -3066,14 +3077,14 @@ export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-de
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expiration" $expiration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, resource_name: $resource_name} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.VSOnline/plans/{resource_name}/deleteAllEnvironments") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.VSOnline/plans/{resource_name}/deleteAllEnvironments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.VSOnline/plans/{resourceName}/readAllCodespaces
-export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-read-all-codespaces post" [
+export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-read-all-codespaces create" [
   subscription_id: string
   resource_group: string
   resource_name: string
@@ -3090,14 +3101,14 @@ export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-re
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expiration" $expiration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, resource_name: $resource_name} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.VSOnline/plans/{resource_name}/readAllCodespaces") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.VSOnline/plans/{resource_name}/readAllCodespaces") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.VSOnline/plans/{resourceName}/readAllEnvironments
-export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-read-all-environments post" [
+export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-read-all-environments create" [
   subscription_id: string
   resource_group: string
   resource_name: string
@@ -3114,14 +3125,14 @@ export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-re
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expiration" $expiration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, resource_name: $resource_name} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.VSOnline/plans/{resource_name}/readAllEnvironments") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.VSOnline/plans/{resource_name}/readAllEnvironments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.VSOnline/plans/{resourceName}/readDelegates
-export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-read-delegates post" [
+export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-read-delegates create" [
   subscription_id: string
   resource_group: string
   resource_name: string
@@ -3136,14 +3147,14 @@ export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-re
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, resource_name: $resource_name} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.VSOnline/plans/{resource_name}/readDelegates"))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.VSOnline/plans/{resource_name}/readDelegates"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.VSOnline/plans/{resourceName}/resourceCreationCompleted
-export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-resource-creation-completed post" [
+export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-resource-creation-completed create" [
   subscription_id: string
   resource_group: string
   resource_name: string
@@ -3158,7 +3169,7 @@ export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-re
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, resource_name: $resource_name} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.VSOnline/plans/{resource_name}/resourceCreationCompleted"))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.VSOnline/plans/{resource_name}/resourceCreationCompleted"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3168,7 +3179,7 @@ export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-re
 #
 # --identity shape: {principalId?: string, tenantId?: string, type?: string}
 # --properties shape: {defaultCodespaceSku?: string, defaultEnvironmentSku?: string, encryption?: record, userId?: string, vnetProperties?: record}
-export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-resource-creation-validate post" [
+export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-resource-creation-validate create" [
   subscription_id: string
   resource_group: string
   resource_name: string
@@ -3192,16 +3203,16 @@ export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-re
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, resource_name: $resource_name} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.VSOnline/plans/{resource_name}/resourceCreationValidate"))
-  let body = {"id": $id, "identity": $identity, "location": $location, "name": $name, "properties": $properties, "provisioningState": $provisioning_state, "tags": $tags, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.VSOnline/plans/{resource_name}/resourceCreationValidate"))
+  let req_body = {"id": $id, "identity": $identity, "location": $location, "name": $name, "properties": $properties, "provisioningState": $provisioning_state, "tags": $tags, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.VSOnline/plans/{resourceName}/resourceDeletionValidate
-export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-resource-deletion-validate post" [
+export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-resource-deletion-validate create" [
   subscription_id: string
   resource_group: string
   resource_name: string
@@ -3216,7 +3227,7 @@ export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-re
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, resource_name: $resource_name} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.VSOnline/plans/{resource_name}/resourceDeletionValidate"))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.VSOnline/plans/{resource_name}/resourceDeletionValidate"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3226,7 +3237,7 @@ export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-re
 #
 # --identity shape: {principalId?: string, tenantId?: string, type?: string}
 # --properties shape: {defaultCodespaceSku?: string, defaultEnvironmentSku?: string, encryption?: record, userId?: string, vnetProperties?: record}
-export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-resource-patch-completed post" [
+export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-resource-patch-completed create" [
   subscription_id: string
   resource_group: string
   resource_name: string
@@ -3245,21 +3256,21 @@ export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-re
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, resource_name: $resource_name} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.VSOnline/plans/{resource_name}/resourcePatchCompleted"))
-  let body = {"identity": $identity, "properties": $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"headers": $headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.VSOnline/plans/{resource_name}/resourcePatchCompleted"))
+  let req_body = {"identity": $identity, "properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"headers": $headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.VSOnline/plans/{resourceName}/resourcePatchValidate
 #
 # --identity shape: {principalId?: string, tenantId?: string, type?: string}
 # --properties shape: {defaultCodespaceSku?: string, defaultEnvironmentSku?: string, encryption?: record, userId?: string, vnetProperties?: record}
-export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-resource-patch-validate post" [
+export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-resource-patch-validate create" [
   subscription_id: string
   resource_group: string
   resource_name: string
@@ -3277,19 +3288,19 @@ export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-re
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, resource_name: $resource_name} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.VSOnline/plans/{resource_name}/resourcePatchValidate"))
-  let body = {"identity": $identity, "properties": $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.VSOnline/plans/{resource_name}/resourcePatchValidate"))
+  let req_body = {"identity": $identity, "properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.VSOnline/plans/{resourceName}/resourceReadBegin
 #
 # --identity shape: {principalId?: string, tenantId?: string, type?: string}
 # --properties shape: {defaultCodespaceSku?: string, defaultEnvironmentSku?: string, encryption?: record, userId?: string, vnetProperties?: record}
-export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-resource-read-begin post-by-subscriptionId-resourceGroup-resourceName" [
+export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-resource-read-begin create-by-subscriptionId-resourceGroup-resourceName" [
   subscription_id: string
   resource_group: string
   resource_name: string
@@ -3313,16 +3324,16 @@ export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-re
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, resource_name: $resource_name} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.VSOnline/plans/{resource_name}/resourceReadBegin"))
-  let body = {"id": $id, "identity": $identity, "location": $location, "name": $name, "properties": $properties, "provisioningState": $provisioning_state, "tags": $tags, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.VSOnline/plans/{resource_name}/resourceReadBegin"))
+  let req_body = {"id": $id, "identity": $identity, "location": $location, "name": $name, "properties": $properties, "provisioningState": $provisioning_state, "tags": $tags, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.VSOnline/plans/{resourceName}/writeCodespaces
-export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-write-codespaces post" [
+export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-write-codespaces create" [
   subscription_id: string
   resource_group: string
   resource_name: string
@@ -3339,7 +3350,7 @@ export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-wr
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expiration" $expiration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, resource_name: $resource_name} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.VSOnline/plans/{resource_name}/writeCodespaces") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.VSOnline/plans/{resource_name}/writeCodespaces") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3348,7 +3359,7 @@ export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-wr
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.VSOnline/plans/{resourceName}/writeDelegates
 #
 # --identity shape: {displayName?: string, id?: string, username?: string}
-export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-write-delegates post" [
+export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-write-delegates create" [
   subscription_id: string
   resource_group: string
   resource_name: string
@@ -3360,25 +3371,25 @@ export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-wr
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --environment-ids: list # nullable
+  --environment-ids: list<string> # nullable
   --expiration: string # nullable, format: date-time
   --identity: record # shape: {displayName?: string, id?: string, username?: string}
-  --port-numbers: list # nullable
+  --port-numbers: list<int> # nullable
   --scope: string # nullable
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, resource_name: $resource_name} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.VSOnline/plans/{resource_name}/writeDelegates"))
-  let body = {"environmentIds": $environment_ids, "expiration": $expiration, "identity": $identity, "portNumbers": $port_numbers, "scope": $scope} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.VSOnline/plans/{resource_name}/writeDelegates"))
+  let req_body = {"environmentIds": $environment_ids, "expiration": $expiration, "identity": $identity, "portNumbers": $port_numbers, "scope": $scope} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.VSOnline/plans/{resourceName}/writeEnvironments
-export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-write-environments post" [
+export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-write-environments create" [
   subscription_id: string
   resource_group: string
   resource_name: string
@@ -3395,14 +3406,14 @@ export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-wr
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expiration" $expiration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, resource_name: $resource_name} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.VSOnline/plans/{resource_name}/writeEnvironments") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.VSOnline/plans/{resource_name}/writeEnvironments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/{resourceGroup}/providers/Microsoft.Codespaces/plans/{resourceName}/deleteDelegates
-export def "subscriptions-providers-microsoft-codespaces-plans-delete-delegates post" [
+export def "subscriptions-providers-microsoft-codespaces-plans-delete-delegates create" [
   subscription_id: string
   resource_group: string
   resource_name: string
@@ -3417,14 +3428,14 @@ export def "subscriptions-providers-microsoft-codespaces-plans-delete-delegates 
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, resource_name: $resource_name} | format pattern "/api/v1/subscriptions/{subscription_id}/{resource_group}/providers/Microsoft.Codespaces/plans/{resource_name}/deleteDelegates"))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/{resource_group}/providers/Microsoft.Codespaces/plans/{resource_name}/deleteDelegates"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/{resourceGroup}/providers/Microsoft.VSOnline/plans/{resourceName}/deleteDelegates
-export def "subscriptions-providers-microsoft-vs-online-plans-delete-delegates post" [
+export def "subscriptions-providers-microsoft-vs-online-plans-delete-delegates create" [
   subscription_id: string
   resource_group: string
   resource_name: string
@@ -3439,7 +3450,7 @@ export def "subscriptions-providers-microsoft-vs-online-plans-delete-delegates p
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, resource_name: $resource_name} | format pattern "/api/v1/subscriptions/{subscription_id}/{resource_group}/providers/Microsoft.VSOnline/plans/{resource_name}/deleteDelegates"))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), resource_name: (encode-path-segment $resource_name)} | format pattern "/api/v1/subscriptions/{subscription_id}/{resource_group}/providers/Microsoft.VSOnline/plans/{resource_name}/deleteDelegates"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3460,7 +3471,7 @@ export def "tenant-pool delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({tenant_id: $tenant_id, pool_name: $pool_name} | format pattern "/api/v1/tenant/{tenant_id}/Pool/{pool_name}"))
+  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), pool_name: (encode-path-segment $pool_name)} | format pattern "/api/v1/tenant/{tenant_id}/Pool/{pool_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3482,7 +3493,7 @@ export def "tenant-pool get" [
 ]: nothing -> record<domainUserCredentials: record<domain: string, organizationalUnit: string, passwordSecretIdentifier: string, userName: string>, hotPoolSettings: record<size: int>, poolGroupName: string, provisioningStatus: record<completedSteps: int, currentStepDescription: string, isReady: bool, operationStartedTimeUtc: string, totalSteps: int>, tags: record, userGroupName: string, vmSpecs: record<diskType: int, imageResourceId: string, size: string, subnetResourceId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({tenant_id: $tenant_id, pool_name: $pool_name} | format pattern "/api/v1/tenant/{tenant_id}/Pool/{pool_name}"))
+  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), pool_name: (encode-path-segment $pool_name)} | format pattern "/api/v1/tenant/{tenant_id}/Pool/{pool_name}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3493,7 +3504,7 @@ export def "tenant-pool get" [
 # --domainUserCredentials shape: {domain: string, organizationalUnit?: string, passwordSecretIdentifier: string, userName: string}
 # --hotPoolSettings shape: {size?: int}
 # --vmSpecs shape: {diskType: "0 (StandardHDD)"|"1 (StandardSSD)"|"2 (PremiumSSD)", imageResourceId: string, size: string, subnetResourceId: string}
-export def "tenant-pool patch" [
+export def "tenant-pool update-by-tenantId-poolName" [
   tenant_id: string
   pool_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3515,12 +3526,12 @@ export def "tenant-pool patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({tenant_id: $tenant_id, pool_name: $pool_name} | format pattern "/api/v1/tenant/{tenant_id}/Pool/{pool_name}"))
-  let body = {"domainUserCredentials": $domain_user_credentials, "hotPoolSettings": $hot_pool_settings, "poolGroupName": $pool_group_name, "tags": $tags, "userGroupName": $user_group_name, "vmSpecs": $vm_specs} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), pool_name: (encode-path-segment $pool_name)} | format pattern "/api/v1/tenant/{tenant_id}/Pool/{pool_name}"))
+  let req_body = {"domainUserCredentials": $domain_user_credentials, "hotPoolSettings": $hot_pool_settings, "poolGroupName": $pool_group_name, "tags": $tags, "userGroupName": $user_group_name, "vmSpecs": $vm_specs} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # PUT /api/v1/tenant/{tenantId}/Pool/{poolName}
@@ -3528,7 +3539,7 @@ export def "tenant-pool patch" [
 # --domainUserCredentials shape: {domain: string, organizationalUnit?: string, passwordSecretIdentifier: string, userName: string}
 # --hotPoolSettings shape: {size?: int}
 # --vmSpecs shape: {diskType: "0 (StandardHDD)"|"1 (StandardSSD)"|"2 (PremiumSSD)", imageResourceId: string, size: string, subnetResourceId: string}
-export def "tenant-pool put" [
+export def "tenant-pool update-by-tenantId-poolName-1" [
   tenant_id: string
   pool_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3550,12 +3561,12 @@ export def "tenant-pool put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({tenant_id: $tenant_id, pool_name: $pool_name} | format pattern "/api/v1/tenant/{tenant_id}/Pool/{pool_name}"))
-  let body = {"domainUserCredentials": $domain_user_credentials, "hotPoolSettings": $hot_pool_settings, "poolGroupName": $pool_group_name, "tags": $tags, "userGroupName": $user_group_name, "vmSpecs": $vm_specs} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), pool_name: (encode-path-segment $pool_name)} | format pattern "/api/v1/tenant/{tenant_id}/Pool/{pool_name}"))
+  let req_body = {"domainUserCredentials": $domain_user_credentials, "hotPoolSettings": $hot_pool_settings, "poolGroupName": $pool_group_name, "tags": $tags, "userGroupName": $user_group_name, "vmSpecs": $vm_specs} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DELETE /api/v1/tenant/{tenantId}/PoolGroup/{poolGroupName}
@@ -3573,7 +3584,7 @@ export def "tenant-pool-group delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({tenant_id: $tenant_id, pool_group_name: $pool_group_name} | format pattern "/api/v1/tenant/{tenant_id}/PoolGroup/{pool_group_name}"))
+  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), pool_group_name: (encode-path-segment $pool_group_name)} | format pattern "/api/v1/tenant/{tenant_id}/PoolGroup/{pool_group_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3595,14 +3606,14 @@ export def "tenant-pool-group get" [
 ]: nothing -> record<displayName: string, region: int, tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({tenant_id: $tenant_id, pool_group_name: $pool_group_name} | format pattern "/api/v1/tenant/{tenant_id}/PoolGroup/{pool_group_name}"))
+  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), pool_group_name: (encode-path-segment $pool_group_name)} | format pattern "/api/v1/tenant/{tenant_id}/PoolGroup/{pool_group_name}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # PATCH /api/v1/tenant/{tenantId}/PoolGroup/{poolGroupName}
-export def "tenant-pool-group patch" [
+export def "tenant-pool-group update-by-tenantId-poolGroupName" [
   tenant_id: string
   pool_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3619,16 +3630,16 @@ export def "tenant-pool-group patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({tenant_id: $tenant_id, pool_group_name: $pool_group_name} | format pattern "/api/v1/tenant/{tenant_id}/PoolGroup/{pool_group_name}"))
-  let body = {"displayName": $display_name, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), pool_group_name: (encode-path-segment $pool_group_name)} | format pattern "/api/v1/tenant/{tenant_id}/PoolGroup/{pool_group_name}"))
+  let req_body = {"displayName": $display_name, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # PUT /api/v1/tenant/{tenantId}/PoolGroup/{poolGroupName}
-export def "tenant-pool-group put" [
+export def "tenant-pool-group update-by-tenantId-poolGroupName-1" [
   tenant_id: string
   pool_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3646,12 +3657,12 @@ export def "tenant-pool-group put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({tenant_id: $tenant_id, pool_group_name: $pool_group_name} | format pattern "/api/v1/tenant/{tenant_id}/PoolGroup/{pool_group_name}"))
-  let body = {"displayName": $display_name, "region": $region, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), pool_group_name: (encode-path-segment $pool_group_name)} | format pattern "/api/v1/tenant/{tenant_id}/PoolGroup/{pool_group_name}"))
+  let req_body = {"displayName": $display_name, "region": $region, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /api/v1/tenant/{tenantId}/pool/{poolName}/Vm
@@ -3670,7 +3681,7 @@ export def "tenant-pool-vm list" [
 ]: nothing -> table<connection: record<connectionType: int, liveShareWorkspaceId: string>, provisioningStatus: record<completedSteps: int, currentStepDescription: string, isReady: bool, operationStartedTimeUtc: string, totalSteps: int>, status: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({tenant_id: $tenant_id, pool_name: $pool_name} | format pattern "/api/v1/tenant/{tenant_id}/pool/{pool_name}/Vm"))
+  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), pool_name: (encode-path-segment $pool_name)} | format pattern "/api/v1/tenant/{tenant_id}/pool/{pool_name}/Vm"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3692,7 +3703,7 @@ export def "tenant-pool-vm delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({tenant_id: $tenant_id, pool_name: $pool_name, vm_name: $vm_name} | format pattern "/api/v1/tenant/{tenant_id}/pool/{pool_name}/Vm/{vm_name}"))
+  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), pool_name: (encode-path-segment $pool_name), vm_name: (encode-path-segment $vm_name)} | format pattern "/api/v1/tenant/{tenant_id}/pool/{pool_name}/Vm/{vm_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3715,7 +3726,7 @@ export def "tenant-pool-vm get" [
 ]: nothing -> record<connection: record<connectionType: int, liveShareWorkspaceId: string>, provisioningStatus: record<completedSteps: int, currentStepDescription: string, isReady: bool, operationStartedTimeUtc: string, totalSteps: int>, status: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({tenant_id: $tenant_id, pool_name: $pool_name, vm_name: $vm_name} | format pattern "/api/v1/tenant/{tenant_id}/pool/{pool_name}/Vm/{vm_name}"))
+  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), pool_name: (encode-path-segment $pool_name), vm_name: (encode-path-segment $vm_name)} | format pattern "/api/v1/tenant/{tenant_id}/pool/{pool_name}/Vm/{vm_name}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3724,7 +3735,7 @@ export def "tenant-pool-vm get" [
 # PUT /api/v1/tenant/{tenantId}/pool/{poolName}/Vm/{vmName}
 #
 # --user shape: {userPrincipalName: string}
-export def "tenant-pool-vm put" [
+export def "tenant-pool-vm update" [
   tenant_id: string
   pool_name: string
   vm_name: string
@@ -3742,16 +3753,16 @@ export def "tenant-pool-vm put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({tenant_id: $tenant_id, pool_name: $pool_name, vm_name: $vm_name} | format pattern "/api/v1/tenant/{tenant_id}/pool/{pool_name}/Vm/{vm_name}"))
-  let body = {"user": $user} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), pool_name: (encode-path-segment $pool_name), vm_name: (encode-path-segment $vm_name)} | format pattern "/api/v1/tenant/{tenant_id}/pool/{pool_name}/Vm/{vm_name}"))
+  let req_body = {"user": $user} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /api/v1/tenant/{tenantId}/pool/{poolName}/Vm/{vmName}/start
-export def "tenant-pool-vm-start post" [
+export def "tenant-pool-vm-start create" [
   tenant_id: string
   pool_name: string
   vm_name: string
@@ -3766,14 +3777,14 @@ export def "tenant-pool-vm-start post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({tenant_id: $tenant_id, pool_name: $pool_name, vm_name: $vm_name} | format pattern "/api/v1/tenant/{tenant_id}/pool/{pool_name}/Vm/{vm_name}/start"))
+  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), pool_name: (encode-path-segment $pool_name), vm_name: (encode-path-segment $vm_name)} | format pattern "/api/v1/tenant/{tenant_id}/pool/{pool_name}/Vm/{vm_name}/start"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /api/v1/tenant/{tenantId}/pool/{poolName}/Vm/{vmName}/stop
-export def "tenant-pool-vm-stop post" [
+export def "tenant-pool-vm-stop create" [
   tenant_id: string
   pool_name: string
   vm_name: string
@@ -3788,14 +3799,14 @@ export def "tenant-pool-vm-stop post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({tenant_id: $tenant_id, pool_name: $pool_name, vm_name: $vm_name} | format pattern "/api/v1/tenant/{tenant_id}/pool/{pool_name}/Vm/{vm_name}/stop"))
+  let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), pool_name: (encode-path-segment $pool_name), vm_name: (encode-path-segment $vm_name)} | format pattern "/api/v1/tenant/{tenant_id}/pool/{pool_name}/Vm/{vm_name}/stop"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /api/v2/prebuilds/delete
-export def "prebuilds-delete post" [
+export def "prebuilds-delete create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3813,11 +3824,11 @@ export def "prebuilds-delete post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v2/prebuilds/delete")
-  let body = {"branchName": $branch_name, "devContainerPath": $dev_container_path, "prebuildConfigurationId": $prebuild_configuration_id, "repoId": $repo_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"branchName": $branch_name, "devContainerPath": $dev_container_path, "prebuildConfigurationId": $prebuild_configuration_id, "repoId": $repo_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DELETE /api/v2/prebuilds/repository/{repoId}/branch/{branchName}
@@ -3835,7 +3846,7 @@ export def "prebuilds-repository-branch delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({repo_id: $repo_id, branch_name: $branch_name} | format pattern "/api/v2/prebuilds/repository/{repo_id}/branch/{branch_name}"))
+  let full_url = (build-url $base ({repo_id: (encode-path-segment $repo_id), branch_name: (encode-path-segment $branch_name)} | format pattern "/api/v2/prebuilds/repository/{repo_id}/branch/{branch_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3846,7 +3857,7 @@ export def "prebuilds-repository-branch delete" [
 # --experimentalFeatures shape: {enableDynamicHttpsDetection?: bool, queueResourceAllocation?: bool, usePrebuildFastPathIfAvailable?: bool, usePrebuiltImages?: bool, useStorageV2?: bool}
 # --seed shape: {cloneUrl?: string, gitConfig?: record, recurseClone?: bool, repository?: record, seedMoniker?: string, seedType?: string}
 # --templateInfo shape: {container?: record, prebuildConfigurationId?: string, templateSizeInGB?: float, totalTimeSavingsInSeconds?: string, workFlowRunId?: string}
-export def "prebuilds-templates post" [
+export def "prebuilds-templates create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3869,17 +3880,17 @@ export def "prebuilds-templates post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v2/prebuilds/templates")
-  let body = {"devContainerPath": $dev_container_path, "experimentalFeatures": $experimental_features, "features": $features, "friendlyName": $friendly_name, "planId": $plan_id, "seed": $seed, "storageType": $storage_type, "templateInfo": $template_info} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"devContainerPath": $dev_container_path, "experimentalFeatures": $experimental_features, "features": $features, "friendlyName": $friendly_name, "planId": $plan_id, "seed": $seed, "storageType": $storage_type, "templateInfo": $template_info} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /api/v2/prebuilds/templates/skus/repo/{repoId}/branch/{branchName}/hash/{prebuildHash}/location/{location}/devcontainerpath/{devContainerPath}
 #
 # operationId: GetPrebuildReadinessSkusRoute
-export def "prebuilds-templates-skus-repo-branch-hash-location-devcontainerpath get-prebuild-readiness-skus-route" [
+export def "prebuilds-templates-skus-repo-branch-hash-location-devcontainerpath get-readiness-route" [
   repo_id: string
   branch_name: string
   prebuild_hash: string
@@ -3900,14 +3911,14 @@ export def "prebuilds-templates-skus-repo-branch-hash-location-devcontainerpath 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "storageType" $storage_type "scalar") (serialize-qp "fastPathEnabled" $fast_path_enabled "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({repo_id: $repo_id, branch_name: $branch_name, prebuild_hash: $prebuild_hash, location: $location, dev_container_path: $dev_container_path} | format pattern "/api/v2/prebuilds/templates/skus/repo/{repo_id}/branch/{branch_name}/hash/{prebuild_hash}/location/{location}/devcontainerpath/{dev_container_path}") $qp)
+  let full_url = (build-url $base ({repo_id: (encode-path-segment $repo_id), branch_name: (encode-path-segment $branch_name), prebuild_hash: (encode-path-segment $prebuild_hash), location: (encode-path-segment $location), dev_container_path: (encode-path-segment $dev_container_path)} | format pattern "/api/v2/prebuilds/templates/skus/repo/{repo_id}/branch/{branch_name}/hash/{prebuild_hash}/location/{location}/devcontainerpath/{dev_container_path}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /api/v2/prebuilds/templates/updatemaxversions
-export def "prebuilds-templates-updatemaxversions post" [
+export def "prebuilds-templates-updatemaxversions create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3925,15 +3936,15 @@ export def "prebuilds-templates-updatemaxversions post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v2/prebuilds/templates/updatemaxversions")
-  let body = {"branchName": $branch_name, "devContainerPath": $dev_container_path, "maxPrebuildTemplateVersions": $max_prebuild_template_versions, "repoId": $repo_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"branchName": $branch_name, "devContainerPath": $dev_container_path, "maxPrebuildTemplateVersions": $max_prebuild_template_versions, "repoId": $repo_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /api/v2/prebuilds/templates/{templateId}/updatestatus
-export def "prebuilds-templates-updatestatus post" [
+export def "prebuilds-templates-updatestatus create" [
   template_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3948,12 +3959,12 @@ export def "prebuilds-templates-updatestatus post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({template_id: $template_id} | format pattern "/api/v2/prebuilds/templates/{template_id}/updatestatus"))
-  let body = {"isSuccess": $is_success} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({template_id: (encode-path-segment $template_id)} | format pattern "/api/v2/prebuilds/templates/{template_id}/updatestatus"))
+  let req_body = {"isSuccess": $is_success} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /health
@@ -4023,7 +4034,7 @@ export def "tunnelauth get" [
 }
 
 # POST /tunnelauth
-export def "tunnelauth post" [
+export def "tunnelauth create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

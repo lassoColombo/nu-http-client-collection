@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -76,7 +85,7 @@ def format-completer [] { ["JSON" "SDL"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "domainnames-apiassociation post" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "domainnames-apiassociation create-associate" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -100,7 +109,7 @@ export def commands []: nothing -> table {
 #
 # POST /v1/domainnames/{domainName}/apiassociation
 # operationId: AssociateApi
-export def "domainnames-apiassociation post" [
+export def "domainnames-apiassociation create-associate" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -122,21 +131,21 @@ export def "domainnames-apiassociation post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({domain_name: $domain_name} | format pattern "/v1/domainnames/{domain_name}/apiassociation"))
-  let body = {"apiId": $api_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/v1/domainnames/{domain_name}/apiassociation"))
+  let req_body = {"apiId": $api_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-# Removes an <code>ApiAssociation</code> object from a custom domain.
+# Removes an ApiAssociation object from a custom domain.
 #
 # DELETE /v1/domainnames/{domainName}/apiassociation
 # operationId: DisassociateApi
-export def "domainnames-apiassociation delete" [
+export def "domainnames-apiassociation delete-disassociate" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -156,19 +165,19 @@ export def "domainnames-apiassociation delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({domain_name: $domain_name} | format pattern "/v1/domainnames/{domain_name}/apiassociation"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/v1/domainnames/{domain_name}/apiassociation"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Retrieves an <code>ApiAssociation</code> object.
+# Retrieves an ApiAssociation object.
 #
 # GET /v1/domainnames/{domainName}/apiassociation
 # operationId: GetApiAssociation
-export def "domainnames-apiassociation get" [
+export def "domainnames-apiassociation get-association" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -188,11 +197,11 @@ export def "domainnames-apiassociation get" [
 ]: nothing -> record<apiAssociation: record<domainName: record, apiId: record, associationStatus: record, deploymentDetail: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({domain_name: $domain_name} | format pattern "/v1/domainnames/{domain_name}/apiassociation"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/v1/domainnames/{domain_name}/apiassociation"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -217,26 +226,26 @@ export def "apis-api-caches create" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  ttl: int # <p>TTL in seconds for cache entries.</p> <p>Valid values are 1–3,600 seconds.</p>
+  ttl: int # TTL in seconds for cache entries. Valid values are 1–3,600 seconds.
   --transit-encryption-enabled: oneof<nothing, bool> # Transit encryption flag when connecting to cache. You cannot update this setting after creation.
   --at-rest-encryption-enabled: oneof<nothing, bool> # At-rest encryption flag for cache. You cannot update this setting after creation.
-  api_caching_behavior: string@api-caching-behavior-completer # <p>Caching behavior.</p> <ul> <li> <p> <b>FULL_REQUEST_CACHING</b>: All requests are fully cached.</p> </li> <li> <p> <b>PER_RESOLVER_CACHING</b>: Individual resolvers that you specify are cached.</p> </li> </ul>
-  type: string@type-completer # <p>The cache instance type. Valid values are </p> <ul> <li> <p> <code>SMALL</code> </p> </li> <li> <p> <code>MEDIUM</code> </p> </li> <li> <p> <code>LARGE</code> </p> </li> <li> <p> <code>XLARGE</code> </p> </li> <li> <p> <code>LARGE_2X</code> </p> </li> <li> <p> <code>LARGE_4X</code> </p> </li> <li> <p> <code>LARGE_8X</code> (not available in all regions)</p> </li> <li> <p> <code>LARGE_12X</code> </p> </li> </ul> <p>Historically, instance types were identified by an EC2-style value. As of July 2020, this is deprecated, and the generic identifiers above should be used.</p> <p>The following legacy instance types are available, but their use is discouraged:</p> <ul> <li> <p> <b>T2_SMALL</b>: A t2.small instance type.</p> </li> <li> <p> <b>T2_MEDIUM</b>: A t2.medium instance type.</p> </li> <li> <p> <b>R4_LARGE</b>: A r4.large instance type.</p> </li> <li> <p> <b>R4_XLARGE</b>: A r4.xlarge instance type.</p> </li> <li> <p> <b>R4_2XLARGE</b>: A r4.2xlarge instance type.</p> </li> <li> <p> <b>R4_4XLARGE</b>: A r4.4xlarge instance type.</p> </li> <li> <p> <b>R4_8XLARGE</b>: A r4.8xlarge instance type.</p> </li> </ul>
+  api_caching_behavior: string@api-caching-behavior-completer # Caching behavior. FULL_REQUEST_CACHING: All requests are fully cached. PER_RESOLVER_CACHING: Individual resolvers that you specify are cached.
+  type: string@type-completer # The cache instance type. Valid values are SMALL MEDIUM LARGE XLARGE LARGE_2X LARGE_4X LARGE_8X (not available in all regions) LARGE_12X Historically, instance types were identified by an EC2-style value. As of July 2020, this is deprecated, and the generic identifiers above should be used. The following legacy instance types are available, but their use is discouraged: T2_SMALL: A t2.small instance type. T2_MEDIUM: A t2.medium instance type. R4_LARGE: A r4.large instance type. R4_XLARGE: A r4.xlarge instance type. R4_2XLARGE: A r4.2xlarge instance type. R4_4XLARGE: A r4.4xlarge instance type. R4_8XLARGE: A r4.8xlarge instance type.
 ]: any -> record<apiCache: record<ttl: record, apiCachingBehavior: record, transitEncryptionEnabled: record, atRestEncryptionEnabled: record, type: record, status: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_id: $api_id} | format pattern "/v1/apis/{api_id}/ApiCaches"))
-  let body = {"ttl": $ttl, "transitEncryptionEnabled": $transit_encryption_enabled, "atRestEncryptionEnabled": $at_rest_encryption_enabled, "apiCachingBehavior": $api_caching_behavior, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({api_id: (encode-path-segment $api_id)} | format pattern "/v1/apis/{api_id}/ApiCaches"))
+  let req_body = {"ttl": $ttl, "transitEncryptionEnabled": $transit_encryption_enabled, "atRestEncryptionEnabled": $at_rest_encryption_enabled, "apiCachingBehavior": $api_caching_behavior, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-# Deletes an <code>ApiCache</code> object.
+# Deletes an ApiCache object.
 #
 # DELETE /v1/apis/{apiId}/ApiCaches
 # operationId: DeleteApiCache
@@ -260,15 +269,15 @@ export def "apis-api-caches delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_id: $api_id} | format pattern "/v1/apis/{api_id}/ApiCaches"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({api_id: (encode-path-segment $api_id)} | format pattern "/v1/apis/{api_id}/ApiCaches"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Retrieves an <code>ApiCache</code> object.
+# Retrieves an ApiCache object.
 #
 # GET /v1/apis/{apiId}/ApiCaches
 # operationId: GetApiCache
@@ -292,11 +301,11 @@ export def "apis-api-caches get" [
 ]: nothing -> record<apiCache: record<ttl: record, apiCachingBehavior: record, transitEncryptionEnabled: record, atRestEncryptionEnabled: record, type: record, status: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_id: $api_id} | format pattern "/v1/apis/{api_id}/ApiCaches"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({api_id: (encode-path-segment $api_id)} | format pattern "/v1/apis/{api_id}/ApiCaches"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -304,7 +313,7 @@ export def "apis-api-caches get" [
 #
 # POST /v1/apis/{apiId}/apikeys
 # operationId: CreateApiKey
-export def "apis-apikeys create" [
+export def "apis-apikeys create-key" [
   api_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -327,21 +336,21 @@ export def "apis-apikeys create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_id: $api_id} | format pattern "/v1/apis/{api_id}/apikeys"))
-  let body = {"description": $description, "expires": $expires} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({api_id: (encode-path-segment $api_id)} | format pattern "/v1/apis/{api_id}/apikeys"))
+  let req_body = {"description": $description, "expires": $expires} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-# <p>Lists the API keys for a given API.</p> <note> <p>API keys are deleted automatically 60 days after they expire. However, they may still be included in the response until they have actually been deleted. You can safely call <code>DeleteApiKey</code> to manually delete a key before it's automatically deleted.</p> </note>
+# Lists the API keys for a given API. API keys are deleted automatically 60 days after they expire. However, they may still be included in the response until they have actually been deleted. You can safely call DeleteApiKey to manually delete a key before it's automatically deleted.
 #
 # GET /v1/apis/{apiId}/apikeys
 # operationId: ListApiKeys
-export def "apis-apikeys list" [
+export def "apis-apikeys list-keys" [
   api_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -364,15 +373,15 @@ export def "apis-apikeys list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({api_id: $api_id} | format pattern "/v1/apis/{api_id}/apikeys") $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({api_id: (encode-path-segment $api_id)} | format pattern "/v1/apis/{api_id}/apikeys") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Creates a <code>DataSource</code> object.
+# Creates a DataSource object.
 #
 # POST /v1/apis/{apiId}/datasources
 # operationId: CreateDataSource
@@ -383,7 +392,7 @@ export def "apis-apikeys list" [
 # --httpConfig shape: {endpoint?: any, authorizationConfig?: any}
 # --relationalDatabaseConfig shape: {relationalDatabaseSourceType?: any, rdsHttpEndpointConfig?: any}
 # --eventBridgeConfig shape: {eventBusArn?: any}
-export def "apis-datasources create" [
+export def "apis-datasources create-data-source" [
   api_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -400,13 +409,13 @@ export def "apis-datasources create" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  name: string # A user-supplied name for the <code>DataSource</code>.
-  --description: string # A description of the <code>DataSource</code>.
-  type: string@type-completer-1 # The type of the <code>DataSource</code>.
+  name: string # A user-supplied name for the DataSource.
+  --description: string # A description of the DataSource.
+  type: string@type-completer-1 # The type of the DataSource.
   --service-role-arn: string # The Identity and Access Management (IAM) service role Amazon Resource Name (ARN) for the data source. The system assumes this role when accessing the data source.
   --dynamodb-config: record # Describes an Amazon DynamoDB data source configuration. — shape: {tableName?: any, awsRegion?: any, useCallerCredentials?: any, deltaSyncConfig?: any, versioned?: any}
   --lambda-config: record # Describes an Lambda data source configuration. — shape: {lambdaFunctionArn?: any}
-  --elasticsearch-config: record # <p>Describes an OpenSearch data source configuration.</p> <p>As of September 2021, Amazon Elasticsearch service is Amazon OpenSearch Service. This configuration is deprecated. For new data sources, use <a>OpenSearchServiceDataSourceConfig</a> to specify an OpenSearch data source.</p> — shape: {endpoint?: any, awsRegion?: any}
+  --elasticsearch-config: record # Describes an OpenSearch data source configuration. As of September 2021, Amazon Elasticsearch service is Amazon OpenSearch Service. This configuration is deprecated. For new data sources, use OpenSearchServiceDataSourceConfig to specify an OpenSearch data source. — shape: {endpoint?: any, awsRegion?: any}
   --open-search-service-config: record # Describes an OpenSearch data source configuration. — shape: {endpoint?: any, awsRegion?: any}
   --http-config: record # Describes an HTTP data source configuration. — shape: {endpoint?: any, authorizationConfig?: any}
   --relational-database-config: record # Describes a relational database data source configuration. — shape: {relationalDatabaseSourceType?: any, rdsHttpEndpointConfig?: any}
@@ -415,21 +424,21 @@ export def "apis-datasources create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_id: $api_id} | format pattern "/v1/apis/{api_id}/datasources"))
-  let body = {"name": $name, "description": $description, "type": $type, "serviceRoleArn": $service_role_arn, "dynamodbConfig": $dynamodb_config, "lambdaConfig": $lambda_config, "elasticsearchConfig": $elasticsearch_config, "openSearchServiceConfig": $open_search_service_config, "httpConfig": $http_config, "relationalDatabaseConfig": $relational_database_config, "eventBridgeConfig": $event_bridge_config} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({api_id: (encode-path-segment $api_id)} | format pattern "/v1/apis/{api_id}/datasources"))
+  let req_body = {"name": $name, "description": $description, "type": $type, "serviceRoleArn": $service_role_arn, "dynamodbConfig": $dynamodb_config, "lambdaConfig": $lambda_config, "elasticsearchConfig": $elasticsearch_config, "openSearchServiceConfig": $open_search_service_config, "httpConfig": $http_config, "relationalDatabaseConfig": $relational_database_config, "eventBridgeConfig": $event_bridge_config} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists the data sources for a given API.
 #
 # GET /v1/apis/{apiId}/datasources
 # operationId: ListDataSources
-export def "apis-datasources list" [
+export def "apis-datasources list-data-sources" [
   api_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -452,19 +461,19 @@ export def "apis-datasources list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({api_id: $api_id} | format pattern "/v1/apis/{api_id}/datasources") $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({api_id: (encode-path-segment $api_id)} | format pattern "/v1/apis/{api_id}/datasources") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Creates a custom <code>DomainName</code> object.
+# Creates a custom DomainName object.
 #
 # POST /v1/domainnames
 # operationId: CreateDomainName
-export def "domainnames create" [
+export def "domainnames create-domain-name" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -482,26 +491,26 @@ export def "domainnames create" [
   --x-amz-signed-headers: string
   domain_name: string # The domain name.
   certificate_arn: string # The Amazon Resource Name (ARN) of the certificate. This can be an Certificate Manager (ACM) certificate or an Identity and Access Management (IAM) server certificate.
-  --description: string # A description of the <code>DomainName</code>.
+  --description: string # A description of the DomainName.
 ]: any -> record<domainNameConfig: record<domainName: record, description: record, certificateArn: record, appsyncDomainName: record, hostedZoneId: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/domainnames")
-  let body = {"domainName": $domain_name, "certificateArn": $certificate_arn, "description": $description} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"domainName": $domain_name, "certificateArn": $certificate_arn, "description": $description} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists multiple custom domain names.
 #
 # GET /v1/domainnames
 # operationId: ListDomainNames
-export def "domainnames list" [
+export def "domainnames list-domain-names" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -524,14 +533,14 @@ export def "domainnames list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/domainnames" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# <p>Creates a <code>Function</code> object.</p> <p>A function is a reusable entity. You can use multiple functions to compose the resolver logic.</p>
+# Creates a Function object. A function is a reusable entity. You can use multiple functions to compose the resolver logic.
 #
 # POST /v1/apis/{apiId}/functions
 # operationId: CreateFunction
@@ -554,28 +563,28 @@ export def "apis-functions create" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  name: string # The <code>Function</code> name. The function name does not have to be unique.
-  --description: string # The <code>Function</code> description.
-  data_source_name: string # The <code>Function</code> <code>DataSource</code> name.
-  --request-mapping-template: string # The <code>Function</code> request mapping template. Functions support only the 2018-05-29 version of the request mapping template.
-  --response-mapping-template: string # The <code>Function</code> response mapping template.
-  --function-version: string # The <code>version</code> of the request mapping template. Currently, the supported value is 2018-05-29. Note that when using VTL and mapping templates, the <code>functionVersion</code> is required.
-  --sync-config: record # <p>Describes a Sync configuration for a resolver.</p> <p>Specifies which Conflict Detection strategy and Resolution strategy to use when the resolver is invoked.</p> — shape: {conflictHandler?: any, conflictDetection?: any, lambdaConflictHandlerConfig?: any}
+  name: string # The Function name. The function name does not have to be unique.
+  --description: string # The Function description.
+  data_source_name: string # The Function DataSource name.
+  --request-mapping-template: string # The Function request mapping template. Functions support only the 2018-05-29 version of the request mapping template.
+  --response-mapping-template: string # The Function response mapping template.
+  --function-version: string # The version of the request mapping template. Currently, the supported value is 2018-05-29. Note that when using VTL and mapping templates, the functionVersion is required.
+  --sync-config: record # Describes a Sync configuration for a resolver. Specifies which Conflict Detection strategy and Resolution strategy to use when the resolver is invoked. — shape: {conflictHandler?: any, conflictDetection?: any, lambdaConflictHandlerConfig?: any}
   --max-batch-size: int # The maximum batching size for a resolver.
   --runtime: record # Describes a runtime used by an Amazon Web Services AppSync pipeline resolver or Amazon Web Services AppSync function. Specifies the name and version of the runtime to use. Note that if a runtime is specified, code must also be specified. — shape: {name?: any, runtimeVersion?: any}
-  --code: string # The <code>function</code> code that contains the request and response functions. When code is used, the <code>runtime</code> is required. The <code>runtime</code> value must be <code>APPSYNC_JS</code>.
+  --code: string # The function code that contains the request and response functions. When code is used, the runtime is required. The runtime value must be APPSYNC_JS.
 ]: any -> record<functionConfiguration: record<functionId: record, functionArn: record, name: record, description: record, dataSourceName: record, requestMappingTemplate: record, responseMappingTemplate: record, functionVersion: record, syncConfig: record<conflictHandler: record, conflictDetection: record, lambdaConflictHandlerConfig: record>, maxBatchSize: record, runtime: record<name: record, runtimeVersion: record>, code: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_id: $api_id} | format pattern "/v1/apis/{api_id}/functions"))
-  let body = {"name": $name, "description": $description, "dataSourceName": $data_source_name, "requestMappingTemplate": $request_mapping_template, "responseMappingTemplate": $response_mapping_template, "functionVersion": $function_version, "syncConfig": $sync_config, "maxBatchSize": $max_batch_size, "runtime": $runtime, "code": $code} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({api_id: (encode-path-segment $api_id)} | format pattern "/v1/apis/{api_id}/functions"))
+  let req_body = {"name": $name, "description": $description, "dataSourceName": $data_source_name, "requestMappingTemplate": $request_mapping_template, "responseMappingTemplate": $response_mapping_template, "functionVersion": $function_version, "syncConfig": $sync_config, "maxBatchSize": $max_batch_size, "runtime": $runtime, "code": $code} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List multiple functions.
@@ -605,15 +614,15 @@ export def "apis-functions list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({api_id: $api_id} | format pattern "/v1/apis/{api_id}/functions") $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({api_id: (encode-path-segment $api_id)} | format pattern "/v1/apis/{api_id}/functions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Creates a <code>GraphqlApi</code> object.
+# Creates a GraphqlApi object.
 #
 # POST /v1/apis
 # operationId: CreateGraphqlApi
@@ -638,27 +647,27 @@ export def "apis create-graphql" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  name: string # A user-supplied name for the <code>GraphqlApi</code>.
+  name: string # A user-supplied name for the GraphqlApi.
   --log-config: record # The Amazon CloudWatch Logs configuration. — shape: {fieldLogLevel?: any, cloudWatchLogsRoleArn?: any, excludeVerboseContent?: any}
   authentication_type: string@authentication-type-completer # The authentication type: API key, Identity and Access Management (IAM), OpenID Connect (OIDC), Amazon Cognito user pools, or Lambda.
   --user-pool-config: record # Describes an Amazon Cognito user pool configuration. — shape: {userPoolId?: any, awsRegion?: any, defaultAction?: any, appIdClientRegex?: any}
   --open-id-connect-config: record # Describes an OpenID Connect (OIDC) configuration. — shape: {issuer?: any, clientId?: any, iatTTL?: any, authTTL?: any}
-  --tags: record # A map with keys of <code>TagKey</code> objects and values of <code>TagValue</code> objects.
-  --additional-authentication-providers: list # A list of additional authentication providers for the <code>GraphqlApi</code> API. — item shape: {authenticationType?: any, openIDConnectConfig?: any, userPoolConfig?: any, lambdaAuthorizerConfig?: any}
-  --xray-enabled: oneof<nothing, bool> # A flag indicating whether to use X-Ray tracing for the <code>GraphqlApi</code>.
-  --lambda-authorizer-config: record # A <code>LambdaAuthorizerConfig</code> specifies how to authorize AppSync API access when using the <code>AWS_LAMBDA</code> authorizer mode. Be aware that an AppSync API can have only one Lambda authorizer configured at a time. — shape: {authorizerResultTtlInSeconds?: any, authorizerUri?: any, identityValidationExpression?: any}
+  --tags: record # A map with keys of TagKey objects and values of TagValue objects.
+  --additional-authentication-providers: list # A list of additional authentication providers for the GraphqlApi API. — item shape: {authenticationType?: any, openIDConnectConfig?: any, userPoolConfig?: any, lambdaAuthorizerConfig?: any}
+  --xray-enabled: oneof<nothing, bool> # A flag indicating whether to use X-Ray tracing for the GraphqlApi.
+  --lambda-authorizer-config: record # A LambdaAuthorizerConfig specifies how to authorize AppSync API access when using the AWS_LAMBDA authorizer mode. Be aware that an AppSync API can have only one Lambda authorizer configured at a time. — shape: {authorizerResultTtlInSeconds?: any, authorizerUri?: any, identityValidationExpression?: any}
 ]: any -> record<graphqlApi: record<name: record, apiId: record, authenticationType: record, logConfig: record<fieldLogLevel: record, cloudWatchLogsRoleArn: record, excludeVerboseContent: record>, userPoolConfig: record<userPoolId: record, awsRegion: record, defaultAction: record, appIdClientRegex: record>, openIDConnectConfig: record<issuer: record, clientId: record, iatTTL: record, authTTL: record>, arn: record, uris: record, tags: record, additionalAuthenticationProviders: record, xrayEnabled: record, wafWebAclArn: record, lambdaAuthorizerConfig: record<authorizerResultTtlInSeconds: record, authorizerUri: record, identityValidationExpression: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/apis")
-  let body = {"name": $name, "logConfig": $log_config, "authenticationType": $authentication_type, "userPoolConfig": $user_pool_config, "openIDConnectConfig": $open_id_connect_config, "tags": $tags, "additionalAuthenticationProviders": $additional_authentication_providers, "xrayEnabled": $xray_enabled, "lambdaAuthorizerConfig": $lambda_authorizer_config} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"name": $name, "logConfig": $log_config, "authenticationType": $authentication_type, "userPoolConfig": $user_pool_config, "openIDConnectConfig": $open_id_connect_config, "tags": $tags, "additionalAuthenticationProviders": $additional_authentication_providers, "xrayEnabled": $xray_enabled, "lambdaAuthorizerConfig": $lambda_authorizer_config} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists your GraphQL APIs.
@@ -688,14 +697,14 @@ export def "apis list-graphql" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/apis" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# <p>Creates a <code>Resolver</code> object.</p> <p>A resolver converts incoming requests into a format that a data source can understand, and converts the data source's responses into GraphQL.</p>
+# Creates a Resolver object. A resolver converts incoming requests into a format that a data source can understand, and converts the data source's responses into GraphQL.
 #
 # POST /v1/apis/{apiId}/types/{typeName}/resolvers
 # operationId: CreateResolver
@@ -723,27 +732,27 @@ export def "apis-types-resolvers create" [
   --x-amz-signed-headers: string
   field_name: string # The name of the field to attach the resolver to.
   --data-source-name: string # The name of the data source for which the resolver is being created.
-  --request-mapping-template: string # <p>The mapping template to use for requests.</p> <p>A resolver uses a request mapping template to convert a GraphQL expression into a format that a data source can understand. Mapping templates are written in Apache Velocity Template Language (VTL).</p> <p>VTL request mapping templates are optional when using an Lambda data source. For all other data sources, VTL request and response mapping templates are required.</p>
+  --request-mapping-template: string # The mapping template to use for requests. A resolver uses a request mapping template to convert a GraphQL expression into a format that a data source can understand. Mapping templates are written in Apache Velocity Template Language (VTL). VTL request mapping templates are optional when using an Lambda data source. For all other data sources, VTL request and response mapping templates are required.
   --response-mapping-template: string # The mapping template to use for responses from the data source.
-  --kind: string@kind-completer # <p>The resolver type.</p> <ul> <li> <p> <b>UNIT</b>: A UNIT resolver type. A UNIT resolver is the default resolver type. You can use a UNIT resolver to run a GraphQL query against a single data source.</p> </li> <li> <p> <b>PIPELINE</b>: A PIPELINE resolver type. You can use a PIPELINE resolver to invoke a series of <code>Function</code> objects in a serial manner. You can use a pipeline resolver to run a GraphQL query against multiple data sources.</p> </li> </ul>
-  --pipeline-config: record # The pipeline configuration for a resolver of kind <code>PIPELINE</code>. — shape: {functions?: any}
-  --sync-config: record # <p>Describes a Sync configuration for a resolver.</p> <p>Specifies which Conflict Detection strategy and Resolution strategy to use when the resolver is invoked.</p> — shape: {conflictHandler?: any, conflictDetection?: any, lambdaConflictHandlerConfig?: any}
+  --kind: string@kind-completer # The resolver type. UNIT: A UNIT resolver type. A UNIT resolver is the default resolver type. You can use a UNIT resolver to run a GraphQL query against a single data source. PIPELINE: A PIPELINE resolver type. You can use a PIPELINE resolver to invoke a series of Function objects in a serial manner. You can use a pipeline resolver to run a GraphQL query against multiple data sources.
+  --pipeline-config: record # The pipeline configuration for a resolver of kind PIPELINE. — shape: {functions?: any}
+  --sync-config: record # Describes a Sync configuration for a resolver. Specifies which Conflict Detection strategy and Resolution strategy to use when the resolver is invoked. — shape: {conflictHandler?: any, conflictDetection?: any, lambdaConflictHandlerConfig?: any}
   --caching-config: record # The caching configuration for a resolver that has caching activated. — shape: {ttl?: any, cachingKeys?: any}
   --max-batch-size: int # The maximum batching size for a resolver.
   --runtime: record # Describes a runtime used by an Amazon Web Services AppSync pipeline resolver or Amazon Web Services AppSync function. Specifies the name and version of the runtime to use. Note that if a runtime is specified, code must also be specified. — shape: {name?: any, runtimeVersion?: any}
-  --code: string # The <code>resolver</code> code that contains the request and response functions. When code is used, the <code>runtime</code> is required. The <code>runtime</code> value must be <code>APPSYNC_JS</code>.
+  --code: string # The resolver code that contains the request and response functions. When code is used, the runtime is required. The runtime value must be APPSYNC_JS.
 ]: any -> record<resolver: record<typeName: record, fieldName: record, dataSourceName: record, resolverArn: record, requestMappingTemplate: record, responseMappingTemplate: record, kind: record, pipelineConfig: record<functions: record>, syncConfig: record<conflictHandler: record, conflictDetection: record, lambdaConflictHandlerConfig: record>, cachingConfig: record<ttl: record, cachingKeys: record>, maxBatchSize: record, runtime: record<name: record, runtimeVersion: record>, code: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_id: $api_id, type_name: $type_name} | format pattern "/v1/apis/{api_id}/types/{type_name}/resolvers"))
-  let body = {"fieldName": $field_name, "dataSourceName": $data_source_name, "requestMappingTemplate": $request_mapping_template, "responseMappingTemplate": $response_mapping_template, "kind": $kind, "pipelineConfig": $pipeline_config, "syncConfig": $sync_config, "cachingConfig": $caching_config, "maxBatchSize": $max_batch_size, "runtime": $runtime, "code": $code} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({api_id: (encode-path-segment $api_id), type_name: (encode-path-segment $type_name)} | format pattern "/v1/apis/{api_id}/types/{type_name}/resolvers"))
+  let req_body = {"fieldName": $field_name, "dataSourceName": $data_source_name, "requestMappingTemplate": $request_mapping_template, "responseMappingTemplate": $response_mapping_template, "kind": $kind, "pipelineConfig": $pipeline_config, "syncConfig": $sync_config, "cachingConfig": $caching_config, "maxBatchSize": $max_batch_size, "runtime": $runtime, "code": $code} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists the resolvers for a given API and type.
@@ -774,15 +783,15 @@ export def "apis-types-resolvers list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({api_id: $api_id, type_name: $type_name} | format pattern "/v1/apis/{api_id}/types/{type_name}/resolvers") $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({api_id: (encode-path-segment $api_id), type_name: (encode-path-segment $type_name)} | format pattern "/v1/apis/{api_id}/types/{type_name}/resolvers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Creates a <code>Type</code> object.
+# Creates a Type object.
 #
 # POST /v1/apis/{apiId}/types
 # operationId: CreateType
@@ -803,27 +812,27 @@ export def "apis-types create" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  definition: string # <p>The type definition, in GraphQL Schema Definition Language (SDL) format.</p> <p>For more information, see the <a href="http://graphql.org/learn/schema/">GraphQL SDL documentation</a>.</p>
+  definition: string # The type definition, in GraphQL Schema Definition Language (SDL) format. For more information, see the GraphQL SDL documentation (http://graphql.org/learn/schema/).
   format: string@format-completer # The type format: SDL or JSON.
 ]: any -> record<type: record<name: record, description: record, arn: record, definition: record, format: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_id: $api_id} | format pattern "/v1/apis/{api_id}/types"))
-  let body = {"definition": $definition, "format": $format} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({api_id: (encode-path-segment $api_id)} | format pattern "/v1/apis/{api_id}/types"))
+  let req_body = {"definition": $definition, "format": $format} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes an API key.
 #
 # DELETE /v1/apis/{apiId}/apikeys/{id}
 # operationId: DeleteApiKey
-export def "apis-apikeys delete" [
+export def "apis-apikeys delete-key" [
   api_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -844,11 +853,11 @@ export def "apis-apikeys delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_id: $api_id, id: $id} | format pattern "/v1/apis/{api_id}/apikeys/{id}"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({api_id: (encode-path-segment $api_id), id: (encode-path-segment $id)} | format pattern "/v1/apis/{api_id}/apikeys/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -856,7 +865,7 @@ export def "apis-apikeys delete" [
 #
 # POST /v1/apis/{apiId}/apikeys/{id}
 # operationId: UpdateApiKey
-export def "apis-apikeys update" [
+export def "apis-apikeys update-key" [
   api_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -880,21 +889,21 @@ export def "apis-apikeys update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_id: $api_id, id: $id} | format pattern "/v1/apis/{api_id}/apikeys/{id}"))
-  let body = {"description": $description, "expires": $expires} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({api_id: (encode-path-segment $api_id), id: (encode-path-segment $id)} | format pattern "/v1/apis/{api_id}/apikeys/{id}"))
+  let req_body = {"description": $description, "expires": $expires} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-# Deletes a <code>DataSource</code> object.
+# Deletes a DataSource object.
 #
 # DELETE /v1/apis/{apiId}/datasources/{name}
 # operationId: DeleteDataSource
-export def "apis-datasources delete" [
+export def "apis-datasources delete-data-source" [
   api_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -915,19 +924,19 @@ export def "apis-datasources delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_id: $api_id, name: $name} | format pattern "/v1/apis/{api_id}/datasources/{name}"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({api_id: (encode-path-segment $api_id), name: (encode-path-segment $name)} | format pattern "/v1/apis/{api_id}/datasources/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Retrieves a <code>DataSource</code> object.
+# Retrieves a DataSource object.
 #
 # GET /v1/apis/{apiId}/datasources/{name}
 # operationId: GetDataSource
-export def "apis-datasources get" [
+export def "apis-datasources get-data-source" [
   api_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -948,15 +957,15 @@ export def "apis-datasources get" [
 ]: nothing -> record<dataSource: record<dataSourceArn: record, name: record, description: record, type: record, serviceRoleArn: record, dynamodbConfig: record<tableName: record, awsRegion: record, useCallerCredentials: record, deltaSyncConfig: record, versioned: record>, lambdaConfig: record<lambdaFunctionArn: record>, elasticsearchConfig: record<endpoint: record, awsRegion: record>, openSearchServiceConfig: record<endpoint: record, awsRegion: record>, httpConfig: record<endpoint: record, authorizationConfig: record>, relationalDatabaseConfig: record<relationalDatabaseSourceType: record, rdsHttpEndpointConfig: record>, eventBridgeConfig: record<eventBusArn: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_id: $api_id, name: $name} | format pattern "/v1/apis/{api_id}/datasources/{name}"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({api_id: (encode-path-segment $api_id), name: (encode-path-segment $name)} | format pattern "/v1/apis/{api_id}/datasources/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Updates a <code>DataSource</code> object.
+# Updates a DataSource object.
 #
 # POST /v1/apis/{apiId}/datasources/{name}
 # operationId: UpdateDataSource
@@ -967,7 +976,7 @@ export def "apis-datasources get" [
 # --httpConfig shape: {endpoint?: any, authorizationConfig?: any}
 # --relationalDatabaseConfig shape: {relationalDatabaseSourceType?: any, rdsHttpEndpointConfig?: any}
 # --eventBridgeConfig shape: {eventBusArn?: any}
-export def "apis-datasources update" [
+export def "apis-datasources update-data-source" [
   api_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -990,7 +999,7 @@ export def "apis-datasources update" [
   --service-role-arn: string # The new service role Amazon Resource Name (ARN) for the data source.
   --dynamodb-config: record # Describes an Amazon DynamoDB data source configuration. — shape: {tableName?: any, awsRegion?: any, useCallerCredentials?: any, deltaSyncConfig?: any, versioned?: any}
   --lambda-config: record # Describes an Lambda data source configuration. — shape: {lambdaFunctionArn?: any}
-  --elasticsearch-config: record # <p>Describes an OpenSearch data source configuration.</p> <p>As of September 2021, Amazon Elasticsearch service is Amazon OpenSearch Service. This configuration is deprecated. For new data sources, use <a>OpenSearchServiceDataSourceConfig</a> to specify an OpenSearch data source.</p> — shape: {endpoint?: any, awsRegion?: any}
+  --elasticsearch-config: record # Describes an OpenSearch data source configuration. As of September 2021, Amazon Elasticsearch service is Amazon OpenSearch Service. This configuration is deprecated. For new data sources, use OpenSearchServiceDataSourceConfig to specify an OpenSearch data source. — shape: {endpoint?: any, awsRegion?: any}
   --open-search-service-config: record # Describes an OpenSearch data source configuration. — shape: {endpoint?: any, awsRegion?: any}
   --http-config: record # Describes an HTTP data source configuration. — shape: {endpoint?: any, authorizationConfig?: any}
   --relational-database-config: record # Describes a relational database data source configuration. — shape: {relationalDatabaseSourceType?: any, rdsHttpEndpointConfig?: any}
@@ -999,21 +1008,21 @@ export def "apis-datasources update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_id: $api_id, name: $name} | format pattern "/v1/apis/{api_id}/datasources/{name}"))
-  let body = {"description": $description, "type": $type, "serviceRoleArn": $service_role_arn, "dynamodbConfig": $dynamodb_config, "lambdaConfig": $lambda_config, "elasticsearchConfig": $elasticsearch_config, "openSearchServiceConfig": $open_search_service_config, "httpConfig": $http_config, "relationalDatabaseConfig": $relational_database_config, "eventBridgeConfig": $event_bridge_config} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({api_id: (encode-path-segment $api_id), name: (encode-path-segment $name)} | format pattern "/v1/apis/{api_id}/datasources/{name}"))
+  let req_body = {"description": $description, "type": $type, "serviceRoleArn": $service_role_arn, "dynamodbConfig": $dynamodb_config, "lambdaConfig": $lambda_config, "elasticsearchConfig": $elasticsearch_config, "openSearchServiceConfig": $open_search_service_config, "httpConfig": $http_config, "relationalDatabaseConfig": $relational_database_config, "eventBridgeConfig": $event_bridge_config} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-# Deletes a custom <code>DomainName</code> object.
+# Deletes a custom DomainName object.
 #
 # DELETE /v1/domainnames/{domainName}
 # operationId: DeleteDomainName
-export def "domainnames delete" [
+export def "domainnames delete-domain-name" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1033,19 +1042,19 @@ export def "domainnames delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({domain_name: $domain_name} | format pattern "/v1/domainnames/{domain_name}"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/v1/domainnames/{domain_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Retrieves a custom <code>DomainName</code> object.
+# Retrieves a custom DomainName object.
 #
 # GET /v1/domainnames/{domainName}
 # operationId: GetDomainName
-export def "domainnames get" [
+export def "domainnames get-domain-name" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1065,19 +1074,19 @@ export def "domainnames get" [
 ]: nothing -> record<domainNameConfig: record<domainName: record, description: record, certificateArn: record, appsyncDomainName: record, hostedZoneId: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({domain_name: $domain_name} | format pattern "/v1/domainnames/{domain_name}"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/v1/domainnames/{domain_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Updates a custom <code>DomainName</code> object.
+# Updates a custom DomainName object.
 #
 # POST /v1/domainnames/{domainName}
 # operationId: UpdateDomainName
-export def "domainnames update" [
+export def "domainnames update-domain-name" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1094,22 +1103,22 @@ export def "domainnames update" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --description: string # A description of the <code>DomainName</code>.
+  --description: string # A description of the DomainName.
 ]: any -> record<domainNameConfig: record<domainName: record, description: record, certificateArn: record, appsyncDomainName: record, hostedZoneId: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({domain_name: $domain_name} | format pattern "/v1/domainnames/{domain_name}"))
-  let body = {"description": $description} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/v1/domainnames/{domain_name}"))
+  let req_body = {"description": $description} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-# Deletes a <code>Function</code>.
+# Deletes a Function.
 #
 # DELETE /v1/apis/{apiId}/functions/{functionId}
 # operationId: DeleteFunction
@@ -1134,15 +1143,15 @@ export def "apis-functions delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_id: $api_id, function_id: $function_id} | format pattern "/v1/apis/{api_id}/functions/{function_id}"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({api_id: (encode-path-segment $api_id), function_id: (encode-path-segment $function_id)} | format pattern "/v1/apis/{api_id}/functions/{function_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Get a <code>Function</code>.
+# Get a Function.
 #
 # GET /v1/apis/{apiId}/functions/{functionId}
 # operationId: GetFunction
@@ -1167,15 +1176,15 @@ export def "apis-functions get" [
 ]: nothing -> record<functionConfiguration: record<functionId: record, functionArn: record, name: record, description: record, dataSourceName: record, requestMappingTemplate: record, responseMappingTemplate: record, functionVersion: record, syncConfig: record<conflictHandler: record, conflictDetection: record, lambdaConflictHandlerConfig: record>, maxBatchSize: record, runtime: record<name: record, runtimeVersion: record>, code: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_id: $api_id, function_id: $function_id} | format pattern "/v1/apis/{api_id}/functions/{function_id}"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({api_id: (encode-path-segment $api_id), function_id: (encode-path-segment $function_id)} | format pattern "/v1/apis/{api_id}/functions/{function_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Updates a <code>Function</code> object.
+# Updates a Function object.
 #
 # POST /v1/apis/{apiId}/functions/{functionId}
 # operationId: UpdateFunction
@@ -1199,31 +1208,31 @@ export def "apis-functions update" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  name: string # The <code>Function</code> name.
-  --description: string # The <code>Function</code> description.
-  data_source_name: string # The <code>Function</code> <code>DataSource</code> name.
-  --request-mapping-template: string # The <code>Function</code> request mapping template. Functions support only the 2018-05-29 version of the request mapping template.
-  --response-mapping-template: string # The <code>Function</code> request mapping template.
-  --function-version: string # The <code>version</code> of the request mapping template. Currently, the supported value is 2018-05-29. Note that when using VTL and mapping templates, the <code>functionVersion</code> is required.
-  --sync-config: record # <p>Describes a Sync configuration for a resolver.</p> <p>Specifies which Conflict Detection strategy and Resolution strategy to use when the resolver is invoked.</p> — shape: {conflictHandler?: any, conflictDetection?: any, lambdaConflictHandlerConfig?: any}
+  name: string # The Function name.
+  --description: string # The Function description.
+  data_source_name: string # The Function DataSource name.
+  --request-mapping-template: string # The Function request mapping template. Functions support only the 2018-05-29 version of the request mapping template.
+  --response-mapping-template: string # The Function request mapping template.
+  --function-version: string # The version of the request mapping template. Currently, the supported value is 2018-05-29. Note that when using VTL and mapping templates, the functionVersion is required.
+  --sync-config: record # Describes a Sync configuration for a resolver. Specifies which Conflict Detection strategy and Resolution strategy to use when the resolver is invoked. — shape: {conflictHandler?: any, conflictDetection?: any, lambdaConflictHandlerConfig?: any}
   --max-batch-size: int # The maximum batching size for a resolver.
   --runtime: record # Describes a runtime used by an Amazon Web Services AppSync pipeline resolver or Amazon Web Services AppSync function. Specifies the name and version of the runtime to use. Note that if a runtime is specified, code must also be specified. — shape: {name?: any, runtimeVersion?: any}
-  --code: string # The <code>function</code> code that contains the request and response functions. When code is used, the <code>runtime</code> is required. The <code>runtime</code> value must be <code>APPSYNC_JS</code>.
+  --code: string # The function code that contains the request and response functions. When code is used, the runtime is required. The runtime value must be APPSYNC_JS.
 ]: any -> record<functionConfiguration: record<functionId: record, functionArn: record, name: record, description: record, dataSourceName: record, requestMappingTemplate: record, responseMappingTemplate: record, functionVersion: record, syncConfig: record<conflictHandler: record, conflictDetection: record, lambdaConflictHandlerConfig: record>, maxBatchSize: record, runtime: record<name: record, runtimeVersion: record>, code: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_id: $api_id, function_id: $function_id} | format pattern "/v1/apis/{api_id}/functions/{function_id}"))
-  let body = {"name": $name, "description": $description, "dataSourceName": $data_source_name, "requestMappingTemplate": $request_mapping_template, "responseMappingTemplate": $response_mapping_template, "functionVersion": $function_version, "syncConfig": $sync_config, "maxBatchSize": $max_batch_size, "runtime": $runtime, "code": $code} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({api_id: (encode-path-segment $api_id), function_id: (encode-path-segment $function_id)} | format pattern "/v1/apis/{api_id}/functions/{function_id}"))
+  let req_body = {"name": $name, "description": $description, "dataSourceName": $data_source_name, "requestMappingTemplate": $request_mapping_template, "responseMappingTemplate": $response_mapping_template, "functionVersion": $function_version, "syncConfig": $sync_config, "maxBatchSize": $max_batch_size, "runtime": $runtime, "code": $code} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-# Deletes a <code>GraphqlApi</code> object.
+# Deletes a GraphqlApi object.
 #
 # DELETE /v1/apis/{apiId}
 # operationId: DeleteGraphqlApi
@@ -1247,15 +1256,15 @@ export def "apis delete-graphql" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_id: $api_id} | format pattern "/v1/apis/{api_id}"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({api_id: (encode-path-segment $api_id)} | format pattern "/v1/apis/{api_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Retrieves a <code>GraphqlApi</code> object.
+# Retrieves a GraphqlApi object.
 #
 # GET /v1/apis/{apiId}
 # operationId: GetGraphqlApi
@@ -1279,15 +1288,15 @@ export def "apis get-graphql" [
 ]: nothing -> record<graphqlApi: record<name: record, apiId: record, authenticationType: record, logConfig: record<fieldLogLevel: record, cloudWatchLogsRoleArn: record, excludeVerboseContent: record>, userPoolConfig: record<userPoolId: record, awsRegion: record, defaultAction: record, appIdClientRegex: record>, openIDConnectConfig: record<issuer: record, clientId: record, iatTTL: record, authTTL: record>, arn: record, uris: record, tags: record, additionalAuthenticationProviders: record, xrayEnabled: record, wafWebAclArn: record, lambdaAuthorizerConfig: record<authorizerResultTtlInSeconds: record, authorizerUri: record, identityValidationExpression: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_id: $api_id} | format pattern "/v1/apis/{api_id}"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({api_id: (encode-path-segment $api_id)} | format pattern "/v1/apis/{api_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Updates a <code>GraphqlApi</code> object.
+# Updates a GraphqlApi object.
 #
 # POST /v1/apis/{apiId}
 # operationId: UpdateGraphqlApi
@@ -1313,29 +1322,29 @@ export def "apis update-graphql" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  name: string # The new name for the <code>GraphqlApi</code> object.
+  name: string # The new name for the GraphqlApi object.
   --log-config: record # The Amazon CloudWatch Logs configuration. — shape: {fieldLogLevel?: any, cloudWatchLogsRoleArn?: any, excludeVerboseContent?: any}
-  --authentication-type: string@authentication-type-completer # The new authentication type for the <code>GraphqlApi</code> object.
+  --authentication-type: string@authentication-type-completer # The new authentication type for the GraphqlApi object.
   --user-pool-config: record # Describes an Amazon Cognito user pool configuration. — shape: {userPoolId?: any, awsRegion?: any, defaultAction?: any, appIdClientRegex?: any}
   --open-id-connect-config: record # Describes an OpenID Connect (OIDC) configuration. — shape: {issuer?: any, clientId?: any, iatTTL?: any, authTTL?: any}
-  --additional-authentication-providers: list # A list of additional authentication providers for the <code>GraphqlApi</code> API. — item shape: {authenticationType?: any, openIDConnectConfig?: any, userPoolConfig?: any, lambdaAuthorizerConfig?: any}
-  --xray-enabled: oneof<nothing, bool> # A flag indicating whether to use X-Ray tracing for the <code>GraphqlApi</code>.
-  --lambda-authorizer-config: record # A <code>LambdaAuthorizerConfig</code> specifies how to authorize AppSync API access when using the <code>AWS_LAMBDA</code> authorizer mode. Be aware that an AppSync API can have only one Lambda authorizer configured at a time. — shape: {authorizerResultTtlInSeconds?: any, authorizerUri?: any, identityValidationExpression?: any}
+  --additional-authentication-providers: list # A list of additional authentication providers for the GraphqlApi API. — item shape: {authenticationType?: any, openIDConnectConfig?: any, userPoolConfig?: any, lambdaAuthorizerConfig?: any}
+  --xray-enabled: oneof<nothing, bool> # A flag indicating whether to use X-Ray tracing for the GraphqlApi.
+  --lambda-authorizer-config: record # A LambdaAuthorizerConfig specifies how to authorize AppSync API access when using the AWS_LAMBDA authorizer mode. Be aware that an AppSync API can have only one Lambda authorizer configured at a time. — shape: {authorizerResultTtlInSeconds?: any, authorizerUri?: any, identityValidationExpression?: any}
 ]: any -> record<graphqlApi: record<name: record, apiId: record, authenticationType: record, logConfig: record<fieldLogLevel: record, cloudWatchLogsRoleArn: record, excludeVerboseContent: record>, userPoolConfig: record<userPoolId: record, awsRegion: record, defaultAction: record, appIdClientRegex: record>, openIDConnectConfig: record<issuer: record, clientId: record, iatTTL: record, authTTL: record>, arn: record, uris: record, tags: record, additionalAuthenticationProviders: record, xrayEnabled: record, wafWebAclArn: record, lambdaAuthorizerConfig: record<authorizerResultTtlInSeconds: record, authorizerUri: record, identityValidationExpression: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_id: $api_id} | format pattern "/v1/apis/{api_id}"))
-  let body = {"name": $name, "logConfig": $log_config, "authenticationType": $authentication_type, "userPoolConfig": $user_pool_config, "openIDConnectConfig": $open_id_connect_config, "additionalAuthenticationProviders": $additional_authentication_providers, "xrayEnabled": $xray_enabled, "lambdaAuthorizerConfig": $lambda_authorizer_config} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({api_id: (encode-path-segment $api_id)} | format pattern "/v1/apis/{api_id}"))
+  let req_body = {"name": $name, "logConfig": $log_config, "authenticationType": $authentication_type, "userPoolConfig": $user_pool_config, "openIDConnectConfig": $open_id_connect_config, "additionalAuthenticationProviders": $additional_authentication_providers, "xrayEnabled": $xray_enabled, "lambdaAuthorizerConfig": $lambda_authorizer_config} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-# Deletes a <code>Resolver</code> object.
+# Deletes a Resolver object.
 #
 # DELETE /v1/apis/{apiId}/types/{typeName}/resolvers/{fieldName}
 # operationId: DeleteResolver
@@ -1361,15 +1370,15 @@ export def "apis-types-resolvers delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_id: $api_id, type_name: $type_name, field_name: $field_name} | format pattern "/v1/apis/{api_id}/types/{type_name}/resolvers/{field_name}"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({api_id: (encode-path-segment $api_id), type_name: (encode-path-segment $type_name), field_name: (encode-path-segment $field_name)} | format pattern "/v1/apis/{api_id}/types/{type_name}/resolvers/{field_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Retrieves a <code>Resolver</code> object.
+# Retrieves a Resolver object.
 #
 # GET /v1/apis/{apiId}/types/{typeName}/resolvers/{fieldName}
 # operationId: GetResolver
@@ -1395,15 +1404,15 @@ export def "apis-types-resolvers get" [
 ]: nothing -> record<resolver: record<typeName: record, fieldName: record, dataSourceName: record, resolverArn: record, requestMappingTemplate: record, responseMappingTemplate: record, kind: record, pipelineConfig: record<functions: record>, syncConfig: record<conflictHandler: record, conflictDetection: record, lambdaConflictHandlerConfig: record>, cachingConfig: record<ttl: record, cachingKeys: record>, maxBatchSize: record, runtime: record<name: record, runtimeVersion: record>, code: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_id: $api_id, type_name: $type_name, field_name: $field_name} | format pattern "/v1/apis/{api_id}/types/{type_name}/resolvers/{field_name}"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({api_id: (encode-path-segment $api_id), type_name: (encode-path-segment $type_name), field_name: (encode-path-segment $field_name)} | format pattern "/v1/apis/{api_id}/types/{type_name}/resolvers/{field_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Updates a <code>Resolver</code> object.
+# Updates a Resolver object.
 #
 # POST /v1/apis/{apiId}/types/{typeName}/resolvers/{fieldName}
 # operationId: UpdateResolver
@@ -1431,30 +1440,30 @@ export def "apis-types-resolvers update" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --data-source-name: string # The new data source name.
-  --request-mapping-template: string # <p>The new request mapping template.</p> <p>A resolver uses a request mapping template to convert a GraphQL expression into a format that a data source can understand. Mapping templates are written in Apache Velocity Template Language (VTL).</p> <p>VTL request mapping templates are optional when using an Lambda data source. For all other data sources, VTL request and response mapping templates are required.</p>
+  --request-mapping-template: string # The new request mapping template. A resolver uses a request mapping template to convert a GraphQL expression into a format that a data source can understand. Mapping templates are written in Apache Velocity Template Language (VTL). VTL request mapping templates are optional when using an Lambda data source. For all other data sources, VTL request and response mapping templates are required.
   --response-mapping-template: string # The new response mapping template.
-  --kind: string@kind-completer # <p>The resolver type.</p> <ul> <li> <p> <b>UNIT</b>: A UNIT resolver type. A UNIT resolver is the default resolver type. You can use a UNIT resolver to run a GraphQL query against a single data source.</p> </li> <li> <p> <b>PIPELINE</b>: A PIPELINE resolver type. You can use a PIPELINE resolver to invoke a series of <code>Function</code> objects in a serial manner. You can use a pipeline resolver to run a GraphQL query against multiple data sources.</p> </li> </ul>
-  --pipeline-config: record # The pipeline configuration for a resolver of kind <code>PIPELINE</code>. — shape: {functions?: any}
-  --sync-config: record # <p>Describes a Sync configuration for a resolver.</p> <p>Specifies which Conflict Detection strategy and Resolution strategy to use when the resolver is invoked.</p> — shape: {conflictHandler?: any, conflictDetection?: any, lambdaConflictHandlerConfig?: any}
+  --kind: string@kind-completer # The resolver type. UNIT: A UNIT resolver type. A UNIT resolver is the default resolver type. You can use a UNIT resolver to run a GraphQL query against a single data source. PIPELINE: A PIPELINE resolver type. You can use a PIPELINE resolver to invoke a series of Function objects in a serial manner. You can use a pipeline resolver to run a GraphQL query against multiple data sources.
+  --pipeline-config: record # The pipeline configuration for a resolver of kind PIPELINE. — shape: {functions?: any}
+  --sync-config: record # Describes a Sync configuration for a resolver. Specifies which Conflict Detection strategy and Resolution strategy to use when the resolver is invoked. — shape: {conflictHandler?: any, conflictDetection?: any, lambdaConflictHandlerConfig?: any}
   --caching-config: record # The caching configuration for a resolver that has caching activated. — shape: {ttl?: any, cachingKeys?: any}
   --max-batch-size: int # The maximum batching size for a resolver.
   --runtime: record # Describes a runtime used by an Amazon Web Services AppSync pipeline resolver or Amazon Web Services AppSync function. Specifies the name and version of the runtime to use. Note that if a runtime is specified, code must also be specified. — shape: {name?: any, runtimeVersion?: any}
-  --code: string # The <code>resolver</code> code that contains the request and response functions. When code is used, the <code>runtime</code> is required. The <code>runtime</code> value must be <code>APPSYNC_JS</code>.
+  --code: string # The resolver code that contains the request and response functions. When code is used, the runtime is required. The runtime value must be APPSYNC_JS.
 ]: any -> record<resolver: record<typeName: record, fieldName: record, dataSourceName: record, resolverArn: record, requestMappingTemplate: record, responseMappingTemplate: record, kind: record, pipelineConfig: record<functions: record>, syncConfig: record<conflictHandler: record, conflictDetection: record, lambdaConflictHandlerConfig: record>, cachingConfig: record<ttl: record, cachingKeys: record>, maxBatchSize: record, runtime: record<name: record, runtimeVersion: record>, code: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_id: $api_id, type_name: $type_name, field_name: $field_name} | format pattern "/v1/apis/{api_id}/types/{type_name}/resolvers/{field_name}"))
-  let body = {"dataSourceName": $data_source_name, "requestMappingTemplate": $request_mapping_template, "responseMappingTemplate": $response_mapping_template, "kind": $kind, "pipelineConfig": $pipeline_config, "syncConfig": $sync_config, "cachingConfig": $caching_config, "maxBatchSize": $max_batch_size, "runtime": $runtime, "code": $code} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({api_id: (encode-path-segment $api_id), type_name: (encode-path-segment $type_name), field_name: (encode-path-segment $field_name)} | format pattern "/v1/apis/{api_id}/types/{type_name}/resolvers/{field_name}"))
+  let req_body = {"dataSourceName": $data_source_name, "requestMappingTemplate": $request_mapping_template, "responseMappingTemplate": $response_mapping_template, "kind": $kind, "pipelineConfig": $pipeline_config, "syncConfig": $sync_config, "cachingConfig": $caching_config, "maxBatchSize": $max_batch_size, "runtime": $runtime, "code": $code} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-# Deletes a <code>Type</code> object.
+# Deletes a Type object.
 #
 # DELETE /v1/apis/{apiId}/types/{typeName}
 # operationId: DeleteType
@@ -1479,15 +1488,15 @@ export def "apis-types delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_id: $api_id, type_name: $type_name} | format pattern "/v1/apis/{api_id}/types/{type_name}"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({api_id: (encode-path-segment $api_id), type_name: (encode-path-segment $type_name)} | format pattern "/v1/apis/{api_id}/types/{type_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Updates a <code>Type</code> object.
+# Updates a Type object.
 #
 # POST /v1/apis/{apiId}/types/{typeName}
 # operationId: UpdateType
@@ -1515,22 +1524,22 @@ export def "apis-types update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_id: $api_id, type_name: $type_name} | format pattern "/v1/apis/{api_id}/types/{type_name}"))
-  let body = {"definition": $definition, "format": $format} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({api_id: (encode-path-segment $api_id), type_name: (encode-path-segment $type_name)} | format pattern "/v1/apis/{api_id}/types/{type_name}"))
+  let req_body = {"definition": $definition, "format": $format} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-# Evaluates the given code and returns the response. The code definition requirements depend on the specified runtime. For <code>APPSYNC_JS</code> runtimes, the code defines the request and response functions. The request function takes the incoming request after a GraphQL operation is parsed and converts it into a request configuration for the selected data source operation. The response function interprets responses from the data source and maps it to the shape of the GraphQL field output type. 
+# Evaluates the given code and returns the response. The code definition requirements depend on the specified runtime. For APPSYNC_JS runtimes, the code defines the request and response functions. The request function takes the incoming request after a GraphQL operation is parsed and converts it into a request configuration for the selected data source operation. The response function interprets responses from the data source and maps it to the shape of the GraphQL field output type.
 #
 # POST /v1/dataplane-evaluatecode
 # operationId: EvaluateCode
 # --runtime shape: {name?: any, runtimeVersion?: any}
-export def "dataplane-evaluatecode post" [
+export def "dataplane-evaluatecode create-evaluate-code" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1547,28 +1556,28 @@ export def "dataplane-evaluatecode post" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   runtime: record # Describes a runtime used by an Amazon Web Services AppSync pipeline resolver or Amazon Web Services AppSync function. Specifies the name and version of the runtime to use. Note that if a runtime is specified, code must also be specified. — shape: {name?: any, runtimeVersion?: any}
-  code: string # The code definition to be evaluated. Note that <code>code</code> and <code>runtime</code> are both required for this action. The <code>runtime</code> value must be <code>APPSYNC_JS</code>.
-  context: string # The map that holds all of the contextual information for your resolver invocation. A <code>context</code> is required for this action.
-  --function: string # The function within the code to be evaluated. If provided, the valid values are <code>request</code> and <code>response</code>.
+  code: string # The code definition to be evaluated. Note that code and runtime are both required for this action. The runtime value must be APPSYNC_JS.
+  context: string # The map that holds all of the contextual information for your resolver invocation. A context is required for this action.
+  --function: string # The function within the code to be evaluated. If provided, the valid values are request and response.
 ]: any -> record<evaluationResult: record, error: record<message: record, codeErrors: record>, logs: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/dataplane-evaluatecode")
-  let body = {"runtime": $runtime, "code": $code, "context": $context, "function": $function} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"runtime": $runtime, "code": $code, "context": $context, "function": $function} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-# <p>Evaluates a given template and returns the response. The mapping template can be a request or response template.</p> <p>Request templates take the incoming request after a GraphQL operation is parsed and convert it into a request configuration for the selected data source operation. Response templates interpret responses from the data source and map it to the shape of the GraphQL field output type.</p> <p>Mapping templates are written in the Apache Velocity Template Language (VTL).</p>
+# Evaluates a given template and returns the response. The mapping template can be a request or response template. Request templates take the incoming request after a GraphQL operation is parsed and convert it into a request configuration for the selected data source operation. Response templates interpret responses from the data source and map it to the shape of the GraphQL field output type. Mapping templates are written in the Apache Velocity Template Language (VTL).
 #
 # POST /v1/dataplane-evaluatetemplate
 # operationId: EvaluateMappingTemplate
-export def "dataplane-evaluatetemplate post" [
+export def "dataplane-evaluatetemplate create-evaluate-mapping-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1584,23 +1593,23 @@ export def "dataplane-evaluatetemplate post" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  template: string # The mapping template; this can be a request or response template. A <code>template</code> is required for this action.
-  context: string # The map that holds all of the contextual information for your resolver invocation. A <code>context</code> is required for this action.
+  template: string # The mapping template; this can be a request or response template. A template is required for this action.
+  context: string # The map that holds all of the contextual information for your resolver invocation. A context is required for this action.
 ]: any -> record<evaluationResult: record, error: record<message: record>, logs: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/dataplane-evaluatetemplate")
-  let body = {"template": $template, "context": $context} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"template": $template, "context": $context} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-# Flushes an <code>ApiCache</code> object.
+# Flushes an ApiCache object.
 #
 # DELETE /v1/apis/{apiId}/FlushCache
 # operationId: FlushApiCache
@@ -1624,11 +1633,11 @@ export def "apis-flush-cache delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_id: $api_id} | format pattern "/v1/apis/{api_id}/FlushCache"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({api_id: (encode-path-segment $api_id)} | format pattern "/v1/apis/{api_id}/FlushCache"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1659,11 +1668,11 @@ export def "apis-schemaformat get-introspection-schema" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "includeDirectives" $include_directives "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({api_id: $api_id} | format pattern "/v1/apis/{api_id}/schema#format") $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({api_id: (encode-path-segment $api_id)} | format pattern "/v1/apis/{api_id}/schema#format") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1691,19 +1700,19 @@ export def "apis-schemacreation get-schema-creation-status" [
 ]: nothing -> record<status: record, details: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_id: $api_id} | format pattern "/v1/apis/{api_id}/schemacreation"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({api_id: (encode-path-segment $api_id)} | format pattern "/v1/apis/{api_id}/schemacreation"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# <p>Adds a new schema to your GraphQL API.</p> <p>This operation is asynchronous. Use to determine when it has completed.</p>
+# Adds a new schema to your GraphQL API. This operation is asynchronous. Use to determine when it has completed.
 #
 # POST /v1/apis/{apiId}/schemacreation
 # operationId: StartSchemaCreation
-export def "apis-schemacreation start" [
+export def "apis-schemacreation start-schema-creation" [
   api_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1725,17 +1734,17 @@ export def "apis-schemacreation start" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_id: $api_id} | format pattern "/v1/apis/{api_id}/schemacreation"))
-  let body = {"definition": $definition} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({api_id: (encode-path-segment $api_id)} | format pattern "/v1/apis/{api_id}/schemacreation"))
+  let req_body = {"definition": $definition} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-# Retrieves a <code>Type</code> object.
+# Retrieves a Type object.
 #
 # GET /v1/apis/{apiId}/types/{typeName}#format
 # operationId: GetType
@@ -1762,11 +1771,11 @@ export def "apis-types get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({api_id: $api_id, type_name: $type_name} | format pattern "/v1/apis/{api_id}/types/{type_name}#format") $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({api_id: (encode-path-segment $api_id), type_name: (encode-path-segment $type_name)} | format pattern "/v1/apis/{api_id}/types/{type_name}#format") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1798,11 +1807,11 @@ export def "apis-functions-resolvers list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({api_id: $api_id, function_id: $function_id} | format pattern "/v1/apis/{api_id}/functions/{function_id}/resolvers") $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({api_id: (encode-path-segment $api_id), function_id: (encode-path-segment $function_id)} | format pattern "/v1/apis/{api_id}/functions/{function_id}/resolvers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1810,7 +1819,7 @@ export def "apis-functions-resolvers list" [
 #
 # GET /v1/tags/{resourceArn}
 # operationId: ListTagsForResource
-export def "tags list-tags-for-resource" [
+export def "tags list-for-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1830,11 +1839,11 @@ export def "tags list-tags-for-resource" [
 ]: nothing -> record<tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({resource_arn: $resource_arn} | format pattern "/v1/tags/{resource_arn}"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/v1/tags/{resource_arn}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1859,19 +1868,19 @@ export def "tags tag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  tags: record # A map with keys of <code>TagKey</code> objects and values of <code>TagValue</code> objects.
+  tags: record # A map with keys of TagKey objects and values of TagValue objects.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({resource_arn: $resource_arn} | format pattern "/v1/tags/{resource_arn}"))
-  let body = {"tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/v1/tags/{resource_arn}"))
+  let req_body = {"tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists the types for a given API.
@@ -1902,11 +1911,11 @@ export def "apis-typesformat list-types" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({api_id: $api_id} | format pattern "/v1/apis/{api_id}/types#format") $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({api_id: (encode-path-segment $api_id)} | format pattern "/v1/apis/{api_id}/types#format") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1924,7 +1933,7 @@ export def "tags untag-resource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tag-keys: list # A list of <code>TagKey</code> objects.
+  --tag-keys: list # A list of TagKey objects.
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1936,11 +1945,11 @@ export def "tags untag-resource" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "tagKeys" $tag_keys "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_arn: $resource_arn} | format pattern "/v1/tags/{resource_arn}#tagKeys") $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/v1/tags/{resource_arn}#tagKeys") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1965,19 +1974,19 @@ export def "apis-api-caches-update update" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  ttl: int # <p>TTL in seconds for cache entries.</p> <p>Valid values are 1–3,600 seconds.</p>
-  api_caching_behavior: string@api-caching-behavior-completer # <p>Caching behavior.</p> <ul> <li> <p> <b>FULL_REQUEST_CACHING</b>: All requests are fully cached.</p> </li> <li> <p> <b>PER_RESOLVER_CACHING</b>: Individual resolvers that you specify are cached.</p> </li> </ul>
-  type: string@type-completer # <p>The cache instance type. Valid values are </p> <ul> <li> <p> <code>SMALL</code> </p> </li> <li> <p> <code>MEDIUM</code> </p> </li> <li> <p> <code>LARGE</code> </p> </li> <li> <p> <code>XLARGE</code> </p> </li> <li> <p> <code>LARGE_2X</code> </p> </li> <li> <p> <code>LARGE_4X</code> </p> </li> <li> <p> <code>LARGE_8X</code> (not available in all regions)</p> </li> <li> <p> <code>LARGE_12X</code> </p> </li> </ul> <p>Historically, instance types were identified by an EC2-style value. As of July 2020, this is deprecated, and the generic identifiers above should be used.</p> <p>The following legacy instance types are available, but their use is discouraged:</p> <ul> <li> <p> <b>T2_SMALL</b>: A t2.small instance type.</p> </li> <li> <p> <b>T2_MEDIUM</b>: A t2.medium instance type.</p> </li> <li> <p> <b>R4_LARGE</b>: A r4.large instance type.</p> </li> <li> <p> <b>R4_XLARGE</b>: A r4.xlarge instance type.</p> </li> <li> <p> <b>R4_2XLARGE</b>: A r4.2xlarge instance type.</p> </li> <li> <p> <b>R4_4XLARGE</b>: A r4.4xlarge instance type.</p> </li> <li> <p> <b>R4_8XLARGE</b>: A r4.8xlarge instance type.</p> </li> </ul>
+  ttl: int # TTL in seconds for cache entries. Valid values are 1–3,600 seconds.
+  api_caching_behavior: string@api-caching-behavior-completer # Caching behavior. FULL_REQUEST_CACHING: All requests are fully cached. PER_RESOLVER_CACHING: Individual resolvers that you specify are cached.
+  type: string@type-completer # The cache instance type. Valid values are SMALL MEDIUM LARGE XLARGE LARGE_2X LARGE_4X LARGE_8X (not available in all regions) LARGE_12X Historically, instance types were identified by an EC2-style value. As of July 2020, this is deprecated, and the generic identifiers above should be used. The following legacy instance types are available, but their use is discouraged: T2_SMALL: A t2.small instance type. T2_MEDIUM: A t2.medium instance type. R4_LARGE: A r4.large instance type. R4_XLARGE: A r4.xlarge instance type. R4_2XLARGE: A r4.2xlarge instance type. R4_4XLARGE: A r4.4xlarge instance type. R4_8XLARGE: A r4.8xlarge instance type.
 ]: any -> record<apiCache: record<ttl: record, apiCachingBehavior: record, transitEncryptionEnabled: record, atRestEncryptionEnabled: record, type: record, status: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_id: $api_id} | format pattern "/v1/apis/{api_id}/ApiCaches/update"))
-  let body = {"ttl": $ttl, "apiCachingBehavior": $api_caching_behavior, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({api_id: (encode-path-segment $api_id)} | format pattern "/v1/apis/{api_id}/ApiCaches/update"))
+  let req_body = {"ttl": $ttl, "apiCachingBehavior": $api_caching_behavior, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

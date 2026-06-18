@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -70,7 +79,7 @@ def order-completer [] { ["asc" "desc"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "conversations get-conversations" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "conversations get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -94,7 +103,7 @@ export def commands []: nothing -> table {
 #
 # GET /conversations
 # operationId: get-conversations
-export def "conversations get-conversations" [
+export def "conversations get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -103,9 +112,9 @@ export def "conversations get-conversations" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --page-size: int # The number of results returned per page.   The default value is `10`. The maximum value is `100`. (default: 10)
+  --page-size: int # The number of results returned per page. The default value is `10`. The maximum value is `100`. (default: 10)
   --order: string@order-completer # Show the most (`desc`) / least (`asc`) recently created entries first (default: asc)
-  --cursor: string # The cursor to start returning results from.  You are not expected to provide this manually, but to follow the url provided in `_links.next.href` in the response which contains a `cursor` value
+  --cursor: string # The cursor to start returning results from. You are not expected to provide this manually, but to follow the url provided in `_links.next.href` in the response which contains a `cursor` value
   --date-start: string # Search for conversations created after this ISO8601 date
   --date-end: string # Search for conversations created before this ISO8601 date
 ]: nothing -> record<_embedded: record<data: record<conversations: list>>, _links: record<first: record<href: string>, next: record<href: string>, prev: record<href: string>, self: record<href: string>>, cursor: string, page_size: int> {
@@ -122,7 +131,7 @@ export def "conversations get-conversations" [
 #
 # GET /conversations/{conversation_id}/events
 # operationId: get-events
-export def "conversations-events get-events" [
+export def "conversations-events get" [
   conversation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -132,9 +141,9 @@ export def "conversations-events get-events" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --page-size: int # The number of results returned per page.   The default value is `10`. The maximum value is `100`. (default: 10)
+  --page-size: int # The number of results returned per page. The default value is `10`. The maximum value is `100`. (default: 10)
   --order: string@order-completer # Show the most (`desc`) / least (`asc`) recently created entries first (default: asc)
-  --cursor: string # The cursor to start returning results from.  You are not expected to provide this manually, but to follow the url provided in `_links.next.href` in the response which contains a `cursor` value
+  --cursor: string # The cursor to start returning results from. You are not expected to provide this manually, but to follow the url provided in `_links.next.href` in the response which contains a `cursor` value
   --start-id: string # The ID to start returning events at (e.g. 13)
   --end-id: string # The ID to end returning events at (e.g. 19)
   --event-type: string # The type of event to search for. Does not currently support custom events (e.g. text)
@@ -142,7 +151,7 @@ export def "conversations-events get-events" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "start_id" $start_id "scalar") (serialize-qp "end_id" $end_id "scalar") (serialize-qp "event_type" $event_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({conversation_id: $conversation_id} | format pattern "/conversations/{conversation_id}/events") $qp)
+  let full_url = (build-url $base ({conversation_id: (encode-path-segment $conversation_id)} | format pattern "/conversations/{conversation_id}/events") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -152,7 +161,7 @@ export def "conversations-events get-events" [
 #
 # GET /conversations/{conversation_id}/members
 # operationId: get-members
-export def "conversations-members get-members" [
+export def "conversations-members get" [
   conversation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -162,14 +171,14 @@ export def "conversations-members get-members" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --page-size: int # The number of results returned per page.   The default value is `10`. The maximum value is `100`. (default: 10)
+  --page-size: int # The number of results returned per page. The default value is `10`. The maximum value is `100`. (default: 10)
   --order: string@order-completer # Show the most (`desc`) / least (`asc`) recently created entries first (default: asc)
-  --cursor: string # The cursor to start returning results from.  You are not expected to provide this manually, but to follow the url provided in `_links.next.href` in the response which contains a `cursor` value
+  --cursor: string # The cursor to start returning results from. You are not expected to provide this manually, but to follow the url provided in `_links.next.href` in the response which contains a `cursor` value
 ]: nothing -> record<_embedded: record<data: record<members: list>>, _links: record<first: record<href: string>, next: record<href: string>, prev: record<href: string>, self: record<href: string>>, page_size: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "cursor" $cursor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({conversation_id: $conversation_id} | format pattern "/conversations/{conversation_id}/members") $qp)
+  let full_url = (build-url $base ({conversation_id: (encode-path-segment $conversation_id)} | format pattern "/conversations/{conversation_id}/members") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -179,7 +188,7 @@ export def "conversations-members get-members" [
 #
 # GET /users
 # operationId: get-users
-export def "users get-users" [
+export def "users get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -188,9 +197,9 @@ export def "users get-users" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --page-size: int # The number of results returned per page.   The default value is `10`. The maximum value is `100`. (default: 10)
+  --page-size: int # The number of results returned per page. The default value is `10`. The maximum value is `100`. (default: 10)
   --order: string@order-completer # Show the most (`desc`) / least (`asc`) recently created entries first (default: asc)
-  --cursor: string # The cursor to start returning results from.  You are not expected to provide this manually, but to follow the url provided in `_links.next.href` in the response which contains a `cursor` value
+  --cursor: string # The cursor to start returning results from. You are not expected to provide this manually, but to follow the url provided in `_links.next.href` in the response which contains a `cursor` value
 ]: nothing -> record<_embedded: record<data: record<users: list>>, _links: record<first: record<href: string>, next: record<href: string>, prev: record<href: string>, self: record<href: string>>, cursor: string, page_size: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

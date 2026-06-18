@@ -12,6 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
   match $scheme {
     "basic" => { {headers: {Authorization: $"Basic ($token_val)"}, query: ""} }
+    "basic-credentials" => { {headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: ""} }
     "none" => { {headers: {}, query: ""} }
     _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
   }
@@ -33,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
     "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
     _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -63,13 +73,13 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 }
 
 def base-url-completer [] { ["https://pricing.twilio.com"] }
-def auth-scheme-completer [] { ["basic"] }
+def auth-scheme-completer [] { ["basic" "basic-credentials"] }
 
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "trunking-countries list-trunking-country" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "trunking-countries list-country" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -92,7 +102,7 @@ export def commands []: nothing -> table {
 # GET /v2/Trunking/Countries
 #
 # operationId: ListTrunkingCountry
-export def "trunking-countries list-trunking-country" [
+export def "trunking-countries list-country" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -118,7 +128,7 @@ export def "trunking-countries list-trunking-country" [
 #
 # GET /v2/Trunking/Countries/{IsoCountry}
 # operationId: FetchTrunkingCountry
-export def "trunking-countries get-trunking-country" [
+export def "trunking-countries get-country" [
   iso_country: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -131,7 +141,7 @@ export def "trunking-countries get-trunking-country" [
 ]: nothing -> record<country: string, iso_country: string, originating_call_prices: table<base_price: float, current_price: float, number_type: string>, price_unit: string, terminating_prefix_prices: table<base_price: float, current_price: float, destination_prefixes: list, friendly_name: string, origination_prefixes: list>, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://pricing.twilio.com")
-  let full_url = (build-url $base ({iso_country: $iso_country} | format pattern "/v2/Trunking/Countries/{iso_country}"))
+  let full_url = (build-url $base ({iso_country: (encode-path-segment $iso_country)} | format pattern "/v2/Trunking/Countries/{iso_country}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -156,7 +166,7 @@ export def "trunking-numbers get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://pricing.twilio.com")
   let qp = [(serialize-qp "OriginationNumber" $origination_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({destination_number: $destination_number} | format pattern "/v2/Trunking/Numbers/{destination_number}") $qp)
+  let full_url = (build-url $base ({destination_number: (encode-path-segment $destination_number)} | format pattern "/v2/Trunking/Numbers/{destination_number}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -165,7 +175,7 @@ export def "trunking-numbers get" [
 # GET /v2/Voice/Countries
 #
 # operationId: ListVoiceCountry
-export def "voice-countries list-voice-country" [
+export def "voice-countries list-country" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -191,7 +201,7 @@ export def "voice-countries list-voice-country" [
 #
 # GET /v2/Voice/Countries/{IsoCountry}
 # operationId: FetchVoiceCountry
-export def "voice-countries get-voice-country" [
+export def "voice-countries get-country" [
   iso_country: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -204,7 +214,7 @@ export def "voice-countries get-voice-country" [
 ]: nothing -> record<country: string, inbound_call_prices: table<base_price: float, current_price: float, number_type: string>, iso_country: string, outbound_prefix_prices: table<base_price: float, current_price: float, destination_prefixes: list, friendly_name: string, origination_prefixes: list>, price_unit: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://pricing.twilio.com")
-  let full_url = (build-url $base ({iso_country: $iso_country} | format pattern "/v2/Voice/Countries/{iso_country}"))
+  let full_url = (build-url $base ({iso_country: (encode-path-segment $iso_country)} | format pattern "/v2/Voice/Countries/{iso_country}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -229,7 +239,7 @@ export def "voice-numbers get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://pricing.twilio.com")
   let qp = [(serialize-qp "OriginationNumber" $origination_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({destination_number: $destination_number} | format pattern "/v2/Voice/Numbers/{destination_number}") $qp)
+  let full_url = (build-url $base ({destination_number: (encode-path-segment $destination_number)} | format pattern "/v2/Voice/Numbers/{destination_number}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

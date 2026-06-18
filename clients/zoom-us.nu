@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -60,6 +69,33 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   }
   if ($method in ["head" "options"]) { return $resp }
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+}
+
+# Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
+# the field names whose value should be read from disk as bytes; every
+# other field is sent as a text part (records/lists JSON-stringified).
+# Returns {content_type, body} ready to pass to `do-request`.
+def build-multipart-body [parts: record, file_fields: list<string>]: nothing -> record {
+  let boundary = $"----nu-(random chars --length 24)"
+  let crlf = "\r\n"
+  let chunks = ($parts | transpose k v | where {|p| $p.v != null} | each {|p|
+    let name = $p.k
+    let val = $p.v
+    if $name in $file_fields {
+      let filename = ($val | path basename)
+      let bytes = (open --raw $val | into binary | collect)
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"; filename=\"($filename)\"($crlf)Content-Type: application/octet-stream($crlf)($crlf)" | into binary)
+      $head ++ $bytes ++ ($crlf | into binary)
+    } else {
+      let dt = ($val | describe)
+      let s = if (($dt | str starts-with "record") or ($dt | str starts-with "list") or ($dt | str starts-with "table")) { ($val | to json --raw) } else { ($val | into string) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"($crlf)($crlf)" | into binary)
+      $head ++ ($"($s)($crlf)" | into binary)
+    }
+  })
+  let trailer = ($"--($boundary)--($crlf)" | into binary)
+  let body = ($chunks | reduce --fold (0x[] | into binary) {|chunk, acc| $acc ++ $chunk }) ++ $trailer
+  {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
 }
 
 def base-url-completer [] { ["https://api.zoom.us/v2"] }
@@ -135,7 +171,7 @@ def action-completer-12 [] { ["end"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accounts get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accounts list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -159,7 +195,7 @@ export def commands []: nothing -> table {
 #
 # GET /accounts
 # operationId: accounts
-export def "accounts get" [
+export def "accounts list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -170,7 +206,7 @@ export def "accounts get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page-size: int # The number of records returned within a single API call. (default: 30)
-  --page-number: int #  **Deprecated** - This field has been deprecated and we will stop supporting it completely in a future release. Please use "next_page_token" for pagination instead of this field.  The page number of the current page in the returned records. (default: 1)
+  --page-number: int # **Deprecated** - This field has been deprecated and we will stop supporting it completely in a future release. Please use "next_page_token" for pagination instead of this field. The page number of the current page in the returned records. (default: 1)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -186,8 +222,8 @@ export def "accounts get" [
 #
 # POST /accounts
 # operationId: accountCreate
-# --options shape: {billing_auto_renew?: bool, meeting_connector_list?: list, pay_mode?: "master"|"sub", room_connector_list?: list, share_mc?: bool, share_rc?: bool}
-export def "accounts accountCreate" [
+# --options shape: {billing_auto_renew?: bool, meeting_connector_list?: list<string>, pay_mode?: "master"|"sub", room_connector_list?: list<string>, share_mc?: bool, share_rc?: bool}
+export def "accounts create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -197,29 +233,29 @@ export def "accounts accountCreate" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --account-name: string # Name of the account. If you do not provide a value for this field, by default, the value will be set as a concatenation of "first_name" and "last_name". 
+  --account-name: string # Name of the account. If you do not provide a value for this field, by default, the value will be set as a concatenation of "first_name" and "last_name".
   email: string # User's email address.
   first_name: string # User's first name.
   last_name: string # User's last name.
-  --options: record # Account options object. — shape: {billing_auto_renew?: bool, meeting_connector_list?: list, pay_mode?: "master"|"sub", room_connector_list?: list, share_mc?: bool, share_rc?: bool}
-  password: string # User's password.  **Note:** If the account owner or admin has enabled [enhanced password requirements](https://support.zoom.us/hc/en-us/articles/360034675592-Advanced-security-settings#h_fa9186e4-6818-4f7a-915c-2e25c19f0acd), the value provided in this field must meet those requirements. These requirements can be retrieved by calling the [Get Account Settings API](https://marketplace.zoom.us/docs/api-reference/zoom-api/accounts/accountsettings) and referring to the `password_requirement` field present in the `security` object.
+  --options: record # Account options object. — shape: {billing_auto_renew?: bool, meeting_connector_list?: list<string>, pay_mode?: "master"|"sub", room_connector_list?: list<string>, share_mc?: bool, share_rc?: bool}
+  password: string # User's password. **Note:** If the account owner or admin has enabled [enhanced password requirements](https://support.zoom.us/hc/en-us/articles/360034675592-Advanced-security-settings#h_fa9186e4-6818-4f7a-915c-2e25c19f0acd), the value provided in this field must meet those requirements. These requirements can be retrieved by calling the [Get Account Settings API](https://marketplace.zoom.us/docs/api-reference/zoom-api/accounts/accountsettings) and referring to the `password_requirement` field present in the `security` object.
 ]: any -> record<created_at: string, id: string, owner_email: string, owner_id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/accounts")
-  let body = {"account_name": $account_name, "email": $email, "first_name": $first_name, "last_name": $last_name, "options": $options, "password": $password} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"account_name": $account_name, "email": $email, "first_name": $first_name, "last_name": $last_name, "options": $options, "password": $password} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Disassociate a sub account
 #
 # DELETE /accounts/{accountId}
 # operationId: accountDisassociate
-export def "accounts accountDisassociate" [
+export def "accounts delete-disassociate" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -232,7 +268,7 @@ export def "accounts accountDisassociate" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/accounts/{account_id}"))
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -242,7 +278,7 @@ export def "accounts accountDisassociate" [
 #
 # GET /accounts/{accountId}
 # operationId: account
-export def "accounts account" [
+export def "accounts get" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -256,7 +292,7 @@ export def "accounts account" [
 ]: nothing -> record<created_at: string, id: string, options: record<billing_auto_renew: bool, meeting_connector_list: list<string>, pay_mode: string, room_connector_list: list<string>, share_mc: bool, share_rc: bool>, owner_email: string, owner_id: string, vanity_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/accounts/{account_id}"))
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -266,7 +302,7 @@ export def "accounts account" [
 #
 # GET /accounts/{accountId}/billing
 # operationId: accountBilling
-export def "accounts-billing accountBilling" [
+export def "accounts-billing get" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -280,7 +316,7 @@ export def "accounts-billing accountBilling" [
 ]: nothing -> record<address: string, apt: string, city: string, country: string, email: string, first_name: string, last_name: string, phone_number: string, state: string, zip: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/accounts/{account_id}/billing"))
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/billing"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -290,7 +326,7 @@ export def "accounts-billing accountBilling" [
 #
 # PATCH /accounts/{accountId}/billing
 # operationId: accountBillingUpdate
-export def "accounts-billing accountBillingUpdate" [
+export def "accounts-billing update" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -314,19 +350,19 @@ export def "accounts-billing accountBillingUpdate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/accounts/{account_id}/billing"))
-  let body = {"address": $address, "apt": $apt, "city": $city, "country": $country, "email": $email, "first_name": $first_name, "last_name": $last_name, "phone_number": $phone_number, "state": $state, "zip": $zip} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/billing"))
+  let req_body = {"address": $address, "apt": $apt, "city": $city, "country": $country, "email": $email, "first_name": $first_name, "last_name": $last_name, "phone_number": $phone_number, "state": $state, "zip": $zip} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List billing invoices
 #
 # GET /accounts/{accountId}/billing/invoices
 # operationId: accountBillingInvoices
-export def "accounts-billing-invoices accountBillingInvoices" [
+export def "accounts-billing-invoices list" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -337,13 +373,13 @@ export def "accounts-billing-invoices accountBillingInvoices" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-from: string # Start date for the invoice query in `yyyy-mm-dd` format. The date range defined by the “from” and “to” parameters should not exceed one year. The range defined should fall within the past three years.  (format: date)
+  --qp-from: string # Start date for the invoice query in `yyyy-mm-dd` format. The date range defined by the “from” and “to” parameters should not exceed one year. The range defined should fall within the past three years. (format: date)
   --qp-to: string # End date for the invoice query in `yyyy-mm-dd` format (format: date)
 ]: nothing -> record<currency: string, invoices: table<balance: float, due_date: string, id: string, invoice_date: string, invoice_number: string, status: string, target_date: string, tax_amount: float, total_amount: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/accounts/{account_id}/billing/invoices") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/billing/invoices") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -368,7 +404,7 @@ export def "accounts-billing-invoices get" [
 ]: nothing -> record<balance: float, currency: string, due_date: string, id: string, invoice_date: string, invoice_items: table<charge_name: string, charge_number: string, charge_type: string, end_date: string, quantity: int, start_date: string, tax_amount: float, total_amount: float>, invoice_number: string, status: string, target_date: string, tax_amount: float, total_amount: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({account_id: $account_id, invoice_id: $invoice_id} | format pattern "/accounts/{account_id}/billing/invoices/{invoice_id}"))
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), invoice_id: (encode-path-segment $invoice_id)} | format pattern "/accounts/{account_id}/billing/invoices/{invoice_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -389,13 +425,13 @@ export def "accounts-lock-settings get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --option: string # `meeting_security`: Use this query parameter to view meeting security settings applied on the account.<br>
-  --custom-query-fields: string # Provide the name of the field by which you would like to filter the response. For example, if you provide "host_video" as the value of this field, you will get a response similar to the following:<br> {     "schedule_meeting": {         "host_video": false     } } <br>You can provide multiple values by separating them with commas(example: "host_video,participant_video”).
+  --option: string # `meeting_security`: Use this query parameter to view meeting security settings applied on the account.
+  --custom-query-fields: string # Provide the name of the field by which you would like to filter the response. For example, if you provide "host_video" as the value of this field, you will get a response similar to the following: { "schedule_meeting": { "host_video": false } } You can provide multiple values by separating them with commas(example: "host_video,participant_video”).
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "option" $option "scalar") (serialize-qp "custom_query_fields" $custom_query_fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/accounts/{account_id}/lock_settings") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/lock_settings") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -406,7 +442,7 @@ export def "accounts-lock-settings get" [
 # PATCH /accounts/{accountId}/lock_settings
 # operationId: updateAccountLockSettings
 # --email_notification shape: {alternative_host_reminder?: bool, cancel_meeting_reminder?: bool, cloud_recording_available_reminder?: bool, jbh_reminder?: bool, schedule_for_host_reminder?: bool}
-# --in_meeting shape: {alert_guest_join?: bool, allow_show_zoom_windows?: bool, annotation?: bool, anonymous_question_answer?: bool, attendee_on_hold?: bool, auto_answer?: bool, auto_saving_chat?: bool, breakout_room?: bool, chat?: bool, closed_caption?: bool, co_host?: bool, custom_data_center_regions?: bool, dscp_marking?: bool, e2e_encryption?: bool, entry_exit_chime?: string, far_end_camera_control?: bool, feedback?: bool, file_transfer?: bool, group_hd?: bool, original_audio?: bool, polling?: bool, post_meeting_feedback?: bool, private_chat?: bool, remote_control?: bool, request_permission_to_unmute?: bool, screen_sharing?: bool, sending_default_email_invites?: bool, show_meeting_control_toolbar?: bool, stereo_audio?: bool, use_html_format_email?: bool, virtual_background?: bool, webinar_question_answer?: bool, whiteboard?: bool}
+# --in_meeting shape: {alert_guest_join?: bool, allow_show_zoom_windows?: bool, annotation?: bool, anonymous_question_answer?: bool, attendee_on_hold?: bool, auto_answer?: bool, auto_saving_chat?: bool, breakout_room?: bool, chat?: bool, closed_caption?: bool, co_host?: bool, custom_data_center_regions?: bool, dscp_marking?: bool, e2e_encryption?: bool, entry_exit_chime?: string, far_end_camera_control?: bool, feedback?: bool, file_transfer?: bool, group_hd?: bool, original_audio?: bool, polling?: bool, ... (12 more fields)}
 # --recording shape: {account_user_access_recording?: bool, auto_delete_cmr?: bool, auto_recording?: string, cloud_recording?: bool, cloud_recording_download?: bool, host_delete_cloud_recording?: bool, ip_address_access_control?: record, local_recording?: bool, prevent_host_access_recording?: bool, recording_authentication?: string}
 # --schedule_meeting shape: {audio_type?: bool, embed_password_in_join_link?: bool, enforce_login?: bool, enforce_login_domains?: string, enforce_login_with_domains?: bool, host_video?: bool, join_before_host?: bool, meeting_authentication?: bool, not_store_meeting_topic?: bool, participant_video?: bool, personal_meeting?: bool, require_password_for_instant_meetings?: bool, require_password_for_pmi_meetings?: bool, require_password_for_scheduling_new_meetings?: bool}
 # --telephony shape: {telephony_regions?: bool, third_party_audio?: bool}
@@ -424,7 +460,7 @@ export def "accounts-lock-settings update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --email-notification: record # shape: {alternative_host_reminder?: bool, cancel_meeting_reminder?: bool, cloud_recording_available_reminder?: bool, jbh_reminder?: bool, schedule_for_host_reminder?: bool}
-  --in-meeting: record # shape: {alert_guest_join?: bool, allow_show_zoom_windows?: bool, annotation?: bool, anonymous_question_answer?: bool, attendee_on_hold?: bool, auto_answer?: bool, auto_saving_chat?: bool, breakout_room?: bool, chat?: bool, closed_caption?: bool, co_host?: bool, custom_data_center_regions?: bool, dscp_marking?: bool, e2e_encryption?: bool, entry_exit_chime?: string, far_end_camera_control?: bool, feedback?: bool, file_transfer?: bool, group_hd?: bool, original_audio?: bool, polling?: bool, post_meeting_feedback?: bool, private_chat?: bool, remote_control?: bool, request_permission_to_unmute?: bool, screen_sharing?: bool, sending_default_email_invites?: bool, show_meeting_control_toolbar?: bool, stereo_audio?: bool, use_html_format_email?: bool, virtual_background?: bool, webinar_question_answer?: bool, whiteboard?: bool}
+  --in-meeting: record # shape: {alert_guest_join?: bool, allow_show_zoom_windows?: bool, annotation?: bool, anonymous_question_answer?: bool, attendee_on_hold?: bool, auto_answer?: bool, auto_saving_chat?: bool, breakout_room?: bool, chat?: bool, closed_caption?: bool, co_host?: bool, custom_data_center_regions?: bool, dscp_marking?: bool, e2e_encryption?: bool, entry_exit_chime?: string, far_end_camera_control?: bool, feedback?: bool, file_transfer?: bool, group_hd?: bool, original_audio?: bool, polling?: bool, ... (12 more fields)}
   --recording: record # shape: {account_user_access_recording?: bool, auto_delete_cmr?: bool, auto_recording?: string, cloud_recording?: bool, cloud_recording_download?: bool, host_delete_cloud_recording?: bool, ip_address_access_control?: record, local_recording?: bool, prevent_host_access_recording?: bool, recording_authentication?: string}
   --schedule-meeting: record # shape: {audio_type?: bool, embed_password_in_join_link?: bool, enforce_login?: bool, enforce_login_domains?: string, enforce_login_with_domains?: bool, host_video?: bool, join_before_host?: bool, meeting_authentication?: bool, not_store_meeting_topic?: bool, participant_video?: bool, personal_meeting?: bool, require_password_for_instant_meetings?: bool, require_password_for_pmi_meetings?: bool, require_password_for_scheduling_new_meetings?: bool}
   --telephony: record # shape: {telephony_regions?: bool, third_party_audio?: bool}
@@ -434,19 +470,19 @@ export def "accounts-lock-settings update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/accounts/{account_id}/lock_settings"))
-  let body = {"email_notification": $email_notification, "in_meeting": $in_meeting, "recording": $recording, "schedule_meeting": $schedule_meeting, "telephony": $telephony, "tsp": $tsp, "meeting_security": $meeting_security} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/lock_settings"))
+  let req_body = {"email_notification": $email_notification, "in_meeting": $in_meeting, "recording": $recording, "schedule_meeting": $schedule_meeting, "telephony": $telephony, "tsp": $tsp, "meeting_security": $meeting_security} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get managed domains
 #
 # GET /accounts/{accountId}/managed_domains
 # operationId: accountManagedDomain
-export def "accounts-managed-domains accountManagedDomain" [
+export def "accounts-managed-domains get" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -460,7 +496,7 @@ export def "accounts-managed-domains accountManagedDomain" [
 ]: nothing -> record<domains: list<record>, total_records: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/accounts/{account_id}/managed_domains"))
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/managed_domains"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -470,7 +506,7 @@ export def "accounts-managed-domains accountManagedDomain" [
 #
 # PATCH /accounts/{accountId}/options
 # operationId: accountOptionsUpdate
-export def "accounts-options accountOptionsUpdate" [
+export def "accounts-options update" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -481,21 +517,21 @@ export def "accounts-options accountOptionsUpdate" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --billing-auto-renew: oneof<nothing, bool> # Toggle whether automatic billing renewal is on or off.
-  --meeting-connector-list: list # Specify the IP addresses of the Meeting Connectors that you would like to share with the sub account. Multiple values can be separated by comma. If no value is provided in this field, all the Meeting Connectors of a master account will be shared with the sub account.   **Note:** This option can only be used if the value of `share_mc` is set to `true`.
-  --pay-mode: string@pay-mode-completer # Payee:<br>`master` - master account holder pays.<br>`sub` - Sub account holder pays. (default: master)
-  --room-connector-list: list # Specify the IP addresses of the Room Connectors that you would like to share with the sub account. Multiple values can be separated by comma. If no value is provided in this field, all the Room Connectors of a master account will be shared with the sub account.   **Note:** This option can only be used if the value of `share_rc` is set to `true`.
+  --meeting-connector-list: list<string> # Specify the IP addresses of the Meeting Connectors that you would like to share with the sub account. Multiple values can be separated by comma. If no value is provided in this field, all the Meeting Connectors of a master account will be shared with the sub account. **Note:** This option can only be used if the value of `share_mc` is set to `true`.
+  --pay-mode: string@pay-mode-completer # Payee:`master` - master account holder pays.`sub` - Sub account holder pays. (default: master)
+  --room-connector-list: list<string> # Specify the IP addresses of the Room Connectors that you would like to share with the sub account. Multiple values can be separated by comma. If no value is provided in this field, all the Room Connectors of a master account will be shared with the sub account. **Note:** This option can only be used if the value of `share_rc` is set to `true`.
   --share-mc: oneof<nothing, bool> # Enable/disable the option for a sub account to use shared [Meeting Connector(s)](https://support.zoom.us/hc/en-us/articles/201363093-Getting-Started-with-the-Meeting-Connector) that are set up by the master account. Meeting Connectors can only be used by On-prem users. (default: false)
   --share-rc: oneof<nothing, bool> # Enable/disable the option for a sub account to use shared [Virtual Room Connector(s)](https://support.zoom.us/hc/en-us/articles/202134758-Getting-Started-With-Virtual-Room-Connector) that are set up by the master account. Virtual Room Connectors can only be used by On-prem users. (default: false)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/accounts/{account_id}/options"))
-  let body = {"billing_auto_renew": $billing_auto_renew, "meeting_connector_list": $meeting_connector_list, "pay_mode": $pay_mode, "room_connector_list": $room_connector_list, "share_mc": $share_mc, "share_rc": $share_rc} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/options"))
+  let req_body = {"billing_auto_renew": $billing_auto_renew, "meeting_connector_list": $meeting_connector_list, "pay_mode": $pay_mode, "room_connector_list": $room_connector_list, "share_mc": $share_mc, "share_rc": $share_rc} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update the account owner
@@ -518,12 +554,12 @@ export def "accounts-owner update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/accounts/{account_id}/owner"))
-  let body = {"email": $email} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/owner"))
+  let req_body = {"email": $email} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update BYOC settings
@@ -547,12 +583,12 @@ export def "accounts-phone-settings update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/accounts/{account_id}/phone/settings"))
-  let body = {"byoc": $byoc} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/phone/settings"))
+  let req_body = {"byoc": $byoc} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Set up a Zoom Phone account
@@ -560,7 +596,7 @@ export def "accounts-phone-settings update" [
 # POST /accounts/{accountId}/phone/setup
 # operationId: setUpAccount
 # --emergency_address shape: {address_line1: string, address_line2?: string, city?: string, country: string, state_code?: string, zip?: string}
-export def "accounts-phone-setup setUpAccount" [
+export def "accounts-phone-setup update-up" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -576,12 +612,12 @@ export def "accounts-phone-setup setUpAccount" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/accounts/{account_id}/phone/setup"))
-  let body = {"emergency_address": $emergency_address, "extension_number": $extension_number} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/phone/setup"))
+  let req_body = {"emergency_address": $emergency_address, "extension_number": $extension_number} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Assign SIP trunks
@@ -605,12 +641,12 @@ export def "accounts-phone-sip-trunk-trunks create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/accounts/{account_id}/phone/sip_trunk/trunks"))
-  let body = {"sip_trunks": $sip_trunks} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/phone/sip_trunk/trunks"))
+  let req_body = {"sip_trunks": $sip_trunks} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update SIP trunk details
@@ -635,19 +671,19 @@ export def "accounts-phone-sip-trunk-trunks update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({account_id: $account_id, sip_trunk_id: $sip_trunk_id} | format pattern "/accounts/{account_id}/phone/sip_trunk/trunks/{sip_trunk_id}"))
-  let body = {"carrier_account": $carrier_account, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), sip_trunk_id: (encode-path-segment $sip_trunk_id)} | format pattern "/accounts/{account_id}/phone/sip_trunk/trunks/{sip_trunk_id}"))
+  let req_body = {"carrier_account": $carrier_account, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get plan Information
 #
 # GET /accounts/{accountId}/plans
 # operationId: accountPlans
-export def "accounts-plans accountPlans" [
+export def "accounts-plans get" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -661,7 +697,7 @@ export def "accounts-plans accountPlans" [
 ]: nothing -> record<plan_audio: record<callout_countries: string, ddi_numbers: int, next_invoice_date: string, premium_countries: string, service_effective_date: string, status: string, tollfree_countries: string, type: string>, plan_base: record<hosts: int, next_invoice_date: string, service_effective_date: string, status: string, type: string>, plan_large_meeting: table<hosts: int, next_invoice_date: string, service_effective_date: string, status: string, type: string>, plan_phone: record<plan_base: record<callout_countries: string, next_invoice_date: string, service_effective_date: string, status: string, type: string>, plan_calling: list<record>, plan_number: list<record>>, plan_recording: string, plan_recording_next_invoice_date: string, plan_recording_service_effective_date: string, plan_recording_status: string, plan_room_connector: record<hosts: int, next_invoice_date: string, service_effective_date: string, status: string, type: string>, plan_webinar: table<hosts: int, next_invoice_date: string, service_effective_date: string, status: string, type: string>, plan_zoom_rooms: record<hosts: int, next_invoice_date: string, service_effective_date: string, status: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/accounts/{account_id}/plans"))
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/plans"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -679,7 +715,7 @@ export def "accounts-plans accountPlans" [
 # --plan_room_connector shape: {hosts?: int, type?: string}
 # --plan_webinar item shape: {hosts?: int, type?: string}
 # --plan_zoom_rooms shape: {hosts?: int, type?: string}
-export def "accounts-plans accountPlanCreate" [
+export def "accounts-plans create" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -691,7 +727,7 @@ export def "accounts-plans accountPlanCreate" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --contact: record # Billing Contact object. — shape: {address: string, apt?: string, city: string, country: string, email: string, first_name: string, last_name: string, phone_number: string, state: string, zip: string}
-  --plan-audio: record # Additional audio conferencing <a href="https://marketplace.zoom.us/docs/api-reference/other-references/plans#audio-conferencing-plans">plan type</a>. — shape: {callout_countries?: string, ddi_numbers?: int, premium_countries?: string, tollfree_countries?: string, type?: string}
+  --plan-audio: record # Additional audio conferencing plan type (https://marketplace.zoom.us/docs/api-reference/other-references/plans#audio-conferencing-plans). — shape: {callout_countries?: string, ddi_numbers?: int, premium_countries?: string, tollfree_countries?: string, type?: string}
   plan_base: record # Account base plan object. — shape: {hosts: int, type: string}
   --plan-large-meeting: list # Additional large meeting Plans. — item shape: {hosts?: int, type?: string}
   --plan-phone: record # Phone Plan Object — shape: {plan_base?: record, plan_calling?: list, plan_number?: list}
@@ -703,12 +739,12 @@ export def "accounts-plans accountPlanCreate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/accounts/{account_id}/plans"))
-  let body = {"contact": $contact, "plan_audio": $plan_audio, "plan_base": $plan_base, "plan_large_meeting": $plan_large_meeting, "plan_phone": $plan_phone, "plan_recording": $plan_recording, "plan_room_connector": $plan_room_connector, "plan_webinar": $plan_webinar, "plan_zoom_rooms": $plan_zoom_rooms} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/plans"))
+  let req_body = {"contact": $contact, "plan_audio": $plan_audio, "plan_base": $plan_base, "plan_large_meeting": $plan_large_meeting, "plan_phone": $plan_phone, "plan_recording": $plan_recording, "plan_room_connector": $plan_room_connector, "plan_webinar": $plan_webinar, "plan_zoom_rooms": $plan_zoom_rooms} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Subscribe additional plan
@@ -716,7 +752,7 @@ export def "accounts-plans accountPlanCreate" [
 # POST /accounts/{accountId}/plans/addons
 # operationId: accountPlanAddonCreate
 # --plan_details shape: {plan_base?: record, plan_calling?: list, plan_number?: list}
-export def "accounts-plans-addons accountPlanAddonCreate" [
+export def "accounts-plans-addons create" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -727,25 +763,25 @@ export def "accounts-plans-addons accountPlanAddonCreate" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --hosts: int # Number of hosts for this plan.
-  --type: string # Account <a href="https://marketplace.zoom.us/docs/api-reference/other-references/plans">plan type.</a>
+  --type: string # Account plan type. (https://marketplace.zoom.us/docs/api-reference/other-references/plans)
   --plan-details: record # Phone Plan Object — shape: {plan_base?: record, plan_calling?: list, plan_number?: list}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/accounts/{account_id}/plans/addons"))
-  let body = {"hosts": $hosts, "type": $type, "plan_details": $plan_details} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/plans/addons"))
+  let req_body = {"hosts": $hosts, "type": $type, "plan_details": $plan_details} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update an additional plan
 #
 # PUT /accounts/{accountId}/plans/addons
 # operationId: accountPlanAddonUpdate
-export def "accounts-plans-addons accountPlanAddonUpdate" [
+export def "accounts-plans-addons update" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -756,24 +792,24 @@ export def "accounts-plans-addons accountPlanAddonUpdate" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   hosts: int # Number of hosts for this plan.
-  type: string # Account <a href="https://marketplace.zoom.us/docs/api-reference/other-references/plans">plan type.</a>
+  type: string # Account plan type. (https://marketplace.zoom.us/docs/api-reference/other-references/plans)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/accounts/{account_id}/plans/addons"))
-  let body = {"hosts": $hosts, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/plans/addons"))
+  let req_body = {"hosts": $hosts, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Cancel additional plans
 #
 # PATCH /accounts/{accountId}/plans/addons/status
 # operationId: accountPlanAddonCancel
-export def "accounts-plans-addons-status accountPlanAddonCancel" [
+export def "accounts-plans-addons-status cancel" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -786,25 +822,25 @@ export def "accounts-plans-addons-status accountPlanAddonCancel" [
   --accept: string@accept-completer # Response content type
   --action: string@action-completer # The action that needs to be taken for this sub account. Value must be set to "cancel".
   --comment: string # Additional comments about the cancellation decision.
-  --reason: int@reason-completer # The reason for the cancellation of plan. Reason options:<br>`1` - I am no longer working remote.<br>`2` - I had challenges getting the support I needed.<br>`3` - Features in the Basic Free Plan are sufficient.<br>`4` - The expense is too high.<br>`5` - I purchased the wrong product.<br> `6` - Paid purchase not needed right now, will repurchase in the future.
+  --reason: int@reason-completer # The reason for the cancellation of plan. Reason options:`1` - I am no longer working remote.`2` - I had challenges getting the support I needed.`3` - Features in the Basic Free Plan are sufficient.`4` - The expense is too high.`5` - I purchased the wrong product. `6` - Paid purchase not needed right now, will repurchase in the future.
   --type: string # Plan [type](https://marketplace.zoom.us/docs/api-reference/other-references/plans).
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/accounts/{account_id}/plans/addons/status"))
-  let body = {"action": $action, "comment": $comment, "reason": $reason, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/plans/addons/status"))
+  let req_body = {"action": $action, "comment": $comment, "reason": $reason, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update a base plan
 #
 # PUT /accounts/{accountId}/plans/base
 # operationId: accountPlanBaseUpdate
-export def "accounts-plans-base accountPlanBaseUpdate" [
+export def "accounts-plans-base update" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -815,24 +851,24 @@ export def "accounts-plans-base accountPlanBaseUpdate" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   hosts: int # Account base plan number of hosts. For a Pro Plan please select a value between 1 and 9. For a Business Plan please select a value between 10 and 49. For a Education Plan please select a value between 20 and 149. For a Free Trial Plan please select a value between 1 and 9999.
-  type: string # Account base <a href="https://marketplace.zoom.us/docs/api-reference/other-references/plans">plan type.</a>
+  type: string # Account base plan type. (https://marketplace.zoom.us/docs/api-reference/other-references/plans)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/accounts/{account_id}/plans/base"))
-  let body = {"hosts": $hosts, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/plans/base"))
+  let req_body = {"hosts": $hosts, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Cancel a base plan
 #
 # PATCH /accounts/{accountId}/plans/base/status
 # operationId: accountPlanBaseDelete
-export def "accounts-plans-base-status accountPlanBaseDelete" [
+export def "accounts-plans-base-status delete" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -845,17 +881,17 @@ export def "accounts-plans-base-status accountPlanBaseDelete" [
   --accept: string@accept-completer # Response content type
   action: string # The action that needs to be taken for this sub account. Value must be set to "cancel".
   --comment: string # Additional comments about the cancellation decision.
-  --reason: int@reason-completer # The reason for the cancellation of plan. Reason options:<br>`1` - I am no longer working remote.<br>`2` - I had challenges getting the support I needed.<br>`3` - Features in the Basic Free Plan are sufficient.<br>`4` - The expense is too high.<br>`5` - I purchased the wrong product.<br> `6` - Paid purchase not needed right now, will repurchase in the future.
+  --reason: int@reason-completer # The reason for the cancellation of plan. Reason options:`1` - I am no longer working remote.`2` - I had challenges getting the support I needed.`3` - Features in the Basic Free Plan are sufficient.`4` - The expense is too high.`5` - I purchased the wrong product. `6` - Paid purchase not needed right now, will repurchase in the future.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/accounts/{account_id}/plans/base/status"))
-  let body = {"action": $action, "comment": $comment, "reason": $reason} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/plans/base/status"))
+  let req_body = {"action": $action, "comment": $comment, "reason": $reason} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get plan usage
@@ -876,7 +912,7 @@ export def "accounts-plans-usage get" [
 ]: nothing -> record<plan_base: table<hosts: int, type: string, usage: int>, plan_large_meeting: table<hosts: int, type: string, usage: int>, plan_recording: record<free_storage: string, free_storage_usage: string, plan_storage: string, plan_storage_exceed: string, plan_storage_usage: string, type: string>, plan_united: record<hosts: int, name: string, type: string, usage: int>, plan_webinar: table<hosts: int, type: string, usage: int>, plan_zoom_rooms: table<hosts: int, type: string, usage: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/accounts/{account_id}/plans/usage"))
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/plans/usage"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -886,7 +922,7 @@ export def "accounts-plans-usage get" [
 #
 # GET /accounts/{accountId}/recordings
 # operationId: getAccountCloudRecording
-export def "accounts-recordings get-account-cloud" [
+export def "accounts-recordings get-cloud" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -905,7 +941,7 @@ export def "accounts-recordings get-account-cloud" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "next_page_token" $next_page_token "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/accounts/{account_id}/recordings") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/recordings") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -915,7 +951,7 @@ export def "accounts-recordings get-account-cloud" [
 #
 # GET /accounts/{accountId}/settings
 # operationId: accountSettings
-export def "accounts-settings accountSettings" [
+export def "accounts-settings get" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -926,13 +962,13 @@ export def "accounts-settings accountSettings" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --option: string@option-completer # `meeting_authentication`: Use this query parameter to view [meeting authentication configuration](https://support.zoom.us/hc/en-us/articles/360037117472-Authentication-Profiles-for-Meetings-and-Webinars) applied on the account.<br>`recording_authentication`: Use this query parameter to view [recording authentication configuration](https://support.zoom.us/hc/en-us/articles/360037756671-Authentication-Profiles-for-Cloud-Recordings) applied on the account.<br>`security`: Use this query parameter to view security settings such as password requirements for user login, two factor authentication etc., applied on the account.<br> `meeting_security`: Use this query parameter to view meeting security settings applied on the account.<br> (allows empty value)
-  --custom-query-fields: string # Provide the name of the field by which you would like to filter the response. For example, if you provide "host_video" as the value of this field, you will get a response similar to the following:<br> {     "schedule_meeting": {         "host_video": false     } } <br>You can provide multiple values by separating them with commas(example: "host_video,participant_video”).
+  --option: string@option-completer # `meeting_authentication`: Use this query parameter to view [meeting authentication configuration](https://support.zoom.us/hc/en-us/articles/360037117472-Authentication-Profiles-for-Meetings-and-Webinars) applied on the account.`recording_authentication`: Use this query parameter to view [recording authentication configuration](https://support.zoom.us/hc/en-us/articles/360037756671-Authentication-Profiles-for-Cloud-Recordings) applied on the account.`security`: Use this query parameter to view security settings such as password requirements for user login, two factor authentication etc., applied on the account. `meeting_security`: Use this query parameter to view meeting security settings applied on the account. (allows empty value)
+  --custom-query-fields: string # Provide the name of the field by which you would like to filter the response. For example, if you provide "host_video" as the value of this field, you will get a response similar to the following: { "schedule_meeting": { "host_video": false } } You can provide multiple values by separating them with commas(example: "host_video,participant_video”).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "option" $option "scalar") (serialize-qp "custom_query_fields" $custom_query_fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/accounts/{account_id}/settings") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/settings") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -944,17 +980,17 @@ export def "accounts-settings accountSettings" [
 # operationId: accountSettingsUpdate
 # --email_notification shape: {alternative_host_reminder?: bool, cancel_meeting_reminder?: bool, cloud_recording_avaliable_reminder?: bool, jbh_reminder?: bool, low_host_count_reminder?: bool, schedule_for_reminder?: bool}
 # --feature shape: {meeting_capacity?: int}
-# --in_meeting shape: {alert_guest_join?: bool, allow_live_streaming?: bool, allow_participants_to_rename?: bool, allow_show_zoom_windows?: bool, annotation?: bool, anonymous_question_answer?: bool, attendee_on_hold?: bool, auto_answer?: bool, auto_saving_chat?: bool, breakout_room?: bool, chat?: bool, closed_caption?: bool, co_host?: bool, custom_data_center_regions?: bool, custom_live_streaming_service?: bool, custom_service_instructions?: string, data_center_regions?: "EU"|"HK"|"AU"|"IN"|"TY"|"CN"|"US"|"CA", dscp_audio?: int, dscp_marking?: bool, dscp_video?: int, e2e_encryption?: bool, entry_exit_chime?: "host"|"all"|"none", far_end_camera_control?: bool, feedback?: bool, file_transfer?: bool, group_hd?: bool, meeting_reactions?: bool, original_audio?: bool, p2p_connetion?: bool, p2p_ports?: bool, polling?: bool, ports_range?: string, post_meeting_feedback?: bool, private_chat?: bool, record_play_own_voice?: bool, remote_control?: bool, request_permission_to_unmute?: bool, screen_sharing?: bool, sending_default_email_invites?: bool, show_a_join_from_your_browser_link?: bool, show_meeting_control_toolbar?: bool, stereo_audio?: bool, use_html_format_email?: bool, virtual_background?: bool, virtual_background_settings?: record, watermark?: bool, webinar_question_answer?: bool, whiteboard?: bool, who_can_share_screen?: "host"|"all", who_can_share_screen_when_someone_is_sharing?: "host"|"all", workplace_by_facebook?: bool}
+# --in_meeting shape: {alert_guest_join?: bool, allow_live_streaming?: bool, allow_participants_to_rename?: bool, allow_show_zoom_windows?: bool, annotation?: bool, anonymous_question_answer?: bool, attendee_on_hold?: bool, auto_answer?: bool, auto_saving_chat?: bool, breakout_room?: bool, chat?: bool, closed_caption?: bool, co_host?: bool, custom_data_center_regions?: bool, custom_live_streaming_service?: bool, custom_service_instructions?: string, data_center_regions?: "EU"|"HK"|"AU"|"IN"|"TY"|"CN"|"US"|"CA", ... (34 more fields)}
 # --integration shape: {box?: bool, dropbox?: bool, google_calendar?: bool, google_drive?: bool, kubi?: bool, microsoft_one_drive?: bool}
 # --profile shape: {recording_storage_location?: record}
-# --recording shape: {account_user_access_recording?: bool, allow_recovery_deleted_cloud_recordings?: bool, archive?: record, auto_delete_cmr?: bool, auto_delete_cmr_days?: int, auto_recording?: "local"|"cloud"|"none", cloud_recording?: bool, cloud_recording_download?: bool, cloud_recording_download_host?: bool, host_delete_cloud_recording?: bool, ip_address_access_control?: record, local_recording?: bool, prevent_host_access_recording?: bool, record_audio_file?: bool, record_gallery_view?: bool, record_speaker_view?: bool, recording_audio_transcript?: bool, recording_disclaimer?: bool, recording_password_requirement?: record, required_password_for_existing_cloud_recordings?: bool, save_chat_text?: bool, show_timestamp?: bool}
-# --schedule_meeting shape: {audio_type?: "both"|"telephony"|"voip"|"thirdParty", enforce_login?: bool, enforce_login_domains?: string, enforce_login_with_domains?: bool, force_pmi_jbh_password?: bool, host_video?: bool, join_before_host?: bool, meeting_password_requirement?: record, not_store_meeting_topic?: bool, participant_video?: bool, personal_meeting?: bool, require_password_for_instant_meetings?: bool, require_password_for_pmi_meetings?: "jbh_only"|"all"|"none", require_password_for_scheduled_meetings?: bool, require_password_for_scheduling_new_meetings?: bool, use_pmi_for_instant_meetings?: bool, use_pmi_for_scheduled_meetings?: bool}
-# --security shape: {admin_change_name_pic?: bool, hide_billing_info?: bool, import_photos_from_devices?: bool, password_requirement?: record, sign_again_period_for_inactivity_on_client?: int, sign_again_period_for_inactivity_on_web?: int, sign_in_with_two_factor_auth?: "all"|"group"|"role"|"none", sign_in_with_two_factor_auth_groups?: list, sign_in_with_two_factor_auth_roles?: list}
+# --recording shape: {account_user_access_recording?: bool, allow_recovery_deleted_cloud_recordings?: bool, archive?: record, auto_delete_cmr?: bool, auto_delete_cmr_days?: int, auto_recording?: "local"|"cloud"|"none", cloud_recording?: bool, cloud_recording_download?: bool, cloud_recording_download_host?: bool, host_delete_cloud_recording?: bool, ip_address_access_control?: record, local_recording?: bool, prevent_host_access_recording?: bool, record_audio_file?: bool, record_gallery_view?: bool, ... (7 more fields)}
+# --schedule_meeting shape: {audio_type?: "both"|"telephony"|"voip"|"thirdParty", enforce_login?: bool, enforce_login_domains?: string, enforce_login_with_domains?: bool, force_pmi_jbh_password?: bool, host_video?: bool, join_before_host?: bool, meeting_password_requirement?: record, not_store_meeting_topic?: bool, participant_video?: bool, personal_meeting?: bool, require_password_for_instant_meetings?: bool, require_password_for_pmi_meetings?: "jbh_only"|"all"|"none", require_password_for_scheduled_meetings?: bool, ... (3 more fields)}
+# --security shape: {admin_change_name_pic?: bool, hide_billing_info?: bool, import_photos_from_devices?: bool, password_requirement?: record, sign_again_period_for_inactivity_on_client?: int, sign_again_period_for_inactivity_on_web?: int, sign_in_with_two_factor_auth?: "all"|"group"|"role"|"none", sign_in_with_two_factor_auth_groups?: list<string>, sign_in_with_two_factor_auth_roles?: list<string>}
 # --telephony shape: {audio_conference_info?: string, telephony_regions?: record, third_party_audio?: bool}
 # --tsp shape: {call_out?: bool, call_out_countries?: list, display_toll_free_numbers?: bool, show_international_numbers_link?: bool}
 # --zoom_rooms shape: {auto_start_stop_scheduled_meetings?: bool, cmr_for_instant_meeting?: bool, force_private_meeting?: bool, hide_host_information?: bool, list_meetings_with_calendar?: bool, start_airplay_manually?: bool, ultrasonic?: bool, upcoming_meeting_alert?: bool, weekly_system_restart?: bool, zr_post_meeting_feedback?: bool}
 # --meeting_security shape: {auto_security?: bool, embed_password_in_join_link?: bool, encryption_type?: "enhanced_encryption"|"e2ee", end_to_end_encrypted_meetings?: bool, meeting_password?: bool, meeting_password_requirement?: record, phone_password?: bool, pmi_password?: bool, require_password_for_scheduled_meeting?: bool, require_password_for_scheduled_webinar?: bool, waiting_room?: bool, waiting_room_settings?: record, webinar_password?: bool}
-export def "accounts-settings accountSettingsUpdate" [
+export def "accounts-settings update" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -967,12 +1003,12 @@ export def "accounts-settings accountSettingsUpdate" [
   --option: string@option-completer-1 # allows empty value
   --email-notification: record # Account Settings: Notification. — shape: {alternative_host_reminder?: bool, cancel_meeting_reminder?: bool, cloud_recording_avaliable_reminder?: bool, jbh_reminder?: bool, low_host_count_reminder?: bool, schedule_for_reminder?: bool}
   --feature: record # Account Settings: Feature. — shape: {meeting_capacity?: int}
-  --in-meeting: record # Account Settings: In Meeting. — shape: {alert_guest_join?: bool, allow_live_streaming?: bool, allow_participants_to_rename?: bool, allow_show_zoom_windows?: bool, annotation?: bool, anonymous_question_answer?: bool, attendee_on_hold?: bool, auto_answer?: bool, auto_saving_chat?: bool, breakout_room?: bool, chat?: bool, closed_caption?: bool, co_host?: bool, custom_data_center_regions?: bool, custom_live_streaming_service?: bool, custom_service_instructions?: string, data_center_regions?: "EU"|"HK"|"AU"|"IN"|"TY"|"CN"|"US"|"CA", dscp_audio?: int, dscp_marking?: bool, dscp_video?: int, e2e_encryption?: bool, entry_exit_chime?: "host"|"all"|"none", far_end_camera_control?: bool, feedback?: bool, file_transfer?: bool, group_hd?: bool, meeting_reactions?: bool, original_audio?: bool, p2p_connetion?: bool, p2p_ports?: bool, polling?: bool, ports_range?: string, post_meeting_feedback?: bool, private_chat?: bool, record_play_own_voice?: bool, remote_control?: bool, request_permission_to_unmute?: bool, screen_sharing?: bool, sending_default_email_invites?: bool, show_a_join_from_your_browser_link?: bool, show_meeting_control_toolbar?: bool, stereo_audio?: bool, use_html_format_email?: bool, virtual_background?: bool, virtual_background_settings?: record, watermark?: bool, webinar_question_answer?: bool, whiteboard?: bool, who_can_share_screen?: "host"|"all", who_can_share_screen_when_someone_is_sharing?: "host"|"all", workplace_by_facebook?: bool}
+  --in-meeting: record # Account Settings: In Meeting. — shape: {alert_guest_join?: bool, allow_live_streaming?: bool, allow_participants_to_rename?: bool, allow_show_zoom_windows?: bool, annotation?: bool, anonymous_question_answer?: bool, attendee_on_hold?: bool, auto_answer?: bool, auto_saving_chat?: bool, breakout_room?: bool, chat?: bool, closed_caption?: bool, co_host?: bool, custom_data_center_regions?: bool, custom_live_streaming_service?: bool, custom_service_instructions?: string, data_center_regions?: "EU"|"HK"|"AU"|"IN"|"TY"|"CN"|"US"|"CA", ... (34 more fields)}
   --integration: record # Account Settings: Integration. — shape: {box?: bool, dropbox?: bool, google_calendar?: bool, google_drive?: bool, kubi?: bool, microsoft_one_drive?: bool}
   --profile: record # shape: {recording_storage_location?: record}
-  --recording: record # Account Settings: Recording. — shape: {account_user_access_recording?: bool, allow_recovery_deleted_cloud_recordings?: bool, archive?: record, auto_delete_cmr?: bool, auto_delete_cmr_days?: int, auto_recording?: "local"|"cloud"|"none", cloud_recording?: bool, cloud_recording_download?: bool, cloud_recording_download_host?: bool, host_delete_cloud_recording?: bool, ip_address_access_control?: record, local_recording?: bool, prevent_host_access_recording?: bool, record_audio_file?: bool, record_gallery_view?: bool, record_speaker_view?: bool, recording_audio_transcript?: bool, recording_disclaimer?: bool, recording_password_requirement?: record, required_password_for_existing_cloud_recordings?: bool, save_chat_text?: bool, show_timestamp?: bool}
-  --schedule-meeting: record # Account Settings: Schedule Meeting. — shape: {audio_type?: "both"|"telephony"|"voip"|"thirdParty", enforce_login?: bool, enforce_login_domains?: string, enforce_login_with_domains?: bool, force_pmi_jbh_password?: bool, host_video?: bool, join_before_host?: bool, meeting_password_requirement?: record, not_store_meeting_topic?: bool, participant_video?: bool, personal_meeting?: bool, require_password_for_instant_meetings?: bool, require_password_for_pmi_meetings?: "jbh_only"|"all"|"none", require_password_for_scheduled_meetings?: bool, require_password_for_scheduling_new_meetings?: bool, use_pmi_for_instant_meetings?: bool, use_pmi_for_scheduled_meetings?: bool}
-  --security: record # [Security settings](https://support.zoom.us/hc/en-us/articles/360034675592-Advanced-security-settings#h_bf8a25f6-9a66-447a-befd-f02ed3404f89) of an Account. — shape: {admin_change_name_pic?: bool, hide_billing_info?: bool, import_photos_from_devices?: bool, password_requirement?: record, sign_again_period_for_inactivity_on_client?: int, sign_again_period_for_inactivity_on_web?: int, sign_in_with_two_factor_auth?: "all"|"group"|"role"|"none", sign_in_with_two_factor_auth_groups?: list, sign_in_with_two_factor_auth_roles?: list}
+  --recording: record # Account Settings: Recording. — shape: {account_user_access_recording?: bool, allow_recovery_deleted_cloud_recordings?: bool, archive?: record, auto_delete_cmr?: bool, auto_delete_cmr_days?: int, auto_recording?: "local"|"cloud"|"none", cloud_recording?: bool, cloud_recording_download?: bool, cloud_recording_download_host?: bool, host_delete_cloud_recording?: bool, ip_address_access_control?: record, local_recording?: bool, prevent_host_access_recording?: bool, record_audio_file?: bool, record_gallery_view?: bool, ... (7 more fields)}
+  --schedule-meeting: record # Account Settings: Schedule Meeting. — shape: {audio_type?: "both"|"telephony"|"voip"|"thirdParty", enforce_login?: bool, enforce_login_domains?: string, enforce_login_with_domains?: bool, force_pmi_jbh_password?: bool, host_video?: bool, join_before_host?: bool, meeting_password_requirement?: record, not_store_meeting_topic?: bool, participant_video?: bool, personal_meeting?: bool, require_password_for_instant_meetings?: bool, require_password_for_pmi_meetings?: "jbh_only"|"all"|"none", require_password_for_scheduled_meetings?: bool, ... (3 more fields)}
+  --security: record # [Security settings](https://support.zoom.us/hc/en-us/articles/360034675592-Advanced-security-settings#h_bf8a25f6-9a66-447a-befd-f02ed3404f89) of an Account. — shape: {admin_change_name_pic?: bool, hide_billing_info?: bool, import_photos_from_devices?: bool, password_requirement?: record, sign_again_period_for_inactivity_on_client?: int, sign_again_period_for_inactivity_on_web?: int, sign_in_with_two_factor_auth?: "all"|"group"|"role"|"none", sign_in_with_two_factor_auth_groups?: list<string>, sign_in_with_two_factor_auth_roles?: list<string>}
   --telephony: record # Account Settings Update: Telephony. — shape: {audio_conference_info?: string, telephony_regions?: record, third_party_audio?: bool}
   --tsp: record # Account Settings: TSP. — shape: {call_out?: bool, call_out_countries?: list, display_toll_free_numbers?: bool, show_international_numbers_link?: bool}
   --zoom-rooms: record # Account Settings: Zoom Rooms. — shape: {auto_start_stop_scheduled_meetings?: bool, cmr_for_instant_meeting?: bool, force_private_meeting?: bool, hide_host_information?: bool, list_meetings_with_calendar?: bool, start_airplay_manually?: bool, ultrasonic?: bool, upcoming_meeting_alert?: bool, weekly_system_restart?: bool, zr_post_meeting_feedback?: bool}
@@ -982,19 +1018,19 @@ export def "accounts-settings accountSettingsUpdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "option" $option "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/accounts/{account_id}/settings") $qp)
-  let body = {"email_notification": $email_notification, "feature": $feature, "in_meeting": $in_meeting, "integration": $integration, "profile": $profile, "recording": $recording, "schedule_meeting": $schedule_meeting, "security": $security, "telephony": $telephony, "tsp": $tsp, "zoom_rooms": $zoom_rooms, "meeting_security": $meeting_security} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/settings") $qp)
+  let req_body = {"email_notification": $email_notification, "feature": $feature, "in_meeting": $in_meeting, "integration": $integration, "profile": $profile, "recording": $recording, "schedule_meeting": $schedule_meeting, "security": $security, "telephony": $telephony, "tsp": $tsp, "zoom_rooms": $zoom_rooms, "meeting_security": $meeting_security} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete virtual background files
 #
 # DELETE /accounts/{accountId}/settings/virtual_backgrounds
 # operationId: delVB
-export def "accounts-settings-virtual-backgrounds delVB" [
+export def "accounts-settings-virtual-backgrounds delete-vb" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1009,7 +1045,7 @@ export def "accounts-settings-virtual-backgrounds delVB" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "file_ids" $file_ids "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/accounts/{account_id}/settings/virtual_backgrounds") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/settings/virtual_backgrounds") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1035,12 +1071,13 @@ export def "accounts-settings-virtual-backgrounds upload-vb" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/accounts/{account_id}/settings/virtual_backgrounds"))
-  let body = {"file": $file} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/settings/virtual_backgrounds"))
+  let req_body = {"file": $file} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body [])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # List internal call-out countries
@@ -1061,7 +1098,7 @@ export def "accounts-sip-trunk-callout-countries list-internal" [
 ]: nothing -> record<callout_countries: table<code: string, id: string, name: string>, total_records: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/accounts/{account_id}/sip_trunk/callout_countries"))
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/sip_trunk/callout_countries"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1088,12 +1125,12 @@ export def "accounts-sip-trunk-callout-countries create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/accounts/{account_id}/sip_trunk/callout_countries"))
-  let body = {"callout_countries": $callout_countries} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/sip_trunk/callout_countries"))
+  let req_body = {"callout_countries": $callout_countries} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete internal call-out country
@@ -1115,7 +1152,7 @@ export def "accounts-sip-trunk-callout-countries delete-internal-call-out-countr
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({account_id: $account_id, country_id: $country_id} | format pattern "/accounts/{account_id}/sip_trunk/callout_countries/{country_id}"))
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), country_id: (encode-path-segment $country_id)} | format pattern "/accounts/{account_id}/sip_trunk/callout_countries/{country_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1142,7 +1179,7 @@ export def "accounts-sip-trunk-internal-numbers list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "next_page_token" $next_page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/accounts/{account_id}/sip_trunk/internal_numbers") $qp)
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/sip_trunk/internal_numbers") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1169,12 +1206,12 @@ export def "accounts-sip-trunk-internal-numbers create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/accounts/{account_id}/sip_trunk/internal_numbers"))
-  let body = {"internal_numbers": $internal_numbers} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/sip_trunk/internal_numbers"))
+  let req_body = {"internal_numbers": $internal_numbers} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete an internal number
@@ -1196,7 +1233,7 @@ export def "accounts-sip-trunk-internal-numbers delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({account_id: $account_id, number_id: $number_id} | format pattern "/accounts/{account_id}/sip_trunk/internal_numbers/{number_id}"))
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), number_id: (encode-path-segment $number_id)} | format pattern "/accounts/{account_id}/sip_trunk/internal_numbers/{number_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1206,7 +1243,7 @@ export def "accounts-sip-trunk-internal-numbers delete" [
 #
 # DELETE /accounts/{accountId}/sip_trunk/numbers
 # operationId: deleteAllSipNumbers
-export def "accounts-sip-trunk-numbers delete-all" [
+export def "accounts-sip-trunk-numbers delete-list" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1220,7 +1257,7 @@ export def "accounts-sip-trunk-numbers delete-all" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/accounts/{account_id}/sip_trunk/numbers"))
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/sip_trunk/numbers"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1230,7 +1267,7 @@ export def "accounts-sip-trunk-numbers delete-all" [
 #
 # POST /accounts/{accountId}/sip_trunk/numbers
 # operationId: assignSipTrunkNumbers
-export def "accounts-sip-trunk-numbers assignSipTrunkNumbers" [
+export def "accounts-sip-trunk-numbers assign" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1241,24 +1278,24 @@ export def "accounts-sip-trunk-numbers assignSipTrunkNumbers" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --phone-numbers: list # Phone number(s) to be assigned to the sub account.
+  --phone-numbers: list<string> # Phone number(s) to be assigned to the sub account.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/accounts/{account_id}/sip_trunk/numbers"))
-  let body = {"phone_numbers": $phone_numbers} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/sip_trunk/numbers"))
+  let req_body = {"phone_numbers": $phone_numbers} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Assign SIP trunk configuration
 #
 # PATCH /accounts/{accountId}/sip_trunk/settings
 # operationId: assignSIPConfig
-export def "accounts-sip-trunk-settings assignSIPConfig" [
+export def "accounts-sip-trunk-settings assign-config" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1269,20 +1306,20 @@ export def "accounts-sip-trunk-settings assignSIPConfig" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --enable: oneof<nothing, bool> # Enable or delete the configuration.<br> The values can be one of the following:<br> `true`: Enable configuration.<br> `false`: Delete configuration
+  --enable: oneof<nothing, bool> # Enable or delete the configuration. The values can be one of the following: `true`: Enable configuration. `false`: Delete configuration
   --show-callout-internal-number: oneof<nothing, bool> # If the value of this option is set to `true`, the call-out numbers provided by the Zoom carrier partners will be displayed in the account's list of available call-out numbers in the Zoom Web Portal and Zoom Client.
-  --show-zoom-provided-callout-countries: int # If the value of this option is set to `0`, the call-out countries list provided by Zoom will be [displayed](https://support.zoom.us/hc/en-us/articles/200942859-Using-telephone-call-out) in the account's list of available call-out countries.   If the value of this option is set to `1`, the Zoom provided call-out countries will be hidden from the user's account.<br>   If the value of this option is set to `2`, all Zoom provided countries will be deleted and only internal countries (provided by carrier partners) will be used.
-  --show-zoom-provided-numbers: int@show-zoom-provided-numbers-completer # If the value of this option is set to `0`, the numbers provided by Zoom will be displayed in the account's list of available call-out and call-in numbers in the Zoom Web Portal and Zoom Client.   If the value of this option is set to `1`, the Zoom provided numbers will be shown in the Zoom Web Portal but will not be used unless specified by the user.<br>   If the value of this option is set to `2`, all Zoom provided numbers will be deleted and only internal numbers (provided by carrier partners) will be used.
+  --show-zoom-provided-callout-countries: int # If the value of this option is set to `0`, the call-out countries list provided by Zoom will be [displayed](https://support.zoom.us/hc/en-us/articles/200942859-Using-telephone-call-out) in the account's list of available call-out countries. If the value of this option is set to `1`, the Zoom provided call-out countries will be hidden from the user's account. If the value of this option is set to `2`, all Zoom provided countries will be deleted and only internal countries (provided by carrier partners) will be used.
+  --show-zoom-provided-numbers: int@show-zoom-provided-numbers-completer # If the value of this option is set to `0`, the numbers provided by Zoom will be displayed in the account's list of available call-out and call-in numbers in the Zoom Web Portal and Zoom Client. If the value of this option is set to `1`, the Zoom provided numbers will be shown in the Zoom Web Portal but will not be used unless specified by the user. If the value of this option is set to `2`, all Zoom provided numbers will be deleted and only internal numbers (provided by carrier partners) will be used.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/accounts/{account_id}/sip_trunk/settings"))
-  let body = {"enable": $enable, "show_callout_internal_number": $show_callout_internal_number, "show_zoom_provided_callout_countries": $show_zoom_provided_callout_countries, "show_zoom_provided_numbers": $show_zoom_provided_numbers} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/sip_trunk/settings"))
+  let req_body = {"enable": $enable, "show_callout_internal_number": $show_callout_internal_number, "show_zoom_provided_callout_countries": $show_zoom_provided_callout_countries, "show_zoom_provided_numbers": $show_zoom_provided_numbers} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List SIP trunks
@@ -1303,7 +1340,7 @@ export def "accounts-sip-trunk-trunks list" [
 ]: nothing -> record<sip_trunks: table<dnis: string, id: string, name: string, number_prefix: string, outbound_caller_id: string, sip_server_address: string>, total_records: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/accounts/{account_id}/sip_trunk/trunks"))
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/sip_trunk/trunks"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1314,7 +1351,7 @@ export def "accounts-sip-trunk-trunks list" [
 # POST /accounts/{accountId}/sip_trunk/trunks
 # operationId: assignSIPTrunks
 # --sip_trunks item shape: {dnis?: string, id?: string, outbound_caller_id?: string}
-export def "accounts-sip-trunk-trunks assignSIPTrunks" [
+export def "accounts-sip-trunk-trunks assign" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1325,17 +1362,17 @@ export def "accounts-sip-trunk-trunks assignSIPTrunks" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --sip-trunks: list # Array of one or more SIP Trunk objects.  — item shape: {dnis?: string, id?: string, outbound_caller_id?: string}
+  --sip-trunks: list # Array of one or more SIP Trunk objects. — item shape: {dnis?: string, id?: string, outbound_caller_id?: string}
 ]: any -> record<sip_trunks: table<dnis: string, id: string, name: string, number_prefix: string, sip_server_address: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/accounts/{account_id}/sip_trunk/trunks"))
-  let body = {"sip_trunks": $sip_trunks} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/sip_trunk/trunks"))
+  let req_body = {"sip_trunks": $sip_trunks} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a SIP trunk
@@ -1357,7 +1394,7 @@ export def "accounts-sip-trunk-trunks delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({account_id: $account_id, trunk_id: $trunk_id} | format pattern "/accounts/{account_id}/sip_trunk/trunks/{trunk_id}"))
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), trunk_id: (encode-path-segment $trunk_id)} | format pattern "/accounts/{account_id}/sip_trunk/trunks/{trunk_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1367,7 +1404,7 @@ export def "accounts-sip-trunk-trunks delete" [
 #
 # GET /accounts/{accountId}/trusted_domains
 # operationId: accountTrustedDomain
-export def "accounts-trusted-domains accountTrustedDomain" [
+export def "accounts-trusted-domains get" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1381,7 +1418,7 @@ export def "accounts-trusted-domains accountTrustedDomain" [
 ]: nothing -> record<trusted_domains: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/accounts/{account_id}/trusted_domains"))
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/trusted_domains"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1391,7 +1428,7 @@ export def "accounts-trusted-domains accountTrustedDomain" [
 #
 # PUT /accounts/{accountId}/users/{userId}/account
 # operationId: switchUserAccount
-export def "accounts-users-account switchUserAccount" [
+export def "accounts-users-account update-switch" [
   account_id: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1408,19 +1445,19 @@ export def "accounts-users-account switchUserAccount" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({account_id: $account_id, user_id: $user_id} | format pattern "/accounts/{account_id}/users/{user_id}/account"))
-  let body = {"account_id": $body_account_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), user_id: (encode-path-segment $user_id)} | format pattern "/accounts/{account_id}/users/{user_id}/account"))
+  let req_body = {"account_id": $body_account_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Download an invoice file
 #
 # GET /api/download/billing/invoices/{invoiceId}
 # operationId: downloadInvoicePDF
-export def "download-billing-invoices download-invoice-pdf" [
+export def "download-billing-invoices download-pdf" [
   invoice_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1434,7 +1471,7 @@ export def "download-billing-invoices download-invoice-pdf" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({invoice_id: $invoice_id} | format pattern "/api/download/billing/invoices/{invoice_id}"))
+  let full_url = (build-url $base ({invoice_id: (encode-path-segment $invoice_id)} | format pattern "/api/download/billing/invoices/{invoice_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1457,7 +1494,7 @@ export def "archive-files list-archived" [
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
   --qp-from: string # Start date for the query in "yyyy-MM-dd'T'HH:mm:ss'Z'" format. The duration for the query defined using the "from" and "to" parameters should not exceed 7 days as this API only provides a week's data at once.
-  --qp-to: string # End date for the query in "yyyy-MM-dd'T'HH:mm:ss'Z'" format. 
+  --qp-to: string # End date for the query in "yyyy-MM-dd'T'HH:mm:ss'Z'" format.
   --query-data-type: string@query-data-type-completer # Query data type for `from` and `to`. (default: meeting_start_time)
 ]: nothing -> record<from: string, meetings: table<archive_files: list, duration: int, host_id: string, id: int, recording_count: int, start_time: string, timezone: string, topic: string, total_size: int, type: int, uuid: string>, next_page_token: string, page_size: int, to: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1487,7 +1524,7 @@ export def "chat-channels delete-user-level" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({channel_id: $channel_id} | format pattern "/chat/channels/{channel_id}"))
+  let full_url = (build-url $base ({channel_id: (encode-path-segment $channel_id)} | format pattern "/chat/channels/{channel_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1511,7 +1548,7 @@ export def "chat-channels get-user-level" [
 ]: nothing -> record<id: string, name: string, type: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({channel_id: $channel_id} | format pattern "/chat/channels/{channel_id}"))
+  let full_url = (build-url $base ({channel_id: (encode-path-segment $channel_id)} | format pattern "/chat/channels/{channel_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1537,19 +1574,19 @@ export def "chat-channels update-user-level" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({channel_id: $channel_id} | format pattern "/chat/channels/{channel_id}"))
-  let body = {"name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({channel_id: (encode-path-segment $channel_id)} | format pattern "/chat/channels/{channel_id}"))
+  let req_body = {"name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Leave a channel
 #
 # DELETE /chat/channels/{channelId}/members/me
 # operationId: leaveChannel
-export def "chat-channels-members-me leaveChannel" [
+export def "chat-channels-members-me delete-leave" [
   channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1563,7 +1600,7 @@ export def "chat-channels-members-me leaveChannel" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({channel_id: $channel_id} | format pattern "/chat/channels/{channel_id}/members/me"))
+  let full_url = (build-url $base ({channel_id: (encode-path-segment $channel_id)} | format pattern "/chat/channels/{channel_id}/members/me"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1573,7 +1610,7 @@ export def "chat-channels-members-me leaveChannel" [
 #
 # POST /chat/channels/{channelId}/members/me
 # operationId: joinChannel
-export def "chat-channels-members-me joinChannel" [
+export def "chat-channels-members-me create-join" [
   channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1587,7 +1624,7 @@ export def "chat-channels-members-me joinChannel" [
 ]: nothing -> record<added_at: string, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({channel_id: $channel_id} | format pattern "/chat/channels/{channel_id}/members/me"))
+  let full_url = (build-url $base ({channel_id: (encode-path-segment $channel_id)} | format pattern "/chat/channels/{channel_id}/members/me"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1612,7 +1649,7 @@ export def "chat-channels-members delete-user-level" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({channel_id: $channel_id, member_id: $member_id} | format pattern "/chat/channels/{channel_id}/members/{member_id}"))
+  let full_url = (build-url $base ({channel_id: (encode-path-segment $channel_id), member_id: (encode-path-segment $member_id)} | format pattern "/chat/channels/{channel_id}/members/{member_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1632,7 +1669,7 @@ export def "chat-users-me-contacts list" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --type: string # The type of contact. The value can be one of the following: `company`: Contacts from the user's organization. `external`: External contacts.  (default: company)
+  --type: string # The type of contact. The value can be one of the following: `company`: Contacts from the user's organization. `external`: External contacts. (default: company)
   --page-size: int # The number of records returned with a single API call. (default: 10)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
 ]: nothing -> record<contacts: table<email: string, first_name: string, id: string, last_name: string>, next_page_token: string, page_size: int> {
@@ -1660,12 +1697,12 @@ export def "chat-users-me-contacts get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --query-presence-status: oneof<nothing, bool> # The presence status of the contact.  Include this query parameter with a value of `true` to get the presence status of the contact in the response.
+  --query-presence-status: oneof<nothing, bool> # The presence status of the contact. Include this query parameter with a value of `true` to get the presence status of the contact in the response.
 ]: nothing -> record<direct_numbers: list<string>, email: string, extension_number: string, first_name: string, id: string, last_name: string, phone_number: string, presence_status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query_presence_status" $query_presence_status "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({contact_id: $contact_id} | format pattern "/chat/users/me/contacts/{contact_id}") $qp)
+  let full_url = (build-url $base ({contact_id: (encode-path-segment $contact_id)} | format pattern "/chat/users/me/contacts/{contact_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1692,7 +1729,7 @@ export def "chat-users-channels list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "next_page_token" $next_page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/chat/users/{user_id}/channels") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/chat/users/{user_id}/channels") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1716,17 +1753,17 @@ export def "chat-users-channels create" [
   --accept: string@accept-completer # Response content type
   --members: list # Member(s) to include in the channel. A max of 5 members can be added to the channel at once with this API. — item shape: {email: string}
   --name: string # Name of the channel.
-  --type: int@type-completer # Type of the channel. The value can be one of the following:<br> `1`: Private channel. In this type of channel, members must be invited to join a channel.<br> `2`: Private channel with members that belong to one Zoom account. Members in this channel should be invited and the members should be from the same organization.<br> `3`: Public channel. Anyone can search for this channel and join the channel.<br> `4`: New chat. This is an instant channel which can be created by adding members to a new chat. 
+  --type: int@type-completer # Type of the channel. The value can be one of the following: `1`: Private channel. In this type of channel, members must be invited to join a channel. `2`: Private channel with members that belong to one Zoom account. Members in this channel should be invited and the members should be from the same organization. `3`: Public channel. Anyone can search for this channel and join the channel. `4`: New chat. This is an instant channel which can be created by adding members to a new chat.
 ]: any -> record<id: string, jid: string, name: string, type: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/chat/users/{user_id}/channels"))
-  let body = {"members": $members, "name": $name, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/chat/users/{user_id}/channels"))
+  let req_body = {"members": $members, "name": $name, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a channel
@@ -1748,7 +1785,7 @@ export def "chat-users-channels delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id, channel_id: $channel_id} | format pattern "/chat/users/{user_id}/channels/{channel_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), channel_id: (encode-path-segment $channel_id)} | format pattern "/chat/users/{user_id}/channels/{channel_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1773,7 +1810,7 @@ export def "chat-users-channels get" [
 ]: nothing -> record<id: string, name: string, type: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id, channel_id: $channel_id} | format pattern "/chat/users/{user_id}/channels/{channel_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), channel_id: (encode-path-segment $channel_id)} | format pattern "/chat/users/{user_id}/channels/{channel_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1800,12 +1837,12 @@ export def "chat-users-channels update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id, channel_id: $channel_id} | format pattern "/chat/users/{user_id}/channels/{channel_id}"))
-  let body = {"name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), channel_id: (encode-path-segment $channel_id)} | format pattern "/chat/users/{user_id}/channels/{channel_id}"))
+  let req_body = {"name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List channel members
@@ -1830,7 +1867,7 @@ export def "chat-users-channels-members list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "next_page_token" $next_page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id, channel_id: $channel_id} | format pattern "/chat/users/{user_id}/channels/{channel_id}/members") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), channel_id: (encode-path-segment $channel_id)} | format pattern "/chat/users/{user_id}/channels/{channel_id}/members") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1841,7 +1878,7 @@ export def "chat-users-channels-members list" [
 # POST /chat/users/{userId}/channels/{channelId}/members
 # operationId: inviteChannelMembers
 # --members item shape: {email: string}
-export def "chat-users-channels-members inviteChannelMembers" [
+export def "chat-users-channels-members create-invite" [
   user_id: string
   channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1858,12 +1895,12 @@ export def "chat-users-channels-members inviteChannelMembers" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id, channel_id: $channel_id} | format pattern "/chat/users/{user_id}/channels/{channel_id}/members"))
-  let body = {"members": $members} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), channel_id: (encode-path-segment $channel_id)} | format pattern "/chat/users/{user_id}/channels/{channel_id}/members"))
+  let req_body = {"members": $members} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Remove a member
@@ -1886,7 +1923,7 @@ export def "chat-users-channels-members delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id, channel_id: $channel_id, member_id: $member_id} | format pattern "/chat/users/{user_id}/channels/{channel_id}/members/{member_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), channel_id: (encode-path-segment $channel_id), member_id: (encode-path-segment $member_id)} | format pattern "/chat/users/{user_id}/channels/{channel_id}/members/{member_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1907,17 +1944,17 @@ export def "chat-users-messages get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --to-contact: string # The email address of a chat contact with whom the current user chatted. Messages that were sent and/or received between the user and the contact is displayed.  Note: You must provide either `contact` or `channel` as a query parameter to retrieve messages either from an individual or a chat channel. 
-  --to-channel: string # The channel Id of a channel inside which the current user had chat conversations. Messages that were sent and/or received between the user and the channel is displayed.  Note: You must provide either `contact` or `channel` as a query parameter to retrieve messages either from an individual or a chat channel. 
+  --to-contact: string # The email address of a chat contact with whom the current user chatted. Messages that were sent and/or received between the user and the contact is displayed. Note: You must provide either `contact` or `channel` as a query parameter to retrieve messages either from an individual or a chat channel.
+  --to-channel: string # The channel Id of a channel inside which the current user had chat conversations. Messages that were sent and/or received between the user and the channel is displayed. Note: You must provide either `contact` or `channel` as a query parameter to retrieve messages either from an individual or a chat channel.
   --date: string # The query date for which you would like to get the chat messages. (format: date)
-  --page-size: int # The number of records returned with a single API call.  (default: 10)
+  --page-size: int # The number of records returned with a single API call. (default: 10)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
-  --include-deleted-and-edited-message: string # **Optional** <br> Set the value of this field to `true` to include edited and deleted messages in the response.
+  --include-deleted-and-edited-message: string # **Optional** Set the value of this field to `true` to include edited and deleted messages in the response.
 ]: nothing -> record<date: string, messages: table<date_time: string, id: string, message: string, reply_main_message_id: string, reply_main_message_timestamp: int, sender: string, status: string, timestamp: int>, next_page_token: string, page_size: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "to_contact" $to_contact "scalar") (serialize-qp "to_channel" $to_channel "scalar") (serialize-qp "date" $date "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "next_page_token" $next_page_token "scalar") (serialize-qp "include_deleted_and_edited_message" $include_deleted_and_edited_message "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/chat/users/{user_id}/messages") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/chat/users/{user_id}/messages") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1928,7 +1965,7 @@ export def "chat-users-messages get" [
 # POST /chat/users/{userId}/messages
 # operationId: sendaChatMessage
 # --at_items item shape: {at_contact?: string, at_type?: "1"|"2", end_position?: int, start_position?: int}
-export def "chat-users-messages send-a" [
+export def "chat-users-messages create-senda" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1939,7 +1976,7 @@ export def "chat-users-messages send-a" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --at-items: list # [Chat mentions](https://support.zoom.us/hc/en-us/articles/360037567431-Using-chat-mentions-and-slash-commands) object. Use this object to include mentions in the message that will be sent to  a channel.  — item shape: {at_contact?: string, at_type?: "1"|"2", end_position?: int, start_position?: int}
+  --at-items: list # [Chat mentions](https://support.zoom.us/hc/en-us/articles/360037567431-Using-chat-mentions-and-slash-commands) object. Use this object to include mentions in the message that will be sent to a channel. — item shape: {at_contact?: string, at_type?: "1"|"2", end_position?: int, start_position?: int}
   message: string # The message to be sent.
   --to-channel: string # The Channel Id of the channel where you would like to send a message.
   --to-contact: string # The email address of the contact to whom you would like to send the message.
@@ -1947,12 +1984,12 @@ export def "chat-users-messages send-a" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/chat/users/{user_id}/messages"))
-  let body = {"at_items": $at_items, "message": $message, "to_channel": $to_channel, "to_contact": $to_contact} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/chat/users/{user_id}/messages"))
+  let req_body = {"at_items": $at_items, "message": $message, "to_channel": $to_channel, "to_contact": $to_contact} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a message
@@ -1970,13 +2007,13 @@ export def "chat-users-messages delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --to-contact: string # The userId or email address of a chat contact to whom you previously sent the message.  Note: You must provide either `to_contact` or `to_channel` as a query parameter to delete a message that was previously sent to either an individual or a chat channel respectively. 
-  --to-channel: string # The channel Id of the channel where you would like to send the message.  You must provide either `to_contact` or `to_channel` as a query parameter to delete a message that was previously sent to either an individual or a chat channel 
+  --to-contact: string # The userId or email address of a chat contact to whom you previously sent the message. Note: You must provide either `to_contact` or `to_channel` as a query parameter to delete a message that was previously sent to either an individual or a chat channel respectively.
+  --to-channel: string # The channel Id of the channel where you would like to send the message. You must provide either `to_contact` or `to_channel` as a query parameter to delete a message that was previously sent to either an individual or a chat channel
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "to_contact" $to_contact "scalar") (serialize-qp "to_channel" $to_channel "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id, message_id: $message_id} | format pattern "/chat/users/{user_id}/messages/{message_id}") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), message_id: (encode-path-segment $message_id)} | format pattern "/chat/users/{user_id}/messages/{message_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1986,7 +2023,7 @@ export def "chat-users-messages delete" [
 #
 # PUT /chat/users/{userId}/messages/{messageId}
 # operationId: editMessage
-export def "chat-users-messages editMessage" [
+export def "chat-users-messages update-edit" [
   user_id: string
   message_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1998,18 +2035,18 @@ export def "chat-users-messages editMessage" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --message: string # The edited message.
-  --to-channel: string # The Channel ID of the channel where you sent the message.<br>You must provide either `to_contact` or `to_channel` parameter in the API request.  Channel ID can be retrieved from List User's Channels API. 
-  --to-contact: string # The email address of the contact to whom the message was sent.<br> You must provide either `to_contact` or `to_channel` parameter in the API request.
+  --to-channel: string # The Channel ID of the channel where you sent the message.You must provide either `to_contact` or `to_channel` parameter in the API request. Channel ID can be retrieved from List User's Channels API.
+  --to-contact: string # The email address of the contact to whom the message was sent. You must provide either `to_contact` or `to_channel` parameter in the API request.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id, message_id: $message_id} | format pattern "/chat/users/{user_id}/messages/{message_id}"))
-  let body = {"message": $message, "to_channel": $to_channel, "to_contact": $to_contact} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), message_id: (encode-path-segment $message_id)} | format pattern "/chat/users/{user_id}/messages/{message_id}"))
+  let req_body = {"message": $message, "to_channel": $to_channel, "to_contact": $to_contact} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Search company contacts
@@ -2044,7 +2081,7 @@ export def "contacts list-company" [
 #
 # GET /groups
 # operationId: groups
-export def "groups get" [
+export def "groups list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2067,7 +2104,7 @@ export def "groups get" [
 #
 # POST /groups
 # operationId: groupCreate
-export def "groups groupCreate" [
+export def "groups create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2083,18 +2120,18 @@ export def "groups groupCreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/groups")
-  let body = {"name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a group
 #
 # DELETE /groups/{groupId}
 # operationId: groupDelete
-export def "groups groupDelete" [
+export def "groups delete" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2107,7 +2144,7 @@ export def "groups groupDelete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/groups/{group_id}"))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/groups/{group_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2117,7 +2154,7 @@ export def "groups groupDelete" [
 #
 # GET /groups/{groupId}
 # operationId: group
-export def "groups group" [
+export def "groups get" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2131,7 +2168,7 @@ export def "groups group" [
 ]: nothing -> record<id: string, name: string, total_members: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/groups/{group_id}"))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/groups/{group_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2141,7 +2178,7 @@ export def "groups group" [
 #
 # PATCH /groups/{groupId}
 # operationId: groupUpdate
-export def "groups groupUpdate" [
+export def "groups update" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2156,12 +2193,12 @@ export def "groups groupUpdate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/groups/{group_id}"))
-  let body = {"name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/groups/{group_id}"))
+  let req_body = {"name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get locked settings
@@ -2179,13 +2216,13 @@ export def "groups-lock-settings get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --custom-query-fields: string # Provide the name of the field by which you would like to filter the response. For example, if you provide "host_video" as the value of this field, you will get a response similar to the following:<br> {     "schedule_meeting": {         "host_video": false     } } <br>You can provide multiple values by separating them with commas(example: "host_video,participant_video”).
+  --custom-query-fields: string # Provide the name of the field by which you would like to filter the response. For example, if you provide "host_video" as the value of this field, you will get a response similar to the following: { "schedule_meeting": { "host_video": false } } You can provide multiple values by separating them with commas(example: "host_video,participant_video”).
   --option: string # Specify `meeting_security` as the value of this field if you would like to view security settings applied on a meeting hosted by the users in this group.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "custom_query_fields" $custom_query_fields "scalar") (serialize-qp "option" $option "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/groups/{group_id}/lock_settings") $qp)
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/groups/{group_id}/lock_settings") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2196,12 +2233,12 @@ export def "groups-lock-settings get" [
 # PATCH /groups/{groupId}/lock_settings
 # operationId: groupLockedSettings
 # --email_notification shape: {alternative_host_reminder?: bool, cancel_meeting_reminder?: bool, cloud_recording_available_reminder?: bool, jbh_reminder?: bool, schedule_for_host_reminder?: bool}
-# --in_meeting shape: {alert_guest_join?: bool, allow_show_zoom_windows?: bool, annotation?: bool, attendee_on_hold?: bool, auto_answer?: bool, auto_saving_chat?: bool, breakout_room?: bool, chat?: bool, closed_caption?: bool, co_host?: bool, custom_data_center_regions?: bool, e2e_encryption?: bool, entry_exit_chime?: string, far_end_camera_control?: bool, feedback?: bool, file_transfer?: bool, group_hd?: bool, non_verbal_feedback?: bool, original_audio?: bool, polling?: bool, post_meeting_feedback?: bool, private_chat?: bool, remote_control?: bool, remote_support?: bool, request_permission_to_unmute?: bool, screen_sharing?: bool, sending_default_email_invites?: bool, show_browser_join_link?: bool, show_meeting_control_toolbar?: bool, stereo_audio?: bool, use_html_format_email?: bool, virtual_background?: bool, waiting_room?: bool, whiteboard?: bool}
+# --in_meeting shape: {alert_guest_join?: bool, allow_show_zoom_windows?: bool, annotation?: bool, attendee_on_hold?: bool, auto_answer?: bool, auto_saving_chat?: bool, breakout_room?: bool, chat?: bool, closed_caption?: bool, co_host?: bool, custom_data_center_regions?: bool, e2e_encryption?: bool, entry_exit_chime?: string, far_end_camera_control?: bool, feedback?: bool, file_transfer?: bool, group_hd?: bool, non_verbal_feedback?: bool, original_audio?: bool, polling?: bool, post_meeting_feedback?: bool, ... (13 more fields)}
 # --recording shape: {account_user_access_recording?: bool, auto_delete_cmr?: bool, auto_recording?: string, cloud_recording?: bool, cloud_recording_download?: bool, host_delete_cloud_recording?: bool, ip_address_access_control?: record, local_recording?: bool, recording_authentication?: string}
 # --schedule_meeting shape: {audio_type?: bool, embed_password_in_join_link?: bool, force_pmi_jbh_password?: bool, host_video?: bool, join_before_host?: bool, meeting_authentication?: bool, mute_upon_entry?: bool, participant_video?: bool, personal_meeting?: bool, pstn_password_protected?: bool, require_password_for_instant_meetings?: bool, require_password_for_pmi_meetings?: bool, require_password_for_scheduling_new_meetings?: bool, upcoming_meeting_reminder?: bool}
 # --telephony shape: {telephony_regions?: bool, third_party_audio?: bool}
 # --meeting_security shape: {auto_security?: bool, embed_password_in_join_link?: bool, encryption_type?: "enhanced_encryption"|"e2ee", end_to_end_encrypted_meetings?: bool, meeting_password?: bool, meeting_password_requirement?: record, phone_password?: bool, pmi_password?: bool, require_password_for_scheduled_meeting?: bool, require_password_for_scheduled_webinar?: bool, waiting_room?: bool, waiting_room_settings?: record, webinar_password?: bool}
-export def "groups-lock-settings groupLockedSettings" [
+export def "groups-lock-settings update-locked" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2212,10 +2249,10 @@ export def "groups-lock-settings groupLockedSettings" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --custom-query-fields: string # Provide the name of the field by which you would like to filter the response. For example, if you provide "host_video" as the value of this field, you will get a response similar to the following:<br> {     "schedule_meeting": {         "host_video": false     } } <br>You can provide multiple values by separating them with commas(example: "host_video,participant_video”).
+  --custom-query-fields: string # Provide the name of the field by which you would like to filter the response. For example, if you provide "host_video" as the value of this field, you will get a response similar to the following: { "schedule_meeting": { "host_video": false } } You can provide multiple values by separating them with commas(example: "host_video,participant_video”).
   --option: string # Specify `meeting_security` as the value of this field if you would like to view security settings applied on a meeting hosted by the users in this group.
   --email-notification: record # shape: {alternative_host_reminder?: bool, cancel_meeting_reminder?: bool, cloud_recording_available_reminder?: bool, jbh_reminder?: bool, schedule_for_host_reminder?: bool}
-  --in-meeting: record # shape: {alert_guest_join?: bool, allow_show_zoom_windows?: bool, annotation?: bool, attendee_on_hold?: bool, auto_answer?: bool, auto_saving_chat?: bool, breakout_room?: bool, chat?: bool, closed_caption?: bool, co_host?: bool, custom_data_center_regions?: bool, e2e_encryption?: bool, entry_exit_chime?: string, far_end_camera_control?: bool, feedback?: bool, file_transfer?: bool, group_hd?: bool, non_verbal_feedback?: bool, original_audio?: bool, polling?: bool, post_meeting_feedback?: bool, private_chat?: bool, remote_control?: bool, remote_support?: bool, request_permission_to_unmute?: bool, screen_sharing?: bool, sending_default_email_invites?: bool, show_browser_join_link?: bool, show_meeting_control_toolbar?: bool, stereo_audio?: bool, use_html_format_email?: bool, virtual_background?: bool, waiting_room?: bool, whiteboard?: bool}
+  --in-meeting: record # shape: {alert_guest_join?: bool, allow_show_zoom_windows?: bool, annotation?: bool, attendee_on_hold?: bool, auto_answer?: bool, auto_saving_chat?: bool, breakout_room?: bool, chat?: bool, closed_caption?: bool, co_host?: bool, custom_data_center_regions?: bool, e2e_encryption?: bool, entry_exit_chime?: string, far_end_camera_control?: bool, feedback?: bool, file_transfer?: bool, group_hd?: bool, non_verbal_feedback?: bool, original_audio?: bool, polling?: bool, post_meeting_feedback?: bool, ... (13 more fields)}
   --recording: record # shape: {account_user_access_recording?: bool, auto_delete_cmr?: bool, auto_recording?: string, cloud_recording?: bool, cloud_recording_download?: bool, host_delete_cloud_recording?: bool, ip_address_access_control?: record, local_recording?: bool, recording_authentication?: string}
   --schedule-meeting: record # shape: {audio_type?: bool, embed_password_in_join_link?: bool, force_pmi_jbh_password?: bool, host_video?: bool, join_before_host?: bool, meeting_authentication?: bool, mute_upon_entry?: bool, participant_video?: bool, personal_meeting?: bool, pstn_password_protected?: bool, require_password_for_instant_meetings?: bool, require_password_for_pmi_meetings?: bool, require_password_for_scheduling_new_meetings?: bool, upcoming_meeting_reminder?: bool}
   --telephony: record # shape: {telephony_regions?: bool, third_party_audio?: bool}
@@ -2225,19 +2262,19 @@ export def "groups-lock-settings groupLockedSettings" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "custom_query_fields" $custom_query_fields "scalar") (serialize-qp "option" $option "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/groups/{group_id}/lock_settings") $qp)
-  let body = {"email_notification": $email_notification, "in_meeting": $in_meeting, "recording": $recording, "schedule_meeting": $schedule_meeting, "telephony": $telephony, "meeting_security": $meeting_security} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/groups/{group_id}/lock_settings") $qp)
+  let req_body = {"email_notification": $email_notification, "in_meeting": $in_meeting, "recording": $recording, "schedule_meeting": $schedule_meeting, "telephony": $telephony, "meeting_security": $meeting_security} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-# List group members 
+# List group members
 #
 # GET /groups/{groupId}/members
 # operationId: groupMembers
-export def "groups-members groupMembers" [
+export def "groups-members get" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2249,13 +2286,13 @@ export def "groups-members groupMembers" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page-size: int # The number of records returned within a single API call. (default: 30)
-  --page-number: int #  **Deprecated** - This field has been deprecated and we will stop supporting it completely in a future release. Please use "next_page_token" for pagination instead of this field.  The page number of the current page in the returned records. (default: 1)
+  --page-number: int # **Deprecated** - This field has been deprecated and we will stop supporting it completely in a future release. Please use "next_page_token" for pagination instead of this field. The page number of the current page in the returned records. (default: 1)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
 ]: nothing -> record<members: table<email: string, first_name: string, id: string, last_name: string, type: int>, next_page_token: string, page_count: int, page_number: int, page_size: int, total_records: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page_number" $page_number "scalar") (serialize-qp "next_page_token" $next_page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/groups/{group_id}/members") $qp)
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/groups/{group_id}/members") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2266,7 +2303,7 @@ export def "groups-members groupMembers" [
 # POST /groups/{groupId}/members
 # operationId: groupMembersCreate
 # --members item shape: {email?: string, id?: string}
-export def "groups-members groupMembersCreate" [
+export def "groups-members create" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2282,19 +2319,19 @@ export def "groups-members groupMembersCreate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/groups/{group_id}/members"))
-  let body = {"members": $members} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/groups/{group_id}/members"))
+  let req_body = {"members": $members} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a group member
 #
 # DELETE /groups/{groupId}/members/{memberId}
 # operationId: groupMembersDelete
-export def "groups-members groupMembersDelete" [
+export def "groups-members delete" [
   group_id: string
   member_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2308,7 +2345,7 @@ export def "groups-members groupMembersDelete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({group_id: $group_id, member_id: $member_id} | format pattern "/groups/{group_id}/members/{member_id}"))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), member_id: (encode-path-segment $member_id)} | format pattern "/groups/{group_id}/members/{member_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2330,18 +2367,18 @@ export def "groups-members update" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  action: string@action-completer-1 # Specify the type of action to be performed:<br><br> `move`: Simultaneously remove a member from one group and move the member to a different group.<br> `set_primary`: Set a primary group for the user.
-  --target-group-id: string # Can be retrieved by calling [GET /groups](https://marketplace.zoom.us/docs/api-reference/zoom-api/groups/groups) API.<br>  To move a user, use this field to specify the groupId of the group where the member is to be moved.<br>  To set a primary group for the user, provide the groupId of the group which is going to be the primary group.
+  action: string@action-completer-1 # Specify the type of action to be performed: `move`: Simultaneously remove a member from one group and move the member to a different group. `set_primary`: Set a primary group for the user.
+  --target-group-id: string # Can be retrieved by calling [GET /groups](https://marketplace.zoom.us/docs/api-reference/zoom-api/groups/groups) API. To move a user, use this field to specify the groupId of the group where the member is to be moved. To set a primary group for the user, provide the groupId of the group which is going to be the primary group.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({group_id: $group_id, member_id: $member_id} | format pattern "/groups/{group_id}/members/{member_id}"))
-  let body = {"action": $action, "target_group_id": $target_group_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), member_id: (encode-path-segment $member_id)} | format pattern "/groups/{group_id}/members/{member_id}"))
+  let req_body = {"action": $action, "target_group_id": $target_group_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get a group's settings
@@ -2359,13 +2396,13 @@ export def "groups-settings get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --custom-query-fields: string # Provide the name of the field by which you would like to filter the response. For example, if you provide "host_video" as the value of this field, you will get a response similar to the following:<br> {     "schedule_meeting": {         "host_video": false     } } <br>You can provide multiple values by separating them with commas(example: "host_video,participant_video”).
-  --option: string@option-completer # `meeting_authentication`: Use this query parameter to view [meeting authentication configuration](https://support.zoom.us/hc/en-us/articles/360037117472-Authentication-Profiles-for-Meetings-and-Webinars) applied on the group.<br>`recording_authentication`: Use this query parameter to view [recording authentication configuration](https://support.zoom.us/hc/en-us/articles/360037756671-Authentication-Profiles-for-Cloud-Recordings) applied on the group.<br> `meeting_security`: Use this query parameter to view meeting security settings applied on the group.<br> (allows empty value)
+  --custom-query-fields: string # Provide the name of the field by which you would like to filter the response. For example, if you provide "host_video" as the value of this field, you will get a response similar to the following: { "schedule_meeting": { "host_video": false } } You can provide multiple values by separating them with commas(example: "host_video,participant_video”).
+  --option: string@option-completer # `meeting_authentication`: Use this query parameter to view [meeting authentication configuration](https://support.zoom.us/hc/en-us/articles/360037117472-Authentication-Profiles-for-Meetings-and-Webinars) applied on the group.`recording_authentication`: Use this query parameter to view [recording authentication configuration](https://support.zoom.us/hc/en-us/articles/360037756671-Authentication-Profiles-for-Cloud-Recordings) applied on the group. `meeting_security`: Use this query parameter to view meeting security settings applied on the group. (allows empty value)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "custom_query_fields" $custom_query_fields "scalar") (serialize-qp "option" $option "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/groups/{group_id}/settings") $qp)
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/groups/{group_id}/settings") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2376,7 +2413,7 @@ export def "groups-settings get" [
 # PATCH /groups/{groupId}/settings
 # operationId: updateGroupSettings
 # --email_notification shape: {alternative_host_reminder?: bool, cancel_meeting_reminder?: bool, cloud_recording_available_reminder?: bool, jbh_reminder?: bool, schedule_for_host_reminder?: bool}
-# --in_meeting shape: {alert_guest_join?: bool, allow_show_zoom_windows?: bool, annotation?: bool, attendee_on_hold?: bool, auto_answer?: bool, auto_saving_chat?: bool, breakout_room?: bool, chat?: bool, closed_caption?: bool, co_host?: bool, custom_data_center_regions?: bool, data_center_regions?: "EU"|"HK"|"AU"|"IN"|"TY"|"CN"|"US"|"CA", e2e_encryption?: bool, entry_exit_chime?: string, far_end_camera_control?: bool, feedback?: bool, file_transfer?: bool, group_hd?: bool, non_verbal_feedback?: bool, only_host_view_device_list?: bool, original_audio?: bool, polling?: bool, post_meeting_feedback?: bool, private_chat?: bool, record_play_own_voice?: bool, remote_control?: bool, remote_support?: bool, request_permission_to_unmute?: bool, screen_sharing?: bool, sending_default_email_invites?: bool, show_browser_join_link?: bool, show_device_list?: bool, show_meeting_control_toolbar?: bool, stereo_audio?: bool, use_html_format_email?: bool, virtual_background?: bool, waiting_room?: bool, whiteboard?: bool, who_can_share_screen?: "host"|"all", who_can_share_screen_when_someone_is_sharing?: "host"|"all"}
+# --in_meeting shape: {alert_guest_join?: bool, allow_show_zoom_windows?: bool, annotation?: bool, attendee_on_hold?: bool, auto_answer?: bool, auto_saving_chat?: bool, breakout_room?: bool, chat?: bool, closed_caption?: bool, co_host?: bool, custom_data_center_regions?: bool, data_center_regions?: "EU"|"HK"|"AU"|"IN"|"TY"|"CN"|"US"|"CA", e2e_encryption?: bool, entry_exit_chime?: string, far_end_camera_control?: bool, feedback?: bool, file_transfer?: bool, group_hd?: bool, non_verbal_feedback?: bool, ... (21 more fields)}
 # --profile shape: {recording_storage_location?: record}
 # --recording shape: {account_user_access_recording?: bool, archive?: record, auto_recording?: string, cloud_recording?: bool, cloud_recording_download?: bool, cloud_recording_download_host?: bool, host_delete_cloud_recording?: bool, ip_address_access_control?: record, local_recording?: bool, prevent_host_access_recording?: bool, record_audio_file?: bool, record_gallery_view?: bool, record_speaker_view?: bool, recording_audio_transcript?: bool, save_chat_text?: bool, show_timestamp?: bool}
 # --schedule_meeting shape: {audio_type?: string, embed_password_in_join_link?: bool, force_pmi_jbh_password?: bool, host_video?: bool, join_before_host?: bool, mute_upon_entry?: bool, participant_video?: bool, pstn_password_protected?: bool, require_password_for_all_meetings?: bool, require_password_for_instant_meetings?: bool, require_password_for_pmi_meetings?: "all"|"jbh_only"|"none", require_password_for_scheduled_meetings?: bool, require_password_for_scheduling_new_meetings?: bool, upcoming_meeting_reminder?: bool}
@@ -2393,10 +2430,10 @@ export def "groups-settings update" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --custom-query-fields: string # Provide the name of the field by which you would like to filter the response. For example, if you provide "host_video" as the value of this field, you will get a response similar to the following:<br> {     "schedule_meeting": {         "host_video": false     } } <br>You can provide multiple values by separating them with commas(example: "host_video,participant_video”).
+  --custom-query-fields: string # Provide the name of the field by which you would like to filter the response. For example, if you provide "host_video" as the value of this field, you will get a response similar to the following: { "schedule_meeting": { "host_video": false } } You can provide multiple values by separating them with commas(example: "host_video,participant_video”).
   --option: string@option-completer-2 # allows empty value
   --email-notification: record # shape: {alternative_host_reminder?: bool, cancel_meeting_reminder?: bool, cloud_recording_available_reminder?: bool, jbh_reminder?: bool, schedule_for_host_reminder?: bool}
-  --in-meeting: record # shape: {alert_guest_join?: bool, allow_show_zoom_windows?: bool, annotation?: bool, attendee_on_hold?: bool, auto_answer?: bool, auto_saving_chat?: bool, breakout_room?: bool, chat?: bool, closed_caption?: bool, co_host?: bool, custom_data_center_regions?: bool, data_center_regions?: "EU"|"HK"|"AU"|"IN"|"TY"|"CN"|"US"|"CA", e2e_encryption?: bool, entry_exit_chime?: string, far_end_camera_control?: bool, feedback?: bool, file_transfer?: bool, group_hd?: bool, non_verbal_feedback?: bool, only_host_view_device_list?: bool, original_audio?: bool, polling?: bool, post_meeting_feedback?: bool, private_chat?: bool, record_play_own_voice?: bool, remote_control?: bool, remote_support?: bool, request_permission_to_unmute?: bool, screen_sharing?: bool, sending_default_email_invites?: bool, show_browser_join_link?: bool, show_device_list?: bool, show_meeting_control_toolbar?: bool, stereo_audio?: bool, use_html_format_email?: bool, virtual_background?: bool, waiting_room?: bool, whiteboard?: bool, who_can_share_screen?: "host"|"all", who_can_share_screen_when_someone_is_sharing?: "host"|"all"}
+  --in-meeting: record # shape: {alert_guest_join?: bool, allow_show_zoom_windows?: bool, annotation?: bool, attendee_on_hold?: bool, auto_answer?: bool, auto_saving_chat?: bool, breakout_room?: bool, chat?: bool, closed_caption?: bool, co_host?: bool, custom_data_center_regions?: bool, data_center_regions?: "EU"|"HK"|"AU"|"IN"|"TY"|"CN"|"US"|"CA", e2e_encryption?: bool, entry_exit_chime?: string, far_end_camera_control?: bool, feedback?: bool, file_transfer?: bool, group_hd?: bool, non_verbal_feedback?: bool, ... (21 more fields)}
   --profile: record # shape: {recording_storage_location?: record}
   --recording: record # shape: {account_user_access_recording?: bool, archive?: record, auto_recording?: string, cloud_recording?: bool, cloud_recording_download?: bool, cloud_recording_download_host?: bool, host_delete_cloud_recording?: bool, ip_address_access_control?: record, local_recording?: bool, prevent_host_access_recording?: bool, record_audio_file?: bool, record_gallery_view?: bool, record_speaker_view?: bool, recording_audio_transcript?: bool, save_chat_text?: bool, show_timestamp?: bool}
   --schedule-meeting: record # shape: {audio_type?: string, embed_password_in_join_link?: bool, force_pmi_jbh_password?: bool, host_video?: bool, join_before_host?: bool, mute_upon_entry?: bool, participant_video?: bool, pstn_password_protected?: bool, require_password_for_all_meetings?: bool, require_password_for_instant_meetings?: bool, require_password_for_pmi_meetings?: "all"|"jbh_only"|"none", require_password_for_scheduled_meetings?: bool, require_password_for_scheduling_new_meetings?: bool, upcoming_meeting_reminder?: bool}
@@ -2407,19 +2444,19 @@ export def "groups-settings update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "custom_query_fields" $custom_query_fields "scalar") (serialize-qp "option" $option "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/groups/{group_id}/settings") $qp)
-  let body = {"email_notification": $email_notification, "in_meeting": $in_meeting, "profile": $profile, "recording": $recording, "schedule_meeting": $schedule_meeting, "telephony": $telephony, "meeting_security": $meeting_security} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/groups/{group_id}/settings") $qp)
+  let req_body = {"email_notification": $email_notification, "in_meeting": $in_meeting, "profile": $profile, "recording": $recording, "schedule_meeting": $schedule_meeting, "telephony": $telephony, "meeting_security": $meeting_security} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete virtual background files
 #
 # DELETE /groups/{groupId}/settings/virtual_backgrounds
 # operationId: delGroupVB
-export def "groups-settings-virtual-backgrounds delGroupVB" [
+export def "groups-settings-virtual-backgrounds delete-vb" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2434,7 +2471,7 @@ export def "groups-settings-virtual-backgrounds delGroupVB" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "file_ids" $file_ids "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/groups/{group_id}/settings/virtual_backgrounds") $qp)
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/groups/{group_id}/settings/virtual_backgrounds") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2444,7 +2481,7 @@ export def "groups-settings-virtual-backgrounds delGroupVB" [
 #
 # POST /groups/{groupId}/settings/virtual_backgrounds
 # operationId: uploadGroupVB
-export def "groups-settings-virtual-backgrounds upload-group-vb" [
+export def "groups-settings-virtual-backgrounds upload-vb" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2462,19 +2499,20 @@ export def "groups-settings-virtual-backgrounds upload-group-vb" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "file_ids" $file_ids "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/groups/{group_id}/settings/virtual_backgrounds") $qp)
-  let body = {"file": $file} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/groups/{group_id}/settings/virtual_backgrounds") $qp)
+  let req_body = {"file": $file} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body [])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # List H.323/SIP devices
 #
 # GET /h323/devices
 # operationId: deviceList
-export def "h323-devices deviceList" [
+export def "h323-devices list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2485,7 +2523,7 @@ export def "h323-devices deviceList" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page-size: int # The number of records returned within a single API call. (default: 30)
-  --page-number: int #  **Deprecated** - This field has been deprecated and we will stop supporting it completely in a future release. Please use "next_page_token" for pagination instead of this field.  The page number of the current page in the returned records. (default: 1)
+  --page-number: int # **Deprecated** - This field has been deprecated and we will stop supporting it completely in a future release. Please use "next_page_token" for pagination instead of this field. The page number of the current page in the returned records. (default: 1)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2501,7 +2539,7 @@ export def "h323-devices deviceList" [
 #
 # POST /h323/devices
 # operationId: deviceCreate
-export def "h323-devices deviceCreate" [
+export def "h323-devices create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2511,27 +2549,27 @@ export def "h323-devices deviceCreate" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  encryption: string@encryption-completer # Device encryption:<br>`auto` - auto.<br>`yes` - yes.<br>`no` - no.
+  encryption: string@encryption-completer # Device encryption:`auto` - auto.`yes` - yes.`no` - no.
   ip: string # Device IP.
   name: string # Device name.
-  protocol: string@protocol-completer # Device protocol:<br>`H.323` - H.323.<br>`SIP` - SIP.
+  protocol: string@protocol-completer # Device protocol:`H.323` - H.323.`SIP` - SIP.
 ]: any -> record<id: string, encryption: string, ip: string, name: string, protocol: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/h323/devices")
-  let body = {"encryption": $encryption, "ip": $ip, "name": $name, "protocol": $protocol} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"encryption": $encryption, "ip": $ip, "name": $name, "protocol": $protocol} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a H.323/SIP device
 #
 # DELETE /h323/devices/{deviceId}
 # operationId: deviceDelete
-export def "h323-devices deviceDelete" [
+export def "h323-devices delete" [
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2544,7 +2582,7 @@ export def "h323-devices deviceDelete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({device_id: $device_id} | format pattern "/h323/devices/{device_id}"))
+  let full_url = (build-url $base ({device_id: (encode-path-segment $device_id)} | format pattern "/h323/devices/{device_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2554,7 +2592,7 @@ export def "h323-devices deviceDelete" [
 #
 # PATCH /h323/devices/{deviceId}
 # operationId: deviceUpdate
-export def "h323-devices deviceUpdate" [
+export def "h323-devices update" [
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2564,27 +2602,27 @@ export def "h323-devices deviceUpdate" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  encryption: string@encryption-completer # Device encryption:<br>`auto` - auto.<br>`yes` - yes.<br>`no` - no.
+  encryption: string@encryption-completer # Device encryption:`auto` - auto.`yes` - yes.`no` - no.
   ip: string # Device IP.
   name: string # Device name.
-  protocol: string@protocol-completer # Device protocol:<br>`H.323` - H.323.<br>`SIP` - SIP.
+  protocol: string@protocol-completer # Device protocol:`H.323` - H.323.`SIP` - SIP.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({device_id: $device_id} | format pattern "/h323/devices/{device_id}"))
-  let body = {"encryption": $encryption, "ip": $ip, "name": $name, "protocol": $protocol} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({device_id: (encode-path-segment $device_id)} | format pattern "/h323/devices/{device_id}"))
+  let req_body = {"encryption": $encryption, "ip": $ip, "name": $name, "protocol": $protocol} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Send chatbot messages
 #
 # POST /im/chat/messages
 # operationId: sendchatbot
-export def "im-chat-messages send-chatbot" [
+export def "im-chat-messages create-sendchatbot" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2595,21 +2633,21 @@ export def "im-chat-messages send-chatbot" [
   --dry-run(-n) # Return the request that would be sent without executing it
   account_id: string # Account ID of the authorized account.
   content: record # JSON template describing how the message should be displayed for the user. For more information please see our ["Send Message" templates](https://marketplace.zoom.us/docs/guides/chatbots/sending-messages#example-request).
-  --is-markdown-support: oneof<nothing, bool> # **Optional**<br> Applies the markdown parser to your chatbot message if the value of this field is set to `true`.<br> To learn more, refer to the Chatbot message [markdown reference](https://marketplace.zoom.us/docs/guides/chatbots/customizing-messages/message-with-markdown).
+  --is-markdown-support: oneof<nothing, bool> # **Optional** Applies the markdown parser to your chatbot message if the value of this field is set to `true`. To learn more, refer to the Chatbot message [markdown reference](https://marketplace.zoom.us/docs/guides/chatbots/customizing-messages/message-with-markdown).
   robot_jid: string # Robot JID created when enabling chatbot features on your marketplace app.
   to_jid: string # Unique JID of reciever. Can be a group or user.
-  --user-jid: string # **Optional**<br> The UserJID of the user on whose behalf the message is being sent. Use this field to prevent members of a channel from getting notifications that were set up by a user who has left the channel.
-  --visible-to-user: string # **Optional**<br>Allow a Chatbot to send a message to a group channel, but have only one designated person in that group channel see the message by providing the person's UserID in this field.
+  --user-jid: string # **Optional** The UserJID of the user on whose behalf the message is being sent. Use this field to prevent members of a channel from getting notifications that were set up by a user who has left the channel.
+  --visible-to-user: string # **Optional**Allow a Chatbot to send a message to a group channel, but have only one designated person in that group channel see the message by providing the person's UserID in this field.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/im/chat/messages")
-  let body = {"account_id": $account_id, "content": $content, "is_markdown_support": $is_markdown_support, "robot_jid": $robot_jid, "to_jid": $to_jid, "user_jid": $user_jid, "visible_to_user": $visible_to_user} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"account_id": $account_id, "content": $content, "is_markdown_support": $is_markdown_support, "robot_jid": $robot_jid, "to_jid": $to_jid, "user_jid": $user_jid, "visible_to_user": $visible_to_user} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a chatbot message
@@ -2634,19 +2672,19 @@ export def "im-chat-messages delete-chatbot" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({message_id: $message_id} | format pattern "/im/chat/messages/{message_id}"))
-  let body = {"account_id": $account_id, "robot_jid": $robot_jid, "user_jid": $user_jid} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({message_id: (encode-path-segment $message_id)} | format pattern "/im/chat/messages/{message_id}"))
+  let req_body = {"account_id": $account_id, "robot_jid": $robot_jid, "user_jid": $user_jid} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Edit a chatbot message
 #
 # PUT /im/chat/messages/{message_id}
 # operationId: editChatbotMessage
-export def "im-chat-messages editChatbotMessage" [
+export def "im-chat-messages update-edit-chatbot" [
   message_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2659,19 +2697,19 @@ export def "im-chat-messages editChatbotMessage" [
   --accept: string@accept-completer # Response content type
   account_id: string # The AccountID of the Zoom account to which the message was sent. Retrieve this from the Chatbot request sent to your server as shown in the example [here]( https://marketplace.zoom.us/docs/guides/chatbots/sending-messages).
   content: record # JSON template describing how the edited message should be displayed for the user. For more information please see our ["Send Message" templates](https://marketplace.zoom.us/docs/guides/chatbots/sending-messages#example-request).
-  --is-markdown-support: oneof<nothing, bool> # **Optional**<br> Enable or disable markdown parser to your chatbot message. Applies the markdown parser to your chatbot message if the value of this field is set to `true`.<br> To learn more, refer to the Chatbot message [markdown reference](https://marketplace.zoom.us/docs/guides/chatbots/customizing-messages/message-with-markdown).
+  --is-markdown-support: oneof<nothing, bool> # **Optional** Enable or disable markdown parser to your chatbot message. Applies the markdown parser to your chatbot message if the value of this field is set to `true`. To learn more, refer to the Chatbot message [markdown reference](https://marketplace.zoom.us/docs/guides/chatbots/customizing-messages/message-with-markdown).
   robot_jid: string # Robot JID created when enabling chatbot features on your marketplace app.
-  --user-jid: string # **Optional**<br> The UserJID of the user on whose behalf the message is being sent. Use this field to prevent members of a channel from getting notifications that were set up by a user who has left the channel.
+  --user-jid: string # **Optional** The UserJID of the user on whose behalf the message is being sent. Use this field to prevent members of a channel from getting notifications that were set up by a user who has left the channel.
 ]: any -> record<message_id: string, robot_jid: string, sent_time: string, to_jid: string, user_jid: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({message_id: $message_id} | format pattern "/im/chat/messages/{message_id}"))
-  let body = {"account_id": $account_id, "content": $content, "is_markdown_support": $is_markdown_support, "robot_jid": $robot_jid, "user_jid": $user_jid} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({message_id: (encode-path-segment $message_id)} | format pattern "/im/chat/messages/{message_id}"))
+  let req_body = {"account_id": $account_id, "content": $content, "is_markdown_support": $is_markdown_support, "robot_jid": $robot_jid, "user_jid": $user_jid} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get IM chat sessions
@@ -2680,7 +2718,7 @@ export def "im-chat-messages editChatbotMessage" [
 # DEPRECATED
 # operationId: imChatSessions
 @deprecated
-export def "im-chat-sessions imChatSessions" [
+export def "im-chat-sessions get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2710,7 +2748,7 @@ export def "im-chat-sessions imChatSessions" [
 # DEPRECATED
 # operationId: imChatMessages
 @deprecated
-export def "im-chat-sessions imChatMessages" [
+export def "im-chat-sessions get-messages" [
   session_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2729,7 +2767,7 @@ export def "im-chat-sessions imChatMessages" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "next_page_token" $next_page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({session_id: $session_id} | format pattern "/im/chat/sessions/{session_id}") $qp)
+  let full_url = (build-url $base ({session_id: (encode-path-segment $session_id)} | format pattern "/im/chat/sessions/{session_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2739,7 +2777,7 @@ export def "im-chat-sessions imChatMessages" [
 #
 # GET /im/groups
 # operationId: imGroups
-export def "im-groups imGroups" [
+export def "im-groups list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2762,7 +2800,7 @@ export def "im-groups imGroups" [
 #
 # POST /im/groups
 # operationId: imGroupCreate
-export def "im-groups imGroupCreate" [
+export def "im-groups create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2776,24 +2814,24 @@ export def "im-groups imGroupCreate" [
   --search-by-account: oneof<nothing, bool> # Members can search for others under same account.
   --search-by-domain: oneof<nothing, bool> # Members can search for others in the same email domain.
   --search-by-ma-account: oneof<nothing, bool> # Members can search for others under same master account, including all sub accounts.
-  --type: string@type-completer-1 # IM Group types:<br>`normal` - Only members can see automatically see the other members of this group. Other people can search for members within this group. <br>`shared` - Everyone under an account can see the group members automatically.<br>`restricted` - Nobody can see the group or search for members except the members in the group. (default: normal)
+  --type: string@type-completer-1 # IM Group types:`normal` - Only members can see automatically see the other members of this group. Other people can search for members within this group. `shared` - Everyone under an account can see the group members automatically.`restricted` - Nobody can see the group or search for members except the members in the group. (default: normal)
 ]: any -> record<id: string, name: string, search_by_account: bool, search_by_domain: bool, search_by_ma_account: bool, total_members: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/im/groups")
-  let body = {"name": $name, "search_by_account": $search_by_account, "search_by_domain": $search_by_domain, "search_by_ma_account": $search_by_ma_account, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"name": $name, "search_by_account": $search_by_account, "search_by_domain": $search_by_domain, "search_by_ma_account": $search_by_ma_account, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete an IM directory group
 #
 # DELETE /im/groups/{groupId}
 # operationId: imGroupDelete
-export def "im-groups imGroupDelete" [
+export def "im-groups delete" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2806,7 +2844,7 @@ export def "im-groups imGroupDelete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/im/groups/{group_id}"))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/im/groups/{group_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2816,7 +2854,7 @@ export def "im-groups imGroupDelete" [
 #
 # GET /im/groups/{groupId}
 # operationId: imGroup
-export def "im-groups imGroup" [
+export def "im-groups get" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2830,7 +2868,7 @@ export def "im-groups imGroup" [
 ]: nothing -> record<id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/im/groups/{group_id}"))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/im/groups/{group_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2840,7 +2878,7 @@ export def "im-groups imGroup" [
 #
 # PATCH /im/groups/{groupId}
 # operationId: imGroupUpdate
-export def "im-groups imGroupUpdate" [
+export def "im-groups update" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2854,24 +2892,24 @@ export def "im-groups imGroupUpdate" [
   --search-by-account: oneof<nothing, bool> # Members can search for others under same account.
   --search-by-domain: oneof<nothing, bool> # Members can search for others in the same email domain.
   --search-by-ma-account: oneof<nothing, bool> # Members can search for others under same master account, including all sub accounts.
-  --type: string@type-completer-1 # IM Group types:<br>`normal` - Only group members can automatically see others in their group. Other people can search for members in the group.<br>`shared` - Everyone under the account can see the group and members automatically.<br>`restricted` - Nobody can see the group or search for members except for the members in the group.
+  --type: string@type-completer-1 # IM Group types:`normal` - Only group members can automatically see others in their group. Other people can search for members in the group.`shared` - Everyone under the account can see the group and members automatically.`restricted` - Nobody can see the group or search for members except for the members in the group.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/im/groups/{group_id}"))
-  let body = {"name": $name, "search_by_account": $search_by_account, "search_by_domain": $search_by_domain, "search_by_ma_account": $search_by_ma_account, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/im/groups/{group_id}"))
+  let req_body = {"name": $name, "search_by_account": $search_by_account, "search_by_domain": $search_by_domain, "search_by_ma_account": $search_by_ma_account, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List IM directory group members
 #
 # GET /im/groups/{groupId}/members
 # operationId: imGroupMembers
-export def "im-groups-members imGroupMembers" [
+export def "im-groups-members get" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2883,13 +2921,13 @@ export def "im-groups-members imGroupMembers" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page-size: int # The number of records returned within a single API call. (default: 30)
-  --page-number: int #  **Deprecated** - This field has been deprecated and we will stop supporting it completely in a future release. Please use "next_page_token" for pagination instead of this field.  The page number of the current page in the returned records. (default: 1)
+  --page-number: int # **Deprecated** - This field has been deprecated and we will stop supporting it completely in a future release. Please use "next_page_token" for pagination instead of this field. The page number of the current page in the returned records. (default: 1)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page_number" $page_number "scalar") (serialize-qp "next_page_token" $next_page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/im/groups/{group_id}/members") $qp)
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/im/groups/{group_id}/members") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2900,7 +2938,7 @@ export def "im-groups-members imGroupMembers" [
 # POST /im/groups/{groupId}/members
 # operationId: imGroupMembersCreate
 # --members item shape: {email?: string, id?: string}
-export def "im-groups-members imGroupMembersCreate" [
+export def "im-groups-members create" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2916,19 +2954,19 @@ export def "im-groups-members imGroupMembersCreate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/im/groups/{group_id}/members"))
-  let body = {"members": $members} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/im/groups/{group_id}/members"))
+  let req_body = {"members": $members} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete an IM directory group member
 #
 # DELETE /im/groups/{groupId}/members/{memberId}
 # operationId: imGroupMembersDelete
-export def "im-groups-members imGroupMembersDelete" [
+export def "im-groups-members delete" [
   group_id: string
   member_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2942,7 +2980,7 @@ export def "im-groups-members imGroupMembersDelete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({group_id: $group_id, member_id: $member_id} | format pattern "/im/groups/{group_id}/members/{member_id}"))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), member_id: (encode-path-segment $member_id)} | format pattern "/im/groups/{group_id}/members/{member_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2954,7 +2992,7 @@ export def "im-groups-members imGroupMembersDelete" [
 # DEPRECATED
 # operationId: sendimmessages
 @deprecated
-export def "im-users-me-chat-messages send-immessages" [
+export def "im-users-me-chat-messages create-sendimmessages" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2972,11 +3010,11 @@ export def "im-users-me-chat-messages send-immessages" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "chat_user" $chat_user "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/im/users/me/chat/messages" $qp)
-  let body = {"message": $message} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"message": $message} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get user’s IM messages
@@ -2985,7 +3023,7 @@ export def "im-users-me-chat-messages send-immessages" [
 # DEPRECATED
 # operationId: listimmessages
 @deprecated
-export def "im-users-chat-messages list-immessages" [
+export def "im-users-chat-messages get-listimmessages" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3005,7 +3043,7 @@ export def "im-users-chat-messages list-immessages" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "chat_user" $chat_user "scalar") (serialize-qp "channel" $channel "scalar") (serialize-qp "date" $date "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "next_page_token" $next_page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/im/users/{user_id}/chat/messages") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/im/users/{user_id}/chat/messages") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3015,7 +3053,7 @@ export def "im-users-chat-messages list-immessages" [
 #
 # PATCH /live_meetings/{meetingId}/events
 # operationId: inMeetingRecordingControl
-export def "live-meetings-events inMeetingRecordingControl" [
+export def "live-meetings-events update-in-recording-control" [
   meeting_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3026,24 +3064,24 @@ export def "live-meetings-events inMeetingRecordingControl" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --method: string # The method that you would like to control. The value of this field can be one of the following: * `recording.start`: Provide this value if you would like to start the recording.<br><br> * `recording.stop`: Provide this value if you would like to stop the recording.<br><br> * `recording.pause`: Provide this value if you would like to pause the recording.<br><br> * `recording.resume`: Provide this value if you would like to resume the recording that was previously paused.   
+  --method: string # The method that you would like to control. The value of this field can be one of the following: * `recording.start`: Provide this value if you would like to start the recording. * `recording.stop`: Provide this value if you would like to stop the recording. * `recording.pause`: Provide this value if you would like to pause the recording. * `recording.resume`: Provide this value if you would like to resume the recording that was previously paused.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({meeting_id: $meeting_id} | format pattern "/live_meetings/{meeting_id}/events"))
-  let body = {"method": $method} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id)} | format pattern "/live_meetings/{meeting_id}/events"))
+  let req_body = {"method": $method} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a meeting
 #
 # DELETE /meetings/{meetingId}
 # operationId: meetingDelete
-export def "meetings meetingDelete" [
+export def "meetings delete" [
   meeting_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3055,12 +3093,12 @@ export def "meetings meetingDelete" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --occurrence-id: string # The meeting occurrence ID.
   --schedule-for-reminder: oneof<nothing, bool> # `true`: Notify host and alternative host about the meeting cancellation via email. `false`: Do not send any email notification.
-  --cancel-meeting-reminder: string # `true`: Notify registrants about the meeting cancellation via email.   `false`: Do not send any email notification to meeting registrants.   The default value of this field is `false`.
+  --cancel-meeting-reminder: string # `true`: Notify registrants about the meeting cancellation via email. `false`: Do not send any email notification to meeting registrants. The default value of this field is `false`.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "occurrence_id" $occurrence_id "scalar") (serialize-qp "schedule_for_reminder" $schedule_for_reminder "scalar") (serialize-qp "cancel_meeting_reminder" $cancel_meeting_reminder "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({meeting_id: $meeting_id} | format pattern "/meetings/{meeting_id}") $qp)
+  let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id)} | format pattern "/meetings/{meeting_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3070,7 +3108,7 @@ export def "meetings meetingDelete" [
 #
 # GET /meetings/{meetingId}
 # operationId: meeting
-export def "meetings meeting" [
+export def "meetings get" [
   meeting_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3082,12 +3120,12 @@ export def "meetings meeting" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --occurrence-id: string # Meeting Occurrence ID. Provide this field to view meeting details of a particular occurrence of the [recurring meeting](https://support.zoom.us/hc/en-us/articles/214973206-Scheduling-Recurring-Meetings).
-  --show-previous-occurrences: oneof<nothing, bool> # Set the value of this field to `true` if you would like to view meeting details of all previous occurrences of a [recurring meeting](https://support.zoom.us/hc/en-us/articles/214973206-Scheduling-Recurring-Meetings). 
+  --show-previous-occurrences: oneof<nothing, bool> # Set the value of this field to `true` if you would like to view meeting details of all previous occurrences of a [recurring meeting](https://support.zoom.us/hc/en-us/articles/214973206-Scheduling-Recurring-Meetings).
 ]: nothing -> record<assistant_id: string, host_email: string, host_id: string, id: int, uuid: string, agenda: string, created_at: string, duration: int, encrypted_password: string, h323_password: string, join_url: string, occurrences: table<duration: int, occurrence_id: string, start_time: string, status: string>, password: string, pmi: int, recurrence: record<end_date_time: string, end_times: int, monthly_day: int, monthly_week: int, monthly_week_day: int, repeat_interval: int, type: int, weekly_days: string>, settings: record<allow_multiple_devices: bool, alternative_hosts: string, alternative_hosts_email_notification: bool, approval_type: int, approved_or_denied_countries_or_regions: record<approved_list: list, denied_list: list, enable: bool, method: string>, audio: string, authentication_domains: string, authentication_exception: list<record>, authentication_name: string, authentication_option: string, auto_recording: string, breakout_room: record<enable: bool, rooms: list>, close_registration: bool, cn_meeting: bool, contact_email: string, contact_name: string, custom_keys: list<record>, encryption_type: string, enforce_login: bool, enforce_login_domains: string, global_dial_in_countries: list<string>, global_dial_in_numbers: list<record>, host_video: bool, in_meeting: bool, jbh_time: int, join_before_host: bool, language_interpretation: record<enable: bool, interpreters: list>, meeting_authentication: bool, mute_upon_entry: bool, participant_video: bool, registrants_confirmation_email: bool, registrants_email_notification: bool, registration_type: int, show_share_button: bool, use_pmi: bool, waiting_room: bool, watermark: bool>, start_time: string, start_url: string, status: string, timezone: string, topic: string, tracking_fields: table<field: string, value: string, visible: bool>, type: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "occurrence_id" $occurrence_id "scalar") (serialize-qp "show_previous_occurrences" $show_previous_occurrences "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({meeting_id: $meeting_id} | format pattern "/meetings/{meeting_id}") $qp)
+  let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id)} | format pattern "/meetings/{meeting_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3097,7 +3135,7 @@ export def "meetings meeting" [
 #
 # PATCH /meetings/{meetingId}
 # operationId: meetingUpdate
-export def "meetings meetingUpdate" [
+export def "meetings update" [
   meeting_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3114,19 +3152,19 @@ export def "meetings meetingUpdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "occurrence_id" $occurrence_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({meeting_id: $meeting_id} | format pattern "/meetings/{meeting_id}") $qp)
-  let body = {"schedule_for": $schedule_for} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id)} | format pattern "/meetings/{meeting_id}") $qp)
+  let req_body = {"schedule_for": $schedule_for} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Perform batch poll creation
 #
 # POST /meetings/{meetingId}/batch_polls
 # operationId: createBatchPolls
-# --questions item shape: {answers?: list, name?: string, type?: "single"|"multiple"}
+# --questions item shape: {answers?: list<string>, name?: string, type?: "single"|"multiple"}
 export def "meetings-batch-polls create" [
   meeting_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3138,25 +3176,25 @@ export def "meetings-batch-polls create" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --questions: list # item shape: {answers?: list, name?: string, type?: "single"|"multiple"}
+  --questions: list # item shape: {answers?: list<string>, name?: string, type?: "single"|"multiple"}
   --title: string # Meeting Poll Title.
 ]: any -> record<polls: table<id: string, questions: list, status: string, title: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({meeting_id: $meeting_id} | format pattern "/meetings/{meeting_id}/batch_polls"))
-  let body = {"questions": $questions, "title": $title} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id)} | format pattern "/meetings/{meeting_id}/batch_polls"))
+  let req_body = {"questions": $questions, "title": $title} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get meeting invitation
 #
 # GET /meetings/{meetingId}/invitation
 # operationId: meetingInvitation
-export def "meetings-invitation meetingInvitation" [
+export def "meetings-invitation get" [
   meeting_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3170,7 +3208,7 @@ export def "meetings-invitation meetingInvitation" [
 ]: nothing -> record<invitation: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({meeting_id: $meeting_id} | format pattern "/meetings/{meeting_id}/invitation"))
+  let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id)} | format pattern "/meetings/{meeting_id}/invitation"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3194,7 +3232,7 @@ export def "meetings-livestream get-live-stream-details" [
 ]: nothing -> record<page_url: string, stream_key: string, stream_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({meeting_id: $meeting_id} | format pattern "/meetings/{meeting_id}/livestream"))
+  let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id)} | format pattern "/meetings/{meeting_id}/livestream"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3204,7 +3242,7 @@ export def "meetings-livestream get-live-stream-details" [
 #
 # PATCH /meetings/{meetingId}/livestream
 # operationId: meetingLiveStreamUpdate
-export def "meetings-livestream meetingLiveStreamUpdate" [
+export def "meetings-livestream update-live-stream" [
   meeting_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3221,12 +3259,12 @@ export def "meetings-livestream meetingLiveStreamUpdate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({meeting_id: $meeting_id} | format pattern "/meetings/{meeting_id}/livestream"))
-  let body = {"page_url": $page_url, "stream_key": $stream_key, "stream_url": $stream_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id)} | format pattern "/meetings/{meeting_id}/livestream"))
+  let req_body = {"page_url": $page_url, "stream_key": $stream_key, "stream_url": $stream_url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update Live Stream Status
@@ -3234,7 +3272,7 @@ export def "meetings-livestream meetingLiveStreamUpdate" [
 # PATCH /meetings/{meetingId}/livestream/status
 # operationId: meetingLiveStreamStatusUpdate
 # --settings shape: {active_speaker_name?: bool, display_name?: string}
-export def "meetings-livestream-status meetingLiveStreamStatusUpdate" [
+export def "meetings-livestream-status update-live-stream" [
   meeting_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3244,25 +3282,25 @@ export def "meetings-livestream-status meetingLiveStreamStatusUpdate" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-2 # Update the status of a livestream.  The value can be one of the following:<br> `start`: Start a live stream. <br> `stop`: Stop an ongoing live stream.
+  --action: string@action-completer-2 # Update the status of a livestream. The value can be one of the following: `start`: Start a live stream. `stop`: Stop an ongoing live stream.
   --settings: record # Update the settings of a live streaming session. The settings can only be updated for a live stream that has been stopped. You can not update the settings of an ongoing live stream. — shape: {active_speaker_name?: bool, display_name?: string}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({meeting_id: $meeting_id} | format pattern "/meetings/{meeting_id}/livestream/status"))
-  let body = {"action": $action, "settings": $settings} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id)} | format pattern "/meetings/{meeting_id}/livestream/status"))
+  let req_body = {"action": $action, "settings": $settings} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List meeting polls
 #
 # GET /meetings/{meetingId}/polls
 # operationId: meetingPolls
-export def "meetings-polls meetingPolls" [
+export def "meetings-polls list" [
   meeting_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3276,7 +3314,7 @@ export def "meetings-polls meetingPolls" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({meeting_id: $meeting_id} | format pattern "/meetings/{meeting_id}/polls"))
+  let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id)} | format pattern "/meetings/{meeting_id}/polls"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3286,8 +3324,8 @@ export def "meetings-polls meetingPolls" [
 #
 # POST /meetings/{meetingId}/polls
 # operationId: meetingPollCreate
-# --questions item shape: {answers?: list, name?: string, type?: "single"|"multiple"}
-export def "meetings-polls meetingPollCreate" [
+# --questions item shape: {answers?: list<string>, name?: string, type?: "single"|"multiple"}
+export def "meetings-polls create" [
   meeting_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3298,25 +3336,25 @@ export def "meetings-polls meetingPollCreate" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --questions: list # Array of Polls — item shape: {answers?: list, name?: string, type?: "single"|"multiple"}
+  --questions: list # Array of Polls — item shape: {answers?: list<string>, name?: string, type?: "single"|"multiple"}
   --title: string # Title for the poll.
 ]: any -> record<id: string, status: string, questions: table<answers: list, name: string, type: string>, title: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({meeting_id: $meeting_id} | format pattern "/meetings/{meeting_id}/polls"))
-  let body = {"questions": $questions, "title": $title} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id)} | format pattern "/meetings/{meeting_id}/polls"))
+  let req_body = {"questions": $questions, "title": $title} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a meeting poll
 #
 # DELETE /meetings/{meetingId}/polls/{pollId}
 # operationId: meetingPollDelete
-export def "meetings-polls meetingPollDelete" [
+export def "meetings-polls delete" [
   meeting_id: int
   poll_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3330,7 +3368,7 @@ export def "meetings-polls meetingPollDelete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({meeting_id: $meeting_id, poll_id: $poll_id} | format pattern "/meetings/{meeting_id}/polls/{poll_id}"))
+  let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id), poll_id: (encode-path-segment $poll_id)} | format pattern "/meetings/{meeting_id}/polls/{poll_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3340,7 +3378,7 @@ export def "meetings-polls meetingPollDelete" [
 #
 # GET /meetings/{meetingId}/polls/{pollId}
 # operationId: meetingPollGet
-export def "meetings-polls meetingPollGet" [
+export def "meetings-polls get" [
   meeting_id: int
   poll_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3355,7 +3393,7 @@ export def "meetings-polls meetingPollGet" [
 ]: nothing -> record<id: string, status: string, questions: table<answers: list, name: string, type: string>, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({meeting_id: $meeting_id, poll_id: $poll_id} | format pattern "/meetings/{meeting_id}/polls/{poll_id}"))
+  let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id), poll_id: (encode-path-segment $poll_id)} | format pattern "/meetings/{meeting_id}/polls/{poll_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3365,8 +3403,8 @@ export def "meetings-polls meetingPollGet" [
 #
 # PUT /meetings/{meetingId}/polls/{pollId}
 # operationId: meetingPollUpdate
-# --questions item shape: {answers?: list, name?: string, type?: "single"|"multiple"}
-export def "meetings-polls meetingPollUpdate" [
+# --questions item shape: {answers?: list<string>, name?: string, type?: "single"|"multiple"}
+export def "meetings-polls update" [
   meeting_id: int
   poll_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3377,25 +3415,25 @@ export def "meetings-polls meetingPollUpdate" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --questions: list # Array of Polls — item shape: {answers?: list, name?: string, type?: "single"|"multiple"}
+  --questions: list # Array of Polls — item shape: {answers?: list<string>, name?: string, type?: "single"|"multiple"}
   --title: string # Title for the poll.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({meeting_id: $meeting_id, poll_id: $poll_id} | format pattern "/meetings/{meeting_id}/polls/{poll_id}"))
-  let body = {"questions": $questions, "title": $title} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id), poll_id: (encode-path-segment $poll_id)} | format pattern "/meetings/{meeting_id}/polls/{poll_id}"))
+  let req_body = {"questions": $questions, "title": $title} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete meeting recordings
 #
 # DELETE /meetings/{meetingId}/recordings
 # operationId: recordingDelete
-export def "meetings-recordings recordingDelete" [
+export def "meetings-recordings delete" [
   meeting_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3405,12 +3443,12 @@ export def "meetings-recordings recordingDelete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-3 # The recording delete actions:<br>`trash` - Move recording to trash.<br>`delete` - Delete recording permanently. (default: trash)
+  --action: string@action-completer-3 # The recording delete actions:`trash` - Move recording to trash.`delete` - Delete recording permanently. (default: trash)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "action" $action "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({meeting_id: $meeting_id} | format pattern "/meetings/{meeting_id}/recordings") $qp)
+  let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id)} | format pattern "/meetings/{meeting_id}/recordings") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3420,7 +3458,7 @@ export def "meetings-recordings recordingDelete" [
 #
 # GET /meetings/{meetingId}/recordings
 # operationId: recordingGet
-export def "meetings-recordings recordingGet" [
+export def "meetings-recordings get" [
   meeting_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3437,7 +3475,7 @@ export def "meetings-recordings recordingGet" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "include_fields" $include_fields "scalar") (serialize-qp "ttl" $ttl "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({meeting_id: $meeting_id} | format pattern "/meetings/{meeting_id}/recordings") $qp)
+  let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id)} | format pattern "/meetings/{meeting_id}/recordings") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3447,7 +3485,7 @@ export def "meetings-recordings recordingGet" [
 #
 # GET /meetings/{meetingId}/recordings/registrants
 # operationId: meetingRecordingRegistrants
-export def "meetings-recordings-registrants meetingRecordingRegistrants" [
+export def "meetings-recordings-registrants get" [
   meeting_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3458,15 +3496,15 @@ export def "meetings-recordings-registrants meetingRecordingRegistrants" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --status: string@status-completer # The registrant status:<br>`pending` - Registrant's status is pending.<br>`approved` - Registrant's status is approved.<br>`denied` - Registrant's status is denied. (default: approved)
+  --status: string@status-completer # The registrant status:`pending` - Registrant's status is pending.`approved` - Registrant's status is approved.`denied` - Registrant's status is denied. (default: approved)
   --page-size: int # The number of records returned within a single API call. (default: 30)
-  --page-number: int #  **Deprecated** - This field has been deprecated and we will stop supporting it completely in a future release. Please use "next_page_token" for pagination instead of this field.  The page number of the current page in the returned records. (default: 1)
+  --page-number: int # **Deprecated** - This field has been deprecated and we will stop supporting it completely in a future release. Please use "next_page_token" for pagination instead of this field. The page number of the current page in the returned records. (default: 1)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "status" $status "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "page_number" $page_number "scalar") (serialize-qp "next_page_token" $next_page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({meeting_id: $meeting_id} | format pattern "/meetings/{meeting_id}/recordings/registrants") $qp)
+  let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id)} | format pattern "/meetings/{meeting_id}/recordings/registrants") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3477,7 +3515,7 @@ export def "meetings-recordings-registrants meetingRecordingRegistrants" [
 # POST /meetings/{meetingId}/recordings/registrants
 # operationId: meetingRecordingRegistrantCreate
 # --custom_questions item shape: {title?: string, value?: string}
-export def "meetings-recordings-registrants meetingRecordingRegistrantCreate" [
+export def "meetings-recordings-registrants create" [
   meeting_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3498,30 +3536,30 @@ export def "meetings-recordings-registrants meetingRecordingRegistrantCreate" [
   --industry: string # Registrant's Industry.
   --job-title: string # Registrant's job title.
   --last-name: string # Registrant's last name.
-  --no-of-employees: string # Number of Employees:<br>`1-20`<br>`21-50`<br>`51-100`<br>`101-500`<br>`500-1,000`<br>`1,001-5,000`<br>`5,001-10,000`<br>`More than 10,000`
+  --no-of-employees: string # Number of Employees:`1-20``21-50``51-100``101-500``500-1,000``1,001-5,000``5,001-10,000``More than 10,000`
   --org: string # Registrant's Organization.
   --phone: string # Registrant's Phone number.
-  --purchasing-time-frame: string # This field can be included to gauge interest of webinar attendees towards buying your product or service.  Purchasing Time Frame:<br>`Within a month`<br>`1-3 months`<br>`4-6 months`<br>`More than 6 months`<br>`No timeframe`
-  --role-in-purchase-process: string # Role in Purchase Process:<br>`Decision Maker`<br>`Evaluator/Recommender`<br>`Influencer`<br>`Not involved` 
+  --purchasing-time-frame: string # This field can be included to gauge interest of webinar attendees towards buying your product or service. Purchasing Time Frame:`Within a month``1-3 months``4-6 months``More than 6 months``No timeframe`
+  --role-in-purchase-process: string # Role in Purchase Process:`Decision Maker``Evaluator/Recommender``Influencer``Not involved`
   --state: string # Registrant's State/Province.
   --zip: string # Registrant's Zip/Postal Code.
 ]: any -> record<id: int, registrant_id: string, share_url: string, topic: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({meeting_id: $meeting_id} | format pattern "/meetings/{meeting_id}/recordings/registrants"))
-  let body = {"address": $address, "city": $city, "comments": $comments, "country": $country, "custom_questions": $custom_questions, "email": $email, "first_name": $first_name, "industry": $industry, "job_title": $job_title, "last_name": $last_name, "no_of_employees": $no_of_employees, "org": $org, "phone": $phone, "purchasing_time_frame": $purchasing_time_frame, "role_in_purchase_process": $role_in_purchase_process, "state": $state, "zip": $zip} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id)} | format pattern "/meetings/{meeting_id}/recordings/registrants"))
+  let req_body = {"address": $address, "city": $city, "comments": $comments, "country": $country, "custom_questions": $custom_questions, "email": $email, "first_name": $first_name, "industry": $industry, "job_title": $job_title, "last_name": $last_name, "no_of_employees": $no_of_employees, "org": $org, "phone": $phone, "purchasing_time_frame": $purchasing_time_frame, "role_in_purchase_process": $role_in_purchase_process, "state": $state, "zip": $zip} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get registration questions
 #
 # GET /meetings/{meetingId}/recordings/registrants/questions
 # operationId: recordingRegistrantsQuestionsGet
-export def "meetings-recordings-registrants-questions recordingRegistrantsQuestionsGet" [
+export def "meetings-recordings-registrants-questions get" [
   meeting_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3535,7 +3573,7 @@ export def "meetings-recordings-registrants-questions recordingRegistrantsQuesti
 ]: nothing -> record<custom_questions: table<answers: list, required: bool, title: string, type: string>, questions: table<field_name: string, required: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({meeting_id: $meeting_id} | format pattern "/meetings/{meeting_id}/recordings/registrants/questions"))
+  let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id)} | format pattern "/meetings/{meeting_id}/recordings/registrants/questions"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3545,9 +3583,9 @@ export def "meetings-recordings-registrants-questions recordingRegistrantsQuesti
 #
 # PATCH /meetings/{meetingId}/recordings/registrants/questions
 # operationId: recordingRegistrantQuestionUpdate
-# --custom_questions item shape: {answers?: list, required?: bool, title?: string, type?: "short"|"single"|"multiple"}
+# --custom_questions item shape: {answers?: list<string>, required?: bool, title?: string, type?: "short"|"single"|"multiple"}
 # --questions item shape: {field_name?: "last_name"|"address"|"city"|"country"|"zip"|"state"|"phone"|"industry"|"org"|"job_title"|"purchasing_time_frame"|"role_in_purchase_process"|"no_of_employees"|"comments", required?: bool}
-export def "meetings-recordings-registrants-questions recordingRegistrantQuestionUpdate" [
+export def "meetings-recordings-registrants-questions update" [
   meeting_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3557,18 +3595,18 @@ export def "meetings-recordings-registrants-questions recordingRegistrantQuestio
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --custom-questions: list # Array of Registrant Custom Questions — item shape: {answers?: list, required?: bool, title?: string, type?: "short"|"single"|"multiple"}
+  --custom-questions: list # Array of Registrant Custom Questions — item shape: {answers?: list<string>, required?: bool, title?: string, type?: "short"|"single"|"multiple"}
   --questions: list # Array of Registrant Questions — item shape: {field_name?: "last_name"|"address"|"city"|"country"|"zip"|"state"|"phone"|"industry"|"org"|"job_title"|"purchasing_time_frame"|"role_in_purchase_process"|"no_of_employees"|"comments", required?: bool}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({meeting_id: $meeting_id} | format pattern "/meetings/{meeting_id}/recordings/registrants/questions"))
-  let body = {"custom_questions": $custom_questions, "questions": $questions} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id)} | format pattern "/meetings/{meeting_id}/recordings/registrants/questions"))
+  let req_body = {"custom_questions": $custom_questions, "questions": $questions} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update registrant's status
@@ -3576,7 +3614,7 @@ export def "meetings-recordings-registrants-questions recordingRegistrantQuestio
 # PUT /meetings/{meetingId}/recordings/registrants/status
 # operationId: meetingRecordingRegistrantStatus
 # --registrants item shape: {id?: string}
-export def "meetings-recordings-registrants-status meetingRecordingRegistrantStatus" [
+export def "meetings-recordings-registrants-status update" [
   meeting_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3592,19 +3630,19 @@ export def "meetings-recordings-registrants-status meetingRecordingRegistrantSta
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({meeting_id: $meeting_id} | format pattern "/meetings/{meeting_id}/recordings/registrants/status"))
-  let body = {"action": $action, "registrants": $registrants} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id)} | format pattern "/meetings/{meeting_id}/recordings/registrants/status"))
+  let req_body = {"action": $action, "registrants": $registrants} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get meeting recording settings
 #
 # GET /meetings/{meetingId}/recordings/settings
 # operationId: recordingSettingUpdate
-export def "meetings-recordings-settings recordingSettingUpdate" [
+export def "meetings-recordings-settings update-by-meetingId" [
   meeting_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3618,7 +3656,7 @@ export def "meetings-recordings-settings recordingSettingUpdate" [
 ]: nothing -> record<approval_type: int, authentication_domains: string, authentication_option: string, on_demand: bool, password: string, recording_authentication: bool, send_email_to_host: bool, share_recording: string, show_social_share_buttons: bool, topic: string, viewer_download: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({meeting_id: $meeting_id} | format pattern "/meetings/{meeting_id}/recordings/settings"))
+  let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id)} | format pattern "/meetings/{meeting_id}/recordings/settings"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3628,7 +3666,7 @@ export def "meetings-recordings-settings recordingSettingUpdate" [
 #
 # PATCH /meetings/{meetingId}/recordings/settings
 # operationId: recordingSettingsUpdate
-export def "meetings-recordings-settings recordingSettingsUpdate" [
+export def "meetings-recordings-settings update-by-meetingId-1" [
   meeting_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3638,11 +3676,11 @@ export def "meetings-recordings-settings recordingSettingsUpdate" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --approval-type: int@approval-type-completer # Approval type for the registration.<br> `0`- Automatically approve the registration when a user registers.<br> `1` - Manually approve or deny the registration of a user.<br> `2` - No registration required to view the recording.
+  --approval-type: int@approval-type-completer # Approval type for the registration. `0`- Automatically approve the registration when a user registers. `1` - Manually approve or deny the registration of a user. `2` - No registration required to view the recording.
   --authentication-domains: string # Authentication domains.
   --authentication-option: string # Authentication Options.
-  --on-demand: oneof<nothing, bool> # Determine whether registration  isrequired to view the recording.
-  --password: string # Enable password protection for the recording by setting a password. The password must have a minimum of **eight** characters with a mix of numbers, letters and special characters.<br><br> **Note:** If the account owner or the admin has set minimum password strength requirements for recordings via Account Settings, the password value provided here must meet those requirements. <br><br>If the requirements are enabled, you can view those requirements by calling either the [Get User Settings API](https://marketplace.zoom.us/docs/api-reference/zoom-api/users/usersettings) or the [Get Account Settings](https://marketplace.zoom.us/docs/api-reference/zoom-api/accounts/accountsettings) API. 
+  --on-demand: oneof<nothing, bool> # Determine whether registration isrequired to view the recording.
+  --password: string # Enable password protection for the recording by setting a password. The password must have a minimum of **eight** characters with a mix of numbers, letters and special characters. **Note:** If the account owner or the admin has set minimum password strength requirements for recordings via Account Settings, the password value provided here must meet those requirements. If the requirements are enabled, you can view those requirements by calling either the [Get User Settings API](https://marketplace.zoom.us/docs/api-reference/zoom-api/users/usersettings) or the [Get Account Settings](https://marketplace.zoom.us/docs/api-reference/zoom-api/accounts/accountsettings) API.
   --recording-authentication: oneof<nothing, bool> # Only authenticated users can view.
   --send-email-to-host: oneof<nothing, bool> # Send an email to host when someone registers to view the recording. This applies for On-demand recordings only.
   --share-recording: string@share-recording-completer # Determine how the meeting recording is shared.
@@ -3653,19 +3691,19 @@ export def "meetings-recordings-settings recordingSettingsUpdate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({meeting_id: $meeting_id} | format pattern "/meetings/{meeting_id}/recordings/settings"))
-  let body = {"approval_type": $approval_type, "authentication_domains": $authentication_domains, "authentication_option": $authentication_option, "on_demand": $on_demand, "password": $password, "recording_authentication": $recording_authentication, "send_email_to_host": $send_email_to_host, "share_recording": $share_recording, "show_social_share_buttons": $show_social_share_buttons, "topic": $topic, "viewer_download": $viewer_download} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id)} | format pattern "/meetings/{meeting_id}/recordings/settings"))
+  let req_body = {"approval_type": $approval_type, "authentication_domains": $authentication_domains, "authentication_option": $authentication_option, "on_demand": $on_demand, "password": $password, "recording_authentication": $recording_authentication, "send_email_to_host": $send_email_to_host, "share_recording": $share_recording, "show_social_share_buttons": $show_social_share_buttons, "topic": $topic, "viewer_download": $viewer_download} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Recover meeting recordings
 #
 # PUT /meetings/{meetingId}/recordings/status
 # operationId: recordingStatusUpdate
-export def "meetings-recordings-status recordingStatusUpdate" [
+export def "meetings-recordings-status update" [
   meeting_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3680,19 +3718,19 @@ export def "meetings-recordings-status recordingStatusUpdate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({meeting_id: $meeting_id} | format pattern "/meetings/{meeting_id}/recordings/status"))
-  let body = {"action": $action} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id)} | format pattern "/meetings/{meeting_id}/recordings/status"))
+  let req_body = {"action": $action} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a meeting recording file
 #
 # DELETE /meetings/{meetingId}/recordings/{recordingId}
 # operationId: recordingDeleteOne
-export def "meetings-recordings recordingDeleteOne" [
+export def "meetings-recordings delete-one" [
   meeting_id: string
   recording_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3703,12 +3741,12 @@ export def "meetings-recordings recordingDeleteOne" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-3 # The recording delete actions:<br>`trash` - Move recording to trash.<br>`delete` - Delete recording permanently. (default: trash)
+  --action: string@action-completer-3 # The recording delete actions:`trash` - Move recording to trash.`delete` - Delete recording permanently. (default: trash)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "action" $action "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({meeting_id: $meeting_id, recording_id: $recording_id} | format pattern "/meetings/{meeting_id}/recordings/{recording_id}") $qp)
+  let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id), recording_id: (encode-path-segment $recording_id)} | format pattern "/meetings/{meeting_id}/recordings/{recording_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3718,7 +3756,7 @@ export def "meetings-recordings recordingDeleteOne" [
 #
 # PUT /meetings/{meetingId}/recordings/{recordingId}/status
 # operationId: recordingStatusUpdateOne
-export def "meetings-recordings-status recordingStatusUpdateOne" [
+export def "meetings-recordings-status update-one" [
   meeting_id: string
   recording_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3734,19 +3772,19 @@ export def "meetings-recordings-status recordingStatusUpdateOne" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({meeting_id: $meeting_id, recording_id: $recording_id} | format pattern "/meetings/{meeting_id}/recordings/{recording_id}/status"))
-  let body = {"action": $action} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id), recording_id: (encode-path-segment $recording_id)} | format pattern "/meetings/{meeting_id}/recordings/{recording_id}/status"))
+  let req_body = {"action": $action} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List meeting registrants
 #
 # GET /meetings/{meetingId}/registrants
 # operationId: meetingRegistrants
-export def "meetings-registrants meetingRegistrants" [
+export def "meetings-registrants get" [
   meeting_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3758,15 +3796,15 @@ export def "meetings-registrants meetingRegistrants" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --occurrence-id: string # The meeting occurrence ID.
-  --status: string@status-completer # The registrant status:<br>`pending` - Registrant's status is pending.<br>`approved` - Registrant's status is approved.<br>`denied` - Registrant's status is denied. (default: approved)
+  --status: string@status-completer # The registrant status:`pending` - Registrant's status is pending.`approved` - Registrant's status is approved.`denied` - Registrant's status is denied. (default: approved)
   --page-size: int # The number of records returned within a single API call. (default: 30)
-  --page-number: int #  **Deprecated** - This field has been deprecated and we will stop supporting it completely in a future release. Please use "next_page_token" for pagination instead of this field.  The page number of the current page in the returned records. (default: 1)
+  --page-number: int # **Deprecated** - This field has been deprecated and we will stop supporting it completely in a future release. Please use "next_page_token" for pagination instead of this field. The page number of the current page in the returned records. (default: 1)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "occurrence_id" $occurrence_id "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "page_number" $page_number "scalar") (serialize-qp "next_page_token" $next_page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({meeting_id: $meeting_id} | format pattern "/meetings/{meeting_id}/registrants") $qp)
+  let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id)} | format pattern "/meetings/{meeting_id}/registrants") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3777,7 +3815,7 @@ export def "meetings-registrants meetingRegistrants" [
 # POST /meetings/{meetingId}/registrants
 # operationId: meetingRegistrantCreate
 # --custom_questions item shape: {title?: string, value?: string}
-export def "meetings-registrants meetingRegistrantCreate" [
+export def "meetings-registrants create" [
   meeting_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3799,33 +3837,33 @@ export def "meetings-registrants meetingRegistrantCreate" [
   --industry: string # Registrant's Industry.
   --job-title: string # Registrant's job title.
   --last-name: string # Registrant's last name.
-  --no-of-employees: string # Number of Employees:<br>`1-20`<br>`21-50`<br>`51-100`<br>`101-500`<br>`500-1,000`<br>`1,001-5,000`<br>`5,001-10,000`<br>`More than 10,000`
+  --no-of-employees: string # Number of Employees:`1-20``21-50``51-100``101-500``500-1,000``1,001-5,000``5,001-10,000``More than 10,000`
   --org: string # Registrant's Organization.
   --phone: string # Registrant's Phone number.
-  --purchasing-time-frame: string # This field can be included to gauge interest of webinar attendees towards buying your product or service.  Purchasing Time Frame:<br>`Within a month`<br>`1-3 months`<br>`4-6 months`<br>`More than 6 months`<br>`No timeframe`
-  --role-in-purchase-process: string # Role in Purchase Process:<br>`Decision Maker`<br>`Evaluator/Recommender`<br>`Influencer`<br>`Not involved` 
+  --purchasing-time-frame: string # This field can be included to gauge interest of webinar attendees towards buying your product or service. Purchasing Time Frame:`Within a month``1-3 months``4-6 months``More than 6 months``No timeframe`
+  --role-in-purchase-process: string # Role in Purchase Process:`Decision Maker``Evaluator/Recommender``Influencer``Not involved`
   --state: string # Registrant's State/Province.
   --zip: string # Registrant's Zip/Postal Code.
-  --language: string # Registrant's language preference for confirmation  emails. The value can be one of the following: `en-US`,`de-DE`,`es-ES`,`fr-FR`,`jp-JP`,`pt-PT`,`ru-RU`,`zh-CN`, `zh-TW`, `ko-KO`, `it-IT`, `vi-VN`.
+  --language: string # Registrant's language preference for confirmation emails. The value can be one of the following: `en-US`,`de-DE`,`es-ES`,`fr-FR`,`jp-JP`,`pt-PT`,`ru-RU`,`zh-CN`, `zh-TW`, `ko-KO`, `it-IT`, `vi-VN`.
   --auto-approve: oneof<nothing, bool>
 ]: any -> record<id: int, join_url: string, registrant_id: string, start_time: string, topic: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "occurrence_ids" $occurrence_ids "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({meeting_id: $meeting_id} | format pattern "/meetings/{meeting_id}/registrants") $qp)
-  let body = {"address": $address, "city": $city, "comments": $comments, "country": $country, "custom_questions": $custom_questions, "email": $email, "first_name": $first_name, "industry": $industry, "job_title": $job_title, "last_name": $last_name, "no_of_employees": $no_of_employees, "org": $org, "phone": $phone, "purchasing_time_frame": $purchasing_time_frame, "role_in_purchase_process": $role_in_purchase_process, "state": $state, "zip": $zip, "language": $language, "auto_approve": $auto_approve} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id)} | format pattern "/meetings/{meeting_id}/registrants") $qp)
+  let req_body = {"address": $address, "city": $city, "comments": $comments, "country": $country, "custom_questions": $custom_questions, "email": $email, "first_name": $first_name, "industry": $industry, "job_title": $job_title, "last_name": $last_name, "no_of_employees": $no_of_employees, "org": $org, "phone": $phone, "purchasing_time_frame": $purchasing_time_frame, "role_in_purchase_process": $role_in_purchase_process, "state": $state, "zip": $zip, "language": $language, "auto_approve": $auto_approve} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-# List registration questions 
+# List registration questions
 #
 # GET /meetings/{meetingId}/registrants/questions
 # operationId: meetingRegistrantsQuestionsGet
-export def "meetings-registrants-questions meetingRegistrantsQuestionsGet" [
+export def "meetings-registrants-questions get" [
   meeting_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3839,7 +3877,7 @@ export def "meetings-registrants-questions meetingRegistrantsQuestionsGet" [
 ]: nothing -> record<custom_questions: table<answers: list, required: bool, title: string, type: string>, questions: table<field_name: string, required: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({meeting_id: $meeting_id} | format pattern "/meetings/{meeting_id}/registrants/questions"))
+  let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id)} | format pattern "/meetings/{meeting_id}/registrants/questions"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3849,9 +3887,9 @@ export def "meetings-registrants-questions meetingRegistrantsQuestionsGet" [
 #
 # PATCH /meetings/{meetingId}/registrants/questions
 # operationId: meetingRegistrantQuestionUpdate
-# --custom_questions item shape: {answers?: list, required?: bool, title?: string, type?: "short"|"single"}
+# --custom_questions item shape: {answers?: list<string>, required?: bool, title?: string, type?: "short"|"single"}
 # --questions item shape: {field_name?: "address"|"city"|"country"|"zip"|"state"|"phone"|"industry"|"org"|"job_title"|"purchasing_time_frame"|"role_in_purchase_process"|"no_of_employees"|"comments", required?: bool}
-export def "meetings-registrants-questions meetingRegistrantQuestionUpdate" [
+export def "meetings-registrants-questions update" [
   meeting_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3861,18 +3899,18 @@ export def "meetings-registrants-questions meetingRegistrantQuestionUpdate" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --custom-questions: list # Array of Registrant Custom Questions — item shape: {answers?: list, required?: bool, title?: string, type?: "short"|"single"}
+  --custom-questions: list # Array of Registrant Custom Questions — item shape: {answers?: list<string>, required?: bool, title?: string, type?: "short"|"single"}
   --questions: list # Array of Registrant Questions — item shape: {field_name?: "address"|"city"|"country"|"zip"|"state"|"phone"|"industry"|"org"|"job_title"|"purchasing_time_frame"|"role_in_purchase_process"|"no_of_employees"|"comments", required?: bool}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({meeting_id: $meeting_id} | format pattern "/meetings/{meeting_id}/registrants/questions"))
-  let body = {"custom_questions": $custom_questions, "questions": $questions} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id)} | format pattern "/meetings/{meeting_id}/registrants/questions"))
+  let req_body = {"custom_questions": $custom_questions, "questions": $questions} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update registrant's status
@@ -3880,7 +3918,7 @@ export def "meetings-registrants-questions meetingRegistrantQuestionUpdate" [
 # PUT /meetings/{meetingId}/registrants/status
 # operationId: meetingRegistrantStatus
 # --registrants item shape: {email?: string, id?: string}
-export def "meetings-registrants-status meetingRegistrantStatus" [
+export def "meetings-registrants-status update" [
   meeting_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3891,26 +3929,26 @@ export def "meetings-registrants-status meetingRegistrantStatus" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --occurrence-id: string # The meeting occurrence ID.
-  action: string@action-completer-6 # Registrant Status:<br>`approve` - Approve registrant.<br>`cancel` - Cancel previously approved registrant's registration.<br>`deny` - Deny registrant.
+  action: string@action-completer-6 # Registrant Status:`approve` - Approve registrant.`cancel` - Cancel previously approved registrant's registration.`deny` - Deny registrant.
   --registrants: list # List of registrants. — item shape: {email?: string, id?: string}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "occurrence_id" $occurrence_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({meeting_id: $meeting_id} | format pattern "/meetings/{meeting_id}/registrants/status") $qp)
-  let body = {"action": $action, "registrants": $registrants} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id)} | format pattern "/meetings/{meeting_id}/registrants/status") $qp)
+  let req_body = {"action": $action, "registrants": $registrants} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a meeting registrant
 #
 # DELETE /meetings/{meetingId}/registrants/{registrantId}
 # operationId: meetingregistrantdelete
-export def "meetings-registrants meetingregistrantdelete" [
+export def "meetings-registrants delete-meetingregistrantdelete" [
   meeting_id: int
   registrant_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3926,7 +3964,7 @@ export def "meetings-registrants meetingregistrantdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "occurrence_id" $occurrence_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({meeting_id: $meeting_id, registrant_id: $registrant_id} | format pattern "/meetings/{meeting_id}/registrants/{registrant_id}") $qp)
+  let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id), registrant_id: (encode-path-segment $registrant_id)} | format pattern "/meetings/{meeting_id}/registrants/{registrant_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3936,7 +3974,7 @@ export def "meetings-registrants meetingregistrantdelete" [
 #
 # PUT /meetings/{meetingId}/status
 # operationId: meetingStatus
-export def "meetings-status meetingStatus" [
+export def "meetings-status update" [
   meeting_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3946,24 +3984,24 @@ export def "meetings-status meetingStatus" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-7 # `end` - End a meeting.<br> `recover` - [Recover](https://support.zoom.us/hc/en-us/articles/360038297111-Recover-a-deleted-meeting) a deleted meeting.
+  --action: string@action-completer-7 # `end` - End a meeting. `recover` - [Recover](https://support.zoom.us/hc/en-us/articles/360038297111-Recover-a-deleted-meeting) a deleted meeting.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({meeting_id: $meeting_id} | format pattern "/meetings/{meeting_id}/status"))
-  let body = {"action": $action} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id)} | format pattern "/meetings/{meeting_id}/status"))
+  let req_body = {"action": $action} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List Zoom meetings client feedback
 #
 # GET /metrics/client/feedback
 # operationId: dashboardClientFeedback
-export def "metrics-client-feedback dashboardClientFeedback" [
+export def "metrics-client-feedback get-dashboard" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3989,7 +4027,7 @@ export def "metrics-client-feedback dashboardClientFeedback" [
 #
 # GET /metrics/client/feedback/{feedbackId}
 # operationId: dashboardClientFeedbackDetail
-export def "metrics-client-feedback dashboardClientFeedbackDetail" [
+export def "metrics-client-feedback get-dashboard-detail" [
   feedback_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4008,7 +4046,7 @@ export def "metrics-client-feedback dashboardClientFeedbackDetail" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "next_page_token" $next_page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({feedback_id: $feedback_id} | format pattern "/metrics/client/feedback/{feedback_id}") $qp)
+  let full_url = (build-url $base ({feedback_id: (encode-path-segment $feedback_id)} | format pattern "/metrics/client/feedback/{feedback_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4028,8 +4066,8 @@ export def "metrics-client-satisfaction list-meeting" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-from: string # The start date for the query in “yyyy-mm-dd” format.  (format: date)
-  --qp-to: string # The end date for the query in “yyyy-mm-dd” format.  (format: date)
+  --qp-from: string # The start date for the query in “yyyy-mm-dd” format. (format: date)
+  --qp-to: string # The end date for the query in “yyyy-mm-dd” format. (format: date)
 ]: nothing -> record<client_satisfaction: table<date: string, good_count: int, none_count: int, not_good_count: int, satisfaction_percent: int>, from: string, to: string, total_records: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4044,7 +4082,7 @@ export def "metrics-client-satisfaction list-meeting" [
 #
 # GET /metrics/crc
 # operationId: dashboardCRC
-export def "metrics-crc dashboardCRC" [
+export def "metrics-crc get-dashboard" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4070,7 +4108,7 @@ export def "metrics-crc dashboardCRC" [
 #
 # GET /metrics/im
 # operationId: dashboardIM
-export def "metrics-im dashboardIM" [
+export def "metrics-im get-dashboard" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4098,7 +4136,7 @@ export def "metrics-im dashboardIM" [
 #
 # GET /metrics/issues/zoomrooms
 # operationId: dashboardIssueZoomRoom
-export def "metrics-issues-zoomrooms dashboardIssueZoomRoom" [
+export def "metrics-issues-zoomrooms get-dashboard-zoom-room" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4124,7 +4162,7 @@ export def "metrics-issues-zoomrooms dashboardIssueZoomRoom" [
 #
 # GET /metrics/issues/zoomrooms/{zoomroomId}
 # operationId: dashboardIssueDetailZoomRoom
-export def "metrics-issues-zoomrooms dashboardIssueDetailZoomRoom" [
+export def "metrics-issues-zoomrooms get-dashboard-detail-zoom-room" [
   zoomroom_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4143,7 +4181,7 @@ export def "metrics-issues-zoomrooms dashboardIssueDetailZoomRoom" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "next_page_token" $next_page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({zoomroom_id: $zoomroom_id} | format pattern "/metrics/issues/zoomrooms/{zoomroom_id}") $qp)
+  let full_url = (build-url $base ({zoomroom_id: (encode-path-segment $zoomroom_id)} | format pattern "/metrics/issues/zoomrooms/{zoomroom_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4153,7 +4191,7 @@ export def "metrics-issues-zoomrooms dashboardIssueDetailZoomRoom" [
 #
 # GET /metrics/meetings
 # operationId: dashboardMeetings
-export def "metrics-meetings dashboardMeetings" [
+export def "metrics-meetings get-dashboard" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4163,7 +4201,7 @@ export def "metrics-meetings dashboardMeetings" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --type: string@type-completer-2 # Specify a value to get the response for the corresponding meeting type. The value of this field can be one of the following:<br> <br>`past` - Meeting that already occurred in the specified date range.<br>`pastOne` - Past meetings that were attended by only one user. <br>`live` - Live meetings.<br><br>  If you do not provide this field, the default value will be `live` and thus, the API will only query responses for live meetings. (default: live)
+  --type: string@type-completer-2 # Specify a value to get the response for the corresponding meeting type. The value of this field can be one of the following: `past` - Meeting that already occurred in the specified date range.`pastOne` - Past meetings that were attended by only one user. `live` - Live meetings. If you do not provide this field, the default value will be `live` and thus, the API will only query responses for live meetings. (default: live)
   --qp-from: string # Start date in 'yyyy-mm-dd' format. The date range defined by the "from" and "to" parameters should only be one month as the report includes only one month worth of data at once. (format: date)
   --qp-to: string # End date. (format: date)
   --page-size: int # The number of records returned within a single API call. (default: 30)
@@ -4183,7 +4221,7 @@ export def "metrics-meetings dashboardMeetings" [
 #
 # GET /metrics/meetings/{meetingId}
 # operationId: dashboardMeetingDetail
-export def "metrics-meetings dashboardMeetingDetail" [
+export def "metrics-meetings get-dashboard-detail" [
   meeting_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4194,12 +4232,12 @@ export def "metrics-meetings dashboardMeetingDetail" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --type: string@type-completer-2 # The meeting types: <br>`past` - Past meetings.<br>`pastOne` - Past one user meetings.<br>`live` - Live meetings. (default: live)
+  --type: string@type-completer-2 # The meeting types: `past` - Past meetings.`pastOne` - Past one user meetings.`live` - Live meetings. (default: live)
 ]: nothing -> record<custom_keys: table<key: string, value: string>, dept: string, duration: string, email: string, end_time: string, has_3rd_party_audio: bool, has_pstn: bool, has_recording: bool, has_screen_share: bool, has_sip: bool, has_video: bool, has_voip: bool, host: string, id: int, in_room_participants: int, participants: int, start_time: string, topic: string, user_type: string, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "type" $type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({meeting_id: $meeting_id} | format pattern "/metrics/meetings/{meeting_id}") $qp)
+  let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id)} | format pattern "/metrics/meetings/{meeting_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4209,7 +4247,7 @@ export def "metrics-meetings dashboardMeetingDetail" [
 #
 # GET /metrics/meetings/{meetingId}/participants
 # operationId: dashboardMeetingParticipants
-export def "metrics-meetings-participants dashboardMeetingParticipants" [
+export def "metrics-meetings-participants get-dashboard" [
   meeting_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4220,7 +4258,7 @@ export def "metrics-meetings-participants dashboardMeetingParticipants" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --type: string@type-completer-2 # The meeting types: <br>`past` - Past meetings.<br>`pastOne` - Past one user meetings.<br>`live` - Live meetings. (default: live)
+  --type: string@type-completer-2 # The meeting types: `past` - Past meetings.`pastOne` - Past one user meetings.`live` - Live meetings. (default: live)
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
   --include-fields: string@include-fields-completer-1 # Provide `registrant_id` as the value for this field if you would like to see the registrant ID attribute in the response of this API call. A registrant ID is a unique identifier of a [meeting registrant](https://marketplace.zoom.us/docs/api-reference/zoom-api/meetings/meetingregistrants). This is not supported for `live` meeting types.
@@ -4228,7 +4266,7 @@ export def "metrics-meetings-participants dashboardMeetingParticipants" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "next_page_token" $next_page_token "scalar") (serialize-qp "include_fields" $include_fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({meeting_id: $meeting_id} | format pattern "/metrics/meetings/{meeting_id}/participants") $qp)
+  let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id)} | format pattern "/metrics/meetings/{meeting_id}/participants") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4238,7 +4276,7 @@ export def "metrics-meetings-participants dashboardMeetingParticipants" [
 #
 # GET /metrics/meetings/{meetingId}/participants/qos
 # operationId: dashboardMeetingParticipantsQOS
-export def "metrics-meetings-participants-qos dashboardMeetingParticipantsQOS" [
+export def "metrics-meetings-participants-qos list" [
   meeting_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4249,14 +4287,14 @@ export def "metrics-meetings-participants-qos dashboardMeetingParticipantsQOS" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --type: string@type-completer-2 # The meeting types: <br>`past` - Past meetings.<br>`live` - Live Meetings. (default: live)
+  --type: string@type-completer-2 # The meeting types: `past` - Past meetings.`live` - Live Meetings. (default: live)
   --page-size: int # The number of items returned per page. (default: 1)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "next_page_token" $next_page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({meeting_id: $meeting_id} | format pattern "/metrics/meetings/{meeting_id}/participants/qos") $qp)
+  let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id)} | format pattern "/metrics/meetings/{meeting_id}/participants/qos") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4266,7 +4304,7 @@ export def "metrics-meetings-participants-qos dashboardMeetingParticipantsQOS" [
 #
 # GET /metrics/meetings/{meetingId}/participants/satisfaction
 # operationId: participantFeedback
-export def "metrics-meetings-participants-satisfaction participantFeedback" [
+export def "metrics-meetings-participants-satisfaction get-feedback" [
   meeting_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4277,14 +4315,14 @@ export def "metrics-meetings-participants-satisfaction participantFeedback" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --type: string@type-completer-2 # Specify a value to get the response for the corresponding meeting type. The value of this field can be one of the following:<br> <br>`past` - Meeting that already occurred in the specified date range.<br>`pastOne` - Past meetings that were attended by only one user. <br>`live` - Live meetings.<br><br>  If you do not provide this field, the default value will be `live` and thus, the API will only query responses for live meetings. (default: live)
+  --type: string@type-completer-2 # Specify a value to get the response for the corresponding meeting type. The value of this field can be one of the following: `past` - Meeting that already occurred in the specified date range.`pastOne` - Past meetings that were attended by only one user. `live` - Live meetings. If you do not provide this field, the default value will be `live` and thus, the API will only query responses for live meetings. (default: live)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
   --page-size: int # The number of records returned within a single API call. (default: 30)
 ]: nothing -> record<next_page_token: string, page_size: int, participants: table<date_time: string, email: string, quality: string, user_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "next_page_token" $next_page_token "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({meeting_id: $meeting_id} | format pattern "/metrics/meetings/{meeting_id}/participants/satisfaction") $qp)
+  let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id)} | format pattern "/metrics/meetings/{meeting_id}/participants/satisfaction") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4294,7 +4332,7 @@ export def "metrics-meetings-participants-satisfaction participantFeedback" [
 #
 # GET /metrics/meetings/{meetingId}/participants/sharing
 # operationId: dashboardMeetingParticipantShare
-export def "metrics-meetings-participants-sharing dashboardMeetingParticipantShare" [
+export def "metrics-meetings-participants-sharing get-dashboard-share" [
   meeting_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4305,14 +4343,14 @@ export def "metrics-meetings-participants-sharing dashboardMeetingParticipantSha
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --type: string@type-completer-2 # The meeting types: <br>`past` - Past meetings.<br>`live` - Live Meetings. (default: live)
+  --type: string@type-completer-2 # The meeting types: `past` - Past meetings.`live` - Live Meetings. (default: live)
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceed the current page size. The expiration period for this token is 15 minutes.
 ]: nothing -> record<next_page_token: string, page_count: int, page_size: int, total_records: int, participants: table<details: list, id: string, user_id: string, user_name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "next_page_token" $next_page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({meeting_id: $meeting_id} | format pattern "/metrics/meetings/{meeting_id}/participants/sharing") $qp)
+  let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id)} | format pattern "/metrics/meetings/{meeting_id}/participants/sharing") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4322,7 +4360,7 @@ export def "metrics-meetings-participants-sharing dashboardMeetingParticipantSha
 #
 # GET /metrics/meetings/{meetingId}/participants/{participantId}/qos
 # operationId: dashboardMeetingParticipantQOS
-export def "metrics-meetings-participants-qos dashboardMeetingParticipantQOS" [
+export def "metrics-meetings-participants-qos get-dashboard" [
   meeting_id: string
   participant_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4334,12 +4372,12 @@ export def "metrics-meetings-participants-qos dashboardMeetingParticipantQOS" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --type: string@type-completer-2 # The meeting types: <br>`past` - Past meetings.<br>`live` - Live Meetings. (default: live)
+  --type: string@type-completer-2 # The meeting types: `past` - Past meetings.`live` - Live Meetings. (default: live)
 ]: nothing -> record<device: string, domain: string, harddisk_id: string, ip_address: string, join_time: string, leave_time: string, location: string, mac_addr: string, pc_name: string, user_id: string, user_name: string, user_qos: table<as_device_from_crc: record, as_device_to_crc: record, as_input: record, as_output: record, audio_device_from_crc: record, audio_device_to_crc: record, audio_input: record, audio_output: record, cpu_usage: record, date_time: string, video_device_from_crc: record, video_device_to_crc: record, video_input: record, video_output: record>, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "type" $type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({meeting_id: $meeting_id, participant_id: $participant_id} | format pattern "/metrics/meetings/{meeting_id}/participants/{participant_id}/qos") $qp)
+  let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id), participant_id: (encode-path-segment $participant_id)} | format pattern "/metrics/meetings/{meeting_id}/participants/{participant_id}/qos") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4349,7 +4387,7 @@ export def "metrics-meetings-participants-qos dashboardMeetingParticipantQOS" [
 #
 # GET /metrics/webinars
 # operationId: dashboardWebinars
-export def "metrics-webinars dashboardWebinars" [
+export def "metrics-webinars get-dashboard" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4378,7 +4416,7 @@ export def "metrics-webinars dashboardWebinars" [
 #
 # GET /metrics/webinars/{webinarId}
 # operationId: dashboardWebinarDetail
-export def "metrics-webinars dashboardWebinarDetail" [
+export def "metrics-webinars get-dashboard-detail" [
   webinar_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4394,7 +4432,7 @@ export def "metrics-webinars dashboardWebinarDetail" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "type" $type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({webinar_id: $webinar_id} | format pattern "/metrics/webinars/{webinar_id}") $qp)
+  let full_url = (build-url $base ({webinar_id: (encode-path-segment $webinar_id)} | format pattern "/metrics/webinars/{webinar_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4404,7 +4442,7 @@ export def "metrics-webinars dashboardWebinarDetail" [
 #
 # GET /metrics/webinars/{webinarId}/participants
 # operationId: dashboardWebinarParticipants
-export def "metrics-webinars-participants dashboardWebinarParticipants" [
+export def "metrics-webinars-participants get-dashboard" [
   webinar_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4418,12 +4456,12 @@ export def "metrics-webinars-participants dashboardWebinarParticipants" [
   --type: string@type-completer-3 # The webinar type. (default: live)
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
-  --include-fields: string@include-fields-completer-1 # Provide 'registrant_id' as the value for this field if you would like to see the registrant ID attribute in the response of this API call. A registrant ID is a unique identifier of a [webinar registrant](https://marketplace.zoom.us/docs/api-reference/zoom-api/webinars/webinarregistrants).<br> 
+  --include-fields: string@include-fields-completer-1 # Provide 'registrant_id' as the value for this field if you would like to see the registrant ID attribute in the response of this API call. A registrant ID is a unique identifier of a [webinar registrant](https://marketplace.zoom.us/docs/api-reference/zoom-api/webinars/webinarregistrants).
 ]: nothing -> record<next_page_token: string, page_count: int, page_size: int, total_records: int, participants: table<audio_quality: string, connection_type: string, customer_key: string, data_center: string, device: string, domain: string, email: string, harddisk_id: string, id: string, ip_address: string, join_time: string, leave_reason: string, leave_time: string, location: string, mac_addr: string, microphone: string, network_type: string, pc_name: string, recording: bool, registrant_id: string, screen_share_quality: string, share_application: bool, share_desktop: bool, share_whiteboard: bool, speaker: string, user_id: string, user_name: string, version: string, video_quality: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "next_page_token" $next_page_token "scalar") (serialize-qp "include_fields" $include_fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({webinar_id: $webinar_id} | format pattern "/metrics/webinars/{webinar_id}/participants") $qp)
+  let full_url = (build-url $base ({webinar_id: (encode-path-segment $webinar_id)} | format pattern "/metrics/webinars/{webinar_id}/participants") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4433,7 +4471,7 @@ export def "metrics-webinars-participants dashboardWebinarParticipants" [
 #
 # GET /metrics/webinars/{webinarId}/participants/qos
 # operationId: dashboardWebinarParticipantsQOS
-export def "metrics-webinars-participants-qos dashboardWebinarParticipantsQOS" [
+export def "metrics-webinars-participants-qos list" [
   webinar_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4451,7 +4489,7 @@ export def "metrics-webinars-participants-qos dashboardWebinarParticipantsQOS" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "next_page_token" $next_page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({webinar_id: $webinar_id} | format pattern "/metrics/webinars/{webinar_id}/participants/qos") $qp)
+  let full_url = (build-url $base ({webinar_id: (encode-path-segment $webinar_id)} | format pattern "/metrics/webinars/{webinar_id}/participants/qos") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4461,7 +4499,7 @@ export def "metrics-webinars-participants-qos dashboardWebinarParticipantsQOS" [
 #
 # GET /metrics/webinars/{webinarId}/participants/satisfaction
 # operationId: participantWebinarFeedback
-export def "metrics-webinars-participants-satisfaction participantWebinarFeedback" [
+export def "metrics-webinars-participants-satisfaction get-feedback" [
   webinar_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4472,14 +4510,14 @@ export def "metrics-webinars-participants-satisfaction participantWebinarFeedbac
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --type: string@type-completer-2 # Specify a value to get the response for the corresponding meeting type. The value of this field can be one of the following:<br> <br>`past` - Meeting that already occurred in the specified date range.<br>`pastOne` - Past meetings that were attended by only one user. <br>`live` - Live meetings.<br><br>  If you do not provide this field, the default value will be `live` and thus, the API will only query responses for live meetings. (default: live)
+  --type: string@type-completer-2 # Specify a value to get the response for the corresponding meeting type. The value of this field can be one of the following: `past` - Meeting that already occurred in the specified date range.`pastOne` - Past meetings that were attended by only one user. `live` - Live meetings. If you do not provide this field, the default value will be `live` and thus, the API will only query responses for live meetings. (default: live)
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
 ]: nothing -> record<next_page_token: string, page_size: int, participants: table<date_time: string, email: string, quality: string, user_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "next_page_token" $next_page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({webinar_id: $webinar_id} | format pattern "/metrics/webinars/{webinar_id}/participants/satisfaction") $qp)
+  let full_url = (build-url $base ({webinar_id: (encode-path-segment $webinar_id)} | format pattern "/metrics/webinars/{webinar_id}/participants/satisfaction") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4489,7 +4527,7 @@ export def "metrics-webinars-participants-satisfaction participantWebinarFeedbac
 #
 # GET /metrics/webinars/{webinarId}/participants/sharing
 # operationId: dashboardWebinarParticipantShare
-export def "metrics-webinars-participants-sharing dashboardWebinarParticipantShare" [
+export def "metrics-webinars-participants-sharing get-dashboard-share" [
   webinar_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4507,7 +4545,7 @@ export def "metrics-webinars-participants-sharing dashboardWebinarParticipantSha
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "next_page_token" $next_page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({webinar_id: $webinar_id} | format pattern "/metrics/webinars/{webinar_id}/participants/sharing") $qp)
+  let full_url = (build-url $base ({webinar_id: (encode-path-segment $webinar_id)} | format pattern "/metrics/webinars/{webinar_id}/participants/sharing") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4517,7 +4555,7 @@ export def "metrics-webinars-participants-sharing dashboardWebinarParticipantSha
 #
 # GET /metrics/webinars/{webinarId}/participants/{participantId}/qos
 # operationId: dashboardWebinarParticipantQOS
-export def "metrics-webinars-participants-qos dashboardWebinarParticipantQOS" [
+export def "metrics-webinars-participants-qos get-dashboard" [
   webinar_id: string
   participant_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4534,7 +4572,7 @@ export def "metrics-webinars-participants-qos dashboardWebinarParticipantQOS" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "type" $type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({webinar_id: $webinar_id, participant_id: $participant_id} | format pattern "/metrics/webinars/{webinar_id}/participants/{participant_id}/qos") $qp)
+  let full_url = (build-url $base ({webinar_id: (encode-path-segment $webinar_id), participant_id: (encode-path-segment $participant_id)} | format pattern "/metrics/webinars/{webinar_id}/participants/{participant_id}/qos") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4544,7 +4582,7 @@ export def "metrics-webinars-participants-qos dashboardWebinarParticipantQOS" [
 #
 # GET /metrics/zoomrooms
 # operationId: dashboardZoomRooms
-export def "metrics-zoomrooms dashboardZoomRooms" [
+export def "metrics-zoomrooms get-dashboard-zoom-rooms" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4571,7 +4609,7 @@ export def "metrics-zoomrooms dashboardZoomRooms" [
 #
 # GET /metrics/zoomrooms/issues
 # operationId: dashboardZoomRoomIssue
-export def "metrics-zoomrooms-issues dashboardZoomRoomIssue" [
+export def "metrics-zoomrooms-issues get-dashboard-zoom-room" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4597,7 +4635,7 @@ export def "metrics-zoomrooms-issues dashboardZoomRoomIssue" [
 #
 # GET /metrics/zoomrooms/{zoomroomId}
 # operationId: dashboardZoomRoom
-export def "metrics-zoomrooms dashboardZoomRoom" [
+export def "metrics-zoomrooms get-dashboard-zoom-room" [
   zoomroom_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4616,7 +4654,7 @@ export def "metrics-zoomrooms dashboardZoomRoom" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "next_page_token" $next_page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({zoomroom_id: $zoomroom_id} | format pattern "/metrics/zoomrooms/{zoomroom_id}") $qp)
+  let full_url = (build-url $base ({zoomroom_id: (encode-path-segment $zoomroom_id)} | format pattern "/metrics/zoomrooms/{zoomroom_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4640,7 +4678,7 @@ export def "past-meetings-files list" [
 ]: nothing -> record<in_meeting_files: table<download_url: string, file_name: string, file_size: int>, total_records: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({meeting_id: $meeting_id} | format pattern "/past_meetings/{meeting_id}/files"))
+  let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id)} | format pattern "/past_meetings/{meeting_id}/files"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4650,7 +4688,7 @@ export def "past-meetings-files list" [
 #
 # GET /past_meetings/{meetingId}/instances
 # operationId: pastMeetings
-export def "past-meetings-instances pastMeetings" [
+export def "past-meetings-instances get" [
   meeting_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4664,7 +4702,7 @@ export def "past-meetings-instances pastMeetings" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({meeting_id: $meeting_id} | format pattern "/past_meetings/{meeting_id}/instances"))
+  let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id)} | format pattern "/past_meetings/{meeting_id}/instances"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4688,7 +4726,7 @@ export def "past-meetings-polls list" [
 ]: nothing -> record<id: int, questions: table<email: string, name: string, question_details: list>, start_time: string, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({meeting_id: $meeting_id} | format pattern "/past_meetings/{meeting_id}/polls"))
+  let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id)} | format pattern "/past_meetings/{meeting_id}/polls"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4698,7 +4736,7 @@ export def "past-meetings-polls list" [
 #
 # GET /past_meetings/{meetingUUID}
 # operationId: pastMeetingDetails
-export def "past-meetings pastMeetingDetails" [
+export def "past-meetings get-details" [
   meeting_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4712,7 +4750,7 @@ export def "past-meetings pastMeetingDetails" [
 ]: nothing -> record<duration: int, end_time: string, host_id: string, id: int, participants_count: int, start_time: string, topic: string, total_minutes: int, type: int, user_email: string, user_name: string, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({meeting_uuid: $meeting_uuid} | format pattern "/past_meetings/{meeting_uuid}"))
+  let full_url = (build-url $base ({meeting_uuid: (encode-path-segment $meeting_uuid)} | format pattern "/past_meetings/{meeting_uuid}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4722,7 +4760,7 @@ export def "past-meetings pastMeetingDetails" [
 #
 # GET /past_meetings/{meetingUUID}/participants
 # operationId: pastMeetingParticipants
-export def "past-meetings-participants pastMeetingParticipants" [
+export def "past-meetings-participants get" [
   meeting_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4739,7 +4777,7 @@ export def "past-meetings-participants pastMeetingParticipants" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "next_page_token" $next_page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({meeting_uuid: $meeting_uuid} | format pattern "/past_meetings/{meeting_uuid}/participants") $qp)
+  let full_url = (build-url $base ({meeting_uuid: (encode-path-segment $meeting_uuid)} | format pattern "/past_meetings/{meeting_uuid}/participants") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4749,7 +4787,7 @@ export def "past-meetings-participants pastMeetingParticipants" [
 #
 # GET /past_webinars/{WebinarUUID}/absentees
 # operationId: webinarAbsentees
-export def "past-webinars-absentees webinarAbsentees" [
+export def "past-webinars-absentees get" [
   webinar_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4767,7 +4805,7 @@ export def "past-webinars-absentees webinarAbsentees" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "occurrence_id" $occurrence_id "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "next_page_token" $next_page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({webinar_uuid: $webinar_uuid} | format pattern "/past_webinars/{webinar_uuid}/absentees") $qp)
+  let full_url = (build-url $base ({webinar_uuid: (encode-path-segment $webinar_uuid)} | format pattern "/past_webinars/{webinar_uuid}/absentees") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4791,7 +4829,7 @@ export def "past-webinars-files list" [
 ]: nothing -> record<in_meeting_files: table<download_url: string, file_name: string, file_size: int>, total_records: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({webinar_id: $webinar_id} | format pattern "/past_webinars/{webinar_id}/files"))
+  let full_url = (build-url $base ({webinar_id: (encode-path-segment $webinar_id)} | format pattern "/past_webinars/{webinar_id}/files"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4801,7 +4839,7 @@ export def "past-webinars-files list" [
 #
 # GET /past_webinars/{webinarId}/instances
 # operationId: pastWebinars
-export def "past-webinars-instances pastWebinars" [
+export def "past-webinars-instances get" [
   webinar_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4815,7 +4853,7 @@ export def "past-webinars-instances pastWebinars" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({webinar_id: $webinar_id} | format pattern "/past_webinars/{webinar_id}/instances"))
+  let full_url = (build-url $base ({webinar_id: (encode-path-segment $webinar_id)} | format pattern "/past_webinars/{webinar_id}/instances"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4842,7 +4880,7 @@ export def "past-webinars-participants list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "next_page_token" $next_page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({webinar_id: $webinar_id} | format pattern "/past_webinars/{webinar_id}/participants") $qp)
+  let full_url = (build-url $base ({webinar_id: (encode-path-segment $webinar_id)} | format pattern "/past_webinars/{webinar_id}/participants") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4852,7 +4890,7 @@ export def "past-webinars-participants list" [
 #
 # GET /past_webinars/{webinarId}/polls
 # operationId: listPastWebinarPollResults
-export def "past-webinars-polls list-past-webinar-poll-results" [
+export def "past-webinars-polls list-results" [
   webinar_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4866,7 +4904,7 @@ export def "past-webinars-polls list-past-webinar-poll-results" [
 ]: nothing -> record<id: int, questions: table<email: string, name: string, question_details: list>, start_time: string, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({webinar_id: $webinar_id} | format pattern "/past_webinars/{webinar_id}/polls"))
+  let full_url = (build-url $base ({webinar_id: (encode-path-segment $webinar_id)} | format pattern "/past_webinars/{webinar_id}/polls"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4890,7 +4928,7 @@ export def "past-webinars-qa list" [
 ]: nothing -> record<id: int, questions: table<email: string, name: string, question_details: list>, start_time: string, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({webinar_id: $webinar_id} | format pattern "/past_webinars/{webinar_id}/qa"))
+  let full_url = (build-url $base ({webinar_id: (encode-path-segment $webinar_id)} | format pattern "/past_webinars/{webinar_id}/qa"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4917,11 +4955,11 @@ export def "phone-auto-receptionists create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/phone/auto_receptionists")
-  let body = {"name": $name, "site_id": $site_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"name": $name, "site_id": $site_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update auto receptionist details
@@ -4945,19 +4983,19 @@ export def "phone-auto-receptionists update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({auto_receptionist_id: $auto_receptionist_id} | format pattern "/phone/auto_receptionists/{auto_receptionist_id}"))
-  let body = {"extension_number": $extension_number, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({auto_receptionist_id: (encode-path-segment $auto_receptionist_id)} | format pattern "/phone/auto_receptionists/{auto_receptionist_id}"))
+  let req_body = {"extension_number": $extension_number, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Unassign all phone numbers
 #
 # DELETE /phone/auto_receptionists/{autoReceptionistId}/phone_numbers
 # operationId: unassignAllPhoneNumsAutoReceptionist
-export def "phone-auto-receptionists-phone-numbers unassignAllPhoneNumsAutoReceptionist" [
+export def "phone-auto-receptionists-phone-numbers list-unassign-nums" [
   auto_receptionist_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4971,7 +5009,7 @@ export def "phone-auto-receptionists-phone-numbers unassignAllPhoneNumsAutoRecep
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({auto_receptionist_id: $auto_receptionist_id} | format pattern "/phone/auto_receptionists/{auto_receptionist_id}/phone_numbers"))
+  let full_url = (build-url $base ({auto_receptionist_id: (encode-path-segment $auto_receptionist_id)} | format pattern "/phone/auto_receptionists/{auto_receptionist_id}/phone_numbers"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4982,7 +5020,7 @@ export def "phone-auto-receptionists-phone-numbers unassignAllPhoneNumsAutoRecep
 # POST /phone/auto_receptionists/{autoReceptionistId}/phone_numbers
 # operationId: assignPhoneNumbersAutoReceptionist
 # --phone_numbers item shape: {id?: string, number?: string}
-export def "phone-auto-receptionists-phone-numbers assignPhoneNumbersAutoReceptionist" [
+export def "phone-auto-receptionists-phone-numbers assign" [
   auto_receptionist_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4993,24 +5031,24 @@ export def "phone-auto-receptionists-phone-numbers assignPhoneNumbersAutoRecepti
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --phone-numbers: list # Provide either the unique identifier of the Phone Number  in the `id` field or provide the phone number in the `number` field. — item shape: {id?: string, number?: string}
+  --phone-numbers: list # Provide either the unique identifier of the Phone Number in the `id` field or provide the phone number in the `number` field. — item shape: {id?: string, number?: string}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({auto_receptionist_id: $auto_receptionist_id} | format pattern "/phone/auto_receptionists/{auto_receptionist_id}/phone_numbers"))
-  let body = {"phone_numbers": $phone_numbers} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({auto_receptionist_id: (encode-path-segment $auto_receptionist_id)} | format pattern "/phone/auto_receptionists/{auto_receptionist_id}/phone_numbers"))
+  let req_body = {"phone_numbers": $phone_numbers} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Unassign a phone number
 #
 # DELETE /phone/auto_receptionists/{autoReceptionistId}/phone_numbers/{phoneNumberId}
 # operationId: unassignAPhoneNumAutoReceptionist
-export def "phone-auto-receptionists-phone-numbers unassignAPhoneNumAutoReceptionist" [
+export def "phone-auto-receptionists-phone-numbers delete-unassign-num" [
   auto_receptionist_id: string
   phone_number_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5025,7 +5063,7 @@ export def "phone-auto-receptionists-phone-numbers unassignAPhoneNumAutoReceptio
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({auto_receptionist_id: $auto_receptionist_id, phone_number_id: $phone_number_id} | format pattern "/phone/auto_receptionists/{auto_receptionist_id}/phone_numbers/{phone_number_id}"))
+  let full_url = (build-url $base ({auto_receptionist_id: (encode-path-segment $auto_receptionist_id), phone_number_id: (encode-path-segment $phone_number_id)} | format pattern "/phone/auto_receptionists/{auto_receptionist_id}/phone_numbers/{phone_number_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5061,7 +5099,7 @@ export def "phone-blocked-list list" [
 #
 # POST /phone/blocked_list
 # operationId: addAnumberToBlockedList
-export def "phone-blocked-list create-anumber-to" [
+export def "phone-blocked-list create-anumber" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5071,21 +5109,21 @@ export def "phone-blocked-list create-anumber-to" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --block-type: string@block-type-completer # State whether you want the block type to be inbound or outbound.<br> `inbound`: Pass this value to prevent the blocked number or prefix from calling in to phone users.<br> `outbound`: Pass this value to prevent phone users from calling the blocked number or prefix.
+  --block-type: string@block-type-completer # State whether you want the block type to be inbound or outbound. `inbound`: Pass this value to prevent the blocked number or prefix from calling in to phone users. `outbound`: Pass this value to prevent phone users from calling the blocked number or prefix.
   --comment: string # Provide a comment to help you identify the blocked number or prefix.
-  --match-type: string@match-type-completer # Specify the match type for the blocked list. The values can be one of the following:<br><br> `phoneNumber`: Choose this option (Phone Number Match) if you want to block a specific phone number. Then, in the `phone_number` field, provide the phone number along with the country code.<br><br> `prefix`: Choose this option (Prefix Match) if you want to block all numbers with a specific country code and area code. Next, in the `phone_number` field, enter a country code as part of the prefix. For example, entering 1907 blocks numbers with country code 1 and area code 907.
-  --phone-number: string # The phone number to be blocked if you passed "phoneNumber" as the value for the `match_type` field. If you passed "prefix" as the value for the `match_type` field, provide the prefix of the phone number here including the country code. For example, entering 1905 blocks numbers with country code 1 and area code 905. 
-  --status: string@status-completer-1 # Enable or disable the blocking. One of the following values are allowed:<br> `active`: Keep the blocking active.<br> `inactive`: Disable the blocking.
+  --match-type: string@match-type-completer # Specify the match type for the blocked list. The values can be one of the following: `phoneNumber`: Choose this option (Phone Number Match) if you want to block a specific phone number. Then, in the `phone_number` field, provide the phone number along with the country code. `prefix`: Choose this option (Prefix Match) if you want to block all numbers with a specific country code and area code. Next, in the `phone_number` field, enter a country code as part of the prefix. For example, entering 1907 blocks numbers with country code 1 and area code 907.
+  --phone-number: string # The phone number to be blocked if you passed "phoneNumber" as the value for the `match_type` field. If you passed "prefix" as the value for the `match_type` field, provide the prefix of the phone number here including the country code. For example, entering 1905 blocks numbers with country code 1 and area code 905.
+  --status: string@status-completer-1 # Enable or disable the blocking. One of the following values are allowed: `active`: Keep the blocking active. `inactive`: Disable the blocking.
 ]: any -> record<id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/phone/blocked_list")
-  let body = {"block_type": $block_type, "comment": $comment, "match_type": $match_type, "phone_number": $phone_number, "status": $status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"block_type": $block_type, "comment": $comment, "match_type": $match_type, "phone_number": $phone_number, "status": $status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a blocked list
@@ -5106,7 +5144,7 @@ export def "phone-blocked-list delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({blocked_list_id: $blocked_list_id} | format pattern "/phone/blocked_list/{blocked_list_id}"))
+  let full_url = (build-url $base ({blocked_list_id: (encode-path-segment $blocked_list_id)} | format pattern "/phone/blocked_list/{blocked_list_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5130,7 +5168,7 @@ export def "phone-blocked-list get" [
 ]: nothing -> record<block_type: string, comment: string, id: string, match_type: string, phone_number: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({blocked_list_id: $blocked_list_id} | format pattern "/phone/blocked_list/{blocked_list_id}"))
+  let full_url = (build-url $base ({blocked_list_id: (encode-path-segment $blocked_list_id)} | format pattern "/phone/blocked_list/{blocked_list_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5151,21 +5189,21 @@ export def "phone-blocked-list update" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --block-type: string@block-type-completer # State whether you want the block type to be inbound or outbound.<br> `inbound`: Pass this value to prevent the blocked number or prefix from calling in to phone users.<br> `outbound`: Pass this value to prevent phone users from calling the blocked number or prefix.
+  --block-type: string@block-type-completer # State whether you want the block type to be inbound or outbound. `inbound`: Pass this value to prevent the blocked number or prefix from calling in to phone users. `outbound`: Pass this value to prevent phone users from calling the blocked number or prefix.
   --comment: string # Provide a comment to help you identify the blocked number or prefix.
-  --match-type: string@match-type-completer # Specify the match type for the blocked list. The values can be one of the following:<br><br> `phoneNumber`: Choose this option (Phone Number Match) if you want to block a specific phone number. Then, in the `phone_number` field, provide the phone number along with the country code.<br><br> `prefix`: Choose this option (Prefix Match) if you want to block all numbers with a specific country code and area code. Next, in the `phone_number` field, enter a country code as part of the prefix. For example, entering 1907 blocks numbers with country code 1 and area code 907.
-  --phone-number: string # The phone number to be blocked if you passed "phoneNumber" as the value for the `match_type` field. If you passed "prefix" as the value for the `match_type` field, provide the prefix of the phone number here including the country code. For example, entering 1905 blocks numbers with country code 1 and area code 905. 
-  --status: string@status-completer-1 # Enable or disable the blocking. One of the following values are allowed:<br> `active`: Keep the blocking active.<br> `inactive`: Disable the blocking.
+  --match-type: string@match-type-completer # Specify the match type for the blocked list. The values can be one of the following: `phoneNumber`: Choose this option (Phone Number Match) if you want to block a specific phone number. Then, in the `phone_number` field, provide the phone number along with the country code. `prefix`: Choose this option (Prefix Match) if you want to block all numbers with a specific country code and area code. Next, in the `phone_number` field, enter a country code as part of the prefix. For example, entering 1907 blocks numbers with country code 1 and area code 907.
+  --phone-number: string # The phone number to be blocked if you passed "phoneNumber" as the value for the `match_type` field. If you passed "prefix" as the value for the `match_type` field, provide the prefix of the phone number here including the country code. For example, entering 1905 blocks numbers with country code 1 and area code 905.
+  --status: string@status-completer-1 # Enable or disable the blocking. One of the following values are allowed: `active`: Keep the blocking active. `inactive`: Disable the blocking.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({blocked_list_id: $blocked_list_id} | format pattern "/phone/blocked_list/{blocked_list_id}"))
-  let body = {"block_type": $block_type, "comment": $comment, "match_type": $match_type, "phone_number": $phone_number, "status": $status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({blocked_list_id: (encode-path-segment $blocked_list_id)} | format pattern "/phone/blocked_list/{blocked_list_id}"))
+  let req_body = {"block_type": $block_type, "comment": $comment, "match_type": $match_type, "phone_number": $phone_number, "status": $status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Add BYOC phone numbers
@@ -5183,25 +5221,25 @@ export def "phone-byoc-numbers create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   carrier: string # Name of the carrier.
-  phone_numbers: list # Phone number(s) to be added to Zoom. The value should be in e164 format.
+  phone_numbers: list<string> # Phone number(s) to be added to Zoom. The value should be in e164 format.
   --site-id: string # Unique identifier of the site. This field is only required if you have enabled multiple sites in the account. See [Managing multiple sites](https://support.zoom.us/hc/en-us/articles/360020809672-Managing-multiple-sites) or [Adding a site](https://support.zoom.us/hc/en-us/articles/360020809672-Managing-multiple-sites#h_05c88e35-1593-491f-b1a8-b7139a75dc15) for details.
 ]: any -> record<phone_numbers: table<id: string, number: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/phone/byoc_numbers")
-  let body = {"carrier": $carrier, "phone_numbers": $phone_numbers, "site_id": $site_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"carrier": $carrier, "phone_numbers": $phone_numbers, "site_id": $site_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get account's call logs
 #
 # GET /phone/call_logs
 # operationId: accountCallLogs
-export def "phone-call-logs accountCallLogs" [
+export def "phone-call-logs logs-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5212,7 +5250,7 @@ export def "phone-call-logs accountCallLogs" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page-size: int # The number of records returned within a single API call. (default: 30)
-  --qp-from: string # Start date from which you would like to get the call logs. The start date should be within past six months. <br>  The API only returns data pertaining to a month. Thus, the date range(defined using "from" and "to" fields) for which the call logs are to be returned must not exceed a month.
+  --qp-from: string # Start date from which you would like to get the call logs. The start date should be within past six months. The API only returns data pertaining to a month. Thus, the date range(defined using "from" and "to" fields) for which the call logs are to be returned must not exceed a month.
   --qp-to: string # The end date upto which you would like to get the call logs for. The end date should be within past six months.
   --type: string # The type of the call logs. The value can be either "all" or "missed".
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
@@ -5259,7 +5297,7 @@ export def "phone-call-queues list" [
 #
 # POST /phone/call_queues
 # operationId: createCallQueue
-# --members shape: {common_area_phone_ids?: list, users?: list}
+# --members shape: {common_area_phone_ids?: list<string>, users?: list}
 export def "phone-call-queues create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5271,8 +5309,8 @@ export def "phone-call-queues create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --description: string # Description for the Call Queue.
-  --extension-number: int # Phone extension number for the site.<br>  If a site code has been [assigned](https://support.zoom.us/hc/en-us/articles/360020809672-Managing-Multiple-Sites#h_79ca9c8f-c97b-4486-aa59-d0d9d31a525b) to the site, provide the short extension number instead of the original extension number..
-  --members: record # A list of one or more phone users to be included in the call queue. Provide either users or common area phone(s). Provide at least one user in the users object. — shape: {common_area_phone_ids?: list, users?: list}
+  --extension-number: int # Phone extension number for the site. If a site code has been [assigned](https://support.zoom.us/hc/en-us/articles/360020809672-Managing-Multiple-Sites#h_79ca9c8f-c97b-4486-aa59-d0d9d31a525b) to the site, provide the short extension number instead of the original extension number..
+  --members: record # A list of one or more phone users to be included in the call queue. Provide either users or common area phone(s). Provide at least one user in the users object. — shape: {common_area_phone_ids?: list<string>, users?: list}
   name: string # Name of the Call Queue.
   site_id: string # Unique identifier of the site. Required only if [multiple sites](https://support.zoom.us/hc/en-us/articles/360020809672-Managing-Multiple-Sites) have been enabled. This can be retrieved from the [List Phone Sites](https://marketplace.zoom.us/docs/api-reference/zoom-api/phone-site/listphonesites) API.
 ]: any -> record<extension_number: int, id: string, name: string, status: string> {
@@ -5280,11 +5318,11 @@ export def "phone-call-queues create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/phone/call_queues")
-  let body = {"description": $description, "extension_number": $extension_number, "members": $members, "name": $name, "site_id": $site_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"description": $description, "extension_number": $extension_number, "members": $members, "name": $name, "site_id": $site_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a call queue
@@ -5305,7 +5343,7 @@ export def "phone-call-queues delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({call_queue_id: $call_queue_id} | format pattern "/phone/call_queues/{call_queue_id}"))
+  let full_url = (build-url $base ({call_queue_id: (encode-path-segment $call_queue_id)} | format pattern "/phone/call_queues/{call_queue_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5329,7 +5367,7 @@ export def "phone-call-queues get" [
 ]: nothing -> record<extension_number: int, id: string, members: record<common_area_phones: list<record>, users: list<record>>, name: string, phone_numbers: table<id: string, number: string, source: string>, site: record<id: string, name: string>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({call_queue_id: $call_queue_id} | format pattern "/phone/call_queues/{call_queue_id}"))
+  let full_url = (build-url $base ({call_queue_id: (encode-path-segment $call_queue_id)} | format pattern "/phone/call_queues/{call_queue_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5351,28 +5389,28 @@ export def "phone-call-queues update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --description: string # Description for the Call Queue.
-  --extension-number: int # Phone extension number for the site.<br>  If a site code has been [assigned](https://support.zoom.us/hc/en-us/articles/360020809672-Managing-Multiple-Sites#h_79ca9c8f-c97b-4486-aa59-d0d9d31a525b) to the site, provide the short extension number instead of the original extension number.
+  --extension-number: int # Phone extension number for the site. If a site code has been [assigned](https://support.zoom.us/hc/en-us/articles/360020809672-Managing-Multiple-Sites#h_79ca9c8f-c97b-4486-aa59-d0d9d31a525b) to the site, provide the short extension number instead of the original extension number.
   --name: string # Name of the Call Queue.
   --site-id: string # Unique identifier of the [site](https://support.zoom.us/hc/en-us/articles/360020809672-Managing-Multiple-Sites) where the Call Queue is assigned.
-  --status: string@status-completer-1 # Status of the Call Queue. Allowed values:<br> `active`<br> `inactive`
+  --status: string@status-completer-1 # Status of the Call Queue. Allowed values: `active` `inactive`
   --timezone: string # [Timezone](https://marketplace.zoom.us/docs/api-reference/other-references/abbreviation-lists#timezones) of the Call Queue.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({call_queue_id: $call_queue_id} | format pattern "/phone/call_queues/{call_queue_id}"))
-  let body = {"description": $description, "extension_number": $extension_number, "name": $name, "site_id": $site_id, "status": $status, "timezone": $timezone} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({call_queue_id: (encode-path-segment $call_queue_id)} | format pattern "/phone/call_queues/{call_queue_id}"))
+  let req_body = {"description": $description, "extension_number": $extension_number, "name": $name, "site_id": $site_id, "status": $status, "timezone": $timezone} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Change call queue manager
 #
 # PUT /phone/call_queues/{callQueueId}/manager
 # operationId: changeCallQueueManager
-export def "phone-call-queues-manager changeCallQueueManager" [
+export def "phone-call-queues-manager update-change" [
   call_queue_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5388,19 +5426,19 @@ export def "phone-call-queues-manager changeCallQueueManager" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({call_queue_id: $call_queue_id} | format pattern "/phone/call_queues/{call_queue_id}/manager"))
-  let body = {"member_id": $member_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({call_queue_id: (encode-path-segment $call_queue_id)} | format pattern "/phone/call_queues/{call_queue_id}/manager"))
+  let req_body = {"member_id": $member_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Unassign all members
 #
 # DELETE /phone/call_queues/{callQueueId}/members
 # operationId: unassignAllMembers
-export def "phone-call-queues-members unassignAllMembers" [
+export def "phone-call-queues-members list-unassign" [
   call_queue_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5414,7 +5452,7 @@ export def "phone-call-queues-members unassignAllMembers" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({call_queue_id: $call_queue_id} | format pattern "/phone/call_queues/{call_queue_id}/members"))
+  let full_url = (build-url $base ({call_queue_id: (encode-path-segment $call_queue_id)} | format pattern "/phone/call_queues/{call_queue_id}/members"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5424,8 +5462,8 @@ export def "phone-call-queues-members unassignAllMembers" [
 #
 # POST /phone/call_queues/{callQueueId}/members
 # operationId: addMembersToCallQueue
-# --members shape: {common_area_phone_ids?: list, users?: list}
-export def "phone-call-queues-members create-members-to" [
+# --members shape: {common_area_phone_ids?: list<string>, users?: list}
+export def "phone-call-queues-members create" [
   call_queue_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5436,24 +5474,24 @@ export def "phone-call-queues-members create-members-to" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --members: record # A maximum of 10 members can be added at a time. — shape: {common_area_phone_ids?: list, users?: list}
+  --members: record # A maximum of 10 members can be added at a time. — shape: {common_area_phone_ids?: list<string>, users?: list}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({call_queue_id: $call_queue_id} | format pattern "/phone/call_queues/{call_queue_id}/members"))
-  let body = {"members": $members} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({call_queue_id: (encode-path-segment $call_queue_id)} | format pattern "/phone/call_queues/{call_queue_id}/members"))
+  let req_body = {"members": $members} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Unassign a member
 #
 # DELETE /phone/call_queues/{callQueueId}/members/{memberId}
 # operationId: unassignMemberFromCallQueue
-export def "phone-call-queues-members unassignMemberFromCallQueue" [
+export def "phone-call-queues-members delete-unassign" [
   call_queue_id: string
   member_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5468,7 +5506,7 @@ export def "phone-call-queues-members unassignMemberFromCallQueue" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({call_queue_id: $call_queue_id, member_id: $member_id} | format pattern "/phone/call_queues/{call_queue_id}/members/{member_id}"))
+  let full_url = (build-url $base ({call_queue_id: (encode-path-segment $call_queue_id), member_id: (encode-path-segment $member_id)} | format pattern "/phone/call_queues/{call_queue_id}/members/{member_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5478,7 +5516,7 @@ export def "phone-call-queues-members unassignMemberFromCallQueue" [
 #
 # DELETE /phone/call_queues/{callQueueId}/phone_numbers
 # operationId: unassignAPhoneNumCallQueue
-export def "phone-call-queues-phone-numbers unassignAPhoneNumCallQueue" [
+export def "phone-call-queues-phone-numbers delete-unassign-num" [
   call_queue_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5492,7 +5530,7 @@ export def "phone-call-queues-phone-numbers unassignAPhoneNumCallQueue" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({call_queue_id: $call_queue_id} | format pattern "/phone/call_queues/{call_queue_id}/phone_numbers"))
+  let full_url = (build-url $base ({call_queue_id: (encode-path-segment $call_queue_id)} | format pattern "/phone/call_queues/{call_queue_id}/phone_numbers"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5503,7 +5541,7 @@ export def "phone-call-queues-phone-numbers unassignAPhoneNumCallQueue" [
 # POST /phone/call_queues/{callQueueId}/phone_numbers
 # operationId: assignPhoneToCallQueue
 # --phone_numbers item shape: {id?: string, number?: string}
-export def "phone-call-queues-phone-numbers assignPhoneToCallQueue" [
+export def "phone-call-queues-phone-numbers assign" [
   call_queue_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5519,19 +5557,19 @@ export def "phone-call-queues-phone-numbers assignPhoneToCallQueue" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({call_queue_id: $call_queue_id} | format pattern "/phone/call_queues/{call_queue_id}/phone_numbers"))
-  let body = {"phone_numbers": $phone_numbers} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({call_queue_id: (encode-path-segment $call_queue_id)} | format pattern "/phone/call_queues/{call_queue_id}/phone_numbers"))
+  let req_body = {"phone_numbers": $phone_numbers} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Unassign a phone number
 #
 # DELETE /phone/call_queues/{callQueueId}/phone_numbers/{phoneNumberId}
 # operationId: unAssignPhoneNumCallQueue
-export def "phone-call-queues-phone-numbers unAssignPhoneNumCallQueue" [
+export def "phone-call-queues-phone-numbers assign-un-num" [
   call_queue_id: string
   phone_number_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5546,7 +5584,7 @@ export def "phone-call-queues-phone-numbers unAssignPhoneNumCallQueue" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({call_queue_id: $call_queue_id, phone_number_id: $phone_number_id} | format pattern "/phone/call_queues/{call_queue_id}/phone_numbers/{phone_number_id}"))
+  let full_url = (build-url $base ({call_queue_id: (encode-path-segment $call_queue_id), phone_number_id: (encode-path-segment $phone_number_id)} | format pattern "/phone/call_queues/{call_queue_id}/phone_numbers/{phone_number_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5575,7 +5613,7 @@ export def "phone-call-queues-recordings get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "next_page_token" $next_page_token "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({call_queue_id: $call_queue_id} | format pattern "/phone/call_queues/{call_queue_id}/recordings") $qp)
+  let full_url = (build-url $base ({call_queue_id: (encode-path-segment $call_queue_id)} | format pattern "/phone/call_queues/{call_queue_id}/recordings") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5657,11 +5695,11 @@ export def "phone-common-area-phones create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/phone/common_area_phones")
-  let body = {"description": $description, "display_name": $display_name, "extension_number": $extension_number, "mac_address": $mac_address, "model": $model, "site_id": $site_id, "time_zone": $time_zone, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"description": $description, "display_name": $display_name, "extension_number": $extension_number, "mac_address": $mac_address, "model": $model, "site_id": $site_id, "time_zone": $time_zone, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a common area phone
@@ -5682,7 +5720,7 @@ export def "phone-common-area-phones delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({common_area_phone_id: $common_area_phone_id} | format pattern "/phone/common_area_phones/{common_area_phone_id}"))
+  let full_url = (build-url $base ({common_area_phone_id: (encode-path-segment $common_area_phone_id)} | format pattern "/phone/common_area_phones/{common_area_phone_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5706,7 +5744,7 @@ export def "phone-common-area-phones get" [
 ]: nothing -> record<device_type: string, id: string, mac_address: string, name: string, provision: record<sip_accounts: list<record>, type: string, url: string>, site: record<id: string, name: string>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({common_area_phone_id: $common_area_phone_id} | format pattern "/phone/common_area_phones/{common_area_phone_id}"))
+  let full_url = (build-url $base ({common_area_phone_id: (encode-path-segment $common_area_phone_id)} | format pattern "/phone/common_area_phones/{common_area_phone_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5729,25 +5767,25 @@ export def "phone-common-area-phones update" [
   --accept: string@accept-completer # Response content type
   --display-name: string # Display name of the common area phone.
   --extension-number: int # Extension number of the phone. If site code is enabled, provide short extension number instead.
-  --mac-address: string #  Mac address or serial number of the device. Examples of supported format: "64-16-7f-37-90-92" or "64167f379092".
+  --mac-address: string # Mac address or serial number of the device. Examples of supported format: "64-16-7f-37-90-92" or "64167f379092".
   --site-id: string # Unique identifier of the [site](https://support.zoom.us/hc/en-us/articles/360020809672-Managing-Multiple-Sites) to which the common area desk phone is assigned.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({common_area_phone_id: $common_area_phone_id} | format pattern "/phone/common_area_phones/{common_area_phone_id}"))
-  let body = {"display_name": $display_name, "extension_number": $extension_number, "mac_address": $mac_address, "site_id": $site_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({common_area_phone_id: (encode-path-segment $common_area_phone_id)} | format pattern "/phone/common_area_phones/{common_area_phone_id}"))
+  let req_body = {"display_name": $display_name, "extension_number": $extension_number, "mac_address": $mac_address, "site_id": $site_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Change main company number
 #
 # PUT /phone/company_number
 # operationId: changeMainCompanyNumber
-export def "phone-company-number changeMainCompanyNumber" [
+export def "phone-company-number update-change-main" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5763,11 +5801,11 @@ export def "phone-company-number changeMainCompanyNumber" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/phone/company_number")
-  let body = {"phone_number": $phone_number} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"phone_number": $phone_number} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List devices
@@ -5813,7 +5851,7 @@ export def "phone-devices create" [
   --accept: string@accept-completer # Response content type
   --assigned-to: string # User ID or email address of the user to whom this device is to be assigned. The User ID and the email of the user can be retrieved using the [List Users](https://marketplace.zoom.us/docs/api-reference/zoom-api/users/users) API.
   display_name: string # Display name of the desk phone.
-  mac_address: string # The MAC address of the desk phone.<br>  Note: If you're using a wireless phone, enter the wired MAC address, not the wireless MAC address.
+  mac_address: string # The MAC address of the desk phone. Note: If you're using a wireless phone, enter the wired MAC address, not the wireless MAC address.
   --model: string # Model name of the device.
   --type: string # Manufacturer (brand) name of the device.
 ]: any -> any {
@@ -5821,11 +5859,11 @@ export def "phone-devices create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/phone/devices")
-  let body = {"assigned_to": $assigned_to, "display_name": $display_name, "mac_address": $mac_address, "model": $model, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"assigned_to": $assigned_to, "display_name": $display_name, "mac_address": $mac_address, "model": $model, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a device
@@ -5846,7 +5884,7 @@ export def "phone-devices delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({device_id: $device_id} | format pattern "/phone/devices/{device_id}"))
+  let full_url = (build-url $base ({device_id: (encode-path-segment $device_id)} | format pattern "/phone/devices/{device_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5870,7 +5908,7 @@ export def "phone-devices get" [
 ]: nothing -> record<assignee: record<extension_number: int, id: string, name: string>, device_type: string, display_name: string, id: string, mac_address: string, provision: record<sip_accounts: list<record>, type: string, url: string>, site: record<id: string, name: string>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({device_id: $device_id} | format pattern "/phone/devices/{device_id}"))
+  let full_url = (build-url $base ({device_id: (encode-path-segment $device_id)} | format pattern "/phone/devices/{device_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5893,17 +5931,17 @@ export def "phone-devices update" [
   --accept: string@accept-completer # Response content type
   --assigned-to: string # User ID or email address of the user to whom this device is to be assigned. The User ID and the email of the user can be retrieved using the [List Users](https://marketplace.zoom.us/docs/api-reference/zoom-api/users/users) API.
   --display-name: string # Display name of the desk phone.
-  --mac-address: string # The MAC address of the desk phone.<br>  Note: If you're using a wireless phone, enter the wired MAC address, not the wireless MAC address.
+  --mac-address: string # The MAC address of the desk phone. Note: If you're using a wireless phone, enter the wired MAC address, not the wireless MAC address.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({device_id: $device_id} | format pattern "/phone/devices/{device_id}"))
-  let body = {"assigned_to": $assigned_to, "display_name": $display_name, "mac_address": $mac_address} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({device_id: (encode-path-segment $device_id)} | format pattern "/phone/devices/{device_id}"))
+  let req_body = {"assigned_to": $assigned_to, "display_name": $display_name, "mac_address": $mac_address} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List call logs
@@ -5923,7 +5961,7 @@ export def "phone-metrics-call-logs list" [
   --qp-from: string # Start date for the report in `yyyy-mm-dd` format. Specify a 30 day range using the `from` and `to` parameters as the response provides a maximum of a month worth of data per API request.
   --qp-to: string # End date for the report in `yyyy-mm-dd` format.
   --site-id: string # Unique identifier of the [site](https://support.zoom.us/hc/en-us/articles/360020809672-Managing-multiple-sites). Use this query parameter if you have enabled multiple sites and would like to filter the response of this API call by call logs of a specific phone site.
-  --quality-type: string # Filter call logs by voice quality. Zoom uses MOS of 3.5 as a general baseline to categorize calls by call quality. A MOS greater than or equal to 3.5 means good quality, while below 3.5 means poor quality. <br><br>The value of this field can be one of the following:<br> * `good`: Retrieve call logs of the call(s) with good quality of voice.<br> * `bad`: Retrieve call logs of the call(s) with good quality of voice.<br> * `all`: Retrieve all call logs without filtering by voice quality.    
+  --quality-type: string # Filter call logs by voice quality. Zoom uses MOS of 3.5 as a general baseline to categorize calls by call quality. A MOS greater than or equal to 3.5 means good quality, while below 3.5 means poor quality. The value of this field can be one of the following: * `good`: Retrieve call logs of the call(s) with good quality of voice. * `bad`: Retrieve call logs of the call(s) with good quality of voice. * `all`: Retrieve all call logs without filtering by voice quality.
   --page-size: int # The number of records returned within a single call. (default: 30)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
 ]: nothing -> record<call_logs: table<call_id: string, callee: record, caller: record, date_time: string, direction: string, duration: int, mos: string>, from: string, next_page_token: string, page_size: int, to: string, total_records: int> {
@@ -5940,7 +5978,7 @@ export def "phone-metrics-call-logs list" [
 #
 # GET /phone/metrics/call_logs/{callId}/qos
 # operationId: getCallQoS
-export def "phone-metrics-call-logs-qos get" [
+export def "phone-metrics-call-logs-qos get-s" [
   call_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5954,7 +5992,7 @@ export def "phone-metrics-call-logs-qos get" [
 ]: nothing -> record<call_id: string, callee_qos: record<receiving: list<record>, sending: list<record>>, caller_qos: record<receiving: list<record>, sending: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({call_id: $call_id} | format pattern "/phone/metrics/call_logs/{call_id}/qos"))
+  let full_url = (build-url $base ({call_id: (encode-path-segment $call_id)} | format pattern "/phone/metrics/call_logs/{call_id}/qos"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5964,7 +6002,7 @@ export def "phone-metrics-call-logs-qos get" [
 #
 # GET /phone/metrics/call_logs/{call_id}
 # operationId: getCallLogMetricsDetails
-export def "phone-metrics-call-logs get-call-log-metrics-details" [
+export def "phone-metrics-call-logs get-details" [
   call_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5978,7 +6016,7 @@ export def "phone-metrics-call-logs get-call-log-metrics-details" [
 ]: nothing -> record<call_id: string, callee: record<codec: string, device_type: string, extension_number: string, headset: string, isp: string, microphone: string, phone_number: string, site_id: string>, caller: record<codec: string, device_type: string, extension_number: string, headset: string, isp: string, microphone: string, phone_number: string, site_id: string>, date_time: string, direction: string, duration: int, mos: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({call_id: $call_id} | format pattern "/phone/metrics/call_logs/{call_id}"))
+  let full_url = (build-url $base ({call_id: (encode-path-segment $call_id)} | format pattern "/phone/metrics/call_logs/{call_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5999,8 +6037,8 @@ export def "phone-numbers list-account" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
-  --type: string@type-completer-5 # Query response by number assignment. The value can be one of the following: <br> `assigned`: The number has been assigned to either a user, a call queue, an auto-receptionist or a common area phone in an account. <br>`unassigned`: The number is not assigned to anyone.<br> `all`: Include both assigned and unassigned numbers in the response.<br> `byoc`: Include Bring Your Own Carrier (BYOC) numbers only in the response.
-  --extension-type: string@extension-type-completer # The type of assignee to whom the number is assigned. The value can be one of the following:<br> `user`<br> `callQueue`<br> `autoReceptionist`<br> `commonAreaPhone`
+  --type: string@type-completer-5 # Query response by number assignment. The value can be one of the following: `assigned`: The number has been assigned to either a user, a call queue, an auto-receptionist or a common area phone in an account. `unassigned`: The number is not assigned to anyone. `all`: Include both assigned and unassigned numbers in the response. `byoc`: Include Bring Your Own Carrier (BYOC) numbers only in the response.
+  --extension-type: string@extension-type-completer # The type of assignee to whom the number is assigned. The value can be one of the following: `user` `callQueue` `autoReceptionist` `commonAreaPhone`
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --number-type: string@number-type-completer # The type of phone number. The value can be either `toll` or `tollfree`.
   --pending-numbers: oneof<nothing, bool> # Include or exclude pending numbers in the response. The value can be either `true` or `false`.
@@ -6019,7 +6057,7 @@ export def "phone-numbers list-account" [
 #
 # GET /phone/numbers/{numberId}
 # operationId: getPhoneNumberDetails
-export def "phone-numbers get-phone-number-details" [
+export def "phone-numbers get-details" [
   number_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6033,7 +6071,7 @@ export def "phone-numbers get-phone-number-details" [
 ]: nothing -> record<assignee: record<extension_number: int, id: string, name: string, type: string>, capability: list<string>, display_name: string, id: string, location: string, number: string, number_type: string, site: record<id: string, name: string>, source: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({number_id: $number_id} | format pattern "/phone/numbers/{number_id}"))
+  let full_url = (build-url $base ({number_id: (encode-path-segment $number_id)} | format pattern "/phone/numbers/{number_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6043,7 +6081,7 @@ export def "phone-numbers get-phone-number-details" [
 #
 # PATCH /phone/numbers/{numberId}
 # operationId: updatePhoneNumberDetails
-export def "phone-numbers update-phone-number-details" [
+export def "phone-numbers update-details" [
   number_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6054,18 +6092,18 @@ export def "phone-numbers update-phone-number-details" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --capability: list # Phone number capability. Values: `outgoing` or `incoming`. Add one or both.
+  --capability: list<string> # Phone number capability. Values: `outgoing` or `incoming`. Add one or both.
   --display-name: string # Phone number display name.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({number_id: $number_id} | format pattern "/phone/numbers/{number_id}"))
-  let body = {"capability": $capability, "display_name": $display_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({number_id: (encode-path-segment $number_id)} | format pattern "/phone/numbers/{number_id}"))
+  let req_body = {"capability": $capability, "display_name": $display_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get call recordings
@@ -6085,8 +6123,8 @@ export def "phone-recordings get" [
   --page-size: int # The number of records returned within a single API call. The default is **30**, and the maximum is **100**.
   --next-page-token: string # The current page number of returned records.
   --qp-from: string # Start date and time in **yyyy-mm-dd** format or **yyyy-MM-dd’T’HH:mm:ss’Z’** format. The date range defined by the from and to parameters should only be one month as the report includes only one month worth of data at once.
-  --qp-to: string # End date and time in **yyyy-mm-dd** format or **yyyy-MM-dd’T’HH:mm:ss’Z’** format, the same formats supported by the `from` parameter. 
-  --owner-type: string # The owner type. The allowed values are null, `user`, or `callQueue`. The default is null. If null, returns all owner types.  (default: all)
+  --qp-to: string # End date and time in **yyyy-mm-dd** format or **yyyy-MM-dd’T’HH:mm:ss’Z’** format, the same formats supported by the `from` parameter.
+  --owner-type: string # The owner type. The allowed values are null, `user`, or `callQueue`. The default is null. If null, returns all owner types. (default: all)
   --recording-type: string # The recording type. The allowed values are null, `OnDemand`, or `Automatic`. The default is null. If null, returns all recording types.
   --site-id: string # The site ID. The default is `All sites`. (default: All sites)
 ]: nothing -> record<next_page_token: string, page_size: int, recordings: table<callee_name: string, callee_number: string, callee_number_type: string, caller_name: string, caller_number: string, caller_number_type: string, date_time: string, direction: string, download_url: string, duration: int, id: string, owner: record, recording_type: string, site: record>, total_records: int> {
@@ -6103,7 +6141,7 @@ export def "phone-recordings get" [
 #
 # GET /phone/reports/operationlogs
 # operationId: getPSOperationLogs
-export def "phone-reports-operationlogs get-ps" [
+export def "phone-reports-operationlogs get-ps-operation-logs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6115,7 +6153,7 @@ export def "phone-reports-operationlogs get-ps" [
   --accept: string@accept-completer # Response content type
   --qp-from: string # Start date in 'yyyy-mm-dd' format. The date range defined by the "from" and "to" parameters should only be one month as the report provides only one month worth of data per API request.
   --qp-to: string # End date in 'yyyy-mm-dd' format.
-  --category-type: string # Filter the response by the category of the action performed. By default, the value of this field is "all" and thus, the response will include log of all operations for the defined period.<br><br>To only include response for a specific category type, provide a value for `category_type` from this [table](http://marketplace.zoom.us/docs/phone-operation-categories ). (default: all)
+  --category-type: string # Filter the response by the category of the action performed. By default, the value of this field is "all" and thus, the response will include log of all operations for the defined period.To only include response for a specific category type, provide a value for `category_type` from this [table](http://marketplace.zoom.us/docs/phone-operation-categories ). (default: all)
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
 ]: nothing -> record<next_page_token: string, page_size: int, operation_logs: table<action: string, category_type: string, operation_detail: string, operator: string, time: string>> {
@@ -6144,7 +6182,7 @@ export def "phone-setting-templates list" [
   --accept: string@accept-completer # Response content type
   --page-size: int # Number of records returns within a single API call. (default: 30)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
-  --site-id: string # Unique identifier of the site. This field is required only if multiple sites have been enabled.  of the site. Required only when multiple sites are enabled. See [Managing multiple sites](https://support.zoom.us/hc/en-us/articles/360020809672-Managing-multiple-sites) for details. If this is not provided, the response lists the account level setting templates.
+  --site-id: string # Unique identifier of the site. This field is required only if multiple sites have been enabled. of the site. Required only when multiple sites are enabled. See [Managing multiple sites](https://support.zoom.us/hc/en-us/articles/360020809672-Managing-multiple-sites) for details. If this is not provided, the response lists the account level setting templates.
 ]: nothing -> record<next_page_token: string, page_size: int, templates: table<description: string, id: string, name: string, type: string>, total_records: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6178,11 +6216,11 @@ export def "phone-setting-templates create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/phone/setting_templates")
-  let body = {"description": $description, "name": $name, "site_id": $site_id, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"description": $description, "name": $name, "site_id": $site_id, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get setting template details
@@ -6205,7 +6243,7 @@ export def "phone-setting-templates get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "custom_query_fields" $custom_query_fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({template_id: $template_id} | format pattern "/phone/setting_templates/{template_id}") $qp)
+  let full_url = (build-url $base ({template_id: (encode-path-segment $template_id)} | format pattern "/phone/setting_templates/{template_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6238,12 +6276,12 @@ export def "phone-setting-templates update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({template_id: $template_id} | format pattern "/phone/setting_templates/{template_id}"))
-  let body = {"description": $description, "name": $name, "policy": $policy, "profile": $profile, "user_settings": $user_settings} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({template_id: (encode-path-segment $template_id)} | format pattern "/phone/setting_templates/{template_id}"))
+  let req_body = {"description": $description, "name": $name, "policy": $policy, "profile": $profile, "user_settings": $user_settings} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List shared line groups
@@ -6288,18 +6326,18 @@ export def "phone-shared-line-groups create" [
   --accept: string@accept-completer # Response content type
   --description: string # Provide a description for the shared line group.
   display_name: string # Provide a name to help identify the shared line group.
-  --extension-number: int # Extension number to be assigned to the shared line group. If a [site code has been assigned](https://support.zoom.us/hc/en-us/articles/360020809672#h_79ca9c8f-c97b-4486-aa59-d0d9d31a525b) to the site, provide the short extension number 
-  --site-id: string # Unique identifier of the [site](https://support.zoom.us/hc/en-us/articles/360020809672-Managing-multiple-sites) that you would like to use for the shared line group. You will only be able to add members that belong to this site to the shared line group.  This field is required only if the [multiple sites](https://support.zoom.us/hc/en-us/articles/360020809672-Managing-multiple-sites) option has been enabled for the account.
+  --extension-number: int # Extension number to be assigned to the shared line group. If a [site code has been assigned](https://support.zoom.us/hc/en-us/articles/360020809672#h_79ca9c8f-c97b-4486-aa59-d0d9d31a525b) to the site, provide the short extension number
+  --site-id: string # Unique identifier of the [site](https://support.zoom.us/hc/en-us/articles/360020809672-Managing-multiple-sites) that you would like to use for the shared line group. You will only be able to add members that belong to this site to the shared line group. This field is required only if the [multiple sites](https://support.zoom.us/hc/en-us/articles/360020809672-Managing-multiple-sites) option has been enabled for the account.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/phone/shared_line_groups")
-  let body = {"description": $description, "display_name": $display_name, "extension_number": $extension_number, "site_id": $site_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"description": $description, "display_name": $display_name, "extension_number": $extension_number, "site_id": $site_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a shared line group
@@ -6320,7 +6358,7 @@ export def "phone-shared-line-groups delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({shared_line_group_id: $shared_line_group_id} | format pattern "/phone/shared_line_groups/{shared_line_group_id}"))
+  let full_url = (build-url $base ({shared_line_group_id: (encode-path-segment $shared_line_group_id)} | format pattern "/phone/shared_line_groups/{shared_line_group_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6344,7 +6382,7 @@ export def "phone-shared-line-groups get" [
 ]: nothing -> record<display_name: string, extension_number: int, id: string, members: record<common_area_phones: list<record>, users: list<record>>, phone_numbers: table<id: string, number: string>, primary_number: string, site: record<id: string, name: string>, status: string, timezone: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({shared_line_group_id: $shared_line_group_id} | format pattern "/phone/shared_line_groups/{shared_line_group_id}"))
+  let full_url = (build-url $base ({shared_line_group_id: (encode-path-segment $shared_line_group_id)} | format pattern "/phone/shared_line_groups/{shared_line_group_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6375,19 +6413,19 @@ export def "phone-shared-line-groups update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({shared_line_group_id: $shared_line_group_id} | format pattern "/phone/shared_line_groups/{shared_line_group_id}"))
-  let body = {"display_name": $display_name, "extension_number": $extension_number, "primary_number": $primary_number, "status": $status, "timezone": $timezone} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({shared_line_group_id: (encode-path-segment $shared_line_group_id)} | format pattern "/phone/shared_line_groups/{shared_line_group_id}"))
+  let req_body = {"display_name": $display_name, "extension_number": $extension_number, "primary_number": $primary_number, "status": $status, "timezone": $timezone} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Unassign members of a shared line group
 #
 # DELETE /phone/shared_line_groups/{sharedLineGroupId}/members
 # operationId: deleteMembersOfSLG
-export def "phone-shared-line-groups-members delete-members-of-slg" [
+export def "phone-shared-line-groups-members delete-of-slg" [
   shared_line_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6401,7 +6439,7 @@ export def "phone-shared-line-groups-members delete-members-of-slg" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({shared_line_group_id: $shared_line_group_id} | format pattern "/phone/shared_line_groups/{shared_line_group_id}/members"))
+  let full_url = (build-url $base ({shared_line_group_id: (encode-path-segment $shared_line_group_id)} | format pattern "/phone/shared_line_groups/{shared_line_group_id}/members"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6411,8 +6449,8 @@ export def "phone-shared-line-groups-members delete-members-of-slg" [
 #
 # POST /phone/shared_line_groups/{sharedLineGroupId}/members
 # operationId: addMembersToSharedLineGroup
-# --members shape: {common_area_phone_ids?: list, users?: list}
-export def "phone-shared-line-groups-members create-members-to" [
+# --members shape: {common_area_phone_ids?: list<string>, users?: list}
+export def "phone-shared-line-groups-members create" [
   shared_line_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6423,24 +6461,24 @@ export def "phone-shared-line-groups-members create-members-to" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --members: record # Members can comprise of users on the account as well as common area phones. You can add a maximum of 10 members at once. — shape: {common_area_phone_ids?: list, users?: list}
+  --members: record # Members can comprise of users on the account as well as common area phones. You can add a maximum of 10 members at once. — shape: {common_area_phone_ids?: list<string>, users?: list}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({shared_line_group_id: $shared_line_group_id} | format pattern "/phone/shared_line_groups/{shared_line_group_id}/members"))
-  let body = {"members": $members} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({shared_line_group_id: (encode-path-segment $shared_line_group_id)} | format pattern "/phone/shared_line_groups/{shared_line_group_id}/members"))
+  let req_body = {"members": $members} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Unassign a member from a shared line group
 #
 # DELETE /phone/shared_line_groups/{sharedLineGroupId}/members/{memberId}
 # operationId: deleteAMemberSLG
-export def "phone-shared-line-groups-members delete-member-slg" [
+export def "phone-shared-line-groups-members delete-slg" [
   shared_line_group_id: string
   member_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6454,7 +6492,7 @@ export def "phone-shared-line-groups-members delete-member-slg" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({shared_line_group_id: $shared_line_group_id, member_id: $member_id} | format pattern "/phone/shared_line_groups/{shared_line_group_id}/members/{member_id}"))
+  let full_url = (build-url $base ({shared_line_group_id: (encode-path-segment $shared_line_group_id), member_id: (encode-path-segment $member_id)} | format pattern "/phone/shared_line_groups/{shared_line_group_id}/members/{member_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6465,7 +6503,7 @@ export def "phone-shared-line-groups-members delete-member-slg" [
 # POST /phone/shared_line_groups/{sharedLineGroupId}/phone_numbers
 # operationId: assignPhoneNumbersSLG
 # --phone_numbers item shape: {id?: string, number?: string}
-export def "phone-shared-line-groups-phone-numbers assignPhoneNumbersSLG" [
+export def "phone-shared-line-groups-phone-numbers assign-slg" [
   shared_line_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6480,19 +6518,19 @@ export def "phone-shared-line-groups-phone-numbers assignPhoneNumbersSLG" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({shared_line_group_id: $shared_line_group_id} | format pattern "/phone/shared_line_groups/{shared_line_group_id}/phone_numbers"))
-  let body = {"phone_numbers": $phone_numbers} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({shared_line_group_id: (encode-path-segment $shared_line_group_id)} | format pattern "/phone/shared_line_groups/{shared_line_group_id}/phone_numbers"))
+  let req_body = {"phone_numbers": $phone_numbers} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Unassign a phone number
 #
 # DELETE /phone/shared_line_groups/{sharedLineGroupId}/phone_numbers/{phoneNumberId}
 # operationId: deleteAPhoneNumberSLG
-export def "phone-shared-line-groups-phone-numbers delete-phone-number-slg" [
+export def "phone-shared-line-groups-phone-numbers delete-slg" [
   shared_line_group_id: string
   phone_number_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6506,7 +6544,7 @@ export def "phone-shared-line-groups-phone-numbers delete-phone-number-slg" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({shared_line_group_id: $shared_line_group_id, phone_number_id: $phone_number_id} | format pattern "/phone/shared_line_groups/{shared_line_group_id}/phone_numbers/{phone_number_id}"))
+  let full_url = (build-url $base ({shared_line_group_id: (encode-path-segment $shared_line_group_id), phone_number_id: (encode-path-segment $phone_number_id)} | format pattern "/phone/shared_line_groups/{shared_line_group_id}/phone_numbers/{phone_number_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6584,17 +6622,17 @@ export def "phone-sites create" [
   --default-emergency-address: record # shape: {address_line1: string, address_line2?: string, city: string, country: string, state_code: string, zip: string}
   name: string # Name of the Site.
   --short-extension: record # Short extension of the phone site. — shape: {length?: int}
-  --site-code: int # Identifier for a site. If site code is enabled, this field is required. 
+  --site-code: int # Identifier for a site. If site code is enabled, this field is required.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/phone/sites")
-  let body = {"auto_receptionist_name": $auto_receptionist_name, "default_emergency_address": $default_emergency_address, "name": $name, "short_extension": $short_extension, "site_code": $site_code} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"auto_receptionist_name": $auto_receptionist_name, "default_emergency_address": $default_emergency_address, "name": $name, "short_extension": $short_extension, "site_code": $site_code} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a phone site
@@ -6617,7 +6655,7 @@ export def "phone-sites delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "transfer_site_id" $transfer_site_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/phone/sites/{site_id}") $qp)
+  let full_url = (build-url $base ({site_id: (encode-path-segment $site_id)} | format pattern "/phone/sites/{site_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6641,7 +6679,7 @@ export def "phone-sites get" [
 ]: nothing -> record<country: record<code: string, name: string>, id: string, main_auto_receptionist: record<extension_id: string, extension_number: int, id: string, name: string>, name: string, short_extension: record<length: int>, site_code: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/phone/sites/{site_id}"))
+  let full_url = (build-url $base ({site_id: (encode-path-segment $site_id)} | format pattern "/phone/sites/{site_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6651,7 +6689,7 @@ export def "phone-sites get" [
 #
 # PATCH /phone/sites/{siteId}
 # operationId: updateSiteDetails
-export def "phone-sites update-site-details" [
+export def "phone-sites update-details" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6668,12 +6706,12 @@ export def "phone-sites update-site-details" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/phone/sites/{site_id}"))
-  let body = {"name": $name, "site_code": $site_code} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({site_id: (encode-path-segment $site_id)} | format pattern "/phone/sites/{site_id}"))
+  let req_body = {"name": $name, "site_code": $site_code} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List phone users
@@ -6707,7 +6745,7 @@ export def "phone-users list" [
 #
 # GET /phone/users/{userId}
 # operationId: phoneUser
-export def "phone-users phoneUser" [
+export def "phone-users get" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6721,7 +6759,7 @@ export def "phone-users phoneUser" [
 ]: nothing -> record<calling_plan: table<type: int>, email: string, extension_number: int, id: string, phone_numbers: table<id: string, number: string>, phone_user_id: string, site_admin: bool, site_id: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/phone/users/{user_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/phone/users/{user_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6731,7 +6769,7 @@ export def "phone-users phoneUser" [
 #
 # PATCH /phone/users/{userId}
 # operationId: updateUserProfile
-export def "phone-users update-user-profile" [
+export def "phone-users update-profile" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6743,24 +6781,24 @@ export def "phone-users update-user-profile" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --extension-number: string # The extension number of the user. The number must be complete (i.e. site number + short extension).
-  --site-id: string # Unique identifier of the [site](https://support.zoom.us/hc/en-us/articles/360020809672) where the user should be moved or assigned. 
+  --site-id: string # Unique identifier of the [site](https://support.zoom.us/hc/en-us/articles/360020809672) where the user should be moved or assigned.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/phone/users/{user_id}"))
-  let body = {"extension_number": $extension_number, "site_id": $site_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/phone/users/{user_id}"))
+  let req_body = {"extension_number": $extension_number, "site_id": $site_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get user's call logs
 #
 # GET /phone/users/{userId}/call_logs
 # operationId: phoneUserCallLogs
-export def "phone-users-call-logs phoneUserCallLogs" [
+export def "phone-users-call-logs logs" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6782,7 +6820,7 @@ export def "phone-users-call-logs phoneUserCallLogs" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "next_page_token" $next_page_token "scalar") (serialize-qp "phone_number" $phone_number "scalar") (serialize-qp "time_type" $time_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/phone/users/{user_id}/call_logs") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/phone/users/{user_id}/call_logs") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6807,7 +6845,7 @@ export def "phone-users-call-logs delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id, call_log_id: $call_log_id} | format pattern "/phone/users/{user_id}/call_logs/{call_log_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), call_log_id: (encode-path-segment $call_log_id)} | format pattern "/phone/users/{user_id}/call_logs/{call_log_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6818,7 +6856,7 @@ export def "phone-users-call-logs delete" [
 # POST /phone/users/{userId}/calling_plans
 # operationId: assignCallingPlan
 # --calling_plans item shape: {type?: string}
-export def "phone-users-calling-plans assignCallingPlan" [
+export def "phone-users-calling-plans assign" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6834,19 +6872,19 @@ export def "phone-users-calling-plans assignCallingPlan" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/phone/users/{user_id}/calling_plans"))
-  let body = {"calling_plans": $calling_plans} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/phone/users/{user_id}/calling_plans"))
+  let req_body = {"calling_plans": $calling_plans} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Unassign user's calling plan
 #
 # DELETE /phone/users/{userId}/calling_plans/{type}
 # operationId: unassignCallingPlan
-export def "phone-users-calling-plans unassignCallingPlan" [
+export def "phone-users-calling-plans delete-unassign" [
   user_id: string
   type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6861,7 +6899,7 @@ export def "phone-users-calling-plans unassignCallingPlan" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id, type: $type} | format pattern "/phone/users/{user_id}/calling_plans/{type}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), type: (encode-path-segment $type)} | format pattern "/phone/users/{user_id}/calling_plans/{type}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6872,7 +6910,7 @@ export def "phone-users-calling-plans unassignCallingPlan" [
 # POST /phone/users/{userId}/phone_numbers
 # operationId: assignPhoneNumber
 # --phone_numbers item shape: {id?: string, number?: string}
-export def "phone-users-phone-numbers assignPhoneNumber" [
+export def "phone-users-phone-numbers assign" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6888,19 +6926,19 @@ export def "phone-users-phone-numbers assignPhoneNumber" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/phone/users/{user_id}/phone_numbers"))
-  let body = {"phone_numbers": $phone_numbers} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/phone/users/{user_id}/phone_numbers"))
+  let req_body = {"phone_numbers": $phone_numbers} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Unassign phone number
 #
 # DELETE /phone/users/{userId}/phone_numbers/{phoneNumberId}
 # operationId: UnassignPhoneNumber
-export def "phone-users-phone-numbers delete" [
+export def "phone-users-phone-numbers delete-unassign" [
   user_id: string
   phone_number_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6915,7 +6953,7 @@ export def "phone-users-phone-numbers delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id, phone_number_id: $phone_number_id} | format pattern "/phone/users/{user_id}/phone_numbers/{phone_number_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), phone_number_id: (encode-path-segment $phone_number_id)} | format pattern "/phone/users/{user_id}/phone_numbers/{phone_number_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6925,7 +6963,7 @@ export def "phone-users-phone-numbers delete" [
 #
 # GET /phone/users/{userId}/recordings
 # operationId: phoneUserRecordings
-export def "phone-users-recordings phoneUserRecordings" [
+export def "phone-users-recordings get" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6944,7 +6982,7 @@ export def "phone-users-recordings phoneUserRecordings" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "next_page_token" $next_page_token "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/phone/users/{user_id}/recordings") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/phone/users/{user_id}/recordings") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6954,7 +6992,7 @@ export def "phone-users-recordings phoneUserRecordings" [
 #
 # GET /phone/users/{userId}/settings
 # operationId: phoneUserSettings
-export def "phone-users-settings phoneUserSettings" [
+export def "phone-users-settings get" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6968,7 +7006,7 @@ export def "phone-users-settings phoneUserSettings" [
 ]: nothing -> record<area_code: string, company_number: string, desk_phone: record<keys_positions: record<primary_number: string>>, outbound_caller: record<number: string>, outbound_caller_ids: record<is_default: bool, name: string, number: string>, voice_mail: record<access_user_id: string, delete: bool, download: bool, shared_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/phone/users/{user_id}/settings"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/phone/users/{user_id}/settings"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6995,7 +7033,7 @@ export def "phone-users-settings delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "shared_id" $shared_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id, setting_type: $setting_type} | format pattern "/phone/users/{user_id}/settings/{setting_type}") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), setting_type: (encode-path-segment $setting_type)} | format pattern "/phone/users/{user_id}/settings/{setting_type}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7023,12 +7061,12 @@ export def "phone-users-settings update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id, setting_type: $setting_type} | format pattern "/phone/users/{user_id}/settings/{setting_type}"))
-  let body = {"voice_mail": $voice_mail} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), setting_type: (encode-path-segment $setting_type)} | format pattern "/phone/users/{user_id}/settings/{setting_type}"))
+  let req_body = {"voice_mail": $voice_mail} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Set up shared access
@@ -7053,19 +7091,19 @@ export def "phone-users-settings create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id, setting_type: $setting_type} | format pattern "/phone/users/{user_id}/settings/{setting_type}"))
-  let body = {"voice_mail": $voice_mail} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), setting_type: (encode-path-segment $setting_type)} | format pattern "/phone/users/{user_id}/settings/{setting_type}"))
+  let req_body = {"voice_mail": $voice_mail} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get user's voicemails
 #
 # GET /phone/users/{userId}/voice_mails
 # operationId: phoneUserVoiceMails
-export def "phone-users-voice-mails phoneUserVoiceMails" [
+export def "phone-users-voice-mails get" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7085,7 +7123,7 @@ export def "phone-users-voice-mails phoneUserVoiceMails" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "next_page_token" $next_page_token "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/phone/users/{user_id}/voice_mails") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/phone/users/{user_id}/voice_mails") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7109,7 +7147,7 @@ export def "phone-voice-mails delete-voicemail" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({voicemail_id: $voicemail_id} | format pattern "/phone/voice_mails/{voicemail_id}"))
+  let full_url = (build-url $base ({voicemail_id: (encode-path-segment $voicemail_id)} | format pattern "/phone/voice_mails/{voicemail_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7119,7 +7157,7 @@ export def "phone-voice-mails delete-voicemail" [
 #
 # GET /report/activities
 # operationId: reportSignInSignOutActivities
-export def "report-activities reportSignInSignOutActivities" [
+export def "report-activities get-sign-in-sign-out" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7147,7 +7185,7 @@ export def "report-activities reportSignInSignOutActivities" [
 #
 # GET /report/cloud_recording
 # operationId: reportCloudRecording
-export def "report-cloud-recording reportCloudRecording" [
+export def "report-cloud-recording get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7173,7 +7211,7 @@ export def "report-cloud-recording reportCloudRecording" [
 #
 # GET /report/daily
 # operationId: reportDaily
-export def "report-daily reportDaily" [
+export def "report-daily get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7199,7 +7237,7 @@ export def "report-daily reportDaily" [
 #
 # GET /report/meetings/{meetingId}
 # operationId: reportMeetingDetails
-export def "report-meetings reportMeetingDetails" [
+export def "report-meetings get-details" [
   meeting_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7213,7 +7251,7 @@ export def "report-meetings reportMeetingDetails" [
 ]: nothing -> record<custom_keys: table<key: string, value: string>, dept: string, duration: int, end_time: string, id: int, participants_count: int, start_time: string, topic: string, total_minutes: int, tracking_fields: table<field: string, value: string>, type: int, user_email: string, user_name: string, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({meeting_id: $meeting_id} | format pattern "/report/meetings/{meeting_id}"))
+  let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id)} | format pattern "/report/meetings/{meeting_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7223,7 +7261,7 @@ export def "report-meetings reportMeetingDetails" [
 #
 # GET /report/meetings/{meetingId}/participants
 # operationId: reportMeetingParticipants
-export def "report-meetings-participants reportMeetingParticipants" [
+export def "report-meetings-participants get" [
   meeting_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7236,12 +7274,12 @@ export def "report-meetings-participants reportMeetingParticipants" [
   --accept: string@accept-completer # Response content type
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
-  --include-fields: string@include-fields-completer-1 # Provide `registrant_id` as the value for this field if you would like to see the registrant ID attribute in the response of this API call. A registrant ID is a unique identifier of a [meeting registrant](https://marketplace.zoom.us/docs/api-reference/zoom-api/meetings/meetingregistrants).<br> 
+  --include-fields: string@include-fields-completer-1 # Provide `registrant_id` as the value for this field if you would like to see the registrant ID attribute in the response of this API call. A registrant ID is a unique identifier of a [meeting registrant](https://marketplace.zoom.us/docs/api-reference/zoom-api/meetings/meetingregistrants).
 ]: nothing -> record<next_page_token: string, page_count: int, page_size: int, total_records: int, participants: table<customer_key: string, duration: int, failover: bool, id: string, join_time: string, leave_time: string, name: string, registrant_id: string, user_email: string, user_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "next_page_token" $next_page_token "scalar") (serialize-qp "include_fields" $include_fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({meeting_id: $meeting_id} | format pattern "/report/meetings/{meeting_id}/participants") $qp)
+  let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id)} | format pattern "/report/meetings/{meeting_id}/participants") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7251,7 +7289,7 @@ export def "report-meetings-participants reportMeetingParticipants" [
 #
 # GET /report/meetings/{meetingId}/polls
 # operationId: reportMeetingPolls
-export def "report-meetings-polls reportMeetingPolls" [
+export def "report-meetings-polls get" [
   meeting_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7265,7 +7303,7 @@ export def "report-meetings-polls reportMeetingPolls" [
 ]: nothing -> record<id: int, questions: table<email: string, name: string, question_details: list>, start_time: string, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({meeting_id: $meeting_id} | format pattern "/report/meetings/{meeting_id}/polls"))
+  let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id)} | format pattern "/report/meetings/{meeting_id}/polls"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7275,7 +7313,7 @@ export def "report-meetings-polls reportMeetingPolls" [
 #
 # GET /report/operationlogs
 # operationId: reportOperationLogs
-export def "report-operationlogs reportOperationLogs" [
+export def "report-operationlogs logs-operation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7289,7 +7327,7 @@ export def "report-operationlogs reportOperationLogs" [
   --qp-to: string # End date. (format: date)
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
-  --category-type: string@category-type-completer # **Optional**<br> Filter your response by a category type to see reports for a specific category. The value for this field can be one of the following:<br> `all`<br>`user`<br>`user_settings`<br>`account`<br>`billing`<br>`im`<br>`recording`<br>`phone_contacts`<br>`webinar`<br>`sub_account`<br>`role`<br>`zoom_rooms`
+  --category-type: string@category-type-completer # **Optional** Filter your response by a category type to see reports for a specific category. The value for this field can be one of the following: `all``user``user_settings``account``billing``im``recording``phone_contacts``webinar``sub_account``role``zoom_rooms`
 ]: nothing -> record<next_page_token: string, page_size: int, operation_logs: table<action: string, category_type: string, operation_detail: string, operator: string, time: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7304,7 +7342,7 @@ export def "report-operationlogs reportOperationLogs" [
 #
 # GET /report/telephone
 # operationId: reportTelephone
-export def "report-telephone reportTelephone" [
+export def "report-telephone get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7314,11 +7352,11 @@ export def "report-telephone reportTelephone" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --type: string@type-completer-8 # Audio types:<br>`1` - Toll-free Call-in & Call-out.<br>`2` - Toll <br> `3` - SIP Connected Audio (default: 1)
+  --type: string@type-completer-8 # Audio types:`1` - Toll-free Call-in & Call-out.`2` - Toll `3` - SIP Connected Audio (default: 1)
   --qp-from: string # Start date in 'yyyy-mm-dd' format. The date range defined by the "from" and "to" parameters should only be one month as the report includes only one month worth of data at once. (format: date)
   --qp-to: string # End date. (format: date)
   --page-size: int # The number of records returned within a single API call. (default: 30)
-  --page-number: int #  **Deprecated** - This field has been deprecated and we will stop supporting it completely in a future release. Please use "next_page_token" for pagination instead of this field.  The page number of the current page in the returned records. (default: 1)
+  --page-number: int # **Deprecated** - This field has been deprecated and we will stop supporting it completely in a future release. Please use "next_page_token" for pagination instead of this field. The page number of the current page in the returned records. (default: 1)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7334,7 +7372,7 @@ export def "report-telephone reportTelephone" [
 #
 # GET /report/users
 # operationId: reportUsers
-export def "report-users reportUsers" [
+export def "report-users get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7344,7 +7382,7 @@ export def "report-users reportUsers" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --type: string@type-completer-9 # Active or inactive hosts.<br>`active` - Active hosts. <br>`inactive` - Inactive hosts.
+  --type: string@type-completer-9 # Active or inactive hosts.`active` - Active hosts. `inactive` - Inactive hosts.
   --qp-from: string # Start date in 'yyyy-mm-dd' format. The date range defined by the "from" and "to" parameters should only be one month as the report includes only one month worth of data at once. (format: date)
   --qp-to: string # End date. (format: date)
   --page-size: int # The number of records returned within a single API call. (default: 30)
@@ -7364,7 +7402,7 @@ export def "report-users reportUsers" [
 #
 # GET /report/users/{userId}/meetings
 # operationId: reportMeetings
-export def "report-users-meetings reportMeetings" [
+export def "report-users-meetings get" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7379,12 +7417,12 @@ export def "report-users-meetings reportMeetings" [
   --qp-to: string # End date. (format: date)
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
-  --type: string@type-completer-10 # The meeting types: <br>`past` - Past meetings.<br>`pastOne` - Past one user meetings.  (default: past)
+  --type: string@type-completer-10 # The meeting types: `past` - Past meetings.`pastOne` - Past one user meetings. (default: past)
 ]: nothing -> record<next_page_token: string, page_count: int, page_number: int, page_size: int, total_records: int, from: string, meetings: table<custom_keys: list, duration: int, end_time: string, id: int, participants_count: int, source: string, start_time: string, topic: string, total_minutes: int, type: int, user_email: string, user_name: string, uuid: string>, to: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "next_page_token" $next_page_token "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/report/users/{user_id}/meetings") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/report/users/{user_id}/meetings") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7394,7 +7432,7 @@ export def "report-users-meetings reportMeetings" [
 #
 # GET /report/webinars/{webinarId}
 # operationId: reportWebinarDetails
-export def "report-webinars reportWebinarDetails" [
+export def "report-webinars get-details" [
   webinar_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7408,7 +7446,7 @@ export def "report-webinars reportWebinarDetails" [
 ]: nothing -> record<custom_keys: table<key: string, value: string>, dept: string, duration: int, end_time: string, id: int, participants_count: int, start_time: string, topic: string, total_minutes: int, tracking_fields: table<field: string, value: string>, type: int, user_email: string, user_name: string, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({webinar_id: $webinar_id} | format pattern "/report/webinars/{webinar_id}"))
+  let full_url = (build-url $base ({webinar_id: (encode-path-segment $webinar_id)} | format pattern "/report/webinars/{webinar_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7418,7 +7456,7 @@ export def "report-webinars reportWebinarDetails" [
 #
 # GET /report/webinars/{webinarId}/participants
 # operationId: reportWebinarParticipants
-export def "report-webinars-participants reportWebinarParticipants" [
+export def "report-webinars-participants get" [
   webinar_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7431,12 +7469,12 @@ export def "report-webinars-participants reportWebinarParticipants" [
   --accept: string@accept-completer # Response content type
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
-  --include-fields: string@include-fields-completer-1 # Enter 'registrant_id' as the value for this field if you would like to see the registrant ID attribute included in the response of this API call. A registrant ID is a unique identifier of a [webinar registrant](https://marketplace.zoom.us/docs/api-reference/zoom-api/webinars/webinarregistrants).<br> 
+  --include-fields: string@include-fields-completer-1 # Enter 'registrant_id' as the value for this field if you would like to see the registrant ID attribute included in the response of this API call. A registrant ID is a unique identifier of a [webinar registrant](https://marketplace.zoom.us/docs/api-reference/zoom-api/webinars/webinarregistrants).
 ]: nothing -> record<next_page_token: string, page_count: int, page_size: int, total_records: int, participants: table<customer_key: string, duration: int, failover: bool, id: string, join_time: string, leave_time: string, name: string, user_email: string, user_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "next_page_token" $next_page_token "scalar") (serialize-qp "include_fields" $include_fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({webinar_id: $webinar_id} | format pattern "/report/webinars/{webinar_id}/participants") $qp)
+  let full_url = (build-url $base ({webinar_id: (encode-path-segment $webinar_id)} | format pattern "/report/webinars/{webinar_id}/participants") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7446,7 +7484,7 @@ export def "report-webinars-participants reportWebinarParticipants" [
 #
 # GET /report/webinars/{webinarId}/polls
 # operationId: reportWebinarPolls
-export def "report-webinars-polls reportWebinarPolls" [
+export def "report-webinars-polls get" [
   webinar_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7460,7 +7498,7 @@ export def "report-webinars-polls reportWebinarPolls" [
 ]: nothing -> record<id: int, questions: table<email: string, name: string, question_details: list>, start_time: string, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({webinar_id: $webinar_id} | format pattern "/report/webinars/{webinar_id}/polls"))
+  let full_url = (build-url $base ({webinar_id: (encode-path-segment $webinar_id)} | format pattern "/report/webinars/{webinar_id}/polls"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7470,7 +7508,7 @@ export def "report-webinars-polls reportWebinarPolls" [
 #
 # GET /report/webinars/{webinarId}/qa
 # operationId: reportWebinarQA
-export def "report-webinars-qa reportWebinarQA" [
+export def "report-webinars-qa get" [
   webinar_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7484,7 +7522,7 @@ export def "report-webinars-qa reportWebinarQA" [
 ]: nothing -> record<id: int, questions: table<email: string, name: string, question_details: list>, start_time: string, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({webinar_id: $webinar_id} | format pattern "/report/webinars/{webinar_id}/qa"))
+  let full_url = (build-url $base ({webinar_id: (encode-path-segment $webinar_id)} | format pattern "/report/webinars/{webinar_id}/qa"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7529,17 +7567,17 @@ export def "roles create" [
   --accept: string@accept-completer # Response content type
   --description: string # Description of the role.
   --name: string # Name of the role.
-  --privileges: list # Privileges assigned to the role. Can be one or a combination of [these permissions](https://marketplace.zoom.us/docs/api-reference/other-references/privileges).
+  --privileges: list<string> # Privileges assigned to the role. Can be one or a combination of [these permissions](https://marketplace.zoom.us/docs/api-reference/other-references/privileges).
 ]: any -> record<description: string, id: string, name: string, privileges: list<string>, total_members: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/roles")
-  let body = {"description": $description, "name": $name, "privileges": $privileges} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"description": $description, "name": $name, "privileges": $privileges} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a role
@@ -7560,7 +7598,7 @@ export def "roles delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({role_id: $role_id} | format pattern "/roles/{role_id}"))
+  let full_url = (build-url $base ({role_id: (encode-path-segment $role_id)} | format pattern "/roles/{role_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7570,7 +7608,7 @@ export def "roles delete" [
 #
 # GET /roles/{roleId}
 # operationId: getRoleInformation
-export def "roles get-role-information" [
+export def "roles get-information" [
   role_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7584,7 +7622,7 @@ export def "roles get-role-information" [
 ]: nothing -> record<description: string, id: string, name: string, privileges: list<string>, sub_account_privileges: record<second_level: int>, total_members: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({role_id: $role_id} | format pattern "/roles/{role_id}"))
+  let full_url = (build-url $base ({role_id: (encode-path-segment $role_id)} | format pattern "/roles/{role_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7609,26 +7647,26 @@ export def "roles update" [
   --description: string # Description of the role.
   --id: string # Role Id.
   --name: string # Name of the role.
-  --privileges: list # Privileges assigned to the role. Can be one or a combination of [these permissions](https://marketplace.zoom.us/docs/api-reference/other-references/privileges).
+  --privileges: list<string> # Privileges assigned to the role. Can be one or a combination of [these permissions](https://marketplace.zoom.us/docs/api-reference/other-references/privileges).
   --sub-account-privileges: record # This field will only be displayed to accounts that are enrolled in the partner plan and follow master accounts and sub accounts structure. — shape: {second_level?: int}
   --total-members: int # Total members assigned to that role.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({role_id: $role_id} | format pattern "/roles/{role_id}"))
-  let body = {"description": $description, "id": $id, "name": $name, "privileges": $privileges, "sub_account_privileges": $sub_account_privileges, "total_members": $total_members} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({role_id: (encode-path-segment $role_id)} | format pattern "/roles/{role_id}"))
+  let req_body = {"description": $description, "id": $id, "name": $name, "privileges": $privileges, "sub_account_privileges": $sub_account_privileges, "total_members": $total_members} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List members in a role
 #
 # GET /roles/{roleId}/members
 # operationId: roleMembers
-export def "roles-members roleMembers" [
+export def "roles-members get" [
   role_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7640,14 +7678,14 @@ export def "roles-members roleMembers" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page-count: string # The number of pages returned for this request.
-  --page-number: int #  **Deprecated** - This field has been deprecated and we will stop supporting it completely in a future release. Please use "next_page_token" for pagination instead of this field.  The page number of the current page in the returned records. (default: 1)
+  --page-number: int # **Deprecated** - This field has been deprecated and we will stop supporting it completely in a future release. Please use "next_page_token" for pagination instead of this field. The page number of the current page in the returned records. (default: 1)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
   --page-size: int # The number of records returned within a single API call. (default: 30)
 ]: nothing -> record<members: list<record>, next_page_token: string, page_count: int, page_number: int, page_size: int, total_records: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page_count" $page_count "scalar") (serialize-qp "page_number" $page_number "scalar") (serialize-qp "next_page_token" $next_page_token "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({role_id: $role_id} | format pattern "/roles/{role_id}/members") $qp)
+  let full_url = (build-url $base ({role_id: (encode-path-segment $role_id)} | format pattern "/roles/{role_id}/members") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7674,19 +7712,19 @@ export def "roles-members create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({role_id: $role_id} | format pattern "/roles/{role_id}/members"))
-  let body = {"members": $members} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({role_id: (encode-path-segment $role_id)} | format pattern "/roles/{role_id}/members"))
+  let req_body = {"members": $members} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Unassign a role
 #
 # DELETE /roles/{roleId}/members/{memberId}
 # operationId: roleMemberDelete
-export def "roles-members roleMemberDelete" [
+export def "roles-members delete" [
   role_id: string
   member_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7700,7 +7738,7 @@ export def "roles-members roleMemberDelete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({role_id: $role_id, member_id: $member_id} | format pattern "/roles/{role_id}/members/{member_id}"))
+  let full_url = (build-url $base ({role_id: (encode-path-segment $role_id), member_id: (encode-path-segment $member_id)} | format pattern "/roles/{role_id}/members/{member_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7750,19 +7788,19 @@ export def "rooms create" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --location-id: string # **Optional**<br>Location ID of the lowest level location in the [location hierarchy](https://support.zoom.us/hc/en-us/articles/115000342983-Zoom-Rooms-Location-Hierarchy) where the Zoom Room is to be added. For instance if the structure of the location hierarchy is set up as “country, states, city, campus, building, floor”, a room can only be added under the floor level location.   This ID can be retrieved from the [List Zoom Room Locations](https://marketplace.zoom.us/docs/api-reference/zoom-api/rooms-location/listzrlocations) API.
+  --location-id: string # **Optional**Location ID of the lowest level location in the [location hierarchy](https://support.zoom.us/hc/en-us/articles/115000342983-Zoom-Rooms-Location-Hierarchy) where the Zoom Room is to be added. For instance if the structure of the location hierarchy is set up as “country, states, city, campus, building, floor”, a room can only be added under the floor level location. This ID can be retrieved from the [List Zoom Room Locations](https://marketplace.zoom.us/docs/api-reference/zoom-api/rooms-location/listzrlocations) API.
   name: string # Name of the Zoom Room.
-  type: string@type-completer-11 # Type of the Zoom Room. 
+  type: string@type-completer-11 # Type of the Zoom Room.
 ]: any -> record<id: string, location_id: string, name: string, room_id: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rooms")
-  let body = {"location_id": $location_id, "name": $name, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"location_id": $location_id, "name": $name, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get Zoom Room account profile
@@ -7809,11 +7847,11 @@ export def "rooms-account-profile update-zr-acc" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rooms/account_profile")
-  let body = {"basic": $basic} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"basic": $basic} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get Zoom Room account settings
@@ -7830,7 +7868,7 @@ export def "rooms-account-settings get-zr" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --setting-type: string@setting-type-completer # The type of setting that you would like to retrieve.<br> `alert`: Alert Settings applied on the Zoom Rooms Account.<br> `meeting`: Meeting settings of the Zoom Rooms Account. <br> `signage`: View digital signage settings of the Zoom Rooms Account. (default: meeting)
+  --setting-type: string@setting-type-completer # The type of setting that you would like to retrieve. `alert`: Alert Settings applied on the Zoom Rooms Account. `meeting`: Meeting settings of the Zoom Rooms Account. `signage`: View digital signage settings of the Zoom Rooms Account. (default: meeting)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7845,11 +7883,11 @@ export def "rooms-account-settings get-zr" [
 #
 # PATCH /rooms/account_settings
 # operationId: updateZoomRoomAccSettings
-# --zoom_rooms shape: {allow_multiple_content_sharing?: bool, audio_device_daily_auto_test?: bool, auto_direct_sharing?: bool, auto_start_scheduled_meeting?: bool, auto_stop_scheduled_meeting?: bool, count_attendees_number_in_room?: bool, display_feedback_survey?: bool, display_meeting_list?: bool, display_top_banner?: bool, email_address_prompt_before_recording?: bool, encrypt_shared_screen_content?: bool, hide_id_for_private_meeting?: bool, make_room_alternative_host?: bool, secure_connection_channel?: bool, send_whiteboard_to_internal_contact_only?: bool, show_alert_before_meeting?: bool, show_call_history_in_room?: bool, show_contact_list_on_controller?: bool, show_non_video_participants?: bool, start_airplay_manually?: bool, support_join_3rd_party_meeting?: bool, transform_meeting_to_private?: bool, upcoming_meeting_alert?: bool, weekly_system_restart?: bool}
+# --zoom_rooms shape: {allow_multiple_content_sharing?: bool, audio_device_daily_auto_test?: bool, auto_direct_sharing?: bool, auto_start_scheduled_meeting?: bool, auto_stop_scheduled_meeting?: bool, count_attendees_number_in_room?: bool, display_feedback_survey?: bool, display_meeting_list?: bool, display_top_banner?: bool, email_address_prompt_before_recording?: bool, encrypt_shared_screen_content?: bool, hide_id_for_private_meeting?: bool, make_room_alternative_host?: bool, secure_connection_channel?: bool, ... (10 more fields)}
 # --client_alert shape: {detect_bluetooth_microphone_error_alert?: bool, detect_bluetooth_speaker_error_alert?: bool, detect_camera_error_alert?: bool, detect_microphone_error_alert?: bool, detect_speaker_error_alert?: bool}
 # --digital_signage shape: {banner?: record, display_period?: record, enable_digital_signage?: bool, layout?: string, mute?: bool, play_list?: list}
-# --notification shape: {audio_meet_usability_threshold?: bool, audio_not_meet_usability_threshold?: bool, battery_is_charging?: bool, battery_low_and_not_charging?: bool, battery_percentage?: string, controller_scheduling_disconnected?: bool, controller_scheduling_reconnected?: bool, cpu_usage_high_detected?: bool, mic_speaker_camera_disconnected?: bool, mic_speaker_camera_reconnected?: bool, network_stable_detected?: bool, network_unstable_detected?: bool, sip_registration_failed?: bool, sip_registration_re_enabled?: bool, zoom_room_come_back_online?: bool, zoom_room_display_disconnected?: bool, zoom_room_offline?: bool}
-export def "rooms-account-settings update-zoom-room-acc" [
+# --notification shape: {audio_meet_usability_threshold?: bool, audio_not_meet_usability_threshold?: bool, battery_is_charging?: bool, battery_low_and_not_charging?: bool, battery_percentage?: string, controller_scheduling_disconnected?: bool, controller_scheduling_reconnected?: bool, cpu_usage_high_detected?: bool, mic_speaker_camera_disconnected?: bool, mic_speaker_camera_reconnected?: bool, network_stable_detected?: bool, network_unstable_detected?: bool, sip_registration_failed?: bool, ... (4 more fields)}
+export def "rooms-account-settings update-zoom-acc" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7859,29 +7897,29 @@ export def "rooms-account-settings update-zoom-room-acc" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --setting-type: string # The type of setting that you would like to update.<br> `alert`: Alert Settings applied on the Zoom Rooms Account.<br> `meeting`: Meeting settings of the Zoom Rooms Account.<br> `signage`: View digital signage settings of the Zoom Rooms Account. (default: meeting)
-  --zoom-rooms: record # shape: {allow_multiple_content_sharing?: bool, audio_device_daily_auto_test?: bool, auto_direct_sharing?: bool, auto_start_scheduled_meeting?: bool, auto_stop_scheduled_meeting?: bool, count_attendees_number_in_room?: bool, display_feedback_survey?: bool, display_meeting_list?: bool, display_top_banner?: bool, email_address_prompt_before_recording?: bool, encrypt_shared_screen_content?: bool, hide_id_for_private_meeting?: bool, make_room_alternative_host?: bool, secure_connection_channel?: bool, send_whiteboard_to_internal_contact_only?: bool, show_alert_before_meeting?: bool, show_call_history_in_room?: bool, show_contact_list_on_controller?: bool, show_non_video_participants?: bool, start_airplay_manually?: bool, support_join_3rd_party_meeting?: bool, transform_meeting_to_private?: bool, upcoming_meeting_alert?: bool, weekly_system_restart?: bool}
-  --client-alert: record # The Client Alert Settings section includes alerts that display on the TV screen of the Zoom Room. Disable these settings if you have deliberately disconnected one or more peripheral devices or have never enabled them.  — shape: {detect_bluetooth_microphone_error_alert?: bool, detect_bluetooth_speaker_error_alert?: bool, detect_camera_error_alert?: bool, detect_microphone_error_alert?: bool, detect_speaker_error_alert?: bool}
+  --setting-type: string # The type of setting that you would like to update. `alert`: Alert Settings applied on the Zoom Rooms Account. `meeting`: Meeting settings of the Zoom Rooms Account. `signage`: View digital signage settings of the Zoom Rooms Account. (default: meeting)
+  --zoom-rooms: record # shape: {allow_multiple_content_sharing?: bool, audio_device_daily_auto_test?: bool, auto_direct_sharing?: bool, auto_start_scheduled_meeting?: bool, auto_stop_scheduled_meeting?: bool, count_attendees_number_in_room?: bool, display_feedback_survey?: bool, display_meeting_list?: bool, display_top_banner?: bool, email_address_prompt_before_recording?: bool, encrypt_shared_screen_content?: bool, hide_id_for_private_meeting?: bool, make_room_alternative_host?: bool, secure_connection_channel?: bool, ... (10 more fields)}
+  --client-alert: record # The Client Alert Settings section includes alerts that display on the TV screen of the Zoom Room. Disable these settings if you have deliberately disconnected one or more peripheral devices or have never enabled them. — shape: {detect_bluetooth_microphone_error_alert?: bool, detect_bluetooth_speaker_error_alert?: bool, detect_camera_error_alert?: bool, detect_microphone_error_alert?: bool, detect_speaker_error_alert?: bool}
   --digital-signage: record # shape: {banner?: record, display_period?: record, enable_digital_signage?: bool, layout?: string, mute?: bool, play_list?: list}
-  --notification: record # [Notifications Settings](https://support.zoom.us/hc/en-us/articles/205394099-Zoom-Room-Alerts#h_b430b5f2-5150-4522-9c96-c77f22ab70bc) includes the circumstances in which the room sends an email alert to the support team to notify them of a potentially urgent issue. These issues can affect the operation of the room, but do not display on the TV screen. The email alert is sent to the email address specified in the Notification Email Recipients section.  — shape: {audio_meet_usability_threshold?: bool, audio_not_meet_usability_threshold?: bool, battery_is_charging?: bool, battery_low_and_not_charging?: bool, battery_percentage?: string, controller_scheduling_disconnected?: bool, controller_scheduling_reconnected?: bool, cpu_usage_high_detected?: bool, mic_speaker_camera_disconnected?: bool, mic_speaker_camera_reconnected?: bool, network_stable_detected?: bool, network_unstable_detected?: bool, sip_registration_failed?: bool, sip_registration_re_enabled?: bool, zoom_room_come_back_online?: bool, zoom_room_display_disconnected?: bool, zoom_room_offline?: bool}
+  --notification: record # [Notifications Settings](https://support.zoom.us/hc/en-us/articles/205394099-Zoom-Room-Alerts#h_b430b5f2-5150-4522-9c96-c77f22ab70bc) includes the circumstances in which the room sends an email alert to the support team to notify them of a potentially urgent issue. These issues can affect the operation of the room, but do not display on the TV screen. The email alert is sent to the email address specified in the Notification Email Recipients section. — shape: {audio_meet_usability_threshold?: bool, audio_not_meet_usability_threshold?: bool, battery_is_charging?: bool, battery_low_and_not_charging?: bool, battery_percentage?: string, controller_scheduling_disconnected?: bool, controller_scheduling_reconnected?: bool, cpu_usage_high_detected?: bool, mic_speaker_camera_disconnected?: bool, mic_speaker_camera_reconnected?: bool, network_stable_detected?: bool, network_unstable_detected?: bool, sip_registration_failed?: bool, ... (4 more fields)}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "setting_type" $setting_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rooms/account_settings" $qp)
-  let body = {"zoom_rooms": $zoom_rooms, "client_alert": $client_alert, "digital_signage": $digital_signage, "notification": $notification} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"zoom_rooms": $zoom_rooms, "client_alert": $client_alert, "digital_signage": $digital_signage, "notification": $notification} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List digital signage contents
 #
 # GET /rooms/digital_signage
 # operationId: listDigitalSignageContent
-export def "rooms-digital-signage list-digital-signage-content" [
+export def "rooms-digital-signage list-content" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7909,8 +7947,8 @@ export def "rooms-digital-signage list-digital-signage-content" [
 #
 # PATCH /rooms/events
 # operationId: manageE911signage
-# --params shape: {content?: string, target_ids?: list, target_type?: "account"|"location"|"room"}
-export def "rooms-events manageE911signage" [
+# --params shape: {content?: string, target_ids?: list<string>, target_type?: "account"|"location"|"room"}
+export def "rooms-events update-manage-e911signage" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7921,17 +7959,17 @@ export def "rooms-events manageE911signage" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --method: string@method-completer # To display the emergency content on the Zoom Rooms digital signage display, set the value of this field to be `zoomroom.emergency_alert_displayed`.
-  --params: record # shape: {content?: string, target_ids?: list, target_type?: "account"|"location"|"room"}
+  --params: record # shape: {content?: string, target_ids?: list<string>, target_type?: "account"|"location"|"room"}
 ]: any -> record<event_id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rooms/events")
-  let body = {"method": $method, "params": $params} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"method": $method, "params": $params} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List Zoom Room locations
@@ -7949,7 +7987,7 @@ export def "rooms-locations list-zr" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --parent-location-id: string # A unique identifier of the parent location. For instance, if a Zoom Room is located in Floor 1 of Building A, the location of Building A will be the parent location of Floor 1. Use this parameter to filter the response by a specific location hierarchy level.
-  --type: string # Use this field to filter the response by the type of location. The value can be one of the following: `country`, `states`, `city`, `campus`, `building`, `floor`. 
+  --type: string # Use this field to filter the response by the type of location. The value can be one of the following: `country`, `states`, `city`, `campus`, `building`, `floor`.
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
 ]: nothing -> record<locations: table<id: string, name: string, parent_location_id: string, type: string>, next_page_token: string, page_size: int> {
@@ -7966,7 +8004,7 @@ export def "rooms-locations list-zr" [
 #
 # POST /rooms/locations
 # operationId: addAZRLocation
-export def "rooms-locations create-zr" [
+export def "rooms-locations create-azr" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7977,17 +8015,17 @@ export def "rooms-locations create-zr" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --name: string # Name of the location. The name must be unique and shouldn't have already been used in the same account.
-  --parent-location-id: string # The location ID of the location that is a level higher from the location that is being added.<br><br> For example, to add a City named "City 1" as the child location under a State named "State 1", you must provide the location ID of "State 1". This can be retrieved using the [List Zoom Room Locations](https://marketplace.zoom.us/docs/api-reference/zoom-api/rooms-location/listzrlocations) API.
+  --parent-location-id: string # The location ID of the location that is a level higher from the location that is being added. For example, to add a City named "City 1" as the child location under a State named "State 1", you must provide the location ID of "State 1". This can be retrieved using the [List Zoom Room Locations](https://marketplace.zoom.us/docs/api-reference/zoom-api/rooms-location/listzrlocations) API.
 ]: any -> record<id: string, name: string, parent_location_id: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rooms/locations")
-  let body = {"name": $name, "parent_location_id": $parent_location_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"name": $name, "parent_location_id": $parent_location_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get Zoom Room location structure
@@ -8027,24 +8065,24 @@ export def "rooms-locations-structure update-zoom" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --structures: list # Location Structure. The value can be either one or a combination of the following strings separated by comma: `country`, `state`, `city`, `campus`, `building`, `floor`
+  --structures: list<string> # Location Structure. The value can be either one or a combination of the following strings separated by comma: `country`, `state`, `city`, `campus`, `building`, `floor`
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rooms/locations/structure")
-  let body = {"structures": $structures} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"structures": $structures} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get Zoom Room location profile
 #
 # GET /rooms/locations/{locationId}
 # operationId: getZRLocationProfile
-export def "rooms-locations get-zr-location-profile" [
+export def "rooms-locations get-zr-profile" [
   location_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8058,7 +8096,7 @@ export def "rooms-locations get-zr-location-profile" [
 ]: nothing -> record<basic: record<address: string, description_: string, name: string, required_code_to_ext: bool, room_passcode: string, support_email: string, support_phone: string, timezone: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({location_id: $location_id} | format pattern "/rooms/locations/{location_id}"))
+  let full_url = (build-url $base ({location_id: (encode-path-segment $location_id)} | format pattern "/rooms/locations/{location_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8069,7 +8107,7 @@ export def "rooms-locations get-zr-location-profile" [
 # PATCH /rooms/locations/{locationId}
 # operationId: updateZRLocationProfile
 # --basic shape: {address?: string, description ?: string, name?: string, required_code_to_ext?: bool, room_passcode?: string, support_email?: string, support_phone?: string, timezone?: string}
-export def "rooms-locations update-zr-location-profile" [
+export def "rooms-locations update-zr-profile" [
   location_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8085,19 +8123,19 @@ export def "rooms-locations update-zr-location-profile" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({location_id: $location_id} | format pattern "/rooms/locations/{location_id}"))
-  let body = {"basic": $basic} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({location_id: (encode-path-segment $location_id)} | format pattern "/rooms/locations/{location_id}"))
+  let req_body = {"basic": $basic} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Change the assigned parent location
 #
 # PUT /rooms/locations/{locationId}/location
 # operationId: changeParentLocation
-export def "rooms-locations-location changeParentLocation" [
+export def "rooms-locations-location update-change-parent" [
   location_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8113,12 +8151,12 @@ export def "rooms-locations-location changeParentLocation" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({location_id: $location_id} | format pattern "/rooms/locations/{location_id}/location"))
-  let body = {"parent_location_id": $parent_location_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({location_id: (encode-path-segment $location_id)} | format pattern "/rooms/locations/{location_id}/location"))
+  let req_body = {"parent_location_id": $parent_location_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get location settings
@@ -8136,12 +8174,12 @@ export def "rooms-locations-settings get-zr" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --setting-type: string # The type of setting that you would like to retrieve.<br> `alert`: Alert Settings applied on the Zoom Rooms Account.<br> `meeting`: Meeting settings of the Zoom Rooms Account.<br> `signage`: Digital signage settings of the Zoom Rooms Account. (default: meeting)
+  --setting-type: string # The type of setting that you would like to retrieve. `alert`: Alert Settings applied on the Zoom Rooms Account. `meeting`: Meeting settings of the Zoom Rooms Account. `signage`: Digital signage settings of the Zoom Rooms Account. (default: meeting)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "setting_type" $setting_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({location_id: $location_id} | format pattern "/rooms/locations/{location_id}/settings") $qp)
+  let full_url = (build-url $base ({location_id: (encode-path-segment $location_id)} | format pattern "/rooms/locations/{location_id}/settings") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8152,10 +8190,10 @@ export def "rooms-locations-settings get-zr" [
 # PATCH /rooms/locations/{locationId}/settings
 # operationId: updateZRLocationSettings
 # --meeting_security shape: {encryption_type?: "enhanced_encryption"|"e2ee", end_to_end_encrypted_meetings?: bool}
-# --zoom_rooms shape: {allow_multiple_content_sharing?: bool, audio_device_daily_auto_test?: bool, auto_accept_incoming_call_and_fecc?: bool, auto_direct_sharing?: bool, auto_start_scheduled_meeting?: bool, auto_stop_scheduled_meeting?: bool, count_attendees_number_in_room?: bool, display_feedback_survey?: bool, display_meeting_list?: bool, display_top_banner?: bool, encrypt_shared_screen_content?: bool, hide_id_for_private_meeting?: bool, hide_self_view?: bool, lock_speaker_volume_control?: bool, send_whiteboard_to_internal_contact_only?: bool, show_alert_before_meeting?: bool, show_call_history_in_room?: bool, show_contact_list_on_controller?: bool, show_non_video_participants?: bool, start_airplay_manually?: bool, start_airplay_mirroring?: bool, start_hdmi_content_share_manualy?: bool, support_join_3rd_party_meeting?: bool, transform_meeting_to_private?: bool, upcoming_meeting_alert?: bool, voice_commands?: bool, weekly_system_restart?: bool}
+# --zoom_rooms shape: {allow_multiple_content_sharing?: bool, audio_device_daily_auto_test?: bool, auto_accept_incoming_call_and_fecc?: bool, auto_direct_sharing?: bool, auto_start_scheduled_meeting?: bool, auto_stop_scheduled_meeting?: bool, count_attendees_number_in_room?: bool, display_feedback_survey?: bool, display_meeting_list?: bool, display_top_banner?: bool, encrypt_shared_screen_content?: bool, hide_id_for_private_meeting?: bool, hide_self_view?: bool, lock_speaker_volume_control?: bool, ... (13 more fields)}
 # --client_alert shape: {detect_bluetooth_microphone_error_alert?: bool, detect_bluetooth_speaker_error_alert?: bool, detect_camera_error_alert?: bool, detect_microphone_error_alert?: bool, detect_speaker_error_alert?: bool}
 # --digital_signage shape: {banner?: record, display_period?: record, enable_digital_signage?: bool, layout?: string, mute?: bool, play_list?: list}
-# --notification shape: {audio_meet_usability_threshold?: bool, audio_not_meet_usability_threshold?: bool, battery_is_charging?: bool, battery_low_and_not_charging?: bool, battery_percentage?: string, controller_scheduling_disconnected?: bool, controller_scheduling_reconnected?: bool, cpu_usage_high_detected?: bool, mic_speaker_camera_disconnected?: bool, mic_speaker_camera_reconnected?: bool, network_unstable_detected?: bool, sip_registration_failed?: bool, sip_registration_re_enabled?: bool, zoom_room_come_back_online?: bool, zoom_room_display_disconnected?: bool, zoom_room_offline?: bool}
+# --notification shape: {audio_meet_usability_threshold?: bool, audio_not_meet_usability_threshold?: bool, battery_is_charging?: bool, battery_low_and_not_charging?: bool, battery_percentage?: string, controller_scheduling_disconnected?: bool, controller_scheduling_reconnected?: bool, cpu_usage_high_detected?: bool, mic_speaker_camera_disconnected?: bool, mic_speaker_camera_reconnected?: bool, network_unstable_detected?: bool, sip_registration_failed?: bool, sip_registration_re_enabled?: bool, ... (3 more fields)}
 export def "rooms-locations-settings update-zr" [
   location_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8167,23 +8205,23 @@ export def "rooms-locations-settings update-zr" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --setting-type: string # The type of setting that you would like to update.<br> `alert`: Alert Settings applied on the Zoom Rooms Account.<br> `meeting`: Meeting settings of the Zoom Rooms Account.<br> `signage`: Digital signage settings. (default: meeting)
+  --setting-type: string # The type of setting that you would like to update. `alert`: Alert Settings applied on the Zoom Rooms Account. `meeting`: Meeting settings of the Zoom Rooms Account. `signage`: Digital signage settings. (default: meeting)
   --meeting-security: record # shape: {encryption_type?: "enhanced_encryption"|"e2ee", end_to_end_encrypted_meetings?: bool}
-  --zoom-rooms: record # shape: {allow_multiple_content_sharing?: bool, audio_device_daily_auto_test?: bool, auto_accept_incoming_call_and_fecc?: bool, auto_direct_sharing?: bool, auto_start_scheduled_meeting?: bool, auto_stop_scheduled_meeting?: bool, count_attendees_number_in_room?: bool, display_feedback_survey?: bool, display_meeting_list?: bool, display_top_banner?: bool, encrypt_shared_screen_content?: bool, hide_id_for_private_meeting?: bool, hide_self_view?: bool, lock_speaker_volume_control?: bool, send_whiteboard_to_internal_contact_only?: bool, show_alert_before_meeting?: bool, show_call_history_in_room?: bool, show_contact_list_on_controller?: bool, show_non_video_participants?: bool, start_airplay_manually?: bool, start_airplay_mirroring?: bool, start_hdmi_content_share_manualy?: bool, support_join_3rd_party_meeting?: bool, transform_meeting_to_private?: bool, upcoming_meeting_alert?: bool, voice_commands?: bool, weekly_system_restart?: bool}
-  --client-alert: record # The Client Alert Settings section includes alerts that display on the TV screen of the Zoom Room. Disable these settings if you have deliberately disconnected one or more peripheral devices or have never enabled them.  — shape: {detect_bluetooth_microphone_error_alert?: bool, detect_bluetooth_speaker_error_alert?: bool, detect_camera_error_alert?: bool, detect_microphone_error_alert?: bool, detect_speaker_error_alert?: bool}
+  --zoom-rooms: record # shape: {allow_multiple_content_sharing?: bool, audio_device_daily_auto_test?: bool, auto_accept_incoming_call_and_fecc?: bool, auto_direct_sharing?: bool, auto_start_scheduled_meeting?: bool, auto_stop_scheduled_meeting?: bool, count_attendees_number_in_room?: bool, display_feedback_survey?: bool, display_meeting_list?: bool, display_top_banner?: bool, encrypt_shared_screen_content?: bool, hide_id_for_private_meeting?: bool, hide_self_view?: bool, lock_speaker_volume_control?: bool, ... (13 more fields)}
+  --client-alert: record # The Client Alert Settings section includes alerts that display on the TV screen of the Zoom Room. Disable these settings if you have deliberately disconnected one or more peripheral devices or have never enabled them. — shape: {detect_bluetooth_microphone_error_alert?: bool, detect_bluetooth_speaker_error_alert?: bool, detect_camera_error_alert?: bool, detect_microphone_error_alert?: bool, detect_speaker_error_alert?: bool}
   --digital-signage: record # shape: {banner?: record, display_period?: record, enable_digital_signage?: bool, layout?: string, mute?: bool, play_list?: list}
-  --notification: record # [Notifications Settings](https://support.zoom.us/hc/en-us/articles/205394099-Zoom-Room-Alerts#h_b430b5f2-5150-4522-9c96-c77f22ab70bc) includes the circumstances in which the room sends an email alert to the support team to notify them of a potentially urgent issue. These issues can affect the operation of the room, but do not display on the TV screen. The email alert is sent to the email address specified in the Notification Email Recipients section.  — shape: {audio_meet_usability_threshold?: bool, audio_not_meet_usability_threshold?: bool, battery_is_charging?: bool, battery_low_and_not_charging?: bool, battery_percentage?: string, controller_scheduling_disconnected?: bool, controller_scheduling_reconnected?: bool, cpu_usage_high_detected?: bool, mic_speaker_camera_disconnected?: bool, mic_speaker_camera_reconnected?: bool, network_unstable_detected?: bool, sip_registration_failed?: bool, sip_registration_re_enabled?: bool, zoom_room_come_back_online?: bool, zoom_room_display_disconnected?: bool, zoom_room_offline?: bool}
+  --notification: record # [Notifications Settings](https://support.zoom.us/hc/en-us/articles/205394099-Zoom-Room-Alerts#h_b430b5f2-5150-4522-9c96-c77f22ab70bc) includes the circumstances in which the room sends an email alert to the support team to notify them of a potentially urgent issue. These issues can affect the operation of the room, but do not display on the TV screen. The email alert is sent to the email address specified in the Notification Email Recipients section. — shape: {audio_meet_usability_threshold?: bool, audio_not_meet_usability_threshold?: bool, battery_is_charging?: bool, battery_low_and_not_charging?: bool, battery_percentage?: string, controller_scheduling_disconnected?: bool, controller_scheduling_reconnected?: bool, cpu_usage_high_detected?: bool, mic_speaker_camera_disconnected?: bool, mic_speaker_camera_reconnected?: bool, network_unstable_detected?: bool, sip_registration_failed?: bool, sip_registration_re_enabled?: bool, ... (3 more fields)}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "setting_type" $setting_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({location_id: $location_id} | format pattern "/rooms/locations/{location_id}/settings") $qp)
-  let body = {"meeting_security": $meeting_security, "zoom_rooms": $zoom_rooms, "client_alert": $client_alert, "digital_signage": $digital_signage, "notification": $notification} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({location_id: (encode-path-segment $location_id)} | format pattern "/rooms/locations/{location_id}/settings") $qp)
+  let req_body = {"meeting_security": $meeting_security, "zoom_rooms": $zoom_rooms, "client_alert": $client_alert, "digital_signage": $digital_signage, "notification": $notification} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Check-in or check-out of a Zoom Room
@@ -8191,7 +8229,7 @@ export def "rooms-locations-settings update-zr" [
 # PATCH /rooms/{id}/events
 # operationId: checkInRooms
 # --params shape: {calendar_id?: string, change_key?: string, event_id: string, resource_email?: string}
-export def "rooms-events check-in" [
+export def "rooms-events check" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8202,18 +8240,18 @@ export def "rooms-events check-in" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --method: string # The value of this field can be one of the following:<br> * zoomroom.check_in * zoomroom.check_out
+  --method: string # The value of this field can be one of the following: * zoomroom.check_in * zoomroom.check_out
   --params: record # shape: {calendar_id?: string, change_key?: string, event_id: string, resource_email?: string}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/rooms/{id}/events"))
-  let body = {"method": $method, "params": $params} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rooms/{id}/events"))
+  let req_body = {"method": $method, "params": $params} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a Zoom Room
@@ -8234,7 +8272,7 @@ export def "rooms delete-zoom" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({room_id: $room_id} | format pattern "/rooms/{room_id}"))
+  let full_url = (build-url $base ({room_id: (encode-path-segment $room_id)} | format pattern "/rooms/{room_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8258,7 +8296,7 @@ export def "rooms get-zr-profile" [
 ]: nothing -> record<basic: record<activation_code: string, hide_room_in_contacts: bool, name: string, required_code_to_ext: bool, room_passcode: string, support_email: string, support_phone: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({room_id: $room_id} | format pattern "/rooms/{room_id}"))
+  let full_url = (build-url $base ({room_id: (encode-path-segment $room_id)} | format pattern "/rooms/{room_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8269,7 +8307,7 @@ export def "rooms get-zr-profile" [
 # PATCH /rooms/{roomId}
 # operationId: updateRoomProfile
 # --basic shape: {hide_room_in_contacts?: bool, name?: string, required_code_to_ext?: bool, room_passcode?: string, support_email?: string, support_phone?: string}
-export def "rooms update-room-profile" [
+export def "rooms update-profile" [
   room_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8285,12 +8323,12 @@ export def "rooms update-room-profile" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({room_id: $room_id} | format pattern "/rooms/{room_id}"))
-  let body = {"basic": $basic} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({room_id: (encode-path-segment $room_id)} | format pattern "/rooms/{room_id}"))
+  let req_body = {"basic": $basic} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List Zoom Room devices
@@ -8311,7 +8349,7 @@ export def "rooms-devices list-zr" [
 ]: nothing -> record<devices: table<app_version: string, device_system: string, device_type: string, id: string, room_name: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({room_id: $room_id} | format pattern "/rooms/{room_id}/devices"))
+  let full_url = (build-url $base ({room_id: (encode-path-segment $room_id)} | format pattern "/rooms/{room_id}/devices"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8321,7 +8359,7 @@ export def "rooms-devices list-zr" [
 #
 # PUT /rooms/{roomId}/devices/{deviceId}/app_version
 # operationId: changeZoomRoomsAppVersion
-export def "rooms-devices-app-version changeZoomRoomsAppVersion" [
+export def "rooms-devices-app-version version-change-zoom" [
   room_id: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8333,24 +8371,24 @@ export def "rooms-devices-app-version changeZoomRoomsAppVersion" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --action: string@action-completer-8 # Specify one of the following values for this field:  `upgrade`: Upgrade to the latest Zoom Rooms App Version.<br> `downgrade`: Downgrade the Zoom Rooms App Version.<br> `cancel`: Cancel an ongoing upgrade or downgrade process.
+  --action: string@action-completer-8 # Specify one of the following values for this field: `upgrade`: Upgrade to the latest Zoom Rooms App Version. `downgrade`: Downgrade the Zoom Rooms App Version. `cancel`: Cancel an ongoing upgrade or downgrade process.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({room_id: $room_id, device_id: $device_id} | format pattern "/rooms/{room_id}/devices/{device_id}/app_version"))
-  let body = {"action": $action} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({room_id: (encode-path-segment $room_id), device_id: (encode-path-segment $device_id)} | format pattern "/rooms/{room_id}/devices/{device_id}/app_version"))
+  let req_body = {"action": $action} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Change a Zoom Room's location
 #
 # PUT /rooms/{roomId}/location
 # operationId: changeZRLocation
-export def "rooms-location changeZRLocation" [
+export def "rooms-location update-change-zr" [
   room_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8366,12 +8404,12 @@ export def "rooms-location changeZRLocation" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({room_id: $room_id} | format pattern "/rooms/{room_id}/location"))
-  let body = {"location_id": $location_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({room_id: (encode-path-segment $room_id)} | format pattern "/rooms/{room_id}/location"))
+  let req_body = {"location_id": $location_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get Zoom Room settings
@@ -8389,12 +8427,12 @@ export def "rooms-settings get-zr" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --setting-type: string # The type of setting that you would like to retrieve.<br> `alert`: Alert Settings applied on the Zoom Rooms Account.<br> `meeting`: Meeting settings of the Zoom Rooms Account. (default: meeting)
+  --setting-type: string # The type of setting that you would like to retrieve. `alert`: Alert Settings applied on the Zoom Rooms Account. `meeting`: Meeting settings of the Zoom Rooms Account. (default: meeting)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "setting_type" $setting_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({room_id: $room_id} | format pattern "/rooms/{room_id}/settings") $qp)
+  let full_url = (build-url $base ({room_id: (encode-path-segment $room_id)} | format pattern "/rooms/{room_id}/settings") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8405,10 +8443,10 @@ export def "rooms-settings get-zr" [
 # PATCH /rooms/{roomId}/settings
 # operationId: updateZRSettings
 # --meeting_security shape: {encryption_type?: "enhanced_encryption"|"e2ee", end_to_end_encrypted_meetings?: bool}
-# --zoom_rooms shape: {allow_multiple_content_sharing?: bool, audio_device_daily_auto_test?: bool, auto_direct_sharing?: bool, auto_start_scheduled_meeting?: bool, auto_stop_scheduled_meeting?: bool, count_attendees_number_in_room?: bool, display_feedback_survey?: bool, display_meeting_list?: bool, display_top_banner?: bool, encrypt_shared_screen_content?: bool, hide_id_for_private_meeting?: bool, hide_share_instruction?: bool, send_whiteboard_to_internal_contact_only?: bool, show_alert_before_meeting?: bool, show_call_history_in_room?: bool, show_contact_list_on_controller?: bool, show_non_video_participants?: bool, start_airplay_manually?: bool, start_airplay_mirroring?: bool, support_join_3rd_party_meeting?: bool, transform_meeting_to_private?: bool, upcoming_meeting_alert?: bool, weekly_system_restart?: bool}
+# --zoom_rooms shape: {allow_multiple_content_sharing?: bool, audio_device_daily_auto_test?: bool, auto_direct_sharing?: bool, auto_start_scheduled_meeting?: bool, auto_stop_scheduled_meeting?: bool, count_attendees_number_in_room?: bool, display_feedback_survey?: bool, display_meeting_list?: bool, display_top_banner?: bool, encrypt_shared_screen_content?: bool, hide_id_for_private_meeting?: bool, hide_share_instruction?: bool, send_whiteboard_to_internal_contact_only?: bool, show_alert_before_meeting?: bool, ... (9 more fields)}
 # --client_alert shape: {detect_bluetooth_microphone_error_alert?: bool, detect_bluetooth_speaker_error_alert?: bool, detect_camera_error_alert?: bool, detect_microphone_error_alert?: bool, detect_speaker_error_alert?: bool}
 # --digital_signage shape: {banner?: record, display_period?: record, enable_digital_signage?: bool, layout?: string, mute?: bool, play_list?: list}
-# --notification shape: {audio_meet_usability_threshold?: bool, audio_not_meet_usability_threshold?: bool, battery_is_charging?: bool, battery_low_and_not_charging?: bool, battery_percentage?: string, controller_scheduling_disconnected?: bool, controller_scheduling_reconnected?: bool, cpu_usage_high_detected?: bool, mic_speaker_camera_disconnected?: bool, mic_speaker_camera_reconnected?: bool, network_unstable_detected?: bool, sip_registration_failed?: bool, sip_registration_re_enabled?: bool, zoom_room_come_back_online?: bool, zoom_room_display_disconnected?: bool, zoom_room_offline?: bool}
+# --notification shape: {audio_meet_usability_threshold?: bool, audio_not_meet_usability_threshold?: bool, battery_is_charging?: bool, battery_low_and_not_charging?: bool, battery_percentage?: string, controller_scheduling_disconnected?: bool, controller_scheduling_reconnected?: bool, cpu_usage_high_detected?: bool, mic_speaker_camera_disconnected?: bool, mic_speaker_camera_reconnected?: bool, network_unstable_detected?: bool, sip_registration_failed?: bool, sip_registration_re_enabled?: bool, ... (3 more fields)}
 export def "rooms-settings update-zr" [
   room_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8420,23 +8458,23 @@ export def "rooms-settings update-zr" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --setting-type: string # The type of setting that you would like to update.<br> `alert`: Alert Settings applied on the Zoom Room.<br> `meeting`: Meeting settings of the Zoom Room.<br> `signage`: Digital signage settings applied on the Zoom Room.
+  --setting-type: string # The type of setting that you would like to update. `alert`: Alert Settings applied on the Zoom Room. `meeting`: Meeting settings of the Zoom Room. `signage`: Digital signage settings applied on the Zoom Room.
   --meeting-security: record # shape: {encryption_type?: "enhanced_encryption"|"e2ee", end_to_end_encrypted_meetings?: bool}
-  --zoom-rooms: record # shape: {allow_multiple_content_sharing?: bool, audio_device_daily_auto_test?: bool, auto_direct_sharing?: bool, auto_start_scheduled_meeting?: bool, auto_stop_scheduled_meeting?: bool, count_attendees_number_in_room?: bool, display_feedback_survey?: bool, display_meeting_list?: bool, display_top_banner?: bool, encrypt_shared_screen_content?: bool, hide_id_for_private_meeting?: bool, hide_share_instruction?: bool, send_whiteboard_to_internal_contact_only?: bool, show_alert_before_meeting?: bool, show_call_history_in_room?: bool, show_contact_list_on_controller?: bool, show_non_video_participants?: bool, start_airplay_manually?: bool, start_airplay_mirroring?: bool, support_join_3rd_party_meeting?: bool, transform_meeting_to_private?: bool, upcoming_meeting_alert?: bool, weekly_system_restart?: bool}
-  --client-alert: record # The Client Alert Settings section includes alerts that display on the TV screen of the Zoom Room. Disable these settings if you have deliberately disconnected one or more peripheral devices or have never enabled them.  — shape: {detect_bluetooth_microphone_error_alert?: bool, detect_bluetooth_speaker_error_alert?: bool, detect_camera_error_alert?: bool, detect_microphone_error_alert?: bool, detect_speaker_error_alert?: bool}
+  --zoom-rooms: record # shape: {allow_multiple_content_sharing?: bool, audio_device_daily_auto_test?: bool, auto_direct_sharing?: bool, auto_start_scheduled_meeting?: bool, auto_stop_scheduled_meeting?: bool, count_attendees_number_in_room?: bool, display_feedback_survey?: bool, display_meeting_list?: bool, display_top_banner?: bool, encrypt_shared_screen_content?: bool, hide_id_for_private_meeting?: bool, hide_share_instruction?: bool, send_whiteboard_to_internal_contact_only?: bool, show_alert_before_meeting?: bool, ... (9 more fields)}
+  --client-alert: record # The Client Alert Settings section includes alerts that display on the TV screen of the Zoom Room. Disable these settings if you have deliberately disconnected one or more peripheral devices or have never enabled them. — shape: {detect_bluetooth_microphone_error_alert?: bool, detect_bluetooth_speaker_error_alert?: bool, detect_camera_error_alert?: bool, detect_microphone_error_alert?: bool, detect_speaker_error_alert?: bool}
   --digital-signage: record # shape: {banner?: record, display_period?: record, enable_digital_signage?: bool, layout?: string, mute?: bool, play_list?: list}
-  --notification: record # [Notifications Settings](https://support.zoom.us/hc/en-us/articles/205394099-Zoom-Room-Alerts#h_b430b5f2-5150-4522-9c96-c77f22ab70bc) includes the circumstances in which the room sends an email alert to the support team to notify them of a potentially urgent issue. These issues can affect the operation of the room, but do not display on the TV screen. The email alert is sent to the email address specified in the Notification Email Recipients section.  — shape: {audio_meet_usability_threshold?: bool, audio_not_meet_usability_threshold?: bool, battery_is_charging?: bool, battery_low_and_not_charging?: bool, battery_percentage?: string, controller_scheduling_disconnected?: bool, controller_scheduling_reconnected?: bool, cpu_usage_high_detected?: bool, mic_speaker_camera_disconnected?: bool, mic_speaker_camera_reconnected?: bool, network_unstable_detected?: bool, sip_registration_failed?: bool, sip_registration_re_enabled?: bool, zoom_room_come_back_online?: bool, zoom_room_display_disconnected?: bool, zoom_room_offline?: bool}
+  --notification: record # [Notifications Settings](https://support.zoom.us/hc/en-us/articles/205394099-Zoom-Room-Alerts#h_b430b5f2-5150-4522-9c96-c77f22ab70bc) includes the circumstances in which the room sends an email alert to the support team to notify them of a potentially urgent issue. These issues can affect the operation of the room, but do not display on the TV screen. The email alert is sent to the email address specified in the Notification Email Recipients section. — shape: {audio_meet_usability_threshold?: bool, audio_not_meet_usability_threshold?: bool, battery_is_charging?: bool, battery_low_and_not_charging?: bool, battery_percentage?: string, controller_scheduling_disconnected?: bool, controller_scheduling_reconnected?: bool, cpu_usage_high_detected?: bool, mic_speaker_camera_disconnected?: bool, mic_speaker_camera_reconnected?: bool, network_unstable_detected?: bool, sip_registration_failed?: bool, sip_registration_re_enabled?: bool, ... (3 more fields)}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "setting_type" $setting_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({room_id: $room_id} | format pattern "/rooms/{room_id}/settings") $qp)
-  let body = {"meeting_security": $meeting_security, "zoom_rooms": $zoom_rooms, "client_alert": $client_alert, "digital_signage": $digital_signage, "notification": $notification} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({room_id: (encode-path-segment $room_id)} | format pattern "/rooms/{room_id}/settings") $qp)
+  let req_body = {"meeting_security": $meeting_security, "zoom_rooms": $zoom_rooms, "client_alert": $client_alert, "digital_signage": $digital_signage, "notification": $notification} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List SIP phones
@@ -8453,7 +8491,7 @@ export def "sip-phones list" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --page-number: int #  **Deprecated** - This field has been deprecated and we will stop supporting it completely in a future release. Please use "next_page_token" for pagination instead of this field.  The page number of the current page in the returned records. (default: 1)
+  --page-number: int # **Deprecated** - This field has been deprecated and we will stop supporting it completely in a future release. Please use "next_page_token" for pagination instead of this field. The page number of the current page in the returned records. (default: 1)
   --search-key: string # User name or email address of a user. If this parameter is provided, only the SIP phone system integration enabled for that specific user will be returned. Otherwise, all SIP phones on an account will be returned.
   --page-size: int # The number of records returned within a single API call.
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
@@ -8480,7 +8518,7 @@ export def "sip-phones create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  authorization_name: string # Authorization name of the user  registered for SIP Phone.
+  authorization_name: string # Authorization name of the user registered for SIP Phone.
   domain: string # The name or IP address of your provider’s SIP domain. (example: CDC.WEB).
   password: string # The password generated for the user in the SIP account.
   proxy_server: string # IP address of the proxy server for SIP requests. Note that if you are using the UDP transport protocol, the default port is 5060. If you are using UDP with a different port number, that port number must be included with the IP address. If you are not using a proxy server, this value can be the same as the Register Server.
@@ -8490,9 +8528,9 @@ export def "sip-phones create" [
   --register-server2: string # IP address of the server that accepts REGISTER requests. Note that if you are using the UDP transport protocol, the default port is 5060. If you are using UDP with a different port number, that port number must be included with the IP address.
   --register-server3: string # IP address of the server that accepts REGISTER requests. Note that if you are using the UDP transport protocol, the default port is 5060. If you are using UDP with a different port number, that port number must be included with the IP address.
   --registration-expire-time: int # The number of minutes after which the SIP registration of the Zoom client user will expire, and the client will auto register to the SIP server. (default: 60)
-  --transport-protocol: string@transport-protocol-completer # Protocols supported by the SIP provider.<br> The value must be either `UDP`, `TCP`, `TLS`, `AUTO`.
-  --transport-protocol2: string@transport-protocol2-completer # Protocols supported by the SIP provider.<br> The value must be either `UDP`, `TCP`, `TLS`, `AUTO`.
-  --transport-protocol3: string@transport-protocol3-completer # Protocols supported by the SIP provider.<br> The value must be either `UDP`, `TCP`, `TLS`, `AUTO`.
+  --transport-protocol: string@transport-protocol-completer # Protocols supported by the SIP provider. The value must be either `UDP`, `TCP`, `TLS`, `AUTO`.
+  --transport-protocol2: string@transport-protocol2-completer # Protocols supported by the SIP provider. The value must be either `UDP`, `TCP`, `TLS`, `AUTO`.
+  --transport-protocol3: string@transport-protocol3-completer # Protocols supported by the SIP provider. The value must be either `UDP`, `TCP`, `TLS`, `AUTO`.
   user_email: string # The email address of the user to associate with the SIP Phone. Can add [.win, .mac, .android, .ipad, .iphone, .linux, .pc, .mobile, .pad] at the end of the email (ex. user@test.com.mac) to add accounts for different platforms for the same user. (format: email)
   user_name: string # The phone number associated with the user in the SIP account.
   voice_mail: string # The number to dial for checking voicemail.
@@ -8501,11 +8539,11 @@ export def "sip-phones create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sip_phones")
-  let body = {"authorization_name": $authorization_name, "domain": $domain, "password": $password, "proxy_server": $proxy_server, "proxy_server2": $proxy_server2, "proxy_server3": $proxy_server3, "register_server": $register_server, "register_server2": $register_server2, "register_server3": $register_server3, "registration_expire_time": $registration_expire_time, "transport_protocol": $transport_protocol, "transport_protocol2": $transport_protocol2, "transport_protocol3": $transport_protocol3, "user_email": $user_email, "user_name": $user_name, "voice_mail": $voice_mail} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"authorization_name": $authorization_name, "domain": $domain, "password": $password, "proxy_server": $proxy_server, "proxy_server2": $proxy_server2, "proxy_server3": $proxy_server3, "register_server": $register_server, "register_server2": $register_server2, "register_server3": $register_server3, "registration_expire_time": $registration_expire_time, "transport_protocol": $transport_protocol, "transport_protocol2": $transport_protocol2, "transport_protocol3": $transport_protocol3, "user_email": $user_email, "user_name": $user_name, "voice_mail": $voice_mail} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete SIP phone
@@ -8526,7 +8564,7 @@ export def "sip-phones delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({phone_id: $phone_id} | format pattern "/sip_phones/{phone_id}"))
+  let full_url = (build-url $base ({phone_id: (encode-path-segment $phone_id)} | format pattern "/sip_phones/{phone_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8547,7 +8585,7 @@ export def "sip-phones update" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  authorization_name: string # Authorization name of the user  registered for SIP Phone.
+  authorization_name: string # Authorization name of the user registered for SIP Phone.
   domain: string # The name or IP address of your provider’s SIP domain. (example: CDC.WEB).
   password: string # The password generated for the user in the SIP account.
   proxy_server: string # IP address of the proxy server for SIP requests. Note that if you are using the UDP transport protocol, the default port is 5060. If you are using UDP with a different port number, that port number must be included with the IP address. If you are not using a proxy server, this value can be the same as the Register Server.
@@ -8557,21 +8595,21 @@ export def "sip-phones update" [
   register_server2: string # IP address of the server that accepts REGISTER requests. Note that if you are using the UDP transport protocol, the default port is 5060. If you are using UDP with a different port number, that port number must be included with the IP address.
   register_server3: string # IP address of the server that accepts REGISTER requests. Note that if you are using the UDP transport protocol, the default port is 5060. If you are using UDP with a different port number, that port number must be included with the IP address.
   --registration-expire-time: int # The number of minutes after which the SIP registration of the Zoom client user will expire, and the client will auto register to the SIP server. (default: 60)
-  --transport-protocol: string@transport-protocol-completer # Protocols supported by the SIP provider.<br> The value must be either `UDP`, `TCP`, `TLS`, `AUTO`.
-  --transport-protocol2: string@transport-protocol2-completer # Protocols supported by the SIP provider.<br> The value must be either `UDP`, `TCP`, `TLS`, `AUTO`.
-  --transport-protocol3: string@transport-protocol3-completer # Protocols supported by the SIP provider.<br> The value must be either `UDP`, `TCP`, `TLS`, `AUTO`.
+  --transport-protocol: string@transport-protocol-completer # Protocols supported by the SIP provider. The value must be either `UDP`, `TCP`, `TLS`, `AUTO`.
+  --transport-protocol2: string@transport-protocol2-completer # Protocols supported by the SIP provider. The value must be either `UDP`, `TCP`, `TLS`, `AUTO`.
+  --transport-protocol3: string@transport-protocol3-completer # Protocols supported by the SIP provider. The value must be either `UDP`, `TCP`, `TLS`, `AUTO`.
   user_name: string # The phone number associated with the user in the SIP account.
   voice_mail: string # The number to dial for checking voicemail.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({phone_id: $phone_id} | format pattern "/sip_phones/{phone_id}"))
-  let body = {"authorization_name": $authorization_name, "domain": $domain, "password": $password, "proxy_server": $proxy_server, "proxy_server2": $proxy_server2, "proxy_server3": $proxy_server3, "register_server": $register_server, "register_server2": $register_server2, "register_server3": $register_server3, "registration_expire_time": $registration_expire_time, "transport_protocol": $transport_protocol, "transport_protocol2": $transport_protocol2, "transport_protocol3": $transport_protocol3, "user_name": $user_name, "voice_mail": $voice_mail} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({phone_id: (encode-path-segment $phone_id)} | format pattern "/sip_phones/{phone_id}"))
+  let req_body = {"authorization_name": $authorization_name, "domain": $domain, "password": $password, "proxy_server": $proxy_server, "proxy_server2": $proxy_server2, "proxy_server3": $proxy_server3, "register_server": $register_server, "register_server2": $register_server2, "register_server3": $register_server3, "registration_expire_time": $registration_expire_time, "transport_protocol": $transport_protocol, "transport_protocol2": $transport_protocol2, "transport_protocol3": $transport_protocol3, "user_name": $user_name, "voice_mail": $voice_mail} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List SIP trunk numbers
@@ -8601,7 +8639,7 @@ export def "sip-trunk-numbers list" [
 #
 # GET /tracking_fields
 # operationId: trackingfieldList
-export def "tracking-fields trackingfieldList" [
+export def "tracking-fields list-trackingfield" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8624,7 +8662,7 @@ export def "tracking-fields trackingfieldList" [
 #
 # POST /tracking_fields
 # operationId: trackingfieldCreate
-export def "tracking-fields trackingfieldCreate" [
+export def "tracking-fields create-trackingfield" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8635,7 +8673,7 @@ export def "tracking-fields trackingfieldCreate" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --field: string # Label/ Name for the tracking field.
-  --recommended-values: list # Array of recommended values
+  --recommended-values: list<string> # Array of recommended values
   --required: oneof<nothing, bool> # Tracking Field Required
   --visible: oneof<nothing, bool> # Tracking Field Visible
 ]: any -> record<id: string, field: string, recommended_values: list<string>, required: bool, visible: bool> {
@@ -8643,18 +8681,18 @@ export def "tracking-fields trackingfieldCreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tracking_fields")
-  let body = {"field": $field, "recommended_values": $recommended_values, "required": $required, "visible": $visible} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"field": $field, "recommended_values": $recommended_values, "required": $required, "visible": $visible} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a tracking field
 #
 # DELETE /tracking_fields/{fieldId}
 # operationId: trackingfieldDelete
-export def "tracking-fields trackingfieldDelete" [
+export def "tracking-fields delete-trackingfield" [
   field_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8667,7 +8705,7 @@ export def "tracking-fields trackingfieldDelete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({field_id: $field_id} | format pattern "/tracking_fields/{field_id}"))
+  let full_url = (build-url $base ({field_id: (encode-path-segment $field_id)} | format pattern "/tracking_fields/{field_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8677,7 +8715,7 @@ export def "tracking-fields trackingfieldDelete" [
 #
 # GET /tracking_fields/{fieldId}
 # operationId: trackingfieldGet
-export def "tracking-fields trackingfieldGet" [
+export def "tracking-fields get-trackingfield" [
   field_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8691,7 +8729,7 @@ export def "tracking-fields trackingfieldGet" [
 ]: nothing -> record<id: string, field: string, recommended_values: list<string>, required: bool, visible: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({field_id: $field_id} | format pattern "/tracking_fields/{field_id}"))
+  let full_url = (build-url $base ({field_id: (encode-path-segment $field_id)} | format pattern "/tracking_fields/{field_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8701,7 +8739,7 @@ export def "tracking-fields trackingfieldGet" [
 #
 # PATCH /tracking_fields/{fieldId}
 # operationId: trackingfieldUpdate
-export def "tracking-fields trackingfieldUpdate" [
+export def "tracking-fields update-trackingfield" [
   field_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8712,19 +8750,19 @@ export def "tracking-fields trackingfieldUpdate" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --field: string # Label/ Name for the tracking field.
-  --recommended-values: list # Array of recommended values
+  --recommended-values: list<string> # Array of recommended values
   --required: oneof<nothing, bool> # Tracking Field Required
   --visible: oneof<nothing, bool> # Tracking Field Visible
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({field_id: $field_id} | format pattern "/tracking_fields/{field_id}"))
-  let body = {"field": $field, "recommended_values": $recommended_values, "required": $required, "visible": $visible} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({field_id: (encode-path-segment $field_id)} | format pattern "/tracking_fields/{field_id}"))
+  let req_body = {"field": $field, "recommended_values": $recommended_values, "required": $required, "visible": $visible} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get account's TSP information
@@ -8754,7 +8792,7 @@ export def "tsp get" [
 #
 # PATCH /tsp
 # operationId: tspUpdate
-export def "tsp tspUpdate" [
+export def "tsp update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8775,18 +8813,18 @@ export def "tsp tspUpdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tsp")
-  let body = {"dial_in_number_unrestricted": $dial_in_number_unrestricted, "enable": $enable, "master_account_setting_extended": $master_account_setting_extended, "modify_credential_forbidden": $modify_credential_forbidden, "tsp_bridge": $tsp_bridge, "tsp_enabled": $tsp_enabled, "tsp_provider": $tsp_provider} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"dial_in_number_unrestricted": $dial_in_number_unrestricted, "enable": $enable, "master_account_setting_extended": $master_account_setting_extended, "modify_credential_forbidden": $modify_credential_forbidden, "tsp_bridge": $tsp_bridge, "tsp_enabled": $tsp_enabled, "tsp_provider": $tsp_provider} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List users
 #
 # GET /users
 # operationId: users
-export def "users get" [
+export def "users list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8796,11 +8834,11 @@ export def "users get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --status: string@status-completer-4 # User statuses:<br>`active` - Users with an active status.<br>`inactive` - Users who are deactivated.<br>`pending` - Users with a pending status. (default: active)
+  --status: string@status-completer-4 # User statuses:`active` - Users with an active status.`inactive` - Users who are deactivated.`pending` - Users with a pending status. (default: active)
   --page-size: int # The number of records returned within a single API call. (default: 30)
-  --role-id: string # Unique identifier of the role. Provide this parameter if you would like to filter the response by a specific role. You can retrieve Role IDs from [List Roles](https://marketplace.zoom.us/docs/api-reference/zoom-api/roles/roles) API. 
+  --role-id: string # Unique identifier of the role. Provide this parameter if you would like to filter the response by a specific role. You can retrieve Role IDs from [List Roles](https://marketplace.zoom.us/docs/api-reference/zoom-api/roles/roles) API.
   --page-number: string # The page number of the current page in the returned records.
-  --include-fields: string # Provide a value for this field if you would like to see the following attribute in the response of this API call:<br>  `custom_attributes`: Returns custom attributes that are associated with the user.<br>`host_key`: Returns [host key](https://support.zoom.us/hc/en-us/articles/205172555-Using-your-host-key) of the user.
+  --include-fields: string # Provide a value for this field if you would like to see the following attribute in the response of this API call: `custom_attributes`: Returns custom attributes that are associated with the user.`host_key`: Returns [host key](https://support.zoom.us/hc/en-us/articles/205172555-Using-your-host-key) of the user.
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
 ]: nothing -> record<next_page_token: string, page_count: int, page_number: int, page_size: int, total_records: int, users: table<created_at: string, custom_attributes: list, dept: string, email: string, first_name: string, group_ids: list, host_key: string, id: string, im_group_ids: list, last_client_version: string, last_login_time: string, last_name: string, plan_united_type: string, pmi: int, role_id: string, status: string, timezone: string, type: int, verified: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8817,7 +8855,7 @@ export def "users get" [
 # POST /users
 # operationId: userCreate
 # --user_info shape: {email: string, first_name?: string, last_name?: string, password?: string, type: "1"|"2"|"3"|"99"}
-export def "users userCreate" [
+export def "users create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8827,25 +8865,25 @@ export def "users userCreate" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  action: string@action-completer-9 # Specify how to create the new user: <br>`create` - User will get an email sent from Zoom. There is a confirmation link in this email. The user will then need to use the link to activate their Zoom account. The user can then set or change their password.<br>`autoCreate` - This action is provided for the enterprise customer who has a managed domain. This feature is disabled by default because of the security risk involved in creating a user who does not belong to your domain.<br>`custCreate` - Users created via this option do not have passwords and will not have the ability to log into the Zoom Web Portal or the Zoom Client. These users can still host and join meetings using the `start_url` and `join_url` respectively. To use this option, you must contact the ISV Platform Sales team at isv@zoom.us.<br>`ssoCreate` - This action is provided for the enabled “Pre-provisioning SSO User” option. A user created in this way has no password. If not a basic user, a personal vanity URL using the user name (no domain) of the provisioning email will be generated. If the user name or PMI is invalid or occupied, it will use a random number or random personal vanity URL.
+  action: string@action-completer-9 # Specify how to create the new user: `create` - User will get an email sent from Zoom. There is a confirmation link in this email. The user will then need to use the link to activate their Zoom account. The user can then set or change their password.`autoCreate` - This action is provided for the enterprise customer who has a managed domain. This feature is disabled by default because of the security risk involved in creating a user who does not belong to your domain.`custCreate` - Users created via this option do not have passwords and will not have the ability to log into the Zoom Web Portal or the Zoom Client. These users can still host and join meetings using the `start_url` and `join_url` respectively. To use this option, you must contact the ISV Platform Sales team at isv@zoom.us.`ssoCreate` - This action is provided for the enabled “Pre-provisioning SSO User” option. A user created in this way has no password. If not a basic user, a personal vanity URL using the user name (no domain) of the provisioning email will be generated. If the user name or PMI is invalid or occupied, it will use a random number or random personal vanity URL.
   --user-info: record # shape: {email: string, first_name?: string, last_name?: string, password?: string, type: "1"|"2"|"3"|"99"}
 ]: any -> record<email: string, first_name: string, id: string, last_name: string, type: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/users")
-  let body = {"action": $action, "user_info": $user_info} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"action": $action, "user_info": $user_info} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Check a user email
 #
 # GET /users/email
 # operationId: userEmail
-export def "users-email userEmail" [
+export def "users-email get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8870,7 +8908,7 @@ export def "users-email userEmail" [
 #
 # GET /users/me/zak
 # operationId: userZak
-export def "users-me-zak userZak" [
+export def "users-me-zak get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8893,7 +8931,7 @@ export def "users-me-zak userZak" [
 #
 # GET /users/vanity_name
 # operationId: userVanityName
-export def "users-vanity-name userVanityName" [
+export def "users-vanity-name get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8918,7 +8956,7 @@ export def "users-vanity-name userVanityName" [
 #
 # DELETE /users/{userId}
 # operationId: userDelete
-export def "users userDelete" [
+export def "users delete" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8928,7 +8966,7 @@ export def "users userDelete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-10 # Delete action options:<br>`disassociate` - Disassociate a user.<br>`delete`-  Permanently delete a user.<br>Note: To delete pending user in the account, use `disassociate` (default: disassociate)
+  --action: string@action-completer-10 # Delete action options:`disassociate` - Disassociate a user.`delete`- Permanently delete a user.Note: To delete pending user in the account, use `disassociate` (default: disassociate)
   --transfer-email: string # Transfer email.
   --transfer-meeting: oneof<nothing, bool> # Transfer meeting.
   --transfer-webinar: oneof<nothing, bool> # Transfer webinar.
@@ -8937,7 +8975,7 @@ export def "users userDelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "action" $action "scalar") (serialize-qp "transfer_email" $transfer_email "scalar") (serialize-qp "transfer_meeting" $transfer_meeting "scalar") (serialize-qp "transfer_webinar" $transfer_webinar "scalar") (serialize-qp "transfer_recording" $transfer_recording "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8947,7 +8985,7 @@ export def "users userDelete" [
 #
 # GET /users/{userId}
 # operationId: user
-export def "users user" [
+export def "users get" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8958,12 +8996,12 @@ export def "users user" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --login-type: string@login-type-completer # `0` - Facebook.<br>`1` - Google.<br>`99` - API.<br>`100` - Zoom.<br>`101` - SSO.
+  --login-type: string@login-type-completer # `0` - Facebook.`1` - Google.`99` - API.`100` - Zoom.`101` - SSO.
 ]: nothing -> record<id: string, created_at: string, dept: string, email: string, first_name: string, last_client_version: string, last_login_time: string, last_name: string, pmi: int, role_name: string, timezone: string, type: int, use_pmi: bool, account_id: string, cms_user_id: string, company: string, custom_attributes: record<key: string, name: string, value: string>, group_ids: list<string>, host_key: string, im_group_ids: list<string>, jid: string, job_title: string, language: string, location: string, login_type: int, manager: string, personal_meeting_url: string, phone_country: string, phone_number: string, phone_numbers: record<code: string, country: string, number: string, verified: bool>, pic_url: string, plan_united_type: string, role_id: string, status: string, vanity_url: string, verified: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "login_type" $login_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8975,7 +9013,7 @@ export def "users user" [
 # operationId: userUpdate
 # --custom_attributes shape: {key?: string, name?: string, value?: string}
 # --phone_numbers shape: {code?: string, country?: string, number?: string}
-export def "users userUpdate" [
+export def "users update" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8985,7 +9023,7 @@ export def "users userUpdate" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login-type: string@login-type-completer # `0` - Facebook.<br>`1` - Google.<br>`99` - API.<br>`100` - Zoom.<br>`101` - SSO.
+  --login-type: string@login-type-completer # `0` - Facebook.`1` - Google.`99` - API.`100` - Zoom.`101` - SSO.
   --cms-user-id: string # Kaltura user ID.
   --company: string # User's company.
   --custom-attributes: record # Custom attribute(s) of the user. — shape: {key?: string, name?: string, value?: string}
@@ -8998,12 +9036,12 @@ export def "users userUpdate" [
   --last-name: string # User's last name. Cannot contain more than 5 Chinese characters.
   --location: string # User's location.
   --manager: string # The manager for the user. (format: email)
-  --phone-country: string # **Note:** This field has been **deprecated** and will not be supported in the future. Use the **country** field of the **phone_numbers** object instead to select the country for the phone number.    [Country ID](https://marketplace.zoom.us/docs/api-reference/other-references/abbreviation-lists#countries) of the phone number. For example, if the phone number provided in the `phone_number` field is a Brazil based number, the value of the `phone_country` field should be `BR`.
-  --phone-number: string # **Note:** This field has been **deprecated** and will not be supported in the future. Use the **phone_numbers** field instead to assign phone number(s) to a user.   Phone number of the user. To update a phone number, you must also provide the `phone_country` field.
+  --phone-country: string # **Note:** This field has been **deprecated** and will not be supported in the future. Use the **country** field of the **phone_numbers** object instead to select the country for the phone number. [Country ID](https://marketplace.zoom.us/docs/api-reference/other-references/abbreviation-lists#countries) of the phone number. For example, if the phone number provided in the `phone_number` field is a Brazil based number, the value of the `phone_country` field should be `BR`.
+  --phone-number: string # **Note:** This field has been **deprecated** and will not be supported in the future. Use the **phone_numbers** field instead to assign phone number(s) to a user. Phone number of the user. To update a phone number, you must also provide the `phone_country` field.
   --phone-numbers: record # shape: {code?: string, country?: string, number?: string}
   --pmi: int # Personal meeting ID: length must be 10.
   --timezone: string # The time zone ID for a user profile. For this parameter value please refer to the ID value in the [timezone](https://marketplace.zoom.us/docs/api-reference/other-references/abbreviation-lists#timezones) list.
-  --type: int@type-completer-12 # User types:<br>`1` - Basic.<br>`2` - Licensed.<br>`3` - On-prem.<br>`99` - None (this can only be set with `ssoCreate`).
+  --type: int@type-completer-12 # User types:`1` - Basic.`2` - Licensed.`3` - On-prem.`99` - None (this can only be set with `ssoCreate`).
   --use-pmi: oneof<nothing, bool> # Use Personal Meeting ID for instant meetings. (default: false)
   --vanity-name: string # Personal meeting room name.
 ]: any -> any {
@@ -9011,19 +9049,19 @@ export def "users userUpdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "login_type" $login_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}") $qp)
-  let body = {"cms_user_id": $cms_user_id, "company": $company, "custom_attributes": $custom_attributes, "dept": $dept, "first_name": $first_name, "group_id": $group_id, "host_key": $host_key, "job_title": $job_title, "language": $language, "last_name": $last_name, "location": $location, "manager": $manager, "phone_country": $phone_country, "phone_number": $phone_number, "phone_numbers": $phone_numbers, "pmi": $pmi, "timezone": $timezone, "type": $type, "use_pmi": $use_pmi, "vanity_name": $vanity_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}") $qp)
+  let req_body = {"cms_user_id": $cms_user_id, "company": $company, "custom_attributes": $custom_attributes, "dept": $dept, "first_name": $first_name, "group_id": $group_id, "host_key": $host_key, "job_title": $job_title, "language": $language, "last_name": $last_name, "location": $location, "manager": $manager, "phone_country": $phone_country, "phone_number": $phone_number, "phone_numbers": $phone_numbers, "pmi": $pmi, "timezone": $timezone, "type": $type, "use_pmi": $use_pmi, "vanity_name": $vanity_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete user assistants
 #
 # DELETE /users/{userId}/assistants
 # operationId: userAssistantsDelete
-export def "users-assistants userAssistantsDelete" [
+export def "users-assistants delete-by-userId" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9036,7 +9074,7 @@ export def "users-assistants userAssistantsDelete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}/assistants"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/assistants"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9046,7 +9084,7 @@ export def "users-assistants userAssistantsDelete" [
 #
 # GET /users/{userId}/assistants
 # operationId: userAssistants
-export def "users-assistants userAssistants" [
+export def "users-assistants get" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9060,7 +9098,7 @@ export def "users-assistants userAssistants" [
 ]: nothing -> record<assistants: table<email: string, id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}/assistants"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/assistants"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9071,7 +9109,7 @@ export def "users-assistants userAssistants" [
 # POST /users/{userId}/assistants
 # operationId: userAssistantCreate
 # --assistants item shape: {email?: string, id?: string}
-export def "users-assistants userAssistantCreate" [
+export def "users-assistants create" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9087,19 +9125,19 @@ export def "users-assistants userAssistantCreate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}/assistants"))
-  let body = {"assistants": $assistants} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/assistants"))
+  let req_body = {"assistants": $assistants} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a user assistant
 #
 # DELETE /users/{userId}/assistants/{assistantId}
 # operationId: userAssistantDelete
-export def "users-assistants userAssistantDelete" [
+export def "users-assistants delete-by-userId-assistantId" [
   user_id: string
   assistant_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9113,7 +9151,7 @@ export def "users-assistants userAssistantDelete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id, assistant_id: $assistant_id} | format pattern "/users/{user_id}/assistants/{assistant_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), assistant_id: (encode-path-segment $assistant_id)} | format pattern "/users/{user_id}/assistants/{assistant_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9123,7 +9161,7 @@ export def "users-assistants userAssistantDelete" [
 #
 # PUT /users/{userId}/email
 # operationId: userEmailUpdate
-export def "users-email userEmailUpdate" [
+export def "users-email update" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9138,12 +9176,12 @@ export def "users-email userEmailUpdate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}/email"))
-  let body = {"email": $email} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/email"))
+  let req_body = {"email": $email} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List meeting templates
@@ -9164,7 +9202,7 @@ export def "users-meeting-templates list" [
 ]: nothing -> record<templates: table<id: string, name: string, type: int>, total_records: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}/meeting_templates"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/meeting_templates"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9174,7 +9212,7 @@ export def "users-meeting-templates list" [
 #
 # GET /users/{userId}/meetings
 # operationId: meetings
-export def "users-meetings meetings" [
+export def "users-meetings get" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9185,7 +9223,7 @@ export def "users-meetings meetings" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --type: string@type-completer-13 # The meeting types: <br>`scheduled` - This includes all valid past meetings (unexpired), live meetings and upcoming scheduled meetings. It is equivalent to the combined list of "Previous Meetings" and "Upcoming Meetings" displayed in the user's [Meetings page](https://zoom.us/meeting) on the Zoom Web Portal.<br>`live` - All the ongoing meetings.<br>`upcoming` - All upcoming meetings including live meetings. (default: live)
+  --type: string@type-completer-13 # The meeting types: `scheduled` - This includes all valid past meetings (unexpired), live meetings and upcoming scheduled meetings. It is equivalent to the combined list of "Previous Meetings" and "Upcoming Meetings" displayed in the user's [Meetings page](https://zoom.us/meeting) on the Zoom Web Portal.`live` - All the ongoing meetings.`upcoming` - All upcoming meetings including live meetings. (default: live)
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
   --page-number: string # The page number of the current page in the returned records.
@@ -9193,7 +9231,7 @@ export def "users-meetings meetings" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "next_page_token" $next_page_token "scalar") (serialize-qp "page_number" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}/meetings") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/meetings") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9204,9 +9242,9 @@ export def "users-meetings meetings" [
 # POST /users/{userId}/meetings
 # operationId: meetingCreate
 # --recurrence shape: {end_date_time?: string, end_times?: int, monthly_day?: int, monthly_week?: "-1"|"1"|"2"|"3"|"4", monthly_week_day?: "1"|"2"|"3"|"4"|"5"|"6"|"7", repeat_interval?: int, type: "1"|"2"|"3", weekly_days?: "1"|"2"|"3"|"4"|"5"|"6"|"7"}
-# --settings shape: {additional_data_center_regions?: list, allow_multiple_devices?: bool, alternative_hosts?: string, alternative_hosts_email_notification?: bool, approval_type?: "0"|"1"|"2", approved_or_denied_countries_or_regions?: record, audio?: "both"|"telephony"|"voip", authentication_domains?: string, authentication_option?: string, auto_recording?: "local"|"cloud"|"none", breakout_room?: record, close_registration?: bool, cn_meeting?: bool, contact_email?: string, contact_name?: string, encryption_type?: "enhanced_encryption"|"e2ee", global_dial_in_countries?: list, host_video?: bool, in_meeting?: bool, jbh_time?: "0"|"5"|"10", join_before_host?: bool, language_interpretation?: record, meeting_authentication?: bool, mute_upon_entry?: bool, participant_video?: bool, registrants_email_notification?: bool, registration_type?: "1"|"2"|"3", show_share_button?: bool, use_pmi?: bool, waiting_room?: bool, watermark?: bool}
+# --settings shape: {additional_data_center_regions?: list<string>, allow_multiple_devices?: bool, alternative_hosts?: string, alternative_hosts_email_notification?: bool, approval_type?: "0"|"1"|"2", approved_or_denied_countries_or_regions?: record, audio?: "both"|"telephony"|"voip", authentication_domains?: string, authentication_option?: string, auto_recording?: "local"|"cloud"|"none", breakout_room?: record, close_registration?: bool, cn_meeting?: bool, contact_email?: string, contact_name?: string, ... (16 more fields)}
 # --tracking_fields item shape: {field: string, value?: string}
-export def "users-meetings meetingCreate" [
+export def "users-meetings create" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9219,33 +9257,33 @@ export def "users-meetings meetingCreate" [
   --accept: string@accept-completer # Response content type
   --agenda: string # Meeting description.
   --duration: int # Meeting duration (minutes). Used for scheduled meetings only.
-  --password: string # Passcode to join the meeting. By default, passcode may only contain the following characters: [a-z A-Z 0-9 @ - _ *] and can have a maximum of 10 characters.  **Note:** If the account owner or the admin has configured [minimum passcode requirement settings](https://support.zoom.us/hc/en-us/articles/360033559832-Meeting-and-webinar-passwords#h_a427384b-e383-4f80-864d-794bf0a37604), the passcode value provided here must meet those requirements. <br><br>If the requirements are enabled, you can view those requirements by calling either the [Get User Settings API](https://marketplace.zoom.us/docs/api-reference/zoom-api/users/usersettings) or the [Get Account Settings](https://marketplace.zoom.us/docs/api-reference/zoom-api/accounts/accountsettings) API. 
-  --recurrence: record # Recurrence object. Use this object only for a meeting with type `8` i.e., a recurring meeting with fixed time.  — shape: {end_date_time?: string, end_times?: int, monthly_day?: int, monthly_week?: "-1"|"1"|"2"|"3"|"4", monthly_week_day?: "1"|"2"|"3"|"4"|"5"|"6"|"7", repeat_interval?: int, type: "1"|"2"|"3", weekly_days?: "1"|"2"|"3"|"4"|"5"|"6"|"7"}
+  --password: string # Passcode to join the meeting. By default, passcode may only contain the following characters: [a-z A-Z 0-9 @ - _ *] and can have a maximum of 10 characters. **Note:** If the account owner or the admin has configured [minimum passcode requirement settings](https://support.zoom.us/hc/en-us/articles/360033559832-Meeting-and-webinar-passwords#h_a427384b-e383-4f80-864d-794bf0a37604), the passcode value provided here must meet those requirements. If the requirements are enabled, you can view those requirements by calling either the [Get User Settings API](https://marketplace.zoom.us/docs/api-reference/zoom-api/users/usersettings) or the [Get Account Settings](https://marketplace.zoom.us/docs/api-reference/zoom-api/accounts/accountsettings) API.
+  --recurrence: record # Recurrence object. Use this object only for a meeting with type `8` i.e., a recurring meeting with fixed time. — shape: {end_date_time?: string, end_times?: int, monthly_day?: int, monthly_week?: "-1"|"1"|"2"|"3"|"4", monthly_week_day?: "1"|"2"|"3"|"4"|"5"|"6"|"7", repeat_interval?: int, type: "1"|"2"|"3", weekly_days?: "1"|"2"|"3"|"4"|"5"|"6"|"7"}
   --schedule-for: string # If you would like to schedule this meeting for someone else in your account, provide the Zoom user id or email address of the user here.
-  --settings: record # Meeting settings. — shape: {additional_data_center_regions?: list, allow_multiple_devices?: bool, alternative_hosts?: string, alternative_hosts_email_notification?: bool, approval_type?: "0"|"1"|"2", approved_or_denied_countries_or_regions?: record, audio?: "both"|"telephony"|"voip", authentication_domains?: string, authentication_option?: string, auto_recording?: "local"|"cloud"|"none", breakout_room?: record, close_registration?: bool, cn_meeting?: bool, contact_email?: string, contact_name?: string, encryption_type?: "enhanced_encryption"|"e2ee", global_dial_in_countries?: list, host_video?: bool, in_meeting?: bool, jbh_time?: "0"|"5"|"10", join_before_host?: bool, language_interpretation?: record, meeting_authentication?: bool, mute_upon_entry?: bool, participant_video?: bool, registrants_email_notification?: bool, registration_type?: "1"|"2"|"3", show_share_button?: bool, use_pmi?: bool, waiting_room?: bool, watermark?: bool}
-  --start-time: string # Meeting start time. We support two formats for `start_time` - local time and GMT.<br>   To set time as GMT the format should be `yyyy-MM-dd`T`HH:mm:ssZ`. Example: "2020-03-31T12:02:00Z"  To set time using a specific timezone, use `yyyy-MM-dd`T`HH:mm:ss` format and specify the timezone [ID](https://marketplace.zoom.us/docs/api-reference/other-references/abbreviation-lists#timezones) in the `timezone` field OR leave it blank and the timezone set on your Zoom account will be used. You can also set the time as UTC as the timezone field.  The `start_time` should only be used for scheduled and / or recurring webinars with fixed time. (format: date-time)
-  --template-id: string # Unique identifier of the **admin meeting template**. To create admin meeting templates, contact the Zoom support team.  Use this field if you would like to [schedule the meeting from a admin meeting template](https://support.zoom.us/hc/en-us/articles/360036559151-Meeting-templates#h_86f06cff-0852-4998-81c5-c83663c176fb). You can retrieve the value of this field by calling the [List meeting templates](https://marketplace.zoom.us/docs/api-reference/zoom-api/meetings/listmeetingtemplates) API.
+  --settings: record # Meeting settings. — shape: {additional_data_center_regions?: list<string>, allow_multiple_devices?: bool, alternative_hosts?: string, alternative_hosts_email_notification?: bool, approval_type?: "0"|"1"|"2", approved_or_denied_countries_or_regions?: record, audio?: "both"|"telephony"|"voip", authentication_domains?: string, authentication_option?: string, auto_recording?: "local"|"cloud"|"none", breakout_room?: record, close_registration?: bool, cn_meeting?: bool, contact_email?: string, contact_name?: string, ... (16 more fields)}
+  --start-time: string # Meeting start time. We support two formats for `start_time` - local time and GMT. To set time as GMT the format should be `yyyy-MM-dd`T`HH:mm:ssZ`. Example: "2020-03-31T12:02:00Z" To set time using a specific timezone, use `yyyy-MM-dd`T`HH:mm:ss` format and specify the timezone [ID](https://marketplace.zoom.us/docs/api-reference/other-references/abbreviation-lists#timezones) in the `timezone` field OR leave it blank and the timezone set on your Zoom account will be used. You can also set the time as UTC as the timezone field. The `start_time` should only be used for scheduled and / or recurring webinars with fixed time. (format: date-time)
+  --template-id: string # Unique identifier of the **admin meeting template**. To create admin meeting templates, contact the Zoom support team. Use this field if you would like to [schedule the meeting from a admin meeting template](https://support.zoom.us/hc/en-us/articles/360036559151-Meeting-templates#h_86f06cff-0852-4998-81c5-c83663c176fb). You can retrieve the value of this field by calling the [List meeting templates](https://marketplace.zoom.us/docs/api-reference/zoom-api/meetings/listmeetingtemplates) API.
   --timezone: string # Time zone to format start_time. For example, "America/Los_Angeles". For scheduled meetings only. Please reference our [time zone](https://marketplace.zoom.us/docs/api-reference/other-references/abbreviation-lists#timezones) list for supported time zones and their formats.
   --topic: string # Meeting topic.
   --tracking-fields: list # Tracking fields — item shape: {field: string, value?: string}
-  --type: int@type-completer-14 # Meeting Type:<br>`1` - Instant meeting.<br>`2` - Scheduled meeting.<br>`3` - Recurring meeting with no fixed time.<br>`8` - Recurring meeting with fixed time. (default: 2)
+  --type: int@type-completer-14 # Meeting Type:`1` - Instant meeting.`2` - Scheduled meeting.`3` - Recurring meeting with no fixed time.`8` - Recurring meeting with fixed time. (default: 2)
 ]: any -> record<assistant_id: string, host_email: string, id: int, registration_url: string, agenda: string, created_at: string, duration: int, h323_password: string, join_url: string, occurrences: table<duration: int, occurrence_id: string, start_time: string, status: string>, password: string, pmi: int, recurrence: record<end_date_time: string, end_times: int, monthly_day: int, monthly_week: int, monthly_week_day: int, repeat_interval: int, type: int, weekly_days: string>, settings: record<allow_multiple_devices: bool, alternative_hosts: string, alternative_hosts_email_notification: bool, approval_type: int, approved_or_denied_countries_or_regions: record<approved_list: list, denied_list: list, enable: bool, method: string>, audio: string, authentication_domains: string, authentication_exception: list<record>, authentication_name: string, authentication_option: string, auto_recording: string, breakout_room: record<enable: bool, rooms: list>, close_registration: bool, cn_meeting: bool, contact_email: string, contact_name: string, custom_keys: list<record>, encryption_type: string, enforce_login: bool, enforce_login_domains: string, global_dial_in_countries: list<string>, global_dial_in_numbers: list<record>, host_video: bool, in_meeting: bool, jbh_time: int, join_before_host: bool, language_interpretation: record<enable: bool, interpreters: list>, meeting_authentication: bool, mute_upon_entry: bool, participant_video: bool, registrants_confirmation_email: bool, registrants_email_notification: bool, registration_type: int, show_share_button: bool, use_pmi: bool, waiting_room: bool, watermark: bool>, start_time: string, start_url: string, timezone: string, topic: string, tracking_fields: table<field: string, value: string, visible: bool>, type: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}/meetings"))
-  let body = {"agenda": $agenda, "duration": $duration, "password": $password, "recurrence": $recurrence, "schedule_for": $schedule_for, "settings": $settings, "start_time": $start_time, "template_id": $template_id, "timezone": $timezone, "topic": $topic, "tracking_fields": $tracking_fields, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/meetings"))
+  let req_body = {"agenda": $agenda, "duration": $duration, "password": $password, "recurrence": $recurrence, "schedule_for": $schedule_for, "settings": $settings, "start_time": $start_time, "template_id": $template_id, "timezone": $timezone, "topic": $topic, "tracking_fields": $tracking_fields, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List a user's PAC accounts
 #
 # GET /users/{userId}/pac
 # operationId: userPACs
-export def "users-pac userPACs" [
+export def "users-pac get-pa-cs" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9259,7 +9297,7 @@ export def "users-pac userPACs" [
 ]: nothing -> record<pac_accounts: table<conference_id: int, dedicated_dial_in_number: list, global_dial_in_numbers: list, listen_only_password: string, participant_password: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}/pac"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/pac"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9269,7 +9307,7 @@ export def "users-pac userPACs" [
 #
 # PUT /users/{userId}/password
 # operationId: userPassword
-export def "users-password userPassword" [
+export def "users-password update" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9279,24 +9317,24 @@ export def "users-password userPassword" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  password: string # User password. Should be less than 32 characters.  **Note:** If the account owner or admin has enabled [enhanced password requirements](https://support.zoom.us/hc/en-us/articles/360034675592-Advanced-security-settings#h_fa9186e4-6818-4f7a-915c-2e25c19f0acd), the value provided in this field must meet those requirements. These requirements can be retrieved by calling the [Get Account Settings API](https://marketplace.zoom.us/docs/api-reference/zoom-api/accounts/accountsettings) and referring to the `password_requirement` field present in the `security` object.
+  password: string # User password. Should be less than 32 characters. **Note:** If the account owner or admin has enabled [enhanced password requirements](https://support.zoom.us/hc/en-us/articles/360034675592-Advanced-security-settings#h_fa9186e4-6818-4f7a-915c-2e25c19f0acd), the value provided in this field must meet those requirements. These requirements can be retrieved by calling the [Get Account Settings API](https://marketplace.zoom.us/docs/api-reference/zoom-api/accounts/accountsettings) and referring to the `password_requirement` field present in the `security` object.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}/password"))
-  let body = {"password": $password} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/password"))
+  let req_body = {"password": $password} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get user permissions
 #
 # GET /users/{userId}/permissions
 # operationId: userPermission
-export def "users-permissions userPermission" [
+export def "users-permissions get" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9310,7 +9348,7 @@ export def "users-permissions userPermission" [
 ]: nothing -> record<permissions: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}/permissions"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/permissions"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9320,7 +9358,7 @@ export def "users-permissions userPermission" [
 #
 # POST /users/{userId}/picture
 # operationId: userPicture
-export def "users-picture userPicture" [
+export def "users-picture create" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9330,17 +9368,18 @@ export def "users-picture userPicture" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  pic_file: string # The file's path.  (format: binary)
+  pic_file: string # The file's path. (format: binary)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}/picture"))
-  let body = {"pic_file": $pic_file} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/picture"))
+  let req_body = {"pic_file": $pic_file} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body ["pic_file"])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # Update a user's presence status
@@ -9358,25 +9397,25 @@ export def "users-presence-status update" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --duration: int # If you're updating the status to `Do_Not_Disturb`, specify a duration in minutes for which the status should remain as `Do_Not_Disturb`.   The default value is 20 minutes and the maximum allowed value is 1440 minutes.
-  --status: string@status-completer-5 # Presence status of the user. The value can be set to one of the following:<br> * `Away` * `Do_Not_Disturb` * `Available`  Users who are on Zoom Client with a version **lower than 5.3.0** can update the status from: * `Away` to `Do_Not_Disturb`  * `Available` to `Do-Not_Disturb`  Users who are on **Zoom Client 5.3.0** or higher can update the status from: * `Do_Not_Disturb` to `Away` * `Do_Not_Disturb` to `Available` * `Available` to `Away` * `Away` to `Available`
+  --duration: int # If you're updating the status to `Do_Not_Disturb`, specify a duration in minutes for which the status should remain as `Do_Not_Disturb`. The default value is 20 minutes and the maximum allowed value is 1440 minutes.
+  --status: string@status-completer-5 # Presence status of the user. The value can be set to one of the following: * `Away` * `Do_Not_Disturb` * `Available` Users who are on Zoom Client with a version **lower than 5.3.0** can update the status from: * `Away` to `Do_Not_Disturb` * `Available` to `Do-Not_Disturb` Users who are on **Zoom Client 5.3.0** or higher can update the status from: * `Do_Not_Disturb` to `Away` * `Do_Not_Disturb` to `Available` * `Available` to `Away` * `Away` to `Available`
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}/presence_status"))
-  let body = {"duration": $duration, "status": $status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/presence_status"))
+  let req_body = {"duration": $duration, "status": $status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List all recordings
 #
 # GET /users/{userId}/recordings
 # operationId: recordingsList
-export def "users-recordings recordingsList" [
+export def "users-recordings list" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9390,15 +9429,15 @@ export def "users-recordings recordingsList" [
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
   --mc: string # Query Metadata of Recording if an On-Premise Meeting Connector was used for the meeting. (default: false)
-  --trash: oneof<nothing, bool> # Query trash. `true`: List recordings from trash.<br> `false`: Do not list recordings from the trash.<br> The default value is `false`. If you set it to `true`, you can use the `trash_type` property to indicate the type of Cloud recording that you need to retrieve.  (default: false)
-  --qp-from: string # The start date in 'yyyy-mm-dd' UTC format for the date range for which you would like to retrieve recordings. The maximum range can be a month. If no value is provided for this field, the default will be current date. For example, if you make the API request on June 30, 2020, without providing the “from” and “to” parameters, by default the value of 'from' field will be “2020-06-30” and the value of the 'to' field will be “2020-07-01”.   **Note**: The "trash" files cannot be filtered by date range and thus, the "from" and "to" fields should not be used for trash files. (format: date)
-  --qp-to: string # End date in 'yyyy-mm-dd' 'yyyy-mm-dd' UTC format.  (format: date)
-  --trash-type: string # The type of Cloud recording that you would like to retrieve from the trash. The value can be one of the following:<br>     `meeting_recordings`: List all meeting recordings from the trash.<br>     `recording_file`: List all individual recording files from the trash.  (default: meeting_recordings)
+  --trash: oneof<nothing, bool> # Query trash. `true`: List recordings from trash. `false`: Do not list recordings from the trash. The default value is `false`. If you set it to `true`, you can use the `trash_type` property to indicate the type of Cloud recording that you need to retrieve. (default: false)
+  --qp-from: string # The start date in 'yyyy-mm-dd' UTC format for the date range for which you would like to retrieve recordings. The maximum range can be a month. If no value is provided for this field, the default will be current date. For example, if you make the API request on June 30, 2020, without providing the “from” and “to” parameters, by default the value of 'from' field will be “2020-06-30” and the value of the 'to' field will be “2020-07-01”. **Note**: The "trash" files cannot be filtered by date range and thus, the "from" and "to" fields should not be used for trash files. (format: date)
+  --qp-to: string # End date in 'yyyy-mm-dd' 'yyyy-mm-dd' UTC format. (format: date)
+  --trash-type: string # The type of Cloud recording that you would like to retrieve from the trash. The value can be one of the following: `meeting_recordings`: List all meeting recordings from the trash. `recording_file`: List all individual recording files from the trash. (default: meeting_recordings)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "next_page_token" $next_page_token "scalar") (serialize-qp "mc" $mc "scalar") (serialize-qp "trash" $trash "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "trash_type" $trash_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}/recordings") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/recordings") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9408,7 +9447,7 @@ export def "users-recordings recordingsList" [
 #
 # DELETE /users/{userId}/schedulers
 # operationId: userSchedulersDelete
-export def "users-schedulers userSchedulersDelete" [
+export def "users-schedulers delete-by-userId" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9421,7 +9460,7 @@ export def "users-schedulers userSchedulersDelete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}/schedulers"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/schedulers"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9431,7 +9470,7 @@ export def "users-schedulers userSchedulersDelete" [
 #
 # GET /users/{userId}/schedulers
 # operationId: userSchedulers
-export def "users-schedulers userSchedulers" [
+export def "users-schedulers get" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9445,7 +9484,7 @@ export def "users-schedulers userSchedulers" [
 ]: nothing -> record<schedulers: table<email: string, id: string, pmi: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}/schedulers"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/schedulers"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9455,7 +9494,7 @@ export def "users-schedulers userSchedulers" [
 #
 # DELETE /users/{userId}/schedulers/{schedulerId}
 # operationId: userSchedulerDelete
-export def "users-schedulers userSchedulerDelete" [
+export def "users-schedulers delete-by-userId-schedulerId" [
   user_id: string
   scheduler_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9469,7 +9508,7 @@ export def "users-schedulers userSchedulerDelete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id, scheduler_id: $scheduler_id} | format pattern "/users/{user_id}/schedulers/{scheduler_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), scheduler_id: (encode-path-segment $scheduler_id)} | format pattern "/users/{user_id}/schedulers/{scheduler_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9479,7 +9518,7 @@ export def "users-schedulers userSchedulerDelete" [
 #
 # GET /users/{userId}/settings
 # operationId: userSettings
-export def "users-settings userSettings" [
+export def "users-settings get" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9490,14 +9529,14 @@ export def "users-settings userSettings" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --login-type: string@login-type-completer # `0` - Facebook.<br>`1` - Google.<br>`99` - API.<br>`100` - Zoom.<br>`101` - SSO.
-  --option: string@option-completer # `meeting_authentication`: Use this query parameter to view [meeting authentication configuration](https://support.zoom.us/hc/en-us/articles/360037117472-Authentication-Profiles-for-Meetings-and-Webinars) applied on the user's account.<br>`recording_authentication`: Use this query parameter to view [recording authentication configuration](https://support.zoom.us/hc/en-us/articles/360037756671-Authentication-Profiles-for-Cloud-Recordings) applied on the user's account.<br> `meeting_security`: Use this query parameter to view meeting security settings applied on the user's account.<br> (allows empty value)
-  --custom-query-fields: string # Provide the name of the field by which you would like to filter the response. For example, if you provide "host_video" as the value of this field, you will get a response similar to the following:<br> {     "schedule_meeting": {         "host_video": false     } } <br>You can provide multiple values by separating them with commas(example: "host_video,participant_video”).
+  --login-type: string@login-type-completer # `0` - Facebook.`1` - Google.`99` - API.`100` - Zoom.`101` - SSO.
+  --option: string@option-completer # `meeting_authentication`: Use this query parameter to view [meeting authentication configuration](https://support.zoom.us/hc/en-us/articles/360037117472-Authentication-Profiles-for-Meetings-and-Webinars) applied on the user's account.`recording_authentication`: Use this query parameter to view [recording authentication configuration](https://support.zoom.us/hc/en-us/articles/360037756671-Authentication-Profiles-for-Cloud-Recordings) applied on the user's account. `meeting_security`: Use this query parameter to view meeting security settings applied on the user's account. (allows empty value)
+  --custom-query-fields: string # Provide the name of the field by which you would like to filter the response. For example, if you provide "host_video" as the value of this field, you will get a response similar to the following: { "schedule_meeting": { "host_video": false } } You can provide multiple values by separating them with commas(example: "host_video,participant_video”).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "login_type" $login_type "scalar") (serialize-qp "option" $option "scalar") (serialize-qp "custom_query_fields" $custom_query_fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}/settings") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/settings") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9509,14 +9548,14 @@ export def "users-settings userSettings" [
 # operationId: userSettingsUpdate
 # --email_notification shape: {alternative_host_reminder?: bool, cancel_meeting_reminder?: bool, jbh_reminder?: bool, schedule_for_reminder?: bool}
 # --feature shape: {large_meeting?: bool, large_meeting_capacity?: int, meeting_capacity?: int, webinar?: bool, webinar_capacity?: int, zoom_phone?: bool}
-# --in_meeting shape: {allow_live_streaming?: bool, annotation?: bool, attendee_on_hold?: bool, auto_saving_chat?: bool, breakout_room?: bool, chat?: bool, closed_caption?: bool, co_host?: bool, custom_data_center_regions?: bool, custom_live_streaming_service?: bool, custom_service_instructions?: string, data_center_regions?: "HK"|"AU"|"IN"|"TY"|"CN"|"US"|"CA"|"DE"|"NL"|"LA", e2e_encryption?: bool, entry_exit_chime?: "host"|"all"|"none", far_end_camera_control?: bool, feedback?: bool, file_transfer?: bool, group_hd?: bool, non_verbal_feedback?: bool, polling?: bool, private_chat?: bool, record_play_voice?: bool, remote_control?: bool, remote_support?: bool, request_permission_to_unmute?: bool, screen_sharing?: bool, share_dual_camera?: bool, show_meeting_control_toolbar?: bool, virtual_background?: bool, virtual_background_settings?: record, waiting_room?: bool, who_can_share_screen?: "host"|"all", who_can_share_screen_when_someone_is_sharing?: "host"|"all", workplace_by_facebook?: bool}
+# --in_meeting shape: {allow_live_streaming?: bool, annotation?: bool, attendee_on_hold?: bool, auto_saving_chat?: bool, breakout_room?: bool, chat?: bool, closed_caption?: bool, co_host?: bool, custom_data_center_regions?: bool, custom_live_streaming_service?: bool, custom_service_instructions?: string, data_center_regions?: "HK"|"AU"|"IN"|"TY"|"CN"|"US"|"CA"|"DE"|"NL"|"LA", e2e_encryption?: bool, entry_exit_chime?: "host"|"all"|"none", far_end_camera_control?: bool, feedback?: bool, file_transfer?: bool, ... (17 more fields)}
 # --profile shape: {recording_storage_location?: record}
-# --recording shape: {ask_host_to_confirm_disclaimer?: bool, ask_participants_to_consent_disclaimer?: bool, auto_delete_cmr?: bool, auto_delete_cmr_days?: int, auto_recording?: "local"|"cloud"|"none", cloud_recording?: bool, host_pause_stop_recording?: bool, ip_address_access_control?: record, local_recording?: bool, record_audio_file?: bool, record_gallery_view?: bool, record_speaker_view?: bool, recording_audio_transcript?: bool, recording_disclaimer?: bool, recording_password_requirement?: record, save_chat_text?: bool, show_timestamp?: bool}
-# --schedule_meeting shape: {audio_type?: "both"|"telephony"|"voip"|"thirdParty", default_password_for_scheduled_meetings?: string, embed_password_in_join_link?: bool, force_pmi_jbh_password?: bool, host_video?: bool, join_before_host?: bool, meeting_password_requirement?: record, participants_video?: bool, personal_meeting?: bool, pmi_password?: string, pstn_password_protected?: bool, require_password_for_instant_meetings?: bool, require_password_for_pmi_meetings?: "jbh_only"|"all"|"none", require_password_for_scheduled_meetings?: bool, require_password_for_scheduling_new_meetings?: bool, use_pmi_for_instant_meetings?: bool, use_pmi_for_scheduled_meetings?: bool}
+# --recording shape: {ask_host_to_confirm_disclaimer?: bool, ask_participants_to_consent_disclaimer?: bool, auto_delete_cmr?: bool, auto_delete_cmr_days?: int, auto_recording?: "local"|"cloud"|"none", cloud_recording?: bool, host_pause_stop_recording?: bool, ip_address_access_control?: record, local_recording?: bool, record_audio_file?: bool, record_gallery_view?: bool, record_speaker_view?: bool, recording_audio_transcript?: bool, recording_disclaimer?: bool, recording_password_requirement?: record, ... (2 more fields)}
+# --schedule_meeting shape: {audio_type?: "both"|"telephony"|"voip"|"thirdParty", default_password_for_scheduled_meetings?: string, embed_password_in_join_link?: bool, force_pmi_jbh_password?: bool, host_video?: bool, join_before_host?: bool, meeting_password_requirement?: record, participants_video?: bool, personal_meeting?: bool, pmi_password?: string, pstn_password_protected?: bool, require_password_for_instant_meetings?: bool, require_password_for_pmi_meetings?: "jbh_only"|"all"|"none", ... (4 more fields)}
 # --telephony shape: {audio_conference_info?: string, show_international_numbers_link?: bool, telephony_regions?: record, third_party_audio?: bool}
 # --tsp shape: {call_out?: bool, call_out_countries?: list, show_international_numbers_link?: bool}
 # --meeting_security shape: {auto_security?: bool, embed_password_in_join_link?: bool, encryption_type?: "enhanced_encryption"|"e2ee", end_to_end_encrypted_meetings?: bool, meeting_password?: bool, meeting_password_requirement?: record, phone_password?: bool, pmi_password?: bool, require_password_for_scheduled_meeting?: bool, require_password_for_scheduled_webinar?: bool, waiting_room?: bool, waiting_room_settings?: record, webinar_password?: bool}
-export def "users-settings userSettingsUpdate" [
+export def "users-settings update" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9529,10 +9568,10 @@ export def "users-settings userSettingsUpdate" [
   --option: string@option-completer-3 # allows empty value
   --email-notification: record # shape: {alternative_host_reminder?: bool, cancel_meeting_reminder?: bool, jbh_reminder?: bool, schedule_for_reminder?: bool}
   --feature: record # shape: {large_meeting?: bool, large_meeting_capacity?: int, meeting_capacity?: int, webinar?: bool, webinar_capacity?: int, zoom_phone?: bool}
-  --in-meeting: record # shape: {allow_live_streaming?: bool, annotation?: bool, attendee_on_hold?: bool, auto_saving_chat?: bool, breakout_room?: bool, chat?: bool, closed_caption?: bool, co_host?: bool, custom_data_center_regions?: bool, custom_live_streaming_service?: bool, custom_service_instructions?: string, data_center_regions?: "HK"|"AU"|"IN"|"TY"|"CN"|"US"|"CA"|"DE"|"NL"|"LA", e2e_encryption?: bool, entry_exit_chime?: "host"|"all"|"none", far_end_camera_control?: bool, feedback?: bool, file_transfer?: bool, group_hd?: bool, non_verbal_feedback?: bool, polling?: bool, private_chat?: bool, record_play_voice?: bool, remote_control?: bool, remote_support?: bool, request_permission_to_unmute?: bool, screen_sharing?: bool, share_dual_camera?: bool, show_meeting_control_toolbar?: bool, virtual_background?: bool, virtual_background_settings?: record, waiting_room?: bool, who_can_share_screen?: "host"|"all", who_can_share_screen_when_someone_is_sharing?: "host"|"all", workplace_by_facebook?: bool}
+  --in-meeting: record # shape: {allow_live_streaming?: bool, annotation?: bool, attendee_on_hold?: bool, auto_saving_chat?: bool, breakout_room?: bool, chat?: bool, closed_caption?: bool, co_host?: bool, custom_data_center_regions?: bool, custom_live_streaming_service?: bool, custom_service_instructions?: string, data_center_regions?: "HK"|"AU"|"IN"|"TY"|"CN"|"US"|"CA"|"DE"|"NL"|"LA", e2e_encryption?: bool, entry_exit_chime?: "host"|"all"|"none", far_end_camera_control?: bool, feedback?: bool, file_transfer?: bool, ... (17 more fields)}
   --profile: record # shape: {recording_storage_location?: record}
-  --recording: record # shape: {ask_host_to_confirm_disclaimer?: bool, ask_participants_to_consent_disclaimer?: bool, auto_delete_cmr?: bool, auto_delete_cmr_days?: int, auto_recording?: "local"|"cloud"|"none", cloud_recording?: bool, host_pause_stop_recording?: bool, ip_address_access_control?: record, local_recording?: bool, record_audio_file?: bool, record_gallery_view?: bool, record_speaker_view?: bool, recording_audio_transcript?: bool, recording_disclaimer?: bool, recording_password_requirement?: record, save_chat_text?: bool, show_timestamp?: bool}
-  --schedule-meeting: record # shape: {audio_type?: "both"|"telephony"|"voip"|"thirdParty", default_password_for_scheduled_meetings?: string, embed_password_in_join_link?: bool, force_pmi_jbh_password?: bool, host_video?: bool, join_before_host?: bool, meeting_password_requirement?: record, participants_video?: bool, personal_meeting?: bool, pmi_password?: string, pstn_password_protected?: bool, require_password_for_instant_meetings?: bool, require_password_for_pmi_meetings?: "jbh_only"|"all"|"none", require_password_for_scheduled_meetings?: bool, require_password_for_scheduling_new_meetings?: bool, use_pmi_for_instant_meetings?: bool, use_pmi_for_scheduled_meetings?: bool}
+  --recording: record # shape: {ask_host_to_confirm_disclaimer?: bool, ask_participants_to_consent_disclaimer?: bool, auto_delete_cmr?: bool, auto_delete_cmr_days?: int, auto_recording?: "local"|"cloud"|"none", cloud_recording?: bool, host_pause_stop_recording?: bool, ip_address_access_control?: record, local_recording?: bool, record_audio_file?: bool, record_gallery_view?: bool, record_speaker_view?: bool, recording_audio_transcript?: bool, recording_disclaimer?: bool, recording_password_requirement?: record, ... (2 more fields)}
+  --schedule-meeting: record # shape: {audio_type?: "both"|"telephony"|"voip"|"thirdParty", default_password_for_scheduled_meetings?: string, embed_password_in_join_link?: bool, force_pmi_jbh_password?: bool, host_video?: bool, join_before_host?: bool, meeting_password_requirement?: record, participants_video?: bool, personal_meeting?: bool, pmi_password?: string, pstn_password_protected?: bool, require_password_for_instant_meetings?: bool, require_password_for_pmi_meetings?: "jbh_only"|"all"|"none", ... (4 more fields)}
   --telephony: record # shape: {audio_conference_info?: string, show_international_numbers_link?: bool, telephony_regions?: record, third_party_audio?: bool}
   --tsp: record # Account Settings: TSP. — shape: {call_out?: bool, call_out_countries?: list, show_international_numbers_link?: bool}
   --meeting-security: record # shape: {auto_security?: bool, embed_password_in_join_link?: bool, encryption_type?: "enhanced_encryption"|"e2ee", end_to_end_encrypted_meetings?: bool, meeting_password?: bool, meeting_password_requirement?: record, phone_password?: bool, pmi_password?: bool, require_password_for_scheduled_meeting?: bool, require_password_for_scheduled_webinar?: bool, waiting_room?: bool, waiting_room_settings?: record, webinar_password?: bool}
@@ -9541,19 +9580,19 @@ export def "users-settings userSettingsUpdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "option" $option "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}/settings") $qp)
-  let body = {"email_notification": $email_notification, "feature": $feature, "in_meeting": $in_meeting, "profile": $profile, "recording": $recording, "schedule_meeting": $schedule_meeting, "telephony": $telephony, "tsp": $tsp, "meeting_security": $meeting_security} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/settings") $qp)
+  let req_body = {"email_notification": $email_notification, "feature": $feature, "in_meeting": $in_meeting, "profile": $profile, "recording": $recording, "schedule_meeting": $schedule_meeting, "telephony": $telephony, "tsp": $tsp, "meeting_security": $meeting_security} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete virtual background files
 #
 # DELETE /users/{userId}/settings/virtual_backgrounds
 # operationId: delUserVB
-export def "users-settings-virtual-backgrounds delUserVB" [
+export def "users-settings-virtual-backgrounds delete-vb" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9568,7 +9607,7 @@ export def "users-settings-virtual-backgrounds delUserVB" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "file_ids" $file_ids "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}/settings/virtual_backgrounds") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/settings/virtual_backgrounds") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9594,19 +9633,20 @@ export def "users-settings-virtual-backgrounds upload-v-buser" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}/settings/virtual_backgrounds"))
-  let body = {"file": $file} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/settings/virtual_backgrounds"))
+  let req_body = {"file": $file} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body [])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # Update user status
 #
 # PUT /users/{userId}/status
 # operationId: userStatus
-export def "users-status userStatus" [
+export def "users-status update" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9616,24 +9656,24 @@ export def "users-status userStatus" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  action: string@action-completer-11 # The action types:<br>`activate` - Activate a deactivated user.<br>`deactivate` - Deactivate a user.
+  action: string@action-completer-11 # The action types:`activate` - Activate a deactivated user.`deactivate` - Deactivate a user.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}/status"))
-  let body = {"action": $action} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/status"))
+  let req_body = {"action": $action} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Revoke a user's SSO token
 #
 # DELETE /users/{userId}/token
 # operationId: userSSOTokenDelete
-export def "users-token userSSOTokenDelete" [
+export def "users-token delete-sso" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9646,7 +9686,7 @@ export def "users-token userSSOTokenDelete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}/token"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/token"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9656,7 +9696,7 @@ export def "users-token userSSOTokenDelete" [
 #
 # GET /users/{userId}/token
 # operationId: userToken
-export def "users-token userToken" [
+export def "users-token get" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9667,13 +9707,13 @@ export def "users-token userToken" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --type: string@type-completer-15 # User token types:<br>`token` - Used for starting meetings with the client SDK. This token expires in 14 days and a new token will be returned after the expiry.<br>`zak` - Used for generating the start meeting URL. The token expiration time is two hours. For API users, the expiration time is 90 days.
+  --type: string@type-completer-15 # User token types:`token` - Used for starting meetings with the client SDK. This token expires in 14 days and a new token will be returned after the expiry.`zak` - Used for generating the start meeting URL. The token expiration time is two hours. For API users, the expiration time is 90 days.
   --ttl: int # Use this field in conjunction with the `type` field where the value of `type` field is `zak`. The value of this field denotes the expiry time of the `zak` token in seconds. For example, if you would like the zak token to be expired after one hour of the token generation, the value of this field should be `3600`.
 ]: nothing -> record<token: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "ttl" $ttl "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}/token") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/token") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9683,7 +9723,7 @@ export def "users-token userToken" [
 #
 # GET /users/{userId}/tsp
 # operationId: userTSPs
-export def "users-tsp userTSPs" [
+export def "users-tsp get-ts-ps" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9697,7 +9737,7 @@ export def "users-tsp userTSPs" [
 ]: nothing -> record<tsp_accounts: table<conference_code: string, dial_in_numbers: list, id: int, leader_pin: string, tsp_bridge: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}/tsp"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/tsp"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9708,7 +9748,7 @@ export def "users-tsp userTSPs" [
 # POST /users/{userId}/tsp
 # operationId: userTSPCreate
 # --dial_in_numbers item shape: {code?: string, country_label?: string, number?: string, type?: "toll"|"tollfree"|"media_link"}
-export def "users-tsp userTSPCreate" [
+export def "users-tsp create" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9727,19 +9767,19 @@ export def "users-tsp userTSPCreate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}/tsp"))
-  let body = {"conference_code": $conference_code, "dial_in_numbers": $dial_in_numbers, "leader_pin": $leader_pin, "tsp_bridge": $tsp_bridge} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/tsp"))
+  let req_body = {"conference_code": $conference_code, "dial_in_numbers": $dial_in_numbers, "leader_pin": $leader_pin, "tsp_bridge": $tsp_bridge} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Set global dial-in URL for a TSP user
 #
 # PATCH /users/{userId}/tsp/settings
 # operationId: tspUrlUpdate
-export def "users-tsp-settings tspUrlUpdate" [
+export def "users-tsp-settings update-url" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9754,19 +9794,19 @@ export def "users-tsp-settings tspUrlUpdate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}/tsp/settings"))
-  let body = {"audio_url": $audio_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/tsp/settings"))
+  let req_body = {"audio_url": $audio_url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a user's TSP account
 #
 # DELETE /users/{userId}/tsp/{tspId}
 # operationId: userTSPDelete
-export def "users-tsp userTSPDelete" [
+export def "users-tsp delete" [
   user_id: string
   tsp_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9780,7 +9820,7 @@ export def "users-tsp userTSPDelete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id, tsp_id: $tsp_id} | format pattern "/users/{user_id}/tsp/{tsp_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), tsp_id: (encode-path-segment $tsp_id)} | format pattern "/users/{user_id}/tsp/{tsp_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9790,7 +9830,7 @@ export def "users-tsp userTSPDelete" [
 #
 # GET /users/{userId}/tsp/{tspId}
 # operationId: userTSP
-export def "users-tsp userTSP" [
+export def "users-tsp get" [
   user_id: string
   tsp_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9805,7 +9845,7 @@ export def "users-tsp userTSP" [
 ]: nothing -> record<conference_code: string, dial_in_numbers: table<code: string, country_label: string, number: string, type: string>, id: int, leader_pin: string, tsp_bridge: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id, tsp_id: $tsp_id} | format pattern "/users/{user_id}/tsp/{tsp_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), tsp_id: (encode-path-segment $tsp_id)} | format pattern "/users/{user_id}/tsp/{tsp_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9816,7 +9856,7 @@ export def "users-tsp userTSP" [
 # PATCH /users/{userId}/tsp/{tspId}
 # operationId: userTSPUpdate
 # --dial_in_numbers item shape: {code?: string, country_label?: string, number?: string, type?: "toll"|"tollfree"|"media_link"}
-export def "users-tsp userTSPUpdate" [
+export def "users-tsp update" [
   user_id: string
   tsp_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9835,12 +9875,12 @@ export def "users-tsp userTSPUpdate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id, tsp_id: $tsp_id} | format pattern "/users/{user_id}/tsp/{tsp_id}"))
-  let body = {"conference_code": $conference_code, "dial_in_numbers": $dial_in_numbers, "leader_pin": $leader_pin, "tsp_bridge": $tsp_bridge} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), tsp_id: (encode-path-segment $tsp_id)} | format pattern "/users/{user_id}/tsp/{tsp_id}"))
+  let req_body = {"conference_code": $conference_code, "dial_in_numbers": $dial_in_numbers, "leader_pin": $leader_pin, "tsp_bridge": $tsp_bridge} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List webinar templates
@@ -9861,7 +9901,7 @@ export def "users-webinar-templates list" [
 ]: nothing -> record<templates: table<id: string, name: string>, total_records: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}/webinar_templates"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/webinar_templates"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9871,7 +9911,7 @@ export def "users-webinar-templates list" [
 #
 # GET /users/{userId}/webinars
 # operationId: webinars
-export def "users-webinars webinars" [
+export def "users-webinars get" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9883,12 +9923,12 @@ export def "users-webinars webinars" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page-size: int # The number of records returned within a single API call. (default: 30)
-  --page-number: int #  **Deprecated** - This field has been deprecated and we will stop supporting it completely in a future release. Please use "next_page_token" for pagination instead of this field.  The page number of the current page in the returned records. (default: 1)
+  --page-number: int # **Deprecated** - This field has been deprecated and we will stop supporting it completely in a future release. Please use "next_page_token" for pagination instead of this field. The page number of the current page in the returned records. (default: 1)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page_number" $page_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}/webinars") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/webinars") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9899,9 +9939,9 @@ export def "users-webinars webinars" [
 # POST /users/{userId}/webinars
 # operationId: webinarCreate
 # --recurrence shape: {end_date_time?: string, end_times?: int, monthly_day?: int, monthly_week?: "-1"|"1"|"2"|"3"|"4", monthly_week_day?: "1"|"2"|"3"|"4"|"5"|"6"|"7", repeat_interval?: int, type: "1"|"2"|"3", weekly_days?: string}
-# --settings shape: {allow_multiple_devices?: bool, alternative_hosts?: string, approval_type?: "0"|"1"|"2", attendees_and_panelists_reminder_email_notification?: record, audio?: "both"|"telephony"|"voip", authentication_domains?: string, authentication_option?: string, auto_recording?: "local"|"cloud"|"none", close_registration?: bool, contact_email?: string, contact_name?: string, email_language?: string, enforce_login?: bool, enforce_login_domains?: string, follow_up_absentees_email_notification?: record, follow_up_attendees_email_notification?: record, global_dial_in_countries?: list, hd_video?: bool, host_video?: bool, meeting_authentication?: bool, on_demand?: bool, panelists_invitation_email_notification?: bool, panelists_video?: bool, post_webinar_survey?: bool, practice_session?: bool, question_and_answer?: record, registrants_email_notification?: bool, registrants_restrict_number?: int, registration_type?: "1"|"2"|"3", show_share_button?: bool, survey_url?: string}
+# --settings shape: {allow_multiple_devices?: bool, alternative_hosts?: string, approval_type?: "0"|"1"|"2", attendees_and_panelists_reminder_email_notification?: record, audio?: "both"|"telephony"|"voip", authentication_domains?: string, authentication_option?: string, auto_recording?: "local"|"cloud"|"none", close_registration?: bool, contact_email?: string, contact_name?: string, email_language?: string, enforce_login?: bool, enforce_login_domains?: string, follow_up_absentees_email_notification?: record, ... (16 more fields)}
 # --tracking_fields item shape: {field: string, value?: string}
-export def "users-webinars webinarCreate" [
+export def "users-webinars create" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9914,31 +9954,31 @@ export def "users-webinars webinarCreate" [
   --accept: string@accept-completer # Response content type
   --agenda: string # Webinar description.
   --duration: int # Webinar duration (minutes). Used for scheduled webinars only.
-  --password: string # Webinar passcode. Passcode may only contain the following characters: [a-z A-Z 0-9 @ - _ * !]. Max of 10 characters.  If "Require a passcode when scheduling new meetings" setting has been **enabled** **and** [locked](https://support.zoom.us/hc/en-us/articles/115005269866-Using-Tiered-Settings#locked) for the user, the passcode field will be autogenerated for the Webinar in the response even if it is not provided in the API request. <br><br>  **Note:** If the account owner or the admin has configured [minimum passcode requirement settings](https://support.zoom.us/hc/en-us/articles/360033559832-Meeting-and-webinar-passwords#h_a427384b-e383-4f80-864d-794bf0a37604), the passcode value provided here must meet those requirements. <br><br>If the requirements are enabled, you can view those requirements by calling [Get Account Settings](https://marketplace.zoom.us/docs/api-reference/zoom-api/accounts/accountsettings) API.    
-  --recurrence: record # Recurrence object. Use this object only for a webinar of type `9` i.e., a recurring webinar with fixed time.  — shape: {end_date_time?: string, end_times?: int, monthly_day?: int, monthly_week?: "-1"|"1"|"2"|"3"|"4", monthly_week_day?: "1"|"2"|"3"|"4"|"5"|"6"|"7", repeat_interval?: int, type: "1"|"2"|"3", weekly_days?: string}
-  --settings: record # Create Webinar settings. — shape: {allow_multiple_devices?: bool, alternative_hosts?: string, approval_type?: "0"|"1"|"2", attendees_and_panelists_reminder_email_notification?: record, audio?: "both"|"telephony"|"voip", authentication_domains?: string, authentication_option?: string, auto_recording?: "local"|"cloud"|"none", close_registration?: bool, contact_email?: string, contact_name?: string, email_language?: string, enforce_login?: bool, enforce_login_domains?: string, follow_up_absentees_email_notification?: record, follow_up_attendees_email_notification?: record, global_dial_in_countries?: list, hd_video?: bool, host_video?: bool, meeting_authentication?: bool, on_demand?: bool, panelists_invitation_email_notification?: bool, panelists_video?: bool, post_webinar_survey?: bool, practice_session?: bool, question_and_answer?: record, registrants_email_notification?: bool, registrants_restrict_number?: int, registration_type?: "1"|"2"|"3", show_share_button?: bool, survey_url?: string}
-  --start-time: string # Webinar start time. We support two formats for `start_time` - local time and GMT.<br>   To set time as GMT the format should be `yyyy-MM-dd`T`HH:mm:ssZ`.  To set time using a specific timezone, use `yyyy-MM-dd`T`HH:mm:ss` format and specify the timezone [ID](https://marketplace.zoom.us/docs/api-reference/other-references/abbreviation-lists#timezones) in the `timezone` field OR leave it blank and the timezone set on your Zoom account will be used. You can also set the time as UTC as the timezone field.  The `start_time` should only be used for scheduled and / or recurring webinars with fixed time. (format: date-time)
+  --password: string # Webinar passcode. Passcode may only contain the following characters: [a-z A-Z 0-9 @ - _ * !]. Max of 10 characters. If "Require a passcode when scheduling new meetings" setting has been **enabled** **and** [locked](https://support.zoom.us/hc/en-us/articles/115005269866-Using-Tiered-Settings#locked) for the user, the passcode field will be autogenerated for the Webinar in the response even if it is not provided in the API request. **Note:** If the account owner or the admin has configured [minimum passcode requirement settings](https://support.zoom.us/hc/en-us/articles/360033559832-Meeting-and-webinar-passwords#h_a427384b-e383-4f80-864d-794bf0a37604), the passcode value provided here must meet those requirements. If the requirements are enabled, you can view those requirements by calling [Get Account Settings](https://marketplace.zoom.us/docs/api-reference/zoom-api/accounts/accountsettings) API.
+  --recurrence: record # Recurrence object. Use this object only for a webinar of type `9` i.e., a recurring webinar with fixed time. — shape: {end_date_time?: string, end_times?: int, monthly_day?: int, monthly_week?: "-1"|"1"|"2"|"3"|"4", monthly_week_day?: "1"|"2"|"3"|"4"|"5"|"6"|"7", repeat_interval?: int, type: "1"|"2"|"3", weekly_days?: string}
+  --settings: record # Create Webinar settings. — shape: {allow_multiple_devices?: bool, alternative_hosts?: string, approval_type?: "0"|"1"|"2", attendees_and_panelists_reminder_email_notification?: record, audio?: "both"|"telephony"|"voip", authentication_domains?: string, authentication_option?: string, auto_recording?: "local"|"cloud"|"none", close_registration?: bool, contact_email?: string, contact_name?: string, email_language?: string, enforce_login?: bool, enforce_login_domains?: string, follow_up_absentees_email_notification?: record, ... (16 more fields)}
+  --start-time: string # Webinar start time. We support two formats for `start_time` - local time and GMT. To set time as GMT the format should be `yyyy-MM-dd`T`HH:mm:ssZ`. To set time using a specific timezone, use `yyyy-MM-dd`T`HH:mm:ss` format and specify the timezone [ID](https://marketplace.zoom.us/docs/api-reference/other-references/abbreviation-lists#timezones) in the `timezone` field OR leave it blank and the timezone set on your Zoom account will be used. You can also set the time as UTC as the timezone field. The `start_time` should only be used for scheduled and / or recurring webinars with fixed time. (format: date-time)
   --timezone: string # Time zone to format start_time. For example, "America/Los_Angeles". For scheduled meetings only. Please reference our [timezone](https://marketplace.zoom.us/docs/api-reference/other-references/abbreviation-lists#timezones) list for supported time zones and their formats.
   --topic: string # Webinar topic.
   --tracking-fields: list # Tracking fields — item shape: {field: string, value?: string}
-  --type: int@type-completer-16 # Webinar Types:<br>`5` - Webinar.<br>`6` - Recurring webinar with no fixed time.<br>`9` - Recurring webinar with a fixed time. (default: 5)
+  --type: int@type-completer-16 # Webinar Types:`5` - Webinar.`6` - Recurring webinar with no fixed time.`9` - Recurring webinar with a fixed time. (default: 5)
 ]: any -> record<host_email: string, host_id: string, id: int, registrants_confirmation_email: bool, template_id: string, uuid: string, agenda: string, created_at: string, duration: int, join_url: string, occurrences: table<duration: int, occurrence_id: string, start_time: string, status: string>, password: string, recurrence: record<end_date_time: string, end_times: int, monthly_day: int, monthly_week: int, monthly_week_day: int, repeat_interval: int, type: int, weekly_days: string>, settings: record<allow_multiple_devices: bool, alternative_hosts: string, approval_type: int, attendees_and_panelists_reminder_email_notification: record<enable: bool, type: int>, audio: string, authentication_domains: string, authentication_name: string, authentication_option: string, auto_recording: string, close_registration: bool, contact_email: string, contact_name: string, email_language: string, enforce_login: bool, enforce_login_domains: string, follow_up_absentees_email_notification: record<enable: bool, type: int>, follow_up_attendees_email_notification: record<enable: bool, type: int>, global_dial_in_countries: list<string>, hd_video: bool, host_video: bool, meeting_authentication: bool, notify_registrants: bool, on_demand: bool, panelists_invitation_email_notification: bool, panelists_video: bool, post_webinar_survey: bool, practice_session: bool, question_and_answer: record<allow_anonymous_questions: bool, answer_questions: string, attendees_can_comment: bool, attendees_can_upvote: bool, enable: bool>, registrants_confirmation_email: bool, registrants_email_notification: bool, registrants_restrict_number: int, registration_type: int, show_share_button: bool, survey_url: string>, start_time: string, start_url: string, timezone: string, topic: string, tracking_fields: table<field: string, value: string>, type: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}/webinars"))
-  let body = {"agenda": $agenda, "duration": $duration, "password": $password, "recurrence": $recurrence, "settings": $settings, "start_time": $start_time, "timezone": $timezone, "topic": $topic, "tracking_fields": $tracking_fields, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/webinars"))
+  let req_body = {"agenda": $agenda, "duration": $duration, "password": $password, "recurrence": $recurrence, "settings": $settings, "start_time": $start_time, "timezone": $timezone, "topic": $topic, "tracking_fields": $tracking_fields, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a webinar
 #
 # DELETE /webinars/{webinarId}
 # operationId: webinarDelete
-export def "webinars webinarDelete" [
+export def "webinars delete" [
   webinar_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9949,12 +9989,12 @@ export def "webinars webinarDelete" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --occurrence-id: string # The meeting occurrence ID.
-  --cancel-webinar-reminder: string # `true`: Notify panelists and registrants about the webinar cancellation via email.   `false`: Do not send any email notification to webinar registrants and panelists.   The default value of this field is `false`.
+  --cancel-webinar-reminder: string # `true`: Notify panelists and registrants about the webinar cancellation via email. `false`: Do not send any email notification to webinar registrants and panelists. The default value of this field is `false`.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "occurrence_id" $occurrence_id "scalar") (serialize-qp "cancel_webinar_reminder" $cancel_webinar_reminder "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({webinar_id: $webinar_id} | format pattern "/webinars/{webinar_id}") $qp)
+  let full_url = (build-url $base ({webinar_id: (encode-path-segment $webinar_id)} | format pattern "/webinars/{webinar_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9964,7 +10004,7 @@ export def "webinars webinarDelete" [
 #
 # GET /webinars/{webinarId}
 # operationId: webinar
-export def "webinars webinar" [
+export def "webinars get" [
   webinar_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9981,7 +10021,7 @@ export def "webinars webinar" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "occurrence_id" $occurrence_id "scalar") (serialize-qp "show_previous_occurrences" $show_previous_occurrences "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({webinar_id: $webinar_id} | format pattern "/webinars/{webinar_id}") $qp)
+  let full_url = (build-url $base ({webinar_id: (encode-path-segment $webinar_id)} | format pattern "/webinars/{webinar_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9993,7 +10033,7 @@ export def "webinars webinar" [
 # operationId: webinarUpdate
 # --recurrence shape: {end_date_time?: string, end_times?: int, monthly_day?: int, monthly_week?: "-1"|"1"|"2"|"3"|"4", monthly_week_day?: "1"|"2"|"3"|"4"|"5"|"6"|"7", repeat_interval?: int, type: "1"|"2"|"3", weekly_days?: "1"|"2"|"3"|"4"|"5"|"6"|"7"}
 # --tracking_fields item shape: {field?: string, value?: string}
-export def "webinars webinarUpdate" [
+export def "webinars update" [
   webinar_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10006,25 +10046,25 @@ export def "webinars webinarUpdate" [
   --occurrence-id: string # Webinar occurrence id. Support change of agenda, start_time, duration, settings: {host_video, panelist_video, hd_video, watermark, auto_recording}
   --agenda: string # Webinar description.
   --duration: int # Webinar duration (minutes). Used for scheduled webinar only.
-  --password: string # [Webinar passcode](https://support.zoom.us/hc/en-us/articles/360033559832-Meeting-and-webinar-passwords). By default, passcode may only contain the following characters: [a-z A-Z 0-9 @ - _ * !] and can have a maximum of 10 characters.  **Note:** If the account owner or the admin has configured [minimum passcode requirement settings](https://support.zoom.us/hc/en-us/articles/360033559832-Meeting-and-webinar-passwords#h_a427384b-e383-4f80-864d-794bf0a37604), the passcode value provided here must meet those requirements. <br><br>If the requirements are enabled, you can view those requirements by calling either the [Get User Settings API](https://marketplace.zoom.us/docs/api-reference/zoom-api/users/usersettings) or the  [Get Account Settings](https://marketplace.zoom.us/docs/api-reference/zoom-api/accounts/accountsettings) API.   If "**Require a passcode when scheduling new meetings**" setting has been **enabled** **and** [locked](https://support.zoom.us/hc/en-us/articles/115005269866-Using-Tiered-Settings#locked) for the user, the passcode field will be autogenerated for the Webinar in the response even if it is not provided in the API request. <br><br>       
-  --recurrence: record # Recurrence object. Use this object only for a meeting with type `8` i.e., a recurring meeting with fixed time.  — shape: {end_date_time?: string, end_times?: int, monthly_day?: int, monthly_week?: "-1"|"1"|"2"|"3"|"4", monthly_week_day?: "1"|"2"|"3"|"4"|"5"|"6"|"7", repeat_interval?: int, type: "1"|"2"|"3", weekly_days?: "1"|"2"|"3"|"4"|"5"|"6"|"7"}
+  --password: string # [Webinar passcode](https://support.zoom.us/hc/en-us/articles/360033559832-Meeting-and-webinar-passwords). By default, passcode may only contain the following characters: [a-z A-Z 0-9 @ - _ * !] and can have a maximum of 10 characters. **Note:** If the account owner or the admin has configured [minimum passcode requirement settings](https://support.zoom.us/hc/en-us/articles/360033559832-Meeting-and-webinar-passwords#h_a427384b-e383-4f80-864d-794bf0a37604), the passcode value provided here must meet those requirements. If the requirements are enabled, you can view those requirements by calling either the [Get User Settings API](https://marketplace.zoom.us/docs/api-reference/zoom-api/users/usersettings) or the [Get Account Settings](https://marketplace.zoom.us/docs/api-reference/zoom-api/accounts/accountsettings) API. If "**Require a passcode when scheduling new meetings**" setting has been **enabled** **and** [locked](https://support.zoom.us/hc/en-us/articles/115005269866-Using-Tiered-Settings#locked) for the user, the passcode field will be autogenerated for the Webinar in the response even if it is not provided in the API request.
+  --recurrence: record # Recurrence object. Use this object only for a meeting with type `8` i.e., a recurring meeting with fixed time. — shape: {end_date_time?: string, end_times?: int, monthly_day?: int, monthly_week?: "-1"|"1"|"2"|"3"|"4", monthly_week_day?: "1"|"2"|"3"|"4"|"5"|"6"|"7", repeat_interval?: int, type: "1"|"2"|"3", weekly_days?: "1"|"2"|"3"|"4"|"5"|"6"|"7"}
   --settings: any
   --start-time: string # Webinar start time, in the format "yyyy-MM-dd'T'HH:mm:ss'Z'." Should be in GMT time. In the format "yyyy-MM-dd'T'HH:mm:ss." This should be in local time and the timezone should be specified. Only used for scheduled webinars and recurring webinars with a fixed time. (format: date-time)
   --timezone: string # Time zone to format start_time. For example, "America/Los_Angeles". For scheduled meetings only. Please reference our [time zone](#timezones) list for supported time zones and their formats.
   --topic: string # Webinar topic.
   --tracking-fields: list # Tracking fields — item shape: {field?: string, value?: string}
-  --type: int@type-completer-16 # Webinar Types:<br>`5` - webinar.<br>`6` - Recurring webinar with no fixed time.<br>`9` - Recurring webinar with a fixed time. (default: 5)
+  --type: int@type-completer-16 # Webinar Types:`5` - webinar.`6` - Recurring webinar with no fixed time.`9` - Recurring webinar with a fixed time. (default: 5)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "occurrence_id" $occurrence_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({webinar_id: $webinar_id} | format pattern "/webinars/{webinar_id}") $qp)
-  let body = {"agenda": $agenda, "duration": $duration, "password": $password, "recurrence": $recurrence, "settings": $settings, "start_time": $start_time, "timezone": $timezone, "topic": $topic, "tracking_fields": $tracking_fields, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({webinar_id: (encode-path-segment $webinar_id)} | format pattern "/webinars/{webinar_id}") $qp)
+  let req_body = {"agenda": $agenda, "duration": $duration, "password": $password, "recurrence": $recurrence, "settings": $settings, "start_time": $start_time, "timezone": $timezone, "topic": $topic, "tracking_fields": $tracking_fields, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Perform batch registration
@@ -10043,25 +10083,25 @@ export def "webinars-batch-registrants create" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --auto-approve: oneof<nothing, bool> # If a meeting was scheduled with approval_type `1` (manual approval), but you would like to automatically approve the registrants that are added via this API, you can set the value of this field to `true`.   You **cannot** use this field to change approval setting for a meeting  that was originally scheduled with approval_type `0` (automatic approval).
+  --auto-approve: oneof<nothing, bool> # If a meeting was scheduled with approval_type `1` (manual approval), but you would like to automatically approve the registrants that are added via this API, you can set the value of this field to `true`. You **cannot** use this field to change approval setting for a meeting that was originally scheduled with approval_type `0` (automatic approval).
   --registrants: list # item shape: {email: string, first_name: string, last_name?: string}
 ]: any -> record<registrants: table<email: string, join_url: string, registrant_id: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({webinar_id: $webinar_id} | format pattern "/webinars/{webinar_id}/batch_registrants"))
-  let body = {"auto_approve": $auto_approve, "registrants": $registrants} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({webinar_id: (encode-path-segment $webinar_id)} | format pattern "/webinars/{webinar_id}/batch_registrants"))
+  let req_body = {"auto_approve": $auto_approve, "registrants": $registrants} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Remove panelists
 #
 # DELETE /webinars/{webinarId}/panelists
 # operationId: webinarPanelistsDelete
-export def "webinars-panelists webinarPanelistsDelete" [
+export def "webinars-panelists delete-by-webinarId" [
   webinar_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10074,7 +10114,7 @@ export def "webinars-panelists webinarPanelistsDelete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({webinar_id: $webinar_id} | format pattern "/webinars/{webinar_id}/panelists"))
+  let full_url = (build-url $base ({webinar_id: (encode-path-segment $webinar_id)} | format pattern "/webinars/{webinar_id}/panelists"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10084,7 +10124,7 @@ export def "webinars-panelists webinarPanelistsDelete" [
 #
 # GET /webinars/{webinarId}/panelists
 # operationId: webinarPanelists
-export def "webinars-panelists webinarPanelists" [
+export def "webinars-panelists get" [
   webinar_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10098,7 +10138,7 @@ export def "webinars-panelists webinarPanelists" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({webinar_id: $webinar_id} | format pattern "/webinars/{webinar_id}/panelists"))
+  let full_url = (build-url $base ({webinar_id: (encode-path-segment $webinar_id)} | format pattern "/webinars/{webinar_id}/panelists"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10109,7 +10149,7 @@ export def "webinars-panelists webinarPanelists" [
 # POST /webinars/{webinarId}/panelists
 # operationId: webinarPanelistCreate
 # --panelists item shape: {email?: string, name?: string}
-export def "webinars-panelists webinarPanelistCreate" [
+export def "webinars-panelists create" [
   webinar_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10125,19 +10165,19 @@ export def "webinars-panelists webinarPanelistCreate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({webinar_id: $webinar_id} | format pattern "/webinars/{webinar_id}/panelists"))
-  let body = {"panelists": $panelists} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({webinar_id: (encode-path-segment $webinar_id)} | format pattern "/webinars/{webinar_id}/panelists"))
+  let req_body = {"panelists": $panelists} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Remove a panelist
 #
 # DELETE /webinars/{webinarId}/panelists/{panelistId}
 # operationId: webinarPanelistDelete
-export def "webinars-panelists webinarPanelistDelete" [
+export def "webinars-panelists delete-by-webinarId-panelistId" [
   webinar_id: int
   panelist_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -10151,17 +10191,17 @@ export def "webinars-panelists webinarPanelistDelete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({webinar_id: $webinar_id, panelist_id: $panelist_id} | format pattern "/webinars/{webinar_id}/panelists/{panelist_id}"))
+  let full_url = (build-url $base ({webinar_id: (encode-path-segment $webinar_id), panelist_id: (encode-path-segment $panelist_id)} | format pattern "/webinars/{webinar_id}/panelists/{panelist_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# List a webinar's polls 
+# List a webinar's polls
 #
 # GET /webinars/{webinarId}/polls
 # operationId: webinarPolls
-export def "webinars-polls webinarPolls" [
+export def "webinars-polls list" [
   webinar_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10175,7 +10215,7 @@ export def "webinars-polls webinarPolls" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({webinar_id: $webinar_id} | format pattern "/webinars/{webinar_id}/polls"))
+  let full_url = (build-url $base ({webinar_id: (encode-path-segment $webinar_id)} | format pattern "/webinars/{webinar_id}/polls"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10185,8 +10225,8 @@ export def "webinars-polls webinarPolls" [
 #
 # POST /webinars/{webinarId}/polls
 # operationId: webinarPollCreate
-# --questions item shape: {answers?: list, name?: string, type?: "single"|"multiple"}
-export def "webinars-polls webinarPollCreate" [
+# --questions item shape: {answers?: list<string>, name?: string, type?: "single"|"multiple"}
+export def "webinars-polls create" [
   webinar_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10197,25 +10237,25 @@ export def "webinars-polls webinarPollCreate" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --questions: list # Array of Polls — item shape: {answers?: list, name?: string, type?: "single"|"multiple"}
+  --questions: list # Array of Polls — item shape: {answers?: list<string>, name?: string, type?: "single"|"multiple"}
   --title: string # Title for the poll.
 ]: any -> record<id: string, status: string, questions: table<answers: list, name: string, type: string>, title: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({webinar_id: $webinar_id} | format pattern "/webinars/{webinar_id}/polls"))
-  let body = {"questions": $questions, "title": $title} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({webinar_id: (encode-path-segment $webinar_id)} | format pattern "/webinars/{webinar_id}/polls"))
+  let req_body = {"questions": $questions, "title": $title} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a webinar poll
 #
 # DELETE /webinars/{webinarId}/polls/{pollId}
 # operationId: webinarPollDelete
-export def "webinars-polls webinarPollDelete" [
+export def "webinars-polls delete" [
   webinar_id: int
   poll_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10229,7 +10269,7 @@ export def "webinars-polls webinarPollDelete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({webinar_id: $webinar_id, poll_id: $poll_id} | format pattern "/webinars/{webinar_id}/polls/{poll_id}"))
+  let full_url = (build-url $base ({webinar_id: (encode-path-segment $webinar_id), poll_id: (encode-path-segment $poll_id)} | format pattern "/webinars/{webinar_id}/polls/{poll_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10239,7 +10279,7 @@ export def "webinars-polls webinarPollDelete" [
 #
 # GET /webinars/{webinarId}/polls/{pollId}
 # operationId: webinarPollGet
-export def "webinars-polls webinarPollGet" [
+export def "webinars-polls get" [
   webinar_id: int
   poll_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10254,7 +10294,7 @@ export def "webinars-polls webinarPollGet" [
 ]: nothing -> record<id: string, status: string, questions: table<answers: list, name: string, type: string>, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({webinar_id: $webinar_id, poll_id: $poll_id} | format pattern "/webinars/{webinar_id}/polls/{poll_id}"))
+  let full_url = (build-url $base ({webinar_id: (encode-path-segment $webinar_id), poll_id: (encode-path-segment $poll_id)} | format pattern "/webinars/{webinar_id}/polls/{poll_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10264,8 +10304,8 @@ export def "webinars-polls webinarPollGet" [
 #
 # PUT /webinars/{webinarId}/polls/{pollId}
 # operationId: webinarPollUpdate
-# --questions item shape: {answers?: list, name?: string, type?: "single"|"multiple"}
-export def "webinars-polls webinarPollUpdate" [
+# --questions item shape: {answers?: list<string>, name?: string, type?: "single"|"multiple"}
+export def "webinars-polls update" [
   webinar_id: int
   poll_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10276,25 +10316,25 @@ export def "webinars-polls webinarPollUpdate" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --questions: list # Array of Polls — item shape: {answers?: list, name?: string, type?: "single"|"multiple"}
+  --questions: list # Array of Polls — item shape: {answers?: list<string>, name?: string, type?: "single"|"multiple"}
   --title: string # Title for the poll.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({webinar_id: $webinar_id, poll_id: $poll_id} | format pattern "/webinars/{webinar_id}/polls/{poll_id}"))
-  let body = {"questions": $questions, "title": $title} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({webinar_id: (encode-path-segment $webinar_id), poll_id: (encode-path-segment $poll_id)} | format pattern "/webinars/{webinar_id}/polls/{poll_id}"))
+  let req_body = {"questions": $questions, "title": $title} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List webinar registrants
 #
 # GET /webinars/{webinarId}/registrants
 # operationId: webinarRegistrants
-export def "webinars-registrants webinarRegistrants" [
+export def "webinars-registrants list" [
   webinar_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10306,16 +10346,16 @@ export def "webinars-registrants webinarRegistrants" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --occurrence-id: string # The meeting occurrence ID.
-  --status: string@status-completer # The registrant status:<br>`pending` - Registrant's status is pending.<br>`approved` - Registrant's status is approved.<br>`denied` - Registrant's status is denied. (default: approved)
+  --status: string@status-completer # The registrant status:`pending` - Registrant's status is pending.`approved` - Registrant's status is approved.`denied` - Registrant's status is denied. (default: approved)
   --tracking-source-id: string # The tracking source ID for the registrants. Useful if you share the webinar registration page in multiple locations. See [Creating source tracking links for webinar registration](https://support.zoom.us/hc/en-us/articles/360000315683-Creating-source-tracking-links-for-webinar-registration) for details.
   --page-size: int # The number of records returned within a single API call. (default: 30)
-  --page-number: int #  **Deprecated** - This field has been deprecated and we will stop supporting it completely in a future release. Please use "next_page_token" for pagination instead of this field.  The page number of the current page in the returned records. (default: 1)
+  --page-number: int # **Deprecated** - This field has been deprecated and we will stop supporting it completely in a future release. Please use "next_page_token" for pagination instead of this field. The page number of the current page in the returned records. (default: 1)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "occurrence_id" $occurrence_id "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "tracking_source_id" $tracking_source_id "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "page_number" $page_number "scalar") (serialize-qp "next_page_token" $next_page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({webinar_id: $webinar_id} | format pattern "/webinars/{webinar_id}/registrants") $qp)
+  let full_url = (build-url $base ({webinar_id: (encode-path-segment $webinar_id)} | format pattern "/webinars/{webinar_id}/registrants") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10326,7 +10366,7 @@ export def "webinars-registrants webinarRegistrants" [
 # POST /webinars/{webinarId}/registrants
 # operationId: webinarRegistrantCreate
 # --custom_questions item shape: {title?: string, value?: string}
-export def "webinars-registrants webinarRegistrantCreate" [
+export def "webinars-registrants create" [
   webinar_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10348,11 +10388,11 @@ export def "webinars-registrants webinarRegistrantCreate" [
   --industry: string # Registrant's Industry.
   --job-title: string # Registrant's job title.
   --last-name: string # Registrant's last name.
-  --no-of-employees: string # Number of Employees:<br>`1-20`<br>`21-50`<br>`51-100`<br>`101-500`<br>`500-1,000`<br>`1,001-5,000`<br>`5,001-10,000`<br>`More than 10,000`
+  --no-of-employees: string # Number of Employees:`1-20``21-50``51-100``101-500``500-1,000``1,001-5,000``5,001-10,000``More than 10,000`
   --org: string # Registrant's Organization.
   --phone: string # Registrant's Phone number.
-  --purchasing-time-frame: string # This field can be included to gauge interest of webinar attendees towards buying your product or service.  Purchasing Time Frame:<br>`Within a month`<br>`1-3 months`<br>`4-6 months`<br>`More than 6 months`<br>`No timeframe`
-  --role-in-purchase-process: string # Role in Purchase Process:<br>`Decision Maker`<br>`Evaluator/Recommender`<br>`Influencer`<br>`Not involved` 
+  --purchasing-time-frame: string # This field can be included to gauge interest of webinar attendees towards buying your product or service. Purchasing Time Frame:`Within a month``1-3 months``4-6 months``More than 6 months``No timeframe`
+  --role-in-purchase-process: string # Role in Purchase Process:`Decision Maker``Evaluator/Recommender``Influencer``Not involved`
   --state: string # Registrant's State/Province.
   --zip: string # Registrant's Zip/Postal Code.
 ]: any -> record<id: string, join_url: string, registrant_id: string, start_time: string, topic: string> {
@@ -10360,19 +10400,19 @@ export def "webinars-registrants webinarRegistrantCreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "occurrence_ids" $occurrence_ids "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({webinar_id: $webinar_id} | format pattern "/webinars/{webinar_id}/registrants") $qp)
-  let body = {"address": $address, "city": $city, "comments": $comments, "country": $country, "custom_questions": $custom_questions, "email": $email, "first_name": $first_name, "industry": $industry, "job_title": $job_title, "last_name": $last_name, "no_of_employees": $no_of_employees, "org": $org, "phone": $phone, "purchasing_time_frame": $purchasing_time_frame, "role_in_purchase_process": $role_in_purchase_process, "state": $state, "zip": $zip} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({webinar_id: (encode-path-segment $webinar_id)} | format pattern "/webinars/{webinar_id}/registrants") $qp)
+  let req_body = {"address": $address, "city": $city, "comments": $comments, "country": $country, "custom_questions": $custom_questions, "email": $email, "first_name": $first_name, "industry": $industry, "job_title": $job_title, "last_name": $last_name, "no_of_employees": $no_of_employees, "org": $org, "phone": $phone, "purchasing_time_frame": $purchasing_time_frame, "role_in_purchase_process": $role_in_purchase_process, "state": $state, "zip": $zip} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List registration questions
 #
 # GET /webinars/{webinarId}/registrants/questions
 # operationId: webinarRegistrantsQuestionsGet
-export def "webinars-registrants-questions webinarRegistrantsQuestionsGet" [
+export def "webinars-registrants-questions get" [
   webinar_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10386,7 +10426,7 @@ export def "webinars-registrants-questions webinarRegistrantsQuestionsGet" [
 ]: nothing -> record<custom_questions: table<answers: list, required: bool, title: string, type: string>, questions: table<field_name: string, required: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({webinar_id: $webinar_id} | format pattern "/webinars/{webinar_id}/registrants/questions"))
+  let full_url = (build-url $base ({webinar_id: (encode-path-segment $webinar_id)} | format pattern "/webinars/{webinar_id}/registrants/questions"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10396,9 +10436,9 @@ export def "webinars-registrants-questions webinarRegistrantsQuestionsGet" [
 #
 # PATCH /webinars/{webinarId}/registrants/questions
 # operationId: webinarRegistrantQuestionUpdate
-# --custom_questions item shape: {answers?: list, required?: bool, title?: string, type?: "short"|"single_radio"|"single_dropdown"|"multiple"}
+# --custom_questions item shape: {answers?: list<string>, required?: bool, title?: string, type?: "short"|"single_radio"|"single_dropdown"|"multiple"}
 # --questions item shape: {field_name?: "last_name"|"address"|"city"|"country"|"zip"|"state"|"phone"|"industry"|"org"|"job_title"|"purchasing_time_frame"|"role_in_purchase_process"|"no_of_employees"|"comments", required?: bool}
-export def "webinars-registrants-questions webinarRegistrantQuestionUpdate" [
+export def "webinars-registrants-questions update" [
   webinar_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10408,18 +10448,18 @@ export def "webinars-registrants-questions webinarRegistrantQuestionUpdate" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --custom-questions: list # Array of Registrant Custom Questions. — item shape: {answers?: list, required?: bool, title?: string, type?: "short"|"single_radio"|"single_dropdown"|"multiple"}
+  --custom-questions: list # Array of Registrant Custom Questions. — item shape: {answers?: list<string>, required?: bool, title?: string, type?: "short"|"single_radio"|"single_dropdown"|"multiple"}
   --questions: list # Array of registration fields whose values should be provided by registrants during registration. — item shape: {field_name?: "last_name"|"address"|"city"|"country"|"zip"|"state"|"phone"|"industry"|"org"|"job_title"|"purchasing_time_frame"|"role_in_purchase_process"|"no_of_employees"|"comments", required?: bool}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({webinar_id: $webinar_id} | format pattern "/webinars/{webinar_id}/registrants/questions"))
-  let body = {"custom_questions": $custom_questions, "questions": $questions} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({webinar_id: (encode-path-segment $webinar_id)} | format pattern "/webinars/{webinar_id}/registrants/questions"))
+  let req_body = {"custom_questions": $custom_questions, "questions": $questions} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update registrant's status
@@ -10427,7 +10467,7 @@ export def "webinars-registrants-questions webinarRegistrantQuestionUpdate" [
 # PUT /webinars/{webinarId}/registrants/status
 # operationId: webinarRegistrantStatus
 # --registrants item shape: {email?: string, id?: string}
-export def "webinars-registrants-status webinarRegistrantStatus" [
+export def "webinars-registrants-status update" [
   webinar_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10438,19 +10478,19 @@ export def "webinars-registrants-status webinarRegistrantStatus" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --occurrence-id: string # The meeting occurrence ID.
-  action: string@action-completer-6 # Used to approve a registrant, deny a registrant, or cancel a previously approved registrant. 
+  action: string@action-completer-6 # Used to approve a registrant, deny a registrant, or cancel a previously approved registrant.
   --registrants: list # List of registrants. — item shape: {email?: string, id?: string}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "occurrence_id" $occurrence_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({webinar_id: $webinar_id} | format pattern "/webinars/{webinar_id}/registrants/status") $qp)
-  let body = {"action": $action, "registrants": $registrants} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({webinar_id: (encode-path-segment $webinar_id)} | format pattern "/webinars/{webinar_id}/registrants/status") $qp)
+  let req_body = {"action": $action, "registrants": $registrants} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a webinar registrant
@@ -10473,7 +10513,7 @@ export def "webinars-registrants delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "occurrence_id" $occurrence_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({webinar_id: $webinar_id, registrant_id: $registrant_id} | format pattern "/webinars/{webinar_id}/registrants/{registrant_id}") $qp)
+  let full_url = (build-url $base ({webinar_id: (encode-path-segment $webinar_id), registrant_id: (encode-path-segment $registrant_id)} | format pattern "/webinars/{webinar_id}/registrants/{registrant_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10483,7 +10523,7 @@ export def "webinars-registrants delete" [
 #
 # GET /webinars/{webinarId}/registrants/{registrantId}
 # operationId: webinarRegistrantGet
-export def "webinars-registrants webinarRegistrantGet" [
+export def "webinars-registrants get" [
   webinar_id: int
   registrant_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10500,7 +10540,7 @@ export def "webinars-registrants webinarRegistrantGet" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "occurrence_id" $occurrence_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({webinar_id: $webinar_id, registrant_id: $registrant_id} | format pattern "/webinars/{webinar_id}/registrants/{registrant_id}") $qp)
+  let full_url = (build-url $base ({webinar_id: (encode-path-segment $webinar_id), registrant_id: (encode-path-segment $registrant_id)} | format pattern "/webinars/{webinar_id}/registrants/{registrant_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10510,7 +10550,7 @@ export def "webinars-registrants webinarRegistrantGet" [
 #
 # PUT /webinars/{webinarId}/status
 # operationId: webinarStatus
-export def "webinars-status webinarStatus" [
+export def "webinars-status update" [
   webinar_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10525,12 +10565,12 @@ export def "webinars-status webinarStatus" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({webinar_id: $webinar_id} | format pattern "/webinars/{webinar_id}/status"))
-  let body = {"action": $action} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({webinar_id: (encode-path-segment $webinar_id)} | format pattern "/webinars/{webinar_id}/status"))
+  let req_body = {"action": $action} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get webinar tracking sources
@@ -10551,7 +10591,7 @@ export def "webinars-tracking-sources get" [
 ]: nothing -> record<total_records: int, tracking_sources: table<id: string, registration_count: int, source_name: string, tracking_url: string, visitor_count: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({webinar_id: $webinar_id} | format pattern "/webinars/{webinar_id}/tracking_sources"))
+  let full_url = (build-url $base ({webinar_id: (encode-path-segment $webinar_id)} | format pattern "/webinars/{webinar_id}/tracking_sources"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

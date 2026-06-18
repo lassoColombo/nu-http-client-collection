@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -119,7 +128,7 @@ export def "verification-result get" [
 # Send an SMS with verification code and a custom message for authentication purpose.
 #
 # POST /v1/verification/send
-export def "verification-send post" [
+export def "verification-send create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -132,7 +141,7 @@ export def "verification-send post" [
   --format: string@format-completer # Returns the API response in json (default) or xml format.
   --tel: string # The recipient mobile phone number in E164 format which is a plus followed by just numbers with no spaces or parentheses.
   --key: string # FraudLabs Pro API key.
-  --mesg: string # The message template for the SMS. Add <otp> as placeholder for the actual OTP to be generated. Max length is 140 characters. (allows empty value)
+  --mesg: string # The message template for the SMS. Add as placeholder for the actual OTP to be generated. Max length is 140 characters. (allows empty value)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

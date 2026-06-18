@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -68,7 +77,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "activities get-activities-using-get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "activities get-using-get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -92,7 +101,7 @@ export def commands []: nothing -> table {
 #
 # GET /activities
 # operationId: getActivitiesUsingGET
-export def "activities get-activities-using-get" [
+export def "activities get-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -101,12 +110,12 @@ export def "activities get-activities-using-get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --assay-chembl-id: list # assayChemblId
+  --assay-chembl-id: list<string> # assayChemblId
   --limit: int # limit (format: int32, default: 10)
-  --molecule-chembl-id: list # moleculeChemblId
+  --molecule-chembl-id: list<string> # moleculeChemblId
   --page: int # page (format: int32, default: 0)
   --pchembl-value: float # pchemblValue (format: double)
-  --target-chembl-id: list # targetChemblId
+  --target-chembl-id: list<string> # targetChemblId
 ]: nothing -> record<activities: table<assay_chembl_id: string, data_validity_comment: string, molecule_chembl_id: string, pchembl_value: float, standard_flag: bool, standard_relation: string, standard_units: string, standard_value: float, target_chembl_id: string>, pageMeta: record<currentElements: int, currentPage: int, limit: int, totalElements: int, totalPages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -121,7 +130,7 @@ export def "activities get-activities-using-get" [
 #
 # GET /assays
 # operationId: getAssaysUsingGET
-export def "assays get-assays-using-get" [
+export def "assays get-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -130,12 +139,12 @@ export def "assays get-assays-using-get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --assay-chembl-id: list # assayChemblId
-  --assay-org: list # assayOrg
-  --assay-type: list # assayType
+  --assay-chembl-id: list<string> # assayChemblId
+  --assay-org: list<string> # assayOrg
+  --assay-type: list<string> # assayType
   --limit: int # limit (format: int32, default: 10)
   --page: int # page (format: int32, default: 0)
-  --target-chembl-id: list # targetChemblId
+  --target-chembl-id: list<string> # targetChemblId
 ]: nothing -> record<assays: table<assay_chembl_id: string, assay_id: string, assay_organism: string, assay_type: string, confidence_score: float, target_chembl_id: string>, pageMeta: record<currentElements: int, currentPage: int, limit: int, totalElements: int, totalPages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -150,7 +159,7 @@ export def "assays get-assays-using-get" [
 #
 # GET /drugs
 # operationId: getDrugsUsingGET
-export def "drugs get-drugs-using-get" [
+export def "drugs get-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -159,13 +168,13 @@ export def "drugs get-drugs-using-get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accession: list # accession
-  --chembl-id: list # chemblId
-  --identifier: list # identifier
+  --accession: list<string> # accession
+  --chembl-id: list<string> # chemblId
+  --identifier: list<string> # identifier
   --limit: int # limit (format: int32, default: 10)
-  --name: list # name
+  --name: list<string> # name
   --page: int # page (format: int32, default: 0)
-  --pubchem-cid: list # pubchemCid
+  --pubchem-cid: list<string> # pubchemCid
 ]: nothing -> record<drugs: table<alogp: float, canonical_smiles: string, chembl_id: string, full_mwt: float, identifier: string, inchi_key: string, kegg_cid: string, molecule_type: string, name: string, pathway: list, pb_structures: list, polar_surface_area: float, pubchem_cid: string, pubchem_sid: string, standard_inchi: string, targets: list, uniprot_accession: string>, pageMeta: record<currentElements: int, currentPage: int, limit: int, totalElements: int, totalPages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -180,7 +189,7 @@ export def "drugs get-drugs-using-get" [
 #
 # GET /efo
 # operationId: getEFOUsingGET
-export def "efo get-efo-using-get" [
+export def "efo get-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -189,14 +198,14 @@ export def "efo get-efo-using-get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --doid: list # doid
-  --label: list # label
+  --doid: list<string> # doid
+  --label: list<string> # label
   --limit: int # limit (format: int32, default: 10)
-  --mesh: list # mesh
-  --obo-id: list # oboId
-  --omim-id: list # omimId
+  --mesh: list<string> # mesh
+  --obo-id: list<string> # oboId
+  --omim-id: list<string> # omimId
   --page: int # page (format: int32, default: 0)
-  --synonym: list # synonym
+  --synonym: list<string> # synonym
 ]: nothing -> record<diseases: table<description: list, doid: list, icd9: list, label: string, mesh: list, ncit: list, obo_id: string, omim: list, short_form: string, snowmed: list, synonyms: list, umls: list>, pageMeta: record<currentElements: int, currentPage: int, limit: int, totalElements: int, totalPages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -211,7 +220,7 @@ export def "efo get-efo-using-get" [
 #
 # GET /hpo
 # operationId: getHpoUsingGET
-export def "hpo get-hpo-using-get" [
+export def "hpo get-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -220,11 +229,11 @@ export def "hpo get-hpo-using-get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --genesymbol: list # genesymbol
-  --hpotermname: list # hpotermname
+  --genesymbol: list<string> # genesymbol
+  --hpotermname: list<string> # hpotermname
   --limit: int # limit (format: int32, default: 10)
   --page: int # page (format: int32, default: 0)
-  --synonym: list # synonym
+  --synonym: list<string> # synonym
 ]: nothing -> record<hpo: table<db_references: list, gene: list, hpo_id: string, synonyms: list, term_name: string>, pageMeta: record<currentElements: int, currentPage: int, limit: int, totalElements: int, totalPages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -239,7 +248,7 @@ export def "hpo get-hpo-using-get" [
 #
 # GET /intact
 # operationId: getIntactUsingGET
-export def "intact get-intact-using-get" [
+export def "intact get-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -248,9 +257,9 @@ export def "intact get-intact-using-get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accession: list # accession
+  --accession: list<string> # accession
   --confidence: float # confidence (format: double)
-  --gene: list # gene
+  --gene: list<string> # gene
   --limit: int # limit (format: int32, default: 10)
   --page: int # page (format: int32, default: 0)
 ]: nothing -> record<interactions: table<confidence: float, interaction_ac: list, interactor_a: record, interactor_b: record, method: string, source_db: string>, pageMeta: record<currentElements: int, currentPage: int, limit: int, totalElements: int, totalPages: int>> {
@@ -267,7 +276,7 @@ export def "intact get-intact-using-get" [
 #
 # GET /molecules
 # operationId: getMoleculesUsingGET
-export def "molecules get-molecules-using-get" [
+export def "molecules get-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -276,10 +285,10 @@ export def "molecules get-molecules-using-get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --canonical-smiles: list # canonicalSmiles
-  --inchi-key: list # inchiKey
+  --canonical-smiles: list<string> # canonicalSmiles
+  --inchi-key: list<string> # inchiKey
   --limit: int # limit (format: int32, default: 10)
-  --molecule-chembl-id: list # moleculeChemblId
+  --molecule-chembl-id: list<string> # moleculeChemblId
   --page: int # page (format: int32, default: 0)
 ]: nothing -> record<molecules: table<alogp: float, canonical_smiles: string, chirality: float, full_mwt: float, heavy_atoms_count: int, inchi_key: string, max_phase: int, molecular_species: string, molecular_type: string, molecule_chembl_id: string, parent_chembl_id: string, pref_name: string, prodrug: float, standard_inchi: string, xrefs: list>, pageMeta: record<currentElements: int, currentPage: int, limit: int, totalElements: int, totalPages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -291,11 +300,11 @@ export def "molecules get-molecules-using-get" [
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Proteins collected from Uniprot for selective tax ids  HUMAN(9606), MOUSE(10090), RAT(10116), BOVINE(9913), ESCHERICHIA_COLI(83333), SUS_SCROFA(9823), MYCOBACTERIUM_TUBERCULOSIS(83332), ORYCTOLAGUS_CUNICULUS(9986), SACCHAROMYCES_CEREVISIAE(559292), CVHSA(694009) & SARS2(2697049)
+# Proteins collected from Uniprot for selective tax ids HUMAN(9606), MOUSE(10090), RAT(10116), BOVINE(9913), ESCHERICHIA_COLI(83333), SUS_SCROFA(9823), MYCOBACTERIUM_TUBERCULOSIS(83332), ORYCTOLAGUS_CUNICULUS(9986), SACCHAROMYCES_CEREVISIAE(559292), CVHSA(694009) & SARS2(2697049)
 #
 # GET /proteins
 # operationId: getProteinsUsingGET
-export def "proteins get-proteins-using-get" [
+export def "proteins get-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -304,19 +313,19 @@ export def "proteins get-proteins-using-get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accession: list # accession
-  --ec: list # ec
-  --full-name: list # fullName
-  --gene: list # gene
-  --go: list # go
-  --interpro: list # interpro
+  --accession: list<string> # accession
+  --ec: list<string> # ec
+  --full-name: list<string> # fullName
+  --gene: list<string> # gene
+  --go: list<string> # go
+  --interpro: list<string> # interpro
   --limit: int # limit (format: int32, default: 10)
-  --omim: list # omim
-  --orphanet: list # orphanet
+  --omim: list<string> # omim
+  --orphanet: list<string> # orphanet
   --page: int # page (format: int32, default: 0)
-  --pfam: list # pfam
-  --reactome: list # reactome
-  --tax-id: list # taxId
+  --pfam: list<string> # pfam
+  --reactome: list<string> # reactome
+  --tax-id: list<int> # taxId
 ]: nothing -> record<pageMeta: record<currentElements: int, currentPage: int, limit: int, totalElements: int, totalPages: int>, proteins: table<accession: string, chromosome: string, crossreferences: record, ec_numbers: list, features: record, full_name: string, genes: list, interactions: list, length: float, mass: float, tax_id: int, variations: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -331,7 +340,7 @@ export def "proteins get-proteins-using-get" [
 #
 # GET /pubchem/bioassays
 # operationId: getBioassaysUsingGET
-export def "pubchem-bioassays get-bioassays-using-get" [
+export def "pubchem-bioassays get-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -340,10 +349,10 @@ export def "pubchem-bioassays get-bioassays-using-get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accession: list # accession
-  --assay-pubchem-id: list # assayPubchemId
+  --accession: list<string> # accession
+  --assay-pubchem-id: list<string> # assayPubchemId
   --limit: int # limit (format: int32, default: 1)
-  --ncbi-protein-id: list # ncbiProteinId
+  --ncbi-protein-id: list<string> # ncbiProteinId
   --page: int # page (format: int32, default: 0)
 ]: nothing -> record<bioassays: table<bioAssay: record, sidRelatedData: list>, pageMeta: record<currentElements: int, currentPage: int, limit: int, totalElements: int, totalPages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -359,7 +368,7 @@ export def "pubchem-bioassays get-bioassays-using-get" [
 #
 # GET /pubchem/bioassays/sids
 # operationId: getBioassaysUsingGET_1
-export def "pubchem-bioassays-sids get-bioassays-using-get-by-" [
+export def "pubchem-bioassays-sids get-using-get-by-" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -371,7 +380,7 @@ export def "pubchem-bioassays-sids get-bioassays-using-get-by-" [
   --limit: int # limit (format: int32, default: 10)
   --outcome: string # outcome
   --page: int # page (format: int32, default: 0)
-  --sids: list # sids
+  --sids: list<string> # sids
 ]: nothing -> record<bioassays: table<bioAssay: record, sidRelatedData: list>, pageMeta: record<currentElements: int, currentPage: int, limit: int, totalElements: int, totalPages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -386,7 +395,7 @@ export def "pubchem-bioassays-sids get-bioassays-using-get-by-" [
 #
 # GET /pubchem/compounds
 # operationId: getCompoundsUsingGET
-export def "pubchem-compounds get-compounds-using-get" [
+export def "pubchem-compounds get-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -395,9 +404,9 @@ export def "pubchem-compounds get-compounds-using-get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --canonical-smiles: list # canonicalSmiles
-  --cid: list # cid
-  --inchi-key: list # inchiKey
+  --canonical-smiles: list<string> # canonicalSmiles
+  --cid: list<string> # cid
+  --inchi-key: list<string> # inchiKey
   --limit: int # limit (format: int32, default: 10)
   --page: int # page (format: int32, default: 0)
 ]: nothing -> record<compounds: table<alogp: float, atom_chiral_count: int, atom_chiral_def_count: int, bond_chiral_count: int, bond_chiral_def_count: int, bond_chiral_undef_count: int, canonical_smiles: string, cid: int, covalent_unit_count: int, finger_print: string, full_mwt: float, heavy_atoms_count: int, inchi_key: string, isotope_atom_count: int, polar_surface_area: float, standard_inchi: string, tautomers_count: int>, pageMeta: record<currentElements: int, currentPage: int, limit: int, totalElements: int, totalPages: int>> {
@@ -414,7 +423,7 @@ export def "pubchem-compounds get-compounds-using-get" [
 #
 # GET /pubchem/substances
 # operationId: getSubstancesUsingGET
-export def "pubchem-substances get-substances-using-get" [
+export def "pubchem-substances get-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -423,10 +432,10 @@ export def "pubchem-substances get-substances-using-get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --cid: list # cid
+  --cid: list<string> # cid
   --limit: int # limit (format: int32, default: 10)
   --page: int # page (format: int32, default: 0)
-  --sid: list # sid
+  --sid: list<string> # sid
 ]: nothing -> record<pageMeta: record<currentElements: int, currentPage: int, limit: int, totalElements: int, totalPages: int>, substances: table<chembl_cmpd_xref: string, cids: list, sid: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -441,7 +450,7 @@ export def "pubchem-substances get-substances-using-get" [
 #
 # GET /targets
 # operationId: getTargetsUsingGET
-export def "targets get-targets-using-get" [
+export def "targets get-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -450,10 +459,10 @@ export def "targets get-targets-using-get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accession: list # accession
+  --accession: list<string> # accession
   --limit: int # limit (format: int32, default: 10)
   --page: int # page (format: int32, default: 0)
-  --target-ids: list # targetIds
+  --target-ids: list<string> # targetIds
 ]: nothing -> record<pageMeta: record<currentElements: int, currentPage: int, limit: int, totalElements: int, totalPages: int>, targets: table<accession: string, target_chembl_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

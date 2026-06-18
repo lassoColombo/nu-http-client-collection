@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -68,7 +77,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "domains-search item" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "domains-search get-item" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -92,7 +101,7 @@ export def commands []: nothing -> table {
 #
 # GET /domains/search
 # operationId: get_search_domain_item
-export def "domains-search item" [
+export def "domains-search get-item" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -128,7 +137,7 @@ export def "domains-search item" [
 #
 # GET /domains/tld/{zone_id}
 # operationId: get_tld_domain_item
-export def "domains-tld item" [
+export def "domains-tld get-item" [
   zone_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -154,7 +163,7 @@ export def "domains-tld item" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "date" $date "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "domain" $domain "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "isDead" $is_dead "scalar") (serialize-qp "A" $a "scalar") (serialize-qp "NS" $ns "scalar") (serialize-qp "CNAME" $cname "scalar") (serialize-qp "MX" $mx "scalar") (serialize-qp "TXT" $txt "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({zone_id: $zone_id} | format pattern "/domains/tld/{zone_id}") $qp)
+  let full_url = (build-url $base ({zone_id: (encode-path-segment $zone_id)} | format pattern "/domains/tld/{zone_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -179,7 +188,7 @@ export def "domains-tld-download get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "date" $date "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({zone_id: $zone_id} | format pattern "/domains/tld/{zone_id}/download") $qp)
+  let full_url = (build-url $base ({zone_id: (encode-path-segment $zone_id)} | format pattern "/domains/tld/{zone_id}/download") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -214,7 +223,7 @@ export def "domains-tld-search get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "date" $date "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "domain" $domain "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "isDead" $is_dead "scalar") (serialize-qp "A" $a "scalar") (serialize-qp "NS" $ns "scalar") (serialize-qp "CNAME" $cname "scalar") (serialize-qp "MX" $mx "scalar") (serialize-qp "TXT" $txt "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({zone_id: $zone_id} | format pattern "/domains/tld/{zone_id}/search") $qp)
+  let full_url = (build-url $base ({zone_id: (encode-path-segment $zone_id)} | format pattern "/domains/tld/{zone_id}/search") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -346,7 +355,7 @@ export def "domains-updates-list get" [
 # GET /info/api
 #
 # operationId: get_api_info_item
-export def "info item" [
+export def "info get-item" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -370,7 +379,7 @@ export def "info item" [
 #
 # GET /info/stat/
 # operationId: get_statistics_collection
-export def "info-stat collection" [
+export def "info-stat get-statistics-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -395,7 +404,7 @@ export def "info-stat collection" [
 #
 # GET /info/stat/{zone}
 # operationId: get_statistics_item
-export def "info-stat item" [
+export def "info-stat get-statistics-item" [
   zone: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -411,7 +420,7 @@ export def "info-stat item" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({zone: $zone} | format pattern "/info/stat/{zone}") $qp)
+  let full_url = (build-url $base ({zone: (encode-path-segment $zone)} | format pattern "/info/stat/{zone}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -457,7 +466,7 @@ export def "info-tld get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({zone: $zone} | format pattern "/info/tld/{zone}") $qp)
+  let full_url = (build-url $base ({zone: (encode-path-segment $zone)} | format pattern "/info/tld/{zone}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

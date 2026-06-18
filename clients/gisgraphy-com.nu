@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -75,7 +84,7 @@ def accept-completer-1 [] { ["application/json" "application/php" "application/p
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "addressparser-parse create-ressparsing" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "addressparser-parse get-addressparsing" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -99,7 +108,7 @@ export def commands []: nothing -> table {
 #
 # GET /addressparser/parse
 # operationId: addressparsing
-export def "addressparser-parse create-ressparsing" [
+export def "addressparser-parse get-addressparsing" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -130,7 +139,7 @@ export def "addressparser-parse create-ressparsing" [
 #
 # GET /fulltext/search
 # operationId: fulltxtsearch
-export def "fulltext-search fulltxtsearch" [
+export def "fulltext-search get-fulltxtsearch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -169,7 +178,7 @@ export def "fulltext-search fulltxtsearch" [
 #
 # GET /geocoding/geocode
 # operationId: geocode
-export def "geocoding-geocode geocode" [
+export def "geocoding-geocode get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -201,7 +210,7 @@ export def "geocoding-geocode geocode" [
 #
 # GET /geoloc/search
 # operationId: geoloc
-export def "geoloc-search geoloc" [
+export def "geoloc-search get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -235,7 +244,7 @@ export def "geoloc-search geoloc" [
 #
 # GET /reversegeocoding/reversegeocode
 # operationId: reversegeocode
-export def "reversegeocoding-reversegeocode reversegeocode" [
+export def "reversegeocoding-reversegeocode get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -266,7 +275,7 @@ export def "reversegeocoding-reversegeocode reversegeocode" [
 #
 # GET /street/find
 # operationId: streetsearch
-export def "street-find streetsearch" [
+export def "street-find get-streetsearch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

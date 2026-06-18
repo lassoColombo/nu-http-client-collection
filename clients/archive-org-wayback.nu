@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -103,17 +112,17 @@ export def "wayback-available get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-url: string # A single URL to query.
-  --timestamp: string # Timestamp requested in ISO 8601 format. The following formats are acceptable:  - YYYY  - YYYY-MM  - YYYY-MM-DD  - YYYY-MM-DDTHH:mm:SSz  - YYYY-MM-DD:HH:mm+00:00
+  --url: string # A single URL to query.
+  --timestamp: string # Timestamp requested in ISO 8601 format. The following formats are acceptable: - YYYY - YYYY-MM - YYYY-MM-DD - YYYY-MM-DDTHH:mm:SSz - YYYY-MM-DD:HH:mm+00:00
   --callback: string # Specifies a JavaScript function func, for a JSON-P response. When provided, results are wrapped as `callback(data)`, and the returned MIME type is application/javascript. This causes the caller to automatically run the func with the JSON results as its argument.
-  --timeout: float # Timeout is the maximum number of seconds to wait for the availability API to get its underlying results from the CDX server. The default value is 5.0.  (default: 5)
-  --closest: string@closest-completer # The direction specifies whether to match archived timestamps that are before the provided one, after, or the default either (closest in either direction). Must be before, after, or either. May be overidden by individual requests.  (default: either)
+  --timeout: float # Timeout is the maximum number of seconds to wait for the availability API to get its underlying results from the CDX server. The default value is 5.0. (default: 5)
+  --closest: string@closest-completer # The direction specifies whether to match archived timestamps that are before the provided one, after, or the default either (closest in either direction). Must be before, after, or either. May be overidden by individual requests. (default: either)
   --status-code: int@status-code-completer # HTTP status codes to filter by. Only results with these codes will be returned
   --tag: string # The optional tag can have any value, and is returned with the results; it can be used to help collate input and output values.
 ]: nothing -> record<code: int, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "url" $qp_url "scalar") (serialize-qp "timestamp" $timestamp "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "closest" $closest "scalar") (serialize-qp "status_code" $status_code "scalar") (serialize-qp "tag" $tag "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "url" $url "scalar") (serialize-qp "timestamp" $timestamp "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "closest" $closest "scalar") (serialize-qp "status_code" $status_code "scalar") (serialize-qp "tag" $tag "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/wayback/v1/available" $qp)
   let accept_val = ($accept | default "application/javascript")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -121,7 +130,7 @@ export def "wayback-available get" [
 }
 
 # POST /wayback/v1/available
-export def "wayback-available post" [
+export def "wayback-available create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -131,11 +140,11 @@ export def "wayback-available post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-url: string # A single URL to query.
-  --timestamp: string # Timestamp requested in ISO 8601 format. The following formats are acceptable:  - YYYY  - YYYY-MM  - YYYY-MM-DD  - YYYY-MM-DDTHH:mm:SSz  - YYYY-MM-DD:HH:mm+00:00
+  --url: string # A single URL to query.
+  --timestamp: string # Timestamp requested in ISO 8601 format. The following formats are acceptable: - YYYY - YYYY-MM - YYYY-MM-DD - YYYY-MM-DDTHH:mm:SSz - YYYY-MM-DD:HH:mm+00:00
   --callback: string # Specifies a JavaScript function func, for a JSON-P response. When provided, results are wrapped as `callback(data)`, and the returned MIME type is application/javascript. This causes the caller to automatically run the func with the JSON results as its argument.
-  --timeout: float # Timeout is the maximum number of seconds to wait for the availability API to get its underlying results from the CDX server. The default value is 5.0.  (default: 5)
-  --closest: string@closest-completer # The direction specifies whether to match archived timestamps that are before the provided one, after, or the default either (closest in either direction). Must be before, after, or either. May be overidden by individual requests.  (default: either)
+  --timeout: float # Timeout is the maximum number of seconds to wait for the availability API to get its underlying results from the CDX server. The default value is 5.0. (default: 5)
+  --closest: string@closest-completer # The direction specifies whether to match archived timestamps that are before the provided one, after, or the default either (closest in either direction). Must be before, after, or either. May be overidden by individual requests. (default: either)
   --status-code: int@status-code-completer # HTTP status codes to filter by. Only results with these codes will be returned
   --tag: string # The optional tag can have any value, and is returned with the results; it can be used to help collate input and output values.
   --body: record
@@ -143,10 +152,11 @@ export def "wayback-available post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "url" $qp_url "scalar") (serialize-qp "timestamp" $timestamp "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "closest" $closest "scalar") (serialize-qp "status_code" $status_code "scalar") (serialize-qp "tag" $tag "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "url" $url "scalar") (serialize-qp "timestamp" $timestamp "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "closest" $closest "scalar") (serialize-qp "status_code" $status_code "scalar") (serialize-qp "tag" $tag "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/wayback/v1/available" $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/javascript")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

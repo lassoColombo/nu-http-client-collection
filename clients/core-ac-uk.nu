@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -69,7 +78,7 @@ def auth-scheme-completer [] { ["query-apiKey"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "articles-dedup nearDuplicateArticles" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "articles-dedup create-near-duplicate" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,7 +102,7 @@ export def commands []: nothing -> table {
 #
 # POST /articles/dedup
 # operationId: nearDuplicateArticles
-export def "articles-dedup nearDuplicateArticles" [
+export def "articles-dedup create-near-duplicate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -104,11 +113,11 @@ export def "articles-dedup nearDuplicateArticles" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --doi: string # The DOI for which the duplicates will be identified
   --title: string # Title to match when looking for duplicate articles. Only useful when either value for @year or @description is supplied.
-  --year: string # Year the article was published. Only useful when value for @title is supplied. 
+  --year: string # Year the article was published. Only useful when value for @title is supplied.
   --description: string # Abstract for an article based on which its duplicates will be found. Only useful when value for @title is supplied.
   --fulltext: string # Full text for an article based on which its duplicates will be found.
   --identifier: string # Article identifier for which the duplicates will be identified. Only useful when either values for @doi or (@title and @year) or (@title and @abstract) or @fulltext are supplied.
-  --repository-id: string # Limit the duplicates search to particular repository id. 
+  --repository-id: string # Limit the duplicates search to particular repository id.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-apiKey"))
   let base = ($base_url | default $BASE_URL)
@@ -123,7 +132,7 @@ export def "articles-dedup nearDuplicateArticles" [
 #
 # POST /articles/get
 # operationId: getArticleByCoreIdBatch
-export def "articles-get get" [
+export def "articles-get get-by-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -146,17 +155,18 @@ export def "articles-get get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "metadata" $metadata "scalar") (serialize-qp "fulltext" $fulltext "scalar") (serialize-qp "citations" $citations "scalar") (serialize-qp "similar" $similar "scalar") (serialize-qp "duplicate" $duplicate "scalar") (serialize-qp "urls" $urls "scalar") (serialize-qp "faithfulMetadata" $faithful_metadata "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/articles/get" $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get article by CORE ID
 #
 # GET /articles/get/{coreId}
 # operationId: getArticleByCoreId
-export def "articles-get get-by-coreId" [
+export def "articles-get get" [
   core_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -177,7 +187,7 @@ export def "articles-get get-by-coreId" [
   let auth = (build-auth $token ($auth_scheme | default "query-apiKey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "metadata" $metadata "scalar") (serialize-qp "fulltext" $fulltext "scalar") (serialize-qp "citations" $citations "scalar") (serialize-qp "similar" $similar "scalar") (serialize-qp "duplicate" $duplicate "scalar") (serialize-qp "urls" $urls "scalar") (serialize-qp "faithfulMetadata" $faithful_metadata "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({core_id: $core_id} | format pattern "/articles/get/{core_id}") $qp)
+  let full_url = (build-url $base ({core_id: (encode-path-segment $core_id)} | format pattern "/articles/get/{core_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -200,7 +210,7 @@ export def "articles-get-download-pdf get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-apiKey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({core_id: $core_id} | format pattern "/articles/get/{core_id}/download/pdf"))
+  let full_url = (build-url $base ({core_id: (encode-path-segment $core_id)} | format pattern "/articles/get/{core_id}/download/pdf"))
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -226,7 +236,7 @@ export def "articles-get-history get" [
   let auth = (build-auth $token ($auth_scheme | default "query-apiKey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({core_id: $core_id} | format pattern "/articles/get/{core_id}/history") $qp)
+  let full_url = (build-url $base ({core_id: (encode-path-segment $core_id)} | format pattern "/articles/get/{core_id}/history") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -236,7 +246,7 @@ export def "articles-get-history get" [
 #
 # POST /articles/search
 # operationId: searchArticlesBatch
-export def "articles-search list-articles-batch" [
+export def "articles-search list-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -259,10 +269,11 @@ export def "articles-search list-articles-batch" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "metadata" $metadata "scalar") (serialize-qp "fulltext" $fulltext "scalar") (serialize-qp "citations" $citations "scalar") (serialize-qp "similar" $similar "scalar") (serialize-qp "duplicate" $duplicate "scalar") (serialize-qp "urls" $urls "scalar") (serialize-qp "faithfulMetadata" $faithful_metadata "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/articles/search" $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Search through all documents
@@ -292,7 +303,7 @@ export def "articles-search list" [
   let auth = (build-auth $token ($auth_scheme | default "query-apiKey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "metadata" $metadata "scalar") (serialize-qp "fulltext" $fulltext "scalar") (serialize-qp "citations" $citations "scalar") (serialize-qp "similar" $similar "scalar") (serialize-qp "duplicate" $duplicate "scalar") (serialize-qp "urls" $urls "scalar") (serialize-qp "faithfulMetadata" $faithful_metadata "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({query: $query} | format pattern "/articles/search/{query}") $qp)
+  let full_url = (build-url $base ({query: (encode-path-segment $query)} | format pattern "/articles/search/{query}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -302,7 +313,7 @@ export def "articles-search list" [
 #
 # POST /articles/similar
 # operationId: similarArticles
-export def "articles-similar similarArticles" [
+export def "articles-similar create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -326,18 +337,18 @@ export def "articles-similar similarArticles" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "metadata" $metadata "scalar") (serialize-qp "fulltext" $fulltext "scalar") (serialize-qp "citations" $citations "scalar") (serialize-qp "similar" $similar "scalar") (serialize-qp "duplicate" $duplicate "scalar") (serialize-qp "urls" $urls "scalar") (serialize-qp "faithfulMetadata" $faithful_metadata "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/articles/similar" $qp)
-  let body = {"text": $text} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"text": $text} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Batch operation for retrieving journals by ISSN
 #
 # POST /journals/get
 # operationId: getJournalByIssnBatch
-export def "journals-get get" [
+export def "journals-get get-by-issn-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -352,17 +363,18 @@ export def "journals-get get" [
   let auth = (build-auth $token ($auth_scheme | default "query-apiKey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/journals/get")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Find journal by ISSN
 #
 # GET /journals/get/{issn}
 # operationId: getJournalByIssn
-export def "journals-get get-by-issn" [
+export def "journals-get get" [
   issn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -375,7 +387,7 @@ export def "journals-get get-by-issn" [
 ]: nothing -> record<data: record<identifiers: list<string>, language: string, publisher: string, rights: string, subjects: list<string>, title: string>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apiKey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({issn: $issn} | format pattern "/journals/get/{issn}"))
+  let full_url = (build-url $base ({issn: (encode-path-segment $issn)} | format pattern "/journals/get/{issn}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -384,7 +396,7 @@ export def "journals-get get-by-issn" [
 # Batch operation for search through journals
 #
 # POST /journals/search
-export def "journals-search post" [
+export def "journals-search create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -399,10 +411,11 @@ export def "journals-search post" [
   let auth = (build-auth $token ($auth_scheme | default "query-apiKey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/journals/search")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Search through journals
@@ -424,7 +437,7 @@ export def "journals-search get" [
   let auth = (build-auth $token ($auth_scheme | default "query-apiKey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({query: $query} | format pattern "/journals/search/{query}") $qp)
+  let full_url = (build-url $base ({query: (encode-path-segment $query)} | format pattern "/journals/search/{query}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -434,7 +447,7 @@ export def "journals-search get" [
 #
 # POST /repositories/get
 # operationId: getRepositoryByIdBatch
-export def "repositories-get get-repository" [
+export def "repositories-get get-repository-by-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -453,17 +466,18 @@ export def "repositories-get get-repository" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "stats" $stats "scalar") (serialize-qp "depositHistory" $deposit_history "scalar") (serialize-qp "depositHistoryCumulative" $deposit_history_cumulative "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repositories/get" $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get repository by CORE repository ID
 #
 # GET /repositories/get/{repositoryId}
 # operationId: getRepositoryById
-export def "repositories-get get-repository-by-repositoryId" [
+export def "repositories-get get-repository" [
   repository_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -480,7 +494,7 @@ export def "repositories-get get-repository-by-repositoryId" [
   let auth = (build-auth $token ($auth_scheme | default "query-apiKey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "stats" $stats "scalar") (serialize-qp "depositHistory" $deposit_history "scalar") (serialize-qp "depositHistoryCumulative" $deposit_history_cumulative "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({repository_id: $repository_id} | format pattern "/repositories/get/{repository_id}") $qp)
+  let full_url = (build-url $base ({repository_id: (encode-path-segment $repository_id)} | format pattern "/repositories/get/{repository_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -489,7 +503,7 @@ export def "repositories-get get-repository-by-repositoryId" [
 # Batch operation for searching through repositories
 #
 # POST /repositories/search
-export def "repositories-search post" [
+export def "repositories-search create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -508,10 +522,11 @@ export def "repositories-search post" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "stats" $stats "scalar") (serialize-qp "depositHistory" $deposit_history "scalar") (serialize-qp "depositHistoryCumulative" $deposit_history_cumulative "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repositories/search" $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Search through all repositories
@@ -536,7 +551,7 @@ export def "repositories-search get" [
   let auth = (build-auth $token ($auth_scheme | default "query-apiKey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "stats" $stats "scalar") (serialize-qp "depositHistory" $deposit_history "scalar") (serialize-qp "depositHistoryCumulative" $deposit_history_cumulative "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({query: $query} | format pattern "/repositories/search/{query}") $qp)
+  let full_url = (build-url $base ({query: (encode-path-segment $query)} | format pattern "/repositories/search/{query}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -545,7 +560,7 @@ export def "repositories-search get" [
 # Batch operation for search through all resources
 #
 # POST /search
-export def "search post" [
+export def "search create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -560,10 +575,11 @@ export def "search post" [
   let auth = (build-auth $token ($auth_scheme | default "query-apiKey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/search")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Search through all resources
@@ -585,7 +601,7 @@ export def "search get" [
   let auth = (build-auth $token ($auth_scheme | default "query-apiKey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({query: $query} | format pattern "/search/{query}") $qp)
+  let full_url = (build-url $base ({query: (encode-path-segment $query)} | format pattern "/search/{query}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

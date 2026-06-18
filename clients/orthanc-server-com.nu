@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -197,7 +206,7 @@ export def "instances list" [
   --expand: string # If present, retrieve detailed information about the individual instances
   --full: oneof<nothing, bool> # If present, report the DICOM tags in full format (tags indexed by their hexadecimal format, associated with their symbolic name and their value)
   --limit: float # Limit the number of results
-  --requested-tags: string # If present, list the DICOM Tags you want to list in the response.  This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'.  The tags requested tags are returned in the 'RequestedTags' field in the response.  Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files.  If not specified, Orthanc will return 
+  --requested-tags: string # If present, list the DICOM Tags you want to list in the response. This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'. The tags requested tags are returned in the 'RequestedTags' field in the response. Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files. If not specified, Orthanc will return
   --short: oneof<nothing, bool> # If present, report the DICOM tags in hexadecimal format
   --since: float # Show only the resources since the provided index
 ]: nothing -> any {
@@ -213,7 +222,7 @@ export def "instances list" [
 # Upload DICOM instances
 #
 # POST /instances
-export def "instances post" [
+export def "instances create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -228,10 +237,11 @@ export def "instances post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/instances")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/dicom" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/dicom" $req_body
 }
 
 # Delete some instance
@@ -250,7 +260,7 @@ export def "instances delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/instances/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/instances/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -270,13 +280,13 @@ export def "instances get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --full: oneof<nothing, bool> # If present, report the DICOM tags in full format (tags indexed by their hexadecimal format, associated with their symbolic name and their value)
-  --requested-tags: string # If present, list the DICOM Tags you want to list in the response.  This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'.  The tags requested tags are returned in the 'RequestedTags' field in the response.  Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files.  If not specified, Orthanc will return 
+  --requested-tags: string # If present, list the DICOM Tags you want to list in the response. This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'. The tags requested tags are returned in the 'RequestedTags' field in the response. Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files. If not specified, Orthanc will return
   --short: oneof<nothing, bool> # If present, report the DICOM tags in hexadecimal format
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "full" $full "scalar") (serialize-qp "requestedTags" $requested_tags "scalar") (serialize-qp "short" $short "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/instances/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/instances/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -285,7 +295,7 @@ export def "instances get" [
 # Anonymize instance
 #
 # POST /instances/{id}/anonymize
-export def "instances-anonymize post" [
+export def "instances-anonymize create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -297,23 +307,23 @@ export def "instances-anonymize post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --dicom-version: string # Version of the DICOM standard to be used for anonymization. Check out configuration option `DeidentifyLogsDicomVersion` for possible values.
   --force: oneof<nothing, bool> # Allow the modification of tags related to DICOM identifiers, at the risk of breaking the DICOM model of the real world
-  --keep: list # List of DICOM tags whose value must not be destroyed by the anonymization. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
+  --keep: list<string> # List of DICOM tags whose value must not be destroyed by the anonymization. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
   --keep-private-tags: oneof<nothing, bool> # Keep the private tags from the DICOM instances (defaults to `false`)
   --keep-source: oneof<nothing, bool> # If set to `false`, instructs Orthanc to the remove original resources. By default, the original resources are kept in Orthanc.
   --private-creator: string # The private creator to be used for private tags in `Replace`
-  --remove: list # List of additional tags to be removed from the DICOM instances. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
+  --remove: list<string> # List of additional tags to be removed from the DICOM instances. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
   --replace: record # Associative array to change the value of some DICOM tags in the DICOM instances. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
   --transcode: string # Transcode the DICOM instances to the provided DICOM transfer syntax: https://book.orthanc-server.com/faq/transcoding.html
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/instances/{id}/anonymize"))
-  let body = {"DicomVersion": $dicom_version, "Force": $force, "Keep": $keep, "KeepPrivateTags": $keep_private_tags, "KeepSource": $keep_source, "PrivateCreator": $private_creator, "Remove": $remove, "Replace": $replace, "Transcode": $transcode} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/instances/{id}/anonymize"))
+  let req_body = {"DicomVersion": $dicom_version, "Force": $force, "Keep": $keep, "KeepPrivateTags": $keep_private_tags, "KeepSource": $keep_source, "PrivateCreator": $private_creator, "Remove": $remove, "Replace": $replace, "Transcode": $transcode} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/dicom"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List attachments
@@ -334,7 +344,7 @@ export def "instances-attachments list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "full" $full "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/instances/{id}/attachments") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/instances/{id}/attachments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -358,11 +368,11 @@ export def "instances-attachments delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/instances/{id}/attachments/{name}"))
-  let extra_headers = {"If-Match": $if_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/instances/{id}/attachments/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-Match": $if_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -384,18 +394,18 @@ export def "instances-attachments get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/instances/{id}/attachments/{name}"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/instances/{id}/attachments/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set attachment
 #
 # PUT /instances/{id}/attachments/{name}
-export def "instances-attachments put" [
+export def "instances-attachments update" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -412,19 +422,20 @@ export def "instances-attachments put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/instances/{id}/attachments/{name}"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"If-Match": $if_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/instances/{id}/attachments/{name}"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/octet-stream" $body
+  let extra_headers = {"If-Match": $if_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/octet-stream" $req_body
 }
 
 # Compress attachment
 #
 # POST /instances/{id}/attachments/{name}/compress
-export def "instances-attachments-compress post" [
+export def "instances-attachments-compress create" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -438,7 +449,7 @@ export def "instances-attachments-compress post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/instances/{id}/attachments/{name}/compress"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/instances/{id}/attachments/{name}/compress"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -462,11 +473,11 @@ export def "instances-attachments-compressed-data get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/instances/{id}/attachments/{name}/compressed-data"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/instances/{id}/attachments/{name}/compressed-data"))
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -488,11 +499,11 @@ export def "instances-attachments-compressed-md5 get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/instances/{id}/attachments/{name}/compressed-md5"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/instances/{id}/attachments/{name}/compressed-md5"))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -514,11 +525,11 @@ export def "instances-attachments-compressed-size get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/instances/{id}/attachments/{name}/compressed-size"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/instances/{id}/attachments/{name}/compressed-size"))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -540,11 +551,11 @@ export def "instances-attachments-data get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/instances/{id}/attachments/{name}/data"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/instances/{id}/attachments/{name}/data"))
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -566,11 +577,11 @@ export def "instances-attachments-info get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/instances/{id}/attachments/{name}/info"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/instances/{id}/attachments/{name}/info"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -592,11 +603,11 @@ export def "instances-attachments-is-compressed get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/instances/{id}/attachments/{name}/is-compressed"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/instances/{id}/attachments/{name}/is-compressed"))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -618,11 +629,11 @@ export def "instances-attachments-md5 get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/instances/{id}/attachments/{name}/md5"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/instances/{id}/attachments/{name}/md5"))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -644,18 +655,18 @@ export def "instances-attachments-size get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/instances/{id}/attachments/{name}/size"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/instances/{id}/attachments/{name}/size"))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Uncompress attachment
 #
 # POST /instances/{id}/attachments/{name}/uncompress
-export def "instances-attachments-uncompress post" [
+export def "instances-attachments-uncompress create" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -669,7 +680,7 @@ export def "instances-attachments-uncompress post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/instances/{id}/attachments/{name}/uncompress"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/instances/{id}/attachments/{name}/uncompress"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -678,7 +689,7 @@ export def "instances-attachments-uncompress post" [
 # Verify attachment
 #
 # POST /instances/{id}/attachments/{name}/verify-md5
-export def "instances-attachments-verify-md5 post" [
+export def "instances-attachments-verify-md5 create" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -692,7 +703,7 @@ export def "instances-attachments-verify-md5 post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/instances/{id}/attachments/{name}/verify-md5"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/instances/{id}/attachments/{name}/verify-md5"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -716,7 +727,7 @@ export def "instances-content get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "..." $param "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/instances/{id}/content") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/instances/{id}/content") $qp)
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -725,7 +736,7 @@ export def "instances-content get" [
 # Write DICOM onto filesystem
 #
 # POST /instances/{id}/export
-export def "instances-export post" [
+export def "instances-export create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -740,11 +751,12 @@ export def "instances-export post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/instances/{id}/export"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/instances/{id}/export"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "text/plain" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "text/plain" $req_body
 }
 
 # Download DICOM
@@ -765,11 +777,11 @@ export def "instances-file get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/instances/{id}/file"))
-  let extra_headers = {"Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/instances/{id}/file"))
   let accept_val = ($accept | default "application/dicom")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -789,7 +801,7 @@ export def "instances-frames list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/instances/{id}/frames"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/instances/{id}/frames"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -812,7 +824,7 @@ export def "instances-frames get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, frame: $frame} | format pattern "/instances/{id}/frames/{frame}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), frame: (encode-path-segment $frame)} | format pattern "/instances/{id}/frames/{frame}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -840,11 +852,11 @@ export def "instances-frames-image-int16 get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "quality" $quality "scalar") (serialize-qp "returnUnsupportedImage" $return_unsupported_image "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id, frame: $frame} | format pattern "/instances/{id}/frames/{frame}/image-int16") $qp)
-  let extra_headers = {"Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), frame: (encode-path-segment $frame)} | format pattern "/instances/{id}/frames/{frame}/image-int16") $qp)
   let accept_val = ($accept | default "image/jpeg")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -870,11 +882,11 @@ export def "instances-frames-image-uint16 get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "quality" $quality "scalar") (serialize-qp "returnUnsupportedImage" $return_unsupported_image "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id, frame: $frame} | format pattern "/instances/{id}/frames/{frame}/image-uint16") $qp)
-  let extra_headers = {"Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), frame: (encode-path-segment $frame)} | format pattern "/instances/{id}/frames/{frame}/image-uint16") $qp)
   let accept_val = ($accept | default "image/jpeg")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -900,11 +912,11 @@ export def "instances-frames-image-uint8 get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "quality" $quality "scalar") (serialize-qp "returnUnsupportedImage" $return_unsupported_image "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id, frame: $frame} | format pattern "/instances/{id}/frames/{frame}/image-uint8") $qp)
-  let extra_headers = {"Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), frame: (encode-path-segment $frame)} | format pattern "/instances/{id}/frames/{frame}/image-uint8") $qp)
   let accept_val = ($accept | default "image/jpeg")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -925,7 +937,7 @@ export def "instances-frames-matlab get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, frame: $frame} | format pattern "/instances/{id}/frames/{frame}/matlab"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), frame: (encode-path-segment $frame)} | format pattern "/instances/{id}/frames/{frame}/matlab"))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -951,7 +963,7 @@ export def "instances-frames-numpy get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "compress" $compress "scalar") (serialize-qp "rescale" $rescale "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id, frame: $frame} | format pattern "/instances/{id}/frames/{frame}/numpy") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id), frame: (encode-path-segment $frame)} | format pattern "/instances/{id}/frames/{frame}/numpy") $qp)
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -979,11 +991,11 @@ export def "instances-frames-preview get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "quality" $quality "scalar") (serialize-qp "returnUnsupportedImage" $return_unsupported_image "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id, frame: $frame} | format pattern "/instances/{id}/frames/{frame}/preview") $qp)
-  let extra_headers = {"Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), frame: (encode-path-segment $frame)} | format pattern "/instances/{id}/frames/{frame}/preview") $qp)
   let accept_val = ($accept | default "image/jpeg")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1004,7 +1016,7 @@ export def "instances-frames-raw get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, frame: $frame} | format pattern "/instances/{id}/frames/{frame}/raw"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), frame: (encode-path-segment $frame)} | format pattern "/instances/{id}/frames/{frame}/raw"))
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1013,7 +1025,7 @@ export def "instances-frames-raw get" [
 # Access raw frame (compressed)
 #
 # GET /instances/{id}/frames/{frame}/raw.gz
-export def "instances-frames-rawgz get" [
+export def "instances-frames-raw-gz get" [
   id: string
   frame: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -1027,7 +1039,7 @@ export def "instances-frames-rawgz get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, frame: $frame} | format pattern "/instances/{id}/frames/{frame}/raw.gz"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), frame: (encode-path-segment $frame)} | format pattern "/instances/{id}/frames/{frame}/raw.gz"))
   let accept_val = "application/gzip"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1060,11 +1072,11 @@ export def "instances-frames-rendered get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "height" $height "scalar") (serialize-qp "quality" $quality "scalar") (serialize-qp "returnUnsupportedImage" $return_unsupported_image "scalar") (serialize-qp "smooth" $smooth "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "window-center" $window_center "scalar") (serialize-qp "window-width" $window_width "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id, frame: $frame} | format pattern "/instances/{id}/frames/{frame}/rendered") $qp)
-  let extra_headers = {"Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), frame: (encode-path-segment $frame)} | format pattern "/instances/{id}/frames/{frame}/rendered") $qp)
   let accept_val = ($accept | default "image/jpeg")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1087,7 +1099,7 @@ export def "instances-header get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "short" $short "scalar") (serialize-qp "simplify" $simplify "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/instances/{id}/header") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/instances/{id}/header") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1114,11 +1126,11 @@ export def "instances-image-int16 get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "quality" $quality "scalar") (serialize-qp "returnUnsupportedImage" $return_unsupported_image "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/instances/{id}/image-int16") $qp)
-  let extra_headers = {"Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/instances/{id}/image-int16") $qp)
   let accept_val = ($accept | default "image/jpeg")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1143,11 +1155,11 @@ export def "instances-image-uint16 get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "quality" $quality "scalar") (serialize-qp "returnUnsupportedImage" $return_unsupported_image "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/instances/{id}/image-uint16") $qp)
-  let extra_headers = {"Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/instances/{id}/image-uint16") $qp)
   let accept_val = ($accept | default "image/jpeg")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1172,11 +1184,11 @@ export def "instances-image-uint8 get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "quality" $quality "scalar") (serialize-qp "returnUnsupportedImage" $return_unsupported_image "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/instances/{id}/image-uint8") $qp)
-  let extra_headers = {"Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/instances/{id}/image-uint8") $qp)
   let accept_val = ($accept | default "image/jpeg")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1196,7 +1208,7 @@ export def "instances-matlab get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/instances/{id}/matlab"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/instances/{id}/matlab"))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1220,7 +1232,7 @@ export def "instances-metadata list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/instances/{id}/metadata") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/instances/{id}/metadata") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1244,11 +1256,11 @@ export def "instances-metadata delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/instances/{id}/metadata/{name}"))
-  let extra_headers = {"If-Match": $if_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/instances/{id}/metadata/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-Match": $if_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1270,18 +1282,18 @@ export def "instances-metadata get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/instances/{id}/metadata/{name}"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/instances/{id}/metadata/{name}"))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set metadata
 #
 # PUT /instances/{id}/metadata/{name}
-export def "instances-metadata put" [
+export def "instances-metadata update" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1298,19 +1310,20 @@ export def "instances-metadata put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/instances/{id}/metadata/{name}"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"If-Match": $if_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/instances/{id}/metadata/{name}"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "text/plain" $body
+  let extra_headers = {"If-Match": $if_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "text/plain" $req_body
 }
 
 # Modify instance
 #
 # POST /instances/{id}/modify
-export def "instances-modify post" [
+export def "instances-modify create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1321,10 +1334,10 @@ export def "instances-modify post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --force: oneof<nothing, bool> # Allow the modification of tags related to DICOM identifiers, at the risk of breaking the DICOM model of the real world
-  --keep: list # Keep the original value of the specified tags, to be chosen among the `StudyInstanceUID`, `SeriesInstanceUID` and `SOPInstanceUID` tags. Avoid this feature as much as possible, as this breaks the DICOM model of the real world.
+  --keep: list<string> # Keep the original value of the specified tags, to be chosen among the `StudyInstanceUID`, `SeriesInstanceUID` and `SOPInstanceUID` tags. Avoid this feature as much as possible, as this breaks the DICOM model of the real world.
   --keep-source: oneof<nothing, bool> # If set to `false`, instructs Orthanc to the remove original resources. By default, the original resources are kept in Orthanc.
   --private-creator: string # The private creator to be used for private tags in `Replace`
-  --remove: list # List of tags that must be removed from the DICOM instances. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
+  --remove: list<string> # List of tags that must be removed from the DICOM instances. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
   --remove-private-tags: oneof<nothing, bool> # Remove the private tags from the DICOM instances (defaults to `false`)
   --replace: record # Associative array to change the value of some DICOM tags in the DICOM instances. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
   --transcode: string # Transcode the DICOM instances to the provided DICOM transfer syntax: https://book.orthanc-server.com/faq/transcoding.html
@@ -1332,12 +1345,12 @@ export def "instances-modify post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/instances/{id}/modify"))
-  let body = {"Force": $force, "Keep": $keep, "KeepSource": $keep_source, "PrivateCreator": $private_creator, "Remove": $remove, "RemovePrivateTags": $remove_private_tags, "Replace": $replace, "Transcode": $transcode} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/instances/{id}/modify"))
+  let req_body = {"Force": $force, "Keep": $keep, "KeepSource": $keep_source, "PrivateCreator": $private_creator, "Remove": $remove, "RemovePrivateTags": $remove_private_tags, "Replace": $replace, "Transcode": $transcode} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/dicom"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get instance module
@@ -1353,14 +1366,14 @@ export def "instances-module get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ignore-length: list # Also include the DICOM tags that are provided in this list, even if their associated value is long
+  --ignore-length: list<string> # Also include the DICOM tags that are provided in this list, even if their associated value is long
   --short: oneof<nothing, bool> # If present, report the DICOM tags in hexadecimal format
   --simplify: oneof<nothing, bool> # If present, report the DICOM tags in human-readable format (using the symbolic name of the tags)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ignore-length" $ignore_length "multi") (serialize-qp "short" $short "scalar") (serialize-qp "simplify" $simplify "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/instances/{id}/module") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/instances/{id}/module") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1385,7 +1398,7 @@ export def "instances-numpy get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "compress" $compress "scalar") (serialize-qp "rescale" $rescale "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/instances/{id}/numpy") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/instances/{id}/numpy") $qp)
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1405,13 +1418,13 @@ export def "instances-patient get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --full: oneof<nothing, bool> # If present, report the DICOM tags in full format (tags indexed by their hexadecimal format, associated with their symbolic name and their value)
-  --requested-tags: string # If present, list the DICOM Tags you want to list in the response.  This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'.  The tags requested tags are returned in the 'RequestedTags' field in the response.  Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files.  If not specified, Orthanc will return 
+  --requested-tags: string # If present, list the DICOM Tags you want to list in the response. This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'. The tags requested tags are returned in the 'RequestedTags' field in the response. Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files. If not specified, Orthanc will return
   --short: oneof<nothing, bool> # If present, report the DICOM tags in hexadecimal format
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "full" $full "scalar") (serialize-qp "requestedTags" $requested_tags "scalar") (serialize-qp "short" $short "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/instances/{id}/patient") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/instances/{id}/patient") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1433,7 +1446,7 @@ export def "instances-pdf get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/instances/{id}/pdf"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/instances/{id}/pdf"))
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1460,18 +1473,18 @@ export def "instances-preview get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "quality" $quality "scalar") (serialize-qp "returnUnsupportedImage" $return_unsupported_image "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/instances/{id}/preview") $qp)
-  let extra_headers = {"Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/instances/{id}/preview") $qp)
   let accept_val = ($accept | default "image/jpeg")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Reconstruct tags & optionally files of instance
 #
 # POST /instances/{id}/reconstruct
-export def "instances-reconstruct post" [
+export def "instances-reconstruct create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1486,12 +1499,12 @@ export def "instances-reconstruct post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/instances/{id}/reconstruct"))
-  let body = {"ReconstructFiles": $reconstruct_files} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/instances/{id}/reconstruct"))
+  let req_body = {"ReconstructFiles": $reconstruct_files} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Render an image
@@ -1520,11 +1533,11 @@ export def "instances-rendered get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "height" $height "scalar") (serialize-qp "quality" $quality "scalar") (serialize-qp "returnUnsupportedImage" $return_unsupported_image "scalar") (serialize-qp "smooth" $smooth "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "window-center" $window_center "scalar") (serialize-qp "window-width" $window_width "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/instances/{id}/rendered") $qp)
-  let extra_headers = {"Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/instances/{id}/rendered") $qp)
   let accept_val = ($accept | default "image/jpeg")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1542,13 +1555,13 @@ export def "instances-series get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --full: oneof<nothing, bool> # If present, report the DICOM tags in full format (tags indexed by their hexadecimal format, associated with their symbolic name and their value)
-  --requested-tags: string # If present, list the DICOM Tags you want to list in the response.  This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'.  The tags requested tags are returned in the 'RequestedTags' field in the response.  Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files.  If not specified, Orthanc will return 
+  --requested-tags: string # If present, list the DICOM Tags you want to list in the response. This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'. The tags requested tags are returned in the 'RequestedTags' field in the response. Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files. If not specified, Orthanc will return
   --short: oneof<nothing, bool> # If present, report the DICOM tags in hexadecimal format
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "full" $full "scalar") (serialize-qp "requestedTags" $requested_tags "scalar") (serialize-qp "short" $short "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/instances/{id}/series") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/instances/{id}/series") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1567,12 +1580,12 @@ export def "instances-simplified-tags get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ignore-length: list # Also include the DICOM tags that are provided in this list, even if their associated value is long
+  --ignore-length: list<string> # Also include the DICOM tags that are provided in this list, even if their associated value is long
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ignore-length" $ignore_length "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/instances/{id}/simplified-tags") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/instances/{id}/simplified-tags") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1594,7 +1607,7 @@ export def "instances-statistics get" [
 ]: nothing -> record<DicomDiskSize: string, DicomDiskSizeMB: float, DicomUncompressedSize: string, DicomUncompressedSizeMB: float, DiskSize: string, DiskSizeMB: float, UncompressedSize: string, UncompressedSizeMB: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/instances/{id}/statistics"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/instances/{id}/statistics"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1614,13 +1627,13 @@ export def "instances-study get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --full: oneof<nothing, bool> # If present, report the DICOM tags in full format (tags indexed by their hexadecimal format, associated with their symbolic name and their value)
-  --requested-tags: string # If present, list the DICOM Tags you want to list in the response.  This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'.  The tags requested tags are returned in the 'RequestedTags' field in the response.  Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files.  If not specified, Orthanc will return 
+  --requested-tags: string # If present, list the DICOM Tags you want to list in the response. This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'. The tags requested tags are returned in the 'RequestedTags' field in the response. Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files. If not specified, Orthanc will return
   --short: oneof<nothing, bool> # If present, report the DICOM tags in hexadecimal format
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "full" $full "scalar") (serialize-qp "requestedTags" $requested_tags "scalar") (serialize-qp "short" $short "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/instances/{id}/study") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/instances/{id}/study") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1639,14 +1652,14 @@ export def "instances-tags get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ignore-length: list # Also include the DICOM tags that are provided in this list, even if their associated value is long
+  --ignore-length: list<string> # Also include the DICOM tags that are provided in this list, even if their associated value is long
   --short: oneof<nothing, bool> # If present, report the DICOM tags in hexadecimal format
   --simplify: oneof<nothing, bool> # If present, report the DICOM tags in human-readable format (using the symbolic name of the tags)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ignore-length" $ignore_length "multi") (serialize-qp "short" $short "scalar") (serialize-qp "simplify" $simplify "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/instances/{id}/tags") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/instances/{id}/tags") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1691,7 +1704,7 @@ export def "jobs get-by-id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/jobs/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/jobs/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1700,7 +1713,7 @@ export def "jobs get-by-id" [
 # Cancel job
 #
 # POST /jobs/{id}/cancel
-export def "jobs-cancel post" [
+export def "jobs-cancel create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1713,7 +1726,7 @@ export def "jobs-cancel post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/jobs/{id}/cancel"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/jobs/{id}/cancel"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1722,7 +1735,7 @@ export def "jobs-cancel post" [
 # Pause job
 #
 # POST /jobs/{id}/pause
-export def "jobs-pause post" [
+export def "jobs-pause create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1735,7 +1748,7 @@ export def "jobs-pause post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/jobs/{id}/pause"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/jobs/{id}/pause"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1744,7 +1757,7 @@ export def "jobs-pause post" [
 # Resubmit job
 #
 # POST /jobs/{id}/resubmit
-export def "jobs-resubmit post" [
+export def "jobs-resubmit create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1757,7 +1770,7 @@ export def "jobs-resubmit post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/jobs/{id}/resubmit"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/jobs/{id}/resubmit"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1766,7 +1779,7 @@ export def "jobs-resubmit post" [
 # Resume job
 #
 # POST /jobs/{id}/resume
-export def "jobs-resume post" [
+export def "jobs-resume create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1779,7 +1792,7 @@ export def "jobs-resume post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/jobs/{id}/resume"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/jobs/{id}/resume"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1802,7 +1815,7 @@ export def "jobs get-by-id-key" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, key: $key} | format pattern "/jobs/{id}/{key}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), key: (encode-path-segment $key)} | format pattern "/jobs/{id}/{key}"))
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1847,7 +1860,7 @@ export def "modalities delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/modalities/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/modalities/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1869,7 +1882,7 @@ export def "modalities get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/modalities/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/modalities/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1878,7 +1891,7 @@ export def "modalities get" [
 # Update DICOM modality
 #
 # PUT /modalities/{id}
-export def "modalities put" [
+export def "modalities update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1905,12 +1918,12 @@ export def "modalities put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/modalities/{id}"))
-  let body = {"AET": $aet, "AllowEcho": $allow_echo, "AllowFind": $allow_find, "AllowFindWorklist": $allow_find_worklist, "AllowGet": $allow_get, "AllowMove": $allow_move, "AllowStorageCommitment": $allow_storage_commitment, "AllowStore": $allow_store, "AllowTranscoding": $allow_transcoding, "Host": $host, "Manufacturer": $manufacturer, "Port": $port, "UseDicomTls": $use_dicom_tls} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/modalities/{id}"))
+  let req_body = {"AET": $aet, "AllowEcho": $allow_echo, "AllowFind": $allow_find, "AllowFindWorklist": $allow_find_worklist, "AllowGet": $allow_get, "AllowMove": $allow_move, "AllowStorageCommitment": $allow_storage_commitment, "AllowStore": $allow_store, "AllowTranscoding": $allow_transcoding, "Host": $host, "Manufacturer": $manufacturer, "Port": $port, "UseDicomTls": $use_dicom_tls} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get modality configuration
@@ -1929,7 +1942,7 @@ export def "modalities-configuration get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/modalities/{id}/configuration"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/modalities/{id}/configuration"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1938,7 +1951,7 @@ export def "modalities-configuration get" [
 # Trigger C-ECHO SCU
 #
 # POST /modalities/{id}/echo
-export def "modalities-echo post" [
+export def "modalities-echo create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1954,12 +1967,12 @@ export def "modalities-echo post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/modalities/{id}/echo"))
-  let body = {"CheckFind": $check_find, "Timeout": $timeout} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/modalities/{id}/echo"))
+  let req_body = {"CheckFind": $check_find, "Timeout": $timeout} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Hierarchical C-FIND SCU
@@ -1967,7 +1980,7 @@ export def "modalities-echo post" [
 # POST /modalities/{id}/find
 # DEPRECATED
 @deprecated
-export def "modalities-find post" [
+export def "modalities-find create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1982,11 +1995,12 @@ export def "modalities-find post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/modalities/{id}/find"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/modalities/{id}/find"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # C-FIND SCU for instances
@@ -1994,7 +2008,7 @@ export def "modalities-find post" [
 # POST /modalities/{id}/find-instance
 # DEPRECATED
 @deprecated
-export def "modalities-find-instance post" [
+export def "modalities-find-instance create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2009,11 +2023,12 @@ export def "modalities-find-instance post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/modalities/{id}/find-instance"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/modalities/{id}/find-instance"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # C-FIND SCU for patients
@@ -2021,7 +2036,7 @@ export def "modalities-find-instance post" [
 # POST /modalities/{id}/find-patient
 # DEPRECATED
 @deprecated
-export def "modalities-find-patient post" [
+export def "modalities-find-patient create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2036,11 +2051,12 @@ export def "modalities-find-patient post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/modalities/{id}/find-patient"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/modalities/{id}/find-patient"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # C-FIND SCU for series
@@ -2048,7 +2064,7 @@ export def "modalities-find-patient post" [
 # POST /modalities/{id}/find-series
 # DEPRECATED
 @deprecated
-export def "modalities-find-series post" [
+export def "modalities-find-series create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2063,11 +2079,12 @@ export def "modalities-find-series post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/modalities/{id}/find-series"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/modalities/{id}/find-series"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # C-FIND SCU for studies
@@ -2075,7 +2092,7 @@ export def "modalities-find-series post" [
 # POST /modalities/{id}/find-study
 # DEPRECATED
 @deprecated
-export def "modalities-find-study post" [
+export def "modalities-find-study create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2090,17 +2107,18 @@ export def "modalities-find-study post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/modalities/{id}/find-study"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/modalities/{id}/find-study"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # C-FIND SCU for worklist
 #
 # POST /modalities/{id}/find-worklist
-export def "modalities-find-worklist post" [
+export def "modalities-find-worklist create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2117,18 +2135,18 @@ export def "modalities-find-worklist post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/modalities/{id}/find-worklist"))
-  let body = {"Full": $full, "Query": $query, "Short": $short} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/modalities/{id}/find-worklist"))
+  let req_body = {"Full": $full, "Query": $query, "Short": $short} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Trigger C-MOVE SCU
 #
 # POST /modalities/{id}/move
-export def "modalities-move post" [
+export def "modalities-move create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2151,18 +2169,18 @@ export def "modalities-move post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/modalities/{id}/move"))
-  let body = {"Asynchronous": $asynchronous, "Level": $level, "LocalAet": $local_aet, "Permissive": $permissive, "Priority": $priority, "Resources": $resources, "Synchronous": $synchronous, "TargetAet": $target_aet, "Timeout": $timeout} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/modalities/{id}/move"))
+  let req_body = {"Asynchronous": $asynchronous, "Level": $level, "LocalAet": $local_aet, "Permissive": $permissive, "Priority": $priority, "Resources": $resources, "Synchronous": $synchronous, "TargetAet": $target_aet, "Timeout": $timeout} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Trigger C-FIND SCU
 #
 # POST /modalities/{id}/query
-export def "modalities-query post" [
+export def "modalities-query create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2181,18 +2199,18 @@ export def "modalities-query post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/modalities/{id}/query"))
-  let body = {"Level": $level, "LocalAet": $local_aet, "Normalize": $normalize, "Query": $query, "Timeout": $timeout} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/modalities/{id}/query"))
+  let req_body = {"Level": $level, "LocalAet": $local_aet, "Normalize": $normalize, "Query": $query, "Timeout": $timeout} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Trigger storage commitment request
 #
 # POST /modalities/{id}/storage-commitment
-export def "modalities-storage-commitment post" [
+export def "modalities-storage-commitment create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2203,24 +2221,24 @@ export def "modalities-storage-commitment post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --dicom-instances: list # List of DICOM resources that are not necessarily stored within Orthanc, but that must be checked by storage commitment. This is a list of JSON objects that must contain the `SOPClassUID` and `SOPInstanceUID` fields.
-  --resources: list # List of the Orthanc identifiers of the DICOM resources to be checked by storage commitment
+  --resources: list<string> # List of the Orthanc identifiers of the DICOM resources to be checked by storage commitment
   --timeout: float # Timeout for the storage commitment command (new in Orthanc 1.9.1)
 ]: any -> record<ID: record, Path: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/modalities/{id}/storage-commitment"))
-  let body = {"DicomInstances": $dicom_instances, "Resources": $resources, "Timeout": $timeout} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/modalities/{id}/storage-commitment"))
+  let req_body = {"DicomInstances": $dicom_instances, "Resources": $resources, "Timeout": $timeout} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Trigger C-STORE SCU
 #
 # POST /modalities/{id}/store
-export def "modalities-store post" [
+export def "modalities-store create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2239,7 +2257,7 @@ export def "modalities-store post" [
   --permissive: oneof<nothing, bool> # If `true`, ignore errors during the individual steps of the job.
   --port: float # Port that is used for this commands, defaults to `Port` configuration option. Allows you to overwrite the destination port for a specific operation.
   --priority: float # In asynchronous mode, the priority of the job. The lower the value, the higher the priority.
-  --resources: list # List of the Orthanc identifiers of all the DICOM resources to be sent
+  --resources: list<string> # List of the Orthanc identifiers of all the DICOM resources to be sent
   --storage-commitment: oneof<nothing, bool> # Whether to chain C-STORE with DICOM storage commitment to validate the success of the transmission: https://book.orthanc-server.com/users/storage-commitment.html#chaining-c-store-with-storage-commitment
   --synchronous: oneof<nothing, bool> # If `true`, run the job in synchronous mode, which means that the HTTP answer will directly contain the result of the job. This is the default, easy behavior, but it is *not* desirable for long jobs, as it might lead to network timeouts.
   --timeout: float # Timeout for the C-STORE command, in seconds
@@ -2247,18 +2265,18 @@ export def "modalities-store post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/modalities/{id}/store"))
-  let body = {"Asynchronous": $asynchronous, "CalledAet": $called_aet, "Host": $host, "LocalAet": $local_aet, "MoveOriginatorAet": $move_originator_aet, "MoveOriginatorID": $move_originator_id, "Permissive": $permissive, "Port": $port, "Priority": $priority, "Resources": $resources, "StorageCommitment": $storage_commitment, "Synchronous": $synchronous, "Timeout": $timeout} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/modalities/{id}/store"))
+  let req_body = {"Asynchronous": $asynchronous, "CalledAet": $called_aet, "Host": $host, "LocalAet": $local_aet, "MoveOriginatorAet": $move_originator_aet, "MoveOriginatorID": $move_originator_id, "Permissive": $permissive, "Port": $port, "Priority": $priority, "Resources": $resources, "StorageCommitment": $storage_commitment, "Synchronous": $synchronous, "Timeout": $timeout} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Straight C-STORE SCU
 #
 # POST /modalities/{id}/store-straight
-export def "modalities-store-straight post" [
+export def "modalities-store-straight create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2273,11 +2291,12 @@ export def "modalities-store-straight post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/modalities/{id}/store-straight"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/modalities/{id}/store-straight"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/dicom" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/dicom" $req_body
 }
 
 # List the available patients
@@ -2295,7 +2314,7 @@ export def "patients list" [
   --expand: string # If present, retrieve detailed information about the individual patients
   --full: oneof<nothing, bool> # If present, report the DICOM tags in full format (tags indexed by their hexadecimal format, associated with their symbolic name and their value)
   --limit: float # Limit the number of results
-  --requested-tags: string # If present, list the DICOM Tags you want to list in the response.  This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'.  The tags requested tags are returned in the 'RequestedTags' field in the response.  Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files.  If not specified, Orthanc will return 
+  --requested-tags: string # If present, list the DICOM Tags you want to list in the response. This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'. The tags requested tags are returned in the 'RequestedTags' field in the response. Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files. If not specified, Orthanc will return
   --short: oneof<nothing, bool> # If present, report the DICOM tags in hexadecimal format
   --since: float # Show only the resources since the provided index
 ]: nothing -> any {
@@ -2324,7 +2343,7 @@ export def "patients delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/patients/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/patients/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2344,13 +2363,13 @@ export def "patients get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --full: oneof<nothing, bool> # If present, report the DICOM tags in full format (tags indexed by their hexadecimal format, associated with their symbolic name and their value)
-  --requested-tags: string # If present, list the DICOM Tags you want to list in the response.  This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'.  The tags requested tags are returned in the 'RequestedTags' field in the response.  Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files.  If not specified, Orthanc will return 
+  --requested-tags: string # If present, list the DICOM Tags you want to list in the response. This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'. The tags requested tags are returned in the 'RequestedTags' field in the response. Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files. If not specified, Orthanc will return
   --short: oneof<nothing, bool> # If present, report the DICOM tags in hexadecimal format
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "full" $full "scalar") (serialize-qp "requestedTags" $requested_tags "scalar") (serialize-qp "short" $short "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/patients/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/patients/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2359,7 +2378,7 @@ export def "patients get" [
 # Anonymize patient
 #
 # POST /patients/{id}/anonymize
-export def "patients-anonymize post" [
+export def "patients-anonymize create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2372,13 +2391,13 @@ export def "patients-anonymize post" [
   --asynchronous: oneof<nothing, bool> # If `true`, run the job in asynchronous mode, which means that the REST API call will immediately return, reporting the identifier of a job. Prefer this flavor wherever possible.
   --dicom-version: string # Version of the DICOM standard to be used for anonymization. Check out configuration option `DeidentifyLogsDicomVersion` for possible values.
   --force: oneof<nothing, bool> # Allow the modification of tags related to DICOM identifiers, at the risk of breaking the DICOM model of the real world
-  --keep: list # List of DICOM tags whose value must not be destroyed by the anonymization. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
+  --keep: list<string> # List of DICOM tags whose value must not be destroyed by the anonymization. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
   --keep-private-tags: oneof<nothing, bool> # Keep the private tags from the DICOM instances (defaults to `false`)
   --keep-source: oneof<nothing, bool> # If set to `false`, instructs Orthanc to the remove original resources. By default, the original resources are kept in Orthanc.
   --permissive: oneof<nothing, bool> # If `true`, ignore errors during the individual steps of the job.
   --priority: float # In asynchronous mode, the priority of the job. The lower the value, the higher the priority.
   --private-creator: string # The private creator to be used for private tags in `Replace`
-  --remove: list # List of additional tags to be removed from the DICOM instances. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
+  --remove: list<string> # List of additional tags to be removed from the DICOM instances. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
   --replace: record # Associative array to change the value of some DICOM tags in the DICOM instances. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
   --synchronous: oneof<nothing, bool> # If `true`, run the job in synchronous mode, which means that the HTTP answer will directly contain the result of the job. This is the default, easy behavior, but it is *not* desirable for long jobs, as it might lead to network timeouts.
   --transcode: string # Transcode the DICOM instances to the provided DICOM transfer syntax: https://book.orthanc-server.com/faq/transcoding.html
@@ -2386,12 +2405,12 @@ export def "patients-anonymize post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/patients/{id}/anonymize"))
-  let body = {"Asynchronous": $asynchronous, "DicomVersion": $dicom_version, "Force": $force, "Keep": $keep, "KeepPrivateTags": $keep_private_tags, "KeepSource": $keep_source, "Permissive": $permissive, "Priority": $priority, "PrivateCreator": $private_creator, "Remove": $remove, "Replace": $replace, "Synchronous": $synchronous, "Transcode": $transcode} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/patients/{id}/anonymize"))
+  let req_body = {"Asynchronous": $asynchronous, "DicomVersion": $dicom_version, "Force": $force, "Keep": $keep, "KeepPrivateTags": $keep_private_tags, "KeepSource": $keep_source, "Permissive": $permissive, "Priority": $priority, "PrivateCreator": $private_creator, "Remove": $remove, "Replace": $replace, "Synchronous": $synchronous, "Transcode": $transcode} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create ZIP archive
@@ -2413,7 +2432,7 @@ export def "patients-archive get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filename" $filename "scalar") (serialize-qp "transcode" $transcode "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/patients/{id}/archive") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/patients/{id}/archive") $qp)
   let accept_val = "application/zip"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2422,7 +2441,7 @@ export def "patients-archive get" [
 # Create ZIP archive
 #
 # POST /patients/{id}/archive
-export def "patients-archive post" [
+export def "patients-archive create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2441,12 +2460,12 @@ export def "patients-archive post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/patients/{id}/archive"))
-  let body = {"Asynchronous": $asynchronous, "Priority": $priority, "Synchronous": $synchronous, "Transcode": $transcode} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/patients/{id}/archive"))
+  let req_body = {"Asynchronous": $asynchronous, "Priority": $priority, "Synchronous": $synchronous, "Transcode": $transcode} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List attachments
@@ -2467,7 +2486,7 @@ export def "patients-attachments list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "full" $full "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/patients/{id}/attachments") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/patients/{id}/attachments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2491,11 +2510,11 @@ export def "patients-attachments delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/patients/{id}/attachments/{name}"))
-  let extra_headers = {"If-Match": $if_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/patients/{id}/attachments/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-Match": $if_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2517,18 +2536,18 @@ export def "patients-attachments get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/patients/{id}/attachments/{name}"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/patients/{id}/attachments/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set attachment
 #
 # PUT /patients/{id}/attachments/{name}
-export def "patients-attachments put" [
+export def "patients-attachments update" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2545,19 +2564,20 @@ export def "patients-attachments put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/patients/{id}/attachments/{name}"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"If-Match": $if_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/patients/{id}/attachments/{name}"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/octet-stream" $body
+  let extra_headers = {"If-Match": $if_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/octet-stream" $req_body
 }
 
 # Compress attachment
 #
 # POST /patients/{id}/attachments/{name}/compress
-export def "patients-attachments-compress post" [
+export def "patients-attachments-compress create" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2571,7 +2591,7 @@ export def "patients-attachments-compress post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/patients/{id}/attachments/{name}/compress"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/patients/{id}/attachments/{name}/compress"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2595,11 +2615,11 @@ export def "patients-attachments-compressed-data get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/patients/{id}/attachments/{name}/compressed-data"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/patients/{id}/attachments/{name}/compressed-data"))
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2621,11 +2641,11 @@ export def "patients-attachments-compressed-md5 get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/patients/{id}/attachments/{name}/compressed-md5"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/patients/{id}/attachments/{name}/compressed-md5"))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2647,11 +2667,11 @@ export def "patients-attachments-compressed-size get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/patients/{id}/attachments/{name}/compressed-size"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/patients/{id}/attachments/{name}/compressed-size"))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2673,11 +2693,11 @@ export def "patients-attachments-data get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/patients/{id}/attachments/{name}/data"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/patients/{id}/attachments/{name}/data"))
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2699,11 +2719,11 @@ export def "patients-attachments-info get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/patients/{id}/attachments/{name}/info"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/patients/{id}/attachments/{name}/info"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2725,11 +2745,11 @@ export def "patients-attachments-is-compressed get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/patients/{id}/attachments/{name}/is-compressed"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/patients/{id}/attachments/{name}/is-compressed"))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2751,11 +2771,11 @@ export def "patients-attachments-md5 get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/patients/{id}/attachments/{name}/md5"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/patients/{id}/attachments/{name}/md5"))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2777,18 +2797,18 @@ export def "patients-attachments-size get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/patients/{id}/attachments/{name}/size"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/patients/{id}/attachments/{name}/size"))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Uncompress attachment
 #
 # POST /patients/{id}/attachments/{name}/uncompress
-export def "patients-attachments-uncompress post" [
+export def "patients-attachments-uncompress create" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2802,7 +2822,7 @@ export def "patients-attachments-uncompress post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/patients/{id}/attachments/{name}/uncompress"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/patients/{id}/attachments/{name}/uncompress"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2811,7 +2831,7 @@ export def "patients-attachments-uncompress post" [
 # Verify attachment
 #
 # POST /patients/{id}/attachments/{name}/verify-md5
-export def "patients-attachments-verify-md5 post" [
+export def "patients-attachments-verify-md5 create" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2825,7 +2845,7 @@ export def "patients-attachments-verify-md5 post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/patients/{id}/attachments/{name}/verify-md5"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/patients/{id}/attachments/{name}/verify-md5"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2845,13 +2865,13 @@ export def "patients-instances get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --full: oneof<nothing, bool> # If present, report the DICOM tags in full format (tags indexed by their hexadecimal format, associated with their symbolic name and their value)
-  --requested-tags: string # If present, list the DICOM Tags you want to list in the response.  This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'.  The tags requested tags are returned in the 'RequestedTags' field in the response.  Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files.  If not specified, Orthanc will return 
+  --requested-tags: string # If present, list the DICOM Tags you want to list in the response. This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'. The tags requested tags are returned in the 'RequestedTags' field in the response. Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files. If not specified, Orthanc will return
   --short: oneof<nothing, bool> # If present, report the DICOM tags in hexadecimal format
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "full" $full "scalar") (serialize-qp "requestedTags" $requested_tags "scalar") (serialize-qp "short" $short "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/patients/{id}/instances") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/patients/{id}/instances") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2870,14 +2890,14 @@ export def "patients-instances-tags get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ignore-length: list # Also include the DICOM tags that are provided in this list, even if their associated value is long
+  --ignore-length: list<string> # Also include the DICOM tags that are provided in this list, even if their associated value is long
   --short: oneof<nothing, bool> # If present, report the DICOM tags in hexadecimal format
   --simplify: oneof<nothing, bool> # If present, report the DICOM tags in human-readable format (using the symbolic name of the tags)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ignore-length" $ignore_length "multi") (serialize-qp "short" $short "scalar") (serialize-qp "simplify" $simplify "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/patients/{id}/instances-tags") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/patients/{id}/instances-tags") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2903,7 +2923,7 @@ export def "patients-media get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "extended" $extended "scalar") (serialize-qp "filename" $filename "scalar") (serialize-qp "transcode" $transcode "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/patients/{id}/media") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/patients/{id}/media") $qp)
   let accept_val = "application/zip"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2912,7 +2932,7 @@ export def "patients-media get" [
 # Create DICOMDIR media
 #
 # POST /patients/{id}/media
-export def "patients-media post" [
+export def "patients-media create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2932,12 +2952,12 @@ export def "patients-media post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/patients/{id}/media"))
-  let body = {"Asynchronous": $asynchronous, "Extended": $extended, "Priority": $priority, "Synchronous": $synchronous, "Transcode": $transcode} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/patients/{id}/media"))
+  let req_body = {"Asynchronous": $asynchronous, "Extended": $extended, "Priority": $priority, "Synchronous": $synchronous, "Transcode": $transcode} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List metadata
@@ -2958,7 +2978,7 @@ export def "patients-metadata list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/patients/{id}/metadata") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/patients/{id}/metadata") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2982,11 +3002,11 @@ export def "patients-metadata delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/patients/{id}/metadata/{name}"))
-  let extra_headers = {"If-Match": $if_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/patients/{id}/metadata/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-Match": $if_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3008,18 +3028,18 @@ export def "patients-metadata get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/patients/{id}/metadata/{name}"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/patients/{id}/metadata/{name}"))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set metadata
 #
 # PUT /patients/{id}/metadata/{name}
-export def "patients-metadata put" [
+export def "patients-metadata update" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3036,19 +3056,20 @@ export def "patients-metadata put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/patients/{id}/metadata/{name}"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"If-Match": $if_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/patients/{id}/metadata/{name}"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "text/plain" $body
+  let extra_headers = {"If-Match": $if_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "text/plain" $req_body
 }
 
 # Modify patient
 #
 # POST /patients/{id}/modify
-export def "patients-modify post" [
+export def "patients-modify create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3060,12 +3081,12 @@ export def "patients-modify post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --asynchronous: oneof<nothing, bool> # If `true`, run the job in asynchronous mode, which means that the REST API call will immediately return, reporting the identifier of a job. Prefer this flavor wherever possible.
   --force: oneof<nothing, bool> # Allow the modification of tags related to DICOM identifiers, at the risk of breaking the DICOM model of the real world
-  --keep: list # Keep the original value of the specified tags, to be chosen among the `StudyInstanceUID`, `SeriesInstanceUID` and `SOPInstanceUID` tags. Avoid this feature as much as possible, as this breaks the DICOM model of the real world.
+  --keep: list<string> # Keep the original value of the specified tags, to be chosen among the `StudyInstanceUID`, `SeriesInstanceUID` and `SOPInstanceUID` tags. Avoid this feature as much as possible, as this breaks the DICOM model of the real world.
   --keep-source: oneof<nothing, bool> # If set to `false`, instructs Orthanc to the remove original resources. By default, the original resources are kept in Orthanc.
   --permissive: oneof<nothing, bool> # If `true`, ignore errors during the individual steps of the job.
   --priority: float # In asynchronous mode, the priority of the job. The lower the value, the higher the priority.
   --private-creator: string # The private creator to be used for private tags in `Replace`
-  --remove: list # List of tags that must be removed from the DICOM instances. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
+  --remove: list<string> # List of tags that must be removed from the DICOM instances. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
   --remove-private-tags: oneof<nothing, bool> # Remove the private tags from the DICOM instances (defaults to `false`)
   --replace: record # Associative array to change the value of some DICOM tags in the DICOM instances. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
   --synchronous: oneof<nothing, bool> # If `true`, run the job in synchronous mode, which means that the HTTP answer will directly contain the result of the job. This is the default, easy behavior, but it is *not* desirable for long jobs, as it might lead to network timeouts.
@@ -3074,12 +3095,12 @@ export def "patients-modify post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/patients/{id}/modify"))
-  let body = {"Asynchronous": $asynchronous, "Force": $force, "Keep": $keep, "KeepSource": $keep_source, "Permissive": $permissive, "Priority": $priority, "PrivateCreator": $private_creator, "Remove": $remove, "RemovePrivateTags": $remove_private_tags, "Replace": $replace, "Synchronous": $synchronous, "Transcode": $transcode} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/patients/{id}/modify"))
+  let req_body = {"Asynchronous": $asynchronous, "Force": $force, "Keep": $keep, "KeepSource": $keep_source, "Permissive": $permissive, "Priority": $priority, "PrivateCreator": $private_creator, "Remove": $remove, "RemovePrivateTags": $remove_private_tags, "Replace": $replace, "Synchronous": $synchronous, "Transcode": $transcode} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get patient module
@@ -3095,14 +3116,14 @@ export def "patients-module get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ignore-length: list # Also include the DICOM tags that are provided in this list, even if their associated value is long
+  --ignore-length: list<string> # Also include the DICOM tags that are provided in this list, even if their associated value is long
   --short: oneof<nothing, bool> # If present, report the DICOM tags in hexadecimal format
   --simplify: oneof<nothing, bool> # If present, report the DICOM tags in human-readable format (using the symbolic name of the tags)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ignore-length" $ignore_length "multi") (serialize-qp "short" $short "scalar") (serialize-qp "simplify" $simplify "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/patients/{id}/module") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/patients/{id}/module") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3124,7 +3145,7 @@ export def "patients-protected get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/patients/{id}/protected"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/patients/{id}/protected"))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3133,7 +3154,7 @@ export def "patients-protected get" [
 # Protect one patient against recycling
 #
 # PUT /patients/{id}/protected
-export def "patients-protected put" [
+export def "patients-protected update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3146,7 +3167,7 @@ export def "patients-protected put" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/patients/{id}/protected"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/patients/{id}/protected"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3155,7 +3176,7 @@ export def "patients-protected put" [
 # Reconstruct tags & optionally files of patient
 #
 # POST /patients/{id}/reconstruct
-export def "patients-reconstruct post" [
+export def "patients-reconstruct create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3170,12 +3191,12 @@ export def "patients-reconstruct post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/patients/{id}/reconstruct"))
-  let body = {"ReconstructFiles": $reconstruct_files} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/patients/{id}/reconstruct"))
+  let req_body = {"ReconstructFiles": $reconstruct_files} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get child series
@@ -3192,13 +3213,13 @@ export def "patients-series get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --full: oneof<nothing, bool> # If present, report the DICOM tags in full format (tags indexed by their hexadecimal format, associated with their symbolic name and their value)
-  --requested-tags: string # If present, list the DICOM Tags you want to list in the response.  This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'.  The tags requested tags are returned in the 'RequestedTags' field in the response.  Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files.  If not specified, Orthanc will return 
+  --requested-tags: string # If present, list the DICOM Tags you want to list in the response. This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'. The tags requested tags are returned in the 'RequestedTags' field in the response. Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files. If not specified, Orthanc will return
   --short: oneof<nothing, bool> # If present, report the DICOM tags in hexadecimal format
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "full" $full "scalar") (serialize-qp "requestedTags" $requested_tags "scalar") (serialize-qp "short" $short "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/patients/{id}/series") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/patients/{id}/series") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3223,7 +3244,7 @@ export def "patients-shared-tags get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "short" $short "scalar") (serialize-qp "simplify" $simplify "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/patients/{id}/shared-tags") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/patients/{id}/shared-tags") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3245,7 +3266,7 @@ export def "patients-statistics get" [
 ]: nothing -> record<CountInstances: float, CountSeries: float, CountStudies: float, DicomDiskSize: string, DicomDiskSizeMB: float, DicomUncompressedSize: string, DicomUncompressedSizeMB: float, DiskSize: string, DiskSizeMB: float, UncompressedSize: string, UncompressedSizeMB: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/patients/{id}/statistics"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/patients/{id}/statistics"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3265,13 +3286,13 @@ export def "patients-studies get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --full: oneof<nothing, bool> # If present, report the DICOM tags in full format (tags indexed by their hexadecimal format, associated with their symbolic name and their value)
-  --requested-tags: string # If present, list the DICOM Tags you want to list in the response.  This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'.  The tags requested tags are returned in the 'RequestedTags' field in the response.  Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files.  If not specified, Orthanc will return 
+  --requested-tags: string # If present, list the DICOM Tags you want to list in the response. This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'. The tags requested tags are returned in the 'RequestedTags' field in the response. Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files. If not specified, Orthanc will return
   --short: oneof<nothing, bool> # If present, report the DICOM tags in hexadecimal format
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "full" $full "scalar") (serialize-qp "requestedTags" $requested_tags "scalar") (serialize-qp "short" $short "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/patients/{id}/studies") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/patients/{id}/studies") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3316,7 +3337,7 @@ export def "peers delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/peers/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/peers/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3338,7 +3359,7 @@ export def "peers get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/peers/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/peers/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3347,7 +3368,7 @@ export def "peers get" [
 # Update Orthanc peer
 #
 # PUT /peers/{id}
-export def "peers put" [
+export def "peers update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3362,18 +3383,18 @@ export def "peers put" [
   --certificate-key-password: string # Key password for the SSL certificate for the HTTPS connections
   --http-headers: record # HTTP headers to be used for the connections to the remote peer
   --password: string # Password for the credentials
-  --body-url: string # URL of the root of the REST API of the remote Orthanc peer, for instance `http://localhost:8042/`
+  --url: string # URL of the root of the REST API of the remote Orthanc peer, for instance `http://localhost:8042/`
   --username: string # Username for the credentials
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/peers/{id}"))
-  let body = {"CertificateFile": $certificate_file, "CertificateKeyFile": $certificate_key_file, "CertificateKeyPassword": $certificate_key_password, "HttpHeaders": $http_headers, "Password": $password, "URL": $body_url, "Username": $username} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/peers/{id}"))
+  let req_body = {"CertificateFile": $certificate_file, "CertificateKeyFile": $certificate_key_file, "CertificateKeyPassword": $certificate_key_password, "HttpHeaders": $http_headers, "Password": $password, "URL": $url, "Username": $username} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get peer configuration
@@ -3392,7 +3413,7 @@ export def "peers-configuration get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/peers/{id}/configuration"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/peers/{id}/configuration"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3401,7 +3422,7 @@ export def "peers-configuration get" [
 # Send to Orthanc peer
 #
 # POST /peers/{id}/store
-export def "peers-store post" [
+export def "peers-store create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3415,25 +3436,25 @@ export def "peers-store post" [
   --compress: oneof<nothing, bool> # Whether to compress the DICOM instances using gzip before the actual sending
   --permissive: oneof<nothing, bool> # If `true`, ignore errors during the individual steps of the job.
   --priority: float # In asynchronous mode, the priority of the job. The lower the value, the higher the priority.
-  --resources: list # List of the Orthanc identifiers of all the DICOM resources to be sent
+  --resources: list<string> # List of the Orthanc identifiers of all the DICOM resources to be sent
   --synchronous: oneof<nothing, bool> # If `true`, run the job in synchronous mode, which means that the HTTP answer will directly contain the result of the job. This is the default, easy behavior, but it is *not* desirable for long jobs, as it might lead to network timeouts.
   --transcode: string # Transcode to the provided DICOM transfer syntax before the actual sending
 ]: any -> record<ID: string, Path: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/peers/{id}/store"))
-  let body = {"Asynchronous": $asynchronous, "Compress": $compress, "Permissive": $permissive, "Priority": $priority, "Resources": $resources, "Synchronous": $synchronous, "Transcode": $transcode} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/peers/{id}/store"))
+  let req_body = {"Asynchronous": $asynchronous, "Compress": $compress, "Permissive": $permissive, "Priority": $priority, "Resources": $resources, "Synchronous": $synchronous, "Transcode": $transcode} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Straight store to peer
 #
 # POST /peers/{id}/store-straight
-export def "peers-store-straight post" [
+export def "peers-store-straight create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3448,11 +3469,12 @@ export def "peers-store-straight post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/peers/{id}/store-straight"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/peers/{id}/store-straight"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/dicom" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/dicom" $req_body
 }
 
 # Get peer system information
@@ -3471,7 +3493,7 @@ export def "peers-system get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/peers/{id}/system"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/peers/{id}/system"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3501,7 +3523,7 @@ export def "plugins list" [
 # JavaScript extensions to Orthanc Explorer
 #
 # GET /plugins/explorer.js
-export def "plugins-explorerjs get" [
+export def "plugins-explorer-js get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3535,7 +3557,7 @@ export def "plugins get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/plugins/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/plugins/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3578,7 +3600,7 @@ export def "queries delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/queries/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/queries/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3600,7 +3622,7 @@ export def "queries get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/queries/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/queries/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3626,7 +3648,7 @@ export def "queries-answers list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "short" $short "scalar") (serialize-qp "simplify" $simplify "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/queries/{id}/answers") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/queries/{id}/answers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3649,7 +3671,7 @@ export def "queries-answers get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, index: $index} | format pattern "/queries/{id}/answers/{index}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), index: (encode-path-segment $index)} | format pattern "/queries/{id}/answers/{index}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3675,7 +3697,7 @@ export def "queries-answers-content get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "short" $short "scalar") (serialize-qp "simplify" $simplify "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id, index: $index} | format pattern "/queries/{id}/answers/{index}/content") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id), index: (encode-path-segment $index)} | format pattern "/queries/{id}/answers/{index}/content") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3684,7 +3706,7 @@ export def "queries-answers-content get" [
 # Query the child instances of an answer
 #
 # POST /queries/{id}/answers/{index}/query-instances
-export def "queries-answers-query-instances post" [
+export def "queries-answers-query-instances create" [
   id: string
   index: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3701,18 +3723,18 @@ export def "queries-answers-query-instances post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, index: $index} | format pattern "/queries/{id}/answers/{index}/query-instances"))
-  let body = {"Query": $query, "Timeout": $timeout} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id), index: (encode-path-segment $index)} | format pattern "/queries/{id}/answers/{index}/query-instances"))
+  let req_body = {"Query": $query, "Timeout": $timeout} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Query the child series of an answer
 #
 # POST /queries/{id}/answers/{index}/query-series
-export def "queries-answers-query-series post" [
+export def "queries-answers-query-series create" [
   id: string
   index: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3729,18 +3751,18 @@ export def "queries-answers-query-series post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, index: $index} | format pattern "/queries/{id}/answers/{index}/query-series"))
-  let body = {"Query": $query, "Timeout": $timeout} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id), index: (encode-path-segment $index)} | format pattern "/queries/{id}/answers/{index}/query-series"))
+  let req_body = {"Query": $query, "Timeout": $timeout} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Query the child studies of an answer
 #
 # POST /queries/{id}/answers/{index}/query-studies
-export def "queries-answers-query-studies post" [
+export def "queries-answers-query-studies create" [
   id: string
   index: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3757,18 +3779,18 @@ export def "queries-answers-query-studies post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, index: $index} | format pattern "/queries/{id}/answers/{index}/query-studies"))
-  let body = {"Query": $query, "Timeout": $timeout} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id), index: (encode-path-segment $index)} | format pattern "/queries/{id}/answers/{index}/query-studies"))
+  let req_body = {"Query": $query, "Timeout": $timeout} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve one answer
 #
 # POST /queries/{id}/answers/{index}/retrieve
-export def "queries-answers-retrieve post" [
+export def "queries-answers-retrieve create" [
   id: string
   index: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3791,12 +3813,12 @@ export def "queries-answers-retrieve post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, index: $index} | format pattern "/queries/{id}/answers/{index}/retrieve"))
-  let body = {"Asynchronous": $asynchronous, "Full": $full, "Permissive": $permissive, "Priority": $priority, "Simplify": $simplify, "Synchronous": $synchronous, "TargetAet": $target_aet, "Timeout": $timeout} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id), index: (encode-path-segment $index)} | format pattern "/queries/{id}/answers/{index}/retrieve"))
+  let req_body = {"Asynchronous": $asynchronous, "Full": $full, "Permissive": $permissive, "Priority": $priority, "Simplify": $simplify, "Synchronous": $synchronous, "TargetAet": $target_aet, "Timeout": $timeout} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get level of original query
@@ -3815,7 +3837,7 @@ export def "queries-level get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/queries/{id}/level"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/queries/{id}/level"))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3837,7 +3859,7 @@ export def "queries-modality get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/queries/{id}/modality"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/queries/{id}/modality"))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3862,7 +3884,7 @@ export def "queries-query get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "short" $short "scalar") (serialize-qp "simplify" $simplify "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/queries/{id}/query") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/queries/{id}/query") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3871,7 +3893,7 @@ export def "queries-query get" [
 # Retrieve all answers
 #
 # POST /queries/{id}/retrieve
-export def "queries-retrieve post" [
+export def "queries-retrieve create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3893,12 +3915,12 @@ export def "queries-retrieve post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/queries/{id}/retrieve"))
-  let body = {"Asynchronous": $asynchronous, "Full": $full, "Permissive": $permissive, "Priority": $priority, "Simplify": $simplify, "Synchronous": $synchronous, "TargetAet": $target_aet, "Timeout": $timeout} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/queries/{id}/retrieve"))
+  let req_body = {"Asynchronous": $asynchronous, "Full": $full, "Permissive": $permissive, "Priority": $priority, "Simplify": $simplify, "Synchronous": $synchronous, "TargetAet": $target_aet, "Timeout": $timeout} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List the available series
@@ -3916,7 +3938,7 @@ export def "series list" [
   --expand: string # If present, retrieve detailed information about the individual series
   --full: oneof<nothing, bool> # If present, report the DICOM tags in full format (tags indexed by their hexadecimal format, associated with their symbolic name and their value)
   --limit: float # Limit the number of results
-  --requested-tags: string # If present, list the DICOM Tags you want to list in the response.  This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'.  The tags requested tags are returned in the 'RequestedTags' field in the response.  Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files.  If not specified, Orthanc will return 
+  --requested-tags: string # If present, list the DICOM Tags you want to list in the response. This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'. The tags requested tags are returned in the 'RequestedTags' field in the response. Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files. If not specified, Orthanc will return
   --short: oneof<nothing, bool> # If present, report the DICOM tags in hexadecimal format
   --since: float # Show only the resources since the provided index
 ]: nothing -> any {
@@ -3945,7 +3967,7 @@ export def "series delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/series/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/series/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3965,13 +3987,13 @@ export def "series get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --full: oneof<nothing, bool> # If present, report the DICOM tags in full format (tags indexed by their hexadecimal format, associated with their symbolic name and their value)
-  --requested-tags: string # If present, list the DICOM Tags you want to list in the response.  This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'.  The tags requested tags are returned in the 'RequestedTags' field in the response.  Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files.  If not specified, Orthanc will return 
+  --requested-tags: string # If present, list the DICOM Tags you want to list in the response. This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'. The tags requested tags are returned in the 'RequestedTags' field in the response. Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files. If not specified, Orthanc will return
   --short: oneof<nothing, bool> # If present, report the DICOM tags in hexadecimal format
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "full" $full "scalar") (serialize-qp "requestedTags" $requested_tags "scalar") (serialize-qp "short" $short "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/series/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/series/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3980,7 +4002,7 @@ export def "series get" [
 # Anonymize series
 #
 # POST /series/{id}/anonymize
-export def "series-anonymize post" [
+export def "series-anonymize create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3993,13 +4015,13 @@ export def "series-anonymize post" [
   --asynchronous: oneof<nothing, bool> # If `true`, run the job in asynchronous mode, which means that the REST API call will immediately return, reporting the identifier of a job. Prefer this flavor wherever possible.
   --dicom-version: string # Version of the DICOM standard to be used for anonymization. Check out configuration option `DeidentifyLogsDicomVersion` for possible values.
   --force: oneof<nothing, bool> # Allow the modification of tags related to DICOM identifiers, at the risk of breaking the DICOM model of the real world
-  --keep: list # List of DICOM tags whose value must not be destroyed by the anonymization. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
+  --keep: list<string> # List of DICOM tags whose value must not be destroyed by the anonymization. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
   --keep-private-tags: oneof<nothing, bool> # Keep the private tags from the DICOM instances (defaults to `false`)
   --keep-source: oneof<nothing, bool> # If set to `false`, instructs Orthanc to the remove original resources. By default, the original resources are kept in Orthanc.
   --permissive: oneof<nothing, bool> # If `true`, ignore errors during the individual steps of the job.
   --priority: float # In asynchronous mode, the priority of the job. The lower the value, the higher the priority.
   --private-creator: string # The private creator to be used for private tags in `Replace`
-  --remove: list # List of additional tags to be removed from the DICOM instances. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
+  --remove: list<string> # List of additional tags to be removed from the DICOM instances. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
   --replace: record # Associative array to change the value of some DICOM tags in the DICOM instances. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
   --synchronous: oneof<nothing, bool> # If `true`, run the job in synchronous mode, which means that the HTTP answer will directly contain the result of the job. This is the default, easy behavior, but it is *not* desirable for long jobs, as it might lead to network timeouts.
   --transcode: string # Transcode the DICOM instances to the provided DICOM transfer syntax: https://book.orthanc-server.com/faq/transcoding.html
@@ -4007,12 +4029,12 @@ export def "series-anonymize post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/series/{id}/anonymize"))
-  let body = {"Asynchronous": $asynchronous, "DicomVersion": $dicom_version, "Force": $force, "Keep": $keep, "KeepPrivateTags": $keep_private_tags, "KeepSource": $keep_source, "Permissive": $permissive, "Priority": $priority, "PrivateCreator": $private_creator, "Remove": $remove, "Replace": $replace, "Synchronous": $synchronous, "Transcode": $transcode} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/series/{id}/anonymize"))
+  let req_body = {"Asynchronous": $asynchronous, "DicomVersion": $dicom_version, "Force": $force, "Keep": $keep, "KeepPrivateTags": $keep_private_tags, "KeepSource": $keep_source, "Permissive": $permissive, "Priority": $priority, "PrivateCreator": $private_creator, "Remove": $remove, "Replace": $replace, "Synchronous": $synchronous, "Transcode": $transcode} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create ZIP archive
@@ -4034,7 +4056,7 @@ export def "series-archive get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filename" $filename "scalar") (serialize-qp "transcode" $transcode "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/series/{id}/archive") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/series/{id}/archive") $qp)
   let accept_val = "application/zip"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4043,7 +4065,7 @@ export def "series-archive get" [
 # Create ZIP archive
 #
 # POST /series/{id}/archive
-export def "series-archive post" [
+export def "series-archive create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4062,12 +4084,12 @@ export def "series-archive post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/series/{id}/archive"))
-  let body = {"Asynchronous": $asynchronous, "Priority": $priority, "Synchronous": $synchronous, "Transcode": $transcode} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/series/{id}/archive"))
+  let req_body = {"Asynchronous": $asynchronous, "Priority": $priority, "Synchronous": $synchronous, "Transcode": $transcode} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List attachments
@@ -4088,7 +4110,7 @@ export def "series-attachments list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "full" $full "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/series/{id}/attachments") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/series/{id}/attachments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4112,11 +4134,11 @@ export def "series-attachments delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/series/{id}/attachments/{name}"))
-  let extra_headers = {"If-Match": $if_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/series/{id}/attachments/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-Match": $if_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4138,18 +4160,18 @@ export def "series-attachments get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/series/{id}/attachments/{name}"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/series/{id}/attachments/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set attachment
 #
 # PUT /series/{id}/attachments/{name}
-export def "series-attachments put" [
+export def "series-attachments update" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4166,19 +4188,20 @@ export def "series-attachments put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/series/{id}/attachments/{name}"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"If-Match": $if_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/series/{id}/attachments/{name}"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/octet-stream" $body
+  let extra_headers = {"If-Match": $if_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/octet-stream" $req_body
 }
 
 # Compress attachment
 #
 # POST /series/{id}/attachments/{name}/compress
-export def "series-attachments-compress post" [
+export def "series-attachments-compress create" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4192,7 +4215,7 @@ export def "series-attachments-compress post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/series/{id}/attachments/{name}/compress"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/series/{id}/attachments/{name}/compress"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4216,11 +4239,11 @@ export def "series-attachments-compressed-data get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/series/{id}/attachments/{name}/compressed-data"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/series/{id}/attachments/{name}/compressed-data"))
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4242,11 +4265,11 @@ export def "series-attachments-compressed-md5 get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/series/{id}/attachments/{name}/compressed-md5"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/series/{id}/attachments/{name}/compressed-md5"))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4268,11 +4291,11 @@ export def "series-attachments-compressed-size get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/series/{id}/attachments/{name}/compressed-size"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/series/{id}/attachments/{name}/compressed-size"))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4294,11 +4317,11 @@ export def "series-attachments-data get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/series/{id}/attachments/{name}/data"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/series/{id}/attachments/{name}/data"))
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4320,11 +4343,11 @@ export def "series-attachments-info get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/series/{id}/attachments/{name}/info"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/series/{id}/attachments/{name}/info"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4346,11 +4369,11 @@ export def "series-attachments-is-compressed get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/series/{id}/attachments/{name}/is-compressed"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/series/{id}/attachments/{name}/is-compressed"))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4372,11 +4395,11 @@ export def "series-attachments-md5 get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/series/{id}/attachments/{name}/md5"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/series/{id}/attachments/{name}/md5"))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4398,18 +4421,18 @@ export def "series-attachments-size get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/series/{id}/attachments/{name}/size"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/series/{id}/attachments/{name}/size"))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Uncompress attachment
 #
 # POST /series/{id}/attachments/{name}/uncompress
-export def "series-attachments-uncompress post" [
+export def "series-attachments-uncompress create" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4423,7 +4446,7 @@ export def "series-attachments-uncompress post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/series/{id}/attachments/{name}/uncompress"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/series/{id}/attachments/{name}/uncompress"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4432,7 +4455,7 @@ export def "series-attachments-uncompress post" [
 # Verify attachment
 #
 # POST /series/{id}/attachments/{name}/verify-md5
-export def "series-attachments-verify-md5 post" [
+export def "series-attachments-verify-md5 create" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4446,7 +4469,7 @@ export def "series-attachments-verify-md5 post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/series/{id}/attachments/{name}/verify-md5"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/series/{id}/attachments/{name}/verify-md5"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4466,13 +4489,13 @@ export def "series-instances get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --full: oneof<nothing, bool> # If present, report the DICOM tags in full format (tags indexed by their hexadecimal format, associated with their symbolic name and their value)
-  --requested-tags: string # If present, list the DICOM Tags you want to list in the response.  This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'.  The tags requested tags are returned in the 'RequestedTags' field in the response.  Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files.  If not specified, Orthanc will return 
+  --requested-tags: string # If present, list the DICOM Tags you want to list in the response. This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'. The tags requested tags are returned in the 'RequestedTags' field in the response. Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files. If not specified, Orthanc will return
   --short: oneof<nothing, bool> # If present, report the DICOM tags in hexadecimal format
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "full" $full "scalar") (serialize-qp "requestedTags" $requested_tags "scalar") (serialize-qp "short" $short "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/series/{id}/instances") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/series/{id}/instances") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4491,14 +4514,14 @@ export def "series-instances-tags get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ignore-length: list # Also include the DICOM tags that are provided in this list, even if their associated value is long
+  --ignore-length: list<string> # Also include the DICOM tags that are provided in this list, even if their associated value is long
   --short: oneof<nothing, bool> # If present, report the DICOM tags in hexadecimal format
   --simplify: oneof<nothing, bool> # If present, report the DICOM tags in human-readable format (using the symbolic name of the tags)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ignore-length" $ignore_length "multi") (serialize-qp "short" $short "scalar") (serialize-qp "simplify" $simplify "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/series/{id}/instances-tags") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/series/{id}/instances-tags") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4524,7 +4547,7 @@ export def "series-media get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "extended" $extended "scalar") (serialize-qp "filename" $filename "scalar") (serialize-qp "transcode" $transcode "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/series/{id}/media") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/series/{id}/media") $qp)
   let accept_val = "application/zip"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4533,7 +4556,7 @@ export def "series-media get" [
 # Create DICOMDIR media
 #
 # POST /series/{id}/media
-export def "series-media post" [
+export def "series-media create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4553,12 +4576,12 @@ export def "series-media post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/series/{id}/media"))
-  let body = {"Asynchronous": $asynchronous, "Extended": $extended, "Priority": $priority, "Synchronous": $synchronous, "Transcode": $transcode} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/series/{id}/media"))
+  let req_body = {"Asynchronous": $asynchronous, "Extended": $extended, "Priority": $priority, "Synchronous": $synchronous, "Transcode": $transcode} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List metadata
@@ -4579,7 +4602,7 @@ export def "series-metadata list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/series/{id}/metadata") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/series/{id}/metadata") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4603,11 +4626,11 @@ export def "series-metadata delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/series/{id}/metadata/{name}"))
-  let extra_headers = {"If-Match": $if_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/series/{id}/metadata/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-Match": $if_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4629,18 +4652,18 @@ export def "series-metadata get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/series/{id}/metadata/{name}"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/series/{id}/metadata/{name}"))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set metadata
 #
 # PUT /series/{id}/metadata/{name}
-export def "series-metadata put" [
+export def "series-metadata update" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4657,19 +4680,20 @@ export def "series-metadata put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/series/{id}/metadata/{name}"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"If-Match": $if_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/series/{id}/metadata/{name}"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "text/plain" $body
+  let extra_headers = {"If-Match": $if_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "text/plain" $req_body
 }
 
 # Modify series
 #
 # POST /series/{id}/modify
-export def "series-modify post" [
+export def "series-modify create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4681,12 +4705,12 @@ export def "series-modify post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --asynchronous: oneof<nothing, bool> # If `true`, run the job in asynchronous mode, which means that the REST API call will immediately return, reporting the identifier of a job. Prefer this flavor wherever possible.
   --force: oneof<nothing, bool> # Allow the modification of tags related to DICOM identifiers, at the risk of breaking the DICOM model of the real world
-  --keep: list # Keep the original value of the specified tags, to be chosen among the `StudyInstanceUID`, `SeriesInstanceUID` and `SOPInstanceUID` tags. Avoid this feature as much as possible, as this breaks the DICOM model of the real world.
+  --keep: list<string> # Keep the original value of the specified tags, to be chosen among the `StudyInstanceUID`, `SeriesInstanceUID` and `SOPInstanceUID` tags. Avoid this feature as much as possible, as this breaks the DICOM model of the real world.
   --keep-source: oneof<nothing, bool> # If set to `false`, instructs Orthanc to the remove original resources. By default, the original resources are kept in Orthanc.
   --permissive: oneof<nothing, bool> # If `true`, ignore errors during the individual steps of the job.
   --priority: float # In asynchronous mode, the priority of the job. The lower the value, the higher the priority.
   --private-creator: string # The private creator to be used for private tags in `Replace`
-  --remove: list # List of tags that must be removed from the DICOM instances. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
+  --remove: list<string> # List of tags that must be removed from the DICOM instances. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
   --remove-private-tags: oneof<nothing, bool> # Remove the private tags from the DICOM instances (defaults to `false`)
   --replace: record # Associative array to change the value of some DICOM tags in the DICOM instances. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
   --synchronous: oneof<nothing, bool> # If `true`, run the job in synchronous mode, which means that the HTTP answer will directly contain the result of the job. This is the default, easy behavior, but it is *not* desirable for long jobs, as it might lead to network timeouts.
@@ -4695,12 +4719,12 @@ export def "series-modify post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/series/{id}/modify"))
-  let body = {"Asynchronous": $asynchronous, "Force": $force, "Keep": $keep, "KeepSource": $keep_source, "Permissive": $permissive, "Priority": $priority, "PrivateCreator": $private_creator, "Remove": $remove, "RemovePrivateTags": $remove_private_tags, "Replace": $replace, "Synchronous": $synchronous, "Transcode": $transcode} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/series/{id}/modify"))
+  let req_body = {"Asynchronous": $asynchronous, "Force": $force, "Keep": $keep, "KeepSource": $keep_source, "Permissive": $permissive, "Priority": $priority, "PrivateCreator": $private_creator, "Remove": $remove, "RemovePrivateTags": $remove_private_tags, "Replace": $replace, "Synchronous": $synchronous, "Transcode": $transcode} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get series module
@@ -4716,14 +4740,14 @@ export def "series-module get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ignore-length: list # Also include the DICOM tags that are provided in this list, even if their associated value is long
+  --ignore-length: list<string> # Also include the DICOM tags that are provided in this list, even if their associated value is long
   --short: oneof<nothing, bool> # If present, report the DICOM tags in hexadecimal format
   --simplify: oneof<nothing, bool> # If present, report the DICOM tags in human-readable format (using the symbolic name of the tags)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ignore-length" $ignore_length "multi") (serialize-qp "short" $short "scalar") (serialize-qp "simplify" $simplify "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/series/{id}/module") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/series/{id}/module") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4748,7 +4772,7 @@ export def "series-numpy get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "compress" $compress "scalar") (serialize-qp "rescale" $rescale "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/series/{id}/numpy") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/series/{id}/numpy") $qp)
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4772,7 +4796,7 @@ export def "series-ordered-slices get" [
 ]: nothing -> record<Dicom: list<string>, Slices: list<string>, SlicesShort: list<record>, Type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/series/{id}/ordered-slices"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/series/{id}/ordered-slices"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4792,13 +4816,13 @@ export def "series-patient get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --full: oneof<nothing, bool> # If present, report the DICOM tags in full format (tags indexed by their hexadecimal format, associated with their symbolic name and their value)
-  --requested-tags: string # If present, list the DICOM Tags you want to list in the response.  This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'.  The tags requested tags are returned in the 'RequestedTags' field in the response.  Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files.  If not specified, Orthanc will return 
+  --requested-tags: string # If present, list the DICOM Tags you want to list in the response. This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'. The tags requested tags are returned in the 'RequestedTags' field in the response. Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files. If not specified, Orthanc will return
   --short: oneof<nothing, bool> # If present, report the DICOM tags in hexadecimal format
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "full" $full "scalar") (serialize-qp "requestedTags" $requested_tags "scalar") (serialize-qp "short" $short "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/series/{id}/patient") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/series/{id}/patient") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4807,7 +4831,7 @@ export def "series-patient get" [
 # Reconstruct tags & optionally files of series
 #
 # POST /series/{id}/reconstruct
-export def "series-reconstruct post" [
+export def "series-reconstruct create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4822,12 +4846,12 @@ export def "series-reconstruct post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/series/{id}/reconstruct"))
-  let body = {"ReconstructFiles": $reconstruct_files} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/series/{id}/reconstruct"))
+  let req_body = {"ReconstructFiles": $reconstruct_files} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get shared tags
@@ -4849,7 +4873,7 @@ export def "series-shared-tags get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "short" $short "scalar") (serialize-qp "simplify" $simplify "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/series/{id}/shared-tags") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/series/{id}/shared-tags") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4871,7 +4895,7 @@ export def "series-statistics get" [
 ]: nothing -> record<CountInstances: float, DicomDiskSize: string, DicomDiskSizeMB: float, DicomUncompressedSize: string, DicomUncompressedSizeMB: float, DiskSize: string, DiskSizeMB: float, UncompressedSize: string, UncompressedSizeMB: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/series/{id}/statistics"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/series/{id}/statistics"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4891,13 +4915,13 @@ export def "series-study get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --full: oneof<nothing, bool> # If present, report the DICOM tags in full format (tags indexed by their hexadecimal format, associated with their symbolic name and their value)
-  --requested-tags: string # If present, list the DICOM Tags you want to list in the response.  This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'.  The tags requested tags are returned in the 'RequestedTags' field in the response.  Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files.  If not specified, Orthanc will return 
+  --requested-tags: string # If present, list the DICOM Tags you want to list in the response. This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'. The tags requested tags are returned in the 'RequestedTags' field in the response. Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files. If not specified, Orthanc will return
   --short: oneof<nothing, bool> # If present, report the DICOM tags in hexadecimal format
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "full" $full "scalar") (serialize-qp "requestedTags" $requested_tags "scalar") (serialize-qp "short" $short "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/series/{id}/study") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/series/{id}/study") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4940,7 +4964,7 @@ export def "storage-commitment get" [
 ]: nothing -> record<Failures: list<record>, RemoteAET: string, Status: string, Success: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/storage-commitment/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/storage-commitment/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4949,7 +4973,7 @@ export def "storage-commitment get" [
 # Remove after storage commitment
 #
 # POST /storage-commitment/{id}/remove
-export def "storage-commitment-remove post" [
+export def "storage-commitment-remove create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4962,7 +4986,7 @@ export def "storage-commitment-remove post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/storage-commitment/{id}/remove"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/storage-commitment/{id}/remove"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4983,7 +5007,7 @@ export def "studies list" [
   --expand: string # If present, retrieve detailed information about the individual studies
   --full: oneof<nothing, bool> # If present, report the DICOM tags in full format (tags indexed by their hexadecimal format, associated with their symbolic name and their value)
   --limit: float # Limit the number of results
-  --requested-tags: string # If present, list the DICOM Tags you want to list in the response.  This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'.  The tags requested tags are returned in the 'RequestedTags' field in the response.  Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files.  If not specified, Orthanc will return 
+  --requested-tags: string # If present, list the DICOM Tags you want to list in the response. This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'. The tags requested tags are returned in the 'RequestedTags' field in the response. Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files. If not specified, Orthanc will return
   --short: oneof<nothing, bool> # If present, report the DICOM tags in hexadecimal format
   --since: float # Show only the resources since the provided index
 ]: nothing -> any {
@@ -5012,7 +5036,7 @@ export def "studies delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/studies/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/studies/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5032,13 +5056,13 @@ export def "studies get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --full: oneof<nothing, bool> # If present, report the DICOM tags in full format (tags indexed by their hexadecimal format, associated with their symbolic name and their value)
-  --requested-tags: string # If present, list the DICOM Tags you want to list in the response.  This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'.  The tags requested tags are returned in the 'RequestedTags' field in the response.  Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files.  If not specified, Orthanc will return 
+  --requested-tags: string # If present, list the DICOM Tags you want to list in the response. This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'. The tags requested tags are returned in the 'RequestedTags' field in the response. Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files. If not specified, Orthanc will return
   --short: oneof<nothing, bool> # If present, report the DICOM tags in hexadecimal format
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "full" $full "scalar") (serialize-qp "requestedTags" $requested_tags "scalar") (serialize-qp "short" $short "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/studies/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/studies/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5047,7 +5071,7 @@ export def "studies get" [
 # Anonymize study
 #
 # POST /studies/{id}/anonymize
-export def "studies-anonymize post" [
+export def "studies-anonymize create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5060,13 +5084,13 @@ export def "studies-anonymize post" [
   --asynchronous: oneof<nothing, bool> # If `true`, run the job in asynchronous mode, which means that the REST API call will immediately return, reporting the identifier of a job. Prefer this flavor wherever possible.
   --dicom-version: string # Version of the DICOM standard to be used for anonymization. Check out configuration option `DeidentifyLogsDicomVersion` for possible values.
   --force: oneof<nothing, bool> # Allow the modification of tags related to DICOM identifiers, at the risk of breaking the DICOM model of the real world
-  --keep: list # List of DICOM tags whose value must not be destroyed by the anonymization. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
+  --keep: list<string> # List of DICOM tags whose value must not be destroyed by the anonymization. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
   --keep-private-tags: oneof<nothing, bool> # Keep the private tags from the DICOM instances (defaults to `false`)
   --keep-source: oneof<nothing, bool> # If set to `false`, instructs Orthanc to the remove original resources. By default, the original resources are kept in Orthanc.
   --permissive: oneof<nothing, bool> # If `true`, ignore errors during the individual steps of the job.
   --priority: float # In asynchronous mode, the priority of the job. The lower the value, the higher the priority.
   --private-creator: string # The private creator to be used for private tags in `Replace`
-  --remove: list # List of additional tags to be removed from the DICOM instances. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
+  --remove: list<string> # List of additional tags to be removed from the DICOM instances. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
   --replace: record # Associative array to change the value of some DICOM tags in the DICOM instances. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
   --synchronous: oneof<nothing, bool> # If `true`, run the job in synchronous mode, which means that the HTTP answer will directly contain the result of the job. This is the default, easy behavior, but it is *not* desirable for long jobs, as it might lead to network timeouts.
   --transcode: string # Transcode the DICOM instances to the provided DICOM transfer syntax: https://book.orthanc-server.com/faq/transcoding.html
@@ -5074,12 +5098,12 @@ export def "studies-anonymize post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/studies/{id}/anonymize"))
-  let body = {"Asynchronous": $asynchronous, "DicomVersion": $dicom_version, "Force": $force, "Keep": $keep, "KeepPrivateTags": $keep_private_tags, "KeepSource": $keep_source, "Permissive": $permissive, "Priority": $priority, "PrivateCreator": $private_creator, "Remove": $remove, "Replace": $replace, "Synchronous": $synchronous, "Transcode": $transcode} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/studies/{id}/anonymize"))
+  let req_body = {"Asynchronous": $asynchronous, "DicomVersion": $dicom_version, "Force": $force, "Keep": $keep, "KeepPrivateTags": $keep_private_tags, "KeepSource": $keep_source, "Permissive": $permissive, "Priority": $priority, "PrivateCreator": $private_creator, "Remove": $remove, "Replace": $replace, "Synchronous": $synchronous, "Transcode": $transcode} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create ZIP archive
@@ -5101,7 +5125,7 @@ export def "studies-archive get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filename" $filename "scalar") (serialize-qp "transcode" $transcode "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/studies/{id}/archive") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/studies/{id}/archive") $qp)
   let accept_val = "application/zip"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5110,7 +5134,7 @@ export def "studies-archive get" [
 # Create ZIP archive
 #
 # POST /studies/{id}/archive
-export def "studies-archive post" [
+export def "studies-archive create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5129,12 +5153,12 @@ export def "studies-archive post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/studies/{id}/archive"))
-  let body = {"Asynchronous": $asynchronous, "Priority": $priority, "Synchronous": $synchronous, "Transcode": $transcode} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/studies/{id}/archive"))
+  let req_body = {"Asynchronous": $asynchronous, "Priority": $priority, "Synchronous": $synchronous, "Transcode": $transcode} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List attachments
@@ -5155,7 +5179,7 @@ export def "studies-attachments list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "full" $full "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/studies/{id}/attachments") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/studies/{id}/attachments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5179,11 +5203,11 @@ export def "studies-attachments delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/studies/{id}/attachments/{name}"))
-  let extra_headers = {"If-Match": $if_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/studies/{id}/attachments/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-Match": $if_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5205,18 +5229,18 @@ export def "studies-attachments get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/studies/{id}/attachments/{name}"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/studies/{id}/attachments/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set attachment
 #
 # PUT /studies/{id}/attachments/{name}
-export def "studies-attachments put" [
+export def "studies-attachments update" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5233,19 +5257,20 @@ export def "studies-attachments put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/studies/{id}/attachments/{name}"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"If-Match": $if_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/studies/{id}/attachments/{name}"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/octet-stream" $body
+  let extra_headers = {"If-Match": $if_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/octet-stream" $req_body
 }
 
 # Compress attachment
 #
 # POST /studies/{id}/attachments/{name}/compress
-export def "studies-attachments-compress post" [
+export def "studies-attachments-compress create" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5259,7 +5284,7 @@ export def "studies-attachments-compress post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/studies/{id}/attachments/{name}/compress"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/studies/{id}/attachments/{name}/compress"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5283,11 +5308,11 @@ export def "studies-attachments-compressed-data get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/studies/{id}/attachments/{name}/compressed-data"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/studies/{id}/attachments/{name}/compressed-data"))
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5309,11 +5334,11 @@ export def "studies-attachments-compressed-md5 get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/studies/{id}/attachments/{name}/compressed-md5"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/studies/{id}/attachments/{name}/compressed-md5"))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5335,11 +5360,11 @@ export def "studies-attachments-compressed-size get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/studies/{id}/attachments/{name}/compressed-size"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/studies/{id}/attachments/{name}/compressed-size"))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5361,11 +5386,11 @@ export def "studies-attachments-data get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/studies/{id}/attachments/{name}/data"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/studies/{id}/attachments/{name}/data"))
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5387,11 +5412,11 @@ export def "studies-attachments-info get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/studies/{id}/attachments/{name}/info"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/studies/{id}/attachments/{name}/info"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5413,11 +5438,11 @@ export def "studies-attachments-is-compressed get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/studies/{id}/attachments/{name}/is-compressed"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/studies/{id}/attachments/{name}/is-compressed"))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5439,11 +5464,11 @@ export def "studies-attachments-md5 get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/studies/{id}/attachments/{name}/md5"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/studies/{id}/attachments/{name}/md5"))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5465,18 +5490,18 @@ export def "studies-attachments-size get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/studies/{id}/attachments/{name}/size"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/studies/{id}/attachments/{name}/size"))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Uncompress attachment
 #
 # POST /studies/{id}/attachments/{name}/uncompress
-export def "studies-attachments-uncompress post" [
+export def "studies-attachments-uncompress create" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5490,7 +5515,7 @@ export def "studies-attachments-uncompress post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/studies/{id}/attachments/{name}/uncompress"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/studies/{id}/attachments/{name}/uncompress"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5499,7 +5524,7 @@ export def "studies-attachments-uncompress post" [
 # Verify attachment
 #
 # POST /studies/{id}/attachments/{name}/verify-md5
-export def "studies-attachments-verify-md5 post" [
+export def "studies-attachments-verify-md5 create" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5513,7 +5538,7 @@ export def "studies-attachments-verify-md5 post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/studies/{id}/attachments/{name}/verify-md5"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/studies/{id}/attachments/{name}/verify-md5"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5533,13 +5558,13 @@ export def "studies-instances get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --full: oneof<nothing, bool> # If present, report the DICOM tags in full format (tags indexed by their hexadecimal format, associated with their symbolic name and their value)
-  --requested-tags: string # If present, list the DICOM Tags you want to list in the response.  This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'.  The tags requested tags are returned in the 'RequestedTags' field in the response.  Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files.  If not specified, Orthanc will return 
+  --requested-tags: string # If present, list the DICOM Tags you want to list in the response. This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'. The tags requested tags are returned in the 'RequestedTags' field in the response. Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files. If not specified, Orthanc will return
   --short: oneof<nothing, bool> # If present, report the DICOM tags in hexadecimal format
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "full" $full "scalar") (serialize-qp "requestedTags" $requested_tags "scalar") (serialize-qp "short" $short "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/studies/{id}/instances") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/studies/{id}/instances") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5558,14 +5583,14 @@ export def "studies-instances-tags get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ignore-length: list # Also include the DICOM tags that are provided in this list, even if their associated value is long
+  --ignore-length: list<string> # Also include the DICOM tags that are provided in this list, even if their associated value is long
   --short: oneof<nothing, bool> # If present, report the DICOM tags in hexadecimal format
   --simplify: oneof<nothing, bool> # If present, report the DICOM tags in human-readable format (using the symbolic name of the tags)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ignore-length" $ignore_length "multi") (serialize-qp "short" $short "scalar") (serialize-qp "simplify" $simplify "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/studies/{id}/instances-tags") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/studies/{id}/instances-tags") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5591,7 +5616,7 @@ export def "studies-media get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "extended" $extended "scalar") (serialize-qp "filename" $filename "scalar") (serialize-qp "transcode" $transcode "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/studies/{id}/media") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/studies/{id}/media") $qp)
   let accept_val = "application/zip"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5600,7 +5625,7 @@ export def "studies-media get" [
 # Create DICOMDIR media
 #
 # POST /studies/{id}/media
-export def "studies-media post" [
+export def "studies-media create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5620,18 +5645,18 @@ export def "studies-media post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/studies/{id}/media"))
-  let body = {"Asynchronous": $asynchronous, "Extended": $extended, "Priority": $priority, "Synchronous": $synchronous, "Transcode": $transcode} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/studies/{id}/media"))
+  let req_body = {"Asynchronous": $asynchronous, "Extended": $extended, "Priority": $priority, "Synchronous": $synchronous, "Transcode": $transcode} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Merge study
 #
 # POST /studies/{id}/merge
-export def "studies-merge post" [
+export def "studies-merge create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5645,18 +5670,18 @@ export def "studies-merge post" [
   --keep-source: oneof<nothing, bool> # If set to `true`, instructs Orthanc to keep a copy of the original resources in their source study. By default, the original resources are deleted from Orthanc.
   --permissive: oneof<nothing, bool> # If `true`, ignore errors during the individual steps of the job.
   --priority: float # In asynchronous mode, the priority of the job. The lower the value, the higher the priority.
-  --resources: list # The list of DICOM resources (studies, series, and/or instances) to be merged into the study of interest (mandatory option)
+  --resources: list<string> # The list of DICOM resources (studies, series, and/or instances) to be merged into the study of interest (mandatory option)
   --synchronous: oneof<nothing, bool> # If `true`, run the job in synchronous mode, which means that the HTTP answer will directly contain the result of the job. This is the default, easy behavior, but it is *not* desirable for long jobs, as it might lead to network timeouts.
 ]: any -> record<ID: string, Path: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/studies/{id}/merge"))
-  let body = {"Asynchronous": $asynchronous, "KeepSource": $keep_source, "Permissive": $permissive, "Priority": $priority, "Resources": $resources, "Synchronous": $synchronous} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/studies/{id}/merge"))
+  let req_body = {"Asynchronous": $asynchronous, "KeepSource": $keep_source, "Permissive": $permissive, "Priority": $priority, "Resources": $resources, "Synchronous": $synchronous} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List metadata
@@ -5677,7 +5702,7 @@ export def "studies-metadata list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/studies/{id}/metadata") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/studies/{id}/metadata") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5701,11 +5726,11 @@ export def "studies-metadata delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/studies/{id}/metadata/{name}"))
-  let extra_headers = {"If-Match": $if_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/studies/{id}/metadata/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-Match": $if_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5727,18 +5752,18 @@ export def "studies-metadata get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/studies/{id}/metadata/{name}"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/studies/{id}/metadata/{name}"))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set metadata
 #
 # PUT /studies/{id}/metadata/{name}
-export def "studies-metadata put" [
+export def "studies-metadata update" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5755,19 +5780,20 @@ export def "studies-metadata put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/studies/{id}/metadata/{name}"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"If-Match": $if_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/studies/{id}/metadata/{name}"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "text/plain" $body
+  let extra_headers = {"If-Match": $if_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "text/plain" $req_body
 }
 
 # Modify study
 #
 # POST /studies/{id}/modify
-export def "studies-modify post" [
+export def "studies-modify create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5779,12 +5805,12 @@ export def "studies-modify post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --asynchronous: oneof<nothing, bool> # If `true`, run the job in asynchronous mode, which means that the REST API call will immediately return, reporting the identifier of a job. Prefer this flavor wherever possible.
   --force: oneof<nothing, bool> # Allow the modification of tags related to DICOM identifiers, at the risk of breaking the DICOM model of the real world
-  --keep: list # Keep the original value of the specified tags, to be chosen among the `StudyInstanceUID`, `SeriesInstanceUID` and `SOPInstanceUID` tags. Avoid this feature as much as possible, as this breaks the DICOM model of the real world.
+  --keep: list<string> # Keep the original value of the specified tags, to be chosen among the `StudyInstanceUID`, `SeriesInstanceUID` and `SOPInstanceUID` tags. Avoid this feature as much as possible, as this breaks the DICOM model of the real world.
   --keep-source: oneof<nothing, bool> # If set to `false`, instructs Orthanc to the remove original resources. By default, the original resources are kept in Orthanc.
   --permissive: oneof<nothing, bool> # If `true`, ignore errors during the individual steps of the job.
   --priority: float # In asynchronous mode, the priority of the job. The lower the value, the higher the priority.
   --private-creator: string # The private creator to be used for private tags in `Replace`
-  --remove: list # List of tags that must be removed from the DICOM instances. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
+  --remove: list<string> # List of tags that must be removed from the DICOM instances. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
   --remove-private-tags: oneof<nothing, bool> # Remove the private tags from the DICOM instances (defaults to `false`)
   --replace: record # Associative array to change the value of some DICOM tags in the DICOM instances. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
   --synchronous: oneof<nothing, bool> # If `true`, run the job in synchronous mode, which means that the HTTP answer will directly contain the result of the job. This is the default, easy behavior, but it is *not* desirable for long jobs, as it might lead to network timeouts.
@@ -5793,12 +5819,12 @@ export def "studies-modify post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/studies/{id}/modify"))
-  let body = {"Asynchronous": $asynchronous, "Force": $force, "Keep": $keep, "KeepSource": $keep_source, "Permissive": $permissive, "Priority": $priority, "PrivateCreator": $private_creator, "Remove": $remove, "RemovePrivateTags": $remove_private_tags, "Replace": $replace, "Synchronous": $synchronous, "Transcode": $transcode} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/studies/{id}/modify"))
+  let req_body = {"Asynchronous": $asynchronous, "Force": $force, "Keep": $keep, "KeepSource": $keep_source, "Permissive": $permissive, "Priority": $priority, "PrivateCreator": $private_creator, "Remove": $remove, "RemovePrivateTags": $remove_private_tags, "Replace": $replace, "Synchronous": $synchronous, "Transcode": $transcode} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get study module
@@ -5814,14 +5840,14 @@ export def "studies-module get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ignore-length: list # Also include the DICOM tags that are provided in this list, even if their associated value is long
+  --ignore-length: list<string> # Also include the DICOM tags that are provided in this list, even if their associated value is long
   --short: oneof<nothing, bool> # If present, report the DICOM tags in hexadecimal format
   --simplify: oneof<nothing, bool> # If present, report the DICOM tags in human-readable format (using the symbolic name of the tags)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ignore-length" $ignore_length "multi") (serialize-qp "short" $short "scalar") (serialize-qp "simplify" $simplify "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/studies/{id}/module") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/studies/{id}/module") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5840,14 +5866,14 @@ export def "studies-module-patient get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ignore-length: list # Also include the DICOM tags that are provided in this list, even if their associated value is long
+  --ignore-length: list<string> # Also include the DICOM tags that are provided in this list, even if their associated value is long
   --short: oneof<nothing, bool> # If present, report the DICOM tags in hexadecimal format
   --simplify: oneof<nothing, bool> # If present, report the DICOM tags in human-readable format (using the symbolic name of the tags)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ignore-length" $ignore_length "multi") (serialize-qp "short" $short "scalar") (serialize-qp "simplify" $simplify "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/studies/{id}/module-patient") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/studies/{id}/module-patient") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5867,13 +5893,13 @@ export def "studies-patient get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --full: oneof<nothing, bool> # If present, report the DICOM tags in full format (tags indexed by their hexadecimal format, associated with their symbolic name and their value)
-  --requested-tags: string # If present, list the DICOM Tags you want to list in the response.  This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'.  The tags requested tags are returned in the 'RequestedTags' field in the response.  Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files.  If not specified, Orthanc will return 
+  --requested-tags: string # If present, list the DICOM Tags you want to list in the response. This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'. The tags requested tags are returned in the 'RequestedTags' field in the response. Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files. If not specified, Orthanc will return
   --short: oneof<nothing, bool> # If present, report the DICOM tags in hexadecimal format
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "full" $full "scalar") (serialize-qp "requestedTags" $requested_tags "scalar") (serialize-qp "short" $short "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/studies/{id}/patient") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/studies/{id}/patient") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5882,7 +5908,7 @@ export def "studies-patient get" [
 # Reconstruct tags & optionally files of study
 #
 # POST /studies/{id}/reconstruct
-export def "studies-reconstruct post" [
+export def "studies-reconstruct create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5897,12 +5923,12 @@ export def "studies-reconstruct post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/studies/{id}/reconstruct"))
-  let body = {"ReconstructFiles": $reconstruct_files} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/studies/{id}/reconstruct"))
+  let req_body = {"ReconstructFiles": $reconstruct_files} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get child series
@@ -5919,13 +5945,13 @@ export def "studies-series get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --full: oneof<nothing, bool> # If present, report the DICOM tags in full format (tags indexed by their hexadecimal format, associated with their symbolic name and their value)
-  --requested-tags: string # If present, list the DICOM Tags you want to list in the response.  This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'.  The tags requested tags are returned in the 'RequestedTags' field in the response.  Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files.  If not specified, Orthanc will return 
+  --requested-tags: string # If present, list the DICOM Tags you want to list in the response. This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'. The tags requested tags are returned in the 'RequestedTags' field in the response. Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files. If not specified, Orthanc will return
   --short: oneof<nothing, bool> # If present, report the DICOM tags in hexadecimal format
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "full" $full "scalar") (serialize-qp "requestedTags" $requested_tags "scalar") (serialize-qp "short" $short "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/studies/{id}/series") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/studies/{id}/series") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5950,7 +5976,7 @@ export def "studies-shared-tags get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "short" $short "scalar") (serialize-qp "simplify" $simplify "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/studies/{id}/shared-tags") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/studies/{id}/shared-tags") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5959,7 +5985,7 @@ export def "studies-shared-tags get" [
 # Split study
 #
 # POST /studies/{id}/split
-export def "studies-split post" [
+export def "studies-split create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5970,24 +5996,24 @@ export def "studies-split post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --asynchronous: oneof<nothing, bool> # If `true`, run the job in asynchronous mode, which means that the REST API call will immediately return, reporting the identifier of a job. Prefer this flavor wherever possible.
-  --instances: list # The list of instances to be separated from the parent study. These instances must all be children of the same source study, that is specified in the URI.
+  --instances: list<string> # The list of instances to be separated from the parent study. These instances must all be children of the same source study, that is specified in the URI.
   --keep-source: oneof<nothing, bool> # If set to `true`, instructs Orthanc to keep a copy of the original series/instances in the source study. By default, the original series/instances are deleted from Orthanc.
   --permissive: oneof<nothing, bool> # If `true`, ignore errors during the individual steps of the job.
   --priority: float # In asynchronous mode, the priority of the job. The lower the value, the higher the priority.
-  --remove: list # List of tags that must be removed in the new study (from the same modules as in the `Replace` option)
+  --remove: list<string> # List of tags that must be removed in the new study (from the same modules as in the `Replace` option)
   --replace: record # Associative array to change the value of some DICOM tags in the new study. These tags must be part of the "Patient Module Attributes" or the "General Study Module Attributes", as specified by the DICOM 2011 standard in Tables C.7-1 and C.7-3.
-  --series: list # The list of series to be separated from the parent study. These series must all be children of the same source study, that is specified in the URI.
+  --series: list<string> # The list of series to be separated from the parent study. These series must all be children of the same source study, that is specified in the URI.
   --synchronous: oneof<nothing, bool> # If `true`, run the job in synchronous mode, which means that the HTTP answer will directly contain the result of the job. This is the default, easy behavior, but it is *not* desirable for long jobs, as it might lead to network timeouts.
 ]: any -> record<ID: string, Path: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/studies/{id}/split"))
-  let body = {"Asynchronous": $asynchronous, "Instances": $instances, "KeepSource": $keep_source, "Permissive": $permissive, "Priority": $priority, "Remove": $remove, "Replace": $replace, "Series": $series, "Synchronous": $synchronous} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/studies/{id}/split"))
+  let req_body = {"Asynchronous": $asynchronous, "Instances": $instances, "KeepSource": $keep_source, "Permissive": $permissive, "Priority": $priority, "Remove": $remove, "Replace": $replace, "Series": $series, "Synchronous": $synchronous} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get study statistics
@@ -6006,7 +6032,7 @@ export def "studies-statistics get" [
 ]: nothing -> record<CountInstances: float, CountSeries: float, DicomDiskSize: string, DicomDiskSizeMB: float, DicomUncompressedSize: string, DicomUncompressedSizeMB: float, DiskSize: string, DiskSizeMB: float, UncompressedSize: string, UncompressedSizeMB: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/studies/{id}/statistics"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/studies/{id}/statistics"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6078,7 +6104,7 @@ export def "tools-accepted-transfer-syntaxes get" [
 # Set accepted transfer syntaxes
 #
 # PUT /tools/accepted-transfer-syntaxes
-export def "tools-accepted-transfer-syntaxes put" [
+export def "tools-accepted-transfer-syntaxes update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6093,16 +6119,17 @@ export def "tools-accepted-transfer-syntaxes put" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tools/accepted-transfer-syntaxes")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Anonymize a set of resources
 #
 # POST /tools/bulk-anonymize
-export def "tools-bulk-anonymize post" [
+export def "tools-bulk-anonymize create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6114,15 +6141,15 @@ export def "tools-bulk-anonymize post" [
   --asynchronous: oneof<nothing, bool> # If `true`, run the job in asynchronous mode, which means that the REST API call will immediately return, reporting the identifier of a job. Prefer this flavor wherever possible.
   --dicom-version: string # Version of the DICOM standard to be used for anonymization. Check out configuration option `DeidentifyLogsDicomVersion` for possible values.
   --force: oneof<nothing, bool> # Allow the modification of tags related to DICOM identifiers, at the risk of breaking the DICOM model of the real world
-  --keep: list # List of DICOM tags whose value must not be destroyed by the anonymization. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
+  --keep: list<string> # List of DICOM tags whose value must not be destroyed by the anonymization. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
   --keep-private-tags: oneof<nothing, bool> # Keep the private tags from the DICOM instances (defaults to `false`)
   --keep-source: oneof<nothing, bool> # If set to `false`, instructs Orthanc to the remove original resources. By default, the original resources are kept in Orthanc.
   --permissive: oneof<nothing, bool> # If `true`, ignore errors during the individual steps of the job.
   --priority: float # In asynchronous mode, the priority of the job. The lower the value, the higher the priority.
   --private-creator: string # The private creator to be used for private tags in `Replace`
-  --remove: list # List of additional tags to be removed from the DICOM instances. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
+  --remove: list<string> # List of additional tags to be removed from the DICOM instances. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
   --replace: record # Associative array to change the value of some DICOM tags in the DICOM instances. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
-  --resources: list # List of the Orthanc identifiers of the patients/studies/series/instances of interest.
+  --resources: list<string> # List of the Orthanc identifiers of the patients/studies/series/instances of interest.
   --synchronous: oneof<nothing, bool> # If `true`, run the job in synchronous mode, which means that the HTTP answer will directly contain the result of the job. This is the default, easy behavior, but it is *not* desirable for long jobs, as it might lead to network timeouts.
   --transcode: string # Transcode the DICOM instances to the provided DICOM transfer syntax: https://book.orthanc-server.com/faq/transcoding.html
 ]: any -> record<ID: string, Path: string> {
@@ -6130,17 +6157,17 @@ export def "tools-bulk-anonymize post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tools/bulk-anonymize")
-  let body = {"Asynchronous": $asynchronous, "DicomVersion": $dicom_version, "Force": $force, "Keep": $keep, "KeepPrivateTags": $keep_private_tags, "KeepSource": $keep_source, "Permissive": $permissive, "Priority": $priority, "PrivateCreator": $private_creator, "Remove": $remove, "Replace": $replace, "Resources": $resources, "Synchronous": $synchronous, "Transcode": $transcode} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"Asynchronous": $asynchronous, "DicomVersion": $dicom_version, "Force": $force, "Keep": $keep, "KeepPrivateTags": $keep_private_tags, "KeepSource": $keep_source, "Permissive": $permissive, "Priority": $priority, "PrivateCreator": $private_creator, "Remove": $remove, "Replace": $replace, "Resources": $resources, "Synchronous": $synchronous, "Transcode": $transcode} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Describe a set of resources
 #
 # POST /tools/bulk-content
-export def "tools-bulk-content post" [
+export def "tools-bulk-content create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6152,24 +6179,24 @@ export def "tools-bulk-content post" [
   --full: oneof<nothing, bool> # If set to `true`, report the DICOM tags in full format (tags indexed by their hexadecimal format, associated with their symbolic name and their value)
   --level: string # This optional argument specifies the level of interest (can be `Patient`, `Study`, `Series` or `Instance`). Orthanc will loop over the items inside `Resources`, and explore upward or downward in the DICOM hierarchy in order to find the level of interest.
   --metadata: oneof<nothing, bool> # If set to `true` (default value), the metadata associated with the resources will also be retrieved.
-  --resources: list # List of the Orthanc identifiers of the patients/studies/series/instances of interest.
+  --resources: list<string> # List of the Orthanc identifiers of the patients/studies/series/instances of interest.
   --short: oneof<nothing, bool> # If set to `true`, report the DICOM tags in hexadecimal format
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tools/bulk-content")
-  let body = {"Full": $full, "Level": $level, "Metadata": $metadata, "Resources": $resources, "Short": $short} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"Full": $full, "Level": $level, "Metadata": $metadata, "Resources": $resources, "Short": $short} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a set of resources
 #
 # POST /tools/bulk-delete
-export def "tools-bulk-delete post" [
+export def "tools-bulk-delete create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6178,23 +6205,23 @@ export def "tools-bulk-delete post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --resources: list # List of the Orthanc identifiers of the patients/studies/series/instances of interest.
+  --resources: list<string> # List of the Orthanc identifiers of the patients/studies/series/instances of interest.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tools/bulk-delete")
-  let body = {"Resources": $resources} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"Resources": $resources} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Modify a set of resources
 #
 # POST /tools/bulk-modify
-export def "tools-bulk-modify post" [
+export def "tools-bulk-modify create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6205,16 +6232,16 @@ export def "tools-bulk-modify post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --asynchronous: oneof<nothing, bool> # If `true`, run the job in asynchronous mode, which means that the REST API call will immediately return, reporting the identifier of a job. Prefer this flavor wherever possible.
   --force: oneof<nothing, bool> # Allow the modification of tags related to DICOM identifiers, at the risk of breaking the DICOM model of the real world
-  --keep: list # Keep the original value of the specified tags, to be chosen among the `StudyInstanceUID`, `SeriesInstanceUID` and `SOPInstanceUID` tags. Avoid this feature as much as possible, as this breaks the DICOM model of the real world.
+  --keep: list<string> # Keep the original value of the specified tags, to be chosen among the `StudyInstanceUID`, `SeriesInstanceUID` and `SOPInstanceUID` tags. Avoid this feature as much as possible, as this breaks the DICOM model of the real world.
   --keep-source: oneof<nothing, bool> # If set to `false`, instructs Orthanc to the remove original resources. By default, the original resources are kept in Orthanc.
   --level: string # Level of the modification (`Patient`, `Study`, `Series` or `Instance`). If absent, the level defaults to `Instance`, but is set to `Patient` if `PatientID` is modified, to `Study` if `StudyInstanceUID` is modified, or to `Series` if `SeriesInstancesUID` is modified. (new in Orthanc 1.9.7)
   --permissive: oneof<nothing, bool> # If `true`, ignore errors during the individual steps of the job.
   --priority: float # In asynchronous mode, the priority of the job. The lower the value, the higher the priority.
   --private-creator: string # The private creator to be used for private tags in `Replace`
-  --remove: list # List of tags that must be removed from the DICOM instances. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
+  --remove: list<string> # List of tags that must be removed from the DICOM instances. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
   --remove-private-tags: oneof<nothing, bool> # Remove the private tags from the DICOM instances (defaults to `false`)
   --replace: record # Associative array to change the value of some DICOM tags in the DICOM instances. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
-  --resources: list # List of the Orthanc identifiers of the patients/studies/series/instances of interest.
+  --resources: list<string> # List of the Orthanc identifiers of the patients/studies/series/instances of interest.
   --synchronous: oneof<nothing, bool> # If `true`, run the job in synchronous mode, which means that the HTTP answer will directly contain the result of the job. This is the default, easy behavior, but it is *not* desirable for long jobs, as it might lead to network timeouts.
   --transcode: string # Transcode the DICOM instances to the provided DICOM transfer syntax: https://book.orthanc-server.com/faq/transcoding.html
 ]: any -> record<ID: string, Path: string> {
@@ -6222,17 +6249,17 @@ export def "tools-bulk-modify post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tools/bulk-modify")
-  let body = {"Asynchronous": $asynchronous, "Force": $force, "Keep": $keep, "KeepSource": $keep_source, "Level": $level, "Permissive": $permissive, "Priority": $priority, "PrivateCreator": $private_creator, "Remove": $remove, "RemovePrivateTags": $remove_private_tags, "Replace": $replace, "Resources": $resources, "Synchronous": $synchronous, "Transcode": $transcode} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"Asynchronous": $asynchronous, "Force": $force, "Keep": $keep, "KeepSource": $keep_source, "Level": $level, "Permissive": $permissive, "Priority": $priority, "PrivateCreator": $private_creator, "Remove": $remove, "RemovePrivateTags": $remove_private_tags, "Replace": $replace, "Resources": $resources, "Synchronous": $synchronous, "Transcode": $transcode} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create ZIP archive
 #
 # POST /tools/create-archive
-export def "tools-create-archive post" [
+export def "tools-create-archive create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6244,7 +6271,7 @@ export def "tools-create-archive post" [
   --accept: string@accept-completer-2 # Response content type
   --asynchronous: oneof<nothing, bool> # If `true`, create the archive in asynchronous mode, which means that a job is submitted to create the archive in background.
   --priority: float # In asynchronous mode, the priority of the job. The lower the value, the higher the priority.
-  --resources: list # The list of Orthanc identifiers of interest.
+  --resources: list<string> # The list of Orthanc identifiers of interest.
   --synchronous: oneof<nothing, bool> # If `true`, create the archive in synchronous mode, which means that the HTTP answer will directly contain the ZIP file. This is the default, easy behavior. However, if global configuration option "SynchronousZipStream" is set to "false", asynchronous transfers should be preferred for large amount of data, as the creation of the temporary file might lead to network timeouts.
   --transcode: string # If present, the DICOM files in the archive will be transcoded to the provided transfer syntax: https://book.orthanc-server.com/faq/transcoding.html
 ]: any -> record<ID: string, Path: string> {
@@ -6252,17 +6279,17 @@ export def "tools-create-archive post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tools/create-archive")
-  let body = {"Asynchronous": $asynchronous, "Priority": $priority, "Resources": $resources, "Synchronous": $synchronous, "Transcode": $transcode} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"Asynchronous": $asynchronous, "Priority": $priority, "Resources": $resources, "Synchronous": $synchronous, "Transcode": $transcode} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create one DICOM instance
 #
 # POST /tools/create-dicom
-export def "tools-create-dicom post" [
+export def "tools-create-dicom create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6282,17 +6309,17 @@ export def "tools-create-dicom post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tools/create-dicom")
-  let body = {"Content": $content, "Force": $force, "InterpretBinaryTags": $interpret_binary_tags, "Parent": $parent, "PrivateCreator": $private_creator, "Tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"Content": $content, "Force": $force, "InterpretBinaryTags": $interpret_binary_tags, "Parent": $parent, "PrivateCreator": $private_creator, "Tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create DICOMDIR media
 #
 # POST /tools/create-media
-export def "tools-create-media post" [
+export def "tools-create-media create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6305,7 +6332,7 @@ export def "tools-create-media post" [
   --asynchronous: oneof<nothing, bool> # If `true`, create the archive in asynchronous mode, which means that a job is submitted to create the archive in background.
   --extended: oneof<nothing, bool> # If `true`, will include additional tags such as `SeriesDescription`, leading to a so-called *extended DICOMDIR*. Default value is `false`.
   --priority: float # In asynchronous mode, the priority of the job. The lower the value, the higher the priority.
-  --resources: list # The list of Orthanc identifiers of interest.
+  --resources: list<string> # The list of Orthanc identifiers of interest.
   --synchronous: oneof<nothing, bool> # If `true`, create the archive in synchronous mode, which means that the HTTP answer will directly contain the ZIP file. This is the default, easy behavior. However, if global configuration option "SynchronousZipStream" is set to "false", asynchronous transfers should be preferred for large amount of data, as the creation of the temporary file might lead to network timeouts.
   --transcode: string # If present, the DICOM files in the archive will be transcoded to the provided transfer syntax: https://book.orthanc-server.com/faq/transcoding.html
 ]: any -> record<ID: string, Path: string> {
@@ -6313,17 +6340,17 @@ export def "tools-create-media post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tools/create-media")
-  let body = {"Asynchronous": $asynchronous, "Extended": $extended, "Priority": $priority, "Resources": $resources, "Synchronous": $synchronous, "Transcode": $transcode} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"Asynchronous": $asynchronous, "Extended": $extended, "Priority": $priority, "Resources": $resources, "Synchronous": $synchronous, "Transcode": $transcode} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create DICOMDIR media
 #
 # POST /tools/create-media-extended
-export def "tools-create-media-extended post" [
+export def "tools-create-media-extended create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6336,7 +6363,7 @@ export def "tools-create-media-extended post" [
   --asynchronous: oneof<nothing, bool> # If `true`, create the archive in asynchronous mode, which means that a job is submitted to create the archive in background.
   --extended: oneof<nothing, bool> # If `true`, will include additional tags such as `SeriesDescription`, leading to a so-called *extended DICOMDIR*. Default value is `true`.
   --priority: float # In asynchronous mode, the priority of the job. The lower the value, the higher the priority.
-  --resources: list # The list of Orthanc identifiers of interest.
+  --resources: list<string> # The list of Orthanc identifiers of interest.
   --synchronous: oneof<nothing, bool> # If `true`, create the archive in synchronous mode, which means that the HTTP answer will directly contain the ZIP file. This is the default, easy behavior. However, if global configuration option "SynchronousZipStream" is set to "false", asynchronous transfers should be preferred for large amount of data, as the creation of the temporary file might lead to network timeouts.
   --transcode: string # If present, the DICOM files in the archive will be transcoded to the provided transfer syntax: https://book.orthanc-server.com/faq/transcoding.html
 ]: any -> record<ID: string, Path: string> {
@@ -6344,11 +6371,11 @@ export def "tools-create-media-extended post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tools/create-media-extended")
-  let body = {"Asynchronous": $asynchronous, "Extended": $extended, "Priority": $priority, "Resources": $resources, "Synchronous": $synchronous, "Transcode": $transcode} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"Asynchronous": $asynchronous, "Extended": $extended, "Priority": $priority, "Resources": $resources, "Synchronous": $synchronous, "Transcode": $transcode} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get default encoding
@@ -6375,7 +6402,7 @@ export def "tools-default-encoding get" [
 # Set default encoding
 #
 # PUT /tools/default-encoding
-export def "tools-default-encoding put" [
+export def "tools-default-encoding update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6390,10 +6417,11 @@ export def "tools-default-encoding put" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tools/default-encoding")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "text/plain" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "text/plain" $req_body
 }
 
 # Get DICOM conformance
@@ -6420,7 +6448,7 @@ export def "tools-dicom-conformance get" [
 # Trigger C-ECHO SCU
 #
 # POST /tools/dicom-echo
-export def "tools-dicom-echo post" [
+export def "tools-dicom-echo create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6441,17 +6469,17 @@ export def "tools-dicom-echo post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tools/dicom-echo")
-  let body = {"AET": $aet, "CheckFind": $check_find, "Host": $host, "Manufacturer": $manufacturer, "Port": $port, "Timeout": $timeout, "UseDicomTls": $use_dicom_tls} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"AET": $aet, "CheckFind": $check_find, "Host": $host, "Manufacturer": $manufacturer, "Port": $port, "Timeout": $timeout, "UseDicomTls": $use_dicom_tls} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Execute Lua script
 #
 # POST /tools/execute-script
-export def "tools-execute-script post" [
+export def "tools-execute-script create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6466,16 +6494,17 @@ export def "tools-execute-script post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tools/execute-script")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "text/plain" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "text/plain" $req_body
 }
 
 # Look for local resources
 #
 # POST /tools/find
-export def "tools-find post" [
+export def "tools-find create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6490,7 +6519,7 @@ export def "tools-find post" [
   --level: string # Level of the query (`Patient`, `Study`, `Series` or `Instance`)
   --limit: float # Limit the number of reported resources
   --query: record # Associative array containing the filter on the values of the DICOM tags
-  --requested-tags: list # A list of DICOM tags to include in the response (applicable only if "Expand" is set to true).  The tags requested tags are returned in the 'RequestedTags' field in the response.  Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files.  If not specified, Orthanc will return all Main Dicom Tags to keep backward compatibility with Orthanc prior to 1.11.0.
+  --requested-tags: list<string> # A list of DICOM tags to include in the response (applicable only if "Expand" is set to true). The tags requested tags are returned in the 'RequestedTags' field in the response. Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files. If not specified, Orthanc will return all Main Dicom Tags to keep backward compatibility with Orthanc prior to 1.11.0.
   --short: oneof<nothing, bool> # If set to `true`, report the DICOM tags in hexadecimal format
   --since: float # Show only the resources since the provided index (in conjunction with `Limit`)
 ]: any -> any {
@@ -6498,11 +6527,11 @@ export def "tools-find post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tools/find")
-  let body = {"CaseSensitive": $case_sensitive, "Expand": $expand, "Full": $full, "Level": $level, "Limit": $limit, "Query": $query, "RequestedTags": $requested_tags, "Short": $short, "Since": $since} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"CaseSensitive": $case_sensitive, "Expand": $expand, "Full": $full, "Level": $level, "Limit": $limit, "Query": $query, "RequestedTags": $requested_tags, "Short": $short, "Since": $since} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Generate an identifier
@@ -6531,7 +6560,7 @@ export def "tools-generate-uid get" [
 # Invalidate DICOM-as-JSON summaries
 #
 # POST /tools/invalidate-tags
-export def "tools-invalidate-tags post" [
+export def "tools-invalidate-tags create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6573,7 +6602,7 @@ export def "tools-log-level get" [
 # Set main log level
 #
 # PUT /tools/log-level
-export def "tools-log-level put" [
+export def "tools-log-level update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6588,10 +6617,11 @@ export def "tools-log-level put" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tools/log-level")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "text/plain" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "text/plain" $req_body
 }
 
 # Get log level for `dicom`
@@ -6618,7 +6648,7 @@ export def "tools-log-level-dicom get" [
 # Set log level for `dicom`
 #
 # PUT /tools/log-level-dicom
-export def "tools-log-level-dicom put" [
+export def "tools-log-level-dicom update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6633,10 +6663,11 @@ export def "tools-log-level-dicom put" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tools/log-level-dicom")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "text/plain" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "text/plain" $req_body
 }
 
 # Get log level for `generic`
@@ -6663,7 +6694,7 @@ export def "tools-log-level-generic get" [
 # Set log level for `generic`
 #
 # PUT /tools/log-level-generic
-export def "tools-log-level-generic put" [
+export def "tools-log-level-generic update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6678,10 +6709,11 @@ export def "tools-log-level-generic put" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tools/log-level-generic")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "text/plain" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "text/plain" $req_body
 }
 
 # Get log level for `http`
@@ -6708,7 +6740,7 @@ export def "tools-log-level-http get" [
 # Set log level for `http`
 #
 # PUT /tools/log-level-http
-export def "tools-log-level-http put" [
+export def "tools-log-level-http update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6723,10 +6755,11 @@ export def "tools-log-level-http put" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tools/log-level-http")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "text/plain" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "text/plain" $req_body
 }
 
 # Get log level for `jobs`
@@ -6753,7 +6786,7 @@ export def "tools-log-level-jobs get" [
 # Set log level for `jobs`
 #
 # PUT /tools/log-level-jobs
-export def "tools-log-level-jobs put" [
+export def "tools-log-level-jobs update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6768,10 +6801,11 @@ export def "tools-log-level-jobs put" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tools/log-level-jobs")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "text/plain" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "text/plain" $req_body
 }
 
 # Get log level for `lua`
@@ -6798,7 +6832,7 @@ export def "tools-log-level-lua get" [
 # Set log level for `lua`
 #
 # PUT /tools/log-level-lua
-export def "tools-log-level-lua put" [
+export def "tools-log-level-lua update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6813,10 +6847,11 @@ export def "tools-log-level-lua put" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tools/log-level-lua")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "text/plain" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "text/plain" $req_body
 }
 
 # Get log level for `plugins`
@@ -6843,7 +6878,7 @@ export def "tools-log-level-plugins get" [
 # Set log level for `plugins`
 #
 # PUT /tools/log-level-plugins
-export def "tools-log-level-plugins put" [
+export def "tools-log-level-plugins update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6858,10 +6893,11 @@ export def "tools-log-level-plugins put" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tools/log-level-plugins")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "text/plain" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "text/plain" $req_body
 }
 
 # Get log level for `sqlite`
@@ -6888,7 +6924,7 @@ export def "tools-log-level-sqlite get" [
 # Set log level for `sqlite`
 #
 # PUT /tools/log-level-sqlite
-export def "tools-log-level-sqlite put" [
+export def "tools-log-level-sqlite update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6903,16 +6939,17 @@ export def "tools-log-level-sqlite put" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tools/log-level-sqlite")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "text/plain" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "text/plain" $req_body
 }
 
 # Look for DICOM identifiers
 #
 # POST /tools/lookup
-export def "tools-lookup post" [
+export def "tools-lookup create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6927,10 +6964,11 @@ export def "tools-lookup post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tools/lookup")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "text/plain" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "text/plain" $req_body
 }
 
 # Are metrics collected?
@@ -6957,7 +6995,7 @@ export def "tools-metrics get" [
 # Enable collection of metrics
 #
 # PUT /tools/metrics
-export def "tools-metrics put" [
+export def "tools-metrics update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6972,10 +7010,11 @@ export def "tools-metrics put" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tools/metrics")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "text/plain" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "text/plain" $req_body
 }
 
 # Get usage metrics
@@ -7044,7 +7083,7 @@ export def "tools-now-local get" [
 # Reconstruct all the index
 #
 # POST /tools/reconstruct
-export def "tools-reconstruct post" [
+export def "tools-reconstruct create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7059,17 +7098,17 @@ export def "tools-reconstruct post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tools/reconstruct")
-  let body = {"ReconstructFiles": $reconstruct_files} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"ReconstructFiles": $reconstruct_files} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Restart Orthanc
 #
 # POST /tools/reset
-export def "tools-reset post" [
+export def "tools-reset create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7090,7 +7129,7 @@ export def "tools-reset post" [
 # Shutdown Orthanc
 #
 # POST /tools/shutdown
-export def "tools-shutdown post" [
+export def "tools-shutdown create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7132,7 +7171,7 @@ export def "tools-unknown-sop-class-accepted get" [
 # Set unknown SOP class accepted
 #
 # PUT /tools/unknown-sop-class-accepted
-export def "tools-unknown-sop-class-accepted put" [
+export def "tools-unknown-sop-class-accepted update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7147,8 +7186,9 @@ export def "tools-unknown-sop-class-accepted put" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tools/unknown-sop-class-accepted")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "text/plain" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "text/plain" $req_body
 }

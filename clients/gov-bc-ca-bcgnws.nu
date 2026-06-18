@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -182,7 +191,7 @@ export def "features get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({feature_id: $feature_id} | format pattern "/features/{feature_id}"))
+  let full_url = (build-url $base ({feature_id: (encode-path-segment $feature_id)} | format pattern "/features/{feature_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -226,9 +235,9 @@ export def "names-changes get" [
   --output-format: string@output-format-completer-1 # The format of the output. (default: json, e.g. json)
   --from-date: int # Defines the earliest date (YYYY-MM-DD format) of the change time window for the search (e.g. 2017-01-01)
   --to-date: int # Defines the latest date (YYYY-MM-DD format) of the change time window for the search (e.g. 2017-06-30)
-  --feature-class: string # A filter to limit the search to names associated with features of a certain 'class'  The value of this parameter should be a 'featureClassCode' value returned by the /featureClasses resource, or an asterisk (*) to request that all feature classes be included. (default: *)
-  --feature-category: string # A filter to limit the search to names associated with features of a certain 'category'  The value of this parameter should be a 'featureCategoryCode' value returned by the /featureCategories resource, or an asterisk (*) to request that all feature categories be included. (default: *)
-  --feature-type: string # A filter to limit the search to names associated with features of a certain 'type'  The value of this parameter should be a 'featureTypeCode' value returned by the /featureTypes resource, or an asterisk (*) to request that all feature types be included (default: *)
+  --feature-class: string # A filter to limit the search to names associated with features of a certain 'class' The value of this parameter should be a 'featureClassCode' value returned by the /featureClasses resource, or an asterisk (*) to request that all feature classes be included. (default: *)
+  --feature-category: string # A filter to limit the search to names associated with features of a certain 'category' The value of this parameter should be a 'featureCategoryCode' value returned by the /featureCategories resource, or an asterisk (*) to request that all feature categories be included. (default: *)
+  --feature-type: string # A filter to limit the search to names associated with features of a certain 'type' The value of this parameter should be a 'featureTypeCode' value returned by the /featureTypes resource, or an asterisk (*) to request that all feature types be included (default: *)
   --sort-by: string@sort-by-completer # The distance to move the accessPoint away from the curb and towards the inside of the parcel (in metres). Ignored if locationDescriptor not set to accessPoint. (default: name)
   --output-srs: int@output-srs-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. (default: 4326)
   --embed: int@embed-completer # A flag to indicate whether to embed the corresponding 'feature' into each matching name
@@ -258,10 +267,10 @@ export def "names-decisions-recent get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --output-format: string@output-format-completer-1 # The format of the output. (default: json, e.g. json)
-  --days: int # The number of days used to define the time window of naming decisions to search.  The number is interpreted as searching for 'names affected by decisions within the last X days'. (default: 30, e.g. 30)
-  --feature-class: string # A filter to limit the search to names associated with features of a certain 'class'  The value of this parameter should be a 'featureClassCode' value returned by the /featureClasses resource, or an asterisk (*) to request that all feature classes be included. (default: *)
-  --feature-category: string # A filter to limit the search to names associated with features of a certain 'category'  The value of this parameter should be a 'featureCategoryCode' value returned by the /featureCategories resource, or an asterisk (*) to request that all feature categories be included. (default: *)
-  --feature-type: string # A filter to limit the search to names associated with features of a certain 'type'  The value of this parameter should be a 'featureTypeCode' value returned by the /featureTypes resource, or an asterisk (*) to request that all feature types be included (default: *)
+  --days: int # The number of days used to define the time window of naming decisions to search. The number is interpreted as searching for 'names affected by decisions within the last X days'. (default: 30, e.g. 30)
+  --feature-class: string # A filter to limit the search to names associated with features of a certain 'class' The value of this parameter should be a 'featureClassCode' value returned by the /featureClasses resource, or an asterisk (*) to request that all feature classes be included. (default: *)
+  --feature-category: string # A filter to limit the search to names associated with features of a certain 'category' The value of this parameter should be a 'featureCategoryCode' value returned by the /featureCategories resource, or an asterisk (*) to request that all feature categories be included. (default: *)
+  --feature-type: string # A filter to limit the search to names associated with features of a certain 'type' The value of this parameter should be a 'featureTypeCode' value returned by the /featureTypes resource, or an asterisk (*) to request that all feature types be included (default: *)
   --sort-by: string@sort-by-completer # The distance to move the accessPoint away from the curb and towards the inside of the parcel (in metres). Ignored if locationDescriptor not set to accessPoint. (default: name)
   --output-srs: int@output-srs-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. (default: 4326)
   --embed: int@embed-completer # A flag to indicate whether to embed the corresponding 'feature' into each matching name
@@ -292,9 +301,9 @@ export def "names-decisions-year get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --output-format: string@output-format-completer-1 # The format of the output. (default: json, e.g. json)
   --year: int # The year in which to search for names affected by naming decisions'. (e.g. 2007)
-  --feature-class: string # A filter to limit the search to names associated with features of a certain 'class'  The value of this parameter should be a 'featureClassCode' value returned by the /featureClasses resource, or an asterisk (*) to request that all feature classes be included. (default: *)
-  --feature-category: string # A filter to limit the search to names associated with features of a certain 'category'  The value of this parameter should be a 'featureCategoryCode' value returned by the /featureCategories resource, or an asterisk (*) to request that all feature categories be included. (default: *)
-  --feature-type: string # A filter to limit the search to names associated with features of a certain 'type'  The value of this parameter should be a 'featureTypeCode' value returned by the /featureTypes resource, or an asterisk (*) to request that all feature types be included (default: *)
+  --feature-class: string # A filter to limit the search to names associated with features of a certain 'class' The value of this parameter should be a 'featureClassCode' value returned by the /featureClasses resource, or an asterisk (*) to request that all feature classes be included. (default: *)
+  --feature-category: string # A filter to limit the search to names associated with features of a certain 'category' The value of this parameter should be a 'featureCategoryCode' value returned by the /featureCategories resource, or an asterisk (*) to request that all feature categories be included. (default: *)
+  --feature-type: string # A filter to limit the search to names associated with features of a certain 'type' The value of this parameter should be a 'featureTypeCode' value returned by the /featureTypes resource, or an asterisk (*) to request that all feature types be included (default: *)
   --sort-by: string@sort-by-completer # The distance to move the accessPoint away from the curb and towards the inside of the parcel (in metres). Ignored if locationDescriptor not set to accessPoint. (default: name)
   --output-srs: int@output-srs-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. (default: 4326)
   --embed: int@embed-completer # A flag to indicate whether to embed the corresponding 'feature' into each matching name
@@ -324,10 +333,10 @@ export def "names-inside get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --output-format: string@output-format-completer-1 # The format of the output. (default: json, e.g. json)
-  --bbox: string # A geographic bounding box defining the search area.  Must be specified as a string of the form 'minLongitude,minLatitude,maxLongitude,maxLatitude' (WGS84). e.g. -119,49,-118,50 (e.g. -119,49,-118,50)
-  --feature-class: string # A filter to limit the search to names associated with features of a certain 'class'  The value of this parameter should be a 'featureClassCode' value returned by the /featureClasses resource, or an asterisk (*) to request that all feature classes be included. (default: *)
-  --feature-category: string # A filter to limit the search to names associated with features of a certain 'category'  The value of this parameter should be a 'featureCategoryCode' value returned by the /featureCategories resource, or an asterisk (*) to request that all feature categories be included. (default: *)
-  --feature-type: string # A filter to limit the search to names associated with features of a certain 'type'  The value of this parameter should be a 'featureTypeCode' value returned by the /featureTypes resource, or an asterisk (*) to request that all feature types be included (default: *)
+  --bbox: string # A geographic bounding box defining the search area. Must be specified as a string of the form 'minLongitude,minLatitude,maxLongitude,maxLatitude' (WGS84). e.g. -119,49,-118,50 (e.g. -119,49,-118,50)
+  --feature-class: string # A filter to limit the search to names associated with features of a certain 'class' The value of this parameter should be a 'featureClassCode' value returned by the /featureClasses resource, or an asterisk (*) to request that all feature classes be included. (default: *)
+  --feature-category: string # A filter to limit the search to names associated with features of a certain 'category' The value of this parameter should be a 'featureCategoryCode' value returned by the /featureCategories resource, or an asterisk (*) to request that all feature categories be included. (default: *)
+  --feature-type: string # A filter to limit the search to names associated with features of a certain 'type' The value of this parameter should be a 'featureTypeCode' value returned by the /featureTypes resource, or an asterisk (*) to request that all feature types be included (default: *)
   --sort-by: string@sort-by-completer # The distance to move the accessPoint away from the curb and towards the inside of the parcel (in metres). Ignored if locationDescriptor not set to accessPoint. (default: name)
   --output-srs: int@output-srs-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. (default: 4326)
   --embed: int@embed-completer # A flag to indicate whether to embed the corresponding 'feature' into each matching name
@@ -357,11 +366,11 @@ export def "names-near get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --output-format: string@output-format-completer-1 # The format of the output. (default: json, e.g. -119,49,-118,50)
-  --feature-point: string # A geographic coordinate specifying the centre point of the search area.  Must be specified as a string of the form 'longitude,latitude' (WGS84).  e.g. -120,51 (e.g. -120,51)
+  --feature-point: string # A geographic coordinate specifying the centre point of the search area. Must be specified as a string of the form 'longitude,latitude' (WGS84). e.g. -120,51 (e.g. -120,51)
   --distance: string # A radius (in kilometres) around the centre point.
-  --feature-class: string # A filter to limit the search to names associated with features of a certain 'class'  The value of this parameter should be a 'featureClassCode' value returned by the /featureClasses resource, or an asterisk (*) to request that all feature classes be included. (default: *)
-  --feature-category: string # A filter to limit the search to names associated with features of a certain 'category'  The value of this parameter should be a 'featureCategoryCode' value returned by the /featureCategories resource, or an asterisk (*) to request that all feature categories be included. (default: *)
-  --feature-type: string # A filter to limit the search to names associated with features of a certain 'type'  The value of this parameter should be a 'featureTypeCode' value returned by the /featureTypes resource, or an asterisk (*) to request that all feature types be included (default: *)
+  --feature-class: string # A filter to limit the search to names associated with features of a certain 'class' The value of this parameter should be a 'featureClassCode' value returned by the /featureClasses resource, or an asterisk (*) to request that all feature classes be included. (default: *)
+  --feature-category: string # A filter to limit the search to names associated with features of a certain 'category' The value of this parameter should be a 'featureCategoryCode' value returned by the /featureCategories resource, or an asterisk (*) to request that all feature categories be included. (default: *)
+  --feature-type: string # A filter to limit the search to names associated with features of a certain 'type' The value of this parameter should be a 'featureTypeCode' value returned by the /featureTypes resource, or an asterisk (*) to request that all feature types be included (default: *)
   --sort-by: string@sort-by-completer # The distance to move the accessPoint away from the curb and towards the inside of the parcel (in metres). Ignored if locationDescriptor not set to accessPoint. (default: name)
   --output-srs: int@output-srs-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. (default: 4326)
   --embed: int@embed-completer # A flag to indicate whether to embed the corresponding 'feature' into each matching name
@@ -391,11 +400,11 @@ export def "names-not-official-search get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --output-format: string@output-format-completer-1 # The format of the output. (default: json, e.g. json)
-  --name: string # A filter to search based on the the text of the name itself.  Use the asterisk (*) as a wildcard character.  For example 'vancouv*' (e.g. Victoria)
+  --name: string # A filter to search based on the the text of the name itself. Use the asterisk (*) as a wildcard character. For example 'vancouv*' (e.g. Victoria)
   --exact-spelling: int@exact-spelling-completer # If the 'name' parameter is specified, 'exactSpelling' specifies whether to include only names that exactly match the search text (exactSpelling=1), or whether to also include names with similar spellings (exactSpelling=0) (default: 0)
-  --feature-class: string # A filter to limit the search to names associated with features of a certain 'class'  The value of this parameter should be a 'featureClassCode' value returned by the /featureClasses resource, or an asterisk (*) to request that all feature classes be included. (default: *)
-  --feature-category: string # A filter to limit the search to names associated with features of a certain 'category'  The value of this parameter should be a 'featureCategoryCode' value returned by the /featureCategories resource, or an asterisk (*) to request that all feature categories be included. (default: *)
-  --feature-type: string # A filter to limit the search to names associated with features of a certain 'type'  The value of this parameter should be a 'featureTypeCode' value returned by the /featureTypes resource, or an asterisk (*) to request that all feature types be included (default: *)
+  --feature-class: string # A filter to limit the search to names associated with features of a certain 'class' The value of this parameter should be a 'featureClassCode' value returned by the /featureClasses resource, or an asterisk (*) to request that all feature classes be included. (default: *)
+  --feature-category: string # A filter to limit the search to names associated with features of a certain 'category' The value of this parameter should be a 'featureCategoryCode' value returned by the /featureCategories resource, or an asterisk (*) to request that all feature categories be included. (default: *)
+  --feature-type: string # A filter to limit the search to names associated with features of a certain 'type' The value of this parameter should be a 'featureTypeCode' value returned by the /featureTypes resource, or an asterisk (*) to request that all feature types be included (default: *)
   --sort-by: string@sort-by-completer-1 # The distance to move the accessPoint away from the curb and towards the inside of the parcel (in metres). Ignored if locationDescriptor not set to accessPoint. (default: relevance)
   --output-srs: int@output-srs-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. (default: 4326)
   --embed: int@embed-completer # A flag to indicate whether to embed the corresponding 'feature' into each matching name
@@ -425,11 +434,11 @@ export def "names-official-search get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --output-format: string@output-format-completer-1 # The format of the output. (default: json, e.g. json)
-  --name: string # A filter to search based on the the text of the name itself.  Use the asterisk (*) as a wildcard character.  For example 'vancouv*' (e.g. Victoria)
+  --name: string # A filter to search based on the the text of the name itself. Use the asterisk (*) as a wildcard character. For example 'vancouv*' (e.g. Victoria)
   --exact-spelling: int@exact-spelling-completer # If the 'name' parameter is specified, 'exactSpelling' specifies whether to include only names that exactly match the search text (exactSpelling=1), or whether to also include names with similar spellings (exactSpelling=0) (default: 0)
-  --feature-class: string # A filter to limit the search to names associated with features of a certain 'class'  The value of this parameter should be a 'featureClassCode' value returned by the /featureClasses resource, or an asterisk (*) to request that all feature classes be included. (default: *)
-  --feature-category: string # A filter to limit the search to names associated with features of a certain 'category'  The value of this parameter should be a 'featureCategoryCode' value returned by the /featureCategories resource, or an asterisk (*) to request that all feature categories be included. (default: *)
-  --feature-type: string # A filter to limit the search to names associated with features of a certain 'type'  The value of this parameter should be a 'featureTypeCode' value returned by the /featureTypes resource, or an asterisk (*) to request that all feature types be included (default: *)
+  --feature-class: string # A filter to limit the search to names associated with features of a certain 'class' The value of this parameter should be a 'featureClassCode' value returned by the /featureClasses resource, or an asterisk (*) to request that all feature classes be included. (default: *)
+  --feature-category: string # A filter to limit the search to names associated with features of a certain 'category' The value of this parameter should be a 'featureCategoryCode' value returned by the /featureCategories resource, or an asterisk (*) to request that all feature categories be included. (default: *)
+  --feature-type: string # A filter to limit the search to names associated with features of a certain 'type' The value of this parameter should be a 'featureTypeCode' value returned by the /featureTypes resource, or an asterisk (*) to request that all feature types be included (default: *)
   --sort-by: string@sort-by-completer-1 # The distance to move the accessPoint away from the curb and towards the inside of the parcel (in metres). Ignored if locationDescriptor not set to accessPoint. (default: relevance)
   --output-srs: int@output-srs-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. (default: 4326)
   --embed: int@embed-completer # A flag to indicate whether to embed the corresponding 'feature' into each matching name
@@ -459,11 +468,11 @@ export def "names-search get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --output-format: string@output-format-completer-1 # The format of the output. (default: json, e.g. json)
-  --name: string # A filter to search based on the the text of the name itself.  Use the asterisk (*) as a wildcard character.  For example 'vancouv*' (e.g. Victoria)
+  --name: string # A filter to search based on the the text of the name itself. Use the asterisk (*) as a wildcard character. For example 'vancouv*' (e.g. Victoria)
   --exact-spelling: int@exact-spelling-completer # If the 'name' parameter is specified, 'exactSpelling' specifies whether to include only names that exactly match the search text (exactSpelling=1), or whether to also include names with similar spellings (exactSpelling=0) (default: 0)
-  --feature-class: string # A filter to limit the search to names associated with features of a certain 'class'  The value of this parameter should be a 'featureClassCode' value returned by the /featureClasses resource, or an asterisk (*) to request that all feature classes be included. (default: *)
-  --feature-category: string # A filter to limit the search to names associated with features of a certain 'category'  The value of this parameter should be a 'featureCategoryCode' value returned by the /featureCategories resource, or an asterisk (*) to request that all feature categories be included. (default: *)
-  --feature-type: string # A filter to limit the search to names associated with features of a certain 'type'  The value of this parameter should be a 'featureTypeCode' value returned by the /featureTypes resource, or an asterisk (*) to request that all feature types be included (default: *)
+  --feature-class: string # A filter to limit the search to names associated with features of a certain 'class' The value of this parameter should be a 'featureClassCode' value returned by the /featureClasses resource, or an asterisk (*) to request that all feature classes be included. (default: *)
+  --feature-category: string # A filter to limit the search to names associated with features of a certain 'category' The value of this parameter should be a 'featureCategoryCode' value returned by the /featureCategories resource, or an asterisk (*) to request that all feature categories be included. (default: *)
+  --feature-type: string # A filter to limit the search to names associated with features of a certain 'type' The value of this parameter should be a 'featureTypeCode' value returned by the /featureTypes resource, or an asterisk (*) to request that all feature types be included (default: *)
   --sort-by: string@sort-by-completer-1 # The distance to move the accessPoint away from the curb and towards the inside of the parcel (in metres). Ignored if locationDescriptor not set to accessPoint. (default: relevance)
   --output-srs: int@output-srs-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. (default: 4326)
   --embed: int@embed-completer # A flag to indicate whether to embed the corresponding 'feature' into each matching name
@@ -497,7 +506,7 @@ export def "names get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({name_id: $name_id, output_format: $output_format} | format pattern "/names/{name_id}.{output_format}"))
+  let full_url = (build-url $base ({name_id: (encode-path-segment $name_id), output_format: (encode-path-segment $output_format)} | format pattern "/names/{name_id}.{output_format}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

@@ -13,6 +13,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   match $scheme {
     "x-billbee-api-key" => { {headers: {X-Billbee-Api-Key: $token_val}, query: ""} }
     "basic" => { {headers: {Authorization: $"Basic ($token_val)"}, query: ""} }
+    "basic-credentials" => { {headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: ""} }
     "none" => { {headers: {}, query: ""} }
     _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
   }
@@ -34,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
     "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
     _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -64,7 +74,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 }
 
 def base-url-completer [] { ["https://app.billbee.io"] }
-def auth-scheme-completer [] { ["x-billbee-api-key" "basic"] }
+def auth-scheme-completer [] { ["x-billbee-api-key" "basic" "basic-credentials"] }
 
 # Completers for enum parameters
 def default-vat-mode-completer [] { ["0" "1" "2" "3" "4" "5"] }
@@ -83,7 +93,7 @@ def shipping-carrier-completer [] { ["0" "1" "10" "11" "12" "13" "14" "15" "16" 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "automaticprovision-createaccount create-account" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "automaticprovision-createaccount create-automatic-provisioning-account" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -108,7 +118,7 @@ export def commands []: nothing -> table {
 # POST /api/v1/automaticprovision/createaccount
 # operationId: AutomaticProvisioning_CreateAccount
 # --Address shape: {Address1?: string, Address2?: string, City?: string, Company?: string, Country?: string, Name?: string, VatId?: string, Zip?: string}
-export def "automaticprovision-createaccount create-account" [
+export def "automaticprovision-createaccount create-automatic-provisioning-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -118,7 +128,7 @@ export def "automaticprovision-createaccount create-account" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --accept-terms: oneof<nothing, bool> # Set to true, if the user has accepted the Billbee terms &amp; conditions
+  --accept-terms: oneof<nothing, bool> # Set to true, if the user has accepted the Billbee terms & conditions
   --address: record # Represents the invoice address of a Billbee user — shape: {Address1?: string, Address2?: string, City?: string, Company?: string, Country?: string, Name?: string, VatId?: string, Zip?: string}
   --affiliate-coupon-code: string # Specifies an billbee affiliate code to attach to the user
   --default-currrency: string # Optionally specify the default currency of the user
@@ -133,18 +143,18 @@ export def "automaticprovision-createaccount create-account" [
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/automaticprovision/createaccount")
-  let body = {"AcceptTerms": $accept_terms, "Address": $address, "AffiliateCouponCode": $affiliate_coupon_code, "DefaultCurrrency": $default_currrency, "DefaultVatIndex": $default_vat_index, "DefaultVatMode": $default_vat_mode, "EMail": $e_mail, "Password": $password, "Vat1Rate": $vat1_rate, "Vat2Rate": $vat2_rate} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"AcceptTerms": $accept_terms, "Address": $address, "AffiliateCouponCode": $affiliate_coupon_code, "DefaultCurrrency": $default_currrency, "DefaultVatIndex": $default_vat_index, "DefaultVatMode": $default_vat_mode, "EMail": $e_mail, "Password": $password, "Vat1Rate": $vat1_rate, "Vat2Rate": $vat2_rate} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns infos about Billbee terms and conditions
 #
 # GET /api/v1/automaticprovision/termsinfo
 # operationId: AutomaticProvisioning_TermsInfo
-export def "automaticprovision-termsinfo get" [
+export def "automaticprovision-termsinfo get-automatic-provisioning-terms" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -167,7 +177,7 @@ export def "automaticprovision-termsinfo get" [
 #
 # GET /api/v1/cloudstorages
 # operationId: CloudStorageApi_GetList
-export def "cloudstorages get-list" [
+export def "cloudstorages get-cloud-storage-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -190,7 +200,7 @@ export def "cloudstorages get-list" [
 #
 # GET /api/v1/customer-addresses
 # operationId: CustomerAddresses_GetAll
-export def "customer-addresses get-all" [
+export def "customer-addresses get-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -251,11 +261,11 @@ export def "customer-addresses create" [
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/customer-addresses")
-  let body = {"AddressAddition": $address_addition, "AddressType": $address_type, "ArchivedAt": $archived_at, "City": $city, "Company": $company, "CountryCode": $country_code, "CustomerId": $customer_id, "Email": $email, "Fax": $fax, "FirstName": $first_name, "Housenumber": $housenumber, "Id": $id, "LastName": $last_name, "Name2": $name2, "RestoredAt": $restored_at, "State": $state, "Street": $street, "Tel1": $tel1, "Tel2": $tel2, "Zip": $zip} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"AddressAddition": $address_addition, "AddressType": $address_type, "ArchivedAt": $archived_at, "City": $city, "Company": $company, "CountryCode": $country_code, "CustomerId": $customer_id, "Email": $email, "Fax": $fax, "FirstName": $first_name, "Housenumber": $housenumber, "Id": $id, "LastName": $last_name, "Name2": $name2, "RestoredAt": $restored_at, "State": $state, "Street": $street, "Tel1": $tel1, "Tel2": $tel2, "Zip": $zip} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Queries a single customer address by id
@@ -276,7 +286,7 @@ export def "customer-addresses get-one" [
 ]: nothing -> record<Data: record<AddressAddition: string, AddressType: int, ArchivedAt: string, City: string, Company: string, CountryCode: string, CustomerId: int, Email: string, Fax: string, FirstName: string, Housenumber: string, Id: int, LastName: string, Name2: string, RestoredAt: string, State: string, Street: string, Tel1: string, Tel2: string, Zip: string>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/customer-addresses/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/customer-addresses/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -321,19 +331,19 @@ export def "customer-addresses update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/customer-addresses/{id}"))
-  let body = {"AddressAddition": $address_addition, "AddressType": $address_type, "ArchivedAt": $archived_at, "City": $city, "Company": $company, "CountryCode": $country_code, "CustomerId": $customer_id, "Email": $email, "Fax": $fax, "FirstName": $first_name, "Housenumber": $housenumber, "Id": $body_id, "LastName": $last_name, "Name2": $name2, "RestoredAt": $restored_at, "State": $state, "Street": $street, "Tel1": $tel1, "Tel2": $tel2, "Zip": $zip} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/customer-addresses/{id}"))
+  let req_body = {"AddressAddition": $address_addition, "AddressType": $address_type, "ArchivedAt": $archived_at, "City": $city, "Company": $company, "CountryCode": $country_code, "CustomerId": $customer_id, "Email": $email, "Fax": $fax, "FirstName": $first_name, "Housenumber": $housenumber, "Id": $body_id, "LastName": $last_name, "Name2": $name2, "RestoredAt": $restored_at, "State": $state, "Street": $street, "Tel1": $tel1, "Tel2": $tel2, "Zip": $zip} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get a list of all customers
 #
 # GET /api/v1/customers
 # operationId: Customer_GetAll
-export def "customers get-all" [
+export def "customers get-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -402,18 +412,18 @@ export def "customers create" [
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/customers")
-  let body = {"Address": $address, "ArchivedAt": $archived_at, "DefaultCommercialMailAddress": $default_commercial_mail_address, "DefaultFax": $default_fax, "DefaultMailAddress": $default_mail_address, "DefaultPhone1": $default_phone1, "DefaultPhone2": $default_phone2, "DefaultStatusUpdatesMailAddress": $default_status_updates_mail_address, "Email": $email, "Id": $id, "LanguageId": $language_id, "MetaData": $meta_data, "Name": $name, "Number": $number, "PriceGroupId": $price_group_id, "RestoredAt": $restored_at, "Tel1": $tel1, "Tel2": $tel2, "Type": $type, "VatId": $vat_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"Address": $address, "ArchivedAt": $archived_at, "DefaultCommercialMailAddress": $default_commercial_mail_address, "DefaultFax": $default_fax, "DefaultMailAddress": $default_mail_address, "DefaultPhone1": $default_phone1, "DefaultPhone2": $default_phone2, "DefaultStatusUpdatesMailAddress": $default_status_updates_mail_address, "Email": $email, "Id": $id, "LanguageId": $language_id, "MetaData": $meta_data, "Name": $name, "Number": $number, "PriceGroupId": $price_group_id, "RestoredAt": $restored_at, "Tel1": $tel1, "Tel2": $tel2, "Type": $type, "VatId": $vat_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Queries a single address from a customer
 #
 # GET /api/v1/customers/addresses/{id}
 # operationId: Customer_GetCustomerAddress
-export def "customers-addresses get-customer-address" [
+export def "customers-addresses get-address" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -427,7 +437,7 @@ export def "customers-addresses get-customer-address" [
 ]: nothing -> record<Data: record<AddressAddition: string, AddressType: int, ArchivedAt: string, City: string, Company: string, CountryCode: string, CustomerId: int, Email: string, Fax: string, FirstName: string, Housenumber: string, Id: int, LastName: string, Name2: string, RestoredAt: string, State: string, Street: string, Tel1: string, Tel2: string, Zip: string>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/customers/addresses/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/customers/addresses/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -453,11 +463,12 @@ export def "customers-addresses update-address-by-id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/customers/addresses/{id}"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/customers/addresses/{id}"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates all fields of an address
@@ -499,12 +510,12 @@ export def "customers-addresses update-address-by-id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/customers/addresses/{id}"))
-  let body = {"AddressAddition": $address_addition, "AddressType": $address_type, "ArchivedAt": $archived_at, "City": $city, "Company": $company, "CountryCode": $country_code, "CustomerId": $customer_id, "Email": $email, "Fax": $fax, "FirstName": $first_name, "Housenumber": $housenumber, "Id": $body_id, "LastName": $last_name, "Name2": $name2, "RestoredAt": $restored_at, "State": $state, "Street": $street, "Tel1": $tel1, "Tel2": $tel2, "Zip": $zip} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/customers/addresses/{id}"))
+  let req_body = {"AddressAddition": $address_addition, "AddressType": $address_type, "ArchivedAt": $archived_at, "City": $city, "Company": $company, "CountryCode": $country_code, "CustomerId": $customer_id, "Email": $email, "Fax": $fax, "FirstName": $first_name, "Housenumber": $housenumber, "Id": $body_id, "LastName": $last_name, "Name2": $name2, "RestoredAt": $restored_at, "State": $state, "Street": $street, "Tel1": $tel1, "Tel2": $tel2, "Zip": $zip} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Queries a single customer by id
@@ -525,7 +536,7 @@ export def "customers get-one" [
 ]: nothing -> record<Data: record<ArchivedAt: string, DefaultCommercialMailAddress: record<Id: int, SubType: string, TypeId: int, TypeName: string, Value: string>, DefaultFax: record<Id: int, SubType: string, TypeId: int, TypeName: string, Value: string>, DefaultMailAddress: record<Id: int, SubType: string, TypeId: int, TypeName: string, Value: string>, DefaultPhone1: record<Id: int, SubType: string, TypeId: int, TypeName: string, Value: string>, DefaultPhone2: record<Id: int, SubType: string, TypeId: int, TypeName: string, Value: string>, DefaultStatusUpdatesMailAddress: record<Id: int, SubType: string, TypeId: int, TypeName: string, Value: string>, Email: string, Id: int, LanguageId: int, MetaData: list<record>, Name: string, Number: int, PriceGroupId: int, RestoredAt: string, Tel1: string, Tel2: string, Type: int, VatId: string>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/customers/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/customers/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -576,12 +587,12 @@ export def "customers update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/customers/{id}"))
-  let body = {"ArchivedAt": $archived_at, "DefaultCommercialMailAddress": $default_commercial_mail_address, "DefaultFax": $default_fax, "DefaultMailAddress": $default_mail_address, "DefaultPhone1": $default_phone1, "DefaultPhone2": $default_phone2, "DefaultStatusUpdatesMailAddress": $default_status_updates_mail_address, "Email": $email, "Id": $body_id, "LanguageId": $language_id, "MetaData": $meta_data, "Name": $name, "Number": $number, "PriceGroupId": $price_group_id, "RestoredAt": $restored_at, "Tel1": $tel1, "Tel2": $tel2, "Type": $type, "VatId": $vat_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/customers/{id}"))
+  let req_body = {"ArchivedAt": $archived_at, "DefaultCommercialMailAddress": $default_commercial_mail_address, "DefaultFax": $default_fax, "DefaultMailAddress": $default_mail_address, "DefaultPhone1": $default_phone1, "DefaultPhone2": $default_phone2, "DefaultStatusUpdatesMailAddress": $default_status_updates_mail_address, "Email": $email, "Id": $body_id, "LanguageId": $language_id, "MetaData": $meta_data, "Name": $name, "Number": $number, "PriceGroupId": $price_group_id, "RestoredAt": $restored_at, "Tel1": $tel1, "Tel2": $tel2, "Type": $type, "VatId": $vat_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Queries a list of addresses from a customer
@@ -605,7 +616,7 @@ export def "customers-addresses get" [
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/customers/{id}/addresses") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/customers/{id}/addresses") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -615,7 +626,7 @@ export def "customers-addresses get" [
 #
 # POST /api/v1/customers/{id}/addresses
 # operationId: Customer_AddCustomerAddress
-export def "customers-addresses create-customer-address" [
+export def "customers-addresses create-address" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -650,12 +661,12 @@ export def "customers-addresses create-customer-address" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/customers/{id}/addresses"))
-  let body = {"AddressAddition": $address_addition, "AddressType": $address_type, "ArchivedAt": $archived_at, "City": $city, "Company": $company, "CountryCode": $country_code, "CustomerId": $customer_id, "Email": $email, "Fax": $fax, "FirstName": $first_name, "Housenumber": $housenumber, "Id": $body_id, "LastName": $last_name, "Name2": $name2, "RestoredAt": $restored_at, "State": $state, "Street": $street, "Tel1": $tel1, "Tel2": $tel2, "Zip": $zip} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/customers/{id}/addresses"))
+  let req_body = {"AddressAddition": $address_addition, "AddressType": $address_type, "ArchivedAt": $archived_at, "City": $city, "Company": $company, "CountryCode": $country_code, "CustomerId": $customer_id, "Email": $email, "Fax": $fax, "FirstName": $first_name, "Housenumber": $housenumber, "Id": $body_id, "LastName": $last_name, "Name2": $name2, "RestoredAt": $restored_at, "State": $state, "Street": $street, "Tel1": $tel1, "Tel2": $tel2, "Zip": $zip} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Queries a list of orders from a customer
@@ -679,7 +690,7 @@ export def "customers-orders get" [
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/customers/{id}/orders") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/customers/{id}/orders") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -689,7 +700,7 @@ export def "customers-orders get" [
 #
 # GET /api/v1/enums/orderstates
 # operationId: EnumApi_GetOrderStates
-export def "enums-orderstates get" [
+export def "enums-orderstates get-order-states" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -712,7 +723,7 @@ export def "enums-orderstates get" [
 #
 # GET /api/v1/enums/paymenttypes
 # operationId: EnumApi_GetPaymentTypes
-export def "enums-paymenttypes get" [
+export def "enums-paymenttypes get-payment-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -735,7 +746,7 @@ export def "enums-paymenttypes get" [
 #
 # GET /api/v1/enums/shipmenttypes
 # operationId: EnumApi_GetShipmentTypes
-export def "enums-shipmenttypes get" [
+export def "enums-shipmenttypes get-shipment-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -758,7 +769,7 @@ export def "enums-shipmenttypes get" [
 #
 # GET /api/v1/enums/shippingcarriers
 # operationId: EnumApi_GetShippingCarriers
-export def "enums-shippingcarriers get" [
+export def "enums-shippingcarriers get-shipping-carriers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -795,7 +806,7 @@ export def "events get-list" [
   --max-date: string # Specifies the newest date to include in the response (format: date-time)
   --page: int # Specifies the page to request (format: int32)
   --page-size: int # Specifies the pagesize. Defaults to 50, max value is 250 (format: int32)
-  --type-id: list # Filter for specific event types
+  --type-id: list<int> # Filter for specific event types
   --order-id: int # Filter for specific order id (format: int64)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
@@ -847,9 +858,9 @@ export def "orders get-list" [
   --max-order-date: string # Specifies the newest order date to include in the response (format: date-time)
   --page: int # Specifies the page to request (format: int32)
   --page-size: int # Specifies the pagesize. Defaults to 50, max value is 250 (format: int32)
-  --shop-id: list # Specifies a list of shop ids for which invoices should be included
-  --order-state-id: list # Specifies a list of state ids to include in the response
-  --tag: list # Specifies a list of tags the order must have attached to be included in the response
+  --shop-id: list<int> # Specifies a list of shop ids for which invoices should be included
+  --order-state-id: list<int> # Specifies a list of state ids to include in the response
+  --tag: list<string> # Specifies a list of tags the order must have attached to be included in the response
   --minimum-bill-bee-order-id: int # If given, all delivered orders have an Id greater than or equal to the given minimumOrderId (format: int64)
   --modified-at-min: string # If given, the last modification has to be newer than the given date (format: date-time)
   --modified-at-max: string # If given, the last modification has to be older or equal than the given date. (format: date-time)
@@ -946,7 +957,7 @@ export def "orders create-new" [
   --shipping-provider-product-name: string # The Name of the used shipping product
   --shipping-services: list # Additional services for the shipment
   --state: int@state-completer # The current state of the order (format: int32)
-  --tags: list # The Tags of the order
+  --tags: list<string> # The Tags of the order
   --tax-rate1: float # The regular tax rate (format: double)
   --tax-rate2: float # The reduced tax rate (format: double)
   --total-cost: float # The total cost excluding shipping cost (format: double)
@@ -959,11 +970,11 @@ export def "orders create-new" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "shopId" $shop_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/orders" $qp)
-  let body = {"AcceptLossOfReturnRight": $accept_loss_of_return_right, "AdjustmentCost": $adjustment_cost, "AdjustmentReason": $adjustment_reason, "ApiAccountId": $api_account_id, "ApiAccountName": $api_account_name, "ArchivedAt": $archived_at, "BillBeeOrderId": $bill_bee_order_id, "BillBeeParentOrderId": $bill_bee_parent_order_id, "Buyer": $buyer, "Comments": $comments, "ConfirmedAt": $confirmed_at, "CreatedAt": $created_at, "Currency": $currency, "CustomInvoiceNote": $custom_invoice_note, "Customer": $customer, "CustomerNumber": $customer_number, "CustomerVatId": $customer_vat_id, "DeliverySourceCountryCode": $delivery_source_country_code, "DistributionCenter": $distribution_center, "History": $history, "Id": $id, "InvoiceAddress": $invoice_address, "InvoiceDate": $invoice_date, "InvoiceNumber": $invoice_number, "InvoiceNumberPostfix": $invoice_number_postfix, "InvoiceNumberPrefix": $invoice_number_prefix, "IsCancelationFor": $is_cancelation_for, "IsFromBillbeeApi": $is_from_billbee_api, "LanguageCode": $language_code, "LastModifiedAt": $last_modified_at, "MerchantVatId": $merchant_vat_id, "OrderItems": $order_items, "OrderNumber": $order_number, "PaidAmount": $paid_amount, "PayedAt": $payed_at, "PaymentInstruction": $payment_instruction, "PaymentMethod": $payment_method, "PaymentReference": $payment_reference, "PaymentTransactionId": $payment_transaction_id, "Payments": $payments, "RestoredAt": $restored_at, "Seller": $seller, "SellerComment": $seller_comment, "ShipWeightKg": $ship_weight_kg, "ShippedAt": $shipped_at, "ShippingAddress": $shipping_address, "ShippingCost": $shipping_cost, "ShippingIds": $shipping_ids, "ShippingProfileId": $shipping_profile_id, "ShippingProfileName": $shipping_profile_name, "ShippingProviderId": $shipping_provider_id, "ShippingProviderName": $shipping_provider_name, "ShippingProviderProductId": $shipping_provider_product_id, "ShippingProviderProductName": $shipping_provider_product_name, "ShippingServices": $shipping_services, "State": $state, "Tags": $tags, "TaxRate1": $tax_rate1, "TaxRate2": $tax_rate2, "TotalCost": $total_cost, "UpdatedAt": $updated_at, "VatId": $vat_id, "VatMode": $vat_mode} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"AcceptLossOfReturnRight": $accept_loss_of_return_right, "AdjustmentCost": $adjustment_cost, "AdjustmentReason": $adjustment_reason, "ApiAccountId": $api_account_id, "ApiAccountName": $api_account_name, "ArchivedAt": $archived_at, "BillBeeOrderId": $bill_bee_order_id, "BillBeeParentOrderId": $bill_bee_parent_order_id, "Buyer": $buyer, "Comments": $comments, "ConfirmedAt": $confirmed_at, "CreatedAt": $created_at, "Currency": $currency, "CustomInvoiceNote": $custom_invoice_note, "Customer": $customer, "CustomerNumber": $customer_number, "CustomerVatId": $customer_vat_id, "DeliverySourceCountryCode": $delivery_source_country_code, "DistributionCenter": $distribution_center, "History": $history, "Id": $id, "InvoiceAddress": $invoice_address, "InvoiceDate": $invoice_date, "InvoiceNumber": $invoice_number, "InvoiceNumberPostfix": $invoice_number_postfix, "InvoiceNumberPrefix": $invoice_number_prefix, "IsCancelationFor": $is_cancelation_for, "IsFromBillbeeApi": $is_from_billbee_api, "LanguageCode": $language_code, "LastModifiedAt": $last_modified_at, "MerchantVatId": $merchant_vat_id, "OrderItems": $order_items, "OrderNumber": $order_number, "PaidAmount": $paid_amount, "PayedAt": $payed_at, "PaymentInstruction": $payment_instruction, "PaymentMethod": $payment_method, "PaymentReference": $payment_reference, "PaymentTransactionId": $payment_transaction_id, "Payments": $payments, "RestoredAt": $restored_at, "Seller": $seller, "SellerComment": $seller_comment, "ShipWeightKg": $ship_weight_kg, "ShippedAt": $shipped_at, "ShippingAddress": $shipping_address, "ShippingCost": $shipping_cost, "ShippingIds": $shipping_ids, "ShippingProfileId": $shipping_profile_id, "ShippingProfileName": $shipping_profile_name, "ShippingProviderId": $shipping_provider_id, "ShippingProviderName": $shipping_provider_name, "ShippingProviderProductId": $shipping_provider_product_id, "ShippingProviderProductName": $shipping_provider_product_name, "ShippingServices": $shipping_services, "State": $state, "Tags": $tags, "TaxRate1": $tax_rate1, "TaxRate2": $tax_rate2, "TotalCost": $total_cost, "UpdatedAt": $updated_at, "VatId": $vat_id, "VatMode": $vat_mode} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create an delivery note for an existing order. This request is extra throttled by order and api key to a maximum of 1 per 5 minutes.
@@ -987,7 +998,7 @@ export def "orders-create-delivery-note create" [
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "includePdf" $include_pdf "scalar") (serialize-qp "sendToCloudId" $send_to_cloud_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/orders/CreateDeliveryNote/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/orders/CreateDeliveryNote/{id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1015,7 +1026,7 @@ export def "orders-create-invoice create" [
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "includeInvoicePdf" $include_invoice_pdf "scalar") (serialize-qp "templateId" $template_id "scalar") (serialize-qp "sendToCloudId" $send_to_cloud_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/orders/CreateInvoice/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/orders/CreateInvoice/{id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1050,7 +1061,7 @@ export def "orders-patchable-fields get" [
 # DEPRECATED
 # operationId: OrderApi_Find
 @deprecated
-export def "orders-find get" [
+export def "orders-find find" [
   id: string
   partner: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1065,7 +1076,7 @@ export def "orders-find get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, partner: $partner} | format pattern "/api/v1/orders/find/{id}/{partner}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), partner: (encode-path-segment $partner)} | format pattern "/api/v1/orders/find/{id}/{partner}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1089,7 +1100,7 @@ export def "orders-findbyextref get-by-ext-ref" [
 ]: nothing -> record<Data: record<AcceptLossOfReturnRight: bool, AdjustmentCost: float, AdjustmentReason: string, ApiAccountId: int, ApiAccountName: string, ArchivedAt: string, BillBeeOrderId: int, BillBeeParentOrderId: int, Buyer: record<BillbeeShopId: int, BillbeeShopName: string, Email: string, FirstName: string, FullName: string, Id: string, LastName: string, Nick: string, Platform: string>, Comments: list<record>, ConfirmedAt: string, CreatedAt: string, Currency: string, CustomInvoiceNote: string, Customer: record<ArchivedAt: string, DefaultCommercialMailAddress: record, DefaultFax: record, DefaultMailAddress: record, DefaultPhone1: record, DefaultPhone2: record, DefaultStatusUpdatesMailAddress: record, Email: string, Id: int, LanguageId: int, MetaData: list, Name: string, Number: int, PriceGroupId: int, RestoredAt: string, Tel1: string, Tel2: string, Type: int, VatId: string>, CustomerNumber: string, CustomerVatId: string, DeliverySourceCountryCode: string, DistributionCenter: string, History: list<record>, Id: string, InvoiceAddress: record<BillbeeId: int, City: string, Company: string, Country: string, CountryISO2: string, Email: string, FirstName: string, HouseNumber: string, LastName: string, Line2: string, NameAddition: string, Phone: string, State: string, Street: string, Zip: string>, InvoiceDate: string, InvoiceNumber: int, InvoiceNumberPostfix: string, InvoiceNumberPrefix: string, IsCancelationFor: string, IsFromBillbeeApi: bool, LanguageCode: string, LastModifiedAt: string, MerchantVatId: string, OrderItems: list<record>, OrderNumber: string, PaidAmount: float, PayedAt: string, PaymentInstruction: string, PaymentMethod: int, PaymentReference: string, PaymentTransactionId: string, Payments: list<record>, RebateDifference: float, RestoredAt: string, Seller: record<BillbeeShopId: int, BillbeeShopName: string, Email: string, FirstName: string, FullName: string, Id: string, LastName: string, Nick: string, Platform: string>, SellerComment: string, ShipWeightKg: float, ShippedAt: string, ShippingAddress: record<BillbeeId: int, City: string, Company: string, Country: string, CountryISO2: string, Email: string, FirstName: string, HouseNumber: string, LastName: string, Line2: string, NameAddition: string, Phone: string, State: string, Street: string, Zip: string>, ShippingCost: float, ShippingIds: list<record>, ShippingProfileId: string, ShippingProfileName: string, ShippingProviderId: int, ShippingProviderName: string, ShippingProviderProductId: int, ShippingProviderProductName: string, ShippingServices: list<record>, State: int, Tags: list<string>, TaxRate1: float, TaxRate2: float, TotalCost: float, UpdatedAt: string, VatId: string, VatMode: int>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({ext_ref: $ext_ref} | format pattern "/api/v1/orders/findbyextref/{ext_ref}"))
+  let full_url = (build-url $base ({ext_ref: (encode-path-segment $ext_ref)} | format pattern "/api/v1/orders/findbyextref/{ext_ref}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1099,7 +1110,7 @@ export def "orders-findbyextref get-by-ext-ref" [
 #
 # GET /api/v1/orders/invoices
 # operationId: OrderApi_GetInvoiceList
-export def "orders-invoices get-invoice-list" [
+export def "orders-invoices get-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1113,9 +1124,9 @@ export def "orders-invoices get-invoice-list" [
   --max-invoice-date: string # Specifies the newest invoice date to include (format: date-time)
   --page: int # Specifies the page to request (format: int32)
   --page-size: int # Specifies the pagesize. Defaults to 50, max value is 250 (format: int32)
-  --shop-id: list # Specifies a list of shop ids for which invoices should be included
-  --order-state-id: list # Specifies a list of state ids to include in the response
-  --tag: list
+  --shop-id: list<int> # Specifies a list of shop ids for which invoices should be included
+  --order-state-id: list<int> # Specifies a list of state ids to include in the response
+  --tag: list<string>
   --min-pay-date: string # format: date-time
   --max-pay-date: string # format: date-time
   --include-positions: oneof<nothing, bool>
@@ -1150,7 +1161,7 @@ export def "orders get" [
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "articleTitleSource" $article_title_source "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/orders/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/orders/{id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1176,11 +1187,12 @@ export def "orders update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/orders/{id}"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/orders/{id}"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Changes the main state of a single order
@@ -1203,19 +1215,19 @@ export def "orders-orderstate update-state" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/orders/{id}/orderstate"))
-  let body = {"NewStateId": $new_state_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/orders/{id}/orderstate"))
+  let req_body = {"NewStateId": $new_state_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Parses a text and replaces all placeholders
 #
 # POST /api/v1/orders/{id}/parse-placeholders
 # operationId: OrderApi_ParsePlaceholders
-export def "orders-parse-placeholders post" [
+export def "orders-parse-placeholders create" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1234,12 +1246,12 @@ export def "orders-parse-placeholders post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/orders/{id}/parse-placeholders"))
-  let body = {"IsHtml": $is_html, "Language": $language, "TextToParse": $text_to_parse, "Trim": $trim} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/orders/{id}/parse-placeholders"))
+  let req_body = {"IsHtml": $is_html, "Language": $language, "TextToParse": $text_to_parse, "Trim": $trim} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Sends a message to the buyer
@@ -1260,19 +1272,19 @@ export def "orders-send-message send" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --alternative-mail: string
-  --body-body: list # item shape: {LanguageCode?: string, Text?: string}
+  --body: list # item shape: {LanguageCode?: string, Text?: string}
   --send-mode: int@send-mode-completer # format: int32
   --subject: list # item shape: {LanguageCode?: string, Text?: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/orders/{id}/send-message"))
-  let body = {"AlternativeMail": $alternative_mail, "Body": $body_body, "SendMode": $send_mode, "Subject": $subject} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/orders/{id}/send-message"))
+  let req_body = {"AlternativeMail": $alternative_mail, "Body": $body, "SendMode": $send_mode, "Subject": $subject} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Add a shipment to a given order
@@ -1301,19 +1313,19 @@ export def "orders-shipment create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/orders/{id}/shipment"))
-  let body = {"CarrierId": $carrier_id, "Comment": $comment, "OrderId": $order_id, "ShipmentType": $shipment_type, "ShippingId": $shipping_id, "ShippingProviderId": $shipping_provider_id, "ShippingProviderProductId": $shipping_provider_product_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/orders/{id}/shipment"))
+  let req_body = {"CarrierId": $carrier_id, "Comment": $comment, "OrderId": $order_id, "ShipmentType": $shipment_type, "ShippingId": $shipping_id, "ShippingProviderId": $shipping_provider_id, "ShippingProviderProductId": $shipping_provider_product_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Attach one or more tags to an order
 #
 # POST /api/v1/orders/{id}/tags
 # operationId: OrderApi_TagsCreate
-export def "orders-tags tag-s-create" [
+export def "orders-tags create" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1324,24 +1336,24 @@ export def "orders-tags tag-s-create" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --tags: list
+  --tags: list<string>
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/orders/{id}/tags"))
-  let body = {"Tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/orders/{id}/tags"))
+  let req_body = {"Tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Sets the tags attached to an order
 #
 # PUT /api/v1/orders/{id}/tags
 # operationId: OrderApi_TagsUpdate
-export def "orders-tags tag-s-update" [
+export def "orders-tags update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1352,17 +1364,17 @@ export def "orders-tags tag-s-update" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --tags: list
+  --tags: list<string>
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/orders/{id}/tags"))
-  let body = {"Tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/orders/{id}/tags"))
+  let req_body = {"Tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Triggers a rule event
@@ -1386,19 +1398,19 @@ export def "orders-trigger-event trigger" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/orders/{id}/trigger-event"))
-  let body = {"DelayInMinutes": $delay_in_minutes, "Name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/orders/{id}/trigger-event"))
+  let req_body = {"DelayInMinutes": $delay_in_minutes, "Name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get a list of all products
 #
 # GET /api/v1/products
 # operationId: Article_GetList
-export def "products get-list" [
+export def "products get-article-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1443,7 +1455,7 @@ export def "products get-list" [
 # --Stocks item shape: {Name?: string, StockCode?: string, StockCurrent?: float, StockDesired?: float, StockId?: int, StockWarning?: float, UnfulfilledAmount?: float}
 # --Tags item shape: {LanguageCode?: string, Text?: string}
 # --Title item shape: {LanguageCode?: string, Text?: string}
-export def "products create-article" [
+export def "products create-article-article" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1513,18 +1525,18 @@ export def "products create-article" [
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/products")
-  let body = {"BasicAttributes": $basic_attributes, "BillOfMaterial": $bill_of_material, "Category1": $category1, "Category2": $category2, "Category3": $category3, "Condition": $condition, "CostPrice": $cost_price, "CountryOfOrigin": $country_of_origin, "CustomFields": $custom_fields, "DeliveryTime": $delivery_time, "Description": $description, "EAN": $ean, "ExportDescription": $export_description, "ExportDescriptionMultiLanguage": $export_description_multi_language, "HeightCm": $height_cm, "Id": $id, "Images": $images, "InvoiceText": $invoice_text, "IsCustomizable": $is_customizable, "IsDeactivated": $is_deactivated, "IsDigital": $is_digital, "LengthCm": $length_cm, "Manufacturer": $manufacturer, "Materials": $materials, "Occasion": $occasion, "Price": $price, "Recipient": $recipient, "SKU": $sku, "ShippingProductId": $shipping_product_id, "ShortDescription": $short_description, "SoldAmount": $sold_amount, "SoldAmountLast30Days": $sold_amount_last30_days, "SoldSumGross": $sold_sum_gross, "SoldSumGrossLast30Days": $sold_sum_gross_last30_days, "SoldSumNet": $sold_sum_net, "SoldSumNetLast30Days": $sold_sum_net_last30_days, "Sources": $sources, "StockCode": $stock_code, "StockCurrent": $stock_current, "StockDesired": $stock_desired, "StockReduceItemsPerSale": $stock_reduce_items_per_sale, "StockWarning": $stock_warning, "Stocks": $stocks, "Tags": $tags, "TaricNumber": $taric_number, "Title": $title, "Type": $type, "Unit": $unit, "UnitsPerItem": $units_per_item, "Vat1Rate": $vat1_rate, "Vat2Rate": $vat2_rate, "VatIndex": $vat_index, "Weight": $weight, "WeightNet": $weight_net, "WidthCm": $width_cm} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"BasicAttributes": $basic_attributes, "BillOfMaterial": $bill_of_material, "Category1": $category1, "Category2": $category2, "Category3": $category3, "Condition": $condition, "CostPrice": $cost_price, "CountryOfOrigin": $country_of_origin, "CustomFields": $custom_fields, "DeliveryTime": $delivery_time, "Description": $description, "EAN": $ean, "ExportDescription": $export_description, "ExportDescriptionMultiLanguage": $export_description_multi_language, "HeightCm": $height_cm, "Id": $id, "Images": $images, "InvoiceText": $invoice_text, "IsCustomizable": $is_customizable, "IsDeactivated": $is_deactivated, "IsDigital": $is_digital, "LengthCm": $length_cm, "Manufacturer": $manufacturer, "Materials": $materials, "Occasion": $occasion, "Price": $price, "Recipient": $recipient, "SKU": $sku, "ShippingProductId": $shipping_product_id, "ShortDescription": $short_description, "SoldAmount": $sold_amount, "SoldAmountLast30Days": $sold_amount_last30_days, "SoldSumGross": $sold_sum_gross, "SoldSumGrossLast30Days": $sold_sum_gross_last30_days, "SoldSumNet": $sold_sum_net, "SoldSumNetLast30Days": $sold_sum_net_last30_days, "Sources": $sources, "StockCode": $stock_code, "StockCurrent": $stock_current, "StockDesired": $stock_desired, "StockReduceItemsPerSale": $stock_reduce_items_per_sale, "StockWarning": $stock_warning, "Stocks": $stocks, "Tags": $tags, "TaricNumber": $taric_number, "Title": $title, "Type": $type, "Unit": $unit, "UnitsPerItem": $units_per_item, "Vat1Rate": $vat1_rate, "Vat2Rate": $vat2_rate, "VatIndex": $vat_index, "Weight": $weight, "WeightNet": $weight_net, "WidthCm": $width_cm} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns a list of fields which can be updated with the patch call
 #
 # GET /api/v1/products/PatchableFields
 # operationId: Article_GetPatchableFields
-export def "products-patchable-fields get" [
+export def "products-patchable-fields get-article" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1547,7 +1559,7 @@ export def "products-patchable-fields get" [
 #
 # GET /api/v1/products/category
 # operationId: Article_GetCategory
-export def "products-category get" [
+export def "products-category get-article" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1596,7 +1608,7 @@ export def "products-custom-fields list" [
 #
 # GET /api/v1/products/custom-fields/{id}
 # operationId: Article_GetCustomField
-export def "products-custom-fields get" [
+export def "products-custom-fields get-article" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1610,7 +1622,7 @@ export def "products-custom-fields get" [
 ]: nothing -> record<Data: record<Configuration: record, Id: int, IsNullable: bool, Name: string, Type: int>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/products/custom-fields/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/products/custom-fields/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1620,7 +1632,7 @@ export def "products-custom-fields get" [
 #
 # POST /api/v1/products/images/delete
 # operationId: Article_DeleteImages
-export def "products-images-delete delete" [
+export def "products-images-delete delete-article" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1636,17 +1648,18 @@ export def "products-images-delete delete" [
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/products/images/delete")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes a single image by id
 #
 # DELETE /api/v1/products/images/{imageId}
 # operationId: Article_DeleteImage
-export def "products-images delete" [
+export def "products-images delete-article-by-imageId" [
   image_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1660,7 +1673,7 @@ export def "products-images delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({image_id: $image_id} | format pattern "/api/v1/products/images/{image_id}"))
+  let full_url = (build-url $base ({image_id: (encode-path-segment $image_id)} | format pattern "/api/v1/products/images/{image_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1670,7 +1683,7 @@ export def "products-images delete" [
 #
 # GET /api/v1/products/images/{imageId}
 # operationId: Article_GetImage
-export def "products-images get-by-imageId" [
+export def "products-images get-article-by-imageId" [
   image_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1684,7 +1697,7 @@ export def "products-images get-by-imageId" [
 ]: nothing -> record<Data: record<ArticleId: int, Id: int, IsDefault: bool, Position: int, ThumbPathExt: string, ThumbUrl: string, Url: string>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({image_id: $image_id} | format pattern "/api/v1/products/images/{image_id}"))
+  let full_url = (build-url $base ({image_id: (encode-path-segment $image_id)} | format pattern "/api/v1/products/images/{image_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1694,7 +1707,7 @@ export def "products-images get-by-imageId" [
 #
 # GET /api/v1/products/reservedamount
 # operationId: Article_GetReservedAmount
-export def "products-reservedamount get" [
+export def "products-reservedamount get-article-reserved-amount" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1721,7 +1734,7 @@ export def "products-reservedamount get" [
 #
 # GET /api/v1/products/stocks
 # operationId: Article_GetStocks
-export def "products-stocks get" [
+export def "products-stocks get-article" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1744,7 +1757,7 @@ export def "products-stocks get" [
 #
 # POST /api/v1/products/updatestock
 # operationId: Article_UpdateStock
-export def "products-updatestock update-stock" [
+export def "products-updatestock update-article-stock" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1768,18 +1781,18 @@ export def "products-updatestock update-stock" [
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/products/updatestock")
-  let body = {"AutosubtractReservedAmount": $autosubtract_reserved_amount, "BillbeeId": $billbee_id, "DeltaQuantity": $delta_quantity, "ForceSendStockToShops": $force_send_stock_to_shops, "NewQuantity": $new_quantity, "OldQuantity": $old_quantity, "Reason": $reason, "Sku": $sku, "StockId": $stock_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"AutosubtractReservedAmount": $autosubtract_reserved_amount, "BillbeeId": $billbee_id, "DeltaQuantity": $delta_quantity, "ForceSendStockToShops": $force_send_stock_to_shops, "NewQuantity": $new_quantity, "OldQuantity": $old_quantity, "Reason": $reason, "Sku": $sku, "StockId": $stock_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update the stock code of an article
 #
 # POST /api/v1/products/updatestockcode
 # operationId: Article_UpdateStockCode
-export def "products-updatestockcode update-stock-code" [
+export def "products-updatestockcode update-article-stock-code" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1798,18 +1811,18 @@ export def "products-updatestockcode update-stock-code" [
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/products/updatestockcode")
-  let body = {"BillbeeId": $billbee_id, "Sku": $sku, "StockCode": $stock_code, "StockId": $stock_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"BillbeeId": $billbee_id, "Sku": $sku, "StockCode": $stock_code, "StockId": $stock_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update the stock qty for multiple articles at once
 #
 # POST /api/v1/products/updatestockmultiple
 # operationId: Article_UpdateStockMultiple
-export def "products-updatestockmultiple update-stock-multiple" [
+export def "products-updatestockmultiple update-article-stock-multiple" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1825,17 +1838,18 @@ export def "products-updatestockmultiple update-stock-multiple" [
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/products/updatestockmultiple")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes a product
 #
 # DELETE /api/v1/products/{id}
 # operationId: Article_DeleteArticle
-export def "products delete-article" [
+export def "products delete-article-article" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1849,7 +1863,7 @@ export def "products delete-article" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/products/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/products/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1859,7 +1873,7 @@ export def "products delete-article" [
 #
 # GET /api/v1/products/{id}
 # operationId: Article_GetArticle
-export def "products get-article" [
+export def "products get-article-article" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1875,7 +1889,7 @@ export def "products get-article" [
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "lookupBy" $lookup_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/products/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/products/{id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1885,7 +1899,7 @@ export def "products get-article" [
 #
 # PATCH /api/v1/products/{id}
 # operationId: Article_PatchArticle
-export def "products update-article" [
+export def "products update-article-article" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1901,18 +1915,19 @@ export def "products update-article" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/products/{id}"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/products/{id}"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns a list of all images of the product
 #
 # GET /api/v1/products/{productId}/images
 # operationId: Article_GetImages
-export def "products-images get-by-productId" [
+export def "products-images get-article-by-productId" [
   product_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1926,7 +1941,7 @@ export def "products-images get-by-productId" [
 ]: nothing -> record<Data: table<ArticleId: int, Id: int, IsDefault: bool, Position: int, ThumbPathExt: string, ThumbUrl: string, Url: string>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({product_id: $product_id} | format pattern "/api/v1/products/{product_id}/images"))
+  let full_url = (build-url $base ({product_id: (encode-path-segment $product_id)} | format pattern "/api/v1/products/{product_id}/images"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1936,7 +1951,7 @@ export def "products-images get-by-productId" [
 #
 # PUT /api/v1/products/{productId}/images
 # operationId: Article_PutImages
-export def "products-images update-by-productId" [
+export def "products-images update-article-by-productId" [
   product_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1954,18 +1969,19 @@ export def "products-images update-by-productId" [
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "replace" $replace "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({product_id: $product_id} | format pattern "/api/v1/products/{product_id}/images") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({product_id: (encode-path-segment $product_id)} | format pattern "/api/v1/products/{product_id}/images") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes a single image from a product
 #
 # DELETE /api/v1/products/{productId}/images/{imageId}
 # operationId: Article_DeleteImageFromProduct
-export def "products-images delete-image-from" [
+export def "products-images delete-article-by-productId-imageId" [
   product_id: int
   image_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1980,7 +1996,7 @@ export def "products-images delete-image-from" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({product_id: $product_id, image_id: $image_id} | format pattern "/api/v1/products/{product_id}/images/{image_id}"))
+  let full_url = (build-url $base ({product_id: (encode-path-segment $product_id), image_id: (encode-path-segment $image_id)} | format pattern "/api/v1/products/{product_id}/images/{image_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1990,7 +2006,7 @@ export def "products-images delete-image-from" [
 #
 # GET /api/v1/products/{productId}/images/{imageId}
 # operationId: Article_GetImageFromProduct
-export def "products-images get-image-from" [
+export def "products-images get-article-by-productId-imageId" [
   product_id: int
   image_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2005,7 +2021,7 @@ export def "products-images get-image-from" [
 ]: nothing -> record<Data: record<ArticleId: int, Id: int, IsDefault: bool, Position: int, ThumbPathExt: string, ThumbUrl: string, Url: string>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({product_id: $product_id, image_id: $image_id} | format pattern "/api/v1/products/{product_id}/images/{image_id}"))
+  let full_url = (build-url $base ({product_id: (encode-path-segment $product_id), image_id: (encode-path-segment $image_id)} | format pattern "/api/v1/products/{product_id}/images/{image_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2015,7 +2031,7 @@ export def "products-images get-image-from" [
 #
 # PUT /api/v1/products/{productId}/images/{imageId}
 # operationId: Article_PutImage
-export def "products-images update-by-productId-imageId" [
+export def "products-images update-article-by-productId-imageId" [
   product_id: int
   image_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2033,17 +2049,17 @@ export def "products-images update-by-productId-imageId" [
   --position: int # format: int32
   --thumb-path-ext: string
   --thumb-url: string
-  --body-url: string
+  --url: string
 ]: any -> record<Data: record<ArticleId: int, Id: int, IsDefault: bool, Position: int, ThumbPathExt: string, ThumbUrl: string, Url: string>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({product_id: $product_id, image_id: $image_id} | format pattern "/api/v1/products/{product_id}/images/{image_id}"))
-  let body = {"ArticleId": $article_id, "Id": $id, "IsDefault": $is_default, "Position": $position, "ThumbPathExt": $thumb_path_ext, "ThumbUrl": $thumb_url, "Url": $body_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({product_id: (encode-path-segment $product_id), image_id: (encode-path-segment $image_id)} | format pattern "/api/v1/products/{product_id}/images/{image_id}"))
+  let req_body = {"ArticleId": $article_id, "Id": $id, "IsDefault": $is_default, "Position": $position, "ThumbPathExt": $thumb_path_ext, "ThumbUrl": $thumb_url, "Url": $url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Search for products, customers and orders. Type can be "order", "product" and / or "customer" Term can contains lucene query syntax
@@ -2062,17 +2078,17 @@ export def "search list" [
   --accept: string@accept-completer-1 # Response content type
   --search-mode: int@search-mode-completer # format: int32
   --term: string
-  --type: list
+  --type: list<string>
 ]: any -> record<Data: record<Customers: list<record>, Orders: list<record>, Products: list<record>>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/search")
-  let body = {"SearchMode": $search_mode, "Term": $term, "Type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"SearchMode": $search_mode, "Term": $term, "Type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /api/v1/shipment/ping
@@ -2134,11 +2150,11 @@ export def "shipment-shipment create" [
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/shipment/shipment")
-  let body = {"ClientReference": $client_reference, "Content": $content, "CustomerNumber": $customer_number, "Dimension": $dimension, "OrderCurrencyCode": $order_currency_code, "OrderSum": $order_sum, "PrinterIdForExportDocs": $printer_id_for_export_docs, "PrinterName": $printer_name, "ProductCode": $product_code, "ProviderName": $provider_name, "ReceiverAddress": $receiver_address, "Services": $services, "ShipDate": $ship_date, "TotalNet": $total_net, "WeightInGram": $weight_in_gram, "shippingCarrier": $shipping_carrier} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"ClientReference": $client_reference, "Content": $content, "CustomerNumber": $customer_number, "Dimension": $dimension, "OrderCurrencyCode": $order_currency_code, "OrderSum": $order_sum, "PrinterIdForExportDocs": $printer_id_for_export_docs, "PrinterName": $printer_name, "ProductCode": $product_code, "ProviderName": $provider_name, "ReceiverAddress": $receiver_address, "Services": $services, "ShipDate": $ship_date, "TotalNet": $total_net, "WeightInGram": $weight_in_gram, "shippingCarrier": $shipping_carrier} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get a list of all shipments optionally filtered by date. All parameters are optional.
@@ -2161,7 +2177,7 @@ export def "shipment-shipments get-list" [
   --created-at-max: string # Specifies the newest shipment date to include in the response (format: date-time)
   --order-id: int # Get shipments for this order only. (format: int64)
   --minimum-shipment-id: int # Get Shipments with a shipment greater or equal than this id. New shipments have a greater id than older shipments. (format: int64)
-  --shipping-provider-id: int # Get Shippings for the specified shipping provider only. <seealso cref="M:Rechnungsdruck.WebApp.Controllers.Api.ShipmentController.GetShippingproviders" /> (format: int64)
+  --shipping-provider-id: int # Get Shippings for the specified shipping provider only. (format: int64)
 ]: nothing -> record<Data: table<BillbeeId: int, Created: string, ShipmentType: int, Shipper: string, ShippingCarrier: int, ShippingId: string, ShippingProviderId: int, ShippingProviderProductId: int, TrackingUrl: string>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string, Paging: record<Page: int, PageSize: int, TotalPages: int, TotalRows: int>> {
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2176,7 +2192,7 @@ export def "shipment-shipments get-list" [
 #
 # GET /api/v1/shipment/shippingcarriers
 # operationId: Shipment_GetShippingCarrier
-export def "shipment-shippingcarriers get" [
+export def "shipment-shippingcarriers get-shipping-carrier" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2223,7 +2239,7 @@ export def "shipment-shippingproviders get" [
 # POST /api/v1/shipment/shipwithlabel
 # operationId: Shipment_ShipWithLabel
 # --Dimension shape: {height?: float, length?: float, width?: float}
-export def "shipment-shipwithlabel post" [
+export def "shipment-shipwithlabel create-ship-with-label" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2247,18 +2263,18 @@ export def "shipment-shipwithlabel post" [
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/shipment/shipwithlabel")
-  let body = {"ChangeStateToSend": $change_state_to_send, "ClientReference": $client_reference, "Dimension": $dimension, "OrderId": $order_id, "PrinterName": $printer_name, "ProductId": $product_id, "ProviderId": $provider_id, "ShipDate": $ship_date, "WeightInGram": $weight_in_gram} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"ChangeStateToSend": $change_state_to_send, "ClientReference": $client_reference, "Dimension": $dimension, "OrderId": $order_id, "PrinterName": $printer_name, "ProductId": $product_id, "ProviderId": $provider_id, "ShipDate": $ship_date, "WeightInGram": $weight_in_gram} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes all existing WebHook registrations.
 #
 # DELETE /api/v1/webhooks
 # operationId: WebHookManagement_DeleteAll
-export def "webhooks delete-all" [
+export def "webhooks delete-web-hook-management-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2281,7 +2297,7 @@ export def "webhooks delete-all" [
 #
 # GET /api/v1/webhooks
 # operationId: WebHookManagement_Get
-export def "webhooks list" [
+export def "webhooks get-web-hook-management" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2304,7 +2320,7 @@ export def "webhooks list" [
 #
 # POST /api/v1/webhooks
 # operationId: WebHookManagement_Post
-export def "webhooks create" [
+export def "webhooks create-web-hook-management" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2315,7 +2331,7 @@ export def "webhooks create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --description: string
-  --filters: list
+  --filters: list<string>
   --headers: record
   --id: string
   --is-paused: oneof<nothing, bool>
@@ -2327,18 +2343,18 @@ export def "webhooks create" [
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/webhooks")
-  let body = {"Description": $description, "Filters": $filters, "Headers": $headers, "Id": $id, "IsPaused": $is_paused, "Properties": $properties, "Secret": $secret, "WebHookUri": $web_hook_uri} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"Description": $description, "Filters": $filters, "Headers": $headers, "Id": $id, "IsPaused": $is_paused, "Properties": $properties, "Secret": $secret, "WebHookUri": $web_hook_uri} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns a list of all known filters you can use to register webhooks
 #
 # GET /api/v1/webhooks/filters
 # operationId: WebHookManagement_GetFilters
-export def "webhooks-filters get" [
+export def "webhooks-filters get-web-hook-management" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2361,7 +2377,7 @@ export def "webhooks-filters get" [
 #
 # DELETE /api/v1/webhooks/{id}
 # operationId: WebHookManagement_Delete
-export def "webhooks delete" [
+export def "webhooks delete-web-hook-management" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2375,7 +2391,7 @@ export def "webhooks delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/webhooks/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/webhooks/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2385,7 +2401,7 @@ export def "webhooks delete" [
 #
 # GET /api/v1/webhooks/{id}
 # operationId: WebHookManagement_Lookup
-export def "webhooks get" [
+export def "webhooks get-web-hook-management-lookup" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2399,7 +2415,7 @@ export def "webhooks get" [
 ]: nothing -> record<Description: string, Filters: list<string>, Headers: record, Id: string, IsPaused: bool, Properties: record, Secret: string, WebHookUri: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/webhooks/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/webhooks/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2409,7 +2425,7 @@ export def "webhooks get" [
 #
 # PUT /api/v1/webhooks/{id}
 # operationId: WebHookManagement_Put
-export def "webhooks update" [
+export def "webhooks update-web-hook-management" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2421,7 +2437,7 @@ export def "webhooks update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --description: string
-  --filters: list
+  --filters: list<string>
   --headers: record
   --body-id: string
   --is-paused: oneof<nothing, bool>
@@ -2432,10 +2448,10 @@ export def "webhooks update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/webhooks/{id}"))
-  let body = {"Description": $description, "Filters": $filters, "Headers": $headers, "Id": $body_id, "IsPaused": $is_paused, "Properties": $properties, "Secret": $secret, "WebHookUri": $web_hook_uri} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/webhooks/{id}"))
+  let req_body = {"Description": $description, "Filters": $filters, "Headers": $headers, "Id": $body_id, "IsPaused": $is_paused, "Properties": $properties, "Secret": $secret, "WebHookUri": $web_hook_uri} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

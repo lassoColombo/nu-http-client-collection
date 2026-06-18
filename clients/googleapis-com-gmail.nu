@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -84,7 +93,7 @@ def label-filter-action-completer [] { ["exclude" "include"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "gmail-users-drafts gmailusersdraftslist" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "gmail-users-drafts list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -108,7 +117,7 @@ export def commands []: nothing -> table {
 #
 # GET /gmail/v1/users/{userId}/drafts
 # operationId: gmail.users.drafts.list
-export def "gmail-users-drafts gmailusersdraftslist" [
+export def "gmail-users-drafts list" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -137,7 +146,7 @@ export def "gmail-users-drafts gmailusersdraftslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "includeSpamTrash" $include_spam_trash "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/gmail/v1/users/{user_id}/drafts") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/gmail/v1/users/{user_id}/drafts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -147,7 +156,7 @@ export def "gmail-users-drafts gmailusersdraftslist" [
 #
 # POST /gmail/v1/users/{userId}/drafts
 # operationId: gmail.users.drafts.create
-export def "gmail-users-drafts gmailusersdraftscreate" [
+export def "gmail-users-drafts create" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -174,18 +183,19 @@ export def "gmail-users-drafts gmailusersdraftscreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/gmail/v1/users/{user_id}/drafts") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/gmail/v1/users/{user_id}/drafts") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "message/cpim" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "message/cpim" $req_body
 }
 
 # Sends the specified, existing draft to the recipients in the `To`, `Cc`, and `Bcc` headers.
 #
 # POST /gmail/v1/users/{userId}/drafts/send
 # operationId: gmail.users.drafts.send
-export def "gmail-users-drafts-send gmailusersdraftssend" [
+export def "gmail-users-drafts-send send" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -212,18 +222,19 @@ export def "gmail-users-drafts-send gmailusersdraftssend" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/gmail/v1/users/{user_id}/drafts/send") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/gmail/v1/users/{user_id}/drafts/send") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "message/cpim" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "message/cpim" $req_body
 }
 
 # Immediately and permanently deletes the specified draft. Does not simply trash it.
 #
 # DELETE /gmail/v1/users/{userId}/drafts/{id}
 # operationId: gmail.users.drafts.delete
-export def "gmail-users-drafts gmailusersdraftsdelete" [
+export def "gmail-users-drafts delete" [
   user_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -249,7 +260,7 @@ export def "gmail-users-drafts gmailusersdraftsdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id, id: $id} | format pattern "/gmail/v1/users/{user_id}/drafts/{id}") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), id: (encode-path-segment $id)} | format pattern "/gmail/v1/users/{user_id}/drafts/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -259,7 +270,7 @@ export def "gmail-users-drafts gmailusersdraftsdelete" [
 #
 # GET /gmail/v1/users/{userId}/drafts/{id}
 # operationId: gmail.users.drafts.get
-export def "gmail-users-drafts gmailusersdraftsget" [
+export def "gmail-users-drafts get" [
   user_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -286,7 +297,7 @@ export def "gmail-users-drafts gmailusersdraftsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id, id: $id} | format pattern "/gmail/v1/users/{user_id}/drafts/{id}") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), id: (encode-path-segment $id)} | format pattern "/gmail/v1/users/{user_id}/drafts/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -296,7 +307,7 @@ export def "gmail-users-drafts gmailusersdraftsget" [
 #
 # PUT /gmail/v1/users/{userId}/drafts/{id}
 # operationId: gmail.users.drafts.update
-export def "gmail-users-drafts gmailusersdraftsupdate" [
+export def "gmail-users-drafts update" [
   user_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -324,18 +335,19 @@ export def "gmail-users-drafts gmailusersdraftsupdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id, id: $id} | format pattern "/gmail/v1/users/{user_id}/drafts/{id}") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), id: (encode-path-segment $id)} | format pattern "/gmail/v1/users/{user_id}/drafts/{id}") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "message/cpim" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "message/cpim" $req_body
 }
 
 # Lists the history of all changes to the given mailbox. History results are returned in chronological order (increasing `historyId`).
 #
 # GET /gmail/v1/users/{userId}/history
 # operationId: gmail.users.history.list
-export def "gmail-users-history gmailusershistorylist" [
+export def "gmail-users-history list" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -356,7 +368,7 @@ export def "gmail-users-history gmailusershistorylist" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --history-types: list # History types to be returned by the function
+  --history-types: list<string> # History types to be returned by the function
   --label-id: string # Only return messages with a label matching the ID.
   --max-results: int # Maximum number of history records to return. This field defaults to 100. The maximum allowed value for this field is 500.
   --page-token: string # Page token to retrieve a specific page of results in the list.
@@ -365,7 +377,7 @@ export def "gmail-users-history gmailusershistorylist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "historyTypes" $history_types "multi") (serialize-qp "labelId" $label_id "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "startHistoryId" $start_history_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/gmail/v1/users/{user_id}/history") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/gmail/v1/users/{user_id}/history") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -375,7 +387,7 @@ export def "gmail-users-history gmailusershistorylist" [
 #
 # GET /gmail/v1/users/{userId}/labels
 # operationId: gmail.users.labels.list
-export def "gmail-users-labels gmailuserslabelslist" [
+export def "gmail-users-labels list" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -400,7 +412,7 @@ export def "gmail-users-labels gmailuserslabelslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/gmail/v1/users/{user_id}/labels") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/gmail/v1/users/{user_id}/labels") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -411,7 +423,7 @@ export def "gmail-users-labels gmailuserslabelslist" [
 # POST /gmail/v1/users/{userId}/labels
 # operationId: gmail.users.labels.create
 # --color shape: {backgroundColor?: string, textColor?: string}
-export def "gmail-users-labels gmailuserslabelscreate" [
+export def "gmail-users-labels create" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -447,19 +459,19 @@ export def "gmail-users-labels gmailuserslabelscreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/gmail/v1/users/{user_id}/labels") $qp)
-  let body = {"color": $color, "id": $id, "labelListVisibility": $label_list_visibility, "messageListVisibility": $message_list_visibility, "messagesTotal": $messages_total, "messagesUnread": $messages_unread, "name": $name, "threadsTotal": $threads_total, "threadsUnread": $threads_unread, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/gmail/v1/users/{user_id}/labels") $qp)
+  let req_body = {"color": $color, "id": $id, "labelListVisibility": $label_list_visibility, "messageListVisibility": $message_list_visibility, "messagesTotal": $messages_total, "messagesUnread": $messages_unread, "name": $name, "threadsTotal": $threads_total, "threadsUnread": $threads_unread, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Immediately and permanently deletes the specified label and removes it from any messages and threads that it is applied to.
 #
 # DELETE /gmail/v1/users/{userId}/labels/{id}
 # operationId: gmail.users.labels.delete
-export def "gmail-users-labels gmailuserslabelsdelete" [
+export def "gmail-users-labels delete" [
   user_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -485,7 +497,7 @@ export def "gmail-users-labels gmailuserslabelsdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id, id: $id} | format pattern "/gmail/v1/users/{user_id}/labels/{id}") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), id: (encode-path-segment $id)} | format pattern "/gmail/v1/users/{user_id}/labels/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -495,7 +507,7 @@ export def "gmail-users-labels gmailuserslabelsdelete" [
 #
 # GET /gmail/v1/users/{userId}/labels/{id}
 # operationId: gmail.users.labels.get
-export def "gmail-users-labels gmailuserslabelsget" [
+export def "gmail-users-labels get" [
   user_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -521,7 +533,7 @@ export def "gmail-users-labels gmailuserslabelsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id, id: $id} | format pattern "/gmail/v1/users/{user_id}/labels/{id}") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), id: (encode-path-segment $id)} | format pattern "/gmail/v1/users/{user_id}/labels/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -532,7 +544,7 @@ export def "gmail-users-labels gmailuserslabelsget" [
 # PATCH /gmail/v1/users/{userId}/labels/{id}
 # operationId: gmail.users.labels.patch
 # --color shape: {backgroundColor?: string, textColor?: string}
-export def "gmail-users-labels gmailuserslabelspatch" [
+export def "gmail-users-labels update-by-userId-id" [
   user_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -569,12 +581,12 @@ export def "gmail-users-labels gmailuserslabelspatch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id, id: $id} | format pattern "/gmail/v1/users/{user_id}/labels/{id}") $qp)
-  let body = {"color": $color, "id": $body_id, "labelListVisibility": $label_list_visibility, "messageListVisibility": $message_list_visibility, "messagesTotal": $messages_total, "messagesUnread": $messages_unread, "name": $name, "threadsTotal": $threads_total, "threadsUnread": $threads_unread, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), id: (encode-path-segment $id)} | format pattern "/gmail/v1/users/{user_id}/labels/{id}") $qp)
+  let req_body = {"color": $color, "id": $body_id, "labelListVisibility": $label_list_visibility, "messageListVisibility": $message_list_visibility, "messagesTotal": $messages_total, "messagesUnread": $messages_unread, "name": $name, "threadsTotal": $threads_total, "threadsUnread": $threads_unread, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates the specified label.
@@ -582,7 +594,7 @@ export def "gmail-users-labels gmailuserslabelspatch" [
 # PUT /gmail/v1/users/{userId}/labels/{id}
 # operationId: gmail.users.labels.update
 # --color shape: {backgroundColor?: string, textColor?: string}
-export def "gmail-users-labels gmailuserslabelsupdate" [
+export def "gmail-users-labels update-by-userId-id-1" [
   user_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -619,19 +631,19 @@ export def "gmail-users-labels gmailuserslabelsupdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id, id: $id} | format pattern "/gmail/v1/users/{user_id}/labels/{id}") $qp)
-  let body = {"color": $color, "id": $body_id, "labelListVisibility": $label_list_visibility, "messageListVisibility": $message_list_visibility, "messagesTotal": $messages_total, "messagesUnread": $messages_unread, "name": $name, "threadsTotal": $threads_total, "threadsUnread": $threads_unread, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), id: (encode-path-segment $id)} | format pattern "/gmail/v1/users/{user_id}/labels/{id}") $qp)
+  let req_body = {"color": $color, "id": $body_id, "labelListVisibility": $label_list_visibility, "messageListVisibility": $message_list_visibility, "messagesTotal": $messages_total, "messagesUnread": $messages_unread, "name": $name, "threadsTotal": $threads_total, "threadsUnread": $threads_unread, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists the messages in the user's mailbox.
 #
 # GET /gmail/v1/users/{userId}/messages
 # operationId: gmail.users.messages.list
-export def "gmail-users-messages gmailusersmessageslist" [
+export def "gmail-users-messages list" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -653,7 +665,7 @@ export def "gmail-users-messages gmailusersmessageslist" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --include-spam-trash: oneof<nothing, bool> # Include messages from `SPAM` and `TRASH` in the results.
-  --label-ids: list # Only return messages with labels that match all of the specified label IDs. Messages in a thread might have labels that other messages in the same thread don't have. To learn more, see [Manage labels on messages and threads](https://developers.google.com/gmail/api/guides/labels#manage_labels_on_messages_threads).
+  --label-ids: list<string> # Only return messages with labels that match all of the specified label IDs. Messages in a thread might have labels that other messages in the same thread don't have. To learn more, see [Manage labels on messages and threads](https://developers.google.com/gmail/api/guides/labels#manage_labels_on_messages_threads).
   --max-results: int # Maximum number of messages to return. This field defaults to 100. The maximum allowed value for this field is 500.
   --page-token: string # Page token to retrieve a specific page of results in the list.
   --q: string # Only return messages matching the specified query. Supports the same query format as the Gmail search box. For example, `"from:someuser@example.com rfc822msgid: is:unread"`. Parameter cannot be used when accessing the api using the gmail.metadata scope.
@@ -661,7 +673,7 @@ export def "gmail-users-messages gmailusersmessageslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "includeSpamTrash" $include_spam_trash "scalar") (serialize-qp "labelIds" $label_ids "multi") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/gmail/v1/users/{user_id}/messages") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/gmail/v1/users/{user_id}/messages") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -671,7 +683,7 @@ export def "gmail-users-messages gmailusersmessageslist" [
 #
 # POST /gmail/v1/users/{userId}/messages
 # operationId: gmail.users.messages.insert
-export def "gmail-users-messages gmailusersmessagesinsert" [
+export def "gmail-users-messages create" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -700,18 +712,19 @@ export def "gmail-users-messages gmailusersmessagesinsert" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "deleted" $deleted "scalar") (serialize-qp "internalDateSource" $internal_date_source "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/gmail/v1/users/{user_id}/messages") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/gmail/v1/users/{user_id}/messages") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "message/cpim" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "message/cpim" $req_body
 }
 
 # Deletes many messages by message ID. Provides no guarantees that messages were not already deleted or even existed at all.
 #
 # POST /gmail/v1/users/{userId}/messages/batchDelete
 # operationId: gmail.users.messages.batchDelete
-export def "gmail-users-messages-batch-delete gmailusersmessagesbatchDelete" [
+export def "gmail-users-messages-batch-delete delete" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -732,25 +745,25 @@ export def "gmail-users-messages-batch-delete gmailusersmessagesbatchDelete" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --ids: list # The IDs of the messages to delete.
+  --ids: list<string> # The IDs of the messages to delete.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/gmail/v1/users/{user_id}/messages/batchDelete") $qp)
-  let body = {"ids": $ids} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/gmail/v1/users/{user_id}/messages/batchDelete") $qp)
+  let req_body = {"ids": $ids} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Modifies the labels on the specified messages.
 #
 # POST /gmail/v1/users/{userId}/messages/batchModify
 # operationId: gmail.users.messages.batchModify
-export def "gmail-users-messages-batch-modify gmailusersmessagesbatchModify" [
+export def "gmail-users-messages-batch-modify create" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -771,27 +784,27 @@ export def "gmail-users-messages-batch-modify gmailusersmessagesbatchModify" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --add-label-ids: list # A list of label IDs to add to messages.
-  --ids: list # The IDs of the messages to modify. There is a limit of 1000 ids per request.
-  --remove-label-ids: list # A list of label IDs to remove from messages.
+  --add-label-ids: list<string> # A list of label IDs to add to messages.
+  --ids: list<string> # The IDs of the messages to modify. There is a limit of 1000 ids per request.
+  --remove-label-ids: list<string> # A list of label IDs to remove from messages.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/gmail/v1/users/{user_id}/messages/batchModify") $qp)
-  let body = {"addLabelIds": $add_label_ids, "ids": $ids, "removeLabelIds": $remove_label_ids} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/gmail/v1/users/{user_id}/messages/batchModify") $qp)
+  let req_body = {"addLabelIds": $add_label_ids, "ids": $ids, "removeLabelIds": $remove_label_ids} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Imports a message into only this user's mailbox, with standard email delivery scanning and classification similar to receiving via SMTP. This method doesn't perform SPF checks, so it might not work for some spam messages, such as those attempting to perform domain spoofing. This method does not send a message. Note: This function doesn't trigger forwarding rules or filters set up by the user.
 #
 # POST /gmail/v1/users/{userId}/messages/import
 # operationId: gmail.users.messages.import
-export def "gmail-users-messages-import gmailusersmessagesimport" [
+export def "gmail-users-messages-import import" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -822,18 +835,19 @@ export def "gmail-users-messages-import gmailusersmessagesimport" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "deleted" $deleted "scalar") (serialize-qp "internalDateSource" $internal_date_source "scalar") (serialize-qp "neverMarkSpam" $never_mark_spam "scalar") (serialize-qp "processForCalendar" $process_for_calendar "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/gmail/v1/users/{user_id}/messages/import") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/gmail/v1/users/{user_id}/messages/import") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "message/cpim" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "message/cpim" $req_body
 }
 
 # Sends the specified message to the recipients in the `To`, `Cc`, and `Bcc` headers. For example usage, see [Sending email](https://developers.google.com/gmail/api/guides/sending).
 #
 # POST /gmail/v1/users/{userId}/messages/send
 # operationId: gmail.users.messages.send
-export def "gmail-users-messages-send gmailusersmessagessend" [
+export def "gmail-users-messages-send send" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -860,18 +874,19 @@ export def "gmail-users-messages-send gmailusersmessagessend" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/gmail/v1/users/{user_id}/messages/send") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/gmail/v1/users/{user_id}/messages/send") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "message/cpim" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "message/cpim" $req_body
 }
 
 # Immediately and permanently deletes the specified message. This operation cannot be undone. Prefer `messages.trash` instead.
 #
 # DELETE /gmail/v1/users/{userId}/messages/{id}
 # operationId: gmail.users.messages.delete
-export def "gmail-users-messages gmailusersmessagesdelete" [
+export def "gmail-users-messages delete" [
   user_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -897,7 +912,7 @@ export def "gmail-users-messages gmailusersmessagesdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id, id: $id} | format pattern "/gmail/v1/users/{user_id}/messages/{id}") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), id: (encode-path-segment $id)} | format pattern "/gmail/v1/users/{user_id}/messages/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -907,7 +922,7 @@ export def "gmail-users-messages gmailusersmessagesdelete" [
 #
 # GET /gmail/v1/users/{userId}/messages/{id}
 # operationId: gmail.users.messages.get
-export def "gmail-users-messages gmailusersmessagesget" [
+export def "gmail-users-messages get" [
   user_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -930,12 +945,12 @@ export def "gmail-users-messages gmailusersmessagesget" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --format: string@format-completer # The format to return the message in.
-  --metadata-headers: list # When given and format is `METADATA`, only include headers specified.
+  --metadata-headers: list<string> # When given and format is `METADATA`, only include headers specified.
 ]: nothing -> record<historyId: string, id: string, internalDate: string, labelIds: list<string>, payload: record<body: record<attachmentId: string, data: string, size: int>, filename: string, headers: list<record>, mimeType: string, partId: string, parts: list<any>>, raw: string, sizeEstimate: int, snippet: string, threadId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "metadataHeaders" $metadata_headers "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id, id: $id} | format pattern "/gmail/v1/users/{user_id}/messages/{id}") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), id: (encode-path-segment $id)} | format pattern "/gmail/v1/users/{user_id}/messages/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -945,7 +960,7 @@ export def "gmail-users-messages gmailusersmessagesget" [
 #
 # POST /gmail/v1/users/{userId}/messages/{id}/modify
 # operationId: gmail.users.messages.modify
-export def "gmail-users-messages-modify gmailusersmessagesmodify" [
+export def "gmail-users-messages-modify create" [
   user_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -967,26 +982,26 @@ export def "gmail-users-messages-modify gmailusersmessagesmodify" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --add-label-ids: list # A list of IDs of labels to add to this message. You can add up to 100 labels with each update.
-  --remove-label-ids: list # A list IDs of labels to remove from this message. You can remove up to 100 labels with each update.
+  --add-label-ids: list<string> # A list of IDs of labels to add to this message. You can add up to 100 labels with each update.
+  --remove-label-ids: list<string> # A list IDs of labels to remove from this message. You can remove up to 100 labels with each update.
 ]: any -> record<historyId: string, id: string, internalDate: string, labelIds: list<string>, payload: record<body: record<attachmentId: string, data: string, size: int>, filename: string, headers: list<record>, mimeType: string, partId: string, parts: list<any>>, raw: string, sizeEstimate: int, snippet: string, threadId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id, id: $id} | format pattern "/gmail/v1/users/{user_id}/messages/{id}/modify") $qp)
-  let body = {"addLabelIds": $add_label_ids, "removeLabelIds": $remove_label_ids} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), id: (encode-path-segment $id)} | format pattern "/gmail/v1/users/{user_id}/messages/{id}/modify") $qp)
+  let req_body = {"addLabelIds": $add_label_ids, "removeLabelIds": $remove_label_ids} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Moves the specified message to the trash.
 #
 # POST /gmail/v1/users/{userId}/messages/{id}/trash
 # operationId: gmail.users.messages.trash
-export def "gmail-users-messages-trash gmailusersmessagestrash" [
+export def "gmail-users-messages-trash create" [
   user_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1012,7 +1027,7 @@ export def "gmail-users-messages-trash gmailusersmessagestrash" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id, id: $id} | format pattern "/gmail/v1/users/{user_id}/messages/{id}/trash") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), id: (encode-path-segment $id)} | format pattern "/gmail/v1/users/{user_id}/messages/{id}/trash") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1022,7 +1037,7 @@ export def "gmail-users-messages-trash gmailusersmessagestrash" [
 #
 # POST /gmail/v1/users/{userId}/messages/{id}/untrash
 # operationId: gmail.users.messages.untrash
-export def "gmail-users-messages-untrash gmailusersmessagesuntrash" [
+export def "gmail-users-messages-untrash create" [
   user_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1048,7 +1063,7 @@ export def "gmail-users-messages-untrash gmailusersmessagesuntrash" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id, id: $id} | format pattern "/gmail/v1/users/{user_id}/messages/{id}/untrash") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), id: (encode-path-segment $id)} | format pattern "/gmail/v1/users/{user_id}/messages/{id}/untrash") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1058,7 +1073,7 @@ export def "gmail-users-messages-untrash gmailusersmessagesuntrash" [
 #
 # GET /gmail/v1/users/{userId}/messages/{messageId}/attachments/{id}
 # operationId: gmail.users.messages.attachments.get
-export def "gmail-users-messages-attachments gmailusersmessagesattachmentsget" [
+export def "gmail-users-messages-attachments get" [
   user_id: string
   message_id: string
   id: string
@@ -1085,7 +1100,7 @@ export def "gmail-users-messages-attachments gmailusersmessagesattachmentsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id, message_id: $message_id, id: $id} | format pattern "/gmail/v1/users/{user_id}/messages/{message_id}/attachments/{id}") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), message_id: (encode-path-segment $message_id), id: (encode-path-segment $id)} | format pattern "/gmail/v1/users/{user_id}/messages/{message_id}/attachments/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1095,7 +1110,7 @@ export def "gmail-users-messages-attachments gmailusersmessagesattachmentsget" [
 #
 # GET /gmail/v1/users/{userId}/profile
 # operationId: gmail.users.getProfile
-export def "gmail-users-profile gmailusersgetProfile" [
+export def "gmail-users-profile get" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1120,7 +1135,7 @@ export def "gmail-users-profile gmailusersgetProfile" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/gmail/v1/users/{user_id}/profile") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/gmail/v1/users/{user_id}/profile") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1130,7 +1145,7 @@ export def "gmail-users-profile gmailusersgetProfile" [
 #
 # GET /gmail/v1/users/{userId}/settings/autoForwarding
 # operationId: gmail.users.settings.getAutoForwarding
-export def "gmail-users-settings-auto-forwarding gmailuserssettingsgetAutoForwarding" [
+export def "gmail-users-settings-auto-forwarding get" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1155,7 +1170,7 @@ export def "gmail-users-settings-auto-forwarding gmailuserssettingsgetAutoForwar
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/gmail/v1/users/{user_id}/settings/autoForwarding") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/gmail/v1/users/{user_id}/settings/autoForwarding") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1165,7 +1180,7 @@ export def "gmail-users-settings-auto-forwarding gmailuserssettingsgetAutoForwar
 #
 # PUT /gmail/v1/users/{userId}/settings/autoForwarding
 # operationId: gmail.users.settings.updateAutoForwarding
-export def "gmail-users-settings-auto-forwarding gmailuserssettingsupdateAutoForwarding" [
+export def "gmail-users-settings-auto-forwarding update" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1194,19 +1209,19 @@ export def "gmail-users-settings-auto-forwarding gmailuserssettingsupdateAutoFor
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/gmail/v1/users/{user_id}/settings/autoForwarding") $qp)
-  let body = {"disposition": $disposition, "emailAddress": $email_address, "enabled": $enabled} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/gmail/v1/users/{user_id}/settings/autoForwarding") $qp)
+  let req_body = {"disposition": $disposition, "emailAddress": $email_address, "enabled": $enabled} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists the client-side encrypted identities for an authenticated user.
 #
 # GET /gmail/v1/users/{userId}/settings/cse/identities
 # operationId: gmail.users.settings.cse.identities.list
-export def "gmail-users-settings-cse-identities gmailuserssettingscseidentitieslist" [
+export def "gmail-users-settings-cse-identities list" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1233,7 +1248,7 @@ export def "gmail-users-settings-cse-identities gmailuserssettingscseidentitiesl
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/gmail/v1/users/{user_id}/settings/cse/identities") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/gmail/v1/users/{user_id}/settings/cse/identities") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1243,7 +1258,7 @@ export def "gmail-users-settings-cse-identities gmailuserssettingscseidentitiesl
 #
 # POST /gmail/v1/users/{userId}/settings/cse/identities
 # operationId: gmail.users.settings.cse.identities.create
-export def "gmail-users-settings-cse-identities gmailuserssettingscseidentitiescreate" [
+export def "gmail-users-settings-cse-identities create" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1271,19 +1286,19 @@ export def "gmail-users-settings-cse-identities gmailuserssettingscseidentitiesc
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/gmail/v1/users/{user_id}/settings/cse/identities") $qp)
-  let body = {"emailAddress": $email_address, "primaryKeyPairId": $primary_key_pair_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/gmail/v1/users/{user_id}/settings/cse/identities") $qp)
+  let req_body = {"emailAddress": $email_address, "primaryKeyPairId": $primary_key_pair_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes a client-side encryption identity. The authenticated user can no longer use the identity to send encrypted messages. You cannot restore the identity after you delete it. Instead, use the CreateCseIdentity method to create another identity with the same configuration.
 #
 # DELETE /gmail/v1/users/{userId}/settings/cse/identities/{cseEmailAddress}
 # operationId: gmail.users.settings.cse.identities.delete
-export def "gmail-users-settings-cse-identities gmailuserssettingscseidentitiesdelete" [
+export def "gmail-users-settings-cse-identities delete" [
   user_id: string
   cse_email_address: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1309,7 +1324,7 @@ export def "gmail-users-settings-cse-identities gmailuserssettingscseidentitiesd
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id, cse_email_address: $cse_email_address} | format pattern "/gmail/v1/users/{user_id}/settings/cse/identities/{cse_email_address}") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), cse_email_address: (encode-path-segment $cse_email_address)} | format pattern "/gmail/v1/users/{user_id}/settings/cse/identities/{cse_email_address}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1319,7 +1334,7 @@ export def "gmail-users-settings-cse-identities gmailuserssettingscseidentitiesd
 #
 # GET /gmail/v1/users/{userId}/settings/cse/identities/{cseEmailAddress}
 # operationId: gmail.users.settings.cse.identities.get
-export def "gmail-users-settings-cse-identities gmailuserssettingscseidentitiesget" [
+export def "gmail-users-settings-cse-identities get" [
   user_id: string
   cse_email_address: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1345,7 +1360,7 @@ export def "gmail-users-settings-cse-identities gmailuserssettingscseidentitiesg
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id, cse_email_address: $cse_email_address} | format pattern "/gmail/v1/users/{user_id}/settings/cse/identities/{cse_email_address}") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), cse_email_address: (encode-path-segment $cse_email_address)} | format pattern "/gmail/v1/users/{user_id}/settings/cse/identities/{cse_email_address}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1355,7 +1370,7 @@ export def "gmail-users-settings-cse-identities gmailuserssettingscseidentitiesg
 #
 # PATCH /gmail/v1/users/{userId}/settings/cse/identities/{emailAddress}
 # operationId: gmail.users.settings.cse.identities.patch
-export def "gmail-users-settings-cse-identities gmailuserssettingscseidentitiespatch" [
+export def "gmail-users-settings-cse-identities update" [
   user_id: string
   email_address: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1384,19 +1399,19 @@ export def "gmail-users-settings-cse-identities gmailuserssettingscseidentitiesp
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id, email_address: $email_address} | format pattern "/gmail/v1/users/{user_id}/settings/cse/identities/{email_address}") $qp)
-  let body = {"emailAddress": $body_email_address, "primaryKeyPairId": $primary_key_pair_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), email_address: (encode-path-segment $email_address)} | format pattern "/gmail/v1/users/{user_id}/settings/cse/identities/{email_address}") $qp)
+  let req_body = {"emailAddress": $body_email_address, "primaryKeyPairId": $primary_key_pair_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists client-side encryption key pairs for an authenticated user.
 #
 # GET /gmail/v1/users/{userId}/settings/cse/keypairs
 # operationId: gmail.users.settings.cse.keypairs.list
-export def "gmail-users-settings-cse-keypairs gmailuserssettingscsekeypairslist" [
+export def "gmail-users-settings-cse-keypairs list" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1423,7 +1438,7 @@ export def "gmail-users-settings-cse-keypairs gmailuserssettingscsekeypairslist"
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/gmail/v1/users/{user_id}/settings/cse/keypairs") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/gmail/v1/users/{user_id}/settings/cse/keypairs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1434,7 +1449,7 @@ export def "gmail-users-settings-cse-keypairs gmailuserssettingscsekeypairslist"
 # POST /gmail/v1/users/{userId}/settings/cse/keypairs
 # operationId: gmail.users.settings.cse.keypairs.create
 # --privateKeyMetadata item shape: {kaclsKeyMetadata?: record}
-export def "gmail-users-settings-cse-keypairs gmailuserssettingscsekeypairscreate" [
+export def "gmail-users-settings-cse-keypairs create" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1462,19 +1477,19 @@ export def "gmail-users-settings-cse-keypairs gmailuserssettingscsekeypairscreat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/gmail/v1/users/{user_id}/settings/cse/keypairs") $qp)
-  let body = {"pkcs7": $pkcs7, "privateKeyMetadata": $private_key_metadata} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/gmail/v1/users/{user_id}/settings/cse/keypairs") $qp)
+  let req_body = {"pkcs7": $pkcs7, "privateKeyMetadata": $private_key_metadata} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieves an existing client-side encryption key pair.
 #
 # GET /gmail/v1/users/{userId}/settings/cse/keypairs/{keyPairId}
 # operationId: gmail.users.settings.cse.keypairs.get
-export def "gmail-users-settings-cse-keypairs gmailuserssettingscsekeypairsget" [
+export def "gmail-users-settings-cse-keypairs get" [
   user_id: string
   key_pair_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1500,7 +1515,7 @@ export def "gmail-users-settings-cse-keypairs gmailuserssettingscsekeypairsget" 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id, key_pair_id: $key_pair_id} | format pattern "/gmail/v1/users/{user_id}/settings/cse/keypairs/{key_pair_id}") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), key_pair_id: (encode-path-segment $key_pair_id)} | format pattern "/gmail/v1/users/{user_id}/settings/cse/keypairs/{key_pair_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1510,7 +1525,7 @@ export def "gmail-users-settings-cse-keypairs gmailuserssettingscsekeypairsget" 
 #
 # POST /gmail/v1/users/{userId}/settings/cse/keypairs/{keyPairId}:disable
 # operationId: gmail.users.settings.cse.keypairs.disable
-export def "gmail-users-settings-cse-keypairs gmailuserssettingscsekeypairsdisable" [
+export def "gmail-users-settings-cse-keypairs disable" [
   user_id: string
   key_pair_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1538,18 +1553,19 @@ export def "gmail-users-settings-cse-keypairs gmailuserssettingscsekeypairsdisab
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id, key_pair_id: $key_pair_id} | format pattern "/gmail/v1/users/{user_id}/settings/cse/keypairs/{key_pair_id}:disable") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), key_pair_id: (encode-path-segment $key_pair_id)} | format pattern "/gmail/v1/users/{user_id}/settings/cse/keypairs/{key_pair_id}:disable") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Turns on a client-side encryption key pair that was turned off. The key pair becomes active again for any associated client-side encryption identities.
 #
 # POST /gmail/v1/users/{userId}/settings/cse/keypairs/{keyPairId}:enable
 # operationId: gmail.users.settings.cse.keypairs.enable
-export def "gmail-users-settings-cse-keypairs gmailuserssettingscsekeypairsenable" [
+export def "gmail-users-settings-cse-keypairs enable" [
   user_id: string
   key_pair_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1577,18 +1593,19 @@ export def "gmail-users-settings-cse-keypairs gmailuserssettingscsekeypairsenabl
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id, key_pair_id: $key_pair_id} | format pattern "/gmail/v1/users/{user_id}/settings/cse/keypairs/{key_pair_id}:enable") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), key_pair_id: (encode-path-segment $key_pair_id)} | format pattern "/gmail/v1/users/{user_id}/settings/cse/keypairs/{key_pair_id}:enable") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes a client-side encryption key pair permanently and immediately. You can only permanently delete key pairs that have been turned off for more than 30 days. To turn off a key pair, use the DisableCseKeyPair method. Gmail can't restore or decrypt any messages that were encrypted by an obliterated key. Authenticated users and Google Workspace administrators lose access to reading the encrypted messages.
 #
 # POST /gmail/v1/users/{userId}/settings/cse/keypairs/{keyPairId}:obliterate
 # operationId: gmail.users.settings.cse.keypairs.obliterate
-export def "gmail-users-settings-cse-keypairs gmailuserssettingscsekeypairsobliterate" [
+export def "gmail-users-settings-cse-keypairs create-obliterate" [
   user_id: string
   key_pair_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1616,18 +1633,19 @@ export def "gmail-users-settings-cse-keypairs gmailuserssettingscsekeypairsoblit
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id, key_pair_id: $key_pair_id} | format pattern "/gmail/v1/users/{user_id}/settings/cse/keypairs/{key_pair_id}:obliterate") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), key_pair_id: (encode-path-segment $key_pair_id)} | format pattern "/gmail/v1/users/{user_id}/settings/cse/keypairs/{key_pair_id}:obliterate") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists the delegates for the specified account. This method is only available to service account clients that have been delegated domain-wide authority.
 #
 # GET /gmail/v1/users/{userId}/settings/delegates
 # operationId: gmail.users.settings.delegates.list
-export def "gmail-users-settings-delegates gmailuserssettingsdelegateslist" [
+export def "gmail-users-settings-delegates list" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1652,7 +1670,7 @@ export def "gmail-users-settings-delegates gmailuserssettingsdelegateslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/gmail/v1/users/{user_id}/settings/delegates") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/gmail/v1/users/{user_id}/settings/delegates") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1662,7 +1680,7 @@ export def "gmail-users-settings-delegates gmailuserssettingsdelegateslist" [
 #
 # POST /gmail/v1/users/{userId}/settings/delegates
 # operationId: gmail.users.settings.delegates.create
-export def "gmail-users-settings-delegates gmailuserssettingsdelegatescreate" [
+export def "gmail-users-settings-delegates create" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1690,19 +1708,19 @@ export def "gmail-users-settings-delegates gmailuserssettingsdelegatescreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/gmail/v1/users/{user_id}/settings/delegates") $qp)
-  let body = {"delegateEmail": $delegate_email, "verificationStatus": $verification_status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/gmail/v1/users/{user_id}/settings/delegates") $qp)
+  let req_body = {"delegateEmail": $delegate_email, "verificationStatus": $verification_status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Removes the specified delegate (which can be of any verification status), and revokes any verification that may have been required for using it. Note that a delegate user must be referred to by their primary email address, and not an email alias. This method is only available to service account clients that have been delegated domain-wide authority.
 #
 # DELETE /gmail/v1/users/{userId}/settings/delegates/{delegateEmail}
 # operationId: gmail.users.settings.delegates.delete
-export def "gmail-users-settings-delegates gmailuserssettingsdelegatesdelete" [
+export def "gmail-users-settings-delegates delete" [
   user_id: string
   delegate_email: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1728,7 +1746,7 @@ export def "gmail-users-settings-delegates gmailuserssettingsdelegatesdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id, delegate_email: $delegate_email} | format pattern "/gmail/v1/users/{user_id}/settings/delegates/{delegate_email}") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), delegate_email: (encode-path-segment $delegate_email)} | format pattern "/gmail/v1/users/{user_id}/settings/delegates/{delegate_email}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1738,7 +1756,7 @@ export def "gmail-users-settings-delegates gmailuserssettingsdelegatesdelete" [
 #
 # GET /gmail/v1/users/{userId}/settings/delegates/{delegateEmail}
 # operationId: gmail.users.settings.delegates.get
-export def "gmail-users-settings-delegates gmailuserssettingsdelegatesget" [
+export def "gmail-users-settings-delegates get" [
   user_id: string
   delegate_email: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1764,7 +1782,7 @@ export def "gmail-users-settings-delegates gmailuserssettingsdelegatesget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id, delegate_email: $delegate_email} | format pattern "/gmail/v1/users/{user_id}/settings/delegates/{delegate_email}") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), delegate_email: (encode-path-segment $delegate_email)} | format pattern "/gmail/v1/users/{user_id}/settings/delegates/{delegate_email}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1774,7 +1792,7 @@ export def "gmail-users-settings-delegates gmailuserssettingsdelegatesget" [
 #
 # GET /gmail/v1/users/{userId}/settings/filters
 # operationId: gmail.users.settings.filters.list
-export def "gmail-users-settings-filters gmailuserssettingsfilterslist" [
+export def "gmail-users-settings-filters list" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1799,7 +1817,7 @@ export def "gmail-users-settings-filters gmailuserssettingsfilterslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/gmail/v1/users/{user_id}/settings/filters") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/gmail/v1/users/{user_id}/settings/filters") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1809,9 +1827,9 @@ export def "gmail-users-settings-filters gmailuserssettingsfilterslist" [
 #
 # POST /gmail/v1/users/{userId}/settings/filters
 # operationId: gmail.users.settings.filters.create
-# --action shape: {addLabelIds?: list, forward?: string, removeLabelIds?: list}
+# --action shape: {addLabelIds?: list<string>, forward?: string, removeLabelIds?: list<string>}
 # --criteria shape: {excludeChats?: bool, from?: string, hasAttachment?: bool, negatedQuery?: string, query?: string, size?: int, sizeComparison?: "unspecified"|"smaller"|"larger", subject?: string, to?: string}
-export def "gmail-users-settings-filters gmailuserssettingsfilterscreate" [
+export def "gmail-users-settings-filters create" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1832,7 +1850,7 @@ export def "gmail-users-settings-filters gmailuserssettingsfilterscreate" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --action: record # A set of actions to perform on a message. — shape: {addLabelIds?: list, forward?: string, removeLabelIds?: list}
+  --action: record # A set of actions to perform on a message. — shape: {addLabelIds?: list<string>, forward?: string, removeLabelIds?: list<string>}
   --criteria: record # Message matching criteria. — shape: {excludeChats?: bool, from?: string, hasAttachment?: bool, negatedQuery?: string, query?: string, size?: int, sizeComparison?: "unspecified"|"smaller"|"larger", subject?: string, to?: string}
   --id: string # The server assigned ID of the filter.
 ]: any -> record<action: record<addLabelIds: list<string>, forward: string, removeLabelIds: list<string>>, criteria: record<excludeChats: bool, from: string, hasAttachment: bool, negatedQuery: string, query: string, size: int, sizeComparison: string, subject: string, to: string>, id: string> {
@@ -1840,19 +1858,19 @@ export def "gmail-users-settings-filters gmailuserssettingsfilterscreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/gmail/v1/users/{user_id}/settings/filters") $qp)
-  let body = {"action": $action, "criteria": $criteria, "id": $id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/gmail/v1/users/{user_id}/settings/filters") $qp)
+  let req_body = {"action": $action, "criteria": $criteria, "id": $id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Immediately and permanently deletes the specified filter.
 #
 # DELETE /gmail/v1/users/{userId}/settings/filters/{id}
 # operationId: gmail.users.settings.filters.delete
-export def "gmail-users-settings-filters gmailuserssettingsfiltersdelete" [
+export def "gmail-users-settings-filters delete" [
   user_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1878,7 +1896,7 @@ export def "gmail-users-settings-filters gmailuserssettingsfiltersdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id, id: $id} | format pattern "/gmail/v1/users/{user_id}/settings/filters/{id}") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), id: (encode-path-segment $id)} | format pattern "/gmail/v1/users/{user_id}/settings/filters/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1888,7 +1906,7 @@ export def "gmail-users-settings-filters gmailuserssettingsfiltersdelete" [
 #
 # GET /gmail/v1/users/{userId}/settings/filters/{id}
 # operationId: gmail.users.settings.filters.get
-export def "gmail-users-settings-filters gmailuserssettingsfiltersget" [
+export def "gmail-users-settings-filters get" [
   user_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1914,7 +1932,7 @@ export def "gmail-users-settings-filters gmailuserssettingsfiltersget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id, id: $id} | format pattern "/gmail/v1/users/{user_id}/settings/filters/{id}") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), id: (encode-path-segment $id)} | format pattern "/gmail/v1/users/{user_id}/settings/filters/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1924,7 +1942,7 @@ export def "gmail-users-settings-filters gmailuserssettingsfiltersget" [
 #
 # GET /gmail/v1/users/{userId}/settings/forwardingAddresses
 # operationId: gmail.users.settings.forwardingAddresses.list
-export def "gmail-users-settings-forwarding-addresses gmailuserssettingsforwardingAddresseslist" [
+export def "gmail-users-settings-forwarding-addresses list" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1949,7 +1967,7 @@ export def "gmail-users-settings-forwarding-addresses gmailuserssettingsforwardi
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/gmail/v1/users/{user_id}/settings/forwardingAddresses") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/gmail/v1/users/{user_id}/settings/forwardingAddresses") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1959,7 +1977,7 @@ export def "gmail-users-settings-forwarding-addresses gmailuserssettingsforwardi
 #
 # POST /gmail/v1/users/{userId}/settings/forwardingAddresses
 # operationId: gmail.users.settings.forwardingAddresses.create
-export def "gmail-users-settings-forwarding-addresses gmailuserssettingsforwardingAddressescreate" [
+export def "gmail-users-settings-forwarding-addresses create" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1987,19 +2005,19 @@ export def "gmail-users-settings-forwarding-addresses gmailuserssettingsforwardi
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/gmail/v1/users/{user_id}/settings/forwardingAddresses") $qp)
-  let body = {"forwardingEmail": $forwarding_email, "verificationStatus": $verification_status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/gmail/v1/users/{user_id}/settings/forwardingAddresses") $qp)
+  let req_body = {"forwardingEmail": $forwarding_email, "verificationStatus": $verification_status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes the specified forwarding address and revokes any verification that may have been required. This method is only available to service account clients that have been delegated domain-wide authority.
 #
 # DELETE /gmail/v1/users/{userId}/settings/forwardingAddresses/{forwardingEmail}
 # operationId: gmail.users.settings.forwardingAddresses.delete
-export def "gmail-users-settings-forwarding-addresses gmailuserssettingsforwardingAddressesdelete" [
+export def "gmail-users-settings-forwarding-addresses delete" [
   user_id: string
   forwarding_email: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2025,7 +2043,7 @@ export def "gmail-users-settings-forwarding-addresses gmailuserssettingsforwardi
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id, forwarding_email: $forwarding_email} | format pattern "/gmail/v1/users/{user_id}/settings/forwardingAddresses/{forwarding_email}") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), forwarding_email: (encode-path-segment $forwarding_email)} | format pattern "/gmail/v1/users/{user_id}/settings/forwardingAddresses/{forwarding_email}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2035,7 +2053,7 @@ export def "gmail-users-settings-forwarding-addresses gmailuserssettingsforwardi
 #
 # GET /gmail/v1/users/{userId}/settings/forwardingAddresses/{forwardingEmail}
 # operationId: gmail.users.settings.forwardingAddresses.get
-export def "gmail-users-settings-forwarding-addresses gmailuserssettingsforwardingAddressesget" [
+export def "gmail-users-settings-forwarding-addresses get" [
   user_id: string
   forwarding_email: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2061,7 +2079,7 @@ export def "gmail-users-settings-forwarding-addresses gmailuserssettingsforwardi
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id, forwarding_email: $forwarding_email} | format pattern "/gmail/v1/users/{user_id}/settings/forwardingAddresses/{forwarding_email}") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), forwarding_email: (encode-path-segment $forwarding_email)} | format pattern "/gmail/v1/users/{user_id}/settings/forwardingAddresses/{forwarding_email}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2071,7 +2089,7 @@ export def "gmail-users-settings-forwarding-addresses gmailuserssettingsforwardi
 #
 # GET /gmail/v1/users/{userId}/settings/imap
 # operationId: gmail.users.settings.getImap
-export def "gmail-users-settings-imap gmailuserssettingsgetImap" [
+export def "gmail-users-settings-imap get" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2096,7 +2114,7 @@ export def "gmail-users-settings-imap gmailuserssettingsgetImap" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/gmail/v1/users/{user_id}/settings/imap") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/gmail/v1/users/{user_id}/settings/imap") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2106,7 +2124,7 @@ export def "gmail-users-settings-imap gmailuserssettingsgetImap" [
 #
 # PUT /gmail/v1/users/{userId}/settings/imap
 # operationId: gmail.users.settings.updateImap
-export def "gmail-users-settings-imap gmailuserssettingsupdateImap" [
+export def "gmail-users-settings-imap update" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2136,19 +2154,19 @@ export def "gmail-users-settings-imap gmailuserssettingsupdateImap" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/gmail/v1/users/{user_id}/settings/imap") $qp)
-  let body = {"autoExpunge": $auto_expunge, "enabled": $enabled, "expungeBehavior": $expunge_behavior, "maxFolderSize": $max_folder_size} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/gmail/v1/users/{user_id}/settings/imap") $qp)
+  let req_body = {"autoExpunge": $auto_expunge, "enabled": $enabled, "expungeBehavior": $expunge_behavior, "maxFolderSize": $max_folder_size} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets language settings.
 #
 # GET /gmail/v1/users/{userId}/settings/language
 # operationId: gmail.users.settings.getLanguage
-export def "gmail-users-settings-language gmailuserssettingsgetLanguage" [
+export def "gmail-users-settings-language get" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2173,7 +2191,7 @@ export def "gmail-users-settings-language gmailuserssettingsgetLanguage" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/gmail/v1/users/{user_id}/settings/language") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/gmail/v1/users/{user_id}/settings/language") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2183,7 +2201,7 @@ export def "gmail-users-settings-language gmailuserssettingsgetLanguage" [
 #
 # PUT /gmail/v1/users/{userId}/settings/language
 # operationId: gmail.users.settings.updateLanguage
-export def "gmail-users-settings-language gmailuserssettingsupdateLanguage" [
+export def "gmail-users-settings-language update" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2210,19 +2228,19 @@ export def "gmail-users-settings-language gmailuserssettingsupdateLanguage" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/gmail/v1/users/{user_id}/settings/language") $qp)
-  let body = {"displayLanguage": $display_language} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/gmail/v1/users/{user_id}/settings/language") $qp)
+  let req_body = {"displayLanguage": $display_language} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets POP settings.
 #
 # GET /gmail/v1/users/{userId}/settings/pop
 # operationId: gmail.users.settings.getPop
-export def "gmail-users-settings-pop gmailuserssettingsgetPop" [
+export def "gmail-users-settings-pop get" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2247,7 +2265,7 @@ export def "gmail-users-settings-pop gmailuserssettingsgetPop" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/gmail/v1/users/{user_id}/settings/pop") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/gmail/v1/users/{user_id}/settings/pop") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2257,7 +2275,7 @@ export def "gmail-users-settings-pop gmailuserssettingsgetPop" [
 #
 # PUT /gmail/v1/users/{userId}/settings/pop
 # operationId: gmail.users.settings.updatePop
-export def "gmail-users-settings-pop gmailuserssettingsupdatePop" [
+export def "gmail-users-settings-pop update" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2285,19 +2303,19 @@ export def "gmail-users-settings-pop gmailuserssettingsupdatePop" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/gmail/v1/users/{user_id}/settings/pop") $qp)
-  let body = {"accessWindow": $access_window, "disposition": $disposition} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/gmail/v1/users/{user_id}/settings/pop") $qp)
+  let req_body = {"accessWindow": $access_window, "disposition": $disposition} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists the send-as aliases for the specified account. The result includes the primary send-as address associated with the account as well as any custom "from" aliases.
 #
 # GET /gmail/v1/users/{userId}/settings/sendAs
 # operationId: gmail.users.settings.sendAs.list
-export def "gmail-users-settings-send-as gmailuserssettingssendAslist" [
+export def "gmail-users-settings-send-as list" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2322,7 +2340,7 @@ export def "gmail-users-settings-send-as gmailuserssettingssendAslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/gmail/v1/users/{user_id}/settings/sendAs") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/gmail/v1/users/{user_id}/settings/sendAs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2333,7 +2351,7 @@ export def "gmail-users-settings-send-as gmailuserssettingssendAslist" [
 # POST /gmail/v1/users/{userId}/settings/sendAs
 # operationId: gmail.users.settings.sendAs.create
 # --smtpMsa shape: {host?: string, password?: string, port?: int, securityMode?: "securityModeUnspecified"|"none"|"ssl"|"starttls", username?: string}
-export def "gmail-users-settings-send-as gmailuserssettingssendAscreate" [
+export def "gmail-users-settings-send-as create" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2368,19 +2386,19 @@ export def "gmail-users-settings-send-as gmailuserssettingssendAscreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/gmail/v1/users/{user_id}/settings/sendAs") $qp)
-  let body = {"displayName": $display_name, "isDefault": $is_default, "isPrimary": $is_primary, "replyToAddress": $reply_to_address, "sendAsEmail": $send_as_email, "signature": $signature, "smtpMsa": $smtp_msa, "treatAsAlias": $treat_as_alias, "verificationStatus": $verification_status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/gmail/v1/users/{user_id}/settings/sendAs") $qp)
+  let req_body = {"displayName": $display_name, "isDefault": $is_default, "isPrimary": $is_primary, "replyToAddress": $reply_to_address, "sendAsEmail": $send_as_email, "signature": $signature, "smtpMsa": $smtp_msa, "treatAsAlias": $treat_as_alias, "verificationStatus": $verification_status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes the specified send-as alias. Revokes any verification that may have been required for using it. This method is only available to service account clients that have been delegated domain-wide authority.
 #
 # DELETE /gmail/v1/users/{userId}/settings/sendAs/{sendAsEmail}
 # operationId: gmail.users.settings.sendAs.delete
-export def "gmail-users-settings-send-as gmailuserssettingssendAsdelete" [
+export def "gmail-users-settings-send-as delete" [
   user_id: string
   send_as_email: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2406,7 +2424,7 @@ export def "gmail-users-settings-send-as gmailuserssettingssendAsdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id, send_as_email: $send_as_email} | format pattern "/gmail/v1/users/{user_id}/settings/sendAs/{send_as_email}") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), send_as_email: (encode-path-segment $send_as_email)} | format pattern "/gmail/v1/users/{user_id}/settings/sendAs/{send_as_email}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2416,7 +2434,7 @@ export def "gmail-users-settings-send-as gmailuserssettingssendAsdelete" [
 #
 # GET /gmail/v1/users/{userId}/settings/sendAs/{sendAsEmail}
 # operationId: gmail.users.settings.sendAs.get
-export def "gmail-users-settings-send-as gmailuserssettingssendAsget" [
+export def "gmail-users-settings-send-as get" [
   user_id: string
   send_as_email: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2442,7 +2460,7 @@ export def "gmail-users-settings-send-as gmailuserssettingssendAsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id, send_as_email: $send_as_email} | format pattern "/gmail/v1/users/{user_id}/settings/sendAs/{send_as_email}") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), send_as_email: (encode-path-segment $send_as_email)} | format pattern "/gmail/v1/users/{user_id}/settings/sendAs/{send_as_email}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2453,7 +2471,7 @@ export def "gmail-users-settings-send-as gmailuserssettingssendAsget" [
 # PATCH /gmail/v1/users/{userId}/settings/sendAs/{sendAsEmail}
 # operationId: gmail.users.settings.sendAs.patch
 # --smtpMsa shape: {host?: string, password?: string, port?: int, securityMode?: "securityModeUnspecified"|"none"|"ssl"|"starttls", username?: string}
-export def "gmail-users-settings-send-as gmailuserssettingssendAspatch" [
+export def "gmail-users-settings-send-as update-by-userId-sendAsEmail" [
   user_id: string
   send_as_email: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2489,12 +2507,12 @@ export def "gmail-users-settings-send-as gmailuserssettingssendAspatch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id, send_as_email: $send_as_email} | format pattern "/gmail/v1/users/{user_id}/settings/sendAs/{send_as_email}") $qp)
-  let body = {"displayName": $display_name, "isDefault": $is_default, "isPrimary": $is_primary, "replyToAddress": $reply_to_address, "sendAsEmail": $body_send_as_email, "signature": $signature, "smtpMsa": $smtp_msa, "treatAsAlias": $treat_as_alias, "verificationStatus": $verification_status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), send_as_email: (encode-path-segment $send_as_email)} | format pattern "/gmail/v1/users/{user_id}/settings/sendAs/{send_as_email}") $qp)
+  let req_body = {"displayName": $display_name, "isDefault": $is_default, "isPrimary": $is_primary, "replyToAddress": $reply_to_address, "sendAsEmail": $body_send_as_email, "signature": $signature, "smtpMsa": $smtp_msa, "treatAsAlias": $treat_as_alias, "verificationStatus": $verification_status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates a send-as alias. If a signature is provided, Gmail will sanitize the HTML before saving it with the alias. Addresses other than the primary address for the account can only be updated by service account clients that have been delegated domain-wide authority.
@@ -2502,7 +2520,7 @@ export def "gmail-users-settings-send-as gmailuserssettingssendAspatch" [
 # PUT /gmail/v1/users/{userId}/settings/sendAs/{sendAsEmail}
 # operationId: gmail.users.settings.sendAs.update
 # --smtpMsa shape: {host?: string, password?: string, port?: int, securityMode?: "securityModeUnspecified"|"none"|"ssl"|"starttls", username?: string}
-export def "gmail-users-settings-send-as gmailuserssettingssendAsupdate" [
+export def "gmail-users-settings-send-as update-by-userId-sendAsEmail-1" [
   user_id: string
   send_as_email: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2538,19 +2556,19 @@ export def "gmail-users-settings-send-as gmailuserssettingssendAsupdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id, send_as_email: $send_as_email} | format pattern "/gmail/v1/users/{user_id}/settings/sendAs/{send_as_email}") $qp)
-  let body = {"displayName": $display_name, "isDefault": $is_default, "isPrimary": $is_primary, "replyToAddress": $reply_to_address, "sendAsEmail": $body_send_as_email, "signature": $signature, "smtpMsa": $smtp_msa, "treatAsAlias": $treat_as_alias, "verificationStatus": $verification_status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), send_as_email: (encode-path-segment $send_as_email)} | format pattern "/gmail/v1/users/{user_id}/settings/sendAs/{send_as_email}") $qp)
+  let req_body = {"displayName": $display_name, "isDefault": $is_default, "isPrimary": $is_primary, "replyToAddress": $reply_to_address, "sendAsEmail": $body_send_as_email, "signature": $signature, "smtpMsa": $smtp_msa, "treatAsAlias": $treat_as_alias, "verificationStatus": $verification_status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists S/MIME configs for the specified send-as alias.
 #
 # GET /gmail/v1/users/{userId}/settings/sendAs/{sendAsEmail}/smimeInfo
 # operationId: gmail.users.settings.sendAs.smimeInfo.list
-export def "gmail-users-settings-send-as-smime-info gmailuserssettingssendAssmimeInfolist" [
+export def "gmail-users-settings-send-as-smime-info list" [
   user_id: string
   send_as_email: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2576,7 +2594,7 @@ export def "gmail-users-settings-send-as-smime-info gmailuserssettingssendAssmim
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id, send_as_email: $send_as_email} | format pattern "/gmail/v1/users/{user_id}/settings/sendAs/{send_as_email}/smimeInfo") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), send_as_email: (encode-path-segment $send_as_email)} | format pattern "/gmail/v1/users/{user_id}/settings/sendAs/{send_as_email}/smimeInfo") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2586,7 +2604,7 @@ export def "gmail-users-settings-send-as-smime-info gmailuserssettingssendAssmim
 #
 # POST /gmail/v1/users/{userId}/settings/sendAs/{sendAsEmail}/smimeInfo
 # operationId: gmail.users.settings.sendAs.smimeInfo.insert
-export def "gmail-users-settings-send-as-smime-info gmailuserssettingssendAssmimeInfoinsert" [
+export def "gmail-users-settings-send-as-smime-info create" [
   user_id: string
   send_as_email: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2620,19 +2638,19 @@ export def "gmail-users-settings-send-as-smime-info gmailuserssettingssendAssmim
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id, send_as_email: $send_as_email} | format pattern "/gmail/v1/users/{user_id}/settings/sendAs/{send_as_email}/smimeInfo") $qp)
-  let body = {"encryptedKeyPassword": $encrypted_key_password, "expiration": $expiration, "id": $id, "isDefault": $is_default, "issuerCn": $issuer_cn, "pem": $pem, "pkcs12": $pkcs12} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), send_as_email: (encode-path-segment $send_as_email)} | format pattern "/gmail/v1/users/{user_id}/settings/sendAs/{send_as_email}/smimeInfo") $qp)
+  let req_body = {"encryptedKeyPassword": $encrypted_key_password, "expiration": $expiration, "id": $id, "isDefault": $is_default, "issuerCn": $issuer_cn, "pem": $pem, "pkcs12": $pkcs12} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes the specified S/MIME config for the specified send-as alias.
 #
 # DELETE /gmail/v1/users/{userId}/settings/sendAs/{sendAsEmail}/smimeInfo/{id}
 # operationId: gmail.users.settings.sendAs.smimeInfo.delete
-export def "gmail-users-settings-send-as-smime-info gmailuserssettingssendAssmimeInfodelete" [
+export def "gmail-users-settings-send-as-smime-info delete" [
   user_id: string
   send_as_email: string
   id: string
@@ -2659,7 +2677,7 @@ export def "gmail-users-settings-send-as-smime-info gmailuserssettingssendAssmim
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id, send_as_email: $send_as_email, id: $id} | format pattern "/gmail/v1/users/{user_id}/settings/sendAs/{send_as_email}/smimeInfo/{id}") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), send_as_email: (encode-path-segment $send_as_email), id: (encode-path-segment $id)} | format pattern "/gmail/v1/users/{user_id}/settings/sendAs/{send_as_email}/smimeInfo/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2669,7 +2687,7 @@ export def "gmail-users-settings-send-as-smime-info gmailuserssettingssendAssmim
 #
 # GET /gmail/v1/users/{userId}/settings/sendAs/{sendAsEmail}/smimeInfo/{id}
 # operationId: gmail.users.settings.sendAs.smimeInfo.get
-export def "gmail-users-settings-send-as-smime-info gmailuserssettingssendAssmimeInfoget" [
+export def "gmail-users-settings-send-as-smime-info get" [
   user_id: string
   send_as_email: string
   id: string
@@ -2696,7 +2714,7 @@ export def "gmail-users-settings-send-as-smime-info gmailuserssettingssendAssmim
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id, send_as_email: $send_as_email, id: $id} | format pattern "/gmail/v1/users/{user_id}/settings/sendAs/{send_as_email}/smimeInfo/{id}") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), send_as_email: (encode-path-segment $send_as_email), id: (encode-path-segment $id)} | format pattern "/gmail/v1/users/{user_id}/settings/sendAs/{send_as_email}/smimeInfo/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2706,7 +2724,7 @@ export def "gmail-users-settings-send-as-smime-info gmailuserssettingssendAssmim
 #
 # POST /gmail/v1/users/{userId}/settings/sendAs/{sendAsEmail}/smimeInfo/{id}/setDefault
 # operationId: gmail.users.settings.sendAs.smimeInfo.setDefault
-export def "gmail-users-settings-send-as-smime-info-set-default gmailuserssettingssendAssmimeInfosetDefault" [
+export def "gmail-users-settings-send-as-smime-info-set-default update" [
   user_id: string
   send_as_email: string
   id: string
@@ -2733,7 +2751,7 @@ export def "gmail-users-settings-send-as-smime-info-set-default gmailuserssettin
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id, send_as_email: $send_as_email, id: $id} | format pattern "/gmail/v1/users/{user_id}/settings/sendAs/{send_as_email}/smimeInfo/{id}/setDefault") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), send_as_email: (encode-path-segment $send_as_email), id: (encode-path-segment $id)} | format pattern "/gmail/v1/users/{user_id}/settings/sendAs/{send_as_email}/smimeInfo/{id}/setDefault") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2743,7 +2761,7 @@ export def "gmail-users-settings-send-as-smime-info-set-default gmailuserssettin
 #
 # POST /gmail/v1/users/{userId}/settings/sendAs/{sendAsEmail}/verify
 # operationId: gmail.users.settings.sendAs.verify
-export def "gmail-users-settings-send-as-verify gmailuserssettingssendAsverify" [
+export def "gmail-users-settings-send-as-verify verify" [
   user_id: string
   send_as_email: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2769,7 +2787,7 @@ export def "gmail-users-settings-send-as-verify gmailuserssettingssendAsverify" 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id, send_as_email: $send_as_email} | format pattern "/gmail/v1/users/{user_id}/settings/sendAs/{send_as_email}/verify") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), send_as_email: (encode-path-segment $send_as_email)} | format pattern "/gmail/v1/users/{user_id}/settings/sendAs/{send_as_email}/verify") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2779,7 +2797,7 @@ export def "gmail-users-settings-send-as-verify gmailuserssettingssendAsverify" 
 #
 # GET /gmail/v1/users/{userId}/settings/vacation
 # operationId: gmail.users.settings.getVacation
-export def "gmail-users-settings-vacation gmailuserssettingsgetVacation" [
+export def "gmail-users-settings-vacation get" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2804,7 +2822,7 @@ export def "gmail-users-settings-vacation gmailuserssettingsgetVacation" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/gmail/v1/users/{user_id}/settings/vacation") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/gmail/v1/users/{user_id}/settings/vacation") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2814,7 +2832,7 @@ export def "gmail-users-settings-vacation gmailuserssettingsgetVacation" [
 #
 # PUT /gmail/v1/users/{userId}/settings/vacation
 # operationId: gmail.users.settings.updateVacation
-export def "gmail-users-settings-vacation gmailuserssettingsupdateVacation" [
+export def "gmail-users-settings-vacation update" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2848,19 +2866,19 @@ export def "gmail-users-settings-vacation gmailuserssettingsupdateVacation" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/gmail/v1/users/{user_id}/settings/vacation") $qp)
-  let body = {"enableAutoReply": $enable_auto_reply, "endTime": $end_time, "responseBodyHtml": $response_body_html, "responseBodyPlainText": $response_body_plain_text, "responseSubject": $response_subject, "restrictToContacts": $restrict_to_contacts, "restrictToDomain": $restrict_to_domain, "startTime": $start_time} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/gmail/v1/users/{user_id}/settings/vacation") $qp)
+  let req_body = {"enableAutoReply": $enable_auto_reply, "endTime": $end_time, "responseBodyHtml": $response_body_html, "responseBodyPlainText": $response_body_plain_text, "responseSubject": $response_subject, "restrictToContacts": $restrict_to_contacts, "restrictToDomain": $restrict_to_domain, "startTime": $start_time} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Stop receiving push notifications for the given user mailbox.
 #
 # POST /gmail/v1/users/{userId}/stop
 # operationId: gmail.users.stop
-export def "gmail-users-stop gmailusersstop" [
+export def "gmail-users-stop stop" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2885,7 +2903,7 @@ export def "gmail-users-stop gmailusersstop" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/gmail/v1/users/{user_id}/stop") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/gmail/v1/users/{user_id}/stop") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2895,7 +2913,7 @@ export def "gmail-users-stop gmailusersstop" [
 #
 # GET /gmail/v1/users/{userId}/threads
 # operationId: gmail.users.threads.list
-export def "gmail-users-threads gmailusersthreadslist" [
+export def "gmail-users-threads list" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2917,7 +2935,7 @@ export def "gmail-users-threads gmailusersthreadslist" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --include-spam-trash: oneof<nothing, bool> # Include threads from `SPAM` and `TRASH` in the results.
-  --label-ids: list # Only return threads with labels that match all of the specified label IDs.
+  --label-ids: list<string> # Only return threads with labels that match all of the specified label IDs.
   --max-results: int # Maximum number of threads to return. This field defaults to 100. The maximum allowed value for this field is 500.
   --page-token: string # Page token to retrieve a specific page of results in the list.
   --q: string # Only return threads matching the specified query. Supports the same query format as the Gmail search box. For example, `"from:someuser@example.com rfc822msgid: is:unread"`. Parameter cannot be used when accessing the api using the gmail.metadata scope.
@@ -2925,7 +2943,7 @@ export def "gmail-users-threads gmailusersthreadslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "includeSpamTrash" $include_spam_trash "scalar") (serialize-qp "labelIds" $label_ids "multi") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/gmail/v1/users/{user_id}/threads") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/gmail/v1/users/{user_id}/threads") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2935,7 +2953,7 @@ export def "gmail-users-threads gmailusersthreadslist" [
 #
 # DELETE /gmail/v1/users/{userId}/threads/{id}
 # operationId: gmail.users.threads.delete
-export def "gmail-users-threads gmailusersthreadsdelete" [
+export def "gmail-users-threads delete" [
   user_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2961,7 +2979,7 @@ export def "gmail-users-threads gmailusersthreadsdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id, id: $id} | format pattern "/gmail/v1/users/{user_id}/threads/{id}") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), id: (encode-path-segment $id)} | format pattern "/gmail/v1/users/{user_id}/threads/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2971,7 +2989,7 @@ export def "gmail-users-threads gmailusersthreadsdelete" [
 #
 # GET /gmail/v1/users/{userId}/threads/{id}
 # operationId: gmail.users.threads.get
-export def "gmail-users-threads gmailusersthreadsget" [
+export def "gmail-users-threads get" [
   user_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2994,12 +3012,12 @@ export def "gmail-users-threads gmailusersthreadsget" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --format: string@format-completer-1 # The format to return the messages in.
-  --metadata-headers: list # When given and format is METADATA, only include headers specified.
+  --metadata-headers: list<string> # When given and format is METADATA, only include headers specified.
 ]: nothing -> record<historyId: string, id: string, messages: table<historyId: string, id: string, internalDate: string, labelIds: list, payload: record, raw: string, sizeEstimate: int, snippet: string, threadId: string>, snippet: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "metadataHeaders" $metadata_headers "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id, id: $id} | format pattern "/gmail/v1/users/{user_id}/threads/{id}") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), id: (encode-path-segment $id)} | format pattern "/gmail/v1/users/{user_id}/threads/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3009,7 +3027,7 @@ export def "gmail-users-threads gmailusersthreadsget" [
 #
 # POST /gmail/v1/users/{userId}/threads/{id}/modify
 # operationId: gmail.users.threads.modify
-export def "gmail-users-threads-modify gmailusersthreadsmodify" [
+export def "gmail-users-threads-modify create" [
   user_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3031,26 +3049,26 @@ export def "gmail-users-threads-modify gmailusersthreadsmodify" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --add-label-ids: list # A list of IDs of labels to add to this thread. You can add up to 100 labels with each update.
-  --remove-label-ids: list # A list of IDs of labels to remove from this thread. You can remove up to 100 labels with each update.
+  --add-label-ids: list<string> # A list of IDs of labels to add to this thread. You can add up to 100 labels with each update.
+  --remove-label-ids: list<string> # A list of IDs of labels to remove from this thread. You can remove up to 100 labels with each update.
 ]: any -> record<historyId: string, id: string, messages: table<historyId: string, id: string, internalDate: string, labelIds: list, payload: record, raw: string, sizeEstimate: int, snippet: string, threadId: string>, snippet: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id, id: $id} | format pattern "/gmail/v1/users/{user_id}/threads/{id}/modify") $qp)
-  let body = {"addLabelIds": $add_label_ids, "removeLabelIds": $remove_label_ids} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), id: (encode-path-segment $id)} | format pattern "/gmail/v1/users/{user_id}/threads/{id}/modify") $qp)
+  let req_body = {"addLabelIds": $add_label_ids, "removeLabelIds": $remove_label_ids} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Moves the specified thread to the trash. Any messages that belong to the thread are also moved to the trash.
 #
 # POST /gmail/v1/users/{userId}/threads/{id}/trash
 # operationId: gmail.users.threads.trash
-export def "gmail-users-threads-trash gmailusersthreadstrash" [
+export def "gmail-users-threads-trash create" [
   user_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3076,7 +3094,7 @@ export def "gmail-users-threads-trash gmailusersthreadstrash" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id, id: $id} | format pattern "/gmail/v1/users/{user_id}/threads/{id}/trash") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), id: (encode-path-segment $id)} | format pattern "/gmail/v1/users/{user_id}/threads/{id}/trash") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3086,7 +3104,7 @@ export def "gmail-users-threads-trash gmailusersthreadstrash" [
 #
 # POST /gmail/v1/users/{userId}/threads/{id}/untrash
 # operationId: gmail.users.threads.untrash
-export def "gmail-users-threads-untrash gmailusersthreadsuntrash" [
+export def "gmail-users-threads-untrash create" [
   user_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3112,7 +3130,7 @@ export def "gmail-users-threads-untrash gmailusersthreadsuntrash" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id, id: $id} | format pattern "/gmail/v1/users/{user_id}/threads/{id}/untrash") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), id: (encode-path-segment $id)} | format pattern "/gmail/v1/users/{user_id}/threads/{id}/untrash") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3122,7 +3140,7 @@ export def "gmail-users-threads-untrash gmailusersthreadsuntrash" [
 #
 # POST /gmail/v1/users/{userId}/watch
 # operationId: gmail.users.watch
-export def "gmail-users-watch gmailuserswatch" [
+export def "gmail-users-watch watch" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3144,17 +3162,17 @@ export def "gmail-users-watch gmailuserswatch" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --label-filter-action: string@label-filter-action-completer # Filtering behavior of labelIds list specified.
-  --label-ids: list # List of label_ids to restrict notifications about. By default, if unspecified, all changes are pushed out. If specified then dictates which labels are required for a push notification to be generated.
+  --label-ids: list<string> # List of label_ids to restrict notifications about. By default, if unspecified, all changes are pushed out. If specified then dictates which labels are required for a push notification to be generated.
   --topic-name: string # A fully qualified Google Cloud Pub/Sub API topic name to publish the events to. This topic name **must** already exist in Cloud Pub/Sub and you **must** have already granted gmail "publish" permission on it. For example, "projects/my-project-identifier/topics/my-topic-name" (using the Cloud Pub/Sub "v1" topic naming format). Note that the "my-project-identifier" portion must exactly match your Google developer project id (the one executing this watch request).
 ]: any -> record<expiration: string, historyId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/gmail/v1/users/{user_id}/watch") $qp)
-  let body = {"labelFilterAction": $label_filter_action, "labelIds": $label_ids, "topicName": $topic_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/gmail/v1/users/{user_id}/watch") $qp)
+  let req_body = {"labelFilterAction": $label_filter_action, "labelIds": $label_ids, "topicName": $topic_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

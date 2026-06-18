@@ -36,6 +36,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -108,8 +117,8 @@ export def "personas list" [
   --name: string # Filter by Persona name
   --count: int # Amount of items to return (default: 20)
   --page: int # Offset, used together with count
-  --fields: list # Allows to select only needed fields
-  --expand: list # Allows to select extra fields
+  --fields: list<string> # Allows to select only needed fields
+  --expand: list<string> # Allows to select extra fields
 ]: nothing -> record<_links: record<self: record<href: string>>, _meta: record<currentPage: int, pageCount: int, perPage: int, totalCount: int>, items: table<_links: record, bio: string, email: string, id: int, image: string, name: string, since: int, website: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -134,13 +143,13 @@ export def "personas get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --fields: list # Allows to select only needed fields
-  --expand: list # Allows to select extra fields
+  --fields: list<string> # Allows to select only needed fields
+  --expand: list<string> # Allows to select extra fields
 ]: nothing -> record<_links: record<self: record<href: string>, shows: list<record>>, bio: string, email: string, id: int, image: string, name: string, since: int, website: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "multi") (serialize-qp "expand" $expand "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/personas/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/personas/{id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -159,14 +168,14 @@ export def "playlists list" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --start: string # The datetime starting from items must be returned. Maximum 1 hour in future.  (format: date-time)
-  --end: string # The ending datetime. Maximum 1 hour in future.  (format: date-time)
+  --start: string # The datetime starting from items must be returned. Maximum 1 hour in future. (format: date-time)
+  --end: string # The ending datetime. Maximum 1 hour in future. (format: date-time)
   --show-id: int # Filter by show
   --persona-id: int # Filter by persona
   --count: int # Amount of items to return (default: 20)
   --page: int # Offset, used together with count
-  --fields: list # Allows to select only needed fields
-  --expand: list # Allows to select extra fields
+  --fields: list<string> # Allows to select only needed fields
+  --expand: list<string> # Allows to select extra fields
 ]: nothing -> record<_links: record<self: record<href: string>>, _meta: record<currentPage: int, pageCount: int, perPage: int, totalCount: int>, items: table<_links: record, automation: bool, category: string, description: string, duration: int, end: string, episode_description: string, episode_name: string, hide_dj: bool, id: int, image: string, persona_id: int, show_id: int, since: int, start: string, timezone: string, title: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -191,13 +200,13 @@ export def "playlists get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --fields: list # Allows to select only needed fields
-  --expand: list # Allows to select extra fields
+  --fields: list<string> # Allows to select only needed fields
+  --expand: list<string> # Allows to select extra fields
 ]: nothing -> record<_links: record<persona: record<href: string>, self: record<href: string>, show: record<href: string>, spins: record<href: string>>, automation: bool, category: string, description: string, duration: int, end: string, episode_description: string, episode_name: string, hide_dj: bool, id: int, image: string, persona_id: int, show_id: int, since: int, start: string, timezone: string, title: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "multi") (serialize-qp "expand" $expand "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/playlists/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/playlists/{id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -216,12 +225,12 @@ export def "shows list" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --start: string # The datetime starting from items must be returned. Maximum 1 hour in past.  (format: date-time)
-  --end: string # The ending datetime. Maximum 1 hour in past.  (format: date-time)
+  --start: string # The datetime starting from items must be returned. Maximum 1 hour in past. (format: date-time)
+  --end: string # The ending datetime. Maximum 1 hour in past. (format: date-time)
   --count: int # Amount of items to return (default: 20)
   --page: int # Offset, used together with count
-  --fields: list # Allows to select only needed fields
-  --expand: list # Allows to select extra fields
+  --fields: list<string> # Allows to select only needed fields
+  --expand: list<string> # Allows to select extra fields
 ]: nothing -> record<_links: record<self: record<href: string>>, _meta: record<currentPage: int, pageCount: int, perPage: int, totalCount: int>, items: table<_links: record, category: string, description: string, duration: int, end: string, hide_dj: bool, id: int, image: string, one_off: bool, since: int, start: string, timezone: string, title: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -246,13 +255,13 @@ export def "shows get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --fields: list # Allows to select only needed fields
-  --expand: list # Allows to select extra fields
+  --fields: list<string> # Allows to select only needed fields
+  --expand: list<string> # Allows to select extra fields
 ]: nothing -> record<_links: record<personas: list<record>, playlists: record<href: string>, self: record<href: string>>, category: string, description: string, duration: int, end: string, hide_dj: bool, id: int, image: string, one_off: bool, since: int, start: string, timezone: string, title: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "multi") (serialize-qp "expand" $expand "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/shows/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/shows/{id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -271,14 +280,14 @@ export def "spins list" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --start: string # The datetime starting from items must be returned.  (format: date-time)
-  --end: string # The ending datetime.  (format: date-time)
+  --start: string # The datetime starting from items must be returned. (format: date-time)
+  --end: string # The ending datetime. (format: date-time)
   --playlist-id: int # Filter by playlist
   --show-id: int # Filter by show
   --count: int # Amount of items to return (default: 20)
   --page: int # Offset, used together with count
-  --fields: list # Allows to select only needed fields
-  --expand: list # Allows to select extra fields
+  --fields: list<string> # Allows to select only needed fields
+  --expand: list<string> # Allows to select extra fields
 ]: nothing -> record<_links: record<self: record<href: string>>, _meta: record<currentPage: int, pageCount: int, perPage: int, totalCount: int>, items: table<_links: record, artist: string, artist_custom: string, catalog_number: string, classical: bool, composer: string, conductor: string, duration: int, end: string, ensemble: string, genre: string, id: int, image: string, isrc: string, iswc: string, label: string, label_custom: string, local: bool, medium: string, new: bool, note: string, performers: string, playlist_id: int, release: string, release_custom: string, released: int, request: bool, song: string, start: string, timezone: string, upc: string, va: bool, work: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -292,7 +301,7 @@ export def "spins list" [
 # Log a Spin
 #
 # POST /spins
-export def "spins post" [
+export def "spins create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -317,11 +326,12 @@ export def "spins post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/spins")
-  let body = {"artist": $artist, "composer": $composer, "duration": $duration, "genre": $genre, "isrc": $isrc, "label": $label, "live": $live, "release": $release, "song": $song, "start": $start} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"artist": $artist, "composer": $composer, "duration": $duration, "genre": $genre, "isrc": $isrc, "label": $label, "live": $live, "release": $release, "song": $song, "start": $start} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Get a Spin by id
@@ -338,13 +348,13 @@ export def "spins get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --fields: list # Allows to select only needed fields
-  --expand: list # Allows to select extra fields
+  --fields: list<string> # Allows to select only needed fields
+  --expand: list<string> # Allows to select extra fields
 ]: nothing -> record<_links: record<playlist: record<href: string>, self: record<href: string>>, artist: string, artist_custom: string, catalog_number: string, classical: bool, composer: string, conductor: string, duration: int, end: string, ensemble: string, genre: string, id: int, image: string, isrc: string, iswc: string, label: string, label_custom: string, local: bool, medium: string, new: bool, note: string, performers: string, playlist_id: int, release: string, release_custom: string, released: int, request: bool, song: string, start: string, timezone: string, upc: string, va: bool, work: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "multi") (serialize-qp "expand" $expand "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/spins/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/spins/{id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

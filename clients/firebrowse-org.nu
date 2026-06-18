@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -83,7 +92,7 @@ def sort-by-completer-10 [] { ["cohort" "mir" "sample_type" "tcga_participant_ba
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "analyses-copy-number-genes-all get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "analyses-copy-number-genes-all list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -107,7 +116,7 @@ export def commands []: nothing -> table {
 #
 # GET /Analyses/CopyNumber/Genes/All
 # operationId: All
-export def "analyses-copy-number-genes-all get" [
+export def "analyses-copy-number-genes-all list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -118,11 +127,11 @@ export def "analyses-copy-number-genes-all get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --format: string@format-completer # Format of result. (default: json)
-  --cohort: list # Narrow search to one or more TCGA disease cohorts from the scrollable list.
-  --gene: list # Comma separated list of gene name(s).
-  --tcga-participant-barcode: list # Comma separated list of TCGA participant barcodes (e.g. TCGA-GF-A4EO).
-  --page: list # Which page (slice) of entire results set should be returned. 
-  --page-size: list # Number of records per page of results.  Max is 2000.
+  --cohort: list<string> # Narrow search to one or more TCGA disease cohorts from the scrollable list.
+  --gene: list<string> # Comma separated list of gene name(s).
+  --tcga-participant-barcode: list<string> # Comma separated list of TCGA participant barcodes (e.g. TCGA-GF-A4EO).
+  --page: list<int> # Which page (slice) of entire results set should be returned.
+  --page-size: list<int> # Number of records per page of results. Max is 2000.
   --sort-by: string@sort-by-completer # Which column in the results should be used for sorting paginated results? (default: cohort)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -149,11 +158,11 @@ export def "analyses-copy-number-genes-amplified get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --format: string@format-completer # Format of result. (default: json)
-  --cohort: list # Narrow search to one or more TCGA disease cohorts from the scrollable list.
-  --gene: list # Comma separated list of gene name(s).
+  --cohort: list<string> # Narrow search to one or more TCGA disease cohorts from the scrollable list.
+  --gene: list<string> # Comma separated list of gene name(s).
   --q: float # Only return results with Q-value <= given threshold.
-  --page: list # Which page (slice) of entire results set should be returned. 
-  --page-size: list # Number of records per page of results.  Max is 2000.
+  --page: list<int> # Which page (slice) of entire results set should be returned.
+  --page-size: list<int> # Number of records per page of results. Max is 2000.
   --sort-by: string@sort-by-completer-1 # Which column in the results should be used for sorting paginated results? (default: cohort)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -169,7 +178,7 @@ export def "analyses-copy-number-genes-amplified get" [
 #
 # GET /Analyses/CopyNumber/Genes/Deleted
 # operationId: Deleted
-export def "analyses-copy-number-genes-deleted delete-d" [
+export def "analyses-copy-number-genes-deleted get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -180,11 +189,11 @@ export def "analyses-copy-number-genes-deleted delete-d" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --format: string@format-completer # Format of result. (default: json)
-  --cohort: list # Narrow search to one or more TCGA disease cohorts from the scrollable list.
-  --gene: list # Comma separated list of gene name(s).
+  --cohort: list<string> # Narrow search to one or more TCGA disease cohorts from the scrollable list.
+  --gene: list<string> # Comma separated list of gene name(s).
   --q: float # Only return results with Q-value <= given threshold.
-  --page: list # Which page (slice) of entire results set should be returned. 
-  --page-size: list # Number of records per page of results.  Max is 2000.
+  --page: list<int> # Which page (slice) of entire results set should be returned.
+  --page-size: list<int> # Number of records per page of results. Max is 2000.
   --sort-by: string@sort-by-completer-1 # Which column in the results should be used for sorting paginated results? (default: cohort)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -211,11 +220,11 @@ export def "analyses-copy-number-genes-focal get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --format: string@format-completer # Format of result. (default: json)
-  --cohort: list # Narrow search to one or more TCGA disease cohorts from the scrollable list.
-  --gene: list # Comma separated list of gene name(s).
-  --tcga-participant-barcode: list # Comma separated list of TCGA participant barcodes (e.g. TCGA-GF-A4EO).
-  --page: list # Which page (slice) of entire results set should be returned. 
-  --page-size: list # Number of records per page of results.  Max is 2000.
+  --cohort: list<string> # Narrow search to one or more TCGA disease cohorts from the scrollable list.
+  --gene: list<string> # Comma separated list of gene name(s).
+  --tcga-participant-barcode: list<string> # Comma separated list of TCGA participant barcodes (e.g. TCGA-GF-A4EO).
+  --page: list<int> # Which page (slice) of entire results set should be returned.
+  --page-size: list<int> # Number of records per page of results. Max is 2000.
   --sort-by: string@sort-by-completer # Which column in the results should be used for sorting paginated results? (default: cohort)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -242,11 +251,11 @@ export def "analyses-copy-number-genes-thresholded get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --format: string@format-completer # Format of result. (default: json)
-  --cohort: list # Narrow search to one or more TCGA disease cohorts from the scrollable list.
-  --gene: list # Comma separated list of gene name(s).
-  --tcga-participant-barcode: list # Comma separated list of TCGA participant barcodes (e.g. TCGA-GF-A4EO).
-  --page: list # Which page (slice) of entire results set should be returned. 
-  --page-size: list # Number of records per page of results.  Max is 2000.
+  --cohort: list<string> # Narrow search to one or more TCGA disease cohorts from the scrollable list.
+  --gene: list<string> # Comma separated list of gene name(s).
+  --tcga-participant-barcode: list<string> # Comma separated list of TCGA participant barcodes (e.g. TCGA-GF-A4EO).
+  --page: list<int> # Which page (slice) of entire results set should be returned.
+  --page-size: list<int> # Number of records per page of results. Max is 2000.
   --sort-by: string@sort-by-completer # Which column in the results should be used for sorting paginated results? (default: cohort)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -273,11 +282,11 @@ export def "analyses-feature-table get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --format: string@format-completer-1 # Format of result. (default: tsv)
-  --cohort: list # Narrow search to one or more TCGA disease cohorts from the scrollable list.
-  --date: list # Select one or more date stamps.
-  --column: list # Comma separated list of which data columns/fields to return.
-  --page: list # Which page (slice) of entire results set should be returned. 
-  --page-size: list # Number of records per page of results.  Max is 2000.
+  --cohort: list<string> # Narrow search to one or more TCGA disease cohorts from the scrollable list.
+  --date: list<string> # Select one or more date stamps.
+  --column: list<string> # Comma separated list of which data columns/fields to return.
+  --page: list<int> # Which page (slice) of entire results set should be returned.
+  --page-size: list<int> # Number of records per page of results. Max is 2000.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -303,13 +312,13 @@ export def "analyses-mutation-maf get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --format: string@format-completer # Format of result. (default: json)
-  --cohort: list # Narrow search to one or more TCGA disease cohorts from the scrollable list.
-  --tool: list # Narrow search to include only data/results produced by the selected Firehose tool.
-  --gene: list # Comma separated list of gene name(s).
-  --tcga-participant-barcode: list # Comma separated list of TCGA participant barcodes (e.g. TCGA-GF-A4EO).
-  --column: list # Comma separated list of which data columns/fields to return.
-  --page: list # Which page (slice) of entire results set should be returned. 
-  --page-size: list # Number of records per page of results.  Max is 2000.
+  --cohort: list<string> # Narrow search to one or more TCGA disease cohorts from the scrollable list.
+  --tool: list<string> # Narrow search to include only data/results produced by the selected Firehose tool.
+  --gene: list<string> # Comma separated list of gene name(s).
+  --tcga-participant-barcode: list<string> # Comma separated list of TCGA participant barcodes (e.g. TCGA-GF-A4EO).
+  --column: list<string> # Comma separated list of which data columns/fields to return.
+  --page: list<int> # Which page (slice) of entire results set should be returned.
+  --page-size: list<int> # Number of records per page of results. Max is 2000.
   --sort-by: string@sort-by-completer-2 # Which column in the results should be used for sorting paginated results? (default: cohort)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -336,13 +345,13 @@ export def "analyses-mutation-smg get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --format: string@format-completer # Format of result. (default: json)
-  --cohort: list # Narrow search to one or more TCGA disease cohorts from the scrollable list.
-  --tool: list # Narrow search to include only data/results produced by the selected Firehose tool.
+  --cohort: list<string> # Narrow search to one or more TCGA disease cohorts from the scrollable list.
+  --tool: list<string> # Narrow search to include only data/results produced by the selected Firehose tool.
   --rank: int # Number of significant genes to return. (format: int32)
-  --gene: list # Comma separated list of gene name(s).
+  --gene: list<string> # Comma separated list of gene name(s).
   --q: float # Only return results with Q-value <= given threshold.
-  --page: list # Which page (slice) of entire results set should be returned. 
-  --page-size: list # Number of records per page of results.  Max is 2000.
+  --page: list<int> # Which page (slice) of entire results set should be returned.
+  --page-size: list<int> # Number of records per page of results. Max is 2000.
   --sort-by: string@sort-by-completer-3 # Which column in the results should be used for sorting paginated results? (default: rank)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -369,12 +378,12 @@ export def "analyses-reports get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --format: string@format-completer # Format of result. (default: json)
-  --date: list # Select one or more date stamps.
-  --cohort: list # Narrow search to one or more TCGA disease cohorts from the scrollable list.
-  --name: list # Narrow search to one or more report names.
-  --type: list # Narrow search to one or more report types.
-  --page: list # Which page (slice) of entire results set should be returned. 
-  --page-size: list # Number of records per page of results.  Max is 2000.
+  --date: list<string> # Select one or more date stamps.
+  --cohort: list<string> # Narrow search to one or more TCGA disease cohorts from the scrollable list.
+  --name: list<string> # Narrow search to one or more report names.
+  --type: list<string> # Narrow search to one or more report types.
+  --page: list<int> # Which page (slice) of entire results set should be returned.
+  --page-size: list<int> # Number of records per page of results. Max is 2000.
   --sort-by: string@sort-by-completer-4 # Which column in the results should be used for sorting paginated results? (default: date)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -390,7 +399,7 @@ export def "analyses-reports get" [
 #
 # GET /Analyses/mRNASeq/Quartiles
 # operationId: mRNASeq/Quartiles
-export def "analyses-m-rna-seq-quartiles mRNASeq-Quartiles" [
+export def "analyses-m-rna-seq-quartiles get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -402,10 +411,10 @@ export def "analyses-m-rna-seq-quartiles mRNASeq-Quartiles" [
   --accept: string@accept-completer # Response content type
   --format: string@format-completer # Format of result. (default: json)
   --gene: string # Enter a single gene name.
-  --cohort: list # Narrow search to one or more TCGA disease cohorts from the scrollable list.
-  --protocol: list # Narrow search to one or more sample characterization protocols from the scrollable list.
-  --sample-type: list # For which type of sample(s) should quartiles be computed?
-  --exclude: list # Comma separated list of TCGA participants, identified by barcodes such as TCGA-GF-A4EO, denoting samples to exclude from computation.
+  --cohort: list<string> # Narrow search to one or more TCGA disease cohorts from the scrollable list.
+  --protocol: list<string> # Narrow search to one or more sample characterization protocols from the scrollable list.
+  --sample-type: list<string> # For which type of sample(s) should quartiles be computed?
+  --exclude: list<string> # Comma separated list of TCGA participants, identified by barcodes such as TCGA-GF-A4EO, denoting samples to exclude from computation.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -431,16 +440,16 @@ export def "archives-standard-data get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --format: string@format-completer # Format of result. (default: json)
-  --date: list # Select one or more date stamps.
-  --cohort: list # Narrow search to one or more TCGA disease cohorts from the scrollable list.
-  --data-type: list # Narrow search to one or more TCGA data types from the scrollable list.
-  --tool: list # Narrow search to include only data/results produced by the selected Firehose tool.
-  --platform: list # Narrow search to one or more TCGA data generation platforms from the scrollable list.
-  --center: list # Narrow search to one or more TCGA centers from the scrollable list.
-  --level: list # Narrow search to one or more TCGA data levels.
-  --protocol: list # Narrow search to one or more sample characterization protocols from the scrollable list.
-  --page: list # Which page (slice) of entire results set should be returned. 
-  --page-size: list # Number of records per page of results.  Max is 2000.
+  --date: list<string> # Select one or more date stamps.
+  --cohort: list<string> # Narrow search to one or more TCGA disease cohorts from the scrollable list.
+  --data-type: list<string> # Narrow search to one or more TCGA data types from the scrollable list.
+  --tool: list<string> # Narrow search to include only data/results produced by the selected Firehose tool.
+  --platform: list<string> # Narrow search to one or more TCGA data generation platforms from the scrollable list.
+  --center: list<string> # Narrow search to one or more TCGA centers from the scrollable list.
+  --level: list<int> # Narrow search to one or more TCGA data levels.
+  --protocol: list<string> # Narrow search to one or more sample characterization protocols from the scrollable list.
+  --page: list<int> # Which page (slice) of entire results set should be returned.
+  --page-size: list<int> # Number of records per page of results. Max is 2000.
   --sort-by: string@sort-by-completer-5 # Which column in the results should be used for sorting paginated results? (default: cohort)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -467,7 +476,7 @@ export def "metadata-centers get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --format: string@format-completer # Format of result. (default: json)
-  --center: list # Narrow search to one or more TCGA centers from the scrollable list.
+  --center: list<string> # Narrow search to one or more TCGA centers from the scrollable list.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -543,7 +552,7 @@ export def "metadata-cohorts get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --format: string@format-completer # Format of result. (default: json)
-  --cohort: list # Narrow search to one or more TCGA disease cohorts from the scrollable list.
+  --cohort: list<string> # Narrow search to one or more TCGA disease cohorts from the scrollable list.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -569,10 +578,10 @@ export def "metadata-counts get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --format: string@format-completer # Format of result. (default: json)
-  --date: list # Select one or more date stamps.
-  --cohort: list # Narrow search to one or more TCGA disease cohorts from the scrollable list.
-  --sample-type: list # Narrow search to one or more TCGA sample types from the scrollable list.
-  --data-type: list # Narrow search to one or more TCGA data types from the scrollable list.
+  --date: list<string> # Select one or more date stamps.
+  --cohort: list<string> # Narrow search to one or more TCGA disease cohorts from the scrollable list.
+  --sample-type: list<string> # Narrow search to one or more TCGA sample types from the scrollable list.
+  --data-type: list<string> # Narrow search to one or more TCGA data types from the scrollable list.
   --totals: oneof<nothing, bool> # Output an entry providing the totals for each data type. (default: true)
   --sort-by: string@sort-by-completer-6 # Which column in the results should be used for sorting paginated results? (default: cohort)
 ]: nothing -> any {
@@ -675,9 +684,9 @@ export def "metadata-patients get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --format: string@format-completer # Format of result. (default: json)
-  --cohort: list # Narrow search to one or more TCGA disease cohorts from the scrollable list.
-  --page: list # Which page (slice) of entire results set should be returned. 
-  --page-size: list # Number of records per page of results.  Max is 2000.
+  --cohort: list<string> # Narrow search to one or more TCGA disease cohorts from the scrollable list.
+  --page: list<int> # Which page (slice) of entire results set should be returned.
+  --page-size: list<int> # Number of records per page of results. Max is 2000.
   --sort-by: string@sort-by-completer-6 # Which column in the results should be used for sorting paginated results? (default: cohort)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -704,7 +713,7 @@ export def "metadata-platforms get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --format: string@format-completer # Format of result. (default: json)
-  --platform: list # Narrow search to one or more TCGA data generation platforms from the scrollable list.
+  --platform: list<string> # Narrow search to one or more TCGA data generation platforms from the scrollable list.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -735,7 +744,7 @@ export def "metadata-sample-type-barcode get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tcga_barcode: $tcga_barcode} | format pattern "/Metadata/SampleType/Barcode/{tcga_barcode}") $qp)
+  let full_url = (build-url $base ({tcga_barcode: (encode-path-segment $tcga_barcode)} | format pattern "/Metadata/SampleType/Barcode/{tcga_barcode}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -761,7 +770,7 @@ export def "metadata-sample-type-code get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({code: $code} | format pattern "/Metadata/SampleType/Code/{code}") $qp)
+  let full_url = (build-url $base ({code: (encode-path-segment $code)} | format pattern "/Metadata/SampleType/Code/{code}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -787,7 +796,7 @@ export def "metadata-sample-type-short-letter-code get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_letter_code: $short_letter_code} | format pattern "/Metadata/SampleType/ShortLetterCode/{short_letter_code}") $qp)
+  let full_url = (build-url $base ({short_letter_code: (encode-path-segment $short_letter_code)} | format pattern "/Metadata/SampleType/ShortLetterCode/{short_letter_code}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -833,7 +842,7 @@ export def "metadata-ts-sites get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --format: string@format-completer # Format of result. (default: json)
-  --tss-code: list # Narrow search to one or more TSS codes
+  --tss-code: list<string> # Narrow search to one or more TSS codes
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -859,11 +868,11 @@ export def "samples-clinical get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --format: string@format-completer # Format of result. (default: json)
-  --cohort: list # Narrow search to one or more TCGA disease cohorts from the scrollable list.
-  --tcga-participant-barcode: list # Comma separated list of TCGA participant barcodes (e.g. TCGA-GF-A4EO).
-  --cde-name: list # Retrieve results only for specified CDEs, per the Metadata/ClinicalNames function
-  --page: list # Which page (slice) of entire results set should be returned. 
-  --page-size: list # Number of records per page of results.  Max is 2000.
+  --cohort: list<string> # Narrow search to one or more TCGA disease cohorts from the scrollable list.
+  --tcga-participant-barcode: list<string> # Comma separated list of TCGA participant barcodes (e.g. TCGA-GF-A4EO).
+  --cde-name: list<string> # Retrieve results only for specified CDEs, per the Metadata/ClinicalNames function
+  --page: list<int> # Which page (slice) of entire results set should be returned.
+  --page-size: list<int> # Number of records per page of results. Max is 2000.
   --sort-by: string@sort-by-completer-7 # Which column in the results should be used for sorting paginated results? (default: cohort)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -890,11 +899,11 @@ export def "samples-clinical-fh get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --format: string@format-completer # Format of result. (default: json)
-  --cohort: list # Narrow search to one or more TCGA disease cohorts from the scrollable list.
-  --tcga-participant-barcode: list # Comma separated list of TCGA participant barcodes (e.g. TCGA-GF-A4EO).
-  --fh-cde-name: list # Retrieve results only for the CDEs specified from the scrollable list.
-  --page: list # Which page (slice) of entire results set should be returned. 
-  --page-size: list # Number of records per page of results.  Max is 2000.
+  --cohort: list<string> # Narrow search to one or more TCGA disease cohorts from the scrollable list.
+  --tcga-participant-barcode: list<string> # Comma separated list of TCGA participant barcodes (e.g. TCGA-GF-A4EO).
+  --fh-cde-name: list<string> # Retrieve results only for the CDEs specified from the scrollable list.
+  --page: list<int> # Which page (slice) of entire results set should be returned.
+  --page-size: list<int> # Number of records per page of results. Max is 2000.
   --sort-by: string@sort-by-completer-8 # Which column in the results should be used for sorting paginated results? (default: cohort)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -910,7 +919,7 @@ export def "samples-clinical-fh get" [
 #
 # GET /Samples/mRNASeq
 # operationId: mRNASeq
-export def "samples-m-rna-seq mRNASeq" [
+export def "samples-m-rna-seq get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -921,13 +930,13 @@ export def "samples-m-rna-seq mRNASeq" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --format: string@format-completer # Format of result. (default: json)
-  --gene: list # Comma separated list of gene name(s).
-  --cohort: list # Narrow search to one or more TCGA disease cohorts from the scrollable list.
-  --tcga-participant-barcode: list # Comma separated list of TCGA participant barcodes (e.g. TCGA-GF-A4EO).
-  --sample-type: list # Narrow search to one or more TCGA sample types from the scrollable list.
-  --protocol: list # Narrow search to one or more sample characterization protocols from the scrollable list.
-  --page: list # Which page (slice) of entire results set should be returned. 
-  --page-size: list # Number of records per page of results.  Max is 2000.
+  --gene: list<string> # Comma separated list of gene name(s).
+  --cohort: list<string> # Narrow search to one or more TCGA disease cohorts from the scrollable list.
+  --tcga-participant-barcode: list<string> # Comma separated list of TCGA participant barcodes (e.g. TCGA-GF-A4EO).
+  --sample-type: list<string> # Narrow search to one or more TCGA sample types from the scrollable list.
+  --protocol: list<string> # Narrow search to one or more sample characterization protocols from the scrollable list.
+  --page: list<int> # Which page (slice) of entire results set should be returned.
+  --page-size: list<int> # Number of records per page of results. Max is 2000.
   --sort-by: string@sort-by-completer-9 # Which column in the results should be used for sorting paginated results? (default: cohort)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -943,7 +952,7 @@ export def "samples-m-rna-seq mRNASeq" [
 #
 # GET /Samples/miRSeq
 # operationId: miRSeq
-export def "samples-mi-r-seq miRSeq" [
+export def "samples-mi-r-seq get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -954,13 +963,13 @@ export def "samples-mi-r-seq miRSeq" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --format: string@format-completer # Format of result. (default: json)
-  --mir: list # Comma separated list of miR names (e.g. hsa-let-7b-5p,hsa-let-7a-1).
-  --cohort: list # Narrow search to one or more TCGA disease cohorts from the scrollable list.
-  --tcga-participant-barcode: list # Comma separated list of TCGA participant barcodes (e.g. TCGA-GF-A4EO).
-  --tool: list # Narrow search to include only data/results produced by the selected Firehose tool.
-  --sample-type: list # Narrow search to one or more TCGA sample types from the scrollable list.
-  --page: list # Which page (slice) of entire results set should be returned. 
-  --page-size: list # Number of records per page of results.  Max is 2000.
+  --mir: list<string> # Comma separated list of miR names (e.g. hsa-let-7b-5p,hsa-let-7a-1).
+  --cohort: list<string> # Narrow search to one or more TCGA disease cohorts from the scrollable list.
+  --tcga-participant-barcode: list<string> # Comma separated list of TCGA participant barcodes (e.g. TCGA-GF-A4EO).
+  --tool: list<string> # Narrow search to include only data/results produced by the selected Firehose tool.
+  --sample-type: list<string> # Narrow search to one or more TCGA sample types from the scrollable list.
+  --page: list<int> # Which page (slice) of entire results set should be returned.
+  --page-size: list<int> # Number of records per page of results. Max is 2000.
   --sort-by: string@sort-by-completer-10 # Which column in the results should be used for sorting paginated results? (default: cohort)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

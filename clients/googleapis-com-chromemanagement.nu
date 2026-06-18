@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -73,7 +82,7 @@ def app-type-completer [] { ["ANDROID_APP" "APP" "APP_TYPE_UNSPECIFIED" "EXTENSI
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "apps-count-chrome-app-requests chromemanagementcustomersappscountChromeAppRequests" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "apps-count-chrome-app-requests get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -97,7 +106,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/{customer}/apps:countChromeAppRequests
 # operationId: chromemanagement.customers.apps.countChromeAppRequests
-export def "apps-count-chrome-app-requests chromemanagementcustomersappscountChromeAppRequests" [
+export def "apps-count-chrome-app-requests get" [
   customer: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -126,7 +135,7 @@ export def "apps-count-chrome-app-requests chromemanagementcustomersappscountChr
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "orgUnitId" $org_unit_id "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer: $customer} | format pattern "/v1/{customer}/apps:countChromeAppRequests") $qp)
+  let full_url = (build-url $base ({customer: (encode-path-segment $customer)} | format pattern "/v1/{customer}/apps:countChromeAppRequests") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -136,7 +145,7 @@ export def "apps-count-chrome-app-requests chromemanagementcustomersappscountChr
 #
 # GET /v1/{customer}/reports:countChromeBrowsersNeedingAttention
 # operationId: chromemanagement.customers.reports.countChromeBrowsersNeedingAttention
-export def "reports-count-chrome-browsers-needing-attention chromemanagementcustomersreportscountChromeBrowsersNeedingAttention" [
+export def "reports-count-chrome-browsers-needing-attention get" [
   customer: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -162,7 +171,7 @@ export def "reports-count-chrome-browsers-needing-attention chromemanagementcust
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "orgUnitId" $org_unit_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer: $customer} | format pattern "/v1/{customer}/reports:countChromeBrowsersNeedingAttention") $qp)
+  let full_url = (build-url $base ({customer: (encode-path-segment $customer)} | format pattern "/v1/{customer}/reports:countChromeBrowsersNeedingAttention") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -172,7 +181,7 @@ export def "reports-count-chrome-browsers-needing-attention chromemanagementcust
 #
 # GET /v1/{customer}/reports:countChromeDevicesReachingAutoExpirationDate
 # operationId: chromemanagement.customers.reports.countChromeDevicesReachingAutoExpirationDate
-export def "reports-count-chrome-devices-reaching-auto-expiration-date chromemanagementcustomersreportscountChromeDevicesReachingAutoExpirationDate" [
+export def "reports-count-chrome-devices-reaching-auto-expiration-date get" [
   customer: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -200,7 +209,7 @@ export def "reports-count-chrome-devices-reaching-auto-expiration-date chromeman
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "maxAueDate" $max_aue_date "scalar") (serialize-qp "minAueDate" $min_aue_date "scalar") (serialize-qp "orgUnitId" $org_unit_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer: $customer} | format pattern "/v1/{customer}/reports:countChromeDevicesReachingAutoExpirationDate") $qp)
+  let full_url = (build-url $base ({customer: (encode-path-segment $customer)} | format pattern "/v1/{customer}/reports:countChromeDevicesReachingAutoExpirationDate") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -210,7 +219,7 @@ export def "reports-count-chrome-devices-reaching-auto-expiration-date chromeman
 #
 # GET /v1/{customer}/reports:countChromeDevicesThatNeedAttention
 # operationId: chromemanagement.customers.reports.countChromeDevicesThatNeedAttention
-export def "reports-count-chrome-devices-that-need-attention chromemanagementcustomersreportscountChromeDevicesThatNeedAttention" [
+export def "reports-count-chrome-devices-that-need-attention get" [
   customer: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -237,7 +246,7 @@ export def "reports-count-chrome-devices-that-need-attention chromemanagementcus
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "orgUnitId" $org_unit_id "scalar") (serialize-qp "readMask" $read_mask "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer: $customer} | format pattern "/v1/{customer}/reports:countChromeDevicesThatNeedAttention") $qp)
+  let full_url = (build-url $base ({customer: (encode-path-segment $customer)} | format pattern "/v1/{customer}/reports:countChromeDevicesThatNeedAttention") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -247,7 +256,7 @@ export def "reports-count-chrome-devices-that-need-attention chromemanagementcus
 #
 # GET /v1/{customer}/reports:countChromeHardwareFleetDevices
 # operationId: chromemanagement.customers.reports.countChromeHardwareFleetDevices
-export def "reports-count-chrome-hardware-fleet-devices chromemanagementcustomersreportscountChromeHardwareFleetDevices" [
+export def "reports-count-chrome-hardware-fleet-devices get" [
   customer: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -274,7 +283,7 @@ export def "reports-count-chrome-hardware-fleet-devices chromemanagementcustomer
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "orgUnitId" $org_unit_id "scalar") (serialize-qp "readMask" $read_mask "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer: $customer} | format pattern "/v1/{customer}/reports:countChromeHardwareFleetDevices") $qp)
+  let full_url = (build-url $base ({customer: (encode-path-segment $customer)} | format pattern "/v1/{customer}/reports:countChromeHardwareFleetDevices") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -284,7 +293,7 @@ export def "reports-count-chrome-hardware-fleet-devices chromemanagementcustomer
 #
 # GET /v1/{customer}/reports:countChromeVersions
 # operationId: chromemanagement.customers.reports.countChromeVersions
-export def "reports-count-chrome-versions chromemanagementcustomersreportscountChromeVersions" [
+export def "reports-count-chrome-versions get" [
   customer: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -313,7 +322,7 @@ export def "reports-count-chrome-versions chromemanagementcustomersreportscountC
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orgUnitId" $org_unit_id "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer: $customer} | format pattern "/v1/{customer}/reports:countChromeVersions") $qp)
+  let full_url = (build-url $base ({customer: (encode-path-segment $customer)} | format pattern "/v1/{customer}/reports:countChromeVersions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -323,7 +332,7 @@ export def "reports-count-chrome-versions chromemanagementcustomersreportscountC
 #
 # GET /v1/{customer}/reports:countInstalledApps
 # operationId: chromemanagement.customers.reports.countInstalledApps
-export def "reports-count-installed-apps chromemanagementcustomersreportscountInstalledApps" [
+export def "reports-count-installed-apps get" [
   customer: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -353,7 +362,7 @@ export def "reports-count-installed-apps chromemanagementcustomersreportscountIn
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "orgUnitId" $org_unit_id "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer: $customer} | format pattern "/v1/{customer}/reports:countInstalledApps") $qp)
+  let full_url = (build-url $base ({customer: (encode-path-segment $customer)} | format pattern "/v1/{customer}/reports:countInstalledApps") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -363,7 +372,7 @@ export def "reports-count-installed-apps chromemanagementcustomersreportscountIn
 #
 # GET /v1/{customer}/reports:findInstalledAppDevices
 # operationId: chromemanagement.customers.reports.findInstalledAppDevices
-export def "reports-find-installed-app-devices chromemanagementcustomersreportsfindInstalledAppDevices" [
+export def "reports-find-installed-app-devices find" [
   customer: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -395,7 +404,7 @@ export def "reports-find-installed-app-devices chromemanagementcustomersreportsf
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "appId" $app_id "scalar") (serialize-qp "appType" $app_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "orgUnitId" $org_unit_id "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer: $customer} | format pattern "/v1/{customer}/reports:findInstalledAppDevices") $qp)
+  let full_url = (build-url $base ({customer: (encode-path-segment $customer)} | format pattern "/v1/{customer}/reports:findInstalledAppDevices") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -405,7 +414,7 @@ export def "reports-find-installed-app-devices chromemanagementcustomersreportsf
 #
 # GET /v1/{name}
 # operationId: chromemanagement.customers.telemetry.users.get
-export def "customers chromemanagementcustomerstelemetryusersget" [
+export def "customers get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -431,7 +440,7 @@ export def "customers chromemanagementcustomerstelemetryusersget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "readMask" $read_mask "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -441,7 +450,7 @@ export def "customers chromemanagementcustomerstelemetryusersget" [
 #
 # GET /v1/{parent}/telemetry/devices
 # operationId: chromemanagement.customers.telemetry.devices.list
-export def "telemetry-devices chromemanagementcustomerstelemetrydeviceslist" [
+export def "telemetry-devices list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -470,7 +479,7 @@ export def "telemetry-devices chromemanagementcustomerstelemetrydeviceslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "readMask" $read_mask "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/telemetry/devices") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/telemetry/devices") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -480,7 +489,7 @@ export def "telemetry-devices chromemanagementcustomerstelemetrydeviceslist" [
 #
 # GET /v1/{parent}/telemetry/events
 # operationId: chromemanagement.customers.telemetry.events.list
-export def "telemetry-events chromemanagementcustomerstelemetryeventslist" [
+export def "telemetry-events list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -509,7 +518,7 @@ export def "telemetry-events chromemanagementcustomerstelemetryeventslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "readMask" $read_mask "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/telemetry/events") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/telemetry/events") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -519,7 +528,7 @@ export def "telemetry-events chromemanagementcustomerstelemetryeventslist" [
 #
 # GET /v1/{parent}/telemetry/users
 # operationId: chromemanagement.customers.telemetry.users.list
-export def "telemetry-users chromemanagementcustomerstelemetryuserslist" [
+export def "telemetry-users list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -540,7 +549,7 @@ export def "telemetry-users chromemanagementcustomerstelemetryuserslist" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --filter: string # Only include resources that match the filter. Supported filter fields: - user_id - user_org_unit_id 
+  --filter: string # Only include resources that match the filter. Supported filter fields: - user_id - user_org_unit_id
   --page-size: int # Maximum number of results to return. Default value is 100. Maximum value is 1000.
   --page-token: string # Token to specify next page in the list.
   --read-mask: string # Read mask to specify which fields to return.
@@ -548,7 +557,7 @@ export def "telemetry-users chromemanagementcustomerstelemetryuserslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "readMask" $read_mask "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/telemetry/users") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/telemetry/users") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

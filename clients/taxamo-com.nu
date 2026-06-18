@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -69,7 +78,7 @@ def auth-scheme-completer [] { ["token"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "dictionaries-countries get-countries-dict" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "dictionaries-countries get-dict" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,7 +102,7 @@ export def commands []: nothing -> table {
 #
 # GET /api/v1/dictionaries/countries
 # operationId: getCountriesDict
-export def "dictionaries-countries get-countries-dict" [
+export def "dictionaries-countries get-dict" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -117,7 +126,7 @@ export def "dictionaries-countries get-countries-dict" [
 #
 # GET /api/v1/dictionaries/currencies
 # operationId: getCurrenciesDict
-export def "dictionaries-currencies get-currencies-dict" [
+export def "dictionaries-currencies get-dict" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -139,7 +148,7 @@ export def "dictionaries-currencies get-currencies-dict" [
 #
 # GET /api/v1/dictionaries/product_types
 # operationId: getProductTypesDict
-export def "dictionaries-product-types get-product-types-dict" [
+export def "dictionaries-product-types get-dict" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -161,7 +170,7 @@ export def "dictionaries-product-types get-product-types-dict" [
 #
 # GET /api/v1/geoip
 # operationId: locateMyIP
-export def "geoip locateMyIP" [
+export def "geoip get-locate-my-ip" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -183,7 +192,7 @@ export def "geoip locateMyIP" [
 #
 # GET /api/v1/geoip/{ip}
 # operationId: locateGivenIP
-export def "geoip locateGivenIP" [
+export def "geoip get-locate-given" [
   ip: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -196,7 +205,7 @@ export def "geoip locateGivenIP" [
 ]: nothing -> record<country: record<callingCode: list<string>, cca2: string, cca3: string, ccn3: string, code: string, code_long: string, codenum: string, currency: list<string>, name: string, tax_number_country_code: string, tax_region: string, tax_supported: bool>, country_code: string, remote_addr: string> {
   let auth = (build-auth $token ($auth_scheme | default "token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({ip: $ip} | format pattern "/api/v1/geoip/{ip}"))
+  let full_url = (build-url $base ({ip: (encode-path-segment $ip)} | format pattern "/api/v1/geoip/{ip}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -342,7 +351,7 @@ export def "settlement-summary get" [
   let auth = (build-auth $token ($auth_scheme | default "token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "moss_country_code" $moss_country_code "scalar") (serialize-qp "tax_region" $tax_region "scalar") (serialize-qp "start_month" $start_month "scalar") (serialize-qp "end_month" $end_month "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({quarter: $quarter} | format pattern "/api/v1/settlement/summary/{quarter}") $qp)
+  let full_url = (build-url $base ({quarter: (encode-path-segment $quarter)} | format pattern "/api/v1/settlement/summary/{quarter}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -370,12 +379,12 @@ export def "settlement get" [
   --start-month: string # Period start month in yyyy-MM format. Either quarter or start-month and end-month have to be provided.
   --moss-country-code: string # MOSS country code, used to determine currency/region. If ommited, merchant default setting is used. Deprecated: please use tax-country-code.
   --format: string # Output format. 'csv' value is accepted as well
-  --tax-country-code: string # Tax entity country code, used to determine currency/region. 
+  --tax-country-code: string # Tax entity country code, used to determine currency/region.
 ]: nothing -> record<end_date: string, fx_rate_date: string, indicative: bool, report: table<amount: float, country_code: string, country_name: string, country_subdivision: string, currency_code: string, skip_moss: bool, tax_amount: float, tax_rate: float, tax_region: string>, start_date: string> {
   let auth = (build-auth $token ($auth_scheme | default "token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "moss_tax_id" $moss_tax_id "scalar") (serialize-qp "currency_code" $currency_code "scalar") (serialize-qp "end_month" $end_month "scalar") (serialize-qp "tax_id" $tax_id "scalar") (serialize-qp "refund_date_kind_override" $refund_date_kind_override "scalar") (serialize-qp "start_month" $start_month "scalar") (serialize-qp "moss_country_code" $moss_country_code "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "tax_country_code" $tax_country_code "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({quarter: $quarter} | format pattern "/api/v1/settlement/{quarter}") $qp)
+  let full_url = (build-url $base ({quarter: (encode-path-segment $quarter)} | format pattern "/api/v1/settlement/{quarter}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -513,7 +522,7 @@ export def "stats-transactions-by-country get" [
 #
 # GET /api/v1/tax/calculate
 # operationId: calculateSimpleTax
-export def "tax-calculate calculateSimpleTax" [
+export def "tax-calculate get-simple" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -522,14 +531,14 @@ export def "tax-calculate calculateSimpleTax" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --product-type: string # Product type, according to dictionary /dictionaries/product_types. 
+  --product-type: string # Product type, according to dictionary /dictionaries/product_types.
   --invoice-address-city: string # Invoice address/postal_code
   --buyer-credit-card-prefix: string # First 6 digits of buyer's credit card prefix.
   --currency-code: string # Currency code for transaction - e.g. EUR.
   --invoice-address-region: string # Invoice address/region
   --unit-price: float # Unit price.
   --quantity: float # Quantity Defaults to 1.
-  --buyer-tax-number: string #  Buyer's tax number - EU VAT number for example. If using EU VAT number, it is possible to provide country code in it (e.g. IE1234567X) or simply use billing_country_code field for that. In the first case, if billing_country_code value was provided, it will be overwritten with country code value extracted from VAT number - but only if the VAT has been verified properly.
+  --buyer-tax-number: string # Buyer's tax number - EU VAT number for example. If using EU VAT number, it is possible to provide country code in it (e.g. IE1234567X) or simply use billing_country_code field for that. In the first case, if billing_country_code value was provided, it will be overwritten with country code value extracted from VAT number - but only if the VAT has been verified properly.
   --force-country-code: string # Two-letter ISO country code, e.g. FR. Use it to force country code for tax calculation.
   --order-date: string # Order date in yyyy-MM-dd format, in merchant's timezone. If provided by the API caller, no timezone conversion is performed. Default value is current date and time. When using public token, the default value is used.
   --amount: float # Amount. Required if total amount or both unit price and quantity are not provided.
@@ -551,8 +560,8 @@ export def "tax-calculate calculateSimpleTax" [
 #
 # POST /api/v1/tax/calculate
 # operationId: calculateTax
-# --transaction shape: {additional_currencies?: record, billing_country_code?: string, buyer_credit_card_prefix?: string, buyer_email?: string, buyer_ip?: string, buyer_name?: string, buyer_tax_number?: string, comments?: string, currency_code: string, custom_data?: string, custom_fields?: list, custom_id?: string, customer_id?: string, description?: string, evidence?: record, force_country_code?: string, invoice_address?: record, invoice_date?: string, invoice_number?: string, invoice_place?: string, note?: string, order_date?: string, original_transaction_key?: string, status?: string, sub_account_id?: string, supply_date?: string, tax_country_code?: string, tax_data?: record, tax_deducted?: bool, transaction_lines: list, verification_token?: string}
-export def "tax-calculate calculateTax" [
+# --transaction shape: {additional_currencies?: record, billing_country_code?: string, buyer_credit_card_prefix?: string, buyer_email?: string, buyer_ip?: string, buyer_name?: string, buyer_tax_number?: string, comments?: string, currency_code: string, custom_data?: string, custom_fields?: list, custom_id?: string, customer_id?: string, description?: string, evidence?: record, force_country_code?: string, invoice_address?: record, invoice_date?: string, invoice_number?: string, invoice_place?: string, note?: string, ... (10 more fields)}
+export def "tax-calculate create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -561,24 +570,24 @@ export def "tax-calculate calculateTax" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  transaction: record # shape: {additional_currencies?: record, billing_country_code?: string, buyer_credit_card_prefix?: string, buyer_email?: string, buyer_ip?: string, buyer_name?: string, buyer_tax_number?: string, comments?: string, currency_code: string, custom_data?: string, custom_fields?: list, custom_id?: string, customer_id?: string, description?: string, evidence?: record, force_country_code?: string, invoice_address?: record, invoice_date?: string, invoice_number?: string, invoice_place?: string, note?: string, order_date?: string, original_transaction_key?: string, status?: string, sub_account_id?: string, supply_date?: string, tax_country_code?: string, tax_data?: record, tax_deducted?: bool, transaction_lines: list, verification_token?: string}
+  transaction: record # shape: {additional_currencies?: record, billing_country_code?: string, buyer_credit_card_prefix?: string, buyer_email?: string, buyer_ip?: string, buyer_name?: string, buyer_tax_number?: string, comments?: string, currency_code: string, custom_data?: string, custom_fields?: list, custom_id?: string, customer_id?: string, description?: string, evidence?: record, force_country_code?: string, invoice_address?: record, invoice_date?: string, invoice_number?: string, invoice_place?: string, note?: string, ... (10 more fields)}
 ]: any -> record<storage_required_fields: table<field_name: string>, tax_required_fields: table<field_name: string>, transaction: record<additional_currencies: record<invoice: record>, amount: float, billing_country_code: string, buyer_credit_card_prefix: string, buyer_email: string, buyer_ip: string, buyer_name: string, buyer_tax_number: string, buyer_tax_number_valid: bool, comments: string, confirm_timestamp: string, countries: record<by_2003_rules: record, by_billing: record, by_cc: record, by_ip: record, by_tax_number: record, by_token: record, detected: record, forced: record, guessed_from_ip: record, other_commercially_relevant_info: record, self_declaration: record>, create_timestamp: string, currency_code: string, custom_data: string, custom_fields: list<record>, custom_id: string, customer_id: string, deducted_tax_amount: float, description: string, evidence: record<by_2003_rules: record, by_billing: record, by_cc: record, by_ip: record, by_payment_method: record, by_tax_number: record, by_token: record, forced: record, guessed_from_ip: record, other_commercially_relevant_info: record, self_declaration: record>, external_key: string, force_country_code: string, fully_informative: bool, invoice_address: record<address_detail: string, building_number: string, city: string, country: string, freeform_address: string, postal_code: string, region: string, street_name: string>, invoice_date: string, invoice_image_url: string, invoice_number: string, invoice_place: string, key: string, kind: string, manual: bool, note: string, order_date: string, original_transaction_key: string, refunded_tax_amount: float, refunded_total_amount: float, source: string, status: string, sub_account_id: string, supply_date: string, tax_amount: float, tax_country_code: string, tax_data: record<us_tax_exemption_certificate: record>, tax_deducted: bool, tax_entity_name: string, tax_number_service: string, tax_supported: bool, tax_timezone: string, test: bool, total_amount: float, transaction_lines: list<record>, verification_token: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/tax/calculate")
-  let body = {"transaction": $transaction} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"transaction": $transaction} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Calculate location
 #
 # GET /api/v1/tax/location/calculate
 # operationId: calculateTaxLocation
-export def "tax-location-calculate calculateTaxLocation" [
+export def "tax-location-calculate get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -618,7 +627,7 @@ export def "tax-vat-numbers-validate validate" [
   let auth = (build-auth $token ($auth_scheme | default "token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "country_code" $country_code "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tax_number: $tax_number} | format pattern "/api/v1/tax/vat_numbers/{tax_number}/validate") $qp)
+  let full_url = (build-url $base ({tax_number: (encode-path-segment $tax_number)} | format pattern "/api/v1/tax/vat_numbers/{tax_number}/validate") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -668,7 +677,7 @@ export def "transactions list" [
 #
 # POST /api/v1/transactions
 # operationId: createTransaction
-# --transaction shape: {additional_currencies?: record, billing_country_code?: string, buyer_credit_card_prefix?: string, buyer_email?: string, buyer_ip?: string, buyer_name?: string, buyer_tax_number?: string, comments?: string, currency_code: string, custom_data?: string, custom_fields?: list, custom_id?: string, customer_id?: string, description?: string, evidence?: record, force_country_code?: string, invoice_address?: record, invoice_date?: string, invoice_number?: string, invoice_place?: string, note?: string, order_date?: string, original_transaction_key?: string, status?: string, sub_account_id?: string, supply_date?: string, tax_country_code?: string, tax_data?: record, tax_deducted?: bool, transaction_lines: list, verification_token?: string}
+# --transaction shape: {additional_currencies?: record, billing_country_code?: string, buyer_credit_card_prefix?: string, buyer_email?: string, buyer_ip?: string, buyer_name?: string, buyer_tax_number?: string, comments?: string, currency_code: string, custom_data?: string, custom_fields?: list, custom_id?: string, customer_id?: string, description?: string, evidence?: record, force_country_code?: string, invoice_address?: record, invoice_date?: string, invoice_number?: string, invoice_place?: string, note?: string, ... (10 more fields)}
 export def "transactions create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -679,17 +688,17 @@ export def "transactions create" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --manual-mode: oneof<nothing, bool> # Use manual mode, bypassing country detection. Only allowed with private token. This flag allows to use original_transaction_key field
-  transaction: record # shape: {additional_currencies?: record, billing_country_code?: string, buyer_credit_card_prefix?: string, buyer_email?: string, buyer_ip?: string, buyer_name?: string, buyer_tax_number?: string, comments?: string, currency_code: string, custom_data?: string, custom_fields?: list, custom_id?: string, customer_id?: string, description?: string, evidence?: record, force_country_code?: string, invoice_address?: record, invoice_date?: string, invoice_number?: string, invoice_place?: string, note?: string, order_date?: string, original_transaction_key?: string, status?: string, sub_account_id?: string, supply_date?: string, tax_country_code?: string, tax_data?: record, tax_deducted?: bool, transaction_lines: list, verification_token?: string}
+  transaction: record # shape: {additional_currencies?: record, billing_country_code?: string, buyer_credit_card_prefix?: string, buyer_email?: string, buyer_ip?: string, buyer_name?: string, buyer_tax_number?: string, comments?: string, currency_code: string, custom_data?: string, custom_fields?: list, custom_id?: string, customer_id?: string, description?: string, evidence?: record, force_country_code?: string, invoice_address?: record, invoice_date?: string, invoice_number?: string, invoice_place?: string, note?: string, ... (10 more fields)}
 ]: any -> record<storage_required_fields: table<field_name: string>, tax_required_fields: table<field_name: string>, transaction: record<additional_currencies: record<invoice: record>, amount: float, billing_country_code: string, buyer_credit_card_prefix: string, buyer_email: string, buyer_ip: string, buyer_name: string, buyer_tax_number: string, buyer_tax_number_valid: bool, comments: string, confirm_timestamp: string, countries: record<by_2003_rules: record, by_billing: record, by_cc: record, by_ip: record, by_tax_number: record, by_token: record, detected: record, forced: record, guessed_from_ip: record, other_commercially_relevant_info: record, self_declaration: record>, create_timestamp: string, currency_code: string, custom_data: string, custom_fields: list<record>, custom_id: string, customer_id: string, deducted_tax_amount: float, description: string, evidence: record<by_2003_rules: record, by_billing: record, by_cc: record, by_ip: record, by_payment_method: record, by_tax_number: record, by_token: record, forced: record, guessed_from_ip: record, other_commercially_relevant_info: record, self_declaration: record>, external_key: string, force_country_code: string, fully_informative: bool, invoice_address: record<address_detail: string, building_number: string, city: string, country: string, freeform_address: string, postal_code: string, region: string, street_name: string>, invoice_date: string, invoice_image_url: string, invoice_number: string, invoice_place: string, key: string, kind: string, manual: bool, note: string, order_date: string, original_transaction_key: string, refunded_tax_amount: float, refunded_total_amount: float, source: string, status: string, sub_account_id: string, supply_date: string, tax_amount: float, tax_country_code: string, tax_data: record<us_tax_exemption_certificate: record>, tax_deducted: bool, tax_entity_name: string, tax_number_service: string, tax_supported: bool, tax_timezone: string, test: bool, total_amount: float, transaction_lines: list<record>, verification_token: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/transactions")
-  let body = {"manual_mode": $manual_mode, "transaction": $transaction} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"manual_mode": $manual_mode, "transaction": $transaction} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete transaction
@@ -709,7 +718,7 @@ export def "transactions cancel" [
 ]: nothing -> record<success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({key: $key} | format pattern "/api/v1/transactions/{key}"))
+  let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/api/v1/transactions/{key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -732,7 +741,7 @@ export def "transactions get" [
 ]: nothing -> record<storage_required_fields: table<field_name: string>, tax_required_fields: table<field_name: string>, transaction: record<additional_currencies: record<invoice: record>, amount: float, billing_country_code: string, buyer_credit_card_prefix: string, buyer_email: string, buyer_ip: string, buyer_name: string, buyer_tax_number: string, buyer_tax_number_valid: bool, comments: string, confirm_timestamp: string, countries: record<by_2003_rules: record, by_billing: record, by_cc: record, by_ip: record, by_tax_number: record, by_token: record, detected: record, forced: record, guessed_from_ip: record, other_commercially_relevant_info: record, self_declaration: record>, create_timestamp: string, currency_code: string, custom_data: string, custom_fields: list<record>, custom_id: string, customer_id: string, deducted_tax_amount: float, description: string, evidence: record<by_2003_rules: record, by_billing: record, by_cc: record, by_ip: record, by_payment_method: record, by_tax_number: record, by_token: record, forced: record, guessed_from_ip: record, other_commercially_relevant_info: record, self_declaration: record>, external_key: string, force_country_code: string, fully_informative: bool, invoice_address: record<address_detail: string, building_number: string, city: string, country: string, freeform_address: string, postal_code: string, region: string, street_name: string>, invoice_date: string, invoice_image_url: string, invoice_number: string, invoice_place: string, key: string, kind: string, manual: bool, note: string, order_date: string, original_transaction_key: string, refunded_tax_amount: float, refunded_total_amount: float, source: string, status: string, sub_account_id: string, supply_date: string, tax_amount: float, tax_country_code: string, tax_data: record<us_tax_exemption_certificate: record>, tax_deducted: bool, tax_entity_name: string, tax_number_service: string, tax_supported: bool, tax_timezone: string, test: bool, total_amount: float, transaction_lines: list<record>, verification_token: string>> {
   let auth = (build-auth $token ($auth_scheme | default "token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({key: $key} | format pattern "/api/v1/transactions/{key}"))
+  let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/api/v1/transactions/{key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -742,7 +751,7 @@ export def "transactions get" [
 #
 # PUT /api/v1/transactions/{key}
 # operationId: updateTransaction
-# --transaction shape: {additional_currencies?: record, amount?: float, billing_country_code?: string, buyer_credit_card_prefix?: string, buyer_email?: string, buyer_ip?: string, buyer_name?: string, buyer_tax_number?: string, buyer_tax_number_valid?: bool, comments?: string, confirm_timestamp?: string, countries?: record, create_timestamp?: string, currency_code: string, custom_data?: string, custom_fields?: list, custom_id?: string, customer_id?: string, deducted_tax_amount?: float, description?: string, evidence?: record, external_key?: string, force_country_code?: string, fully_informative?: bool, invoice_address?: record, invoice_date?: string, invoice_image_url?: string, invoice_number?: string, invoice_place?: string, key?: string, kind?: string, manual?: bool, note?: string, order_date?: string, original_transaction_key?: string, refunded_tax_amount?: float, refunded_total_amount?: float, source?: string, status?: string, sub_account_id?: string, supply_date?: string, tax_amount?: float, tax_country_code?: string, tax_data?: record, tax_deducted?: bool, tax_entity_name?: string, tax_number_service?: string, tax_supported?: bool, tax_timezone?: string, test?: bool, total_amount?: float, transaction_lines: list, verification_token?: string}
+# --transaction shape: {additional_currencies?: record, amount?: float, billing_country_code?: string, buyer_credit_card_prefix?: string, buyer_email?: string, buyer_ip?: string, buyer_name?: string, buyer_tax_number?: string, buyer_tax_number_valid?: bool, comments?: string, confirm_timestamp?: string, countries?: record, create_timestamp?: string, currency_code: string, custom_data?: string, custom_fields?: list, custom_id?: string, customer_id?: string, deducted_tax_amount?: float, description?: string, ... (33 more fields)}
 export def "transactions update" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -753,25 +762,25 @@ export def "transactions update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --transaction: record # shape: {additional_currencies?: record, amount?: float, billing_country_code?: string, buyer_credit_card_prefix?: string, buyer_email?: string, buyer_ip?: string, buyer_name?: string, buyer_tax_number?: string, buyer_tax_number_valid?: bool, comments?: string, confirm_timestamp?: string, countries?: record, create_timestamp?: string, currency_code: string, custom_data?: string, custom_fields?: list, custom_id?: string, customer_id?: string, deducted_tax_amount?: float, description?: string, evidence?: record, external_key?: string, force_country_code?: string, fully_informative?: bool, invoice_address?: record, invoice_date?: string, invoice_image_url?: string, invoice_number?: string, invoice_place?: string, key?: string, kind?: string, manual?: bool, note?: string, order_date?: string, original_transaction_key?: string, refunded_tax_amount?: float, refunded_total_amount?: float, source?: string, status?: string, sub_account_id?: string, supply_date?: string, tax_amount?: float, tax_country_code?: string, tax_data?: record, tax_deducted?: bool, tax_entity_name?: string, tax_number_service?: string, tax_supported?: bool, tax_timezone?: string, test?: bool, total_amount?: float, transaction_lines: list, verification_token?: string}
+  --transaction: record # shape: {additional_currencies?: record, amount?: float, billing_country_code?: string, buyer_credit_card_prefix?: string, buyer_email?: string, buyer_ip?: string, buyer_name?: string, buyer_tax_number?: string, buyer_tax_number_valid?: bool, comments?: string, confirm_timestamp?: string, countries?: record, create_timestamp?: string, currency_code: string, custom_data?: string, custom_fields?: list, custom_id?: string, customer_id?: string, deducted_tax_amount?: float, description?: string, ... (33 more fields)}
 ]: any -> record<storage_required_fields: table<field_name: string>, tax_required_fields: table<field_name: string>, transaction: record<additional_currencies: record<invoice: record>, amount: float, billing_country_code: string, buyer_credit_card_prefix: string, buyer_email: string, buyer_ip: string, buyer_name: string, buyer_tax_number: string, buyer_tax_number_valid: bool, comments: string, confirm_timestamp: string, countries: record<by_2003_rules: record, by_billing: record, by_cc: record, by_ip: record, by_tax_number: record, by_token: record, detected: record, forced: record, guessed_from_ip: record, other_commercially_relevant_info: record, self_declaration: record>, create_timestamp: string, currency_code: string, custom_data: string, custom_fields: list<record>, custom_id: string, customer_id: string, deducted_tax_amount: float, description: string, evidence: record<by_2003_rules: record, by_billing: record, by_cc: record, by_ip: record, by_payment_method: record, by_tax_number: record, by_token: record, forced: record, guessed_from_ip: record, other_commercially_relevant_info: record, self_declaration: record>, external_key: string, force_country_code: string, fully_informative: bool, invoice_address: record<address_detail: string, building_number: string, city: string, country: string, freeform_address: string, postal_code: string, region: string, street_name: string>, invoice_date: string, invoice_image_url: string, invoice_number: string, invoice_place: string, key: string, kind: string, manual: bool, note: string, order_date: string, original_transaction_key: string, refunded_tax_amount: float, refunded_total_amount: float, source: string, status: string, sub_account_id: string, supply_date: string, tax_amount: float, tax_country_code: string, tax_data: record<us_tax_exemption_certificate: record>, tax_deducted: bool, tax_entity_name: string, tax_number_service: string, tax_supported: bool, tax_timezone: string, test: bool, total_amount: float, transaction_lines: list<record>, verification_token: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({key: $key} | format pattern "/api/v1/transactions/{key}"))
-  let body = {"transaction": $transaction} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/api/v1/transactions/{key}"))
+  let req_body = {"transaction": $transaction} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Confirm transaction
 #
 # POST /api/v1/transactions/{key}/confirm
 # operationId: confirmTransaction
-# --transaction shape: {additional_currencies?: record, billing_country_code?: string, buyer_credit_card_prefix?: string, buyer_email?: string, buyer_ip?: string, buyer_name?: string, buyer_tax_number?: string, comments?: string, currency_code?: string, custom_data?: string, custom_fields?: list, custom_id?: string, customer_id?: string, description?: string, evidence?: record, force_country_code?: string, invoice_address?: record, invoice_date?: string, invoice_number?: string, invoice_place?: string, note?: string, order_date?: string, original_transaction_key?: string, status?: string, sub_account_id?: string, supply_date?: string, tax_country_code?: string, tax_data?: record, tax_deducted?: bool, transaction_lines?: list, verification_token?: string}
-export def "transactions-confirm confirmTransaction" [
+# --transaction shape: {additional_currencies?: record, billing_country_code?: string, buyer_credit_card_prefix?: string, buyer_email?: string, buyer_ip?: string, buyer_name?: string, buyer_tax_number?: string, comments?: string, currency_code?: string, custom_data?: string, custom_fields?: list, custom_id?: string, customer_id?: string, description?: string, evidence?: record, force_country_code?: string, invoice_address?: record, invoice_date?: string, invoice_number?: string, invoice_place?: string, note?: string, ... (10 more fields)}
+export def "transactions-confirm confirm" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -781,24 +790,24 @@ export def "transactions-confirm confirmTransaction" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --transaction: record # shape: {additional_currencies?: record, billing_country_code?: string, buyer_credit_card_prefix?: string, buyer_email?: string, buyer_ip?: string, buyer_name?: string, buyer_tax_number?: string, comments?: string, currency_code?: string, custom_data?: string, custom_fields?: list, custom_id?: string, customer_id?: string, description?: string, evidence?: record, force_country_code?: string, invoice_address?: record, invoice_date?: string, invoice_number?: string, invoice_place?: string, note?: string, order_date?: string, original_transaction_key?: string, status?: string, sub_account_id?: string, supply_date?: string, tax_country_code?: string, tax_data?: record, tax_deducted?: bool, transaction_lines?: list, verification_token?: string}
+  --transaction: record # shape: {additional_currencies?: record, billing_country_code?: string, buyer_credit_card_prefix?: string, buyer_email?: string, buyer_ip?: string, buyer_name?: string, buyer_tax_number?: string, comments?: string, currency_code?: string, custom_data?: string, custom_fields?: list, custom_id?: string, customer_id?: string, description?: string, evidence?: record, force_country_code?: string, invoice_address?: record, invoice_date?: string, invoice_number?: string, invoice_place?: string, note?: string, ... (10 more fields)}
 ]: any -> record<storage_required_fields: table<field_name: string>, tax_required_fields: table<field_name: string>, transaction: record<additional_currencies: record<invoice: record>, amount: float, billing_country_code: string, buyer_credit_card_prefix: string, buyer_email: string, buyer_ip: string, buyer_name: string, buyer_tax_number: string, buyer_tax_number_valid: bool, comments: string, confirm_timestamp: string, countries: record<by_2003_rules: record, by_billing: record, by_cc: record, by_ip: record, by_tax_number: record, by_token: record, detected: record, forced: record, guessed_from_ip: record, other_commercially_relevant_info: record, self_declaration: record>, create_timestamp: string, currency_code: string, custom_data: string, custom_fields: list<record>, custom_id: string, customer_id: string, deducted_tax_amount: float, description: string, evidence: record<by_2003_rules: record, by_billing: record, by_cc: record, by_ip: record, by_payment_method: record, by_tax_number: record, by_token: record, forced: record, guessed_from_ip: record, other_commercially_relevant_info: record, self_declaration: record>, external_key: string, force_country_code: string, fully_informative: bool, invoice_address: record<address_detail: string, building_number: string, city: string, country: string, freeform_address: string, postal_code: string, region: string, street_name: string>, invoice_date: string, invoice_image_url: string, invoice_number: string, invoice_place: string, key: string, kind: string, manual: bool, note: string, order_date: string, original_transaction_key: string, refunded_tax_amount: float, refunded_total_amount: float, source: string, status: string, sub_account_id: string, supply_date: string, tax_amount: float, tax_country_code: string, tax_data: record<us_tax_exemption_certificate: record>, tax_deducted: bool, tax_entity_name: string, tax_number_service: string, tax_supported: bool, tax_timezone: string, test: bool, total_amount: float, transaction_lines: list<record>, verification_token: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({key: $key} | format pattern "/api/v1/transactions/{key}/confirm"))
-  let body = {"transaction": $transaction} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/api/v1/transactions/{key}/confirm"))
+  let req_body = {"transaction": $transaction} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Email credit note
 #
 # POST /api/v1/transactions/{key}/invoice/refunds/{refund_note_number}/send_email
 # operationId: emailRefund
-export def "transactions-invoice-refunds-send-email emailRefund" [
+export def "transactions-invoice-refunds-send-email create" [
   key: string
   refund_note_number: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -814,19 +823,19 @@ export def "transactions-invoice-refunds-send-email emailRefund" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({key: $key, refund_note_number: $refund_note_number} | format pattern "/api/v1/transactions/{key}/invoice/refunds/{refund_note_number}/send_email"))
-  let body = {"buyer_email": $buyer_email} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({key: (encode-path-segment $key), refund_note_number: (encode-path-segment $refund_note_number)} | format pattern "/api/v1/transactions/{key}/invoice/refunds/{refund_note_number}/send_email"))
+  let req_body = {"buyer_email": $buyer_email} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Email invoice
 #
 # POST /api/v1/transactions/{key}/invoice/send_email
 # operationId: emailInvoice
-export def "transactions-invoice-send-email emailInvoice" [
+export def "transactions-invoice-send-email create" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -841,12 +850,12 @@ export def "transactions-invoice-send-email emailInvoice" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({key: $key} | format pattern "/api/v1/transactions/{key}/invoice/send_email"))
-  let body = {"buyer_email": $buyer_email} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/api/v1/transactions/{key}/invoice/send_email"))
+  let req_body = {"buyer_email": $buyer_email} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List payments
@@ -869,7 +878,7 @@ export def "transactions-payments list" [
   let auth = (build-auth $token ($auth_scheme | default "token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({key: $key} | format pattern "/api/v1/transactions/{key}/payments") $qp)
+  let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/api/v1/transactions/{key}/payments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -896,19 +905,19 @@ export def "transactions-payments create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({key: $key} | format pattern "/api/v1/transactions/{key}/payments"))
-  let body = {"amount": $amount, "payment_information": $payment_information, "payment_timestamp": $payment_timestamp} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/api/v1/transactions/{key}/payments"))
+  let req_body = {"amount": $amount, "payment_information": $payment_information, "payment_timestamp": $payment_timestamp} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Capture payment
 #
 # POST /api/v1/transactions/{key}/payments/capture
 # operationId: capturePayment
-export def "transactions-payments-capture capturePayment" [
+export def "transactions-payments-capture create" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -921,7 +930,7 @@ export def "transactions-payments-capture capturePayment" [
 ]: nothing -> record<success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({key: $key} | format pattern "/api/v1/transactions/{key}/payments/capture"))
+  let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/api/v1/transactions/{key}/payments/capture"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -944,7 +953,7 @@ export def "transactions-refunds list" [
 ]: nothing -> record<refunds: table<amount: float, informative: bool, line_key: string, refund_note_number: string, refund_note_url: string, refund_reason: string, refund_timestamp: string, tax_amount: float, tax_rate: float, total_amount: float>> {
   let auth = (build-auth $token ($auth_scheme | default "token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({key: $key} | format pattern "/api/v1/transactions/{key}/refunds"))
+  let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/api/v1/transactions/{key}/refunds"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -973,20 +982,20 @@ export def "transactions-refunds create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({key: $key} | format pattern "/api/v1/transactions/{key}/refunds"))
-  let body = {"amount": $amount, "custom_id": $custom_id, "line_key": $line_key, "refund_reason": $refund_reason, "total_amount": $total_amount} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/api/v1/transactions/{key}/refunds"))
+  let req_body = {"amount": $amount, "custom_id": $custom_id, "line_key": $line_key, "refund_reason": $refund_reason, "total_amount": $total_amount} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Un-confirm the transaction
 #
 # POST /api/v1/transactions/{key}/unconfirm
 # operationId: unconfirmTransaction
-# --transaction shape: {additional_currencies?: record, billing_country_code?: string, buyer_credit_card_prefix?: string, buyer_email?: string, buyer_ip?: string, buyer_name?: string, buyer_tax_number?: string, comments?: string, currency_code?: string, custom_data?: string, custom_fields?: list, custom_id?: string, customer_id?: string, description?: string, evidence?: record, force_country_code?: string, invoice_address?: record, invoice_date?: string, invoice_number?: string, invoice_place?: string, note?: string, order_date?: string, original_transaction_key?: string, status?: string, sub_account_id?: string, supply_date?: string, tax_country_code?: string, tax_data?: record, tax_deducted?: bool, transaction_lines?: list, verification_token?: string}
-export def "transactions-unconfirm unconfirmTransaction" [
+# --transaction shape: {additional_currencies?: record, billing_country_code?: string, buyer_credit_card_prefix?: string, buyer_email?: string, buyer_ip?: string, buyer_name?: string, buyer_tax_number?: string, comments?: string, currency_code?: string, custom_data?: string, custom_fields?: list, custom_id?: string, customer_id?: string, description?: string, evidence?: record, force_country_code?: string, invoice_address?: record, invoice_date?: string, invoice_number?: string, invoice_place?: string, note?: string, ... (10 more fields)}
+export def "transactions-unconfirm create" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -996,24 +1005,24 @@ export def "transactions-unconfirm unconfirmTransaction" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --transaction: record # shape: {additional_currencies?: record, billing_country_code?: string, buyer_credit_card_prefix?: string, buyer_email?: string, buyer_ip?: string, buyer_name?: string, buyer_tax_number?: string, comments?: string, currency_code?: string, custom_data?: string, custom_fields?: list, custom_id?: string, customer_id?: string, description?: string, evidence?: record, force_country_code?: string, invoice_address?: record, invoice_date?: string, invoice_number?: string, invoice_place?: string, note?: string, order_date?: string, original_transaction_key?: string, status?: string, sub_account_id?: string, supply_date?: string, tax_country_code?: string, tax_data?: record, tax_deducted?: bool, transaction_lines?: list, verification_token?: string}
+  --transaction: record # shape: {additional_currencies?: record, billing_country_code?: string, buyer_credit_card_prefix?: string, buyer_email?: string, buyer_ip?: string, buyer_name?: string, buyer_tax_number?: string, comments?: string, currency_code?: string, custom_data?: string, custom_fields?: list, custom_id?: string, customer_id?: string, description?: string, evidence?: record, force_country_code?: string, invoice_address?: record, invoice_date?: string, invoice_number?: string, invoice_place?: string, note?: string, ... (10 more fields)}
 ]: any -> record<storage_required_fields: table<field_name: string>, tax_required_fields: table<field_name: string>, transaction: record<additional_currencies: record<invoice: record>, amount: float, billing_country_code: string, buyer_credit_card_prefix: string, buyer_email: string, buyer_ip: string, buyer_name: string, buyer_tax_number: string, buyer_tax_number_valid: bool, comments: string, confirm_timestamp: string, countries: record<by_2003_rules: record, by_billing: record, by_cc: record, by_ip: record, by_tax_number: record, by_token: record, detected: record, forced: record, guessed_from_ip: record, other_commercially_relevant_info: record, self_declaration: record>, create_timestamp: string, currency_code: string, custom_data: string, custom_fields: list<record>, custom_id: string, customer_id: string, deducted_tax_amount: float, description: string, evidence: record<by_2003_rules: record, by_billing: record, by_cc: record, by_ip: record, by_payment_method: record, by_tax_number: record, by_token: record, forced: record, guessed_from_ip: record, other_commercially_relevant_info: record, self_declaration: record>, external_key: string, force_country_code: string, fully_informative: bool, invoice_address: record<address_detail: string, building_number: string, city: string, country: string, freeform_address: string, postal_code: string, region: string, street_name: string>, invoice_date: string, invoice_image_url: string, invoice_number: string, invoice_place: string, key: string, kind: string, manual: bool, note: string, order_date: string, original_transaction_key: string, refunded_tax_amount: float, refunded_total_amount: float, source: string, status: string, sub_account_id: string, supply_date: string, tax_amount: float, tax_country_code: string, tax_data: record<us_tax_exemption_certificate: record>, tax_deducted: bool, tax_entity_name: string, tax_number_service: string, tax_supported: bool, tax_timezone: string, test: bool, total_amount: float, transaction_lines: list<record>, verification_token: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({key: $key} | format pattern "/api/v1/transactions/{key}/unconfirm"))
-  let body = {"transaction": $transaction} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/api/v1/transactions/{key}/unconfirm"))
+  let req_body = {"transaction": $transaction} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create SMS token
 #
 # POST /api/v1/verification/sms
 # operationId: createSMSToken
-export def "verification-sms create-sms-token" [
+export def "verification-sms create-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1029,11 +1038,11 @@ export def "verification-sms create-sms-token" [
   let auth = (build-auth $token ($auth_scheme | default "token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/verification/sms")
-  let body = {"country_code": $country_code, "recipient": $recipient} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"country_code": $country_code, "recipient": $recipient} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Verify SMS token
@@ -1053,7 +1062,7 @@ export def "verification-sms verify" [
 ]: nothing -> record<country_code: string> {
   let auth = (build-auth $token ($auth_scheme | default "token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({token_arg: $token_arg} | format pattern "/api/v1/verification/sms/{token_arg}"))
+  let full_url = (build-url $base ({token_arg: (encode-path-segment $token_arg)} | format pattern "/api/v1/verification/sms/{token_arg}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

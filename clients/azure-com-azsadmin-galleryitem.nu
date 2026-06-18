@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -69,7 +78,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoftgalleryadmin-gallery-items list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-gallery-admin-gallery-items list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,7 +102,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/microsoft.gallery.admin/galleryItems
 # operationId: GalleryItems_List
-export def "subscriptions-providers-microsoftgalleryadmin-gallery-items list" [
+export def "subscriptions-providers-microsoft-gallery-admin-gallery-items list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -108,7 +117,7 @@ export def "subscriptions-providers-microsoftgalleryadmin-gallery-items list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/microsoft.gallery.admin/galleryItems") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/microsoft.gallery.admin/galleryItems") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -118,7 +127,7 @@ export def "subscriptions-providers-microsoftgalleryadmin-gallery-items list" [
 #
 # POST /subscriptions/{subscriptionId}/providers/microsoft.gallery.admin/galleryItems
 # operationId: GalleryItems_Create
-export def "subscriptions-providers-microsoftgalleryadmin-gallery-items create" [
+export def "subscriptions-providers-microsoft-gallery-admin-gallery-items create" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -133,7 +142,7 @@ export def "subscriptions-providers-microsoftgalleryadmin-gallery-items create" 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/microsoft.gallery.admin/galleryItems") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/microsoft.gallery.admin/galleryItems") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -143,7 +152,7 @@ export def "subscriptions-providers-microsoftgalleryadmin-gallery-items create" 
 #
 # DELETE /subscriptions/{subscriptionId}/providers/microsoft.gallery.admin/galleryItems/{galleryItemName}
 # operationId: GalleryItems_Delete
-export def "subscriptions-providers-microsoftgalleryadmin-gallery-items delete" [
+export def "subscriptions-providers-microsoft-gallery-admin-gallery-items delete" [
   subscription_id: string
   gallery_item_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -159,7 +168,7 @@ export def "subscriptions-providers-microsoftgalleryadmin-gallery-items delete" 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, gallery_item_name: $gallery_item_name} | format pattern "/subscriptions/{subscription_id}/providers/microsoft.gallery.admin/galleryItems/{gallery_item_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), gallery_item_name: (encode-path-segment $gallery_item_name)} | format pattern "/subscriptions/{subscription_id}/providers/microsoft.gallery.admin/galleryItems/{gallery_item_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -169,7 +178,7 @@ export def "subscriptions-providers-microsoftgalleryadmin-gallery-items delete" 
 #
 # GET /subscriptions/{subscriptionId}/providers/microsoft.gallery.admin/galleryItems/{galleryItemName}
 # operationId: GalleryItems_Get
-export def "subscriptions-providers-microsoftgalleryadmin-gallery-items get" [
+export def "subscriptions-providers-microsoft-gallery-admin-gallery-items get" [
   subscription_id: string
   gallery_item_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -185,7 +194,7 @@ export def "subscriptions-providers-microsoftgalleryadmin-gallery-items get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, gallery_item_name: $gallery_item_name} | format pattern "/subscriptions/{subscription_id}/providers/microsoft.gallery.admin/galleryItems/{gallery_item_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), gallery_item_name: (encode-path-segment $gallery_item_name)} | format pattern "/subscriptions/{subscription_id}/providers/microsoft.gallery.admin/galleryItems/{gallery_item_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

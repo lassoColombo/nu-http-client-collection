@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -74,7 +83,7 @@ def severity-completer [] { ["S0" "S1" "S2" "S3" "S4" "SEVERITY_UNSPECIFIED"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v2beta-case-classifications-search cloudsupportcaseClassificationssearch" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v2beta-case-classifications-search list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -98,7 +107,7 @@ export def commands []: nothing -> table {
 #
 # GET /v2beta/caseClassifications:search
 # operationId: cloudsupport.caseClassifications.search
-export def "v2beta-case-classifications-search cloudsupportcaseClassificationssearch" [
+export def "v2beta-case-classifications-search list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -135,7 +144,7 @@ export def "v2beta-case-classifications-search cloudsupportcaseClassificationsse
 #
 # GET /v2beta/cases:search
 # operationId: cloudsupport.cases.search
-export def "v2beta-cases-search cloudsupportcasessearch" [
+export def "v2beta-cases-search list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -172,7 +181,7 @@ export def "v2beta-cases-search cloudsupportcasessearch" [
 #
 # GET /v2beta/{name}
 # operationId: cloudsupport.cases.get
-export def "v2beta cloudsupportcasesget" [
+export def "v2beta get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -197,7 +206,7 @@ export def "v2beta cloudsupportcasesget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v2beta/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v2beta/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -209,7 +218,7 @@ export def "v2beta cloudsupportcasesget" [
 # operationId: cloudsupport.cases.patch
 # --classification shape: {displayName?: string, id?: string}
 # --creator shape: {displayName?: string, email?: string}
-export def "v2beta cloudsupportcasespatch" [
+export def "v2beta update" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -241,7 +250,7 @@ export def "v2beta cloudsupportcasespatch" [
   --body-name: string # The resource name for the case.
   --priority: string@priority-completer # The priority of this case. If this is set, do not set severity.
   --severity: string@severity-completer # REMOVED. The severity of this case. Use priority instead.
-  --subscriber-email-addresses: list # The email addresses to receive updates on this case.
+  --subscriber-email-addresses: list<string> # The email addresses to receive updates on this case.
   --test-case: oneof<nothing, bool> # Whether this case was created for internal API testing and should not be acted on by the support team.
   --time-zone: string # The timezone of the user who created the support case. It should be in a format IANA recognizes: https://www.iana.org/time-zones. There is no additional validation done by the API.
 ]: any -> record<classification: record<displayName: string, id: string>, contactEmail: string, createTime: string, creator: record<displayName: string, email: string, googleSupport: bool>, description: string, displayName: string, escalated: bool, languageCode: string, name: string, priority: string, severity: string, state: string, subscriberEmailAddresses: list<string>, testCase: bool, timeZone: string, updateTime: string> {
@@ -249,19 +258,19 @@ export def "v2beta cloudsupportcasespatch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v2beta/{name}") $qp)
-  let body = {"classification": $classification, "contactEmail": $contact_email, "creator": $creator, "description": $description, "displayName": $display_name, "escalated": $escalated, "languageCode": $language_code, "name": $body_name, "priority": $priority, "severity": $severity, "subscriberEmailAddresses": $subscriber_email_addresses, "testCase": $test_case, "timeZone": $time_zone} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v2beta/{name}") $qp)
+  let req_body = {"classification": $classification, "contactEmail": $contact_email, "creator": $creator, "description": $description, "displayName": $display_name, "escalated": $escalated, "languageCode": $language_code, "name": $body_name, "priority": $priority, "severity": $severity, "subscriberEmailAddresses": $subscriber_email_addresses, "testCase": $test_case, "timeZone": $time_zone} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Close the specified case.
 #
 # POST /v2beta/{name}:close
 # operationId: cloudsupport.cases.close
-export def "v2beta cloudsupportcasesclose" [
+export def "v2beta close" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -288,18 +297,19 @@ export def "v2beta cloudsupportcasesclose" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v2beta/{name}:close") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v2beta/{name}:close") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Download a file attachment on a case. Note: HTTP requests must append "?alt=media" to the URL.
 #
 # GET /v2beta/{name}:download
 # operationId: cloudsupport.media.download
-export def "v2beta cloudsupportmediadownload" [
+export def "v2beta download" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -324,7 +334,7 @@ export def "v2beta cloudsupportmediadownload" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v2beta/{name}:download") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v2beta/{name}:download") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -335,7 +345,7 @@ export def "v2beta cloudsupportmediadownload" [
 # POST /v2beta/{name}:escalate
 # operationId: cloudsupport.cases.escalate
 # --escalation shape: {justification?: string, reason?: "REASON_UNSPECIFIED"|"RESOLUTION_TIME"|"TECHNICAL_EXPERTISE"|"BUSINESS_IMPACT"}
-export def "v2beta cloudsupportcasesescalate" [
+export def "v2beta create-escalate" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -362,19 +372,19 @@ export def "v2beta cloudsupportcasesescalate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v2beta/{name}:escalate") $qp)
-  let body = {"escalation": $escalation} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v2beta/{name}:escalate") $qp)
+  let req_body = {"escalation": $escalation} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve all attachments associated with a support case.
 #
 # GET /v2beta/{parent}/attachments
 # operationId: cloudsupport.cases.attachments.list
-export def "v2beta-attachments cloudsupportcasesattachmentslist" [
+export def "v2beta-attachments list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -401,7 +411,7 @@ export def "v2beta-attachments cloudsupportcasesattachmentslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v2beta/{parent}/attachments") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v2beta/{parent}/attachments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -411,7 +421,7 @@ export def "v2beta-attachments cloudsupportcasesattachmentslist" [
 #
 # POST /v2beta/{parent}/attachments
 # operationId: cloudsupport.media.upload
-export def "v2beta-attachments cloudsupportmediaupload" [
+export def "v2beta-attachments upload" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -438,18 +448,19 @@ export def "v2beta-attachments cloudsupportmediaupload" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v2beta/{parent}/attachments") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v2beta/{parent}/attachments") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/octet-stream" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/octet-stream" $req_body
 }
 
 # Retrieve all cases under the specified parent. Note: Listing cases under an Organization returns only the cases directly parented by that organization. To retrieve all cases under an organization, including cases parented by projects under that organization, use `cases.search`.
 #
 # GET /v2beta/{parent}/cases
 # operationId: cloudsupport.cases.list
-export def "v2beta-cases cloudsupportcaseslist" [
+export def "v2beta-cases list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -477,7 +488,7 @@ export def "v2beta-cases cloudsupportcaseslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v2beta/{parent}/cases") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v2beta/{parent}/cases") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -489,7 +500,7 @@ export def "v2beta-cases cloudsupportcaseslist" [
 # operationId: cloudsupport.cases.create
 # --classification shape: {displayName?: string, id?: string}
 # --creator shape: {displayName?: string, email?: string}
-export def "v2beta-cases cloudsupportcasescreate" [
+export def "v2beta-cases create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -520,7 +531,7 @@ export def "v2beta-cases cloudsupportcasescreate" [
   --name: string # The resource name for the case.
   --priority: string@priority-completer # The priority of this case. If this is set, do not set severity.
   --severity: string@severity-completer # REMOVED. The severity of this case. Use priority instead.
-  --subscriber-email-addresses: list # The email addresses to receive updates on this case.
+  --subscriber-email-addresses: list<string> # The email addresses to receive updates on this case.
   --test-case: oneof<nothing, bool> # Whether this case was created for internal API testing and should not be acted on by the support team.
   --time-zone: string # The timezone of the user who created the support case. It should be in a format IANA recognizes: https://www.iana.org/time-zones. There is no additional validation done by the API.
 ]: any -> record<classification: record<displayName: string, id: string>, contactEmail: string, createTime: string, creator: record<displayName: string, email: string, googleSupport: bool>, description: string, displayName: string, escalated: bool, languageCode: string, name: string, priority: string, severity: string, state: string, subscriberEmailAddresses: list<string>, testCase: bool, timeZone: string, updateTime: string> {
@@ -528,19 +539,19 @@ export def "v2beta-cases cloudsupportcasescreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v2beta/{parent}/cases") $qp)
-  let body = {"classification": $classification, "contactEmail": $contact_email, "creator": $creator, "description": $description, "displayName": $display_name, "escalated": $escalated, "languageCode": $language_code, "name": $name, "priority": $priority, "severity": $severity, "subscriberEmailAddresses": $subscriber_email_addresses, "testCase": $test_case, "timeZone": $time_zone} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v2beta/{parent}/cases") $qp)
+  let req_body = {"classification": $classification, "contactEmail": $contact_email, "creator": $creator, "description": $description, "displayName": $display_name, "escalated": $escalated, "languageCode": $language_code, "name": $name, "priority": $priority, "severity": $severity, "subscriberEmailAddresses": $subscriber_email_addresses, "testCase": $test_case, "timeZone": $time_zone} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve all Comments associated with the Case object.
 #
 # GET /v2beta/{parent}/comments
 # operationId: cloudsupport.cases.comments.list
-export def "v2beta-comments cloudsupportcasescommentslist" [
+export def "v2beta-comments list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -567,7 +578,7 @@ export def "v2beta-comments cloudsupportcasescommentslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v2beta/{parent}/comments") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v2beta/{parent}/comments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -578,7 +589,7 @@ export def "v2beta-comments cloudsupportcasescommentslist" [
 # POST /v2beta/{parent}/comments
 # operationId: cloudsupport.cases.comments.create
 # --creator shape: {displayName?: string, email?: string}
-export def "v2beta-comments cloudsupportcasescommentscreate" [
+export def "v2beta-comments create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -599,17 +610,17 @@ export def "v2beta-comments cloudsupportcasescommentscreate" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --body-body: string # The full comment body. Maximum of 12800 characters. This can contain rich text syntax.
+  --body: string # The full comment body. Maximum of 12800 characters. This can contain rich text syntax.
   --creator: record # An object containing information about the effective user and authenticated principal responsible for an action. — shape: {displayName?: string, email?: string}
 ]: any -> record<body: string, createTime: string, creator: record<displayName: string, email: string, googleSupport: bool>, name: string, plainTextBody: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v2beta/{parent}/comments") $qp)
-  let body = {"body": $body_body, "creator": $creator} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v2beta/{parent}/comments") $qp)
+  let req_body = {"body": $body, "creator": $creator} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

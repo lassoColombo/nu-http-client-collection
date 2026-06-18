@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -69,7 +78,7 @@ def auth-scheme-completer [] { ["x-api-key"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api options" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api options-options" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -90,7 +99,7 @@ export def commands []: nothing -> table {
 }
 
 # OPTIONS /
-export def "api options" [
+export def "api options-options" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -109,7 +118,7 @@ export def "api options" [
 }
 
 # OPTIONS /account
-export def "account options" [
+export def "account options-options" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -130,7 +139,7 @@ export def "account options" [
 # Create new account
 #
 # POST /account
-export def "account post" [
+export def "account create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -164,14 +173,14 @@ export def "account get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/account/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/account/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # OPTIONS /account/{id}
-export def "account options-by-id" [
+export def "account options-options-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -184,7 +193,7 @@ export def "account options-by-id" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/account/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/account/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "options" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -212,7 +221,7 @@ export def "block list" [
 }
 
 # OPTIONS /block
-export def "block options" [
+export def "block options-options" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -246,14 +255,14 @@ export def "block get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/block/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/block/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # OPTIONS /block/{id}
-export def "block options-by-id" [
+export def "block options-options-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -266,7 +275,7 @@ export def "block options-by-id" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/block/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/block/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "options" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -288,14 +297,14 @@ export def "block-transaction list" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/block/{id}/transaction"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/block/{id}/transaction"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # OPTIONS /block/{id}/transaction
-export def "block-transaction options-by-id" [
+export def "block-transaction options-options-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -308,7 +317,7 @@ export def "block-transaction options-by-id" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/block/{id}/transaction"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/block/{id}/transaction"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "options" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -331,14 +340,14 @@ export def "block-transaction get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, index: $index} | format pattern "/block/{id}/transaction/{index}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), index: (encode-path-segment $index)} | format pattern "/block/{id}/transaction/{index}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # OPTIONS /block/{id}/transaction/{index}
-export def "block-transaction options-by-id-index" [
+export def "block-transaction options-options-by-id-index" [
   id: string
   index: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -352,7 +361,7 @@ export def "block-transaction options-by-id-index" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, index: $index} | format pattern "/block/{id}/transaction/{index}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), index: (encode-path-segment $index)} | format pattern "/block/{id}/transaction/{index}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "options" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -380,7 +389,7 @@ export def "blockchain list" [
 }
 
 # OPTIONS /blockchain
-export def "blockchain options" [
+export def "blockchain options-options" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -414,14 +423,14 @@ export def "blockchain get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/blockchain/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/blockchain/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # OPTIONS /blockchain/{id}
-export def "blockchain options-by-id" [
+export def "blockchain options-options-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -434,14 +443,14 @@ export def "blockchain options-by-id" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/blockchain/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/blockchain/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "options" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # OPTIONS /contract
-export def "contract options" [
+export def "contract options-options" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -462,7 +471,7 @@ export def "contract options" [
 # Create a new smart contract
 #
 # POST /contract
-export def "contract post" [
+export def "contract create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -496,14 +505,14 @@ export def "contract get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/contract/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/contract/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # OPTIONS /contract/{id}
-export def "contract options-by-id" [
+export def "contract options-options-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -516,7 +525,7 @@ export def "contract options-by-id" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/contract/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/contract/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "options" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -525,7 +534,7 @@ export def "contract options-by-id" [
 # Call the contract
 #
 # POST /contract/{id}
-export def "contract post-by-id" [
+export def "contract create-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -538,14 +547,14 @@ export def "contract post-by-id" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/contract/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/contract/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # OPTIONS /echo
-export def "echo options" [
+export def "echo options-options" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -585,7 +594,7 @@ export def "erc20 list" [
 }
 
 # OPTIONS /erc20
-export def "erc20 options" [
+export def "erc20 options-options" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -604,7 +613,7 @@ export def "erc20 options" [
 }
 
 # POST /erc20
-export def "erc20 post" [
+export def "erc20 create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -638,14 +647,14 @@ export def "erc20 get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({address: $address} | format pattern "/erc20/{address}"))
+  let full_url = (build-url $base ({address: (encode-path-segment $address)} | format pattern "/erc20/{address}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # OPTIONS /erc20/{address}
-export def "erc20 options-by-address" [
+export def "erc20 options-options-by-address" [
   address: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -658,7 +667,7 @@ export def "erc20 options-by-address" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({address: $address} | format pattern "/erc20/{address}"))
+  let full_url = (build-url $base ({address: (encode-path-segment $address)} | format pattern "/erc20/{address}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "options" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -667,7 +676,7 @@ export def "erc20 options-by-address" [
 # Transfer tokens to another account
 #
 # POST /erc20/{address}
-export def "erc20 post-by-address" [
+export def "erc20 create-by-address" [
   address: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -680,7 +689,7 @@ export def "erc20 post-by-address" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({address: $address} | format pattern "/erc20/{address}"))
+  let full_url = (build-url $base ({address: (encode-path-segment $address)} | format pattern "/erc20/{address}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -708,7 +717,7 @@ export def "key get" [
 }
 
 # OPTIONS /key
-export def "key options" [
+export def "key options-options" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -727,7 +736,7 @@ export def "key options" [
 }
 
 # POST /key
-export def "key post" [
+export def "key create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -759,14 +768,14 @@ export def "key delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({key: $key} | format pattern "/key/{key}"))
+  let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/key/{key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # OPTIONS /key/{key}
-export def "key options-by-key" [
+export def "key options-options-by-key" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -779,14 +788,14 @@ export def "key options-by-key" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({key: $key} | format pattern "/key/{key}"))
+  let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/key/{key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "options" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # OPTIONS /transaction
-export def "transaction options" [
+export def "transaction options-options" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -807,7 +816,7 @@ export def "transaction options" [
 # Create a new transaction. Transfer Ether between accounts
 #
 # POST /transaction
-export def "transaction post" [
+export def "transaction create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -841,14 +850,14 @@ export def "transaction get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({hash: $hash} | format pattern "/transaction/{hash}"))
+  let full_url = (build-url $base ({hash: (encode-path-segment $hash)} | format pattern "/transaction/{hash}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # OPTIONS /transaction/{hash}
-export def "transaction options-by-hash" [
+export def "transaction options-options-by-hash" [
   hash: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -861,7 +870,7 @@ export def "transaction options-by-hash" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({hash: $hash} | format pattern "/transaction/{hash}"))
+  let full_url = (build-url $base ({hash: (encode-path-segment $hash)} | format pattern "/transaction/{hash}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "options" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -883,14 +892,14 @@ export def "transaction-receipt get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({hash: $hash} | format pattern "/transaction/{hash}/receipt"))
+  let full_url = (build-url $base ({hash: (encode-path-segment $hash)} | format pattern "/transaction/{hash}/receipt"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # OPTIONS /transaction/{hash}/receipt
-export def "transaction-receipt options" [
+export def "transaction-receipt options-options" [
   hash: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -903,7 +912,7 @@ export def "transaction-receipt options" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({hash: $hash} | format pattern "/transaction/{hash}/receipt"))
+  let full_url = (build-url $base ({hash: (encode-path-segment $hash)} | format pattern "/transaction/{hash}/receipt"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "options" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -931,7 +940,7 @@ export def "version get" [
 }
 
 # OPTIONS /version
-export def "version options" [
+export def "version options-options" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -971,7 +980,7 @@ export def "wallet get" [
 }
 
 # OPTIONS /wallet
-export def "wallet options" [
+export def "wallet options-options" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -992,7 +1001,7 @@ export def "wallet options" [
 # Create personal wallet
 #
 # POST /wallet
-export def "wallet post" [
+export def "wallet create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1030,7 +1039,7 @@ export def "wallet-account list" [
 }
 
 # OPTIONS /wallet/account
-export def "wallet-account options" [
+export def "wallet-account options-options" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1049,7 +1058,7 @@ export def "wallet-account options" [
 }
 
 # POST /wallet/account
-export def "wallet-account post" [
+export def "wallet-account create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1083,14 +1092,14 @@ export def "wallet-account get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/wallet/account/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/wallet/account/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # OPTIONS /wallet/account/{id}
-export def "wallet-account options-by-id" [
+export def "wallet-account options-options-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1103,14 +1112,14 @@ export def "wallet-account options-by-id" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/wallet/account/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/wallet/account/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "options" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /wallet/account/{id}/contract
-export def "wallet-account-contract post" [
+export def "wallet-account-contract create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1123,14 +1132,14 @@ export def "wallet-account-contract post" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/wallet/account/{id}/contract"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/wallet/account/{id}/contract"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /wallet/account/{id}/erc20
-export def "wallet-account-erc20 post" [
+export def "wallet-account-erc20 create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1143,14 +1152,14 @@ export def "wallet-account-erc20 post" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/wallet/account/{id}/erc20"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/wallet/account/{id}/erc20"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # OPTIONS /wallet/account/{id}/pay
-export def "wallet-account-pay options" [
+export def "wallet-account-pay options-options" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1163,7 +1172,7 @@ export def "wallet-account-pay options" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/wallet/account/{id}/pay"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/wallet/account/{id}/pay"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "options" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1172,7 +1181,7 @@ export def "wallet-account-pay options" [
 # Send payment from the account held within the wallet
 #
 # POST /wallet/account/{id}/pay
-export def "wallet-account-pay post" [
+export def "wallet-account-pay create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1185,7 +1194,7 @@ export def "wallet-account-pay post" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/wallet/account/{id}/pay"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/wallet/account/{id}/pay"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

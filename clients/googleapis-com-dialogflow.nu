@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -82,7 +91,7 @@ def data-format-completer [] { ["BLOB" "DATA_FORMAT_UNSPECIFIED" "JSON"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v3beta1-test-cases-calculate-coverage dialogflowprojectslocationsagentstestCasescalculateCoverage" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v3beta1-test-cases-calculate-coverage get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -106,7 +115,7 @@ export def commands []: nothing -> table {
 #
 # GET /v3beta1/{agent}/testCases:calculateCoverage
 # operationId: dialogflow.projects.locations.agents.testCases.calculateCoverage
-export def "v3beta1-test-cases-calculate-coverage dialogflowprojectslocationsagentstestCasescalculateCoverage" [
+export def "v3beta1-test-cases-calculate-coverage get" [
   agent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -132,7 +141,7 @@ export def "v3beta1-test-cases-calculate-coverage dialogflowprojectslocationsage
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({agent: $agent} | format pattern "/v3beta1/{agent}/testCases:calculateCoverage") $qp)
+  let full_url = (build-url $base ({agent: (encode-path-segment $agent)} | format pattern "/v3beta1/{agent}/testCases:calculateCoverage") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -142,7 +151,7 @@ export def "v3beta1-test-cases-calculate-coverage dialogflowprojectslocationsage
 #
 # POST /v3beta1/{baseVersion}:compareVersions
 # operationId: dialogflow.projects.locations.agents.flows.versions.compareVersions
-export def "v3beta1 dialogflowprojectslocationsagentsflowsversionscompareVersions" [
+export def "v3beta1 create-compare-versions" [
   base_version: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -170,19 +179,19 @@ export def "v3beta1 dialogflowprojectslocationsagentsflowsversionscompareVersion
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({base_version: $base_version} | format pattern "/v3beta1/{base_version}:compareVersions") $qp)
-  let body = {"languageCode": $language_code, "targetVersion": $target_version} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({base_version: (encode-path-segment $base_version)} | format pattern "/v3beta1/{base_version}:compareVersions") $qp)
+  let req_body = {"languageCode": $language_code, "targetVersion": $target_version} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deploys a flow to the specified Environment. This method is a [long-running operation](https://cloud.google.com/dialogflow/cx/docs/how/long-running-operation). The returned `Operation` type has the following method-specific fields: - `metadata`: DeployFlowMetadata - `response`: DeployFlowResponse
 #
 # POST /v3beta1/{environment}:deployFlow
 # operationId: dialogflow.projects.locations.agents.environments.deployFlow
-export def "v3beta1 dialogflowprojectslocationsagentsenvironmentsdeployFlow" [
+export def "v3beta1 create-deploy-flow" [
   environment: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -209,19 +218,19 @@ export def "v3beta1 dialogflowprojectslocationsagentsenvironmentsdeployFlow" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({environment: $environment} | format pattern "/v3beta1/{environment}:deployFlow") $qp)
-  let body = {"flowVersion": $flow_version} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({environment: (encode-path-segment $environment)} | format pattern "/v3beta1/{environment}:deployFlow") $qp)
+  let req_body = {"flowVersion": $flow_version} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Kicks off a continuous test under the specified Environment. This method is a [long-running operation](https://cloud.google.com/dialogflow/cx/docs/how/long-running-operation). The returned `Operation` type has the following method-specific fields: - `metadata`: RunContinuousTestMetadata - `response`: RunContinuousTestResponse
 #
 # POST /v3beta1/{environment}:runContinuousTest
 # operationId: dialogflow.projects.locations.agents.environments.runContinuousTest
-export def "v3beta1 dialogflowprojectslocationsagentsenvironmentsrunContinuousTest" [
+export def "v3beta1 test-run-continuous" [
   environment: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -248,18 +257,19 @@ export def "v3beta1 dialogflowprojectslocationsagentsenvironmentsrunContinuousTe
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({environment: $environment} | format pattern "/v3beta1/{environment}:runContinuousTest") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({environment: (encode-path-segment $environment)} | format pattern "/v3beta1/{environment}:runContinuousTest") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes the specified SecuritySettings.
 #
 # DELETE /v3beta1/{name}
 # operationId: dialogflow.projects.locations.securitySettings.delete
-export def "v3beta1 dialogflowprojectslocationssecuritySettingsdelete" [
+export def "v3beta1 delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -285,7 +295,7 @@ export def "v3beta1 dialogflowprojectslocationssecuritySettingsdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "force" $force "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v3beta1/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v3beta1/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -295,7 +305,7 @@ export def "v3beta1 dialogflowprojectslocationssecuritySettingsdelete" [
 #
 # GET /v3beta1/{name}
 # operationId: dialogflow.projects.operations.get
-export def "v3beta1 dialogflowprojectsoperationsget" [
+export def "v3beta1 get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -321,7 +331,7 @@ export def "v3beta1 dialogflowprojectsoperationsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "languageCode" $language_code "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v3beta1/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v3beta1/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -333,7 +343,7 @@ export def "v3beta1 dialogflowprojectsoperationsget" [
 # operationId: dialogflow.projects.locations.securitySettings.patch
 # --audioExportSettings shape: {audioExportPattern?: string, audioFormat?: "AUDIO_FORMAT_UNSPECIFIED"|"MULAW"|"MP3"|"OGG", enableAudioRedaction?: bool, gcsBucket?: string}
 # --insightsExportSettings shape: {enableInsightsExport?: bool}
-export def "v3beta1 dialogflowprojectslocationssecuritySettingspatch" [
+export def "v3beta1 update" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -361,7 +371,7 @@ export def "v3beta1 dialogflowprojectslocationssecuritySettingspatch" [
   --insights-export-settings: record # Settings for exporting conversations to [Insights](https://cloud.google.com/contact-center/insights/docs). — shape: {enableInsightsExport?: bool}
   --inspect-template: string # [DLP](https://cloud.google.com/dlp/docs) inspect template name. Use this template to define inspect base settings. The `DLP Inspect Templates Reader` role is needed on the Dialogflow service identity service account (has the form `service-PROJECT_NUMBER@gcp-sa-dialogflow.iam.gserviceaccount.com`) for your agent's project. If empty, we use the default DLP inspect config. The template name will have one of the following formats: `projects//locations//inspectTemplates/` OR `organizations//locations//inspectTemplates/` Note: `inspect_template` must be located in the same region as the `SecuritySettings`.
   --body-name: string # Resource name of the settings. Required for the SecuritySettingsService.UpdateSecuritySettings method. SecuritySettingsService.CreateSecuritySettings populates the name automatically. Format: `projects//locations//securitySettings/`.
-  --purge-data-types: list # List of types of data to remove when retention settings triggers purge.
+  --purge-data-types: list<string> # List of types of data to remove when retention settings triggers purge.
   --redaction-scope: string@redaction-scope-completer # Defines the data for which Dialogflow applies redaction. Dialogflow does not redact data that it does not have access to – for example, Cloud logging.
   --redaction-strategy: string@redaction-strategy-completer # Strategy that defines how we do redaction.
   --retention-window-days: int # Retains data in interaction logging for the specified number of days. This does not apply to Cloud logging, which is owned by the user - not Dialogflow. User must set a value lower than Dialogflow's default 365d TTL (30 days for Agent Assist traffic), higher value will be ignored and use default. Setting a value higher than that has no effect. A missing value or setting to 0 also means we use default TTL. (format: int32)
@@ -370,19 +380,19 @@ export def "v3beta1 dialogflowprojectslocationssecuritySettingspatch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v3beta1/{name}") $qp)
-  let body = {"audioExportSettings": $audio_export_settings, "deidentifyTemplate": $deidentify_template, "displayName": $display_name, "insightsExportSettings": $insights_export_settings, "inspectTemplate": $inspect_template, "name": $body_name, "purgeDataTypes": $purge_data_types, "redactionScope": $redaction_scope, "redactionStrategy": $redaction_strategy, "retentionWindowDays": $retention_window_days} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v3beta1/{name}") $qp)
+  let req_body = {"audioExportSettings": $audio_export_settings, "deidentifyTemplate": $deidentify_template, "displayName": $display_name, "insightsExportSettings": $insights_export_settings, "inspectTemplate": $inspect_template, "name": $body_name, "purgeDataTypes": $purge_data_types, "redactionScope": $redaction_scope, "redactionStrategy": $redaction_strategy, "retentionWindowDays": $retention_window_days} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists information about the supported locations for this service.
 #
 # GET /v3beta1/{name}/locations
 # operationId: dialogflow.projects.locations.list
-export def "v3beta1-locations dialogflowprojectslocationslist" [
+export def "v3beta1-locations list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -410,7 +420,7 @@ export def "v3beta1-locations dialogflowprojectslocationslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v3beta1/{name}/locations") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v3beta1/{name}/locations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -420,7 +430,7 @@ export def "v3beta1-locations dialogflowprojectslocationslist" [
 #
 # GET /v3beta1/{name}/operations
 # operationId: dialogflow.projects.operations.list
-export def "v3beta1-operations dialogflowprojectsoperationslist" [
+export def "v3beta1-operations list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -448,7 +458,7 @@ export def "v3beta1-operations dialogflowprojectsoperationslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v3beta1/{name}/operations") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v3beta1/{name}/operations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -458,7 +468,7 @@ export def "v3beta1-operations dialogflowprojectsoperationslist" [
 #
 # POST /v3beta1/{name}:cancel
 # operationId: dialogflow.projects.operations.cancel
-export def "v3beta1 dialogflowprojectsoperationscancel" [
+export def "v3beta1 cancel" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -483,7 +493,7 @@ export def "v3beta1 dialogflowprojectsoperationscancel" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v3beta1/{name}:cancel") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v3beta1/{name}:cancel") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -493,7 +503,7 @@ export def "v3beta1 dialogflowprojectsoperationscancel" [
 #
 # POST /v3beta1/{name}:export
 # operationId: dialogflow.projects.locations.agents.flows.export
-export def "v3beta1 dialogflowprojectslocationsagentsflowsexport" [
+export def "v3beta1 export" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -521,19 +531,19 @@ export def "v3beta1 dialogflowprojectslocationsagentsflowsexport" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v3beta1/{name}:export") $qp)
-  let body = {"flowUri": $flow_uri, "includeReferencedFlows": $include_referenced_flows} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v3beta1/{name}:export") $qp)
+  let req_body = {"flowUri": $flow_uri, "includeReferencedFlows": $include_referenced_flows} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Loads resources in the specified version to the draft flow. This method is a [long-running operation](https://cloud.google.com/dialogflow/cx/docs/how/long-running-operation). The returned `Operation` type has the following method-specific fields: - `metadata`: An empty [Struct message](https://developers.google.com/protocol-buffers/docs/reference/google.protobuf#struct) - `response`: An [Empty message](https://developers.google.com/protocol-buffers/docs/reference/google.protobuf#empty)
 #
 # POST /v3beta1/{name}:load
 # operationId: dialogflow.projects.locations.agents.flows.versions.load
-export def "v3beta1 dialogflowprojectslocationsagentsflowsversionsload" [
+export def "v3beta1 create-load" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -560,19 +570,19 @@ export def "v3beta1 dialogflowprojectslocationsagentsflowsversionsload" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v3beta1/{name}:load") $qp)
-  let body = {"allowOverrideAgentResources": $allow_override_agent_resources} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v3beta1/{name}:load") $qp)
+  let req_body = {"allowOverrideAgentResources": $allow_override_agent_resources} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Looks up the history of the specified Environment.
 #
 # GET /v3beta1/{name}:lookupEnvironmentHistory
 # operationId: dialogflow.projects.locations.agents.environments.lookupEnvironmentHistory
-export def "v3beta1 dialogflowprojectslocationsagentsenvironmentslookupEnvironmentHistory" [
+export def "v3beta1 get-lookup-environment-history" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -599,7 +609,7 @@ export def "v3beta1 dialogflowprojectslocationsagentsenvironmentslookupEnvironme
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v3beta1/{name}:lookupEnvironmentHistory") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v3beta1/{name}:lookupEnvironmentHistory") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -609,7 +619,7 @@ export def "v3beta1 dialogflowprojectslocationsagentsenvironmentslookupEnvironme
 #
 # POST /v3beta1/{name}:restore
 # operationId: dialogflow.projects.locations.agents.restore
-export def "v3beta1 dialogflowprojectslocationsagentsrestore" [
+export def "v3beta1 create-restore" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -638,19 +648,19 @@ export def "v3beta1 dialogflowprojectslocationsagentsrestore" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v3beta1/{name}:restore") $qp)
-  let body = {"agentContent": $agent_content, "agentUri": $agent_uri, "restoreOption": $restore_option} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v3beta1/{name}:restore") $qp)
+  let req_body = {"agentContent": $agent_content, "agentUri": $agent_uri, "restoreOption": $restore_option} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Kicks off a test case run. This method is a [long-running operation](https://cloud.google.com/dialogflow/cx/docs/how/long-running-operation). The returned `Operation` type has the following method-specific fields: - `metadata`: RunTestCaseMetadata - `response`: RunTestCaseResponse
 #
 # POST /v3beta1/{name}:run
 # operationId: dialogflow.projects.locations.agents.testCases.run
-export def "v3beta1 dialogflowprojectslocationsagentstestCasesrun" [
+export def "v3beta1 create-run" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -677,19 +687,19 @@ export def "v3beta1 dialogflowprojectslocationsagentstestCasesrun" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v3beta1/{name}:run") $qp)
-  let body = {"environment": $environment} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v3beta1/{name}:run") $qp)
+  let req_body = {"environment": $environment} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Starts the specified Experiment. This rpc only changes the state of experiment from PENDING to RUNNING.
 #
 # POST /v3beta1/{name}:start
 # operationId: dialogflow.projects.locations.agents.environments.experiments.start
-export def "v3beta1 dialogflowprojectslocationsagentsenvironmentsexperimentsstart" [
+export def "v3beta1 start" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -716,18 +726,19 @@ export def "v3beta1 dialogflowprojectslocationsagentsenvironmentsexperimentsstar
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v3beta1/{name}:start") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v3beta1/{name}:start") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Stops the specified Experiment. This rpc only changes the state of experiment from RUNNING to DONE.
 #
 # POST /v3beta1/{name}:stop
 # operationId: dialogflow.projects.locations.agents.environments.experiments.stop
-export def "v3beta1 dialogflowprojectslocationsagentsenvironmentsexperimentsstop" [
+export def "v3beta1 stop" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -754,18 +765,19 @@ export def "v3beta1 dialogflowprojectslocationsagentsenvironmentsexperimentsstop
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v3beta1/{name}:stop") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v3beta1/{name}:stop") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Trains the specified flow. Note that only the flow in 'draft' environment is trained. This method is a [long-running operation](https://cloud.google.com/dialogflow/cx/docs/how/long-running-operation). The returned `Operation` type has the following method-specific fields: - `metadata`: An empty [Struct message](https://developers.google.com/protocol-buffers/docs/reference/google.protobuf#struct) - `response`: An [Empty message](https://developers.google.com/protocol-buffers/docs/reference/google.protobuf#empty) Note: You should always train a flow prior to sending it queries. See the [training documentation](https://cloud.google.com/dialogflow/cx/docs/concept/training).
 #
 # POST /v3beta1/{name}:train
 # operationId: dialogflow.projects.locations.agents.flows.train
-export def "v3beta1 dialogflowprojectslocationsagentsflowstrain" [
+export def "v3beta1 create-train" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -792,18 +804,19 @@ export def "v3beta1 dialogflowprojectslocationsagentsflowstrain" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v3beta1/{name}:train") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v3beta1/{name}:train") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Validates the specified flow and creates or updates validation results. Please call this API after the training is completed to get the complete validation results.
 #
 # POST /v3beta1/{name}:validate
 # operationId: dialogflow.projects.locations.agents.flows.validate
-export def "v3beta1 dialogflowprojectslocationsagentsflowsvalidate" [
+export def "v3beta1 validate" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -830,19 +843,19 @@ export def "v3beta1 dialogflowprojectslocationsagentsflowsvalidate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v3beta1/{name}:validate") $qp)
-  let body = {"languageCode": $language_code} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v3beta1/{name}:validate") $qp)
+  let req_body = {"languageCode": $language_code} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns the list of all agents in the specified location.
 #
 # GET /v3beta1/{parent}/agents
 # operationId: dialogflow.projects.locations.agents.list
-export def "v3beta1-agents dialogflowprojectslocationsagentslist" [
+export def "v3beta1-agents list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -869,7 +882,7 @@ export def "v3beta1-agents dialogflowprojectslocationsagentslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v3beta1/{parent}/agents") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v3beta1/{parent}/agents") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -882,7 +895,7 @@ export def "v3beta1-agents dialogflowprojectslocationsagentslist" [
 # --advancedSettings shape: {audioExportGcsDestination?: record, loggingSettings?: record}
 # --speechToTextSettings shape: {enableSpeechAdaptation?: bool}
 # --textToSpeechSettings shape: {synthesizeSpeechConfigs?: record}
-export def "v3beta1-agents dialogflowprojectslocationsagentscreate" [
+export def "v3beta1-agents create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -915,7 +928,7 @@ export def "v3beta1-agents dialogflowprojectslocationsagentscreate" [
   --security-settings: string # Name of the SecuritySettings reference for the agent. Format: `projects//locations//securitySettings/`.
   --speech-to-text-settings: record # Settings related to speech recognition. — shape: {enableSpeechAdaptation?: bool}
   --start-flow: string # Immutable. Name of the start flow in this agent. A start flow will be automatically created when the agent is created, and can only be deleted by deleting the agent. Format: `projects//locations//agents//flows/`.
-  --supported-language-codes: list # The list of all languages supported by the agent (except for the `default_language_code`).
+  --supported-language-codes: list<string> # The list of all languages supported by the agent (except for the `default_language_code`).
   --text-to-speech-settings: record # Settings related to speech generating. — shape: {synthesizeSpeechConfigs?: record}
   --time-zone: string # Required. The time zone of the agent from the [time zone database](https://www.iana.org/time-zones), e.g., America/New_York, Europe/Paris.
 ]: any -> record<advancedSettings: record<audioExportGcsDestination: record<uri: string>, loggingSettings: record<enableInteractionLogging: bool, enableStackdriverLogging: bool>>, avatarUri: string, defaultLanguageCode: string, description: string, displayName: string, enableSpellCorrection: bool, enableStackdriverLogging: bool, locked: bool, name: string, securitySettings: string, speechToTextSettings: record<enableSpeechAdaptation: bool>, startFlow: string, supportedLanguageCodes: list<string>, textToSpeechSettings: record<synthesizeSpeechConfigs: record>, timeZone: string> {
@@ -923,19 +936,19 @@ export def "v3beta1-agents dialogflowprojectslocationsagentscreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v3beta1/{parent}/agents") $qp)
-  let body = {"advancedSettings": $advanced_settings, "avatarUri": $avatar_uri, "defaultLanguageCode": $default_language_code, "description": $description, "displayName": $display_name, "enableSpellCorrection": $enable_spell_correction, "enableStackdriverLogging": $enable_stackdriver_logging, "locked": $locked, "name": $name, "securitySettings": $security_settings, "speechToTextSettings": $speech_to_text_settings, "startFlow": $start_flow, "supportedLanguageCodes": $supported_language_codes, "textToSpeechSettings": $text_to_speech_settings, "timeZone": $time_zone} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v3beta1/{parent}/agents") $qp)
+  let req_body = {"advancedSettings": $advanced_settings, "avatarUri": $avatar_uri, "defaultLanguageCode": $default_language_code, "description": $description, "displayName": $display_name, "enableSpellCorrection": $enable_spell_correction, "enableStackdriverLogging": $enable_stackdriver_logging, "locked": $locked, "name": $name, "securitySettings": $security_settings, "speechToTextSettings": $speech_to_text_settings, "startFlow": $start_flow, "supportedLanguageCodes": $supported_language_codes, "textToSpeechSettings": $text_to_speech_settings, "timeZone": $time_zone} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns the list of Changelogs.
 #
 # GET /v3beta1/{parent}/changelogs
 # operationId: dialogflow.projects.locations.agents.changelogs.list
-export def "v3beta1-changelogs dialogflowprojectslocationsagentschangelogslist" [
+export def "v3beta1-changelogs list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -963,7 +976,7 @@ export def "v3beta1-changelogs dialogflowprojectslocationsagentschangelogslist" 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v3beta1/{parent}/changelogs") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v3beta1/{parent}/changelogs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -973,7 +986,7 @@ export def "v3beta1-changelogs dialogflowprojectslocationsagentschangelogslist" 
 #
 # GET /v3beta1/{parent}/continuousTestResults
 # operationId: dialogflow.projects.locations.agents.environments.continuousTestResults.list
-export def "v3beta1-continuous-test-results dialogflowprojectslocationsagentsenvironmentscontinuousTestResultslist" [
+export def "v3beta1-continuous-test-results list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1000,7 +1013,7 @@ export def "v3beta1-continuous-test-results dialogflowprojectslocationsagentsenv
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v3beta1/{parent}/continuousTestResults") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v3beta1/{parent}/continuousTestResults") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1010,7 +1023,7 @@ export def "v3beta1-continuous-test-results dialogflowprojectslocationsagentsenv
 #
 # GET /v3beta1/{parent}/deployments
 # operationId: dialogflow.projects.locations.agents.environments.deployments.list
-export def "v3beta1-deployments dialogflowprojectslocationsagentsenvironmentsdeploymentslist" [
+export def "v3beta1-deployments list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1037,7 +1050,7 @@ export def "v3beta1-deployments dialogflowprojectslocationsagentsenvironmentsdep
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v3beta1/{parent}/deployments") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v3beta1/{parent}/deployments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1047,7 +1060,7 @@ export def "v3beta1-deployments dialogflowprojectslocationsagentsenvironmentsdep
 #
 # GET /v3beta1/{parent}/entityTypes
 # operationId: dialogflow.projects.locations.agents.sessions.entityTypes.list
-export def "v3beta1-entity-types dialogflowprojectslocationsagentssessionsentityTypeslist" [
+export def "v3beta1-entity-types list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1074,7 +1087,7 @@ export def "v3beta1-entity-types dialogflowprojectslocationsagentssessionsentity
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v3beta1/{parent}/entityTypes") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v3beta1/{parent}/entityTypes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1084,8 +1097,8 @@ export def "v3beta1-entity-types dialogflowprojectslocationsagentssessionsentity
 #
 # POST /v3beta1/{parent}/entityTypes
 # operationId: dialogflow.projects.locations.agents.sessions.entityTypes.create
-# --entities item shape: {synonyms?: list, value?: string}
-export def "v3beta1-entity-types dialogflowprojectslocationsagentssessionsentityTypescreate" [
+# --entities item shape: {synonyms?: list<string>, value?: string}
+export def "v3beta1-entity-types create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1107,7 +1120,7 @@ export def "v3beta1-entity-types dialogflowprojectslocationsagentssessionsentity
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --language-code: string # The language of the following fields in `entity_type`: * `EntityType.entities.value` * `EntityType.entities.synonyms` * `EntityType.excluded_phrases.value` If not specified, the agent's default language is used. [Many languages](https://cloud.google.com/dialogflow/cx/docs/reference/language) are supported. Note: languages must be enabled in the agent before they can be used.
-  --entities: list # Required. The collection of entities to override or supplement the custom entity type. — item shape: {synonyms?: list, value?: string}
+  --entities: list # Required. The collection of entities to override or supplement the custom entity type. — item shape: {synonyms?: list<string>, value?: string}
   --entity-override-mode: string@entity-override-mode-completer # Required. Indicates whether the additional data should override or supplement the custom entity type definition.
   --name: string # Required. The unique identifier of the session entity type. Format: `projects//locations//agents//sessions//entityTypes/` or `projects//locations//agents//environments//sessions//entityTypes/`. If `Environment ID` is not specified, we assume default 'draft' environment.
 ]: any -> record<entities: table<synonyms: list, value: string>, entityOverrideMode: string, name: string> {
@@ -1115,19 +1128,19 @@ export def "v3beta1-entity-types dialogflowprojectslocationsagentssessionsentity
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "languageCode" $language_code "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v3beta1/{parent}/entityTypes") $qp)
-  let body = {"entities": $entities, "entityOverrideMode": $entity_override_mode, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v3beta1/{parent}/entityTypes") $qp)
+  let req_body = {"entities": $entities, "entityOverrideMode": $entity_override_mode, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns the list of all environments in the specified Agent.
 #
 # GET /v3beta1/{parent}/environments
 # operationId: dialogflow.projects.locations.agents.environments.list
-export def "v3beta1-environments dialogflowprojectslocationsagentsenvironmentslist" [
+export def "v3beta1-environments list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1154,7 +1167,7 @@ export def "v3beta1-environments dialogflowprojectslocationsagentsenvironmentsli
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v3beta1/{parent}/environments") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v3beta1/{parent}/environments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1164,10 +1177,10 @@ export def "v3beta1-environments dialogflowprojectslocationsagentsenvironmentsli
 #
 # POST /v3beta1/{parent}/environments
 # operationId: dialogflow.projects.locations.agents.environments.create
-# --testCasesConfig shape: {enableContinuousRun?: bool, enablePredeploymentRun?: bool, testCases?: list}
+# --testCasesConfig shape: {enableContinuousRun?: bool, enablePredeploymentRun?: bool, testCases?: list<string>}
 # --versionConfigs item shape: {version?: string}
 # --webhookConfig shape: {webhookOverrides?: list}
-export def "v3beta1-environments dialogflowprojectslocationsagentsenvironmentscreate" [
+export def "v3beta1-environments create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1191,7 +1204,7 @@ export def "v3beta1-environments dialogflowprojectslocationsagentsenvironmentscr
   --description: string # The human-readable description of the environment. The maximum length is 500 characters. If exceeded, the request is rejected.
   --display-name: string # Required. The human-readable name of the environment (unique in an agent). Limit of 64 characters.
   --name: string # The name of the environment. Format: `projects//locations//agents//environments/`.
-  --test-cases-config: record # The configuration for continuous tests. — shape: {enableContinuousRun?: bool, enablePredeploymentRun?: bool, testCases?: list}
+  --test-cases-config: record # The configuration for continuous tests. — shape: {enableContinuousRun?: bool, enablePredeploymentRun?: bool, testCases?: list<string>}
   --version-configs: list # A list of configurations for flow versions. You should include version configs for all flows that are reachable from `Start Flow` in the agent. Otherwise, an error will be returned. — item shape: {version?: string}
   --webhook-config: record # Configuration for webhooks. — shape: {webhookOverrides?: list}
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
@@ -1199,19 +1212,19 @@ export def "v3beta1-environments dialogflowprojectslocationsagentsenvironmentscr
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v3beta1/{parent}/environments") $qp)
-  let body = {"description": $description, "displayName": $display_name, "name": $name, "testCasesConfig": $test_cases_config, "versionConfigs": $version_configs, "webhookConfig": $webhook_config} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v3beta1/{parent}/environments") $qp)
+  let req_body = {"description": $description, "displayName": $display_name, "name": $name, "testCasesConfig": $test_cases_config, "versionConfigs": $version_configs, "webhookConfig": $webhook_config} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns the list of all experiments in the specified Environment.
 #
 # GET /v3beta1/{parent}/experiments
 # operationId: dialogflow.projects.locations.agents.environments.experiments.list
-export def "v3beta1-experiments dialogflowprojectslocationsagentsenvironmentsexperimentslist" [
+export def "v3beta1-experiments list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1238,7 +1251,7 @@ export def "v3beta1-experiments dialogflowprojectslocationsagentsenvironmentsexp
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v3beta1/{parent}/experiments") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v3beta1/{parent}/experiments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1253,7 +1266,7 @@ export def "v3beta1-experiments dialogflowprojectslocationsagentsenvironmentsexp
 # --rolloutConfig shape: {failureCondition?: string, rolloutCondition?: string, rolloutSteps?: list}
 # --rolloutState shape: {startTime?: string, step?: string, stepIndex?: int}
 # --variantsHistory item shape: {updateTime?: string, versionVariants?: record}
-export def "v3beta1-experiments dialogflowprojectslocationsagentsenvironmentsexperimentscreate" [
+export def "v3beta1-experiments create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1294,19 +1307,19 @@ export def "v3beta1-experiments dialogflowprojectslocationsagentsenvironmentsexp
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v3beta1/{parent}/experiments") $qp)
-  let body = {"createTime": $create_time, "definition": $definition, "description": $description, "displayName": $display_name, "endTime": $end_time, "experimentLength": $experiment_length, "lastUpdateTime": $last_update_time, "name": $name, "result": $result, "rolloutConfig": $rollout_config, "rolloutFailureReason": $rollout_failure_reason, "rolloutState": $rollout_state, "startTime": $start_time, "state": $state, "variantsHistory": $variants_history} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v3beta1/{parent}/experiments") $qp)
+  let req_body = {"createTime": $create_time, "definition": $definition, "description": $description, "displayName": $display_name, "endTime": $end_time, "experimentLength": $experiment_length, "lastUpdateTime": $last_update_time, "name": $name, "result": $result, "rolloutConfig": $rollout_config, "rolloutFailureReason": $rollout_failure_reason, "rolloutState": $rollout_state, "startTime": $start_time, "state": $state, "variantsHistory": $variants_history} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns the list of all flows in the specified agent.
 #
 # GET /v3beta1/{parent}/flows
 # operationId: dialogflow.projects.locations.agents.flows.list
-export def "v3beta1-flows dialogflowprojectslocationsagentsflowslist" [
+export def "v3beta1-flows list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1334,7 +1347,7 @@ export def "v3beta1-flows dialogflowprojectslocationsagentsflowslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "languageCode" $language_code "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v3beta1/{parent}/flows") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v3beta1/{parent}/flows") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1347,7 +1360,7 @@ export def "v3beta1-flows dialogflowprojectslocationsagentsflowslist" [
 # --eventHandlers item shape: {event?: string, targetFlow?: string, targetPage?: string, triggerFulfillment?: record}
 # --nluSettings shape: {classificationThreshold?: float, modelTrainingMode?: "MODEL_TRAINING_MODE_UNSPECIFIED"|"MODEL_TRAINING_MODE_AUTOMATIC"|"MODEL_TRAINING_MODE_MANUAL", modelType?: "MODEL_TYPE_UNSPECIFIED"|"MODEL_TYPE_STANDARD"|"MODEL_TYPE_ADVANCED"}
 # --transitionRoutes item shape: {condition?: string, intent?: string, targetFlow?: string, targetPage?: string, triggerFulfillment?: record}
-export def "v3beta1-flows dialogflowprojectslocationsagentsflowscreate" [
+export def "v3beta1-flows create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1374,26 +1387,26 @@ export def "v3beta1-flows dialogflowprojectslocationsagentsflowscreate" [
   --event-handlers: list # A flow's event handlers serve two purposes: * They are responsible for handling events (e.g. no match, webhook errors) in the flow. * They are inherited by every page's event handlers, which can be used to handle common events regardless of the current page. Event handlers defined in the page have higher priority than those defined in the flow. Unlike transition_routes, these handlers are evaluated on a first-match basis. The first one that matches the event get executed, with the rest being ignored. — item shape: {event?: string, targetFlow?: string, targetPage?: string, triggerFulfillment?: record}
   --name: string # The unique identifier of the flow. Format: `projects//locations//agents//flows/`.
   --nlu-settings: record # Settings related to NLU. — shape: {classificationThreshold?: float, modelTrainingMode?: "MODEL_TRAINING_MODE_UNSPECIFIED"|"MODEL_TRAINING_MODE_AUTOMATIC"|"MODEL_TRAINING_MODE_MANUAL", modelType?: "MODEL_TYPE_UNSPECIFIED"|"MODEL_TYPE_STANDARD"|"MODEL_TYPE_ADVANCED"}
-  --transition-route-groups: list # A flow's transition route group serve two purposes: * They are responsible for matching the user's first utterances in the flow. * They are inherited by every page's transition route groups. Transition route groups defined in the page have higher priority than those defined in the flow. Format:`projects//locations//agents//flows//transitionRouteGroups/`.
+  --transition-route-groups: list<string> # A flow's transition route group serve two purposes: * They are responsible for matching the user's first utterances in the flow. * They are inherited by every page's transition route groups. Transition route groups defined in the page have higher priority than those defined in the flow. Format:`projects//locations//agents//flows//transitionRouteGroups/`.
   --transition-routes: list # A flow's transition routes serve two purposes: * They are responsible for matching the user's first utterances in the flow. * They are inherited by every page's transition routes and can support use cases such as the user saying "help" or "can I talk to a human?", which can be handled in a common way regardless of the current page. Transition routes defined in the page have higher priority than those defined in the flow. TransitionRoutes are evalauted in the following order: * TransitionRoutes with intent specified. * TransitionRoutes with only condition specified. TransitionRoutes with intent specified are inherited by pages in the flow. — item shape: {condition?: string, intent?: string, targetFlow?: string, targetPage?: string, triggerFulfillment?: record}
 ]: any -> record<description: string, displayName: string, eventHandlers: table<event: string, name: string, targetFlow: string, targetPage: string, triggerFulfillment: record>, name: string, nluSettings: record<classificationThreshold: float, modelTrainingMode: string, modelType: string>, transitionRouteGroups: list<string>, transitionRoutes: table<condition: string, intent: string, name: string, targetFlow: string, targetPage: string, triggerFulfillment: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "languageCode" $language_code "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v3beta1/{parent}/flows") $qp)
-  let body = {"description": $description, "displayName": $display_name, "eventHandlers": $event_handlers, "name": $name, "nluSettings": $nlu_settings, "transitionRouteGroups": $transition_route_groups, "transitionRoutes": $transition_routes} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v3beta1/{parent}/flows") $qp)
+  let req_body = {"description": $description, "displayName": $display_name, "eventHandlers": $event_handlers, "name": $name, "nluSettings": $nlu_settings, "transitionRouteGroups": $transition_route_groups, "transitionRoutes": $transition_routes} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Imports the specified flow to the specified agent from a binary file. This method is a [long-running operation](https://cloud.google.com/dialogflow/cx/docs/how/long-running-operation). The returned `Operation` type has the following method-specific fields: - `metadata`: An empty [Struct message](https://developers.google.com/protocol-buffers/docs/reference/google.protobuf#struct) - `response`: ImportFlowResponse Note: You should always train a flow prior to sending it queries. See the [training documentation](https://cloud.google.com/dialogflow/cx/docs/concept/training).
 #
 # POST /v3beta1/{parent}/flows:import
 # operationId: dialogflow.projects.locations.agents.flows.import
-export def "v3beta1-flows-import dialogflowprojectslocationsagentsflowsimport" [
+export def "v3beta1-flows-import import" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1422,19 +1435,19 @@ export def "v3beta1-flows-import dialogflowprojectslocationsagentsflowsimport" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v3beta1/{parent}/flows:import") $qp)
-  let body = {"flowContent": $flow_content, "flowUri": $flow_uri, "importOption": $import_option} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v3beta1/{parent}/flows:import") $qp)
+  let req_body = {"flowContent": $flow_content, "flowUri": $flow_uri, "importOption": $import_option} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns the list of all intents in the specified agent.
 #
 # GET /v3beta1/{parent}/intents
 # operationId: dialogflow.projects.locations.agents.intents.list
-export def "v3beta1-intents dialogflowprojectslocationsagentsintentslist" [
+export def "v3beta1-intents list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1463,7 +1476,7 @@ export def "v3beta1-intents dialogflowprojectslocationsagentsintentslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "intentView" $intent_view "scalar") (serialize-qp "languageCode" $language_code "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v3beta1/{parent}/intents") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v3beta1/{parent}/intents") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1475,7 +1488,7 @@ export def "v3beta1-intents dialogflowprojectslocationsagentsintentslist" [
 # operationId: dialogflow.projects.locations.agents.intents.create
 # --parameters item shape: {entityType?: string, id?: string, isList?: bool, redact?: bool}
 # --trainingPhrases item shape: {id?: string, parts?: list, repeatCount?: int}
-export def "v3beta1-intents dialogflowprojectslocationsagentsintentscreate" [
+export def "v3beta1-intents create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1510,19 +1523,19 @@ export def "v3beta1-intents dialogflowprojectslocationsagentsintentscreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "languageCode" $language_code "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v3beta1/{parent}/intents") $qp)
-  let body = {"description": $description, "displayName": $display_name, "isFallback": $is_fallback, "labels": $labels, "name": $name, "parameters": $parameters, "priority": $priority, "trainingPhrases": $training_phrases} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v3beta1/{parent}/intents") $qp)
+  let req_body = {"description": $description, "displayName": $display_name, "isFallback": $is_fallback, "labels": $labels, "name": $name, "parameters": $parameters, "priority": $priority, "trainingPhrases": $training_phrases} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns the list of all pages in the specified flow.
 #
 # GET /v3beta1/{parent}/pages
 # operationId: dialogflow.projects.locations.agents.flows.pages.list
-export def "v3beta1-pages dialogflowprojectslocationsagentsflowspageslist" [
+export def "v3beta1-pages list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1550,7 +1563,7 @@ export def "v3beta1-pages dialogflowprojectslocationsagentsflowspageslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "languageCode" $language_code "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v3beta1/{parent}/pages") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v3beta1/{parent}/pages") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1564,7 +1577,7 @@ export def "v3beta1-pages dialogflowprojectslocationsagentsflowspageslist" [
 # --eventHandlers item shape: {event?: string, targetFlow?: string, targetPage?: string, triggerFulfillment?: record}
 # --form shape: {parameters?: list}
 # --transitionRoutes item shape: {condition?: string, intent?: string, targetFlow?: string, targetPage?: string, triggerFulfillment?: record}
-export def "v3beta1-pages dialogflowprojectslocationsagentsflowspagescreate" [
+export def "v3beta1-pages create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1591,26 +1604,26 @@ export def "v3beta1-pages dialogflowprojectslocationsagentsflowspagescreate" [
   --event-handlers: list # Handlers associated with the page to handle events such as webhook errors, no match or no input. — item shape: {event?: string, targetFlow?: string, targetPage?: string, triggerFulfillment?: record}
   --form: record # A form is a data model that groups related parameters that can be collected from the user. The process in which the agent prompts the user and collects parameter values from the user is called form filling. A form can be added to a page. When form filling is done, the filled parameters will be written to the session. — shape: {parameters?: list}
   --name: string # The unique identifier of the page. Required for the Pages.UpdatePage method. Pages.CreatePage populates the name automatically. Format: `projects//locations//agents//flows//pages/`.
-  --transition-route-groups: list # Ordered list of `TransitionRouteGroups` associated with the page. Transition route groups must be unique within a page. * If multiple transition routes within a page scope refer to the same intent, then the precedence order is: page's transition route -> page's transition route group -> flow's transition routes. * If multiple transition route groups within a page contain the same intent, then the first group in the ordered list takes precedence. Format:`projects//locations//agents//flows//transitionRouteGroups/`.
+  --transition-route-groups: list<string> # Ordered list of `TransitionRouteGroups` associated with the page. Transition route groups must be unique within a page. * If multiple transition routes within a page scope refer to the same intent, then the precedence order is: page's transition route -> page's transition route group -> flow's transition routes. * If multiple transition route groups within a page contain the same intent, then the first group in the ordered list takes precedence. Format:`projects//locations//agents//flows//transitionRouteGroups/`.
   --transition-routes: list # A list of transitions for the transition rules of this page. They route the conversation to another page in the same flow, or another flow. When we are in a certain page, the TransitionRoutes are evalauted in the following order: * TransitionRoutes defined in the page with intent specified. * TransitionRoutes defined in the transition route groups with intent specified. * TransitionRoutes defined in flow with intent specified. * TransitionRoutes defined in the transition route groups with intent specified. * TransitionRoutes defined in the page with only condition specified. * TransitionRoutes defined in the transition route groups with only condition specified. — item shape: {condition?: string, intent?: string, targetFlow?: string, targetPage?: string, triggerFulfillment?: record}
 ]: any -> record<displayName: string, entryFulfillment: record<conditionalCases: list<record>, messages: list<record>, returnPartialResponses: bool, setParameterActions: list<record>, tag: string, webhook: string>, eventHandlers: table<event: string, name: string, targetFlow: string, targetPage: string, triggerFulfillment: record>, form: record<parameters: list<record>>, name: string, transitionRouteGroups: list<string>, transitionRoutes: table<condition: string, intent: string, name: string, targetFlow: string, targetPage: string, triggerFulfillment: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "languageCode" $language_code "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v3beta1/{parent}/pages") $qp)
-  let body = {"displayName": $display_name, "entryFulfillment": $entry_fulfillment, "eventHandlers": $event_handlers, "form": $form, "name": $name, "transitionRouteGroups": $transition_route_groups, "transitionRoutes": $transition_routes} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v3beta1/{parent}/pages") $qp)
+  let req_body = {"displayName": $display_name, "entryFulfillment": $entry_fulfillment, "eventHandlers": $event_handlers, "form": $form, "name": $name, "transitionRouteGroups": $transition_route_groups, "transitionRoutes": $transition_routes} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Fetches a list of results for a given test case.
 #
 # GET /v3beta1/{parent}/results
 # operationId: dialogflow.projects.locations.agents.testCases.results.list
-export def "v3beta1-results dialogflowprojectslocationsagentstestCasesresultslist" [
+export def "v3beta1-results list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1638,7 +1651,7 @@ export def "v3beta1-results dialogflowprojectslocationsagentstestCasesresultslis
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v3beta1/{parent}/results") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v3beta1/{parent}/results") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1648,7 +1661,7 @@ export def "v3beta1-results dialogflowprojectslocationsagentstestCasesresultslis
 #
 # GET /v3beta1/{parent}/securitySettings
 # operationId: dialogflow.projects.locations.securitySettings.list
-export def "v3beta1-security-settings dialogflowprojectslocationssecuritySettingslist" [
+export def "v3beta1-security-settings list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1675,7 +1688,7 @@ export def "v3beta1-security-settings dialogflowprojectslocationssecuritySetting
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v3beta1/{parent}/securitySettings") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v3beta1/{parent}/securitySettings") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1687,7 +1700,7 @@ export def "v3beta1-security-settings dialogflowprojectslocationssecuritySetting
 # operationId: dialogflow.projects.locations.securitySettings.create
 # --audioExportSettings shape: {audioExportPattern?: string, audioFormat?: "AUDIO_FORMAT_UNSPECIFIED"|"MULAW"|"MP3"|"OGG", enableAudioRedaction?: bool, gcsBucket?: string}
 # --insightsExportSettings shape: {enableInsightsExport?: bool}
-export def "v3beta1-security-settings dialogflowprojectslocationssecuritySettingscreate" [
+export def "v3beta1-security-settings create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1714,7 +1727,7 @@ export def "v3beta1-security-settings dialogflowprojectslocationssecuritySetting
   --insights-export-settings: record # Settings for exporting conversations to [Insights](https://cloud.google.com/contact-center/insights/docs). — shape: {enableInsightsExport?: bool}
   --inspect-template: string # [DLP](https://cloud.google.com/dlp/docs) inspect template name. Use this template to define inspect base settings. The `DLP Inspect Templates Reader` role is needed on the Dialogflow service identity service account (has the form `service-PROJECT_NUMBER@gcp-sa-dialogflow.iam.gserviceaccount.com`) for your agent's project. If empty, we use the default DLP inspect config. The template name will have one of the following formats: `projects//locations//inspectTemplates/` OR `organizations//locations//inspectTemplates/` Note: `inspect_template` must be located in the same region as the `SecuritySettings`.
   --name: string # Resource name of the settings. Required for the SecuritySettingsService.UpdateSecuritySettings method. SecuritySettingsService.CreateSecuritySettings populates the name automatically. Format: `projects//locations//securitySettings/`.
-  --purge-data-types: list # List of types of data to remove when retention settings triggers purge.
+  --purge-data-types: list<string> # List of types of data to remove when retention settings triggers purge.
   --redaction-scope: string@redaction-scope-completer # Defines the data for which Dialogflow applies redaction. Dialogflow does not redact data that it does not have access to – for example, Cloud logging.
   --redaction-strategy: string@redaction-strategy-completer # Strategy that defines how we do redaction.
   --retention-window-days: int # Retains data in interaction logging for the specified number of days. This does not apply to Cloud logging, which is owned by the user - not Dialogflow. User must set a value lower than Dialogflow's default 365d TTL (30 days for Agent Assist traffic), higher value will be ignored and use default. Setting a value higher than that has no effect. A missing value or setting to 0 also means we use default TTL. (format: int32)
@@ -1723,19 +1736,19 @@ export def "v3beta1-security-settings dialogflowprojectslocationssecuritySetting
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v3beta1/{parent}/securitySettings") $qp)
-  let body = {"audioExportSettings": $audio_export_settings, "deidentifyTemplate": $deidentify_template, "displayName": $display_name, "insightsExportSettings": $insights_export_settings, "inspectTemplate": $inspect_template, "name": $name, "purgeDataTypes": $purge_data_types, "redactionScope": $redaction_scope, "redactionStrategy": $redaction_strategy, "retentionWindowDays": $retention_window_days} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v3beta1/{parent}/securitySettings") $qp)
+  let req_body = {"audioExportSettings": $audio_export_settings, "deidentifyTemplate": $deidentify_template, "displayName": $display_name, "insightsExportSettings": $insights_export_settings, "inspectTemplate": $inspect_template, "name": $name, "purgeDataTypes": $purge_data_types, "redactionScope": $redaction_scope, "redactionStrategy": $redaction_strategy, "retentionWindowDays": $retention_window_days} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Fetches a list of test cases for a given agent.
 #
 # GET /v3beta1/{parent}/testCases
 # operationId: dialogflow.projects.locations.agents.testCases.list
-export def "v3beta1-test-cases dialogflowprojectslocationsagentstestCaseslist" [
+export def "v3beta1-test-cases list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1763,7 +1776,7 @@ export def "v3beta1-test-cases dialogflowprojectslocationsagentstestCaseslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v3beta1/{parent}/testCases") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v3beta1/{parent}/testCases") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1775,8 +1788,8 @@ export def "v3beta1-test-cases dialogflowprojectslocationsagentstestCaseslist" [
 # operationId: dialogflow.projects.locations.agents.testCases.create
 # --lastTestResult shape: {conversationTurns?: list, environment?: string, name?: string, testResult?: "TEST_RESULT_UNSPECIFIED"|"PASSED"|"FAILED", testTime?: string}
 # --testCaseConversationTurns item shape: {userInput?: record, virtualAgentOutput?: record}
-# --testConfig shape: {flow?: string, page?: string, trackingParameters?: list}
-export def "v3beta1-test-cases dialogflowprojectslocationsagentstestCasescreate" [
+# --testConfig shape: {flow?: string, page?: string, trackingParameters?: list<string>}
+export def "v3beta1-test-cases create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1801,27 +1814,27 @@ export def "v3beta1-test-cases dialogflowprojectslocationsagentstestCasescreate"
   --last-test-result: record # Represents a result from running a test case in an agent environment. — shape: {conversationTurns?: list, environment?: string, name?: string, testResult?: "TEST_RESULT_UNSPECIFIED"|"PASSED"|"FAILED", testTime?: string}
   --name: string # The unique identifier of the test case. TestCases.CreateTestCase will populate the name automatically. Otherwise use format: `projects//locations//agents/ /testCases/`.
   --notes: string # Additional freeform notes about the test case. Limit of 400 characters.
-  --tags: list # Tags are short descriptions that users may apply to test cases for organizational and filtering purposes. Each tag should start with "#" and has a limit of 30 characters.
+  --tags: list<string> # Tags are short descriptions that users may apply to test cases for organizational and filtering purposes. Each tag should start with "#" and has a limit of 30 characters.
   --test-case-conversation-turns: list # The conversation turns uttered when the test case was created, in chronological order. These include the canonical set of agent utterances that should occur when the agent is working properly. — item shape: {userInput?: record, virtualAgentOutput?: record}
-  --test-config: record # Represents configurations for a test case. — shape: {flow?: string, page?: string, trackingParameters?: list}
+  --test-config: record # Represents configurations for a test case. — shape: {flow?: string, page?: string, trackingParameters?: list<string>}
 ]: any -> record<creationTime: string, displayName: string, lastTestResult: record<conversationTurns: list<record>, environment: string, name: string, testResult: string, testTime: string>, name: string, notes: string, tags: list<string>, testCaseConversationTurns: table<userInput: record, virtualAgentOutput: record>, testConfig: record<flow: string, page: string, trackingParameters: list<string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v3beta1/{parent}/testCases") $qp)
-  let body = {"displayName": $display_name, "lastTestResult": $last_test_result, "name": $name, "notes": $notes, "tags": $tags, "testCaseConversationTurns": $test_case_conversation_turns, "testConfig": $test_config} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v3beta1/{parent}/testCases") $qp)
+  let req_body = {"displayName": $display_name, "lastTestResult": $last_test_result, "name": $name, "notes": $notes, "tags": $tags, "testCaseConversationTurns": $test_case_conversation_turns, "testConfig": $test_config} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Batch deletes test cases.
 #
 # POST /v3beta1/{parent}/testCases:batchDelete
 # operationId: dialogflow.projects.locations.agents.testCases.batchDelete
-export def "v3beta1-test-cases-batch-delete dialogflowprojectslocationsagentstestCasesbatchDelete" [
+export def "v3beta1-test-cases-batch-delete delete" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1842,25 +1855,25 @@ export def "v3beta1-test-cases-batch-delete dialogflowprojectslocationsagentstes
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --names: list # Required. Format of test case names: `projects//locations/ /agents//testCases/`.
+  --names: list<string> # Required. Format of test case names: `projects//locations/ /agents//testCases/`.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v3beta1/{parent}/testCases:batchDelete") $qp)
-  let body = {"names": $names} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v3beta1/{parent}/testCases:batchDelete") $qp)
+  let req_body = {"names": $names} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Kicks off a batch run of test cases. This method is a [long-running operation](https://cloud.google.com/dialogflow/cx/docs/how/long-running-operation). The returned `Operation` type has the following method-specific fields: - `metadata`: BatchRunTestCasesMetadata - `response`: BatchRunTestCasesResponse
 #
 # POST /v3beta1/{parent}/testCases:batchRun
 # operationId: dialogflow.projects.locations.agents.testCases.batchRun
-export def "v3beta1-test-cases-batch-run dialogflowprojectslocationsagentstestCasesbatchRun" [
+export def "v3beta1-test-cases-batch-run create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1882,25 +1895,25 @@ export def "v3beta1-test-cases-batch-run dialogflowprojectslocationsagentstestCa
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --environment: string # Optional. If not set, draft environment is assumed. Format: `projects//locations//agents//environments/`.
-  --test-cases: list # Required. Format: `projects//locations//agents//testCases/`.
+  --test-cases: list<string> # Required. Format: `projects//locations//agents//testCases/`.
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v3beta1/{parent}/testCases:batchRun") $qp)
-  let body = {"environment": $environment, "testCases": $test_cases} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v3beta1/{parent}/testCases:batchRun") $qp)
+  let req_body = {"environment": $environment, "testCases": $test_cases} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Exports the test cases under the agent to a Cloud Storage bucket or a local file. Filter can be applied to export a subset of test cases. This method is a [long-running operation](https://cloud.google.com/dialogflow/cx/docs/how/long-running-operation). The returned `Operation` type has the following method-specific fields: - `metadata`: ExportTestCasesMetadata - `response`: ExportTestCasesResponse
 #
 # POST /v3beta1/{parent}/testCases:export
 # operationId: dialogflow.projects.locations.agents.testCases.export
-export def "v3beta1-test-cases-export dialogflowprojectslocationsagentstestCasesexport" [
+export def "v3beta1-test-cases-export export" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1929,19 +1942,19 @@ export def "v3beta1-test-cases-export dialogflowprojectslocationsagentstestCases
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v3beta1/{parent}/testCases:export") $qp)
-  let body = {"dataFormat": $data_format, "filter": $filter, "gcsUri": $gcs_uri} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v3beta1/{parent}/testCases:export") $qp)
+  let req_body = {"dataFormat": $data_format, "filter": $filter, "gcsUri": $gcs_uri} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Imports the test cases from a Cloud Storage bucket or a local file. It always creates new test cases and won't overwrite any existing ones. The provided ID in the imported test case is neglected. This method is a [long-running operation](https://cloud.google.com/dialogflow/cx/docs/how/long-running-operation). The returned `Operation` type has the following method-specific fields: - `metadata`: ImportTestCasesMetadata - `response`: ImportTestCasesResponse
 #
 # POST /v3beta1/{parent}/testCases:import
 # operationId: dialogflow.projects.locations.agents.testCases.import
-export def "v3beta1-test-cases-import dialogflowprojectslocationsagentstestCasesimport" [
+export def "v3beta1-test-cases-import import" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1969,19 +1982,19 @@ export def "v3beta1-test-cases-import dialogflowprojectslocationsagentstestCases
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v3beta1/{parent}/testCases:import") $qp)
-  let body = {"content": $content, "gcsUri": $gcs_uri} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v3beta1/{parent}/testCases:import") $qp)
+  let req_body = {"content": $content, "gcsUri": $gcs_uri} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns the list of all transition route groups in the specified flow.
 #
 # GET /v3beta1/{parent}/transitionRouteGroups
 # operationId: dialogflow.projects.locations.agents.flows.transitionRouteGroups.list
-export def "v3beta1-transition-route-groups dialogflowprojectslocationsagentsflowstransitionRouteGroupslist" [
+export def "v3beta1-transition-route-groups list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2009,7 +2022,7 @@ export def "v3beta1-transition-route-groups dialogflowprojectslocationsagentsflo
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "languageCode" $language_code "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v3beta1/{parent}/transitionRouteGroups") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v3beta1/{parent}/transitionRouteGroups") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2020,7 +2033,7 @@ export def "v3beta1-transition-route-groups dialogflowprojectslocationsagentsflo
 # POST /v3beta1/{parent}/transitionRouteGroups
 # operationId: dialogflow.projects.locations.agents.flows.transitionRouteGroups.create
 # --transitionRoutes item shape: {condition?: string, intent?: string, targetFlow?: string, targetPage?: string, triggerFulfillment?: record}
-export def "v3beta1-transition-route-groups dialogflowprojectslocationsagentsflowstransitionRouteGroupscreate" [
+export def "v3beta1-transition-route-groups create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2050,19 +2063,19 @@ export def "v3beta1-transition-route-groups dialogflowprojectslocationsagentsflo
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "languageCode" $language_code "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v3beta1/{parent}/transitionRouteGroups") $qp)
-  let body = {"displayName": $display_name, "name": $name, "transitionRoutes": $transition_routes} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v3beta1/{parent}/transitionRouteGroups") $qp)
+  let req_body = {"displayName": $display_name, "name": $name, "transitionRoutes": $transition_routes} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns the list of all versions in the specified Flow.
 #
 # GET /v3beta1/{parent}/versions
 # operationId: dialogflow.projects.locations.agents.flows.versions.list
-export def "v3beta1-versions dialogflowprojectslocationsagentsflowsversionslist" [
+export def "v3beta1-versions list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2089,7 +2102,7 @@ export def "v3beta1-versions dialogflowprojectslocationsagentsflowsversionslist"
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v3beta1/{parent}/versions") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v3beta1/{parent}/versions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2100,7 +2113,7 @@ export def "v3beta1-versions dialogflowprojectslocationsagentsflowsversionslist"
 # POST /v3beta1/{parent}/versions
 # operationId: dialogflow.projects.locations.agents.flows.versions.create
 # --nluSettings shape: {classificationThreshold?: float, modelTrainingMode?: "MODEL_TRAINING_MODE_UNSPECIFIED"|"MODEL_TRAINING_MODE_AUTOMATIC"|"MODEL_TRAINING_MODE_MANUAL", modelType?: "MODEL_TYPE_UNSPECIFIED"|"MODEL_TYPE_STANDARD"|"MODEL_TYPE_ADVANCED"}
-export def "v3beta1-versions dialogflowprojectslocationsagentsflowsversionscreate" [
+export def "v3beta1-versions create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2130,19 +2143,19 @@ export def "v3beta1-versions dialogflowprojectslocationsagentsflowsversionscreat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v3beta1/{parent}/versions") $qp)
-  let body = {"description": $description, "displayName": $display_name, "name": $name, "nluSettings": $nlu_settings} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v3beta1/{parent}/versions") $qp)
+  let req_body = {"description": $description, "displayName": $display_name, "name": $name, "nluSettings": $nlu_settings} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns the list of all webhooks in the specified agent.
 #
 # GET /v3beta1/{parent}/webhooks
 # operationId: dialogflow.projects.locations.agents.webhooks.list
-export def "v3beta1-webhooks dialogflowprojectslocationsagentswebhookslist" [
+export def "v3beta1-webhooks list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2169,7 +2182,7 @@ export def "v3beta1-webhooks dialogflowprojectslocationsagentswebhookslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v3beta1/{parent}/webhooks") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v3beta1/{parent}/webhooks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2179,9 +2192,9 @@ export def "v3beta1-webhooks dialogflowprojectslocationsagentswebhookslist" [
 #
 # POST /v3beta1/{parent}/webhooks
 # operationId: dialogflow.projects.locations.agents.webhooks.create
-# --genericWebService shape: {allowedCaCerts?: list, password?: string, requestHeaders?: record, uri?: string, username?: string}
+# --genericWebService shape: {allowedCaCerts?: list<string>, password?: string, requestHeaders?: record, uri?: string, username?: string}
 # --serviceDirectory shape: {genericWebService?: record, service?: string}
-export def "v3beta1-webhooks dialogflowprojectslocationsagentswebhookscreate" [
+export def "v3beta1-webhooks create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2204,7 +2217,7 @@ export def "v3beta1-webhooks dialogflowprojectslocationsagentswebhookscreate" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --disabled: oneof<nothing, bool> # Indicates whether the webhook is disabled.
   --display-name: string # Required. The human-readable name of the webhook, unique within the agent.
-  --generic-web-service: record # Represents configuration for a generic web service. — shape: {allowedCaCerts?: list, password?: string, requestHeaders?: record, uri?: string, username?: string}
+  --generic-web-service: record # Represents configuration for a generic web service. — shape: {allowedCaCerts?: list<string>, password?: string, requestHeaders?: record, uri?: string, username?: string}
   --name: string # The unique identifier of the webhook. Required for the Webhooks.UpdateWebhook method. Webhooks.CreateWebhook populates the name automatically. Format: `projects//locations//agents//webhooks/`.
   --service-directory: record # Represents configuration for a [Service Directory](https://cloud.google.com/service-directory) service. — shape: {genericWebService?: record, service?: string}
   --timeout: string # Webhook execution timeout. Execution is considered failed if Dialogflow doesn't receive a response from webhook at the end of the timeout period. Defaults to 5 seconds, maximum allowed timeout is 30 seconds. (format: google-duration)
@@ -2213,12 +2226,12 @@ export def "v3beta1-webhooks dialogflowprojectslocationsagentswebhookscreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v3beta1/{parent}/webhooks") $qp)
-  let body = {"disabled": $disabled, "displayName": $display_name, "genericWebService": $generic_web_service, "name": $name, "serviceDirectory": $service_directory, "timeout": $timeout} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v3beta1/{parent}/webhooks") $qp)
+  let req_body = {"disabled": $disabled, "displayName": $display_name, "genericWebService": $generic_web_service, "name": $name, "serviceDirectory": $service_directory, "timeout": $timeout} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Processes a natural language query and returns structured, actionable data as a result. This method is not idempotent, because it may cause session entity types to be updated, which in turn might affect results of future queries. Note: Always use agent versions for production traffic. See [Versions and environments](https://cloud.google.com/dialogflow/cx/docs/concept/version).
@@ -2227,8 +2240,8 @@ export def "v3beta1-webhooks dialogflowprojectslocationsagentswebhookscreate" [
 # operationId: dialogflow.projects.locations.agents.sessions.detectIntent
 # --outputAudioConfig shape: {audioEncoding?: "OUTPUT_AUDIO_ENCODING_UNSPECIFIED"|"OUTPUT_AUDIO_ENCODING_LINEAR_16"|"OUTPUT_AUDIO_ENCODING_MP3"|"OUTPUT_AUDIO_ENCODING_MP3_64_KBPS"|"OUTPUT_AUDIO_ENCODING_OGG_OPUS"|"OUTPUT_AUDIO_ENCODING_MULAW", sampleRateHertz?: int, synthesizeSpeechConfig?: record}
 # --queryInput shape: {audio?: record, dtmf?: record, event?: record, intent?: record, languageCode?: string, text?: record}
-# --queryParams shape: {analyzeQueryTextSentiment?: bool, channel?: string, currentPage?: string, disableWebhook?: bool, flowVersions?: list, geoLocation?: record, parameters?: record, payload?: record, sessionEntityTypes?: list, timeZone?: string, webhookHeaders?: record}
-export def "v3beta1 dialogflowprojectslocationsagentssessionsdetectIntent" [
+# --queryParams shape: {analyzeQueryTextSentiment?: bool, channel?: string, currentPage?: string, disableWebhook?: bool, flowVersions?: list<string>, geoLocation?: record, parameters?: record, payload?: record, sessionEntityTypes?: list, timeZone?: string, webhookHeaders?: record}
+export def "v3beta1 create-detect-intent" [
   session: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2250,19 +2263,19 @@ export def "v3beta1 dialogflowprojectslocationsagentssessionsdetectIntent" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --output-audio-config: record # Instructs the speech synthesizer how to generate the output audio content. — shape: {audioEncoding?: "OUTPUT_AUDIO_ENCODING_UNSPECIFIED"|"OUTPUT_AUDIO_ENCODING_LINEAR_16"|"OUTPUT_AUDIO_ENCODING_MP3"|"OUTPUT_AUDIO_ENCODING_MP3_64_KBPS"|"OUTPUT_AUDIO_ENCODING_OGG_OPUS"|"OUTPUT_AUDIO_ENCODING_MULAW", sampleRateHertz?: int, synthesizeSpeechConfig?: record}
-  --query-input: record # Represents the query input. It can contain one of: 1. A conversational query in the form of text. 2. An intent query that specifies which intent to trigger. 3. Natural language speech audio to be processed. 4. An event to be triggered.  — shape: {audio?: record, dtmf?: record, event?: record, intent?: record, languageCode?: string, text?: record}
-  --query-params: record # Represents the parameters of a conversational query. — shape: {analyzeQueryTextSentiment?: bool, channel?: string, currentPage?: string, disableWebhook?: bool, flowVersions?: list, geoLocation?: record, parameters?: record, payload?: record, sessionEntityTypes?: list, timeZone?: string, webhookHeaders?: record}
+  --query-input: record # Represents the query input. It can contain one of: 1. A conversational query in the form of text. 2. An intent query that specifies which intent to trigger. 3. Natural language speech audio to be processed. 4. An event to be triggered. — shape: {audio?: record, dtmf?: record, event?: record, intent?: record, languageCode?: string, text?: record}
+  --query-params: record # Represents the parameters of a conversational query. — shape: {analyzeQueryTextSentiment?: bool, channel?: string, currentPage?: string, disableWebhook?: bool, flowVersions?: list<string>, geoLocation?: record, parameters?: record, payload?: record, sessionEntityTypes?: list, timeZone?: string, webhookHeaders?: record}
 ]: any -> record<allowCancellation: bool, outputAudio: string, outputAudioConfig: record<audioEncoding: string, sampleRateHertz: int, synthesizeSpeechConfig: record<effectsProfileId: list, pitch: float, speakingRate: float, voice: record, volumeGainDb: float>>, queryResult: record<currentPage: record<displayName: string, entryFulfillment: record, eventHandlers: list, form: record, name: string, transitionRouteGroups: list, transitionRoutes: list>, diagnosticInfo: record, dtmf: record<digits: string, finishDigit: string>, intent: record<description: string, displayName: string, isFallback: bool, labels: record, name: string, parameters: list, priority: int, trainingPhrases: list>, intentDetectionConfidence: float, languageCode: string, match: record<confidence: float, event: string, intent: record, matchType: string, parameters: record, resolvedInput: string>, parameters: record, responseMessages: list<record>, sentimentAnalysisResult: record<magnitude: float, score: float>, text: string, transcript: string, triggerEvent: string, triggerIntent: string, webhookPayloads: list<record>, webhookStatuses: list<record>>, responseId: string, responseType: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({session: $session} | format pattern "/v3beta1/{session}:detectIntent") $qp)
-  let body = {"outputAudioConfig": $output_audio_config, "queryInput": $query_input, "queryParams": $query_params} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({session: (encode-path-segment $session)} | format pattern "/v3beta1/{session}:detectIntent") $qp)
+  let req_body = {"outputAudioConfig": $output_audio_config, "queryInput": $query_input, "queryParams": $query_params} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Fulfills a matched intent returned by MatchIntent. Must be called after MatchIntent, with input from MatchIntentResponse. Otherwise, the behavior is undefined.
@@ -2272,7 +2285,7 @@ export def "v3beta1 dialogflowprojectslocationsagentssessionsdetectIntent" [
 # --match shape: {confidence?: float, event?: string, intent?: record, matchType?: "MATCH_TYPE_UNSPECIFIED"|"INTENT"|"DIRECT_INTENT"|"PARAMETER_FILLING"|"NO_MATCH"|"NO_INPUT"|"EVENT", parameters?: record, resolvedInput?: string}
 # --matchIntentRequest shape: {persistParameterChanges?: bool, queryInput?: record, queryParams?: record}
 # --outputAudioConfig shape: {audioEncoding?: "OUTPUT_AUDIO_ENCODING_UNSPECIFIED"|"OUTPUT_AUDIO_ENCODING_LINEAR_16"|"OUTPUT_AUDIO_ENCODING_MP3"|"OUTPUT_AUDIO_ENCODING_MP3_64_KBPS"|"OUTPUT_AUDIO_ENCODING_OGG_OPUS"|"OUTPUT_AUDIO_ENCODING_MULAW", sampleRateHertz?: int, synthesizeSpeechConfig?: record}
-export def "v3beta1 dialogflowprojectslocationsagentssessionsfulfillIntent" [
+export def "v3beta1 create-fulfill-intent" [
   session: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2301,12 +2314,12 @@ export def "v3beta1 dialogflowprojectslocationsagentssessionsfulfillIntent" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({session: $session} | format pattern "/v3beta1/{session}:fulfillIntent") $qp)
-  let body = {"match": $body_match, "matchIntentRequest": $match_intent_request, "outputAudioConfig": $output_audio_config} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({session: (encode-path-segment $session)} | format pattern "/v3beta1/{session}:fulfillIntent") $qp)
+  let req_body = {"match": $body_match, "matchIntentRequest": $match_intent_request, "outputAudioConfig": $output_audio_config} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns preliminary intent match results, doesn't change the session status.
@@ -2314,8 +2327,8 @@ export def "v3beta1 dialogflowprojectslocationsagentssessionsfulfillIntent" [
 # POST /v3beta1/{session}:matchIntent
 # operationId: dialogflow.projects.locations.agents.sessions.matchIntent
 # --queryInput shape: {audio?: record, dtmf?: record, event?: record, intent?: record, languageCode?: string, text?: record}
-# --queryParams shape: {analyzeQueryTextSentiment?: bool, channel?: string, currentPage?: string, disableWebhook?: bool, flowVersions?: list, geoLocation?: record, parameters?: record, payload?: record, sessionEntityTypes?: list, timeZone?: string, webhookHeaders?: record}
-export def "v3beta1 dialogflowprojectslocationsagentssessionsmatchIntent" [
+# --queryParams shape: {analyzeQueryTextSentiment?: bool, channel?: string, currentPage?: string, disableWebhook?: bool, flowVersions?: list<string>, geoLocation?: record, parameters?: record, payload?: record, sessionEntityTypes?: list, timeZone?: string, webhookHeaders?: record}
+export def "v3beta1 create-match-intent" [
   session: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2337,17 +2350,17 @@ export def "v3beta1 dialogflowprojectslocationsagentssessionsmatchIntent" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --persist-parameter-changes: oneof<nothing, bool> # Persist session parameter changes from `query_params`.
-  --query-input: record # Represents the query input. It can contain one of: 1. A conversational query in the form of text. 2. An intent query that specifies which intent to trigger. 3. Natural language speech audio to be processed. 4. An event to be triggered.  — shape: {audio?: record, dtmf?: record, event?: record, intent?: record, languageCode?: string, text?: record}
-  --query-params: record # Represents the parameters of a conversational query. — shape: {analyzeQueryTextSentiment?: bool, channel?: string, currentPage?: string, disableWebhook?: bool, flowVersions?: list, geoLocation?: record, parameters?: record, payload?: record, sessionEntityTypes?: list, timeZone?: string, webhookHeaders?: record}
+  --query-input: record # Represents the query input. It can contain one of: 1. A conversational query in the form of text. 2. An intent query that specifies which intent to trigger. 3. Natural language speech audio to be processed. 4. An event to be triggered. — shape: {audio?: record, dtmf?: record, event?: record, intent?: record, languageCode?: string, text?: record}
+  --query-params: record # Represents the parameters of a conversational query. — shape: {analyzeQueryTextSentiment?: bool, channel?: string, currentPage?: string, disableWebhook?: bool, flowVersions?: list<string>, geoLocation?: record, parameters?: record, payload?: record, sessionEntityTypes?: list, timeZone?: string, webhookHeaders?: record}
 ]: any -> record<currentPage: record<displayName: string, entryFulfillment: record<conditionalCases: list, messages: list, returnPartialResponses: bool, setParameterActions: list, tag: string, webhook: string>, eventHandlers: list<record>, form: record<parameters: list>, name: string, transitionRouteGroups: list<string>, transitionRoutes: list<record>>, matches: table<confidence: float, event: string, intent: record, matchType: string, parameters: record, resolvedInput: string>, text: string, transcript: string, triggerEvent: string, triggerIntent: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({session: $session} | format pattern "/v3beta1/{session}:matchIntent") $qp)
-  let body = {"persistParameterChanges": $persist_parameter_changes, "queryInput": $query_input, "queryParams": $query_params} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({session: (encode-path-segment $session)} | format pattern "/v3beta1/{session}:matchIntent") $qp)
+  let req_body = {"persistParameterChanges": $persist_parameter_changes, "queryInput": $query_input, "queryParams": $query_params} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

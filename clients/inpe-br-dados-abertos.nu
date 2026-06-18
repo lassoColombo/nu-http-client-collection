@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -68,7 +77,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "auxiliar-estados resource" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "auxiliar-estados get-resource" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -92,7 +101,7 @@ export def commands []: nothing -> table {
 #
 # GET /auxiliar/estados
 # operationId: get_estados_auxiliar_resource
-export def "auxiliar-estados resource" [
+export def "auxiliar-estados get-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -101,7 +110,7 @@ export def "auxiliar-estados resource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pais-id: list # Código do país pelo qual será filtrado o resultado. Ver rotas auxiliares.
+  --pais-id: list<int> # Código do país pelo qual será filtrado o resultado. Ver rotas auxiliares.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -116,7 +125,7 @@ export def "auxiliar-estados resource" [
 #
 # GET /auxiliar/municipios
 # operationId: get_municipios_auxiliar_resource
-export def "auxiliar-municipios resource" [
+export def "auxiliar-municipios get-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -126,7 +135,7 @@ export def "auxiliar-municipios resource" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --pais-id: int # Código do país pelo qual será filtrado o resultado. Ver rotas auxiliares.
-  --estado-id: list # Código do estado pelo qual será filtrado o resultado. Ver rotas auxiliares.
+  --estado-id: list<int> # Código do estado pelo qual será filtrado o resultado. Ver rotas auxiliares.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -141,7 +150,7 @@ export def "auxiliar-municipios resource" [
 #
 # GET /auxiliar/paises
 # operationId: get_paises_auxiliar_resource
-export def "auxiliar-paises resource" [
+export def "auxiliar-paises get-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -163,7 +172,7 @@ export def "auxiliar-paises resource" [
 #
 # GET /auxiliar/satelites
 # operationId: get_satelite_auxiliar_resource
-export def "auxiliar-satelites resource" [
+export def "auxiliar-satelites get-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -185,7 +194,7 @@ export def "auxiliar-satelites resource" [
 #
 # GET /focos/
 # operationId: get_focos_resource
-export def "focos resource" [
+export def "focos get-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -197,17 +206,17 @@ export def "focos resource" [
   --pais-id: int # Código do país pelo qual será filtrado o resultado. Ver rotas auxiliares.
   --estado-id: int # Código do estado pelo qual será filtrado o resultado. Ver rotas auxiliares.
   --municipio-id: int # Código do município pelo qual será filtrado o resultado. Ver rotas auxiliares.
-  --satelite: list # Nome do satélte pelo qual será filtrado o resultado. Ver rotas auxiliares.
+  --satelite: list<string> # Nome do satélte pelo qual será filtrado o resultado. Ver rotas auxiliares.
   --x-fields: string # An optional fields mask
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pais_id" $pais_id "scalar") (serialize-qp "estado_id" $estado_id "scalar") (serialize-qp "municipio_id" $municipio_id "scalar") (serialize-qp "satelite" $satelite "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/focos/" $qp)
-  let extra_headers = {"X-Fields": $x_fields} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Fields": $x_fields} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -215,7 +224,7 @@ export def "focos resource" [
 #
 # GET /focos/count
 # operationId: get_focos_count_resource
-export def "focos-count resource" [
+export def "focos-count get-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -227,7 +236,7 @@ export def "focos-count resource" [
   --pais-id: int # Código do país pelo qual será filtrado o resultado. Ver rotas auxiliares.
   --estado-id: int # Código do estado pelo qual será filtrado o resultado. Ver rotas auxiliares.
   --municipio-id: int # Código do município pelo qual será filtrado o resultado. Ver rotas auxiliares.
-  --satelite: list # Nome do satélte pelo qual será filtrado o resultado. Ver rotas auxiliares.
+  --satelite: list<string> # Nome do satélte pelo qual será filtrado o resultado. Ver rotas auxiliares.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

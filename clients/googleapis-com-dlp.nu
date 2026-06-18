@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -73,7 +82,7 @@ def type-completer [] { ["DLP_JOB_TYPE_UNSPECIFIED" "INSPECT_JOB" "RISK_ANALYSIS
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "info-types dlpinfoTypeslist" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "info-types list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -97,7 +106,7 @@ export def commands []: nothing -> table {
 #
 # GET /v2/infoTypes
 # operationId: dlp.infoTypes.list
-export def "info-types dlpinfoTypeslist" [
+export def "info-types list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -135,7 +144,7 @@ export def "info-types dlpinfoTypeslist" [
 #
 # DELETE /v2/{name}
 # operationId: dlp.projects.storedInfoTypes.delete
-export def "projects dlpprojectsstoredInfoTypesdelete" [
+export def "projects delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -160,7 +169,7 @@ export def "projects dlpprojectsstoredInfoTypesdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v2/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v2/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -170,7 +179,7 @@ export def "projects dlpprojectsstoredInfoTypesdelete" [
 #
 # GET /v2/{name}
 # operationId: dlp.projects.storedInfoTypes.get
-export def "projects dlpprojectsstoredInfoTypesget" [
+export def "projects get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -195,7 +204,7 @@ export def "projects dlpprojectsstoredInfoTypesget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v2/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v2/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -206,7 +215,7 @@ export def "projects dlpprojectsstoredInfoTypesget" [
 # PATCH /v2/{name}
 # operationId: dlp.projects.storedInfoTypes.patch
 # --config shape: {description?: string, dictionary?: record, displayName?: string, largeCustomDictionary?: record, regex?: record}
-export def "projects dlpprojectsstoredInfoTypespatch" [
+export def "projects update" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -234,19 +243,19 @@ export def "projects dlpprojectsstoredInfoTypespatch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v2/{name}") $qp)
-  let body = {"config": $config, "updateMask": $update_mask} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v2/{name}") $qp)
+  let req_body = {"config": $config, "updateMask": $update_mask} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Activate a job trigger. Causes the immediate execute of a trigger instead of waiting on the trigger event to occur.
 #
 # POST /v2/{name}:activate
 # operationId: dlp.projects.locations.jobTriggers.activate
-export def "projects dlpprojectslocationsjobTriggersactivate" [
+export def "projects create-activate" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -273,18 +282,19 @@ export def "projects dlpprojectslocationsjobTriggersactivate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v2/{name}:activate") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v2/{name}:activate") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Starts asynchronous cancellation on a long-running DlpJob. The server makes a best effort to cancel the DlpJob, but success is not guaranteed. See https://cloud.google.com/dlp/docs/inspecting-storage and https://cloud.google.com/dlp/docs/compute-risk-analysis to learn more.
 #
 # POST /v2/{name}:cancel
 # operationId: dlp.projects.locations.dlpJobs.cancel
-export def "projects dlpprojectslocationsdlpJobscancel" [
+export def "projects cancel" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -311,18 +321,19 @@ export def "projects dlpprojectslocationsdlpJobscancel" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v2/{name}:cancel") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v2/{name}:cancel") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Finish a running hybrid DlpJob. Triggers the finalization steps and running of any enabled actions that have not yet run.
 #
 # POST /v2/{name}:finish
 # operationId: dlp.projects.locations.dlpJobs.finish
-export def "projects dlpprojectslocationsdlpJobsfinish" [
+export def "projects create-finish" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -349,11 +360,12 @@ export def "projects dlpprojectslocationsdlpJobsfinish" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v2/{name}:finish") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v2/{name}:finish") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Inspect hybrid content and store findings to a trigger. The inspection will be processed asynchronously. To review the findings monitor the jobs within the trigger.
@@ -361,7 +373,7 @@ export def "projects dlpprojectslocationsdlpJobsfinish" [
 # POST /v2/{name}:hybridInspect
 # operationId: dlp.projects.locations.jobTriggers.hybridInspect
 # --hybridItem shape: {findingDetails?: record, item?: record}
-export def "projects dlpprojectslocationsjobTriggershybridInspect" [
+export def "projects get-hybrid" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -388,12 +400,12 @@ export def "projects dlpprojectslocationsjobTriggershybridInspect" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v2/{name}:hybridInspect") $qp)
-  let body = {"hybridItem": $hybrid_item} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v2/{name}:hybridInspect") $qp)
+  let req_body = {"hybridItem": $hybrid_item} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # De-identifies potentially sensitive info from a ContentItem. This method has limits on input size and output size. See https://cloud.google.com/dlp/docs/deidentify-sensitive-data to learn more. When no InfoTypes or CustomInfoTypes are specified in this request, the system will automatically choose what detectors to run. By default this may be all types, but may change over time as detectors are updated.
@@ -401,9 +413,9 @@ export def "projects dlpprojectslocationsjobTriggershybridInspect" [
 # POST /v2/{parent}/content:deidentify
 # operationId: dlp.projects.locations.content.deidentify
 # --deidentifyConfig shape: {imageTransformations?: record, infoTypeTransformations?: record, recordTransformations?: record, transformationErrorHandling?: record}
-# --inspectConfig shape: {contentOptions?: list, customInfoTypes?: list, excludeInfoTypes?: bool, includeQuote?: bool, infoTypes?: list, limits?: record, minLikelihood?: "LIKELIHOOD_UNSPECIFIED"|"VERY_UNLIKELY"|"UNLIKELY"|"POSSIBLE"|"LIKELY"|"VERY_LIKELY", ruleSet?: list}
+# --inspectConfig shape: {contentOptions?: list<string>, customInfoTypes?: list, excludeInfoTypes?: bool, includeQuote?: bool, infoTypes?: list, limits?: record, minLikelihood?: "LIKELIHOOD_UNSPECIFIED"|"VERY_UNLIKELY"|"UNLIKELY"|"POSSIBLE"|"LIKELY"|"VERY_LIKELY", ruleSet?: list}
 # --item shape: {byteItem?: record, table?: record, value?: string}
-export def "content-deidentify dlpprojectslocationscontentdeidentify" [
+export def "content-deidentify create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -426,7 +438,7 @@ export def "content-deidentify dlpprojectslocationscontentdeidentify" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --deidentify-config: record # The configuration that controls how the data will change. — shape: {imageTransformations?: record, infoTypeTransformations?: record, recordTransformations?: record, transformationErrorHandling?: record}
   --deidentify-template-name: string # Template to use. Any configuration directly specified in deidentify_config will override those set in the template. Singular fields that are set in this request will replace their corresponding fields in the template. Repeated fields are appended. Singular sub-messages and groups are recursively merged.
-  --inspect-config: record # Configuration description of the scanning process. When used with redactContent only info_types and min_likelihood are currently used. — shape: {contentOptions?: list, customInfoTypes?: list, excludeInfoTypes?: bool, includeQuote?: bool, infoTypes?: list, limits?: record, minLikelihood?: "LIKELIHOOD_UNSPECIFIED"|"VERY_UNLIKELY"|"UNLIKELY"|"POSSIBLE"|"LIKELY"|"VERY_LIKELY", ruleSet?: list}
+  --inspect-config: record # Configuration description of the scanning process. When used with redactContent only info_types and min_likelihood are currently used. — shape: {contentOptions?: list<string>, customInfoTypes?: list, excludeInfoTypes?: bool, includeQuote?: bool, infoTypes?: list, limits?: record, minLikelihood?: "LIKELIHOOD_UNSPECIFIED"|"VERY_UNLIKELY"|"UNLIKELY"|"POSSIBLE"|"LIKELY"|"VERY_LIKELY", ruleSet?: list}
   --inspect-template-name: string # Template to use. Any configuration directly specified in inspect_config will override those set in the template. Singular fields that are set in this request will replace their corresponding fields in the template. Repeated fields are appended. Singular sub-messages and groups are recursively merged.
   --item: record # shape: {byteItem?: record, table?: record, value?: string}
   --location-id: string # Deprecated. This field has no effect.
@@ -435,21 +447,21 @@ export def "content-deidentify dlpprojectslocationscontentdeidentify" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v2/{parent}/content:deidentify") $qp)
-  let body = {"deidentifyConfig": $deidentify_config, "deidentifyTemplateName": $deidentify_template_name, "inspectConfig": $inspect_config, "inspectTemplateName": $inspect_template_name, "item": $item, "locationId": $location_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v2/{parent}/content:deidentify") $qp)
+  let req_body = {"deidentifyConfig": $deidentify_config, "deidentifyTemplateName": $deidentify_template_name, "inspectConfig": $inspect_config, "inspectTemplateName": $inspect_template_name, "item": $item, "locationId": $location_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Finds potentially sensitive info in content. This method has limits on input size, processing time, and output size. When no InfoTypes or CustomInfoTypes are specified in this request, the system will automatically choose what detectors to run. By default this may be all types, but may change over time as detectors are updated. For how to guides, see https://cloud.google.com/dlp/docs/inspecting-images and https://cloud.google.com/dlp/docs/inspecting-text,
 #
 # POST /v2/{parent}/content:inspect
 # operationId: dlp.projects.locations.content.inspect
-# --inspectConfig shape: {contentOptions?: list, customInfoTypes?: list, excludeInfoTypes?: bool, includeQuote?: bool, infoTypes?: list, limits?: record, minLikelihood?: "LIKELIHOOD_UNSPECIFIED"|"VERY_UNLIKELY"|"UNLIKELY"|"POSSIBLE"|"LIKELY"|"VERY_LIKELY", ruleSet?: list}
+# --inspectConfig shape: {contentOptions?: list<string>, customInfoTypes?: list, excludeInfoTypes?: bool, includeQuote?: bool, infoTypes?: list, limits?: record, minLikelihood?: "LIKELIHOOD_UNSPECIFIED"|"VERY_UNLIKELY"|"UNLIKELY"|"POSSIBLE"|"LIKELY"|"VERY_LIKELY", ruleSet?: list}
 # --item shape: {byteItem?: record, table?: record, value?: string}
-export def "content-inspect dlpprojectslocationscontentinspect" [
+export def "content-inspect get" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -470,7 +482,7 @@ export def "content-inspect dlpprojectslocationscontentinspect" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --inspect-config: record # Configuration description of the scanning process. When used with redactContent only info_types and min_likelihood are currently used. — shape: {contentOptions?: list, customInfoTypes?: list, excludeInfoTypes?: bool, includeQuote?: bool, infoTypes?: list, limits?: record, minLikelihood?: "LIKELIHOOD_UNSPECIFIED"|"VERY_UNLIKELY"|"UNLIKELY"|"POSSIBLE"|"LIKELY"|"VERY_LIKELY", ruleSet?: list}
+  --inspect-config: record # Configuration description of the scanning process. When used with redactContent only info_types and min_likelihood are currently used. — shape: {contentOptions?: list<string>, customInfoTypes?: list, excludeInfoTypes?: bool, includeQuote?: bool, infoTypes?: list, limits?: record, minLikelihood?: "LIKELIHOOD_UNSPECIFIED"|"VERY_UNLIKELY"|"UNLIKELY"|"POSSIBLE"|"LIKELY"|"VERY_LIKELY", ruleSet?: list}
   --inspect-template-name: string # Template to use. Any configuration directly specified in inspect_config will override those set in the template. Singular fields that are set in this request will replace their corresponding fields in the template. Repeated fields are appended. Singular sub-messages and groups are recursively merged.
   --item: record # shape: {byteItem?: record, table?: record, value?: string}
   --location-id: string # Deprecated. This field has no effect.
@@ -479,22 +491,22 @@ export def "content-inspect dlpprojectslocationscontentinspect" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v2/{parent}/content:inspect") $qp)
-  let body = {"inspectConfig": $inspect_config, "inspectTemplateName": $inspect_template_name, "item": $item, "locationId": $location_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v2/{parent}/content:inspect") $qp)
+  let req_body = {"inspectConfig": $inspect_config, "inspectTemplateName": $inspect_template_name, "item": $item, "locationId": $location_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Re-identifies content that has been de-identified. See https://cloud.google.com/dlp/docs/pseudonymization#re-identification_in_free_text_code_example to learn more.
 #
 # POST /v2/{parent}/content:reidentify
 # operationId: dlp.projects.locations.content.reidentify
-# --inspectConfig shape: {contentOptions?: list, customInfoTypes?: list, excludeInfoTypes?: bool, includeQuote?: bool, infoTypes?: list, limits?: record, minLikelihood?: "LIKELIHOOD_UNSPECIFIED"|"VERY_UNLIKELY"|"UNLIKELY"|"POSSIBLE"|"LIKELY"|"VERY_LIKELY", ruleSet?: list}
+# --inspectConfig shape: {contentOptions?: list<string>, customInfoTypes?: list, excludeInfoTypes?: bool, includeQuote?: bool, infoTypes?: list, limits?: record, minLikelihood?: "LIKELIHOOD_UNSPECIFIED"|"VERY_UNLIKELY"|"UNLIKELY"|"POSSIBLE"|"LIKELY"|"VERY_LIKELY", ruleSet?: list}
 # --item shape: {byteItem?: record, table?: record, value?: string}
 # --reidentifyConfig shape: {imageTransformations?: record, infoTypeTransformations?: record, recordTransformations?: record, transformationErrorHandling?: record}
-export def "content-reidentify dlpprojectslocationscontentreidentify" [
+export def "content-reidentify create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -515,7 +527,7 @@ export def "content-reidentify dlpprojectslocationscontentreidentify" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --inspect-config: record # Configuration description of the scanning process. When used with redactContent only info_types and min_likelihood are currently used. — shape: {contentOptions?: list, customInfoTypes?: list, excludeInfoTypes?: bool, includeQuote?: bool, infoTypes?: list, limits?: record, minLikelihood?: "LIKELIHOOD_UNSPECIFIED"|"VERY_UNLIKELY"|"UNLIKELY"|"POSSIBLE"|"LIKELY"|"VERY_LIKELY", ruleSet?: list}
+  --inspect-config: record # Configuration description of the scanning process. When used with redactContent only info_types and min_likelihood are currently used. — shape: {contentOptions?: list<string>, customInfoTypes?: list, excludeInfoTypes?: bool, includeQuote?: bool, infoTypes?: list, limits?: record, minLikelihood?: "LIKELIHOOD_UNSPECIFIED"|"VERY_UNLIKELY"|"UNLIKELY"|"POSSIBLE"|"LIKELY"|"VERY_LIKELY", ruleSet?: list}
   --inspect-template-name: string # Template to use. Any configuration directly specified in `inspect_config` will override those set in the template. Singular fields that are set in this request will replace their corresponding fields in the template. Repeated fields are appended. Singular sub-messages and groups are recursively merged.
   --item: record # shape: {byteItem?: record, table?: record, value?: string}
   --location-id: string # Deprecated. This field has no effect.
@@ -526,19 +538,19 @@ export def "content-reidentify dlpprojectslocationscontentreidentify" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v2/{parent}/content:reidentify") $qp)
-  let body = {"inspectConfig": $inspect_config, "inspectTemplateName": $inspect_template_name, "item": $item, "locationId": $location_id, "reidentifyConfig": $reidentify_config, "reidentifyTemplateName": $reidentify_template_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v2/{parent}/content:reidentify") $qp)
+  let req_body = {"inspectConfig": $inspect_config, "inspectTemplateName": $inspect_template_name, "item": $item, "locationId": $location_id, "reidentifyConfig": $reidentify_config, "reidentifyTemplateName": $reidentify_template_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists DeidentifyTemplates. See https://cloud.google.com/dlp/docs/creating-templates-deid to learn more.
 #
 # GET /v2/{parent}/deidentifyTemplates
 # operationId: dlp.projects.locations.deidentifyTemplates.list
-export def "deidentify-templates dlpprojectslocationsdeidentifyTemplateslist" [
+export def "deidentify-templates list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -567,7 +579,7 @@ export def "deidentify-templates dlpprojectslocationsdeidentifyTemplateslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "locationId" $location_id "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v2/{parent}/deidentifyTemplates") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v2/{parent}/deidentifyTemplates") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -578,7 +590,7 @@ export def "deidentify-templates dlpprojectslocationsdeidentifyTemplateslist" [
 # POST /v2/{parent}/deidentifyTemplates
 # operationId: dlp.projects.locations.deidentifyTemplates.create
 # --deidentifyTemplate shape: {deidentifyConfig?: record, description?: string, displayName?: string}
-export def "deidentify-templates dlpprojectslocationsdeidentifyTemplatescreate" [
+export def "deidentify-templates create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -607,19 +619,19 @@ export def "deidentify-templates dlpprojectslocationsdeidentifyTemplatescreate" 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v2/{parent}/deidentifyTemplates") $qp)
-  let body = {"deidentifyTemplate": $deidentify_template, "locationId": $location_id, "templateId": $template_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v2/{parent}/deidentifyTemplates") $qp)
+  let req_body = {"deidentifyTemplate": $deidentify_template, "locationId": $location_id, "templateId": $template_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists DlpJobs that match the specified filter in the request. See https://cloud.google.com/dlp/docs/inspecting-storage and https://cloud.google.com/dlp/docs/compute-risk-analysis to learn more.
 #
 # GET /v2/{parent}/dlpJobs
 # operationId: dlp.projects.locations.dlpJobs.list
-export def "dlp-jobs dlpprojectslocationsdlpJobslist" [
+export def "dlp-jobs list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -650,7 +662,7 @@ export def "dlp-jobs dlpprojectslocationsdlpJobslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "locationId" $location_id "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v2/{parent}/dlpJobs") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v2/{parent}/dlpJobs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -662,7 +674,7 @@ export def "dlp-jobs dlpprojectslocationsdlpJobslist" [
 # operationId: dlp.projects.locations.dlpJobs.create
 # --inspectJob shape: {actions?: list, inspectConfig?: record, inspectTemplateName?: string, storageConfig?: record}
 # --riskJob shape: {actions?: list, privacyMetric?: record, sourceTable?: record}
-export def "dlp-jobs dlpprojectslocationsdlpJobscreate" [
+export def "dlp-jobs create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -692,12 +704,12 @@ export def "dlp-jobs dlpprojectslocationsdlpJobscreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v2/{parent}/dlpJobs") $qp)
-  let body = {"inspectJob": $inspect_job, "jobId": $job_id, "locationId": $location_id, "riskJob": $risk_job} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v2/{parent}/dlpJobs") $qp)
+  let req_body = {"inspectJob": $inspect_job, "jobId": $job_id, "locationId": $location_id, "riskJob": $risk_job} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Redacts potentially sensitive info from an image. This method has limits on input size, processing time, and output size. See https://cloud.google.com/dlp/docs/redacting-sensitive-data-images to learn more. When no InfoTypes or CustomInfoTypes are specified in this request, the system will automatically choose what detectors to run. By default this may be all types, but may change over time as detectors are updated.
@@ -706,8 +718,8 @@ export def "dlp-jobs dlpprojectslocationsdlpJobscreate" [
 # operationId: dlp.projects.locations.image.redact
 # --byteItem shape: {data?: string, type?: "BYTES_TYPE_UNSPECIFIED"|"IMAGE"|"IMAGE_JPEG"|"IMAGE_BMP"|"IMAGE_PNG"|"IMAGE_SVG"|"TEXT_UTF8"|"WORD_DOCUMENT"|"PDF"|"POWERPOINT_DOCUMENT"|"EXCEL_DOCUMENT"|"AVRO"|"CSV"|"TSV"}
 # --imageRedactionConfigs item shape: {infoType?: record, redactAllText?: bool, redactionColor?: record}
-# --inspectConfig shape: {contentOptions?: list, customInfoTypes?: list, excludeInfoTypes?: bool, includeQuote?: bool, infoTypes?: list, limits?: record, minLikelihood?: "LIKELIHOOD_UNSPECIFIED"|"VERY_UNLIKELY"|"UNLIKELY"|"POSSIBLE"|"LIKELY"|"VERY_LIKELY", ruleSet?: list}
-export def "image-redact dlpprojectslocationsimageredact" [
+# --inspectConfig shape: {contentOptions?: list<string>, customInfoTypes?: list, excludeInfoTypes?: bool, includeQuote?: bool, infoTypes?: list, limits?: record, minLikelihood?: "LIKELIHOOD_UNSPECIFIED"|"VERY_UNLIKELY"|"UNLIKELY"|"POSSIBLE"|"LIKELY"|"VERY_LIKELY", ruleSet?: list}
+export def "image-redact create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -731,26 +743,26 @@ export def "image-redact dlpprojectslocationsimageredact" [
   --byte-item: record # Container for bytes to inspect or redact. — shape: {data?: string, type?: "BYTES_TYPE_UNSPECIFIED"|"IMAGE"|"IMAGE_JPEG"|"IMAGE_BMP"|"IMAGE_PNG"|"IMAGE_SVG"|"TEXT_UTF8"|"WORD_DOCUMENT"|"PDF"|"POWERPOINT_DOCUMENT"|"EXCEL_DOCUMENT"|"AVRO"|"CSV"|"TSV"}
   --image-redaction-configs: list # The configuration for specifying what content to redact from images. — item shape: {infoType?: record, redactAllText?: bool, redactionColor?: record}
   --include-findings: oneof<nothing, bool> # Whether the response should include findings along with the redacted image.
-  --inspect-config: record # Configuration description of the scanning process. When used with redactContent only info_types and min_likelihood are currently used. — shape: {contentOptions?: list, customInfoTypes?: list, excludeInfoTypes?: bool, includeQuote?: bool, infoTypes?: list, limits?: record, minLikelihood?: "LIKELIHOOD_UNSPECIFIED"|"VERY_UNLIKELY"|"UNLIKELY"|"POSSIBLE"|"LIKELY"|"VERY_LIKELY", ruleSet?: list}
+  --inspect-config: record # Configuration description of the scanning process. When used with redactContent only info_types and min_likelihood are currently used. — shape: {contentOptions?: list<string>, customInfoTypes?: list, excludeInfoTypes?: bool, includeQuote?: bool, infoTypes?: list, limits?: record, minLikelihood?: "LIKELIHOOD_UNSPECIFIED"|"VERY_UNLIKELY"|"UNLIKELY"|"POSSIBLE"|"LIKELY"|"VERY_LIKELY", ruleSet?: list}
   --location-id: string # Deprecated. This field has no effect.
 ]: any -> record<extractedText: string, inspectResult: record<findings: list<record>, findingsTruncated: bool>, redactedImage: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v2/{parent}/image:redact") $qp)
-  let body = {"byteItem": $byte_item, "imageRedactionConfigs": $image_redaction_configs, "includeFindings": $include_findings, "inspectConfig": $inspect_config, "locationId": $location_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v2/{parent}/image:redact") $qp)
+  let req_body = {"byteItem": $byte_item, "imageRedactionConfigs": $image_redaction_configs, "includeFindings": $include_findings, "inspectConfig": $inspect_config, "locationId": $location_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns a list of the sensitive information types that DLP API supports. See https://cloud.google.com/dlp/docs/infotypes-reference to learn more.
 #
 # GET /v2/{parent}/infoTypes
 # operationId: dlp.locations.infoTypes.list
-export def "info-types dlplocationsinfoTypeslist" [
+export def "info-types list-1" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -778,7 +790,7 @@ export def "info-types dlplocationsinfoTypeslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "languageCode" $language_code "scalar") (serialize-qp "locationId" $location_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v2/{parent}/infoTypes") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v2/{parent}/infoTypes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -788,7 +800,7 @@ export def "info-types dlplocationsinfoTypeslist" [
 #
 # GET /v2/{parent}/inspectTemplates
 # operationId: dlp.projects.locations.inspectTemplates.list
-export def "inspect-templates dlpprojectslocationsinspectTemplateslist" [
+export def "inspect-templates list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -817,7 +829,7 @@ export def "inspect-templates dlpprojectslocationsinspectTemplateslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "locationId" $location_id "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v2/{parent}/inspectTemplates") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v2/{parent}/inspectTemplates") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -828,7 +840,7 @@ export def "inspect-templates dlpprojectslocationsinspectTemplateslist" [
 # POST /v2/{parent}/inspectTemplates
 # operationId: dlp.projects.locations.inspectTemplates.create
 # --inspectTemplate shape: {description?: string, displayName?: string, inspectConfig?: record}
-export def "inspect-templates dlpprojectslocationsinspectTemplatescreate" [
+export def "inspect-templates create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -857,19 +869,19 @@ export def "inspect-templates dlpprojectslocationsinspectTemplatescreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v2/{parent}/inspectTemplates") $qp)
-  let body = {"inspectTemplate": $inspect_template, "locationId": $location_id, "templateId": $template_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v2/{parent}/inspectTemplates") $qp)
+  let req_body = {"inspectTemplate": $inspect_template, "locationId": $location_id, "templateId": $template_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists job triggers. See https://cloud.google.com/dlp/docs/creating-job-triggers to learn more.
 #
 # GET /v2/{parent}/jobTriggers
 # operationId: dlp.projects.locations.jobTriggers.list
-export def "job-triggers dlpprojectslocationsjobTriggerslist" [
+export def "job-triggers list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -900,7 +912,7 @@ export def "job-triggers dlpprojectslocationsjobTriggerslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "locationId" $location_id "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v2/{parent}/jobTriggers") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v2/{parent}/jobTriggers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -911,7 +923,7 @@ export def "job-triggers dlpprojectslocationsjobTriggerslist" [
 # POST /v2/{parent}/jobTriggers
 # operationId: dlp.projects.locations.jobTriggers.create
 # --jobTrigger shape: {description?: string, displayName?: string, inspectJob?: record, name?: string, status?: "STATUS_UNSPECIFIED"|"HEALTHY"|"PAUSED"|"CANCELLED", triggers?: list}
-export def "job-triggers dlpprojectslocationsjobTriggerscreate" [
+export def "job-triggers create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -940,19 +952,19 @@ export def "job-triggers dlpprojectslocationsjobTriggerscreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v2/{parent}/jobTriggers") $qp)
-  let body = {"jobTrigger": $job_trigger, "locationId": $location_id, "triggerId": $trigger_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v2/{parent}/jobTriggers") $qp)
+  let req_body = {"jobTrigger": $job_trigger, "locationId": $location_id, "triggerId": $trigger_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists stored infoTypes. See https://cloud.google.com/dlp/docs/creating-stored-infotypes to learn more.
 #
 # GET /v2/{parent}/storedInfoTypes
 # operationId: dlp.projects.storedInfoTypes.list
-export def "stored-info-types dlpprojectsstoredInfoTypeslist" [
+export def "stored-info-types list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -981,7 +993,7 @@ export def "stored-info-types dlpprojectsstoredInfoTypeslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "locationId" $location_id "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v2/{parent}/storedInfoTypes") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v2/{parent}/storedInfoTypes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -992,7 +1004,7 @@ export def "stored-info-types dlpprojectsstoredInfoTypeslist" [
 # POST /v2/{parent}/storedInfoTypes
 # operationId: dlp.projects.storedInfoTypes.create
 # --config shape: {description?: string, dictionary?: record, displayName?: string, largeCustomDictionary?: record, regex?: record}
-export def "stored-info-types dlpprojectsstoredInfoTypescreate" [
+export def "stored-info-types create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1021,10 +1033,10 @@ export def "stored-info-types dlpprojectsstoredInfoTypescreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v2/{parent}/storedInfoTypes") $qp)
-  let body = {"config": $config, "locationId": $location_id, "storedInfoTypeId": $stored_info_type_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v2/{parent}/storedInfoTypes") $qp)
+  let req_body = {"config": $config, "locationId": $location_id, "storedInfoTypeId": $stored_info_type_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

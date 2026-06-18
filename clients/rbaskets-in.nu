@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -132,7 +141,7 @@ export def "baskets delete-by-name" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({name: $name} | format pattern "/api/baskets/{name}"))
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/api/baskets/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -154,7 +163,7 @@ export def "baskets get-by-name" [
 ]: nothing -> record<capacity: int, expand_path: bool, forward_url: string, insecure_tls: bool, proxy_response: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({name: $name} | format pattern "/api/baskets/{name}"))
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/api/baskets/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -163,7 +172,7 @@ export def "baskets get-by-name" [
 # Create new basket
 #
 # POST /api/baskets/{name}
-export def "baskets post-by-name" [
+export def "baskets create-by-name" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -176,24 +185,24 @@ export def "baskets post-by-name" [
   --capacity: int # Baskets capacity, defines maximum number of requests to store (e.g. 250)
   --expand-path: oneof<nothing, bool> # If set to `true` the forward URL path will be expanded when original HTTP request contains compound path. (e.g. true)
   --forward-url: string # URL to forward all incoming requests of the basket, `empty` value disables forwarding (e.g. https://myservice.example.com/events-collector)
-  --insecure-tls: oneof<nothing, bool> # If set to `true` the certificate verification will be disabled if forward URL indicates HTTPS scheme. **Warning:** enabling this feature has known security implications.  (e.g. false)
-  --proxy-response: oneof<nothing, bool> # If set to `true` this basket behaves as a full proxy: responses from underlying service configured in `forward_url` are passed back to clients of original requests. The configuration of basket responses is ignored in this case.  (e.g. false)
+  --insecure-tls: oneof<nothing, bool> # If set to `true` the certificate verification will be disabled if forward URL indicates HTTPS scheme. **Warning:** enabling this feature has known security implications. (e.g. false)
+  --proxy-response: oneof<nothing, bool> # If set to `true` this basket behaves as a full proxy: responses from underlying service configured in `forward_url` are passed back to clients of original requests. The configuration of basket responses is ignored in this case. (e.g. false)
 ]: any -> record<token: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({name: $name} | format pattern "/api/baskets/{name}"))
-  let body = {"capacity": $capacity, "expand_path": $expand_path, "forward_url": $forward_url, "insecure_tls": $insecure_tls, "proxy_response": $proxy_response} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/api/baskets/{name}"))
+  let req_body = {"capacity": $capacity, "expand_path": $expand_path, "forward_url": $forward_url, "insecure_tls": $insecure_tls, "proxy_response": $proxy_response} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update basket settings
 #
 # PUT /api/baskets/{name}
-export def "baskets put-by-name" [
+export def "baskets update-by-name" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -206,18 +215,18 @@ export def "baskets put-by-name" [
   --capacity: int # Baskets capacity, defines maximum number of requests to store (e.g. 250)
   --expand-path: oneof<nothing, bool> # If set to `true` the forward URL path will be expanded when original HTTP request contains compound path. (e.g. true)
   --forward-url: string # URL to forward all incoming requests of the basket, `empty` value disables forwarding (e.g. https://myservice.example.com/events-collector)
-  --insecure-tls: oneof<nothing, bool> # If set to `true` the certificate verification will be disabled if forward URL indicates HTTPS scheme. **Warning:** enabling this feature has known security implications.  (e.g. false)
-  --proxy-response: oneof<nothing, bool> # If set to `true` this basket behaves as a full proxy: responses from underlying service configured in `forward_url` are passed back to clients of original requests. The configuration of basket responses is ignored in this case.  (e.g. false)
+  --insecure-tls: oneof<nothing, bool> # If set to `true` the certificate verification will be disabled if forward URL indicates HTTPS scheme. **Warning:** enabling this feature has known security implications. (e.g. false)
+  --proxy-response: oneof<nothing, bool> # If set to `true` this basket behaves as a full proxy: responses from underlying service configured in `forward_url` are passed back to clients of original requests. The configuration of basket responses is ignored in this case. (e.g. false)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({name: $name} | format pattern "/api/baskets/{name}"))
-  let body = {"capacity": $capacity, "expand_path": $expand_path, "forward_url": $forward_url, "insecure_tls": $insecure_tls, "proxy_response": $proxy_response} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/api/baskets/{name}"))
+  let req_body = {"capacity": $capacity, "expand_path": $expand_path, "forward_url": $forward_url, "insecure_tls": $insecure_tls, "proxy_response": $proxy_response} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete all requests
@@ -236,7 +245,7 @@ export def "baskets-requests delete-by-name" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({name: $name} | format pattern "/api/baskets/{name}/requests"))
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/api/baskets/{name}/requests"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -263,7 +272,7 @@ export def "baskets-requests get-by-name" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "in" $in_param "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/api/baskets/{name}/requests") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/api/baskets/{name}/requests") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -286,7 +295,7 @@ export def "baskets-responses get-by-name-method" [
 ]: nothing -> record<body: string, headers: record, is_template: bool, status: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({name: $name, method: $method} | format pattern "/api/baskets/{name}/responses/{method}"))
+  let full_url = (build-url $base ({name: (encode-path-segment $name), method: (encode-path-segment $method)} | format pattern "/api/baskets/{name}/responses/{method}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -295,7 +304,7 @@ export def "baskets-responses get-by-name-method" [
 # Update response settings
 #
 # PUT /api/baskets/{name}/responses/{method}
-export def "baskets-responses put-by-name-method" [
+export def "baskets-responses update-by-name-method" [
   name: string
   method: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -306,20 +315,20 @@ export def "baskets-responses put-by-name-method" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-body: string # Content of response body (e.g. Success)
+  --body: string # Content of response body (e.g. Success)
   --headers: record # Map of HTTP headers, key represents name, value is array of values (e.g. {Accept: [application/json, application/xml], Connection: [close], Content-Type: [application/json]})
-  --is-template: oneof<nothing, bool> # If set to `true` the body is treated as [HTML template](https://golang.org/pkg/html/template) that accepts input from request parameters.  (e.g. false)
+  --is-template: oneof<nothing, bool> # If set to `true` the body is treated as [HTML template](https://golang.org/pkg/html/template) that accepts input from request parameters. (e.g. false)
   --status: int # The HTTP status code to reply with (e.g. 200)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({name: $name, method: $method} | format pattern "/api/baskets/{name}/responses/{method}"))
-  let body = {"body": $body_body, "headers": $headers, "is_template": $is_template, "status": $status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name), method: (encode-path-segment $method)} | format pattern "/api/baskets/{name}/responses/{method}"))
+  let req_body = {"body": $body, "headers": $headers, "is_template": $is_template, "status": $status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get baskets statistics
@@ -411,7 +420,7 @@ export def "baskets delete-by-name-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({name: $name} | format pattern "/baskets/{name}"))
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/baskets/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -435,7 +444,7 @@ export def "baskets get-by-name-1" [
 ]: nothing -> record<capacity: int, expand_path: bool, forward_url: string, insecure_tls: bool, proxy_response: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({name: $name} | format pattern "/baskets/{name}"))
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/baskets/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -446,7 +455,7 @@ export def "baskets get-by-name-1" [
 # POST /baskets/{name}
 # DEPRECATED
 @deprecated
-export def "baskets post-by-name-1" [
+export def "baskets create-by-name-1" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -459,18 +468,18 @@ export def "baskets post-by-name-1" [
   --capacity: int # Baskets capacity, defines maximum number of requests to store (e.g. 250)
   --expand-path: oneof<nothing, bool> # If set to `true` the forward URL path will be expanded when original HTTP request contains compound path. (e.g. true)
   --forward-url: string # URL to forward all incoming requests of the basket, `empty` value disables forwarding (e.g. https://myservice.example.com/events-collector)
-  --insecure-tls: oneof<nothing, bool> # If set to `true` the certificate verification will be disabled if forward URL indicates HTTPS scheme. **Warning:** enabling this feature has known security implications.  (e.g. false)
-  --proxy-response: oneof<nothing, bool> # If set to `true` this basket behaves as a full proxy: responses from underlying service configured in `forward_url` are passed back to clients of original requests. The configuration of basket responses is ignored in this case.  (e.g. false)
+  --insecure-tls: oneof<nothing, bool> # If set to `true` the certificate verification will be disabled if forward URL indicates HTTPS scheme. **Warning:** enabling this feature has known security implications. (e.g. false)
+  --proxy-response: oneof<nothing, bool> # If set to `true` this basket behaves as a full proxy: responses from underlying service configured in `forward_url` are passed back to clients of original requests. The configuration of basket responses is ignored in this case. (e.g. false)
 ]: any -> record<token: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({name: $name} | format pattern "/baskets/{name}"))
-  let body = {"capacity": $capacity, "expand_path": $expand_path, "forward_url": $forward_url, "insecure_tls": $insecure_tls, "proxy_response": $proxy_response} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/baskets/{name}"))
+  let req_body = {"capacity": $capacity, "expand_path": $expand_path, "forward_url": $forward_url, "insecure_tls": $insecure_tls, "proxy_response": $proxy_response} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update basket settings
@@ -478,7 +487,7 @@ export def "baskets post-by-name-1" [
 # PUT /baskets/{name}
 # DEPRECATED
 @deprecated
-export def "baskets put-by-name-1" [
+export def "baskets update-by-name-1" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -491,18 +500,18 @@ export def "baskets put-by-name-1" [
   --capacity: int # Baskets capacity, defines maximum number of requests to store (e.g. 250)
   --expand-path: oneof<nothing, bool> # If set to `true` the forward URL path will be expanded when original HTTP request contains compound path. (e.g. true)
   --forward-url: string # URL to forward all incoming requests of the basket, `empty` value disables forwarding (e.g. https://myservice.example.com/events-collector)
-  --insecure-tls: oneof<nothing, bool> # If set to `true` the certificate verification will be disabled if forward URL indicates HTTPS scheme. **Warning:** enabling this feature has known security implications.  (e.g. false)
-  --proxy-response: oneof<nothing, bool> # If set to `true` this basket behaves as a full proxy: responses from underlying service configured in `forward_url` are passed back to clients of original requests. The configuration of basket responses is ignored in this case.  (e.g. false)
+  --insecure-tls: oneof<nothing, bool> # If set to `true` the certificate verification will be disabled if forward URL indicates HTTPS scheme. **Warning:** enabling this feature has known security implications. (e.g. false)
+  --proxy-response: oneof<nothing, bool> # If set to `true` this basket behaves as a full proxy: responses from underlying service configured in `forward_url` are passed back to clients of original requests. The configuration of basket responses is ignored in this case. (e.g. false)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({name: $name} | format pattern "/baskets/{name}"))
-  let body = {"capacity": $capacity, "expand_path": $expand_path, "forward_url": $forward_url, "insecure_tls": $insecure_tls, "proxy_response": $proxy_response} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/baskets/{name}"))
+  let req_body = {"capacity": $capacity, "expand_path": $expand_path, "forward_url": $forward_url, "insecure_tls": $insecure_tls, "proxy_response": $proxy_response} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete all requests
@@ -523,7 +532,7 @@ export def "baskets-requests delete-by-name-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({name: $name} | format pattern "/baskets/{name}/requests"))
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/baskets/{name}/requests"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -552,7 +561,7 @@ export def "baskets-requests get-by-name-1" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "in" $in_param "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/baskets/{name}/requests") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/baskets/{name}/requests") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -577,7 +586,7 @@ export def "baskets-responses get-by-name-method-1" [
 ]: nothing -> record<body: string, headers: record, is_template: bool, status: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({name: $name, method: $method} | format pattern "/baskets/{name}/responses/{method}"))
+  let full_url = (build-url $base ({name: (encode-path-segment $name), method: (encode-path-segment $method)} | format pattern "/baskets/{name}/responses/{method}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -588,7 +597,7 @@ export def "baskets-responses get-by-name-method-1" [
 # PUT /baskets/{name}/responses/{method}
 # DEPRECATED
 @deprecated
-export def "baskets-responses put-by-name-method-1" [
+export def "baskets-responses update-by-name-method-1" [
   name: string
   method: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -599,18 +608,18 @@ export def "baskets-responses put-by-name-method-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-body: string # Content of response body (e.g. Success)
+  --body: string # Content of response body (e.g. Success)
   --headers: record # Map of HTTP headers, key represents name, value is array of values (e.g. {Accept: [application/json, application/xml], Connection: [close], Content-Type: [application/json]})
-  --is-template: oneof<nothing, bool> # If set to `true` the body is treated as [HTML template](https://golang.org/pkg/html/template) that accepts input from request parameters.  (e.g. false)
+  --is-template: oneof<nothing, bool> # If set to `true` the body is treated as [HTML template](https://golang.org/pkg/html/template) that accepts input from request parameters. (e.g. false)
   --status: int # The HTTP status code to reply with (e.g. 200)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({name: $name, method: $method} | format pattern "/baskets/{name}/responses/{method}"))
-  let body = {"body": $body_body, "headers": $headers, "is_template": $is_template, "status": $status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name), method: (encode-path-segment $method)} | format pattern "/baskets/{name}/responses/{method}"))
+  let req_body = {"body": $body, "headers": $headers, "is_template": $is_template, "status": $status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

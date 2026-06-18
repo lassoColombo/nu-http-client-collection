@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -70,7 +79,7 @@ def accept-completer [] { ["application/json" "application/jwt"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "key nosecret" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "key delete-nosecret" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -90,11 +99,11 @@ export def commands []: nothing -> table {
   }
 }
 
-# Revoke an Authentiq ID using email & phone.  If called with `email` and `phone` only, a verification code  will be sent by email. Do a second call adding `code` to  complete the revocation.
+# Revoke an Authentiq ID using email & phone. If called with `email` and `phone` only, a verification code will be sent by email. Do a second call adding `code` to complete the revocation.
 #
 # DELETE /key
 # operationId: key_revoke_nosecret
-export def "key nosecret" [
+export def "key delete-nosecret" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -116,11 +125,11 @@ export def "key nosecret" [
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Register a new ID `JWT(sub, devtoken)`  v5: `JWT(sub, pk, devtoken, ...)`  See: https://github.com/skion/authentiq/wiki/JWT-Examples
+# Register a new ID `JWT(sub, devtoken)` v5: `JWT(sub, pk, devtoken, ...)` See: https://github.com/skion/authentiq/wiki/JWT-Examples
 #
 # POST /key
 # operationId: key_register
-export def "key register" [
+export def "key create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -135,17 +144,18 @@ export def "key register" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/key")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/jwt" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/jwt" $req_body
 }
 
 # Revoke an Identity (Key) with a revocation secret
 #
 # DELETE /key/{PK}
 # operationId: key_revoke
-export def "key revoke" [
+export def "key delete" [
   pk: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -160,7 +170,7 @@ export def "key revoke" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "secret" $secret "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({pk: $pk} | format pattern "/key/{pk}") $qp)
+  let full_url = (build-url $base ({pk: (encode-path-segment $pk)} | format pattern "/key/{pk}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -183,7 +193,7 @@ export def "key get" [
 ]: nothing -> record<since: string, status: string, sub: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({pk: $pk} | format pattern "/key/{pk}"))
+  let full_url = (build-url $base ({pk: (encode-path-segment $pk)} | format pattern "/key/{pk}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -192,7 +202,7 @@ export def "key get" [
 # HEAD info on Authentiq ID
 #
 # HEAD /key/{PK}
-export def "key head" [
+export def "key head-head" [
   pk: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -205,13 +215,13 @@ export def "key head" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({pk: $pk} | format pattern "/key/{pk}"))
+  let full_url = (build-url $base ({pk: (encode-path-segment $pk)} | format pattern "/key/{pk}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# update properties of an Authentiq ID. (not operational in v4; use PUT for now)  v5: POST issuer-signed email & phone scopes in a self-signed JWT  See: https://github.com/skion/authentiq/wiki/JWT-Examples
+# update properties of an Authentiq ID. (not operational in v4; use PUT for now) v5: POST issuer-signed email & phone scopes in a self-signed JWT See: https://github.com/skion/authentiq/wiki/JWT-Examples
 #
 # POST /key/{PK}
 # operationId: key_update
@@ -230,18 +240,19 @@ export def "key update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({pk: $pk} | format pattern "/key/{pk}"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({pk: (encode-path-segment $pk)} | format pattern "/key/{pk}"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/jwt" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/jwt" $req_body
 }
 
-# Update Authentiq ID by replacing the object.  v4: `JWT(sub,email,phone)` to bind email/phone hash;   v5: POST issuer-signed email & phone scopes and PUT to update registration `JWT(sub, pk, devtoken, ...)`  See: https://github.com/skion/authentiq/wiki/JWT-Examples
+# Update Authentiq ID by replacing the object. v4: `JWT(sub,email,phone)` to bind email/phone hash; v5: POST issuer-signed email & phone scopes and PUT to update registration `JWT(sub, pk, devtoken, ...)` See: https://github.com/skion/authentiq/wiki/JWT-Examples
 #
 # PUT /key/{PK}
 # operationId: key_bind
-export def "key bind" [
+export def "key update-bind" [
   pk: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -256,18 +267,19 @@ export def "key bind" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({pk: $pk} | format pattern "/key/{pk}"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({pk: (encode-path-segment $pk)} | format pattern "/key/{pk}"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/jwt" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/jwt" $req_body
 }
 
 # push sign-in request See: https://github.com/skion/authentiq/wiki/JWT-Examples
 #
 # POST /login
 # operationId: push_login_request
-export def "login request" [
+export def "login push-request" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -284,17 +296,18 @@ export def "login request" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/login" $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/jwt" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/jwt" $req_body
 }
 
 # scope verification request See: https://github.com/skion/authentiq/wiki/JWT-Examples
 #
 # POST /scope
 # operationId: sign_request
-export def "scope request" [
+export def "scope request-sign" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -311,17 +324,18 @@ export def "scope request" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "test" $test "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/scope" $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/jwt" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/jwt" $req_body
 }
 
 # delete a verification job
 #
 # DELETE /scope/{job}
 # operationId: sign_delete
-export def "scope delete" [
+export def "scope delete-sign" [
   job: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -334,7 +348,7 @@ export def "scope delete" [
 ]: nothing -> record<status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({job: $job} | format pattern "/scope/{job}"))
+  let full_url = (build-url $base ({job: (encode-path-segment $job)} | format pattern "/scope/{job}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -344,7 +358,7 @@ export def "scope delete" [
 #
 # GET /scope/{job}
 # operationId: sign_retrieve
-export def "scope get" [
+export def "scope get-sign" [
   job: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -358,7 +372,7 @@ export def "scope get" [
 ]: nothing -> record<exp: int, field: string, sub: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({job: $job} | format pattern "/scope/{job}"))
+  let full_url = (build-url $base ({job: (encode-path-segment $job)} | format pattern "/scope/{job}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -368,7 +382,7 @@ export def "scope get" [
 #
 # HEAD /scope/{job}
 # operationId: sign_retrieve_head
-export def "scope head" [
+export def "scope get-sign-head" [
   job: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -381,7 +395,7 @@ export def "scope head" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({job: $job} | format pattern "/scope/{job}"))
+  let full_url = (build-url $base ({job: (encode-path-segment $job)} | format pattern "/scope/{job}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -391,7 +405,7 @@ export def "scope head" [
 #
 # POST /scope/{job}
 # operationId: sign_confirm
-export def "scope confirm" [
+export def "scope confirm-sign" [
   job: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -404,7 +418,7 @@ export def "scope confirm" [
 ]: nothing -> record<status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({job: $job} | format pattern "/scope/{job}"))
+  let full_url = (build-url $base ({job: (encode-path-segment $job)} | format pattern "/scope/{job}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -414,7 +428,7 @@ export def "scope confirm" [
 #
 # PUT /scope/{job}
 # operationId: sign_update
-export def "scope update" [
+export def "scope update-sign" [
   job: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -427,7 +441,7 @@ export def "scope update" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({job: $job} | format pattern "/scope/{job}"))
+  let full_url = (build-url $base ({job: (encode-path-segment $job)} | format pattern "/scope/{job}"))
   let accept_val = "application/jwt"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

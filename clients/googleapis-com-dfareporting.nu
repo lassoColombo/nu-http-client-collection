@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -113,7 +122,7 @@ def type-completer-5 [] { ["CROSS_DIMENSION_REACH" "FLOODLIGHT" "PATH" "PATH_ATT
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "reports-files dfareportingfilesget" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "reports-files get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -137,7 +146,7 @@ export def commands []: nothing -> table {
 #
 # GET /reports/{reportId}/files/{fileId}
 # operationId: dfareporting.files.get
-export def "reports-files dfareportingfilesget" [
+export def "reports-files get" [
   report_id: string
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -163,7 +172,7 @@ export def "reports-files dfareportingfilesget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({report_id: $report_id, file_id: $file_id} | format pattern "/reports/{report_id}/files/{file_id}") $qp)
+  let full_url = (build-url $base ({report_id: (encode-path-segment $report_id), file_id: (encode-path-segment $file_id)} | format pattern "/reports/{report_id}/files/{file_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -173,7 +182,7 @@ export def "reports-files dfareportingfilesget" [
 #
 # GET /userprofiles
 # operationId: dfareporting.userProfiles.list
-export def "userprofiles dfareportinguserProfileslist" [
+export def "userprofiles list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -207,7 +216,7 @@ export def "userprofiles dfareportinguserProfileslist" [
 #
 # GET /userprofiles/{profileId}
 # operationId: dfareporting.userProfiles.get
-export def "userprofiles dfareportinguserProfilesget" [
+export def "userprofiles get" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -232,7 +241,7 @@ export def "userprofiles dfareportinguserProfilesget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -242,7 +251,7 @@ export def "userprofiles dfareportinguserProfilesget" [
 #
 # GET /userprofiles/{profileId}/accountActiveAdSummaries/{summaryAccountId}
 # operationId: dfareporting.accountActiveAdSummaries.get
-export def "userprofiles-account-active-ad-summaries dfareportingaccountActiveAdSummariesget" [
+export def "userprofiles-account-active-ad-summaries get" [
   profile_id: string
   summary_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -268,7 +277,7 @@ export def "userprofiles-account-active-ad-summaries dfareportingaccountActiveAd
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id, summary_account_id: $summary_account_id} | format pattern "/userprofiles/{profile_id}/accountActiveAdSummaries/{summary_account_id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), summary_account_id: (encode-path-segment $summary_account_id)} | format pattern "/userprofiles/{profile_id}/accountActiveAdSummaries/{summary_account_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -278,7 +287,7 @@ export def "userprofiles-account-active-ad-summaries dfareportingaccountActiveAd
 #
 # GET /userprofiles/{profileId}/accountPermissionGroups
 # operationId: dfareporting.accountPermissionGroups.list
-export def "userprofiles-account-permission-groups dfareportingaccountPermissionGroupslist" [
+export def "userprofiles-account-permission-groups list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -303,7 +312,7 @@ export def "userprofiles-account-permission-groups dfareportingaccountPermission
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/accountPermissionGroups") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/accountPermissionGroups") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -313,7 +322,7 @@ export def "userprofiles-account-permission-groups dfareportingaccountPermission
 #
 # GET /userprofiles/{profileId}/accountPermissionGroups/{id}
 # operationId: dfareporting.accountPermissionGroups.get
-export def "userprofiles-account-permission-groups dfareportingaccountPermissionGroupsget" [
+export def "userprofiles-account-permission-groups get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -339,7 +348,7 @@ export def "userprofiles-account-permission-groups dfareportingaccountPermission
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id, id: $id} | format pattern "/userprofiles/{profile_id}/accountPermissionGroups/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/accountPermissionGroups/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -349,7 +358,7 @@ export def "userprofiles-account-permission-groups dfareportingaccountPermission
 #
 # GET /userprofiles/{profileId}/accountPermissions
 # operationId: dfareporting.accountPermissions.list
-export def "userprofiles-account-permissions dfareportingaccountPermissionslist" [
+export def "userprofiles-account-permissions list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -374,7 +383,7 @@ export def "userprofiles-account-permissions dfareportingaccountPermissionslist"
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/accountPermissions") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/accountPermissions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -384,7 +393,7 @@ export def "userprofiles-account-permissions dfareportingaccountPermissionslist"
 #
 # GET /userprofiles/{profileId}/accountPermissions/{id}
 # operationId: dfareporting.accountPermissions.get
-export def "userprofiles-account-permissions dfareportingaccountPermissionsget" [
+export def "userprofiles-account-permissions get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -410,7 +419,7 @@ export def "userprofiles-account-permissions dfareportingaccountPermissionsget" 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id, id: $id} | format pattern "/userprofiles/{profile_id}/accountPermissions/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/accountPermissions/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -420,7 +429,7 @@ export def "userprofiles-account-permissions dfareportingaccountPermissionsget" 
 #
 # GET /userprofiles/{profileId}/accountUserProfiles
 # operationId: dfareporting.accountUserProfiles.list
-export def "userprofiles-account-user-profiles dfareportingaccountUserProfileslist" [
+export def "userprofiles-account-user-profiles list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -442,7 +451,7 @@ export def "userprofiles-account-user-profiles dfareportingaccountUserProfilesli
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --active: oneof<nothing, bool> # Select only active user profiles.
-  --ids: list # Select only user profiles with these IDs.
+  --ids: list<string> # Select only user profiles with these IDs.
   --max-results: int # Maximum number of results to return.
   --page-token: string # Value of the nextPageToken from the previous result page.
   --search-string: string # Allows searching for objects by name, ID or email. Wildcards (*) are allowed. For example, "user profile*2015" will return objects with names like "user profile June 2015", "user profile April 2015", or simply "user profile 2015". Most of the searches also add wildcards implicitly at the start and the end of the search string. For example, a search string of "user profile" will match objects with name "my user profile", "user profile 2015", or simply "user profile".
@@ -454,7 +463,7 @@ export def "userprofiles-account-user-profiles dfareportingaccountUserProfilesli
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "active" $active "scalar") (serialize-qp "ids" $ids "multi") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "searchString" $search_string "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "subaccountId" $subaccount_id "scalar") (serialize-qp "userRoleId" $user_role_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/accountUserProfiles") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/accountUserProfiles") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -464,11 +473,11 @@ export def "userprofiles-account-user-profiles dfareportingaccountUserProfilesli
 #
 # PATCH /userprofiles/{profileId}/accountUserProfiles
 # operationId: dfareporting.accountUserProfiles.patch
-# --advertiserFilter shape: {kind?: string, objectIds?: list, status?: "NONE"|"ASSIGNED"|"ALL"}
-# --campaignFilter shape: {kind?: string, objectIds?: list, status?: "NONE"|"ASSIGNED"|"ALL"}
-# --siteFilter shape: {kind?: string, objectIds?: list, status?: "NONE"|"ASSIGNED"|"ALL"}
-# --userRoleFilter shape: {kind?: string, objectIds?: list, status?: "NONE"|"ASSIGNED"|"ALL"}
-export def "userprofiles-account-user-profiles dfareportingaccountUserProfilespatch" [
+# --advertiserFilter shape: {kind?: string, objectIds?: list<string>, status?: "NONE"|"ASSIGNED"|"ALL"}
+# --campaignFilter shape: {kind?: string, objectIds?: list<string>, status?: "NONE"|"ASSIGNED"|"ALL"}
+# --siteFilter shape: {kind?: string, objectIds?: list<string>, status?: "NONE"|"ASSIGNED"|"ALL"}
+# --userRoleFilter shape: {kind?: string, objectIds?: list<string>, status?: "NONE"|"ASSIGNED"|"ALL"}
+export def "userprofiles-account-user-profiles update-by-profileId" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -492,42 +501,42 @@ export def "userprofiles-account-user-profiles dfareportingaccountUserProfilespa
   --id: string # AccountUserProfile ID.
   --account-id: string # Account ID of the user profile. This is a read-only field that can be left blank. (format: int64)
   --active: oneof<nothing, bool> # Whether this user profile is active. This defaults to false, and must be set true on insert for the user profile to be usable.
-  --advertiser-filter: record # Object Filter. — shape: {kind?: string, objectIds?: list, status?: "NONE"|"ASSIGNED"|"ALL"}
-  --campaign-filter: record # Object Filter. — shape: {kind?: string, objectIds?: list, status?: "NONE"|"ASSIGNED"|"ALL"}
+  --advertiser-filter: record # Object Filter. — shape: {kind?: string, objectIds?: list<string>, status?: "NONE"|"ASSIGNED"|"ALL"}
+  --campaign-filter: record # Object Filter. — shape: {kind?: string, objectIds?: list<string>, status?: "NONE"|"ASSIGNED"|"ALL"}
   --comments: string # Comments for this user profile.
   --email: string # Email of the user profile. The email addresss must be linked to a Google Account. This field is required on insertion and is read-only after insertion.
   --id: string # ID of the user profile. This is a read-only, auto-generated field. (format: int64)
   --kind: string # Identifies what kind of resource this is. Value: the fixed string "dfareporting#accountUserProfile".
-  --locale: string # Locale of the user profile. This is a required field. Acceptable values are: - "cs" (Czech) - "de" (German) - "en" (English) - "en-GB" (English United Kingdom) - "es" (Spanish) - "fr" (French) - "it" (Italian) - "ja" (Japanese) - "ko" (Korean) - "pl" (Polish) - "pt-BR" (Portuguese Brazil) - "ru" (Russian) - "sv" (Swedish) - "tr" (Turkish) - "zh-CN" (Chinese Simplified) - "zh-TW" (Chinese Traditional) 
+  --locale: string # Locale of the user profile. This is a required field. Acceptable values are: - "cs" (Czech) - "de" (German) - "en" (English) - "en-GB" (English United Kingdom) - "es" (Spanish) - "fr" (French) - "it" (Italian) - "ja" (Japanese) - "ko" (Korean) - "pl" (Polish) - "pt-BR" (Portuguese Brazil) - "ru" (Russian) - "sv" (Swedish) - "tr" (Turkish) - "zh-CN" (Chinese Simplified) - "zh-TW" (Chinese Traditional)
   --name: string # Name of the user profile. This is a required field. Must be less than 64 characters long, must be globally unique, and cannot contain whitespace or any of the following characters: "&;<>"#%,".
-  --site-filter: record # Object Filter. — shape: {kind?: string, objectIds?: list, status?: "NONE"|"ASSIGNED"|"ALL"}
+  --site-filter: record # Object Filter. — shape: {kind?: string, objectIds?: list<string>, status?: "NONE"|"ASSIGNED"|"ALL"}
   --subaccount-id: string # Subaccount ID of the user profile. This is a read-only field that can be left blank. (format: int64)
   --trafficker-type: string@trafficker-type-completer # Trafficker type of this user profile. This is a read-only field.
   --user-access-type: string@user-access-type-completer # User type of the user profile. This is a read-only field that can be left blank.
-  --user-role-filter: record # Object Filter. — shape: {kind?: string, objectIds?: list, status?: "NONE"|"ASSIGNED"|"ALL"}
+  --user-role-filter: record # Object Filter. — shape: {kind?: string, objectIds?: list<string>, status?: "NONE"|"ASSIGNED"|"ALL"}
   --user-role-id: string # User role ID of the user profile. This is a required field. (format: int64)
 ]: any -> record<accountId: string, active: bool, advertiserFilter: record<kind: string, objectIds: list<string>, status: string>, campaignFilter: record<kind: string, objectIds: list<string>, status: string>, comments: string, email: string, id: string, kind: string, locale: string, name: string, siteFilter: record<kind: string, objectIds: list<string>, status: string>, subaccountId: string, traffickerType: string, userAccessType: string, userRoleFilter: record<kind: string, objectIds: list<string>, status: string>, userRoleId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/accountUserProfiles") $qp)
-  let body = {"accountId": $account_id, "active": $active, "advertiserFilter": $advertiser_filter, "campaignFilter": $campaign_filter, "comments": $comments, "email": $email, "id": $id, "kind": $kind, "locale": $locale, "name": $name, "siteFilter": $site_filter, "subaccountId": $subaccount_id, "traffickerType": $trafficker_type, "userAccessType": $user_access_type, "userRoleFilter": $user_role_filter, "userRoleId": $user_role_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/accountUserProfiles") $qp)
+  let req_body = {"accountId": $account_id, "active": $active, "advertiserFilter": $advertiser_filter, "campaignFilter": $campaign_filter, "comments": $comments, "email": $email, "id": $id, "kind": $kind, "locale": $locale, "name": $name, "siteFilter": $site_filter, "subaccountId": $subaccount_id, "traffickerType": $trafficker_type, "userAccessType": $user_access_type, "userRoleFilter": $user_role_filter, "userRoleId": $user_role_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Inserts a new account user profile.
 #
 # POST /userprofiles/{profileId}/accountUserProfiles
 # operationId: dfareporting.accountUserProfiles.insert
-# --advertiserFilter shape: {kind?: string, objectIds?: list, status?: "NONE"|"ASSIGNED"|"ALL"}
-# --campaignFilter shape: {kind?: string, objectIds?: list, status?: "NONE"|"ASSIGNED"|"ALL"}
-# --siteFilter shape: {kind?: string, objectIds?: list, status?: "NONE"|"ASSIGNED"|"ALL"}
-# --userRoleFilter shape: {kind?: string, objectIds?: list, status?: "NONE"|"ASSIGNED"|"ALL"}
-export def "userprofiles-account-user-profiles dfareportingaccountUserProfilesinsert" [
+# --advertiserFilter shape: {kind?: string, objectIds?: list<string>, status?: "NONE"|"ASSIGNED"|"ALL"}
+# --campaignFilter shape: {kind?: string, objectIds?: list<string>, status?: "NONE"|"ASSIGNED"|"ALL"}
+# --siteFilter shape: {kind?: string, objectIds?: list<string>, status?: "NONE"|"ASSIGNED"|"ALL"}
+# --userRoleFilter shape: {kind?: string, objectIds?: list<string>, status?: "NONE"|"ASSIGNED"|"ALL"}
+export def "userprofiles-account-user-profiles create" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -550,42 +559,42 @@ export def "userprofiles-account-user-profiles dfareportingaccountUserProfilesin
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --account-id: string # Account ID of the user profile. This is a read-only field that can be left blank. (format: int64)
   --active: oneof<nothing, bool> # Whether this user profile is active. This defaults to false, and must be set true on insert for the user profile to be usable.
-  --advertiser-filter: record # Object Filter. — shape: {kind?: string, objectIds?: list, status?: "NONE"|"ASSIGNED"|"ALL"}
-  --campaign-filter: record # Object Filter. — shape: {kind?: string, objectIds?: list, status?: "NONE"|"ASSIGNED"|"ALL"}
+  --advertiser-filter: record # Object Filter. — shape: {kind?: string, objectIds?: list<string>, status?: "NONE"|"ASSIGNED"|"ALL"}
+  --campaign-filter: record # Object Filter. — shape: {kind?: string, objectIds?: list<string>, status?: "NONE"|"ASSIGNED"|"ALL"}
   --comments: string # Comments for this user profile.
   --email: string # Email of the user profile. The email addresss must be linked to a Google Account. This field is required on insertion and is read-only after insertion.
   --id: string # ID of the user profile. This is a read-only, auto-generated field. (format: int64)
   --kind: string # Identifies what kind of resource this is. Value: the fixed string "dfareporting#accountUserProfile".
-  --locale: string # Locale of the user profile. This is a required field. Acceptable values are: - "cs" (Czech) - "de" (German) - "en" (English) - "en-GB" (English United Kingdom) - "es" (Spanish) - "fr" (French) - "it" (Italian) - "ja" (Japanese) - "ko" (Korean) - "pl" (Polish) - "pt-BR" (Portuguese Brazil) - "ru" (Russian) - "sv" (Swedish) - "tr" (Turkish) - "zh-CN" (Chinese Simplified) - "zh-TW" (Chinese Traditional) 
+  --locale: string # Locale of the user profile. This is a required field. Acceptable values are: - "cs" (Czech) - "de" (German) - "en" (English) - "en-GB" (English United Kingdom) - "es" (Spanish) - "fr" (French) - "it" (Italian) - "ja" (Japanese) - "ko" (Korean) - "pl" (Polish) - "pt-BR" (Portuguese Brazil) - "ru" (Russian) - "sv" (Swedish) - "tr" (Turkish) - "zh-CN" (Chinese Simplified) - "zh-TW" (Chinese Traditional)
   --name: string # Name of the user profile. This is a required field. Must be less than 64 characters long, must be globally unique, and cannot contain whitespace or any of the following characters: "&;<>"#%,".
-  --site-filter: record # Object Filter. — shape: {kind?: string, objectIds?: list, status?: "NONE"|"ASSIGNED"|"ALL"}
+  --site-filter: record # Object Filter. — shape: {kind?: string, objectIds?: list<string>, status?: "NONE"|"ASSIGNED"|"ALL"}
   --subaccount-id: string # Subaccount ID of the user profile. This is a read-only field that can be left blank. (format: int64)
   --trafficker-type: string@trafficker-type-completer # Trafficker type of this user profile. This is a read-only field.
   --user-access-type: string@user-access-type-completer # User type of the user profile. This is a read-only field that can be left blank.
-  --user-role-filter: record # Object Filter. — shape: {kind?: string, objectIds?: list, status?: "NONE"|"ASSIGNED"|"ALL"}
+  --user-role-filter: record # Object Filter. — shape: {kind?: string, objectIds?: list<string>, status?: "NONE"|"ASSIGNED"|"ALL"}
   --user-role-id: string # User role ID of the user profile. This is a required field. (format: int64)
 ]: any -> record<accountId: string, active: bool, advertiserFilter: record<kind: string, objectIds: list<string>, status: string>, campaignFilter: record<kind: string, objectIds: list<string>, status: string>, comments: string, email: string, id: string, kind: string, locale: string, name: string, siteFilter: record<kind: string, objectIds: list<string>, status: string>, subaccountId: string, traffickerType: string, userAccessType: string, userRoleFilter: record<kind: string, objectIds: list<string>, status: string>, userRoleId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/accountUserProfiles") $qp)
-  let body = {"accountId": $account_id, "active": $active, "advertiserFilter": $advertiser_filter, "campaignFilter": $campaign_filter, "comments": $comments, "email": $email, "id": $id, "kind": $kind, "locale": $locale, "name": $name, "siteFilter": $site_filter, "subaccountId": $subaccount_id, "traffickerType": $trafficker_type, "userAccessType": $user_access_type, "userRoleFilter": $user_role_filter, "userRoleId": $user_role_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/accountUserProfiles") $qp)
+  let req_body = {"accountId": $account_id, "active": $active, "advertiserFilter": $advertiser_filter, "campaignFilter": $campaign_filter, "comments": $comments, "email": $email, "id": $id, "kind": $kind, "locale": $locale, "name": $name, "siteFilter": $site_filter, "subaccountId": $subaccount_id, "traffickerType": $trafficker_type, "userAccessType": $user_access_type, "userRoleFilter": $user_role_filter, "userRoleId": $user_role_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates an existing account user profile.
 #
 # PUT /userprofiles/{profileId}/accountUserProfiles
 # operationId: dfareporting.accountUserProfiles.update
-# --advertiserFilter shape: {kind?: string, objectIds?: list, status?: "NONE"|"ASSIGNED"|"ALL"}
-# --campaignFilter shape: {kind?: string, objectIds?: list, status?: "NONE"|"ASSIGNED"|"ALL"}
-# --siteFilter shape: {kind?: string, objectIds?: list, status?: "NONE"|"ASSIGNED"|"ALL"}
-# --userRoleFilter shape: {kind?: string, objectIds?: list, status?: "NONE"|"ASSIGNED"|"ALL"}
-export def "userprofiles-account-user-profiles dfareportingaccountUserProfilesupdate" [
+# --advertiserFilter shape: {kind?: string, objectIds?: list<string>, status?: "NONE"|"ASSIGNED"|"ALL"}
+# --campaignFilter shape: {kind?: string, objectIds?: list<string>, status?: "NONE"|"ASSIGNED"|"ALL"}
+# --siteFilter shape: {kind?: string, objectIds?: list<string>, status?: "NONE"|"ASSIGNED"|"ALL"}
+# --userRoleFilter shape: {kind?: string, objectIds?: list<string>, status?: "NONE"|"ASSIGNED"|"ALL"}
+export def "userprofiles-account-user-profiles update-by-profileId-1" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -608,38 +617,38 @@ export def "userprofiles-account-user-profiles dfareportingaccountUserProfilesup
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --account-id: string # Account ID of the user profile. This is a read-only field that can be left blank. (format: int64)
   --active: oneof<nothing, bool> # Whether this user profile is active. This defaults to false, and must be set true on insert for the user profile to be usable.
-  --advertiser-filter: record # Object Filter. — shape: {kind?: string, objectIds?: list, status?: "NONE"|"ASSIGNED"|"ALL"}
-  --campaign-filter: record # Object Filter. — shape: {kind?: string, objectIds?: list, status?: "NONE"|"ASSIGNED"|"ALL"}
+  --advertiser-filter: record # Object Filter. — shape: {kind?: string, objectIds?: list<string>, status?: "NONE"|"ASSIGNED"|"ALL"}
+  --campaign-filter: record # Object Filter. — shape: {kind?: string, objectIds?: list<string>, status?: "NONE"|"ASSIGNED"|"ALL"}
   --comments: string # Comments for this user profile.
   --email: string # Email of the user profile. The email addresss must be linked to a Google Account. This field is required on insertion and is read-only after insertion.
   --id: string # ID of the user profile. This is a read-only, auto-generated field. (format: int64)
   --kind: string # Identifies what kind of resource this is. Value: the fixed string "dfareporting#accountUserProfile".
-  --locale: string # Locale of the user profile. This is a required field. Acceptable values are: - "cs" (Czech) - "de" (German) - "en" (English) - "en-GB" (English United Kingdom) - "es" (Spanish) - "fr" (French) - "it" (Italian) - "ja" (Japanese) - "ko" (Korean) - "pl" (Polish) - "pt-BR" (Portuguese Brazil) - "ru" (Russian) - "sv" (Swedish) - "tr" (Turkish) - "zh-CN" (Chinese Simplified) - "zh-TW" (Chinese Traditional) 
+  --locale: string # Locale of the user profile. This is a required field. Acceptable values are: - "cs" (Czech) - "de" (German) - "en" (English) - "en-GB" (English United Kingdom) - "es" (Spanish) - "fr" (French) - "it" (Italian) - "ja" (Japanese) - "ko" (Korean) - "pl" (Polish) - "pt-BR" (Portuguese Brazil) - "ru" (Russian) - "sv" (Swedish) - "tr" (Turkish) - "zh-CN" (Chinese Simplified) - "zh-TW" (Chinese Traditional)
   --name: string # Name of the user profile. This is a required field. Must be less than 64 characters long, must be globally unique, and cannot contain whitespace or any of the following characters: "&;<>"#%,".
-  --site-filter: record # Object Filter. — shape: {kind?: string, objectIds?: list, status?: "NONE"|"ASSIGNED"|"ALL"}
+  --site-filter: record # Object Filter. — shape: {kind?: string, objectIds?: list<string>, status?: "NONE"|"ASSIGNED"|"ALL"}
   --subaccount-id: string # Subaccount ID of the user profile. This is a read-only field that can be left blank. (format: int64)
   --trafficker-type: string@trafficker-type-completer # Trafficker type of this user profile. This is a read-only field.
   --user-access-type: string@user-access-type-completer # User type of the user profile. This is a read-only field that can be left blank.
-  --user-role-filter: record # Object Filter. — shape: {kind?: string, objectIds?: list, status?: "NONE"|"ASSIGNED"|"ALL"}
+  --user-role-filter: record # Object Filter. — shape: {kind?: string, objectIds?: list<string>, status?: "NONE"|"ASSIGNED"|"ALL"}
   --user-role-id: string # User role ID of the user profile. This is a required field. (format: int64)
 ]: any -> record<accountId: string, active: bool, advertiserFilter: record<kind: string, objectIds: list<string>, status: string>, campaignFilter: record<kind: string, objectIds: list<string>, status: string>, comments: string, email: string, id: string, kind: string, locale: string, name: string, siteFilter: record<kind: string, objectIds: list<string>, status: string>, subaccountId: string, traffickerType: string, userAccessType: string, userRoleFilter: record<kind: string, objectIds: list<string>, status: string>, userRoleId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/accountUserProfiles") $qp)
-  let body = {"accountId": $account_id, "active": $active, "advertiserFilter": $advertiser_filter, "campaignFilter": $campaign_filter, "comments": $comments, "email": $email, "id": $id, "kind": $kind, "locale": $locale, "name": $name, "siteFilter": $site_filter, "subaccountId": $subaccount_id, "traffickerType": $trafficker_type, "userAccessType": $user_access_type, "userRoleFilter": $user_role_filter, "userRoleId": $user_role_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/accountUserProfiles") $qp)
+  let req_body = {"accountId": $account_id, "active": $active, "advertiserFilter": $advertiser_filter, "campaignFilter": $campaign_filter, "comments": $comments, "email": $email, "id": $id, "kind": $kind, "locale": $locale, "name": $name, "siteFilter": $site_filter, "subaccountId": $subaccount_id, "traffickerType": $trafficker_type, "userAccessType": $user_access_type, "userRoleFilter": $user_role_filter, "userRoleId": $user_role_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets one account user profile by ID.
 #
 # GET /userprofiles/{profileId}/accountUserProfiles/{id}
 # operationId: dfareporting.accountUserProfiles.get
-export def "userprofiles-account-user-profiles dfareportingaccountUserProfilesget" [
+export def "userprofiles-account-user-profiles get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -665,7 +674,7 @@ export def "userprofiles-account-user-profiles dfareportingaccountUserProfilesge
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id, id: $id} | format pattern "/userprofiles/{profile_id}/accountUserProfiles/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/accountUserProfiles/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -675,7 +684,7 @@ export def "userprofiles-account-user-profiles dfareportingaccountUserProfilesge
 #
 # GET /userprofiles/{profileId}/accounts
 # operationId: dfareporting.accounts.list
-export def "userprofiles-accounts dfareportingaccountslist" [
+export def "userprofiles-accounts list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -697,7 +706,7 @@ export def "userprofiles-accounts dfareportingaccountslist" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --active: oneof<nothing, bool> # Select only active accounts. Don't set this field to select both active and non-active accounts.
-  --ids: list # Select only accounts with these IDs.
+  --ids: list<string> # Select only accounts with these IDs.
   --max-results: int # Maximum number of results to return.
   --page-token: string # Value of the nextPageToken from the previous result page.
   --search-string: string # Allows searching for objects by name or ID. Wildcards (*) are allowed. For example, "account*2015" will return objects with names like "account June 2015", "account April 2015", or simply "account 2015". Most of the searches also add wildcards implicitly at the start and the end of the search string. For example, a search string of "account" will match objects with name "my account", "account 2015", or simply "account".
@@ -707,7 +716,7 @@ export def "userprofiles-accounts dfareportingaccountslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "active" $active "scalar") (serialize-qp "ids" $ids "multi") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "searchString" $search_string "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/accounts") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/accounts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -718,7 +727,7 @@ export def "userprofiles-accounts dfareportingaccountslist" [
 # PATCH /userprofiles/{profileId}/accounts
 # operationId: dfareporting.accounts.patch
 # --reportsConfiguration shape: {exposureToConversionEnabled?: bool, lookbackConfiguration?: record, reportGenerationTimeZoneId?: string}
-export def "userprofiles-accounts dfareportingaccountspatch" [
+export def "userprofiles-accounts update-by-profileId" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -740,19 +749,19 @@ export def "userprofiles-accounts dfareportingaccountspatch" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --id: string # Account ID.
-  --account-permission-ids: list # Account permissions assigned to this account.
+  --account-permission-ids: list<string> # Account permissions assigned to this account.
   --account-profile: string@account-profile-completer # Profile for this account. This is a read-only field that can be left blank.
   --active: oneof<nothing, bool> # Whether this account is active.
   --active-ads-limit-tier: string@active-ads-limit-tier-completer # Maximum number of active ads allowed for this account.
   --active-view-opt-out: oneof<nothing, bool> # Whether to serve creatives with Active View tags. If disabled, viewability data will not be available for any impressions.
-  --available-permission-ids: list # User role permissions available to the user roles of this account.
+  --available-permission-ids: list<string> # User role permissions available to the user roles of this account.
   --country-id: string # ID of the country associated with this account. (format: int64)
-  --currency-id: string # ID of currency associated with this account. This is a required field. Acceptable values are: - "1" for USD - "2" for GBP - "3" for ESP - "4" for SEK - "5" for CAD - "6" for JPY - "7" for DEM - "8" for AUD - "9" for FRF - "10" for ITL - "11" for DKK - "12" for NOK - "13" for FIM - "14" for ZAR - "15" for IEP - "16" for NLG - "17" for EUR - "18" for KRW - "19" for TWD - "20" for SGD - "21" for CNY - "22" for HKD - "23" for NZD - "24" for MYR - "25" for BRL - "26" for PTE - "28" for CLP - "29" for TRY - "30" for ARS - "31" for PEN - "32" for ILS - "33" for CHF - "34" for VEF - "35" for COP - "36" for GTQ - "37" for PLN - "39" for INR - "40" for THB - "41" for IDR - "42" for CZK - "43" for RON - "44" for HUF - "45" for RUB - "46" for AED - "47" for BGN - "48" for HRK - "49" for MXN - "50" for NGN - "51" for EGP  (format: int64)
+  --currency-id: string # ID of currency associated with this account. This is a required field. Acceptable values are: - "1" for USD - "2" for GBP - "3" for ESP - "4" for SEK - "5" for CAD - "6" for JPY - "7" for DEM - "8" for AUD - "9" for FRF - "10" for ITL - "11" for DKK - "12" for NOK - "13" for FIM - "14" for ZAR - "15" for IEP - "16" for NLG - "17" for EUR - "18" for KRW - "19" for TWD - "20" for SGD - "21" for CNY - "22" for HKD - "23" for NZD - "24" for MYR - "25" for BRL - "26" for PTE - "28" for CLP - "29" for TRY - "30" for ARS - "31" for PEN - "32" for ILS - "33" for CHF - "34" for VEF - "35" for COP - "36" for GTQ - "37" for PLN - "39" for INR - "40" for THB - "41" for IDR - "42" for CZK - "43" for RON - "44" for HUF - "45" for RUB - "46" for AED - "47" for BGN - "48" for HRK - "49" for MXN - "50" for NGN - "51" for EGP (format: int64)
   --default-creative-size-id: string # Default placement dimensions for this account. (format: int64)
   --description: string # Description of this account.
   --id: string # ID of this account. This is a read-only, auto-generated field. (format: int64)
   --kind: string # Identifies what kind of resource this is. Value: the fixed string "dfareporting#account".
-  --locale: string # Locale of this account. Acceptable values are: - "cs" (Czech) - "de" (German) - "en" (English) - "en-GB" (English United Kingdom) - "es" (Spanish) - "fr" (French) - "it" (Italian) - "ja" (Japanese) - "ko" (Korean) - "pl" (Polish) - "pt-BR" (Portuguese Brazil) - "ru" (Russian) - "sv" (Swedish) - "tr" (Turkish) - "zh-CN" (Chinese Simplified) - "zh-TW" (Chinese Traditional) 
+  --locale: string # Locale of this account. Acceptable values are: - "cs" (Czech) - "de" (German) - "en" (English) - "en-GB" (English United Kingdom) - "es" (Spanish) - "fr" (French) - "it" (Italian) - "ja" (Japanese) - "ko" (Korean) - "pl" (Polish) - "pt-BR" (Portuguese Brazil) - "ru" (Russian) - "sv" (Swedish) - "tr" (Turkish) - "zh-CN" (Chinese Simplified) - "zh-TW" (Chinese Traditional)
   --maximum-image-size: string # Maximum image size allowed for this account, in kilobytes. Value must be greater than or equal to 1. (format: int64)
   --name: string # Name of this account. This is a required field, and must be less than 128 characters long and be globally unique.
   --nielsen-ocr-enabled: oneof<nothing, bool> # Whether campaigns created in this account will be enabled for Nielsen OCR reach ratings by default.
@@ -764,12 +773,12 @@ export def "userprofiles-accounts dfareportingaccountspatch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/accounts") $qp)
-  let body = {"accountPermissionIds": $account_permission_ids, "accountProfile": $account_profile, "active": $active, "activeAdsLimitTier": $active_ads_limit_tier, "activeViewOptOut": $active_view_opt_out, "availablePermissionIds": $available_permission_ids, "countryId": $country_id, "currencyId": $currency_id, "defaultCreativeSizeId": $default_creative_size_id, "description": $description, "id": $id, "kind": $kind, "locale": $locale, "maximumImageSize": $maximum_image_size, "name": $name, "nielsenOcrEnabled": $nielsen_ocr_enabled, "reportsConfiguration": $reports_configuration, "shareReportsWithTwitter": $share_reports_with_twitter, "teaserSizeLimit": $teaser_size_limit} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/accounts") $qp)
+  let req_body = {"accountPermissionIds": $account_permission_ids, "accountProfile": $account_profile, "active": $active, "activeAdsLimitTier": $active_ads_limit_tier, "activeViewOptOut": $active_view_opt_out, "availablePermissionIds": $available_permission_ids, "countryId": $country_id, "currencyId": $currency_id, "defaultCreativeSizeId": $default_creative_size_id, "description": $description, "id": $id, "kind": $kind, "locale": $locale, "maximumImageSize": $maximum_image_size, "name": $name, "nielsenOcrEnabled": $nielsen_ocr_enabled, "reportsConfiguration": $reports_configuration, "shareReportsWithTwitter": $share_reports_with_twitter, "teaserSizeLimit": $teaser_size_limit} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates an existing account.
@@ -777,7 +786,7 @@ export def "userprofiles-accounts dfareportingaccountspatch" [
 # PUT /userprofiles/{profileId}/accounts
 # operationId: dfareporting.accounts.update
 # --reportsConfiguration shape: {exposureToConversionEnabled?: bool, lookbackConfiguration?: record, reportGenerationTimeZoneId?: string}
-export def "userprofiles-accounts dfareportingaccountsupdate" [
+export def "userprofiles-accounts update-by-profileId-1" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -798,19 +807,19 @@ export def "userprofiles-accounts dfareportingaccountsupdate" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --account-permission-ids: list # Account permissions assigned to this account.
+  --account-permission-ids: list<string> # Account permissions assigned to this account.
   --account-profile: string@account-profile-completer # Profile for this account. This is a read-only field that can be left blank.
   --active: oneof<nothing, bool> # Whether this account is active.
   --active-ads-limit-tier: string@active-ads-limit-tier-completer # Maximum number of active ads allowed for this account.
   --active-view-opt-out: oneof<nothing, bool> # Whether to serve creatives with Active View tags. If disabled, viewability data will not be available for any impressions.
-  --available-permission-ids: list # User role permissions available to the user roles of this account.
+  --available-permission-ids: list<string> # User role permissions available to the user roles of this account.
   --country-id: string # ID of the country associated with this account. (format: int64)
-  --currency-id: string # ID of currency associated with this account. This is a required field. Acceptable values are: - "1" for USD - "2" for GBP - "3" for ESP - "4" for SEK - "5" for CAD - "6" for JPY - "7" for DEM - "8" for AUD - "9" for FRF - "10" for ITL - "11" for DKK - "12" for NOK - "13" for FIM - "14" for ZAR - "15" for IEP - "16" for NLG - "17" for EUR - "18" for KRW - "19" for TWD - "20" for SGD - "21" for CNY - "22" for HKD - "23" for NZD - "24" for MYR - "25" for BRL - "26" for PTE - "28" for CLP - "29" for TRY - "30" for ARS - "31" for PEN - "32" for ILS - "33" for CHF - "34" for VEF - "35" for COP - "36" for GTQ - "37" for PLN - "39" for INR - "40" for THB - "41" for IDR - "42" for CZK - "43" for RON - "44" for HUF - "45" for RUB - "46" for AED - "47" for BGN - "48" for HRK - "49" for MXN - "50" for NGN - "51" for EGP  (format: int64)
+  --currency-id: string # ID of currency associated with this account. This is a required field. Acceptable values are: - "1" for USD - "2" for GBP - "3" for ESP - "4" for SEK - "5" for CAD - "6" for JPY - "7" for DEM - "8" for AUD - "9" for FRF - "10" for ITL - "11" for DKK - "12" for NOK - "13" for FIM - "14" for ZAR - "15" for IEP - "16" for NLG - "17" for EUR - "18" for KRW - "19" for TWD - "20" for SGD - "21" for CNY - "22" for HKD - "23" for NZD - "24" for MYR - "25" for BRL - "26" for PTE - "28" for CLP - "29" for TRY - "30" for ARS - "31" for PEN - "32" for ILS - "33" for CHF - "34" for VEF - "35" for COP - "36" for GTQ - "37" for PLN - "39" for INR - "40" for THB - "41" for IDR - "42" for CZK - "43" for RON - "44" for HUF - "45" for RUB - "46" for AED - "47" for BGN - "48" for HRK - "49" for MXN - "50" for NGN - "51" for EGP (format: int64)
   --default-creative-size-id: string # Default placement dimensions for this account. (format: int64)
   --description: string # Description of this account.
   --id: string # ID of this account. This is a read-only, auto-generated field. (format: int64)
   --kind: string # Identifies what kind of resource this is. Value: the fixed string "dfareporting#account".
-  --locale: string # Locale of this account. Acceptable values are: - "cs" (Czech) - "de" (German) - "en" (English) - "en-GB" (English United Kingdom) - "es" (Spanish) - "fr" (French) - "it" (Italian) - "ja" (Japanese) - "ko" (Korean) - "pl" (Polish) - "pt-BR" (Portuguese Brazil) - "ru" (Russian) - "sv" (Swedish) - "tr" (Turkish) - "zh-CN" (Chinese Simplified) - "zh-TW" (Chinese Traditional) 
+  --locale: string # Locale of this account. Acceptable values are: - "cs" (Czech) - "de" (German) - "en" (English) - "en-GB" (English United Kingdom) - "es" (Spanish) - "fr" (French) - "it" (Italian) - "ja" (Japanese) - "ko" (Korean) - "pl" (Polish) - "pt-BR" (Portuguese Brazil) - "ru" (Russian) - "sv" (Swedish) - "tr" (Turkish) - "zh-CN" (Chinese Simplified) - "zh-TW" (Chinese Traditional)
   --maximum-image-size: string # Maximum image size allowed for this account, in kilobytes. Value must be greater than or equal to 1. (format: int64)
   --name: string # Name of this account. This is a required field, and must be less than 128 characters long and be globally unique.
   --nielsen-ocr-enabled: oneof<nothing, bool> # Whether campaigns created in this account will be enabled for Nielsen OCR reach ratings by default.
@@ -822,19 +831,19 @@ export def "userprofiles-accounts dfareportingaccountsupdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/accounts") $qp)
-  let body = {"accountPermissionIds": $account_permission_ids, "accountProfile": $account_profile, "active": $active, "activeAdsLimitTier": $active_ads_limit_tier, "activeViewOptOut": $active_view_opt_out, "availablePermissionIds": $available_permission_ids, "countryId": $country_id, "currencyId": $currency_id, "defaultCreativeSizeId": $default_creative_size_id, "description": $description, "id": $id, "kind": $kind, "locale": $locale, "maximumImageSize": $maximum_image_size, "name": $name, "nielsenOcrEnabled": $nielsen_ocr_enabled, "reportsConfiguration": $reports_configuration, "shareReportsWithTwitter": $share_reports_with_twitter, "teaserSizeLimit": $teaser_size_limit} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/accounts") $qp)
+  let req_body = {"accountPermissionIds": $account_permission_ids, "accountProfile": $account_profile, "active": $active, "activeAdsLimitTier": $active_ads_limit_tier, "activeViewOptOut": $active_view_opt_out, "availablePermissionIds": $available_permission_ids, "countryId": $country_id, "currencyId": $currency_id, "defaultCreativeSizeId": $default_creative_size_id, "description": $description, "id": $id, "kind": $kind, "locale": $locale, "maximumImageSize": $maximum_image_size, "name": $name, "nielsenOcrEnabled": $nielsen_ocr_enabled, "reportsConfiguration": $reports_configuration, "shareReportsWithTwitter": $share_reports_with_twitter, "teaserSizeLimit": $teaser_size_limit} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets one account by ID.
 #
 # GET /userprofiles/{profileId}/accounts/{id}
 # operationId: dfareporting.accounts.get
-export def "userprofiles-accounts dfareportingaccountsget" [
+export def "userprofiles-accounts get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -860,7 +869,7 @@ export def "userprofiles-accounts dfareportingaccountsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id, id: $id} | format pattern "/userprofiles/{profile_id}/accounts/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/accounts/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -870,7 +879,7 @@ export def "userprofiles-accounts dfareportingaccountsget" [
 #
 # GET /userprofiles/{profileId}/ads
 # operationId: dfareporting.ads.list
-export def "userprofiles-ads dfareportingadslist" [
+export def "userprofiles-ads list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -894,31 +903,31 @@ export def "userprofiles-ads dfareportingadslist" [
   --active: oneof<nothing, bool> # Select only active ads.
   --advertiser-id: string # Select only ads with this advertiser ID.
   --archived: oneof<nothing, bool> # Select only archived ads.
-  --audience-segment-ids: list # Select only ads with these audience segment IDs.
-  --campaign-ids: list # Select only ads with these campaign IDs.
+  --audience-segment-ids: list<string> # Select only ads with these audience segment IDs.
+  --campaign-ids: list<string> # Select only ads with these campaign IDs.
   --compatibility: string@compatibility-completer # Select default ads with the specified compatibility. Applicable when type is AD_SERVING_DEFAULT_AD. DISPLAY and DISPLAY_INTERSTITIAL refer to rendering either on desktop or on mobile devices for regular or interstitial ads, respectively. APP and APP_INTERSTITIAL are for rendering in mobile apps. IN_STREAM_VIDEO refers to rendering an in-stream video ads developed with the VAST standard.
-  --creative-ids: list # Select only ads with these creative IDs assigned.
-  --creative-optimization-configuration-ids: list # Select only ads with these creative optimization configuration IDs.
+  --creative-ids: list<string> # Select only ads with these creative IDs assigned.
+  --creative-optimization-configuration-ids: list<string> # Select only ads with these creative optimization configuration IDs.
   --dynamic-click-tracker: oneof<nothing, bool> # Select only dynamic click trackers. Applicable when type is AD_SERVING_CLICK_TRACKER. If true, select dynamic click trackers. If false, select static click trackers. Leave unset to select both.
-  --ids: list # Select only ads with these IDs.
-  --landing-page-ids: list # Select only ads with these landing page IDs.
+  --ids: list<string> # Select only ads with these IDs.
+  --landing-page-ids: list<string> # Select only ads with these landing page IDs.
   --max-results: int # Maximum number of results to return.
   --overridden-event-tag-id: string # Select only ads with this event tag override ID.
   --page-token: string # Value of the nextPageToken from the previous result page.
-  --placement-ids: list # Select only ads with these placement IDs assigned.
-  --remarketing-list-ids: list # Select only ads whose list targeting expression use these remarketing list IDs.
+  --placement-ids: list<string> # Select only ads with these placement IDs assigned.
+  --remarketing-list-ids: list<string> # Select only ads whose list targeting expression use these remarketing list IDs.
   --search-string: string # Allows searching for objects by name or ID. Wildcards (*) are allowed. For example, "ad*2015" will return objects with names like "ad June 2015", "ad April 2015", or simply "ad 2015". Most of the searches also add wildcards implicitly at the start and the end of the search string. For example, a search string of "ad" will match objects with name "my ad", "ad 2015", or simply "ad".
-  --size-ids: list # Select only ads with these size IDs.
+  --size-ids: list<string> # Select only ads with these size IDs.
   --sort-field: string@sort-field-completer # Field by which to sort the list.
   --sort-order: string@sort-order-completer # Order of sorted results.
   --ssl-compliant: oneof<nothing, bool> # Select only ads that are SSL-compliant.
   --ssl-required: oneof<nothing, bool> # Select only ads that require SSL.
-  --type: list # Select only ads with these types.
+  --type: list<string> # Select only ads with these types.
 ]: nothing -> record<ads: table<accountId: string, active: bool, advertiserId: string, advertiserIdDimensionValue: record, archived: bool, audienceSegmentId: string, campaignId: string, campaignIdDimensionValue: record, clickThroughUrl: record, clickThroughUrlSuffixProperties: record, comments: string, compatibility: string, createInfo: record, creativeGroupAssignments: list, creativeRotation: record, dayPartTargeting: record, defaultClickThroughEventTagProperties: record, deliverySchedule: record, dynamicClickTracker: bool, endTime: string, eventTagOverrides: list, geoTargeting: record, id: string, idDimensionValue: record, keyValueTargetingExpression: record, kind: string, languageTargeting: record, lastModifiedInfo: record, name: string, placementAssignments: list, remarketingListExpression: record, size: record, sslCompliant: bool, sslRequired: bool, startTime: string, subaccountId: string, targetingTemplateId: string, technologyTargeting: record, type: string>, kind: string, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "active" $active "scalar") (serialize-qp "advertiserId" $advertiser_id "scalar") (serialize-qp "archived" $archived "scalar") (serialize-qp "audienceSegmentIds" $audience_segment_ids "multi") (serialize-qp "campaignIds" $campaign_ids "multi") (serialize-qp "compatibility" $compatibility "scalar") (serialize-qp "creativeIds" $creative_ids "multi") (serialize-qp "creativeOptimizationConfigurationIds" $creative_optimization_configuration_ids "multi") (serialize-qp "dynamicClickTracker" $dynamic_click_tracker "scalar") (serialize-qp "ids" $ids "multi") (serialize-qp "landingPageIds" $landing_page_ids "multi") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "overriddenEventTagId" $overridden_event_tag_id "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "placementIds" $placement_ids "multi") (serialize-qp "remarketingListIds" $remarketing_list_ids "multi") (serialize-qp "searchString" $search_string "scalar") (serialize-qp "sizeIds" $size_ids "multi") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "sslCompliant" $ssl_compliant "scalar") (serialize-qp "sslRequired" $ssl_required "scalar") (serialize-qp "type" $type "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/ads") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/ads") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -935,7 +944,7 @@ export def "userprofiles-ads dfareportingadslist" [
 # --createInfo shape: {time?: string}
 # --creativeGroupAssignments item shape: {creativeGroupId?: string, creativeGroupNumber?: "CREATIVE_GROUP_ONE"|"CREATIVE_GROUP_TWO"}
 # --creativeRotation shape: {creativeAssignments?: list, creativeOptimizationConfigurationId?: string, type?: "CREATIVE_ROTATION_TYPE_SEQUENTIAL"|"CREATIVE_ROTATION_TYPE_RANDOM", weightCalculationStrategy?: "WEIGHT_STRATEGY_EQUAL"|"WEIGHT_STRATEGY_CUSTOM"|"WEIGHT_STRATEGY_HIGHEST_CTR"|"WEIGHT_STRATEGY_OPTIMIZED"}
-# --dayPartTargeting shape: {daysOfWeek?: list, hoursOfDay?: list, userLocalTime?: bool}
+# --dayPartTargeting shape: {daysOfWeek?: list<string>, hoursOfDay?: list<int>, userLocalTime?: bool}
 # --defaultClickThroughEventTagProperties shape: {defaultClickThroughEventTagId?: string, overrideInheritedEventTag?: bool}
 # --deliverySchedule shape: {frequencyCap?: record, hardCutoff?: bool, impressionRatio?: string, priority?: "AD_PRIORITY_01"|"AD_PRIORITY_02"|"AD_PRIORITY_03"|"AD_PRIORITY_04"|"AD_PRIORITY_05"|"AD_PRIORITY_06"|"AD_PRIORITY_07"|"AD_PRIORITY_08"|"AD_PRIORITY_09"|"AD_PRIORITY_10"|"AD_PRIORITY_11"|"AD_PRIORITY_12"|"AD_PRIORITY_13"|"AD_PRIORITY_14"|"AD_PRIORITY_15"|"AD_PRIORITY_16"}
 # --eventTagOverrides item shape: {enabled?: bool, id?: string}
@@ -948,7 +957,7 @@ export def "userprofiles-ads dfareportingadslist" [
 # --remarketingListExpression shape: {expression?: string}
 # --size shape: {height?: int, iab?: bool, id?: string, kind?: string, width?: int}
 # --technologyTargeting shape: {browsers?: list, connectionTypes?: list, mobileCarriers?: list, operatingSystemVersions?: list, operatingSystems?: list, platformTypes?: list}
-export def "userprofiles-ads dfareportingadspatch" [
+export def "userprofiles-ads update-by-profileId" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -985,7 +994,7 @@ export def "userprofiles-ads dfareportingadspatch" [
   --create-info: record # Modification timestamp. — shape: {time?: string}
   --creative-group-assignments: list # Creative group assignments for this ad. Applicable when type is AD_SERVING_CLICK_TRACKER. Only one assignment per creative group number is allowed for a maximum of two assignments. — item shape: {creativeGroupId?: string, creativeGroupNumber?: "CREATIVE_GROUP_ONE"|"CREATIVE_GROUP_TWO"}
   --creative-rotation: record # Creative Rotation. — shape: {creativeAssignments?: list, creativeOptimizationConfigurationId?: string, type?: "CREATIVE_ROTATION_TYPE_SEQUENTIAL"|"CREATIVE_ROTATION_TYPE_RANDOM", weightCalculationStrategy?: "WEIGHT_STRATEGY_EQUAL"|"WEIGHT_STRATEGY_CUSTOM"|"WEIGHT_STRATEGY_HIGHEST_CTR"|"WEIGHT_STRATEGY_OPTIMIZED"}
-  --day-part-targeting: record # Day Part Targeting. — shape: {daysOfWeek?: list, hoursOfDay?: list, userLocalTime?: bool}
+  --day-part-targeting: record # Day Part Targeting. — shape: {daysOfWeek?: list<string>, hoursOfDay?: list<int>, userLocalTime?: bool}
   --default-click-through-event-tag-properties: record # Properties of inheriting and overriding the default click-through event tag. A campaign may override the event tag defined at the advertiser level, and an ad may also override the campaign's setting further. — shape: {defaultClickThroughEventTagId?: string, overrideInheritedEventTag?: bool}
   --delivery-schedule: record # Delivery Schedule. — shape: {frequencyCap?: record, hardCutoff?: bool, impressionRatio?: string, priority?: "AD_PRIORITY_01"|"AD_PRIORITY_02"|"AD_PRIORITY_03"|"AD_PRIORITY_04"|"AD_PRIORITY_05"|"AD_PRIORITY_06"|"AD_PRIORITY_07"|"AD_PRIORITY_08"|"AD_PRIORITY_09"|"AD_PRIORITY_10"|"AD_PRIORITY_11"|"AD_PRIORITY_12"|"AD_PRIORITY_13"|"AD_PRIORITY_14"|"AD_PRIORITY_15"|"AD_PRIORITY_16"}
   --dynamic-click-tracker: oneof<nothing, bool> # Whether this ad is a dynamic click tracker. Applicable when type is AD_SERVING_CLICK_TRACKER. This is a required field on insert, and is read-only after insert.
@@ -1014,12 +1023,12 @@ export def "userprofiles-ads dfareportingadspatch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/ads") $qp)
-  let body = {"accountId": $account_id, "active": $active, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "archived": $archived, "audienceSegmentId": $audience_segment_id, "campaignId": $campaign_id, "campaignIdDimensionValue": $campaign_id_dimension_value, "clickThroughUrl": $click_through_url, "clickThroughUrlSuffixProperties": $click_through_url_suffix_properties, "comments": $comments, "compatibility": $compatibility, "createInfo": $create_info, "creativeGroupAssignments": $creative_group_assignments, "creativeRotation": $creative_rotation, "dayPartTargeting": $day_part_targeting, "defaultClickThroughEventTagProperties": $default_click_through_event_tag_properties, "deliverySchedule": $delivery_schedule, "dynamicClickTracker": $dynamic_click_tracker, "endTime": $end_time, "eventTagOverrides": $event_tag_overrides, "geoTargeting": $geo_targeting, "id": $id, "idDimensionValue": $id_dimension_value, "keyValueTargetingExpression": $key_value_targeting_expression, "kind": $kind, "languageTargeting": $language_targeting, "lastModifiedInfo": $last_modified_info, "name": $name, "placementAssignments": $placement_assignments, "remarketingListExpression": $remarketing_list_expression, "size": $size, "sslCompliant": $ssl_compliant, "sslRequired": $ssl_required, "startTime": $start_time, "subaccountId": $subaccount_id, "targetingTemplateId": $targeting_template_id, "technologyTargeting": $technology_targeting, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/ads") $qp)
+  let req_body = {"accountId": $account_id, "active": $active, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "archived": $archived, "audienceSegmentId": $audience_segment_id, "campaignId": $campaign_id, "campaignIdDimensionValue": $campaign_id_dimension_value, "clickThroughUrl": $click_through_url, "clickThroughUrlSuffixProperties": $click_through_url_suffix_properties, "comments": $comments, "compatibility": $compatibility, "createInfo": $create_info, "creativeGroupAssignments": $creative_group_assignments, "creativeRotation": $creative_rotation, "dayPartTargeting": $day_part_targeting, "defaultClickThroughEventTagProperties": $default_click_through_event_tag_properties, "deliverySchedule": $delivery_schedule, "dynamicClickTracker": $dynamic_click_tracker, "endTime": $end_time, "eventTagOverrides": $event_tag_overrides, "geoTargeting": $geo_targeting, "id": $id, "idDimensionValue": $id_dimension_value, "keyValueTargetingExpression": $key_value_targeting_expression, "kind": $kind, "languageTargeting": $language_targeting, "lastModifiedInfo": $last_modified_info, "name": $name, "placementAssignments": $placement_assignments, "remarketingListExpression": $remarketing_list_expression, "size": $size, "sslCompliant": $ssl_compliant, "sslRequired": $ssl_required, "startTime": $start_time, "subaccountId": $subaccount_id, "targetingTemplateId": $targeting_template_id, "technologyTargeting": $technology_targeting, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Inserts a new ad.
@@ -1033,7 +1042,7 @@ export def "userprofiles-ads dfareportingadspatch" [
 # --createInfo shape: {time?: string}
 # --creativeGroupAssignments item shape: {creativeGroupId?: string, creativeGroupNumber?: "CREATIVE_GROUP_ONE"|"CREATIVE_GROUP_TWO"}
 # --creativeRotation shape: {creativeAssignments?: list, creativeOptimizationConfigurationId?: string, type?: "CREATIVE_ROTATION_TYPE_SEQUENTIAL"|"CREATIVE_ROTATION_TYPE_RANDOM", weightCalculationStrategy?: "WEIGHT_STRATEGY_EQUAL"|"WEIGHT_STRATEGY_CUSTOM"|"WEIGHT_STRATEGY_HIGHEST_CTR"|"WEIGHT_STRATEGY_OPTIMIZED"}
-# --dayPartTargeting shape: {daysOfWeek?: list, hoursOfDay?: list, userLocalTime?: bool}
+# --dayPartTargeting shape: {daysOfWeek?: list<string>, hoursOfDay?: list<int>, userLocalTime?: bool}
 # --defaultClickThroughEventTagProperties shape: {defaultClickThroughEventTagId?: string, overrideInheritedEventTag?: bool}
 # --deliverySchedule shape: {frequencyCap?: record, hardCutoff?: bool, impressionRatio?: string, priority?: "AD_PRIORITY_01"|"AD_PRIORITY_02"|"AD_PRIORITY_03"|"AD_PRIORITY_04"|"AD_PRIORITY_05"|"AD_PRIORITY_06"|"AD_PRIORITY_07"|"AD_PRIORITY_08"|"AD_PRIORITY_09"|"AD_PRIORITY_10"|"AD_PRIORITY_11"|"AD_PRIORITY_12"|"AD_PRIORITY_13"|"AD_PRIORITY_14"|"AD_PRIORITY_15"|"AD_PRIORITY_16"}
 # --eventTagOverrides item shape: {enabled?: bool, id?: string}
@@ -1046,7 +1055,7 @@ export def "userprofiles-ads dfareportingadspatch" [
 # --remarketingListExpression shape: {expression?: string}
 # --size shape: {height?: int, iab?: bool, id?: string, kind?: string, width?: int}
 # --technologyTargeting shape: {browsers?: list, connectionTypes?: list, mobileCarriers?: list, operatingSystemVersions?: list, operatingSystems?: list, platformTypes?: list}
-export def "userprofiles-ads dfareportingadsinsert" [
+export def "userprofiles-ads create" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1082,7 +1091,7 @@ export def "userprofiles-ads dfareportingadsinsert" [
   --create-info: record # Modification timestamp. — shape: {time?: string}
   --creative-group-assignments: list # Creative group assignments for this ad. Applicable when type is AD_SERVING_CLICK_TRACKER. Only one assignment per creative group number is allowed for a maximum of two assignments. — item shape: {creativeGroupId?: string, creativeGroupNumber?: "CREATIVE_GROUP_ONE"|"CREATIVE_GROUP_TWO"}
   --creative-rotation: record # Creative Rotation. — shape: {creativeAssignments?: list, creativeOptimizationConfigurationId?: string, type?: "CREATIVE_ROTATION_TYPE_SEQUENTIAL"|"CREATIVE_ROTATION_TYPE_RANDOM", weightCalculationStrategy?: "WEIGHT_STRATEGY_EQUAL"|"WEIGHT_STRATEGY_CUSTOM"|"WEIGHT_STRATEGY_HIGHEST_CTR"|"WEIGHT_STRATEGY_OPTIMIZED"}
-  --day-part-targeting: record # Day Part Targeting. — shape: {daysOfWeek?: list, hoursOfDay?: list, userLocalTime?: bool}
+  --day-part-targeting: record # Day Part Targeting. — shape: {daysOfWeek?: list<string>, hoursOfDay?: list<int>, userLocalTime?: bool}
   --default-click-through-event-tag-properties: record # Properties of inheriting and overriding the default click-through event tag. A campaign may override the event tag defined at the advertiser level, and an ad may also override the campaign's setting further. — shape: {defaultClickThroughEventTagId?: string, overrideInheritedEventTag?: bool}
   --delivery-schedule: record # Delivery Schedule. — shape: {frequencyCap?: record, hardCutoff?: bool, impressionRatio?: string, priority?: "AD_PRIORITY_01"|"AD_PRIORITY_02"|"AD_PRIORITY_03"|"AD_PRIORITY_04"|"AD_PRIORITY_05"|"AD_PRIORITY_06"|"AD_PRIORITY_07"|"AD_PRIORITY_08"|"AD_PRIORITY_09"|"AD_PRIORITY_10"|"AD_PRIORITY_11"|"AD_PRIORITY_12"|"AD_PRIORITY_13"|"AD_PRIORITY_14"|"AD_PRIORITY_15"|"AD_PRIORITY_16"}
   --dynamic-click-tracker: oneof<nothing, bool> # Whether this ad is a dynamic click tracker. Applicable when type is AD_SERVING_CLICK_TRACKER. This is a required field on insert, and is read-only after insert.
@@ -1111,12 +1120,12 @@ export def "userprofiles-ads dfareportingadsinsert" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/ads") $qp)
-  let body = {"accountId": $account_id, "active": $active, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "archived": $archived, "audienceSegmentId": $audience_segment_id, "campaignId": $campaign_id, "campaignIdDimensionValue": $campaign_id_dimension_value, "clickThroughUrl": $click_through_url, "clickThroughUrlSuffixProperties": $click_through_url_suffix_properties, "comments": $comments, "compatibility": $compatibility, "createInfo": $create_info, "creativeGroupAssignments": $creative_group_assignments, "creativeRotation": $creative_rotation, "dayPartTargeting": $day_part_targeting, "defaultClickThroughEventTagProperties": $default_click_through_event_tag_properties, "deliverySchedule": $delivery_schedule, "dynamicClickTracker": $dynamic_click_tracker, "endTime": $end_time, "eventTagOverrides": $event_tag_overrides, "geoTargeting": $geo_targeting, "id": $id, "idDimensionValue": $id_dimension_value, "keyValueTargetingExpression": $key_value_targeting_expression, "kind": $kind, "languageTargeting": $language_targeting, "lastModifiedInfo": $last_modified_info, "name": $name, "placementAssignments": $placement_assignments, "remarketingListExpression": $remarketing_list_expression, "size": $size, "sslCompliant": $ssl_compliant, "sslRequired": $ssl_required, "startTime": $start_time, "subaccountId": $subaccount_id, "targetingTemplateId": $targeting_template_id, "technologyTargeting": $technology_targeting, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/ads") $qp)
+  let req_body = {"accountId": $account_id, "active": $active, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "archived": $archived, "audienceSegmentId": $audience_segment_id, "campaignId": $campaign_id, "campaignIdDimensionValue": $campaign_id_dimension_value, "clickThroughUrl": $click_through_url, "clickThroughUrlSuffixProperties": $click_through_url_suffix_properties, "comments": $comments, "compatibility": $compatibility, "createInfo": $create_info, "creativeGroupAssignments": $creative_group_assignments, "creativeRotation": $creative_rotation, "dayPartTargeting": $day_part_targeting, "defaultClickThroughEventTagProperties": $default_click_through_event_tag_properties, "deliverySchedule": $delivery_schedule, "dynamicClickTracker": $dynamic_click_tracker, "endTime": $end_time, "eventTagOverrides": $event_tag_overrides, "geoTargeting": $geo_targeting, "id": $id, "idDimensionValue": $id_dimension_value, "keyValueTargetingExpression": $key_value_targeting_expression, "kind": $kind, "languageTargeting": $language_targeting, "lastModifiedInfo": $last_modified_info, "name": $name, "placementAssignments": $placement_assignments, "remarketingListExpression": $remarketing_list_expression, "size": $size, "sslCompliant": $ssl_compliant, "sslRequired": $ssl_required, "startTime": $start_time, "subaccountId": $subaccount_id, "targetingTemplateId": $targeting_template_id, "technologyTargeting": $technology_targeting, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates an existing ad.
@@ -1130,7 +1139,7 @@ export def "userprofiles-ads dfareportingadsinsert" [
 # --createInfo shape: {time?: string}
 # --creativeGroupAssignments item shape: {creativeGroupId?: string, creativeGroupNumber?: "CREATIVE_GROUP_ONE"|"CREATIVE_GROUP_TWO"}
 # --creativeRotation shape: {creativeAssignments?: list, creativeOptimizationConfigurationId?: string, type?: "CREATIVE_ROTATION_TYPE_SEQUENTIAL"|"CREATIVE_ROTATION_TYPE_RANDOM", weightCalculationStrategy?: "WEIGHT_STRATEGY_EQUAL"|"WEIGHT_STRATEGY_CUSTOM"|"WEIGHT_STRATEGY_HIGHEST_CTR"|"WEIGHT_STRATEGY_OPTIMIZED"}
-# --dayPartTargeting shape: {daysOfWeek?: list, hoursOfDay?: list, userLocalTime?: bool}
+# --dayPartTargeting shape: {daysOfWeek?: list<string>, hoursOfDay?: list<int>, userLocalTime?: bool}
 # --defaultClickThroughEventTagProperties shape: {defaultClickThroughEventTagId?: string, overrideInheritedEventTag?: bool}
 # --deliverySchedule shape: {frequencyCap?: record, hardCutoff?: bool, impressionRatio?: string, priority?: "AD_PRIORITY_01"|"AD_PRIORITY_02"|"AD_PRIORITY_03"|"AD_PRIORITY_04"|"AD_PRIORITY_05"|"AD_PRIORITY_06"|"AD_PRIORITY_07"|"AD_PRIORITY_08"|"AD_PRIORITY_09"|"AD_PRIORITY_10"|"AD_PRIORITY_11"|"AD_PRIORITY_12"|"AD_PRIORITY_13"|"AD_PRIORITY_14"|"AD_PRIORITY_15"|"AD_PRIORITY_16"}
 # --eventTagOverrides item shape: {enabled?: bool, id?: string}
@@ -1143,7 +1152,7 @@ export def "userprofiles-ads dfareportingadsinsert" [
 # --remarketingListExpression shape: {expression?: string}
 # --size shape: {height?: int, iab?: bool, id?: string, kind?: string, width?: int}
 # --technologyTargeting shape: {browsers?: list, connectionTypes?: list, mobileCarriers?: list, operatingSystemVersions?: list, operatingSystems?: list, platformTypes?: list}
-export def "userprofiles-ads dfareportingadsupdate" [
+export def "userprofiles-ads update-by-profileId-1" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1179,7 +1188,7 @@ export def "userprofiles-ads dfareportingadsupdate" [
   --create-info: record # Modification timestamp. — shape: {time?: string}
   --creative-group-assignments: list # Creative group assignments for this ad. Applicable when type is AD_SERVING_CLICK_TRACKER. Only one assignment per creative group number is allowed for a maximum of two assignments. — item shape: {creativeGroupId?: string, creativeGroupNumber?: "CREATIVE_GROUP_ONE"|"CREATIVE_GROUP_TWO"}
   --creative-rotation: record # Creative Rotation. — shape: {creativeAssignments?: list, creativeOptimizationConfigurationId?: string, type?: "CREATIVE_ROTATION_TYPE_SEQUENTIAL"|"CREATIVE_ROTATION_TYPE_RANDOM", weightCalculationStrategy?: "WEIGHT_STRATEGY_EQUAL"|"WEIGHT_STRATEGY_CUSTOM"|"WEIGHT_STRATEGY_HIGHEST_CTR"|"WEIGHT_STRATEGY_OPTIMIZED"}
-  --day-part-targeting: record # Day Part Targeting. — shape: {daysOfWeek?: list, hoursOfDay?: list, userLocalTime?: bool}
+  --day-part-targeting: record # Day Part Targeting. — shape: {daysOfWeek?: list<string>, hoursOfDay?: list<int>, userLocalTime?: bool}
   --default-click-through-event-tag-properties: record # Properties of inheriting and overriding the default click-through event tag. A campaign may override the event tag defined at the advertiser level, and an ad may also override the campaign's setting further. — shape: {defaultClickThroughEventTagId?: string, overrideInheritedEventTag?: bool}
   --delivery-schedule: record # Delivery Schedule. — shape: {frequencyCap?: record, hardCutoff?: bool, impressionRatio?: string, priority?: "AD_PRIORITY_01"|"AD_PRIORITY_02"|"AD_PRIORITY_03"|"AD_PRIORITY_04"|"AD_PRIORITY_05"|"AD_PRIORITY_06"|"AD_PRIORITY_07"|"AD_PRIORITY_08"|"AD_PRIORITY_09"|"AD_PRIORITY_10"|"AD_PRIORITY_11"|"AD_PRIORITY_12"|"AD_PRIORITY_13"|"AD_PRIORITY_14"|"AD_PRIORITY_15"|"AD_PRIORITY_16"}
   --dynamic-click-tracker: oneof<nothing, bool> # Whether this ad is a dynamic click tracker. Applicable when type is AD_SERVING_CLICK_TRACKER. This is a required field on insert, and is read-only after insert.
@@ -1208,19 +1217,19 @@ export def "userprofiles-ads dfareportingadsupdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/ads") $qp)
-  let body = {"accountId": $account_id, "active": $active, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "archived": $archived, "audienceSegmentId": $audience_segment_id, "campaignId": $campaign_id, "campaignIdDimensionValue": $campaign_id_dimension_value, "clickThroughUrl": $click_through_url, "clickThroughUrlSuffixProperties": $click_through_url_suffix_properties, "comments": $comments, "compatibility": $compatibility, "createInfo": $create_info, "creativeGroupAssignments": $creative_group_assignments, "creativeRotation": $creative_rotation, "dayPartTargeting": $day_part_targeting, "defaultClickThroughEventTagProperties": $default_click_through_event_tag_properties, "deliverySchedule": $delivery_schedule, "dynamicClickTracker": $dynamic_click_tracker, "endTime": $end_time, "eventTagOverrides": $event_tag_overrides, "geoTargeting": $geo_targeting, "id": $id, "idDimensionValue": $id_dimension_value, "keyValueTargetingExpression": $key_value_targeting_expression, "kind": $kind, "languageTargeting": $language_targeting, "lastModifiedInfo": $last_modified_info, "name": $name, "placementAssignments": $placement_assignments, "remarketingListExpression": $remarketing_list_expression, "size": $size, "sslCompliant": $ssl_compliant, "sslRequired": $ssl_required, "startTime": $start_time, "subaccountId": $subaccount_id, "targetingTemplateId": $targeting_template_id, "technologyTargeting": $technology_targeting, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/ads") $qp)
+  let req_body = {"accountId": $account_id, "active": $active, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "archived": $archived, "audienceSegmentId": $audience_segment_id, "campaignId": $campaign_id, "campaignIdDimensionValue": $campaign_id_dimension_value, "clickThroughUrl": $click_through_url, "clickThroughUrlSuffixProperties": $click_through_url_suffix_properties, "comments": $comments, "compatibility": $compatibility, "createInfo": $create_info, "creativeGroupAssignments": $creative_group_assignments, "creativeRotation": $creative_rotation, "dayPartTargeting": $day_part_targeting, "defaultClickThroughEventTagProperties": $default_click_through_event_tag_properties, "deliverySchedule": $delivery_schedule, "dynamicClickTracker": $dynamic_click_tracker, "endTime": $end_time, "eventTagOverrides": $event_tag_overrides, "geoTargeting": $geo_targeting, "id": $id, "idDimensionValue": $id_dimension_value, "keyValueTargetingExpression": $key_value_targeting_expression, "kind": $kind, "languageTargeting": $language_targeting, "lastModifiedInfo": $last_modified_info, "name": $name, "placementAssignments": $placement_assignments, "remarketingListExpression": $remarketing_list_expression, "size": $size, "sslCompliant": $ssl_compliant, "sslRequired": $ssl_required, "startTime": $start_time, "subaccountId": $subaccount_id, "targetingTemplateId": $targeting_template_id, "technologyTargeting": $technology_targeting, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets one ad by ID.
 #
 # GET /userprofiles/{profileId}/ads/{id}
 # operationId: dfareporting.ads.get
-export def "userprofiles-ads dfareportingadsget" [
+export def "userprofiles-ads get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1246,7 +1255,7 @@ export def "userprofiles-ads dfareportingadsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id, id: $id} | format pattern "/userprofiles/{profile_id}/ads/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/ads/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1256,7 +1265,7 @@ export def "userprofiles-ads dfareportingadsget" [
 #
 # GET /userprofiles/{profileId}/advertiserGroups
 # operationId: dfareporting.advertiserGroups.list
-export def "userprofiles-advertiser-groups dfareportingadvertiserGroupslist" [
+export def "userprofiles-advertiser-groups list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1277,7 +1286,7 @@ export def "userprofiles-advertiser-groups dfareportingadvertiserGroupslist" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --ids: list # Select only advertiser groups with these IDs.
+  --ids: list<string> # Select only advertiser groups with these IDs.
   --max-results: int # Maximum number of results to return.
   --page-token: string # Value of the nextPageToken from the previous result page.
   --search-string: string # Allows searching for objects by name or ID. Wildcards (*) are allowed. For example, "advertiser*2015" will return objects with names like "advertiser group June 2015", "advertiser group April 2015", or simply "advertiser group 2015". Most of the searches also add wildcards implicitly at the start and the end of the search string. For example, a search string of "advertisergroup" will match objects with name "my advertisergroup", "advertisergroup 2015", or simply "advertisergroup".
@@ -1287,7 +1296,7 @@ export def "userprofiles-advertiser-groups dfareportingadvertiserGroupslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "ids" $ids "multi") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "searchString" $search_string "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/advertiserGroups") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/advertiserGroups") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1297,7 +1306,7 @@ export def "userprofiles-advertiser-groups dfareportingadvertiserGroupslist" [
 #
 # PATCH /userprofiles/{profileId}/advertiserGroups
 # operationId: dfareporting.advertiserGroups.patch
-export def "userprofiles-advertiser-groups dfareportingadvertiserGroupspatch" [
+export def "userprofiles-advertiser-groups update-by-profileId" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1328,19 +1337,19 @@ export def "userprofiles-advertiser-groups dfareportingadvertiserGroupspatch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/advertiserGroups") $qp)
-  let body = {"accountId": $account_id, "id": $id, "kind": $kind, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/advertiserGroups") $qp)
+  let req_body = {"accountId": $account_id, "id": $id, "kind": $kind, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Inserts a new advertiser group.
 #
 # POST /userprofiles/{profileId}/advertiserGroups
 # operationId: dfareporting.advertiserGroups.insert
-export def "userprofiles-advertiser-groups dfareportingadvertiserGroupsinsert" [
+export def "userprofiles-advertiser-groups create" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1370,19 +1379,19 @@ export def "userprofiles-advertiser-groups dfareportingadvertiserGroupsinsert" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/advertiserGroups") $qp)
-  let body = {"accountId": $account_id, "id": $id, "kind": $kind, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/advertiserGroups") $qp)
+  let req_body = {"accountId": $account_id, "id": $id, "kind": $kind, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates an existing advertiser group.
 #
 # PUT /userprofiles/{profileId}/advertiserGroups
 # operationId: dfareporting.advertiserGroups.update
-export def "userprofiles-advertiser-groups dfareportingadvertiserGroupsupdate" [
+export def "userprofiles-advertiser-groups update-by-profileId-1" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1412,19 +1421,19 @@ export def "userprofiles-advertiser-groups dfareportingadvertiserGroupsupdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/advertiserGroups") $qp)
-  let body = {"accountId": $account_id, "id": $id, "kind": $kind, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/advertiserGroups") $qp)
+  let req_body = {"accountId": $account_id, "id": $id, "kind": $kind, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes an existing advertiser group.
 #
 # DELETE /userprofiles/{profileId}/advertiserGroups/{id}
 # operationId: dfareporting.advertiserGroups.delete
-export def "userprofiles-advertiser-groups dfareportingadvertiserGroupsdelete" [
+export def "userprofiles-advertiser-groups delete" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1450,7 +1459,7 @@ export def "userprofiles-advertiser-groups dfareportingadvertiserGroupsdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id, id: $id} | format pattern "/userprofiles/{profile_id}/advertiserGroups/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/advertiserGroups/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1460,7 +1469,7 @@ export def "userprofiles-advertiser-groups dfareportingadvertiserGroupsdelete" [
 #
 # GET /userprofiles/{profileId}/advertiserGroups/{id}
 # operationId: dfareporting.advertiserGroups.get
-export def "userprofiles-advertiser-groups dfareportingadvertiserGroupsget" [
+export def "userprofiles-advertiser-groups get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1486,7 +1495,7 @@ export def "userprofiles-advertiser-groups dfareportingadvertiserGroupsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id, id: $id} | format pattern "/userprofiles/{profile_id}/advertiserGroups/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/advertiserGroups/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1496,7 +1505,7 @@ export def "userprofiles-advertiser-groups dfareportingadvertiserGroupsget" [
 #
 # GET /userprofiles/{profileId}/advertiserLandingPages
 # operationId: dfareporting.advertiserLandingPages.list
-export def "userprofiles-advertiser-landing-pages dfareportingadvertiserLandingPageslist" [
+export def "userprofiles-advertiser-landing-pages list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1517,10 +1526,10 @@ export def "userprofiles-advertiser-landing-pages dfareportingadvertiserLandingP
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --advertiser-ids: list # Select only landing pages that belong to these advertisers.
+  --advertiser-ids: list<string> # Select only landing pages that belong to these advertisers.
   --archived: oneof<nothing, bool> # Select only archived landing pages. Don't set this field to select both archived and non-archived landing pages.
-  --campaign-ids: list # Select only landing pages that are associated with these campaigns.
-  --ids: list # Select only landing pages with these IDs.
+  --campaign-ids: list<string> # Select only landing pages that are associated with these campaigns.
+  --ids: list<string> # Select only landing pages with these IDs.
   --max-results: int # Maximum number of results to return.
   --page-token: string # Value of the nextPageToken from the previous result page.
   --search-string: string # Allows searching for landing pages by name or ID. Wildcards (*) are allowed. For example, "landingpage*2017" will return landing pages with names like "landingpage July 2017", "landingpage March 2017", or simply "landingpage 2017". Most of the searches also add wildcards implicitly at the start and the end of the search string. For example, a search string of "landingpage" will match campaigns with name "my landingpage", "landingpage 2015", or simply "landingpage".
@@ -1531,7 +1540,7 @@ export def "userprofiles-advertiser-landing-pages dfareportingadvertiserLandingP
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserIds" $advertiser_ids "multi") (serialize-qp "archived" $archived "scalar") (serialize-qp "campaignIds" $campaign_ids "multi") (serialize-qp "ids" $ids "multi") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "searchString" $search_string "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "subaccountId" $subaccount_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/advertiserLandingPages") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/advertiserLandingPages") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1541,8 +1550,8 @@ export def "userprofiles-advertiser-landing-pages dfareportingadvertiserLandingP
 #
 # PATCH /userprofiles/{profileId}/advertiserLandingPages
 # operationId: dfareporting.advertiserLandingPages.patch
-# --deepLinks item shape: {appUrl?: string, fallbackUrl?: string, kind?: string, mobileApp?: record, remarketingListIds?: list}
-export def "userprofiles-advertiser-landing-pages dfareportingadvertiserLandingPagespatch" [
+# --deepLinks item shape: {appUrl?: string, fallbackUrl?: string, kind?: string, mobileApp?: record, remarketingListIds?: list<string>}
+export def "userprofiles-advertiser-landing-pages update-by-profileId" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1566,30 +1575,30 @@ export def "userprofiles-advertiser-landing-pages dfareportingadvertiserLandingP
   --id: string # LandingPage ID.
   --advertiser-id: string # Advertiser ID of this landing page. This is a required field. (format: int64)
   --archived: oneof<nothing, bool> # Whether this landing page has been archived.
-  --deep-links: list # Links that will direct the user to a mobile app, if installed. — item shape: {appUrl?: string, fallbackUrl?: string, kind?: string, mobileApp?: record, remarketingListIds?: list}
+  --deep-links: list # Links that will direct the user to a mobile app, if installed. — item shape: {appUrl?: string, fallbackUrl?: string, kind?: string, mobileApp?: record, remarketingListIds?: list<string>}
   --id: string # ID of this landing page. This is a read-only, auto-generated field. (format: int64)
   --kind: string # Identifies what kind of resource this is. Value: the fixed string "dfareporting#landingPage".
   --name: string # Name of this landing page. This is a required field. It must be less than 256 characters long.
-  --body-url: string # URL of this landing page. This is a required field.
+  --url: string # URL of this landing page. This is a required field.
 ]: any -> record<advertiserId: string, archived: bool, deepLinks: table<appUrl: string, fallbackUrl: string, kind: string, mobileApp: record, remarketingListIds: list>, id: string, kind: string, name: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/advertiserLandingPages") $qp)
-  let body = {"advertiserId": $advertiser_id, "archived": $archived, "deepLinks": $deep_links, "id": $id, "kind": $kind, "name": $name, "url": $body_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/advertiserLandingPages") $qp)
+  let req_body = {"advertiserId": $advertiser_id, "archived": $archived, "deepLinks": $deep_links, "id": $id, "kind": $kind, "name": $name, "url": $url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Inserts a new landing page.
 #
 # POST /userprofiles/{profileId}/advertiserLandingPages
 # operationId: dfareporting.advertiserLandingPages.insert
-# --deepLinks item shape: {appUrl?: string, fallbackUrl?: string, kind?: string, mobileApp?: record, remarketingListIds?: list}
-export def "userprofiles-advertiser-landing-pages dfareportingadvertiserLandingPagesinsert" [
+# --deepLinks item shape: {appUrl?: string, fallbackUrl?: string, kind?: string, mobileApp?: record, remarketingListIds?: list<string>}
+export def "userprofiles-advertiser-landing-pages create" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1612,30 +1621,30 @@ export def "userprofiles-advertiser-landing-pages dfareportingadvertiserLandingP
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --advertiser-id: string # Advertiser ID of this landing page. This is a required field. (format: int64)
   --archived: oneof<nothing, bool> # Whether this landing page has been archived.
-  --deep-links: list # Links that will direct the user to a mobile app, if installed. — item shape: {appUrl?: string, fallbackUrl?: string, kind?: string, mobileApp?: record, remarketingListIds?: list}
+  --deep-links: list # Links that will direct the user to a mobile app, if installed. — item shape: {appUrl?: string, fallbackUrl?: string, kind?: string, mobileApp?: record, remarketingListIds?: list<string>}
   --id: string # ID of this landing page. This is a read-only, auto-generated field. (format: int64)
   --kind: string # Identifies what kind of resource this is. Value: the fixed string "dfareporting#landingPage".
   --name: string # Name of this landing page. This is a required field. It must be less than 256 characters long.
-  --body-url: string # URL of this landing page. This is a required field.
+  --url: string # URL of this landing page. This is a required field.
 ]: any -> record<advertiserId: string, archived: bool, deepLinks: table<appUrl: string, fallbackUrl: string, kind: string, mobileApp: record, remarketingListIds: list>, id: string, kind: string, name: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/advertiserLandingPages") $qp)
-  let body = {"advertiserId": $advertiser_id, "archived": $archived, "deepLinks": $deep_links, "id": $id, "kind": $kind, "name": $name, "url": $body_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/advertiserLandingPages") $qp)
+  let req_body = {"advertiserId": $advertiser_id, "archived": $archived, "deepLinks": $deep_links, "id": $id, "kind": $kind, "name": $name, "url": $url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates an existing landing page.
 #
 # PUT /userprofiles/{profileId}/advertiserLandingPages
 # operationId: dfareporting.advertiserLandingPages.update
-# --deepLinks item shape: {appUrl?: string, fallbackUrl?: string, kind?: string, mobileApp?: record, remarketingListIds?: list}
-export def "userprofiles-advertiser-landing-pages dfareportingadvertiserLandingPagesupdate" [
+# --deepLinks item shape: {appUrl?: string, fallbackUrl?: string, kind?: string, mobileApp?: record, remarketingListIds?: list<string>}
+export def "userprofiles-advertiser-landing-pages update-by-profileId-1" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1658,29 +1667,29 @@ export def "userprofiles-advertiser-landing-pages dfareportingadvertiserLandingP
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --advertiser-id: string # Advertiser ID of this landing page. This is a required field. (format: int64)
   --archived: oneof<nothing, bool> # Whether this landing page has been archived.
-  --deep-links: list # Links that will direct the user to a mobile app, if installed. — item shape: {appUrl?: string, fallbackUrl?: string, kind?: string, mobileApp?: record, remarketingListIds?: list}
+  --deep-links: list # Links that will direct the user to a mobile app, if installed. — item shape: {appUrl?: string, fallbackUrl?: string, kind?: string, mobileApp?: record, remarketingListIds?: list<string>}
   --id: string # ID of this landing page. This is a read-only, auto-generated field. (format: int64)
   --kind: string # Identifies what kind of resource this is. Value: the fixed string "dfareporting#landingPage".
   --name: string # Name of this landing page. This is a required field. It must be less than 256 characters long.
-  --body-url: string # URL of this landing page. This is a required field.
+  --url: string # URL of this landing page. This is a required field.
 ]: any -> record<advertiserId: string, archived: bool, deepLinks: table<appUrl: string, fallbackUrl: string, kind: string, mobileApp: record, remarketingListIds: list>, id: string, kind: string, name: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/advertiserLandingPages") $qp)
-  let body = {"advertiserId": $advertiser_id, "archived": $archived, "deepLinks": $deep_links, "id": $id, "kind": $kind, "name": $name, "url": $body_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/advertiserLandingPages") $qp)
+  let req_body = {"advertiserId": $advertiser_id, "archived": $archived, "deepLinks": $deep_links, "id": $id, "kind": $kind, "name": $name, "url": $url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets one landing page by ID.
 #
 # GET /userprofiles/{profileId}/advertiserLandingPages/{id}
 # operationId: dfareporting.advertiserLandingPages.get
-export def "userprofiles-advertiser-landing-pages dfareportingadvertiserLandingPagesget" [
+export def "userprofiles-advertiser-landing-pages get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1706,7 +1715,7 @@ export def "userprofiles-advertiser-landing-pages dfareportingadvertiserLandingP
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id, id: $id} | format pattern "/userprofiles/{profile_id}/advertiserLandingPages/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/advertiserLandingPages/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1716,7 +1725,7 @@ export def "userprofiles-advertiser-landing-pages dfareportingadvertiserLandingP
 #
 # GET /userprofiles/{profileId}/advertisers
 # operationId: dfareporting.advertisers.list
-export def "userprofiles-advertisers dfareportingadvertiserslist" [
+export def "userprofiles-advertisers list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1737,9 +1746,9 @@ export def "userprofiles-advertisers dfareportingadvertiserslist" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --advertiser-group-ids: list # Select only advertisers with these advertiser group IDs.
-  --floodlight-configuration-ids: list # Select only advertisers with these floodlight configuration IDs.
-  --ids: list # Select only advertisers with these IDs.
+  --advertiser-group-ids: list<string> # Select only advertisers with these advertiser group IDs.
+  --floodlight-configuration-ids: list<string> # Select only advertisers with these floodlight configuration IDs.
+  --ids: list<string> # Select only advertisers with these IDs.
   --include-advertisers-without-groups-only: oneof<nothing, bool> # Select only advertisers which do not belong to any advertiser group.
   --max-results: int # Maximum number of results to return.
   --only-parent: oneof<nothing, bool> # Select only advertisers which use another advertiser's floodlight configuration.
@@ -1753,7 +1762,7 @@ export def "userprofiles-advertisers dfareportingadvertiserslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserGroupIds" $advertiser_group_ids "multi") (serialize-qp "floodlightConfigurationIds" $floodlight_configuration_ids "multi") (serialize-qp "ids" $ids "multi") (serialize-qp "includeAdvertisersWithoutGroupsOnly" $include_advertisers_without_groups_only "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "onlyParent" $only_parent "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "searchString" $search_string "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "subaccountId" $subaccount_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/advertisers") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/advertisers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1765,7 +1774,7 @@ export def "userprofiles-advertisers dfareportingadvertiserslist" [
 # operationId: dfareporting.advertisers.patch
 # --floodlightConfigurationIdDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
 # --idDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
-export def "userprofiles-advertisers dfareportingadvertiserspatch" [
+export def "userprofiles-advertisers update-by-profileId" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1792,7 +1801,7 @@ export def "userprofiles-advertisers dfareportingadvertiserspatch" [
   --click-through-url-suffix: string # Suffix added to click-through URL of ad creative associations under this advertiser. Must be less than 129 characters long.
   --default-click-through-event-tag-id: string # ID of the click-through event tag to apply by default to the landing pages of this advertiser's campaigns. (format: int64)
   --default-email: string # Default email address used in sender field for tag emails.
-  --floodlight-configuration-id: string # Floodlight configuration ID of this advertiser. The floodlight configuration ID will be created automatically, so on insert this field should be left blank. This field can be set to another advertiser's floodlight configuration ID in order to share that advertiser's floodlight configuration with this advertiser, so long as: - This advertiser's original floodlight configuration is not already associated with floodlight activities or floodlight activity groups. - This advertiser's original floodlight configuration is not already shared with another advertiser.  (format: int64)
+  --floodlight-configuration-id: string # Floodlight configuration ID of this advertiser. The floodlight configuration ID will be created automatically, so on insert this field should be left blank. This field can be set to another advertiser's floodlight configuration ID in order to share that advertiser's floodlight configuration with this advertiser, so long as: - This advertiser's original floodlight configuration is not already associated with floodlight activities or floodlight activity groups. - This advertiser's original floodlight configuration is not already shared with another advertiser. (format: int64)
   --floodlight-configuration-id-dimension-value: record # Represents a DimensionValue resource. — shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
   --id: string # ID of this advertiser. This is a read-only, auto-generated field. (format: int64)
   --id-dimension-value: record # Represents a DimensionValue resource. — shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
@@ -1807,12 +1816,12 @@ export def "userprofiles-advertisers dfareportingadvertiserspatch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/advertisers") $qp)
-  let body = {"accountId": $account_id, "advertiserGroupId": $advertiser_group_id, "clickThroughUrlSuffix": $click_through_url_suffix, "defaultClickThroughEventTagId": $default_click_through_event_tag_id, "defaultEmail": $default_email, "floodlightConfigurationId": $floodlight_configuration_id, "floodlightConfigurationIdDimensionValue": $floodlight_configuration_id_dimension_value, "id": $id, "idDimensionValue": $id_dimension_value, "kind": $kind, "name": $name, "originalFloodlightConfigurationId": $original_floodlight_configuration_id, "status": $status, "subaccountId": $subaccount_id, "suspended": $suspended} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/advertisers") $qp)
+  let req_body = {"accountId": $account_id, "advertiserGroupId": $advertiser_group_id, "clickThroughUrlSuffix": $click_through_url_suffix, "defaultClickThroughEventTagId": $default_click_through_event_tag_id, "defaultEmail": $default_email, "floodlightConfigurationId": $floodlight_configuration_id, "floodlightConfigurationIdDimensionValue": $floodlight_configuration_id_dimension_value, "id": $id, "idDimensionValue": $id_dimension_value, "kind": $kind, "name": $name, "originalFloodlightConfigurationId": $original_floodlight_configuration_id, "status": $status, "subaccountId": $subaccount_id, "suspended": $suspended} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Inserts a new advertiser.
@@ -1821,7 +1830,7 @@ export def "userprofiles-advertisers dfareportingadvertiserspatch" [
 # operationId: dfareporting.advertisers.insert
 # --floodlightConfigurationIdDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
 # --idDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
-export def "userprofiles-advertisers dfareportingadvertisersinsert" [
+export def "userprofiles-advertisers create" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1847,7 +1856,7 @@ export def "userprofiles-advertisers dfareportingadvertisersinsert" [
   --click-through-url-suffix: string # Suffix added to click-through URL of ad creative associations under this advertiser. Must be less than 129 characters long.
   --default-click-through-event-tag-id: string # ID of the click-through event tag to apply by default to the landing pages of this advertiser's campaigns. (format: int64)
   --default-email: string # Default email address used in sender field for tag emails.
-  --floodlight-configuration-id: string # Floodlight configuration ID of this advertiser. The floodlight configuration ID will be created automatically, so on insert this field should be left blank. This field can be set to another advertiser's floodlight configuration ID in order to share that advertiser's floodlight configuration with this advertiser, so long as: - This advertiser's original floodlight configuration is not already associated with floodlight activities or floodlight activity groups. - This advertiser's original floodlight configuration is not already shared with another advertiser.  (format: int64)
+  --floodlight-configuration-id: string # Floodlight configuration ID of this advertiser. The floodlight configuration ID will be created automatically, so on insert this field should be left blank. This field can be set to another advertiser's floodlight configuration ID in order to share that advertiser's floodlight configuration with this advertiser, so long as: - This advertiser's original floodlight configuration is not already associated with floodlight activities or floodlight activity groups. - This advertiser's original floodlight configuration is not already shared with another advertiser. (format: int64)
   --floodlight-configuration-id-dimension-value: record # Represents a DimensionValue resource. — shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
   --id: string # ID of this advertiser. This is a read-only, auto-generated field. (format: int64)
   --id-dimension-value: record # Represents a DimensionValue resource. — shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
@@ -1862,12 +1871,12 @@ export def "userprofiles-advertisers dfareportingadvertisersinsert" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/advertisers") $qp)
-  let body = {"accountId": $account_id, "advertiserGroupId": $advertiser_group_id, "clickThroughUrlSuffix": $click_through_url_suffix, "defaultClickThroughEventTagId": $default_click_through_event_tag_id, "defaultEmail": $default_email, "floodlightConfigurationId": $floodlight_configuration_id, "floodlightConfigurationIdDimensionValue": $floodlight_configuration_id_dimension_value, "id": $id, "idDimensionValue": $id_dimension_value, "kind": $kind, "name": $name, "originalFloodlightConfigurationId": $original_floodlight_configuration_id, "status": $status, "subaccountId": $subaccount_id, "suspended": $suspended} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/advertisers") $qp)
+  let req_body = {"accountId": $account_id, "advertiserGroupId": $advertiser_group_id, "clickThroughUrlSuffix": $click_through_url_suffix, "defaultClickThroughEventTagId": $default_click_through_event_tag_id, "defaultEmail": $default_email, "floodlightConfigurationId": $floodlight_configuration_id, "floodlightConfigurationIdDimensionValue": $floodlight_configuration_id_dimension_value, "id": $id, "idDimensionValue": $id_dimension_value, "kind": $kind, "name": $name, "originalFloodlightConfigurationId": $original_floodlight_configuration_id, "status": $status, "subaccountId": $subaccount_id, "suspended": $suspended} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates an existing advertiser.
@@ -1876,7 +1885,7 @@ export def "userprofiles-advertisers dfareportingadvertisersinsert" [
 # operationId: dfareporting.advertisers.update
 # --floodlightConfigurationIdDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
 # --idDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
-export def "userprofiles-advertisers dfareportingadvertisersupdate" [
+export def "userprofiles-advertisers update-by-profileId-1" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1902,7 +1911,7 @@ export def "userprofiles-advertisers dfareportingadvertisersupdate" [
   --click-through-url-suffix: string # Suffix added to click-through URL of ad creative associations under this advertiser. Must be less than 129 characters long.
   --default-click-through-event-tag-id: string # ID of the click-through event tag to apply by default to the landing pages of this advertiser's campaigns. (format: int64)
   --default-email: string # Default email address used in sender field for tag emails.
-  --floodlight-configuration-id: string # Floodlight configuration ID of this advertiser. The floodlight configuration ID will be created automatically, so on insert this field should be left blank. This field can be set to another advertiser's floodlight configuration ID in order to share that advertiser's floodlight configuration with this advertiser, so long as: - This advertiser's original floodlight configuration is not already associated with floodlight activities or floodlight activity groups. - This advertiser's original floodlight configuration is not already shared with another advertiser.  (format: int64)
+  --floodlight-configuration-id: string # Floodlight configuration ID of this advertiser. The floodlight configuration ID will be created automatically, so on insert this field should be left blank. This field can be set to another advertiser's floodlight configuration ID in order to share that advertiser's floodlight configuration with this advertiser, so long as: - This advertiser's original floodlight configuration is not already associated with floodlight activities or floodlight activity groups. - This advertiser's original floodlight configuration is not already shared with another advertiser. (format: int64)
   --floodlight-configuration-id-dimension-value: record # Represents a DimensionValue resource. — shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
   --id: string # ID of this advertiser. This is a read-only, auto-generated field. (format: int64)
   --id-dimension-value: record # Represents a DimensionValue resource. — shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
@@ -1917,19 +1926,19 @@ export def "userprofiles-advertisers dfareportingadvertisersupdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/advertisers") $qp)
-  let body = {"accountId": $account_id, "advertiserGroupId": $advertiser_group_id, "clickThroughUrlSuffix": $click_through_url_suffix, "defaultClickThroughEventTagId": $default_click_through_event_tag_id, "defaultEmail": $default_email, "floodlightConfigurationId": $floodlight_configuration_id, "floodlightConfigurationIdDimensionValue": $floodlight_configuration_id_dimension_value, "id": $id, "idDimensionValue": $id_dimension_value, "kind": $kind, "name": $name, "originalFloodlightConfigurationId": $original_floodlight_configuration_id, "status": $status, "subaccountId": $subaccount_id, "suspended": $suspended} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/advertisers") $qp)
+  let req_body = {"accountId": $account_id, "advertiserGroupId": $advertiser_group_id, "clickThroughUrlSuffix": $click_through_url_suffix, "defaultClickThroughEventTagId": $default_click_through_event_tag_id, "defaultEmail": $default_email, "floodlightConfigurationId": $floodlight_configuration_id, "floodlightConfigurationIdDimensionValue": $floodlight_configuration_id_dimension_value, "id": $id, "idDimensionValue": $id_dimension_value, "kind": $kind, "name": $name, "originalFloodlightConfigurationId": $original_floodlight_configuration_id, "status": $status, "subaccountId": $subaccount_id, "suspended": $suspended} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets one advertiser by ID.
 #
 # GET /userprofiles/{profileId}/advertisers/{id}
 # operationId: dfareporting.advertisers.get
-export def "userprofiles-advertisers dfareportingadvertisersget" [
+export def "userprofiles-advertisers get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1955,7 +1964,7 @@ export def "userprofiles-advertisers dfareportingadvertisersget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id, id: $id} | format pattern "/userprofiles/{profile_id}/advertisers/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/advertisers/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1965,7 +1974,7 @@ export def "userprofiles-advertisers dfareportingadvertisersget" [
 #
 # GET /userprofiles/{profileId}/browsers
 # operationId: dfareporting.browsers.list
-export def "userprofiles-browsers dfareportingbrowserslist" [
+export def "userprofiles-browsers list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1990,7 +1999,7 @@ export def "userprofiles-browsers dfareportingbrowserslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/browsers") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/browsers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2000,7 +2009,7 @@ export def "userprofiles-browsers dfareportingbrowserslist" [
 #
 # GET /userprofiles/{profileId}/campaigns
 # operationId: dfareporting.campaigns.list
-export def "userprofiles-campaigns dfareportingcampaignslist" [
+export def "userprofiles-campaigns list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2021,12 +2030,12 @@ export def "userprofiles-campaigns dfareportingcampaignslist" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --advertiser-group-ids: list # Select only campaigns whose advertisers belong to these advertiser groups.
-  --advertiser-ids: list # Select only campaigns that belong to these advertisers.
+  --advertiser-group-ids: list<string> # Select only campaigns whose advertisers belong to these advertiser groups.
+  --advertiser-ids: list<string> # Select only campaigns that belong to these advertisers.
   --archived: oneof<nothing, bool> # Select only archived campaigns. Don't set this field to select both archived and non-archived campaigns.
   --at-least-one-optimization-activity: oneof<nothing, bool> # Select only campaigns that have at least one optimization activity.
-  --excluded-ids: list # Exclude campaigns with these IDs.
-  --ids: list # Select only campaigns with these IDs.
+  --excluded-ids: list<string> # Exclude campaigns with these IDs.
+  --ids: list<string> # Select only campaigns with these IDs.
   --max-results: int # Maximum number of results to return.
   --overridden-event-tag-id: string # Select only campaigns that have overridden this event tag ID.
   --page-token: string # Value of the nextPageToken from the previous result page.
@@ -2038,7 +2047,7 @@ export def "userprofiles-campaigns dfareportingcampaignslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserGroupIds" $advertiser_group_ids "multi") (serialize-qp "advertiserIds" $advertiser_ids "multi") (serialize-qp "archived" $archived "scalar") (serialize-qp "atLeastOneOptimizationActivity" $at_least_one_optimization_activity "scalar") (serialize-qp "excludedIds" $excluded_ids "multi") (serialize-qp "ids" $ids "multi") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "overriddenEventTagId" $overridden_event_tag_id "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "searchString" $search_string "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "subaccountId" $subaccount_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/campaigns") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/campaigns") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2059,7 +2068,7 @@ export def "userprofiles-campaigns dfareportingcampaignslist" [
 # --eventTagOverrides item shape: {enabled?: bool, id?: string}
 # --idDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
 # --lastModifiedInfo shape: {time?: string}
-export def "userprofiles-campaigns dfareportingcampaignspatch" [
+export def "userprofiles-campaigns update-by-profileId" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2093,7 +2102,7 @@ export def "userprofiles-campaigns dfareportingcampaignspatch" [
   --click-through-url-suffix-properties: record # Click Through URL Suffix settings. — shape: {clickThroughUrlSuffix?: string, overrideInheritedSuffix?: bool}
   --comment: string # Arbitrary comments about this campaign. Must be less than 256 characters long.
   --create-info: record # Modification timestamp. — shape: {time?: string}
-  --creative-group-ids: list # List of creative group IDs that are assigned to the campaign.
+  --creative-group-ids: list<string> # List of creative group IDs that are assigned to the campaign.
   --creative-optimization-configuration: record # Creative optimization settings. — shape: {id?: string, name?: string, optimizationActivitys?: list, optimizationModel?: "CLICK"|"POST_CLICK"|"POST_IMPRESSION"|"POST_CLICK_AND_IMPRESSION"|"VIDEO_COMPLETION"}
   --default-click-through-event-tag-properties: record # Properties of inheriting and overriding the default click-through event tag. A campaign may override the event tag defined at the advertiser level, and an ad may also override the campaign's setting further. — shape: {defaultClickThroughEventTagId?: string, overrideInheritedEventTag?: bool}
   --default-landing-page-id: string # The default landing page ID for this campaign. (format: int64)
@@ -2108,18 +2117,18 @@ export def "userprofiles-campaigns dfareportingcampaignspatch" [
   --nielsen-ocr-enabled: oneof<nothing, bool> # Whether Nielsen reports are enabled for this campaign.
   --start-date: string # format: date
   --subaccount-id: string # Subaccount ID of this campaign. This is a read-only field that can be left blank. (format: int64)
-  --trafficker-emails: list # Campaign trafficker contact emails.
+  --trafficker-emails: list<string> # Campaign trafficker contact emails.
 ]: any -> record<accountId: string, adBlockingConfiguration: record<clickThroughUrl: string, creativeBundleId: string, enabled: bool, overrideClickThroughUrl: bool>, additionalCreativeOptimizationConfigurations: table<id: string, name: string, optimizationActivitys: list, optimizationModel: string>, advertiserGroupId: string, advertiserId: string, advertiserIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, archived: bool, audienceSegmentGroups: table<audienceSegments: list, id: string, name: string>, billingInvoiceCode: string, clickThroughUrlSuffixProperties: record<clickThroughUrlSuffix: string, overrideInheritedSuffix: bool>, comment: string, createInfo: record<time: string>, creativeGroupIds: list<string>, creativeOptimizationConfiguration: record<id: string, name: string, optimizationActivitys: list<record>, optimizationModel: string>, defaultClickThroughEventTagProperties: record<defaultClickThroughEventTagId: string, overrideInheritedEventTag: bool>, defaultLandingPageId: string, endDate: string, eventTagOverrides: table<enabled: bool, id: string>, externalId: string, id: string, idDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, kind: string, lastModifiedInfo: record<time: string>, name: string, nielsenOcrEnabled: bool, startDate: string, subaccountId: string, traffickerEmails: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/campaigns") $qp)
-  let body = {"accountId": $account_id, "adBlockingConfiguration": $ad_blocking_configuration, "additionalCreativeOptimizationConfigurations": $additional_creative_optimization_configurations, "advertiserGroupId": $advertiser_group_id, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "archived": $archived, "audienceSegmentGroups": $audience_segment_groups, "billingInvoiceCode": $billing_invoice_code, "clickThroughUrlSuffixProperties": $click_through_url_suffix_properties, "comment": $comment, "createInfo": $create_info, "creativeGroupIds": $creative_group_ids, "creativeOptimizationConfiguration": $creative_optimization_configuration, "defaultClickThroughEventTagProperties": $default_click_through_event_tag_properties, "defaultLandingPageId": $default_landing_page_id, "endDate": $end_date, "eventTagOverrides": $event_tag_overrides, "externalId": $external_id, "id": $id, "idDimensionValue": $id_dimension_value, "kind": $kind, "lastModifiedInfo": $last_modified_info, "name": $name, "nielsenOcrEnabled": $nielsen_ocr_enabled, "startDate": $start_date, "subaccountId": $subaccount_id, "traffickerEmails": $trafficker_emails} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/campaigns") $qp)
+  let req_body = {"accountId": $account_id, "adBlockingConfiguration": $ad_blocking_configuration, "additionalCreativeOptimizationConfigurations": $additional_creative_optimization_configurations, "advertiserGroupId": $advertiser_group_id, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "archived": $archived, "audienceSegmentGroups": $audience_segment_groups, "billingInvoiceCode": $billing_invoice_code, "clickThroughUrlSuffixProperties": $click_through_url_suffix_properties, "comment": $comment, "createInfo": $create_info, "creativeGroupIds": $creative_group_ids, "creativeOptimizationConfiguration": $creative_optimization_configuration, "defaultClickThroughEventTagProperties": $default_click_through_event_tag_properties, "defaultLandingPageId": $default_landing_page_id, "endDate": $end_date, "eventTagOverrides": $event_tag_overrides, "externalId": $external_id, "id": $id, "idDimensionValue": $id_dimension_value, "kind": $kind, "lastModifiedInfo": $last_modified_info, "name": $name, "nielsenOcrEnabled": $nielsen_ocr_enabled, "startDate": $start_date, "subaccountId": $subaccount_id, "traffickerEmails": $trafficker_emails} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Inserts a new campaign.
@@ -2137,7 +2146,7 @@ export def "userprofiles-campaigns dfareportingcampaignspatch" [
 # --eventTagOverrides item shape: {enabled?: bool, id?: string}
 # --idDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
 # --lastModifiedInfo shape: {time?: string}
-export def "userprofiles-campaigns dfareportingcampaignsinsert" [
+export def "userprofiles-campaigns create" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2170,7 +2179,7 @@ export def "userprofiles-campaigns dfareportingcampaignsinsert" [
   --click-through-url-suffix-properties: record # Click Through URL Suffix settings. — shape: {clickThroughUrlSuffix?: string, overrideInheritedSuffix?: bool}
   --comment: string # Arbitrary comments about this campaign. Must be less than 256 characters long.
   --create-info: record # Modification timestamp. — shape: {time?: string}
-  --creative-group-ids: list # List of creative group IDs that are assigned to the campaign.
+  --creative-group-ids: list<string> # List of creative group IDs that are assigned to the campaign.
   --creative-optimization-configuration: record # Creative optimization settings. — shape: {id?: string, name?: string, optimizationActivitys?: list, optimizationModel?: "CLICK"|"POST_CLICK"|"POST_IMPRESSION"|"POST_CLICK_AND_IMPRESSION"|"VIDEO_COMPLETION"}
   --default-click-through-event-tag-properties: record # Properties of inheriting and overriding the default click-through event tag. A campaign may override the event tag defined at the advertiser level, and an ad may also override the campaign's setting further. — shape: {defaultClickThroughEventTagId?: string, overrideInheritedEventTag?: bool}
   --default-landing-page-id: string # The default landing page ID for this campaign. (format: int64)
@@ -2185,18 +2194,18 @@ export def "userprofiles-campaigns dfareportingcampaignsinsert" [
   --nielsen-ocr-enabled: oneof<nothing, bool> # Whether Nielsen reports are enabled for this campaign.
   --start-date: string # format: date
   --subaccount-id: string # Subaccount ID of this campaign. This is a read-only field that can be left blank. (format: int64)
-  --trafficker-emails: list # Campaign trafficker contact emails.
+  --trafficker-emails: list<string> # Campaign trafficker contact emails.
 ]: any -> record<accountId: string, adBlockingConfiguration: record<clickThroughUrl: string, creativeBundleId: string, enabled: bool, overrideClickThroughUrl: bool>, additionalCreativeOptimizationConfigurations: table<id: string, name: string, optimizationActivitys: list, optimizationModel: string>, advertiserGroupId: string, advertiserId: string, advertiserIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, archived: bool, audienceSegmentGroups: table<audienceSegments: list, id: string, name: string>, billingInvoiceCode: string, clickThroughUrlSuffixProperties: record<clickThroughUrlSuffix: string, overrideInheritedSuffix: bool>, comment: string, createInfo: record<time: string>, creativeGroupIds: list<string>, creativeOptimizationConfiguration: record<id: string, name: string, optimizationActivitys: list<record>, optimizationModel: string>, defaultClickThroughEventTagProperties: record<defaultClickThroughEventTagId: string, overrideInheritedEventTag: bool>, defaultLandingPageId: string, endDate: string, eventTagOverrides: table<enabled: bool, id: string>, externalId: string, id: string, idDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, kind: string, lastModifiedInfo: record<time: string>, name: string, nielsenOcrEnabled: bool, startDate: string, subaccountId: string, traffickerEmails: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/campaigns") $qp)
-  let body = {"accountId": $account_id, "adBlockingConfiguration": $ad_blocking_configuration, "additionalCreativeOptimizationConfigurations": $additional_creative_optimization_configurations, "advertiserGroupId": $advertiser_group_id, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "archived": $archived, "audienceSegmentGroups": $audience_segment_groups, "billingInvoiceCode": $billing_invoice_code, "clickThroughUrlSuffixProperties": $click_through_url_suffix_properties, "comment": $comment, "createInfo": $create_info, "creativeGroupIds": $creative_group_ids, "creativeOptimizationConfiguration": $creative_optimization_configuration, "defaultClickThroughEventTagProperties": $default_click_through_event_tag_properties, "defaultLandingPageId": $default_landing_page_id, "endDate": $end_date, "eventTagOverrides": $event_tag_overrides, "externalId": $external_id, "id": $id, "idDimensionValue": $id_dimension_value, "kind": $kind, "lastModifiedInfo": $last_modified_info, "name": $name, "nielsenOcrEnabled": $nielsen_ocr_enabled, "startDate": $start_date, "subaccountId": $subaccount_id, "traffickerEmails": $trafficker_emails} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/campaigns") $qp)
+  let req_body = {"accountId": $account_id, "adBlockingConfiguration": $ad_blocking_configuration, "additionalCreativeOptimizationConfigurations": $additional_creative_optimization_configurations, "advertiserGroupId": $advertiser_group_id, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "archived": $archived, "audienceSegmentGroups": $audience_segment_groups, "billingInvoiceCode": $billing_invoice_code, "clickThroughUrlSuffixProperties": $click_through_url_suffix_properties, "comment": $comment, "createInfo": $create_info, "creativeGroupIds": $creative_group_ids, "creativeOptimizationConfiguration": $creative_optimization_configuration, "defaultClickThroughEventTagProperties": $default_click_through_event_tag_properties, "defaultLandingPageId": $default_landing_page_id, "endDate": $end_date, "eventTagOverrides": $event_tag_overrides, "externalId": $external_id, "id": $id, "idDimensionValue": $id_dimension_value, "kind": $kind, "lastModifiedInfo": $last_modified_info, "name": $name, "nielsenOcrEnabled": $nielsen_ocr_enabled, "startDate": $start_date, "subaccountId": $subaccount_id, "traffickerEmails": $trafficker_emails} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates an existing campaign.
@@ -2214,7 +2223,7 @@ export def "userprofiles-campaigns dfareportingcampaignsinsert" [
 # --eventTagOverrides item shape: {enabled?: bool, id?: string}
 # --idDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
 # --lastModifiedInfo shape: {time?: string}
-export def "userprofiles-campaigns dfareportingcampaignsupdate" [
+export def "userprofiles-campaigns update-by-profileId-1" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2247,7 +2256,7 @@ export def "userprofiles-campaigns dfareportingcampaignsupdate" [
   --click-through-url-suffix-properties: record # Click Through URL Suffix settings. — shape: {clickThroughUrlSuffix?: string, overrideInheritedSuffix?: bool}
   --comment: string # Arbitrary comments about this campaign. Must be less than 256 characters long.
   --create-info: record # Modification timestamp. — shape: {time?: string}
-  --creative-group-ids: list # List of creative group IDs that are assigned to the campaign.
+  --creative-group-ids: list<string> # List of creative group IDs that are assigned to the campaign.
   --creative-optimization-configuration: record # Creative optimization settings. — shape: {id?: string, name?: string, optimizationActivitys?: list, optimizationModel?: "CLICK"|"POST_CLICK"|"POST_IMPRESSION"|"POST_CLICK_AND_IMPRESSION"|"VIDEO_COMPLETION"}
   --default-click-through-event-tag-properties: record # Properties of inheriting and overriding the default click-through event tag. A campaign may override the event tag defined at the advertiser level, and an ad may also override the campaign's setting further. — shape: {defaultClickThroughEventTagId?: string, overrideInheritedEventTag?: bool}
   --default-landing-page-id: string # The default landing page ID for this campaign. (format: int64)
@@ -2262,25 +2271,25 @@ export def "userprofiles-campaigns dfareportingcampaignsupdate" [
   --nielsen-ocr-enabled: oneof<nothing, bool> # Whether Nielsen reports are enabled for this campaign.
   --start-date: string # format: date
   --subaccount-id: string # Subaccount ID of this campaign. This is a read-only field that can be left blank. (format: int64)
-  --trafficker-emails: list # Campaign trafficker contact emails.
+  --trafficker-emails: list<string> # Campaign trafficker contact emails.
 ]: any -> record<accountId: string, adBlockingConfiguration: record<clickThroughUrl: string, creativeBundleId: string, enabled: bool, overrideClickThroughUrl: bool>, additionalCreativeOptimizationConfigurations: table<id: string, name: string, optimizationActivitys: list, optimizationModel: string>, advertiserGroupId: string, advertiserId: string, advertiserIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, archived: bool, audienceSegmentGroups: table<audienceSegments: list, id: string, name: string>, billingInvoiceCode: string, clickThroughUrlSuffixProperties: record<clickThroughUrlSuffix: string, overrideInheritedSuffix: bool>, comment: string, createInfo: record<time: string>, creativeGroupIds: list<string>, creativeOptimizationConfiguration: record<id: string, name: string, optimizationActivitys: list<record>, optimizationModel: string>, defaultClickThroughEventTagProperties: record<defaultClickThroughEventTagId: string, overrideInheritedEventTag: bool>, defaultLandingPageId: string, endDate: string, eventTagOverrides: table<enabled: bool, id: string>, externalId: string, id: string, idDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, kind: string, lastModifiedInfo: record<time: string>, name: string, nielsenOcrEnabled: bool, startDate: string, subaccountId: string, traffickerEmails: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/campaigns") $qp)
-  let body = {"accountId": $account_id, "adBlockingConfiguration": $ad_blocking_configuration, "additionalCreativeOptimizationConfigurations": $additional_creative_optimization_configurations, "advertiserGroupId": $advertiser_group_id, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "archived": $archived, "audienceSegmentGroups": $audience_segment_groups, "billingInvoiceCode": $billing_invoice_code, "clickThroughUrlSuffixProperties": $click_through_url_suffix_properties, "comment": $comment, "createInfo": $create_info, "creativeGroupIds": $creative_group_ids, "creativeOptimizationConfiguration": $creative_optimization_configuration, "defaultClickThroughEventTagProperties": $default_click_through_event_tag_properties, "defaultLandingPageId": $default_landing_page_id, "endDate": $end_date, "eventTagOverrides": $event_tag_overrides, "externalId": $external_id, "id": $id, "idDimensionValue": $id_dimension_value, "kind": $kind, "lastModifiedInfo": $last_modified_info, "name": $name, "nielsenOcrEnabled": $nielsen_ocr_enabled, "startDate": $start_date, "subaccountId": $subaccount_id, "traffickerEmails": $trafficker_emails} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/campaigns") $qp)
+  let req_body = {"accountId": $account_id, "adBlockingConfiguration": $ad_blocking_configuration, "additionalCreativeOptimizationConfigurations": $additional_creative_optimization_configurations, "advertiserGroupId": $advertiser_group_id, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "archived": $archived, "audienceSegmentGroups": $audience_segment_groups, "billingInvoiceCode": $billing_invoice_code, "clickThroughUrlSuffixProperties": $click_through_url_suffix_properties, "comment": $comment, "createInfo": $create_info, "creativeGroupIds": $creative_group_ids, "creativeOptimizationConfiguration": $creative_optimization_configuration, "defaultClickThroughEventTagProperties": $default_click_through_event_tag_properties, "defaultLandingPageId": $default_landing_page_id, "endDate": $end_date, "eventTagOverrides": $event_tag_overrides, "externalId": $external_id, "id": $id, "idDimensionValue": $id_dimension_value, "kind": $kind, "lastModifiedInfo": $last_modified_info, "name": $name, "nielsenOcrEnabled": $nielsen_ocr_enabled, "startDate": $start_date, "subaccountId": $subaccount_id, "traffickerEmails": $trafficker_emails} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieves the list of creative IDs associated with the specified campaign. This method supports paging.
 #
 # GET /userprofiles/{profileId}/campaigns/{campaignId}/campaignCreativeAssociations
 # operationId: dfareporting.campaignCreativeAssociations.list
-export def "userprofiles-campaigns-campaign-creative-associations dfareportingcampaignCreativeAssociationslist" [
+export def "userprofiles-campaigns-campaign-creative-associations list" [
   profile_id: string
   campaign_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2309,7 +2318,7 @@ export def "userprofiles-campaigns-campaign-creative-associations dfareportingca
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "sortOrder" $sort_order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id, campaign_id: $campaign_id} | format pattern "/userprofiles/{profile_id}/campaigns/{campaign_id}/campaignCreativeAssociations") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), campaign_id: (encode-path-segment $campaign_id)} | format pattern "/userprofiles/{profile_id}/campaigns/{campaign_id}/campaignCreativeAssociations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2319,7 +2328,7 @@ export def "userprofiles-campaigns-campaign-creative-associations dfareportingca
 #
 # POST /userprofiles/{profileId}/campaigns/{campaignId}/campaignCreativeAssociations
 # operationId: dfareporting.campaignCreativeAssociations.insert
-export def "userprofiles-campaigns-campaign-creative-associations dfareportingcampaignCreativeAssociationsinsert" [
+export def "userprofiles-campaigns-campaign-creative-associations create" [
   profile_id: string
   campaign_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2348,19 +2357,19 @@ export def "userprofiles-campaigns-campaign-creative-associations dfareportingca
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id, campaign_id: $campaign_id} | format pattern "/userprofiles/{profile_id}/campaigns/{campaign_id}/campaignCreativeAssociations") $qp)
-  let body = {"creativeId": $creative_id, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), campaign_id: (encode-path-segment $campaign_id)} | format pattern "/userprofiles/{profile_id}/campaigns/{campaign_id}/campaignCreativeAssociations") $qp)
+  let req_body = {"creativeId": $creative_id, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets one campaign by ID.
 #
 # GET /userprofiles/{profileId}/campaigns/{id}
 # operationId: dfareporting.campaigns.get
-export def "userprofiles-campaigns dfareportingcampaignsget" [
+export def "userprofiles-campaigns get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2386,7 +2395,7 @@ export def "userprofiles-campaigns dfareportingcampaignsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id, id: $id} | format pattern "/userprofiles/{profile_id}/campaigns/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/campaigns/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2396,7 +2405,7 @@ export def "userprofiles-campaigns dfareportingcampaignsget" [
 #
 # GET /userprofiles/{profileId}/changeLogs
 # operationId: dfareporting.changeLogs.list
-export def "userprofiles-change-logs dfareportingchangeLogslist" [
+export def "userprofiles-change-logs list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2418,20 +2427,20 @@ export def "userprofiles-change-logs dfareportingchangeLogslist" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --action: string@action-completer # Select only change logs with the specified action.
-  --ids: list # Select only change logs with these IDs.
+  --ids: list<string> # Select only change logs with these IDs.
   --max-change-time: string # Select only change logs whose change time is before the specified maxChangeTime.The time should be formatted as an RFC3339 date/time string. For example, for 10:54 PM on July 18th, 2015, in the America/New York time zone, the format is "2015-07-18T22:54:00-04:00". In other words, the year, month, day, the letter T, the hour (24-hour clock system), minute, second, and then the time zone offset.
   --max-results: int # Maximum number of results to return.
   --min-change-time: string # Select only change logs whose change time is after the specified minChangeTime.The time should be formatted as an RFC3339 date/time string. For example, for 10:54 PM on July 18th, 2015, in the America/New York time zone, the format is "2015-07-18T22:54:00-04:00". In other words, the year, month, day, the letter T, the hour (24-hour clock system), minute, second, and then the time zone offset.
-  --object-ids: list # Select only change logs with these object IDs.
+  --object-ids: list<string> # Select only change logs with these object IDs.
   --object-type: string@object-type-completer # Select only change logs with the specified object type.
   --page-token: string # Value of the nextPageToken from the previous result page.
   --search-string: string # Select only change logs whose object ID, user name, old or new values match the search string.
-  --user-profile-ids: list # Select only change logs with these user profile IDs.
+  --user-profile-ids: list<string> # Select only change logs with these user profile IDs.
 ]: nothing -> record<changeLogs: table<accountId: string, action: string, changeTime: string, fieldName: string, id: string, kind: string, newValue: string, objectId: string, objectType: string, oldValue: string, subaccountId: string, transactionId: string, userProfileId: string, userProfileName: string>, kind: string, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "action" $action "scalar") (serialize-qp "ids" $ids "multi") (serialize-qp "maxChangeTime" $max_change_time "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "minChangeTime" $min_change_time "scalar") (serialize-qp "objectIds" $object_ids "multi") (serialize-qp "objectType" $object_type "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "searchString" $search_string "scalar") (serialize-qp "userProfileIds" $user_profile_ids "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/changeLogs") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/changeLogs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2441,7 +2450,7 @@ export def "userprofiles-change-logs dfareportingchangeLogslist" [
 #
 # GET /userprofiles/{profileId}/changeLogs/{id}
 # operationId: dfareporting.changeLogs.get
-export def "userprofiles-change-logs dfareportingchangeLogsget" [
+export def "userprofiles-change-logs get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2467,7 +2476,7 @@ export def "userprofiles-change-logs dfareportingchangeLogsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id, id: $id} | format pattern "/userprofiles/{profile_id}/changeLogs/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/changeLogs/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2477,7 +2486,7 @@ export def "userprofiles-change-logs dfareportingchangeLogsget" [
 #
 # GET /userprofiles/{profileId}/cities
 # operationId: dfareporting.cities.list
-export def "userprofiles-cities dfareportingcitieslist" [
+export def "userprofiles-cities list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2498,15 +2507,15 @@ export def "userprofiles-cities dfareportingcitieslist" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --country-dart-ids: list # Select only cities from these countries.
-  --dart-ids: list # Select only cities with these DART IDs.
+  --country-dart-ids: list<string> # Select only cities from these countries.
+  --dart-ids: list<string> # Select only cities with these DART IDs.
   --name-prefix: string # Select only cities with names starting with this prefix.
-  --region-dart-ids: list # Select only cities from these regions.
+  --region-dart-ids: list<string> # Select only cities from these regions.
 ]: nothing -> record<cities: table<countryCode: string, countryDartId: string, dartId: string, kind: string, metroCode: string, metroDmaId: string, name: string, regionCode: string, regionDartId: string>, kind: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "countryDartIds" $country_dart_ids "multi") (serialize-qp "dartIds" $dart_ids "multi") (serialize-qp "namePrefix" $name_prefix "scalar") (serialize-qp "regionDartIds" $region_dart_ids "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/cities") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/cities") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2516,7 +2525,7 @@ export def "userprofiles-cities dfareportingcitieslist" [
 #
 # GET /userprofiles/{profileId}/connectionTypes
 # operationId: dfareporting.connectionTypes.list
-export def "userprofiles-connection-types dfareportingconnectionTypeslist" [
+export def "userprofiles-connection-types list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2541,7 +2550,7 @@ export def "userprofiles-connection-types dfareportingconnectionTypeslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/connectionTypes") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/connectionTypes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2551,7 +2560,7 @@ export def "userprofiles-connection-types dfareportingconnectionTypeslist" [
 #
 # GET /userprofiles/{profileId}/connectionTypes/{id}
 # operationId: dfareporting.connectionTypes.get
-export def "userprofiles-connection-types dfareportingconnectionTypesget" [
+export def "userprofiles-connection-types get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2577,7 +2586,7 @@ export def "userprofiles-connection-types dfareportingconnectionTypesget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id, id: $id} | format pattern "/userprofiles/{profile_id}/connectionTypes/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/connectionTypes/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2587,7 +2596,7 @@ export def "userprofiles-connection-types dfareportingconnectionTypesget" [
 #
 # GET /userprofiles/{profileId}/contentCategories
 # operationId: dfareporting.contentCategories.list
-export def "userprofiles-content-categories dfareportingcontentCategorieslist" [
+export def "userprofiles-content-categories list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2608,7 +2617,7 @@ export def "userprofiles-content-categories dfareportingcontentCategorieslist" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --ids: list # Select only content categories with these IDs.
+  --ids: list<string> # Select only content categories with these IDs.
   --max-results: int # Maximum number of results to return.
   --page-token: string # Value of the nextPageToken from the previous result page.
   --search-string: string # Allows searching for objects by name or ID. Wildcards (*) are allowed. For example, "contentcategory*2015" will return objects with names like "contentcategory June 2015", "contentcategory April 2015", or simply "contentcategory 2015". Most of the searches also add wildcards implicitly at the start and the end of the search string. For example, a search string of "contentcategory" will match objects with name "my contentcategory", "contentcategory 2015", or simply "contentcategory".
@@ -2618,7 +2627,7 @@ export def "userprofiles-content-categories dfareportingcontentCategorieslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "ids" $ids "multi") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "searchString" $search_string "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/contentCategories") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/contentCategories") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2628,7 +2637,7 @@ export def "userprofiles-content-categories dfareportingcontentCategorieslist" [
 #
 # PATCH /userprofiles/{profileId}/contentCategories
 # operationId: dfareporting.contentCategories.patch
-export def "userprofiles-content-categories dfareportingcontentCategoriespatch" [
+export def "userprofiles-content-categories update-by-profileId" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2659,19 +2668,19 @@ export def "userprofiles-content-categories dfareportingcontentCategoriespatch" 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/contentCategories") $qp)
-  let body = {"accountId": $account_id, "id": $id, "kind": $kind, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/contentCategories") $qp)
+  let req_body = {"accountId": $account_id, "id": $id, "kind": $kind, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Inserts a new content category.
 #
 # POST /userprofiles/{profileId}/contentCategories
 # operationId: dfareporting.contentCategories.insert
-export def "userprofiles-content-categories dfareportingcontentCategoriesinsert" [
+export def "userprofiles-content-categories create" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2701,19 +2710,19 @@ export def "userprofiles-content-categories dfareportingcontentCategoriesinsert"
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/contentCategories") $qp)
-  let body = {"accountId": $account_id, "id": $id, "kind": $kind, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/contentCategories") $qp)
+  let req_body = {"accountId": $account_id, "id": $id, "kind": $kind, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates an existing content category.
 #
 # PUT /userprofiles/{profileId}/contentCategories
 # operationId: dfareporting.contentCategories.update
-export def "userprofiles-content-categories dfareportingcontentCategoriesupdate" [
+export def "userprofiles-content-categories update-by-profileId-1" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2743,19 +2752,19 @@ export def "userprofiles-content-categories dfareportingcontentCategoriesupdate"
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/contentCategories") $qp)
-  let body = {"accountId": $account_id, "id": $id, "kind": $kind, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/contentCategories") $qp)
+  let req_body = {"accountId": $account_id, "id": $id, "kind": $kind, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes an existing content category.
 #
 # DELETE /userprofiles/{profileId}/contentCategories/{id}
 # operationId: dfareporting.contentCategories.delete
-export def "userprofiles-content-categories dfareportingcontentCategoriesdelete" [
+export def "userprofiles-content-categories delete" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2781,7 +2790,7 @@ export def "userprofiles-content-categories dfareportingcontentCategoriesdelete"
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id, id: $id} | format pattern "/userprofiles/{profile_id}/contentCategories/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/contentCategories/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2791,7 +2800,7 @@ export def "userprofiles-content-categories dfareportingcontentCategoriesdelete"
 #
 # GET /userprofiles/{profileId}/contentCategories/{id}
 # operationId: dfareporting.contentCategories.get
-export def "userprofiles-content-categories dfareportingcontentCategoriesget" [
+export def "userprofiles-content-categories get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2817,7 +2826,7 @@ export def "userprofiles-content-categories dfareportingcontentCategoriesget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id, id: $id} | format pattern "/userprofiles/{profile_id}/contentCategories/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/contentCategories/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2827,9 +2836,9 @@ export def "userprofiles-content-categories dfareportingcontentCategoriesget" [
 #
 # POST /userprofiles/{profileId}/conversions/batchinsert
 # operationId: dfareporting.conversions.batchinsert
-# --conversions item shape: {childDirectedTreatment?: bool, customVariables?: list, dclid?: string, encryptedUserId?: string, encryptedUserIdCandidates?: list, floodlightActivityId?: string, floodlightConfigurationId?: string, gclid?: string, kind?: string, limitAdTracking?: bool, matchId?: string, mobileDeviceId?: string, nonPersonalizedAd?: bool, ordinal?: string, quantity?: string, timestampMicros?: string, treatmentForUnderage?: bool, value?: float}
+# --conversions item shape: {childDirectedTreatment?: bool, customVariables?: list, dclid?: string, encryptedUserId?: string, encryptedUserIdCandidates?: list<string>, floodlightActivityId?: string, floodlightConfigurationId?: string, gclid?: string, kind?: string, limitAdTracking?: bool, matchId?: string, mobileDeviceId?: string, nonPersonalizedAd?: bool, ordinal?: string, quantity?: string, timestampMicros?: string, treatmentForUnderage?: bool, value?: float}
 # --encryptionInfo shape: {encryptionEntityId?: string, encryptionEntityType?: "ENCRYPTION_ENTITY_TYPE_UNKNOWN"|"DCM_ACCOUNT"|"DCM_ADVERTISER"|"DBM_PARTNER"|"DBM_ADVERTISER"|"ADWORDS_CUSTOMER"|"DFP_NETWORK_CODE", encryptionSource?: "ENCRYPTION_SCOPE_UNKNOWN"|"AD_SERVING"|"DATA_TRANSFER", kind?: string}
-export def "userprofiles-conversions-batchinsert dfareportingconversionsbatchinsert" [
+export def "userprofiles-conversions-batchinsert create" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2850,7 +2859,7 @@ export def "userprofiles-conversions-batchinsert dfareportingconversionsbatchins
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --conversions: list # The set of conversions to insert. — item shape: {childDirectedTreatment?: bool, customVariables?: list, dclid?: string, encryptedUserId?: string, encryptedUserIdCandidates?: list, floodlightActivityId?: string, floodlightConfigurationId?: string, gclid?: string, kind?: string, limitAdTracking?: bool, matchId?: string, mobileDeviceId?: string, nonPersonalizedAd?: bool, ordinal?: string, quantity?: string, timestampMicros?: string, treatmentForUnderage?: bool, value?: float}
+  --conversions: list # The set of conversions to insert. — item shape: {childDirectedTreatment?: bool, customVariables?: list, dclid?: string, encryptedUserId?: string, encryptedUserIdCandidates?: list<string>, floodlightActivityId?: string, floodlightConfigurationId?: string, gclid?: string, kind?: string, limitAdTracking?: bool, matchId?: string, mobileDeviceId?: string, nonPersonalizedAd?: bool, ordinal?: string, quantity?: string, timestampMicros?: string, treatmentForUnderage?: bool, value?: float}
   --encryption-info: record # A description of how user IDs are encrypted. — shape: {encryptionEntityId?: string, encryptionEntityType?: "ENCRYPTION_ENTITY_TYPE_UNKNOWN"|"DCM_ACCOUNT"|"DCM_ADVERTISER"|"DBM_PARTNER"|"DBM_ADVERTISER"|"ADWORDS_CUSTOMER"|"DFP_NETWORK_CODE", encryptionSource?: "ENCRYPTION_SCOPE_UNKNOWN"|"AD_SERVING"|"DATA_TRANSFER", kind?: string}
   --kind: string # Identifies what kind of resource this is. Value: the fixed string "dfareporting#conversionsBatchInsertRequest".
 ]: any -> record<hasFailures: bool, kind: string, status: table<conversion: record, errors: list, kind: string>> {
@@ -2858,21 +2867,21 @@ export def "userprofiles-conversions-batchinsert dfareportingconversionsbatchins
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/conversions/batchinsert") $qp)
-  let body = {"conversions": $conversions, "encryptionInfo": $encryption_info, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/conversions/batchinsert") $qp)
+  let req_body = {"conversions": $conversions, "encryptionInfo": $encryption_info, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates existing conversions.
 #
 # POST /userprofiles/{profileId}/conversions/batchupdate
 # operationId: dfareporting.conversions.batchupdate
-# --conversions item shape: {childDirectedTreatment?: bool, customVariables?: list, dclid?: string, encryptedUserId?: string, encryptedUserIdCandidates?: list, floodlightActivityId?: string, floodlightConfigurationId?: string, gclid?: string, kind?: string, limitAdTracking?: bool, matchId?: string, mobileDeviceId?: string, nonPersonalizedAd?: bool, ordinal?: string, quantity?: string, timestampMicros?: string, treatmentForUnderage?: bool, value?: float}
+# --conversions item shape: {childDirectedTreatment?: bool, customVariables?: list, dclid?: string, encryptedUserId?: string, encryptedUserIdCandidates?: list<string>, floodlightActivityId?: string, floodlightConfigurationId?: string, gclid?: string, kind?: string, limitAdTracking?: bool, matchId?: string, mobileDeviceId?: string, nonPersonalizedAd?: bool, ordinal?: string, quantity?: string, timestampMicros?: string, treatmentForUnderage?: bool, value?: float}
 # --encryptionInfo shape: {encryptionEntityId?: string, encryptionEntityType?: "ENCRYPTION_ENTITY_TYPE_UNKNOWN"|"DCM_ACCOUNT"|"DCM_ADVERTISER"|"DBM_PARTNER"|"DBM_ADVERTISER"|"ADWORDS_CUSTOMER"|"DFP_NETWORK_CODE", encryptionSource?: "ENCRYPTION_SCOPE_UNKNOWN"|"AD_SERVING"|"DATA_TRANSFER", kind?: string}
-export def "userprofiles-conversions-batchupdate dfareportingconversionsbatchupdate" [
+export def "userprofiles-conversions-batchupdate create" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2893,7 +2902,7 @@ export def "userprofiles-conversions-batchupdate dfareportingconversionsbatchupd
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --conversions: list # The set of conversions to update. — item shape: {childDirectedTreatment?: bool, customVariables?: list, dclid?: string, encryptedUserId?: string, encryptedUserIdCandidates?: list, floodlightActivityId?: string, floodlightConfigurationId?: string, gclid?: string, kind?: string, limitAdTracking?: bool, matchId?: string, mobileDeviceId?: string, nonPersonalizedAd?: bool, ordinal?: string, quantity?: string, timestampMicros?: string, treatmentForUnderage?: bool, value?: float}
+  --conversions: list # The set of conversions to update. — item shape: {childDirectedTreatment?: bool, customVariables?: list, dclid?: string, encryptedUserId?: string, encryptedUserIdCandidates?: list<string>, floodlightActivityId?: string, floodlightConfigurationId?: string, gclid?: string, kind?: string, limitAdTracking?: bool, matchId?: string, mobileDeviceId?: string, nonPersonalizedAd?: bool, ordinal?: string, quantity?: string, timestampMicros?: string, treatmentForUnderage?: bool, value?: float}
   --encryption-info: record # A description of how user IDs are encrypted. — shape: {encryptionEntityId?: string, encryptionEntityType?: "ENCRYPTION_ENTITY_TYPE_UNKNOWN"|"DCM_ACCOUNT"|"DCM_ADVERTISER"|"DBM_PARTNER"|"DBM_ADVERTISER"|"ADWORDS_CUSTOMER"|"DFP_NETWORK_CODE", encryptionSource?: "ENCRYPTION_SCOPE_UNKNOWN"|"AD_SERVING"|"DATA_TRANSFER", kind?: string}
   --kind: string # Identifies what kind of resource this is. Value: the fixed string "dfareporting#conversionsBatchUpdateRequest".
 ]: any -> record<hasFailures: bool, kind: string, status: table<conversion: record, errors: list, kind: string>> {
@@ -2901,19 +2910,19 @@ export def "userprofiles-conversions-batchupdate dfareportingconversionsbatchupd
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/conversions/batchupdate") $qp)
-  let body = {"conversions": $conversions, "encryptionInfo": $encryption_info, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/conversions/batchupdate") $qp)
+  let req_body = {"conversions": $conversions, "encryptionInfo": $encryption_info, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieves a list of countries.
 #
 # GET /userprofiles/{profileId}/countries
 # operationId: dfareporting.countries.list
-export def "userprofiles-countries dfareportingcountrieslist" [
+export def "userprofiles-countries list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2938,7 +2947,7 @@ export def "userprofiles-countries dfareportingcountrieslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/countries") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/countries") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2948,7 +2957,7 @@ export def "userprofiles-countries dfareportingcountrieslist" [
 #
 # GET /userprofiles/{profileId}/countries/{dartId}
 # operationId: dfareporting.countries.get
-export def "userprofiles-countries dfareportingcountriesget" [
+export def "userprofiles-countries get" [
   profile_id: string
   dart_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2974,7 +2983,7 @@ export def "userprofiles-countries dfareportingcountriesget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id, dart_id: $dart_id} | format pattern "/userprofiles/{profile_id}/countries/{dart_id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), dart_id: (encode-path-segment $dart_id)} | format pattern "/userprofiles/{profile_id}/countries/{dart_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2984,7 +2993,7 @@ export def "userprofiles-countries dfareportingcountriesget" [
 #
 # POST /userprofiles/{profileId}/creativeAssets/{advertiserId}/creativeAssets
 # operationId: dfareporting.creativeAssets.insert
-export def "userprofiles-creative-assets-creative-assets dfareportingcreativeAssetsinsert" [
+export def "userprofiles-creative-assets-creative-assets create" [
   profile_id: string
   advertiser_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3012,18 +3021,19 @@ export def "userprofiles-creative-assets-creative-assets dfareportingcreativeAss
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id, advertiser_id: $advertiser_id} | format pattern "/userprofiles/{profile_id}/creativeAssets/{advertiser_id}/creativeAssets") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), advertiser_id: (encode-path-segment $advertiser_id)} | format pattern "/userprofiles/{profile_id}/creativeAssets/{advertiser_id}/creativeAssets") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/octet-stream" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/octet-stream" $req_body
 }
 
 # Retrieves a list of creative fields, possibly filtered. This method supports paging.
 #
 # GET /userprofiles/{profileId}/creativeFields
 # operationId: dfareporting.creativeFields.list
-export def "userprofiles-creative-fields dfareportingcreativeFieldslist" [
+export def "userprofiles-creative-fields list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3044,8 +3054,8 @@ export def "userprofiles-creative-fields dfareportingcreativeFieldslist" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --advertiser-ids: list # Select only creative fields that belong to these advertisers.
-  --ids: list # Select only creative fields with these IDs.
+  --advertiser-ids: list<string> # Select only creative fields that belong to these advertisers.
+  --ids: list<string> # Select only creative fields with these IDs.
   --max-results: int # Maximum number of results to return.
   --page-token: string # Value of the nextPageToken from the previous result page.
   --search-string: string # Allows searching for creative fields by name or ID. Wildcards (*) are allowed. For example, "creativefield*2015" will return creative fields with names like "creativefield June 2015", "creativefield April 2015", or simply "creativefield 2015". Most of the searches also add wild-cards implicitly at the start and the end of the search string. For example, a search string of "creativefield" will match creative fields with the name "my creativefield", "creativefield 2015", or simply "creativefield".
@@ -3055,7 +3065,7 @@ export def "userprofiles-creative-fields dfareportingcreativeFieldslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserIds" $advertiser_ids "multi") (serialize-qp "ids" $ids "multi") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "searchString" $search_string "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/creativeFields") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/creativeFields") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3066,7 +3076,7 @@ export def "userprofiles-creative-fields dfareportingcreativeFieldslist" [
 # PATCH /userprofiles/{profileId}/creativeFields
 # operationId: dfareporting.creativeFields.patch
 # --advertiserIdDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
-export def "userprofiles-creative-fields dfareportingcreativeFieldspatch" [
+export def "userprofiles-creative-fields update-by-profileId" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3100,12 +3110,12 @@ export def "userprofiles-creative-fields dfareportingcreativeFieldspatch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/creativeFields") $qp)
-  let body = {"accountId": $account_id, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "id": $id, "kind": $kind, "name": $name, "subaccountId": $subaccount_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/creativeFields") $qp)
+  let req_body = {"accountId": $account_id, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "id": $id, "kind": $kind, "name": $name, "subaccountId": $subaccount_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Inserts a new creative field.
@@ -3113,7 +3123,7 @@ export def "userprofiles-creative-fields dfareportingcreativeFieldspatch" [
 # POST /userprofiles/{profileId}/creativeFields
 # operationId: dfareporting.creativeFields.insert
 # --advertiserIdDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
-export def "userprofiles-creative-fields dfareportingcreativeFieldsinsert" [
+export def "userprofiles-creative-fields create" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3146,12 +3156,12 @@ export def "userprofiles-creative-fields dfareportingcreativeFieldsinsert" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/creativeFields") $qp)
-  let body = {"accountId": $account_id, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "id": $id, "kind": $kind, "name": $name, "subaccountId": $subaccount_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/creativeFields") $qp)
+  let req_body = {"accountId": $account_id, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "id": $id, "kind": $kind, "name": $name, "subaccountId": $subaccount_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates an existing creative field.
@@ -3159,7 +3169,7 @@ export def "userprofiles-creative-fields dfareportingcreativeFieldsinsert" [
 # PUT /userprofiles/{profileId}/creativeFields
 # operationId: dfareporting.creativeFields.update
 # --advertiserIdDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
-export def "userprofiles-creative-fields dfareportingcreativeFieldsupdate" [
+export def "userprofiles-creative-fields update-by-profileId-1" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3192,19 +3202,19 @@ export def "userprofiles-creative-fields dfareportingcreativeFieldsupdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/creativeFields") $qp)
-  let body = {"accountId": $account_id, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "id": $id, "kind": $kind, "name": $name, "subaccountId": $subaccount_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/creativeFields") $qp)
+  let req_body = {"accountId": $account_id, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "id": $id, "kind": $kind, "name": $name, "subaccountId": $subaccount_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieves a list of creative field values, possibly filtered. This method supports paging.
 #
 # GET /userprofiles/{profileId}/creativeFields/{creativeFieldId}/creativeFieldValues
 # operationId: dfareporting.creativeFieldValues.list
-export def "userprofiles-creative-fields-creative-field-values dfareportingcreativeFieldValueslist" [
+export def "userprofiles-creative-fields-creative-field-values list" [
   profile_id: string
   creative_field_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3226,7 +3236,7 @@ export def "userprofiles-creative-fields-creative-field-values dfareportingcreat
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --ids: list # Select only creative field values with these IDs.
+  --ids: list<string> # Select only creative field values with these IDs.
   --max-results: int # Maximum number of results to return.
   --page-token: string # Value of the nextPageToken from the previous result page.
   --search-string: string # Allows searching for creative field values by their values. Wildcards (e.g. *) are not allowed.
@@ -3236,7 +3246,7 @@ export def "userprofiles-creative-fields-creative-field-values dfareportingcreat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "ids" $ids "multi") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "searchString" $search_string "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id, creative_field_id: $creative_field_id} | format pattern "/userprofiles/{profile_id}/creativeFields/{creative_field_id}/creativeFieldValues") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), creative_field_id: (encode-path-segment $creative_field_id)} | format pattern "/userprofiles/{profile_id}/creativeFields/{creative_field_id}/creativeFieldValues") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3246,7 +3256,7 @@ export def "userprofiles-creative-fields-creative-field-values dfareportingcreat
 #
 # PATCH /userprofiles/{profileId}/creativeFields/{creativeFieldId}/creativeFieldValues
 # operationId: dfareporting.creativeFieldValues.patch
-export def "userprofiles-creative-fields-creative-field-values dfareportingcreativeFieldValuespatch" [
+export def "userprofiles-creative-fields-creative-field-values update-by-profileId-creativeFieldId" [
   profile_id: string
   creative_field_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3277,19 +3287,19 @@ export def "userprofiles-creative-fields-creative-field-values dfareportingcreat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id, creative_field_id: $creative_field_id} | format pattern "/userprofiles/{profile_id}/creativeFields/{creative_field_id}/creativeFieldValues") $qp)
-  let body = {"id": $id, "kind": $kind, "value": $value} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), creative_field_id: (encode-path-segment $creative_field_id)} | format pattern "/userprofiles/{profile_id}/creativeFields/{creative_field_id}/creativeFieldValues") $qp)
+  let req_body = {"id": $id, "kind": $kind, "value": $value} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Inserts a new creative field value.
 #
 # POST /userprofiles/{profileId}/creativeFields/{creativeFieldId}/creativeFieldValues
 # operationId: dfareporting.creativeFieldValues.insert
-export def "userprofiles-creative-fields-creative-field-values dfareportingcreativeFieldValuesinsert" [
+export def "userprofiles-creative-fields-creative-field-values create" [
   profile_id: string
   creative_field_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3319,19 +3329,19 @@ export def "userprofiles-creative-fields-creative-field-values dfareportingcreat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id, creative_field_id: $creative_field_id} | format pattern "/userprofiles/{profile_id}/creativeFields/{creative_field_id}/creativeFieldValues") $qp)
-  let body = {"id": $id, "kind": $kind, "value": $value} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), creative_field_id: (encode-path-segment $creative_field_id)} | format pattern "/userprofiles/{profile_id}/creativeFields/{creative_field_id}/creativeFieldValues") $qp)
+  let req_body = {"id": $id, "kind": $kind, "value": $value} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates an existing creative field value.
 #
 # PUT /userprofiles/{profileId}/creativeFields/{creativeFieldId}/creativeFieldValues
 # operationId: dfareporting.creativeFieldValues.update
-export def "userprofiles-creative-fields-creative-field-values dfareportingcreativeFieldValuesupdate" [
+export def "userprofiles-creative-fields-creative-field-values update-by-profileId-creativeFieldId-1" [
   profile_id: string
   creative_field_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3361,19 +3371,19 @@ export def "userprofiles-creative-fields-creative-field-values dfareportingcreat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id, creative_field_id: $creative_field_id} | format pattern "/userprofiles/{profile_id}/creativeFields/{creative_field_id}/creativeFieldValues") $qp)
-  let body = {"id": $id, "kind": $kind, "value": $value} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), creative_field_id: (encode-path-segment $creative_field_id)} | format pattern "/userprofiles/{profile_id}/creativeFields/{creative_field_id}/creativeFieldValues") $qp)
+  let req_body = {"id": $id, "kind": $kind, "value": $value} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes an existing creative field value.
 #
 # DELETE /userprofiles/{profileId}/creativeFields/{creativeFieldId}/creativeFieldValues/{id}
 # operationId: dfareporting.creativeFieldValues.delete
-export def "userprofiles-creative-fields-creative-field-values dfareportingcreativeFieldValuesdelete" [
+export def "userprofiles-creative-fields-creative-field-values delete" [
   profile_id: string
   creative_field_id: string
   id: string
@@ -3400,7 +3410,7 @@ export def "userprofiles-creative-fields-creative-field-values dfareportingcreat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id, creative_field_id: $creative_field_id, id: $id} | format pattern "/userprofiles/{profile_id}/creativeFields/{creative_field_id}/creativeFieldValues/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), creative_field_id: (encode-path-segment $creative_field_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/creativeFields/{creative_field_id}/creativeFieldValues/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3410,7 +3420,7 @@ export def "userprofiles-creative-fields-creative-field-values dfareportingcreat
 #
 # GET /userprofiles/{profileId}/creativeFields/{creativeFieldId}/creativeFieldValues/{id}
 # operationId: dfareporting.creativeFieldValues.get
-export def "userprofiles-creative-fields-creative-field-values dfareportingcreativeFieldValuesget" [
+export def "userprofiles-creative-fields-creative-field-values get" [
   profile_id: string
   creative_field_id: string
   id: string
@@ -3437,7 +3447,7 @@ export def "userprofiles-creative-fields-creative-field-values dfareportingcreat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id, creative_field_id: $creative_field_id, id: $id} | format pattern "/userprofiles/{profile_id}/creativeFields/{creative_field_id}/creativeFieldValues/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), creative_field_id: (encode-path-segment $creative_field_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/creativeFields/{creative_field_id}/creativeFieldValues/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3447,7 +3457,7 @@ export def "userprofiles-creative-fields-creative-field-values dfareportingcreat
 #
 # DELETE /userprofiles/{profileId}/creativeFields/{id}
 # operationId: dfareporting.creativeFields.delete
-export def "userprofiles-creative-fields dfareportingcreativeFieldsdelete" [
+export def "userprofiles-creative-fields delete" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3473,7 +3483,7 @@ export def "userprofiles-creative-fields dfareportingcreativeFieldsdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id, id: $id} | format pattern "/userprofiles/{profile_id}/creativeFields/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/creativeFields/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3483,7 +3493,7 @@ export def "userprofiles-creative-fields dfareportingcreativeFieldsdelete" [
 #
 # GET /userprofiles/{profileId}/creativeFields/{id}
 # operationId: dfareporting.creativeFields.get
-export def "userprofiles-creative-fields dfareportingcreativeFieldsget" [
+export def "userprofiles-creative-fields get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3509,7 +3519,7 @@ export def "userprofiles-creative-fields dfareportingcreativeFieldsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id, id: $id} | format pattern "/userprofiles/{profile_id}/creativeFields/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/creativeFields/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3519,7 +3529,7 @@ export def "userprofiles-creative-fields dfareportingcreativeFieldsget" [
 #
 # GET /userprofiles/{profileId}/creativeGroups
 # operationId: dfareporting.creativeGroups.list
-export def "userprofiles-creative-groups dfareportingcreativeGroupslist" [
+export def "userprofiles-creative-groups list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3540,9 +3550,9 @@ export def "userprofiles-creative-groups dfareportingcreativeGroupslist" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --advertiser-ids: list # Select only creative groups that belong to these advertisers.
+  --advertiser-ids: list<string> # Select only creative groups that belong to these advertisers.
   --group-number: int # Select only creative groups that belong to this subgroup.
-  --ids: list # Select only creative groups with these IDs.
+  --ids: list<string> # Select only creative groups with these IDs.
   --max-results: int # Maximum number of results to return.
   --page-token: string # Value of the nextPageToken from the previous result page.
   --search-string: string # Allows searching for creative groups by name or ID. Wildcards (*) are allowed. For example, "creativegroup*2015" will return creative groups with names like "creativegroup June 2015", "creativegroup April 2015", or simply "creativegroup 2015". Most of the searches also add wild-cards implicitly at the start and the end of the search string. For example, a search string of "creativegroup" will match creative groups with the name "my creativegroup", "creativegroup 2015", or simply "creativegroup".
@@ -3552,7 +3562,7 @@ export def "userprofiles-creative-groups dfareportingcreativeGroupslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserIds" $advertiser_ids "multi") (serialize-qp "groupNumber" $group_number "scalar") (serialize-qp "ids" $ids "multi") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "searchString" $search_string "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/creativeGroups") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/creativeGroups") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3563,7 +3573,7 @@ export def "userprofiles-creative-groups dfareportingcreativeGroupslist" [
 # PATCH /userprofiles/{profileId}/creativeGroups
 # operationId: dfareporting.creativeGroups.patch
 # --advertiserIdDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
-export def "userprofiles-creative-groups dfareportingcreativeGroupspatch" [
+export def "userprofiles-creative-groups update-by-profileId" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3598,12 +3608,12 @@ export def "userprofiles-creative-groups dfareportingcreativeGroupspatch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/creativeGroups") $qp)
-  let body = {"accountId": $account_id, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "groupNumber": $group_number, "id": $id, "kind": $kind, "name": $name, "subaccountId": $subaccount_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/creativeGroups") $qp)
+  let req_body = {"accountId": $account_id, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "groupNumber": $group_number, "id": $id, "kind": $kind, "name": $name, "subaccountId": $subaccount_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Inserts a new creative group.
@@ -3611,7 +3621,7 @@ export def "userprofiles-creative-groups dfareportingcreativeGroupspatch" [
 # POST /userprofiles/{profileId}/creativeGroups
 # operationId: dfareporting.creativeGroups.insert
 # --advertiserIdDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
-export def "userprofiles-creative-groups dfareportingcreativeGroupsinsert" [
+export def "userprofiles-creative-groups create" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3645,12 +3655,12 @@ export def "userprofiles-creative-groups dfareportingcreativeGroupsinsert" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/creativeGroups") $qp)
-  let body = {"accountId": $account_id, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "groupNumber": $group_number, "id": $id, "kind": $kind, "name": $name, "subaccountId": $subaccount_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/creativeGroups") $qp)
+  let req_body = {"accountId": $account_id, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "groupNumber": $group_number, "id": $id, "kind": $kind, "name": $name, "subaccountId": $subaccount_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates an existing creative group.
@@ -3658,7 +3668,7 @@ export def "userprofiles-creative-groups dfareportingcreativeGroupsinsert" [
 # PUT /userprofiles/{profileId}/creativeGroups
 # operationId: dfareporting.creativeGroups.update
 # --advertiserIdDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
-export def "userprofiles-creative-groups dfareportingcreativeGroupsupdate" [
+export def "userprofiles-creative-groups update-by-profileId-1" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3692,19 +3702,19 @@ export def "userprofiles-creative-groups dfareportingcreativeGroupsupdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/creativeGroups") $qp)
-  let body = {"accountId": $account_id, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "groupNumber": $group_number, "id": $id, "kind": $kind, "name": $name, "subaccountId": $subaccount_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/creativeGroups") $qp)
+  let req_body = {"accountId": $account_id, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "groupNumber": $group_number, "id": $id, "kind": $kind, "name": $name, "subaccountId": $subaccount_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets one creative group by ID.
 #
 # GET /userprofiles/{profileId}/creativeGroups/{id}
 # operationId: dfareporting.creativeGroups.get
-export def "userprofiles-creative-groups dfareportingcreativeGroupsget" [
+export def "userprofiles-creative-groups get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3730,7 +3740,7 @@ export def "userprofiles-creative-groups dfareportingcreativeGroupsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id, id: $id} | format pattern "/userprofiles/{profile_id}/creativeGroups/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/creativeGroups/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3740,7 +3750,7 @@ export def "userprofiles-creative-groups dfareportingcreativeGroupsget" [
 #
 # GET /userprofiles/{profileId}/creatives
 # operationId: dfareporting.creatives.list
-export def "userprofiles-creatives dfareportingcreativeslist" [
+export def "userprofiles-creatives list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3765,23 +3775,23 @@ export def "userprofiles-creatives dfareportingcreativeslist" [
   --advertiser-id: string # Select only creatives with this advertiser ID.
   --archived: oneof<nothing, bool> # Select only archived creatives. Leave blank to select archived and unarchived creatives.
   --campaign-id: string # Select only creatives with this campaign ID.
-  --companion-creative-ids: list # Select only in-stream video creatives with these companion IDs.
-  --creative-field-ids: list # Select only creatives with these creative field IDs.
-  --ids: list # Select only creatives with these IDs.
+  --companion-creative-ids: list<string> # Select only in-stream video creatives with these companion IDs.
+  --creative-field-ids: list<string> # Select only creatives with these creative field IDs.
+  --ids: list<string> # Select only creatives with these IDs.
   --max-results: int # Maximum number of results to return.
   --page-token: string # Value of the nextPageToken from the previous result page.
-  --rendering-ids: list # Select only creatives with these rendering IDs.
+  --rendering-ids: list<string> # Select only creatives with these rendering IDs.
   --search-string: string # Allows searching for objects by name or ID. Wildcards (*) are allowed. For example, "creative*2015" will return objects with names like "creative June 2015", "creative April 2015", or simply "creative 2015". Most of the searches also add wildcards implicitly at the start and the end of the search string. For example, a search string of "creative" will match objects with name "my creative", "creative 2015", or simply "creative".
-  --size-ids: list # Select only creatives with these size IDs.
+  --size-ids: list<string> # Select only creatives with these size IDs.
   --sort-field: string@sort-field-completer # Field by which to sort the list.
   --sort-order: string@sort-order-completer # Order of sorted results.
   --studio-creative-id: string # Select only creatives corresponding to this Studio creative ID.
-  --types: list # Select only creatives with these creative types.
+  --types: list<string> # Select only creatives with these creative types.
 ]: nothing -> record<creatives: table<accountId: string, active: bool, adParameters: string, adTagKeys: list, additionalSizes: list, advertiserId: string, allowScriptAccess: bool, archived: bool, artworkType: string, authoringSource: string, authoringTool: string, autoAdvanceImages: bool, backgroundColor: string, backupImageClickThroughUrl: record, backupImageFeatures: list, backupImageReportingLabel: string, backupImageTargetWindow: record, clickTags: list, commercialId: string, companionCreatives: list, compatibility: list, convertFlashToHtml5: bool, counterCustomEvents: list, creativeAssetSelection: record, creativeAssets: list, creativeFieldAssignments: list, customKeyValues: list, dynamicAssetSelection: bool, exitCustomEvents: list, fsCommand: record, htmlCode: string, htmlCodeLocked: bool, id: string, idDimensionValue: record, kind: string, lastModifiedInfo: record, latestTraffickedCreativeId: string, mediaDescription: string, mediaDuration: float, name: string, obaIcon: record, overrideCss: string, progressOffset: record, redirectUrl: string, renderingId: string, renderingIdDimensionValue: record, requiredFlashPluginVersion: string, requiredFlashVersion: int, size: record, skipOffset: record, skippable: bool, sslCompliant: bool, sslOverride: bool, studioAdvertiserId: string, studioCreativeId: string, studioTraffickedCreativeId: string, subaccountId: string, thirdPartyBackupImageImpressionsUrl: string, thirdPartyRichMediaImpressionsUrl: string, thirdPartyUrls: list, timerCustomEvents: list, totalFileSize: string, type: string, universalAdId: record, version: int>, kind: string, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "active" $active "scalar") (serialize-qp "advertiserId" $advertiser_id "scalar") (serialize-qp "archived" $archived "scalar") (serialize-qp "campaignId" $campaign_id "scalar") (serialize-qp "companionCreativeIds" $companion_creative_ids "multi") (serialize-qp "creativeFieldIds" $creative_field_ids "multi") (serialize-qp "ids" $ids "multi") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "renderingIds" $rendering_ids "multi") (serialize-qp "searchString" $search_string "scalar") (serialize-qp "sizeIds" $size_ids "multi") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "studioCreativeId" $studio_creative_id "scalar") (serialize-qp "types" $types "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/creatives") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/creatives") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3797,7 +3807,7 @@ export def "userprofiles-creatives dfareportingcreativeslist" [
 # --clickTags item shape: {clickThroughUrl?: record, eventName?: string, name?: string}
 # --counterCustomEvents item shape: {advertiserCustomEventId?: string, advertiserCustomEventName?: string, advertiserCustomEventType?: "ADVERTISER_EVENT_TIMER"|"ADVERTISER_EVENT_EXIT"|"ADVERTISER_EVENT_COUNTER", artworkLabel?: string, artworkType?: "ARTWORK_TYPE_FLASH"|"ARTWORK_TYPE_HTML5"|"ARTWORK_TYPE_MIXED"|"ARTWORK_TYPE_IMAGE", exitClickThroughUrl?: record, id?: string, popupWindowProperties?: record, targetType?: "TARGET_BLANK"|"TARGET_TOP"|"TARGET_SELF"|"TARGET_PARENT"|"TARGET_POPUP", videoReportingId?: string}
 # --creativeAssetSelection shape: {defaultAssetId?: string, rules?: list}
-# --creativeAssets item shape: {actionScript3?: bool, active?: bool, additionalSizes?: list, alignment?: "ALIGNMENT_TOP"|"ALIGNMENT_RIGHT"|"ALIGNMENT_BOTTOM"|"ALIGNMENT_LEFT", artworkType?: "ARTWORK_TYPE_FLASH"|"ARTWORK_TYPE_HTML5"|"ARTWORK_TYPE_MIXED"|"ARTWORK_TYPE_IMAGE", assetIdentifier?: record, audioBitRate?: int, audioSampleRate?: int, backupImageExit?: record, bitRate?: int, childAssetType?: "CHILD_ASSET_TYPE_FLASH"|"CHILD_ASSET_TYPE_VIDEO"|"CHILD_ASSET_TYPE_IMAGE"|"CHILD_ASSET_TYPE_DATA", collapsedSize?: record, companionCreativeIds?: list, customStartTimeValue?: int, detectedFeatures?: list, displayType?: "ASSET_DISPLAY_TYPE_INPAGE"|"ASSET_DISPLAY_TYPE_FLOATING"|"ASSET_DISPLAY_TYPE_OVERLAY"|"ASSET_DISPLAY_TYPE_EXPANDING"|"ASSET_DISPLAY_TYPE_FLASH_IN_FLASH"|"ASSET_DISPLAY_TYPE_FLASH_IN_FLASH_EXPANDING"|"ASSET_DISPLAY_TYPE_PEEL_DOWN"|"ASSET_DISPLAY_TYPE_VPAID_LINEAR"|"ASSET_DISPLAY_TYPE_VPAID_NON_LINEAR"|"ASSET_DISPLAY_TYPE_BACKDROP", duration?: int, durationType?: "ASSET_DURATION_TYPE_AUTO"|"ASSET_DURATION_TYPE_NONE"|"ASSET_DURATION_TYPE_CUSTOM", expandedDimension?: record, fileSize?: string, flashVersion?: int, frameRate?: float, hideFlashObjects?: bool, hideSelectionBoxes?: bool, horizontallyLocked?: bool, id?: string, idDimensionValue?: record, mediaDuration?: float, mimeType?: string, offset?: record, orientation?: "LANDSCAPE"|"PORTRAIT"|"SQUARE", originalBackup?: bool, politeLoad?: bool, position?: record, positionLeftUnit?: "OFFSET_UNIT_PIXEL"|"OFFSET_UNIT_PERCENT"|"OFFSET_UNIT_PIXEL_FROM_CENTER", positionTopUnit?: "OFFSET_UNIT_PIXEL"|"OFFSET_UNIT_PERCENT"|"OFFSET_UNIT_PIXEL_FROM_CENTER", progressiveServingUrl?: string, pushdown?: bool, pushdownDuration?: float, role?: "PRIMARY"|"BACKUP_IMAGE"|"ADDITIONAL_IMAGE"|"ADDITIONAL_FLASH"|"PARENT_VIDEO"|"TRANSCODED_VIDEO"|"OTHER"|"ALTERNATE_VIDEO"|"PARENT_AUDIO"|"TRANSCODED_AUDIO", size?: record, sslCompliant?: bool, startTimeType?: "ASSET_START_TIME_TYPE_NONE"|"ASSET_START_TIME_TYPE_CUSTOM", streamingServingUrl?: string, transparency?: bool, verticallyLocked?: bool, windowMode?: "OPAQUE"|"WINDOW"|"TRANSPARENT", zIndex?: int, zipFilename?: string, zipFilesize?: string}
+# --creativeAssets item shape: {actionScript3?: bool, active?: bool, additionalSizes?: list, alignment?: "ALIGNMENT_TOP"|"ALIGNMENT_RIGHT"|"ALIGNMENT_BOTTOM"|"ALIGNMENT_LEFT", artworkType?: "ARTWORK_TYPE_FLASH"|"ARTWORK_TYPE_HTML5"|"ARTWORK_TYPE_MIXED"|"ARTWORK_TYPE_IMAGE", assetIdentifier?: record, audioBitRate?: int, audioSampleRate?: int, backupImageExit?: record, bitRate?: int, childAssetType?: "CHILD_ASSET_TYPE_FLASH"|"CHILD_ASSET_TYPE_VIDEO"|"CHILD_ASSET_TYPE_IMAGE"|"CHILD_ASSET_TYPE_DATA", collapsedSize?: record, ... (38 more fields)}
 # --creativeFieldAssignments item shape: {creativeFieldId?: string, creativeFieldValueId?: string}
 # --exitCustomEvents item shape: {advertiserCustomEventId?: string, advertiserCustomEventName?: string, advertiserCustomEventType?: "ADVERTISER_EVENT_TIMER"|"ADVERTISER_EVENT_EXIT"|"ADVERTISER_EVENT_COUNTER", artworkLabel?: string, artworkType?: "ARTWORK_TYPE_FLASH"|"ARTWORK_TYPE_HTML5"|"ARTWORK_TYPE_MIXED"|"ARTWORK_TYPE_IMAGE", exitClickThroughUrl?: record, id?: string, popupWindowProperties?: record, targetType?: "TARGET_BLANK"|"TARGET_TOP"|"TARGET_SELF"|"TARGET_PARENT"|"TARGET_POPUP", videoReportingId?: string}
 # --fsCommand shape: {left?: int, positionOption?: "CENTERED"|"DISTANCE_FROM_TOP_LEFT_CORNER", top?: int, windowHeight?: int, windowWidth?: int}
@@ -3811,7 +3821,7 @@ export def "userprofiles-creatives dfareportingcreativeslist" [
 # --thirdPartyUrls item shape: {thirdPartyUrlType?: "IMPRESSION"|"CLICK_TRACKING"|"VIDEO_START"|"VIDEO_FIRST_QUARTILE"|"VIDEO_MIDPOINT"|"VIDEO_THIRD_QUARTILE"|"VIDEO_COMPLETE"|"VIDEO_MUTE"|"VIDEO_PAUSE"|"VIDEO_REWIND"|"VIDEO_FULLSCREEN"|"VIDEO_STOP"|"VIDEO_CUSTOM"|"SURVEY"|"RICH_MEDIA_IMPRESSION"|"RICH_MEDIA_RM_IMPRESSION"|"RICH_MEDIA_BACKUP_IMPRESSION"|"VIDEO_SKIP"|"VIDEO_PROGRESS", url?: string}
 # --timerCustomEvents item shape: {advertiserCustomEventId?: string, advertiserCustomEventName?: string, advertiserCustomEventType?: "ADVERTISER_EVENT_TIMER"|"ADVERTISER_EVENT_EXIT"|"ADVERTISER_EVENT_COUNTER", artworkLabel?: string, artworkType?: "ARTWORK_TYPE_FLASH"|"ARTWORK_TYPE_HTML5"|"ARTWORK_TYPE_MIXED"|"ARTWORK_TYPE_IMAGE", exitClickThroughUrl?: record, id?: string, popupWindowProperties?: record, targetType?: "TARGET_BLANK"|"TARGET_TOP"|"TARGET_SELF"|"TARGET_PARENT"|"TARGET_POPUP", videoReportingId?: string}
 # --universalAdId shape: {registry?: "OTHER"|"AD_ID_OFFICIAL"|"CLEARCAST"|"DCM", value?: string}
-export def "userprofiles-creatives dfareportingcreativespatch" [
+export def "userprofiles-creatives update-by-profileId" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3836,7 +3846,7 @@ export def "userprofiles-creatives dfareportingcreativespatch" [
   --account-id: string # Account ID of this creative. This field, if left unset, will be auto-generated for both insert and update operations. Applicable to all creative types. (format: int64)
   --active: oneof<nothing, bool> # Whether the creative is active. Applicable to all creative types.
   --ad-parameters: string # Ad parameters user for VPAID creative. This is a read-only field. Applicable to the following creative types: all VPAID.
-  --ad-tag-keys: list # Keywords for a Rich Media creative. Keywords let you customize the creative settings of a Rich Media ad running on your site without having to contact the advertiser. You can use keywords to dynamically change the look or functionality of a creative. Applicable to the following creative types: all RICH_MEDIA, and all VPAID.
+  --ad-tag-keys: list<string> # Keywords for a Rich Media creative. Keywords let you customize the creative settings of a Rich Media ad running on your site without having to contact the advertiser. You can use keywords to dynamically change the look or functionality of a creative. Applicable to the following creative types: all RICH_MEDIA, and all VPAID.
   --additional-sizes: list # Additional sizes associated with a responsive creative. When inserting or updating a creative either the size ID field or size width and height fields can be used. Applicable to DISPLAY creatives when the primary asset type is HTML_IMAGE. — item shape: {height?: int, iab?: bool, id?: string, kind?: string, width?: int}
   --advertiser-id: string # Advertiser ID of this creative. This is a required field. Applicable to all creative types. (format: int64)
   --allow-script-access: oneof<nothing, bool> # Whether script access is allowed for this creative. This is a read-only and deprecated field which will automatically be set to true on update. Applicable to the following creative types: FLASH_INPAGE.
@@ -3847,19 +3857,19 @@ export def "userprofiles-creatives dfareportingcreativespatch" [
   --auto-advance-images: oneof<nothing, bool> # Whether images are automatically advanced for image gallery creatives. Applicable to the following creative types: DISPLAY_IMAGE_GALLERY.
   --background-color: string # The 6-character HTML color code, beginning with #, for the background of the window area where the Flash file is displayed. Default is white. Applicable to the following creative types: FLASH_INPAGE.
   --backup-image-click-through-url: record # Click-through URL — shape: {computedClickThroughUrl?: string, customClickThroughUrl?: string, landingPageId?: string}
-  --backup-image-features: list # List of feature dependencies that will cause a backup image to be served if the browser that serves the ad does not support them. Feature dependencies are features that a browser must be able to support in order to render your HTML5 creative asset correctly. This field is initially auto-generated to contain all features detected by Campaign Manager for all the assets of this creative and can then be modified by the client. To reset this field, copy over all the creativeAssets' detected features. Applicable to the following creative types: HTML5_BANNER. Applicable to DISPLAY when the primary asset type is not HTML_IMAGE.
+  --backup-image-features: list<string> # List of feature dependencies that will cause a backup image to be served if the browser that serves the ad does not support them. Feature dependencies are features that a browser must be able to support in order to render your HTML5 creative asset correctly. This field is initially auto-generated to contain all features detected by Campaign Manager for all the assets of this creative and can then be modified by the client. To reset this field, copy over all the creativeAssets' detected features. Applicable to the following creative types: HTML5_BANNER. Applicable to DISPLAY when the primary asset type is not HTML_IMAGE.
   --backup-image-reporting-label: string # Reporting label used for HTML5 banner backup image. Applicable to the following creative types: DISPLAY when the primary asset type is not HTML_IMAGE.
   --backup-image-target-window: record # Target Window. — shape: {customHtml?: string, targetWindowOption?: "NEW_WINDOW"|"CURRENT_WINDOW"|"CUSTOM"}
   --click-tags: list # Click tags of the creative. For DISPLAY, FLASH_INPAGE, and HTML5_BANNER creatives, this is a subset of detected click tags for the assets associated with this creative. After creating a flash asset, detected click tags will be returned in the creativeAssetMetadata. When inserting the creative, populate the creative clickTags field using the creativeAssetMetadata.clickTags field. For DISPLAY_IMAGE_GALLERY creatives, there should be exactly one entry in this list for each image creative asset. A click tag is matched with a corresponding creative asset by matching the clickTag.name field with the creativeAsset.assetIdentifier.name field. Applicable to the following creative types: DISPLAY_IMAGE_GALLERY, FLASH_INPAGE, HTML5_BANNER. Applicable to DISPLAY when the primary asset type is not HTML_IMAGE. — item shape: {clickThroughUrl?: record, eventName?: string, name?: string}
   --commercial-id: string # Industry standard ID assigned to creative for reach and frequency. Applicable to INSTREAM_VIDEO_REDIRECT creatives.
-  --companion-creatives: list # List of companion creatives assigned to an in-Stream video creative. Acceptable values include IDs of existing flash and image creatives. Applicable to the following creative types: all VPAID, all INSTREAM_AUDIO and all INSTREAM_VIDEO with dynamicAssetSelection set to false.
-  --compatibility: list # Compatibilities associated with this creative. This is a read-only field. DISPLAY and DISPLAY_INTERSTITIAL refer to rendering either on desktop or on mobile devices or in mobile apps for regular or interstitial ads, respectively. APP and APP_INTERSTITIAL are for rendering in mobile apps. Only pre-existing creatives may have these compatibilities since new creatives will either be assigned DISPLAY or DISPLAY_INTERSTITIAL instead. IN_STREAM_VIDEO refers to rendering in in-stream video ads developed with the VAST standard. IN_STREAM_AUDIO refers to rendering in in-stream audio ads developed with the VAST standard. Applicable to all creative types. Acceptable values are: - "APP" - "APP_INTERSTITIAL" - "IN_STREAM_VIDEO" - "IN_STREAM_AUDIO" - "DISPLAY" - "DISPLAY_INTERSTITIAL" 
+  --companion-creatives: list<string> # List of companion creatives assigned to an in-Stream video creative. Acceptable values include IDs of existing flash and image creatives. Applicable to the following creative types: all VPAID, all INSTREAM_AUDIO and all INSTREAM_VIDEO with dynamicAssetSelection set to false.
+  --compatibility: list<string> # Compatibilities associated with this creative. This is a read-only field. DISPLAY and DISPLAY_INTERSTITIAL refer to rendering either on desktop or on mobile devices or in mobile apps for regular or interstitial ads, respectively. APP and APP_INTERSTITIAL are for rendering in mobile apps. Only pre-existing creatives may have these compatibilities since new creatives will either be assigned DISPLAY or DISPLAY_INTERSTITIAL instead. IN_STREAM_VIDEO refers to rendering in in-stream video ads developed with the VAST standard. IN_STREAM_AUDIO refers to rendering in in-stream audio ads developed with the VAST standard. Applicable to all creative types. Acceptable values are: - "APP" - "APP_INTERSTITIAL" - "IN_STREAM_VIDEO" - "IN_STREAM_AUDIO" - "DISPLAY" - "DISPLAY_INTERSTITIAL"
   --convert-flash-to-html5: oneof<nothing, bool> # Whether Flash assets associated with the creative need to be automatically converted to HTML5. This flag is enabled by default and users can choose to disable it if they don't want the system to generate and use HTML5 asset for this creative. Applicable to the following creative type: FLASH_INPAGE. Applicable to DISPLAY when the primary asset type is not HTML_IMAGE.
   --counter-custom-events: list # List of counter events configured for the creative. For DISPLAY_IMAGE_GALLERY creatives, these are read-only and auto-generated from clickTags. Applicable to the following creative types: DISPLAY_IMAGE_GALLERY, all RICH_MEDIA, and all VPAID. — item shape: {advertiserCustomEventId?: string, advertiserCustomEventName?: string, advertiserCustomEventType?: "ADVERTISER_EVENT_TIMER"|"ADVERTISER_EVENT_EXIT"|"ADVERTISER_EVENT_COUNTER", artworkLabel?: string, artworkType?: "ARTWORK_TYPE_FLASH"|"ARTWORK_TYPE_HTML5"|"ARTWORK_TYPE_MIXED"|"ARTWORK_TYPE_IMAGE", exitClickThroughUrl?: record, id?: string, popupWindowProperties?: record, targetType?: "TARGET_BLANK"|"TARGET_TOP"|"TARGET_SELF"|"TARGET_PARENT"|"TARGET_POPUP", videoReportingId?: string}
   --creative-asset-selection: record # Encapsulates the list of rules for asset selection and a default asset in case none of the rules match. Applicable to INSTREAM_VIDEO creatives. — shape: {defaultAssetId?: string, rules?: list}
-  --creative-assets: list # Assets associated with a creative. Applicable to all but the following creative types: INTERNAL_REDIRECT, INTERSTITIAL_INTERNAL_REDIRECT, and REDIRECT — item shape: {actionScript3?: bool, active?: bool, additionalSizes?: list, alignment?: "ALIGNMENT_TOP"|"ALIGNMENT_RIGHT"|"ALIGNMENT_BOTTOM"|"ALIGNMENT_LEFT", artworkType?: "ARTWORK_TYPE_FLASH"|"ARTWORK_TYPE_HTML5"|"ARTWORK_TYPE_MIXED"|"ARTWORK_TYPE_IMAGE", assetIdentifier?: record, audioBitRate?: int, audioSampleRate?: int, backupImageExit?: record, bitRate?: int, childAssetType?: "CHILD_ASSET_TYPE_FLASH"|"CHILD_ASSET_TYPE_VIDEO"|"CHILD_ASSET_TYPE_IMAGE"|"CHILD_ASSET_TYPE_DATA", collapsedSize?: record, companionCreativeIds?: list, customStartTimeValue?: int, detectedFeatures?: list, displayType?: "ASSET_DISPLAY_TYPE_INPAGE"|"ASSET_DISPLAY_TYPE_FLOATING"|"ASSET_DISPLAY_TYPE_OVERLAY"|"ASSET_DISPLAY_TYPE_EXPANDING"|"ASSET_DISPLAY_TYPE_FLASH_IN_FLASH"|"ASSET_DISPLAY_TYPE_FLASH_IN_FLASH_EXPANDING"|"ASSET_DISPLAY_TYPE_PEEL_DOWN"|"ASSET_DISPLAY_TYPE_VPAID_LINEAR"|"ASSET_DISPLAY_TYPE_VPAID_NON_LINEAR"|"ASSET_DISPLAY_TYPE_BACKDROP", duration?: int, durationType?: "ASSET_DURATION_TYPE_AUTO"|"ASSET_DURATION_TYPE_NONE"|"ASSET_DURATION_TYPE_CUSTOM", expandedDimension?: record, fileSize?: string, flashVersion?: int, frameRate?: float, hideFlashObjects?: bool, hideSelectionBoxes?: bool, horizontallyLocked?: bool, id?: string, idDimensionValue?: record, mediaDuration?: float, mimeType?: string, offset?: record, orientation?: "LANDSCAPE"|"PORTRAIT"|"SQUARE", originalBackup?: bool, politeLoad?: bool, position?: record, positionLeftUnit?: "OFFSET_UNIT_PIXEL"|"OFFSET_UNIT_PERCENT"|"OFFSET_UNIT_PIXEL_FROM_CENTER", positionTopUnit?: "OFFSET_UNIT_PIXEL"|"OFFSET_UNIT_PERCENT"|"OFFSET_UNIT_PIXEL_FROM_CENTER", progressiveServingUrl?: string, pushdown?: bool, pushdownDuration?: float, role?: "PRIMARY"|"BACKUP_IMAGE"|"ADDITIONAL_IMAGE"|"ADDITIONAL_FLASH"|"PARENT_VIDEO"|"TRANSCODED_VIDEO"|"OTHER"|"ALTERNATE_VIDEO"|"PARENT_AUDIO"|"TRANSCODED_AUDIO", size?: record, sslCompliant?: bool, startTimeType?: "ASSET_START_TIME_TYPE_NONE"|"ASSET_START_TIME_TYPE_CUSTOM", streamingServingUrl?: string, transparency?: bool, verticallyLocked?: bool, windowMode?: "OPAQUE"|"WINDOW"|"TRANSPARENT", zIndex?: int, zipFilename?: string, zipFilesize?: string}
+  --creative-assets: list # Assets associated with a creative. Applicable to all but the following creative types: INTERNAL_REDIRECT, INTERSTITIAL_INTERNAL_REDIRECT, and REDIRECT — item shape: {actionScript3?: bool, active?: bool, additionalSizes?: list, alignment?: "ALIGNMENT_TOP"|"ALIGNMENT_RIGHT"|"ALIGNMENT_BOTTOM"|"ALIGNMENT_LEFT", artworkType?: "ARTWORK_TYPE_FLASH"|"ARTWORK_TYPE_HTML5"|"ARTWORK_TYPE_MIXED"|"ARTWORK_TYPE_IMAGE", assetIdentifier?: record, audioBitRate?: int, audioSampleRate?: int, backupImageExit?: record, bitRate?: int, childAssetType?: "CHILD_ASSET_TYPE_FLASH"|"CHILD_ASSET_TYPE_VIDEO"|"CHILD_ASSET_TYPE_IMAGE"|"CHILD_ASSET_TYPE_DATA", collapsedSize?: record, ... (38 more fields)}
   --creative-field-assignments: list # Creative field assignments for this creative. Applicable to all creative types. — item shape: {creativeFieldId?: string, creativeFieldValueId?: string}
-  --custom-key-values: list # Custom key-values for a Rich Media creative. Key-values let you customize the creative settings of a Rich Media ad running on your site without having to contact the advertiser. You can use key-values to dynamically change the look or functionality of a creative. Applicable to the following creative types: all RICH_MEDIA, and all VPAID.
+  --custom-key-values: list<string> # Custom key-values for a Rich Media creative. Key-values let you customize the creative settings of a Rich Media ad running on your site without having to contact the advertiser. You can use key-values to dynamically change the look or functionality of a creative. Applicable to the following creative types: all RICH_MEDIA, and all VPAID.
   --dynamic-asset-selection: oneof<nothing, bool> # Set this to true to enable the use of rules to target individual assets in this creative. When set to true creativeAssetSelection must be set. This also controls asset-level companions. When this is true, companion creatives should be assigned to creative assets. Learn more. Applicable to INSTREAM_VIDEO creatives.
   --exit-custom-events: list # List of exit events configured for the creative. For DISPLAY and DISPLAY_IMAGE_GALLERY creatives, these are read-only and auto-generated from clickTags, For DISPLAY, an event is also created from the backupImageReportingLabel. Applicable to the following creative types: DISPLAY_IMAGE_GALLERY, all RICH_MEDIA, and all VPAID. Applicable to DISPLAY when the primary asset type is not HTML_IMAGE. — item shape: {advertiserCustomEventId?: string, advertiserCustomEventName?: string, advertiserCustomEventType?: "ADVERTISER_EVENT_TIMER"|"ADVERTISER_EVENT_EXIT"|"ADVERTISER_EVENT_COUNTER", artworkLabel?: string, artworkType?: "ARTWORK_TYPE_FLASH"|"ARTWORK_TYPE_HTML5"|"ARTWORK_TYPE_MIXED"|"ARTWORK_TYPE_IMAGE", exitClickThroughUrl?: record, id?: string, popupWindowProperties?: record, targetType?: "TARGET_BLANK"|"TARGET_TOP"|"TARGET_SELF"|"TARGET_PARENT"|"TARGET_POPUP", videoReportingId?: string}
   --fs-command: record # FsCommand. — shape: {left?: int, positionOption?: "CENTERED"|"DISTANCE_FROM_TOP_LEFT_CORNER", top?: int, windowHeight?: int, windowWidth?: int}
@@ -3903,12 +3913,12 @@ export def "userprofiles-creatives dfareportingcreativespatch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/creatives") $qp)
-  let body = {"accountId": $account_id, "active": $active, "adParameters": $ad_parameters, "adTagKeys": $ad_tag_keys, "additionalSizes": $additional_sizes, "advertiserId": $advertiser_id, "allowScriptAccess": $allow_script_access, "archived": $archived, "artworkType": $artwork_type, "authoringSource": $authoring_source, "authoringTool": $authoring_tool, "autoAdvanceImages": $auto_advance_images, "backgroundColor": $background_color, "backupImageClickThroughUrl": $backup_image_click_through_url, "backupImageFeatures": $backup_image_features, "backupImageReportingLabel": $backup_image_reporting_label, "backupImageTargetWindow": $backup_image_target_window, "clickTags": $click_tags, "commercialId": $commercial_id, "companionCreatives": $companion_creatives, "compatibility": $compatibility, "convertFlashToHtml5": $convert_flash_to_html5, "counterCustomEvents": $counter_custom_events, "creativeAssetSelection": $creative_asset_selection, "creativeAssets": $creative_assets, "creativeFieldAssignments": $creative_field_assignments, "customKeyValues": $custom_key_values, "dynamicAssetSelection": $dynamic_asset_selection, "exitCustomEvents": $exit_custom_events, "fsCommand": $fs_command, "htmlCode": $html_code, "htmlCodeLocked": $html_code_locked, "id": $id, "idDimensionValue": $id_dimension_value, "kind": $kind, "lastModifiedInfo": $last_modified_info, "latestTraffickedCreativeId": $latest_trafficked_creative_id, "mediaDescription": $media_description, "mediaDuration": $media_duration, "name": $name, "obaIcon": $oba_icon, "overrideCss": $override_css, "progressOffset": $progress_offset, "redirectUrl": $redirect_url, "renderingId": $rendering_id, "renderingIdDimensionValue": $rendering_id_dimension_value, "requiredFlashPluginVersion": $required_flash_plugin_version, "requiredFlashVersion": $required_flash_version, "size": $size, "skipOffset": $skip_offset, "skippable": $skippable, "sslCompliant": $ssl_compliant, "sslOverride": $ssl_override, "studioAdvertiserId": $studio_advertiser_id, "studioCreativeId": $studio_creative_id, "studioTraffickedCreativeId": $studio_trafficked_creative_id, "subaccountId": $subaccount_id, "thirdPartyBackupImageImpressionsUrl": $third_party_backup_image_impressions_url, "thirdPartyRichMediaImpressionsUrl": $third_party_rich_media_impressions_url, "thirdPartyUrls": $third_party_urls, "timerCustomEvents": $timer_custom_events, "totalFileSize": $total_file_size, "type": $type, "universalAdId": $universal_ad_id, "version": $version} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/creatives") $qp)
+  let req_body = {"accountId": $account_id, "active": $active, "adParameters": $ad_parameters, "adTagKeys": $ad_tag_keys, "additionalSizes": $additional_sizes, "advertiserId": $advertiser_id, "allowScriptAccess": $allow_script_access, "archived": $archived, "artworkType": $artwork_type, "authoringSource": $authoring_source, "authoringTool": $authoring_tool, "autoAdvanceImages": $auto_advance_images, "backgroundColor": $background_color, "backupImageClickThroughUrl": $backup_image_click_through_url, "backupImageFeatures": $backup_image_features, "backupImageReportingLabel": $backup_image_reporting_label, "backupImageTargetWindow": $backup_image_target_window, "clickTags": $click_tags, "commercialId": $commercial_id, "companionCreatives": $companion_creatives, "compatibility": $compatibility, "convertFlashToHtml5": $convert_flash_to_html5, "counterCustomEvents": $counter_custom_events, "creativeAssetSelection": $creative_asset_selection, "creativeAssets": $creative_assets, "creativeFieldAssignments": $creative_field_assignments, "customKeyValues": $custom_key_values, "dynamicAssetSelection": $dynamic_asset_selection, "exitCustomEvents": $exit_custom_events, "fsCommand": $fs_command, "htmlCode": $html_code, "htmlCodeLocked": $html_code_locked, "id": $id, "idDimensionValue": $id_dimension_value, "kind": $kind, "lastModifiedInfo": $last_modified_info, "latestTraffickedCreativeId": $latest_trafficked_creative_id, "mediaDescription": $media_description, "mediaDuration": $media_duration, "name": $name, "obaIcon": $oba_icon, "overrideCss": $override_css, "progressOffset": $progress_offset, "redirectUrl": $redirect_url, "renderingId": $rendering_id, "renderingIdDimensionValue": $rendering_id_dimension_value, "requiredFlashPluginVersion": $required_flash_plugin_version, "requiredFlashVersion": $required_flash_version, "size": $size, "skipOffset": $skip_offset, "skippable": $skippable, "sslCompliant": $ssl_compliant, "sslOverride": $ssl_override, "studioAdvertiserId": $studio_advertiser_id, "studioCreativeId": $studio_creative_id, "studioTraffickedCreativeId": $studio_trafficked_creative_id, "subaccountId": $subaccount_id, "thirdPartyBackupImageImpressionsUrl": $third_party_backup_image_impressions_url, "thirdPartyRichMediaImpressionsUrl": $third_party_rich_media_impressions_url, "thirdPartyUrls": $third_party_urls, "timerCustomEvents": $timer_custom_events, "totalFileSize": $total_file_size, "type": $type, "universalAdId": $universal_ad_id, "version": $version} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Inserts a new creative.
@@ -3921,7 +3931,7 @@ export def "userprofiles-creatives dfareportingcreativespatch" [
 # --clickTags item shape: {clickThroughUrl?: record, eventName?: string, name?: string}
 # --counterCustomEvents item shape: {advertiserCustomEventId?: string, advertiserCustomEventName?: string, advertiserCustomEventType?: "ADVERTISER_EVENT_TIMER"|"ADVERTISER_EVENT_EXIT"|"ADVERTISER_EVENT_COUNTER", artworkLabel?: string, artworkType?: "ARTWORK_TYPE_FLASH"|"ARTWORK_TYPE_HTML5"|"ARTWORK_TYPE_MIXED"|"ARTWORK_TYPE_IMAGE", exitClickThroughUrl?: record, id?: string, popupWindowProperties?: record, targetType?: "TARGET_BLANK"|"TARGET_TOP"|"TARGET_SELF"|"TARGET_PARENT"|"TARGET_POPUP", videoReportingId?: string}
 # --creativeAssetSelection shape: {defaultAssetId?: string, rules?: list}
-# --creativeAssets item shape: {actionScript3?: bool, active?: bool, additionalSizes?: list, alignment?: "ALIGNMENT_TOP"|"ALIGNMENT_RIGHT"|"ALIGNMENT_BOTTOM"|"ALIGNMENT_LEFT", artworkType?: "ARTWORK_TYPE_FLASH"|"ARTWORK_TYPE_HTML5"|"ARTWORK_TYPE_MIXED"|"ARTWORK_TYPE_IMAGE", assetIdentifier?: record, audioBitRate?: int, audioSampleRate?: int, backupImageExit?: record, bitRate?: int, childAssetType?: "CHILD_ASSET_TYPE_FLASH"|"CHILD_ASSET_TYPE_VIDEO"|"CHILD_ASSET_TYPE_IMAGE"|"CHILD_ASSET_TYPE_DATA", collapsedSize?: record, companionCreativeIds?: list, customStartTimeValue?: int, detectedFeatures?: list, displayType?: "ASSET_DISPLAY_TYPE_INPAGE"|"ASSET_DISPLAY_TYPE_FLOATING"|"ASSET_DISPLAY_TYPE_OVERLAY"|"ASSET_DISPLAY_TYPE_EXPANDING"|"ASSET_DISPLAY_TYPE_FLASH_IN_FLASH"|"ASSET_DISPLAY_TYPE_FLASH_IN_FLASH_EXPANDING"|"ASSET_DISPLAY_TYPE_PEEL_DOWN"|"ASSET_DISPLAY_TYPE_VPAID_LINEAR"|"ASSET_DISPLAY_TYPE_VPAID_NON_LINEAR"|"ASSET_DISPLAY_TYPE_BACKDROP", duration?: int, durationType?: "ASSET_DURATION_TYPE_AUTO"|"ASSET_DURATION_TYPE_NONE"|"ASSET_DURATION_TYPE_CUSTOM", expandedDimension?: record, fileSize?: string, flashVersion?: int, frameRate?: float, hideFlashObjects?: bool, hideSelectionBoxes?: bool, horizontallyLocked?: bool, id?: string, idDimensionValue?: record, mediaDuration?: float, mimeType?: string, offset?: record, orientation?: "LANDSCAPE"|"PORTRAIT"|"SQUARE", originalBackup?: bool, politeLoad?: bool, position?: record, positionLeftUnit?: "OFFSET_UNIT_PIXEL"|"OFFSET_UNIT_PERCENT"|"OFFSET_UNIT_PIXEL_FROM_CENTER", positionTopUnit?: "OFFSET_UNIT_PIXEL"|"OFFSET_UNIT_PERCENT"|"OFFSET_UNIT_PIXEL_FROM_CENTER", progressiveServingUrl?: string, pushdown?: bool, pushdownDuration?: float, role?: "PRIMARY"|"BACKUP_IMAGE"|"ADDITIONAL_IMAGE"|"ADDITIONAL_FLASH"|"PARENT_VIDEO"|"TRANSCODED_VIDEO"|"OTHER"|"ALTERNATE_VIDEO"|"PARENT_AUDIO"|"TRANSCODED_AUDIO", size?: record, sslCompliant?: bool, startTimeType?: "ASSET_START_TIME_TYPE_NONE"|"ASSET_START_TIME_TYPE_CUSTOM", streamingServingUrl?: string, transparency?: bool, verticallyLocked?: bool, windowMode?: "OPAQUE"|"WINDOW"|"TRANSPARENT", zIndex?: int, zipFilename?: string, zipFilesize?: string}
+# --creativeAssets item shape: {actionScript3?: bool, active?: bool, additionalSizes?: list, alignment?: "ALIGNMENT_TOP"|"ALIGNMENT_RIGHT"|"ALIGNMENT_BOTTOM"|"ALIGNMENT_LEFT", artworkType?: "ARTWORK_TYPE_FLASH"|"ARTWORK_TYPE_HTML5"|"ARTWORK_TYPE_MIXED"|"ARTWORK_TYPE_IMAGE", assetIdentifier?: record, audioBitRate?: int, audioSampleRate?: int, backupImageExit?: record, bitRate?: int, childAssetType?: "CHILD_ASSET_TYPE_FLASH"|"CHILD_ASSET_TYPE_VIDEO"|"CHILD_ASSET_TYPE_IMAGE"|"CHILD_ASSET_TYPE_DATA", collapsedSize?: record, ... (38 more fields)}
 # --creativeFieldAssignments item shape: {creativeFieldId?: string, creativeFieldValueId?: string}
 # --exitCustomEvents item shape: {advertiserCustomEventId?: string, advertiserCustomEventName?: string, advertiserCustomEventType?: "ADVERTISER_EVENT_TIMER"|"ADVERTISER_EVENT_EXIT"|"ADVERTISER_EVENT_COUNTER", artworkLabel?: string, artworkType?: "ARTWORK_TYPE_FLASH"|"ARTWORK_TYPE_HTML5"|"ARTWORK_TYPE_MIXED"|"ARTWORK_TYPE_IMAGE", exitClickThroughUrl?: record, id?: string, popupWindowProperties?: record, targetType?: "TARGET_BLANK"|"TARGET_TOP"|"TARGET_SELF"|"TARGET_PARENT"|"TARGET_POPUP", videoReportingId?: string}
 # --fsCommand shape: {left?: int, positionOption?: "CENTERED"|"DISTANCE_FROM_TOP_LEFT_CORNER", top?: int, windowHeight?: int, windowWidth?: int}
@@ -3935,7 +3945,7 @@ export def "userprofiles-creatives dfareportingcreativespatch" [
 # --thirdPartyUrls item shape: {thirdPartyUrlType?: "IMPRESSION"|"CLICK_TRACKING"|"VIDEO_START"|"VIDEO_FIRST_QUARTILE"|"VIDEO_MIDPOINT"|"VIDEO_THIRD_QUARTILE"|"VIDEO_COMPLETE"|"VIDEO_MUTE"|"VIDEO_PAUSE"|"VIDEO_REWIND"|"VIDEO_FULLSCREEN"|"VIDEO_STOP"|"VIDEO_CUSTOM"|"SURVEY"|"RICH_MEDIA_IMPRESSION"|"RICH_MEDIA_RM_IMPRESSION"|"RICH_MEDIA_BACKUP_IMPRESSION"|"VIDEO_SKIP"|"VIDEO_PROGRESS", url?: string}
 # --timerCustomEvents item shape: {advertiserCustomEventId?: string, advertiserCustomEventName?: string, advertiserCustomEventType?: "ADVERTISER_EVENT_TIMER"|"ADVERTISER_EVENT_EXIT"|"ADVERTISER_EVENT_COUNTER", artworkLabel?: string, artworkType?: "ARTWORK_TYPE_FLASH"|"ARTWORK_TYPE_HTML5"|"ARTWORK_TYPE_MIXED"|"ARTWORK_TYPE_IMAGE", exitClickThroughUrl?: record, id?: string, popupWindowProperties?: record, targetType?: "TARGET_BLANK"|"TARGET_TOP"|"TARGET_SELF"|"TARGET_PARENT"|"TARGET_POPUP", videoReportingId?: string}
 # --universalAdId shape: {registry?: "OTHER"|"AD_ID_OFFICIAL"|"CLEARCAST"|"DCM", value?: string}
-export def "userprofiles-creatives dfareportingcreativesinsert" [
+export def "userprofiles-creatives create" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3959,7 +3969,7 @@ export def "userprofiles-creatives dfareportingcreativesinsert" [
   --account-id: string # Account ID of this creative. This field, if left unset, will be auto-generated for both insert and update operations. Applicable to all creative types. (format: int64)
   --active: oneof<nothing, bool> # Whether the creative is active. Applicable to all creative types.
   --ad-parameters: string # Ad parameters user for VPAID creative. This is a read-only field. Applicable to the following creative types: all VPAID.
-  --ad-tag-keys: list # Keywords for a Rich Media creative. Keywords let you customize the creative settings of a Rich Media ad running on your site without having to contact the advertiser. You can use keywords to dynamically change the look or functionality of a creative. Applicable to the following creative types: all RICH_MEDIA, and all VPAID.
+  --ad-tag-keys: list<string> # Keywords for a Rich Media creative. Keywords let you customize the creative settings of a Rich Media ad running on your site without having to contact the advertiser. You can use keywords to dynamically change the look or functionality of a creative. Applicable to the following creative types: all RICH_MEDIA, and all VPAID.
   --additional-sizes: list # Additional sizes associated with a responsive creative. When inserting or updating a creative either the size ID field or size width and height fields can be used. Applicable to DISPLAY creatives when the primary asset type is HTML_IMAGE. — item shape: {height?: int, iab?: bool, id?: string, kind?: string, width?: int}
   --advertiser-id: string # Advertiser ID of this creative. This is a required field. Applicable to all creative types. (format: int64)
   --allow-script-access: oneof<nothing, bool> # Whether script access is allowed for this creative. This is a read-only and deprecated field which will automatically be set to true on update. Applicable to the following creative types: FLASH_INPAGE.
@@ -3970,19 +3980,19 @@ export def "userprofiles-creatives dfareportingcreativesinsert" [
   --auto-advance-images: oneof<nothing, bool> # Whether images are automatically advanced for image gallery creatives. Applicable to the following creative types: DISPLAY_IMAGE_GALLERY.
   --background-color: string # The 6-character HTML color code, beginning with #, for the background of the window area where the Flash file is displayed. Default is white. Applicable to the following creative types: FLASH_INPAGE.
   --backup-image-click-through-url: record # Click-through URL — shape: {computedClickThroughUrl?: string, customClickThroughUrl?: string, landingPageId?: string}
-  --backup-image-features: list # List of feature dependencies that will cause a backup image to be served if the browser that serves the ad does not support them. Feature dependencies are features that a browser must be able to support in order to render your HTML5 creative asset correctly. This field is initially auto-generated to contain all features detected by Campaign Manager for all the assets of this creative and can then be modified by the client. To reset this field, copy over all the creativeAssets' detected features. Applicable to the following creative types: HTML5_BANNER. Applicable to DISPLAY when the primary asset type is not HTML_IMAGE.
+  --backup-image-features: list<string> # List of feature dependencies that will cause a backup image to be served if the browser that serves the ad does not support them. Feature dependencies are features that a browser must be able to support in order to render your HTML5 creative asset correctly. This field is initially auto-generated to contain all features detected by Campaign Manager for all the assets of this creative and can then be modified by the client. To reset this field, copy over all the creativeAssets' detected features. Applicable to the following creative types: HTML5_BANNER. Applicable to DISPLAY when the primary asset type is not HTML_IMAGE.
   --backup-image-reporting-label: string # Reporting label used for HTML5 banner backup image. Applicable to the following creative types: DISPLAY when the primary asset type is not HTML_IMAGE.
   --backup-image-target-window: record # Target Window. — shape: {customHtml?: string, targetWindowOption?: "NEW_WINDOW"|"CURRENT_WINDOW"|"CUSTOM"}
   --click-tags: list # Click tags of the creative. For DISPLAY, FLASH_INPAGE, and HTML5_BANNER creatives, this is a subset of detected click tags for the assets associated with this creative. After creating a flash asset, detected click tags will be returned in the creativeAssetMetadata. When inserting the creative, populate the creative clickTags field using the creativeAssetMetadata.clickTags field. For DISPLAY_IMAGE_GALLERY creatives, there should be exactly one entry in this list for each image creative asset. A click tag is matched with a corresponding creative asset by matching the clickTag.name field with the creativeAsset.assetIdentifier.name field. Applicable to the following creative types: DISPLAY_IMAGE_GALLERY, FLASH_INPAGE, HTML5_BANNER. Applicable to DISPLAY when the primary asset type is not HTML_IMAGE. — item shape: {clickThroughUrl?: record, eventName?: string, name?: string}
   --commercial-id: string # Industry standard ID assigned to creative for reach and frequency. Applicable to INSTREAM_VIDEO_REDIRECT creatives.
-  --companion-creatives: list # List of companion creatives assigned to an in-Stream video creative. Acceptable values include IDs of existing flash and image creatives. Applicable to the following creative types: all VPAID, all INSTREAM_AUDIO and all INSTREAM_VIDEO with dynamicAssetSelection set to false.
-  --compatibility: list # Compatibilities associated with this creative. This is a read-only field. DISPLAY and DISPLAY_INTERSTITIAL refer to rendering either on desktop or on mobile devices or in mobile apps for regular or interstitial ads, respectively. APP and APP_INTERSTITIAL are for rendering in mobile apps. Only pre-existing creatives may have these compatibilities since new creatives will either be assigned DISPLAY or DISPLAY_INTERSTITIAL instead. IN_STREAM_VIDEO refers to rendering in in-stream video ads developed with the VAST standard. IN_STREAM_AUDIO refers to rendering in in-stream audio ads developed with the VAST standard. Applicable to all creative types. Acceptable values are: - "APP" - "APP_INTERSTITIAL" - "IN_STREAM_VIDEO" - "IN_STREAM_AUDIO" - "DISPLAY" - "DISPLAY_INTERSTITIAL" 
+  --companion-creatives: list<string> # List of companion creatives assigned to an in-Stream video creative. Acceptable values include IDs of existing flash and image creatives. Applicable to the following creative types: all VPAID, all INSTREAM_AUDIO and all INSTREAM_VIDEO with dynamicAssetSelection set to false.
+  --compatibility: list<string> # Compatibilities associated with this creative. This is a read-only field. DISPLAY and DISPLAY_INTERSTITIAL refer to rendering either on desktop or on mobile devices or in mobile apps for regular or interstitial ads, respectively. APP and APP_INTERSTITIAL are for rendering in mobile apps. Only pre-existing creatives may have these compatibilities since new creatives will either be assigned DISPLAY or DISPLAY_INTERSTITIAL instead. IN_STREAM_VIDEO refers to rendering in in-stream video ads developed with the VAST standard. IN_STREAM_AUDIO refers to rendering in in-stream audio ads developed with the VAST standard. Applicable to all creative types. Acceptable values are: - "APP" - "APP_INTERSTITIAL" - "IN_STREAM_VIDEO" - "IN_STREAM_AUDIO" - "DISPLAY" - "DISPLAY_INTERSTITIAL"
   --convert-flash-to-html5: oneof<nothing, bool> # Whether Flash assets associated with the creative need to be automatically converted to HTML5. This flag is enabled by default and users can choose to disable it if they don't want the system to generate and use HTML5 asset for this creative. Applicable to the following creative type: FLASH_INPAGE. Applicable to DISPLAY when the primary asset type is not HTML_IMAGE.
   --counter-custom-events: list # List of counter events configured for the creative. For DISPLAY_IMAGE_GALLERY creatives, these are read-only and auto-generated from clickTags. Applicable to the following creative types: DISPLAY_IMAGE_GALLERY, all RICH_MEDIA, and all VPAID. — item shape: {advertiserCustomEventId?: string, advertiserCustomEventName?: string, advertiserCustomEventType?: "ADVERTISER_EVENT_TIMER"|"ADVERTISER_EVENT_EXIT"|"ADVERTISER_EVENT_COUNTER", artworkLabel?: string, artworkType?: "ARTWORK_TYPE_FLASH"|"ARTWORK_TYPE_HTML5"|"ARTWORK_TYPE_MIXED"|"ARTWORK_TYPE_IMAGE", exitClickThroughUrl?: record, id?: string, popupWindowProperties?: record, targetType?: "TARGET_BLANK"|"TARGET_TOP"|"TARGET_SELF"|"TARGET_PARENT"|"TARGET_POPUP", videoReportingId?: string}
   --creative-asset-selection: record # Encapsulates the list of rules for asset selection and a default asset in case none of the rules match. Applicable to INSTREAM_VIDEO creatives. — shape: {defaultAssetId?: string, rules?: list}
-  --creative-assets: list # Assets associated with a creative. Applicable to all but the following creative types: INTERNAL_REDIRECT, INTERSTITIAL_INTERNAL_REDIRECT, and REDIRECT — item shape: {actionScript3?: bool, active?: bool, additionalSizes?: list, alignment?: "ALIGNMENT_TOP"|"ALIGNMENT_RIGHT"|"ALIGNMENT_BOTTOM"|"ALIGNMENT_LEFT", artworkType?: "ARTWORK_TYPE_FLASH"|"ARTWORK_TYPE_HTML5"|"ARTWORK_TYPE_MIXED"|"ARTWORK_TYPE_IMAGE", assetIdentifier?: record, audioBitRate?: int, audioSampleRate?: int, backupImageExit?: record, bitRate?: int, childAssetType?: "CHILD_ASSET_TYPE_FLASH"|"CHILD_ASSET_TYPE_VIDEO"|"CHILD_ASSET_TYPE_IMAGE"|"CHILD_ASSET_TYPE_DATA", collapsedSize?: record, companionCreativeIds?: list, customStartTimeValue?: int, detectedFeatures?: list, displayType?: "ASSET_DISPLAY_TYPE_INPAGE"|"ASSET_DISPLAY_TYPE_FLOATING"|"ASSET_DISPLAY_TYPE_OVERLAY"|"ASSET_DISPLAY_TYPE_EXPANDING"|"ASSET_DISPLAY_TYPE_FLASH_IN_FLASH"|"ASSET_DISPLAY_TYPE_FLASH_IN_FLASH_EXPANDING"|"ASSET_DISPLAY_TYPE_PEEL_DOWN"|"ASSET_DISPLAY_TYPE_VPAID_LINEAR"|"ASSET_DISPLAY_TYPE_VPAID_NON_LINEAR"|"ASSET_DISPLAY_TYPE_BACKDROP", duration?: int, durationType?: "ASSET_DURATION_TYPE_AUTO"|"ASSET_DURATION_TYPE_NONE"|"ASSET_DURATION_TYPE_CUSTOM", expandedDimension?: record, fileSize?: string, flashVersion?: int, frameRate?: float, hideFlashObjects?: bool, hideSelectionBoxes?: bool, horizontallyLocked?: bool, id?: string, idDimensionValue?: record, mediaDuration?: float, mimeType?: string, offset?: record, orientation?: "LANDSCAPE"|"PORTRAIT"|"SQUARE", originalBackup?: bool, politeLoad?: bool, position?: record, positionLeftUnit?: "OFFSET_UNIT_PIXEL"|"OFFSET_UNIT_PERCENT"|"OFFSET_UNIT_PIXEL_FROM_CENTER", positionTopUnit?: "OFFSET_UNIT_PIXEL"|"OFFSET_UNIT_PERCENT"|"OFFSET_UNIT_PIXEL_FROM_CENTER", progressiveServingUrl?: string, pushdown?: bool, pushdownDuration?: float, role?: "PRIMARY"|"BACKUP_IMAGE"|"ADDITIONAL_IMAGE"|"ADDITIONAL_FLASH"|"PARENT_VIDEO"|"TRANSCODED_VIDEO"|"OTHER"|"ALTERNATE_VIDEO"|"PARENT_AUDIO"|"TRANSCODED_AUDIO", size?: record, sslCompliant?: bool, startTimeType?: "ASSET_START_TIME_TYPE_NONE"|"ASSET_START_TIME_TYPE_CUSTOM", streamingServingUrl?: string, transparency?: bool, verticallyLocked?: bool, windowMode?: "OPAQUE"|"WINDOW"|"TRANSPARENT", zIndex?: int, zipFilename?: string, zipFilesize?: string}
+  --creative-assets: list # Assets associated with a creative. Applicable to all but the following creative types: INTERNAL_REDIRECT, INTERSTITIAL_INTERNAL_REDIRECT, and REDIRECT — item shape: {actionScript3?: bool, active?: bool, additionalSizes?: list, alignment?: "ALIGNMENT_TOP"|"ALIGNMENT_RIGHT"|"ALIGNMENT_BOTTOM"|"ALIGNMENT_LEFT", artworkType?: "ARTWORK_TYPE_FLASH"|"ARTWORK_TYPE_HTML5"|"ARTWORK_TYPE_MIXED"|"ARTWORK_TYPE_IMAGE", assetIdentifier?: record, audioBitRate?: int, audioSampleRate?: int, backupImageExit?: record, bitRate?: int, childAssetType?: "CHILD_ASSET_TYPE_FLASH"|"CHILD_ASSET_TYPE_VIDEO"|"CHILD_ASSET_TYPE_IMAGE"|"CHILD_ASSET_TYPE_DATA", collapsedSize?: record, ... (38 more fields)}
   --creative-field-assignments: list # Creative field assignments for this creative. Applicable to all creative types. — item shape: {creativeFieldId?: string, creativeFieldValueId?: string}
-  --custom-key-values: list # Custom key-values for a Rich Media creative. Key-values let you customize the creative settings of a Rich Media ad running on your site without having to contact the advertiser. You can use key-values to dynamically change the look or functionality of a creative. Applicable to the following creative types: all RICH_MEDIA, and all VPAID.
+  --custom-key-values: list<string> # Custom key-values for a Rich Media creative. Key-values let you customize the creative settings of a Rich Media ad running on your site without having to contact the advertiser. You can use key-values to dynamically change the look or functionality of a creative. Applicable to the following creative types: all RICH_MEDIA, and all VPAID.
   --dynamic-asset-selection: oneof<nothing, bool> # Set this to true to enable the use of rules to target individual assets in this creative. When set to true creativeAssetSelection must be set. This also controls asset-level companions. When this is true, companion creatives should be assigned to creative assets. Learn more. Applicable to INSTREAM_VIDEO creatives.
   --exit-custom-events: list # List of exit events configured for the creative. For DISPLAY and DISPLAY_IMAGE_GALLERY creatives, these are read-only and auto-generated from clickTags, For DISPLAY, an event is also created from the backupImageReportingLabel. Applicable to the following creative types: DISPLAY_IMAGE_GALLERY, all RICH_MEDIA, and all VPAID. Applicable to DISPLAY when the primary asset type is not HTML_IMAGE. — item shape: {advertiserCustomEventId?: string, advertiserCustomEventName?: string, advertiserCustomEventType?: "ADVERTISER_EVENT_TIMER"|"ADVERTISER_EVENT_EXIT"|"ADVERTISER_EVENT_COUNTER", artworkLabel?: string, artworkType?: "ARTWORK_TYPE_FLASH"|"ARTWORK_TYPE_HTML5"|"ARTWORK_TYPE_MIXED"|"ARTWORK_TYPE_IMAGE", exitClickThroughUrl?: record, id?: string, popupWindowProperties?: record, targetType?: "TARGET_BLANK"|"TARGET_TOP"|"TARGET_SELF"|"TARGET_PARENT"|"TARGET_POPUP", videoReportingId?: string}
   --fs-command: record # FsCommand. — shape: {left?: int, positionOption?: "CENTERED"|"DISTANCE_FROM_TOP_LEFT_CORNER", top?: int, windowHeight?: int, windowWidth?: int}
@@ -4026,12 +4036,12 @@ export def "userprofiles-creatives dfareportingcreativesinsert" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/creatives") $qp)
-  let body = {"accountId": $account_id, "active": $active, "adParameters": $ad_parameters, "adTagKeys": $ad_tag_keys, "additionalSizes": $additional_sizes, "advertiserId": $advertiser_id, "allowScriptAccess": $allow_script_access, "archived": $archived, "artworkType": $artwork_type, "authoringSource": $authoring_source, "authoringTool": $authoring_tool, "autoAdvanceImages": $auto_advance_images, "backgroundColor": $background_color, "backupImageClickThroughUrl": $backup_image_click_through_url, "backupImageFeatures": $backup_image_features, "backupImageReportingLabel": $backup_image_reporting_label, "backupImageTargetWindow": $backup_image_target_window, "clickTags": $click_tags, "commercialId": $commercial_id, "companionCreatives": $companion_creatives, "compatibility": $compatibility, "convertFlashToHtml5": $convert_flash_to_html5, "counterCustomEvents": $counter_custom_events, "creativeAssetSelection": $creative_asset_selection, "creativeAssets": $creative_assets, "creativeFieldAssignments": $creative_field_assignments, "customKeyValues": $custom_key_values, "dynamicAssetSelection": $dynamic_asset_selection, "exitCustomEvents": $exit_custom_events, "fsCommand": $fs_command, "htmlCode": $html_code, "htmlCodeLocked": $html_code_locked, "id": $id, "idDimensionValue": $id_dimension_value, "kind": $kind, "lastModifiedInfo": $last_modified_info, "latestTraffickedCreativeId": $latest_trafficked_creative_id, "mediaDescription": $media_description, "mediaDuration": $media_duration, "name": $name, "obaIcon": $oba_icon, "overrideCss": $override_css, "progressOffset": $progress_offset, "redirectUrl": $redirect_url, "renderingId": $rendering_id, "renderingIdDimensionValue": $rendering_id_dimension_value, "requiredFlashPluginVersion": $required_flash_plugin_version, "requiredFlashVersion": $required_flash_version, "size": $size, "skipOffset": $skip_offset, "skippable": $skippable, "sslCompliant": $ssl_compliant, "sslOverride": $ssl_override, "studioAdvertiserId": $studio_advertiser_id, "studioCreativeId": $studio_creative_id, "studioTraffickedCreativeId": $studio_trafficked_creative_id, "subaccountId": $subaccount_id, "thirdPartyBackupImageImpressionsUrl": $third_party_backup_image_impressions_url, "thirdPartyRichMediaImpressionsUrl": $third_party_rich_media_impressions_url, "thirdPartyUrls": $third_party_urls, "timerCustomEvents": $timer_custom_events, "totalFileSize": $total_file_size, "type": $type, "universalAdId": $universal_ad_id, "version": $version} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/creatives") $qp)
+  let req_body = {"accountId": $account_id, "active": $active, "adParameters": $ad_parameters, "adTagKeys": $ad_tag_keys, "additionalSizes": $additional_sizes, "advertiserId": $advertiser_id, "allowScriptAccess": $allow_script_access, "archived": $archived, "artworkType": $artwork_type, "authoringSource": $authoring_source, "authoringTool": $authoring_tool, "autoAdvanceImages": $auto_advance_images, "backgroundColor": $background_color, "backupImageClickThroughUrl": $backup_image_click_through_url, "backupImageFeatures": $backup_image_features, "backupImageReportingLabel": $backup_image_reporting_label, "backupImageTargetWindow": $backup_image_target_window, "clickTags": $click_tags, "commercialId": $commercial_id, "companionCreatives": $companion_creatives, "compatibility": $compatibility, "convertFlashToHtml5": $convert_flash_to_html5, "counterCustomEvents": $counter_custom_events, "creativeAssetSelection": $creative_asset_selection, "creativeAssets": $creative_assets, "creativeFieldAssignments": $creative_field_assignments, "customKeyValues": $custom_key_values, "dynamicAssetSelection": $dynamic_asset_selection, "exitCustomEvents": $exit_custom_events, "fsCommand": $fs_command, "htmlCode": $html_code, "htmlCodeLocked": $html_code_locked, "id": $id, "idDimensionValue": $id_dimension_value, "kind": $kind, "lastModifiedInfo": $last_modified_info, "latestTraffickedCreativeId": $latest_trafficked_creative_id, "mediaDescription": $media_description, "mediaDuration": $media_duration, "name": $name, "obaIcon": $oba_icon, "overrideCss": $override_css, "progressOffset": $progress_offset, "redirectUrl": $redirect_url, "renderingId": $rendering_id, "renderingIdDimensionValue": $rendering_id_dimension_value, "requiredFlashPluginVersion": $required_flash_plugin_version, "requiredFlashVersion": $required_flash_version, "size": $size, "skipOffset": $skip_offset, "skippable": $skippable, "sslCompliant": $ssl_compliant, "sslOverride": $ssl_override, "studioAdvertiserId": $studio_advertiser_id, "studioCreativeId": $studio_creative_id, "studioTraffickedCreativeId": $studio_trafficked_creative_id, "subaccountId": $subaccount_id, "thirdPartyBackupImageImpressionsUrl": $third_party_backup_image_impressions_url, "thirdPartyRichMediaImpressionsUrl": $third_party_rich_media_impressions_url, "thirdPartyUrls": $third_party_urls, "timerCustomEvents": $timer_custom_events, "totalFileSize": $total_file_size, "type": $type, "universalAdId": $universal_ad_id, "version": $version} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates an existing creative.
@@ -4044,7 +4054,7 @@ export def "userprofiles-creatives dfareportingcreativesinsert" [
 # --clickTags item shape: {clickThroughUrl?: record, eventName?: string, name?: string}
 # --counterCustomEvents item shape: {advertiserCustomEventId?: string, advertiserCustomEventName?: string, advertiserCustomEventType?: "ADVERTISER_EVENT_TIMER"|"ADVERTISER_EVENT_EXIT"|"ADVERTISER_EVENT_COUNTER", artworkLabel?: string, artworkType?: "ARTWORK_TYPE_FLASH"|"ARTWORK_TYPE_HTML5"|"ARTWORK_TYPE_MIXED"|"ARTWORK_TYPE_IMAGE", exitClickThroughUrl?: record, id?: string, popupWindowProperties?: record, targetType?: "TARGET_BLANK"|"TARGET_TOP"|"TARGET_SELF"|"TARGET_PARENT"|"TARGET_POPUP", videoReportingId?: string}
 # --creativeAssetSelection shape: {defaultAssetId?: string, rules?: list}
-# --creativeAssets item shape: {actionScript3?: bool, active?: bool, additionalSizes?: list, alignment?: "ALIGNMENT_TOP"|"ALIGNMENT_RIGHT"|"ALIGNMENT_BOTTOM"|"ALIGNMENT_LEFT", artworkType?: "ARTWORK_TYPE_FLASH"|"ARTWORK_TYPE_HTML5"|"ARTWORK_TYPE_MIXED"|"ARTWORK_TYPE_IMAGE", assetIdentifier?: record, audioBitRate?: int, audioSampleRate?: int, backupImageExit?: record, bitRate?: int, childAssetType?: "CHILD_ASSET_TYPE_FLASH"|"CHILD_ASSET_TYPE_VIDEO"|"CHILD_ASSET_TYPE_IMAGE"|"CHILD_ASSET_TYPE_DATA", collapsedSize?: record, companionCreativeIds?: list, customStartTimeValue?: int, detectedFeatures?: list, displayType?: "ASSET_DISPLAY_TYPE_INPAGE"|"ASSET_DISPLAY_TYPE_FLOATING"|"ASSET_DISPLAY_TYPE_OVERLAY"|"ASSET_DISPLAY_TYPE_EXPANDING"|"ASSET_DISPLAY_TYPE_FLASH_IN_FLASH"|"ASSET_DISPLAY_TYPE_FLASH_IN_FLASH_EXPANDING"|"ASSET_DISPLAY_TYPE_PEEL_DOWN"|"ASSET_DISPLAY_TYPE_VPAID_LINEAR"|"ASSET_DISPLAY_TYPE_VPAID_NON_LINEAR"|"ASSET_DISPLAY_TYPE_BACKDROP", duration?: int, durationType?: "ASSET_DURATION_TYPE_AUTO"|"ASSET_DURATION_TYPE_NONE"|"ASSET_DURATION_TYPE_CUSTOM", expandedDimension?: record, fileSize?: string, flashVersion?: int, frameRate?: float, hideFlashObjects?: bool, hideSelectionBoxes?: bool, horizontallyLocked?: bool, id?: string, idDimensionValue?: record, mediaDuration?: float, mimeType?: string, offset?: record, orientation?: "LANDSCAPE"|"PORTRAIT"|"SQUARE", originalBackup?: bool, politeLoad?: bool, position?: record, positionLeftUnit?: "OFFSET_UNIT_PIXEL"|"OFFSET_UNIT_PERCENT"|"OFFSET_UNIT_PIXEL_FROM_CENTER", positionTopUnit?: "OFFSET_UNIT_PIXEL"|"OFFSET_UNIT_PERCENT"|"OFFSET_UNIT_PIXEL_FROM_CENTER", progressiveServingUrl?: string, pushdown?: bool, pushdownDuration?: float, role?: "PRIMARY"|"BACKUP_IMAGE"|"ADDITIONAL_IMAGE"|"ADDITIONAL_FLASH"|"PARENT_VIDEO"|"TRANSCODED_VIDEO"|"OTHER"|"ALTERNATE_VIDEO"|"PARENT_AUDIO"|"TRANSCODED_AUDIO", size?: record, sslCompliant?: bool, startTimeType?: "ASSET_START_TIME_TYPE_NONE"|"ASSET_START_TIME_TYPE_CUSTOM", streamingServingUrl?: string, transparency?: bool, verticallyLocked?: bool, windowMode?: "OPAQUE"|"WINDOW"|"TRANSPARENT", zIndex?: int, zipFilename?: string, zipFilesize?: string}
+# --creativeAssets item shape: {actionScript3?: bool, active?: bool, additionalSizes?: list, alignment?: "ALIGNMENT_TOP"|"ALIGNMENT_RIGHT"|"ALIGNMENT_BOTTOM"|"ALIGNMENT_LEFT", artworkType?: "ARTWORK_TYPE_FLASH"|"ARTWORK_TYPE_HTML5"|"ARTWORK_TYPE_MIXED"|"ARTWORK_TYPE_IMAGE", assetIdentifier?: record, audioBitRate?: int, audioSampleRate?: int, backupImageExit?: record, bitRate?: int, childAssetType?: "CHILD_ASSET_TYPE_FLASH"|"CHILD_ASSET_TYPE_VIDEO"|"CHILD_ASSET_TYPE_IMAGE"|"CHILD_ASSET_TYPE_DATA", collapsedSize?: record, ... (38 more fields)}
 # --creativeFieldAssignments item shape: {creativeFieldId?: string, creativeFieldValueId?: string}
 # --exitCustomEvents item shape: {advertiserCustomEventId?: string, advertiserCustomEventName?: string, advertiserCustomEventType?: "ADVERTISER_EVENT_TIMER"|"ADVERTISER_EVENT_EXIT"|"ADVERTISER_EVENT_COUNTER", artworkLabel?: string, artworkType?: "ARTWORK_TYPE_FLASH"|"ARTWORK_TYPE_HTML5"|"ARTWORK_TYPE_MIXED"|"ARTWORK_TYPE_IMAGE", exitClickThroughUrl?: record, id?: string, popupWindowProperties?: record, targetType?: "TARGET_BLANK"|"TARGET_TOP"|"TARGET_SELF"|"TARGET_PARENT"|"TARGET_POPUP", videoReportingId?: string}
 # --fsCommand shape: {left?: int, positionOption?: "CENTERED"|"DISTANCE_FROM_TOP_LEFT_CORNER", top?: int, windowHeight?: int, windowWidth?: int}
@@ -4058,7 +4068,7 @@ export def "userprofiles-creatives dfareportingcreativesinsert" [
 # --thirdPartyUrls item shape: {thirdPartyUrlType?: "IMPRESSION"|"CLICK_TRACKING"|"VIDEO_START"|"VIDEO_FIRST_QUARTILE"|"VIDEO_MIDPOINT"|"VIDEO_THIRD_QUARTILE"|"VIDEO_COMPLETE"|"VIDEO_MUTE"|"VIDEO_PAUSE"|"VIDEO_REWIND"|"VIDEO_FULLSCREEN"|"VIDEO_STOP"|"VIDEO_CUSTOM"|"SURVEY"|"RICH_MEDIA_IMPRESSION"|"RICH_MEDIA_RM_IMPRESSION"|"RICH_MEDIA_BACKUP_IMPRESSION"|"VIDEO_SKIP"|"VIDEO_PROGRESS", url?: string}
 # --timerCustomEvents item shape: {advertiserCustomEventId?: string, advertiserCustomEventName?: string, advertiserCustomEventType?: "ADVERTISER_EVENT_TIMER"|"ADVERTISER_EVENT_EXIT"|"ADVERTISER_EVENT_COUNTER", artworkLabel?: string, artworkType?: "ARTWORK_TYPE_FLASH"|"ARTWORK_TYPE_HTML5"|"ARTWORK_TYPE_MIXED"|"ARTWORK_TYPE_IMAGE", exitClickThroughUrl?: record, id?: string, popupWindowProperties?: record, targetType?: "TARGET_BLANK"|"TARGET_TOP"|"TARGET_SELF"|"TARGET_PARENT"|"TARGET_POPUP", videoReportingId?: string}
 # --universalAdId shape: {registry?: "OTHER"|"AD_ID_OFFICIAL"|"CLEARCAST"|"DCM", value?: string}
-export def "userprofiles-creatives dfareportingcreativesupdate" [
+export def "userprofiles-creatives update-by-profileId-1" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4082,7 +4092,7 @@ export def "userprofiles-creatives dfareportingcreativesupdate" [
   --account-id: string # Account ID of this creative. This field, if left unset, will be auto-generated for both insert and update operations. Applicable to all creative types. (format: int64)
   --active: oneof<nothing, bool> # Whether the creative is active. Applicable to all creative types.
   --ad-parameters: string # Ad parameters user for VPAID creative. This is a read-only field. Applicable to the following creative types: all VPAID.
-  --ad-tag-keys: list # Keywords for a Rich Media creative. Keywords let you customize the creative settings of a Rich Media ad running on your site without having to contact the advertiser. You can use keywords to dynamically change the look or functionality of a creative. Applicable to the following creative types: all RICH_MEDIA, and all VPAID.
+  --ad-tag-keys: list<string> # Keywords for a Rich Media creative. Keywords let you customize the creative settings of a Rich Media ad running on your site without having to contact the advertiser. You can use keywords to dynamically change the look or functionality of a creative. Applicable to the following creative types: all RICH_MEDIA, and all VPAID.
   --additional-sizes: list # Additional sizes associated with a responsive creative. When inserting or updating a creative either the size ID field or size width and height fields can be used. Applicable to DISPLAY creatives when the primary asset type is HTML_IMAGE. — item shape: {height?: int, iab?: bool, id?: string, kind?: string, width?: int}
   --advertiser-id: string # Advertiser ID of this creative. This is a required field. Applicable to all creative types. (format: int64)
   --allow-script-access: oneof<nothing, bool> # Whether script access is allowed for this creative. This is a read-only and deprecated field which will automatically be set to true on update. Applicable to the following creative types: FLASH_INPAGE.
@@ -4093,19 +4103,19 @@ export def "userprofiles-creatives dfareportingcreativesupdate" [
   --auto-advance-images: oneof<nothing, bool> # Whether images are automatically advanced for image gallery creatives. Applicable to the following creative types: DISPLAY_IMAGE_GALLERY.
   --background-color: string # The 6-character HTML color code, beginning with #, for the background of the window area where the Flash file is displayed. Default is white. Applicable to the following creative types: FLASH_INPAGE.
   --backup-image-click-through-url: record # Click-through URL — shape: {computedClickThroughUrl?: string, customClickThroughUrl?: string, landingPageId?: string}
-  --backup-image-features: list # List of feature dependencies that will cause a backup image to be served if the browser that serves the ad does not support them. Feature dependencies are features that a browser must be able to support in order to render your HTML5 creative asset correctly. This field is initially auto-generated to contain all features detected by Campaign Manager for all the assets of this creative and can then be modified by the client. To reset this field, copy over all the creativeAssets' detected features. Applicable to the following creative types: HTML5_BANNER. Applicable to DISPLAY when the primary asset type is not HTML_IMAGE.
+  --backup-image-features: list<string> # List of feature dependencies that will cause a backup image to be served if the browser that serves the ad does not support them. Feature dependencies are features that a browser must be able to support in order to render your HTML5 creative asset correctly. This field is initially auto-generated to contain all features detected by Campaign Manager for all the assets of this creative and can then be modified by the client. To reset this field, copy over all the creativeAssets' detected features. Applicable to the following creative types: HTML5_BANNER. Applicable to DISPLAY when the primary asset type is not HTML_IMAGE.
   --backup-image-reporting-label: string # Reporting label used for HTML5 banner backup image. Applicable to the following creative types: DISPLAY when the primary asset type is not HTML_IMAGE.
   --backup-image-target-window: record # Target Window. — shape: {customHtml?: string, targetWindowOption?: "NEW_WINDOW"|"CURRENT_WINDOW"|"CUSTOM"}
   --click-tags: list # Click tags of the creative. For DISPLAY, FLASH_INPAGE, and HTML5_BANNER creatives, this is a subset of detected click tags for the assets associated with this creative. After creating a flash asset, detected click tags will be returned in the creativeAssetMetadata. When inserting the creative, populate the creative clickTags field using the creativeAssetMetadata.clickTags field. For DISPLAY_IMAGE_GALLERY creatives, there should be exactly one entry in this list for each image creative asset. A click tag is matched with a corresponding creative asset by matching the clickTag.name field with the creativeAsset.assetIdentifier.name field. Applicable to the following creative types: DISPLAY_IMAGE_GALLERY, FLASH_INPAGE, HTML5_BANNER. Applicable to DISPLAY when the primary asset type is not HTML_IMAGE. — item shape: {clickThroughUrl?: record, eventName?: string, name?: string}
   --commercial-id: string # Industry standard ID assigned to creative for reach and frequency. Applicable to INSTREAM_VIDEO_REDIRECT creatives.
-  --companion-creatives: list # List of companion creatives assigned to an in-Stream video creative. Acceptable values include IDs of existing flash and image creatives. Applicable to the following creative types: all VPAID, all INSTREAM_AUDIO and all INSTREAM_VIDEO with dynamicAssetSelection set to false.
-  --compatibility: list # Compatibilities associated with this creative. This is a read-only field. DISPLAY and DISPLAY_INTERSTITIAL refer to rendering either on desktop or on mobile devices or in mobile apps for regular or interstitial ads, respectively. APP and APP_INTERSTITIAL are for rendering in mobile apps. Only pre-existing creatives may have these compatibilities since new creatives will either be assigned DISPLAY or DISPLAY_INTERSTITIAL instead. IN_STREAM_VIDEO refers to rendering in in-stream video ads developed with the VAST standard. IN_STREAM_AUDIO refers to rendering in in-stream audio ads developed with the VAST standard. Applicable to all creative types. Acceptable values are: - "APP" - "APP_INTERSTITIAL" - "IN_STREAM_VIDEO" - "IN_STREAM_AUDIO" - "DISPLAY" - "DISPLAY_INTERSTITIAL" 
+  --companion-creatives: list<string> # List of companion creatives assigned to an in-Stream video creative. Acceptable values include IDs of existing flash and image creatives. Applicable to the following creative types: all VPAID, all INSTREAM_AUDIO and all INSTREAM_VIDEO with dynamicAssetSelection set to false.
+  --compatibility: list<string> # Compatibilities associated with this creative. This is a read-only field. DISPLAY and DISPLAY_INTERSTITIAL refer to rendering either on desktop or on mobile devices or in mobile apps for regular or interstitial ads, respectively. APP and APP_INTERSTITIAL are for rendering in mobile apps. Only pre-existing creatives may have these compatibilities since new creatives will either be assigned DISPLAY or DISPLAY_INTERSTITIAL instead. IN_STREAM_VIDEO refers to rendering in in-stream video ads developed with the VAST standard. IN_STREAM_AUDIO refers to rendering in in-stream audio ads developed with the VAST standard. Applicable to all creative types. Acceptable values are: - "APP" - "APP_INTERSTITIAL" - "IN_STREAM_VIDEO" - "IN_STREAM_AUDIO" - "DISPLAY" - "DISPLAY_INTERSTITIAL"
   --convert-flash-to-html5: oneof<nothing, bool> # Whether Flash assets associated with the creative need to be automatically converted to HTML5. This flag is enabled by default and users can choose to disable it if they don't want the system to generate and use HTML5 asset for this creative. Applicable to the following creative type: FLASH_INPAGE. Applicable to DISPLAY when the primary asset type is not HTML_IMAGE.
   --counter-custom-events: list # List of counter events configured for the creative. For DISPLAY_IMAGE_GALLERY creatives, these are read-only and auto-generated from clickTags. Applicable to the following creative types: DISPLAY_IMAGE_GALLERY, all RICH_MEDIA, and all VPAID. — item shape: {advertiserCustomEventId?: string, advertiserCustomEventName?: string, advertiserCustomEventType?: "ADVERTISER_EVENT_TIMER"|"ADVERTISER_EVENT_EXIT"|"ADVERTISER_EVENT_COUNTER", artworkLabel?: string, artworkType?: "ARTWORK_TYPE_FLASH"|"ARTWORK_TYPE_HTML5"|"ARTWORK_TYPE_MIXED"|"ARTWORK_TYPE_IMAGE", exitClickThroughUrl?: record, id?: string, popupWindowProperties?: record, targetType?: "TARGET_BLANK"|"TARGET_TOP"|"TARGET_SELF"|"TARGET_PARENT"|"TARGET_POPUP", videoReportingId?: string}
   --creative-asset-selection: record # Encapsulates the list of rules for asset selection and a default asset in case none of the rules match. Applicable to INSTREAM_VIDEO creatives. — shape: {defaultAssetId?: string, rules?: list}
-  --creative-assets: list # Assets associated with a creative. Applicable to all but the following creative types: INTERNAL_REDIRECT, INTERSTITIAL_INTERNAL_REDIRECT, and REDIRECT — item shape: {actionScript3?: bool, active?: bool, additionalSizes?: list, alignment?: "ALIGNMENT_TOP"|"ALIGNMENT_RIGHT"|"ALIGNMENT_BOTTOM"|"ALIGNMENT_LEFT", artworkType?: "ARTWORK_TYPE_FLASH"|"ARTWORK_TYPE_HTML5"|"ARTWORK_TYPE_MIXED"|"ARTWORK_TYPE_IMAGE", assetIdentifier?: record, audioBitRate?: int, audioSampleRate?: int, backupImageExit?: record, bitRate?: int, childAssetType?: "CHILD_ASSET_TYPE_FLASH"|"CHILD_ASSET_TYPE_VIDEO"|"CHILD_ASSET_TYPE_IMAGE"|"CHILD_ASSET_TYPE_DATA", collapsedSize?: record, companionCreativeIds?: list, customStartTimeValue?: int, detectedFeatures?: list, displayType?: "ASSET_DISPLAY_TYPE_INPAGE"|"ASSET_DISPLAY_TYPE_FLOATING"|"ASSET_DISPLAY_TYPE_OVERLAY"|"ASSET_DISPLAY_TYPE_EXPANDING"|"ASSET_DISPLAY_TYPE_FLASH_IN_FLASH"|"ASSET_DISPLAY_TYPE_FLASH_IN_FLASH_EXPANDING"|"ASSET_DISPLAY_TYPE_PEEL_DOWN"|"ASSET_DISPLAY_TYPE_VPAID_LINEAR"|"ASSET_DISPLAY_TYPE_VPAID_NON_LINEAR"|"ASSET_DISPLAY_TYPE_BACKDROP", duration?: int, durationType?: "ASSET_DURATION_TYPE_AUTO"|"ASSET_DURATION_TYPE_NONE"|"ASSET_DURATION_TYPE_CUSTOM", expandedDimension?: record, fileSize?: string, flashVersion?: int, frameRate?: float, hideFlashObjects?: bool, hideSelectionBoxes?: bool, horizontallyLocked?: bool, id?: string, idDimensionValue?: record, mediaDuration?: float, mimeType?: string, offset?: record, orientation?: "LANDSCAPE"|"PORTRAIT"|"SQUARE", originalBackup?: bool, politeLoad?: bool, position?: record, positionLeftUnit?: "OFFSET_UNIT_PIXEL"|"OFFSET_UNIT_PERCENT"|"OFFSET_UNIT_PIXEL_FROM_CENTER", positionTopUnit?: "OFFSET_UNIT_PIXEL"|"OFFSET_UNIT_PERCENT"|"OFFSET_UNIT_PIXEL_FROM_CENTER", progressiveServingUrl?: string, pushdown?: bool, pushdownDuration?: float, role?: "PRIMARY"|"BACKUP_IMAGE"|"ADDITIONAL_IMAGE"|"ADDITIONAL_FLASH"|"PARENT_VIDEO"|"TRANSCODED_VIDEO"|"OTHER"|"ALTERNATE_VIDEO"|"PARENT_AUDIO"|"TRANSCODED_AUDIO", size?: record, sslCompliant?: bool, startTimeType?: "ASSET_START_TIME_TYPE_NONE"|"ASSET_START_TIME_TYPE_CUSTOM", streamingServingUrl?: string, transparency?: bool, verticallyLocked?: bool, windowMode?: "OPAQUE"|"WINDOW"|"TRANSPARENT", zIndex?: int, zipFilename?: string, zipFilesize?: string}
+  --creative-assets: list # Assets associated with a creative. Applicable to all but the following creative types: INTERNAL_REDIRECT, INTERSTITIAL_INTERNAL_REDIRECT, and REDIRECT — item shape: {actionScript3?: bool, active?: bool, additionalSizes?: list, alignment?: "ALIGNMENT_TOP"|"ALIGNMENT_RIGHT"|"ALIGNMENT_BOTTOM"|"ALIGNMENT_LEFT", artworkType?: "ARTWORK_TYPE_FLASH"|"ARTWORK_TYPE_HTML5"|"ARTWORK_TYPE_MIXED"|"ARTWORK_TYPE_IMAGE", assetIdentifier?: record, audioBitRate?: int, audioSampleRate?: int, backupImageExit?: record, bitRate?: int, childAssetType?: "CHILD_ASSET_TYPE_FLASH"|"CHILD_ASSET_TYPE_VIDEO"|"CHILD_ASSET_TYPE_IMAGE"|"CHILD_ASSET_TYPE_DATA", collapsedSize?: record, ... (38 more fields)}
   --creative-field-assignments: list # Creative field assignments for this creative. Applicable to all creative types. — item shape: {creativeFieldId?: string, creativeFieldValueId?: string}
-  --custom-key-values: list # Custom key-values for a Rich Media creative. Key-values let you customize the creative settings of a Rich Media ad running on your site without having to contact the advertiser. You can use key-values to dynamically change the look or functionality of a creative. Applicable to the following creative types: all RICH_MEDIA, and all VPAID.
+  --custom-key-values: list<string> # Custom key-values for a Rich Media creative. Key-values let you customize the creative settings of a Rich Media ad running on your site without having to contact the advertiser. You can use key-values to dynamically change the look or functionality of a creative. Applicable to the following creative types: all RICH_MEDIA, and all VPAID.
   --dynamic-asset-selection: oneof<nothing, bool> # Set this to true to enable the use of rules to target individual assets in this creative. When set to true creativeAssetSelection must be set. This also controls asset-level companions. When this is true, companion creatives should be assigned to creative assets. Learn more. Applicable to INSTREAM_VIDEO creatives.
   --exit-custom-events: list # List of exit events configured for the creative. For DISPLAY and DISPLAY_IMAGE_GALLERY creatives, these are read-only and auto-generated from clickTags, For DISPLAY, an event is also created from the backupImageReportingLabel. Applicable to the following creative types: DISPLAY_IMAGE_GALLERY, all RICH_MEDIA, and all VPAID. Applicable to DISPLAY when the primary asset type is not HTML_IMAGE. — item shape: {advertiserCustomEventId?: string, advertiserCustomEventName?: string, advertiserCustomEventType?: "ADVERTISER_EVENT_TIMER"|"ADVERTISER_EVENT_EXIT"|"ADVERTISER_EVENT_COUNTER", artworkLabel?: string, artworkType?: "ARTWORK_TYPE_FLASH"|"ARTWORK_TYPE_HTML5"|"ARTWORK_TYPE_MIXED"|"ARTWORK_TYPE_IMAGE", exitClickThroughUrl?: record, id?: string, popupWindowProperties?: record, targetType?: "TARGET_BLANK"|"TARGET_TOP"|"TARGET_SELF"|"TARGET_PARENT"|"TARGET_POPUP", videoReportingId?: string}
   --fs-command: record # FsCommand. — shape: {left?: int, positionOption?: "CENTERED"|"DISTANCE_FROM_TOP_LEFT_CORNER", top?: int, windowHeight?: int, windowWidth?: int}
@@ -4149,19 +4159,19 @@ export def "userprofiles-creatives dfareportingcreativesupdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/creatives") $qp)
-  let body = {"accountId": $account_id, "active": $active, "adParameters": $ad_parameters, "adTagKeys": $ad_tag_keys, "additionalSizes": $additional_sizes, "advertiserId": $advertiser_id, "allowScriptAccess": $allow_script_access, "archived": $archived, "artworkType": $artwork_type, "authoringSource": $authoring_source, "authoringTool": $authoring_tool, "autoAdvanceImages": $auto_advance_images, "backgroundColor": $background_color, "backupImageClickThroughUrl": $backup_image_click_through_url, "backupImageFeatures": $backup_image_features, "backupImageReportingLabel": $backup_image_reporting_label, "backupImageTargetWindow": $backup_image_target_window, "clickTags": $click_tags, "commercialId": $commercial_id, "companionCreatives": $companion_creatives, "compatibility": $compatibility, "convertFlashToHtml5": $convert_flash_to_html5, "counterCustomEvents": $counter_custom_events, "creativeAssetSelection": $creative_asset_selection, "creativeAssets": $creative_assets, "creativeFieldAssignments": $creative_field_assignments, "customKeyValues": $custom_key_values, "dynamicAssetSelection": $dynamic_asset_selection, "exitCustomEvents": $exit_custom_events, "fsCommand": $fs_command, "htmlCode": $html_code, "htmlCodeLocked": $html_code_locked, "id": $id, "idDimensionValue": $id_dimension_value, "kind": $kind, "lastModifiedInfo": $last_modified_info, "latestTraffickedCreativeId": $latest_trafficked_creative_id, "mediaDescription": $media_description, "mediaDuration": $media_duration, "name": $name, "obaIcon": $oba_icon, "overrideCss": $override_css, "progressOffset": $progress_offset, "redirectUrl": $redirect_url, "renderingId": $rendering_id, "renderingIdDimensionValue": $rendering_id_dimension_value, "requiredFlashPluginVersion": $required_flash_plugin_version, "requiredFlashVersion": $required_flash_version, "size": $size, "skipOffset": $skip_offset, "skippable": $skippable, "sslCompliant": $ssl_compliant, "sslOverride": $ssl_override, "studioAdvertiserId": $studio_advertiser_id, "studioCreativeId": $studio_creative_id, "studioTraffickedCreativeId": $studio_trafficked_creative_id, "subaccountId": $subaccount_id, "thirdPartyBackupImageImpressionsUrl": $third_party_backup_image_impressions_url, "thirdPartyRichMediaImpressionsUrl": $third_party_rich_media_impressions_url, "thirdPartyUrls": $third_party_urls, "timerCustomEvents": $timer_custom_events, "totalFileSize": $total_file_size, "type": $type, "universalAdId": $universal_ad_id, "version": $version} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/creatives") $qp)
+  let req_body = {"accountId": $account_id, "active": $active, "adParameters": $ad_parameters, "adTagKeys": $ad_tag_keys, "additionalSizes": $additional_sizes, "advertiserId": $advertiser_id, "allowScriptAccess": $allow_script_access, "archived": $archived, "artworkType": $artwork_type, "authoringSource": $authoring_source, "authoringTool": $authoring_tool, "autoAdvanceImages": $auto_advance_images, "backgroundColor": $background_color, "backupImageClickThroughUrl": $backup_image_click_through_url, "backupImageFeatures": $backup_image_features, "backupImageReportingLabel": $backup_image_reporting_label, "backupImageTargetWindow": $backup_image_target_window, "clickTags": $click_tags, "commercialId": $commercial_id, "companionCreatives": $companion_creatives, "compatibility": $compatibility, "convertFlashToHtml5": $convert_flash_to_html5, "counterCustomEvents": $counter_custom_events, "creativeAssetSelection": $creative_asset_selection, "creativeAssets": $creative_assets, "creativeFieldAssignments": $creative_field_assignments, "customKeyValues": $custom_key_values, "dynamicAssetSelection": $dynamic_asset_selection, "exitCustomEvents": $exit_custom_events, "fsCommand": $fs_command, "htmlCode": $html_code, "htmlCodeLocked": $html_code_locked, "id": $id, "idDimensionValue": $id_dimension_value, "kind": $kind, "lastModifiedInfo": $last_modified_info, "latestTraffickedCreativeId": $latest_trafficked_creative_id, "mediaDescription": $media_description, "mediaDuration": $media_duration, "name": $name, "obaIcon": $oba_icon, "overrideCss": $override_css, "progressOffset": $progress_offset, "redirectUrl": $redirect_url, "renderingId": $rendering_id, "renderingIdDimensionValue": $rendering_id_dimension_value, "requiredFlashPluginVersion": $required_flash_plugin_version, "requiredFlashVersion": $required_flash_version, "size": $size, "skipOffset": $skip_offset, "skippable": $skippable, "sslCompliant": $ssl_compliant, "sslOverride": $ssl_override, "studioAdvertiserId": $studio_advertiser_id, "studioCreativeId": $studio_creative_id, "studioTraffickedCreativeId": $studio_trafficked_creative_id, "subaccountId": $subaccount_id, "thirdPartyBackupImageImpressionsUrl": $third_party_backup_image_impressions_url, "thirdPartyRichMediaImpressionsUrl": $third_party_rich_media_impressions_url, "thirdPartyUrls": $third_party_urls, "timerCustomEvents": $timer_custom_events, "totalFileSize": $total_file_size, "type": $type, "universalAdId": $universal_ad_id, "version": $version} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets one creative by ID.
 #
 # GET /userprofiles/{profileId}/creatives/{id}
 # operationId: dfareporting.creatives.get
-export def "userprofiles-creatives dfareportingcreativesget" [
+export def "userprofiles-creatives get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4187,7 +4197,7 @@ export def "userprofiles-creatives dfareportingcreativesget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id, id: $id} | format pattern "/userprofiles/{profile_id}/creatives/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/creatives/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4198,7 +4208,7 @@ export def "userprofiles-creatives dfareportingcreativesget" [
 # POST /userprofiles/{profileId}/customEvents/batchinsert
 # operationId: dfareporting.customEvents.batchinsert
 # --customEvents item shape: {annotateClickEvent?: record, annotateImpressionEvent?: record, customVariables?: list, eventType?: "UNKNOWN"|"INSERT"|"ANNOTATE", floodlightConfigurationId?: string, insertEvent?: record, kind?: string, ordinal?: string, timestampMicros?: string}
-export def "userprofiles-custom-events-batchinsert dfareportingcustomEventsbatchinsert" [
+export def "userprofiles-custom-events-batchinsert create" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4226,12 +4236,12 @@ export def "userprofiles-custom-events-batchinsert dfareportingcustomEventsbatch
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/customEvents/batchinsert") $qp)
-  let body = {"customEvents": $custom_events, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/customEvents/batchinsert") $qp)
+  let req_body = {"customEvents": $custom_events, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieves list of report dimension values for a list of filters.
@@ -4239,7 +4249,7 @@ export def "userprofiles-custom-events-batchinsert dfareportingcustomEventsbatch
 # POST /userprofiles/{profileId}/dimensionvalues/query
 # operationId: dfareporting.dimensionValues.query
 # --filters item shape: {dimensionName?: string, kind?: string, value?: string}
-export def "userprofiles-dimensionvalues-query dfareportingdimensionValuesquery" [
+export def "userprofiles-dimensionvalues-query list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4272,19 +4282,19 @@ export def "userprofiles-dimensionvalues-query dfareportingdimensionValuesquery"
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/dimensionvalues/query") $qp)
-  let body = {"dimensionName": $dimension_name, "endDate": $end_date, "filters": $filters, "kind": $kind, "startDate": $start_date} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/dimensionvalues/query") $qp)
+  let req_body = {"dimensionName": $dimension_name, "endDate": $end_date, "filters": $filters, "kind": $kind, "startDate": $start_date} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieves a list of directory sites, possibly filtered. This method supports paging.
 #
 # GET /userprofiles/{profileId}/directorySites
 # operationId: dfareporting.directorySites.list
-export def "userprofiles-directory-sites dfareportingdirectorySiteslist" [
+export def "userprofiles-directory-sites list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4310,7 +4320,7 @@ export def "userprofiles-directory-sites dfareportingdirectorySiteslist" [
   --accepts-publisher-paid-placements: oneof<nothing, bool> # Select only directory sites that accept publisher paid placements. This field can be left blank.
   --active: oneof<nothing, bool> # Select only active directory sites. Leave blank to retrieve both active and inactive directory sites.
   --dfp-network-code: string # Select only directory sites with this Ad Manager network code.
-  --ids: list # Select only directory sites with these IDs.
+  --ids: list<string> # Select only directory sites with these IDs.
   --max-results: int # Maximum number of results to return.
   --page-token: string # Value of the nextPageToken from the previous result page.
   --search-string: string # Allows searching for objects by name, ID or URL. Wildcards (*) are allowed. For example, "directory site*2015" will return objects with names like "directory site June 2015", "directory site April 2015", or simply "directory site 2015". Most of the searches also add wildcards implicitly at the start and the end of the search string. For example, a search string of "directory site" will match objects with name "my directory site", "directory site 2015" or simply, "directory site".
@@ -4320,7 +4330,7 @@ export def "userprofiles-directory-sites dfareportingdirectorySiteslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "acceptsInStreamVideoPlacements" $accepts_in_stream_video_placements "scalar") (serialize-qp "acceptsInterstitialPlacements" $accepts_interstitial_placements "scalar") (serialize-qp "acceptsPublisherPaidPlacements" $accepts_publisher_paid_placements "scalar") (serialize-qp "active" $active "scalar") (serialize-qp "dfpNetworkCode" $dfp_network_code "scalar") (serialize-qp "ids" $ids "multi") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "searchString" $search_string "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/directorySites") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/directorySites") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4332,7 +4342,7 @@ export def "userprofiles-directory-sites dfareportingdirectorySiteslist" [
 # operationId: dfareporting.directorySites.insert
 # --idDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
 # --settings shape: {activeViewOptOut?: bool, dfpSettings?: record, instreamVideoPlacementAccepted?: bool, interstitialPlacementAccepted?: bool}
-export def "userprofiles-directory-sites dfareportingdirectorySitesinsert" [
+export def "userprofiles-directory-sites create" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4355,30 +4365,30 @@ export def "userprofiles-directory-sites dfareportingdirectorySitesinsert" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --id: string # ID of this directory site. This is a read-only, auto-generated field. (format: int64)
   --id-dimension-value: record # Represents a DimensionValue resource. — shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
-  --inpage-tag-formats: list # Tag types for regular placements. Acceptable values are: - "STANDARD" - "IFRAME_JAVASCRIPT_INPAGE" - "INTERNAL_REDIRECT_INPAGE" - "JAVASCRIPT_INPAGE" 
-  --interstitial-tag-formats: list # Tag types for interstitial placements. Acceptable values are: - "IFRAME_JAVASCRIPT_INTERSTITIAL" - "INTERNAL_REDIRECT_INTERSTITIAL" - "JAVASCRIPT_INTERSTITIAL" 
+  --inpage-tag-formats: list<string> # Tag types for regular placements. Acceptable values are: - "STANDARD" - "IFRAME_JAVASCRIPT_INPAGE" - "INTERNAL_REDIRECT_INPAGE" - "JAVASCRIPT_INPAGE"
+  --interstitial-tag-formats: list<string> # Tag types for interstitial placements. Acceptable values are: - "IFRAME_JAVASCRIPT_INTERSTITIAL" - "INTERNAL_REDIRECT_INTERSTITIAL" - "JAVASCRIPT_INTERSTITIAL"
   --kind: string # Identifies what kind of resource this is. Value: the fixed string "dfareporting#directorySite".
   --name: string # Name of this directory site.
   --settings: record # Directory Site Settings — shape: {activeViewOptOut?: bool, dfpSettings?: record, instreamVideoPlacementAccepted?: bool, interstitialPlacementAccepted?: bool}
-  --body-url: string # URL of this directory site.
+  --url: string # URL of this directory site.
 ]: any -> record<id: string, idDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, inpageTagFormats: list<string>, interstitialTagFormats: list<string>, kind: string, name: string, settings: record<activeViewOptOut: bool, dfpSettings: record<dfpNetworkCode: string, dfpNetworkName: string, programmaticPlacementAccepted: bool, pubPaidPlacementAccepted: bool, publisherPortalOnly: bool>, instreamVideoPlacementAccepted: bool, interstitialPlacementAccepted: bool>, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/directorySites") $qp)
-  let body = {"id": $id, "idDimensionValue": $id_dimension_value, "inpageTagFormats": $inpage_tag_formats, "interstitialTagFormats": $interstitial_tag_formats, "kind": $kind, "name": $name, "settings": $settings, "url": $body_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/directorySites") $qp)
+  let req_body = {"id": $id, "idDimensionValue": $id_dimension_value, "inpageTagFormats": $inpage_tag_formats, "interstitialTagFormats": $interstitial_tag_formats, "kind": $kind, "name": $name, "settings": $settings, "url": $url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets one directory site by ID.
 #
 # GET /userprofiles/{profileId}/directorySites/{id}
 # operationId: dfareporting.directorySites.get
-export def "userprofiles-directory-sites dfareportingdirectorySitesget" [
+export def "userprofiles-directory-sites get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4404,7 +4414,7 @@ export def "userprofiles-directory-sites dfareportingdirectorySitesget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id, id: $id} | format pattern "/userprofiles/{profile_id}/directorySites/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/directorySites/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4414,7 +4424,7 @@ export def "userprofiles-directory-sites dfareportingdirectorySitesget" [
 #
 # GET /userprofiles/{profileId}/dynamicTargetingKeys
 # operationId: dfareporting.dynamicTargetingKeys.list
-export def "userprofiles-dynamic-targeting-keys dfareportingdynamicTargetingKeyslist" [
+export def "userprofiles-dynamic-targeting-keys list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4436,14 +4446,14 @@ export def "userprofiles-dynamic-targeting-keys dfareportingdynamicTargetingKeys
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --advertiser-id: string # Select only dynamic targeting keys whose object has this advertiser ID.
-  --names: list # Select only dynamic targeting keys exactly matching these names.
+  --names: list<string> # Select only dynamic targeting keys exactly matching these names.
   --object-id: string # Select only dynamic targeting keys with this object ID.
   --object-type: string@object-type-completer-1 # Select only dynamic targeting keys with this object type.
 ]: nothing -> record<dynamicTargetingKeys: table<kind: string, name: string, objectId: string, objectType: string>, kind: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserId" $advertiser_id "scalar") (serialize-qp "names" $names "multi") (serialize-qp "objectId" $object_id "scalar") (serialize-qp "objectType" $object_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/dynamicTargetingKeys") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/dynamicTargetingKeys") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4453,7 +4463,7 @@ export def "userprofiles-dynamic-targeting-keys dfareportingdynamicTargetingKeys
 #
 # POST /userprofiles/{profileId}/dynamicTargetingKeys
 # operationId: dfareporting.dynamicTargetingKeys.insert
-export def "userprofiles-dynamic-targeting-keys dfareportingdynamicTargetingKeysinsert" [
+export def "userprofiles-dynamic-targeting-keys create" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4483,19 +4493,19 @@ export def "userprofiles-dynamic-targeting-keys dfareportingdynamicTargetingKeys
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/dynamicTargetingKeys") $qp)
-  let body = {"kind": $kind, "name": $name, "objectId": $object_id, "objectType": $object_type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/dynamicTargetingKeys") $qp)
+  let req_body = {"kind": $kind, "name": $name, "objectId": $object_id, "objectType": $object_type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes an existing dynamic targeting key.
 #
 # DELETE /userprofiles/{profileId}/dynamicTargetingKeys/{objectId}
 # operationId: dfareporting.dynamicTargetingKeys.delete
-export def "userprofiles-dynamic-targeting-keys dfareportingdynamicTargetingKeysdelete" [
+export def "userprofiles-dynamic-targeting-keys delete" [
   profile_id: string
   object_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4523,7 +4533,7 @@ export def "userprofiles-dynamic-targeting-keys dfareportingdynamicTargetingKeys
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "objectType" $object_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id, object_id: $object_id} | format pattern "/userprofiles/{profile_id}/dynamicTargetingKeys/{object_id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), object_id: (encode-path-segment $object_id)} | format pattern "/userprofiles/{profile_id}/dynamicTargetingKeys/{object_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4533,7 +4543,7 @@ export def "userprofiles-dynamic-targeting-keys dfareportingdynamicTargetingKeys
 #
 # GET /userprofiles/{profileId}/eventTags
 # operationId: dfareporting.eventTags.list
-export def "userprofiles-event-tags dfareportingeventTagslist" [
+export def "userprofiles-event-tags list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4559,8 +4569,8 @@ export def "userprofiles-event-tags dfareportingeventTagslist" [
   --campaign-id: string # Select only event tags that belong to this campaign.
   --definitions-only: oneof<nothing, bool> # Examine only the specified campaign or advertiser's event tags for matching selector criteria. When set to false, the parent advertiser and parent campaign of the specified ad or campaign is examined as well. In addition, when set to false, the status field is examined as well, along with the enabledByDefault field. This parameter can not be set to true when adId is specified as ads do not define their own even tags.
   --enabled: oneof<nothing, bool> # Select only enabled event tags. What is considered enabled or disabled depends on the definitionsOnly parameter. When definitionsOnly is set to true, only the specified advertiser or campaign's event tags' enabledByDefault field is examined. When definitionsOnly is set to false, the specified ad or specified campaign's parent advertiser's or parent campaign's event tags' enabledByDefault and status fields are examined as well.
-  --event-tag-types: list # Select only event tags with the specified event tag types. Event tag types can be used to specify whether to use a third-party pixel, a third-party JavaScript URL, or a third-party click-through URL for either impression or click tracking.
-  --ids: list # Select only event tags with these IDs.
+  --event-tag-types: list<string> # Select only event tags with the specified event tag types. Event tag types can be used to specify whether to use a third-party pixel, a third-party JavaScript URL, or a third-party click-through URL for either impression or click tracking.
+  --ids: list<string> # Select only event tags with these IDs.
   --search-string: string # Allows searching for objects by name or ID. Wildcards (*) are allowed. For example, "eventtag*2015" will return objects with names like "eventtag June 2015", "eventtag April 2015", or simply "eventtag 2015". Most of the searches also add wildcards implicitly at the start and the end of the search string. For example, a search string of "eventtag" will match objects with name "my eventtag", "eventtag 2015", or simply "eventtag".
   --sort-field: string@sort-field-completer # Field by which to sort the list.
   --sort-order: string@sort-order-completer # Order of sorted results.
@@ -4568,7 +4578,7 @@ export def "userprofiles-event-tags dfareportingeventTagslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "adId" $ad_id "scalar") (serialize-qp "advertiserId" $advertiser_id "scalar") (serialize-qp "campaignId" $campaign_id "scalar") (serialize-qp "definitionsOnly" $definitions_only "scalar") (serialize-qp "enabled" $enabled "scalar") (serialize-qp "eventTagTypes" $event_tag_types "multi") (serialize-qp "ids" $ids "multi") (serialize-qp "searchString" $search_string "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/eventTags") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/eventTags") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4580,7 +4590,7 @@ export def "userprofiles-event-tags dfareportingeventTagslist" [
 # operationId: dfareporting.eventTags.patch
 # --advertiserIdDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
 # --campaignIdDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
-export def "userprofiles-event-tags dfareportingeventTagspatch" [
+export def "userprofiles-event-tags update-by-profileId" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4613,24 +4623,24 @@ export def "userprofiles-event-tags dfareportingeventTagspatch" [
   --kind: string # Identifies what kind of resource this is. Value: the fixed string "dfareporting#eventTag".
   --name: string # Name of this event tag. This is a required field and must be less than 256 characters long.
   --site-filter-type: string@site-filter-type-completer # Site filter type for this event tag. If no type is specified then the event tag will be applied to all sites.
-  --site-ids: list # Filter list of site IDs associated with this event tag. The siteFilterType determines whether this is a allowlist or blocklist filter.
+  --site-ids: list<string> # Filter list of site IDs associated with this event tag. The siteFilterType determines whether this is a allowlist or blocklist filter.
   --ssl-compliant: oneof<nothing, bool> # Whether this tag is SSL-compliant or not. This is a read-only field.
   --status: string@status-completer-1 # Status of this event tag. Must be ENABLED for this event tag to fire. This is a required field.
   --subaccount-id: string # Subaccount ID of this event tag. This is a read-only field that can be left blank. (format: int64)
   --type: string@type-completer-2 # Event tag type. Can be used to specify whether to use a third-party pixel, a third-party JavaScript URL, or a third-party click-through URL for either impression or click tracking. This is a required field.
-  --body-url: string # Payload URL for this event tag. The URL on a click-through event tag should have a landing page URL appended to the end of it. This field is required on insertion.
+  --url: string # Payload URL for this event tag. The URL on a click-through event tag should have a landing page URL appended to the end of it. This field is required on insertion.
   --url-escape-levels: int # Number of times the landing page URL should be URL-escaped before being appended to the click-through event tag URL. Only applies to click-through event tags as specified by the event tag type. (format: int32)
 ]: any -> record<accountId: string, advertiserId: string, advertiserIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, campaignId: string, campaignIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, enabledByDefault: bool, excludeFromAdxRequests: bool, id: string, kind: string, name: string, siteFilterType: string, siteIds: list<string>, sslCompliant: bool, status: string, subaccountId: string, type: string, url: string, urlEscapeLevels: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/eventTags") $qp)
-  let body = {"accountId": $account_id, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "campaignId": $campaign_id, "campaignIdDimensionValue": $campaign_id_dimension_value, "enabledByDefault": $enabled_by_default, "excludeFromAdxRequests": $exclude_from_adx_requests, "id": $id, "kind": $kind, "name": $name, "siteFilterType": $site_filter_type, "siteIds": $site_ids, "sslCompliant": $ssl_compliant, "status": $status, "subaccountId": $subaccount_id, "type": $type, "url": $body_url, "urlEscapeLevels": $url_escape_levels} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/eventTags") $qp)
+  let req_body = {"accountId": $account_id, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "campaignId": $campaign_id, "campaignIdDimensionValue": $campaign_id_dimension_value, "enabledByDefault": $enabled_by_default, "excludeFromAdxRequests": $exclude_from_adx_requests, "id": $id, "kind": $kind, "name": $name, "siteFilterType": $site_filter_type, "siteIds": $site_ids, "sslCompliant": $ssl_compliant, "status": $status, "subaccountId": $subaccount_id, "type": $type, "url": $url, "urlEscapeLevels": $url_escape_levels} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Inserts a new event tag.
@@ -4639,7 +4649,7 @@ export def "userprofiles-event-tags dfareportingeventTagspatch" [
 # operationId: dfareporting.eventTags.insert
 # --advertiserIdDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
 # --campaignIdDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
-export def "userprofiles-event-tags dfareportingeventTagsinsert" [
+export def "userprofiles-event-tags create" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4671,24 +4681,24 @@ export def "userprofiles-event-tags dfareportingeventTagsinsert" [
   --kind: string # Identifies what kind of resource this is. Value: the fixed string "dfareporting#eventTag".
   --name: string # Name of this event tag. This is a required field and must be less than 256 characters long.
   --site-filter-type: string@site-filter-type-completer # Site filter type for this event tag. If no type is specified then the event tag will be applied to all sites.
-  --site-ids: list # Filter list of site IDs associated with this event tag. The siteFilterType determines whether this is a allowlist or blocklist filter.
+  --site-ids: list<string> # Filter list of site IDs associated with this event tag. The siteFilterType determines whether this is a allowlist or blocklist filter.
   --ssl-compliant: oneof<nothing, bool> # Whether this tag is SSL-compliant or not. This is a read-only field.
   --status: string@status-completer-1 # Status of this event tag. Must be ENABLED for this event tag to fire. This is a required field.
   --subaccount-id: string # Subaccount ID of this event tag. This is a read-only field that can be left blank. (format: int64)
   --type: string@type-completer-2 # Event tag type. Can be used to specify whether to use a third-party pixel, a third-party JavaScript URL, or a third-party click-through URL for either impression or click tracking. This is a required field.
-  --body-url: string # Payload URL for this event tag. The URL on a click-through event tag should have a landing page URL appended to the end of it. This field is required on insertion.
+  --url: string # Payload URL for this event tag. The URL on a click-through event tag should have a landing page URL appended to the end of it. This field is required on insertion.
   --url-escape-levels: int # Number of times the landing page URL should be URL-escaped before being appended to the click-through event tag URL. Only applies to click-through event tags as specified by the event tag type. (format: int32)
 ]: any -> record<accountId: string, advertiserId: string, advertiserIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, campaignId: string, campaignIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, enabledByDefault: bool, excludeFromAdxRequests: bool, id: string, kind: string, name: string, siteFilterType: string, siteIds: list<string>, sslCompliant: bool, status: string, subaccountId: string, type: string, url: string, urlEscapeLevels: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/eventTags") $qp)
-  let body = {"accountId": $account_id, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "campaignId": $campaign_id, "campaignIdDimensionValue": $campaign_id_dimension_value, "enabledByDefault": $enabled_by_default, "excludeFromAdxRequests": $exclude_from_adx_requests, "id": $id, "kind": $kind, "name": $name, "siteFilterType": $site_filter_type, "siteIds": $site_ids, "sslCompliant": $ssl_compliant, "status": $status, "subaccountId": $subaccount_id, "type": $type, "url": $body_url, "urlEscapeLevels": $url_escape_levels} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/eventTags") $qp)
+  let req_body = {"accountId": $account_id, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "campaignId": $campaign_id, "campaignIdDimensionValue": $campaign_id_dimension_value, "enabledByDefault": $enabled_by_default, "excludeFromAdxRequests": $exclude_from_adx_requests, "id": $id, "kind": $kind, "name": $name, "siteFilterType": $site_filter_type, "siteIds": $site_ids, "sslCompliant": $ssl_compliant, "status": $status, "subaccountId": $subaccount_id, "type": $type, "url": $url, "urlEscapeLevels": $url_escape_levels} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates an existing event tag.
@@ -4697,7 +4707,7 @@ export def "userprofiles-event-tags dfareportingeventTagsinsert" [
 # operationId: dfareporting.eventTags.update
 # --advertiserIdDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
 # --campaignIdDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
-export def "userprofiles-event-tags dfareportingeventTagsupdate" [
+export def "userprofiles-event-tags update-by-profileId-1" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4729,31 +4739,31 @@ export def "userprofiles-event-tags dfareportingeventTagsupdate" [
   --kind: string # Identifies what kind of resource this is. Value: the fixed string "dfareporting#eventTag".
   --name: string # Name of this event tag. This is a required field and must be less than 256 characters long.
   --site-filter-type: string@site-filter-type-completer # Site filter type for this event tag. If no type is specified then the event tag will be applied to all sites.
-  --site-ids: list # Filter list of site IDs associated with this event tag. The siteFilterType determines whether this is a allowlist or blocklist filter.
+  --site-ids: list<string> # Filter list of site IDs associated with this event tag. The siteFilterType determines whether this is a allowlist or blocklist filter.
   --ssl-compliant: oneof<nothing, bool> # Whether this tag is SSL-compliant or not. This is a read-only field.
   --status: string@status-completer-1 # Status of this event tag. Must be ENABLED for this event tag to fire. This is a required field.
   --subaccount-id: string # Subaccount ID of this event tag. This is a read-only field that can be left blank. (format: int64)
   --type: string@type-completer-2 # Event tag type. Can be used to specify whether to use a third-party pixel, a third-party JavaScript URL, or a third-party click-through URL for either impression or click tracking. This is a required field.
-  --body-url: string # Payload URL for this event tag. The URL on a click-through event tag should have a landing page URL appended to the end of it. This field is required on insertion.
+  --url: string # Payload URL for this event tag. The URL on a click-through event tag should have a landing page URL appended to the end of it. This field is required on insertion.
   --url-escape-levels: int # Number of times the landing page URL should be URL-escaped before being appended to the click-through event tag URL. Only applies to click-through event tags as specified by the event tag type. (format: int32)
 ]: any -> record<accountId: string, advertiserId: string, advertiserIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, campaignId: string, campaignIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, enabledByDefault: bool, excludeFromAdxRequests: bool, id: string, kind: string, name: string, siteFilterType: string, siteIds: list<string>, sslCompliant: bool, status: string, subaccountId: string, type: string, url: string, urlEscapeLevels: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/eventTags") $qp)
-  let body = {"accountId": $account_id, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "campaignId": $campaign_id, "campaignIdDimensionValue": $campaign_id_dimension_value, "enabledByDefault": $enabled_by_default, "excludeFromAdxRequests": $exclude_from_adx_requests, "id": $id, "kind": $kind, "name": $name, "siteFilterType": $site_filter_type, "siteIds": $site_ids, "sslCompliant": $ssl_compliant, "status": $status, "subaccountId": $subaccount_id, "type": $type, "url": $body_url, "urlEscapeLevels": $url_escape_levels} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/eventTags") $qp)
+  let req_body = {"accountId": $account_id, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "campaignId": $campaign_id, "campaignIdDimensionValue": $campaign_id_dimension_value, "enabledByDefault": $enabled_by_default, "excludeFromAdxRequests": $exclude_from_adx_requests, "id": $id, "kind": $kind, "name": $name, "siteFilterType": $site_filter_type, "siteIds": $site_ids, "sslCompliant": $ssl_compliant, "status": $status, "subaccountId": $subaccount_id, "type": $type, "url": $url, "urlEscapeLevels": $url_escape_levels} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes an existing event tag.
 #
 # DELETE /userprofiles/{profileId}/eventTags/{id}
 # operationId: dfareporting.eventTags.delete
-export def "userprofiles-event-tags dfareportingeventTagsdelete" [
+export def "userprofiles-event-tags delete" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4779,7 +4789,7 @@ export def "userprofiles-event-tags dfareportingeventTagsdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id, id: $id} | format pattern "/userprofiles/{profile_id}/eventTags/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/eventTags/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4789,7 +4799,7 @@ export def "userprofiles-event-tags dfareportingeventTagsdelete" [
 #
 # GET /userprofiles/{profileId}/eventTags/{id}
 # operationId: dfareporting.eventTags.get
-export def "userprofiles-event-tags dfareportingeventTagsget" [
+export def "userprofiles-event-tags get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4815,7 +4825,7 @@ export def "userprofiles-event-tags dfareportingeventTagsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id, id: $id} | format pattern "/userprofiles/{profile_id}/eventTags/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/eventTags/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4825,7 +4835,7 @@ export def "userprofiles-event-tags dfareportingeventTagsget" [
 #
 # GET /userprofiles/{profileId}/files
 # operationId: dfareporting.files.list
-export def "userprofiles-files dfareportingfileslist" [
+export def "userprofiles-files list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4855,7 +4865,7 @@ export def "userprofiles-files dfareportingfileslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "scope" $scope "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/files") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/files") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4865,7 +4875,7 @@ export def "userprofiles-files dfareportingfileslist" [
 #
 # GET /userprofiles/{profileId}/floodlightActivities
 # operationId: dfareporting.floodlightActivities.list
-export def "userprofiles-floodlight-activities dfareportingfloodlightActivitieslist" [
+export def "userprofiles-floodlight-activities list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4887,12 +4897,12 @@ export def "userprofiles-floodlight-activities dfareportingfloodlightActivitiesl
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --advertiser-id: string # Select only floodlight activities for the specified advertiser ID. Must specify either ids, advertiserId, or floodlightConfigurationId for a non-empty result.
-  --floodlight-activity-group-ids: list # Select only floodlight activities with the specified floodlight activity group IDs.
+  --floodlight-activity-group-ids: list<string> # Select only floodlight activities with the specified floodlight activity group IDs.
   --floodlight-activity-group-name: string # Select only floodlight activities with the specified floodlight activity group name.
   --floodlight-activity-group-tag-string: string # Select only floodlight activities with the specified floodlight activity group tag string.
   --floodlight-activity-group-type: string@floodlight-activity-group-type-completer # Select only floodlight activities with the specified floodlight activity group type.
   --floodlight-configuration-id: string # Select only floodlight activities for the specified floodlight configuration ID. Must specify either ids, advertiserId, or floodlightConfigurationId for a non-empty result.
-  --ids: list # Select only floodlight activities with the specified IDs. Must specify either ids, advertiserId, or floodlightConfigurationId for a non-empty result.
+  --ids: list<string> # Select only floodlight activities with the specified IDs. Must specify either ids, advertiserId, or floodlightConfigurationId for a non-empty result.
   --max-results: int # Maximum number of results to return.
   --page-token: string # Value of the nextPageToken from the previous result page.
   --search-string: string # Allows searching for objects by name or ID. Wildcards (*) are allowed. For example, "floodlightactivity*2015" will return objects with names like "floodlightactivity June 2015", "floodlightactivity April 2015", or simply "floodlightactivity 2015". Most of the searches also add wildcards implicitly at the start and the end of the search string. For example, a search string of "floodlightactivity" will match objects with name "my floodlightactivity activity", "floodlightactivity 2015", or simply "floodlightactivity".
@@ -4903,7 +4913,7 @@ export def "userprofiles-floodlight-activities dfareportingfloodlightActivitiesl
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserId" $advertiser_id "scalar") (serialize-qp "floodlightActivityGroupIds" $floodlight_activity_group_ids "multi") (serialize-qp "floodlightActivityGroupName" $floodlight_activity_group_name "scalar") (serialize-qp "floodlightActivityGroupTagString" $floodlight_activity_group_tag_string "scalar") (serialize-qp "floodlightActivityGroupType" $floodlight_activity_group_type "scalar") (serialize-qp "floodlightConfigurationId" $floodlight_configuration_id "scalar") (serialize-qp "ids" $ids "multi") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "searchString" $search_string "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "tagString" $tag_string "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/floodlightActivities") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/floodlightActivities") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4918,7 +4928,7 @@ export def "userprofiles-floodlight-activities dfareportingfloodlightActivitiesl
 # --floodlightConfigurationIdDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
 # --idDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
 # --publisherTags item shape: {clickThrough?: bool, directorySiteId?: string, dynamicTag?: record, siteId?: string, siteIdDimensionValue?: record, viewThrough?: bool}
-export def "userprofiles-floodlight-activities dfareportingfloodlightActivitiespatch" [
+export def "userprofiles-floodlight-activities update-by-profileId" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4968,18 +4978,18 @@ export def "userprofiles-floodlight-activities dfareportingfloodlightActivitiesp
   --subaccount-id: string # Subaccount ID of this floodlight activity. This is a read-only field that can be left blank. (format: int64)
   --tag-format: string@tag-format-completer # Tag format type for the floodlight activity. If left blank, the tag format will default to HTML.
   --tag-string: string # Value of the cat= parameter in the floodlight tag, which the ad servers use to identify the activity. This is optional: if empty, a new tag string will be generated for you. This string must be 1 to 8 characters long, with valid characters being a-z0-9[ _ ]. This tag string must also be unique among activities of the same activity group. This field is read-only after insertion.
-  --user-defined-variable-types: list # List of the user-defined variables used by this conversion tag. These map to the "u[1-100]=" in the tags. Each of these can have a user defined type. Acceptable values are U1 to U100, inclusive. 
+  --user-defined-variable-types: list<string> # List of the user-defined variables used by this conversion tag. These map to the "u[1-100]=" in the tags. Each of these can have a user defined type. Acceptable values are U1 to U100, inclusive.
 ]: any -> record<accountId: string, advertiserId: string, advertiserIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, attributionEnabled: bool, cacheBustingType: string, countingMethod: string, defaultTags: table<id: string, name: string, tag: string>, expectedUrl: string, floodlightActivityGroupId: string, floodlightActivityGroupName: string, floodlightActivityGroupTagString: string, floodlightActivityGroupType: string, floodlightConfigurationId: string, floodlightConfigurationIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, floodlightTagType: string, id: string, idDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, kind: string, name: string, notes: string, publisherTags: table<clickThrough: bool, directorySiteId: string, dynamicTag: record, siteId: string, siteIdDimensionValue: record, viewThrough: bool>, secure: bool, sslCompliant: bool, sslRequired: bool, status: string, subaccountId: string, tagFormat: string, tagString: string, userDefinedVariableTypes: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/floodlightActivities") $qp)
-  let body = {"accountId": $account_id, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "attributionEnabled": $attribution_enabled, "cacheBustingType": $cache_busting_type, "countingMethod": $counting_method, "defaultTags": $default_tags, "expectedUrl": $expected_url, "floodlightActivityGroupId": $floodlight_activity_group_id, "floodlightActivityGroupName": $floodlight_activity_group_name, "floodlightActivityGroupTagString": $floodlight_activity_group_tag_string, "floodlightActivityGroupType": $floodlight_activity_group_type, "floodlightConfigurationId": $floodlight_configuration_id, "floodlightConfigurationIdDimensionValue": $floodlight_configuration_id_dimension_value, "floodlightTagType": $floodlight_tag_type, "id": $id, "idDimensionValue": $id_dimension_value, "kind": $kind, "name": $name, "notes": $notes, "publisherTags": $publisher_tags, "secure": $secure, "sslCompliant": $ssl_compliant, "sslRequired": $ssl_required, "status": $status, "subaccountId": $subaccount_id, "tagFormat": $tag_format, "tagString": $tag_string, "userDefinedVariableTypes": $user_defined_variable_types} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/floodlightActivities") $qp)
+  let req_body = {"accountId": $account_id, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "attributionEnabled": $attribution_enabled, "cacheBustingType": $cache_busting_type, "countingMethod": $counting_method, "defaultTags": $default_tags, "expectedUrl": $expected_url, "floodlightActivityGroupId": $floodlight_activity_group_id, "floodlightActivityGroupName": $floodlight_activity_group_name, "floodlightActivityGroupTagString": $floodlight_activity_group_tag_string, "floodlightActivityGroupType": $floodlight_activity_group_type, "floodlightConfigurationId": $floodlight_configuration_id, "floodlightConfigurationIdDimensionValue": $floodlight_configuration_id_dimension_value, "floodlightTagType": $floodlight_tag_type, "id": $id, "idDimensionValue": $id_dimension_value, "kind": $kind, "name": $name, "notes": $notes, "publisherTags": $publisher_tags, "secure": $secure, "sslCompliant": $ssl_compliant, "sslRequired": $ssl_required, "status": $status, "subaccountId": $subaccount_id, "tagFormat": $tag_format, "tagString": $tag_string, "userDefinedVariableTypes": $user_defined_variable_types} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Inserts a new floodlight activity.
@@ -4991,7 +5001,7 @@ export def "userprofiles-floodlight-activities dfareportingfloodlightActivitiesp
 # --floodlightConfigurationIdDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
 # --idDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
 # --publisherTags item shape: {clickThrough?: bool, directorySiteId?: string, dynamicTag?: record, siteId?: string, siteIdDimensionValue?: record, viewThrough?: bool}
-export def "userprofiles-floodlight-activities dfareportingfloodlightActivitiesinsert" [
+export def "userprofiles-floodlight-activities create" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5040,18 +5050,18 @@ export def "userprofiles-floodlight-activities dfareportingfloodlightActivitiesi
   --subaccount-id: string # Subaccount ID of this floodlight activity. This is a read-only field that can be left blank. (format: int64)
   --tag-format: string@tag-format-completer # Tag format type for the floodlight activity. If left blank, the tag format will default to HTML.
   --tag-string: string # Value of the cat= parameter in the floodlight tag, which the ad servers use to identify the activity. This is optional: if empty, a new tag string will be generated for you. This string must be 1 to 8 characters long, with valid characters being a-z0-9[ _ ]. This tag string must also be unique among activities of the same activity group. This field is read-only after insertion.
-  --user-defined-variable-types: list # List of the user-defined variables used by this conversion tag. These map to the "u[1-100]=" in the tags. Each of these can have a user defined type. Acceptable values are U1 to U100, inclusive. 
+  --user-defined-variable-types: list<string> # List of the user-defined variables used by this conversion tag. These map to the "u[1-100]=" in the tags. Each of these can have a user defined type. Acceptable values are U1 to U100, inclusive.
 ]: any -> record<accountId: string, advertiserId: string, advertiserIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, attributionEnabled: bool, cacheBustingType: string, countingMethod: string, defaultTags: table<id: string, name: string, tag: string>, expectedUrl: string, floodlightActivityGroupId: string, floodlightActivityGroupName: string, floodlightActivityGroupTagString: string, floodlightActivityGroupType: string, floodlightConfigurationId: string, floodlightConfigurationIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, floodlightTagType: string, id: string, idDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, kind: string, name: string, notes: string, publisherTags: table<clickThrough: bool, directorySiteId: string, dynamicTag: record, siteId: string, siteIdDimensionValue: record, viewThrough: bool>, secure: bool, sslCompliant: bool, sslRequired: bool, status: string, subaccountId: string, tagFormat: string, tagString: string, userDefinedVariableTypes: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/floodlightActivities") $qp)
-  let body = {"accountId": $account_id, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "attributionEnabled": $attribution_enabled, "cacheBustingType": $cache_busting_type, "countingMethod": $counting_method, "defaultTags": $default_tags, "expectedUrl": $expected_url, "floodlightActivityGroupId": $floodlight_activity_group_id, "floodlightActivityGroupName": $floodlight_activity_group_name, "floodlightActivityGroupTagString": $floodlight_activity_group_tag_string, "floodlightActivityGroupType": $floodlight_activity_group_type, "floodlightConfigurationId": $floodlight_configuration_id, "floodlightConfigurationIdDimensionValue": $floodlight_configuration_id_dimension_value, "floodlightTagType": $floodlight_tag_type, "id": $id, "idDimensionValue": $id_dimension_value, "kind": $kind, "name": $name, "notes": $notes, "publisherTags": $publisher_tags, "secure": $secure, "sslCompliant": $ssl_compliant, "sslRequired": $ssl_required, "status": $status, "subaccountId": $subaccount_id, "tagFormat": $tag_format, "tagString": $tag_string, "userDefinedVariableTypes": $user_defined_variable_types} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/floodlightActivities") $qp)
+  let req_body = {"accountId": $account_id, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "attributionEnabled": $attribution_enabled, "cacheBustingType": $cache_busting_type, "countingMethod": $counting_method, "defaultTags": $default_tags, "expectedUrl": $expected_url, "floodlightActivityGroupId": $floodlight_activity_group_id, "floodlightActivityGroupName": $floodlight_activity_group_name, "floodlightActivityGroupTagString": $floodlight_activity_group_tag_string, "floodlightActivityGroupType": $floodlight_activity_group_type, "floodlightConfigurationId": $floodlight_configuration_id, "floodlightConfigurationIdDimensionValue": $floodlight_configuration_id_dimension_value, "floodlightTagType": $floodlight_tag_type, "id": $id, "idDimensionValue": $id_dimension_value, "kind": $kind, "name": $name, "notes": $notes, "publisherTags": $publisher_tags, "secure": $secure, "sslCompliant": $ssl_compliant, "sslRequired": $ssl_required, "status": $status, "subaccountId": $subaccount_id, "tagFormat": $tag_format, "tagString": $tag_string, "userDefinedVariableTypes": $user_defined_variable_types} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates an existing floodlight activity.
@@ -5063,7 +5073,7 @@ export def "userprofiles-floodlight-activities dfareportingfloodlightActivitiesi
 # --floodlightConfigurationIdDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
 # --idDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
 # --publisherTags item shape: {clickThrough?: bool, directorySiteId?: string, dynamicTag?: record, siteId?: string, siteIdDimensionValue?: record, viewThrough?: bool}
-export def "userprofiles-floodlight-activities dfareportingfloodlightActivitiesupdate" [
+export def "userprofiles-floodlight-activities update-by-profileId-1" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5112,25 +5122,25 @@ export def "userprofiles-floodlight-activities dfareportingfloodlightActivitiesu
   --subaccount-id: string # Subaccount ID of this floodlight activity. This is a read-only field that can be left blank. (format: int64)
   --tag-format: string@tag-format-completer # Tag format type for the floodlight activity. If left blank, the tag format will default to HTML.
   --tag-string: string # Value of the cat= parameter in the floodlight tag, which the ad servers use to identify the activity. This is optional: if empty, a new tag string will be generated for you. This string must be 1 to 8 characters long, with valid characters being a-z0-9[ _ ]. This tag string must also be unique among activities of the same activity group. This field is read-only after insertion.
-  --user-defined-variable-types: list # List of the user-defined variables used by this conversion tag. These map to the "u[1-100]=" in the tags. Each of these can have a user defined type. Acceptable values are U1 to U100, inclusive. 
+  --user-defined-variable-types: list<string> # List of the user-defined variables used by this conversion tag. These map to the "u[1-100]=" in the tags. Each of these can have a user defined type. Acceptable values are U1 to U100, inclusive.
 ]: any -> record<accountId: string, advertiserId: string, advertiserIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, attributionEnabled: bool, cacheBustingType: string, countingMethod: string, defaultTags: table<id: string, name: string, tag: string>, expectedUrl: string, floodlightActivityGroupId: string, floodlightActivityGroupName: string, floodlightActivityGroupTagString: string, floodlightActivityGroupType: string, floodlightConfigurationId: string, floodlightConfigurationIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, floodlightTagType: string, id: string, idDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, kind: string, name: string, notes: string, publisherTags: table<clickThrough: bool, directorySiteId: string, dynamicTag: record, siteId: string, siteIdDimensionValue: record, viewThrough: bool>, secure: bool, sslCompliant: bool, sslRequired: bool, status: string, subaccountId: string, tagFormat: string, tagString: string, userDefinedVariableTypes: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/floodlightActivities") $qp)
-  let body = {"accountId": $account_id, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "attributionEnabled": $attribution_enabled, "cacheBustingType": $cache_busting_type, "countingMethod": $counting_method, "defaultTags": $default_tags, "expectedUrl": $expected_url, "floodlightActivityGroupId": $floodlight_activity_group_id, "floodlightActivityGroupName": $floodlight_activity_group_name, "floodlightActivityGroupTagString": $floodlight_activity_group_tag_string, "floodlightActivityGroupType": $floodlight_activity_group_type, "floodlightConfigurationId": $floodlight_configuration_id, "floodlightConfigurationIdDimensionValue": $floodlight_configuration_id_dimension_value, "floodlightTagType": $floodlight_tag_type, "id": $id, "idDimensionValue": $id_dimension_value, "kind": $kind, "name": $name, "notes": $notes, "publisherTags": $publisher_tags, "secure": $secure, "sslCompliant": $ssl_compliant, "sslRequired": $ssl_required, "status": $status, "subaccountId": $subaccount_id, "tagFormat": $tag_format, "tagString": $tag_string, "userDefinedVariableTypes": $user_defined_variable_types} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/floodlightActivities") $qp)
+  let req_body = {"accountId": $account_id, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "attributionEnabled": $attribution_enabled, "cacheBustingType": $cache_busting_type, "countingMethod": $counting_method, "defaultTags": $default_tags, "expectedUrl": $expected_url, "floodlightActivityGroupId": $floodlight_activity_group_id, "floodlightActivityGroupName": $floodlight_activity_group_name, "floodlightActivityGroupTagString": $floodlight_activity_group_tag_string, "floodlightActivityGroupType": $floodlight_activity_group_type, "floodlightConfigurationId": $floodlight_configuration_id, "floodlightConfigurationIdDimensionValue": $floodlight_configuration_id_dimension_value, "floodlightTagType": $floodlight_tag_type, "id": $id, "idDimensionValue": $id_dimension_value, "kind": $kind, "name": $name, "notes": $notes, "publisherTags": $publisher_tags, "secure": $secure, "sslCompliant": $ssl_compliant, "sslRequired": $ssl_required, "status": $status, "subaccountId": $subaccount_id, "tagFormat": $tag_format, "tagString": $tag_string, "userDefinedVariableTypes": $user_defined_variable_types} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Generates a tag for a floodlight activity.
 #
 # POST /userprofiles/{profileId}/floodlightActivities/generatetag
 # operationId: dfareporting.floodlightActivities.generatetag
-export def "userprofiles-floodlight-activities-generatetag dfareportingfloodlightActivitiesgeneratetag" [
+export def "userprofiles-floodlight-activities-generatetag create" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5156,7 +5166,7 @@ export def "userprofiles-floodlight-activities-generatetag dfareportingfloodligh
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "floodlightActivityId" $floodlight_activity_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/floodlightActivities/generatetag") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/floodlightActivities/generatetag") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5166,7 +5176,7 @@ export def "userprofiles-floodlight-activities-generatetag dfareportingfloodligh
 #
 # DELETE /userprofiles/{profileId}/floodlightActivities/{id}
 # operationId: dfareporting.floodlightActivities.delete
-export def "userprofiles-floodlight-activities dfareportingfloodlightActivitiesdelete" [
+export def "userprofiles-floodlight-activities delete" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5192,7 +5202,7 @@ export def "userprofiles-floodlight-activities dfareportingfloodlightActivitiesd
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id, id: $id} | format pattern "/userprofiles/{profile_id}/floodlightActivities/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/floodlightActivities/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5202,7 +5212,7 @@ export def "userprofiles-floodlight-activities dfareportingfloodlightActivitiesd
 #
 # GET /userprofiles/{profileId}/floodlightActivities/{id}
 # operationId: dfareporting.floodlightActivities.get
-export def "userprofiles-floodlight-activities dfareportingfloodlightActivitiesget" [
+export def "userprofiles-floodlight-activities get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5228,7 +5238,7 @@ export def "userprofiles-floodlight-activities dfareportingfloodlightActivitiesg
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id, id: $id} | format pattern "/userprofiles/{profile_id}/floodlightActivities/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/floodlightActivities/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5238,7 +5248,7 @@ export def "userprofiles-floodlight-activities dfareportingfloodlightActivitiesg
 #
 # GET /userprofiles/{profileId}/floodlightActivityGroups
 # operationId: dfareporting.floodlightActivityGroups.list
-export def "userprofiles-floodlight-activity-groups dfareportingfloodlightActivityGroupslist" [
+export def "userprofiles-floodlight-activity-groups list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5261,7 +5271,7 @@ export def "userprofiles-floodlight-activity-groups dfareportingfloodlightActivi
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --advertiser-id: string # Select only floodlight activity groups with the specified advertiser ID. Must specify either advertiserId or floodlightConfigurationId for a non-empty result.
   --floodlight-configuration-id: string # Select only floodlight activity groups with the specified floodlight configuration ID. Must specify either advertiserId, or floodlightConfigurationId for a non-empty result.
-  --ids: list # Select only floodlight activity groups with the specified IDs. Must specify either advertiserId or floodlightConfigurationId for a non-empty result.
+  --ids: list<string> # Select only floodlight activity groups with the specified IDs. Must specify either advertiserId or floodlightConfigurationId for a non-empty result.
   --max-results: int # Maximum number of results to return.
   --page-token: string # Value of the nextPageToken from the previous result page.
   --search-string: string # Allows searching for objects by name or ID. Wildcards (*) are allowed. For example, "floodlightactivitygroup*2015" will return objects with names like "floodlightactivitygroup June 2015", "floodlightactivitygroup April 2015", or simply "floodlightactivitygroup 2015". Most of the searches also add wildcards implicitly at the start and the end of the search string. For example, a search string of "floodlightactivitygroup" will match objects with name "my floodlightactivitygroup activity", "floodlightactivitygroup 2015", or simply "floodlightactivitygroup".
@@ -5272,7 +5282,7 @@ export def "userprofiles-floodlight-activity-groups dfareportingfloodlightActivi
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserId" $advertiser_id "scalar") (serialize-qp "floodlightConfigurationId" $floodlight_configuration_id "scalar") (serialize-qp "ids" $ids "multi") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "searchString" $search_string "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/floodlightActivityGroups") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/floodlightActivityGroups") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5285,7 +5295,7 @@ export def "userprofiles-floodlight-activity-groups dfareportingfloodlightActivi
 # --advertiserIdDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
 # --floodlightConfigurationIdDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
 # --idDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
-export def "userprofiles-floodlight-activity-groups dfareportingfloodlightActivityGroupspatch" [
+export def "userprofiles-floodlight-activity-groups update-by-profileId" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5324,12 +5334,12 @@ export def "userprofiles-floodlight-activity-groups dfareportingfloodlightActivi
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/floodlightActivityGroups") $qp)
-  let body = {"accountId": $account_id, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "floodlightConfigurationId": $floodlight_configuration_id, "floodlightConfigurationIdDimensionValue": $floodlight_configuration_id_dimension_value, "id": $id, "idDimensionValue": $id_dimension_value, "kind": $kind, "name": $name, "subaccountId": $subaccount_id, "tagString": $tag_string, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/floodlightActivityGroups") $qp)
+  let req_body = {"accountId": $account_id, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "floodlightConfigurationId": $floodlight_configuration_id, "floodlightConfigurationIdDimensionValue": $floodlight_configuration_id_dimension_value, "id": $id, "idDimensionValue": $id_dimension_value, "kind": $kind, "name": $name, "subaccountId": $subaccount_id, "tagString": $tag_string, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Inserts a new floodlight activity group.
@@ -5339,7 +5349,7 @@ export def "userprofiles-floodlight-activity-groups dfareportingfloodlightActivi
 # --advertiserIdDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
 # --floodlightConfigurationIdDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
 # --idDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
-export def "userprofiles-floodlight-activity-groups dfareportingfloodlightActivityGroupsinsert" [
+export def "userprofiles-floodlight-activity-groups create" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5377,12 +5387,12 @@ export def "userprofiles-floodlight-activity-groups dfareportingfloodlightActivi
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/floodlightActivityGroups") $qp)
-  let body = {"accountId": $account_id, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "floodlightConfigurationId": $floodlight_configuration_id, "floodlightConfigurationIdDimensionValue": $floodlight_configuration_id_dimension_value, "id": $id, "idDimensionValue": $id_dimension_value, "kind": $kind, "name": $name, "subaccountId": $subaccount_id, "tagString": $tag_string, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/floodlightActivityGroups") $qp)
+  let req_body = {"accountId": $account_id, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "floodlightConfigurationId": $floodlight_configuration_id, "floodlightConfigurationIdDimensionValue": $floodlight_configuration_id_dimension_value, "id": $id, "idDimensionValue": $id_dimension_value, "kind": $kind, "name": $name, "subaccountId": $subaccount_id, "tagString": $tag_string, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates an existing floodlight activity group.
@@ -5392,7 +5402,7 @@ export def "userprofiles-floodlight-activity-groups dfareportingfloodlightActivi
 # --advertiserIdDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
 # --floodlightConfigurationIdDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
 # --idDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
-export def "userprofiles-floodlight-activity-groups dfareportingfloodlightActivityGroupsupdate" [
+export def "userprofiles-floodlight-activity-groups update-by-profileId-1" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5430,19 +5440,19 @@ export def "userprofiles-floodlight-activity-groups dfareportingfloodlightActivi
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/floodlightActivityGroups") $qp)
-  let body = {"accountId": $account_id, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "floodlightConfigurationId": $floodlight_configuration_id, "floodlightConfigurationIdDimensionValue": $floodlight_configuration_id_dimension_value, "id": $id, "idDimensionValue": $id_dimension_value, "kind": $kind, "name": $name, "subaccountId": $subaccount_id, "tagString": $tag_string, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/floodlightActivityGroups") $qp)
+  let req_body = {"accountId": $account_id, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "floodlightConfigurationId": $floodlight_configuration_id, "floodlightConfigurationIdDimensionValue": $floodlight_configuration_id_dimension_value, "id": $id, "idDimensionValue": $id_dimension_value, "kind": $kind, "name": $name, "subaccountId": $subaccount_id, "tagString": $tag_string, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets one floodlight activity group by ID.
 #
 # GET /userprofiles/{profileId}/floodlightActivityGroups/{id}
 # operationId: dfareporting.floodlightActivityGroups.get
-export def "userprofiles-floodlight-activity-groups dfareportingfloodlightActivityGroupsget" [
+export def "userprofiles-floodlight-activity-groups get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5468,7 +5478,7 @@ export def "userprofiles-floodlight-activity-groups dfareportingfloodlightActivi
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id, id: $id} | format pattern "/userprofiles/{profile_id}/floodlightActivityGroups/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/floodlightActivityGroups/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5478,7 +5488,7 @@ export def "userprofiles-floodlight-activity-groups dfareportingfloodlightActivi
 #
 # GET /userprofiles/{profileId}/floodlightConfigurations
 # operationId: dfareporting.floodlightConfigurations.list
-export def "userprofiles-floodlight-configurations dfareportingfloodlightConfigurationslist" [
+export def "userprofiles-floodlight-configurations list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5499,12 +5509,12 @@ export def "userprofiles-floodlight-configurations dfareportingfloodlightConfigu
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --ids: list # Set of IDs of floodlight configurations to retrieve. Required field; otherwise an empty list will be returned.
+  --ids: list<string> # Set of IDs of floodlight configurations to retrieve. Required field; otherwise an empty list will be returned.
 ]: nothing -> record<floodlightConfigurations: table<accountId: string, advertiserId: string, advertiserIdDimensionValue: record, analyticsDataSharingEnabled: bool, customViewabilityMetric: record, exposureToConversionEnabled: bool, firstDayOfWeek: string, id: string, idDimensionValue: record, inAppAttributionTrackingEnabled: bool, kind: string, lookbackConfiguration: record, naturalSearchConversionAttributionOption: string, omnitureSettings: record, subaccountId: string, tagSettings: record, thirdPartyAuthenticationTokens: list, userDefinedVariableConfigurations: list>, kind: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "ids" $ids "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/floodlightConfigurations") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/floodlightConfigurations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5521,8 +5531,8 @@ export def "userprofiles-floodlight-configurations dfareportingfloodlightConfigu
 # --omnitureSettings shape: {omnitureCostDataEnabled?: bool, omnitureIntegrationEnabled?: bool}
 # --tagSettings shape: {dynamicTagEnabled?: bool, imageTagEnabled?: bool}
 # --thirdPartyAuthenticationTokens item shape: {name?: string, value?: string}
-# --userDefinedVariableConfigurations item shape: {dataType?: "STRING"|"NUMBER", reportName?: string, variableType?: "U1"|"U2"|"U3"|"U4"|"U5"|"U6"|"U7"|"U8"|"U9"|"U10"|"U11"|"U12"|"U13"|"U14"|"U15"|"U16"|"U17"|"U18"|"U19"|"U20"|"U21"|"U22"|"U23"|"U24"|"U25"|"U26"|"U27"|"U28"|"U29"|"U30"|"U31"|"U32"|"U33"|"U34"|"U35"|"U36"|"U37"|"U38"|"U39"|"U40"|"U41"|"U42"|"U43"|"U44"|"U45"|"U46"|"U47"|"U48"|"U49"|"U50"|"U51"|"U52"|"U53"|"U54"|"U55"|"U56"|"U57"|"U58"|"U59"|"U60"|"U61"|"U62"|"U63"|"U64"|"U65"|"U66"|"U67"|"U68"|"U69"|"U70"|"U71"|"U72"|"U73"|"U74"|"U75"|"U76"|"U77"|"U78"|"U79"|"U80"|"U81"|"U82"|"U83"|"U84"|"U85"|"U86"|"U87"|"U88"|"U89"|"U90"|"U91"|"U92"|"U93"|"U94"|"U95"|"U96"|"U97"|"U98"|"U99"|"U100"}
-export def "userprofiles-floodlight-configurations dfareportingfloodlightConfigurationspatch" [
+# --userDefinedVariableConfigurations item shape: {dataType?: "STRING"|"NUMBER", reportName?: string, ... (1 more fields)}
+export def "userprofiles-floodlight-configurations update-by-profileId" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5561,18 +5571,18 @@ export def "userprofiles-floodlight-configurations dfareportingfloodlightConfigu
   --subaccount-id: string # Subaccount ID of this floodlight configuration. This is a read-only field that can be left blank. (format: int64)
   --tag-settings: record # Dynamic and Image Tag Settings. — shape: {dynamicTagEnabled?: bool, imageTagEnabled?: bool}
   --third-party-authentication-tokens: list # List of third-party authentication tokens enabled for this configuration. — item shape: {name?: string, value?: string}
-  --user-defined-variable-configurations: list # List of user defined variables enabled for this configuration. — item shape: {dataType?: "STRING"|"NUMBER", reportName?: string, variableType?: "U1"|"U2"|"U3"|"U4"|"U5"|"U6"|"U7"|"U8"|"U9"|"U10"|"U11"|"U12"|"U13"|"U14"|"U15"|"U16"|"U17"|"U18"|"U19"|"U20"|"U21"|"U22"|"U23"|"U24"|"U25"|"U26"|"U27"|"U28"|"U29"|"U30"|"U31"|"U32"|"U33"|"U34"|"U35"|"U36"|"U37"|"U38"|"U39"|"U40"|"U41"|"U42"|"U43"|"U44"|"U45"|"U46"|"U47"|"U48"|"U49"|"U50"|"U51"|"U52"|"U53"|"U54"|"U55"|"U56"|"U57"|"U58"|"U59"|"U60"|"U61"|"U62"|"U63"|"U64"|"U65"|"U66"|"U67"|"U68"|"U69"|"U70"|"U71"|"U72"|"U73"|"U74"|"U75"|"U76"|"U77"|"U78"|"U79"|"U80"|"U81"|"U82"|"U83"|"U84"|"U85"|"U86"|"U87"|"U88"|"U89"|"U90"|"U91"|"U92"|"U93"|"U94"|"U95"|"U96"|"U97"|"U98"|"U99"|"U100"}
+  --user-defined-variable-configurations: list # List of user defined variables enabled for this configuration. — item shape: {dataType?: "STRING"|"NUMBER", reportName?: string, ... (1 more fields)}
 ]: any -> record<accountId: string, advertiserId: string, advertiserIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, analyticsDataSharingEnabled: bool, customViewabilityMetric: record<configuration: record<audible: bool, timeMillis: int, timePercent: int, viewabilityPercent: int>, id: string, name: string>, exposureToConversionEnabled: bool, firstDayOfWeek: string, id: string, idDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, inAppAttributionTrackingEnabled: bool, kind: string, lookbackConfiguration: record<clickDuration: int, postImpressionActivitiesDuration: int>, naturalSearchConversionAttributionOption: string, omnitureSettings: record<omnitureCostDataEnabled: bool, omnitureIntegrationEnabled: bool>, subaccountId: string, tagSettings: record<dynamicTagEnabled: bool, imageTagEnabled: bool>, thirdPartyAuthenticationTokens: table<name: string, value: string>, userDefinedVariableConfigurations: table<dataType: string, reportName: string, variableType: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/floodlightConfigurations") $qp)
-  let body = {"accountId": $account_id, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "analyticsDataSharingEnabled": $analytics_data_sharing_enabled, "customViewabilityMetric": $custom_viewability_metric, "exposureToConversionEnabled": $exposure_to_conversion_enabled, "firstDayOfWeek": $first_day_of_week, "id": $id, "idDimensionValue": $id_dimension_value, "inAppAttributionTrackingEnabled": $in_app_attribution_tracking_enabled, "kind": $kind, "lookbackConfiguration": $lookback_configuration, "naturalSearchConversionAttributionOption": $natural_search_conversion_attribution_option, "omnitureSettings": $omniture_settings, "subaccountId": $subaccount_id, "tagSettings": $tag_settings, "thirdPartyAuthenticationTokens": $third_party_authentication_tokens, "userDefinedVariableConfigurations": $user_defined_variable_configurations} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/floodlightConfigurations") $qp)
+  let req_body = {"accountId": $account_id, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "analyticsDataSharingEnabled": $analytics_data_sharing_enabled, "customViewabilityMetric": $custom_viewability_metric, "exposureToConversionEnabled": $exposure_to_conversion_enabled, "firstDayOfWeek": $first_day_of_week, "id": $id, "idDimensionValue": $id_dimension_value, "inAppAttributionTrackingEnabled": $in_app_attribution_tracking_enabled, "kind": $kind, "lookbackConfiguration": $lookback_configuration, "naturalSearchConversionAttributionOption": $natural_search_conversion_attribution_option, "omnitureSettings": $omniture_settings, "subaccountId": $subaccount_id, "tagSettings": $tag_settings, "thirdPartyAuthenticationTokens": $third_party_authentication_tokens, "userDefinedVariableConfigurations": $user_defined_variable_configurations} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates an existing floodlight configuration.
@@ -5586,8 +5596,8 @@ export def "userprofiles-floodlight-configurations dfareportingfloodlightConfigu
 # --omnitureSettings shape: {omnitureCostDataEnabled?: bool, omnitureIntegrationEnabled?: bool}
 # --tagSettings shape: {dynamicTagEnabled?: bool, imageTagEnabled?: bool}
 # --thirdPartyAuthenticationTokens item shape: {name?: string, value?: string}
-# --userDefinedVariableConfigurations item shape: {dataType?: "STRING"|"NUMBER", reportName?: string, variableType?: "U1"|"U2"|"U3"|"U4"|"U5"|"U6"|"U7"|"U8"|"U9"|"U10"|"U11"|"U12"|"U13"|"U14"|"U15"|"U16"|"U17"|"U18"|"U19"|"U20"|"U21"|"U22"|"U23"|"U24"|"U25"|"U26"|"U27"|"U28"|"U29"|"U30"|"U31"|"U32"|"U33"|"U34"|"U35"|"U36"|"U37"|"U38"|"U39"|"U40"|"U41"|"U42"|"U43"|"U44"|"U45"|"U46"|"U47"|"U48"|"U49"|"U50"|"U51"|"U52"|"U53"|"U54"|"U55"|"U56"|"U57"|"U58"|"U59"|"U60"|"U61"|"U62"|"U63"|"U64"|"U65"|"U66"|"U67"|"U68"|"U69"|"U70"|"U71"|"U72"|"U73"|"U74"|"U75"|"U76"|"U77"|"U78"|"U79"|"U80"|"U81"|"U82"|"U83"|"U84"|"U85"|"U86"|"U87"|"U88"|"U89"|"U90"|"U91"|"U92"|"U93"|"U94"|"U95"|"U96"|"U97"|"U98"|"U99"|"U100"}
-export def "userprofiles-floodlight-configurations dfareportingfloodlightConfigurationsupdate" [
+# --userDefinedVariableConfigurations item shape: {dataType?: "STRING"|"NUMBER", reportName?: string, ... (1 more fields)}
+export def "userprofiles-floodlight-configurations update-by-profileId-1" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5625,25 +5635,25 @@ export def "userprofiles-floodlight-configurations dfareportingfloodlightConfigu
   --subaccount-id: string # Subaccount ID of this floodlight configuration. This is a read-only field that can be left blank. (format: int64)
   --tag-settings: record # Dynamic and Image Tag Settings. — shape: {dynamicTagEnabled?: bool, imageTagEnabled?: bool}
   --third-party-authentication-tokens: list # List of third-party authentication tokens enabled for this configuration. — item shape: {name?: string, value?: string}
-  --user-defined-variable-configurations: list # List of user defined variables enabled for this configuration. — item shape: {dataType?: "STRING"|"NUMBER", reportName?: string, variableType?: "U1"|"U2"|"U3"|"U4"|"U5"|"U6"|"U7"|"U8"|"U9"|"U10"|"U11"|"U12"|"U13"|"U14"|"U15"|"U16"|"U17"|"U18"|"U19"|"U20"|"U21"|"U22"|"U23"|"U24"|"U25"|"U26"|"U27"|"U28"|"U29"|"U30"|"U31"|"U32"|"U33"|"U34"|"U35"|"U36"|"U37"|"U38"|"U39"|"U40"|"U41"|"U42"|"U43"|"U44"|"U45"|"U46"|"U47"|"U48"|"U49"|"U50"|"U51"|"U52"|"U53"|"U54"|"U55"|"U56"|"U57"|"U58"|"U59"|"U60"|"U61"|"U62"|"U63"|"U64"|"U65"|"U66"|"U67"|"U68"|"U69"|"U70"|"U71"|"U72"|"U73"|"U74"|"U75"|"U76"|"U77"|"U78"|"U79"|"U80"|"U81"|"U82"|"U83"|"U84"|"U85"|"U86"|"U87"|"U88"|"U89"|"U90"|"U91"|"U92"|"U93"|"U94"|"U95"|"U96"|"U97"|"U98"|"U99"|"U100"}
+  --user-defined-variable-configurations: list # List of user defined variables enabled for this configuration. — item shape: {dataType?: "STRING"|"NUMBER", reportName?: string, ... (1 more fields)}
 ]: any -> record<accountId: string, advertiserId: string, advertiserIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, analyticsDataSharingEnabled: bool, customViewabilityMetric: record<configuration: record<audible: bool, timeMillis: int, timePercent: int, viewabilityPercent: int>, id: string, name: string>, exposureToConversionEnabled: bool, firstDayOfWeek: string, id: string, idDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, inAppAttributionTrackingEnabled: bool, kind: string, lookbackConfiguration: record<clickDuration: int, postImpressionActivitiesDuration: int>, naturalSearchConversionAttributionOption: string, omnitureSettings: record<omnitureCostDataEnabled: bool, omnitureIntegrationEnabled: bool>, subaccountId: string, tagSettings: record<dynamicTagEnabled: bool, imageTagEnabled: bool>, thirdPartyAuthenticationTokens: table<name: string, value: string>, userDefinedVariableConfigurations: table<dataType: string, reportName: string, variableType: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/floodlightConfigurations") $qp)
-  let body = {"accountId": $account_id, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "analyticsDataSharingEnabled": $analytics_data_sharing_enabled, "customViewabilityMetric": $custom_viewability_metric, "exposureToConversionEnabled": $exposure_to_conversion_enabled, "firstDayOfWeek": $first_day_of_week, "id": $id, "idDimensionValue": $id_dimension_value, "inAppAttributionTrackingEnabled": $in_app_attribution_tracking_enabled, "kind": $kind, "lookbackConfiguration": $lookback_configuration, "naturalSearchConversionAttributionOption": $natural_search_conversion_attribution_option, "omnitureSettings": $omniture_settings, "subaccountId": $subaccount_id, "tagSettings": $tag_settings, "thirdPartyAuthenticationTokens": $third_party_authentication_tokens, "userDefinedVariableConfigurations": $user_defined_variable_configurations} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/floodlightConfigurations") $qp)
+  let req_body = {"accountId": $account_id, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "analyticsDataSharingEnabled": $analytics_data_sharing_enabled, "customViewabilityMetric": $custom_viewability_metric, "exposureToConversionEnabled": $exposure_to_conversion_enabled, "firstDayOfWeek": $first_day_of_week, "id": $id, "idDimensionValue": $id_dimension_value, "inAppAttributionTrackingEnabled": $in_app_attribution_tracking_enabled, "kind": $kind, "lookbackConfiguration": $lookback_configuration, "naturalSearchConversionAttributionOption": $natural_search_conversion_attribution_option, "omnitureSettings": $omniture_settings, "subaccountId": $subaccount_id, "tagSettings": $tag_settings, "thirdPartyAuthenticationTokens": $third_party_authentication_tokens, "userDefinedVariableConfigurations": $user_defined_variable_configurations} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets one floodlight configuration by ID.
 #
 # GET /userprofiles/{profileId}/floodlightConfigurations/{id}
 # operationId: dfareporting.floodlightConfigurations.get
-export def "userprofiles-floodlight-configurations dfareportingfloodlightConfigurationsget" [
+export def "userprofiles-floodlight-configurations get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5669,7 +5679,7 @@ export def "userprofiles-floodlight-configurations dfareportingfloodlightConfigu
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id, id: $id} | format pattern "/userprofiles/{profile_id}/floodlightConfigurations/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/floodlightConfigurations/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5679,7 +5689,7 @@ export def "userprofiles-floodlight-configurations dfareportingfloodlightConfigu
 #
 # GET /userprofiles/{profileId}/languages
 # operationId: dfareporting.languages.list
-export def "userprofiles-languages dfareportinglanguageslist" [
+export def "userprofiles-languages list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5704,7 +5714,7 @@ export def "userprofiles-languages dfareportinglanguageslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/languages") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/languages") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5714,7 +5724,7 @@ export def "userprofiles-languages dfareportinglanguageslist" [
 #
 # GET /userprofiles/{profileId}/metros
 # operationId: dfareporting.metros.list
-export def "userprofiles-metros dfareportingmetroslist" [
+export def "userprofiles-metros list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5739,7 +5749,7 @@ export def "userprofiles-metros dfareportingmetroslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/metros") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/metros") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5749,7 +5759,7 @@ export def "userprofiles-metros dfareportingmetroslist" [
 #
 # GET /userprofiles/{profileId}/mobileApps
 # operationId: dfareporting.mobileApps.list
-export def "userprofiles-mobile-apps dfareportingmobileAppslist" [
+export def "userprofiles-mobile-apps list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5770,8 +5780,8 @@ export def "userprofiles-mobile-apps dfareportingmobileAppslist" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --directories: list # Select only apps from these directories.
-  --ids: list # Select only apps with these IDs.
+  --directories: list<string> # Select only apps from these directories.
+  --ids: list<string> # Select only apps with these IDs.
   --max-results: int # Maximum number of results to return.
   --page-token: string # Value of the nextPageToken from the previous result page.
   --search-string: string # Allows searching for objects by name or ID. Wildcards (*) are allowed. For example, "app*2015" will return objects with names like "app Jan 2018", "app Jan 2018", or simply "app 2018". Most of the searches also add wildcards implicitly at the start and the end of the search string. For example, a search string of "app" will match objects with name "my app", "app 2018", or simply "app".
@@ -5779,7 +5789,7 @@ export def "userprofiles-mobile-apps dfareportingmobileAppslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "directories" $directories "multi") (serialize-qp "ids" $ids "multi") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "searchString" $search_string "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/mobileApps") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/mobileApps") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5789,7 +5799,7 @@ export def "userprofiles-mobile-apps dfareportingmobileAppslist" [
 #
 # GET /userprofiles/{profileId}/mobileApps/{id}
 # operationId: dfareporting.mobileApps.get
-export def "userprofiles-mobile-apps dfareportingmobileAppsget" [
+export def "userprofiles-mobile-apps get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5815,7 +5825,7 @@ export def "userprofiles-mobile-apps dfareportingmobileAppsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id, id: $id} | format pattern "/userprofiles/{profile_id}/mobileApps/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/mobileApps/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5825,7 +5835,7 @@ export def "userprofiles-mobile-apps dfareportingmobileAppsget" [
 #
 # GET /userprofiles/{profileId}/mobileCarriers
 # operationId: dfareporting.mobileCarriers.list
-export def "userprofiles-mobile-carriers dfareportingmobileCarrierslist" [
+export def "userprofiles-mobile-carriers list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5850,7 +5860,7 @@ export def "userprofiles-mobile-carriers dfareportingmobileCarrierslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/mobileCarriers") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/mobileCarriers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5860,7 +5870,7 @@ export def "userprofiles-mobile-carriers dfareportingmobileCarrierslist" [
 #
 # GET /userprofiles/{profileId}/mobileCarriers/{id}
 # operationId: dfareporting.mobileCarriers.get
-export def "userprofiles-mobile-carriers dfareportingmobileCarriersget" [
+export def "userprofiles-mobile-carriers get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5886,7 +5896,7 @@ export def "userprofiles-mobile-carriers dfareportingmobileCarriersget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id, id: $id} | format pattern "/userprofiles/{profile_id}/mobileCarriers/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/mobileCarriers/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5896,7 +5906,7 @@ export def "userprofiles-mobile-carriers dfareportingmobileCarriersget" [
 #
 # GET /userprofiles/{profileId}/operatingSystemVersions
 # operationId: dfareporting.operatingSystemVersions.list
-export def "userprofiles-operating-system-versions dfareportingoperatingSystemVersionslist" [
+export def "userprofiles-operating-system-versions list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5921,7 +5931,7 @@ export def "userprofiles-operating-system-versions dfareportingoperatingSystemVe
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/operatingSystemVersions") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/operatingSystemVersions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5931,7 +5941,7 @@ export def "userprofiles-operating-system-versions dfareportingoperatingSystemVe
 #
 # GET /userprofiles/{profileId}/operatingSystemVersions/{id}
 # operationId: dfareporting.operatingSystemVersions.get
-export def "userprofiles-operating-system-versions dfareportingoperatingSystemVersionsget" [
+export def "userprofiles-operating-system-versions get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5957,7 +5967,7 @@ export def "userprofiles-operating-system-versions dfareportingoperatingSystemVe
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id, id: $id} | format pattern "/userprofiles/{profile_id}/operatingSystemVersions/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/operatingSystemVersions/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5967,7 +5977,7 @@ export def "userprofiles-operating-system-versions dfareportingoperatingSystemVe
 #
 # GET /userprofiles/{profileId}/operatingSystems
 # operationId: dfareporting.operatingSystems.list
-export def "userprofiles-operating-systems dfareportingoperatingSystemslist" [
+export def "userprofiles-operating-systems list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5992,7 +6002,7 @@ export def "userprofiles-operating-systems dfareportingoperatingSystemslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/operatingSystems") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/operatingSystems") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6002,7 +6012,7 @@ export def "userprofiles-operating-systems dfareportingoperatingSystemslist" [
 #
 # GET /userprofiles/{profileId}/operatingSystems/{dartId}
 # operationId: dfareporting.operatingSystems.get
-export def "userprofiles-operating-systems dfareportingoperatingSystemsget" [
+export def "userprofiles-operating-systems get" [
   profile_id: string
   dart_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6028,7 +6038,7 @@ export def "userprofiles-operating-systems dfareportingoperatingSystemsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id, dart_id: $dart_id} | format pattern "/userprofiles/{profile_id}/operatingSystems/{dart_id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), dart_id: (encode-path-segment $dart_id)} | format pattern "/userprofiles/{profile_id}/operatingSystems/{dart_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6038,7 +6048,7 @@ export def "userprofiles-operating-systems dfareportingoperatingSystemsget" [
 #
 # GET /userprofiles/{profileId}/placementGroups
 # operationId: dfareporting.placementGroups.list
-export def "userprofiles-placement-groups dfareportingplacementGroupslist" [
+export def "userprofiles-placement-groups list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6059,12 +6069,12 @@ export def "userprofiles-placement-groups dfareportingplacementGroupslist" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --advertiser-ids: list # Select only placement groups that belong to these advertisers.
+  --advertiser-ids: list<string> # Select only placement groups that belong to these advertisers.
   --archived: oneof<nothing, bool> # Select only archived placements. Don't set this field to select both archived and non-archived placements.
-  --campaign-ids: list # Select only placement groups that belong to these campaigns.
-  --content-category-ids: list # Select only placement groups that are associated with these content categories.
-  --directory-site-ids: list # Select only placement groups that are associated with these directory sites.
-  --ids: list # Select only placement groups with these IDs.
+  --campaign-ids: list<string> # Select only placement groups that belong to these campaigns.
+  --content-category-ids: list<string> # Select only placement groups that are associated with these content categories.
+  --directory-site-ids: list<string> # Select only placement groups that are associated with these directory sites.
+  --ids: list<string> # Select only placement groups with these IDs.
   --max-end-date: string # Select only placements or placement groups whose end date is on or before the specified maxEndDate. The date should be formatted as "yyyy-MM-dd".
   --max-results: int # Maximum number of results to return.
   --max-start-date: string # Select only placements or placement groups whose start date is on or before the specified maxStartDate. The date should be formatted as "yyyy-MM-dd".
@@ -6072,17 +6082,17 @@ export def "userprofiles-placement-groups dfareportingplacementGroupslist" [
   --min-start-date: string # Select only placements or placement groups whose start date is on or after the specified minStartDate. The date should be formatted as "yyyy-MM-dd".
   --page-token: string # Value of the nextPageToken from the previous result page.
   --placement-group-type: string@placement-group-type-completer # Select only placement groups belonging with this group type. A package is a simple group of placements that acts as a single pricing point for a group of tags. A roadblock is a group of placements that not only acts as a single pricing point but also assumes that all the tags in it will be served at the same time. A roadblock requires one of its assigned placements to be marked as primary for reporting.
-  --placement-strategy-ids: list # Select only placement groups that are associated with these placement strategies.
-  --pricing-types: list # Select only placement groups with these pricing types.
+  --placement-strategy-ids: list<string> # Select only placement groups that are associated with these placement strategies.
+  --pricing-types: list<string> # Select only placement groups with these pricing types.
   --search-string: string # Allows searching for placement groups by name or ID. Wildcards (*) are allowed. For example, "placement*2015" will return placement groups with names like "placement group June 2015", "placement group May 2015", or simply "placements 2015". Most of the searches also add wildcards implicitly at the start and the end of the search string. For example, a search string of "placementgroup" will match placement groups with name "my placementgroup", "placementgroup 2015", or simply "placementgroup".
-  --site-ids: list # Select only placement groups that are associated with these sites.
+  --site-ids: list<string> # Select only placement groups that are associated with these sites.
   --sort-field: string@sort-field-completer # Field by which to sort the list.
   --sort-order: string@sort-order-completer # Order of sorted results.
 ]: nothing -> record<kind: string, nextPageToken: string, placementGroups: table<accountId: string, advertiserId: string, advertiserIdDimensionValue: record, archived: bool, campaignId: string, campaignIdDimensionValue: record, childPlacementIds: list, comment: string, contentCategoryId: string, createInfo: record, directorySiteId: string, directorySiteIdDimensionValue: record, externalId: string, id: string, idDimensionValue: record, kind: string, lastModifiedInfo: record, name: string, placementGroupType: string, placementStrategyId: string, pricingSchedule: record, primaryPlacementId: string, primaryPlacementIdDimensionValue: record, siteId: string, siteIdDimensionValue: record, subaccountId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserIds" $advertiser_ids "multi") (serialize-qp "archived" $archived "scalar") (serialize-qp "campaignIds" $campaign_ids "multi") (serialize-qp "contentCategoryIds" $content_category_ids "multi") (serialize-qp "directorySiteIds" $directory_site_ids "multi") (serialize-qp "ids" $ids "multi") (serialize-qp "maxEndDate" $max_end_date "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "maxStartDate" $max_start_date "scalar") (serialize-qp "minEndDate" $min_end_date "scalar") (serialize-qp "minStartDate" $min_start_date "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "placementGroupType" $placement_group_type "scalar") (serialize-qp "placementStrategyIds" $placement_strategy_ids "multi") (serialize-qp "pricingTypes" $pricing_types "multi") (serialize-qp "searchString" $search_string "scalar") (serialize-qp "siteIds" $site_ids "multi") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/placementGroups") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/placementGroups") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6101,7 +6111,7 @@ export def "userprofiles-placement-groups dfareportingplacementGroupslist" [
 # --pricingSchedule shape: {capCostOption?: "CAP_COST_NONE"|"CAP_COST_MONTHLY"|"CAP_COST_CUMULATIVE", endDate?: string, flighted?: bool, floodlightActivityId?: string, pricingPeriods?: list, pricingType?: "PRICING_TYPE_CPM"|"PRICING_TYPE_CPC"|"PRICING_TYPE_CPA"|"PRICING_TYPE_FLAT_RATE_IMPRESSIONS"|"PRICING_TYPE_FLAT_RATE_CLICKS"|"PRICING_TYPE_CPM_ACTIVEVIEW", startDate?: string, testingStartDate?: string}
 # --primaryPlacementIdDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
 # --siteIdDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
-export def "userprofiles-placement-groups dfareportingplacementGroupspatch" [
+export def "userprofiles-placement-groups update-by-profileId" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6129,7 +6139,7 @@ export def "userprofiles-placement-groups dfareportingplacementGroupspatch" [
   --archived: oneof<nothing, bool> # Whether this placement group is archived.
   --campaign-id: string # Campaign ID of this placement group. This field is required on insertion. (format: int64)
   --campaign-id-dimension-value: record # Represents a DimensionValue resource. — shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
-  --child-placement-ids: list # IDs of placements which are assigned to this placement group. This is a read-only, auto-generated field.
+  --child-placement-ids: list<string> # IDs of placements which are assigned to this placement group. This is a read-only, auto-generated field.
   --comment: string # Comments for this placement group.
   --content-category-id: string # ID of the content category assigned to this placement group. (format: int64)
   --create-info: record # Modification timestamp. — shape: {time?: string}
@@ -6154,12 +6164,12 @@ export def "userprofiles-placement-groups dfareportingplacementGroupspatch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/placementGroups") $qp)
-  let body = {"accountId": $account_id, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "archived": $archived, "campaignId": $campaign_id, "campaignIdDimensionValue": $campaign_id_dimension_value, "childPlacementIds": $child_placement_ids, "comment": $comment, "contentCategoryId": $content_category_id, "createInfo": $create_info, "directorySiteId": $directory_site_id, "directorySiteIdDimensionValue": $directory_site_id_dimension_value, "externalId": $external_id, "id": $id, "idDimensionValue": $id_dimension_value, "kind": $kind, "lastModifiedInfo": $last_modified_info, "name": $name, "placementGroupType": $placement_group_type, "placementStrategyId": $placement_strategy_id, "pricingSchedule": $pricing_schedule, "primaryPlacementId": $primary_placement_id, "primaryPlacementIdDimensionValue": $primary_placement_id_dimension_value, "siteId": $site_id, "siteIdDimensionValue": $site_id_dimension_value, "subaccountId": $subaccount_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/placementGroups") $qp)
+  let req_body = {"accountId": $account_id, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "archived": $archived, "campaignId": $campaign_id, "campaignIdDimensionValue": $campaign_id_dimension_value, "childPlacementIds": $child_placement_ids, "comment": $comment, "contentCategoryId": $content_category_id, "createInfo": $create_info, "directorySiteId": $directory_site_id, "directorySiteIdDimensionValue": $directory_site_id_dimension_value, "externalId": $external_id, "id": $id, "idDimensionValue": $id_dimension_value, "kind": $kind, "lastModifiedInfo": $last_modified_info, "name": $name, "placementGroupType": $placement_group_type, "placementStrategyId": $placement_strategy_id, "pricingSchedule": $pricing_schedule, "primaryPlacementId": $primary_placement_id, "primaryPlacementIdDimensionValue": $primary_placement_id_dimension_value, "siteId": $site_id, "siteIdDimensionValue": $site_id_dimension_value, "subaccountId": $subaccount_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Inserts a new placement group.
@@ -6175,7 +6185,7 @@ export def "userprofiles-placement-groups dfareportingplacementGroupspatch" [
 # --pricingSchedule shape: {capCostOption?: "CAP_COST_NONE"|"CAP_COST_MONTHLY"|"CAP_COST_CUMULATIVE", endDate?: string, flighted?: bool, floodlightActivityId?: string, pricingPeriods?: list, pricingType?: "PRICING_TYPE_CPM"|"PRICING_TYPE_CPC"|"PRICING_TYPE_CPA"|"PRICING_TYPE_FLAT_RATE_IMPRESSIONS"|"PRICING_TYPE_FLAT_RATE_CLICKS"|"PRICING_TYPE_CPM_ACTIVEVIEW", startDate?: string, testingStartDate?: string}
 # --primaryPlacementIdDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
 # --siteIdDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
-export def "userprofiles-placement-groups dfareportingplacementGroupsinsert" [
+export def "userprofiles-placement-groups create" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6202,7 +6212,7 @@ export def "userprofiles-placement-groups dfareportingplacementGroupsinsert" [
   --archived: oneof<nothing, bool> # Whether this placement group is archived.
   --campaign-id: string # Campaign ID of this placement group. This field is required on insertion. (format: int64)
   --campaign-id-dimension-value: record # Represents a DimensionValue resource. — shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
-  --child-placement-ids: list # IDs of placements which are assigned to this placement group. This is a read-only, auto-generated field.
+  --child-placement-ids: list<string> # IDs of placements which are assigned to this placement group. This is a read-only, auto-generated field.
   --comment: string # Comments for this placement group.
   --content-category-id: string # ID of the content category assigned to this placement group. (format: int64)
   --create-info: record # Modification timestamp. — shape: {time?: string}
@@ -6227,12 +6237,12 @@ export def "userprofiles-placement-groups dfareportingplacementGroupsinsert" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/placementGroups") $qp)
-  let body = {"accountId": $account_id, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "archived": $archived, "campaignId": $campaign_id, "campaignIdDimensionValue": $campaign_id_dimension_value, "childPlacementIds": $child_placement_ids, "comment": $comment, "contentCategoryId": $content_category_id, "createInfo": $create_info, "directorySiteId": $directory_site_id, "directorySiteIdDimensionValue": $directory_site_id_dimension_value, "externalId": $external_id, "id": $id, "idDimensionValue": $id_dimension_value, "kind": $kind, "lastModifiedInfo": $last_modified_info, "name": $name, "placementGroupType": $placement_group_type, "placementStrategyId": $placement_strategy_id, "pricingSchedule": $pricing_schedule, "primaryPlacementId": $primary_placement_id, "primaryPlacementIdDimensionValue": $primary_placement_id_dimension_value, "siteId": $site_id, "siteIdDimensionValue": $site_id_dimension_value, "subaccountId": $subaccount_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/placementGroups") $qp)
+  let req_body = {"accountId": $account_id, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "archived": $archived, "campaignId": $campaign_id, "campaignIdDimensionValue": $campaign_id_dimension_value, "childPlacementIds": $child_placement_ids, "comment": $comment, "contentCategoryId": $content_category_id, "createInfo": $create_info, "directorySiteId": $directory_site_id, "directorySiteIdDimensionValue": $directory_site_id_dimension_value, "externalId": $external_id, "id": $id, "idDimensionValue": $id_dimension_value, "kind": $kind, "lastModifiedInfo": $last_modified_info, "name": $name, "placementGroupType": $placement_group_type, "placementStrategyId": $placement_strategy_id, "pricingSchedule": $pricing_schedule, "primaryPlacementId": $primary_placement_id, "primaryPlacementIdDimensionValue": $primary_placement_id_dimension_value, "siteId": $site_id, "siteIdDimensionValue": $site_id_dimension_value, "subaccountId": $subaccount_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates an existing placement group.
@@ -6248,7 +6258,7 @@ export def "userprofiles-placement-groups dfareportingplacementGroupsinsert" [
 # --pricingSchedule shape: {capCostOption?: "CAP_COST_NONE"|"CAP_COST_MONTHLY"|"CAP_COST_CUMULATIVE", endDate?: string, flighted?: bool, floodlightActivityId?: string, pricingPeriods?: list, pricingType?: "PRICING_TYPE_CPM"|"PRICING_TYPE_CPC"|"PRICING_TYPE_CPA"|"PRICING_TYPE_FLAT_RATE_IMPRESSIONS"|"PRICING_TYPE_FLAT_RATE_CLICKS"|"PRICING_TYPE_CPM_ACTIVEVIEW", startDate?: string, testingStartDate?: string}
 # --primaryPlacementIdDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
 # --siteIdDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
-export def "userprofiles-placement-groups dfareportingplacementGroupsupdate" [
+export def "userprofiles-placement-groups update-by-profileId-1" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6275,7 +6285,7 @@ export def "userprofiles-placement-groups dfareportingplacementGroupsupdate" [
   --archived: oneof<nothing, bool> # Whether this placement group is archived.
   --campaign-id: string # Campaign ID of this placement group. This field is required on insertion. (format: int64)
   --campaign-id-dimension-value: record # Represents a DimensionValue resource. — shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
-  --child-placement-ids: list # IDs of placements which are assigned to this placement group. This is a read-only, auto-generated field.
+  --child-placement-ids: list<string> # IDs of placements which are assigned to this placement group. This is a read-only, auto-generated field.
   --comment: string # Comments for this placement group.
   --content-category-id: string # ID of the content category assigned to this placement group. (format: int64)
   --create-info: record # Modification timestamp. — shape: {time?: string}
@@ -6300,19 +6310,19 @@ export def "userprofiles-placement-groups dfareportingplacementGroupsupdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/placementGroups") $qp)
-  let body = {"accountId": $account_id, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "archived": $archived, "campaignId": $campaign_id, "campaignIdDimensionValue": $campaign_id_dimension_value, "childPlacementIds": $child_placement_ids, "comment": $comment, "contentCategoryId": $content_category_id, "createInfo": $create_info, "directorySiteId": $directory_site_id, "directorySiteIdDimensionValue": $directory_site_id_dimension_value, "externalId": $external_id, "id": $id, "idDimensionValue": $id_dimension_value, "kind": $kind, "lastModifiedInfo": $last_modified_info, "name": $name, "placementGroupType": $placement_group_type, "placementStrategyId": $placement_strategy_id, "pricingSchedule": $pricing_schedule, "primaryPlacementId": $primary_placement_id, "primaryPlacementIdDimensionValue": $primary_placement_id_dimension_value, "siteId": $site_id, "siteIdDimensionValue": $site_id_dimension_value, "subaccountId": $subaccount_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/placementGroups") $qp)
+  let req_body = {"accountId": $account_id, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "archived": $archived, "campaignId": $campaign_id, "campaignIdDimensionValue": $campaign_id_dimension_value, "childPlacementIds": $child_placement_ids, "comment": $comment, "contentCategoryId": $content_category_id, "createInfo": $create_info, "directorySiteId": $directory_site_id, "directorySiteIdDimensionValue": $directory_site_id_dimension_value, "externalId": $external_id, "id": $id, "idDimensionValue": $id_dimension_value, "kind": $kind, "lastModifiedInfo": $last_modified_info, "name": $name, "placementGroupType": $placement_group_type, "placementStrategyId": $placement_strategy_id, "pricingSchedule": $pricing_schedule, "primaryPlacementId": $primary_placement_id, "primaryPlacementIdDimensionValue": $primary_placement_id_dimension_value, "siteId": $site_id, "siteIdDimensionValue": $site_id_dimension_value, "subaccountId": $subaccount_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets one placement group by ID.
 #
 # GET /userprofiles/{profileId}/placementGroups/{id}
 # operationId: dfareporting.placementGroups.get
-export def "userprofiles-placement-groups dfareportingplacementGroupsget" [
+export def "userprofiles-placement-groups get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6338,7 +6348,7 @@ export def "userprofiles-placement-groups dfareportingplacementGroupsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id, id: $id} | format pattern "/userprofiles/{profile_id}/placementGroups/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/placementGroups/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6348,7 +6358,7 @@ export def "userprofiles-placement-groups dfareportingplacementGroupsget" [
 #
 # GET /userprofiles/{profileId}/placementStrategies
 # operationId: dfareporting.placementStrategies.list
-export def "userprofiles-placement-strategies dfareportingplacementStrategieslist" [
+export def "userprofiles-placement-strategies list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6369,7 +6379,7 @@ export def "userprofiles-placement-strategies dfareportingplacementStrategieslis
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --ids: list # Select only placement strategies with these IDs.
+  --ids: list<string> # Select only placement strategies with these IDs.
   --max-results: int # Maximum number of results to return.
   --page-token: string # Value of the nextPageToken from the previous result page.
   --search-string: string # Allows searching for objects by name or ID. Wildcards (*) are allowed. For example, "placementstrategy*2015" will return objects with names like "placementstrategy June 2015", "placementstrategy April 2015", or simply "placementstrategy 2015". Most of the searches also add wildcards implicitly at the start and the end of the search string. For example, a search string of "placementstrategy" will match objects with name "my placementstrategy", "placementstrategy 2015", or simply "placementstrategy".
@@ -6379,7 +6389,7 @@ export def "userprofiles-placement-strategies dfareportingplacementStrategieslis
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "ids" $ids "multi") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "searchString" $search_string "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/placementStrategies") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/placementStrategies") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6389,7 +6399,7 @@ export def "userprofiles-placement-strategies dfareportingplacementStrategieslis
 #
 # PATCH /userprofiles/{profileId}/placementStrategies
 # operationId: dfareporting.placementStrategies.patch
-export def "userprofiles-placement-strategies dfareportingplacementStrategiespatch" [
+export def "userprofiles-placement-strategies update-by-profileId" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6420,19 +6430,19 @@ export def "userprofiles-placement-strategies dfareportingplacementStrategiespat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/placementStrategies") $qp)
-  let body = {"accountId": $account_id, "id": $id, "kind": $kind, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/placementStrategies") $qp)
+  let req_body = {"accountId": $account_id, "id": $id, "kind": $kind, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Inserts a new placement strategy.
 #
 # POST /userprofiles/{profileId}/placementStrategies
 # operationId: dfareporting.placementStrategies.insert
-export def "userprofiles-placement-strategies dfareportingplacementStrategiesinsert" [
+export def "userprofiles-placement-strategies create" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6462,19 +6472,19 @@ export def "userprofiles-placement-strategies dfareportingplacementStrategiesins
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/placementStrategies") $qp)
-  let body = {"accountId": $account_id, "id": $id, "kind": $kind, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/placementStrategies") $qp)
+  let req_body = {"accountId": $account_id, "id": $id, "kind": $kind, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates an existing placement strategy.
 #
 # PUT /userprofiles/{profileId}/placementStrategies
 # operationId: dfareporting.placementStrategies.update
-export def "userprofiles-placement-strategies dfareportingplacementStrategiesupdate" [
+export def "userprofiles-placement-strategies update-by-profileId-1" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6504,19 +6514,19 @@ export def "userprofiles-placement-strategies dfareportingplacementStrategiesupd
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/placementStrategies") $qp)
-  let body = {"accountId": $account_id, "id": $id, "kind": $kind, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/placementStrategies") $qp)
+  let req_body = {"accountId": $account_id, "id": $id, "kind": $kind, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes an existing placement strategy.
 #
 # DELETE /userprofiles/{profileId}/placementStrategies/{id}
 # operationId: dfareporting.placementStrategies.delete
-export def "userprofiles-placement-strategies dfareportingplacementStrategiesdelete" [
+export def "userprofiles-placement-strategies delete" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6542,7 +6552,7 @@ export def "userprofiles-placement-strategies dfareportingplacementStrategiesdel
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id, id: $id} | format pattern "/userprofiles/{profile_id}/placementStrategies/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/placementStrategies/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6552,7 +6562,7 @@ export def "userprofiles-placement-strategies dfareportingplacementStrategiesdel
 #
 # GET /userprofiles/{profileId}/placementStrategies/{id}
 # operationId: dfareporting.placementStrategies.get
-export def "userprofiles-placement-strategies dfareportingplacementStrategiesget" [
+export def "userprofiles-placement-strategies get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6578,7 +6588,7 @@ export def "userprofiles-placement-strategies dfareportingplacementStrategiesget
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id, id: $id} | format pattern "/userprofiles/{profile_id}/placementStrategies/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/placementStrategies/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6588,7 +6598,7 @@ export def "userprofiles-placement-strategies dfareportingplacementStrategiesget
 #
 # GET /userprofiles/{profileId}/placements
 # operationId: dfareporting.placements.list
-export def "userprofiles-placements dfareportingplacementslist" [
+export def "userprofiles-placements list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6609,14 +6619,14 @@ export def "userprofiles-placements dfareportingplacementslist" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --advertiser-ids: list # Select only placements that belong to these advertisers.
+  --advertiser-ids: list<string> # Select only placements that belong to these advertisers.
   --archived: oneof<nothing, bool> # Select only archived placements. Don't set this field to select both archived and non-archived placements.
-  --campaign-ids: list # Select only placements that belong to these campaigns.
-  --compatibilities: list # Select only placements that are associated with these compatibilities. DISPLAY and DISPLAY_INTERSTITIAL refer to rendering either on desktop or on mobile devices for regular or interstitial ads respectively. APP and APP_INTERSTITIAL are for rendering in mobile apps. IN_STREAM_VIDEO refers to rendering in in-stream video ads developed with the VAST standard.
-  --content-category-ids: list # Select only placements that are associated with these content categories.
-  --directory-site-ids: list # Select only placements that are associated with these directory sites.
-  --group-ids: list # Select only placements that belong to these placement groups.
-  --ids: list # Select only placements with these IDs.
+  --campaign-ids: list<string> # Select only placements that belong to these campaigns.
+  --compatibilities: list<string> # Select only placements that are associated with these compatibilities. DISPLAY and DISPLAY_INTERSTITIAL refer to rendering either on desktop or on mobile devices for regular or interstitial ads respectively. APP and APP_INTERSTITIAL are for rendering in mobile apps. IN_STREAM_VIDEO refers to rendering in in-stream video ads developed with the VAST standard.
+  --content-category-ids: list<string> # Select only placements that are associated with these content categories.
+  --directory-site-ids: list<string> # Select only placements that are associated with these directory sites.
+  --group-ids: list<string> # Select only placements that belong to these placement groups.
+  --ids: list<string> # Select only placements with these IDs.
   --max-end-date: string # Select only placements or placement groups whose end date is on or before the specified maxEndDate. The date should be formatted as "yyyy-MM-dd".
   --max-results: int # Maximum number of results to return.
   --max-start-date: string # Select only placements or placement groups whose start date is on or before the specified maxStartDate. The date should be formatted as "yyyy-MM-dd".
@@ -6624,18 +6634,18 @@ export def "userprofiles-placements dfareportingplacementslist" [
   --min-start-date: string # Select only placements or placement groups whose start date is on or after the specified minStartDate. The date should be formatted as "yyyy-MM-dd".
   --page-token: string # Value of the nextPageToken from the previous result page.
   --payment-source: string@payment-source-completer # Select only placements with this payment source.
-  --placement-strategy-ids: list # Select only placements that are associated with these placement strategies.
-  --pricing-types: list # Select only placements with these pricing types.
+  --placement-strategy-ids: list<string> # Select only placements that are associated with these placement strategies.
+  --pricing-types: list<string> # Select only placements with these pricing types.
   --search-string: string # Allows searching for placements by name or ID. Wildcards (*) are allowed. For example, "placement*2015" will return placements with names like "placement June 2015", "placement May 2015", or simply "placements 2015". Most of the searches also add wildcards implicitly at the start and the end of the search string. For example, a search string of "placement" will match placements with name "my placement", "placement 2015", or simply "placement" .
-  --site-ids: list # Select only placements that are associated with these sites.
-  --size-ids: list # Select only placements that are associated with these sizes.
+  --site-ids: list<string> # Select only placements that are associated with these sites.
+  --size-ids: list<string> # Select only placements that are associated with these sizes.
   --sort-field: string@sort-field-completer # Field by which to sort the list.
   --sort-order: string@sort-order-completer # Order of sorted results.
 ]: nothing -> record<kind: string, nextPageToken: string, placements: table<accountId: string, adBlockingOptOut: bool, additionalSizes: list, advertiserId: string, advertiserIdDimensionValue: record, archived: bool, campaignId: string, campaignIdDimensionValue: record, comment: string, compatibility: string, contentCategoryId: string, createInfo: record, directorySiteId: string, directorySiteIdDimensionValue: record, externalId: string, id: string, idDimensionValue: record, keyName: string, kind: string, lastModifiedInfo: record, lookbackConfiguration: record, name: string, paymentApproved: bool, paymentSource: string, placementGroupId: string, placementGroupIdDimensionValue: record, placementStrategyId: string, pricingSchedule: record, primary: bool, publisherUpdateInfo: record, siteId: string, siteIdDimensionValue: record, size: record, sslRequired: bool, status: string, subaccountId: string, tagFormats: list, tagSetting: record, videoActiveViewOptOut: bool, videoSettings: record, vpaidAdapterChoice: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserIds" $advertiser_ids "multi") (serialize-qp "archived" $archived "scalar") (serialize-qp "campaignIds" $campaign_ids "multi") (serialize-qp "compatibilities" $compatibilities "multi") (serialize-qp "contentCategoryIds" $content_category_ids "multi") (serialize-qp "directorySiteIds" $directory_site_ids "multi") (serialize-qp "groupIds" $group_ids "multi") (serialize-qp "ids" $ids "multi") (serialize-qp "maxEndDate" $max_end_date "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "maxStartDate" $max_start_date "scalar") (serialize-qp "minEndDate" $min_end_date "scalar") (serialize-qp "minStartDate" $min_start_date "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "paymentSource" $payment_source "scalar") (serialize-qp "placementStrategyIds" $placement_strategy_ids "multi") (serialize-qp "pricingTypes" $pricing_types "multi") (serialize-qp "searchString" $search_string "scalar") (serialize-qp "siteIds" $site_ids "multi") (serialize-qp "sizeIds" $size_ids "multi") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/placements") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/placements") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6660,7 +6670,7 @@ export def "userprofiles-placements dfareportingplacementslist" [
 # --size shape: {height?: int, iab?: bool, id?: string, kind?: string, width?: int}
 # --tagSetting shape: {additionalKeyValues?: string, includeClickThroughUrls?: bool, includeClickTracking?: bool, keywordOption?: "PLACEHOLDER_WITH_LIST_OF_KEYWORDS"|"IGNORE"|"GENERATE_SEPARATE_TAG_FOR_EACH_KEYWORD"}
 # --videoSettings shape: {companionSettings?: record, kind?: string, obaEnabled?: bool, obaSettings?: record, orientation?: "ANY"|"LANDSCAPE"|"PORTRAIT", skippableSettings?: record, transcodeSettings?: record}
-export def "userprofiles-placements dfareportingplacementspatch" [
+export def "userprofiles-placements update-by-profileId" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6718,7 +6728,7 @@ export def "userprofiles-placements dfareportingplacementspatch" [
   --ssl-required: oneof<nothing, bool> # Whether creatives assigned to this placement must be SSL-compliant.
   --status: string@status-completer-3 # Third-party placement status.
   --subaccount-id: string # Subaccount ID of this placement. This field can be left blank. (format: int64)
-  --tag-formats: list # Tag formats to generate for this placement. This field is required on insertion. Acceptable values are: - "PLACEMENT_TAG_STANDARD" - "PLACEMENT_TAG_IFRAME_JAVASCRIPT" - "PLACEMENT_TAG_IFRAME_ILAYER" - "PLACEMENT_TAG_INTERNAL_REDIRECT" - "PLACEMENT_TAG_JAVASCRIPT" - "PLACEMENT_TAG_INTERSTITIAL_IFRAME_JAVASCRIPT" - "PLACEMENT_TAG_INTERSTITIAL_INTERNAL_REDIRECT" - "PLACEMENT_TAG_INTERSTITIAL_JAVASCRIPT" - "PLACEMENT_TAG_CLICK_COMMANDS" - "PLACEMENT_TAG_INSTREAM_VIDEO_PREFETCH" - "PLACEMENT_TAG_INSTREAM_VIDEO_PREFETCH_VAST_3" - "PLACEMENT_TAG_INSTREAM_VIDEO_PREFETCH_VAST_4" - "PLACEMENT_TAG_TRACKING" - "PLACEMENT_TAG_TRACKING_IFRAME" - "PLACEMENT_TAG_TRACKING_JAVASCRIPT" 
+  --tag-formats: list<string> # Tag formats to generate for this placement. This field is required on insertion. Acceptable values are: - "PLACEMENT_TAG_STANDARD" - "PLACEMENT_TAG_IFRAME_JAVASCRIPT" - "PLACEMENT_TAG_IFRAME_ILAYER" - "PLACEMENT_TAG_INTERNAL_REDIRECT" - "PLACEMENT_TAG_JAVASCRIPT" - "PLACEMENT_TAG_INTERSTITIAL_IFRAME_JAVASCRIPT" - "PLACEMENT_TAG_INTERSTITIAL_INTERNAL_REDIRECT" - "PLACEMENT_TAG_INTERSTITIAL_JAVASCRIPT" - "PLACEMENT_TAG_CLICK_COMMANDS" - "PLACEMENT_TAG_INSTREAM_VIDEO_PREFETCH" - "PLACEMENT_TAG_INSTREAM_VIDEO_PREFETCH_VAST_3" - "PLACEMENT_TAG_INSTREAM_VIDEO_PREFETCH_VAST_4" - "PLACEMENT_TAG_TRACKING" - "PLACEMENT_TAG_TRACKING_IFRAME" - "PLACEMENT_TAG_TRACKING_JAVASCRIPT"
   --tag-setting: record # Tag Settings — shape: {additionalKeyValues?: string, includeClickThroughUrls?: bool, includeClickTracking?: bool, keywordOption?: "PLACEHOLDER_WITH_LIST_OF_KEYWORDS"|"IGNORE"|"GENERATE_SEPARATE_TAG_FOR_EACH_KEYWORD"}
   --video-active-view-opt-out: oneof<nothing, bool> # Whether Verification and ActiveView are disabled for in-stream video creatives for this placement. The same setting videoActiveViewOptOut exists on the site level -- the opt out occurs if either of these settings are true. These settings are distinct from DirectorySites.settings.activeViewOptOut or Sites.siteSettings.activeViewOptOut which only apply to display ads. However, Accounts.activeViewOptOut opts out both video traffic, as well as display ads, from Verification and ActiveView.
   --video-settings: record # Video Settings — shape: {companionSettings?: record, kind?: string, obaEnabled?: bool, obaSettings?: record, orientation?: "ANY"|"LANDSCAPE"|"PORTRAIT", skippableSettings?: record, transcodeSettings?: record}
@@ -6728,12 +6738,12 @@ export def "userprofiles-placements dfareportingplacementspatch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/placements") $qp)
-  let body = {"accountId": $account_id, "adBlockingOptOut": $ad_blocking_opt_out, "additionalSizes": $additional_sizes, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "archived": $archived, "campaignId": $campaign_id, "campaignIdDimensionValue": $campaign_id_dimension_value, "comment": $comment, "compatibility": $compatibility, "contentCategoryId": $content_category_id, "createInfo": $create_info, "directorySiteId": $directory_site_id, "directorySiteIdDimensionValue": $directory_site_id_dimension_value, "externalId": $external_id, "id": $id, "idDimensionValue": $id_dimension_value, "keyName": $key_name, "kind": $kind, "lastModifiedInfo": $last_modified_info, "lookbackConfiguration": $lookback_configuration, "name": $name, "paymentApproved": $payment_approved, "paymentSource": $payment_source, "placementGroupId": $placement_group_id, "placementGroupIdDimensionValue": $placement_group_id_dimension_value, "placementStrategyId": $placement_strategy_id, "pricingSchedule": $pricing_schedule, "primary": $primary, "publisherUpdateInfo": $publisher_update_info, "siteId": $site_id, "siteIdDimensionValue": $site_id_dimension_value, "size": $size, "sslRequired": $ssl_required, "status": $status, "subaccountId": $subaccount_id, "tagFormats": $tag_formats, "tagSetting": $tag_setting, "videoActiveViewOptOut": $video_active_view_opt_out, "videoSettings": $video_settings, "vpaidAdapterChoice": $vpaid_adapter_choice} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/placements") $qp)
+  let req_body = {"accountId": $account_id, "adBlockingOptOut": $ad_blocking_opt_out, "additionalSizes": $additional_sizes, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "archived": $archived, "campaignId": $campaign_id, "campaignIdDimensionValue": $campaign_id_dimension_value, "comment": $comment, "compatibility": $compatibility, "contentCategoryId": $content_category_id, "createInfo": $create_info, "directorySiteId": $directory_site_id, "directorySiteIdDimensionValue": $directory_site_id_dimension_value, "externalId": $external_id, "id": $id, "idDimensionValue": $id_dimension_value, "keyName": $key_name, "kind": $kind, "lastModifiedInfo": $last_modified_info, "lookbackConfiguration": $lookback_configuration, "name": $name, "paymentApproved": $payment_approved, "paymentSource": $payment_source, "placementGroupId": $placement_group_id, "placementGroupIdDimensionValue": $placement_group_id_dimension_value, "placementStrategyId": $placement_strategy_id, "pricingSchedule": $pricing_schedule, "primary": $primary, "publisherUpdateInfo": $publisher_update_info, "siteId": $site_id, "siteIdDimensionValue": $site_id_dimension_value, "size": $size, "sslRequired": $ssl_required, "status": $status, "subaccountId": $subaccount_id, "tagFormats": $tag_formats, "tagSetting": $tag_setting, "videoActiveViewOptOut": $video_active_view_opt_out, "videoSettings": $video_settings, "vpaidAdapterChoice": $vpaid_adapter_choice} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Inserts a new placement.
@@ -6755,7 +6765,7 @@ export def "userprofiles-placements dfareportingplacementspatch" [
 # --size shape: {height?: int, iab?: bool, id?: string, kind?: string, width?: int}
 # --tagSetting shape: {additionalKeyValues?: string, includeClickThroughUrls?: bool, includeClickTracking?: bool, keywordOption?: "PLACEHOLDER_WITH_LIST_OF_KEYWORDS"|"IGNORE"|"GENERATE_SEPARATE_TAG_FOR_EACH_KEYWORD"}
 # --videoSettings shape: {companionSettings?: record, kind?: string, obaEnabled?: bool, obaSettings?: record, orientation?: "ANY"|"LANDSCAPE"|"PORTRAIT", skippableSettings?: record, transcodeSettings?: record}
-export def "userprofiles-placements dfareportingplacementsinsert" [
+export def "userprofiles-placements create" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6812,7 +6822,7 @@ export def "userprofiles-placements dfareportingplacementsinsert" [
   --ssl-required: oneof<nothing, bool> # Whether creatives assigned to this placement must be SSL-compliant.
   --status: string@status-completer-3 # Third-party placement status.
   --subaccount-id: string # Subaccount ID of this placement. This field can be left blank. (format: int64)
-  --tag-formats: list # Tag formats to generate for this placement. This field is required on insertion. Acceptable values are: - "PLACEMENT_TAG_STANDARD" - "PLACEMENT_TAG_IFRAME_JAVASCRIPT" - "PLACEMENT_TAG_IFRAME_ILAYER" - "PLACEMENT_TAG_INTERNAL_REDIRECT" - "PLACEMENT_TAG_JAVASCRIPT" - "PLACEMENT_TAG_INTERSTITIAL_IFRAME_JAVASCRIPT" - "PLACEMENT_TAG_INTERSTITIAL_INTERNAL_REDIRECT" - "PLACEMENT_TAG_INTERSTITIAL_JAVASCRIPT" - "PLACEMENT_TAG_CLICK_COMMANDS" - "PLACEMENT_TAG_INSTREAM_VIDEO_PREFETCH" - "PLACEMENT_TAG_INSTREAM_VIDEO_PREFETCH_VAST_3" - "PLACEMENT_TAG_INSTREAM_VIDEO_PREFETCH_VAST_4" - "PLACEMENT_TAG_TRACKING" - "PLACEMENT_TAG_TRACKING_IFRAME" - "PLACEMENT_TAG_TRACKING_JAVASCRIPT" 
+  --tag-formats: list<string> # Tag formats to generate for this placement. This field is required on insertion. Acceptable values are: - "PLACEMENT_TAG_STANDARD" - "PLACEMENT_TAG_IFRAME_JAVASCRIPT" - "PLACEMENT_TAG_IFRAME_ILAYER" - "PLACEMENT_TAG_INTERNAL_REDIRECT" - "PLACEMENT_TAG_JAVASCRIPT" - "PLACEMENT_TAG_INTERSTITIAL_IFRAME_JAVASCRIPT" - "PLACEMENT_TAG_INTERSTITIAL_INTERNAL_REDIRECT" - "PLACEMENT_TAG_INTERSTITIAL_JAVASCRIPT" - "PLACEMENT_TAG_CLICK_COMMANDS" - "PLACEMENT_TAG_INSTREAM_VIDEO_PREFETCH" - "PLACEMENT_TAG_INSTREAM_VIDEO_PREFETCH_VAST_3" - "PLACEMENT_TAG_INSTREAM_VIDEO_PREFETCH_VAST_4" - "PLACEMENT_TAG_TRACKING" - "PLACEMENT_TAG_TRACKING_IFRAME" - "PLACEMENT_TAG_TRACKING_JAVASCRIPT"
   --tag-setting: record # Tag Settings — shape: {additionalKeyValues?: string, includeClickThroughUrls?: bool, includeClickTracking?: bool, keywordOption?: "PLACEHOLDER_WITH_LIST_OF_KEYWORDS"|"IGNORE"|"GENERATE_SEPARATE_TAG_FOR_EACH_KEYWORD"}
   --video-active-view-opt-out: oneof<nothing, bool> # Whether Verification and ActiveView are disabled for in-stream video creatives for this placement. The same setting videoActiveViewOptOut exists on the site level -- the opt out occurs if either of these settings are true. These settings are distinct from DirectorySites.settings.activeViewOptOut or Sites.siteSettings.activeViewOptOut which only apply to display ads. However, Accounts.activeViewOptOut opts out both video traffic, as well as display ads, from Verification and ActiveView.
   --video-settings: record # Video Settings — shape: {companionSettings?: record, kind?: string, obaEnabled?: bool, obaSettings?: record, orientation?: "ANY"|"LANDSCAPE"|"PORTRAIT", skippableSettings?: record, transcodeSettings?: record}
@@ -6822,12 +6832,12 @@ export def "userprofiles-placements dfareportingplacementsinsert" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/placements") $qp)
-  let body = {"accountId": $account_id, "adBlockingOptOut": $ad_blocking_opt_out, "additionalSizes": $additional_sizes, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "archived": $archived, "campaignId": $campaign_id, "campaignIdDimensionValue": $campaign_id_dimension_value, "comment": $comment, "compatibility": $compatibility, "contentCategoryId": $content_category_id, "createInfo": $create_info, "directorySiteId": $directory_site_id, "directorySiteIdDimensionValue": $directory_site_id_dimension_value, "externalId": $external_id, "id": $id, "idDimensionValue": $id_dimension_value, "keyName": $key_name, "kind": $kind, "lastModifiedInfo": $last_modified_info, "lookbackConfiguration": $lookback_configuration, "name": $name, "paymentApproved": $payment_approved, "paymentSource": $payment_source, "placementGroupId": $placement_group_id, "placementGroupIdDimensionValue": $placement_group_id_dimension_value, "placementStrategyId": $placement_strategy_id, "pricingSchedule": $pricing_schedule, "primary": $primary, "publisherUpdateInfo": $publisher_update_info, "siteId": $site_id, "siteIdDimensionValue": $site_id_dimension_value, "size": $size, "sslRequired": $ssl_required, "status": $status, "subaccountId": $subaccount_id, "tagFormats": $tag_formats, "tagSetting": $tag_setting, "videoActiveViewOptOut": $video_active_view_opt_out, "videoSettings": $video_settings, "vpaidAdapterChoice": $vpaid_adapter_choice} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/placements") $qp)
+  let req_body = {"accountId": $account_id, "adBlockingOptOut": $ad_blocking_opt_out, "additionalSizes": $additional_sizes, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "archived": $archived, "campaignId": $campaign_id, "campaignIdDimensionValue": $campaign_id_dimension_value, "comment": $comment, "compatibility": $compatibility, "contentCategoryId": $content_category_id, "createInfo": $create_info, "directorySiteId": $directory_site_id, "directorySiteIdDimensionValue": $directory_site_id_dimension_value, "externalId": $external_id, "id": $id, "idDimensionValue": $id_dimension_value, "keyName": $key_name, "kind": $kind, "lastModifiedInfo": $last_modified_info, "lookbackConfiguration": $lookback_configuration, "name": $name, "paymentApproved": $payment_approved, "paymentSource": $payment_source, "placementGroupId": $placement_group_id, "placementGroupIdDimensionValue": $placement_group_id_dimension_value, "placementStrategyId": $placement_strategy_id, "pricingSchedule": $pricing_schedule, "primary": $primary, "publisherUpdateInfo": $publisher_update_info, "siteId": $site_id, "siteIdDimensionValue": $site_id_dimension_value, "size": $size, "sslRequired": $ssl_required, "status": $status, "subaccountId": $subaccount_id, "tagFormats": $tag_formats, "tagSetting": $tag_setting, "videoActiveViewOptOut": $video_active_view_opt_out, "videoSettings": $video_settings, "vpaidAdapterChoice": $vpaid_adapter_choice} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates an existing placement.
@@ -6849,7 +6859,7 @@ export def "userprofiles-placements dfareportingplacementsinsert" [
 # --size shape: {height?: int, iab?: bool, id?: string, kind?: string, width?: int}
 # --tagSetting shape: {additionalKeyValues?: string, includeClickThroughUrls?: bool, includeClickTracking?: bool, keywordOption?: "PLACEHOLDER_WITH_LIST_OF_KEYWORDS"|"IGNORE"|"GENERATE_SEPARATE_TAG_FOR_EACH_KEYWORD"}
 # --videoSettings shape: {companionSettings?: record, kind?: string, obaEnabled?: bool, obaSettings?: record, orientation?: "ANY"|"LANDSCAPE"|"PORTRAIT", skippableSettings?: record, transcodeSettings?: record}
-export def "userprofiles-placements dfareportingplacementsupdate" [
+export def "userprofiles-placements update-by-profileId-1" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6906,7 +6916,7 @@ export def "userprofiles-placements dfareportingplacementsupdate" [
   --ssl-required: oneof<nothing, bool> # Whether creatives assigned to this placement must be SSL-compliant.
   --status: string@status-completer-3 # Third-party placement status.
   --subaccount-id: string # Subaccount ID of this placement. This field can be left blank. (format: int64)
-  --tag-formats: list # Tag formats to generate for this placement. This field is required on insertion. Acceptable values are: - "PLACEMENT_TAG_STANDARD" - "PLACEMENT_TAG_IFRAME_JAVASCRIPT" - "PLACEMENT_TAG_IFRAME_ILAYER" - "PLACEMENT_TAG_INTERNAL_REDIRECT" - "PLACEMENT_TAG_JAVASCRIPT" - "PLACEMENT_TAG_INTERSTITIAL_IFRAME_JAVASCRIPT" - "PLACEMENT_TAG_INTERSTITIAL_INTERNAL_REDIRECT" - "PLACEMENT_TAG_INTERSTITIAL_JAVASCRIPT" - "PLACEMENT_TAG_CLICK_COMMANDS" - "PLACEMENT_TAG_INSTREAM_VIDEO_PREFETCH" - "PLACEMENT_TAG_INSTREAM_VIDEO_PREFETCH_VAST_3" - "PLACEMENT_TAG_INSTREAM_VIDEO_PREFETCH_VAST_4" - "PLACEMENT_TAG_TRACKING" - "PLACEMENT_TAG_TRACKING_IFRAME" - "PLACEMENT_TAG_TRACKING_JAVASCRIPT" 
+  --tag-formats: list<string> # Tag formats to generate for this placement. This field is required on insertion. Acceptable values are: - "PLACEMENT_TAG_STANDARD" - "PLACEMENT_TAG_IFRAME_JAVASCRIPT" - "PLACEMENT_TAG_IFRAME_ILAYER" - "PLACEMENT_TAG_INTERNAL_REDIRECT" - "PLACEMENT_TAG_JAVASCRIPT" - "PLACEMENT_TAG_INTERSTITIAL_IFRAME_JAVASCRIPT" - "PLACEMENT_TAG_INTERSTITIAL_INTERNAL_REDIRECT" - "PLACEMENT_TAG_INTERSTITIAL_JAVASCRIPT" - "PLACEMENT_TAG_CLICK_COMMANDS" - "PLACEMENT_TAG_INSTREAM_VIDEO_PREFETCH" - "PLACEMENT_TAG_INSTREAM_VIDEO_PREFETCH_VAST_3" - "PLACEMENT_TAG_INSTREAM_VIDEO_PREFETCH_VAST_4" - "PLACEMENT_TAG_TRACKING" - "PLACEMENT_TAG_TRACKING_IFRAME" - "PLACEMENT_TAG_TRACKING_JAVASCRIPT"
   --tag-setting: record # Tag Settings — shape: {additionalKeyValues?: string, includeClickThroughUrls?: bool, includeClickTracking?: bool, keywordOption?: "PLACEHOLDER_WITH_LIST_OF_KEYWORDS"|"IGNORE"|"GENERATE_SEPARATE_TAG_FOR_EACH_KEYWORD"}
   --video-active-view-opt-out: oneof<nothing, bool> # Whether Verification and ActiveView are disabled for in-stream video creatives for this placement. The same setting videoActiveViewOptOut exists on the site level -- the opt out occurs if either of these settings are true. These settings are distinct from DirectorySites.settings.activeViewOptOut or Sites.siteSettings.activeViewOptOut which only apply to display ads. However, Accounts.activeViewOptOut opts out both video traffic, as well as display ads, from Verification and ActiveView.
   --video-settings: record # Video Settings — shape: {companionSettings?: record, kind?: string, obaEnabled?: bool, obaSettings?: record, orientation?: "ANY"|"LANDSCAPE"|"PORTRAIT", skippableSettings?: record, transcodeSettings?: record}
@@ -6916,19 +6926,19 @@ export def "userprofiles-placements dfareportingplacementsupdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/placements") $qp)
-  let body = {"accountId": $account_id, "adBlockingOptOut": $ad_blocking_opt_out, "additionalSizes": $additional_sizes, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "archived": $archived, "campaignId": $campaign_id, "campaignIdDimensionValue": $campaign_id_dimension_value, "comment": $comment, "compatibility": $compatibility, "contentCategoryId": $content_category_id, "createInfo": $create_info, "directorySiteId": $directory_site_id, "directorySiteIdDimensionValue": $directory_site_id_dimension_value, "externalId": $external_id, "id": $id, "idDimensionValue": $id_dimension_value, "keyName": $key_name, "kind": $kind, "lastModifiedInfo": $last_modified_info, "lookbackConfiguration": $lookback_configuration, "name": $name, "paymentApproved": $payment_approved, "paymentSource": $payment_source, "placementGroupId": $placement_group_id, "placementGroupIdDimensionValue": $placement_group_id_dimension_value, "placementStrategyId": $placement_strategy_id, "pricingSchedule": $pricing_schedule, "primary": $primary, "publisherUpdateInfo": $publisher_update_info, "siteId": $site_id, "siteIdDimensionValue": $site_id_dimension_value, "size": $size, "sslRequired": $ssl_required, "status": $status, "subaccountId": $subaccount_id, "tagFormats": $tag_formats, "tagSetting": $tag_setting, "videoActiveViewOptOut": $video_active_view_opt_out, "videoSettings": $video_settings, "vpaidAdapterChoice": $vpaid_adapter_choice} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/placements") $qp)
+  let req_body = {"accountId": $account_id, "adBlockingOptOut": $ad_blocking_opt_out, "additionalSizes": $additional_sizes, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "archived": $archived, "campaignId": $campaign_id, "campaignIdDimensionValue": $campaign_id_dimension_value, "comment": $comment, "compatibility": $compatibility, "contentCategoryId": $content_category_id, "createInfo": $create_info, "directorySiteId": $directory_site_id, "directorySiteIdDimensionValue": $directory_site_id_dimension_value, "externalId": $external_id, "id": $id, "idDimensionValue": $id_dimension_value, "keyName": $key_name, "kind": $kind, "lastModifiedInfo": $last_modified_info, "lookbackConfiguration": $lookback_configuration, "name": $name, "paymentApproved": $payment_approved, "paymentSource": $payment_source, "placementGroupId": $placement_group_id, "placementGroupIdDimensionValue": $placement_group_id_dimension_value, "placementStrategyId": $placement_strategy_id, "pricingSchedule": $pricing_schedule, "primary": $primary, "publisherUpdateInfo": $publisher_update_info, "siteId": $site_id, "siteIdDimensionValue": $site_id_dimension_value, "size": $size, "sslRequired": $ssl_required, "status": $status, "subaccountId": $subaccount_id, "tagFormats": $tag_formats, "tagSetting": $tag_setting, "videoActiveViewOptOut": $video_active_view_opt_out, "videoSettings": $video_settings, "vpaidAdapterChoice": $vpaid_adapter_choice} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Generates tags for a placement.
 #
 # POST /userprofiles/{profileId}/placements/generatetags
 # operationId: dfareporting.placements.generatetags
-export def "userprofiles-placements-generatetags dfareportingplacementsgeneratetags" [
+export def "userprofiles-placements-generatetags create" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6950,13 +6960,13 @@ export def "userprofiles-placements-generatetags dfareportingplacementsgeneratet
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --campaign-id: string # Generate placements belonging to this campaign. This is a required field.
-  --placement-ids: list # Generate tags for these placements.
-  --tag-formats: list # Tag formats to generate for these placements. *Note:* PLACEMENT_TAG_STANDARD can only be generated for 1x1 placements.
+  --placement-ids: list<string> # Generate tags for these placements.
+  --tag-formats: list<string> # Tag formats to generate for these placements. *Note:* PLACEMENT_TAG_STANDARD can only be generated for 1x1 placements.
 ]: nothing -> record<kind: string, placementTags: table<placementId: string, tagDatas: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "campaignId" $campaign_id "scalar") (serialize-qp "placementIds" $placement_ids "multi") (serialize-qp "tagFormats" $tag_formats "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/placements/generatetags") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/placements/generatetags") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6966,7 +6976,7 @@ export def "userprofiles-placements-generatetags dfareportingplacementsgeneratet
 #
 # GET /userprofiles/{profileId}/placements/{id}
 # operationId: dfareporting.placements.get
-export def "userprofiles-placements dfareportingplacementsget" [
+export def "userprofiles-placements get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6992,7 +7002,7 @@ export def "userprofiles-placements dfareportingplacementsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id, id: $id} | format pattern "/userprofiles/{profile_id}/placements/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/placements/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7002,7 +7012,7 @@ export def "userprofiles-placements dfareportingplacementsget" [
 #
 # GET /userprofiles/{profileId}/platformTypes
 # operationId: dfareporting.platformTypes.list
-export def "userprofiles-platform-types dfareportingplatformTypeslist" [
+export def "userprofiles-platform-types list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7027,7 +7037,7 @@ export def "userprofiles-platform-types dfareportingplatformTypeslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/platformTypes") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/platformTypes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7037,7 +7047,7 @@ export def "userprofiles-platform-types dfareportingplatformTypeslist" [
 #
 # GET /userprofiles/{profileId}/platformTypes/{id}
 # operationId: dfareporting.platformTypes.get
-export def "userprofiles-platform-types dfareportingplatformTypesget" [
+export def "userprofiles-platform-types get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7063,7 +7073,7 @@ export def "userprofiles-platform-types dfareportingplatformTypesget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id, id: $id} | format pattern "/userprofiles/{profile_id}/platformTypes/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/platformTypes/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7073,7 +7083,7 @@ export def "userprofiles-platform-types dfareportingplatformTypesget" [
 #
 # GET /userprofiles/{profileId}/postalCodes
 # operationId: dfareporting.postalCodes.list
-export def "userprofiles-postal-codes dfareportingpostalCodeslist" [
+export def "userprofiles-postal-codes list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7098,7 +7108,7 @@ export def "userprofiles-postal-codes dfareportingpostalCodeslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/postalCodes") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/postalCodes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7108,7 +7118,7 @@ export def "userprofiles-postal-codes dfareportingpostalCodeslist" [
 #
 # GET /userprofiles/{profileId}/postalCodes/{code}
 # operationId: dfareporting.postalCodes.get
-export def "userprofiles-postal-codes dfareportingpostalCodesget" [
+export def "userprofiles-postal-codes get" [
   profile_id: string
   code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7134,7 +7144,7 @@ export def "userprofiles-postal-codes dfareportingpostalCodesget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id, code: $code} | format pattern "/userprofiles/{profile_id}/postalCodes/{code}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), code: (encode-path-segment $code)} | format pattern "/userprofiles/{profile_id}/postalCodes/{code}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7144,7 +7154,7 @@ export def "userprofiles-postal-codes dfareportingpostalCodesget" [
 #
 # GET /userprofiles/{profileId}/projects
 # operationId: dfareporting.projects.list
-export def "userprofiles-projects dfareportingprojectslist" [
+export def "userprofiles-projects list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7165,8 +7175,8 @@ export def "userprofiles-projects dfareportingprojectslist" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --advertiser-ids: list # Select only projects with these advertiser IDs.
-  --ids: list # Select only projects with these IDs.
+  --advertiser-ids: list<string> # Select only projects with these advertiser IDs.
+  --ids: list<string> # Select only projects with these IDs.
   --max-results: int # Maximum number of results to return.
   --page-token: string # Value of the nextPageToken from the previous result page.
   --search-string: string # Allows searching for projects by name or ID. Wildcards (*) are allowed. For example, "project*2015" will return projects with names like "project June 2015", "project April 2015", or simply "project 2015". Most of the searches also add wildcards implicitly at the start and the end of the search string. For example, a search string of "project" will match projects with name "my project", "project 2015", or simply "project".
@@ -7176,7 +7186,7 @@ export def "userprofiles-projects dfareportingprojectslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserIds" $advertiser_ids "multi") (serialize-qp "ids" $ids "multi") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "searchString" $search_string "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/projects") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/projects") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7186,7 +7196,7 @@ export def "userprofiles-projects dfareportingprojectslist" [
 #
 # GET /userprofiles/{profileId}/projects/{id}
 # operationId: dfareporting.projects.get
-export def "userprofiles-projects dfareportingprojectsget" [
+export def "userprofiles-projects get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7212,7 +7222,7 @@ export def "userprofiles-projects dfareportingprojectsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id, id: $id} | format pattern "/userprofiles/{profile_id}/projects/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/projects/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7222,7 +7232,7 @@ export def "userprofiles-projects dfareportingprojectsget" [
 #
 # GET /userprofiles/{profileId}/projects/{projectId}/inventoryItems
 # operationId: dfareporting.inventoryItems.list
-export def "userprofiles-projects-inventory-items dfareportinginventoryItemslist" [
+export def "userprofiles-projects-inventory-items list" [
   profile_id: string
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7244,12 +7254,12 @@ export def "userprofiles-projects-inventory-items dfareportinginventoryItemslist
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --ids: list # Select only inventory items with these IDs.
+  --ids: list<string> # Select only inventory items with these IDs.
   --in-plan: oneof<nothing, bool> # Select only inventory items that are in plan.
   --max-results: int # Maximum number of results to return.
-  --order-id: list # Select only inventory items that belong to specified orders.
+  --order-id: list<string> # Select only inventory items that belong to specified orders.
   --page-token: string # Value of the nextPageToken from the previous result page.
-  --site-id: list # Select only inventory items that are associated with these sites.
+  --site-id: list<string> # Select only inventory items that are associated with these sites.
   --sort-field: string@sort-field-completer # Field by which to sort the list.
   --sort-order: string@sort-order-completer # Order of sorted results.
   --type: string@type-completer-4 # Select only inventory items with this type.
@@ -7257,7 +7267,7 @@ export def "userprofiles-projects-inventory-items dfareportinginventoryItemslist
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "ids" $ids "multi") (serialize-qp "inPlan" $in_plan "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "orderId" $order_id "multi") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "siteId" $site_id "multi") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id, project_id: $project_id} | format pattern "/userprofiles/{profile_id}/projects/{project_id}/inventoryItems") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), project_id: (encode-path-segment $project_id)} | format pattern "/userprofiles/{profile_id}/projects/{project_id}/inventoryItems") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7267,7 +7277,7 @@ export def "userprofiles-projects-inventory-items dfareportinginventoryItemslist
 #
 # GET /userprofiles/{profileId}/projects/{projectId}/inventoryItems/{id}
 # operationId: dfareporting.inventoryItems.get
-export def "userprofiles-projects-inventory-items dfareportinginventoryItemsget" [
+export def "userprofiles-projects-inventory-items get" [
   profile_id: string
   project_id: string
   id: string
@@ -7294,7 +7304,7 @@ export def "userprofiles-projects-inventory-items dfareportinginventoryItemsget"
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id, project_id: $project_id, id: $id} | format pattern "/userprofiles/{profile_id}/projects/{project_id}/inventoryItems/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), project_id: (encode-path-segment $project_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/projects/{project_id}/inventoryItems/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7304,7 +7314,7 @@ export def "userprofiles-projects-inventory-items dfareportinginventoryItemsget"
 #
 # GET /userprofiles/{profileId}/projects/{projectId}/orderDocuments
 # operationId: dfareporting.orderDocuments.list
-export def "userprofiles-projects-order-documents dfareportingorderDocumentslist" [
+export def "userprofiles-projects-order-documents list" [
   profile_id: string
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7327,19 +7337,19 @@ export def "userprofiles-projects-order-documents dfareportingorderDocumentslist
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --approved: oneof<nothing, bool> # Select only order documents that have been approved by at least one user.
-  --ids: list # Select only order documents with these IDs.
+  --ids: list<string> # Select only order documents with these IDs.
   --max-results: int # Maximum number of results to return.
-  --order-id: list # Select only order documents for specified orders.
+  --order-id: list<string> # Select only order documents for specified orders.
   --page-token: string # Value of the nextPageToken from the previous result page.
   --search-string: string # Allows searching for order documents by name or ID. Wildcards (*) are allowed. For example, "orderdocument*2015" will return order documents with names like "orderdocument June 2015", "orderdocument April 2015", or simply "orderdocument 2015". Most of the searches also add wildcards implicitly at the start and the end of the search string. For example, a search string of "orderdocument" will match order documents with name "my orderdocument", "orderdocument 2015", or simply "orderdocument".
-  --site-id: list # Select only order documents that are associated with these sites.
+  --site-id: list<string> # Select only order documents that are associated with these sites.
   --sort-field: string@sort-field-completer # Field by which to sort the list.
   --sort-order: string@sort-order-completer # Order of sorted results.
 ]: nothing -> record<kind: string, nextPageToken: string, orderDocuments: table<accountId: string, advertiserId: string, amendedOrderDocumentId: string, approvedByUserProfileIds: list, cancelled: bool, createdInfo: record, effectiveDate: string, id: string, kind: string, lastSentRecipients: list, lastSentTime: string, orderId: string, projectId: string, signed: bool, subaccountId: string, title: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "approved" $approved "scalar") (serialize-qp "ids" $ids "multi") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "orderId" $order_id "multi") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "searchString" $search_string "scalar") (serialize-qp "siteId" $site_id "multi") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id, project_id: $project_id} | format pattern "/userprofiles/{profile_id}/projects/{project_id}/orderDocuments") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), project_id: (encode-path-segment $project_id)} | format pattern "/userprofiles/{profile_id}/projects/{project_id}/orderDocuments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7349,7 +7359,7 @@ export def "userprofiles-projects-order-documents dfareportingorderDocumentslist
 #
 # GET /userprofiles/{profileId}/projects/{projectId}/orderDocuments/{id}
 # operationId: dfareporting.orderDocuments.get
-export def "userprofiles-projects-order-documents dfareportingorderDocumentsget" [
+export def "userprofiles-projects-order-documents get" [
   profile_id: string
   project_id: string
   id: string
@@ -7376,7 +7386,7 @@ export def "userprofiles-projects-order-documents dfareportingorderDocumentsget"
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id, project_id: $project_id, id: $id} | format pattern "/userprofiles/{profile_id}/projects/{project_id}/orderDocuments/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), project_id: (encode-path-segment $project_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/projects/{project_id}/orderDocuments/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7386,7 +7396,7 @@ export def "userprofiles-projects-order-documents dfareportingorderDocumentsget"
 #
 # GET /userprofiles/{profileId}/projects/{projectId}/orders
 # operationId: dfareporting.orders.list
-export def "userprofiles-projects-orders dfareportingorderslist" [
+export def "userprofiles-projects-orders list" [
   profile_id: string
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7408,18 +7418,18 @@ export def "userprofiles-projects-orders dfareportingorderslist" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --ids: list # Select only orders with these IDs.
+  --ids: list<string> # Select only orders with these IDs.
   --max-results: int # Maximum number of results to return.
   --page-token: string # Value of the nextPageToken from the previous result page.
   --search-string: string # Allows searching for orders by name or ID. Wildcards (*) are allowed. For example, "order*2015" will return orders with names like "order June 2015", "order April 2015", or simply "order 2015". Most of the searches also add wildcards implicitly at the start and the end of the search string. For example, a search string of "order" will match orders with name "my order", "order 2015", or simply "order".
-  --site-id: list # Select only orders that are associated with these site IDs.
+  --site-id: list<string> # Select only orders that are associated with these site IDs.
   --sort-field: string@sort-field-completer # Field by which to sort the list.
   --sort-order: string@sort-order-completer # Order of sorted results.
 ]: nothing -> record<kind: string, nextPageToken: string, orders: table<accountId: string, advertiserId: string, approverUserProfileIds: list, buyerInvoiceId: string, buyerOrganizationName: string, comments: string, contacts: list, id: string, kind: string, lastModifiedInfo: record, name: string, notes: string, planningTermId: string, projectId: string, sellerOrderId: string, sellerOrganizationName: string, siteId: list, siteNames: list, subaccountId: string, termsAndConditions: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "ids" $ids "multi") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "searchString" $search_string "scalar") (serialize-qp "siteId" $site_id "multi") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id, project_id: $project_id} | format pattern "/userprofiles/{profile_id}/projects/{project_id}/orders") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), project_id: (encode-path-segment $project_id)} | format pattern "/userprofiles/{profile_id}/projects/{project_id}/orders") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7429,7 +7439,7 @@ export def "userprofiles-projects-orders dfareportingorderslist" [
 #
 # GET /userprofiles/{profileId}/projects/{projectId}/orders/{id}
 # operationId: dfareporting.orders.get
-export def "userprofiles-projects-orders dfareportingordersget" [
+export def "userprofiles-projects-orders get" [
   profile_id: string
   project_id: string
   id: string
@@ -7456,7 +7466,7 @@ export def "userprofiles-projects-orders dfareportingordersget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id, project_id: $project_id, id: $id} | format pattern "/userprofiles/{profile_id}/projects/{project_id}/orders/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), project_id: (encode-path-segment $project_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/projects/{project_id}/orders/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7466,7 +7476,7 @@ export def "userprofiles-projects-orders dfareportingordersget" [
 #
 # GET /userprofiles/{profileId}/regions
 # operationId: dfareporting.regions.list
-export def "userprofiles-regions dfareportingregionslist" [
+export def "userprofiles-regions list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7491,7 +7501,7 @@ export def "userprofiles-regions dfareportingregionslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/regions") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/regions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7501,7 +7511,7 @@ export def "userprofiles-regions dfareportingregionslist" [
 #
 # PATCH /userprofiles/{profileId}/remarketingListShares
 # operationId: dfareporting.remarketingListShares.patch
-export def "userprofiles-remarketing-list-shares dfareportingremarketingListSharespatch" [
+export def "userprofiles-remarketing-list-shares update-by-profileId" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7525,26 +7535,26 @@ export def "userprofiles-remarketing-list-shares dfareportingremarketingListShar
   --id: string # RemarketingList ID.
   --kind: string # Identifies what kind of resource this is. Value: the fixed string "dfareporting#remarketingListShare".
   --remarketing-list-id: string # Remarketing list ID. This is a read-only, auto-generated field. (format: int64)
-  --shared-account-ids: list # Accounts that the remarketing list is shared with.
-  --shared-advertiser-ids: list # Advertisers that the remarketing list is shared with.
+  --shared-account-ids: list<string> # Accounts that the remarketing list is shared with.
+  --shared-advertiser-ids: list<string> # Advertisers that the remarketing list is shared with.
 ]: any -> record<kind: string, remarketingListId: string, sharedAccountIds: list<string>, sharedAdvertiserIds: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/remarketingListShares") $qp)
-  let body = {"kind": $kind, "remarketingListId": $remarketing_list_id, "sharedAccountIds": $shared_account_ids, "sharedAdvertiserIds": $shared_advertiser_ids} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/remarketingListShares") $qp)
+  let req_body = {"kind": $kind, "remarketingListId": $remarketing_list_id, "sharedAccountIds": $shared_account_ids, "sharedAdvertiserIds": $shared_advertiser_ids} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates an existing remarketing list share.
 #
 # PUT /userprofiles/{profileId}/remarketingListShares
 # operationId: dfareporting.remarketingListShares.update
-export def "userprofiles-remarketing-list-shares dfareportingremarketingListSharesupdate" [
+export def "userprofiles-remarketing-list-shares update-by-profileId-1" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7567,26 +7577,26 @@ export def "userprofiles-remarketing-list-shares dfareportingremarketingListShar
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --kind: string # Identifies what kind of resource this is. Value: the fixed string "dfareporting#remarketingListShare".
   --remarketing-list-id: string # Remarketing list ID. This is a read-only, auto-generated field. (format: int64)
-  --shared-account-ids: list # Accounts that the remarketing list is shared with.
-  --shared-advertiser-ids: list # Advertisers that the remarketing list is shared with.
+  --shared-account-ids: list<string> # Accounts that the remarketing list is shared with.
+  --shared-advertiser-ids: list<string> # Advertisers that the remarketing list is shared with.
 ]: any -> record<kind: string, remarketingListId: string, sharedAccountIds: list<string>, sharedAdvertiserIds: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/remarketingListShares") $qp)
-  let body = {"kind": $kind, "remarketingListId": $remarketing_list_id, "sharedAccountIds": $shared_account_ids, "sharedAdvertiserIds": $shared_advertiser_ids} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/remarketingListShares") $qp)
+  let req_body = {"kind": $kind, "remarketingListId": $remarketing_list_id, "sharedAccountIds": $shared_account_ids, "sharedAdvertiserIds": $shared_advertiser_ids} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets one remarketing list share by remarketing list ID.
 #
 # GET /userprofiles/{profileId}/remarketingListShares/{remarketingListId}
 # operationId: dfareporting.remarketingListShares.get
-export def "userprofiles-remarketing-list-shares dfareportingremarketingListSharesget" [
+export def "userprofiles-remarketing-list-shares get" [
   profile_id: string
   remarketing_list_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7612,7 +7622,7 @@ export def "userprofiles-remarketing-list-shares dfareportingremarketingListShar
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id, remarketing_list_id: $remarketing_list_id} | format pattern "/userprofiles/{profile_id}/remarketingListShares/{remarketing_list_id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), remarketing_list_id: (encode-path-segment $remarketing_list_id)} | format pattern "/userprofiles/{profile_id}/remarketingListShares/{remarketing_list_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7622,7 +7632,7 @@ export def "userprofiles-remarketing-list-shares dfareportingremarketingListShar
 #
 # GET /userprofiles/{profileId}/remarketingLists
 # operationId: dfareporting.remarketingLists.list
-export def "userprofiles-remarketing-lists dfareportingremarketingListslist" [
+export def "userprofiles-remarketing-lists list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7655,7 +7665,7 @@ export def "userprofiles-remarketing-lists dfareportingremarketingListslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserId" $advertiser_id "scalar") (serialize-qp "active" $active "scalar") (serialize-qp "floodlightActivityId" $floodlight_activity_id "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/remarketingLists") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/remarketingLists") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7667,7 +7677,7 @@ export def "userprofiles-remarketing-lists dfareportingremarketingListslist" [
 # operationId: dfareporting.remarketingLists.patch
 # --advertiserIdDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
 # --listPopulationRule shape: {floodlightActivityId?: string, floodlightActivityName?: string, listPopulationClauses?: list}
-export def "userprofiles-remarketing-lists dfareportingremarketingListspatch" [
+export def "userprofiles-remarketing-lists update-by-profileId" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7707,12 +7717,12 @@ export def "userprofiles-remarketing-lists dfareportingremarketingListspatch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/remarketingLists") $qp)
-  let body = {"accountId": $account_id, "active": $active, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "description": $description, "id": $id, "kind": $kind, "lifeSpan": $life_span, "listPopulationRule": $list_population_rule, "listSize": $list_size, "listSource": $list_source, "name": $name, "subaccountId": $subaccount_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/remarketingLists") $qp)
+  let req_body = {"accountId": $account_id, "active": $active, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "description": $description, "id": $id, "kind": $kind, "lifeSpan": $life_span, "listPopulationRule": $list_population_rule, "listSize": $list_size, "listSource": $list_source, "name": $name, "subaccountId": $subaccount_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Inserts a new remarketing list.
@@ -7721,7 +7731,7 @@ export def "userprofiles-remarketing-lists dfareportingremarketingListspatch" [
 # operationId: dfareporting.remarketingLists.insert
 # --advertiserIdDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
 # --listPopulationRule shape: {floodlightActivityId?: string, floodlightActivityName?: string, listPopulationClauses?: list}
-export def "userprofiles-remarketing-lists dfareportingremarketingListsinsert" [
+export def "userprofiles-remarketing-lists create" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7760,12 +7770,12 @@ export def "userprofiles-remarketing-lists dfareportingremarketingListsinsert" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/remarketingLists") $qp)
-  let body = {"accountId": $account_id, "active": $active, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "description": $description, "id": $id, "kind": $kind, "lifeSpan": $life_span, "listPopulationRule": $list_population_rule, "listSize": $list_size, "listSource": $list_source, "name": $name, "subaccountId": $subaccount_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/remarketingLists") $qp)
+  let req_body = {"accountId": $account_id, "active": $active, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "description": $description, "id": $id, "kind": $kind, "lifeSpan": $life_span, "listPopulationRule": $list_population_rule, "listSize": $list_size, "listSource": $list_source, "name": $name, "subaccountId": $subaccount_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates an existing remarketing list.
@@ -7774,7 +7784,7 @@ export def "userprofiles-remarketing-lists dfareportingremarketingListsinsert" [
 # operationId: dfareporting.remarketingLists.update
 # --advertiserIdDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
 # --listPopulationRule shape: {floodlightActivityId?: string, floodlightActivityName?: string, listPopulationClauses?: list}
-export def "userprofiles-remarketing-lists dfareportingremarketingListsupdate" [
+export def "userprofiles-remarketing-lists update-by-profileId-1" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7813,19 +7823,19 @@ export def "userprofiles-remarketing-lists dfareportingremarketingListsupdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/remarketingLists") $qp)
-  let body = {"accountId": $account_id, "active": $active, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "description": $description, "id": $id, "kind": $kind, "lifeSpan": $life_span, "listPopulationRule": $list_population_rule, "listSize": $list_size, "listSource": $list_source, "name": $name, "subaccountId": $subaccount_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/remarketingLists") $qp)
+  let req_body = {"accountId": $account_id, "active": $active, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "description": $description, "id": $id, "kind": $kind, "lifeSpan": $life_span, "listPopulationRule": $list_population_rule, "listSize": $list_size, "listSource": $list_source, "name": $name, "subaccountId": $subaccount_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets one remarketing list by ID.
 #
 # GET /userprofiles/{profileId}/remarketingLists/{id}
 # operationId: dfareporting.remarketingLists.get
-export def "userprofiles-remarketing-lists dfareportingremarketingListsget" [
+export def "userprofiles-remarketing-lists get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7851,7 +7861,7 @@ export def "userprofiles-remarketing-lists dfareportingremarketingListsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id, id: $id} | format pattern "/userprofiles/{profile_id}/remarketingLists/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/remarketingLists/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7861,7 +7871,7 @@ export def "userprofiles-remarketing-lists dfareportingremarketingListsget" [
 #
 # GET /userprofiles/{profileId}/reports
 # operationId: dfareporting.reports.list
-export def "userprofiles-reports dfareportingreportslist" [
+export def "userprofiles-reports list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7891,7 +7901,7 @@ export def "userprofiles-reports dfareportingreportslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "scope" $scope "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/reports") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/reports") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7901,16 +7911,16 @@ export def "userprofiles-reports dfareportingreportslist" [
 #
 # POST /userprofiles/{profileId}/reports
 # operationId: dfareporting.reports.insert
-# --criteria shape: {activities?: record, customRichMediaEvents?: record, dateRange?: record, dimensionFilters?: list, dimensions?: list, metricNames?: list}
-# --crossDimensionReachCriteria shape: {breakdown?: list, dateRange?: record, dimension?: "ADVERTISER"|"CAMPAIGN"|"SITE_BY_ADVERTISER"|"SITE_BY_CAMPAIGN", dimensionFilters?: list, metricNames?: list, overlapMetricNames?: list, pivoted?: bool}
+# --criteria shape: {activities?: record, customRichMediaEvents?: record, dateRange?: record, dimensionFilters?: list, dimensions?: list, metricNames?: list<string>}
+# --crossDimensionReachCriteria shape: {breakdown?: list, dateRange?: record, dimension?: "ADVERTISER"|"CAMPAIGN"|"SITE_BY_ADVERTISER"|"SITE_BY_CAMPAIGN", dimensionFilters?: list, metricNames?: list<string>, overlapMetricNames?: list<string>, pivoted?: bool}
 # --delivery shape: {emailOwner?: bool, emailOwnerDeliveryType?: "LINK"|"ATTACHMENT", message?: string, recipients?: list}
-# --floodlightCriteria shape: {customRichMediaEvents?: list, dateRange?: record, dimensionFilters?: list, dimensions?: list, floodlightConfigId?: record, metricNames?: list, reportProperties?: record}
-# --pathAttributionCriteria shape: {activityFilters?: list, customChannelGrouping?: record, dateRange?: record, dimensions?: list, floodlightConfigId?: record, metricNames?: list, pathFilters?: list}
-# --pathCriteria shape: {activityFilters?: list, customChannelGrouping?: record, dateRange?: record, dimensions?: list, floodlightConfigId?: record, metricNames?: list, pathFilters?: list}
-# --pathToConversionCriteria shape: {activityFilters?: list, conversionDimensions?: list, customFloodlightVariables?: list, customRichMediaEvents?: list, dateRange?: record, floodlightConfigId?: record, metricNames?: list, perInteractionDimensions?: list, reportProperties?: record}
-# --reachCriteria shape: {activities?: record, customRichMediaEvents?: record, dateRange?: record, dimensionFilters?: list, dimensions?: list, enableAllDimensionCombinations?: bool, metricNames?: list, reachByFrequencyMetricNames?: list}
-# --schedule shape: {active?: bool, every?: int, expirationDate?: string, repeats?: string, repeatsOnWeekDays?: list, runsOnDayOfMonth?: "DAY_OF_MONTH"|"WEEK_OF_MONTH", startDate?: string}
-export def "userprofiles-reports dfareportingreportsinsert" [
+# --floodlightCriteria shape: {customRichMediaEvents?: list, dateRange?: record, dimensionFilters?: list, dimensions?: list, floodlightConfigId?: record, metricNames?: list<string>, reportProperties?: record}
+# --pathAttributionCriteria shape: {activityFilters?: list, customChannelGrouping?: record, dateRange?: record, dimensions?: list, floodlightConfigId?: record, metricNames?: list<string>, pathFilters?: list}
+# --pathCriteria shape: {activityFilters?: list, customChannelGrouping?: record, dateRange?: record, dimensions?: list, floodlightConfigId?: record, metricNames?: list<string>, pathFilters?: list}
+# --pathToConversionCriteria shape: {activityFilters?: list, conversionDimensions?: list, customFloodlightVariables?: list, customRichMediaEvents?: list, dateRange?: record, floodlightConfigId?: record, metricNames?: list<string>, perInteractionDimensions?: list, reportProperties?: record}
+# --reachCriteria shape: {activities?: record, customRichMediaEvents?: record, dateRange?: record, dimensionFilters?: list, dimensions?: list, enableAllDimensionCombinations?: bool, metricNames?: list<string>, reachByFrequencyMetricNames?: list<string>}
+# --schedule shape: {active?: bool, every?: int, expirationDate?: string, repeats?: string, repeatsOnWeekDays?: list<string>, runsOnDayOfMonth?: "DAY_OF_MONTH"|"WEEK_OF_MONTH", startDate?: string}
+export def "userprofiles-reports create" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7932,23 +7942,23 @@ export def "userprofiles-reports dfareportingreportsinsert" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --account-id: string # The account ID to which this report belongs. (format: int64)
-  --criteria: record # The report criteria for a report of type "STANDARD". — shape: {activities?: record, customRichMediaEvents?: record, dateRange?: record, dimensionFilters?: list, dimensions?: list, metricNames?: list}
-  --cross-dimension-reach-criteria: record # The report criteria for a report of type "CROSS_DIMENSION_REACH". — shape: {breakdown?: list, dateRange?: record, dimension?: "ADVERTISER"|"CAMPAIGN"|"SITE_BY_ADVERTISER"|"SITE_BY_CAMPAIGN", dimensionFilters?: list, metricNames?: list, overlapMetricNames?: list, pivoted?: bool}
+  --criteria: record # The report criteria for a report of type "STANDARD". — shape: {activities?: record, customRichMediaEvents?: record, dateRange?: record, dimensionFilters?: list, dimensions?: list, metricNames?: list<string>}
+  --cross-dimension-reach-criteria: record # The report criteria for a report of type "CROSS_DIMENSION_REACH". — shape: {breakdown?: list, dateRange?: record, dimension?: "ADVERTISER"|"CAMPAIGN"|"SITE_BY_ADVERTISER"|"SITE_BY_CAMPAIGN", dimensionFilters?: list, metricNames?: list<string>, overlapMetricNames?: list<string>, pivoted?: bool}
   --delivery: record # The report's email delivery settings. — shape: {emailOwner?: bool, emailOwnerDeliveryType?: "LINK"|"ATTACHMENT", message?: string, recipients?: list}
   --etag: string # The eTag of this response for caching purposes.
   --file-name: string # The filename used when generating report files for this report.
-  --floodlight-criteria: record # The report criteria for a report of type "FLOODLIGHT". — shape: {customRichMediaEvents?: list, dateRange?: record, dimensionFilters?: list, dimensions?: list, floodlightConfigId?: record, metricNames?: list, reportProperties?: record}
+  --floodlight-criteria: record # The report criteria for a report of type "FLOODLIGHT". — shape: {customRichMediaEvents?: list, dateRange?: record, dimensionFilters?: list, dimensions?: list, floodlightConfigId?: record, metricNames?: list<string>, reportProperties?: record}
   --format: string@format-completer # The output format of the report. If not specified, default format is "CSV". Note that the actual format in the completed report file might differ if for instance the report's size exceeds the format's capabilities. "CSV" will then be the fallback format.
   --id: string # The unique ID identifying this report resource. (format: int64)
   --kind: string # The kind of resource this is, in this case dfareporting#report.
   --last-modified-time: string # The timestamp (in milliseconds since epoch) of when this report was last modified. (format: uint64)
   --name: string # The name of the report.
   --owner-profile-id: string # The user profile id of the owner of this report. (format: int64)
-  --path-attribution-criteria: record # The report criteria for a report of type "PATH_ATTRIBUTION". — shape: {activityFilters?: list, customChannelGrouping?: record, dateRange?: record, dimensions?: list, floodlightConfigId?: record, metricNames?: list, pathFilters?: list}
-  --path-criteria: record # The report criteria for a report of type "PATH". — shape: {activityFilters?: list, customChannelGrouping?: record, dateRange?: record, dimensions?: list, floodlightConfigId?: record, metricNames?: list, pathFilters?: list}
-  --path-to-conversion-criteria: record # The report criteria for a report of type "PATH_TO_CONVERSION". — shape: {activityFilters?: list, conversionDimensions?: list, customFloodlightVariables?: list, customRichMediaEvents?: list, dateRange?: record, floodlightConfigId?: record, metricNames?: list, perInteractionDimensions?: list, reportProperties?: record}
-  --reach-criteria: record # The report criteria for a report of type "REACH". — shape: {activities?: record, customRichMediaEvents?: record, dateRange?: record, dimensionFilters?: list, dimensions?: list, enableAllDimensionCombinations?: bool, metricNames?: list, reachByFrequencyMetricNames?: list}
-  --schedule: record # The report's schedule. Can only be set if the report's 'dateRange' is a relative date range and the relative date range is not "TODAY". — shape: {active?: bool, every?: int, expirationDate?: string, repeats?: string, repeatsOnWeekDays?: list, runsOnDayOfMonth?: "DAY_OF_MONTH"|"WEEK_OF_MONTH", startDate?: string}
+  --path-attribution-criteria: record # The report criteria for a report of type "PATH_ATTRIBUTION". — shape: {activityFilters?: list, customChannelGrouping?: record, dateRange?: record, dimensions?: list, floodlightConfigId?: record, metricNames?: list<string>, pathFilters?: list}
+  --path-criteria: record # The report criteria for a report of type "PATH". — shape: {activityFilters?: list, customChannelGrouping?: record, dateRange?: record, dimensions?: list, floodlightConfigId?: record, metricNames?: list<string>, pathFilters?: list}
+  --path-to-conversion-criteria: record # The report criteria for a report of type "PATH_TO_CONVERSION". — shape: {activityFilters?: list, conversionDimensions?: list, customFloodlightVariables?: list, customRichMediaEvents?: list, dateRange?: record, floodlightConfigId?: record, metricNames?: list<string>, perInteractionDimensions?: list, reportProperties?: record}
+  --reach-criteria: record # The report criteria for a report of type "REACH". — shape: {activities?: record, customRichMediaEvents?: record, dateRange?: record, dimensionFilters?: list, dimensions?: list, enableAllDimensionCombinations?: bool, metricNames?: list<string>, reachByFrequencyMetricNames?: list<string>}
+  --schedule: record # The report's schedule. Can only be set if the report's 'dateRange' is a relative date range and the relative date range is not "TODAY". — shape: {active?: bool, every?: int, expirationDate?: string, repeats?: string, repeatsOnWeekDays?: list<string>, runsOnDayOfMonth?: "DAY_OF_MONTH"|"WEEK_OF_MONTH", startDate?: string}
   --sub-account-id: string # The subaccount ID to which this report belongs if applicable. (format: int64)
   --type: string@type-completer-5 # The type of the report.
 ]: any -> record<accountId: string, criteria: record<activities: record<filters: list, kind: string, metricNames: list>, customRichMediaEvents: record<filteredEventIds: list, kind: string>, dateRange: record<endDate: string, kind: string, relativeDateRange: string, startDate: string>, dimensionFilters: list<record>, dimensions: list<record>, metricNames: list<string>>, crossDimensionReachCriteria: record<breakdown: list<record>, dateRange: record<endDate: string, kind: string, relativeDateRange: string, startDate: string>, dimension: string, dimensionFilters: list<record>, metricNames: list<string>, overlapMetricNames: list<string>, pivoted: bool>, delivery: record<emailOwner: bool, emailOwnerDeliveryType: string, message: string, recipients: list<record>>, etag: string, fileName: string, floodlightCriteria: record<customRichMediaEvents: list<record>, dateRange: record<endDate: string, kind: string, relativeDateRange: string, startDate: string>, dimensionFilters: list<record>, dimensions: list<record>, floodlightConfigId: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, metricNames: list<string>, reportProperties: record<includeAttributedIPConversions: bool, includeUnattributedCookieConversions: bool, includeUnattributedIPConversions: bool>>, format: string, id: string, kind: string, lastModifiedTime: string, name: string, ownerProfileId: string, pathAttributionCriteria: record<activityFilters: list<record>, customChannelGrouping: record<fallbackName: string, kind: string, name: string, rules: list>, dateRange: record<endDate: string, kind: string, relativeDateRange: string, startDate: string>, dimensions: list<record>, floodlightConfigId: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, metricNames: list<string>, pathFilters: list<record>>, pathCriteria: record<activityFilters: list<record>, customChannelGrouping: record<fallbackName: string, kind: string, name: string, rules: list>, dateRange: record<endDate: string, kind: string, relativeDateRange: string, startDate: string>, dimensions: list<record>, floodlightConfigId: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, metricNames: list<string>, pathFilters: list<record>>, pathToConversionCriteria: record<activityFilters: list<record>, conversionDimensions: list<record>, customFloodlightVariables: list<record>, customRichMediaEvents: list<record>, dateRange: record<endDate: string, kind: string, relativeDateRange: string, startDate: string>, floodlightConfigId: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, metricNames: list<string>, perInteractionDimensions: list<record>, reportProperties: record<clicksLookbackWindow: int, impressionsLookbackWindow: int, includeAttributedIPConversions: bool, includeUnattributedCookieConversions: bool, includeUnattributedIPConversions: bool, maximumClickInteractions: int, maximumImpressionInteractions: int, maximumInteractionGap: int, pivotOnInteractionPath: bool>>, reachCriteria: record<activities: record<filters: list, kind: string, metricNames: list>, customRichMediaEvents: record<filteredEventIds: list, kind: string>, dateRange: record<endDate: string, kind: string, relativeDateRange: string, startDate: string>, dimensionFilters: list<record>, dimensions: list<record>, enableAllDimensionCombinations: bool, metricNames: list<string>, reachByFrequencyMetricNames: list<string>>, schedule: record<active: bool, every: int, expirationDate: string, repeats: string, repeatsOnWeekDays: list<string>, runsOnDayOfMonth: string, startDate: string>, subAccountId: string, type: string> {
@@ -7956,28 +7966,28 @@ export def "userprofiles-reports dfareportingreportsinsert" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/reports") $qp)
-  let body = {"accountId": $account_id, "criteria": $criteria, "crossDimensionReachCriteria": $cross_dimension_reach_criteria, "delivery": $delivery, "etag": $etag, "fileName": $file_name, "floodlightCriteria": $floodlight_criteria, "format": $format, "id": $id, "kind": $kind, "lastModifiedTime": $last_modified_time, "name": $name, "ownerProfileId": $owner_profile_id, "pathAttributionCriteria": $path_attribution_criteria, "pathCriteria": $path_criteria, "pathToConversionCriteria": $path_to_conversion_criteria, "reachCriteria": $reach_criteria, "schedule": $schedule, "subAccountId": $sub_account_id, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/reports") $qp)
+  let req_body = {"accountId": $account_id, "criteria": $criteria, "crossDimensionReachCriteria": $cross_dimension_reach_criteria, "delivery": $delivery, "etag": $etag, "fileName": $file_name, "floodlightCriteria": $floodlight_criteria, "format": $format, "id": $id, "kind": $kind, "lastModifiedTime": $last_modified_time, "name": $name, "ownerProfileId": $owner_profile_id, "pathAttributionCriteria": $path_attribution_criteria, "pathCriteria": $path_criteria, "pathToConversionCriteria": $path_to_conversion_criteria, "reachCriteria": $reach_criteria, "schedule": $schedule, "subAccountId": $sub_account_id, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns the fields that are compatible to be selected in the respective sections of a report criteria, given the fields already selected in the input report and user permissions.
 #
 # POST /userprofiles/{profileId}/reports/compatiblefields/query
 # operationId: dfareporting.reports.compatibleFields.query
-# --criteria shape: {activities?: record, customRichMediaEvents?: record, dateRange?: record, dimensionFilters?: list, dimensions?: list, metricNames?: list}
-# --crossDimensionReachCriteria shape: {breakdown?: list, dateRange?: record, dimension?: "ADVERTISER"|"CAMPAIGN"|"SITE_BY_ADVERTISER"|"SITE_BY_CAMPAIGN", dimensionFilters?: list, metricNames?: list, overlapMetricNames?: list, pivoted?: bool}
+# --criteria shape: {activities?: record, customRichMediaEvents?: record, dateRange?: record, dimensionFilters?: list, dimensions?: list, metricNames?: list<string>}
+# --crossDimensionReachCriteria shape: {breakdown?: list, dateRange?: record, dimension?: "ADVERTISER"|"CAMPAIGN"|"SITE_BY_ADVERTISER"|"SITE_BY_CAMPAIGN", dimensionFilters?: list, metricNames?: list<string>, overlapMetricNames?: list<string>, pivoted?: bool}
 # --delivery shape: {emailOwner?: bool, emailOwnerDeliveryType?: "LINK"|"ATTACHMENT", message?: string, recipients?: list}
-# --floodlightCriteria shape: {customRichMediaEvents?: list, dateRange?: record, dimensionFilters?: list, dimensions?: list, floodlightConfigId?: record, metricNames?: list, reportProperties?: record}
-# --pathAttributionCriteria shape: {activityFilters?: list, customChannelGrouping?: record, dateRange?: record, dimensions?: list, floodlightConfigId?: record, metricNames?: list, pathFilters?: list}
-# --pathCriteria shape: {activityFilters?: list, customChannelGrouping?: record, dateRange?: record, dimensions?: list, floodlightConfigId?: record, metricNames?: list, pathFilters?: list}
-# --pathToConversionCriteria shape: {activityFilters?: list, conversionDimensions?: list, customFloodlightVariables?: list, customRichMediaEvents?: list, dateRange?: record, floodlightConfigId?: record, metricNames?: list, perInteractionDimensions?: list, reportProperties?: record}
-# --reachCriteria shape: {activities?: record, customRichMediaEvents?: record, dateRange?: record, dimensionFilters?: list, dimensions?: list, enableAllDimensionCombinations?: bool, metricNames?: list, reachByFrequencyMetricNames?: list}
-# --schedule shape: {active?: bool, every?: int, expirationDate?: string, repeats?: string, repeatsOnWeekDays?: list, runsOnDayOfMonth?: "DAY_OF_MONTH"|"WEEK_OF_MONTH", startDate?: string}
-export def "userprofiles-reports-compatiblefields-query dfareportingreportscompatibleFieldsquery" [
+# --floodlightCriteria shape: {customRichMediaEvents?: list, dateRange?: record, dimensionFilters?: list, dimensions?: list, floodlightConfigId?: record, metricNames?: list<string>, reportProperties?: record}
+# --pathAttributionCriteria shape: {activityFilters?: list, customChannelGrouping?: record, dateRange?: record, dimensions?: list, floodlightConfigId?: record, metricNames?: list<string>, pathFilters?: list}
+# --pathCriteria shape: {activityFilters?: list, customChannelGrouping?: record, dateRange?: record, dimensions?: list, floodlightConfigId?: record, metricNames?: list<string>, pathFilters?: list}
+# --pathToConversionCriteria shape: {activityFilters?: list, conversionDimensions?: list, customFloodlightVariables?: list, customRichMediaEvents?: list, dateRange?: record, floodlightConfigId?: record, metricNames?: list<string>, perInteractionDimensions?: list, reportProperties?: record}
+# --reachCriteria shape: {activities?: record, customRichMediaEvents?: record, dateRange?: record, dimensionFilters?: list, dimensions?: list, enableAllDimensionCombinations?: bool, metricNames?: list<string>, reachByFrequencyMetricNames?: list<string>}
+# --schedule shape: {active?: bool, every?: int, expirationDate?: string, repeats?: string, repeatsOnWeekDays?: list<string>, runsOnDayOfMonth?: "DAY_OF_MONTH"|"WEEK_OF_MONTH", startDate?: string}
+export def "userprofiles-reports-compatiblefields-query list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7999,23 +8009,23 @@ export def "userprofiles-reports-compatiblefields-query dfareportingreportscompa
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --account-id: string # The account ID to which this report belongs. (format: int64)
-  --criteria: record # The report criteria for a report of type "STANDARD". — shape: {activities?: record, customRichMediaEvents?: record, dateRange?: record, dimensionFilters?: list, dimensions?: list, metricNames?: list}
-  --cross-dimension-reach-criteria: record # The report criteria for a report of type "CROSS_DIMENSION_REACH". — shape: {breakdown?: list, dateRange?: record, dimension?: "ADVERTISER"|"CAMPAIGN"|"SITE_BY_ADVERTISER"|"SITE_BY_CAMPAIGN", dimensionFilters?: list, metricNames?: list, overlapMetricNames?: list, pivoted?: bool}
+  --criteria: record # The report criteria for a report of type "STANDARD". — shape: {activities?: record, customRichMediaEvents?: record, dateRange?: record, dimensionFilters?: list, dimensions?: list, metricNames?: list<string>}
+  --cross-dimension-reach-criteria: record # The report criteria for a report of type "CROSS_DIMENSION_REACH". — shape: {breakdown?: list, dateRange?: record, dimension?: "ADVERTISER"|"CAMPAIGN"|"SITE_BY_ADVERTISER"|"SITE_BY_CAMPAIGN", dimensionFilters?: list, metricNames?: list<string>, overlapMetricNames?: list<string>, pivoted?: bool}
   --delivery: record # The report's email delivery settings. — shape: {emailOwner?: bool, emailOwnerDeliveryType?: "LINK"|"ATTACHMENT", message?: string, recipients?: list}
   --etag: string # The eTag of this response for caching purposes.
   --file-name: string # The filename used when generating report files for this report.
-  --floodlight-criteria: record # The report criteria for a report of type "FLOODLIGHT". — shape: {customRichMediaEvents?: list, dateRange?: record, dimensionFilters?: list, dimensions?: list, floodlightConfigId?: record, metricNames?: list, reportProperties?: record}
+  --floodlight-criteria: record # The report criteria for a report of type "FLOODLIGHT". — shape: {customRichMediaEvents?: list, dateRange?: record, dimensionFilters?: list, dimensions?: list, floodlightConfigId?: record, metricNames?: list<string>, reportProperties?: record}
   --format: string@format-completer # The output format of the report. If not specified, default format is "CSV". Note that the actual format in the completed report file might differ if for instance the report's size exceeds the format's capabilities. "CSV" will then be the fallback format.
   --id: string # The unique ID identifying this report resource. (format: int64)
   --kind: string # The kind of resource this is, in this case dfareporting#report.
   --last-modified-time: string # The timestamp (in milliseconds since epoch) of when this report was last modified. (format: uint64)
   --name: string # The name of the report.
   --owner-profile-id: string # The user profile id of the owner of this report. (format: int64)
-  --path-attribution-criteria: record # The report criteria for a report of type "PATH_ATTRIBUTION". — shape: {activityFilters?: list, customChannelGrouping?: record, dateRange?: record, dimensions?: list, floodlightConfigId?: record, metricNames?: list, pathFilters?: list}
-  --path-criteria: record # The report criteria for a report of type "PATH". — shape: {activityFilters?: list, customChannelGrouping?: record, dateRange?: record, dimensions?: list, floodlightConfigId?: record, metricNames?: list, pathFilters?: list}
-  --path-to-conversion-criteria: record # The report criteria for a report of type "PATH_TO_CONVERSION". — shape: {activityFilters?: list, conversionDimensions?: list, customFloodlightVariables?: list, customRichMediaEvents?: list, dateRange?: record, floodlightConfigId?: record, metricNames?: list, perInteractionDimensions?: list, reportProperties?: record}
-  --reach-criteria: record # The report criteria for a report of type "REACH". — shape: {activities?: record, customRichMediaEvents?: record, dateRange?: record, dimensionFilters?: list, dimensions?: list, enableAllDimensionCombinations?: bool, metricNames?: list, reachByFrequencyMetricNames?: list}
-  --schedule: record # The report's schedule. Can only be set if the report's 'dateRange' is a relative date range and the relative date range is not "TODAY". — shape: {active?: bool, every?: int, expirationDate?: string, repeats?: string, repeatsOnWeekDays?: list, runsOnDayOfMonth?: "DAY_OF_MONTH"|"WEEK_OF_MONTH", startDate?: string}
+  --path-attribution-criteria: record # The report criteria for a report of type "PATH_ATTRIBUTION". — shape: {activityFilters?: list, customChannelGrouping?: record, dateRange?: record, dimensions?: list, floodlightConfigId?: record, metricNames?: list<string>, pathFilters?: list}
+  --path-criteria: record # The report criteria for a report of type "PATH". — shape: {activityFilters?: list, customChannelGrouping?: record, dateRange?: record, dimensions?: list, floodlightConfigId?: record, metricNames?: list<string>, pathFilters?: list}
+  --path-to-conversion-criteria: record # The report criteria for a report of type "PATH_TO_CONVERSION". — shape: {activityFilters?: list, conversionDimensions?: list, customFloodlightVariables?: list, customRichMediaEvents?: list, dateRange?: record, floodlightConfigId?: record, metricNames?: list<string>, perInteractionDimensions?: list, reportProperties?: record}
+  --reach-criteria: record # The report criteria for a report of type "REACH". — shape: {activities?: record, customRichMediaEvents?: record, dateRange?: record, dimensionFilters?: list, dimensions?: list, enableAllDimensionCombinations?: bool, metricNames?: list<string>, reachByFrequencyMetricNames?: list<string>}
+  --schedule: record # The report's schedule. Can only be set if the report's 'dateRange' is a relative date range and the relative date range is not "TODAY". — shape: {active?: bool, every?: int, expirationDate?: string, repeats?: string, repeatsOnWeekDays?: list<string>, runsOnDayOfMonth?: "DAY_OF_MONTH"|"WEEK_OF_MONTH", startDate?: string}
   --sub-account-id: string # The subaccount ID to which this report belongs if applicable. (format: int64)
   --type: string@type-completer-5 # The type of the report.
 ]: any -> record<crossDimensionReachReportCompatibleFields: record<breakdown: list<record>, dimensionFilters: list<record>, kind: string, metrics: list<record>, overlapMetrics: list<record>>, floodlightReportCompatibleFields: record<dimensionFilters: list<record>, dimensions: list<record>, kind: string, metrics: list<record>>, kind: string, pathAttributionReportCompatibleFields: record<channelGroupings: list<record>, dimensions: list<record>, kind: string, metrics: list<record>, pathFilters: list<record>>, pathReportCompatibleFields: record<channelGroupings: list<record>, dimensions: list<record>, kind: string, metrics: list<record>, pathFilters: list<record>>, pathToConversionReportCompatibleFields: record<conversionDimensions: list<record>, customFloodlightVariables: list<record>, kind: string, metrics: list<record>, perInteractionDimensions: list<record>>, reachReportCompatibleFields: record<dimensionFilters: list<record>, dimensions: list<record>, kind: string, metrics: list<record>, pivotedActivityMetrics: list<record>, reachByFrequencyMetrics: list<record>>, reportCompatibleFields: record<dimensionFilters: list<record>, dimensions: list<record>, kind: string, metrics: list<record>, pivotedActivityMetrics: list<record>>> {
@@ -8023,19 +8033,19 @@ export def "userprofiles-reports-compatiblefields-query dfareportingreportscompa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/reports/compatiblefields/query") $qp)
-  let body = {"accountId": $account_id, "criteria": $criteria, "crossDimensionReachCriteria": $cross_dimension_reach_criteria, "delivery": $delivery, "etag": $etag, "fileName": $file_name, "floodlightCriteria": $floodlight_criteria, "format": $format, "id": $id, "kind": $kind, "lastModifiedTime": $last_modified_time, "name": $name, "ownerProfileId": $owner_profile_id, "pathAttributionCriteria": $path_attribution_criteria, "pathCriteria": $path_criteria, "pathToConversionCriteria": $path_to_conversion_criteria, "reachCriteria": $reach_criteria, "schedule": $schedule, "subAccountId": $sub_account_id, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/reports/compatiblefields/query") $qp)
+  let req_body = {"accountId": $account_id, "criteria": $criteria, "crossDimensionReachCriteria": $cross_dimension_reach_criteria, "delivery": $delivery, "etag": $etag, "fileName": $file_name, "floodlightCriteria": $floodlight_criteria, "format": $format, "id": $id, "kind": $kind, "lastModifiedTime": $last_modified_time, "name": $name, "ownerProfileId": $owner_profile_id, "pathAttributionCriteria": $path_attribution_criteria, "pathCriteria": $path_criteria, "pathToConversionCriteria": $path_to_conversion_criteria, "reachCriteria": $reach_criteria, "schedule": $schedule, "subAccountId": $sub_account_id, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes a report by its ID.
 #
 # DELETE /userprofiles/{profileId}/reports/{reportId}
 # operationId: dfareporting.reports.delete
-export def "userprofiles-reports dfareportingreportsdelete" [
+export def "userprofiles-reports delete" [
   profile_id: string
   report_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8061,7 +8071,7 @@ export def "userprofiles-reports dfareportingreportsdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id, report_id: $report_id} | format pattern "/userprofiles/{profile_id}/reports/{report_id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), report_id: (encode-path-segment $report_id)} | format pattern "/userprofiles/{profile_id}/reports/{report_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8071,7 +8081,7 @@ export def "userprofiles-reports dfareportingreportsdelete" [
 #
 # GET /userprofiles/{profileId}/reports/{reportId}
 # operationId: dfareporting.reports.get
-export def "userprofiles-reports dfareportingreportsget" [
+export def "userprofiles-reports get" [
   profile_id: string
   report_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8097,7 +8107,7 @@ export def "userprofiles-reports dfareportingreportsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id, report_id: $report_id} | format pattern "/userprofiles/{profile_id}/reports/{report_id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), report_id: (encode-path-segment $report_id)} | format pattern "/userprofiles/{profile_id}/reports/{report_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8107,16 +8117,16 @@ export def "userprofiles-reports dfareportingreportsget" [
 #
 # PATCH /userprofiles/{profileId}/reports/{reportId}
 # operationId: dfareporting.reports.patch
-# --criteria shape: {activities?: record, customRichMediaEvents?: record, dateRange?: record, dimensionFilters?: list, dimensions?: list, metricNames?: list}
-# --crossDimensionReachCriteria shape: {breakdown?: list, dateRange?: record, dimension?: "ADVERTISER"|"CAMPAIGN"|"SITE_BY_ADVERTISER"|"SITE_BY_CAMPAIGN", dimensionFilters?: list, metricNames?: list, overlapMetricNames?: list, pivoted?: bool}
+# --criteria shape: {activities?: record, customRichMediaEvents?: record, dateRange?: record, dimensionFilters?: list, dimensions?: list, metricNames?: list<string>}
+# --crossDimensionReachCriteria shape: {breakdown?: list, dateRange?: record, dimension?: "ADVERTISER"|"CAMPAIGN"|"SITE_BY_ADVERTISER"|"SITE_BY_CAMPAIGN", dimensionFilters?: list, metricNames?: list<string>, overlapMetricNames?: list<string>, pivoted?: bool}
 # --delivery shape: {emailOwner?: bool, emailOwnerDeliveryType?: "LINK"|"ATTACHMENT", message?: string, recipients?: list}
-# --floodlightCriteria shape: {customRichMediaEvents?: list, dateRange?: record, dimensionFilters?: list, dimensions?: list, floodlightConfigId?: record, metricNames?: list, reportProperties?: record}
-# --pathAttributionCriteria shape: {activityFilters?: list, customChannelGrouping?: record, dateRange?: record, dimensions?: list, floodlightConfigId?: record, metricNames?: list, pathFilters?: list}
-# --pathCriteria shape: {activityFilters?: list, customChannelGrouping?: record, dateRange?: record, dimensions?: list, floodlightConfigId?: record, metricNames?: list, pathFilters?: list}
-# --pathToConversionCriteria shape: {activityFilters?: list, conversionDimensions?: list, customFloodlightVariables?: list, customRichMediaEvents?: list, dateRange?: record, floodlightConfigId?: record, metricNames?: list, perInteractionDimensions?: list, reportProperties?: record}
-# --reachCriteria shape: {activities?: record, customRichMediaEvents?: record, dateRange?: record, dimensionFilters?: list, dimensions?: list, enableAllDimensionCombinations?: bool, metricNames?: list, reachByFrequencyMetricNames?: list}
-# --schedule shape: {active?: bool, every?: int, expirationDate?: string, repeats?: string, repeatsOnWeekDays?: list, runsOnDayOfMonth?: "DAY_OF_MONTH"|"WEEK_OF_MONTH", startDate?: string}
-export def "userprofiles-reports dfareportingreportspatch" [
+# --floodlightCriteria shape: {customRichMediaEvents?: list, dateRange?: record, dimensionFilters?: list, dimensions?: list, floodlightConfigId?: record, metricNames?: list<string>, reportProperties?: record}
+# --pathAttributionCriteria shape: {activityFilters?: list, customChannelGrouping?: record, dateRange?: record, dimensions?: list, floodlightConfigId?: record, metricNames?: list<string>, pathFilters?: list}
+# --pathCriteria shape: {activityFilters?: list, customChannelGrouping?: record, dateRange?: record, dimensions?: list, floodlightConfigId?: record, metricNames?: list<string>, pathFilters?: list}
+# --pathToConversionCriteria shape: {activityFilters?: list, conversionDimensions?: list, customFloodlightVariables?: list, customRichMediaEvents?: list, dateRange?: record, floodlightConfigId?: record, metricNames?: list<string>, perInteractionDimensions?: list, reportProperties?: record}
+# --reachCriteria shape: {activities?: record, customRichMediaEvents?: record, dateRange?: record, dimensionFilters?: list, dimensions?: list, enableAllDimensionCombinations?: bool, metricNames?: list<string>, reachByFrequencyMetricNames?: list<string>}
+# --schedule shape: {active?: bool, every?: int, expirationDate?: string, repeats?: string, repeatsOnWeekDays?: list<string>, runsOnDayOfMonth?: "DAY_OF_MONTH"|"WEEK_OF_MONTH", startDate?: string}
+export def "userprofiles-reports update-by-profileId-reportId" [
   profile_id: string
   report_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8139,23 +8149,23 @@ export def "userprofiles-reports dfareportingreportspatch" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --account-id: string # The account ID to which this report belongs. (format: int64)
-  --criteria: record # The report criteria for a report of type "STANDARD". — shape: {activities?: record, customRichMediaEvents?: record, dateRange?: record, dimensionFilters?: list, dimensions?: list, metricNames?: list}
-  --cross-dimension-reach-criteria: record # The report criteria for a report of type "CROSS_DIMENSION_REACH". — shape: {breakdown?: list, dateRange?: record, dimension?: "ADVERTISER"|"CAMPAIGN"|"SITE_BY_ADVERTISER"|"SITE_BY_CAMPAIGN", dimensionFilters?: list, metricNames?: list, overlapMetricNames?: list, pivoted?: bool}
+  --criteria: record # The report criteria for a report of type "STANDARD". — shape: {activities?: record, customRichMediaEvents?: record, dateRange?: record, dimensionFilters?: list, dimensions?: list, metricNames?: list<string>}
+  --cross-dimension-reach-criteria: record # The report criteria for a report of type "CROSS_DIMENSION_REACH". — shape: {breakdown?: list, dateRange?: record, dimension?: "ADVERTISER"|"CAMPAIGN"|"SITE_BY_ADVERTISER"|"SITE_BY_CAMPAIGN", dimensionFilters?: list, metricNames?: list<string>, overlapMetricNames?: list<string>, pivoted?: bool}
   --delivery: record # The report's email delivery settings. — shape: {emailOwner?: bool, emailOwnerDeliveryType?: "LINK"|"ATTACHMENT", message?: string, recipients?: list}
   --etag: string # The eTag of this response for caching purposes.
   --file-name: string # The filename used when generating report files for this report.
-  --floodlight-criteria: record # The report criteria for a report of type "FLOODLIGHT". — shape: {customRichMediaEvents?: list, dateRange?: record, dimensionFilters?: list, dimensions?: list, floodlightConfigId?: record, metricNames?: list, reportProperties?: record}
+  --floodlight-criteria: record # The report criteria for a report of type "FLOODLIGHT". — shape: {customRichMediaEvents?: list, dateRange?: record, dimensionFilters?: list, dimensions?: list, floodlightConfigId?: record, metricNames?: list<string>, reportProperties?: record}
   --format: string@format-completer # The output format of the report. If not specified, default format is "CSV". Note that the actual format in the completed report file might differ if for instance the report's size exceeds the format's capabilities. "CSV" will then be the fallback format.
   --id: string # The unique ID identifying this report resource. (format: int64)
   --kind: string # The kind of resource this is, in this case dfareporting#report.
   --last-modified-time: string # The timestamp (in milliseconds since epoch) of when this report was last modified. (format: uint64)
   --name: string # The name of the report.
   --owner-profile-id: string # The user profile id of the owner of this report. (format: int64)
-  --path-attribution-criteria: record # The report criteria for a report of type "PATH_ATTRIBUTION". — shape: {activityFilters?: list, customChannelGrouping?: record, dateRange?: record, dimensions?: list, floodlightConfigId?: record, metricNames?: list, pathFilters?: list}
-  --path-criteria: record # The report criteria for a report of type "PATH". — shape: {activityFilters?: list, customChannelGrouping?: record, dateRange?: record, dimensions?: list, floodlightConfigId?: record, metricNames?: list, pathFilters?: list}
-  --path-to-conversion-criteria: record # The report criteria for a report of type "PATH_TO_CONVERSION". — shape: {activityFilters?: list, conversionDimensions?: list, customFloodlightVariables?: list, customRichMediaEvents?: list, dateRange?: record, floodlightConfigId?: record, metricNames?: list, perInteractionDimensions?: list, reportProperties?: record}
-  --reach-criteria: record # The report criteria for a report of type "REACH". — shape: {activities?: record, customRichMediaEvents?: record, dateRange?: record, dimensionFilters?: list, dimensions?: list, enableAllDimensionCombinations?: bool, metricNames?: list, reachByFrequencyMetricNames?: list}
-  --schedule: record # The report's schedule. Can only be set if the report's 'dateRange' is a relative date range and the relative date range is not "TODAY". — shape: {active?: bool, every?: int, expirationDate?: string, repeats?: string, repeatsOnWeekDays?: list, runsOnDayOfMonth?: "DAY_OF_MONTH"|"WEEK_OF_MONTH", startDate?: string}
+  --path-attribution-criteria: record # The report criteria for a report of type "PATH_ATTRIBUTION". — shape: {activityFilters?: list, customChannelGrouping?: record, dateRange?: record, dimensions?: list, floodlightConfigId?: record, metricNames?: list<string>, pathFilters?: list}
+  --path-criteria: record # The report criteria for a report of type "PATH". — shape: {activityFilters?: list, customChannelGrouping?: record, dateRange?: record, dimensions?: list, floodlightConfigId?: record, metricNames?: list<string>, pathFilters?: list}
+  --path-to-conversion-criteria: record # The report criteria for a report of type "PATH_TO_CONVERSION". — shape: {activityFilters?: list, conversionDimensions?: list, customFloodlightVariables?: list, customRichMediaEvents?: list, dateRange?: record, floodlightConfigId?: record, metricNames?: list<string>, perInteractionDimensions?: list, reportProperties?: record}
+  --reach-criteria: record # The report criteria for a report of type "REACH". — shape: {activities?: record, customRichMediaEvents?: record, dateRange?: record, dimensionFilters?: list, dimensions?: list, enableAllDimensionCombinations?: bool, metricNames?: list<string>, reachByFrequencyMetricNames?: list<string>}
+  --schedule: record # The report's schedule. Can only be set if the report's 'dateRange' is a relative date range and the relative date range is not "TODAY". — shape: {active?: bool, every?: int, expirationDate?: string, repeats?: string, repeatsOnWeekDays?: list<string>, runsOnDayOfMonth?: "DAY_OF_MONTH"|"WEEK_OF_MONTH", startDate?: string}
   --sub-account-id: string # The subaccount ID to which this report belongs if applicable. (format: int64)
   --type: string@type-completer-5 # The type of the report.
 ]: any -> record<accountId: string, criteria: record<activities: record<filters: list, kind: string, metricNames: list>, customRichMediaEvents: record<filteredEventIds: list, kind: string>, dateRange: record<endDate: string, kind: string, relativeDateRange: string, startDate: string>, dimensionFilters: list<record>, dimensions: list<record>, metricNames: list<string>>, crossDimensionReachCriteria: record<breakdown: list<record>, dateRange: record<endDate: string, kind: string, relativeDateRange: string, startDate: string>, dimension: string, dimensionFilters: list<record>, metricNames: list<string>, overlapMetricNames: list<string>, pivoted: bool>, delivery: record<emailOwner: bool, emailOwnerDeliveryType: string, message: string, recipients: list<record>>, etag: string, fileName: string, floodlightCriteria: record<customRichMediaEvents: list<record>, dateRange: record<endDate: string, kind: string, relativeDateRange: string, startDate: string>, dimensionFilters: list<record>, dimensions: list<record>, floodlightConfigId: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, metricNames: list<string>, reportProperties: record<includeAttributedIPConversions: bool, includeUnattributedCookieConversions: bool, includeUnattributedIPConversions: bool>>, format: string, id: string, kind: string, lastModifiedTime: string, name: string, ownerProfileId: string, pathAttributionCriteria: record<activityFilters: list<record>, customChannelGrouping: record<fallbackName: string, kind: string, name: string, rules: list>, dateRange: record<endDate: string, kind: string, relativeDateRange: string, startDate: string>, dimensions: list<record>, floodlightConfigId: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, metricNames: list<string>, pathFilters: list<record>>, pathCriteria: record<activityFilters: list<record>, customChannelGrouping: record<fallbackName: string, kind: string, name: string, rules: list>, dateRange: record<endDate: string, kind: string, relativeDateRange: string, startDate: string>, dimensions: list<record>, floodlightConfigId: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, metricNames: list<string>, pathFilters: list<record>>, pathToConversionCriteria: record<activityFilters: list<record>, conversionDimensions: list<record>, customFloodlightVariables: list<record>, customRichMediaEvents: list<record>, dateRange: record<endDate: string, kind: string, relativeDateRange: string, startDate: string>, floodlightConfigId: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, metricNames: list<string>, perInteractionDimensions: list<record>, reportProperties: record<clicksLookbackWindow: int, impressionsLookbackWindow: int, includeAttributedIPConversions: bool, includeUnattributedCookieConversions: bool, includeUnattributedIPConversions: bool, maximumClickInteractions: int, maximumImpressionInteractions: int, maximumInteractionGap: int, pivotOnInteractionPath: bool>>, reachCriteria: record<activities: record<filters: list, kind: string, metricNames: list>, customRichMediaEvents: record<filteredEventIds: list, kind: string>, dateRange: record<endDate: string, kind: string, relativeDateRange: string, startDate: string>, dimensionFilters: list<record>, dimensions: list<record>, enableAllDimensionCombinations: bool, metricNames: list<string>, reachByFrequencyMetricNames: list<string>>, schedule: record<active: bool, every: int, expirationDate: string, repeats: string, repeatsOnWeekDays: list<string>, runsOnDayOfMonth: string, startDate: string>, subAccountId: string, type: string> {
@@ -8163,28 +8173,28 @@ export def "userprofiles-reports dfareportingreportspatch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id, report_id: $report_id} | format pattern "/userprofiles/{profile_id}/reports/{report_id}") $qp)
-  let body = {"accountId": $account_id, "criteria": $criteria, "crossDimensionReachCriteria": $cross_dimension_reach_criteria, "delivery": $delivery, "etag": $etag, "fileName": $file_name, "floodlightCriteria": $floodlight_criteria, "format": $format, "id": $id, "kind": $kind, "lastModifiedTime": $last_modified_time, "name": $name, "ownerProfileId": $owner_profile_id, "pathAttributionCriteria": $path_attribution_criteria, "pathCriteria": $path_criteria, "pathToConversionCriteria": $path_to_conversion_criteria, "reachCriteria": $reach_criteria, "schedule": $schedule, "subAccountId": $sub_account_id, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), report_id: (encode-path-segment $report_id)} | format pattern "/userprofiles/{profile_id}/reports/{report_id}") $qp)
+  let req_body = {"accountId": $account_id, "criteria": $criteria, "crossDimensionReachCriteria": $cross_dimension_reach_criteria, "delivery": $delivery, "etag": $etag, "fileName": $file_name, "floodlightCriteria": $floodlight_criteria, "format": $format, "id": $id, "kind": $kind, "lastModifiedTime": $last_modified_time, "name": $name, "ownerProfileId": $owner_profile_id, "pathAttributionCriteria": $path_attribution_criteria, "pathCriteria": $path_criteria, "pathToConversionCriteria": $path_to_conversion_criteria, "reachCriteria": $reach_criteria, "schedule": $schedule, "subAccountId": $sub_account_id, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates a report.
 #
 # PUT /userprofiles/{profileId}/reports/{reportId}
 # operationId: dfareporting.reports.update
-# --criteria shape: {activities?: record, customRichMediaEvents?: record, dateRange?: record, dimensionFilters?: list, dimensions?: list, metricNames?: list}
-# --crossDimensionReachCriteria shape: {breakdown?: list, dateRange?: record, dimension?: "ADVERTISER"|"CAMPAIGN"|"SITE_BY_ADVERTISER"|"SITE_BY_CAMPAIGN", dimensionFilters?: list, metricNames?: list, overlapMetricNames?: list, pivoted?: bool}
+# --criteria shape: {activities?: record, customRichMediaEvents?: record, dateRange?: record, dimensionFilters?: list, dimensions?: list, metricNames?: list<string>}
+# --crossDimensionReachCriteria shape: {breakdown?: list, dateRange?: record, dimension?: "ADVERTISER"|"CAMPAIGN"|"SITE_BY_ADVERTISER"|"SITE_BY_CAMPAIGN", dimensionFilters?: list, metricNames?: list<string>, overlapMetricNames?: list<string>, pivoted?: bool}
 # --delivery shape: {emailOwner?: bool, emailOwnerDeliveryType?: "LINK"|"ATTACHMENT", message?: string, recipients?: list}
-# --floodlightCriteria shape: {customRichMediaEvents?: list, dateRange?: record, dimensionFilters?: list, dimensions?: list, floodlightConfigId?: record, metricNames?: list, reportProperties?: record}
-# --pathAttributionCriteria shape: {activityFilters?: list, customChannelGrouping?: record, dateRange?: record, dimensions?: list, floodlightConfigId?: record, metricNames?: list, pathFilters?: list}
-# --pathCriteria shape: {activityFilters?: list, customChannelGrouping?: record, dateRange?: record, dimensions?: list, floodlightConfigId?: record, metricNames?: list, pathFilters?: list}
-# --pathToConversionCriteria shape: {activityFilters?: list, conversionDimensions?: list, customFloodlightVariables?: list, customRichMediaEvents?: list, dateRange?: record, floodlightConfigId?: record, metricNames?: list, perInteractionDimensions?: list, reportProperties?: record}
-# --reachCriteria shape: {activities?: record, customRichMediaEvents?: record, dateRange?: record, dimensionFilters?: list, dimensions?: list, enableAllDimensionCombinations?: bool, metricNames?: list, reachByFrequencyMetricNames?: list}
-# --schedule shape: {active?: bool, every?: int, expirationDate?: string, repeats?: string, repeatsOnWeekDays?: list, runsOnDayOfMonth?: "DAY_OF_MONTH"|"WEEK_OF_MONTH", startDate?: string}
-export def "userprofiles-reports dfareportingreportsupdate" [
+# --floodlightCriteria shape: {customRichMediaEvents?: list, dateRange?: record, dimensionFilters?: list, dimensions?: list, floodlightConfigId?: record, metricNames?: list<string>, reportProperties?: record}
+# --pathAttributionCriteria shape: {activityFilters?: list, customChannelGrouping?: record, dateRange?: record, dimensions?: list, floodlightConfigId?: record, metricNames?: list<string>, pathFilters?: list}
+# --pathCriteria shape: {activityFilters?: list, customChannelGrouping?: record, dateRange?: record, dimensions?: list, floodlightConfigId?: record, metricNames?: list<string>, pathFilters?: list}
+# --pathToConversionCriteria shape: {activityFilters?: list, conversionDimensions?: list, customFloodlightVariables?: list, customRichMediaEvents?: list, dateRange?: record, floodlightConfigId?: record, metricNames?: list<string>, perInteractionDimensions?: list, reportProperties?: record}
+# --reachCriteria shape: {activities?: record, customRichMediaEvents?: record, dateRange?: record, dimensionFilters?: list, dimensions?: list, enableAllDimensionCombinations?: bool, metricNames?: list<string>, reachByFrequencyMetricNames?: list<string>}
+# --schedule shape: {active?: bool, every?: int, expirationDate?: string, repeats?: string, repeatsOnWeekDays?: list<string>, runsOnDayOfMonth?: "DAY_OF_MONTH"|"WEEK_OF_MONTH", startDate?: string}
+export def "userprofiles-reports update-by-profileId-reportId-1" [
   profile_id: string
   report_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8207,23 +8217,23 @@ export def "userprofiles-reports dfareportingreportsupdate" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --account-id: string # The account ID to which this report belongs. (format: int64)
-  --criteria: record # The report criteria for a report of type "STANDARD". — shape: {activities?: record, customRichMediaEvents?: record, dateRange?: record, dimensionFilters?: list, dimensions?: list, metricNames?: list}
-  --cross-dimension-reach-criteria: record # The report criteria for a report of type "CROSS_DIMENSION_REACH". — shape: {breakdown?: list, dateRange?: record, dimension?: "ADVERTISER"|"CAMPAIGN"|"SITE_BY_ADVERTISER"|"SITE_BY_CAMPAIGN", dimensionFilters?: list, metricNames?: list, overlapMetricNames?: list, pivoted?: bool}
+  --criteria: record # The report criteria for a report of type "STANDARD". — shape: {activities?: record, customRichMediaEvents?: record, dateRange?: record, dimensionFilters?: list, dimensions?: list, metricNames?: list<string>}
+  --cross-dimension-reach-criteria: record # The report criteria for a report of type "CROSS_DIMENSION_REACH". — shape: {breakdown?: list, dateRange?: record, dimension?: "ADVERTISER"|"CAMPAIGN"|"SITE_BY_ADVERTISER"|"SITE_BY_CAMPAIGN", dimensionFilters?: list, metricNames?: list<string>, overlapMetricNames?: list<string>, pivoted?: bool}
   --delivery: record # The report's email delivery settings. — shape: {emailOwner?: bool, emailOwnerDeliveryType?: "LINK"|"ATTACHMENT", message?: string, recipients?: list}
   --etag: string # The eTag of this response for caching purposes.
   --file-name: string # The filename used when generating report files for this report.
-  --floodlight-criteria: record # The report criteria for a report of type "FLOODLIGHT". — shape: {customRichMediaEvents?: list, dateRange?: record, dimensionFilters?: list, dimensions?: list, floodlightConfigId?: record, metricNames?: list, reportProperties?: record}
+  --floodlight-criteria: record # The report criteria for a report of type "FLOODLIGHT". — shape: {customRichMediaEvents?: list, dateRange?: record, dimensionFilters?: list, dimensions?: list, floodlightConfigId?: record, metricNames?: list<string>, reportProperties?: record}
   --format: string@format-completer # The output format of the report. If not specified, default format is "CSV". Note that the actual format in the completed report file might differ if for instance the report's size exceeds the format's capabilities. "CSV" will then be the fallback format.
   --id: string # The unique ID identifying this report resource. (format: int64)
   --kind: string # The kind of resource this is, in this case dfareporting#report.
   --last-modified-time: string # The timestamp (in milliseconds since epoch) of when this report was last modified. (format: uint64)
   --name: string # The name of the report.
   --owner-profile-id: string # The user profile id of the owner of this report. (format: int64)
-  --path-attribution-criteria: record # The report criteria for a report of type "PATH_ATTRIBUTION". — shape: {activityFilters?: list, customChannelGrouping?: record, dateRange?: record, dimensions?: list, floodlightConfigId?: record, metricNames?: list, pathFilters?: list}
-  --path-criteria: record # The report criteria for a report of type "PATH". — shape: {activityFilters?: list, customChannelGrouping?: record, dateRange?: record, dimensions?: list, floodlightConfigId?: record, metricNames?: list, pathFilters?: list}
-  --path-to-conversion-criteria: record # The report criteria for a report of type "PATH_TO_CONVERSION". — shape: {activityFilters?: list, conversionDimensions?: list, customFloodlightVariables?: list, customRichMediaEvents?: list, dateRange?: record, floodlightConfigId?: record, metricNames?: list, perInteractionDimensions?: list, reportProperties?: record}
-  --reach-criteria: record # The report criteria for a report of type "REACH". — shape: {activities?: record, customRichMediaEvents?: record, dateRange?: record, dimensionFilters?: list, dimensions?: list, enableAllDimensionCombinations?: bool, metricNames?: list, reachByFrequencyMetricNames?: list}
-  --schedule: record # The report's schedule. Can only be set if the report's 'dateRange' is a relative date range and the relative date range is not "TODAY". — shape: {active?: bool, every?: int, expirationDate?: string, repeats?: string, repeatsOnWeekDays?: list, runsOnDayOfMonth?: "DAY_OF_MONTH"|"WEEK_OF_MONTH", startDate?: string}
+  --path-attribution-criteria: record # The report criteria for a report of type "PATH_ATTRIBUTION". — shape: {activityFilters?: list, customChannelGrouping?: record, dateRange?: record, dimensions?: list, floodlightConfigId?: record, metricNames?: list<string>, pathFilters?: list}
+  --path-criteria: record # The report criteria for a report of type "PATH". — shape: {activityFilters?: list, customChannelGrouping?: record, dateRange?: record, dimensions?: list, floodlightConfigId?: record, metricNames?: list<string>, pathFilters?: list}
+  --path-to-conversion-criteria: record # The report criteria for a report of type "PATH_TO_CONVERSION". — shape: {activityFilters?: list, conversionDimensions?: list, customFloodlightVariables?: list, customRichMediaEvents?: list, dateRange?: record, floodlightConfigId?: record, metricNames?: list<string>, perInteractionDimensions?: list, reportProperties?: record}
+  --reach-criteria: record # The report criteria for a report of type "REACH". — shape: {activities?: record, customRichMediaEvents?: record, dateRange?: record, dimensionFilters?: list, dimensions?: list, enableAllDimensionCombinations?: bool, metricNames?: list<string>, reachByFrequencyMetricNames?: list<string>}
+  --schedule: record # The report's schedule. Can only be set if the report's 'dateRange' is a relative date range and the relative date range is not "TODAY". — shape: {active?: bool, every?: int, expirationDate?: string, repeats?: string, repeatsOnWeekDays?: list<string>, runsOnDayOfMonth?: "DAY_OF_MONTH"|"WEEK_OF_MONTH", startDate?: string}
   --sub-account-id: string # The subaccount ID to which this report belongs if applicable. (format: int64)
   --type: string@type-completer-5 # The type of the report.
 ]: any -> record<accountId: string, criteria: record<activities: record<filters: list, kind: string, metricNames: list>, customRichMediaEvents: record<filteredEventIds: list, kind: string>, dateRange: record<endDate: string, kind: string, relativeDateRange: string, startDate: string>, dimensionFilters: list<record>, dimensions: list<record>, metricNames: list<string>>, crossDimensionReachCriteria: record<breakdown: list<record>, dateRange: record<endDate: string, kind: string, relativeDateRange: string, startDate: string>, dimension: string, dimensionFilters: list<record>, metricNames: list<string>, overlapMetricNames: list<string>, pivoted: bool>, delivery: record<emailOwner: bool, emailOwnerDeliveryType: string, message: string, recipients: list<record>>, etag: string, fileName: string, floodlightCriteria: record<customRichMediaEvents: list<record>, dateRange: record<endDate: string, kind: string, relativeDateRange: string, startDate: string>, dimensionFilters: list<record>, dimensions: list<record>, floodlightConfigId: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, metricNames: list<string>, reportProperties: record<includeAttributedIPConversions: bool, includeUnattributedCookieConversions: bool, includeUnattributedIPConversions: bool>>, format: string, id: string, kind: string, lastModifiedTime: string, name: string, ownerProfileId: string, pathAttributionCriteria: record<activityFilters: list<record>, customChannelGrouping: record<fallbackName: string, kind: string, name: string, rules: list>, dateRange: record<endDate: string, kind: string, relativeDateRange: string, startDate: string>, dimensions: list<record>, floodlightConfigId: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, metricNames: list<string>, pathFilters: list<record>>, pathCriteria: record<activityFilters: list<record>, customChannelGrouping: record<fallbackName: string, kind: string, name: string, rules: list>, dateRange: record<endDate: string, kind: string, relativeDateRange: string, startDate: string>, dimensions: list<record>, floodlightConfigId: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, metricNames: list<string>, pathFilters: list<record>>, pathToConversionCriteria: record<activityFilters: list<record>, conversionDimensions: list<record>, customFloodlightVariables: list<record>, customRichMediaEvents: list<record>, dateRange: record<endDate: string, kind: string, relativeDateRange: string, startDate: string>, floodlightConfigId: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, metricNames: list<string>, perInteractionDimensions: list<record>, reportProperties: record<clicksLookbackWindow: int, impressionsLookbackWindow: int, includeAttributedIPConversions: bool, includeUnattributedCookieConversions: bool, includeUnattributedIPConversions: bool, maximumClickInteractions: int, maximumImpressionInteractions: int, maximumInteractionGap: int, pivotOnInteractionPath: bool>>, reachCriteria: record<activities: record<filters: list, kind: string, metricNames: list>, customRichMediaEvents: record<filteredEventIds: list, kind: string>, dateRange: record<endDate: string, kind: string, relativeDateRange: string, startDate: string>, dimensionFilters: list<record>, dimensions: list<record>, enableAllDimensionCombinations: bool, metricNames: list<string>, reachByFrequencyMetricNames: list<string>>, schedule: record<active: bool, every: int, expirationDate: string, repeats: string, repeatsOnWeekDays: list<string>, runsOnDayOfMonth: string, startDate: string>, subAccountId: string, type: string> {
@@ -8231,19 +8241,19 @@ export def "userprofiles-reports dfareportingreportsupdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id, report_id: $report_id} | format pattern "/userprofiles/{profile_id}/reports/{report_id}") $qp)
-  let body = {"accountId": $account_id, "criteria": $criteria, "crossDimensionReachCriteria": $cross_dimension_reach_criteria, "delivery": $delivery, "etag": $etag, "fileName": $file_name, "floodlightCriteria": $floodlight_criteria, "format": $format, "id": $id, "kind": $kind, "lastModifiedTime": $last_modified_time, "name": $name, "ownerProfileId": $owner_profile_id, "pathAttributionCriteria": $path_attribution_criteria, "pathCriteria": $path_criteria, "pathToConversionCriteria": $path_to_conversion_criteria, "reachCriteria": $reach_criteria, "schedule": $schedule, "subAccountId": $sub_account_id, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), report_id: (encode-path-segment $report_id)} | format pattern "/userprofiles/{profile_id}/reports/{report_id}") $qp)
+  let req_body = {"accountId": $account_id, "criteria": $criteria, "crossDimensionReachCriteria": $cross_dimension_reach_criteria, "delivery": $delivery, "etag": $etag, "fileName": $file_name, "floodlightCriteria": $floodlight_criteria, "format": $format, "id": $id, "kind": $kind, "lastModifiedTime": $last_modified_time, "name": $name, "ownerProfileId": $owner_profile_id, "pathAttributionCriteria": $path_attribution_criteria, "pathCriteria": $path_criteria, "pathToConversionCriteria": $path_to_conversion_criteria, "reachCriteria": $reach_criteria, "schedule": $schedule, "subAccountId": $sub_account_id, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists files for a report.
 #
 # GET /userprofiles/{profileId}/reports/{reportId}/files
 # operationId: dfareporting.reports.files.list
-export def "userprofiles-reports-files dfareportingreportsfileslist" [
+export def "userprofiles-reports-files list" [
   profile_id: string
   report_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8273,7 +8283,7 @@ export def "userprofiles-reports-files dfareportingreportsfileslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id, report_id: $report_id} | format pattern "/userprofiles/{profile_id}/reports/{report_id}/files") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), report_id: (encode-path-segment $report_id)} | format pattern "/userprofiles/{profile_id}/reports/{report_id}/files") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8283,7 +8293,7 @@ export def "userprofiles-reports-files dfareportingreportsfileslist" [
 #
 # GET /userprofiles/{profileId}/reports/{reportId}/files/{fileId}
 # operationId: dfareporting.reports.files.get
-export def "userprofiles-reports-files dfareportingreportsfilesget" [
+export def "userprofiles-reports-files get" [
   profile_id: string
   report_id: string
   file_id: string
@@ -8310,7 +8320,7 @@ export def "userprofiles-reports-files dfareportingreportsfilesget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id, report_id: $report_id, file_id: $file_id} | format pattern "/userprofiles/{profile_id}/reports/{report_id}/files/{file_id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), report_id: (encode-path-segment $report_id), file_id: (encode-path-segment $file_id)} | format pattern "/userprofiles/{profile_id}/reports/{report_id}/files/{file_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8320,7 +8330,7 @@ export def "userprofiles-reports-files dfareportingreportsfilesget" [
 #
 # POST /userprofiles/{profileId}/reports/{reportId}/run
 # operationId: dfareporting.reports.run
-export def "userprofiles-reports-run dfareportingreportsrun" [
+export def "userprofiles-reports-run create" [
   profile_id: string
   report_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8347,7 +8357,7 @@ export def "userprofiles-reports-run dfareportingreportsrun" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "synchronous" $synchronous "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id, report_id: $report_id} | format pattern "/userprofiles/{profile_id}/reports/{report_id}/run") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), report_id: (encode-path-segment $report_id)} | format pattern "/userprofiles/{profile_id}/reports/{report_id}/run") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8357,7 +8367,7 @@ export def "userprofiles-reports-run dfareportingreportsrun" [
 #
 # GET /userprofiles/{profileId}/sites
 # operationId: dfareporting.sites.list
-export def "userprofiles-sites dfareportingsiteslist" [
+export def "userprofiles-sites list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8383,9 +8393,9 @@ export def "userprofiles-sites dfareportingsiteslist" [
   --accepts-publisher-paid-placements: oneof<nothing, bool> # Select only sites that accept publisher paid placements.
   --ad-words-site: oneof<nothing, bool> # Select only AdWords sites.
   --approved: oneof<nothing, bool> # Select only approved sites.
-  --campaign-ids: list # Select only sites with these campaign IDs.
-  --directory-site-ids: list # Select only sites with these directory site IDs.
-  --ids: list # Select only sites with these IDs.
+  --campaign-ids: list<string> # Select only sites with these campaign IDs.
+  --directory-site-ids: list<string> # Select only sites with these directory site IDs.
+  --ids: list<string> # Select only sites with these IDs.
   --max-results: int # Maximum number of results to return.
   --page-token: string # Value of the nextPageToken from the previous result page.
   --search-string: string # Allows searching for objects by name, ID or keyName. Wildcards (*) are allowed. For example, "site*2015" will return objects with names like "site June 2015", "site April 2015", or simply "site 2015". Most of the searches also add wildcards implicitly at the start and the end of the search string. For example, a search string of "site" will match objects with name "my site", "site 2015", or simply "site".
@@ -8397,7 +8407,7 @@ export def "userprofiles-sites dfareportingsiteslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "acceptsInStreamVideoPlacements" $accepts_in_stream_video_placements "scalar") (serialize-qp "acceptsInterstitialPlacements" $accepts_interstitial_placements "scalar") (serialize-qp "acceptsPublisherPaidPlacements" $accepts_publisher_paid_placements "scalar") (serialize-qp "adWordsSite" $ad_words_site "scalar") (serialize-qp "approved" $approved "scalar") (serialize-qp "campaignIds" $campaign_ids "multi") (serialize-qp "directorySiteIds" $directory_site_ids "multi") (serialize-qp "ids" $ids "multi") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "searchString" $search_string "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "subaccountId" $subaccount_id "scalar") (serialize-qp "unmappedSite" $unmapped_site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/sites") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/sites") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8412,7 +8422,7 @@ export def "userprofiles-sites dfareportingsiteslist" [
 # --siteContacts item shape: {address?: string, contactType?: "SALES_PERSON"|"TRAFFICKER", email?: string, firstName?: string, id?: string, lastName?: string, phone?: string, title?: string}
 # --siteSettings shape: {activeViewOptOut?: bool, adBlockingOptOut?: bool, disableNewCookie?: bool, tagSetting?: record, videoActiveViewOptOutTemplate?: bool, vpaidAdapterChoiceTemplate?: "DEFAULT"|"FLASH"|"HTML5"|"BOTH"}
 # --videoSettings shape: {companionSettings?: record, kind?: string, obaEnabled?: bool, obaSettings?: record, orientation?: "ANY"|"LANDSCAPE"|"PORTRAIT", skippableSettings?: record, transcodeSettings?: record}
-export def "userprofiles-sites dfareportingsitespatch" [
+export def "userprofiles-sites update-by-profileId" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8452,12 +8462,12 @@ export def "userprofiles-sites dfareportingsitespatch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/sites") $qp)
-  let body = {"accountId": $account_id, "approved": $approved, "directorySiteId": $directory_site_id, "directorySiteIdDimensionValue": $directory_site_id_dimension_value, "id": $id, "idDimensionValue": $id_dimension_value, "keyName": $key_name, "kind": $kind, "name": $name, "siteContacts": $site_contacts, "siteSettings": $site_settings, "subaccountId": $subaccount_id, "videoSettings": $video_settings} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/sites") $qp)
+  let req_body = {"accountId": $account_id, "approved": $approved, "directorySiteId": $directory_site_id, "directorySiteIdDimensionValue": $directory_site_id_dimension_value, "id": $id, "idDimensionValue": $id_dimension_value, "keyName": $key_name, "kind": $kind, "name": $name, "siteContacts": $site_contacts, "siteSettings": $site_settings, "subaccountId": $subaccount_id, "videoSettings": $video_settings} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Inserts a new site.
@@ -8469,7 +8479,7 @@ export def "userprofiles-sites dfareportingsitespatch" [
 # --siteContacts item shape: {address?: string, contactType?: "SALES_PERSON"|"TRAFFICKER", email?: string, firstName?: string, id?: string, lastName?: string, phone?: string, title?: string}
 # --siteSettings shape: {activeViewOptOut?: bool, adBlockingOptOut?: bool, disableNewCookie?: bool, tagSetting?: record, videoActiveViewOptOutTemplate?: bool, vpaidAdapterChoiceTemplate?: "DEFAULT"|"FLASH"|"HTML5"|"BOTH"}
 # --videoSettings shape: {companionSettings?: record, kind?: string, obaEnabled?: bool, obaSettings?: record, orientation?: "ANY"|"LANDSCAPE"|"PORTRAIT", skippableSettings?: record, transcodeSettings?: record}
-export def "userprofiles-sites dfareportingsitesinsert" [
+export def "userprofiles-sites create" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8508,12 +8518,12 @@ export def "userprofiles-sites dfareportingsitesinsert" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/sites") $qp)
-  let body = {"accountId": $account_id, "approved": $approved, "directorySiteId": $directory_site_id, "directorySiteIdDimensionValue": $directory_site_id_dimension_value, "id": $id, "idDimensionValue": $id_dimension_value, "keyName": $key_name, "kind": $kind, "name": $name, "siteContacts": $site_contacts, "siteSettings": $site_settings, "subaccountId": $subaccount_id, "videoSettings": $video_settings} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/sites") $qp)
+  let req_body = {"accountId": $account_id, "approved": $approved, "directorySiteId": $directory_site_id, "directorySiteIdDimensionValue": $directory_site_id_dimension_value, "id": $id, "idDimensionValue": $id_dimension_value, "keyName": $key_name, "kind": $kind, "name": $name, "siteContacts": $site_contacts, "siteSettings": $site_settings, "subaccountId": $subaccount_id, "videoSettings": $video_settings} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates an existing site.
@@ -8525,7 +8535,7 @@ export def "userprofiles-sites dfareportingsitesinsert" [
 # --siteContacts item shape: {address?: string, contactType?: "SALES_PERSON"|"TRAFFICKER", email?: string, firstName?: string, id?: string, lastName?: string, phone?: string, title?: string}
 # --siteSettings shape: {activeViewOptOut?: bool, adBlockingOptOut?: bool, disableNewCookie?: bool, tagSetting?: record, videoActiveViewOptOutTemplate?: bool, vpaidAdapterChoiceTemplate?: "DEFAULT"|"FLASH"|"HTML5"|"BOTH"}
 # --videoSettings shape: {companionSettings?: record, kind?: string, obaEnabled?: bool, obaSettings?: record, orientation?: "ANY"|"LANDSCAPE"|"PORTRAIT", skippableSettings?: record, transcodeSettings?: record}
-export def "userprofiles-sites dfareportingsitesupdate" [
+export def "userprofiles-sites update-by-profileId-1" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8564,19 +8574,19 @@ export def "userprofiles-sites dfareportingsitesupdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/sites") $qp)
-  let body = {"accountId": $account_id, "approved": $approved, "directorySiteId": $directory_site_id, "directorySiteIdDimensionValue": $directory_site_id_dimension_value, "id": $id, "idDimensionValue": $id_dimension_value, "keyName": $key_name, "kind": $kind, "name": $name, "siteContacts": $site_contacts, "siteSettings": $site_settings, "subaccountId": $subaccount_id, "videoSettings": $video_settings} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/sites") $qp)
+  let req_body = {"accountId": $account_id, "approved": $approved, "directorySiteId": $directory_site_id, "directorySiteIdDimensionValue": $directory_site_id_dimension_value, "id": $id, "idDimensionValue": $id_dimension_value, "keyName": $key_name, "kind": $kind, "name": $name, "siteContacts": $site_contacts, "siteSettings": $site_settings, "subaccountId": $subaccount_id, "videoSettings": $video_settings} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets one site by ID.
 #
 # GET /userprofiles/{profileId}/sites/{id}
 # operationId: dfareporting.sites.get
-export def "userprofiles-sites dfareportingsitesget" [
+export def "userprofiles-sites get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8602,7 +8612,7 @@ export def "userprofiles-sites dfareportingsitesget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id, id: $id} | format pattern "/userprofiles/{profile_id}/sites/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/sites/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8612,7 +8622,7 @@ export def "userprofiles-sites dfareportingsitesget" [
 #
 # GET /userprofiles/{profileId}/sizes
 # operationId: dfareporting.sizes.list
-export def "userprofiles-sizes dfareportingsizeslist" [
+export def "userprofiles-sizes list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8635,13 +8645,13 @@ export def "userprofiles-sizes dfareportingsizeslist" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --height: int # Select only sizes with this height.
   --iab-standard: oneof<nothing, bool> # Select only IAB standard sizes.
-  --ids: list # Select only sizes with these IDs.
+  --ids: list<string> # Select only sizes with these IDs.
   --width: int # Select only sizes with this width.
 ]: nothing -> record<kind: string, sizes: table<height: int, iab: bool, id: string, kind: string, width: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "iabStandard" $iab_standard "scalar") (serialize-qp "ids" $ids "multi") (serialize-qp "width" $width "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/sizes") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/sizes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8651,7 +8661,7 @@ export def "userprofiles-sizes dfareportingsizeslist" [
 #
 # POST /userprofiles/{profileId}/sizes
 # operationId: dfareporting.sizes.insert
-export def "userprofiles-sizes dfareportingsizesinsert" [
+export def "userprofiles-sizes create" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8682,19 +8692,19 @@ export def "userprofiles-sizes dfareportingsizesinsert" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/sizes") $qp)
-  let body = {"height": $height, "iab": $iab, "id": $id, "kind": $kind, "width": $width} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/sizes") $qp)
+  let req_body = {"height": $height, "iab": $iab, "id": $id, "kind": $kind, "width": $width} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets one size by ID.
 #
 # GET /userprofiles/{profileId}/sizes/{id}
 # operationId: dfareporting.sizes.get
-export def "userprofiles-sizes dfareportingsizesget" [
+export def "userprofiles-sizes get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8720,7 +8730,7 @@ export def "userprofiles-sizes dfareportingsizesget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id, id: $id} | format pattern "/userprofiles/{profile_id}/sizes/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/sizes/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8730,7 +8740,7 @@ export def "userprofiles-sizes dfareportingsizesget" [
 #
 # GET /userprofiles/{profileId}/subaccounts
 # operationId: dfareporting.subaccounts.list
-export def "userprofiles-subaccounts dfareportingsubaccountslist" [
+export def "userprofiles-subaccounts list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8751,7 +8761,7 @@ export def "userprofiles-subaccounts dfareportingsubaccountslist" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --ids: list # Select only subaccounts with these IDs.
+  --ids: list<string> # Select only subaccounts with these IDs.
   --max-results: int # Maximum number of results to return.
   --page-token: string # Value of the nextPageToken from the previous result page.
   --search-string: string # Allows searching for objects by name or ID. Wildcards (*) are allowed. For example, "subaccount*2015" will return objects with names like "subaccount June 2015", "subaccount April 2015", or simply "subaccount 2015". Most of the searches also add wildcards implicitly at the start and the end of the search string. For example, a search string of "subaccount" will match objects with name "my subaccount", "subaccount 2015", or simply "subaccount" .
@@ -8761,7 +8771,7 @@ export def "userprofiles-subaccounts dfareportingsubaccountslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "ids" $ids "multi") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "searchString" $search_string "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/subaccounts") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/subaccounts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8771,7 +8781,7 @@ export def "userprofiles-subaccounts dfareportingsubaccountslist" [
 #
 # PATCH /userprofiles/{profileId}/subaccounts
 # operationId: dfareporting.subaccounts.patch
-export def "userprofiles-subaccounts dfareportingsubaccountspatch" [
+export def "userprofiles-subaccounts update-by-profileId" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8794,7 +8804,7 @@ export def "userprofiles-subaccounts dfareportingsubaccountspatch" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --id: string # Subaccount ID.
   --account-id: string # ID of the account that contains this subaccount. This is a read-only field that can be left blank. (format: int64)
-  --available-permission-ids: list # IDs of the available user role permissions for this subaccount.
+  --available-permission-ids: list<string> # IDs of the available user role permissions for this subaccount.
   --id: string # ID of this subaccount. This is a read-only, auto-generated field. (format: int64)
   --kind: string # Identifies what kind of resource this is. Value: the fixed string "dfareporting#subaccount".
   --name: string # Name of this subaccount. This is a required field. Must be less than 128 characters long and be unique among subaccounts of the same account.
@@ -8803,19 +8813,19 @@ export def "userprofiles-subaccounts dfareportingsubaccountspatch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/subaccounts") $qp)
-  let body = {"accountId": $account_id, "availablePermissionIds": $available_permission_ids, "id": $id, "kind": $kind, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/subaccounts") $qp)
+  let req_body = {"accountId": $account_id, "availablePermissionIds": $available_permission_ids, "id": $id, "kind": $kind, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Inserts a new subaccount.
 #
 # POST /userprofiles/{profileId}/subaccounts
 # operationId: dfareporting.subaccounts.insert
-export def "userprofiles-subaccounts dfareportingsubaccountsinsert" [
+export def "userprofiles-subaccounts create" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8837,7 +8847,7 @@ export def "userprofiles-subaccounts dfareportingsubaccountsinsert" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --account-id: string # ID of the account that contains this subaccount. This is a read-only field that can be left blank. (format: int64)
-  --available-permission-ids: list # IDs of the available user role permissions for this subaccount.
+  --available-permission-ids: list<string> # IDs of the available user role permissions for this subaccount.
   --id: string # ID of this subaccount. This is a read-only, auto-generated field. (format: int64)
   --kind: string # Identifies what kind of resource this is. Value: the fixed string "dfareporting#subaccount".
   --name: string # Name of this subaccount. This is a required field. Must be less than 128 characters long and be unique among subaccounts of the same account.
@@ -8846,19 +8856,19 @@ export def "userprofiles-subaccounts dfareportingsubaccountsinsert" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/subaccounts") $qp)
-  let body = {"accountId": $account_id, "availablePermissionIds": $available_permission_ids, "id": $id, "kind": $kind, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/subaccounts") $qp)
+  let req_body = {"accountId": $account_id, "availablePermissionIds": $available_permission_ids, "id": $id, "kind": $kind, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates an existing subaccount.
 #
 # PUT /userprofiles/{profileId}/subaccounts
 # operationId: dfareporting.subaccounts.update
-export def "userprofiles-subaccounts dfareportingsubaccountsupdate" [
+export def "userprofiles-subaccounts update-by-profileId-1" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8880,7 +8890,7 @@ export def "userprofiles-subaccounts dfareportingsubaccountsupdate" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --account-id: string # ID of the account that contains this subaccount. This is a read-only field that can be left blank. (format: int64)
-  --available-permission-ids: list # IDs of the available user role permissions for this subaccount.
+  --available-permission-ids: list<string> # IDs of the available user role permissions for this subaccount.
   --id: string # ID of this subaccount. This is a read-only, auto-generated field. (format: int64)
   --kind: string # Identifies what kind of resource this is. Value: the fixed string "dfareporting#subaccount".
   --name: string # Name of this subaccount. This is a required field. Must be less than 128 characters long and be unique among subaccounts of the same account.
@@ -8889,19 +8899,19 @@ export def "userprofiles-subaccounts dfareportingsubaccountsupdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/subaccounts") $qp)
-  let body = {"accountId": $account_id, "availablePermissionIds": $available_permission_ids, "id": $id, "kind": $kind, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/subaccounts") $qp)
+  let req_body = {"accountId": $account_id, "availablePermissionIds": $available_permission_ids, "id": $id, "kind": $kind, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets one subaccount by ID.
 #
 # GET /userprofiles/{profileId}/subaccounts/{id}
 # operationId: dfareporting.subaccounts.get
-export def "userprofiles-subaccounts dfareportingsubaccountsget" [
+export def "userprofiles-subaccounts get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8927,7 +8937,7 @@ export def "userprofiles-subaccounts dfareportingsubaccountsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id, id: $id} | format pattern "/userprofiles/{profile_id}/subaccounts/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/subaccounts/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8937,7 +8947,7 @@ export def "userprofiles-subaccounts dfareportingsubaccountsget" [
 #
 # GET /userprofiles/{profileId}/targetableRemarketingLists
 # operationId: dfareporting.targetableRemarketingLists.list
-export def "userprofiles-targetable-remarketing-lists dfareportingtargetableRemarketingListslist" [
+export def "userprofiles-targetable-remarketing-lists list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8969,7 +8979,7 @@ export def "userprofiles-targetable-remarketing-lists dfareportingtargetableRema
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserId" $advertiser_id "scalar") (serialize-qp "active" $active "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/targetableRemarketingLists") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/targetableRemarketingLists") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8979,7 +8989,7 @@ export def "userprofiles-targetable-remarketing-lists dfareportingtargetableRema
 #
 # GET /userprofiles/{profileId}/targetableRemarketingLists/{id}
 # operationId: dfareporting.targetableRemarketingLists.get
-export def "userprofiles-targetable-remarketing-lists dfareportingtargetableRemarketingListsget" [
+export def "userprofiles-targetable-remarketing-lists get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9005,7 +9015,7 @@ export def "userprofiles-targetable-remarketing-lists dfareportingtargetableRema
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id, id: $id} | format pattern "/userprofiles/{profile_id}/targetableRemarketingLists/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/targetableRemarketingLists/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9015,7 +9025,7 @@ export def "userprofiles-targetable-remarketing-lists dfareportingtargetableRema
 #
 # GET /userprofiles/{profileId}/targetingTemplates
 # operationId: dfareporting.targetingTemplates.list
-export def "userprofiles-targeting-templates dfareportingtargetingTemplateslist" [
+export def "userprofiles-targeting-templates list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9037,7 +9047,7 @@ export def "userprofiles-targeting-templates dfareportingtargetingTemplateslist"
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --advertiser-id: string # Select only targeting templates with this advertiser ID.
-  --ids: list # Select only targeting templates with these IDs.
+  --ids: list<string> # Select only targeting templates with these IDs.
   --max-results: int # Maximum number of results to return.
   --page-token: string # Value of the nextPageToken from the previous result page.
   --search-string: string # Allows searching for objects by name or ID. Wildcards (*) are allowed. For example, "template*2015" will return objects with names like "template June 2015", "template April 2015", or simply "template 2015". Most of the searches also add wildcards implicitly at the start and the end of the search string. For example, a search string of "template" will match objects with name "my template", "template 2015", or simply "template".
@@ -9047,7 +9057,7 @@ export def "userprofiles-targeting-templates dfareportingtargetingTemplateslist"
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserId" $advertiser_id "scalar") (serialize-qp "ids" $ids "multi") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "searchString" $search_string "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/targetingTemplates") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/targetingTemplates") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9058,13 +9068,13 @@ export def "userprofiles-targeting-templates dfareportingtargetingTemplateslist"
 # PATCH /userprofiles/{profileId}/targetingTemplates
 # operationId: dfareporting.targetingTemplates.patch
 # --advertiserIdDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
-# --dayPartTargeting shape: {daysOfWeek?: list, hoursOfDay?: list, userLocalTime?: bool}
+# --dayPartTargeting shape: {daysOfWeek?: list<string>, hoursOfDay?: list<int>, userLocalTime?: bool}
 # --geoTargeting shape: {cities?: list, countries?: list, excludeCountries?: bool, metros?: list, postalCodes?: list, regions?: list}
 # --keyValueTargetingExpression shape: {expression?: string}
 # --languageTargeting shape: {languages?: list}
 # --listTargetingExpression shape: {expression?: string}
 # --technologyTargeting shape: {browsers?: list, connectionTypes?: list, mobileCarriers?: list, operatingSystemVersions?: list, operatingSystems?: list, platformTypes?: list}
-export def "userprofiles-targeting-templates dfareportingtargetingTemplatespatch" [
+export def "userprofiles-targeting-templates update-by-profileId" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9089,7 +9099,7 @@ export def "userprofiles-targeting-templates dfareportingtargetingTemplatespatch
   --account-id: string # Account ID of this targeting template. This field, if left unset, will be auto-generated on insert and is read-only after insert. (format: int64)
   --advertiser-id: string # Advertiser ID of this targeting template. This is a required field on insert and is read-only after insert. (format: int64)
   --advertiser-id-dimension-value: record # Represents a DimensionValue resource. — shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
-  --day-part-targeting: record # Day Part Targeting. — shape: {daysOfWeek?: list, hoursOfDay?: list, userLocalTime?: bool}
+  --day-part-targeting: record # Day Part Targeting. — shape: {daysOfWeek?: list<string>, hoursOfDay?: list<int>, userLocalTime?: bool}
   --geo-targeting: record # Geographical Targeting. — shape: {cities?: list, countries?: list, excludeCountries?: bool, metros?: list, postalCodes?: list, regions?: list}
   --id: string # ID of this targeting template. This is a read-only, auto-generated field. (format: int64)
   --key-value-targeting-expression: record # Key Value Targeting Expression. — shape: {expression?: string}
@@ -9104,12 +9114,12 @@ export def "userprofiles-targeting-templates dfareportingtargetingTemplatespatch
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/targetingTemplates") $qp)
-  let body = {"accountId": $account_id, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "dayPartTargeting": $day_part_targeting, "geoTargeting": $geo_targeting, "id": $id, "keyValueTargetingExpression": $key_value_targeting_expression, "kind": $kind, "languageTargeting": $language_targeting, "listTargetingExpression": $list_targeting_expression, "name": $name, "subaccountId": $subaccount_id, "technologyTargeting": $technology_targeting} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/targetingTemplates") $qp)
+  let req_body = {"accountId": $account_id, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "dayPartTargeting": $day_part_targeting, "geoTargeting": $geo_targeting, "id": $id, "keyValueTargetingExpression": $key_value_targeting_expression, "kind": $kind, "languageTargeting": $language_targeting, "listTargetingExpression": $list_targeting_expression, "name": $name, "subaccountId": $subaccount_id, "technologyTargeting": $technology_targeting} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Inserts a new targeting template.
@@ -9117,13 +9127,13 @@ export def "userprofiles-targeting-templates dfareportingtargetingTemplatespatch
 # POST /userprofiles/{profileId}/targetingTemplates
 # operationId: dfareporting.targetingTemplates.insert
 # --advertiserIdDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
-# --dayPartTargeting shape: {daysOfWeek?: list, hoursOfDay?: list, userLocalTime?: bool}
+# --dayPartTargeting shape: {daysOfWeek?: list<string>, hoursOfDay?: list<int>, userLocalTime?: bool}
 # --geoTargeting shape: {cities?: list, countries?: list, excludeCountries?: bool, metros?: list, postalCodes?: list, regions?: list}
 # --keyValueTargetingExpression shape: {expression?: string}
 # --languageTargeting shape: {languages?: list}
 # --listTargetingExpression shape: {expression?: string}
 # --technologyTargeting shape: {browsers?: list, connectionTypes?: list, mobileCarriers?: list, operatingSystemVersions?: list, operatingSystems?: list, platformTypes?: list}
-export def "userprofiles-targeting-templates dfareportingtargetingTemplatesinsert" [
+export def "userprofiles-targeting-templates create" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9147,7 +9157,7 @@ export def "userprofiles-targeting-templates dfareportingtargetingTemplatesinser
   --account-id: string # Account ID of this targeting template. This field, if left unset, will be auto-generated on insert and is read-only after insert. (format: int64)
   --advertiser-id: string # Advertiser ID of this targeting template. This is a required field on insert and is read-only after insert. (format: int64)
   --advertiser-id-dimension-value: record # Represents a DimensionValue resource. — shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
-  --day-part-targeting: record # Day Part Targeting. — shape: {daysOfWeek?: list, hoursOfDay?: list, userLocalTime?: bool}
+  --day-part-targeting: record # Day Part Targeting. — shape: {daysOfWeek?: list<string>, hoursOfDay?: list<int>, userLocalTime?: bool}
   --geo-targeting: record # Geographical Targeting. — shape: {cities?: list, countries?: list, excludeCountries?: bool, metros?: list, postalCodes?: list, regions?: list}
   --id: string # ID of this targeting template. This is a read-only, auto-generated field. (format: int64)
   --key-value-targeting-expression: record # Key Value Targeting Expression. — shape: {expression?: string}
@@ -9162,12 +9172,12 @@ export def "userprofiles-targeting-templates dfareportingtargetingTemplatesinser
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/targetingTemplates") $qp)
-  let body = {"accountId": $account_id, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "dayPartTargeting": $day_part_targeting, "geoTargeting": $geo_targeting, "id": $id, "keyValueTargetingExpression": $key_value_targeting_expression, "kind": $kind, "languageTargeting": $language_targeting, "listTargetingExpression": $list_targeting_expression, "name": $name, "subaccountId": $subaccount_id, "technologyTargeting": $technology_targeting} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/targetingTemplates") $qp)
+  let req_body = {"accountId": $account_id, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "dayPartTargeting": $day_part_targeting, "geoTargeting": $geo_targeting, "id": $id, "keyValueTargetingExpression": $key_value_targeting_expression, "kind": $kind, "languageTargeting": $language_targeting, "listTargetingExpression": $list_targeting_expression, "name": $name, "subaccountId": $subaccount_id, "technologyTargeting": $technology_targeting} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates an existing targeting template.
@@ -9175,13 +9185,13 @@ export def "userprofiles-targeting-templates dfareportingtargetingTemplatesinser
 # PUT /userprofiles/{profileId}/targetingTemplates
 # operationId: dfareporting.targetingTemplates.update
 # --advertiserIdDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
-# --dayPartTargeting shape: {daysOfWeek?: list, hoursOfDay?: list, userLocalTime?: bool}
+# --dayPartTargeting shape: {daysOfWeek?: list<string>, hoursOfDay?: list<int>, userLocalTime?: bool}
 # --geoTargeting shape: {cities?: list, countries?: list, excludeCountries?: bool, metros?: list, postalCodes?: list, regions?: list}
 # --keyValueTargetingExpression shape: {expression?: string}
 # --languageTargeting shape: {languages?: list}
 # --listTargetingExpression shape: {expression?: string}
 # --technologyTargeting shape: {browsers?: list, connectionTypes?: list, mobileCarriers?: list, operatingSystemVersions?: list, operatingSystems?: list, platformTypes?: list}
-export def "userprofiles-targeting-templates dfareportingtargetingTemplatesupdate" [
+export def "userprofiles-targeting-templates update-by-profileId-1" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9205,7 +9215,7 @@ export def "userprofiles-targeting-templates dfareportingtargetingTemplatesupdat
   --account-id: string # Account ID of this targeting template. This field, if left unset, will be auto-generated on insert and is read-only after insert. (format: int64)
   --advertiser-id: string # Advertiser ID of this targeting template. This is a required field on insert and is read-only after insert. (format: int64)
   --advertiser-id-dimension-value: record # Represents a DimensionValue resource. — shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
-  --day-part-targeting: record # Day Part Targeting. — shape: {daysOfWeek?: list, hoursOfDay?: list, userLocalTime?: bool}
+  --day-part-targeting: record # Day Part Targeting. — shape: {daysOfWeek?: list<string>, hoursOfDay?: list<int>, userLocalTime?: bool}
   --geo-targeting: record # Geographical Targeting. — shape: {cities?: list, countries?: list, excludeCountries?: bool, metros?: list, postalCodes?: list, regions?: list}
   --id: string # ID of this targeting template. This is a read-only, auto-generated field. (format: int64)
   --key-value-targeting-expression: record # Key Value Targeting Expression. — shape: {expression?: string}
@@ -9220,19 +9230,19 @@ export def "userprofiles-targeting-templates dfareportingtargetingTemplatesupdat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/targetingTemplates") $qp)
-  let body = {"accountId": $account_id, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "dayPartTargeting": $day_part_targeting, "geoTargeting": $geo_targeting, "id": $id, "keyValueTargetingExpression": $key_value_targeting_expression, "kind": $kind, "languageTargeting": $language_targeting, "listTargetingExpression": $list_targeting_expression, "name": $name, "subaccountId": $subaccount_id, "technologyTargeting": $technology_targeting} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/targetingTemplates") $qp)
+  let req_body = {"accountId": $account_id, "advertiserId": $advertiser_id, "advertiserIdDimensionValue": $advertiser_id_dimension_value, "dayPartTargeting": $day_part_targeting, "geoTargeting": $geo_targeting, "id": $id, "keyValueTargetingExpression": $key_value_targeting_expression, "kind": $kind, "languageTargeting": $language_targeting, "listTargetingExpression": $list_targeting_expression, "name": $name, "subaccountId": $subaccount_id, "technologyTargeting": $technology_targeting} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets one targeting template by ID.
 #
 # GET /userprofiles/{profileId}/targetingTemplates/{id}
 # operationId: dfareporting.targetingTemplates.get
-export def "userprofiles-targeting-templates dfareportingtargetingTemplatesget" [
+export def "userprofiles-targeting-templates get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9258,7 +9268,7 @@ export def "userprofiles-targeting-templates dfareportingtargetingTemplatesget" 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id, id: $id} | format pattern "/userprofiles/{profile_id}/targetingTemplates/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/targetingTemplates/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9268,7 +9278,7 @@ export def "userprofiles-targeting-templates dfareportingtargetingTemplatesget" 
 #
 # GET /userprofiles/{profileId}/userRolePermissionGroups
 # operationId: dfareporting.userRolePermissionGroups.list
-export def "userprofiles-user-role-permission-groups dfareportinguserRolePermissionGroupslist" [
+export def "userprofiles-user-role-permission-groups list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9293,7 +9303,7 @@ export def "userprofiles-user-role-permission-groups dfareportinguserRolePermiss
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/userRolePermissionGroups") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/userRolePermissionGroups") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9303,7 +9313,7 @@ export def "userprofiles-user-role-permission-groups dfareportinguserRolePermiss
 #
 # GET /userprofiles/{profileId}/userRolePermissionGroups/{id}
 # operationId: dfareporting.userRolePermissionGroups.get
-export def "userprofiles-user-role-permission-groups dfareportinguserRolePermissionGroupsget" [
+export def "userprofiles-user-role-permission-groups get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9329,7 +9339,7 @@ export def "userprofiles-user-role-permission-groups dfareportinguserRolePermiss
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id, id: $id} | format pattern "/userprofiles/{profile_id}/userRolePermissionGroups/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/userRolePermissionGroups/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9339,7 +9349,7 @@ export def "userprofiles-user-role-permission-groups dfareportinguserRolePermiss
 #
 # GET /userprofiles/{profileId}/userRolePermissions
 # operationId: dfareporting.userRolePermissions.list
-export def "userprofiles-user-role-permissions dfareportinguserRolePermissionslist" [
+export def "userprofiles-user-role-permissions list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9360,12 +9370,12 @@ export def "userprofiles-user-role-permissions dfareportinguserRolePermissionsli
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --ids: list # Select only user role permissions with these IDs.
+  --ids: list<string> # Select only user role permissions with these IDs.
 ]: nothing -> record<kind: string, userRolePermissions: table<availability: string, id: string, kind: string, name: string, permissionGroupId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "ids" $ids "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/userRolePermissions") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/userRolePermissions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9375,7 +9385,7 @@ export def "userprofiles-user-role-permissions dfareportinguserRolePermissionsli
 #
 # GET /userprofiles/{profileId}/userRolePermissions/{id}
 # operationId: dfareporting.userRolePermissions.get
-export def "userprofiles-user-role-permissions dfareportinguserRolePermissionsget" [
+export def "userprofiles-user-role-permissions get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9401,7 +9411,7 @@ export def "userprofiles-user-role-permissions dfareportinguserRolePermissionsge
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id, id: $id} | format pattern "/userprofiles/{profile_id}/userRolePermissions/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/userRolePermissions/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9411,7 +9421,7 @@ export def "userprofiles-user-role-permissions dfareportinguserRolePermissionsge
 #
 # GET /userprofiles/{profileId}/userRoles
 # operationId: dfareporting.userRoles.list
-export def "userprofiles-user-roles dfareportinguserRoleslist" [
+export def "userprofiles-user-roles list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9433,7 +9443,7 @@ export def "userprofiles-user-roles dfareportinguserRoleslist" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --account-user-role-only: oneof<nothing, bool> # Select only account level user roles not associated with any specific subaccount.
-  --ids: list # Select only user roles with the specified IDs.
+  --ids: list<string> # Select only user roles with the specified IDs.
   --max-results: int # Maximum number of results to return.
   --page-token: string # Value of the nextPageToken from the previous result page.
   --search-string: string # Allows searching for objects by name or ID. Wildcards (*) are allowed. For example, "userrole*2015" will return objects with names like "userrole June 2015", "userrole April 2015", or simply "userrole 2015". Most of the searches also add wildcards implicitly at the start and the end of the search string. For example, a search string of "userrole" will match objects with name "my userrole", "userrole 2015", or simply "userrole".
@@ -9444,7 +9454,7 @@ export def "userprofiles-user-roles dfareportinguserRoleslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "accountUserRoleOnly" $account_user_role_only "scalar") (serialize-qp "ids" $ids "multi") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "searchString" $search_string "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "subaccountId" $subaccount_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/userRoles") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/userRoles") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9455,7 +9465,7 @@ export def "userprofiles-user-roles dfareportinguserRoleslist" [
 # PATCH /userprofiles/{profileId}/userRoles
 # operationId: dfareporting.userRoles.patch
 # --permissions item shape: {availability?: "NOT_AVAILABLE_BY_DEFAULT"|"ACCOUNT_BY_DEFAULT"|"SUBACCOUNT_AND_ACCOUNT_BY_DEFAULT"|"ACCOUNT_ALWAYS"|"SUBACCOUNT_AND_ACCOUNT_ALWAYS"|"USER_PROFILE_ONLY", id?: string, kind?: string, name?: string, permissionGroupId?: string}
-export def "userprofiles-user-roles dfareportinguserRolespatch" [
+export def "userprofiles-user-roles update-by-profileId" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9490,12 +9500,12 @@ export def "userprofiles-user-roles dfareportinguserRolespatch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/userRoles") $qp)
-  let body = {"accountId": $account_id, "defaultUserRole": $default_user_role, "id": $id, "kind": $kind, "name": $name, "parentUserRoleId": $parent_user_role_id, "permissions": $permissions, "subaccountId": $subaccount_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/userRoles") $qp)
+  let req_body = {"accountId": $account_id, "defaultUserRole": $default_user_role, "id": $id, "kind": $kind, "name": $name, "parentUserRoleId": $parent_user_role_id, "permissions": $permissions, "subaccountId": $subaccount_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Inserts a new user role.
@@ -9503,7 +9513,7 @@ export def "userprofiles-user-roles dfareportinguserRolespatch" [
 # POST /userprofiles/{profileId}/userRoles
 # operationId: dfareporting.userRoles.insert
 # --permissions item shape: {availability?: "NOT_AVAILABLE_BY_DEFAULT"|"ACCOUNT_BY_DEFAULT"|"SUBACCOUNT_AND_ACCOUNT_BY_DEFAULT"|"ACCOUNT_ALWAYS"|"SUBACCOUNT_AND_ACCOUNT_ALWAYS"|"USER_PROFILE_ONLY", id?: string, kind?: string, name?: string, permissionGroupId?: string}
-export def "userprofiles-user-roles dfareportinguserRolesinsert" [
+export def "userprofiles-user-roles create" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9537,12 +9547,12 @@ export def "userprofiles-user-roles dfareportinguserRolesinsert" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/userRoles") $qp)
-  let body = {"accountId": $account_id, "defaultUserRole": $default_user_role, "id": $id, "kind": $kind, "name": $name, "parentUserRoleId": $parent_user_role_id, "permissions": $permissions, "subaccountId": $subaccount_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/userRoles") $qp)
+  let req_body = {"accountId": $account_id, "defaultUserRole": $default_user_role, "id": $id, "kind": $kind, "name": $name, "parentUserRoleId": $parent_user_role_id, "permissions": $permissions, "subaccountId": $subaccount_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates an existing user role.
@@ -9550,7 +9560,7 @@ export def "userprofiles-user-roles dfareportinguserRolesinsert" [
 # PUT /userprofiles/{profileId}/userRoles
 # operationId: dfareporting.userRoles.update
 # --permissions item shape: {availability?: "NOT_AVAILABLE_BY_DEFAULT"|"ACCOUNT_BY_DEFAULT"|"SUBACCOUNT_AND_ACCOUNT_BY_DEFAULT"|"ACCOUNT_ALWAYS"|"SUBACCOUNT_AND_ACCOUNT_ALWAYS"|"USER_PROFILE_ONLY", id?: string, kind?: string, name?: string, permissionGroupId?: string}
-export def "userprofiles-user-roles dfareportinguserRolesupdate" [
+export def "userprofiles-user-roles update-by-profileId-1" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9584,19 +9594,19 @@ export def "userprofiles-user-roles dfareportinguserRolesupdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/userRoles") $qp)
-  let body = {"accountId": $account_id, "defaultUserRole": $default_user_role, "id": $id, "kind": $kind, "name": $name, "parentUserRoleId": $parent_user_role_id, "permissions": $permissions, "subaccountId": $subaccount_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/userRoles") $qp)
+  let req_body = {"accountId": $account_id, "defaultUserRole": $default_user_role, "id": $id, "kind": $kind, "name": $name, "parentUserRoleId": $parent_user_role_id, "permissions": $permissions, "subaccountId": $subaccount_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes an existing user role.
 #
 # DELETE /userprofiles/{profileId}/userRoles/{id}
 # operationId: dfareporting.userRoles.delete
-export def "userprofiles-user-roles dfareportinguserRolesdelete" [
+export def "userprofiles-user-roles delete" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9622,7 +9632,7 @@ export def "userprofiles-user-roles dfareportinguserRolesdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id, id: $id} | format pattern "/userprofiles/{profile_id}/userRoles/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/userRoles/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9632,7 +9642,7 @@ export def "userprofiles-user-roles dfareportinguserRolesdelete" [
 #
 # GET /userprofiles/{profileId}/userRoles/{id}
 # operationId: dfareporting.userRoles.get
-export def "userprofiles-user-roles dfareportinguserRolesget" [
+export def "userprofiles-user-roles get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9658,7 +9668,7 @@ export def "userprofiles-user-roles dfareportinguserRolesget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id, id: $id} | format pattern "/userprofiles/{profile_id}/userRoles/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/userRoles/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9668,7 +9678,7 @@ export def "userprofiles-user-roles dfareportinguserRolesget" [
 #
 # GET /userprofiles/{profileId}/videoFormats
 # operationId: dfareporting.videoFormats.list
-export def "userprofiles-video-formats dfareportingvideoFormatslist" [
+export def "userprofiles-video-formats list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9693,7 +9703,7 @@ export def "userprofiles-video-formats dfareportingvideoFormatslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id} | format pattern "/userprofiles/{profile_id}/videoFormats") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/userprofiles/{profile_id}/videoFormats") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9703,7 +9713,7 @@ export def "userprofiles-video-formats dfareportingvideoFormatslist" [
 #
 # GET /userprofiles/{profileId}/videoFormats/{id}
 # operationId: dfareporting.videoFormats.get
-export def "userprofiles-video-formats dfareportingvideoFormatsget" [
+export def "userprofiles-video-formats get" [
   profile_id: string
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -9729,7 +9739,7 @@ export def "userprofiles-video-formats dfareportingvideoFormatsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({profile_id: $profile_id, id: $id} | format pattern "/userprofiles/{profile_id}/videoFormats/{id}") $qp)
+  let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), id: (encode-path-segment $id)} | format pattern "/userprofiles/{profile_id}/videoFormats/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

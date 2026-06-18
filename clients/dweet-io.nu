@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -68,7 +77,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "alert-when create-alert-get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "alert-when create-get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -92,7 +101,7 @@ export def commands []: nothing -> table {
 #
 # GET /alert/{who}/when/{thing}/{condition}
 # operationId: createAlertGET
-export def "alert-when create-alert-get" [
+export def "alert-when create-get" [
   who: string
   thing: string
   condition: string
@@ -109,7 +118,7 @@ export def "alert-when create-alert-get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({who: $who, thing: $thing, condition: $condition} | format pattern "/alert/{who}/when/{thing}/{condition}") $qp)
+  let full_url = (build-url $base ({who: (encode-path-segment $who), thing: (encode-path-segment $thing), condition: (encode-path-segment $condition)} | format pattern "/alert/{who}/when/{thing}/{condition}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -118,7 +127,7 @@ export def "alert-when create-alert-get" [
 # Create a dweet for a thing.
 #
 # POST /dweet/for/{thing}
-export def "dweet-for post" [
+export def "dweet-for create" [
   thing: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -135,17 +144,18 @@ export def "dweet-for post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({thing: $thing} | format pattern "/dweet/for/{thing}") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({thing: (encode-path-segment $thing)} | format pattern "/dweet/for/{thing}") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-# Create a dweet for a thing.  This method differs from /dweet/for/{thing} only in that successful dweets result in an HTTP 204 response rather than the typical verbose response.
+# Create a dweet for a thing. This method differs from /dweet/for/{thing} only in that successful dweets result in an HTTP 204 response rather than the typical verbose response.
 #
 # POST /dweet/quietly/for/{thing}
-export def "dweet-quietly-for post" [
+export def "dweet-quietly-for create" [
   thing: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -162,11 +172,12 @@ export def "dweet-quietly-for post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({thing: $thing} | format pattern "/dweet/quietly/for/{thing}") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({thing: (encode-path-segment $thing)} | format pattern "/dweet/quietly/for/{thing}") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get the alert attached to a thing.
@@ -188,7 +199,7 @@ export def "get-alert-for get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({thing: $thing} | format pattern "/get/alert/for/{thing}") $qp)
+  let full_url = (build-url $base ({thing: (encode-path-segment $thing)} | format pattern "/get/alert/for/{thing}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -212,7 +223,7 @@ export def "get-dweets-for get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({thing: $thing} | format pattern "/get/dweets/for/{thing}") $qp)
+  let full_url = (build-url $base ({thing: (encode-path-segment $thing)} | format pattern "/get/dweets/for/{thing}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -237,13 +248,13 @@ export def "get-latest-dweet-for get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({thing: $thing} | format pattern "/get/latest/dweet/for/{thing}") $qp)
+  let full_url = (build-url $base ({thing: (encode-path-segment $thing)} | format pattern "/get/latest/dweet/for/{thing}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Read all the saved alerts for a thing from long term storage.  You can query a maximum of 1 day per request and a granularly of 1 hour.
+# Read all the saved alerts for a thing from long term storage. You can query a maximum of 1 day per request and a granularly of 1 hour.
 #
 # GET /get/stored/alerts/for/{thing}
 # operationId: getStoredAlerts
@@ -258,20 +269,20 @@ export def "get-stored-alerts-for get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # A valid key for a locked thing. If the thing is not locked, this can be ignored.
-  --date: string # The calendar date (YYYY-MM-DD) from which you'd like to start your query.  The response will be a maximum of one day.
-  --hour: string # The hour of the day represented in the date parameter in 24-hour (00-23) format.  If this parameter is included, a maximum of 1 hour will be returned starting at this hour.
-  --response-type: string # Current valid parameters for this are 'csv' and 'json'.  If this parameter is left blank, all responses default to hapi-json dweet-speak.
+  --date: string # The calendar date (YYYY-MM-DD) from which you'd like to start your query. The response will be a maximum of one day.
+  --hour: string # The hour of the day represented in the date parameter in 24-hour (00-23) format. If this parameter is included, a maximum of 1 hour will be returned starting at this hour.
+  --response-type: string # Current valid parameters for this are 'csv' and 'json'. If this parameter is left blank, all responses default to hapi-json dweet-speak.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "date" $date "scalar") (serialize-qp "hour" $hour "scalar") (serialize-qp "responseType" $response_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({thing: $thing} | format pattern "/get/stored/alerts/for/{thing}") $qp)
+  let full_url = (build-url $base ({thing: (encode-path-segment $thing)} | format pattern "/get/stored/alerts/for/{thing}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Read all the saved dweets for a thing from long term storage.  You can query a maximum of 1 day per request and a granularly of 1 hour.
+# Read all the saved dweets for a thing from long term storage. You can query a maximum of 1 day per request and a granularly of 1 hour.
 #
 # GET /get/stored/dweets/for/{thing}
 export def "get-stored-dweets-for get" [
@@ -285,14 +296,14 @@ export def "get-stored-dweets-for get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # A valid key for a locked thing. If the thing is not locked, this can be ignored.
-  --date: string # The calendar date (YYYY-MM-DD) from which you'd like to start your query.  The response will be a maximum of one day.
-  --hour: string # The hour of the day represented in the date parameter in 24-hour (00-23) format.  If this parameter is included, a maximum of 1 hour will be returned starting at this hour.
-  --response-type: string # Current valid parameters for this are 'csv' and 'json'.  If this parameter is left blank, all responses default to hapi-json dweet-speak.
+  --date: string # The calendar date (YYYY-MM-DD) from which you'd like to start your query. The response will be a maximum of one day.
+  --hour: string # The hour of the day represented in the date parameter in 24-hour (00-23) format. If this parameter is included, a maximum of 1 hour will be returned starting at this hour.
+  --response-type: string # Current valid parameters for this are 'csv' and 'json'. If this parameter is left blank, all responses default to hapi-json dweet-speak.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "date" $date "scalar") (serialize-qp "hour" $hour "scalar") (serialize-qp "responseType" $response_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({thing: $thing} | format pattern "/get/stored/dweets/for/{thing}") $qp)
+  let full_url = (build-url $base ({thing: (encode-path-segment $thing)} | format pattern "/get/stored/dweets/for/{thing}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -302,7 +313,7 @@ export def "get-stored-dweets-for get" [
 #
 # GET /listen/for/dweets/from/{thing}
 # operationId: listenForDweets
-export def "listen-for-dweets-from list-en" [
+export def "listen-for-dweets-from get" [
   thing: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -315,7 +326,7 @@ export def "listen-for-dweets-from list-en" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({thing: $thing} | format pattern "/listen/for/dweets/from/{thing}"))
+  let full_url = (build-url $base ({thing: (encode-path-segment $thing)} | format pattern "/listen/for/dweets/from/{thing}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -341,7 +352,7 @@ export def "lock get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "lock" $lock "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({thing: $thing} | format pattern "/lock/{thing}") $qp)
+  let full_url = (build-url $base ({thing: (encode-path-segment $thing)} | format pattern "/lock/{thing}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -366,7 +377,7 @@ export def "remove-alert-for delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({thing: $thing} | format pattern "/remove/alert/for/{thing}") $qp)
+  let full_url = (build-url $base ({thing: (encode-path-segment $thing)} | format pattern "/remove/alert/for/{thing}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -391,7 +402,7 @@ export def "remove-lock delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({lock: $lock} | format pattern "/remove/lock/{lock}") $qp)
+  let full_url = (build-url $base ({lock: (encode-path-segment $lock)} | format pattern "/remove/lock/{lock}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -416,7 +427,7 @@ export def "unlock get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({thing: $thing} | format pattern "/unlock/{thing}") $qp)
+  let full_url = (build-url $base ({thing: (encode-path-segment $thing)} | format pattern "/unlock/{thing}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

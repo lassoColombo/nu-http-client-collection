@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -129,12 +138,12 @@ export def "budgets get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --last-knowledge-of-server: int # The starting server knowledge.  If provided, only entities that have changed since `last_knowledge_of_server` will be included. (format: int64)
+  --last-knowledge-of-server: int # The starting server knowledge. If provided, only entities that have changed since `last_knowledge_of_server` will be included. (format: int64)
 ]: nothing -> record<data: record<budget: record<accounts: list, currency_format: record, date_format: record, first_month: string, id: string, last_modified_on: string, last_month: string, name: string, categories: list, category_groups: list, months: list, payee_locations: list, payees: list, scheduled_subtransactions: list, scheduled_transactions: list, subtransactions: list, transactions: list>, server_knowledge: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "last_knowledge_of_server" $last_knowledge_of_server "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({budget_id: $budget_id} | format pattern "/budgets/{budget_id}") $qp)
+  let full_url = (build-url $base ({budget_id: (encode-path-segment $budget_id)} | format pattern "/budgets/{budget_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -154,12 +163,12 @@ export def "budgets-accounts list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --last-knowledge-of-server: int # The starting server knowledge.  If provided, only entities that have changed since `last_knowledge_of_server` will be included. (format: int64)
+  --last-knowledge-of-server: int # The starting server knowledge. If provided, only entities that have changed since `last_knowledge_of_server` will be included. (format: int64)
 ]: nothing -> record<data: record<accounts: list<record>, server_knowledge: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "last_knowledge_of_server" $last_knowledge_of_server "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({budget_id: $budget_id} | format pattern "/budgets/{budget_id}/accounts") $qp)
+  let full_url = (build-url $base ({budget_id: (encode-path-segment $budget_id)} | format pattern "/budgets/{budget_id}/accounts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -185,12 +194,12 @@ export def "budgets-accounts create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({budget_id: $budget_id} | format pattern "/budgets/{budget_id}/accounts"))
-  let body = {"account": $account} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({budget_id: (encode-path-segment $budget_id)} | format pattern "/budgets/{budget_id}/accounts"))
+  let req_body = {"account": $account} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Single account
@@ -211,7 +220,7 @@ export def "budgets-accounts get" [
 ]: nothing -> record<data: record<account: record<balance: int, cleared_balance: int, closed: bool, debt_escrow_amounts: record, debt_interest_rates: record, debt_minimum_payments: record, debt_original_balance: int, deleted: bool, direct_import_in_error: bool, direct_import_linked: bool, id: string, last_reconciled_at: string, name: string, note: string, on_budget: bool, transfer_payee_id: string, type: string, uncleared_balance: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({budget_id: $budget_id, account_id: $account_id} | format pattern "/budgets/{budget_id}/accounts/{account_id}"))
+  let full_url = (build-url $base ({budget_id: (encode-path-segment $budget_id), account_id: (encode-path-segment $account_id)} | format pattern "/budgets/{budget_id}/accounts/{account_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -232,14 +241,14 @@ export def "budgets-accounts-transactions get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --since-date: string # If specified, only transactions on or after this date will be included.  The date should be ISO formatted (e.g. 2016-12-30). (format: date)
+  --since-date: string # If specified, only transactions on or after this date will be included. The date should be ISO formatted (e.g. 2016-12-30). (format: date)
   --type: string@type-completer # If specified, only transactions of the specified type will be included. "uncategorized" and "unapproved" are currently supported.
-  --last-knowledge-of-server: int # The starting server knowledge.  If provided, only entities that have changed since `last_knowledge_of_server` will be included. (format: int64)
+  --last-knowledge-of-server: int # The starting server knowledge. If provided, only entities that have changed since `last_knowledge_of_server` will be included. (format: int64)
 ]: nothing -> record<data: record<server_knowledge: int, transactions: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "since_date" $since_date "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "last_knowledge_of_server" $last_knowledge_of_server "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({budget_id: $budget_id, account_id: $account_id} | format pattern "/budgets/{budget_id}/accounts/{account_id}/transactions") $qp)
+  let full_url = (build-url $base ({budget_id: (encode-path-segment $budget_id), account_id: (encode-path-segment $account_id)} | format pattern "/budgets/{budget_id}/accounts/{account_id}/transactions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -249,7 +258,7 @@ export def "budgets-accounts-transactions get" [
 #
 # GET /budgets/{budget_id}/categories
 # operationId: getCategories
-export def "budgets-categories get" [
+export def "budgets-categories list" [
   budget_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -259,12 +268,12 @@ export def "budgets-categories get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --last-knowledge-of-server: int # The starting server knowledge.  If provided, only entities that have changed since `last_knowledge_of_server` will be included. (format: int64)
+  --last-knowledge-of-server: int # The starting server knowledge. If provided, only entities that have changed since `last_knowledge_of_server` will be included. (format: int64)
 ]: nothing -> record<data: record<category_groups: list<record>, server_knowledge: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "last_knowledge_of_server" $last_knowledge_of_server "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({budget_id: $budget_id} | format pattern "/budgets/{budget_id}/categories") $qp)
+  let full_url = (build-url $base ({budget_id: (encode-path-segment $budget_id)} | format pattern "/budgets/{budget_id}/categories") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -274,7 +283,7 @@ export def "budgets-categories get" [
 #
 # GET /budgets/{budget_id}/categories/{category_id}
 # operationId: getCategoryById
-export def "budgets-categories get-category" [
+export def "budgets-categories get" [
   budget_id: string
   category_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -288,7 +297,7 @@ export def "budgets-categories get-category" [
 ]: nothing -> record<data: record<category: record<activity: int, balance: int, budgeted: int, category_group_id: string, deleted: bool, goal_cadence: int, goal_cadence_frequency: int, goal_creation_month: string, goal_day: int, goal_months_to_budget: int, goal_overall_funded: int, goal_overall_left: int, goal_percentage_complete: int, goal_target: int, goal_target_month: string, goal_type: string, goal_under_funded: int, hidden: bool, id: string, name: string, note: string, original_category_group_id: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({budget_id: $budget_id, category_id: $category_id} | format pattern "/budgets/{budget_id}/categories/{category_id}"))
+  let full_url = (build-url $base ({budget_id: (encode-path-segment $budget_id), category_id: (encode-path-segment $category_id)} | format pattern "/budgets/{budget_id}/categories/{category_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -309,14 +318,14 @@ export def "budgets-categories-transactions get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --since-date: string # If specified, only transactions on or after this date will be included.  The date should be ISO formatted (e.g. 2016-12-30). (format: date)
+  --since-date: string # If specified, only transactions on or after this date will be included. The date should be ISO formatted (e.g. 2016-12-30). (format: date)
   --type: string@type-completer # If specified, only transactions of the specified type will be included. "uncategorized" and "unapproved" are currently supported.
-  --last-knowledge-of-server: int # The starting server knowledge.  If provided, only entities that have changed since `last_knowledge_of_server` will be included. (format: int64)
+  --last-knowledge-of-server: int # The starting server knowledge. If provided, only entities that have changed since `last_knowledge_of_server` will be included. (format: int64)
 ]: nothing -> record<data: record<server_knowledge: int, transactions: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "since_date" $since_date "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "last_knowledge_of_server" $last_knowledge_of_server "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({budget_id: $budget_id, category_id: $category_id} | format pattern "/budgets/{budget_id}/categories/{category_id}/transactions") $qp)
+  let full_url = (build-url $base ({budget_id: (encode-path-segment $budget_id), category_id: (encode-path-segment $category_id)} | format pattern "/budgets/{budget_id}/categories/{category_id}/transactions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -336,12 +345,12 @@ export def "budgets-months list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --last-knowledge-of-server: int # The starting server knowledge.  If provided, only entities that have changed since `last_knowledge_of_server` will be included. (format: int64)
+  --last-knowledge-of-server: int # The starting server knowledge. If provided, only entities that have changed since `last_knowledge_of_server` will be included. (format: int64)
 ]: nothing -> record<data: record<months: list<record>, server_knowledge: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "last_knowledge_of_server" $last_knowledge_of_server "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({budget_id: $budget_id} | format pattern "/budgets/{budget_id}/months") $qp)
+  let full_url = (build-url $base ({budget_id: (encode-path-segment $budget_id)} | format pattern "/budgets/{budget_id}/months") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -365,7 +374,7 @@ export def "budgets-months get" [
 ]: nothing -> record<data: record<month: record<activity: int, age_of_money: int, budgeted: int, deleted: bool, income: int, month: string, note: string, to_be_budgeted: int, categories: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({budget_id: $budget_id, month: $month} | format pattern "/budgets/{budget_id}/months/{month}"))
+  let full_url = (build-url $base ({budget_id: (encode-path-segment $budget_id), month: (encode-path-segment $month)} | format pattern "/budgets/{budget_id}/months/{month}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -375,7 +384,7 @@ export def "budgets-months get" [
 #
 # GET /budgets/{budget_id}/months/{month}/categories/{category_id}
 # operationId: getMonthCategoryById
-export def "budgets-months-categories get-category" [
+export def "budgets-months-categories get" [
   budget_id: string
   month: string
   category_id: string
@@ -390,7 +399,7 @@ export def "budgets-months-categories get-category" [
 ]: nothing -> record<data: record<category: record<activity: int, balance: int, budgeted: int, category_group_id: string, deleted: bool, goal_cadence: int, goal_cadence_frequency: int, goal_creation_month: string, goal_day: int, goal_months_to_budget: int, goal_overall_funded: int, goal_overall_left: int, goal_percentage_complete: int, goal_target: int, goal_target_month: string, goal_type: string, goal_under_funded: int, hidden: bool, id: string, name: string, note: string, original_category_group_id: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({budget_id: $budget_id, month: $month, category_id: $category_id} | format pattern "/budgets/{budget_id}/months/{month}/categories/{category_id}"))
+  let full_url = (build-url $base ({budget_id: (encode-path-segment $budget_id), month: (encode-path-segment $month), category_id: (encode-path-segment $category_id)} | format pattern "/budgets/{budget_id}/months/{month}/categories/{category_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -401,7 +410,7 @@ export def "budgets-months-categories get-category" [
 # PATCH /budgets/{budget_id}/months/{month}/categories/{category_id}
 # operationId: updateMonthCategory
 # --category shape: {budgeted: int}
-export def "budgets-months-categories update-category" [
+export def "budgets-months-categories update" [
   budget_id: string
   month: string
   category_id: string
@@ -418,12 +427,12 @@ export def "budgets-months-categories update-category" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({budget_id: $budget_id, month: $month, category_id: $category_id} | format pattern "/budgets/{budget_id}/months/{month}/categories/{category_id}"))
-  let body = {"category": $category} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({budget_id: (encode-path-segment $budget_id), month: (encode-path-segment $month), category_id: (encode-path-segment $category_id)} | format pattern "/budgets/{budget_id}/months/{month}/categories/{category_id}"))
+  let req_body = {"category": $category} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List payee locations
@@ -443,7 +452,7 @@ export def "budgets-payee-locations list" [
 ]: nothing -> record<data: record<payee_locations: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({budget_id: $budget_id} | format pattern "/budgets/{budget_id}/payee_locations"))
+  let full_url = (build-url $base ({budget_id: (encode-path-segment $budget_id)} | format pattern "/budgets/{budget_id}/payee_locations"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -467,7 +476,7 @@ export def "budgets-payee-locations get" [
 ]: nothing -> record<data: record<payee_location: record<deleted: bool, id: string, latitude: string, longitude: string, payee_id: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({budget_id: $budget_id, payee_location_id: $payee_location_id} | format pattern "/budgets/{budget_id}/payee_locations/{payee_location_id}"))
+  let full_url = (build-url $base ({budget_id: (encode-path-segment $budget_id), payee_location_id: (encode-path-segment $payee_location_id)} | format pattern "/budgets/{budget_id}/payee_locations/{payee_location_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -487,12 +496,12 @@ export def "budgets-payees list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --last-knowledge-of-server: int # The starting server knowledge.  If provided, only entities that have changed since `last_knowledge_of_server` will be included. (format: int64)
+  --last-knowledge-of-server: int # The starting server knowledge. If provided, only entities that have changed since `last_knowledge_of_server` will be included. (format: int64)
 ]: nothing -> record<data: record<payees: list<record>, server_knowledge: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "last_knowledge_of_server" $last_knowledge_of_server "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({budget_id: $budget_id} | format pattern "/budgets/{budget_id}/payees") $qp)
+  let full_url = (build-url $base ({budget_id: (encode-path-segment $budget_id)} | format pattern "/budgets/{budget_id}/payees") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -516,7 +525,7 @@ export def "budgets-payees get" [
 ]: nothing -> record<data: record<payee: record<deleted: bool, id: string, name: string, transfer_account_id: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({budget_id: $budget_id, payee_id: $payee_id} | format pattern "/budgets/{budget_id}/payees/{payee_id}"))
+  let full_url = (build-url $base ({budget_id: (encode-path-segment $budget_id), payee_id: (encode-path-segment $payee_id)} | format pattern "/budgets/{budget_id}/payees/{payee_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -540,7 +549,7 @@ export def "budgets-payees-payee-locations get" [
 ]: nothing -> record<data: record<payee_locations: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({budget_id: $budget_id, payee_id: $payee_id} | format pattern "/budgets/{budget_id}/payees/{payee_id}/payee_locations"))
+  let full_url = (build-url $base ({budget_id: (encode-path-segment $budget_id), payee_id: (encode-path-segment $payee_id)} | format pattern "/budgets/{budget_id}/payees/{payee_id}/payee_locations"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -561,14 +570,14 @@ export def "budgets-payees-transactions get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --since-date: string # If specified, only transactions on or after this date will be included.  The date should be ISO formatted (e.g. 2016-12-30). (format: date)
+  --since-date: string # If specified, only transactions on or after this date will be included. The date should be ISO formatted (e.g. 2016-12-30). (format: date)
   --type: string@type-completer # If specified, only transactions of the specified type will be included. "uncategorized" and "unapproved" are currently supported.
-  --last-knowledge-of-server: int # The starting server knowledge.  If provided, only entities that have changed since `last_knowledge_of_server` will be included. (format: int64)
+  --last-knowledge-of-server: int # The starting server knowledge. If provided, only entities that have changed since `last_knowledge_of_server` will be included. (format: int64)
 ]: nothing -> record<data: record<server_knowledge: int, transactions: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "since_date" $since_date "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "last_knowledge_of_server" $last_knowledge_of_server "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({budget_id: $budget_id, payee_id: $payee_id} | format pattern "/budgets/{budget_id}/payees/{payee_id}/transactions") $qp)
+  let full_url = (build-url $base ({budget_id: (encode-path-segment $budget_id), payee_id: (encode-path-segment $payee_id)} | format pattern "/budgets/{budget_id}/payees/{payee_id}/transactions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -588,12 +597,12 @@ export def "budgets-scheduled-transactions list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --last-knowledge-of-server: int # The starting server knowledge.  If provided, only entities that have changed since `last_knowledge_of_server` will be included. (format: int64)
+  --last-knowledge-of-server: int # The starting server knowledge. If provided, only entities that have changed since `last_knowledge_of_server` will be included. (format: int64)
 ]: nothing -> record<data: record<scheduled_transactions: list<record>, server_knowledge: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "last_knowledge_of_server" $last_knowledge_of_server "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({budget_id: $budget_id} | format pattern "/budgets/{budget_id}/scheduled_transactions") $qp)
+  let full_url = (build-url $base ({budget_id: (encode-path-segment $budget_id)} | format pattern "/budgets/{budget_id}/scheduled_transactions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -617,7 +626,7 @@ export def "budgets-scheduled-transactions get" [
 ]: nothing -> record<data: record<scheduled_transaction: record<account_id: string, amount: int, category_id: string, date_first: string, date_next: string, deleted: bool, flag_color: string, frequency: string, id: string, memo: string, payee_id: string, transfer_account_id: string, account_name: string, category_name: string, payee_name: string, subtransactions: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({budget_id: $budget_id, scheduled_transaction_id: $scheduled_transaction_id} | format pattern "/budgets/{budget_id}/scheduled_transactions/{scheduled_transaction_id}"))
+  let full_url = (build-url $base ({budget_id: (encode-path-segment $budget_id), scheduled_transaction_id: (encode-path-segment $scheduled_transaction_id)} | format pattern "/budgets/{budget_id}/scheduled_transactions/{scheduled_transaction_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -640,7 +649,7 @@ export def "budgets-settings get" [
 ]: nothing -> record<data: record<settings: record<currency_format: record, date_format: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({budget_id: $budget_id} | format pattern "/budgets/{budget_id}/settings"))
+  let full_url = (build-url $base ({budget_id: (encode-path-segment $budget_id)} | format pattern "/budgets/{budget_id}/settings"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -660,14 +669,14 @@ export def "budgets-transactions list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --since-date: string # If specified, only transactions on or after this date will be included.  The date should be ISO formatted (e.g. 2016-12-30). (format: date)
+  --since-date: string # If specified, only transactions on or after this date will be included. The date should be ISO formatted (e.g. 2016-12-30). (format: date)
   --type: string@type-completer # If specified, only transactions of the specified type will be included. "uncategorized" and "unapproved" are currently supported.
-  --last-knowledge-of-server: int # The starting server knowledge.  If provided, only entities that have changed since `last_knowledge_of_server` will be included. (format: int64)
+  --last-knowledge-of-server: int # The starting server knowledge. If provided, only entities that have changed since `last_knowledge_of_server` will be included. (format: int64)
 ]: nothing -> record<data: record<server_knowledge: int, transactions: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "since_date" $since_date "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "last_knowledge_of_server" $last_knowledge_of_server "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({budget_id: $budget_id} | format pattern "/budgets/{budget_id}/transactions") $qp)
+  let full_url = (build-url $base ({budget_id: (encode-path-segment $budget_id)} | format pattern "/budgets/{budget_id}/transactions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -693,12 +702,12 @@ export def "budgets-transactions update-by-budget_id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({budget_id: $budget_id} | format pattern "/budgets/{budget_id}/transactions"))
-  let body = {"transactions": $transactions} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({budget_id: (encode-path-segment $budget_id)} | format pattern "/budgets/{budget_id}/transactions"))
+  let req_body = {"transactions": $transactions} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create a single transaction or multiple transactions
@@ -722,12 +731,12 @@ export def "budgets-transactions create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({budget_id: $budget_id} | format pattern "/budgets/{budget_id}/transactions"))
-  let body = {"transaction": $transaction, "transactions": $transactions} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({budget_id: (encode-path-segment $budget_id)} | format pattern "/budgets/{budget_id}/transactions"))
+  let req_body = {"transaction": $transaction, "transactions": $transactions} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Bulk create transactions
@@ -735,7 +744,7 @@ export def "budgets-transactions create" [
 # POST /budgets/{budget_id}/transactions/bulk
 # operationId: bulkCreateTransactions
 # --transactions item shape: {account_id: string, amount: int, approved?: bool, category_id?: string, cleared?: "cleared"|"uncleared"|"reconciled", date: string, flag_color?: "red"|"orange"|"yellow"|"green"|"blue"|"purple"|"", import_id?: string, memo?: string, payee_id?: string, payee_name?: string, subtransactions?: list}
-export def "budgets-transactions-bulk bulkCreateTransactions" [
+export def "budgets-transactions-bulk create" [
   budget_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -750,12 +759,12 @@ export def "budgets-transactions-bulk bulkCreateTransactions" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({budget_id: $budget_id} | format pattern "/budgets/{budget_id}/transactions/bulk"))
-  let body = {"transactions": $transactions} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({budget_id: (encode-path-segment $budget_id)} | format pattern "/budgets/{budget_id}/transactions/bulk"))
+  let req_body = {"transactions": $transactions} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Import transactions
@@ -775,7 +784,7 @@ export def "budgets-transactions-import import" [
 ]: nothing -> record<data: record<transaction_ids: list<string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({budget_id: $budget_id} | format pattern "/budgets/{budget_id}/transactions/import"))
+  let full_url = (build-url $base ({budget_id: (encode-path-segment $budget_id)} | format pattern "/budgets/{budget_id}/transactions/import"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -799,7 +808,7 @@ export def "budgets-transactions delete" [
 ]: nothing -> record<data: record<transaction: record<account_id: string, amount: int, approved: bool, category_id: string, cleared: string, date: string, debt_transaction_type: string, deleted: bool, flag_color: string, id: string, import_id: string, import_payee_name: string, import_payee_name_original: string, matched_transaction_id: string, memo: string, payee_id: string, transfer_account_id: string, transfer_transaction_id: string, account_name: string, category_name: string, payee_name: string, subtransactions: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({budget_id: $budget_id, transaction_id: $transaction_id} | format pattern "/budgets/{budget_id}/transactions/{transaction_id}"))
+  let full_url = (build-url $base ({budget_id: (encode-path-segment $budget_id), transaction_id: (encode-path-segment $transaction_id)} | format pattern "/budgets/{budget_id}/transactions/{transaction_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -823,7 +832,7 @@ export def "budgets-transactions get" [
 ]: nothing -> record<data: record<transaction: record<account_id: string, amount: int, approved: bool, category_id: string, cleared: string, date: string, debt_transaction_type: string, deleted: bool, flag_color: string, id: string, import_id: string, import_payee_name: string, import_payee_name_original: string, matched_transaction_id: string, memo: string, payee_id: string, transfer_account_id: string, transfer_transaction_id: string, account_name: string, category_name: string, payee_name: string, subtransactions: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({budget_id: $budget_id, transaction_id: $transaction_id} | format pattern "/budgets/{budget_id}/transactions/{transaction_id}"))
+  let full_url = (build-url $base ({budget_id: (encode-path-segment $budget_id), transaction_id: (encode-path-segment $transaction_id)} | format pattern "/budgets/{budget_id}/transactions/{transaction_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -849,12 +858,12 @@ export def "budgets-transactions update-by-budget_id-transaction_id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({budget_id: $budget_id, transaction_id: $transaction_id} | format pattern "/budgets/{budget_id}/transactions/{transaction_id}"))
-  let body = {"transaction": $transaction} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({budget_id: (encode-path-segment $budget_id), transaction_id: (encode-path-segment $transaction_id)} | format pattern "/budgets/{budget_id}/transactions/{transaction_id}"))
+  let req_body = {"transaction": $transaction} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # User info

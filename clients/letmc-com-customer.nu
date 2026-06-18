@@ -13,6 +13,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   match $scheme {
     "apikey" => { {headers: {ApiKey: $token_val}, query: ""} }
     "basic" => { {headers: {Authorization: $"Basic ($token_val)"}, query: ""} }
+    "basic-credentials" => { {headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: ""} }
     "none" => { {headers: {}, query: ""} }
     _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
   }
@@ -34,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
     "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
     _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -64,7 +74,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 }
 
 def base-url-completer [] { ["https://live-api.letmc.com"] }
-def auth-scheme-completer [] { ["apikey" "basic"] }
+def auth-scheme-completer [] { ["apikey" "basic" "basic-credentials"] }
 
 # Completers for enum parameters
 def accept-completer [] { ["application/json" "application/xml" "text/json" "text/xml"] }
@@ -73,7 +83,7 @@ def accept-completer-1 [] { ["application/json" "text/json"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "customer-branch-branches list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "customer-branch-branches get-controller" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -97,7 +107,7 @@ export def commands []: nothing -> table {
 #
 # GET /v2/customer/{shortName}/branch/branches
 # operationId: BranchController_GetBranches
-export def "customer-branch-branches list" [
+export def "customer-branch-branches get-controller" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -114,7 +124,7 @@ export def "customer-branch-branches list" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: $short_name} | format pattern "/v2/customer/{short_name}/branch/branches") $qp)
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/branch/branches") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -138,7 +148,7 @@ export def "customer-branch-branches get" [
 ]: nothing -> record<Address1: string, Address2: string, Address3: string, Address4: string, CompanyName: string, County: string, EMailAddress: string, ETag: string, FaxPhone: string, LandPhone: string, Name: string, OID: string, Postcode: string, WebAddress: string> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({short_name: $short_name, branch_id: $branch_id} | format pattern "/v2/customer/{short_name}/branch/branches/{branch_id}"))
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), branch_id: (encode-path-segment $branch_id)} | format pattern "/v2/customer/{short_name}/branch/branches/{branch_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -148,7 +158,7 @@ export def "customer-branch-branches get" [
 #
 # GET /v2/customer/{shortName}/landlord/accounting
 # operationId: LandlordController_GetAccounts
-export def "customer-landlord-accounting get-accounts" [
+export def "customer-landlord-accounting get-controller-accounts" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -164,7 +174,7 @@ export def "customer-landlord-accounting get-accounts" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: $short_name} | format pattern "/v2/customer/{short_name}/landlord/accounting") $qp)
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/landlord/accounting") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -174,7 +184,7 @@ export def "customer-landlord-accounting get-accounts" [
 #
 # GET /v2/customer/{shortName}/landlord/document
 # operationId: LandlordController_GetDocument
-export def "customer-landlord-document get" [
+export def "customer-landlord-document get-controller" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -191,7 +201,7 @@ export def "customer-landlord-document get" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "ID" $id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: $short_name} | format pattern "/v2/customer/{short_name}/landlord/document") $qp)
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/landlord/document") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -201,7 +211,7 @@ export def "customer-landlord-document get" [
 #
 # GET /v2/customer/{shortName}/landlord/inventory
 # operationId: LandlordController_GetInvetoryReport
-export def "customer-landlord-inventory get-invetory-report" [
+export def "customer-landlord-inventory get-controller-invetory-report" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -218,7 +228,7 @@ export def "customer-landlord-inventory get-invetory-report" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "tenancyID" $tenancy_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: $short_name} | format pattern "/v2/customer/{short_name}/landlord/inventory") $qp)
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/landlord/inventory") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -228,7 +238,7 @@ export def "customer-landlord-inventory get-invetory-report" [
 #
 # GET /v2/customer/{shortName}/landlord/invoice
 # operationId: LandlordController_GetInvoice
-export def "customer-landlord-invoice get" [
+export def "customer-landlord-invoice get-controller" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -245,7 +255,7 @@ export def "customer-landlord-invoice get" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "invoiceID" $invoice_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: $short_name} | format pattern "/v2/customer/{short_name}/landlord/invoice") $qp)
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/landlord/invoice") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -255,7 +265,7 @@ export def "customer-landlord-invoice get" [
 #
 # GET /v2/customer/{shortName}/landlord/landlordcrmentries
 # operationId: LandlordController_GetLandlordCrmEntries
-export def "customer-landlord-landlordcrmentries get-landlord-crm-entries" [
+export def "customer-landlord-landlordcrmentries get-controller-crm-entries" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -271,7 +281,7 @@ export def "customer-landlord-landlordcrmentries get-landlord-crm-entries" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: $short_name} | format pattern "/v2/customer/{short_name}/landlord/landlordcrmentries") $qp)
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/landlord/landlordcrmentries") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -281,7 +291,7 @@ export def "customer-landlord-landlordcrmentries get-landlord-crm-entries" [
 #
 # GET /v2/customer/{shortName}/landlord/maintenance
 # operationId: LandlordController_GetMaintenanceJobs
-export def "customer-landlord-maintenance get-maintenance-jobs" [
+export def "customer-landlord-maintenance get-controller-jobs" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -297,7 +307,7 @@ export def "customer-landlord-maintenance get-maintenance-jobs" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: $short_name} | format pattern "/v2/customer/{short_name}/landlord/maintenance") $qp)
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/landlord/maintenance") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -307,7 +317,7 @@ export def "customer-landlord-maintenance get-maintenance-jobs" [
 #
 # GET /v2/customer/{shortName}/landlord/profitloss
 # operationId: LandlordController_GetProfitLossReport
-export def "customer-landlord-profitloss get-profit-loss-report" [
+export def "customer-landlord-profitloss get-controller-profit-loss-report" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -323,7 +333,7 @@ export def "customer-landlord-profitloss get-profit-loss-report" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: $short_name} | format pattern "/v2/customer/{short_name}/landlord/profitloss") $qp)
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/landlord/profitloss") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -333,7 +343,7 @@ export def "customer-landlord-profitloss get-profit-loss-report" [
 #
 # GET /v2/customer/{shortName}/landlord/rentarrears
 # operationId: LandlordController_GetRentArrears
-export def "customer-landlord-rentarrears get" [
+export def "customer-landlord-rentarrears get-controller-rent-arrears" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -349,7 +359,7 @@ export def "customer-landlord-rentarrears get" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: $short_name} | format pattern "/v2/customer/{short_name}/landlord/rentarrears") $qp)
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/landlord/rentarrears") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -359,7 +369,7 @@ export def "customer-landlord-rentarrears get" [
 #
 # GET /v2/customer/{shortName}/landlord/sas
 # operationId: LandlordController_GetSASReport
-export def "customer-landlord-sas get-sas-report" [
+export def "customer-landlord-sas get-controller-report" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -376,7 +386,7 @@ export def "customer-landlord-sas get-sas-report" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "yearEnd" $year_end "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: $short_name} | format pattern "/v2/customer/{short_name}/landlord/sas") $qp)
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/landlord/sas") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -386,7 +396,7 @@ export def "customer-landlord-sas get-sas-report" [
 #
 # GET /v2/customer/{shortName}/landlord/settings
 # operationId: LandlordController_GetSettings
-export def "customer-landlord-settings get" [
+export def "customer-landlord-settings get-controller" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -402,7 +412,7 @@ export def "customer-landlord-settings get" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: $short_name} | format pattern "/v2/customer/{short_name}/landlord/settings") $qp)
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/landlord/settings") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -412,7 +422,7 @@ export def "customer-landlord-settings get" [
 #
 # GET /v2/customer/{shortName}/landlord/summary
 # operationId: LandlordController_GetSummaryDetails
-export def "customer-landlord-summary get-summary-details" [
+export def "customer-landlord-summary get-controller-details" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -428,7 +438,7 @@ export def "customer-landlord-summary get-summary-details" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: $short_name} | format pattern "/v2/customer/{short_name}/landlord/summary") $qp)
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/landlord/summary") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -438,7 +448,7 @@ export def "customer-landlord-summary get-summary-details" [
 #
 # GET /v2/customer/{shortName}/landlord/tenancy
 # operationId: LandlordController_GetTenancy
-export def "customer-landlord-tenancy get" [
+export def "customer-landlord-tenancy get-controller" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -455,7 +465,7 @@ export def "customer-landlord-tenancy get" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "tenancyID" $tenancy_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: $short_name} | format pattern "/v2/customer/{short_name}/landlord/tenancy") $qp)
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/landlord/tenancy") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -465,7 +475,7 @@ export def "customer-landlord-tenancy get" [
 #
 # POST /v2/customer/{shortName}/landlord/tenancy/maintenance/preference
 # operationId: LandlordController_CreateMaintenancePreference
-export def "customer-landlord-tenancy-maintenance-preference create" [
+export def "customer-landlord-tenancy-maintenance-preference create-controller" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -484,7 +494,7 @@ export def "customer-landlord-tenancy-maintenance-preference create" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "tenancyID" $tenancy_id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "notes" $notes "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: $short_name} | format pattern "/v2/customer/{short_name}/landlord/tenancy/maintenance/preference") $qp)
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/landlord/tenancy/maintenance/preference") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -494,7 +504,7 @@ export def "customer-landlord-tenancy-maintenance-preference create" [
 #
 # GET /v2/customer/{shortName}/landlord/tenancyagreement
 # operationId: LandlordController_GetTenancyAgreementReport
-export def "customer-landlord-tenancyagreement get-tenancy-agreement-report" [
+export def "customer-landlord-tenancyagreement get-controller-tenancy-agreement-report" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -511,7 +521,7 @@ export def "customer-landlord-tenancyagreement get-tenancy-agreement-report" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "tenancyID" $tenancy_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: $short_name} | format pattern "/v2/customer/{short_name}/landlord/tenancyagreement") $qp)
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/landlord/tenancyagreement") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -521,7 +531,7 @@ export def "customer-landlord-tenancyagreement get-tenancy-agreement-report" [
 #
 # GET /v2/customer/{shortName}/photo/download
 # operationId: PhotoController_GetPhotoDownload
-export def "customer-photo-download get" [
+export def "customer-photo-download get-controller" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -540,7 +550,7 @@ export def "customer-photo-download get" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "photoID" $photo_id "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: $short_name} | format pattern "/v2/customer/{short_name}/photo/download") $qp)
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/photo/download") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -550,7 +560,7 @@ export def "customer-photo-download get" [
 #
 # GET /v2/customer/{shortName}/property/{propertyID}/photos
 # operationId: PropertyController_GetPropertiesPhotos
-export def "customer-property-photos get-properties" [
+export def "customer-property-photos get-controller-properties" [
   short_name: string
   property_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -569,7 +579,7 @@ export def "customer-property-photos get-properties" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: $short_name, property_id: $property_id} | format pattern "/v2/customer/{short_name}/property/{property_id}/photos") $qp)
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), property_id: (encode-path-segment $property_id)} | format pattern "/v2/customer/{short_name}/property/{property_id}/photos") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -579,7 +589,7 @@ export def "customer-property-photos get-properties" [
 #
 # DELETE /v2/customer/{shortName}/session
 # operationId: SessionController_Logout
-export def "customer-session delete" [
+export def "customer-session delete-controller-logout" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -594,7 +604,7 @@ export def "customer-session delete" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: $short_name} | format pattern "/v2/customer/{short_name}/session") $qp)
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/session") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -604,7 +614,7 @@ export def "customer-session delete" [
 #
 # GET /v2/customer/{shortName}/session
 # operationId: SessionController_GetSessionInfo
-export def "customer-session get-session-info" [
+export def "customer-session get-controller-get" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -620,7 +630,7 @@ export def "customer-session get-session-info" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: $short_name} | format pattern "/v2/customer/{short_name}/session") $qp)
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/session") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -630,7 +640,7 @@ export def "customer-session get-session-info" [
 #
 # POST /v2/customer/{shortName}/session
 # operationId: SessionController_Login
-export def "customer-session post" [
+export def "customer-session create-controller-login" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -647,7 +657,7 @@ export def "customer-session post" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "username" $username "scalar") (serialize-qp "password" $password "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: $short_name} | format pattern "/v2/customer/{short_name}/session") $qp)
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/session") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -657,7 +667,7 @@ export def "customer-session post" [
 #
 # POST /v2/customer/{shortName}/session/createlandlordlogin
 # operationId: SessionController_CreateLandlordLogin
-export def "customer-session-createlandlordlogin create-landlord-login" [
+export def "customer-session-createlandlordlogin create-controller-landlord-login" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -678,7 +688,7 @@ export def "customer-session-createlandlordlogin create-landlord-login" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "email" $email "scalar") (serialize-qp "title" $title "scalar") (serialize-qp "forename" $forename "scalar") (serialize-qp "surname" $surname "scalar") (serialize-qp "propertyAddress" $property_address "scalar") (serialize-qp "contactDetails" $contact_details "scalar") (serialize-qp "branchID" $branch_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: $short_name} | format pattern "/v2/customer/{short_name}/session/createlandlordlogin") $qp)
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/session/createlandlordlogin") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -688,7 +698,7 @@ export def "customer-session-createlandlordlogin create-landlord-login" [
 #
 # PUT /v2/customer/{shortName}/session/password
 # operationId: SessionController_ChangePassword
-export def "customer-session-password put" [
+export def "customer-session-password update-controller-change" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -705,7 +715,7 @@ export def "customer-session-password put" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "oldPassword" $old_password "scalar") (serialize-qp "newPassword" $new_password "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: $short_name} | format pattern "/v2/customer/{short_name}/session/password") $qp)
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/session/password") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -715,7 +725,7 @@ export def "customer-session-password put" [
 #
 # POST /v2/customer/{shortName}/session/resetpassword
 # operationId: SessionController_ResetPassword
-export def "customer-session-resetpassword reset-password" [
+export def "customer-session-resetpassword reset-controller-password" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -730,7 +740,7 @@ export def "customer-session-resetpassword reset-password" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "email" $email "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({short_name: $short_name} | format pattern "/v2/customer/{short_name}/session/resetpassword") $qp)
+  let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/session/resetpassword") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

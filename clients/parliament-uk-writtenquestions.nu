@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -148,8 +157,8 @@ export def "writtenquestions-questions get" [
   --corrected-when-to: string # Written questions corrected on or before the date specified. Date format yyyy-mm-dd (nullable, format: date-time)
   --search-term: string # Written questions / statements containing the search term specified, searches item content (nullable)
   --u-in: string # Written questions / statements with the uin specified (nullable)
-  --answering-bodies: list # Written questions / statements relating to the answering bodies with the IDs specified (nullable)
-  --members: list # Written questions / statements relating to the members with the IDs specified (nullable)
+  --answering-bodies: list<int> # Written questions / statements relating to the answering bodies with the IDs specified (nullable)
+  --members: list<int> # Written questions / statements relating to the members with the IDs specified (nullable)
   --house: string@house-completer # Written questions / statements relating to the House specified
   --skip: int # Number of records to skip, default is 0 (nullable, format: int32)
   --take: int # Number of records to take, default is 20 (nullable, format: int32)
@@ -183,7 +192,7 @@ export def "writtenquestions-questions get-by-date-uin" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expandMember" $expand_member "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({date: $date, uin: $uin} | format pattern "/api/writtenquestions/questions/{date}/{uin}") $qp)
+  let full_url = (build-url $base ({date: (encode-path-segment $date), uin: (encode-path-segment $uin)} | format pattern "/api/writtenquestions/questions/{date}/{uin}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -208,7 +217,7 @@ export def "writtenquestions-questions get-by-id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expandMember" $expand_member "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/writtenquestions/questions/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/writtenquestions/questions/{id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -231,8 +240,8 @@ export def "writtenstatements-statements get" [
   --made-when-to: string # Written statements made on or before the date specified. Date format yyyy-mm-dd (nullable, format: date-time)
   --search-term: string # Written questions / statements containing the search term specified, searches item content (nullable)
   --u-in: string # Written questions / statements with the uin specified (nullable)
-  --answering-bodies: list # Written questions / statements relating to the answering bodies with the IDs specified (nullable)
-  --members: list # Written questions / statements relating to the members with the IDs specified (nullable)
+  --answering-bodies: list<int> # Written questions / statements relating to the answering bodies with the IDs specified (nullable)
+  --members: list<int> # Written questions / statements relating to the members with the IDs specified (nullable)
   --house: string@house-completer # Written questions / statements relating to the House specified
   --skip: int # Number of records to skip, default is 0 (nullable, format: int32)
   --take: int # Number of records to take, default is 20 (nullable, format: int32)
@@ -267,7 +276,7 @@ export def "writtenstatements-statements get-by-date-uin" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expandMember" $expand_member "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({date: $date, uin: $uin} | format pattern "/api/writtenstatements/statements/{date}/{uin}") $qp)
+  let full_url = (build-url $base ({date: (encode-path-segment $date), uin: (encode-path-segment $uin)} | format pattern "/api/writtenstatements/statements/{date}/{uin}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -292,7 +301,7 @@ export def "writtenstatements-statements get-by-id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expandMember" $expand_member "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/writtenstatements/statements/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/writtenstatements/statements/{id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

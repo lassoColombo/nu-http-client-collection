@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -72,7 +81,7 @@ def operation-type-completer [] { ["create" "link" "unknown" "update"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoftvisualstudio-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-visualstudio-operations list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -96,7 +105,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/microsoft.visualstudio/operations
 # operationId: Operations_List
-export def "providers-microsoftvisualstudio-operations list" [
+export def "providers-microsoft-visualstudio-operations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -118,7 +127,7 @@ export def "providers-microsoftvisualstudio-operations list" [
 #
 # POST /subscriptions/{subscriptionId}/providers/microsoft.visualstudio/checkNameAvailability
 # operationId: Accounts_CheckNameAvailability
-export def "subscriptions-providers-microsoftvisualstudio-check-name-availability check" [
+export def "subscriptions-providers-microsoft-visualstudio-check-name-availability check-accounts" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -136,12 +145,12 @@ export def "subscriptions-providers-microsoftvisualstudio-check-name-availabilit
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/microsoft.visualstudio/checkNameAvailability") $qp)
-  let body = {"resourceName": $resource_name, "resourceType": $resource_type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/microsoft.visualstudio/checkNameAvailability") $qp)
+  let req_body = {"resourceName": $resource_name, "resourceType": $resource_type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Projects_ListByAccountResource
@@ -150,7 +159,7 @@ export def "subscriptions-providers-microsoftvisualstudio-check-name-availabilit
 # DEPRECATED
 # operationId: Project_ListByAccountResource
 @deprecated
-export def "subscriptions-resource-groups-providers-microsoftvisualstudio-account-project list-by" [
+export def "subscriptions-resource-groups-providers-microsoft-visualstudio-account-project list" [
   subscription_id: string
   resource_group_name: string
   root_resource_name: string
@@ -167,7 +176,7 @@ export def "subscriptions-resource-groups-providers-microsoftvisualstudio-accoun
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, root_resource_name: $root_resource_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/microsoft.visualstudio/account/{root_resource_name}/project") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), root_resource_name: (encode-path-segment $root_resource_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/microsoft.visualstudio/account/{root_resource_name}/project") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -179,7 +188,7 @@ export def "subscriptions-resource-groups-providers-microsoftvisualstudio-accoun
 # DEPRECATED
 # operationId: Projects_Get
 @deprecated
-export def "subscriptions-resource-groups-providers-microsoftvisualstudio-account-project get" [
+export def "subscriptions-resource-groups-providers-microsoft-visualstudio-account-project get" [
   subscription_id: string
   resource_group_name: string
   root_resource_name: string
@@ -197,7 +206,7 @@ export def "subscriptions-resource-groups-providers-microsoftvisualstudio-accoun
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, root_resource_name: $root_resource_name, resource_name: $resource_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/microsoft.visualstudio/account/{root_resource_name}/project/{resource_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), root_resource_name: (encode-path-segment $root_resource_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/microsoft.visualstudio/account/{root_resource_name}/project/{resource_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -209,7 +218,7 @@ export def "subscriptions-resource-groups-providers-microsoftvisualstudio-accoun
 # DEPRECATED
 # operationId: Projects_Update
 @deprecated
-export def "subscriptions-resource-groups-providers-microsoftvisualstudio-account-project update" [
+export def "subscriptions-resource-groups-providers-microsoft-visualstudio-account-project update" [
   subscription_id: string
   resource_group_name: string
   root_resource_name: string
@@ -229,12 +238,12 @@ export def "subscriptions-resource-groups-providers-microsoftvisualstudio-accoun
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, root_resource_name: $root_resource_name, resource_name: $resource_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/microsoft.visualstudio/account/{root_resource_name}/project/{resource_name}") $qp)
-  let body = {"tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), root_resource_name: (encode-path-segment $root_resource_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/microsoft.visualstudio/account/{root_resource_name}/project/{resource_name}") $qp)
+  let req_body = {"tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Projects_Create
@@ -244,7 +253,7 @@ export def "subscriptions-resource-groups-providers-microsoftvisualstudio-accoun
 # operationId: Projects_Create
 # --properties shape: {bootstrapPipelineTemplate?: record, ownerUpn?: string, processTemplateId?: "Scrum"|"Agile"|"Cmmi", versionControlOption?: "Git"|"Tfvc"}
 @deprecated
-export def "subscriptions-resource-groups-providers-microsoftvisualstudio-account-project create" [
+export def "subscriptions-resource-groups-providers-microsoft-visualstudio-account-project create" [
   subscription_id: string
   resource_group_name: string
   root_resource_name: string
@@ -268,19 +277,19 @@ export def "subscriptions-resource-groups-providers-microsoftvisualstudio-accoun
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "validating" $validating "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, root_resource_name: $root_resource_name, resource_name: $resource_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/microsoft.visualstudio/account/{root_resource_name}/project/{resource_name}") $qp)
-  let body = {"kind": $kind, "properties": $properties, "location": $location, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), root_resource_name: (encode-path-segment $root_resource_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/microsoft.visualstudio/account/{root_resource_name}/project/{resource_name}") $qp)
+  let req_body = {"kind": $kind, "properties": $properties, "location": $location, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Accounts_ListByResourceGroup
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/microsoft.visualstudio/account
 # operationId: Accounts_ListByResourceGroup
-export def "subscriptions-resourcegroups-providers-microsoftvisualstudio-account list-by" [
+export def "subscriptions-resourcegroups-providers-microsoft-visualstudio-account list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -296,7 +305,7 @@ export def "subscriptions-resourcegroups-providers-microsoftvisualstudio-account
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/microsoft.visualstudio/account") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/microsoft.visualstudio/account") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -306,7 +315,7 @@ export def "subscriptions-resourcegroups-providers-microsoftvisualstudio-account
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/microsoft.visualstudio/account/{accountResourceName}/extension
 # operationId: Extensions_ListByAccount
-export def "subscriptions-resourcegroups-providers-microsoftvisualstudio-account-extension list-by" [
+export def "subscriptions-resourcegroups-providers-microsoft-visualstudio-account-extension list" [
   subscription_id: string
   resource_group_name: string
   account_resource_name: string
@@ -323,7 +332,7 @@ export def "subscriptions-resourcegroups-providers-microsoftvisualstudio-account
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_resource_name: $account_resource_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/microsoft.visualstudio/account/{account_resource_name}/extension") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_resource_name: (encode-path-segment $account_resource_name)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/microsoft.visualstudio/account/{account_resource_name}/extension") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -333,7 +342,7 @@ export def "subscriptions-resourcegroups-providers-microsoftvisualstudio-account
 #
 # DELETE /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/microsoft.visualstudio/account/{accountResourceName}/extension/{extensionResourceName}
 # operationId: Extensions_Delete
-export def "subscriptions-resourcegroups-providers-microsoftvisualstudio-account-extension delete" [
+export def "subscriptions-resourcegroups-providers-microsoft-visualstudio-account-extension delete" [
   subscription_id: string
   resource_group_name: string
   account_resource_name: string
@@ -351,7 +360,7 @@ export def "subscriptions-resourcegroups-providers-microsoftvisualstudio-account
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_resource_name: $account_resource_name, extension_resource_name: $extension_resource_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/microsoft.visualstudio/account/{account_resource_name}/extension/{extension_resource_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_resource_name: (encode-path-segment $account_resource_name), extension_resource_name: (encode-path-segment $extension_resource_name)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/microsoft.visualstudio/account/{account_resource_name}/extension/{extension_resource_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -361,7 +370,7 @@ export def "subscriptions-resourcegroups-providers-microsoftvisualstudio-account
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/microsoft.visualstudio/account/{accountResourceName}/extension/{extensionResourceName}
 # operationId: Extensions_Get
-export def "subscriptions-resourcegroups-providers-microsoftvisualstudio-account-extension get" [
+export def "subscriptions-resourcegroups-providers-microsoft-visualstudio-account-extension get" [
   subscription_id: string
   resource_group_name: string
   account_resource_name: string
@@ -379,7 +388,7 @@ export def "subscriptions-resourcegroups-providers-microsoftvisualstudio-account
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_resource_name: $account_resource_name, extension_resource_name: $extension_resource_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/microsoft.visualstudio/account/{account_resource_name}/extension/{extension_resource_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_resource_name: (encode-path-segment $account_resource_name), extension_resource_name: (encode-path-segment $extension_resource_name)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/microsoft.visualstudio/account/{account_resource_name}/extension/{extension_resource_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -390,7 +399,7 @@ export def "subscriptions-resourcegroups-providers-microsoftvisualstudio-account
 # PATCH /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/microsoft.visualstudio/account/{accountResourceName}/extension/{extensionResourceName}
 # operationId: Extensions_Update
 # --plan shape: {name?: string, product?: string, promotionCode?: string, publisher?: string, version?: string}
-export def "subscriptions-resourcegroups-providers-microsoftvisualstudio-account-extension update" [
+export def "subscriptions-resourcegroups-providers-microsoft-visualstudio-account-extension update" [
   subscription_id: string
   resource_group_name: string
   account_resource_name: string
@@ -413,12 +422,12 @@ export def "subscriptions-resourcegroups-providers-microsoftvisualstudio-account
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_resource_name: $account_resource_name, extension_resource_name: $extension_resource_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/microsoft.visualstudio/account/{account_resource_name}/extension/{extension_resource_name}") $qp)
-  let body = {"location": $location, "plan": $plan, "properties": $properties, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_resource_name: (encode-path-segment $account_resource_name), extension_resource_name: (encode-path-segment $extension_resource_name)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/microsoft.visualstudio/account/{account_resource_name}/extension/{extension_resource_name}") $qp)
+  let req_body = {"location": $location, "plan": $plan, "properties": $properties, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Extensions_Create
@@ -426,7 +435,7 @@ export def "subscriptions-resourcegroups-providers-microsoftvisualstudio-account
 # PUT /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/microsoft.visualstudio/account/{accountResourceName}/extension/{extensionResourceName}
 # operationId: Extensions_Create
 # --plan shape: {name?: string, product?: string, promotionCode?: string, publisher?: string, version?: string}
-export def "subscriptions-resourcegroups-providers-microsoftvisualstudio-account-extension create" [
+export def "subscriptions-resourcegroups-providers-microsoft-visualstudio-account-extension create" [
   subscription_id: string
   resource_group_name: string
   account_resource_name: string
@@ -449,19 +458,19 @@ export def "subscriptions-resourcegroups-providers-microsoftvisualstudio-account
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_resource_name: $account_resource_name, extension_resource_name: $extension_resource_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/microsoft.visualstudio/account/{account_resource_name}/extension/{extension_resource_name}") $qp)
-  let body = {"location": $location, "plan": $plan, "properties": $properties, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_resource_name: (encode-path-segment $account_resource_name), extension_resource_name: (encode-path-segment $extension_resource_name)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/microsoft.visualstudio/account/{account_resource_name}/extension/{extension_resource_name}") $qp)
+  let req_body = {"location": $location, "plan": $plan, "properties": $properties, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Accounts_Delete
 #
 # DELETE /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/microsoft.visualstudio/account/{resourceName}
 # operationId: Accounts_Delete
-export def "subscriptions-resourcegroups-providers-microsoftvisualstudio-account delete" [
+export def "subscriptions-resourcegroups-providers-microsoft-visualstudio-account delete" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -478,7 +487,7 @@ export def "subscriptions-resourcegroups-providers-microsoftvisualstudio-account
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/microsoft.visualstudio/account/{resource_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/microsoft.visualstudio/account/{resource_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -488,7 +497,7 @@ export def "subscriptions-resourcegroups-providers-microsoftvisualstudio-account
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/microsoft.visualstudio/account/{resourceName}
 # operationId: Accounts_Get
-export def "subscriptions-resourcegroups-providers-microsoftvisualstudio-account get" [
+export def "subscriptions-resourcegroups-providers-microsoft-visualstudio-account get" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -505,7 +514,7 @@ export def "subscriptions-resourcegroups-providers-microsoftvisualstudio-account
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/microsoft.visualstudio/account/{resource_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/microsoft.visualstudio/account/{resource_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -515,7 +524,7 @@ export def "subscriptions-resourcegroups-providers-microsoftvisualstudio-account
 #
 # PUT /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/microsoft.visualstudio/account/{resourceName}
 # operationId: Accounts_CreateOrUpdate
-export def "subscriptions-resourcegroups-providers-microsoftvisualstudio-account create-or-update" [
+export def "subscriptions-resourcegroups-providers-microsoft-visualstudio-account create-or-update" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -538,10 +547,10 @@ export def "subscriptions-resourcegroups-providers-microsoftvisualstudio-account
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/microsoft.visualstudio/account/{resource_name}") $qp)
-  let body = {"accountName": $account_name, "location": $location, "operationType": $operation_type, "properties": $properties, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/microsoft.visualstudio/account/{resource_name}") $qp)
+  let req_body = {"accountName": $account_name, "location": $location, "operationType": $operation_type, "properties": $properties, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

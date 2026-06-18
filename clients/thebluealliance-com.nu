@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -107,11 +116,11 @@ export def "district-events get" [
 ]: nothing -> table<address: string, city: string, country: string, district: record<abbreviation: string, display_name: string, key: string, year: int>, division_keys: list<string>, end_date: string, event_code: string, event_type: int, event_type_string: string, first_event_code: string, first_event_id: string, gmaps_place_id: string, gmaps_url: string, key: string, lat: float, lng: float, location_name: string, name: string, parent_event_key: string, playoff_type: int, playoff_type_string: string, postal_code: string, short_name: string, start_date: string, state_prov: string, timezone: string, webcasts: list<record>, website: string, week: int, year: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({district_key: $district_key} | format pattern "/district/{district_key}/events"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({district_key: (encode-path-segment $district_key)} | format pattern "/district/{district_key}/events"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -133,11 +142,11 @@ export def "district-events-keys get" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({district_key: $district_key} | format pattern "/district/{district_key}/events/keys"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({district_key: (encode-path-segment $district_key)} | format pattern "/district/{district_key}/events/keys"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -159,11 +168,11 @@ export def "district-events-simple get" [
 ]: nothing -> table<city: string, country: string, district: record<abbreviation: string, display_name: string, key: string, year: int>, end_date: string, event_code: string, event_type: int, key: string, name: string, start_date: string, state_prov: string, year: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({district_key: $district_key} | format pattern "/district/{district_key}/events/simple"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({district_key: (encode-path-segment $district_key)} | format pattern "/district/{district_key}/events/simple"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -185,11 +194,11 @@ export def "district-rankings get" [
 ]: nothing -> table<event_points: list<record>, point_total: int, rank: int, rookie_bonus: int, team_key: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({district_key: $district_key} | format pattern "/district/{district_key}/rankings"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({district_key: (encode-path-segment $district_key)} | format pattern "/district/{district_key}/rankings"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -211,11 +220,11 @@ export def "district-teams get" [
 ]: nothing -> table<address: string, city: string, country: string, gmaps_place_id: string, gmaps_url: string, home_championship: record, key: string, lat: float, lng: float, location_name: string, motto: string, name: string, nickname: string, postal_code: string, rookie_year: int, school_name: string, state_prov: string, team_number: int, website: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({district_key: $district_key} | format pattern "/district/{district_key}/teams"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({district_key: (encode-path-segment $district_key)} | format pattern "/district/{district_key}/teams"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -237,11 +246,11 @@ export def "district-teams-keys get" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({district_key: $district_key} | format pattern "/district/{district_key}/teams/keys"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({district_key: (encode-path-segment $district_key)} | format pattern "/district/{district_key}/teams/keys"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -263,11 +272,11 @@ export def "district-teams-simple get" [
 ]: nothing -> table<city: string, country: string, key: string, name: string, nickname: string, state_prov: string, team_number: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({district_key: $district_key} | format pattern "/district/{district_key}/teams/simple"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({district_key: (encode-path-segment $district_key)} | format pattern "/district/{district_key}/teams/simple"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -289,11 +298,11 @@ export def "districts get" [
 ]: nothing -> table<abbreviation: string, display_name: string, key: string, year: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({year: $year} | format pattern "/districts/{year}"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({year: (encode-path-segment $year)} | format pattern "/districts/{year}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -315,11 +324,11 @@ export def "event get" [
 ]: nothing -> record<address: string, city: string, country: string, district: record<abbreviation: string, display_name: string, key: string, year: int>, division_keys: list<string>, end_date: string, event_code: string, event_type: int, event_type_string: string, first_event_code: string, first_event_id: string, gmaps_place_id: string, gmaps_url: string, key: string, lat: float, lng: float, location_name: string, name: string, parent_event_key: string, playoff_type: int, playoff_type_string: string, postal_code: string, short_name: string, start_date: string, state_prov: string, timezone: string, webcasts: table<channel: string, date: string, file: string, type: string>, website: string, week: int, year: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({event_key: $event_key} | format pattern "/event/{event_key}"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({event_key: (encode-path-segment $event_key)} | format pattern "/event/{event_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -341,11 +350,11 @@ export def "event-alliances get" [
 ]: nothing -> table<backup: record<in: string, out: string>, declines: list<string>, name: string, picks: list<string>, status: record<current_level_record: record, level: string, playoff_average: float, record: record, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({event_key: $event_key} | format pattern "/event/{event_key}/alliances"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({event_key: (encode-path-segment $event_key)} | format pattern "/event/{event_key}/alliances"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -367,11 +376,11 @@ export def "event-awards get" [
 ]: nothing -> table<award_type: int, event_key: string, name: string, recipient_list: list<record>, year: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({event_key: $event_key} | format pattern "/event/{event_key}/awards"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({event_key: (encode-path-segment $event_key)} | format pattern "/event/{event_key}/awards"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -393,11 +402,11 @@ export def "event-district-points get" [
 ]: nothing -> record<points: record, tiebreakers: record> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({event_key: $event_key} | format pattern "/event/{event_key}/district_points"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({event_key: (encode-path-segment $event_key)} | format pattern "/event/{event_key}/district_points"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -419,11 +428,11 @@ export def "event-insights get" [
 ]: nothing -> record<playoff: record, qual: record> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({event_key: $event_key} | format pattern "/event/{event_key}/insights"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({event_key: (encode-path-segment $event_key)} | format pattern "/event/{event_key}/insights"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -445,11 +454,11 @@ export def "event-matches get" [
 ]: nothing -> table<actual_time: int, alliances: record<blue: record, red: record>, comp_level: string, event_key: string, key: string, match_number: int, post_result_time: int, predicted_time: int, score_breakdown: record, set_number: int, time: int, videos: list<record>, winning_alliance: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({event_key: $event_key} | format pattern "/event/{event_key}/matches"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({event_key: (encode-path-segment $event_key)} | format pattern "/event/{event_key}/matches"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -471,11 +480,11 @@ export def "event-matches-keys get" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({event_key: $event_key} | format pattern "/event/{event_key}/matches/keys"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({event_key: (encode-path-segment $event_key)} | format pattern "/event/{event_key}/matches/keys"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -497,11 +506,11 @@ export def "event-matches-simple get" [
 ]: nothing -> table<actual_time: int, alliances: record<blue: record, red: record>, comp_level: string, event_key: string, key: string, match_number: int, predicted_time: int, set_number: int, time: int, winning_alliance: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({event_key: $event_key} | format pattern "/event/{event_key}/matches/simple"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({event_key: (encode-path-segment $event_key)} | format pattern "/event/{event_key}/matches/simple"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -509,7 +518,7 @@ export def "event-matches-simple get" [
 #
 # GET /event/{event_key}/matches/timeseries
 # operationId: getEventMatchTimeseries
-export def "event-matches-timeseries get-event-match" [
+export def "event-matches-timeseries get-match" [
   event_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -523,11 +532,11 @@ export def "event-matches-timeseries get-event-match" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({event_key: $event_key} | format pattern "/event/{event_key}/matches/timeseries"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({event_key: (encode-path-segment $event_key)} | format pattern "/event/{event_key}/matches/timeseries"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -535,7 +544,7 @@ export def "event-matches-timeseries get-event-match" [
 #
 # GET /event/{event_key}/oprs
 # operationId: getEventOPRs
-export def "event-oprs get" [
+export def "event-oprs get-op-rs" [
   event_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -549,11 +558,11 @@ export def "event-oprs get" [
 ]: nothing -> record<ccwms: record, dprs: record, oprs: record> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({event_key: $event_key} | format pattern "/event/{event_key}/oprs"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({event_key: (encode-path-segment $event_key)} | format pattern "/event/{event_key}/oprs"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -575,11 +584,11 @@ export def "event-predictions get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({event_key: $event_key} | format pattern "/event/{event_key}/predictions"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({event_key: (encode-path-segment $event_key)} | format pattern "/event/{event_key}/predictions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -601,11 +610,11 @@ export def "event-rankings get" [
 ]: nothing -> record<extra_stats_info: table<name: string, precision: float>, rankings: table<dq: int, extra_stats: list, matches_played: int, qual_average: int, rank: int, record: record, sort_orders: list, team_key: string>, sort_order_info: table<name: string, precision: int>> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({event_key: $event_key} | format pattern "/event/{event_key}/rankings"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({event_key: (encode-path-segment $event_key)} | format pattern "/event/{event_key}/rankings"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -627,11 +636,11 @@ export def "event-simple get" [
 ]: nothing -> record<city: string, country: string, district: record<abbreviation: string, display_name: string, key: string, year: int>, end_date: string, event_code: string, event_type: int, key: string, name: string, start_date: string, state_prov: string, year: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({event_key: $event_key} | format pattern "/event/{event_key}/simple"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({event_key: (encode-path-segment $event_key)} | format pattern "/event/{event_key}/simple"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -653,11 +662,11 @@ export def "event-teams get" [
 ]: nothing -> table<address: string, city: string, country: string, gmaps_place_id: string, gmaps_url: string, home_championship: record, key: string, lat: float, lng: float, location_name: string, motto: string, name: string, nickname: string, postal_code: string, rookie_year: int, school_name: string, state_prov: string, team_number: int, website: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({event_key: $event_key} | format pattern "/event/{event_key}/teams"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({event_key: (encode-path-segment $event_key)} | format pattern "/event/{event_key}/teams"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -679,11 +688,11 @@ export def "event-teams-keys get" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({event_key: $event_key} | format pattern "/event/{event_key}/teams/keys"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({event_key: (encode-path-segment $event_key)} | format pattern "/event/{event_key}/teams/keys"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -705,11 +714,11 @@ export def "event-teams-simple get" [
 ]: nothing -> table<city: string, country: string, key: string, name: string, nickname: string, state_prov: string, team_number: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({event_key: $event_key} | format pattern "/event/{event_key}/teams/simple"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({event_key: (encode-path-segment $event_key)} | format pattern "/event/{event_key}/teams/simple"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -731,11 +740,11 @@ export def "event-teams-statuses get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({event_key: $event_key} | format pattern "/event/{event_key}/teams/statuses"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({event_key: (encode-path-segment $event_key)} | format pattern "/event/{event_key}/teams/statuses"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -757,11 +766,11 @@ export def "events get" [
 ]: nothing -> table<address: string, city: string, country: string, district: record<abbreviation: string, display_name: string, key: string, year: int>, division_keys: list<string>, end_date: string, event_code: string, event_type: int, event_type_string: string, first_event_code: string, first_event_id: string, gmaps_place_id: string, gmaps_url: string, key: string, lat: float, lng: float, location_name: string, name: string, parent_event_key: string, playoff_type: int, playoff_type_string: string, postal_code: string, short_name: string, start_date: string, state_prov: string, timezone: string, webcasts: list<record>, website: string, week: int, year: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({year: $year} | format pattern "/events/{year}"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({year: (encode-path-segment $year)} | format pattern "/events/{year}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -783,11 +792,11 @@ export def "events-keys get" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({year: $year} | format pattern "/events/{year}/keys"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({year: (encode-path-segment $year)} | format pattern "/events/{year}/keys"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -809,11 +818,11 @@ export def "events-simple get" [
 ]: nothing -> table<city: string, country: string, district: record<abbreviation: string, display_name: string, key: string, year: int>, end_date: string, event_code: string, event_type: int, key: string, name: string, start_date: string, state_prov: string, year: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({year: $year} | format pattern "/events/{year}/simple"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({year: (encode-path-segment $year)} | format pattern "/events/{year}/simple"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -835,11 +844,11 @@ export def "match get" [
 ]: nothing -> record<actual_time: int, alliances: record<blue: record<dq_team_keys: list, score: int, surrogate_team_keys: list, team_keys: list>, red: record<dq_team_keys: list, score: int, surrogate_team_keys: list, team_keys: list>>, comp_level: string, event_key: string, key: string, match_number: int, post_result_time: int, predicted_time: int, score_breakdown: record, set_number: int, time: int, videos: table<key: string, type: string>, winning_alliance: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({match_key: $match_key} | format pattern "/match/{match_key}"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({match_key: (encode-path-segment $match_key)} | format pattern "/match/{match_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -861,11 +870,11 @@ export def "match-simple get" [
 ]: nothing -> record<actual_time: int, alliances: record<blue: record<dq_team_keys: list, score: int, surrogate_team_keys: list, team_keys: list>, red: record<dq_team_keys: list, score: int, surrogate_team_keys: list, team_keys: list>>, comp_level: string, event_key: string, key: string, match_number: int, predicted_time: int, set_number: int, time: int, winning_alliance: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({match_key: $match_key} | format pattern "/match/{match_key}/simple"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({match_key: (encode-path-segment $match_key)} | format pattern "/match/{match_key}/simple"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -887,11 +896,11 @@ export def "match-timeseries get" [
 ]: nothing -> list<record> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({match_key: $match_key} | format pattern "/match/{match_key}/timeseries"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({match_key: (encode-path-segment $match_key)} | format pattern "/match/{match_key}/timeseries"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -913,11 +922,11 @@ export def "match-zebra-motionworks get" [
 ]: nothing -> record<alliances: record<blue: list<record>, red: list<record>>, key: string, times: list<float>> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({match_key: $match_key} | format pattern "/match/{match_key}/zebra_motionworks"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({match_key: (encode-path-segment $match_key)} | format pattern "/match/{match_key}/zebra_motionworks"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -939,10 +948,10 @@ export def "status get" [
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/status")
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -964,11 +973,11 @@ export def "team get" [
 ]: nothing -> record<address: string, city: string, country: string, gmaps_place_id: string, gmaps_url: string, home_championship: record, key: string, lat: float, lng: float, location_name: string, motto: string, name: string, nickname: string, postal_code: string, rookie_year: int, school_name: string, state_prov: string, team_number: int, website: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({team_key: $team_key} | format pattern "/team/{team_key}"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({team_key: (encode-path-segment $team_key)} | format pattern "/team/{team_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -990,11 +999,11 @@ export def "team-awards list" [
 ]: nothing -> table<award_type: int, event_key: string, name: string, recipient_list: list<record>, year: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({team_key: $team_key} | format pattern "/team/{team_key}/awards"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({team_key: (encode-path-segment $team_key)} | format pattern "/team/{team_key}/awards"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1017,11 +1026,11 @@ export def "team-awards get" [
 ]: nothing -> table<award_type: int, event_key: string, name: string, recipient_list: list<record>, year: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({team_key: $team_key, year: $year} | format pattern "/team/{team_key}/awards/{year}"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({team_key: (encode-path-segment $team_key), year: (encode-path-segment $year)} | format pattern "/team/{team_key}/awards/{year}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1043,11 +1052,11 @@ export def "team-districts get" [
 ]: nothing -> table<abbreviation: string, display_name: string, key: string, year: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({team_key: $team_key} | format pattern "/team/{team_key}/districts"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({team_key: (encode-path-segment $team_key)} | format pattern "/team/{team_key}/districts"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1070,11 +1079,11 @@ export def "team-event-awards get" [
 ]: nothing -> table<award_type: int, event_key: string, name: string, recipient_list: list<record>, year: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({team_key: $team_key, event_key: $event_key} | format pattern "/team/{team_key}/event/{event_key}/awards"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({team_key: (encode-path-segment $team_key), event_key: (encode-path-segment $event_key)} | format pattern "/team/{team_key}/event/{event_key}/awards"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1097,11 +1106,11 @@ export def "team-event-matches get" [
 ]: nothing -> table<actual_time: int, alliances: record<blue: record, red: record>, comp_level: string, event_key: string, key: string, match_number: int, post_result_time: int, predicted_time: int, score_breakdown: record, set_number: int, time: int, videos: list<record>, winning_alliance: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({team_key: $team_key, event_key: $event_key} | format pattern "/team/{team_key}/event/{event_key}/matches"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({team_key: (encode-path-segment $team_key), event_key: (encode-path-segment $event_key)} | format pattern "/team/{team_key}/event/{event_key}/matches"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1124,11 +1133,11 @@ export def "team-event-matches-keys get" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({team_key: $team_key, event_key: $event_key} | format pattern "/team/{team_key}/event/{event_key}/matches/keys"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({team_key: (encode-path-segment $team_key), event_key: (encode-path-segment $event_key)} | format pattern "/team/{team_key}/event/{event_key}/matches/keys"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1151,11 +1160,11 @@ export def "team-event-matches-simple get" [
 ]: nothing -> table<actual_time: int, alliances: record<blue: record, red: record>, comp_level: string, event_key: string, key: string, match_number: int, post_result_time: int, predicted_time: int, score_breakdown: record, set_number: int, time: int, videos: list<record>, winning_alliance: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({team_key: $team_key, event_key: $event_key} | format pattern "/team/{team_key}/event/{event_key}/matches/simple"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({team_key: (encode-path-segment $team_key), event_key: (encode-path-segment $event_key)} | format pattern "/team/{team_key}/event/{event_key}/matches/simple"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1178,11 +1187,11 @@ export def "team-event-status get" [
 ]: nothing -> record<alliance: record<backup: record<in: string, out: string>, name: string, number: int, pick: int>, alliance_status_str: string, last_match_key: string, next_match_key: string, overall_status_str: string, playoff: record<current_level_record: record<losses: int, ties: int, wins: int>, level: string, playoff_average: int, record: record<losses: int, ties: int, wins: int>, status: string>, playoff_status_str: string, qual: record<num_teams: int, ranking: record<dq: int, matches_played: int, qual_average: float, rank: int, record: record, sort_orders: list, team_key: string>, sort_order_info: list<record>, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({team_key: $team_key, event_key: $event_key} | format pattern "/team/{team_key}/event/{event_key}/status"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({team_key: (encode-path-segment $team_key), event_key: (encode-path-segment $event_key)} | format pattern "/team/{team_key}/event/{event_key}/status"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1204,11 +1213,11 @@ export def "team-events list" [
 ]: nothing -> table<address: string, city: string, country: string, district: record<abbreviation: string, display_name: string, key: string, year: int>, division_keys: list<string>, end_date: string, event_code: string, event_type: int, event_type_string: string, first_event_code: string, first_event_id: string, gmaps_place_id: string, gmaps_url: string, key: string, lat: float, lng: float, location_name: string, name: string, parent_event_key: string, playoff_type: int, playoff_type_string: string, postal_code: string, short_name: string, start_date: string, state_prov: string, timezone: string, webcasts: list<record>, website: string, week: int, year: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({team_key: $team_key} | format pattern "/team/{team_key}/events"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({team_key: (encode-path-segment $team_key)} | format pattern "/team/{team_key}/events"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1230,11 +1239,11 @@ export def "team-events-keys list" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({team_key: $team_key} | format pattern "/team/{team_key}/events/keys"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({team_key: (encode-path-segment $team_key)} | format pattern "/team/{team_key}/events/keys"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1256,11 +1265,11 @@ export def "team-events-simple list" [
 ]: nothing -> table<city: string, country: string, district: record<abbreviation: string, display_name: string, key: string, year: int>, end_date: string, event_code: string, event_type: int, key: string, name: string, start_date: string, state_prov: string, year: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({team_key: $team_key} | format pattern "/team/{team_key}/events/simple"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({team_key: (encode-path-segment $team_key)} | format pattern "/team/{team_key}/events/simple"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1283,11 +1292,11 @@ export def "team-events get" [
 ]: nothing -> table<address: string, city: string, country: string, district: record<abbreviation: string, display_name: string, key: string, year: int>, division_keys: list<string>, end_date: string, event_code: string, event_type: int, event_type_string: string, first_event_code: string, first_event_id: string, gmaps_place_id: string, gmaps_url: string, key: string, lat: float, lng: float, location_name: string, name: string, parent_event_key: string, playoff_type: int, playoff_type_string: string, postal_code: string, short_name: string, start_date: string, state_prov: string, timezone: string, webcasts: list<record>, website: string, week: int, year: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({team_key: $team_key, year: $year} | format pattern "/team/{team_key}/events/{year}"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({team_key: (encode-path-segment $team_key), year: (encode-path-segment $year)} | format pattern "/team/{team_key}/events/{year}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1310,11 +1319,11 @@ export def "team-events-keys get" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({team_key: $team_key, year: $year} | format pattern "/team/{team_key}/events/{year}/keys"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({team_key: (encode-path-segment $team_key), year: (encode-path-segment $year)} | format pattern "/team/{team_key}/events/{year}/keys"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1337,11 +1346,11 @@ export def "team-events-simple get" [
 ]: nothing -> table<city: string, country: string, district: record<abbreviation: string, display_name: string, key: string, year: int>, end_date: string, event_code: string, event_type: int, key: string, name: string, start_date: string, state_prov: string, year: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({team_key: $team_key, year: $year} | format pattern "/team/{team_key}/events/{year}/simple"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({team_key: (encode-path-segment $team_key), year: (encode-path-segment $year)} | format pattern "/team/{team_key}/events/{year}/simple"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1364,11 +1373,11 @@ export def "team-events-statuses get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({team_key: $team_key, year: $year} | format pattern "/team/{team_key}/events/{year}/statuses"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({team_key: (encode-path-segment $team_key), year: (encode-path-segment $year)} | format pattern "/team/{team_key}/events/{year}/statuses"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1391,11 +1400,11 @@ export def "team-matches get" [
 ]: nothing -> table<actual_time: int, alliances: record<blue: record, red: record>, comp_level: string, event_key: string, key: string, match_number: int, post_result_time: int, predicted_time: int, score_breakdown: record, set_number: int, time: int, videos: list<record>, winning_alliance: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({team_key: $team_key, year: $year} | format pattern "/team/{team_key}/matches/{year}"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({team_key: (encode-path-segment $team_key), year: (encode-path-segment $year)} | format pattern "/team/{team_key}/matches/{year}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1418,11 +1427,11 @@ export def "team-matches-keys get" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({team_key: $team_key, year: $year} | format pattern "/team/{team_key}/matches/{year}/keys"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({team_key: (encode-path-segment $team_key), year: (encode-path-segment $year)} | format pattern "/team/{team_key}/matches/{year}/keys"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1445,11 +1454,11 @@ export def "team-matches-simple get" [
 ]: nothing -> table<actual_time: int, alliances: record<blue: record, red: record>, comp_level: string, event_key: string, key: string, match_number: int, predicted_time: int, set_number: int, time: int, winning_alliance: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({team_key: $team_key, year: $year} | format pattern "/team/{team_key}/matches/{year}/simple"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({team_key: (encode-path-segment $team_key), year: (encode-path-segment $year)} | format pattern "/team/{team_key}/matches/{year}/simple"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1472,11 +1481,11 @@ export def "team-media-tag list" [
 ]: nothing -> table<details: record, direct_url: string, foreign_key: string, preferred: bool, type: string, view_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({team_key: $team_key, media_tag: $media_tag} | format pattern "/team/{team_key}/media/tag/{media_tag}"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({team_key: (encode-path-segment $team_key), media_tag: (encode-path-segment $media_tag)} | format pattern "/team/{team_key}/media/tag/{media_tag}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1500,11 +1509,11 @@ export def "team-media-tag get" [
 ]: nothing -> table<details: record, direct_url: string, foreign_key: string, preferred: bool, type: string, view_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({team_key: $team_key, media_tag: $media_tag, year: $year} | format pattern "/team/{team_key}/media/tag/{media_tag}/{year}"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({team_key: (encode-path-segment $team_key), media_tag: (encode-path-segment $media_tag), year: (encode-path-segment $year)} | format pattern "/team/{team_key}/media/tag/{media_tag}/{year}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1527,11 +1536,11 @@ export def "team-media get" [
 ]: nothing -> table<details: record, direct_url: string, foreign_key: string, preferred: bool, type: string, view_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({team_key: $team_key, year: $year} | format pattern "/team/{team_key}/media/{year}"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({team_key: (encode-path-segment $team_key), year: (encode-path-segment $year)} | format pattern "/team/{team_key}/media/{year}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1553,11 +1562,11 @@ export def "team-robots get" [
 ]: nothing -> table<key: string, robot_name: string, team_key: string, year: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({team_key: $team_key} | format pattern "/team/{team_key}/robots"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({team_key: (encode-path-segment $team_key)} | format pattern "/team/{team_key}/robots"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1579,11 +1588,11 @@ export def "team-simple get" [
 ]: nothing -> record<city: string, country: string, key: string, name: string, nickname: string, state_prov: string, team_number: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({team_key: $team_key} | format pattern "/team/{team_key}/simple"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({team_key: (encode-path-segment $team_key)} | format pattern "/team/{team_key}/simple"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1605,11 +1614,11 @@ export def "team-social-media get" [
 ]: nothing -> table<details: record, direct_url: string, foreign_key: string, preferred: bool, type: string, view_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({team_key: $team_key} | format pattern "/team/{team_key}/social_media"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({team_key: (encode-path-segment $team_key)} | format pattern "/team/{team_key}/social_media"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1631,11 +1640,11 @@ export def "team-years-participated get" [
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({team_key: $team_key} | format pattern "/team/{team_key}/years_participated"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({team_key: (encode-path-segment $team_key)} | format pattern "/team/{team_key}/years_participated"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1657,11 +1666,11 @@ export def "teams list" [
 ]: nothing -> table<address: string, city: string, country: string, gmaps_place_id: string, gmaps_url: string, home_championship: record, key: string, lat: float, lng: float, location_name: string, motto: string, name: string, nickname: string, postal_code: string, rookie_year: int, school_name: string, state_prov: string, team_number: int, website: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({page_num: $page_num} | format pattern "/teams/{page_num}"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({page_num: (encode-path-segment $page_num)} | format pattern "/teams/{page_num}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1683,11 +1692,11 @@ export def "teams-keys list" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({page_num: $page_num} | format pattern "/teams/{page_num}/keys"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({page_num: (encode-path-segment $page_num)} | format pattern "/teams/{page_num}/keys"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1709,11 +1718,11 @@ export def "teams-simple list" [
 ]: nothing -> table<city: string, country: string, key: string, name: string, nickname: string, state_prov: string, team_number: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({page_num: $page_num} | format pattern "/teams/{page_num}/simple"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({page_num: (encode-path-segment $page_num)} | format pattern "/teams/{page_num}/simple"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1736,11 +1745,11 @@ export def "teams get" [
 ]: nothing -> table<address: string, city: string, country: string, gmaps_place_id: string, gmaps_url: string, home_championship: record, key: string, lat: float, lng: float, location_name: string, motto: string, name: string, nickname: string, postal_code: string, rookie_year: int, school_name: string, state_prov: string, team_number: int, website: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({year: $year, page_num: $page_num} | format pattern "/teams/{year}/{page_num}"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({year: (encode-path-segment $year), page_num: (encode-path-segment $page_num)} | format pattern "/teams/{year}/{page_num}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1763,11 +1772,11 @@ export def "teams-keys get" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({year: $year, page_num: $page_num} | format pattern "/teams/{year}/{page_num}/keys"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({year: (encode-path-segment $year), page_num: (encode-path-segment $page_num)} | format pattern "/teams/{year}/{page_num}/keys"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1790,10 +1799,10 @@ export def "teams-simple get" [
 ]: nothing -> table<city: string, country: string, key: string, name: string, nickname: string, state_prov: string, team_number: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({year: $year, page_num: $page_num} | format pattern "/teams/{year}/{page_num}/simple"))
-  let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({year: (encode-path-segment $year), page_num: (encode-path-segment $page_num)} | format pattern "/teams/{year}/{page_num}/simple"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

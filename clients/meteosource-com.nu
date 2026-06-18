@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -131,7 +140,7 @@ export def "find-places get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --text: string # Place name or ZIP code
-  --language: string # The language of text summaries and place names (variable names are never translated). Available languages are:     * ``en``: English    * ``es``: Spanish    * ``fr``: French    * ``de``: German    * ``pl``: Polish    * ``pt``: Portuguese    * ``cs``: Czech  (default: en)
+  --language: string # The language of text summaries and place names (variable names are never translated). Available languages are: * ``en``: English * ``es``: Spanish * ``fr``: French * ``de``: German * ``pl``: Polish * ``pt``: Portuguese * ``cs``: Czech (default: en)
   --key: string # Your unique API key. You can either specify it in this parameter, or set it in `X-API-Key` header.
 ]: nothing -> table<adm_area1: string, adm_area2: string, country: string, lat: string, lon: string, name: string, place_id: string, timezone: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -157,7 +166,7 @@ export def "find-places-prefix get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --text: string # Place name or ZIP code
-  --language: string # The language of text summaries and place names (variable names are never translated). Available languages are:     * ``en``: English    * ``es``: Spanish    * ``fr``: French    * ``de``: German    * ``pl``: Polish    * ``pt``: Portuguese    * ``cs``: Czech  (default: en)
+  --language: string # The language of text summaries and place names (variable names are never translated). Available languages are: * ``en``: English * ``es``: Spanish * ``fr``: French * ``de``: German * ``pl``: Polish * ``pt``: Portuguese * ``cs``: Czech (default: en)
   --key: string # Your unique API key. You can either specify it in this parameter, or set it in `X-API-Key` header.
 ]: nothing -> table<adm_area1: string, adm_area2: string, country: string, lat: string, lon: string, name: string, place_id: string, timezone: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -189,8 +198,8 @@ export def "map get" [
   --min-lon: string # Minimal longitude in format 12E, 12.3E, 12.3, or 13W, 13.2W, -13.2
   --max-lat: string # Maximal latitude in format 12N, 12.3N, 12.3, or 13S, 13.2S, -13.2.
   --max-lon: string # Maximal longitude in format 12E, 12.3E, 12.3, or 13W, 13.2W, -13.2
-  --variable: string # Name of the variable for your map. Available values are:  * `temperature`: Temperature 2 metres above ground * `feels_like_temperature`: Feels like temperature * `clouds`: Percentage of sky covered by clouds * `precipitation`: Total precipitation amount accumulated since last hour * `wind_speed`: Wind speed 10 metres above the ground * `wind_gust`: Wind gust speed * `pressure`: Atmospheric pressure at mean sea level * `humidity`: Relative humidity * `wave_height`: Wave height * `wave_period`: Wave period * `sea_temperature`: Sea temperature (available only for +-24 hours) * `air_quality`: Air quality index * `ozone_surface`: Ozone at surface level * `ozone_total`: Total column ozone * `no2`: Nitrogen dioxide at surface level * `pm2.5`: Particulate matter d < 2.5 µm (PM2.5)
-  --datetime: string # There are two ways to specify date and time for your map:  1. Datetime in `YYYY-MM-DDTHH:MM` format and `UTC` timezone, e.g. `2021-08-24T12:00` 2. Offset from current time in `[+-]<minutes|hours|days>` format, e.g. `+10minutes`, `-2hours` or `+1days`
+  --variable: string # Name of the variable for your map. Available values are: * `temperature`: Temperature 2 metres above ground * `feels_like_temperature`: Feels like temperature * `clouds`: Percentage of sky covered by clouds * `precipitation`: Total precipitation amount accumulated since last hour * `wind_speed`: Wind speed 10 metres above the ground * `wind_gust`: Wind gust speed * `pressure`: Atmospheric pressure at mean sea level * `humidity`: Relative humidity * `wave_height`: Wave height * `wave_period`: Wave period * `sea_temperature`: Sea temperature (available only for +-24 hours) * `air_quality`: Air quality index * `ozone_surface`: Ozone at surface level * `ozone_total`: Total column ozone * `no2`: Nitrogen dioxide at surface level * `pm2.5`: Particulate matter d < 2.5 µm (PM2.5)
+  --datetime: string # There are two ways to specify date and time for your map: 1. Datetime in `YYYY-MM-DDTHH:MM` format and `UTC` timezone, e.g. `2021-08-24T12:00` 2. Offset from current time in `[+-]<minutes|hours|days>` format, e.g. `+10minutes`, `-2hours` or `+1days`
   --key: string # Your unique API key. You can either specify it in this parameter, or set it in `X-API-Key` header.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -217,7 +226,7 @@ export def "nearest-place get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --lat: string # Latitude in format 12N, 12.3N, 12.3, or 13S, 13.2S, -13.4
   --lon: string # Longitude in format 12E, 12.3E, 12.3, or 13W, 13.2W, -13.4
-  --language: string # The language of text summaries and place names (variable names are never translated). Available languages are:     * ``en``: English    * ``es``: Spanish    * ``fr``: French    * ``de``: German    * ``pl``: Polish    * ``pt``: Portuguese    * ``cs``: Czech  (default: en)
+  --language: string # The language of text summaries and place names (variable names are never translated). Available languages are: * ``en``: English * ``es``: Spanish * ``fr``: French * ``de``: German * ``pl``: Polish * ``pt``: Portuguese * ``cs``: Czech (default: en)
   --key: string # Your unique API key. You can either specify it in this parameter, or set it in `X-API-Key` header.
 ]: nothing -> record<adm_area1: string, adm_area2: string, country: string, lat: string, lon: string, name: string, place_id: string, timezone: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -245,10 +254,10 @@ export def "point get" [
   --place-id: string # Identifier of a place. To obtain the `place_id` for the location you want, please use endpoints `/find_places_prefix` (search by prefix) or `/find_places` (search by full name).
   --lat: string # Latitude in format 12N, 12.3N, 12.3, or 13S, 13.2S, -13.4
   --lon: string # Longitude in format 12E, 12.3E, 12.3, or 13W, 13.2W, -13.4
-  --sections: string # Sections to be included in the response. You can specify more section by separating the values with a comma. The available values are:  * ``current``: Current weather situation * ``daily``: Forecasts for each whole day, without the daily parts * ``daily-parts``: Forecasts for each whole day, morning, afternoon and evening     * Important: forecast for the morning, afternoon and evening is available only for the first       7 days in the forecast * ``hourly``: Forecasts with hourly resolution * ``minutely``: Precipitation forecast with 1 minute resolution * ``alerts``: The weather alerts * ``all``: All sections  (default: current,hourly)
+  --sections: string # Sections to be included in the response. You can specify more section by separating the values with a comma. The available values are: * ``current``: Current weather situation * ``daily``: Forecasts for each whole day, without the daily parts * ``daily-parts``: Forecasts for each whole day, morning, afternoon and evening * Important: forecast for the morning, afternoon and evening is available only for the first 7 days in the forecast * ``hourly``: Forecasts with hourly resolution * ``minutely``: Precipitation forecast with 1 minute resolution * ``alerts``: The weather alerts * ``all``: All sections (default: current,hourly)
   --timezone: string # Timezone to be used for the date fields. If not specified, local timezone of the forecast location will be used. The format is according to the tzinfo database, so values like `Europe/Prague` or `UTC` can be used. Alternatively you may use the value ``auto`` in which case the local timezone of the location is used. The full list of valid timezone strings can be found [here](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones#List).
-  --language: string # The language of text summaries and place names (variable names are never translated). Available languages are:     * ``en``: English    * ``es``: Spanish    * ``fr``: French    * ``de``: German    * ``pl``: Polish    * ``pt``: Portuguese    * ``cs``: Czech  (default: en)
-  --units: string # Unit system to be used. The available values are:  * `auto`: Select the system automatically, based on the forecast location. * `metric`: Metric (SI) units (`°C`, `mm/h`, `m/s`, `cm`, `km`, `hPa`). * `us`: Imperial units (`°F`, `in/h`, `mph`, `in`, `mi`, `Hg`). * `uk`: Same as ``metric``, except that visibility is in `miles` and wind speeds are in `mph`. * `ca`: Same as ``metric``, except that wind speeds are in `km/h` and pressure is in `kPa`.  (default: auto)
+  --language: string # The language of text summaries and place names (variable names are never translated). Available languages are: * ``en``: English * ``es``: Spanish * ``fr``: French * ``de``: German * ``pl``: Polish * ``pt``: Portuguese * ``cs``: Czech (default: en)
+  --units: string # Unit system to be used. The available values are: * `auto`: Select the system automatically, based on the forecast location. * `metric`: Metric (SI) units (`°C`, `mm/h`, `m/s`, `cm`, `km`, `hPa`). * `us`: Imperial units (`°F`, `in/h`, `mph`, `in`, `mi`, `Hg`). * `uk`: Same as ``metric``, except that visibility is in `miles` and wind speeds are in `mph`. * `ca`: Same as ``metric``, except that wind speeds are in `km/h` and pressure is in `kPa`. (default: auto)
   --key: string # Your unique API key. You can either specify it in this parameter, or set it in `X-API-Key` header.
 ]: nothing -> record<alerts: record<data: string>, current: record<cloud_cover: float, dew_point: float, feels_like: float, humidity: int, icon: string, icon_num: int, irradiance: float, ozone: float, precipitation: record<total: float, type: string>, pressure: float, summary: string, temperature: float, uv_index: float, visibility: float, wind: record<angle: float, dir: string, gusts: float, speed: float>, wind_chill: float>, daily: record<data: list<record>>, elevation: int, hourly: record<data: list<record>>, lat: string, lon: string, minutely: record<data: list<record>, summary: string>, timezone: string, units: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -276,9 +285,9 @@ export def "time-machine get" [
   --place-id: string # Identifier of a place. To obtain the `place_id` for the location you want, please use endpoints `/find_places_prefix` (search by prefix) or `/find_places` (search by full name).
   --lat: string # Latitude in format 12N, 12.3N, 12.3, or 13S, 13.2S, -13.4
   --lon: string # Longitude in format 12E, 12.3E, 12.3, or 13W, 13.2W, -13.4
-  --date: string # The UTC day of the data in the past. Specify in `YYYY-MM-DD` format, e.g. `2021-08-24`.  (format: date)
+  --date: string # The UTC day of the data in the past. Specify in `YYYY-MM-DD` format, e.g. `2021-08-24`. (format: date)
   --timezone: string # Timezone to be used for the date fields. If not specified, local timezone of the location will be used. The format is according to the tzinfo database, so values like `Europe/Prague` or `UTC` can be used. Alternatively you may use the value ``auto`` in which case the local timezone of the location is used. The full list of valid timezone strings can be found [here](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones#List).
-  --units: string # Unit system to be used. The available values are:  * `auto`: Select the system automatically, based on the forecast location. * `metric`: Metric (SI) units (`°C`, `mm/h`, `m/s`, `cm`, `km`, `hPa`). * `us`: Imperial units (`°F`, `in/h`, `mph`, `in`, `mi`, `Hg`). * `uk`: Same as ``metric``, except that visibility is in `miles` and wind speeds are in `mph`. * `ca`: Same as ``metric``, except that wind speeds are in `km/h` and pressure is in `kPa`.  (default: auto)
+  --units: string # Unit system to be used. The available values are: * `auto`: Select the system automatically, based on the forecast location. * `metric`: Metric (SI) units (`°C`, `mm/h`, `m/s`, `cm`, `km`, `hPa`). * `us`: Imperial units (`°F`, `in/h`, `mph`, `in`, `mi`, `Hg`). * `uk`: Same as ``metric``, except that visibility is in `miles` and wind speeds are in `mph`. * `ca`: Same as ``metric``, except that wind speeds are in `km/h` and pressure is in `kPa`. (default: auto)
   --key: string # Your unique API key. You can either specify it in this parameter, or set it in `X-API-Key` header.
 ]: nothing -> record<data: table<cape: int, cloud_cover: record, date: string, dew_point: float, evaporation: int, feels_like: float, humidity: int, icon: int, irradiance: int, ozone: int, precipitation: record, pressure: float, soil_temperature: float, surface_temperature: float, temperature: float, weather: string, wind: record, wind_chill: float>, elevation: int, lat: string, lon: string, statistics: record<precipitation: record<avg: float, probability: int>, temperature: record<avg: float, avg_max: float, avg_min: float, record_max: float, record_min: float>, wind: record<avg_angle: float, avg_dir: string, avg_speed: float, max_gust: float, max_speed: float>>, timezone: string, units: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
